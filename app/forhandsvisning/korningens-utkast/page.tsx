@@ -12,8 +12,8 @@ import { KorningensUtkast } from "@/components/leads/KorningensUtkast";
  */
 
 const LEADS = [
-  { prospect_id: "p1", company_name: "Provbygget", contact_email: "info@provbygget.example", kan_mejlas: true, status: "vantar", subject: "Nya kontoret i Holmsund", body: "Hej,\n\nJag såg att ni växer. Exempeltext i förhandsvisningen.\n\nVänliga hälsningar\nIris", notis: null },
-  { prospect_id: "p2", company_name: "Exempelrör", contact_email: "anna@exempelror.example", kan_mejlas: true, status: "vantar", subject: "Två nya montörer i Luleå", body: "Hej,\n\nJag såg att ni växer. Exempeltext i förhandsvisningen.\n\nVänliga hälsningar\nIris", notis: null },
+  { prospect_id: "p1", company_name: "Provbygget", contact_email: "info@provbygget.example", kan_mejlas: true, status: "vantar", queue_item_id: "q1", subject: "Nya kontoret i Holmsund", body: "Hej,\n\nJag såg att ni växer. Exempeltext i förhandsvisningen.\n\nVänliga hälsningar\nIris", notis: null },
+  { prospect_id: "p2", company_name: "Exempelrör", contact_email: "anna@exempelror.example", kan_mejlas: true, status: "vantar", queue_item_id: "q2", subject: "Två nya montörer i Luleå", body: "Hej,\n\nJag såg att ni växer. Exempeltext i förhandsvisningen.\n\nVänliga hälsningar\nIris", notis: null },
   { prospect_id: "p3", company_name: "Testmåleri", contact_email: "info@testmaleri.example", kan_mejlas: true, status: "skickat", subject: "Fasadsäsongen i Skellefteå", body: "Hej,\n\nJag såg att ni växer. Exempeltext i förhandsvisningen.\n\nVänliga hälsningar\nIris", notis: null },
   { prospect_id: "p4", company_name: "Demosnickarna", contact_email: "info@demosnickarna.example", kan_mejlas: true, status: "saknas", subject: null, notis: "Research klar, men utkastet stoppades före kön: faktagrinden." },
   { prospect_id: "p5", company_name: "Påhittat Golv", contact_email: null, kan_mejlas: false, status: "saknas", subject: null, notis: "Inget arbetsmejl hittades på bolagets sajt." }
@@ -50,6 +50,11 @@ function installeraFetch() {
       return svar({ skickade: 2, vantar_pa_fonstret: 0, stoppade: [] });
     }
     if (url.endsWith("/utkast/skriv")) return svar({ count: 1, jobs: [] }, 202);
+    if (url.endsWith("/approve")) {
+      const id = url.split("/").at(-2);
+      for (const l of LEADS) if ((l as { queue_item_id?: string }).queue_item_id === id) l.status = "skickat";
+      return svar({ id, status: "sent", utfall: "sent", besked: "Skickat" });
+    }
     if (url.endsWith("/utkast")) {
       const antal: Record<string, number> = {};
       for (const l of LEADS) antal[l.status] = (antal[l.status] ?? 0) + 1;

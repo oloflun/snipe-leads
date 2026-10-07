@@ -21,7 +21,9 @@ import { cn } from "@/lib/utils";
  *
  * Sebbe 2026-10-07: klicka på ett lead i listan och se dess utkast. Raden
  * fäller ut ämne, mottagare och text på plats; ett lead utan utkast har
- * inget att fälla ut och är ingen knapp.
+ * inget att fälla ut och är ingen knapp. Ett väntande utkast godkänns och
+ * skickas därifrån, ett i taget, genom samma väg som granskningen
+ * (POST /leads/queue/{id}/approve: tidsgrinden och sändspärrarna).
  */
 
 type Status = "vantar" | "godkant" | "skickat" | "avvisat" | "stoppat" | "saknas";
@@ -32,6 +34,8 @@ type Lead = {
   contact_email: string | null;
   kan_mejlas: boolean;
   status: Status;
+  /** Granskningskölens post för ett väntande utkast: det som godkänns. */
+  queue_item_id?: string | null;
   subject: string | null;
   /** Utkastets text: det väntande utkastet, annars senaste meddelandet. */
   body?: string | null;
@@ -61,6 +65,7 @@ export function KorningensUtkast({ jobId }: Readonly<{ jobId: string }>) {
   const [pagar, setPagar] = useState<"skriv" | "skicka" | null>(null);
   const [skriver, setSkriver] = useState(0);
   const [oppen, setOppen] = useState<string | null>(null);
+  const [godkanner, setGodkanner] = useState<string | null>(null);
   const poll = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const bas = `/api/snajp-support/leads/korningar/${encodeURIComponent(jobId)}/utkast`;
@@ -181,6 +186,43 @@ export function KorningensUtkast({ jobId }: Readonly<{ jobId: string }>) {
       setFel({ sv: m, en: m });
     } finally {
       setPagar(null);
+    }
+  }
+
+  async function godkann(l: Lead) {
+    if (!l.queue_item_id) return;
+    setGodkanner(l.prospect_id);
+    setFel(null);
+    setBesked(null);
+    const mottagare = l.contact_email ?? l.company_name ?? "";
+    try {
+      const response = await fetch(`/api/snajp-support/leads/queue/${encodeURIComponent(l.queue_item_id)}/approve`, {
+        method: "POST"
+      });
+      const data = await readJsonBody<{ utfall?: string; besked?: string; detail?: string }>(response);
+      if (!response.ok || !data) {
+        const orsak = typeof data?.detail === "string" ? data.detail : `status ${response.status}`;
+        setFel({ sv: `Utkastet kunde inte skickas (${orsak}).`, en: `The draft could not be sent (${orsak}).` });
+        return;
+      }
+      if (data.utfall === "sent") {
+        setBesked({ sv: `Skickat till ${mottagare}.`, en: `Sent to ${mottagare}.` });
+      } else if (data.utfall === "requeued") {
+        setBesked({
+          sv: `Godkänt. Mejlet till ${mottagare} skickas när sändfönstret öppnar (vardagar 08–16).`,
+          en: `Approved. The email to ${mottagare} goes out when the sending window opens (weekdays 08–16).`
+        });
+      } else {
+        const skal = data.besked?.split(": ").slice(1).join(": ");
+        setFel({ sv: `Inte skickat${skal ? `: ${skal}` : "."}`, en: `Not sent${skal ? `: ${skal}` : "."}` });
+      }
+      setOppen(null);
+      await hamta();
+    } catch (orsak) {
+      const m = felmeddelande(orsak);
+      setFel({ sv: m, en: m });
+    } finally {
+      setGodkanner(null);
     }
   }
 
@@ -333,6 +375,29 @@ export function KorningensUtkast({ jobId }: Readonly<{ jobId: string }>) {
                         {text({ sv: "Utkastets text gick inte att läsa.", en: "The draft text could not be read." })}
                       </p>
                     )}
+                    {l.status === "vantar" && l.queue_item_id ? (
+                      <div className="mt-3 flex flex-wrap items-center gap-3 border-t border-ink/10 pt-3">
+                        <button
+                          type="button"
+                          disabled={godkanner !== null || pagar !== null}
+                          onClick={() => void godkann(l)}
+                          className={cn(btnPrimary, btnLiten)}
+                        >
+                          {godkanner === l.prospect_id ? (
+                            <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                          ) : (
+                            <Check className="h-4 w-4" aria-hidden />
+                          )}
+                          {text({ sv: "Godkänn och skicka", en: "Approve and send" })}
+                        </button>
+                        <span className={meta}>
+                          {text({
+                            sv: "Går genom sändspärrarna; utanför vardagar 08–16 skickas det när fönstret öppnar.",
+                            en: "Passes the send guards; outside weekdays 08–16 it goes out when the window opens."
+                          })}
+                        </span>
+                      </div>
+                    ) : null}
                   </div>
                 ) : null}
               </li>
