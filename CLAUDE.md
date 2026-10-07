@@ -116,9 +116,9 @@ Fullständig beskrivning av miljöer, variabler och fällor: [`DEPLOY.md`](DEPLO
    utslag. Merinfos råsida når aldrig researchprompten, bara bolagsfakta
    utan personer och nummer (`merinfo.bolagsfakta_text`).
 
-**Tillägg 2026-10-07 (Sebbe):**
+**Tillägg 2026-10-07 (Sebbe) — ERSATT samma dag av ändringen nedan; behålls bara som historik:**
 
-10. **Iris-leads kräver en namngiven kontaktperson — inte nödvändigtvis VD.**
+10a. ~~Iris-leads kräver en namngiven kontaktperson — inte nödvändigtvis VD.~~
     Regel 3 reviderad för Iris: kontakten måste vara en namngiven person
     styrkt från bolagets egen sajt (namnet intill adressen, lokaldelen bär
     namnet). VD föredras, ägare/chef/ansvarig därnäst, och en namngiven

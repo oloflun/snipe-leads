@@ -852,15 +852,8 @@ def mottagare(prospekt: dict[str, Any]) -> str | None:
     det enda kravet är en kontaktmejl till BOLAGET. En namngiven persons
     styrkta adress föredras; annars duger bolagets egen adress (info@,
     kontakt@) på bolagets domän. Aldrig en privat adress, en främmande
-    domän eller en HR-/ekonomi-/robotadress (_EJ_SALJADRESS).
-
-    Sebbes revidering 2026-10-07 av Antons regel 3: mottagaren måste vara
-    leadets NAMNGIVNA kontaktperson, men behöver inte vara VD — VD föredras
-    i urvalet (hamta_person_kontakt), en annan namngiven person duger.
-    Beviskravet står orubbat: adressens lokaldel måste bära personens för-
-    eller efternamn på bolagets egen domän. En funktionsadress (info@,
-    rekrytering@) går aldrig att knyta till en person och får aldrig ett
-    utkast (provkörningen 2026-10-05 skrev ett utkast till rekrytering@)."""
+    domän eller en HR-/ekonomi-/robotadress (_EJ_SALJADRESS) — provkörningen
+    2026-10-05 skrev ett utkast till rekrytering@."""
     epost = str(prospekt.get("contact_email") or "").strip()
     if not epost or not ar_arbetsmejl(epost, webb=prospekt.get("website")):
         return None
