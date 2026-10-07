@@ -109,6 +109,14 @@ export const etikett = "text-[0.8125rem] font-medium text-ink-muted";
 export const meta = "text-[0.8125rem] text-ink-subtle";
 
 /**
+ * Kortet som översikternas paneler står i (Leads, Kundtjänst, Kvitton,
+ * Aktivitet, Att göra, adminytan). Här och inte i OversiktPaneler: den filen
+ * är en klientmodul, och en sträng som en serverkomponent importerar därifrån
+ * blir en klientreferens i stället för klassnamnet.
+ */
+export const panelKort = "rounded-card border border-ink/12 bg-paper p-4 sm:p-5";
+
+/**
  * Vy- och filterflikar: understrukna, med ochre under den valda (Mailchimp-konsolen,
  * Twentys vybar; redan husets i SupportWorkspaceTabs). Pillren i 44 px med svart
  * platta läste som primärknappar och tävlade med sidans enda riktiga handling
@@ -188,6 +196,27 @@ export function Sektion({
  * att två rader nyckeltal inte får dubbla linjer emellan.
  */
 const nyckeltalKolumner = ["sm:grid-cols-1", "sm:grid-cols-2", "sm:grid-cols-3", "sm:grid-cols-4"];
+
+/**
+ * Nyckeltalen i en panel (adminens Kostnad per agent, Fel och eskaleringar):
+ * samma poster som Nyckeltal, i panelens sans-skala i stället för sidans
+ * display-siffror, så att de inte tävlar med korten ovanför.
+ */
+export function Talrad({
+  poster
+}: Readonly<{ poster: { etikett: string; varde: React.ReactNode; notis?: React.ReactNode }[] }>) {
+  return (
+    <dl className={cn("grid grid-cols-2 gap-x-6 gap-y-4 border-b border-ink/10 pb-4", nyckeltalKolumner[Math.min(poster.length, 4) - 1])}>
+      {poster.map((post) => (
+        <div key={post.etikett} className="min-w-0">
+          <dt className={cn(etikett, "line-clamp-2")}>{post.etikett}</dt>
+          <dd className="num mt-1 text-[1.5rem] font-semibold leading-none tabular-nums text-ink">{post.varde}</dd>
+          {post.notis ? <dd className={cn(meta, "mt-1.5")}>{post.notis}</dd> : null}
+        </div>
+      ))}
+    </dl>
+  );
+}
 
 export function Nyckeltal({
   poster

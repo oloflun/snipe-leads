@@ -1,6 +1,9 @@
+import { panelKort } from "@/components/ui";
 import { AdminText } from "@/components/admin/AdminText";
 import { AgentAnvandning } from "@/components/admin/AgentAnvandning";
-import { Sektion } from "@/components/ui";
+import { KostnadOversikt } from "@/components/admin/KostnadOversikt";
+
+import { cn } from "@/lib/utils";
 import { listRuns, unwrap, type RunRow } from "@/lib/data/admin";
 import { AdminVyhuvud } from "@/components/admin/AdminVyhuvud";
 
@@ -92,9 +95,21 @@ export default async function Page() {
     <div>
       <AdminVyhuvud grupp="logg" />
 
-      <div className="mt-8">
+      {/* Översikternas layout (Sebbe 2026-10-07): de tre agenterna bredvid
+          varandra överst, sedan en panel per agent med kunderna. */}
+      <KostnadOversikt
+        iris={{ runs: leadsFel ? [] : leadsRuns, vidTaket: leadsVidTaket }}
+        kundtjanst={{ runs: sup.data ?? [], vidTaket: (sup.data?.length ?? 0) >= TAK }}
+        kvitton={{ runs: bok.data ?? [], vidTaket: (bok.data?.length ?? 0) >= TAK }}
+        tak={TAK}
+      />
+
+      <div className="mt-4 grid min-w-0 gap-4">
         {sektioner.map((sektion) => (
-          <Sektion key={sektion.rubrik} title={<AdminText n={sektion.rubrik} />}>
+          <section key={sektion.rubrik} aria-labelledby={`agent-${sektion.rubrik}`} className={cn(panelKort, "min-w-0")}>
+            <h2 id={`agent-${sektion.rubrik}`} className="mb-4 text-[1rem] font-semibold">
+              <AdminText n={sektion.rubrik} />
+            </h2>
             {sektion.fel ? (
               <p role="alert" className="max-w-[70ch] break-words text-[15px] text-danger">
                 {sektion.fel}
@@ -102,7 +117,7 @@ export default async function Page() {
             ) : (
               sektion.innehall
             )}
-          </Sektion>
+          </section>
         ))}
       </div>
     </div>

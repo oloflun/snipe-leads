@@ -1,6 +1,6 @@
 "use client";
 
-import { Cell, Nyckeltal, Tabell, Tomt, meta } from "@/components/ui";
+import { Cell, Tabell, Talrad, Tomt, meta } from "@/components/ui";
 import { a as at } from "@/lib/admin/sprak";
 import type { RunRow } from "@/lib/data/admin";
 import { useLocale, type Localized } from "@/lib/i18n";
@@ -131,7 +131,7 @@ export function AgentAnvandning({
 
   return (
     <div>
-      <Nyckeltal
+      <Talrad
         poster={[
           {
             etikett: at("kolKorningar", locale),
@@ -158,7 +158,7 @@ export function AgentAnvandning({
         ]}
       />
 
-      <div className="mt-8">
+      <div className="mt-4">
         <Tabell
           minBredd={560}
           kolumner={[
