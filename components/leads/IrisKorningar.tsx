@@ -223,11 +223,11 @@ export function IrisKorningar({
 }> = {}) {
   const { locale, text } = useLocale();
   const demo = demoRader !== undefined;
-  const pathname = usePathname() ?? "/dashboard/aktivitet";
+  const pathname = usePathname() ?? "/dashboard";
   const sok = useSearchParams();
-  // Samma vy under /dashboard och /admin: Leads-länken följer basen. Vyn
-  // renderas i Aktivitet sedan Snajp Suite (2026-10-03).
-  const bas = pathname.replace(/\/(aktivitet|iris)(\/.*)?$/, "/leads");
+  // Samma vy på översikten (/dashboard, /admin/arbetsyta, /demo) och i
+  // Leads › Körningar: Leads-länken går alltid till ytans Leads.
+  const bas = `${pathname.replace(/\/(arbetsyta|aktivitet|iris|leads)(\/.*)?$/, "")}/leads`;
   const [rader, setRader] = useState<KorningsRad[] | null>(demoRader ?? null);
   const [fel, setFel] = useState<string | null>(null);
   const [oppen, setOppen] = useState<string | null>(sok?.get("id") ?? null);

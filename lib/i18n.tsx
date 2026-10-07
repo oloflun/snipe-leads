@@ -22,7 +22,7 @@ const commonCopy = {
   "action.professional": { sv: "Mer professionell", en: "More professional" },
   "action.human": { sv: "Mer mänsklig", en: "More human" },
   "action.persuasive": { sv: "Mer övertygande", en: "More persuasive" },
-  "nav.dashboard": { sv: "Översikt", en: "Dashboard" },
+  "nav.dashboard": { sv: "Översikt", en: "Overview" },
   "nav.assistant": { sv: "Assistenten", en: "Assistant" },
   "nav.attGora": { sv: "Att göra", en: "To do" },
   "nav.leads": { sv: "Leads", en: "Leads" },

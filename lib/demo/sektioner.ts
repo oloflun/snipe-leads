@@ -40,7 +40,6 @@ export const DEMO_NAV: DemoNavItem[] = [
   { slug: "leads", label: { sv: "Leads", en: "Leads" } },
   { slug: "support", label: { sv: "Kundtjänst", en: "Customer service" } },
   { slug: "kvitton", label: { sv: "Kvitton", en: "Receipts" } },
-  { slug: "aktivitet", label: { sv: "Aktivitet", en: "Activity" } },
   { slug: "installningar", label: { sv: "Inställningar", en: "Settings" } }
 ];
 

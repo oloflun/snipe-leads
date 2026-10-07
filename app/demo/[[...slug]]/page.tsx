@@ -6,7 +6,6 @@ import { CrmDemo } from "@/components/crm/CrmDemo";
 import { KvittoDemoYta } from "@/components/kvitton/KvittoDemoYta";
 import { DemoSupportYta } from "@/components/snajp/DemoSupportYta";
 import { AttGora } from "@/components/leads/AttGora";
-import { Aktivitet } from "@/components/dashboard/Aktivitet";
 import { IrisBolag } from "@/components/leads/LeadsSida";
 import { IrisInstallningar } from "@/components/leads/IrisInstallningar";
 import { SupportRegler } from "@/components/settings/SupportRegler";
@@ -125,11 +124,8 @@ function renderSektion(
         </PageShell>
       );
     case "aktivitet":
-      return undersektion ? null : (
-        <PageShell title={{ sv: "Aktivitet", en: "Activity" }}>
-          <Aktivitet demo />
-        </PageShell>
-      );
+      // Aktivitet är översikten sedan 2026-10-07.
+      redirect("/demo");
     case "installningar":
       return undersektion ? null : (
         <PageShell title={{ sv: "Inställningar", en: "Settings" }}>

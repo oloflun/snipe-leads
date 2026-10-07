@@ -1227,8 +1227,7 @@ function Listtabell({
   // köas med research per bolag. Ersätter svepet "utkast till alla med
   // mejladress", som skrev utkast ur radens metadata utan research.
   const pathname = usePathname() ?? "/dashboard/leads";
-  // Ytans rot (/dashboard eller /admin): körningen följs i Aktivitet sedan
-  // Snajp Suite (2026-10-03).
+  // Ytans rot (/dashboard eller /admin): körningen följs i Leads › Körningar.
   const bas = pathname.replace(/\/(leads|iris)(\/.*)?$/, "");
   const [flyttar, setFlyttar] = useState(false);
   const [flyttScope, setFlyttScope] = useState<"research" | "research_and_draft">("research_and_draft");
@@ -1478,7 +1477,7 @@ function Listtabell({
             sv: `${flyttKvitto.antal} bolag i Iris (${flyttKvitto.nya} nya). Research pågår per bolag.`,
             en: `${flyttKvitto.antal} companies in Iris (${flyttKvitto.nya} new). Research is running per company.`
           })}{" "}
-          <Link href={`${bas}/aktivitet?id=${encodeURIComponent(flyttKvitto.batchId)}`} className="underline underline-offset-4 hover:text-ink">
+          <Link href={`${bas}/leads?vy=korningar&id=${encodeURIComponent(flyttKvitto.batchId)}`} className="underline underline-offset-4 hover:text-ink">
             {text(T.foljKorningen)}
           </Link>
         </p>

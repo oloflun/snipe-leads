@@ -55,11 +55,9 @@ rad(new URL(page.url()).pathname === "/admin", `landar på ${new URL(page.url())
 // --- 1. Flikarna: varje flik BYTER vy och markerar SIG SJÄLV -------------
 console.log("\n=== Flikarna ===");
 const FLIKAR = [
-  ["Översikt", "/admin"], ["Kunder", "/admin/kunder"], ["Körningar", "/admin/korningar"],
-  ["Testkörningar", "/admin/testkorningar"], ["Händelser", "/admin/handelser"],
-  ["Min arbetsyta", "/admin/arbetsyta"], ["Leads", "/admin/leads"],
-  ["Email studio", "/admin/emails"], ["Kontroll", "/admin/leads/kontroll"],
-  ["Kundtjänst", "/admin/support"], ["Inställningar", "/settings"]
+  ["Admin-översikt", "/admin"], ["Kunder", "/admin/kunder"], ["Logg", "/admin/korningar"],
+  ["Översikt", "/admin/arbetsyta"], ["Att göra", "/admin/att-gora"], ["Leads", "/admin/leads"],
+  ["Kundtjänst", "/admin/support"], ["Kvitton", "/admin/kvitton"], ["Inställningar", "/settings"]
 ];
 for (const [namn, väg] of FLIKAR) {
   await page.getByRole("link", { name: namn, exact: true }).first().click().catch(() => {});

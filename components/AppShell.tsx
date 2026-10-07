@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  Activity,
   ArrowLeftRight,
   FileText,
   LayoutDashboard,
@@ -72,8 +71,7 @@ const DEMO_VAGAR: Record<string, string> = {
   "/dashboard/analytics": "/demo/analytics",
   "/dashboard/assistant": "/demo/assistant",
   "/dashboard/support": "/demo/support",
-  "/dashboard/kvitton": "/demo/kvitton",
-  "/dashboard/aktivitet": "/demo/aktivitet"
+  "/dashboard/kvitton": "/demo/kvitton"
 };
 
 /**
@@ -104,7 +102,6 @@ export const RUTT_IKONER: Record<string, LucideIcon> = {
   "/dashboard": LayoutDashboard,
   "/dashboard/att-gora": ListTodo,
   "/dashboard/leads": Target,
-  "/dashboard/aktivitet": Activity,
   "/dashboard/support": MessagesSquare,
   "/dashboard/companies": Users,
   "/dashboard/contacts": Users,

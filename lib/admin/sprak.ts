@@ -20,7 +20,7 @@ import type { Locale, Localized } from "@/lib/i18n";
 
 export const ADMIN: Record<string, Localized> = {
   /* -------------------------------------------------- Översikt */
-  oversiktRubrik: { sv: "Översikt", en: "Overview" },
+  oversiktRubrik: { sv: "Admin-översikt", en: "Admin overview" },
   manadsintakt: { sv: "Månadsintäkt", en: "Monthly revenue" },
   uppskattadKostnad: { sv: "Uppskattad kostnad", en: "Estimated cost" },
   tokensAllaKunder: { sv: "Tokens, alla kunder", en: "Tokens, all customers" },
