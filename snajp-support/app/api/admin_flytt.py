@@ -341,6 +341,11 @@ async def _importera_prospekt(storage, tenant_id: str, post: dict[str, Any], fra
         origin=str(p.get("origin") or "import") if p.get("origin") in ("manual", "example", "import", "test", "inkorg", "lista", "iris") else "import",
         profil=profil,
     )
+    # Bedömningen följer med, som i körningsflytten nedan: create_prospect tar
+    # bara grundfälten, och leadet hade annars landat i main obedömt.
+    bedomning = {f: p[f] for f in BEDOMNINGSFALT if p.get(f) is not None}
+    if bedomning:
+        await storage.spara_bedomning(tenant_id, skapad["id"], bedomning=bedomning)
     return {"ref_id": post.get("ref_id"), "resultat": "importerad", "id": skapad["id"]}
 
 

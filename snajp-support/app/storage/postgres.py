@@ -1041,14 +1041,14 @@ class PostgresStorage:
                 records = await conn.fetch(
                     """
                     select * from agent_context_docs where tenant_id = $1 and kind = $2
-                    order by created_at desc
+                    order by created_at desc, version desc
                     """,
                     tenant_id,
                     kind,
                 )
             else:
                 records = await conn.fetch(
-                    "select * from agent_context_docs where tenant_id = $1 order by created_at desc",
+                    "select * from agent_context_docs where tenant_id = $1 order by created_at desc, version desc",
                     tenant_id,
                 )
         return [_row(r) for r in records]

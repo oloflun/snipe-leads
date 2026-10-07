@@ -169,7 +169,40 @@ def _ar_personlig(epost) -> bool:
     return Prospect(company_name="", contact_email=epost).epost_ar_personlig
 
 
+#: Ett lås per send_queue-post. "Godkänn och skicka" skickar i requesten
+#: medan `run_godkand_sandare` plockar samma post (queued + approved_by=human)
+#: varje minut; inget i sändvägen gör anspråk på posten atomärt, så ett varv
+#: mitt i requestens Resend-anrop hade skickat mejlet en gång till. Samma sak
+#: vid ett dubbelklick. Låset gäller inom processen — api kör EN replika; fler
+#: repliker kräver ett delat lås (se _korningslas och Redis).
+_sandlas: dict[str, asyncio.Lock] = {}
+
+#: Statusar en post kan skickas från. Allt annat är redan hanterat.
+_SANDBARA = ("queued", "awaiting_review")
+
+
 async def process_due_item(
+    storage: Storage,
+    tenant_id: str,
+    item: dict,
+    provider: SendProvider,
+    *,
+    now: datetime,
+    godkant: dict | None = None,
+) -> str:
+    """Kör `_process_due_item` under postens sändlås, och bara om posten
+    fortfarande väntar när låset är taget ('redan_hanterad' annars)."""
+    nyckel = str(item.get("id"))
+    # Låsen städas inte: ett lås per skickad post och process är bytes, och
+    # en städning mellan släpp och nästa väntares tag hade öppnat luckan igen.
+    async with _sandlas.setdefault(nyckel, asyncio.Lock()):
+        farsk = await storage.get_send_queue_item(tenant_id, nyckel) if item.get("id") else None
+        if farsk is not None and farsk.get("status") not in _SANDBARA:
+            return "redan_hanterad"
+        return await _process_due_item(storage, tenant_id, item, provider, now=now, godkant=godkant)
+
+
+async def _process_due_item(
     storage: Storage,
     tenant_id: str,
     item: dict,
@@ -329,16 +362,20 @@ async def skicka_godkant(
     Utfall: 'sent', 'requeued' (godkänt, väntar på sändfönstret 08–16
     vardagar), 'blocked'/'awaiting_review' (en sändspärr sa nej, skälet
     följer med), 'saknas' eller 'redan_hanterad'."""
-    item = await storage.get_send_queue_item(tenant_id, item_id)
-    if item is None:
-        return "saknas", None
-    if item.get("status") not in ("awaiting_review", "queued"):
-        return "redan_hanterad", None
-    godkant = {"approved_by": "human", "via": "granskningskön", "godkand_at": now.isoformat()}
-    await storage.update_send_queue_status(tenant_id, item_id, status="queued", gate_checks=godkant)
-    utfall = await process_due_item(
-        storage, tenant_id, {**item, "status": "queued"}, provider, now=now, godkant=godkant
-    )
+    # Hela läs-godkänn-skicka under postens sändlås: ett dubbelklick hade
+    # annars läst 'awaiting_review', väntat ut det första anropet och sedan
+    # skrivit tillbaka 'queued' över 'sent'.
+    async with _sandlas.setdefault(str(item_id), asyncio.Lock()):
+        item = await storage.get_send_queue_item(tenant_id, item_id)
+        if item is None:
+            return "saknas", None
+        if item.get("status") not in _SANDBARA:
+            return "redan_hanterad", None
+        godkant = {"approved_by": "human", "via": "granskningskön", "godkand_at": now.isoformat()}
+        await storage.update_send_queue_status(tenant_id, item_id, status="queued", gate_checks=godkant)
+        utfall = await _process_due_item(
+            storage, tenant_id, {**item, "status": "queued"}, provider, now=now, godkant=godkant
+        )
     efter = await storage.get_send_queue_item(tenant_id, item_id) or {}
     gc = efter.get("gate_checks") or {}
     if isinstance(gc, str):

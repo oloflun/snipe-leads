@@ -778,7 +778,9 @@ class MemoryStorage:
         docs = self.context_docs.get(tenant_id, [])
         if kind:
             docs = [d for d in docs if d["kind"] == kind]
-        return sorted(docs, key=lambda d: d["created_at"], reverse=True)
+        # Versionen bryter lika tidsstämplar: två sparningar inom samma
+        # klockslag (Windows upplösning ~15 ms) ska ändå ge nyast först.
+        return sorted(docs, key=lambda d: (d["created_at"], d.get("version") or 0), reverse=True)
 
     async def get_latest_context_doc(self, tenant_id: str, *, kind: str) -> dict[str, Any] | None:
         docs = [d for d in self.context_docs.get(tenant_id, []) if d["kind"] == kind]

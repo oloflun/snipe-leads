@@ -298,3 +298,17 @@ def test_bolagsnamnet_star_en_gang_per_mejl():
     # "du på X" och namnet som objekt.
     assert ett_bolagsnamn("Countivo", "Jag såg att du på Countivo erbjuder.", "Countivo")[1] == "Jag såg att du erbjuder."
     assert ett_bolagsnamn("Vinovo", "Ni har bildat Vinovo i år.", "Vinovo AB")[1] == "Ni har bildat företaget i år."
+
+
+def test_bolagsnamnet_i_domanen_lamnas():
+    """Ett ettordsnamn står också i bolagets domän: "countivo.se" blev "er.se"
+    och "info@countivo.se" "info@er.se" när omnämnandena byttes mot ni/er."""
+    from app.leads.tilltal import ett_bolagsnamn
+
+    _, brod = ett_bolagsnamn(
+        "Leads för Countivo",
+        "Jag var inne på countivo.se och såg att Countivo växer. Mejla info@countivo.se.",
+        "Countivo AB",
+    )
+    assert "countivo.se och" in brod and "info@countivo.se" in brod
+    assert "att ni växer" in brod

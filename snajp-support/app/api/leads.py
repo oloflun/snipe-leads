@@ -3403,10 +3403,11 @@ async def _run_list_job(app_state, payload: dict) -> None:
                 signal=traff.get("signal"),
                 signal_detalj=traff.get("signal_detalj"),
             )
-        await storage.set_lead_list_status(tenant_id, lista["id"], status="klar")
         # Säljlistebeställningen (migration 105): raderna som bär ALLT
         # säljlistan kräver läggs direkt där. Resten står kvar i den dolda
         # listan — de är inte relevanta nog (Sebbes krav 2026-10-06).
+        # FÖRE 'klar': säljlistevyn slutar polla och hämtar om när den ser
+        # 'klar', och hade annars kunnat hämta innan raderna fanns.
         saljlista_inlagda = None
         if lista.get("kalla") == "saljlista":
             saljlista_inlagda = await storage.saljlista_fyll_pa(
@@ -3416,6 +3417,7 @@ async def _run_list_job(app_state, payload: dict) -> None:
                 "Säljlistebeställning %s: %d av %d rader kvalificerade in i säljlistan.",
                 lista["id"], saljlista_inlagda, len(rader),
             )
+        await storage.set_lead_list_status(tenant_id, lista["id"], status="klar")
         await app_state.jobs.complete(
             job_id,
             {"list_id": lista["id"], "count": len(traffar), "status": "klar",

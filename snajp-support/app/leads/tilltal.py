@@ -131,8 +131,11 @@ def ett_bolagsnamn(subject: str, body: str, namn: str | None) -> tuple[str, str]
     subject, body = korta_bolagsnamn(subject or "", namn), korta_bolagsnamn(body, namn)
     # Ägandeform ("EC:s", "Volvo's") räknas inte, men ett kolon gör det:
     # ämnet "EC Utbildning: nya LIA-företag" missades annars.
+    # Namnet i en adress eller domän är inget omnämnande: "countivo.se" blev
+    # "er.se" och "info@countivo.se" "info@er.se".
     monster = re.compile(
-        rf"(?<![\wåäöÅÄÖ]){re.escape(kort)}(?![\wåäöÅÄÖ])(?![:'’]s\b)", re.IGNORECASE
+        rf"(?<![\wåäöÅÄÖ@./]){re.escape(kort)}(?![\wåäöÅÄÖ@])(?![:'’]s\b)(?!\.[a-z]{{2,}}\b)",
+        re.IGNORECASE,
     )
     behall = 0 if monster.search(subject or "") else 1
     delar: list[str] = []
