@@ -267,3 +267,34 @@ def test_utkastet_kallar_bolaget_vid_kortnamn():
     )
     # "AB" som början på ett ord är inte bolagsformen.
     assert korta_bolagsnamn("Volvo Abisko", "Volvo AB") == "Volvo Abisko"
+
+
+def test_bolagsnamnet_star_en_gang_per_mejl():
+    """Sebbe 2026-10-07: "Brainy Energy Group Nordic" stod i ämnet och tre
+    gånger i brödtexten. Namnet står en gång i hela mejlet, resten ni/er.
+    Fallen är de som torrkörningen mot de riktiga utkasten fann."""
+    from app.leads.tilltal import ett_bolagsnamn
+
+    namn = "Brainy Energy Group Nordic AB"
+    amne, brod = ett_bolagsnamn(
+        "Energilösningar – Brainy Energy Group Nordic",
+        "Hej Tomas,\n\nJag såg att Brainy Energy Group Nordic utvecklar energilösningar.\n\n"
+        "Snajp hjälper företag som Brainy Energy Group Nordic att hitta kunder.\n\n"
+        "Jag tror att Brainy Energy Group Nordic skulle ha nytta av leads.",
+        namn,
+    )
+    assert (amne + brod).count("Brainy Energy Group Nordic") == 1
+    assert "Jag såg att ni utvecklar" in brod
+    assert "företag som ert att" in brod
+    assert "Jag tror att ni skulle" in brod
+
+    # Utan namnet i ämnet behålls det första omnämnandet i brödtexten.
+    _, brod = ett_bolagsnamn("Fråga", "Jag såg att Prestigo är verksamt. Det passar för Prestigo.", "Prestigo")
+    assert brod == "Jag såg att Prestigo är verksamt. Det passar för er."
+
+    # Bolagsformen kortas först: aldrig "ni AB".
+    _, brod = ett_bolagsnamn("Nya uppdrag – Investbygg Sverige AB", "Jag tror Investbygg Sverige AB vill.", "Investbygg Sverige AB")
+    assert brod == "Jag tror ni vill."
+    # "du på X" och namnet som objekt.
+    assert ett_bolagsnamn("Countivo", "Jag såg att du på Countivo erbjuder.", "Countivo")[1] == "Jag såg att du erbjuder."
+    assert ett_bolagsnamn("Vinovo", "Ni har bildat Vinovo i år.", "Vinovo AB")[1] == "Ni har bildat företaget i år."

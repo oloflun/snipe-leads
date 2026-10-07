@@ -43,7 +43,7 @@ from ..leads.language_gate import last_humanizer_variant
 from ..leads.outreach_playbook import OUTREACH_V2
 from ..leads.research_playbook import RESEARCH_V2
 from ..leads.soul import load_soul
-from ..leads.tilltal import korta_bolagsnamn, kortnamn, ratta_tilltal
+from ..leads.tilltal import ett_bolagsnamn, kortnamn, ratta_tilltal
 from . import leads_systemprompt
 from .leads_context import OutreachContext
 from .leads_tools import _queue_outreach_draft_impl, _request_human_handoff_impl
@@ -736,7 +736,8 @@ async def run_outreach_draft_v2(
     base = (
         f"## Uppdrag\nDu skriver ett kallt första mejl till {kortnamn(company_name)} åt {tenant_name}. "
         f"Kalla bolaget \"{kortnamn(company_name)}\", utan bolagsform (AB, Aktiebolag), "
-        "i både ämnesrad och brödtext.\n\n"
+        "och nämn namnet EN gång i hela mejlet, ämnesraden medräknad; "
+        "annars \"ni\" och \"er\".\n\n"
         f"## Brief\n{brief}\n\n"
         f"## Erbjudandet som styr vinkeln\n{offer_summary}\n\n"
         f"## Språkläge\n{language_state}\n\n"
@@ -864,8 +865,9 @@ async def run_outreach_draft_v2(
         body = ratta_tilltal(body, mottagare)
         # Registernamnet ("… Aktiebolag") blir kortnamnet i det som köas, i
         # kod och sist: modellen läser registernamnet i researchen.
-        subject = korta_bolagsnamn(subject, company_name)
-        body = korta_bolagsnamn(body, company_name)
+        # Och namnet EN gång i hela mejlet (tilltal.ett_bolagsnamn), resten
+        # ni/er; kortningen sker inuti.
+        subject, body = ett_bolagsnamn(subject, body, company_name)
 
         if not grounding["ok"]:
             await _request_human_handoff_impl(
