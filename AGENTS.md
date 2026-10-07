@@ -17,6 +17,15 @@ If `.agent-context/current/routes.json` is missing, fall back to the markdown pa
 
 ## Projektregler — kod
 
+**Vid varje sessionsstart: hämta senaste arbetsgrenen från GitHub innan något
+annat** (Antons regel 2026-10-07). `git fetch origin`, sedan
+`git merge --ff-only origin/<gren>`; har grenarna divergerat
+`git merge origin/<gren>`. Aldrig rebase, reset eller stash av någon annans
+ocommittade filer, och vid konflikt: stanna och rapportera. Läs koden från den
+hämtade grenen: Sebbe pushar flera gånger per dag, och en plan byggd på en
+inaktuell gren gör om arbete som redan finns. Projektets SessionStart-hook
+(`.claude/settings.json`) hämtar och säger hur många commits grenen ligger efter.
+
 **Varje komponent med användarvänd text är tvåspråkig, utan undantag.**
 Svenska och engelska via `lib/i18n.tsx` (`useLocale().text({ sv, en })`, `t(nyckel)`
 eller en modulkonstant av `Localized`; adminytan via `lib/admin/sprak.ts`). Det
@@ -66,6 +75,52 @@ engelska versionen visat sig vara svensk på de flesta sidor.
    miss eller gränsfall i `bedomning.webbutslag`, inte av modellens fria
    utslag. Merinfos råsida når aldrig researchprompten, bara bolagsfakta
    utan personer och nummer (`merinfo.bolagsfakta_text`).
+
+**Ändring 2026-10-07 (Sebbe) — ersätter regel 3 och 4 för Iris-leads:**
+
+10. **Det enda kontaktkravet för ett Iris-lead är en kontaktmejl till
+    bolaget** som utkastet kan nå fram till. Ingen VD krävs, ingen
+    namngiven person krävs. En namngiven persons styrkta adress föredras;
+    annars duger bolagets egen adress (info@, kontakt@) på bolagets domän.
+    Aldrig en privat adress, en främmande domän eller en HR-, ekonomi- eller
+    robotadress (`discovery.mottagare`, `_EJ_SALJADRESS`). En telefon ensam
+    räcker inte. Bolaget måste fortfarande ha en webbplats (adressen hämtas
+    därifrån); utan webbplats går det till listspåret som förut.
+11. **Ger registret färre bolag än beställt fyller den gamla sökkedjan på**
+    (grounded sökning + existensgrinden), så att körningar hittar leads som
+    innan merinfo-filtret. Listornas VD-krav (regel 5, 7) är oförändrat.
+    Anton ska informeras om ändringen.
+
+**Ändring 2026-10-07 (Anton) — fördelningen efter kontaktsökningen. Går före
+regel 1, 4, 5, 7, 8 och 10 där de krockar:**
+
+12. **Ett bolag med webbplats har alltid ett kontaktsätt.** Kontaktsökningen
+    läser startsidan och kontakt- och Om oss-sidorna (länkade eller gissade)
+    och avkodar skyddade adresser. Hittas ändå inget är jobbet inte grundligt
+    gjort: bolaget lämnas fritt, prövas igen nästa körning och räknas i
+    körningsrapporten. Ett bolag med webbplats hamnar aldrig bland ej
+    kvalificerade.
+13. **Mejladress → Iris.** En adress som bolaget självt publicerar på sin
+    webbplats är bolagets kontaktadress, även på gmail/telia eller en annan
+    domän. Registrets bolags-e-post (bolagsnivå, inte en person) räcker också.
+    HR-, ekonomi-, jobb- och robotadresser utesluts som förut.
+14. **Tilltal.** Personlig adress → personens namn. Bolagets adress och en Om
+    oss-sida med högst två personer där en tydligt är ägare eller VD → den
+    personens namn. Annars en inledning utan namn.
+15. **Bara telefon → ringlistan.** Utan mejladress men med telefon (från sajten
+    eller registrets bolagsnummer) går bolaget till ringlistan om VD är
+    namngiven i registret; numret antas vara VD:s när det hör till bolaget.
+    Antal anställda visas alltid, så att säljaren vet att numret kan gå till
+    någon annan. Enskilda firmor går inte till ringlistan (NIX-spärren gäller
+    dem).
+16. **Ej kvalificerade** är bolag utan webbplats och utan både mejl och telefon,
+    utan namngiven VD, eller enskilda firmor.
+17. **Återkoppling.** Varje kontaktat Iris-lead med telefon står i
+    återkopplingslistan, äldst kontakt först, med utfallen Ej svar, Återkom
+    (datum), Ej intresserad, Kontakta inte och Möte bokat. Systemet bevakar:
+    ej svar kommer tillbaka efter två arbetsdagar, återkom på datumet, ett
+    mejlsvar tar bort leadet ur listan och avslutande utfall stoppar alla
+    utskick. Uppföljningsmejl är alltid utkast som en människa godkänner.
 
 Koden: `snajp-support/app/leads/sources/merinfo.py` (filtret, `lage="iris"`
 och `lage="lista"`), `app/leads/discovery.py:hamta_vd_kontakt` (VD-kontrollen).
