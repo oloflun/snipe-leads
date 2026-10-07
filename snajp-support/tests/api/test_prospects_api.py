@@ -403,7 +403,9 @@ async def test_senaste_utkast_lasvag_utan_sidoeffekter():
 
             tomt = await client.get(f"/api/leads/prospects/{pid}/utkast", headers=DEMO)
             assert tomt.status_code == 200
-            assert tomt.json() == {"utkast": None, "thread_id": None, "queue_item_id": None}
+            assert {k: tomt.json()[k] for k in ("utkast", "thread_id", "queue_item_id", "utkast_status")} == {
+                "utkast": None, "thread_id": None, "queue_item_id": None, "utkast_status": "saknas"
+            }
 
             storage = app.state.storage
             # GET:en ovan får INTE ha skapat tråden.
@@ -427,6 +429,7 @@ async def test_senaste_utkast_lasvag_utan_sidoeffekter():
             assert data["utkast"]["subject"] == "Snabb fråga"
             # Kö-id:t är send_queue-radens id — det approve-endpointen tar.
             assert data["queue_item_id"] == skapat["queue_item"]["id"]
+            assert data["utkast_status"] == "vantar"
 
 
 

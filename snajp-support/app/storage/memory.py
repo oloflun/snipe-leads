@@ -200,6 +200,7 @@ class MemoryStorage:
         self.lead_list_items: list[dict[str, Any]] = []
         # Leads Suite (migration 086): platta listor, samma form som tabellerna.
         self.lead_anteckningar: list[dict[str, Any]] = []
+        self.lead_samtal: list[dict[str, Any]] = []
         self.lead_uppgifter: list[dict[str, Any]] = []
         self.prospect_status_logg: list[dict[str, Any]] = []
         self.lead_vyer: list[dict[str, Any]] = []
@@ -876,7 +877,9 @@ class MemoryStorage:
             and (since is None or m["sent_at"] >= since)
         )
 
-    async def last_contact_with_company(self, tenant_id: str, foretagsnyckel: str):
+    async def last_contact_with_company(
+        self, tenant_id: str, foretagsnyckel: str, *, utom_trad: str | None = None
+    ):
         if not foretagsnyckel:
             return None
         tidpunkter = [
@@ -885,6 +888,7 @@ class MemoryStorage:
             if m.get("direction") == "outbound"
             and m.get("sent_at") is not None
             and m.get("foretagsnyckel") == foretagsnyckel
+            and (utom_trad is None or m.get("thread_id") != utom_trad)
         ]
         return max(tidpunkter) if tidpunkter else None
 
@@ -954,6 +958,7 @@ class MemoryStorage:
             "scheduled_at": scheduled_at,
             "status": status,
             "gate_checks": {},
+            "created_at": _now(),
         }
         self.outreach_messages.setdefault(tenant_id, []).append(message)
         self.send_queue.setdefault(tenant_id, []).append(queue_item)
@@ -1029,12 +1034,16 @@ class MemoryStorage:
                     "company_name": p.get("company_name"),
                     "contact_email": p.get("contact_email"),
                     "origin": p.get("origin"),
+                    "prospect_status": p.get("status"),
+                    "arkiverad_at": p.get("arkiverad_at"),
                     "outbound_sent_count": len(skickade),
+                    "first_outbound_sent_at": min((m["sent_at"] for m in skickade), default=None),
                     "last_outbound_sent_at": max((m["sent_at"] for m in skickade), default=None),
                     # Osänt utkast ELLER aktiv köpost räknas — båda betyder att
                     # tråden redan har ett nästa steg och inte ska få ett till.
+                    # Ett kasserat utkast (107) är inget nästa steg.
                     "has_pending_item": bool(
-                        [m for m in utgående if not m.get("sent_at")]
+                        [m for m in utgående if not m.get("sent_at") and not m.get("kasserad_at")]
                         or [
                             q
                             for q in kö
@@ -1066,6 +1075,39 @@ class MemoryStorage:
                 item["scheduled_at"] = until
                 antal += 1
         return antal
+
+    async def utkast_lagen(
+        self, tenant_id: str, *, med_text: bool = False, prospect_id: str | None = None
+    ) -> dict[str, dict[str, Any]]:
+        # Speglar Postgres-frågan: listornas ordning är skapelseordningen, så
+        # "senaste" är sist i listan (samma som created_at desc i SQL).
+        meddelanden = self.outreach_messages.get(tenant_id, [])
+        ko = self.send_queue.get(tenant_id, [])
+        ut: dict[str, dict[str, Any]] = {}
+        for thread in self.outreach_threads.get(tenant_id, {}).values():
+            pid = thread.get("prospect_id")
+            if not pid or pid in ut or (prospect_id is not None and pid != prospect_id):
+                continue
+            utgaende = [m for m in meddelanden if m["thread_id"] == thread["id"] and m["direction"] == "outbound"]
+            skickade = [m["sent_at"] for m in utgaende if m.get("sent_at")]
+            poster = [q for q in ko if q["thread_id"] == thread["id"]]
+            senaste = poster[-1] if poster else {}
+            rad: dict[str, Any] = {
+                "prospect_id": pid,
+                "thread_id": thread["id"],
+                "skickat_at": max(skickade, default=None),
+                "antal_skickade": len(skickade),
+                "queue_item_id": senaste.get("id"),
+                "ko_status": senaste.get("status"),
+                "gate_checks": senaste.get("gate_checks") if senaste else None,
+                "scheduled_at": senaste.get("scheduled_at"),
+            }
+            if med_text:
+                vantande = [m for m in utgaende if not m.get("sent_at") and not m.get("kasserad_at")]
+                aktuellt = (vantande or utgaende or [{}])[-1]
+                rad.update(message_id=aktuellt.get("id"), subject=aktuellt.get("subject"), body=aktuellt.get("body"))
+            ut[pid] = rad
+        return ut
 
     # -- Agentens föreslagna lärdomar (migration 051) -----------------------
 
@@ -1284,10 +1326,50 @@ class MemoryStorage:
             (p for p in self.prospects.get(tenant_id, []) if p["id"] == prospect_id), None
         )
 
-    async def list_prospects(self, tenant_id: str, *, limit: int = 100) -> list[dict[str, Any]]:
+    async def list_prospects(self, tenant_id: str, *, limit: int = 500) -> list[dict[str, Any]]:
         return sorted(
             self.prospects.get(tenant_id, []), key=lambda p: p["created_at"], reverse=True
         )[:limit]
+
+    async def arkivera_prospekt(
+        self, tenant_id: str, prospect_ids: list[str], *, arkivera: bool
+    ) -> list[str]:
+        valda = set(prospect_ids)
+        traffar: list[str] = []
+        for p in self.prospects.get(tenant_id, []):
+            if p["id"] in valda:
+                p["arkiverad_at"] = (p.get("arkiverad_at") or _now()) if arkivera else None
+                traffar.append(p["id"])
+        return traffar
+
+    async def radera_prospekt(self, tenant_id: str, prospect_ids: list[str]) -> dict[str, list[str]]:
+        valda = set(prospect_ids)
+        tradar = {
+            t["id"]: t.get("prospect_id")
+            for t in self.outreach_threads.get(tenant_id, {}).values()
+            if t.get("prospect_id") in valda
+        }
+        kontaktade = {
+            tradar[m["thread_id"]]
+            for m in self.outreach_messages.get(tenant_id, [])
+            if m["thread_id"] in tradar and m.get("direction") == "outbound" and m.get("sent_at")
+        }
+        raderade = [p["id"] for p in self.prospects.get(tenant_id, []) if p["id"] in valda and p["id"] not in kontaktade]
+        bort = set(raderade)
+        # Speglar on delete cascade (010, 086, 107): tråden, dess meddelanden
+        # och köposter, och Suite-raderna försvinner med prospektet.
+        bort_tradar = {tid for tid, pid in tradar.items() if pid in bort}
+        self.prospects[tenant_id] = [p for p in self.prospects.get(tenant_id, []) if p["id"] not in bort]
+        for tid in bort_tradar:
+            self.outreach_threads.get(tenant_id, {}).pop(tid, None)
+        self.outreach_messages[tenant_id] = [
+            m for m in self.outreach_messages.get(tenant_id, []) if m["thread_id"] not in bort_tradar
+        ]
+        self.send_queue[tenant_id] = [q for q in self.send_queue.get(tenant_id, []) if q["thread_id"] not in bort_tradar]
+        for tabell in ("lead_anteckningar", "lead_uppgifter", "prospect_status_logg", "lead_samtal"):
+            if hasattr(self, tabell):
+                setattr(self, tabell, [r for r in getattr(self, tabell) if r.get("prospect_id") not in bort])
+        return {"raderade": raderade, "kontaktade": sorted(kontaktade & valda)}
 
     async def update_prospect(
         self,
@@ -1367,6 +1449,39 @@ class MemoryStorage:
         }
         self.lead_anteckningar.append(rad)
         return dict(rad)
+
+    async def add_lead_samtal(
+        self,
+        tenant_id: str,
+        *,
+        prospect_id: str,
+        utfall: str,
+        aterkom_datum: str | None,
+        anteckning: str | None,
+    ) -> dict[str, Any]:
+        self._ager_prospekt(tenant_id, prospect_id)
+        if utfall not in ("ej_svar", "aterkom", "ej_intresserad", "kontakta_inte", "mote"):
+            raise ValueError(f"okänt utfall {utfall!r}")  # speglar check-villkoret i 107
+        rad = {
+            "id": str(uuid.uuid4()),
+            "tenant_id": tenant_id,
+            "prospect_id": prospect_id,
+            "utfall": utfall,
+            "aterkom_datum": aterkom_datum,
+            "anteckning": anteckning,
+            "created_at": _now(),
+        }
+        self.lead_samtal.append(rad)
+        return dict(rad)
+
+    async def list_lead_samtal(
+        self, tenant_id: str, *, prospect_id: str | None = None
+    ) -> list[dict[str, Any]]:
+        return [
+            dict(r)
+            for r in self.lead_samtal
+            if r["tenant_id"] == tenant_id and (prospect_id is None or r["prospect_id"] == prospect_id)
+        ]
 
     async def list_lead_notes(self, tenant_id: str, prospect_id: str) -> list[dict[str, Any]]:
         return [
@@ -1819,6 +1934,15 @@ class MemoryStorage:
             if not (i["list_id"] == list_id and i["tenant_id"] == tenant_id)
         ]
         return fore - len(self.lead_list_items)
+
+    async def delete_lead_list(self, tenant_id: str, list_id: str) -> bool:
+        listor = self.lead_lists.get(tenant_id, [])
+        if not any(r["id"] == list_id for r in listor):
+            return False
+        self.lead_lists[tenant_id] = [r for r in listor if r["id"] != list_id]
+        # on delete cascade (060): raderna följer med.
+        await self.rensa_lead_list_items(tenant_id, list_id)
+        return True
 
     async def stada_hangande_leadsjobb(
         self, tenant_id: str, *, aldre_an_minuter: int, utom: list[str] | None = None

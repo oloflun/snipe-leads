@@ -70,6 +70,7 @@ from ..leads.signatur import normalisera as normalisera_signatur
 from ..leads.sni import SNI_NAMN, beskriv_kod
 from ..leads.onboarding_state import REQUIRED_KINDS, get_onboarding_state
 from ..leads import korning as iris_korning
+from ..leads import utkaststatus
 from ..leads.profil import las_kundtext, sakerstall_profil, slå_ihop, som_icp
 from .deps import kraev_uuid, require_tenant
 from ..agent.leads_research_v2 import las_produkter
@@ -513,22 +514,39 @@ async def create_example_prospects(
 
 
 @router.get("/api/leads/prospects")
-async def list_prospects(request: Request, tenant: dict = Depends(require_tenant)) -> dict:
-    prospects = await request.app.state.storage.list_prospects(tenant["tenant_id"])
+async def list_prospects(
+    request: Request, limit: int = 500, tenant: dict = Depends(require_tenant)
+) -> dict:
+    storage = request.app.state.storage
+    prospects = await storage.list_prospects(tenant["tenant_id"], limit=max(1, min(limit, 1000)))
     # Exempelbolag syns bara hos demotenanten. Kvarlämnade rader från den
     # gamla default-checkboxen ska inte dyka upp som "fynd" hos en kund.
     if tenant["tenant_id"] != DEFAULT_TENANT_ID:
         prospects = [p for p in prospects if p.get("origin") != "example"]
+    # Ringlistans bolag (origin 'ring', leadsregel 15) är inga Iris-leads:
+    # de har bara ett telefonnummer och visas i samtalsvyn, aldrig här.
+    prospects = [p for p in prospects if p.get("origin") != "ring"]
+    # Arkiverade (107) är dolda; `?arkiverade=1` listar just dem, så att de
+    # går att återställa. Inget får se ut som raderat.
+    arkiverade = request.query_params.get("arkiverade") == "1"
+    prospects = [p for p in prospects if bool(p.get("arkiverad_at")) == arkiverade]
     # Bara leads som uppfyller kraven visas (Antons krav 2026-10-06): ett
     # bortvalt bolag med motiveringen "uppfyller inte ..." är brus för kunden.
     # Raden står kvar i databasen så att nästa sökning utesluter bolaget.
     # `?bortvalda=1` listar i stället just de bortvalda (Sebbe 2026-10-06:
     # inget får SE UT som raderat — ett dolt bolag måste gå att hitta igen;
     # raderas görs bara med uttrycklig handling).
-    if request.query_params.get("bortvalda") == "1":
-        prospects = [p for p in prospects if p.get("niva") == "C" or p.get("qualified") is False]
-    else:
-        prospects = [p for p in prospects if p.get("niva") != "C" and p.get("qualified") is not False]
+    # Arkivvyn visar alla arkiverade, bortvalda eller inte.
+    if not arkiverade:
+        bortvalda = request.query_params.get("bortvalda") == "1"
+        prospects = [
+            p for p in prospects if (p.get("niva") == "C" or p.get("qualified") is False) == bortvalda
+        ]
+    # Utkaststatusen per lead (app/leads/utkaststatus.py): EN fråga för hela
+    # tenanten, samma härledning som körningsvyn och lådan läser.
+    utkast = utkaststatus.per_prospekt(
+        await storage.utkast_lagen(tenant["tenant_id"]), [p["id"] for p in prospects]
+    )
     # Senaste händelse (Leads Suite): EN läsning av statusloggen, grupperad
     # här, i stället för en fråga per prospekt.
     senast: dict[str, str] = {}
@@ -551,6 +569,7 @@ async def list_prospects(request: Request, tenant: dict = Depends(require_tenant
         "prospects": [
             {
                 **med_rollflagga(p),
+                **utkast[str(p["id"])],
                 "senaste_handelse_at": senast.get(str(p["id"])) or p.get("created_at"),
                 **(
                     {"status": "researching"}
@@ -637,30 +656,42 @@ async def senaste_utkast(
 
     Kö-id:t (send_queue-raden, det POST /api/leads/queue/{id}/approve tar)
     är INTE meddelande-id:t — de är två tabeller länkade via thread_id.
-    Svarets `queue_item_id` är därför uppslaget ur granskningskön när tråden
-    har en post som väntar, annars None (redan godkänt/avvisat utkast går
-    att LÄSA men inte godkänna igen — det är rätt, inte en lucka).
+
+    Sedan 2026-10-08 bär svaret utkastets RIKTIGA status (samma härledning
+    som listan, app/leads/utkaststatus.py): förut visades trådens senaste
+    meddelande oavsett status, märkt som utkast — ett skickat eller avvisat
+    mejl såg ut som ett som väntade. Texten är det väntande utkastet, annars
+    det senaste. `queue_item_id` finns när utkastet går att redigera och
+    godkänna (väntar, godkänt eller köat); `brodtext`/`svans` delar mejlet
+    som granskningskön gör, så att lådans editor bara skriver om brödtexten.
     """
     kraev_uuid(prospect_id, "Prospektet")
     storage = request.app.state.storage
-    prospect = await storage.get_prospect(tenant["tenant_id"], prospect_id)
+    tenant_id = tenant["tenant_id"]
+    prospect = await storage.get_prospect(tenant_id, prospect_id)
     if not prospect:
         raise HTTPException(status_code=404, detail="Prospektet finns inte.")
-    thread = await storage.find_outreach_thread(
-        tenant["tenant_id"], prospect_id=prospect_id
-    )
-    if not thread:
-        return {"utkast": None, "thread_id": None, "queue_item_id": None}
-    messages = await storage.list_outreach_messages(tenant["tenant_id"], thread["id"])
-    senaste = messages[-1] if messages else None
-    ko_id = None
-    if senaste:
-        vantande = await storage.list_review_queue(tenant["tenant_id"], limit=200)
-        ko_id = next(
-            (item["id"] for item in vantande if item.get("thread_id") == thread["id"]),
-            None,
-        )
-    return {"utkast": senaste, "thread_id": thread["id"], "queue_item_id": ko_id}
+    lage = (await storage.utkast_lagen(tenant_id, med_text=True, prospect_id=prospect_id)).get(prospect_id)
+    status = utkaststatus.harled(lage)
+    if not lage or not lage.get("body"):
+        return {"utkast": None, "thread_id": (lage or {}).get("thread_id"), **status}
+    settings = await storage.get_agent_settings(tenant_id, agent_type="leads")
+    sig = normalisera_signatur(settings.get("signatur"))
+    brodtext, svans = dela_utkast(lage["body"], sig)
+    svar: dict = {
+        "utkast": {
+            "id": lage.get("message_id"),
+            "subject": lage.get("subject"),
+            "body": lage["body"],
+            "brodtext": brodtext,
+            "svans": svans,
+        },
+        "thread_id": lage.get("thread_id"),
+        **status,
+    }
+    if sig:
+        svar["signatur"] = {**sig, "text": bygg_signaturtext(sig)}
+    return svar
 
 
 @router.post("/api/leads/prospects/{prospect_id}/befordra")
@@ -1564,10 +1595,10 @@ async def hamta_korning(
 async def _korningens_leads(request: Request, tenant: dict, job_id: str) -> tuple[dict, list[dict]]:
     """(körningsraden, en post per lead med utkaststatus).
 
-    status: 'vantar' (utkastet väntar på godkännande), 'godkant' (godkänt,
-    skickas när sändfönstret öppnar), 'skickat', 'avvisat', 'stoppat' (en
-    sändspärr sa nej) eller 'saknas' (inget utkast). `notis` är skälet när
-    utkast saknas — ur barnjobbets resultat, annars härlett ur prospektet.
+    status: samma härledning som listan och lådan (app/leads/utkaststatus.py)
+    — 'vantar', 'godkant', 'koad', 'skickat', 'avvisat', 'stoppat' eller
+    'saknas'. `notis` är skälet när utkast saknas — ur barnjobbets resultat,
+    annars härlett ur prospektet.
     """
     from ..leads.discovery import mottagare
 
@@ -1577,9 +1608,8 @@ async def _korningens_leads(request: Request, tenant: dict, job_id: str) -> tupl
     if rad is None:
         raise HTTPException(status_code=404, detail="Körningen finns inte.")
     jobb = [j for j in ((rad.get("korning") or {}).get("jobs") or []) if j.get("prospect_id")]
-    vantande = {
-        i.get("prospect_id"): i for i in await storage.list_review_queue(tenant_id, limit=200)
-    }
+    # EN fråga för alla körningens leads, med texten (utkastet visas vid klick).
+    lagen = await storage.utkast_lagen(tenant_id, med_text=True)
     leads: list[dict] = []
     sedda: set[str] = set()
     for j in jobb:
@@ -1590,38 +1620,24 @@ async def _korningens_leads(request: Request, tenant: dict, job_id: str) -> tupl
         prospect = await storage.get_prospect(tenant_id, pid)
         if not prospect:
             continue
+        lage = lagen.get(str(pid)) or {}
+        harlett = utkaststatus.harled(lage)
         post = {
             "prospect_id": pid,
             "company_name": prospect.get("company_name") or j.get("company_name"),
             "contact_email": prospect.get("contact_email"),
             "kan_mejlas": bool(mottagare(prospect)),
-            "status": "saknas",
-            "queue_item_id": None,
-            "subject": None,
+            "status": harlett["utkast_status"],
+            # Bara ett väntande utkast godkänns härifrån ("Godkänn och skicka alla").
+            "queue_item_id": harlett["queue_item_id"] if harlett["utkast_status"] == "vantar" else None,
+            "skal": harlett["utkast_skal"],
+            "skickas_tidigast": harlett["skickas_tidigast"],
             # Utkastets text (Sebbe 2026-10-07: klicka på ett lead i listan och
             # se dess utkast). Det väntande utkastet, annars senaste meddelandet.
-            "body": None,
+            "subject": lage.get("subject"),
+            "body": lage.get("body"),
             "notis": None,
         }
-        if pid in vantande:
-            item = vantande[pid]
-            post.update(status="vantar", queue_item_id=item["id"], subject=item.get("subject"), body=item.get("body"))
-        else:
-            trad = await storage.find_outreach_thread(tenant_id, prospect_id=pid)
-            meddelanden = await storage.list_outreach_messages(tenant_id, trad["id"]) if trad else []
-            if any(m.get("sent_at") for m in meddelanden):
-                post["status"] = "skickat"
-            elif meddelanden and trad:
-                ko = await storage.senaste_ko_for_trad(tenant_id, trad["id"]) or {}
-                post["status"] = {
-                    "queued": "godkant",
-                    "cancelled": "avvisat",
-                    "blocked": "stoppat",
-                    "sent": "skickat",
-                }.get(ko.get("status") or "", "saknas")
-            if meddelanden:
-                post["subject"] = meddelanden[-1].get("subject")
-                post["body"] = meddelanden[-1].get("body")
         if post["status"] == "saknas":
             barn = await request.app.state.jobs.get(j["job_id"]) or {}
             notis = ((barn.get("result") or {}) if isinstance(barn.get("result"), dict) else {}).get("draft_note")
@@ -1821,13 +1837,29 @@ async def reject_queue_item(
     request: Request, item_id: str, tenant: dict = Depends(require_tenant)
 ) -> dict:
     """Avbryter ett utkast. 'cancelled' fanns i check-villkoret sedan 010 men
-    hade ingen kodväg som någonsin skrev det."""
-    await request.app.state.storage.update_send_queue_status(
-        tenant["tenant_id"],
+    hade ingen kodväg som någonsin skrev det.
+
+    Sedan 2026-10-08 kasseras även utkastets text (migration 107): förut stod
+    det kvar som osänt, spärrade uppföljningar (has_pending_item) och kunde
+    väljas som "väntande" text igen. Ett redan skickat eller stoppat utkast
+    går inte att avvisa."""
+    kraev_uuid(item_id, "Utkastet")
+    storage = request.app.state.storage
+    tenant_id = tenant["tenant_id"]
+    item = await storage.get_send_queue_item(tenant_id, item_id)
+    if item is None:
+        raise HTTPException(status_code=404, detail="Utkastet finns inte.")
+    if item.get("status") not in ("awaiting_review", "queued"):
+        raise HTTPException(status_code=409, detail="Utkastet är redan hanterat.")
+    await storage.update_send_queue_status(
+        tenant_id,
         item_id,
         status="cancelled",
         gate_checks={"rejected_by": "human", "via": "granskningskön"},
     )
+    # Trådens övriga väntande poster och osända utkast följer med: en tråd har
+    # ett nästa steg i taget, och det är det steget som avvisades.
+    await storage.cancel_pending_sends(tenant_id, item["thread_id"])
     return {"id": item_id, "status": "cancelled"}
 
 
@@ -3035,17 +3067,34 @@ async def processa_om(
 
     Skapar inga nya rader. Samma jobbkö som batch-research, så proxyns
     9-sekundersgräns inte träffar LLM-körningen.
+
+    `ersatt` (Skapa om utkast, 2026-10-08): leadets väntande utkast ställs in
+    och kasseras innan jobbet köas. Ett lead som redan fått ett mejl hoppas
+    över — ett nytt första mejl i ett pågående samtal är fel mejl.
     """
+    from ..leads.scheduler import avbryt_utskick_for_prospekt
+
     _require_live_llm()
     storage = request.app.state.storage
-    await _kraev_leads_budget(storage, tenant["tenant_id"])
+    tenant_id = tenant["tenant_id"]
+    await _kraev_leads_budget(storage, tenant_id)
     hittade: list[dict] = []
     for pid in payload.prospect_ids:
-        rad = await storage.get_prospect(tenant["tenant_id"], pid)
+        rad = await storage.get_prospect(tenant_id, pid)
         if rad:
             hittade.append(rad)
     if not hittade:
         raise HTTPException(status_code=404, detail="Inga av de valda prospekten finns.")
+    hoppade: list[str] = []
+    if payload.ersatt:
+        lagen = await storage.utkast_lagen(tenant_id)
+        hoppade = [str(p["id"]) for p in hittade if (lagen.get(str(p["id"])) or {}).get("antal_skickade")]
+        hittade = [p for p in hittade if str(p["id"]) not in hoppade]
+        # ponytail: skapa om kör hela research_and_draft (sidorna ur cachen); egen utkast-scope om kostnaden märks.
+        for p in hittade:
+            await avbryt_utskick_for_prospekt(storage, tenant_id, str(p["id"]))
+        if not hittade:
+            return {"jobs": [], "scope": payload.scope, "count": 0, "fase": "research", "hoppade_over": hoppade}
     jobs = await _lagg_prospektjobb(
         request.app.state,
         tenant,
@@ -3060,6 +3109,7 @@ async def processa_om(
         "scope": payload.scope,
         "count": len(jobs),
         "fase": "research",
+        "hoppade_over": hoppade,
     }
 
 

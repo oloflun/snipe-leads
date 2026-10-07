@@ -21,6 +21,7 @@ from .api import (
     admin_konvertera,
     admin_ombedom,
     admin_kunddata,
+    admin_listor,
     admin_profil,
     analytics,
     bookkeeping,
@@ -35,6 +36,7 @@ from .api import (
     keys,
     kvitton,
     leads,
+    leads_massatgard,
     leads_suite,
     rules,
     sending_domains_api,
@@ -353,6 +355,8 @@ app.include_router(keys.router)
 app.include_router(kb.router)
 app.include_router(leads.router)
 app.include_router(leads_suite.router)
+# Massåtgärder i Iris-listan och Ta bort lista; se api/leads_massatgard.py.
+app.include_router(leads_massatgard.router)
 app.include_router(demo.router)
 app.include_router(inbox.router)
 app.include_router(drafts.router)
@@ -371,6 +375,8 @@ app.include_router(admin_konvertera.router)
 # Ombedömning av sparade Iris-leads efter regelskärpningen 2026-10-06; se
 # docstringen i api/admin_ombedom.py.
 app.include_router(admin_ombedom.router)
+# Kopiera eller flytta en leadslista till en annan kund; se api/admin_listor.py.
+app.include_router(admin_listor.router)
 app.include_router(analytics.router)
 app.include_router(support_oversikt.router)
 # Journalens tenant-scopade förbrukning (Livrustning-piloten) — samma fråga

@@ -1181,7 +1181,9 @@ class PostgresStorage:
                 since,
             )
 
-    async def last_contact_with_company(self, tenant_id: str, foretagsnyckel: str):
+    async def last_contact_with_company(
+        self, tenant_id: str, foretagsnyckel: str, *, utom_trad: str | None = None
+    ):
         if not foretagsnyckel:
             return None
         async with self._scoped(tenant_id) as conn:
@@ -1198,9 +1200,12 @@ class PostgresStorage:
                    and m.direction = 'outbound'
                    and m.sent_at is not null
                    and p.foretagsnyckel = $2
+                   -- Leadets egen tråd räknas inte (uppföljning, svarsutkast).
+                   and ($3::uuid is null or m.thread_id <> $3::uuid)
                 """,
                 tenant_id,
                 foretagsnyckel,
+                utom_trad,
             )
 
     async def get_send_queue_item(self, tenant_id: str, item_id: str) -> dict[str, Any] | None:
@@ -1369,16 +1374,24 @@ class PostgresStorage:
                        p.company_name,
                        p.contact_email,
                        p.origin,
-                       count(m.id) filter (
+                       p.status as prospect_status,
+                       p.arkiverad_at,
+                       -- distinct: joinen mot send_queue multiplicerar
+                       -- meddelanderaderna (två köposter = varje mejl två gånger).
+                       count(distinct m.id) filter (
                          where m.direction = 'outbound' and m.sent_at is not null
                        ) as outbound_sent_count,
+                       min(m.sent_at) filter (
+                         where m.direction = 'outbound'
+                       ) as first_outbound_sent_at,
                        max(m.sent_at) filter (
                          where m.direction = 'outbound'
                        ) as last_outbound_sent_at,
-                       (count(m.id) filter (
+                       (count(distinct m.id) filter (
                           where m.direction = 'outbound' and m.sent_at is null
+                            and m.kasserad_at is null
                         ) > 0
-                        or count(q.id) filter (
+                        or count(distinct q.id) filter (
                           where q.status in ('queued', 'awaiting_review')
                         ) > 0) as has_pending_item
                 from outreach_threads t
@@ -1386,7 +1399,7 @@ class PostgresStorage:
                 left join outreach_messages m on m.thread_id = t.id
                 left join send_queue q on q.thread_id = t.id
                 where t.tenant_id = $1
-                group by t.id, p.company_name, p.contact_email, p.origin
+                group by t.id, p.company_name, p.contact_email, p.origin, p.status, p.arkiverad_at
                 """,
                 tenant_id,
             )
@@ -1430,6 +1443,59 @@ class PostgresStorage:
                 until,
             )
         return int(resultat.split()[-1])
+
+    async def utkast_lagen(
+        self, tenant_id: str, *, med_text: bool = False, prospect_id: str | None = None
+    ) -> dict[str, dict[str, Any]]:
+        # Texten bara på begäran: listan över alla leads ska inte bära 500
+        # mejlkroppar. Väntande meddelande först (osänt, icke-kasserat),
+        # därefter det senaste; created_at kom med 107, och äldre rader har
+        # samma värde — sent_at och id bryter den oavgjorda ordningen.
+        text_kolumner = ", m.id as message_id, m.subject, m.body" if med_text else ""
+        text_join = (
+            """
+              left join lateral (
+                select om.id, om.subject, om.body from outreach_messages om
+                 where om.thread_id = t.id and om.direction = 'outbound'
+                 order by (om.sent_at is null and om.kasserad_at is null) desc,
+                          om.created_at desc, om.sent_at desc nulls last, om.id desc
+                 limit 1
+              ) m on true
+            """
+            if med_text
+            else ""
+        )
+        async with self._scoped(tenant_id) as conn:
+            records = await conn.fetch(
+                f"""
+                select distinct on (t.prospect_id)
+                       t.prospect_id, t.id as thread_id,
+                       s.skickat_at, coalesce(s.antal_skickade, 0) as antal_skickade,
+                       q.id as queue_item_id, q.status as ko_status, q.gate_checks, q.scheduled_at
+                       {text_kolumner}
+                  from outreach_threads t
+                  left join lateral (
+                    select max(om.sent_at) as skickat_at, count(*)::int as antal_skickade
+                      from outreach_messages om
+                     where om.thread_id = t.id and om.direction = 'outbound'
+                       and om.sent_at is not null
+                  ) s on true
+                  left join lateral (
+                    select sq.id, sq.status, sq.gate_checks, sq.scheduled_at
+                      from send_queue sq
+                     where sq.thread_id = t.id
+                     order by sq.created_at desc, sq.scheduled_at desc
+                     limit 1
+                  ) q on true
+                  {text_join}
+                 where t.tenant_id = $1
+                   and ($2::uuid is null or t.prospect_id = $2::uuid)
+                 order by t.prospect_id, t.created_at
+                """,
+                tenant_id,
+                prospect_id,
+            )
+        return {str(r["prospect_id"]): _avkoda_jsonb(_row(r), "gate_checks") for r in records}
 
     # -- Agentens föreslagna lärdomar (migration 051) -----------------------
 
@@ -1750,7 +1816,7 @@ class PostgresStorage:
             )
         return _avkoda_prospekt(_row(record))
 
-    async def list_prospects(self, tenant_id: str, *, limit: int = 100) -> list[dict[str, Any]]:
+    async def list_prospects(self, tenant_id: str, *, limit: int = 500) -> list[dict[str, Any]]:
         async with self._scoped(tenant_id) as conn:
             records = await conn.fetch(
                 "select * from prospects where tenant_id = $1 order by created_at desc limit $2",
@@ -1758,6 +1824,53 @@ class PostgresStorage:
                 limit,
             )
         return [_avkoda_prospekt(_row(r)) for r in records]
+
+    async def arkivera_prospekt(
+        self, tenant_id: str, prospect_ids: list[str], *, arkivera: bool
+    ) -> list[str]:
+        async with self._scoped(tenant_id) as conn:
+            records = await conn.fetch(
+                """
+                update prospects
+                   set arkiverad_at = case when $3 then coalesce(arkiverad_at, now()) else null end
+                 where tenant_id = $1 and id = any($2::uuid[])
+                returning id
+                """,
+                tenant_id,
+                list(prospect_ids),
+                arkivera,
+            )
+        return [str(r["id"]) for r in records]
+
+    async def radera_prospekt(self, tenant_id: str, prospect_ids: list[str]) -> dict[str, list[str]]:
+        async with self._scoped(tenant_id) as conn:
+            # Kontrollen och raderingen i SAMMA transaktion (_scoped): ett
+            # utskick som hinner gå mellan dem ska inte ge ett raderat lead
+            # med en skickad tråd. Barnraderna följer med via on delete
+            # cascade (010, 086, 107); agent_runs.prospect_id blir null (025).
+            kontaktade = await conn.fetch(
+                """
+                select distinct t.prospect_id
+                  from outreach_threads t
+                  join outreach_messages m on m.thread_id = t.id
+                 where t.tenant_id = $1 and t.prospect_id = any($2::uuid[])
+                   and m.direction = 'outbound' and m.sent_at is not null
+                """,
+                tenant_id,
+                list(prospect_ids),
+            )
+            spärrade = [str(r["prospect_id"]) for r in kontaktade]
+            raderade = await conn.fetch(
+                """
+                delete from prospects
+                 where tenant_id = $1 and id = any($2::uuid[]) and not (id = any($3::uuid[]))
+                returning id
+                """,
+                tenant_id,
+                list(prospect_ids),
+                spärrade,
+            )
+        return {"raderade": [str(r["id"]) for r in raderade], "kontaktade": sorted(spärrade)}
 
     async def update_prospect(
         self,
@@ -1848,6 +1961,44 @@ class PostgresStorage:
                 text,
             )
         return _row(record)
+
+    async def add_lead_samtal(
+        self,
+        tenant_id: str,
+        *,
+        prospect_id: str,
+        utfall: str,
+        aterkom_datum: str | None,
+        anteckning: str | None,
+    ) -> dict[str, Any]:
+        async with self._scoped(tenant_id) as conn:
+            record = await conn.fetchrow(
+                """
+                insert into lead_samtal (tenant_id, prospect_id, utfall, aterkom_datum, anteckning)
+                values ($1, $2, $3, $4, $5) returning *
+                """,
+                tenant_id,
+                prospect_id,
+                utfall,
+                date.fromisoformat(aterkom_datum) if aterkom_datum else None,
+                anteckning,
+            )
+        return _row(record)
+
+    async def list_lead_samtal(
+        self, tenant_id: str, *, prospect_id: str | None = None
+    ) -> list[dict[str, Any]]:
+        async with self._scoped(tenant_id) as conn:
+            records = await conn.fetch(
+                """
+                select * from lead_samtal
+                where tenant_id = $1 and ($2::uuid is null or prospect_id = $2::uuid)
+                order by created_at, id
+                """,
+                tenant_id,
+                prospect_id,
+            )
+        return [_row(r) for r in records]
 
     async def list_lead_notes(self, tenant_id: str, prospect_id: str) -> list[dict[str, Any]]:
         async with self._scoped(tenant_id) as conn:
@@ -2422,6 +2573,17 @@ class PostgresStorage:
             return int(str(status).rsplit(" ", 1)[-1])
         except ValueError:
             return 0
+
+    async def delete_lead_list(self, tenant_id: str, list_id: str) -> bool:
+        async with self._scoped(tenant_id) as conn:
+            # Raderna följer med via on delete cascade (060); delete-grant på
+            # lead_lists finns sedan 060.
+            raderad = await conn.fetchval(
+                "delete from lead_lists where tenant_id = $1 and id = $2 returning id",
+                tenant_id,
+                list_id,
+            )
+        return raderad is not None
 
     async def stada_hangande_leadsjobb(
         self, tenant_id: str, *, aldre_an_minuter: int, utom: list[str] | None = None
@@ -3318,7 +3480,10 @@ class PostgresStorage:
                 """
                 select * from outreach_messages
                 where tenant_id = $1 and thread_id = $2
-                order by id
+                -- created_at (107), inte id: id är ett slumpmässigt uuid, och
+                -- "senaste meddelandet" var därför slumpen. Rader från före
+                -- 107 har samma created_at; sent_at ordnar dem.
+                order by created_at, sent_at nulls last, id
                 """,
                 tenant_id,
                 thread_id,
@@ -3507,12 +3672,13 @@ class PostgresStorage:
                 join outreach_threads t on t.id = q.thread_id
                 left join prospects p on p.id = t.prospect_id
                 left join lateral (
-                  -- order by id, inte created_at: outreach_messages HAR ingen
-                  -- created_at (migration 010). Samma sortering som
-                  -- get_pending_outreach_message redan använder.
+                  -- Samma val som get_pending_outreach_message: det senaste
+                  -- osända, icke-kasserade utkastet (107). Granskaren ser
+                  -- alltså exakt den text som skickas.
                   select * from outreach_messages om
-                  where om.thread_id = q.thread_id and om.sent_at is null
-                  order by om.id limit 1
+                  where om.thread_id = q.thread_id and om.direction = 'outbound'
+                    and om.sent_at is null and om.kasserad_at is null
+                  order by om.created_at desc, om.id desc limit 1
                 ) m on true
                 where q.tenant_id = $1 and q.status = 'awaiting_review'
                 order by q.scheduled_at

@@ -382,9 +382,15 @@ class ProcessaOmRequest(BaseModel):
     innan kontakt/utkast — 'Processa om' i registret.
     """
 
-    prospect_ids: list[str] = Field(..., min_length=1, max_length=50)
+    # 200 (2026-10-08): Skapa utkast och Skapa om i Iris-listan körs på alla
+    # markerade, och listan visar upp till 500 leads.
+    prospect_ids: list[str] = Field(..., min_length=1, max_length=200)
     scope: str = Field(default="research_and_draft", pattern=r"^(research|research_and_draft)$")
     is_test: bool = False
+    #: Skapa om utkast: leadets väntande utkast ersätts. Köposterna ställs in
+    #: och de osända utkasten kasseras FÖRE omskrivningen, så att det gamla
+    #: aldrig kan godkännas eller gå ut efter det nya.
+    ersatt: bool = False
 
 
 class LeadsListaRequest(BaseModel):

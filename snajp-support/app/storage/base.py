@@ -586,11 +586,28 @@ class Storage(Protocol):
 
     async def list_outreach_threads(self, tenant_id: str) -> list[dict[str, Any]]:
         """Alla trådar med de aggregat uppföljningssvepet dömer på:
-        outbound_sent_count, last_outbound_sent_at, last_inbound_at och
-        has_pending_item (köad/väntande post eller osänt utkast), plus
-        prospektets `origin` för automationsreglerna per typ. Aggregaten
-        räknas i lagringen — policyn (NÄR en uppföljning är förfallen) bor i
+        outbound_sent_count, first_outbound_sent_at, last_outbound_sent_at,
+        last_inbound_at och has_pending_item (köad/väntande post eller osänt,
+        icke-kasserat utkast), plus prospektets `origin` för automationsreglerna
+        per typ och `prospect_status`/`arkiverad_at` (ett avslutat eller
+        arkiverat lead följs inte upp). Aggregaten räknas i lagringen, varje
+        rad en gång (count distinct: två joinade tabeller multiplicerade annars
+        varandra) — policyn (NÄR en uppföljning är förfallen) bor i
         app/leads/follow_up_generator.py och är testbar utan databas."""
+        ...
+
+    async def utkast_lagen(
+        self, tenant_id: str, *, med_text: bool = False, prospect_id: str | None = None
+    ) -> dict[str, dict[str, Any]]:
+        """Underlaget för utkaststatusen per lead (app/leads/utkaststatus.py),
+        nycklat på prospect_id, i EN fråga för hela tenanten (eller ett lead).
+
+        Per lead: thread_id, skickat_at (senaste skickade utgående),
+        antal_skickade, och trådens SENASTE köpost (queue_item_id, ko_status,
+        gate_checks, scheduled_at; ordnad på created_at). `med_text` lägger
+        till det aktuella meddelandet (message_id, subject, body): det väntande
+        (osänt, icke-kasserat, senast skapade) i första hand, annars det
+        senaste. Ett lead utan tråd saknas i svaret."""
         ...
 
     async def cancel_pending_sends(self, tenant_id: str, thread_id: str) -> int:
@@ -642,11 +659,15 @@ class Storage(Protocol):
         ...
 
     async def last_contact_with_company(
-        self, tenant_id: str, foretagsnyckel: str
+        self, tenant_id: str, foretagsnyckel: str, *, utom_trad: str | None = None
     ) -> Any | None:
         """När bolaget senast kontaktades, oavsett kontaktperson. Nyckeln är
         FÖRETAGET — ett bolag som byter kontaktperson ska inte kunna få ett
-        nytt kallmejl dagen efter."""
+        nytt kallmejl dagen efter.
+
+        `utom_trad`: leadets egen tråd räknas inte. 90-dagarsspärren gäller ett
+        NYTT kallmejl; en uppföljning eller ett svarsutkast i samma samtal
+        stoppades annars av samtalets eget första mejl (2026-10-08)."""
         ...
 
     # -- G11: segmentaggregatet (den enda avsiktliga tenantgränsöverskridningen) --
@@ -883,6 +904,12 @@ class Storage(Protocol):
         stod i 'byggs' i dagar)."""
         ...
 
+    async def delete_lead_list(self, tenant_id: str, list_id: str) -> bool:
+        """Raderar EN lista; raderna följer med (on delete cascade, 060).
+        Bara kundens eller adminens uttryckliga Ta bort lista, och flytten av
+        en lista till en annan kund, går hit. False om listan inte fanns."""
+        ...
+
     async def stada_hangande_leadsjobb(
         self, tenant_id: str, *, aldre_an_minuter: int, utom: list[str] | None = None
     ) -> list[str]:
@@ -1010,7 +1037,23 @@ class Storage(Protocol):
 
     async def get_prospect(self, tenant_id: str, prospect_id: str) -> dict[str, Any] | None: ...
 
-    async def list_prospects(self, tenant_id: str, *, limit: int = 100) -> list[dict[str, Any]]: ...
+    async def list_prospects(self, tenant_id: str, *, limit: int = 500) -> list[dict[str, Any]]: ...
+
+    async def arkivera_prospekt(
+        self, tenant_id: str, prospect_ids: list[str], *, arkivera: bool
+    ) -> list[str]:
+        """Sätter (arkivera=True) eller nollar `arkiverad_at` (migration 107).
+        Ett arkiverat lead är dolt i Iris-listan men behåller historiken och
+        står kvar i uteslutningsmängden. Returnerar id:na som fanns."""
+        ...
+
+    async def radera_prospekt(self, tenant_id: str, prospect_ids: list[str]) -> dict[str, list[str]]:
+        """Raderar de leads som ALDRIG kontaktats (inget utgående meddelande
+        med sent_at), i en transaktion. {"raderade": [...], "kontaktade": [...]}:
+        ett kontaktat lead raderas aldrig — utskicksloggen bär 90-dagars-
+        spärren och avregistreringarna, så det arkiveras i stället. Trådar,
+        utkast, köposter och Suite-raderna följer med (on delete cascade)."""
+        ...
 
     async def update_prospect(
         self,
@@ -1080,6 +1123,24 @@ class Storage(Protocol):
         self, tenant_id: str, *, prospect_id: str | None = None
     ) -> list[dict[str, Any]]:
         """Nyast först."""
+        ...
+
+    # -- Samtal (migration 107, app/leads/samtal.py) ---------------------------
+
+    async def add_lead_samtal(
+        self,
+        tenant_id: str,
+        *,
+        prospect_id: str,
+        utfall: str,
+        aterkom_datum: str | None,
+        anteckning: str | None,
+    ) -> dict[str, Any]: ...
+
+    async def list_lead_samtal(
+        self, tenant_id: str, *, prospect_id: str | None = None
+    ) -> list[dict[str, Any]]:
+        """Äldst först. Utan `prospect_id`: hela tenantens samtal."""
         ...
 
     async def list_lead_views(self, tenant_id: str) -> list[dict[str, Any]]: ...
