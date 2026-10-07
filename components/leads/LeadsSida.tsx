@@ -90,7 +90,8 @@ export function IrisBolag({ demo = false }: Readonly<{ demo?: boolean }>) {
   const sokParams = useSearchParams();
 
   const segmentVal = tolkaSegment(sokParams.get("vy"));
-  const valdId = segmentVal === "listor" ? sokParams.get("lead") : null;
+  // Lådan öppnas från översikten och från Inkorg › Skickat (Fas 4).
+  const valdId = segmentVal === "listor" || segmentVal === "inkorg" ? sokParams.get("lead") : null;
   // Översiktens "Ladda upp CRM-kundlista" landar på ?vy=listor&crm=1.
   const crmOppen = segmentVal === "listor" && sokParams.get("crm") === "1";
   const flikRefs = useRef<Partial<Record<Segment, HTMLButtonElement | null>>>({});
@@ -113,7 +114,7 @@ export function IrisBolag({ demo = false }: Readonly<{ demo?: boolean }>) {
     [pathname, router, sokParams]
   );
 
-  const valjSegment = (s: Segment) => satt({ vy: s === "listor" ? null : s, lead: null });
+  const valjSegment = (s: Segment) => satt({ vy: s === "listor" ? null : s, lead: null, flik: null });
 
   // En avslutad körning stänger formuläret så att de nya raderna syns direkt.
   useEffect(() => {
@@ -258,7 +259,11 @@ export function IrisBolag({ demo = false }: Readonly<{ demo?: boolean }>) {
           demo ? (
             <p className="text-[0.9375rem] text-ink-muted">{text(T.inkorgDemo)}</p>
           ) : (
-            <IrisInkorg />
+            <IrisInkorg
+              flik={sokParams.get("flik") === "skickat" ? "skickat" : "inkommande"}
+              onFlik={(f) => satt({ flik: f === "skickat" ? "skickat" : null, lead: null })}
+              onValjLead={(id) => satt({ lead: id })}
+            />
           )
         ) : segmentVal === "samtal" ? (
           <Samtalslista demo={demo} />
