@@ -417,6 +417,21 @@ async def _research_v2(
         signaler=list(webbfakta.get("rader") or []),
     ) if bedomning["qualified"] else None
     antal = fynd.get("antal_anstallda")
+    if bedomning["qualified"]:
+        # Rangpoängen (app/leads/rangpoang.py): grindens poäng är 100 för
+        # varje godkänt bolag, så score_total mäter i stället hur bra leadet
+        # är. Läses efter kontaktuppgraderingen — kontakttypen ingår. Grinden
+        # (niva, qualified, icp_fit) är orörd.
+        from ..leads.rangpoang import rangpoang
+
+        bedomning["score_total"] = rangpoang(
+            {
+                **rad_efter_uppgradering,
+                "jev": prospect_row.get("jev") or rad_efter_uppgradering.get("jev"),
+                "score_breakdown": bedomning.get("score_breakdown"),
+                "signaler": bedomning.get("signaler"),
+            }
+        )
     try:
         await storage.spara_bedomning(
             tenant_id,

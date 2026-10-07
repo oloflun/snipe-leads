@@ -2682,7 +2682,13 @@ def _leverbarhet(rad: dict, result: dict, regler: dict) -> str | None:
     if not result.get("qualified"):
         return (result.get("disqualifiers") or ["Uppfyllde inte kriterierna"])[0]
     if eskalering.under_troskel(regler, qualified=True, icp_fit=result.get("icp_fit")):
-        return f"Under tröskeln: poäng {result.get('score_total')} av {regler['kvalificeringstroskel']} krävda"
+        # Tröskeln jämför träffsäkerheten (icp_fit), inte rangpoängen i
+        # score_total (app/leads/rangpoang.py) — skälet ska citera samma tal.
+        try:
+            traff = round(float(result.get("icp_fit")) * 100)
+        except (TypeError, ValueError):
+            traff = result.get("score_total")
+        return f"Under tröskeln: träffsäkerhet {traff} av {regler['kvalificeringstroskel']} krävda"
     if not mottagare(rad):
         return "Ingen kontaktmejl till bolaget"
     if not str(result.get("lagesbeskrivning") or rad.get("lagesbeskrivning") or "").strip():
