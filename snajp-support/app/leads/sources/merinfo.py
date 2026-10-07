@@ -35,8 +35,11 @@ telefonnummer blir aldrig ett leads kontakt: bolagsnumret går inte att knyta
 till en viss person, och styrelseledamöter kontaktas inte.
 
 * Iris (`lage="iris"`): bolagets webbplats letas upp (merinfos fält, annars
-  ett uppslag); kontaktperson, roll och händelser hämtas därifrån i
-  researchen. Utan webbplats går körningen vidare till nästa bolag.
+  e-postdomänen, en gissning och sist ett uppslag) och kontaktsökningen
+  läser den. Sedan fördelas bolaget (`fordela`, Antons regler 12–16
+  2026-10-07): mejl → Iris, bara telefon och namngiven VD → ringlistan
+  (där registrets bolagsnummer och bolags-e-post får användas), sajt utan
+  hittad kontakt → prövas om, resten → ej kvalificerade.
 * Listor (`lage="lista"`): en rad kräver VD:ns mejl eller telefon, och bara
   om uppgiften går att knyta till VD (discovery.hamta_vd_kontakt). VD:ns
   namn kommer från merinfo, uppgiften från bolagets egen webbplats. Merinfos
@@ -174,7 +177,13 @@ def tolka_bolag(md: str, url: str) -> dict[str, Any]:
 
     epost = _falt(md, "E-post")
     hemsida = _falt(md, "Hemsida")
-    hemsida_url = re.search(r"(https?://[^\s\])]+|www\.[^\s\])]+)", hemsida or "")
+    # Registret skriver ibland bara "bolaget.se" (utan www. eller https://),
+    # och då fick bolaget ingen webbplats alls (Antons fynd 2026-10-07).
+    hemsida_url = re.search(
+        r"(https?://[^\s\])]+|www\.[^\s\])]+|(?<![@\w.-])[a-z0-9][a-z0-9-]*(?:\.[a-z0-9-]+)*\.[a-z]{2,}(?![\w@-]))",
+        hemsida if hemsida and "@" not in hemsida else "",
+        re.IGNORECASE,
+    )
     sni = re.search(r"^\s*\*\s*(?P<kod>\d{5})\s*\[(?P<namn>[^\]]+)\]", md, re.MULTILINE)
     verksamhet = re.search(r"###\s*Verksamhetsbeskrivning\s*\n\s*(?P<t>[^\n]+)", md)
 
@@ -576,6 +585,12 @@ def till_kandidat(b: dict[str, Any], icp: dict[str, Any], profil: dict[str, Any]
         # Bara för listspåret (Antons beslut 2026-10-05); blir aldrig ett
         # Iris-leads kontakt.
         "_ensam_vd_telefon": ensam_vd_telefon(b),
+        # Bolagsnivå, för fördelningen efter kontaktsökningen (Antons regler
+        # 13 och 15, 2026-10-07): registrets bolags-e-post räcker för Iris,
+        # och bolagsnumret för ringlistan när VD är namngiven.
+        "_epost": b.get("epost"),
+        "_telefon": b.get("telefon"),
+        "_bolagsform": b.get("bolagsform"),
     }
 
 
@@ -727,6 +742,11 @@ async def sok(
         if kontext and kontext.slut:
             logger.info("merinfo: kredittaket (%d anrop) nått.", kontext.tak)
             break
+        if kontext and lage == "iris" and kontext.webb_slut:
+            # Fler bolagssidor vore betalda för bolag vars sajter inte kan
+            # läsas i den här körningen; de prövas nästa körning (regel 12).
+            logger.info("merinfo: taket för webbsidor (%d anrop) nått.", kontext.webb_tak)
+            break
     if not gav_rader:
         # Sidorna gick inte att HÄMTA: kredittaket, slut på kredit hos
         # ScrapeGraph eller tjänsten nere (sidhamtning räknar det). Det är
@@ -757,19 +777,72 @@ async def sok(
 PROV_PER_LEAD = 4
 
 
-async def _webbplats(k: dict[str, Any]) -> str | None:
+#: Operatörer och e-posttjänster utöver discovery._PRIVATA_DOMÄNER: en
+#: bolags-e-post där säger inget om bolagets webbplats.
+_LEVERANTORSDOMANER = frozenset(
+    {
+        "telia.se", "comhem.se", "tele2.se", "bredband2.com", "bahnhof.se", "ownit.se", "glocalnet.net",
+        "swipnet.se", "passagen.se", "home.se", "tiscali.se", "algonet.se", "telenor.se", "tre.se",
+        "yahoo.com", "gmx.com", "gmx.se", "mail.com", "zoho.com",
+    }
+)
+
+
+def _epostdomanens_sajt(epost: object) -> str | None:
+    """https://<domän> ur registrets bolags-e-post, eller None för en privat
+    adress eller en operatör."""
     from .. import discovery
 
+    epost = str(epost or "").strip()
+    if "@" not in epost or discovery.ar_privat_epost(epost):
+        return None
+    doman = discovery._epostdoman(epost)
+    if doman in _LEVERANTORSDOMANER:
+        return None
+    url = f"https://{doman}"
+    return url if discovery.webbplats_ar_bolagets(url) else None
+
+
+async def _webbplats(k: dict[str, Any], *, betald: bool = True) -> str | None:
+    """Bolagets webbplats, billigaste vägen först (Antons regel 12, 2026-10-07):
+
+    1. registrets hemsida: bolagets egen uppgift, godtas utan namnmatchning
+       (förut fällde matchningen registrets egen hemsida),
+    2. domänen i registrets bolags-e-post, verifierad med HEAD,
+    3. en gissad domän ur namnet, verifierad med HEAD,
+    4. det betalda uppslaget (grounded Gemini), med namnmatchning.
+
+    Steg 2–3 är gratis men gör riktiga anrop, så de körs bara när
+    direkthämtningen är på (av i testsviten). `betald=False` hoppar över
+    steg 4 (omklassningsskriptet). Platshållarkontrollen gör anroparen."""
+    from .. import discovery, sidhamtning
+
+    namn = k["company_name"]
     webb = k.get("website")
-    if not webb:
+    if webb and discovery.webbplats_ar_bolagets(webb):
+        return webb if webb.startswith("http") else f"https://{webb}"
+    if sidhamtning._direkt_forst():
+        sajt = _epostdomanens_sajt(k.get("_epost"))
+        if sajt:
+            for url in (sajt, sajt.replace("https://", "https://www.", 1)):
+                if await discovery._head_ok(url):
+                    return url
         try:
-            webb = await discovery.sla_upp_webbplats(k["company_name"], geografi=k.get("ort"))
-        except Exception:  # noqa: BLE001 — ett uppslag får inte fälla körningen
-            logger.info("merinfo: webbplatsuppslaget för %s föll.", k["company_name"])
-            return None
+            gissad = await discovery.gissa_webbplats_via_head(namn)
+        except Exception:  # noqa: BLE001 — en gissning får inte fälla körningen
+            gissad = None
+        if gissad and discovery.webbplats_ar_bolagets(gissad):
+            return gissad
+    if not betald:
+        return None
+    try:
+        webb = await discovery.sla_upp_webbplats(namn, geografi=k.get("ort"))
+    except Exception:  # noqa: BLE001 — ett uppslag får inte fälla körningen
+        logger.info("merinfo: webbplatsuppslaget för %s föll.", namn)
+        return None
     if not webb or not discovery.webbplats_ar_bolagets(webb):
         return None
-    if not discovery.webbplats_matchar_namn(k["company_name"], webb):
+    if not discovery.webbplats_matchar_namn(namn, webb):
         return None
     return webb if webb.startswith("http") else f"https://{webb}"
 
@@ -790,7 +863,7 @@ def ensam_vd_telefon(b: dict[str, Any]) -> str | None:
     return b["telefon"]
 
 
-def _listrad(k: dict[str, Any], skal: str) -> dict[str, Any]:
+def _listrad(k: dict[str, Any], skal: str, *, spar: str = "ej_kvalificerad") -> dict[str, Any]:
     """Ett bolag som inte blir ett Iris-lead men hör hemma i en lista, så att
     kunden kan nå det med ett mer generellt erbjudande (Anton 2026-10-05:
     bolag utan sajt är pengar på bordet för en webbyrå)."""
@@ -804,6 +877,104 @@ def _listrad(k: dict[str, Any], skal: str) -> dict[str, Any]:
         "contact_level": "named_role_match" if tel else None,
         "signal": "listspar",
         "signal_detalj": skal,
+        "spar": spar,
+    }
+
+
+def ar_enskild(k: dict[str, Any]) -> bool:
+    from ..forfilter import ar_enskild_firma
+
+    return ar_enskild_firma(k.get("orgnr")) or "enskild" in str(k.get("_bolagsform") or "").casefold()
+
+
+def registrets_epost(k: dict[str, Any]) -> str | None:
+    """Registrets bolags-e-post när den duger som Iris-adress (regel 13)."""
+    from .. import discovery
+
+    epost = str(k.get("_epost") or "").strip().lower()
+    if not epost or not discovery.ar_saljadress(epost) or discovery._ar_skrapadress(epost):
+        return None
+    return epost
+
+
+def fordela(k: dict[str, Any], kontakt: dict[str, Any] | None) -> tuple[str, str | None]:
+    """Spåret efter kontaktsökningen, med skälet (Antons regler 12, 13, 15
+    och 16, 2026-10-07). `k` är kandidaten med `website` satt till den
+    webbplats som söktes (None utan sajt eller med en parkerad domän),
+    `kontakt` svaret från discovery.hamta_person_kontakt.
+
+    * "iris": en mejladress, från sajten eller registrets bolags-e-post.
+    * "ring": ingen mejladress men sajtens publicerade telefon, eller
+      registrets bolagsnummer och en VD namngiven i registret.
+    * "prova_om": sökningen stoppades av sidtaket, eller sajten finns men
+      inget kontaktsätt hittades på den. Varken lista eller uteslutning:
+      bolaget prövas nästa körning (regel 12).
+    * "ej_kvalificerad": enskild firma (NIX-spärren och MFL 19 §), registrets
+      nummer utan namngiven VD och utan sajt, eller varken sajt, mejl eller
+      telefon.
+
+    Tolkning (orkestratorn 2026-10-08): regel 12 går före VD-kravet. En sajt
+    vars enda kontaktsätt är en telefon hamnar på ringlistan även utan VD i
+    registret: numret är bolagets eget publicerade. VD-kravet i regel 15
+    gäller registrets nummer, som annars inte går att knyta till någon.
+
+    Ren funktion: används av körningen (_komplettera) och av
+    scripts/omklassa_listspar.py."""
+    if ar_enskild(k):
+        return "ej_kvalificerad", "Enskild firma (NIX-kontroll krävs)"
+    kontakt = kontakt or {}
+    if kontakt.get("tak") and not kontakt.get("contact_email"):
+        return "prova_om", "Stoppad av sidtaket"
+    if kontakt.get("contact_email") or registrets_epost(k):
+        return "iris", None
+    if kontakt.get("contact_phone"):
+        return "ring", None
+    if k.get("_telefon") and k.get("vd_namn"):
+        return "ring", None
+    if k.get("website"):
+        return "prova_om", "Sajt utan hittad kontakt"
+    if k.get("_telefon"):
+        return "ej_kvalificerad", "Ingen namngiven VD"
+    return "ej_kvalificerad", "Inget kontaktsätt"
+
+
+def iris_kandidat(k: dict[str, Any], kontakt: dict[str, Any] | None) -> dict[str, Any]:
+    """Kandidaten på Iris-spåret. `kontakt_kalla` säger varifrån adressen kom
+    (webbplats eller register): bara de två får ligga utanför bolagets domän
+    (regel 13, se api/leads.py:_skapa_prospekt_ur_kandidat)."""
+    kontakt = {f: v for f, v in (kontakt or {}).items() if f != "tak"}
+    if kontakt.get("contact_email"):
+        return {**k, **kontakt, "kontakt_kalla": "webbplats"}
+    return {
+        **k, **kontakt,
+        "contact_email": registrets_epost(k),
+        "contact_level": "role_address",
+        "kontakt_kalla": "register",
+    }
+
+
+def ringrad(k: dict[str, Any], kontakt: dict[str, Any] | None) -> dict[str, Any]:
+    """Prospektet på ringlistan (regel 15): VD ur registret (annars personen
+    sajten nämner vid numret), bolagets telefon och antal anställda, så att
+    säljaren vet att numret kan gå till någon annan. contact_level ur
+    migration 058:s värden: 'named_role_match' när VD är namngiven,
+    'role_address' när numret bara är bolagets växel."""
+    kontakt = kontakt or {}
+    telefon = kontakt.get("contact_phone") or k.get("_telefon")
+    vd = k.get("vd_namn")
+    return {
+        **{f: k.get(f) for f in (
+            "company_name", "website", "ort", "postnr", "orgnr", "anstallda", "omsattning", "sni",
+            "source_name", "source_url", "jev_triage",
+        )},
+        "contact_name": vd or kontakt.get("contact_name"),
+        "contact_role": "VD" if vd else kontakt.get("contact_role"),
+        "contact_phone": telefon,
+        "contact_email": None,
+        "contact_level": "named_role_match" if vd else "role_address",
+        "signal": "ring",
+        "signal_detalj": "Bara telefon, VD namngiven i registret" if vd else "Bara telefon på sajten",
+        "spar": "ring",
     }
 
 
@@ -811,66 +982,69 @@ async def _komplettera(
     rankade: list[dict[str, Any]], antal: int, *, lage: str, puls: Callable[[], Awaitable[Any]] | None,
     listspar: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
-    """Iris: bolag MED webbplats och en kontaktmejl till bolaget på sajten —
-    en namngiven person föredras (VD, ägare/chef, anställd), annars duger
-    bolagets egen adress, info@/kontakt@ (Sebbes beslut 2026-10-07). Lista: oförändrat VD-krav —
-    VD:ns mejl eller telefon på sajten, eller ensam-VD-undantaget.
+    """Iris: kontaktsökningen på bolagets sajt och fördelningen efter den
+    (fordela, Antons regler 12–16 2026-10-07). Bolagen på Iris-spåret
+    returneras; ringlistan, ej kvalificerade och de som prövas om läggs i
+    `listspar` med sitt spår, och körningen sparar dem när den är klar
+    (api/leads.py:_spara_listspar). Ingen dyr research körs på dem.
 
-    Iris-kandidater utan sajt, med parkerad domän eller utan en namngiven
-    kontakt på sajten läggs i `listspar` (plan 2026-10-05, fas 3) i stället
-    för att kastas, och får ingen dyr research."""
-    from .. import discovery
-    from ..platshallare import platshallare_for_webbplats
-
-    def till_lista(k: dict[str, Any], skal: str) -> None:
-        if listspar is not None:
-            listspar.append(_listrad(k, skal))
+    Lista: oförändrat VD-krav — VD:ns mejl eller telefon på sajten, eller
+    ensam-VD-undantaget."""
+    from .. import discovery, sidhamtning
+    from ..platshallare import ar_platshallare
 
     ut: list[dict[str, Any]] = []
     for k in rankade[: max(antal, 1) * PROV_PER_LEAD]:
         if len(ut) >= antal:
             break
-        if lage == "lista" and not k.get("vd_namn"):
+        if lage == "lista":
+            if not k.get("vd_namn"):
+                continue
+            webb = await _webbplats(k)
+            if puls:
+                await puls()
+            kontakt = await discovery.hamta_vd_kontakt(webb, k["vd_namn"]) if webb else None
+            if kontakt:
+                ut.append({**k, "website": webb, **kontakt, "contact_name": k["vd_namn"], "contact_role": "VD",
+                           "contact_level": "named_role_match"})
+            elif k.get("_ensam_vd_telefon"):
+                skal = "VD är ensam i bolaget" if webb else "Ingen webbplats; VD är ensam i bolaget"
+                ut.append({**_listrad({**k, "website": webb}, skal), "signal": None})
             continue
+        kontext = sidhamtning.aktuell()
+        if kontext and kontext.webb_slut:
+            # Resten prövas nästa körning: inget av dem skrivs till en lista
+            # eller hamnar i uteslutningen (regel 12).
+            break
         webb = await _webbplats(k)
         if puls:
             await puls()
-        if not webb:
-            if lage == "lista" and k.get("_ensam_vd_telefon"):
-                ut.append({**_listrad(k, "Ingen webbplats; VD är ensam i bolaget"), "signal": None})
-            else:
-                till_lista(k, "Ingen webbplats")  # Anton: "Om det inte finns en hemsida, gå vidare."
-            continue
-        k = {**k, "website": webb}
-        if lage == "iris":
-            parkerad = await platshallare_for_webbplats(webb)
-            if parkerad:
-                till_lista(k, f"Parkerad domän: {parkerad}")
-                continue
-        if lage == "iris":
-            # Vilken namngiven person som helst duger, i prioritetsordning;
-            # hamta_person_kontakt provar VD först när registret namngett en.
-            kontakt = await discovery.hamta_person_kontakt(
-                webb, k.get("vd_namn"), bolagsadress_racker=True
+        parkerad = await ar_platshallare(webb) if webb else None
+        k = {**k, "website": None if parkerad else webb}
+        kontakt = (
+            await discovery.hamta_person_kontakt(
+                k["website"], k.get("vd_namn"), bolagsadress_racker=True, bolagsnamn=k.get("company_name")
             )
-        else:
-            kontakt = await discovery.hamta_vd_kontakt(webb, k["vd_namn"]) if k.get("vd_namn") else None
-        if not kontakt:
-            if lage == "lista" and k.get("_ensam_vd_telefon"):
-                ut.append({**_listrad(k, "VD är ensam i bolaget"), "signal": None})
-            else:
-                till_lista(
-                    k,
-                    "Ingen VD-kontakt på webbplatsen" if lage == "lista"
-                    else "Ingen kontaktmejl på webbplatsen",
-                )
+            if k["website"] else None
+        )
+        spar, skal = fordela(k, kontakt)
+        if spar == "iris":
+            ut.append(iris_kandidat(k, kontakt))
+        elif listspar is None:
             continue
-        if lage == "iris":
-            k = {**k, **kontakt}
+        elif spar == "ring":
+            listspar.append(ringrad(k, kontakt))
+        elif spar == "prova_om":
+            listspar.append({
+                **{f: k.get(f) for f in ("company_name", "orgnr", "website")},
+                "signal_detalj": skal, "spar": spar, "tak": bool((kontakt or {}).get("tak")),
+            })
         else:
-            k = {**k, **kontakt, "contact_name": k["vd_namn"], "contact_role": "VD",
-                 "contact_level": "named_role_match"}
-        ut.append(k)
+            if parkerad:
+                skal = f"{skal}; parkerad domän ({parkerad})"
+            # Ingen kontaktuppgift på raden: ett nummer utan namngiven VD, eller
+            # en enskild firmas (NIX), hör inte hemma i en lista (regel 5, 15).
+            listspar.append(_listrad({**k, "website": webb, "_ensam_vd_telefon": None}, skal or "Inget kontaktsätt"))
     return ut
 
 

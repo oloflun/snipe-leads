@@ -92,7 +92,12 @@ def _rate_limit(fel: object) -> bool:
 class Skrapkontext:
     storage: Any = None
     tenant_id: str | None = None
+    #: Tak för registrets och researchens sidor (allt utom fas "webb").
     tak: int = STANDARD_TAK
+    #: Eget tak för bolagens webbsidor i kontaktsökningen (Antons regel 12,
+    #: 2026-10-07). De delade förut tak med merinfo-sidorna, och när taket tog
+    #: slut i kvällens körning (150/150) blev resten "Ingen kontaktmejl".
+    webb_tak: int = STANDARD_TAK
     #: Betalda ScrapeGraph-anrop per fas (lista, bolag, webb, research).
     anrop: dict[str, int] = field(default_factory=dict)
     cachetraffar: int = 0
@@ -107,7 +112,14 @@ class Skrapkontext:
 
     @property
     def slut(self) -> bool:
-        return self.totalt >= self.tak
+        return self.totalt - self.anrop.get("webb", 0) >= self.tak
+
+    @property
+    def webb_slut(self) -> bool:
+        return self.anrop.get("webb", 0) >= self.webb_tak
+
+    def slut_for(self, fas: str) -> bool:
+        return self.webb_slut if fas == "webb" else self.slut
 
     def som_dict(self) -> dict[str, Any]:
         # tjanstefel följer med till liggaren: en körning som slutar utan
@@ -121,9 +133,9 @@ class Skrapkontext:
 _KONTEXT: ContextVar[Skrapkontext | None] = ContextVar("leads_skrapkontext", default=None)
 
 
-def starta(storage: Any, tenant_id: str, *, tak: int = STANDARD_TAK) -> Skrapkontext:
+def starta(storage: Any, tenant_id: str, *, tak: int = STANDARD_TAK, webb_tak: int = STANDARD_TAK) -> Skrapkontext:
     """Sätter körningens kontext för den här await-kedjan och returnerar den."""
-    kontext = Skrapkontext(storage=storage, tenant_id=tenant_id, tak=max(0, tak))
+    kontext = Skrapkontext(storage=storage, tenant_id=tenant_id, tak=max(0, tak), webb_tak=max(0, webb_tak))
     _KONTEXT.set(kontext)
     return kontext
 
@@ -201,20 +213,33 @@ def _direkt_forst() -> bool:
     return os.environ.get("LEADS_DIREKTHAMTNING") != ""
 
 
-async def hamta(url: str, *, fas: str, direkt: bool) -> tuple[str | None, str | None, str]:
+#: Cacheversion per fas, i cachenyckeln. Bolagssidor hämtade före 2026-10-08
+#: saknar kontaktraderna ur JSON-LD, mailto/tel och Cloudflares adresskydd
+#: (platshallare.kontaktrader_ur_html) och hämtas därför om en gång. Webb och
+#: research delar version, så att de fortsätter dela cache för samma sida.
+_CACHEVERSION = {"webb": "#v2", "research": "#v2"}
+
+
+async def hamta(
+    url: str, *, fas: str, direkt: bool, betald: bool = True, utan_cache: bool = False
+) -> tuple[str | None, str | None, str]:
     """(text, fel, via). `via` är cache, direkt, scrapegraphai eller tak.
 
     `direkt`: sidan får hämtas med en vanlig httpx-förfrågan (bolagens egna
     sajter). merinfo och andra register som blockerar sådan hämtning anges
-    med direkt=False och går alltid via ScrapeGraph. Kastar aldrig."""
+    med direkt=False och går alltid via ScrapeGraph. `betald=False`: bara
+    gratis direkthämtning, aldrig ScrapeGraph (gissade sökvägar, regel 12).
+    `utan_cache`: cachen läses inte (startsidans betalda reserv när den
+    direkthämtade texten var för tunn). Kastar aldrig."""
     from ..agent.research_tools import _hamta_direkt
     from ..config import get_settings
 
     kontext = aktuell()
     lager = kontext.storage if kontext and kontext.tenant_id else None
-    if lager is not None:
+    nyckel = url + _CACHEVERSION.get(fas, "")
+    if lager is not None and not utan_cache:
         try:
-            rad = await lager.get_sidcache(kontext.tenant_id, url)
+            rad = await lager.get_sidcache(kontext.tenant_id, nyckel)
         except Exception:  # noqa: BLE001 — en trasig cacheläsning kostar bara ett anrop
             logger.exception("Sidcachen gick inte att läsa för %s", url)
             rad = None
@@ -238,9 +263,15 @@ async def hamta(url: str, *, fas: str, direkt: bool) -> tuple[str | None, str | 
     if forst:
         text, fel = await direkthamta()
         via = "direkt"
-    if text is None:
-        if kontext and kontext.slut:
-            fel = "; ".join(filter(None, [fel, f"kredittaket för körningen ({kontext.tak} anrop) är nått"]))
+    if not betald:
+        # Gissningen får aldrig kosta. I testsviten är direkthämtningen av
+        # (LEADS_DIREKTHAMTNING tom) och då hämtas ingenting alls.
+        if not forst:
+            return None, "direkthämtning avstängd", ""
+    elif text is None:
+        if kontext and kontext.slut_for(fas):
+            taket = kontext.webb_tak if fas == "webb" else kontext.tak
+            fel = "; ".join(filter(None, [fel, f"kredittaket för körningen ({taket} anrop) är nått"]))
             return None, fel, "tak"
         if kontext and get_settings().scrapegraphai_api_key:
             kontext.anrop[fas] = kontext.anrop.get(fas, 0) + 1
@@ -259,9 +290,11 @@ async def hamta(url: str, *, fas: str, direkt: bool) -> tuple[str | None, str | 
                 else:
                     fel = f"{fel} Reservhämtningen gav inget heller: {direkt_fel}."
     # Tjänstefel cachas inte: nästa anrop ska få pröva igen med påfylld kredit.
-    if lager is not None and (text or not _TJANSTEFEL.search(str(fel or ""))):
+    # En reservhämtning utan cache som inte gav text skriver inte över den
+    # text som redan ligger där.
+    if lager is not None and (text or not (utan_cache or _TJANSTEFEL.search(str(fel or "")))):
         try:
-            await lager.put_sidcache(kontext.tenant_id, url, innehall=text, fel=None if text else fel)
+            await lager.put_sidcache(kontext.tenant_id, nyckel, innehall=text, fel=None if text else fel)
         except Exception:  # noqa: BLE001
             logger.exception("Sidcachen gick inte att skriva för %s", url)
     return text, fel, via

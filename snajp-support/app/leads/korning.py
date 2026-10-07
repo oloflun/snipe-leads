@@ -102,8 +102,11 @@ async def sokrunda(
     korning["rundor"] += 1
     listspar: list[dict[str, Any]] = []
     fynd = await hitta_bolag(icp, antal, uteslut_namn=uteslut, profil=profil, ring=ring, listspar=listspar)
+    # Bara de ej kvalificerade är bortval i tratten. Ringlistan och de som
+    # prövas om räknas för sig i sammanfattningen (fordelning nedan).
     for rad in listspar:
-        korning["tratt"].append({"namn": rad["company_name"], "steg": "listspår", "skal": rad["signal_detalj"]})
+        if rad.get("spar", "ej_kvalificerad") == "ej_kvalificerad":
+            korning["tratt"].append({"namn": rad["company_name"], "steg": "listspår", "skal": rad["signal_detalj"]})
     korning.setdefault("listspar", []).extend(listspar)
     kvar: list[dict[str, Any]] = []
     for kandidat in fynd:
@@ -208,6 +211,23 @@ def _skalstyp(skal: object) -> str:
     return rubrik
 
 
+def fordelning(korning: dict[str, Any]) -> dict[str, int]:
+    """Hur bolagen utanför Iris fördelades (Antons regler 12–16, 2026-10-07).
+    Det körningen sparade (api/leads.py:_spara_listspar sätter "fordelning",
+    efter dubblettkontrollen) går före räkningen ur listspåret."""
+    if korning.get("fordelning"):
+        return {"ring": 0, "ej_kvalificerade": 0, "prova_om": 0, "tak": 0, **korning["fordelning"]}
+    rader = korning.get("listspar") or []
+    spar = Counter(r.get("spar", "ej_kvalificerad") for r in rader)
+    tak = sum(1 for r in rader if r.get("spar") == "prova_om" and r.get("tak"))
+    return {
+        "ring": spar["ring"],
+        "ej_kvalificerade": spar["ej_kvalificerad"],
+        "prova_om": spar["prova_om"] - tak,
+        "tak": tak,
+    }
+
+
 def sammanfatta(korning: dict[str, Any]) -> str:
     """Tratten i en mening, för kunden."""
     if korning.get("slut_orsak") == "inga_traffar":
@@ -218,8 +238,14 @@ def sammanfatta(korning: dict[str, Any]) -> str:
     delar = [f"{korning['undersokta']} undersökta"]
     typer = Counter(_skalstyp(t.get("skal")) for t in korning["tratt"])
     delar += [f"{antal} bortvalda: {typ.lower()}" for typ, antal in typer.most_common(3) if typ]
-    levererade = korning["levererade"]
-    text = ", ".join(delar) + f" → {levererade} lead{'' if levererade == 1 else 's'}."
+    f = fordelning(korning)
+    text = ", ".join(delar) + (
+        f" → {korning['levererade']} Iris-leads, {f['ring']} till ringlistan, "
+        f"{f['ej_kvalificerade']} ej kvalificerade, {f['prova_om']} sajter utan hittad kontakt (prövas om)"
+    )
+    if f["tak"]:
+        text += f", {f['tak']} stoppade av sidtaket (prövas om)"
+    text += "."
     if korning["levererade"] < korning["mal"] and korning.get("flaskhals"):
         text += f" Det som strypte mest: {korning['flaskhals'].lower()}."
     skrap = korning.get("skrap") or {}

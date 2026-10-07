@@ -48,7 +48,11 @@ def test_bolagsadressen_plockas_ur_sidan():
 
     sida = '<p>Jobba hos oss: <a href="mailto:jobb@alfa.se">jobb</a></p><footer>Kontakt: info (at) alfa (punkt) se</footer>'
     assert bolagsadress_i_text(sida, "https://www.alfa.se") == "info@alfa.se"
-    assert bolagsadress_i_text("Skriv till hej@gmail.com", "https://alfa.se") is None
+    # Antons regel 13 (2026-10-07) ersätter "aldrig en privat adress": en
+    # adress bolaget självt publicerar på sajten är bolagets, men den egna
+    # domänen går först.
+    assert bolagsadress_i_text("Skriv till hej@gmail.com", "https://alfa.se") == "hej@gmail.com"
+    assert bolagsadress_i_text("hej@gmail.com eller info@alfa.se", "https://alfa.se") == "info@alfa.se"
     assert bolagsadress_i_text("Kontakt: sales@alfa.se eller info@alfa.se", "https://alfa.se") == "sales@alfa.se"
 
 

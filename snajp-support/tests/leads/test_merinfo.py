@@ -206,17 +206,18 @@ def _sidor_for_sokningen():
 
 
 @pytest.mark.anyio
-async def test_iris_kraver_sajt_och_vd_kontakt_resten_gar_till_listsparet(monkeypatch):
-    """Antons regler 3-4 (2026-10-04) och planen 2026-10-05: ett Iris-lead har
-    en sajt och en VD-kontakt på den, aldrig registrets uppgifter. Bolag utan
-    sajt eller utan VD-kontakt kastas inte: de går till listspåret."""
+async def test_iris_kraver_mejl_resten_fordelas(monkeypatch):
+    """Antons regler 12–16 (2026-10-07), som ersätter 3–4 och 8 här: ett
+    Iris-lead har en mejladress, aldrig registrets telefon. Gamma (ingen sajt,
+    bara registrets nummer, ingen VD) blir ej kvalificerad; Delta (sajt där
+    inget hittades) prövas om och skrivs inte som listrad."""
     rader, sidor = _sidor_for_sokningen()
     _installera_sidor(monkeypatch, sidor)
 
     async def _uppslag(namn, geografi=None):
         return {"Beta Måleri AB": "https://www.betamaleri.se"}.get(namn)
 
-    async def _kontakt(webb, vd=None, *, bolagsadress_racker=False):
+    async def _kontakt(webb, vd=None, *, bolagsadress_racker=False, **_k):
         # Sebbes beslut 2026-10-07: Iris godtar bolagets egen adress när ingen
         # namngiven person finns. Testets sajter bär bara VD:n ur registret.
         assert bolagsadress_racker
@@ -236,13 +237,13 @@ async def test_iris_kraver_sajt_och_vd_kontakt_resten_gar_till_listsparet(monkey
     assert all(k["contact_phone"] is None for k in leads), "registrets nummer blir aldrig Iris-kontakt"
     beta = next(k for k in leads if k["company_name"] == "Beta Måleri AB")
     assert beta["website"] == "https://www.betamaleri.se"
-    # Gamma: ingen sajt. Delta: sajt men ingen VD i registret att knyta en kontakt till.
-    assert {r["company_name"]: r["signal_detalj"] for r in listspar} == {
-        "Gamma Golv AB": "Ingen webbplats",
-        "Delta Snickeri AB": "Ingen kontaktmejl på webbplatsen",
+    assert {r["company_name"]: (r["spar"], r["signal_detalj"]) for r in listspar} == {
+        "Gamma Golv AB": ("ej_kvalificerad", "Ingen namngiven VD"),
+        "Delta Snickeri AB": ("prova_om", "Sajt utan hittad kontakt"),
     }
-    # Gamma har fyra anställda: VD är inte ensam, så inget nummer på listraden.
-    assert all(r["contact_phone"] is None for r in listspar)
+    # Ett nummer utan namngiven VD hör inte hemma på en listrad (regel 5).
+    gamma = next(r for r in listspar if r["company_name"] == "Gamma Golv AB")
+    assert gamma["contact_phone"] is None
 
 
 def test_ensam_vd_far_registrets_nummer_men_bara_da():
