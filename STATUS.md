@@ -1,5 +1,20 @@
 # Snipra Status
 
+## 2026-10-08 — Claude — CRM-flödet: Översikt, utkast som stämmer, massåtgärder, kontaktsökning, Samtal
+
+Antons beställning 2026-10-07 är byggd och pushad till development (`ed31791`, migration 107 körd där).
+Översikt visar det som var Aktivitet, adminens heter Admin-översikt. Utkast att godkänna/Skickade stod på 0
+för att 26 godkända utkast väntade på sändfönstret och inget mejl gått ut på 28 dygn — nu visar varje lead
+utkastets riktiga status och nyckeltalen räknas ur samma källa som Skickat. Iris-listan har massåtgärder
+(skapa, skapa om, skicka, arkivera, ta bort, flytta till main) och visar bara leads före utskick; skickade
+bor i Inkorg › Skickat och flyttar mellan filtren när prospektet svarar. Uppföljningar skrivs som utkast
+till granskning. Kontaktsökningen hittar adresser den missade (w-domäner, VD-telefon som avbröt, Om
+oss-länkar, skyddade adresser, gissade kontaktsidor, eget sidtak) och fördelar till Iris, ringlista, ej
+kvalificerade eller prövas om (regel 12–17). Leads › Samtal har återkopplingen och ringlistan med utfall
+som verkställs. Listor går att ta bort och (admin) kopiera/flytta till annan kund. **Kvar för Anton:** ja
+till `omklassa_listspar.py --apply` efter torrkörningens siffror; release till main. Handoff:
+`HANDOFF-2026-10-08-CRM-FLODE.md`.
+
 ## 2026-10-06 (4) — Claude — bara leads som uppfyller kraven, insyn, kundens yta, dubblettspärr
 
 Iris visar bara leads som uppfyller kraven (varje nej eller ostyrkt måste-krav ger nivå C, och nivå C når

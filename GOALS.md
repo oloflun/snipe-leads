@@ -268,6 +268,12 @@ rebase. Ändringar behöver samordnas, inte bara pushas.
 
 ## Ändringslogg
 
+- 2026-10-08 — claude — delmål 2 (leads-agenten): kontaktsökningen hittar det som finns på sajten och
+  fördelar till Iris, ringlista, ej kvalificerade eller prövas om (leadsregel 12–17); Leads › Samtal med
+  ringlista och återkoppling. Delmål 11 (mejlsändning): utkastens status är en sanning per lead,
+  massåtgärder, skickade flyttar till Inkorg › Skickat. Delmål 12 (uppföljningskedjan) inkopplad: svepet
+  körs i sändaren för godkända utkast, alltid som utkast till granskning. Delmålslistan orörd.
+
 - 2026-10-06 (4) — claude — delmål 2 (leads-agenten hittar inte på): ett lead måste
   uppfylla kraven (inget nej, alla måste styrkta) och bortvalda visas aldrig; dubbletter
   mellan Iris och listorna spärras även vid samtidiga körningar. Delmål 6: kunden kan

@@ -107,9 +107,10 @@ regel 1, 4, 5, 7, 8 och 10 där de krockar:**
 14. **Tilltal.** Personlig adress → personens namn. Bolagets adress och en Om
     oss-sida med högst två personer där en tydligt är ägare eller VD → den
     personens namn. Annars en inledning utan namn.
-15. **Bara telefon → ringlistan.** Utan mejladress men med telefon (från sajten
-    eller registrets bolagsnummer) går bolaget till ringlistan om VD är
-    namngiven i registret; numret antas vara VD:s när det hör till bolaget.
+15. **Bara telefon → ringlistan.** Utan mejladress men med telefon går bolaget
+    till ringlistan. Sajtens eget publicerade nummer räcker alltid (regel 12
+    går före); registrets bolagsnummer kräver att VD är namngiven i
+    registret, och numret antas då vara VD:s.
     Antal anställda visas alltid, så att säljaren vet att numret kan gå till
     någon annan. Enskilda firmor går inte till ringlistan (NIX-spärren gäller
     dem).
@@ -121,6 +122,12 @@ regel 1, 4, 5, 7, 8 och 10 där de krockar:**
     ej svar kommer tillbaka efter två arbetsdagar, återkom på datumet, ett
     mejlsvar tar bort leadet ur listan och avslutande utfall stoppar alla
     utskick. Uppföljningsmejl är alltid utkast som en människa godkänner.
+
+Kod för 12–17: `sources/merinfo.py:fordela` (fördelningen),
+`discovery.py:hamta_person_kontakt`/`kontakt_ur_sidor` (kontaktsökningen),
+`platshallare.py:kontaktrader_ur_html` (skyddade adresser, JSON-LD),
+`app/leads/samtal.py` (ringlista och återkoppling, Leads › Samtal) och
+`scripts/omklassa_listspar.py` (äldre listspårsrader genom samma sökning).
 
 Koden: `snajp-support/app/leads/sources/merinfo.py` (filtret, `lage="iris"`
 och `lage="lista"`), `app/leads/discovery.py:hamta_vd_kontakt` (VD-kontrollen).
