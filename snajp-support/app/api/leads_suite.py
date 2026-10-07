@@ -16,7 +16,7 @@ from typing import Any, Literal
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel, Field
 
-from ..leads import crm_synk, upptagna
+from ..leads import crm_synk, samtal, upptagna
 from .deps import kraev_uuid, require_tenant
 
 router = APIRouter()
@@ -42,6 +42,14 @@ class UppgiftPatchRequest(BaseModel):
     model_config = {"extra": "forbid"}
 
     klar: bool
+
+
+class SamtalRequest(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    utfall: samtal.Utfall
+    aterkom_datum: date | None = None
+    anteckning: str | None = Field(default=None, max_length=4000)
 
 
 class VyRequest(BaseModel):
@@ -132,6 +140,11 @@ async def tidslinje(request: Request, prospect_id: str, tenant: dict = Depends(r
                 )
             )
 
+    for rad in await storage.list_lead_samtal(tenant_id, prospect_id=prospect_id):
+        # Rubriken bär utfallets nyckel; UI:t översätter, som för statusen.
+        handelser.append(
+            _handelse("samtal", rad["created_at"], rad["utfall"], text=rad.get("anteckning"), id=rad["id"])
+        )
     for rad in await storage.list_lead_notes(tenant_id, prospect_id):
         handelser.append(_handelse("anteckning", rad["created_at"], "", text=rad["text"], id=rad["id"]))
     for rad in await storage.list_lead_tasks(tenant_id, prospect_id=prospect_id):
@@ -146,6 +159,48 @@ async def tidslinje(request: Request, prospect_id: str, tenant: dict = Depends(r
     # lades till sist i listan (och därmed hände sist) först.
     handelser = sorted(reversed(handelser), key=lambda h: _tidpunkt(h["nar"]), reverse=True)
     return {"handelser": handelser}
+
+
+@router.post("/api/leads/prospects/{prospect_id}/samtal", status_code=201)
+async def nytt_samtal(
+    request: Request, prospect_id: str, payload: SamtalRequest, tenant: dict = Depends(require_tenant)
+) -> dict:
+    """Ringd: sparar utfallet och verkställer det (app/leads/samtal.py)."""
+    storage = request.app.state.storage
+    prospect = await _kraev_prospekt(storage, tenant["tenant_id"], prospect_id)
+    if payload.utfall == "aterkom" and payload.aterkom_datum is None:
+        raise HTTPException(status_code=422, detail="Återkom kräver ett datum.")
+    rad = await samtal.registrera(
+        storage, tenant["tenant_id"], prospect,
+        utfall=payload.utfall,
+        aterkom_datum=payload.aterkom_datum if payload.utfall == "aterkom" else None,
+        anteckning=(payload.anteckning or "").strip() or None,
+    )
+    return {"samtal": rad}
+
+
+@router.get("/api/leads/samtal")
+async def samtalslista(
+    request: Request, lista: Literal["aterkoppling", "ring"] = "aterkoppling", tenant: dict = Depends(require_tenant)
+) -> dict:
+    """Återkopplingen eller ringlistan, de som ska ringas i dag först."""
+    storage = request.app.state.storage
+    tenant_id = tenant["tenant_id"]
+    # ponytail: hela tenantens prospekt, samtal och utskick läses och filtreras
+    # här; en SQL-vy när en kund har tusentals leads.
+    prospekter, alla_samtal, skickade = await asyncio.gather(
+        storage.list_prospects(tenant_id, limit=2000),
+        storage.list_lead_samtal(tenant_id),
+        storage.list_skickade(tenant_id, limit=500),
+    )
+    forsta: dict[str, Any] = {}
+    for m in skickade:  # nyast först: den sista vi ser per prospekt är den första
+        if m.get("prospect_id"):
+            forsta[str(m["prospect_id"])] = m.get("sent_at")
+    rader = samtal.samtalslista(
+        prospekter, alla_samtal, forsta, lista=lista, idag=datetime.now(timezone.utc).date()
+    )
+    return {"rader": rader, "ring_idag": sum(1 for r in rader if r["ring_idag"])}
 
 
 @router.post("/api/leads/prospects/{prospect_id}/anteckningar", status_code=201)
