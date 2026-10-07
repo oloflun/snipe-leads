@@ -182,6 +182,17 @@ function KorningsRuta({ onOppna, onPagaende }: Readonly<{ onOppna: (jobId: strin
 
   useEffect(() => {
     void hamta();
+    // En körning som startas medan sidan är öppen (Kör Iris) syns direkt,
+    // inte först vid nästa sidladdning: formuläret signalerar varje steg.
+    const uppdatera = () => {
+      if (!stoppad.current) void hamta();
+    };
+    window.addEventListener("snipra:leads-korning-steg", uppdatera);
+    window.addEventListener("snipra:leads-korning-klar", uppdatera);
+    return () => {
+      window.removeEventListener("snipra:leads-korning-steg", uppdatera);
+      window.removeEventListener("snipra:leads-korning-klar", uppdatera);
+    };
   }, [hamta]);
 
   const pagaende = (rader ?? []).filter(pagar);
@@ -287,6 +298,8 @@ export function LeadsOversikt({
   const { prospekt, veckor } = useOversiktsdata(arDemo);
   const [antalLeads, setAntalLeads] = useState<number | null>(null);
   const [antalUtkast, setAntalUtkast] = useState<number | null>(null);
+  // Körningsrutan vet om en Iris-körning pågår; tabellen går då i livetakt.
+  const [pagaendeKorningar, setPagaendeKorningar] = useState(0);
 
   // Flytt till main: bara plattformsadminens egen vy, aldrig demo eller
   // kundbesök. I main svarar flyttvägen själv med ett tydligt nej.
@@ -410,7 +423,7 @@ export function LeadsOversikt({
           </h2>
           <IrisGranskning demo={arDemo} onAntal={setAntalUtkast} kompakt />
         </section>
-        {arDemo ? null : <KorningsRuta onOppna={(jobId) => onOppnaKorningar?.(jobId)} />}
+        {arDemo ? null : <KorningsRuta onOppna={(jobId) => onOppnaKorningar?.(jobId)} onPagaende={setPagaendeKorningar} />}
       </div>
 
       <SmalKolumn value={bred}>
@@ -426,6 +439,7 @@ export function LeadsOversikt({
               exempel={exempel}
               onValj={onValjLead}
               flyttbar={flyttbar}
+              korningPagar={pagaendeKorningar > 0}
               onAntal={setAntalLeads}
             />
           </section>

@@ -1,10 +1,11 @@
 "use client";
 
 import { X } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { EjAktiverad } from "@/components/EjAktiverad";
 import { Badge, Cell, SkeletonRows, Tabell, Tomt, btnSecondary, etikett, btnLiten, faltDiskret, faltTatt, chip, chipAktiv, chipInaktiv, chiplista, meta, tabellRad } from "@/components/ui";
 import { useSmal } from "@/components/leads/smal";
+import { useRadrorelse } from "@/components/leads/useRadrorelse";
 import { demoOversiktSvar } from "@/lib/demo/oversikt";
 import { felmeddelande } from "@/lib/http/json";
 import { useLocale, type Localized } from "@/lib/i18n";
@@ -84,6 +85,7 @@ const T = {
   statusAndrad: { sv: "Status ändrad till", en: "Status changed to" },
   exempel: { sv: "Exempel", en: "Example" },
   researchar: { sv: "Researchar", en: "Researching" },
+  live: { sv: "Uppdateras live", en: "Updating live" },
   oppna: { sv: "Öppna", en: "Open" },
   modernitet: { sv: "Modernitet", en: "Modernity" }
 } satisfies Record<string, Localized>;
@@ -144,17 +146,53 @@ function forstaMening(p: SuiteProspekt): string | null {
   return slut > 0 ? text.slice(0, slut + 1) : text;
 }
 
-/** Researchen är köad eller pågår: raden finns men är inte bedömd än. */
+/** Researchen är köad eller pågår: backenden säger det (status härledd ur
+ *  jobbliggaren), eller raden finns men är inte bedömd än. */
 function researchPagar(p: SuiteProspekt): boolean {
-  return p.origin !== "example" && !p.niva && p.score_total == null && p.icp_fit == null;
+  if (p.origin === "example") return false;
+  return p.status === "researching" || (!p.niva && p.score_total == null && p.icp_fit == null);
 }
 
-/** Nyaste överst — exemplen först. Sorteringen på nivå och poäng lade nya
- *  leads mitt i listan (Antons krav 2026-10-06). */
-function sortera(rader: SuiteProspekt[]): SuiteProspekt[] {
-  const rang = (p: SuiteProspekt) => (p.origin === "example" ? 0 : 1);
-  return [...rader].sort((a, b) => rang(a) - rang(b) || (b.created_at ?? "").localeCompare(a.created_at ?? ""));
+/** Backendens härledda status: ett researchjobb är köat eller körs nu. Bara
+ *  den styr livetakten — en importerad rad utan poäng ser ut som research
+ *  men väntar inte på något. */
+function iResearch(p: SuiteProspekt): boolean {
+  return p.origin !== "example" && p.status === "researching";
 }
+
+const NIVA_RANG: Record<string, number> = { A: 0, B: 1 };
+
+function kvalitet(p: SuiteProspekt): number {
+  if (typeof p.score_total === "number") return p.score_total;
+  if (typeof p.icp_fit === "number") return p.icp_fit * 100;
+  return -1;
+}
+
+function nyast(a: SuiteProspekt, b: SuiteProspekt): number {
+  return (b.created_at ?? "").localeCompare(a.created_at ?? "");
+}
+
+/**
+ * De bästa leadsen överst (Sebbe 2026-10-07): nivå (Stark före Möjlig), sedan
+ * poäng, sedan nyast. Exemplen först. Bolag under research har inget betyg än
+ * och står överst, så att man ser dem bli klara och glida ner till sin plats.
+ *
+ * Ersätter Antons "nyaste överst" (2026-10-06), vars skäl var att nya leads
+ * hamnade mitt i listan: de nya har nu en egen flik, Ny.
+ */
+function sortera(rader: SuiteProspekt[]): SuiteProspekt[] {
+  const grupp = (p: SuiteProspekt) => (p.origin === "example" ? 0 : iResearch(p) ? 1 : 2);
+  return [...rader].sort(
+    (a, b) =>
+      grupp(a) - grupp(b) ||
+      (NIVA_RANG[a.niva ?? ""] ?? 2) - (NIVA_RANG[b.niva ?? ""] ?? 2) ||
+      kvalitet(b) - kvalitet(a) ||
+      nyast(a, b)
+  );
+}
+
+/** Tidtakten medan något pågår: tätt nog att se ett bolag byta flik. */
+const LIVE_MS = 4000;
 
 export function LeadsTabell({
   onValj,
@@ -162,6 +200,7 @@ export function LeadsTabell({
   exempel = [],
   demo = false,
   flyttbar = false,
+  korningPagar = false,
   onAntal
 }: Readonly<{
   onValj?: (id: string) => void;
@@ -172,6 +211,9 @@ export function LeadsTabell({
   demo?: boolean;
   /** Plattformsadmin i development: markera leads och flytta dem till main. */
   flyttbar?: boolean;
+  /** En Iris-körning pågår (översiktens körningsruta): listan hämtas tätt
+   *  även innan första bolaget hunnit köas. */
+  korningPagar?: boolean;
   /** Översiktens nyckeltal: hur många leads listan bär. */
   onAntal?: (antal: number) => void;
 }>) {
@@ -238,6 +280,35 @@ export function LeadsTabell({
     void hamta();
   }, [hamta]);
 
+  // Bara leadsen, tyst: livetakten ska inte blinka fram fel eller skelett.
+  const hamtaLeads = useCallback(async () => {
+    if (demo) return;
+    try {
+      const svar = await leadsAnrop<{ prospects?: SuiteProspekt[] }>("/leads/prospects");
+      setProspekt(svar.prospects ?? []);
+    } catch {
+      // Nästa varv försöker igen; ett tillfälligt fel är ingen nyhet.
+    }
+  }, [demo]);
+
+  // Live (Sebbe 2026-10-07): medan en körning pågår eller något bolag
+  // researchas hämtas listan var fjärde sekund, så att bolagen syns flytta
+  // från Research pågår till Ny. När det tystnar hämtas allt en sista gång.
+  const live = !demo && (korningPagar || (prospekt ?? []).some(iResearch));
+  const varLive = useRef(false);
+  useEffect(() => {
+    if (!live) {
+      if (varLive.current) void hamta();
+      varLive.current = false;
+      return;
+    }
+    varLive.current = true;
+    const id = window.setInterval(() => {
+      if (document.visibilityState === "visible") void hamtaLeads();
+    }, LIVE_MS);
+    return () => window.clearInterval(id);
+  }, [live, hamta, hamtaLeads]);
+
   // En pågående körning (Kör Iris) lägger till rader medan man tittar.
   useEffect(() => {
     const uppdatera = () => void hamta();
@@ -257,6 +328,8 @@ export function LeadsTabell({
   }, [uppgifter]);
 
   const allaRader = useMemo(() => sortera([...exempel, ...(prospekt ?? [])]), [exempel, prospekt]);
+  const listref = useRef<HTMLDivElement>(null);
+  useRadrorelse(listref, prospekt === null ? null : allaRader);
   useEffect(() => {
     if (prospekt !== null) onAntal?.(allaRader.length);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -284,7 +357,7 @@ export function LeadsTabell({
     setBortvaldaFel(null);
     try {
       const svar = await leadsAnrop<{ prospects?: SuiteProspekt[] }>("/leads/prospects?bortvalda=1");
-      setBortvalda(sortera(svar.prospects ?? []));
+      setBortvalda([...(svar.prospects ?? [])].sort(nyast));
     } catch (orsak) {
       setBortvaldaFel(felmeddelande(orsak));
       setBortvalda([]);
@@ -461,7 +534,10 @@ export function LeadsTabell({
 
   const poangCell = (p: SuiteProspekt) =>
     researchPagar(p) ? (
-      <span className={meta}>{text(T.researchar)}</span>
+      <span className={cn(meta, "inline-flex items-center gap-1.5")}>
+        <span aria-hidden className="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-ochre" />
+        {text(T.researchar)}
+      </span>
     ) : (
       <span className="inline-flex flex-col items-end leading-tight">
         <span className="num font-semibold tabular-nums">{poangAv(p)}</span>
@@ -509,7 +585,16 @@ export function LeadsTabell({
   };
 
   return (
-    <div className="space-y-5">
+    <div ref={listref} className="space-y-5">
+      {live ? (
+        <p className={cn(meta, "inline-flex items-center gap-2")}>
+          <span aria-hidden className="relative flex h-2 w-2">
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-ochre opacity-60 motion-reduce:hidden" />
+            <span className="relative inline-flex h-2 w-2 rounded-full bg-ochre" />
+          </span>
+          {text(T.live)}
+        </p>
+      ) : null}
       {/* Statusremsan: pipelinen som räknare. Ett klick filtrerar, ett till släpper. */}
       <nav aria-label={text(T.pipeline)} className="-mx-1 overflow-x-auto px-1">
         <ul className={cn("flex gap-1.5", smal ? "flex-wrap" : "min-w-max")}>
@@ -722,7 +807,7 @@ export function LeadsTabell({
               ]}
             >
               {synliga.map((p) => (
-                <tr key={p.id} className={cn(tabellRad, "align-top", p.id === valdId && "bg-ochre/10")}>
+                <tr key={p.id} data-rad-id={p.id} className={cn(tabellRad, "align-top", p.id === valdId && "bg-ochre/10")}>
                   {flyttbar ? (
                     <Cell>
                       <input
@@ -749,7 +834,11 @@ export function LeadsTabell({
 
           <ul className={cn("space-y-3", !smal && "lg:hidden")} aria-label={text(T.tabell)}>
             {synliga.map((p) => (
-              <li key={p.id} className={cn("rounded-card border border-ink/12 bg-paper2/40 p-4", p.id === valdId && "border-ochre/50")}>
+              <li
+                key={p.id}
+                data-rad-id={p.id}
+                className={cn("rounded-card border border-ink/12 bg-paper2/40 p-4", p.id === valdId && "border-ochre/50")}
+              >
                 <div className="flex items-start justify-between gap-3">
                   {flyttbar ? (
                     <input

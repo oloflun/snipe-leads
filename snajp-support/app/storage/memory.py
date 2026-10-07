@@ -1606,6 +1606,16 @@ class MemoryStorage:
     def _korningsrad(self, rad: dict[str, Any]) -> dict[str, Any]:
         return {f: rad.get(f) for f in self._KORNINGSFALT}
 
+    async def list_prospekt_i_research(self, tenant_id: str) -> set[str]:
+        return {
+            str(r["prospect_id"])
+            for r in self.leads_job_ledger.values()
+            if r["tenant_id"] == tenant_id
+            and r.get("prospect_id")
+            and r["status"] in ("queued", "processing")
+            and r["scope"] in ("research", "research_and_draft")
+        }
+
     async def list_leads_korningar(self, tenant_id: str, *, limit: int = 20) -> list[dict[str, Any]]:
         rader = [
             r for r in self.leads_job_ledger.values()

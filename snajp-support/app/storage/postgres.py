@@ -2181,6 +2181,19 @@ class PostgresStorage:
          where tenant_id = $1 and scope in ('batch', 'lista')
     """
 
+    async def list_prospekt_i_research(self, tenant_id: str) -> set[str]:
+        async with self._scoped(tenant_id) as conn:
+            records = await conn.fetch(
+                """
+                select distinct prospect_id from leads_job_ledger
+                 where tenant_id = $1 and prospect_id is not null
+                   and status in ('queued', 'processing')
+                   and scope in ('research', 'research_and_draft')
+                """,
+                tenant_id,
+            )
+        return {str(r["prospect_id"]) for r in records}
+
     async def list_leads_korningar(self, tenant_id: str, *, limit: int = 20) -> list[dict[str, Any]]:
         async with self._scoped(tenant_id) as conn:
             records = await conn.fetch(

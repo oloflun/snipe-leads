@@ -737,6 +737,15 @@ class Storage(Protocol):
         migration 059, eller en annan miljös jobb)."""
         ...
 
+    async def list_prospekt_i_research(self, tenant_id: str) -> set[str]:
+        """Prospekten vars researchjobb står i queued eller processing i
+        liggaren (scope research/research_and_draft; ett rent utkastjobb är
+        ingen research). Underlaget för den härledda statusen "Research
+        pågår" i GET /api/leads/prospects (Sebbe 2026-10-07): härledd i
+        stället för lagrad, så att en process som dör aldrig lämnar ett bolag
+        fast i den — städaren failar jobbet och bolaget står som Ny igen."""
+        ...
+
     async def list_leads_korningar(self, tenant_id: str, *, limit: int = 20) -> list[dict[str, Any]]:
         """Tenantens körningar (liggarens batch- och listrader), nyast
         först: job_id, status, scope, is_test, created_at, updated_at,

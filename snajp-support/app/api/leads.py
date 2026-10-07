@@ -535,6 +535,15 @@ async def list_prospects(request: Request, tenant: dict = Depends(require_tenant
         pid = str(rad["prospect_id"])
         if rad["created_at"] > senast.get(pid, ""):
             senast[pid] = rad["created_at"]
+    # "Research pågår" (Sebbe 2026-10-07): ett Ny-bolag vars researchjobb är
+    # köat eller körs visas med status researching, och står som Ny igen när
+    # jobbet är klart. Härlett ur liggaren, aldrig lagrat — se
+    # storage.list_prospekt_i_research för varför.
+    try:
+        i_research = await request.app.state.storage.list_prospekt_i_research(tenant["tenant_id"])
+    except Exception:  # noqa: BLE001 — en visningsdetalj får inte fälla listan
+        logger.exception("Kunde inte läsa pågående research för %s.", tenant["tenant_id"])
+        i_research = set()
     # rollkoppling_oklar: underlag för intresseavvägningen, härlett vid
     # läsning — se app/leads/rollkoppling.py för varför den inte lagras.
     return {
@@ -542,6 +551,11 @@ async def list_prospects(request: Request, tenant: dict = Depends(require_tenant
             {
                 **med_rollflagga(p),
                 "senaste_handelse_at": senast.get(str(p["id"])) or p.get("created_at"),
+                **(
+                    {"status": "researching"}
+                    if (p.get("status") or "new") == "new" and str(p["id"]) in i_research
+                    else {}
+                ),
             }
             for p in prospects
         ]

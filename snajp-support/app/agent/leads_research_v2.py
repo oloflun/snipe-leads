@@ -425,7 +425,10 @@ async def _research_v2(
                 **bedomning,
                 "profil_version": profil.get("version"),
                 "jev": {**(prospect_row.get("jev") or {}), "klassning": jev_klass} if jev_klass else None,
-                "status": "ready" if bedomning["qualified"] else None,
+                # Ingen status: ett researchat lead står som Ny tills kunden
+                # själv flyttar det (Sebbe 2026-10-07: körningens fynd ska
+                # landa i fliken Ny). Förut blev varje kvalificerat bolag
+                # Redo — även ett som kunden redan kontaktat och processade om.
                 "ort": None if prospect_row.get("ort") else fynd.get("ort"),
                 "postnr": None if prospect_row.get("postnr") else fynd.get("postnummer"),
                 "anstallda": antal if isinstance(antal, int) and not isinstance(antal, bool) else None,
