@@ -913,9 +913,10 @@ class MemoryStorage:
         candidates = [
             m
             for m in self.outreach_messages.get(tenant_id, [])
-            if m["thread_id"] == thread_id and m["direction"] == "outbound" and m["sent_at"] is None
+            if m["thread_id"] == thread_id and m["direction"] == "outbound"
+            and m["sent_at"] is None and m.get("kasserad_at") is None
         ]
-        return candidates[0] if candidates else None
+        return candidates[-1] if candidates else None
 
     async def mark_outreach_message_sent(self, tenant_id: str, message_id: str, sent_at) -> None:
         for message in self.outreach_messages.get(tenant_id, []):
@@ -943,6 +944,8 @@ class MemoryStorage:
             "subject": subject,
             "humanizer_variant": humanizer_variant,
             "sent_at": None,
+            "created_at": _now(),
+            "kasserad_at": None,
         }
         queue_item = {
             "id": str(uuid.uuid4()),
@@ -1049,6 +1052,9 @@ class MemoryStorage:
             if item["thread_id"] == thread_id and item["status"] in ("queued", "awaiting_review"):
                 item["status"] = "cancelled"
                 antal += 1
+        for m in self.outreach_messages.get(tenant_id, []):
+            if m["thread_id"] == thread_id and m["direction"] == "outbound" and m["sent_at"] is None:
+                m["kasserad_at"] = m.get("kasserad_at") or _now()
         return antal
 
     async def reschedule_pending_sends(

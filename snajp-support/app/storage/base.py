@@ -596,7 +596,9 @@ class Storage(Protocol):
     async def cancel_pending_sends(self, tenant_id: str, thread_id: str) -> int:
         """Ställer in trådens köade/väntande send_queue-poster. Körs när ett
         svar kommit in: det som låg i kön skrevs till någon som inte hade
-        svarat, och den premissen gäller inte längre. Returnerar antalet."""
+        svarat, och den premissen gäller inte längre. Trådens osända utkast
+        kasseras samtidigt (migration 107), så att inget av dem väljs som
+        väntande text igen. Returnerar antalet inställda poster."""
         ...
 
     async def reschedule_pending_sends(

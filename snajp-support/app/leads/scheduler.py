@@ -351,6 +351,16 @@ async def _process_due_item(
     return "requeued"
 
 
+async def avbryt_utskick_for_prospekt(storage: Storage, tenant_id: str, prospect_id: str) -> int:
+    """Ställer in leadets väntande utskick och kasserar osända utkast.
+
+    Arkivera, ett avslutande samtalsutfall (ej intresserad, kontakta inte,
+    möte) och Skapa om utkast går hit: inget som skrevs före beslutet får gå
+    ut efter det. Returnerar antalet inställda köposter."""
+    trad = await storage.find_outreach_thread(tenant_id, prospect_id=prospect_id)
+    return await storage.cancel_pending_sends(tenant_id, trad["id"]) if trad else 0
+
+
 def godkannande(item: dict) -> dict | None:
     """Godkännandet ur postens grindanteckningar, eller None."""
     gc = item.get("gate_checks") or {}

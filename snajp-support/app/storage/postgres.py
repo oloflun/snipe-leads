@@ -1241,8 +1241,9 @@ class PostgresStorage:
             record = await conn.fetchrow(
                 """
                 select * from outreach_messages
-                where tenant_id = $1 and thread_id = $2 and direction = 'outbound' and sent_at is null
-                order by id limit 1
+                where tenant_id = $1 and thread_id = $2 and direction = 'outbound'
+                  and sent_at is null and kasserad_at is null
+                order by created_at desc, id desc limit 1
                 """,
                 tenant_id,
                 thread_id,
@@ -1398,6 +1399,17 @@ class PostgresStorage:
                 update send_queue set status = 'cancelled'
                 where tenant_id = $1 and thread_id = $2
                   and status in ('queued', 'awaiting_review')
+                """,
+                tenant_id,
+                thread_id,
+            )
+            # Utkastet bakom en inställd post skickas aldrig: kasserat, så att
+            # det inte väljs som väntande text eller spärrar uppföljningar (107).
+            await conn.execute(
+                """
+                update outreach_messages set kasserad_at = now()
+                where tenant_id = $1 and thread_id = $2 and direction = 'outbound'
+                  and sent_at is null and kasserad_at is null
                 """,
                 tenant_id,
                 thread_id,
