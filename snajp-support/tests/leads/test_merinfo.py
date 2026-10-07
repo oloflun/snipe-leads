@@ -106,8 +106,14 @@ def test_bolagssidan_ger_kontaktperson_med_roll_och_telefon():
         (["Stockholms län"], ["stockholms-lan"]),
         (["Göteborg", "Västra Götalands län"], ["vastra-gotalands-lan"]),
         (["Norrland"], ["norrbottens-lan", "vasterbottens-lan", "jamtlands-lan", "vasternorrlands-lan", "gavleborgs-lan"]),
-        # Okänd ort: ingen sökning i hela landet på en felstavning.
-        (["Gbg"], None),
+        # Okänt ord: ingen sökning i hela landet på något som inte är en ort.
+        (["Qwrtzx"], None),
+        # Felstavning och vardagsnamn tolkas (2026-10-07: "Luelå" och "Övik"
+        # tappades, och körningen sökte utan dem).
+        (["Gbg"], ["goteborg"]),
+        (["Luelå"], ["lulea"]),
+        (["Övik"], ["ornskoldsvik"]),
+        (["Umeå", "Luelå", "Skellefteå"], ["umea", "skelleftea", "lulea"]),
     ],
 )
 def test_geografiregeln(termer, vantat):
@@ -283,7 +289,7 @@ async def test_uteslutna_och_okand_malgrupp(monkeypatch):
     assert await m.sok(icp, 3, uteslut=uteslut) == []
     # Okänd ort, och en bransch utan någon lista hos merinfo: None, så den
     # gamla kedjan tar vid i stället för ett tomt svar.
-    assert await m.sok({"industries": ["Bygg"], "geography": ["Gbg"]}, 3) is None
+    assert await m.sok({"industries": ["Bygg"], "geography": ["Qwrtzx"]}, 3) is None
     assert await m.sok({"industries": ["Finns Inte"], "geography": ["Mölndal"]}, 3) is None
 
 

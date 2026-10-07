@@ -237,7 +237,9 @@ async def test_atertag_fortsatter_ur_liggaren_utan_jobbstore(monkeypatch):
 
     rad = await storage.get_leads_korning(t, "b-deploy")
     assert rad["korning"]["klar"] is True and rad["status"] == "completed"
-    assert rad["korning"]["slut_orsak"] == "slut_pa_kandidater"
+    # Ingen sökning gav något bolag: sedan 2026-10-07 heter det inga_traffar
+    # (app/leads/korning.py, avsluta), inte "slut på kandidater".
+    assert rad["korning"]["slut_orsak"] == "inga_traffar"
 
 
 async def test_kandidatpoolen_lamnar_aldrig_apiet():

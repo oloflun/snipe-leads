@@ -1376,6 +1376,7 @@ async def hitta_bolag(
     from .sources import merinfo
 
     fran_register: list[dict[str, Any]] = []
+    registret_oanvant = False
     if merinfo.aktiv():
         try:
             registret = await merinfo.sok(icp, antal, uteslut=uteslut, profil=profil, listspar=listspar)
@@ -1386,6 +1387,7 @@ async def hitta_bolag(
             # existensgrinden står kvar för varje sökträff.
             logger.warning("Registret gick inte att läsa — sökkedjan tar hela rundan.")
             registret = None
+        registret_oanvant = registret is None
         if registret is not None:
             # Register ∩ signaler (plan del C, 2026-10-02): annons- och
             # nyhetskällorna avgör inte urvalet, de rankar det. Ett
@@ -1479,6 +1481,20 @@ async def hitta_bolag(
     # söker bolag utan fungerande webbplats — den mäts av webbsignal i stället.
     if not utan_webb:
         rena = await utan_platshallare(rena)
+    if not rena and not fran_register and not fran_kallor and registret_oanvant:
+        # Sista skyddsnätet (Sebbe 2026-10-07: "körningar ska köras
+        # felfritt"): målgruppen gick inte att översätta till registret och
+        # den öppna sökningen svarade tomt. Förut slutade rundan där, tre
+        # gånger, med 0 undersökta. Registret söks nu brett i kundens område
+        # och Jev klassar mot kriterierna — samma grindar som alltid.
+        try:
+            breda = await merinfo.sok(icp, antal_kvar, uteslut=uteslut, profil=profil, listspar=listspar, bred=True)
+        except DiscoveryError:
+            logger.warning("Den breda registersökningen gick inte att läsa.")
+            breda = None
+        if breda:
+            logger.info("Discovery (ring %d): bred registersökning gav %d bolag.", ring, len(breda))
+            return breda[:antal_kvar]
     # Märks som sökträffar: allt på raden är modellens påstående tills
     # existensgrinden (leads/existens.py) och researchen styrkt det. Kontakten
     # följer därför inte med till prospektet (api/leads.py), och ort och

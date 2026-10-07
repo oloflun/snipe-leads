@@ -145,6 +145,10 @@ const SLUT_ETIKETT: Record<string, Localized> = {
   },
   slut_pa_kandidater: { sv: "Inga fler bolag att pröva i målgruppen", en: "No more companies to try in the target group" },
   sokningen_foll: { sv: "Sökningen gick inte att genomföra", en: "The search could not be completed" },
+  inga_traffar: {
+    sv: "Sökningen hittade inga bolag. Kontrollera orterna eller bredda bransch eller område.",
+    en: "The search found no companies. Check the locations or widen the industry or area."
+  },
   budget: { sv: "Dagens budget för körningar är slut", en: "Today's budget for runs is used up" },
   kredittak: {
     sv: "Körningens tak för sidhämtningar är nått",

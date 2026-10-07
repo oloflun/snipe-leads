@@ -171,7 +171,19 @@ def registrera_utfall(
 
 
 def avsluta(korning: dict[str, Any], orsak: str) -> None:
-    """Sätter slutet — och namnger flaskhalsen när målet inte nåddes."""
+    """Sätter slutet — och namnger flaskhalsen när målet inte nåddes.
+
+    "Slut på kandidater" utan ett enda bolag att pröva är inte en tom
+    målgrupp, det är en sökning som inte hittade något: den heter
+    `inga_traffar` och säger åt kunden vad som går att ändra."""
+    if (
+        orsak == "slut_pa_kandidater"
+        and not korning["undersokta"]
+        and not korning["levererade"]
+        and not korning["tratt"]
+        and not korning.get("listspar")
+    ):
+        orsak = "inga_traffar"
     korning["klar"] = True
     korning["slut_orsak"] = orsak
     if korning["levererade"] < korning["mal"] and korning["tratt"]:
@@ -198,6 +210,11 @@ def _skalstyp(skal: object) -> str:
 
 def sammanfatta(korning: dict[str, Any]) -> str:
     """Tratten i en mening, för kunden."""
+    if korning.get("slut_orsak") == "inga_traffar":
+        return (
+            "Sökningen hittade inga bolag i målgruppen. Kontrollera stavningen på orterna "
+            "eller bredda bransch eller område och kör igen."
+        )
     delar = [f"{korning['undersokta']} undersökta"]
     typer = Counter(_skalstyp(t.get("skal")) for t in korning["tratt"])
     delar += [f"{antal} bortvalda: {typ.lower()}" for typ, antal in typer.most_common(3) if typ]

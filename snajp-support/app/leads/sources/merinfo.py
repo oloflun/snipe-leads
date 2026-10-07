@@ -46,6 +46,7 @@ till en viss person, och styrelseledamöter kontaktas inte.
 from __future__ import annotations
 
 import asyncio
+import difflib
 import json
 import logging
 import os
@@ -302,6 +303,20 @@ def _slug(text: str) -> str:
 _EJ_SLUGG = {"b2b", "b2c", "b2b-b2c", "b2c-b2b", "b2g", "smb", "sme", "foretag", "bolag", "kunder", "alla"}
 
 
+#: Breda B2B-branscher för en målgrupp utan bransch ("B2B", "företag som
+#: söker kunder"). Registret filtrerar då bara på område och storlek, och Jev
+#: klassar mot kundens kriterier (Antons regel 1–2). Före 2026-10-07 gav en
+#: sådan målgrupp None, den öppna sökningen svarade [] i tre rundor och
+#: körningen slutade med 0 undersökta (6ed99585, f92ed14d).
+BRED_B2B = ("foretagstjanster", "byggbranschen", "grossister")
+
+
+def ar_generisk_bransch(termer: list[str]) -> bool:
+    """Inga branschord alls, eller bara ord om VEM bolaget säljer till."""
+    delar = [_slug(t) for t in termer if str(t or "").strip()]
+    return all(d in _EJ_SLUGG or set(d.split("-")) <= _EJ_SLUGG for d in delar)
+
+
 def _delfraser(termer: list[str]) -> list[str]:
     """Kundens branschfält delat i sina delar: "e-utbildning & möblerfirmor
     för företagskontor" är två branscher, och som en fras matchade den ingen
@@ -370,6 +385,25 @@ LANDSDELAR: dict[str, tuple[str, ...]] = {
 }
 
 
+#: Vardagsnamn som ingen stavningsjämförelse når.
+ORTALIAS: dict[str, str] = {
+    "ovik": "ornskoldsvik",
+    "o-vik": "ornskoldsvik",
+    "gbg": "goteborg",
+    "sthlm": "stockholm",
+    "stockholms stad": "stockholm",
+}
+
+
+def _narmaste(n: str, index: dict[str, Any]) -> str | None:
+    """En felstavning ('Luelå') → närmaste kända namn, men bara när den är
+    entydigt nära. Korta ord jämförs inte: 'Mora' ska inte bli 'Mola'."""
+    if len(n) < 4:
+        return None
+    traff = difflib.get_close_matches(n, list(index), n=1, cutoff=0.8)
+    return traff[0] if traff else None
+
+
 def _geoindex() -> tuple[dict[str, str], dict[str, tuple[str, str]]]:
     lan: dict[str, str] = {}
     kommuner: dict[str, tuple[str, str]] = {}
@@ -402,6 +436,12 @@ def valj_platser(termer: list[str]) -> list[str | None] | None:
     for term in termer:
         hel = _norm(term).strip()
         n = hel.removesuffix(" lan").strip()
+        n = ORTALIAS.get(n, n)
+        if n not in LANDSDELAR and n not in kommun_index and n not in lan_index and not hel.endswith(" lan"):
+            gissning = _narmaste(n, kommun_index) or _narmaste(n, lan_index)
+            if gissning:
+                logger.info("merinfo: området %r tolkas som %r.", term, gissning)
+                n = gissning
         # Kommunen före länet: "Stockholm" är staden, "Stockholms län" länet.
         if n in LANDSDELAR:
             lan += list(LANDSDELAR[n])
@@ -548,6 +588,7 @@ async def sok(
     puls: Callable[[], Awaitable[Any]] | None = None,
     lage: str = "iris",
     listspar: list[dict[str, Any]] | None = None,
+    bred: bool = False,
 ) -> list[dict[str, Any]] | None:
     """Antons arbetsflöde: bransch → län/kommun → listsidor → bolagssidor →
     filter på bolagsfakta → Jev mot kundens kriterier (första filtret) →
@@ -556,11 +597,18 @@ async def sok(
 
     None = målgruppen gick inte att översätta till merinfos träd (anroparen
     faller tillbaka på den gamla kedjan). [] = översatt, men inget bolag
-    klarade filtret och steget efter — ett ärligt nej, ingen utfyllnad."""
+    klarade filtret och steget efter — ett ärligt nej, ingen utfyllnad.
+
+    `bred=True` (sista skyddsnätet i discovery.hitta_bolag): sök i de breda
+    B2B-branscherna i kundens område oavsett branschord."""
     p = profil or {}
-    branscher = valj_branscher(list(dict.fromkeys([*(icp.get("industries") or []), *(p.get("branscher") or [])])))
+    branschord = list(dict.fromkeys([*(icp.get("industries") or []), *(p.get("branscher") or [])]))
+    branscher = valj_branscher(branschord)
     if not branscher and p.get("malgrupp"):
         branscher = valj_branscher([p["malgrupp"]])
+    if bred or (not branscher and ar_generisk_bransch(branschord)):
+        logger.info("merinfo: bred B2B-sökning (branschord=%s, bred=%s).", branschord, bred)
+        branscher = list(BRED_B2B)
     # Regionnycklarna (icp.geo, app/leads/geo.py) är redan kommuner i
     # profilen; utan profil (listjobb som inte kunde läsa den) expanderas de
     # här, annars blev "goteborg" bara staden i stället för området.
