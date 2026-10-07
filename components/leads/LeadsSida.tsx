@@ -10,6 +10,7 @@ import { IrisKorningar } from "@/components/leads/IrisKorningar";
 import { LeadDetail, exempelTillRad, type ExempelRad } from "@/components/leads/IrisBolag";
 import { LeadsOversikt } from "@/components/leads/LeadsOversikt";
 import { LeadsRunForm } from "@/components/leads/LeadsRunForm";
+import { Samtalslista } from "@/components/leads/Samtalslista";
 import { btnPrimary, btnSecondary, flik, flikAktiv, flikInaktiv, fliklista } from "@/components/ui";
 import { EXEMPELBOLAG, EXEMPEL_OMGANG_1, EXEMPEL_OMGANG_2 } from "@/lib/demo/iris-exempel";
 import { useLocale, type Localized } from "@/lib/i18n";
@@ -31,11 +32,13 @@ import { cn } from "@/lib/utils";
  * får hela bredden, och lådan stängs med Esc, krysset eller ett klick utanför.
  */
 
-type Segment = "listor" | "inkorg" | "korningar";
+type Segment = "listor" | "inkorg" | "samtal" | "korningar";
 
 const SEGMENT_ETIKETT: Record<Segment, Localized> = {
   listor: { sv: "Översikt", en: "Overview" },
   inkorg: { sv: "Inkorg", en: "Inbox" },
+  // Ringlistan och återkopplingen (Antons beställning 2026-10-07).
+  samtal: { sv: "Samtal", en: "Calls" },
   korningar: { sv: "Körningar", en: "Runs" }
 };
 
@@ -95,7 +98,7 @@ export function IrisBolag({ demo = false }: Readonly<{ demo?: boolean }>) {
   const [exempelRader, setExempelRader] = useState<ExempelRad[]>([]);
   const [demoKorFas, setDemoKorFas] = useState<"vilar" | "kor">("vilar");
 
-  const segment: Segment[] = demo ? ["listor"] : ["listor", "inkorg", "korningar"];
+  const segment: Segment[] = demo ? ["listor"] : ["listor", "inkorg", "samtal", "korningar"];
 
   const satt = useCallback(
     (andring: Record<string, string | null>) => {
@@ -257,6 +260,8 @@ export function IrisBolag({ demo = false }: Readonly<{ demo?: boolean }>) {
           ) : (
             <IrisInkorg />
           )
+        ) : segmentVal === "samtal" ? (
+          <Samtalslista demo={demo} />
         ) : segmentVal === "korningar" ? (
           <IrisKorningar />
         ) : (

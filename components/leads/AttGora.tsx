@@ -5,6 +5,7 @@ import {
   CheckCircle2,
   Inbox,
   PenLine,
+  Phone,
   Receipt,
 } from "lucide-react";
 import Link from "next/link";
@@ -54,7 +55,7 @@ const TAK = 5;
 const TIMME = 3_600_000;
 const DYGN = 24 * TIMME;
 
-type Ko = "eskalerade" | "vantar" | "larm" | "leadsvar" | "utkast" | "kvitton";
+type Ko = "eskalerade" | "vantar" | "larm" | "leadsvar" | "utkast" | "samtal" | "kvitton";
 
 /** Antal och ankomsttider per kö. null = inte hämtat än (eller ej tillgängligt). */
 type Lage = Record<Ko, { antal: number; tider: number[] } | null>;
@@ -116,13 +117,15 @@ const T = {
     en: "Rejected sends and system errors. Identical alerts show as one row.",
   },
   leadsText: {
-    sv: "Svar från dina leads och Iris utkast. Båda hanteras under Leads.",
-    en: "Replies from your leads and Iris drafts. Both are handled under Leads.",
+    sv: "Svar från dina leads, Iris utkast och dagens samtal. Allt hanteras under Leads.",
+    en: "Replies from your leads, Iris drafts and today's calls. All handled under Leads.",
   },
   svarFranLeads: { sv: "Svar från leads", en: "Replies from leads" },
   leadsutkast: { sv: "Utkast att godkänna", en: "Drafts to approve" },
   oppnaInkorgen: { sv: "Öppna inkorgen", en: "Open the inbox" },
   oppnaUtkasten: { sv: "Öppna utkasten", en: "Open the drafts" },
+  samtalIdag: { sv: "Samtal att ringa i dag", en: "Calls to make today" },
+  oppnaSamtalen: { sv: "Öppna samtalen", en: "Open the calls" },
   kvittonText: {
     sv: "Underlag Kvittohanteraren vill att du tittar på.",
     en: "Documents the receipt manager wants you to look at.",
@@ -165,6 +168,11 @@ const KOER: { id: Ko; etikett: Localized; farg: string }[] = [
     id: "utkast",
     etikett: { sv: "Leadsutkast", en: "Lead drafts" },
     farg: "oklch(var(--chart-ramp-6))",
+  },
+  {
+    id: "samtal",
+    etikett: { sv: "Samtal i dag", en: "Calls today" },
+    farg: "oklch(var(--chart-ramp-4))",
   },
   {
     id: "kvitton",
@@ -236,8 +244,8 @@ function belopp(k: KvittoRad, locale: "sv" | "en"): string {
 /** Leads- och kvittodelen räknas här, inte genom att rendera listorna: de bor på sina sidor. */
 function useOvrigaKoer(demo: boolean, iris: boolean, kvitton: boolean) {
   const [lage, setLage] = useState<
-    Pick<Lage, "leadsvar" | "utkast" | "kvitton">
-  >({ leadsvar: null, utkast: null, kvitton: null });
+    Pick<Lage, "leadsvar" | "utkast" | "samtal" | "kvitton">
+  >({ leadsvar: null, utkast: null, samtal: null, kvitton: null });
   const [kvittorader, setKvittorader] = useState<KvittoRad[] | null>(null);
   // Hämtningen är klar (lyckad eller inte). En kö som är null efter det gick inte att hämta.
   const [klar, setKlar] = useState(false);
@@ -274,6 +282,7 @@ function useOvrigaKoer(demo: boolean, iris: boolean, kvitton: boolean) {
                 .filter((t): t is number => t !== null),
             }
           : null,
+        samtal: iris ? { antal: 0, tider: [] } : null,
         kvitton: kvitton ? { antal: granska.length, tider: [] } : null,
       });
       setKvittorader(kvitton ? granska : []);
@@ -291,9 +300,13 @@ function useOvrigaKoer(demo: boolean, iris: boolean, kvitton: boolean) {
         return null;
       }
     };
-    const [svar, ko, kv] = await Promise.all([
+    type Samtal = { ring_idag?: number };
+    const [svar, ko, aterkoppling, ring, kv] = await Promise.all([
       iris ? hamta<Svar>("/inbox?klass=lead&limit=200") : Promise.resolve(null),
       iris ? hamta<Utkast>("/leads/queue") : Promise.resolve(null),
+      // Återkopplingen och ringlistan (Leads › Samtal): de som ska ringas i dag.
+      iris ? hamta<Samtal>("/leads/samtal?lista=aterkoppling") : Promise.resolve(null),
+      iris ? hamta<Samtal>("/leads/samtal?lista=ring") : Promise.resolve(null),
       // Ett år bakåt: ett kvitto att granska äldre än så är inte längre ett beslut som väntar.
       kvitton
         ? hamta<{ kvitton?: KvittoRad[] }>(
@@ -320,6 +333,10 @@ function useOvrigaKoer(demo: boolean, iris: boolean, kvitton: boolean) {
               .filter((t): t is number => t !== null),
           }
         : null,
+      samtal:
+        aterkoppling && ring
+          ? { antal: (aterkoppling.ring_idag ?? 0) + (ring.ring_idag ?? 0), tider: [] }
+          : null,
       kvitton: kv ? { antal: granska.length, tider: [] } : null,
     });
     setKvittorader(kv ? granska : null);
@@ -426,11 +443,11 @@ export function AttGora({ demo = false }: Readonly<{ demo?: boolean }>) {
           {
             id: "leads",
             etikett: T.leads,
-            varde: summa("leadsvar", "utkast"),
+            varde: summa("leadsvar", "utkast", "samtal"),
             href: "#leads",
             detalj: {
-              sv: `${antal("leadsvar") ?? "…"} svar från leads · ${antal("utkast") ?? "…"} utkast`,
-              en: `${antal("leadsvar") ?? "…"} replies from leads · ${antal("utkast") ?? "…"} drafts`,
+              sv: `${antal("leadsvar") ?? "…"} svar från leads · ${antal("utkast") ?? "…"} utkast · ${antal("samtal") ?? "…"} samtal`,
+              en: `${antal("leadsvar") ?? "…"} replies from leads · ${antal("utkast") ?? "…"} drafts · ${antal("samtal") ?? "…"} calls`,
             },
           } satisfies Kpi,
         ]
@@ -612,7 +629,7 @@ export function AttGora({ demo = false }: Readonly<{ demo?: boolean }>) {
                   id="leads"
                   rubrik={T.leads}
                   text={T.leadsText}
-                  antal={summa("leadsvar", "utkast")}
+                  antal={summa("leadsvar", "utkast", "samtal")}
                 >
                   <ul className="divide-y divide-ink/10">
                     <Lankrad
@@ -630,6 +647,14 @@ export function AttGora({ demo = false }: Readonly<{ demo?: boolean }>) {
                       klar={ovrigaKlara}
                       href={vag("/dashboard/leads")}
                       knapp={T.oppnaUtkasten}
+                    />
+                    <Lankrad
+                      ikon={<Phone className="h-4 w-4" aria-hidden />}
+                      etikett={T.samtalIdag}
+                      ko={lage.samtal}
+                      klar={ovrigaKlara}
+                      href={vag("/dashboard/leads?vy=samtal")}
+                      knapp={T.oppnaSamtalen}
                     />
                   </ul>
                 </Ruta>

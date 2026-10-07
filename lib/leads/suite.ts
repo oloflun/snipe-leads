@@ -1,6 +1,6 @@
 import { arEjAktiverad } from "@/components/EjAktiverad";
 import { readJsonBody } from "@/lib/http/json";
-import type { Locale } from "@/lib/i18n";
+import type { Locale, Localized } from "@/lib/i18n";
 
 /**
  * Leads Suite (Fas 10, plan del F): typerna och anropet som tabellen,
@@ -46,12 +46,44 @@ export type VyFilter = { status?: string; niva?: string; typ?: string; sok?: str
 export type Vy = { id: string; namn: string; filter: VyFilter; created_at?: string | null };
 
 export type Handelse = {
-  typ: "skapad" | "status" | "mejl_ut" | "mejl_in" | "anteckning" | "uppgift";
+  typ: "skapad" | "status" | "mejl_ut" | "mejl_in" | "anteckning" | "uppgift" | "samtal";
   nar: string;
   rubrik: string;
   text: string | null;
   id: string | null;
   klar: boolean | null;
+};
+
+/** Samtalens utfall (snajp-support/app/leads/samtal.py, migration 107). */
+export type Utfall = "ej_svar" | "aterkom" | "ej_intresserad" | "kontakta_inte" | "mote";
+
+export const UTFALL_ETIKETT: Record<Utfall, Localized> = {
+  ej_svar: { sv: "Ej svar", en: "No answer" },
+  aterkom: { sv: "Återkom", en: "Call back" },
+  ej_intresserad: { sv: "Ej intresserad", en: "Not interested" },
+  kontakta_inte: { sv: "Kontakta inte", en: "Do not contact" },
+  mote: { sv: "Möte bokat", en: "Meeting booked" }
+};
+
+/** En rad i återkopplingen eller ringlistan (GET /leads/samtal). */
+export type Samtalsrad = {
+  prospect_id: string;
+  company_name: string | null;
+  ort: string | null;
+  website: string | null;
+  contact_name: string | null;
+  contact_role: string | null;
+  contact_phone: string | null;
+  contact_email: string | null;
+  anstallda: number | null;
+  status: string | null;
+  kontaktad: string | null;
+  antal_samtal: number;
+  senaste_utfall: Utfall | null;
+  senaste_samtal: string | null;
+  aterkom_datum: string | null;
+  nasta: string | null;
+  ring_idag: boolean;
 };
 
 /** Ett fel från backenden: meddelandet ur `detail` när det finns, och läget
