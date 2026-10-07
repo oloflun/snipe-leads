@@ -1899,6 +1899,8 @@ async def _korningens_profil(storage, tenant_id: str, overrides: dict | None) ->
 
 
 async def _skapa_prospekt_ur_kandidat(storage, tenant_id: str, bolag: dict, origin: str) -> dict:
+    from ..leads.discovery import ar_arbetsmejl
+
     if bolag.get("kalla") == "gemini":
         # En sökträff bär modellens PÅSTÅENDEN om kontakt, ort och storlek.
         # Provkörningen 2026-10-05: en gissad info@-adress på en påhittad
@@ -1910,6 +1912,17 @@ async def _skapa_prospekt_ur_kandidat(storage, tenant_id: str, bolag: dict, orig
             if k not in ("contact_name", "contact_email", "contact_role", "contact_level",
                          "contact_form_url", "ort", "postnr", "anstallda")
         }
+    elif (
+        bolag.get("contact_email")
+        and bolag.get("kontakt_kalla") not in ("webbplats", "register")
+        and not ar_arbetsmejl(bolag["contact_email"], webb=bolag.get("website"))
+    ):
+        # Regel 13 (Anton 2026-10-07) släpper igenom en adress utanför
+        # bolagets domän för Iris egna prospekt (discovery.mottagare), men
+        # bara en som kontaktsökningen hittat på bolagets sajt eller i
+        # registret. En annons- eller nyhetsträffs adress (en rekryterare,
+        # en byrå) stannar här.
+        bolag = {**bolag, "contact_email": None}
     prospect = await storage.create_prospect(
         tenant_id,
         company_name=bolag["company_name"],
@@ -2348,10 +2361,12 @@ async def _fyll_pa_last(app_state, tenant: dict, batch_id: str) -> None:
                 orsak = "ingen_malgrupp"
                 break
             # Prospekt, listrader och CRM-kunder (app/leads/upptagna.py) plus
-            # det körningen redan prövat.
+            # det körningen redan prövat. Listspårets bolag (även ringlistan
+            # och de som prövas om, som inte står i tratten) prövas inte igen
+            # i samma körning; de som prövas om är fria i nästa.
             uteslut = await upptagna.hamta(storage, tenant_id) | {
                 str(t.get("namn") or "") for t in k["tratt"]
-            }
+            } | {str(r.get("company_name") or "") for r in k.get("listspar") or []}
             # Kredittaket gäller hela körningen (plan 2026-10-05): varje runda
             # får det som återstår, och summan står i liggaren (Körningar).
             # Taket skalar med beställningen (Sebbe 2026-10-07: Iris måste
@@ -2363,8 +2378,14 @@ async def _fyll_pa_last(app_state, tenant: dict, batch_id: str) -> None:
             # fyra saknar webbplats — en 2-beställning svalt ändå. 30 per
             # beställt lead med golvet 60 ger småbeställningar en ärlig chans.
             korningstak = min(160, max(60, 30 * int(k["mal"])))
+            # Bolagens webbsidor har ett eget tak (Antons regel 12,
+            # 2026-10-07): förut delade de taket med merinfo-sidorna, och när
+            # det tog slut blev resten "Ingen kontaktmejl" i listspåret.
+            webb_betalda = int((k.get("skrap") or {}).get("webb") or 0)
             skrap = sidhamtning.starta(
-                storage, tenant_id, tak=korningstak - sidhamtning.betalda(k.get("skrap"))
+                storage, tenant_id,
+                tak=korningstak - (sidhamtning.betalda(k.get("skrap")) - webb_betalda),
+                webb_tak=korningstak - webb_betalda,
             )
             try:
                 # Sökningen och Jev-triagen loggas som en egen post (Fas 7).
@@ -2427,44 +2448,68 @@ async def _fyll_pa_last(app_state, tenant: dict, batch_id: str) -> None:
                 tjanstefel = int((k.get("skrap") or {}).get("tjanstefel") or 0)
                 orsak = "sokningen_foll" if tjanstefel and k["levererade"] == 0 else "slut_pa_kandidater"
             iris_korning.avsluta(k, "klar" if k["levererade"] >= k["mal"] else (orsak or "slut_pa_kandidater"))
-        k["sammanfattning"] = iris_korning.sammanfatta(k)
+        # Före sammanfattningen: den läser fördelningen listspåret sparade.
         await _spara_listspar(storage, tenant_id, k)
+        k["sammanfattning"] = iris_korning.sammanfatta(k)
     resultat.update(korning=k, jobs=k["jobs"], count=len(k["jobs"]))
     await jobs.complete(batch_id, resultat)
     await _spara_korning(app_state, tenant_id, batch_id, k)
 
 
 async def _spara_listspar(storage, tenant_id: str, k: dict) -> None:
-    """Bolagen som inte blev Iris-leads men hör hemma i en lista (plan
-    2026-10-05): en färdig lista per körning, "Utan webbplats", så att kunden
-    kan skapa utkast med ett mer generellt erbjudande senare. Körs en gång;
-    kastar aldrig — listan får inte fälla en körning som redan levererat."""
-    if k.get("listspar_lista"):
+    """Fördelningen efter kontaktsökningen (Antons regler 12–16, 2026-10-07;
+    spåren sätts av sources/merinfo.fordela):
+
+    * ringlistan: ett prospekt med origin 'ring' per bolag (VD, telefon,
+      antal anställda), ingen research och inget utkast;
+    * ej kvalificerade: en lista per körning, "Ej kvalificerade, Iris <datum>",
+      med skälet i signal_detalj;
+    * prövas om (sajt utan hittad kontakt, eller stoppad av sidtaket):
+      skrivs ingenstans och står därför inte i uteslutningen nästa körning.
+
+    Antalen sparas i k["fordelning"] till körningens sammanfattning. Körs en
+    gång; kastar aldrig — fördelningen får inte fälla en körning som redan
+    levererat."""
+    if k.get("listspar_sparad") or k.get("listspar_lista"):
         return
+    fordelning = {"ring": 0, "ej_kvalificerade": 0, "prova_om": 0, "tak": 0}
     try:
-        # Ett bolag som redan står i en lista (eller är kundens CRM-kund) ska
-        # inte komma tillbaka i nästa körnings "Utan webbplats".
+        # Ett bolag som redan står i en lista, är ett prospekt eller kundens
+        # CRM-kund ska inte komma tillbaka.
         sedda = await upptagna.hamta(storage, tenant_id)
         rader: list[dict] = []
         for rad in k.get("listspar") or []:
-            if not upptagna.upptagen(sedda, rad.get("company_name"), rad.get("orgnr")):
-                sedda.add(upptagna.nyckel(rad.get("company_name")))
+            spar = rad.get("spar") or "ej_kvalificerad"
+            if spar == "prova_om":
+                fordelning["tak" if rad.get("tak") else "prova_om"] += 1
+                continue
+            if upptagna.upptagen(sedda, rad.get("company_name"), rad.get("orgnr")):
+                continue
+            sedda |= upptagna.bolagsnycklar([rad])
+            if spar == "ring":
+                await _skapa_prospekt_ur_kandidat(
+                    storage, tenant_id, rad, "test" if k.get("is_test") else "ring"
+                )
+                fordelning["ring"] += 1
+            else:
                 rader.append(rad)
-        if not rader:
-            return
-        lista = await storage.create_lead_list(
-            tenant_id,
-            titel=f"Utan webbplats, Iris {datetime.now(timezone.utc):%Y-%m-%d}",
-            icp={},
-            antal=min(len(rader), 200),
-            is_test=bool(k.get("is_test")),
-        )
-        for rad in rader:
-            await storage.add_lead_list_item(tenant_id, list_id=lista["id"], **rad)
-        await storage.set_lead_list_status(tenant_id, lista["id"], status="klar")
-        k["listspar_lista"] = lista["id"]
+        fordelning["ej_kvalificerade"] = len(rader)
+        if rader:
+            lista = await storage.create_lead_list(
+                tenant_id,
+                titel=f"Ej kvalificerade, Iris {datetime.now(timezone.utc):%Y-%m-%d}",
+                icp={},
+                antal=min(len(rader), 200),
+                is_test=bool(k.get("is_test")),
+            )
+            for rad in rader:
+                await storage.add_lead_list_item(tenant_id, list_id=lista["id"], **rad)
+            await storage.set_lead_list_status(tenant_id, lista["id"], status="klar")
+            k["listspar_lista"] = lista["id"]
+        k["listspar_sparad"] = True
     except Exception:  # noqa: BLE001
         logger.exception("Listspåret för körningen gick inte att spara.")
+    k["fordelning"] = fordelning
 
 
 async def _rapportera_till_korning(
@@ -2848,14 +2893,15 @@ async def _run_batch_prospect(
             result["contact_role"] = prospect.get("contact_role")
             result["contact_level"] = prospect.get("contact_level")
             result["contact_form_url"] = prospect.get("contact_form_url")
-            from ..leads.discovery import ar_arbetsmejl, mottagare
+            from ..leads.discovery import ar_saljadress, mottagare
 
-            if email and not ar_arbetsmejl(email, webb=prospect.get("website")):
-                email = None
-            # Bolagets kontaktmejl: personens adress eller info@ på bolagets
-            # domän (Sebbes beslut 2026-10-07, discovery.mottagare). En HR-,
-            # ekonomi- eller robotadress ger inget utkast.
+            # Bolagets kontaktmejl: personens adress eller bolagets (Sebbes
+            # beslut 2026-10-07), även på en annan domän när bolaget självt
+            # publicerat den (Antons regel 13) — discovery.mottagare avgör.
+            # En HR-, ekonomi- eller robotadress ger inget utkast.
             vd_epost = mottagare(prospect) if email else None
+            if email and not vd_epost and ar_saljadress(email):
+                email = None
             if email and not vd_epost:
                 result["draft_note"] = (
                     "Research klar. Inget utkast: e-postadressen är ingen säljingång (HR, ekonomi eller automatisk)"

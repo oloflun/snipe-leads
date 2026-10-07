@@ -1619,8 +1619,8 @@ async def hitta_bolag(
     """Returnerar upp till `antal` riktiga bolag. Tom lista = inga verifierbara traffar.
 
     `listspar` (plan 2026-10-05): registerkällan lägger där de bolag som inte
-    blir Iris-leads men hör hemma i en lista (ingen sajt, parkerad domän,
-    ingen VD-kontakt på sajten).
+    blir Iris-leads, med sitt spår (ringlistan, ej kvalificerade, prövas om;
+    sources/merinfo.fordela).
 
     Sedan 2026-09-02 är den grounded Gemini-sökningen UTFYLLNAD, inte
     förstahandsval: de registrerade källorna (JobTech-annonser, nyhets-RSS —
