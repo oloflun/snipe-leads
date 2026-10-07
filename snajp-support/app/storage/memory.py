@@ -1794,6 +1794,13 @@ class MemoryStorage:
             if i["list_id"] == list_id and i["tenant_id"] == tenant_id
         ]
 
+    async def spara_listutkast(
+        self, tenant_id: str, item_id: str, utkast: dict[str, Any] | None
+    ) -> None:
+        for i in self.lead_list_items:
+            if str(i["id"]) == str(item_id) and i["tenant_id"] == tenant_id:
+                i["utkast"] = json.loads(json.dumps(utkast)) if utkast is not None else None
+
     async def lista_upptagna_bolag(self, tenant_id: str) -> list[dict[str, Any]]:
         rader = [*self.prospects.get(tenant_id, []), *(i for i in self.lead_list_items if i["tenant_id"] == tenant_id)]
         return [{"company_name": r.get("company_name"), "orgnr": r.get("orgnr")} for r in rader]

@@ -2375,7 +2375,18 @@ class PostgresStorage:
                 tenant_id,
                 list_id,
             )
-        return [_row(r) for r in records]
+        return [_avkoda_jsonb(_row(r), "utkast") for r in records]
+
+    async def spara_listutkast(
+        self, tenant_id: str, item_id: str, utkast: dict[str, Any] | None
+    ) -> None:
+        async with self._scoped(tenant_id) as conn:
+            await conn.execute(
+                "update lead_list_items set utkast = $3::jsonb where tenant_id = $1 and id = $2",
+                tenant_id,
+                item_id,
+                json.dumps(utkast, ensure_ascii=False) if utkast is not None else None,
+            )
 
     async def lista_upptagna_bolag(self, tenant_id: str) -> list[dict[str, Any]]:
         async with self._scoped(tenant_id) as conn:

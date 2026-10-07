@@ -854,6 +854,13 @@ class Storage(Protocol):
         self, tenant_id: str, list_id: str
     ) -> list[dict[str, Any]]: ...
 
+    async def spara_listutkast(
+        self, tenant_id: str, item_id: str, utkast: dict[str, Any] | None
+    ) -> None:
+        """Sätter (eller nollar) listradens utkast (migration 106,
+        app/leads/listutkast.py)."""
+        ...
+
     async def lista_upptagna_bolag(self, tenant_id: str) -> list[dict[str, Any]]:
         """`company_name` och `orgnr` för varje bolag kunden redan har: alla
         prospekt och alla rader i alla leadslistor (CRM-kunder inräknade).

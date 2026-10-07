@@ -10,6 +10,7 @@ så att Fas B/C kan köra på det som finns i stället för att dödlåsa sig.
 import asyncio
 import json
 import logging
+import re
 import uuid
 import weakref
 from datetime import datetime, timezone
@@ -3375,6 +3376,152 @@ async def _befordra_listrad(storage, tenant_id: str, lista: dict, rad: dict) -> 
             logger.exception("Kunde inte registrera listkälla för %s", prospect["id"])
 
     return prospect, True
+
+
+# -- Listutkast: generellt erbjudande till listspårets bolag (regel 8) -------
+#
+# Sebbe 2026-10-07: "Bygg utkast till listan Utan webbplats också". Utkastet
+# skrivs av app/leads/listutkast.py (ett anrop per bolag, ingen research) och
+# sparas på listraden; det köas först när kunden lagt in VD:s mejladress.
+
+_EPOST = re.compile(r"^[^@\s]+@[^@\s]+\.[a-z]{2,}$", re.IGNORECASE)
+_LISTUTKAST_TAK = 100
+
+
+async def _skriv_listans_utkast(app_state, tenant: dict, rader: list[dict], erbjudande: str) -> None:
+    from datetime import datetime, timezone
+
+    from ..leads.listutkast import skriv_listutkast
+
+    storage = app_state.storage
+    grind = asyncio.Semaphore(3)
+
+    async def en(rad: dict) -> None:
+        async with grind:
+            nu = datetime.now(timezone.utc).isoformat()
+            try:
+                utkast = await skriv_listutkast(rad, avsandare=tenant["tenant_name"], erbjudande=erbjudande)
+                await storage.spara_listutkast(tenant["tenant_id"], str(rad["id"]), {**utkast, "skrivet_at": nu})
+            except Exception as fel:  # noqa: BLE001 — en rad som faller ska inte fälla resten
+                logger.exception("Listutkast misslyckades för rad %s", rad.get("id"))
+                await _larma_vid_kreditslut(app_state, tenant["tenant_id"], fel)
+                await storage.spara_listutkast(
+                    tenant["tenant_id"], str(rad["id"]), {"fel": _jobbfeltext(fel), "skrivet_at": nu}
+                )
+
+    await asyncio.gather(*(en(r) for r in rader))
+
+
+@router.post("/api/leads/listor/{list_id}/utkast", status_code=202)
+async def skriv_listutkast_for_listan(
+    request: Request, list_id: str, tenant: dict = Depends(require_tenant)
+) -> dict:
+    """Skriver utkast med kundens generella erbjudande till listans bolag som
+    saknar ett (eller där förra försöket föll). Körs i bakgrunden; listan
+    (GET /api/leads/listor/{id}) visar utkasten på raderna allteftersom."""
+    from ..leads.business_context import require_business_context
+
+    kraev_uuid(list_id, "listan")
+    _require_live_llm()
+    storage = request.app.state.storage
+    tenant_id = tenant["tenant_id"]
+    lista = await storage.get_lead_list(tenant_id, list_id)
+    if not lista:
+        raise HTTPException(status_code=404, detail="Listan finns inte.")
+    _kraev_ej_crm(lista)
+    try:
+        erbjudande = await require_business_context(storage, tenant_id)
+    except MissingBusinessContextError as fel:
+        raise HTTPException(status_code=422, detail=str(fel)) from fel
+    await _kraev_leads_budget(storage, tenant_id)
+    rader = [
+        r
+        for r in await storage.list_lead_list_items(tenant_id, list_id)
+        if (r.get("company_name") or "").strip()
+        and (not isinstance(r.get("utkast"), dict) or r["utkast"].get("fel"))
+    ][:_LISTUTKAST_TAK]
+    if rader:
+        asyncio.create_task(_skriv_listans_utkast(request.app.state, tenant, rader, erbjudande))
+    return {"count": len(rader)}
+
+
+@router.post("/api/leads/listor/{list_id}/items/{item_id}/koa")
+async def koa_listutkast(
+    request: Request, list_id: str, item_id: str, payload: dict, tenant: dict = Depends(require_tenant)
+) -> dict:
+    """Köar listradens utkast till en mejladress kunden angett (VD:s, regel 5).
+
+    Raden lyfts in i prospektregistret (_befordra_listrad), adressen sparas på
+    prospektet, och utkastet köas via samma väg som Iris utkast
+    (_queue_outreach_draft_impl): textkvalitet, signatur med logga, lagstadgad
+    fot och språkgrind. Alltid till granskning, aldrig direkt till utskick.
+    `subject`/`body` i anropet ersätter det sparade utkastet (granskarens
+    redigering i rutan)."""
+    from ..agent.leads_context import OutreachContext
+    from ..agent.leads_tools import _queue_outreach_draft_impl
+    from ..leads.discovery import ar_saljadress
+    from ..leads.listutkast import HUMANIZER
+
+    kraev_uuid(list_id, "listan")
+    kraev_uuid(item_id, "raden")
+    storage = request.app.state.storage
+    tenant_id = tenant["tenant_id"]
+    epost = str(payload.get("email") or "").strip().lower()
+    if not _EPOST.match(epost):
+        raise HTTPException(status_code=422, detail="Ange en giltig mejladress.")
+    if not ar_saljadress(epost):
+        raise HTTPException(
+            status_code=422, detail="Adressen är en HR-, ekonomi- eller robotadress och tar inte emot säljmejl."
+        )
+    lista = await storage.get_lead_list(tenant_id, list_id)
+    if not lista:
+        raise HTTPException(status_code=404, detail="Listan finns inte.")
+    _kraev_ej_crm(lista)
+    rad = next(
+        (r for r in await storage.list_lead_list_items(tenant_id, list_id) if str(r.get("id")) == item_id),
+        None,
+    )
+    if rad is None:
+        raise HTTPException(status_code=404, detail="Raden finns inte i listan.")
+    utkast = rad.get("utkast") if isinstance(rad.get("utkast"), dict) else {}
+    amne = str(payload.get("subject") or utkast.get("subject") or "").strip()
+    brod = str(payload.get("body") or utkast.get("body") or "").strip()
+    if not amne or not brod:
+        raise HTTPException(status_code=409, detail="Raden har inget utkast än. Skriv utkasten först.")
+    if utkast.get("queue_item_id"):
+        return {"queue_item_id": utkast["queue_item_id"], "prospect_id": utkast.get("prospect_id"), "fanns": True}
+
+    prospect, _ = await _befordra_listrad(storage, tenant_id, lista, rad)
+    if (prospect.get("contact_email") or "").lower() != epost:
+        await storage.update_prospect(tenant_id, prospect["id"], contact_email=epost)
+    trad = await storage.ensure_outreach_thread(tenant_id, prospect_id=prospect["id"])
+    ctx = OutreachContext(
+        storage=storage,
+        tenant_id=tenant_id,
+        thread_id=trad["id"],
+        prospect_email=epost,
+        is_test=bool(lista.get("is_test")),
+    )
+    svar = json.loads(
+        await _queue_outreach_draft_impl(
+            ctx, subject=amne, body=brod, language_state="sv", humanizer_variant=HUMANIZER, force_review=True
+        )
+    )
+    if not svar.get("queued"):
+        raise HTTPException(status_code=422, detail=svar.get("error") or "Utkastet kunde inte köas.")
+    await storage.spara_listutkast(
+        tenant_id,
+        item_id,
+        {**utkast, "subject": amne, "body": brod, "queue_item_id": svar["queue_item_id"], "prospect_id": prospect["id"]},
+    )
+    koat = await storage.get_pending_outreach_message(tenant_id, trad["id"]) or {}
+    return {
+        "queue_item_id": svar["queue_item_id"],
+        "prospect_id": prospect["id"],
+        "subject": koat.get("subject") or amne,
+        "body": koat.get("body") or brod,
+        "fanns": False,
+    }
 
 
 @router.post("/api/leads/listor/{list_id}/till-iris", status_code=202)
