@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition, type ReactNode } from "react";
 import type { EmailStudioAction } from "@/lib/agent/email-studio-prompt";
 import type { EmailStudioData } from "@/lib/data/emails";
 import { btnPrimary } from "@/components/ui";
@@ -134,11 +134,26 @@ function toRefineContext(data: EmailStudioData) {
 
 export function EmailStudioEditor({
   data,
-  compact = false
-}: Readonly<{ data: EmailStudioData; compact?: boolean }>) {
+  compact = false,
+  onAndring,
+  efterText
+}: Readonly<{
+  data: EmailStudioData;
+  compact?: boolean;
+  /** Det som står efter brödtexten i det skickade mejlet (signatur med logga,
+   *  lagstadgad fot). Visas direkt under textrutan men ingår aldrig i texten
+   *  som knapparna skriver om: då hade en omskrivning kunnat stryka loggan. */
+  efterText?: ReactNode;
+  /** Ämne och text efter varje ändring, egen eller AI:ns (granskningskön sparar dem före godkännandet). */
+  onAndring?: (subject: string, body: string) => void;
+}>) {
   const { text } = useLocale();
   const [subject, setSubject] = useState(data.email.subject);
   const [body, setBody] = useState(data.email.body);
+  useEffect(() => {
+    onAndring?.(subject, body);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [subject, body]);
   const [error, setError] = useState<string | null>(null);
   const [activeAction, setActiveAction] = useState<EmailStudioAction | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -160,7 +175,7 @@ export function EmailStudioEditor({
             action,
             draft: body,
             subject,
-            context: refineContext,
+            context: { ...refineContext, harSignatur: Boolean(efterText) },
             userId: "current-user"
           })
         });
@@ -279,9 +294,13 @@ export function EmailStudioEditor({
           onChange={(event) => setBody(event.target.value)}
           className={cn(
             "focus-ring mt-2 w-full resize-y rounded-card border border-ink/12 bg-paper p-5 text-[1rem] leading-7 text-ink outline-none transition-colors focus:border-ink/30",
-            compact ? "min-h-[210px]" : "min-h-[320px]"
+            compact ? "min-h-[210px]" : "min-h-[320px]",
+            // Med signaturen under växer rutan med texten: annars scrollade
+            // hälsningsfrasen undan och mejlet såg avklippt ut ovanför namnet.
+            efterText ? "[field-sizing:content]" : null
           )}
         />
+        {efterText}
 
         <div className="hrule mt-6 flex flex-wrap gap-2 pt-5">
           {STUDIO_ACTIONS.map((item) => {

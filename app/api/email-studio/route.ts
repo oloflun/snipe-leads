@@ -559,7 +559,9 @@ export async function POST(request: NextRequest) {
     [
       "Mejl-kontext (fakta om mottagaren — det enda som får synas i mejlet):",
       context.companyName ? `- Företag: ${context.companyName}` : "- Företag: (okänt)",
-      context.contactName ? `- Kontakt: ${context.contactName}` : "- Kontakt: (inget namn — inled utan namn)",
+      context.contactName
+        ? `- Kontakt: ${context.contactName}`
+        : "- Kontakt: (inget namn — inled med \"Hej,\" och skriv \"ni\" genomgående, även i uppmaningen: \"Hör av er\", aldrig \"Vill du\")",
       context.signal ? `- Signal / trigger: ${context.signal}` : ""
     ].filter(Boolean).join("\n"),
     (context.offer || context.cta) &&
@@ -568,6 +570,11 @@ export async function POST(request: NextRequest) {
         context.offer ? `- Erbjudande: ${String(context.offer).slice(0, 800)}` : "",
         context.cta ? `- Önskat nästa steg: ${String(context.cta).slice(0, 200)}` : ""
       ].filter(Boolean).join("\n"),
+    // Granskningskön (components/leads/IrisGranskning.tsx) skickar bara
+    // brödtexten: signaturen med logga och den lagstadgade foten läggs på av
+    // backenden efteråt. En egen signatur här hade hamnat dubbelt.
+    context.harSignatur === true &&
+      "SIGNATUR: Avsändarens signatur (namn, titel, telefon, bolag, logga) och avregistreringsfoten läggs på automatiskt efter texten. Skriv ALDRIG någon signatur, något avsändarnamn eller någon avregistreringsrad. Avsluta med en kort hälsningsfras, t.ex. \"Vänliga hälsningar,\", utan namn efter.",
     `\n\nIMPORTANT: Answer with ONE valid JSON object only, exactly as specified in the system prompt. No prose before or after it.`
   ].filter(Boolean).join('\n\n');
 

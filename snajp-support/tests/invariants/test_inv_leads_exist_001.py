@@ -69,7 +69,12 @@ async def test_listan_returnerar_aldrig_ett_bortvalt_bolag():
             await storage.spara_bedomning(DEFAULT_TENANT_ID, skapad["id"],
                                           bedomning={"niva": "C", "qualified": False})
             rader = (await client.get("/api/leads/prospects", headers=DEMO)).json()["prospects"]
+            # …men det är DOLT, inte raderat (Sebbe 2026-10-06): den
+            # uttryckliga vyn ?bortvalda=1 hittar bolaget igen. Radering sker
+            # bara genom uttrycklig handling.
+            bortvalda = (await client.get("/api/leads/prospects?bortvalda=1", headers=DEMO)).json()["prospects"]
     assert all(p["id"] != skapad["id"] for p in rader)
+    assert any(p["id"] == skapad["id"] for p in bortvalda)
 
 
 @pytest.fixture

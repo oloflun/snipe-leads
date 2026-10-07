@@ -43,6 +43,7 @@ from ..leads.language_gate import last_humanizer_variant
 from ..leads.outreach_playbook import OUTREACH_V2
 from ..leads.research_playbook import RESEARCH_V2
 from ..leads.soul import load_soul
+from ..leads.tilltal import ett_bolagsnamn, kortnamn, ratta_tilltal
 from . import leads_systemprompt
 from .leads_context import OutreachContext
 from .leads_tools import _queue_outreach_draft_impl, _request_human_handoff_impl
@@ -416,6 +417,21 @@ async def _research_v2(
         signaler=list(webbfakta.get("rader") or []),
     ) if bedomning["qualified"] else None
     antal = fynd.get("antal_anstallda")
+    if bedomning["qualified"]:
+        # Rangpoängen (app/leads/rangpoang.py): grindens poäng är 100 för
+        # varje godkänt bolag, så score_total mäter i stället hur bra leadet
+        # är. Läses efter kontaktuppgraderingen — kontakttypen ingår. Grinden
+        # (niva, qualified, icp_fit) är orörd.
+        from ..leads.rangpoang import rangpoang
+
+        bedomning["score_total"] = rangpoang(
+            {
+                **rad_efter_uppgradering,
+                "jev": prospect_row.get("jev") or rad_efter_uppgradering.get("jev"),
+                "score_breakdown": bedomning.get("score_breakdown"),
+                "signaler": bedomning.get("signaler"),
+            }
+        )
     try:
         await storage.spara_bedomning(
             tenant_id,
@@ -424,7 +440,10 @@ async def _research_v2(
                 **bedomning,
                 "profil_version": profil.get("version"),
                 "jev": {**(prospect_row.get("jev") or {}), "klassning": jev_klass} if jev_klass else None,
-                "status": "ready" if bedomning["qualified"] else None,
+                # Ingen status: ett researchat lead står som Ny tills kunden
+                # själv flyttar det (Sebbe 2026-10-07: körningens fynd ska
+                # landa i fliken Ny). Förut blev varje kvalificerat bolag
+                # Redo — även ett som kunden redan kontaktat och processade om.
                 "ort": None if prospect_row.get("ort") else fynd.get("ort"),
                 "postnr": None if prospect_row.get("postnr") else fynd.get("postnummer"),
                 "anstallda": antal if isinstance(antal, int) and not isinstance(antal, bool) else None,
@@ -556,10 +575,25 @@ async def _research_v2(
     # Utkastets råvara: citat som ORDAGRANT står på bolagets egna sidor.
     # Modellens citat utan träff i materialet följer inte med; de hade varit
     # en observation om bolaget som ingen kan peka på.
-    citat = [
-        c["citat"]
-        for c in verifierade_belagg([{"citat": str(e)} for e in fynd.get("evidence") or []], material)
+    # Bedömningens belägg räknas också (2026-10-07): ett leverbart lead har
+    # alltid ett ordagrant citat bakom sitt produktmatchnings-ja, men när
+    # modellen lämnade `evidence` tom stoppade underlagsgolvet varje utkast
+    # (verifieringskörningen: 3 leads, 0 utkast). Samma ordagrannhetskontroll.
+    bedomningscitat = [
+        b
+        for rad in fynd.get("bedomningar") or []
+        if isinstance(rad, dict)
+        for b in rad.get("belagg") or []
+        if isinstance(b, dict)
     ]
+    citat = list(
+        dict.fromkeys(
+            c["citat"]
+            for c in verifierade_belagg(
+                [{"citat": str(e)} for e in fynd.get("evidence") or []] + bedomningscitat, material
+            )
+        )
+    )
     vald_produkt = next(
         (p for p in produkter if p["namn"].casefold() == str(fynd.get("produkt") or "").strip().casefold()),
         None,
@@ -718,7 +752,10 @@ async def run_outreach_draft_v2(
     lager = replace(lager, agent_md=leads_systemprompt.rendera(foretagsnamn=tenant_name, steg="utkast", mall=lager.agent_mall or None))
 
     base = (
-        f"## Uppdrag\nDu skriver ett kallt första mejl till {company_name} åt {tenant_name}.\n\n"
+        f"## Uppdrag\nDu skriver ett kallt första mejl till {kortnamn(company_name)} åt {tenant_name}. "
+        f"Kalla bolaget \"{kortnamn(company_name)}\", utan bolagsform (AB, Aktiebolag), "
+        "och nämn namnet EN gång i hela mejlet, ämnesraden medräknad; "
+        "annars \"ni\" och \"er\".\n\n"
         f"## Brief\n{brief}\n\n"
         f"## Erbjudandet som styr vinkeln\n{offer_summary}\n\n"
         f"## Språkläge\n{language_state}\n\n"
@@ -797,7 +834,6 @@ async def run_outreach_draft_v2(
     body = sign_off(strip_markdown(humanized.get("final_body") or draft.get("body") or ""), tenant_name)
     # Hälsningen avgörs i kod (leads/tilltal.py): mätningen 2026-10-06 fann ett
     # påhittat förnamn och mallens platshållare i hälsningen.
-    from ..leads.tilltal import ratta_tilltal
 
     try:
         mottagare = ((json.loads(research_summary or "{}") or {}).get("mottagare") or {}).get("namn")
@@ -811,6 +847,7 @@ async def run_outreach_draft_v2(
         tenant_id=tenant_id,
         thread_id=thread_id,
         prospect_email=prospect_email,
+        is_test=is_test,
     )
     escalated_steps = [s.skill for s in trace.steps if s.escalated]
     queue_result: dict[str, Any] = {}
@@ -844,6 +881,11 @@ async def run_outreach_draft_v2(
         escalated_steps = [s.skill for s in trace.steps if s.escalated]
         # Reparationen kan ha skrivit om hälsningen; samma regel igen.
         body = ratta_tilltal(body, mottagare)
+        # Registernamnet ("… Aktiebolag") blir kortnamnet i det som köas, i
+        # kod och sist: modellen läser registernamnet i researchen.
+        # Och namnet EN gång i hela mejlet (tilltal.ett_bolagsnamn), resten
+        # ni/er; kortningen sker inuti.
+        subject, body = ett_bolagsnamn(subject, body, company_name)
 
         if not grounding["ok"]:
             await _request_human_handoff_impl(
@@ -860,7 +902,7 @@ async def run_outreach_draft_v2(
             queue_result = json.loads(
                 await _queue_outreach_draft_impl(
                     context,
-                    subject=subject or f"Fråga till {company_name}",
+                    subject=subject or f"Fråga till {kortnamn(company_name)}",
                     body=body,
                     language_state=language_state,
                     humanizer_variant=last_humanizer_variant(trace.skills_used),

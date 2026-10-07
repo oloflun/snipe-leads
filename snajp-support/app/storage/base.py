@@ -497,6 +497,22 @@ class Storage(Protocol):
 
     async def get_outreach_thread(self, tenant_id: str, thread_id: str) -> dict[str, Any] | None: ...
 
+    async def get_send_queue_item(self, tenant_id: str, item_id: str) -> dict[str, Any] | None:
+        """En send_queue-post, eller None om den inte finns hos tenanten."""
+        ...
+
+    async def senaste_ko_for_trad(self, tenant_id: str, thread_id: str) -> dict[str, Any] | None:
+        """Trådens senaste send_queue-post (vilken status som helst), eller None.
+        Körningens utkastvy läser status per lead härifrån."""
+        ...
+
+    async def update_outreach_message_text(
+        self, tenant_id: str, message_id: str, *, subject: str, body: str
+    ) -> None:
+        """Skriver om ett EJ skickat utkasts ämne och text (granskarens
+        redigering). Ett skickat meddelande rörs aldrig."""
+        ...
+
     async def get_pending_outreach_message(
         self, tenant_id: str, thread_id: str
     ) -> dict[str, Any] | None:
@@ -504,6 +520,12 @@ class Storage(Protocol):
         ...
 
     async def mark_outreach_message_sent(self, tenant_id: str, message_id: str, sent_at: Any) -> None: ...
+
+    async def list_skickade(self, tenant_id: str, *, limit: int = 200) -> list[dict[str, Any]]:
+        """Skickade leadsmejl (outbound, sent_at satt) över alla trådar, senast
+        först, med bolag och mottagare — fliken Skickat i Iris-leads
+        (Sebbe 2026-10-07). `last_inbound_at` säger om bolaget svarat."""
+        ...
 
     async def list_replies(self, tenant_id: str, *, limit: int = 50) -> list[dict[str, Any]]:
         """Inkomna svar över ALLA trådar, senast först — arbetsytans Svar-flik.
@@ -721,6 +743,15 @@ class Storage(Protocol):
         migration 059, eller en annan miljös jobb)."""
         ...
 
+    async def list_prospekt_i_research(self, tenant_id: str) -> set[str]:
+        """Prospekten vars researchjobb står i queued eller processing i
+        liggaren (scope research/research_and_draft; ett rent utkastjobb är
+        ingen research). Underlaget för den härledda statusen "Research
+        pågår" i GET /api/leads/prospects (Sebbe 2026-10-07): härledd i
+        stället för lagrad, så att en process som dör aldrig lämnar ett bolag
+        fast i den — städaren failar jobbet och bolaget står som Ny igen."""
+        ...
+
     async def list_leads_korningar(self, tenant_id: str, *, limit: int = 20) -> list[dict[str, Any]]:
         """Tenantens körningar (liggarens batch- och listrader), nyast
         först: job_id, status, scope, is_test, created_at, updated_at,
@@ -808,6 +839,14 @@ class Storage(Protocol):
         """Nyaste först, med `item_count` per rad."""
         ...
 
+    async def saljlista_fyll_pa(self, tenant_id: str, rader: list[dict[str, Any]]) -> int:
+        """Skriver färdiga rader till arbetsytans säljlista (public.saljlista,
+        migration 103/105): nycklarna foretagsnamn, orgnr, kontaktperson,
+        kontaktnummer, kontaktmail, anteckningar. Dedupliklerar mot befintliga
+        rader på orgnr-siffror eller bolagsnamn och returnerar antalet
+        inlagda. Finns ingen arbetsyta för tenanten skrivs ingenting (0)."""
+        ...
+
     async def get_lead_list(self, tenant_id: str, list_id: str) -> dict[str, Any] | None: ...
 
     async def add_lead_list_item(
@@ -820,6 +859,13 @@ class Storage(Protocol):
     async def list_lead_list_items(
         self, tenant_id: str, list_id: str
     ) -> list[dict[str, Any]]: ...
+
+    async def spara_listutkast(
+        self, tenant_id: str, item_id: str, utkast: dict[str, Any] | None
+    ) -> None:
+        """Sätter (eller nollar) listradens utkast (migration 106,
+        app/leads/listutkast.py)."""
+        ...
 
     async def lista_upptagna_bolag(self, tenant_id: str) -> list[dict[str, Any]]:
         """`company_name` och `orgnr` för varje bolag kunden redan har: alla
@@ -855,6 +901,24 @@ class Storage(Protocol):
         """Markerar listor i bestalld/byggs äldre än `aldre_an_minuter` som
         'fel' med `felorsak`, och tar bort deras rader i samma svep.
         Returnerar de städade list_id:na. Se app/jobs/stadare.py."""
+        ...
+
+    async def support_oversikt_underlag(
+        self, tenant_id: str, *, sedan: str, is_test: bool | None
+    ) -> dict[str, Any]:
+        """Råraderna bakom Kundtjänst › Översikt (app/support_oversikt.py).
+
+        Returnerar `{"mejl": [...], "korningar": {...}, "kb_artiklar": int}`.
+        Varje mejl: `id, received_at, status, category, escalate,
+        kb_traffar (int | None), forsta_svar (iso | None)`, för supportmejl
+        mottagna från och med `sedan`. Larm, leads och dolda räknas inte.
+        `forsta_svar` är första `auto_sent`/`approved_and_sent` i
+        beslutsloggen. `korningar` summerar periodens supportkörningar
+        (utan is_test): `antal, tokens_in, tokens_out, cache, modell`.
+
+        Aggregeringen sker i Python och inte här, så att Postgres och minnet
+        inte kan räkna olika.
+        """
         ...
 
     async def weekly_analytics(self, tenant_id: str, *, weeks: int = 8) -> dict[str, Any]:

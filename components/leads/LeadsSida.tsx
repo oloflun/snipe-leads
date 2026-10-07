@@ -5,15 +5,12 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { PageShell } from "@/components/AppShell";
 import { useDashboard } from "@/components/dashboard/DashboardContext";
-import { IrisGranskning } from "@/components/leads/IrisGranskning";
 import { IrisInkorg } from "@/components/leads/IrisInkorg";
 import { IrisKorningar } from "@/components/leads/IrisKorningar";
-import { LeadDetail, ListorUpsell, exempelTillRad, type ExempelRad } from "@/components/leads/IrisBolag";
+import { LeadDetail, exempelTillRad, type ExempelRad } from "@/components/leads/IrisBolag";
+import { LeadsOversikt } from "@/components/leads/LeadsOversikt";
 import { LeadsRunForm } from "@/components/leads/LeadsRunForm";
-import { LeadsTabell } from "@/components/leads/LeadsTabell";
-import { CrmKundlista } from "@/components/leads/CrmKundlista";
-import { LeadslistorView } from "@/components/leads/LeadslistorView";
-import { btnPrimary, flik, flikAktiv, flikInaktiv, fliklista } from "@/components/ui";
+import { btnPrimary, btnSecondary, flik, flikAktiv, flikInaktiv, fliklista } from "@/components/ui";
 import { EXEMPELBOLAG, EXEMPEL_OMGANG_1, EXEMPEL_OMGANG_2 } from "@/lib/demo/iris-exempel";
 import { useLocale, type Localized } from "@/lib/i18n";
 import type { SuiteProspekt } from "@/lib/leads/suite";
@@ -34,21 +31,28 @@ import { cn } from "@/lib/utils";
  * får hela bredden, och lådan stängs med Esc, krysset eller ett klick utanför.
  */
 
-type Segment = "leads" | "inkorg" | "utkast" | "listor" | "korningar";
+type Segment = "listor" | "inkorg" | "korningar";
 
 const SEGMENT_ETIKETT: Record<Segment, Localized> = {
-  leads: { sv: "Leads", en: "Leads" },
+  listor: { sv: "Översikt", en: "Overview" },
   inkorg: { sv: "Inkorg", en: "Inbox" },
-  utkast: { sv: "Utkast", en: "Drafts" },
-  listor: { sv: "Listor", en: "Lists" },
   korningar: { sv: "Körningar", en: "Runs" }
 };
 
-/** Gamla vyadresser (före 2026-10-05) landar i den sammanslagna vyn. */
-const GAMLA: Record<string, Segment> = { bolag: "leads", tabell: "leads", pipeline: "leads" };
+/** Gamla vyadresser landar i översikten (fd Leads/Utkast/Listor, Sebbes
+ *  omläggning 2026-10-06: EN första flik med allt). Nyckeln är kvar "listor"
+ *  så att gamla ?vy=listor-länkar (och ?crm=1) fortsätter fungera. */
+const GAMLA: Record<string, Segment> = {
+  bolag: "listor",
+  tabell: "listor",
+  pipeline: "listor",
+  leads: "listor",
+  utkast: "listor"
+};
 
 const T = {
   korIris: { sv: "Kör Iris", en: "Run Iris" },
+  bestallLeads: { sv: "Beställ leads-lista", en: "Order a lead list" },
   hittaBolag: { sv: "Hitta bolag", en: "Find companies" },
   hittaBolagText: {
     sv: "Utan filter hittar Iris själv de bolag som passar er produkt bäst, utifrån er sparade målgrupp.",
@@ -70,20 +74,20 @@ const T = {
 } satisfies Record<string, Localized>;
 
 function tolkaSegment(vy: string | null): Segment {
-  if (!vy) return "leads";
+  if (!vy) return "listor";
   if (vy in GAMLA) return GAMLA[vy];
-  return (Object.keys(SEGMENT_ETIKETT) as Segment[]).includes(vy as Segment) ? (vy as Segment) : "leads";
+  return (Object.keys(SEGMENT_ETIKETT) as Segment[]).includes(vy as Segment) ? (vy as Segment) : "listor";
 }
 
 export function IrisBolag({ demo = false }: Readonly<{ demo?: boolean }>) {
-  const { addons, isDemo, vy } = useDashboard();
+  const { addons, isDemo, vy, impersonation, arLasare } = useDashboard();
   const { text } = useLocale();
   const router = useRouter();
   const pathname = usePathname();
   const sokParams = useSearchParams();
 
   const segmentVal = tolkaSegment(sokParams.get("vy"));
-  const valdId = segmentVal === "leads" ? sokParams.get("lead") : null;
+  const valdId = segmentVal === "listor" ? sokParams.get("lead") : null;
   // Översiktens "Ladda upp CRM-kundlista" landar på ?vy=listor&crm=1.
   const crmOppen = segmentVal === "listor" && sokParams.get("crm") === "1";
   const flikRefs = useRef<Partial<Record<Segment, HTMLButtonElement | null>>>({});
@@ -91,9 +95,7 @@ export function IrisBolag({ demo = false }: Readonly<{ demo?: boolean }>) {
   const [exempelRader, setExempelRader] = useState<ExempelRad[]>([]);
   const [demoKorFas, setDemoKorFas] = useState<"vilar" | "kor">("vilar");
 
-  const segment: Segment[] = demo
-    ? ["leads", "utkast", "listor"]
-    : ["leads", "inkorg", "utkast", "listor", "korningar"];
+  const segment: Segment[] = demo ? ["listor"] : ["listor", "inkorg", "korningar"];
 
   const satt = useCallback(
     (andring: Record<string, string | null>) => {
@@ -108,7 +110,7 @@ export function IrisBolag({ demo = false }: Readonly<{ demo?: boolean }>) {
     [pathname, router, sokParams]
   );
 
-  const valjSegment = (s: Segment) => satt({ vy: s === "leads" ? null : s, lead: null });
+  const valjSegment = (s: Segment) => satt({ vy: s === "listor" ? null : s, lead: null });
 
   // En avslutad körning stänger formuläret så att de nya raderna syns direkt.
   useEffect(() => {
@@ -140,12 +142,31 @@ export function IrisBolag({ demo = false }: Readonly<{ demo?: boolean }>) {
     <PageShell
       title={{ sv: "Leads", en: "Leads" }}
       action={
-        <button type="button" aria-expanded={korOppen} onClick={() => setKorOppen((v) => !v)} className={btnPrimary}>
-          {text(T.korIris)}
-        </button>
+        <>
+          {/* Samma grind som SaljlistaSektion: formuläret knappen öppnar finns
+              bara i den egna, skrivbara säljlistan — inte i demon, inte under
+              ett kundbesök. */}
+          {segmentVal === "listor" && harListaddon && !demo && !isDemo && vy === "admin" && !impersonation && !arLasare ? (
+            // Beställningen landar i säljlistan (Sebbe 2026-10-06): knappen
+            // öppnar formuläret där nere. Kör Iris står kvar bredvid.
+            <button
+              type="button"
+              onClick={() => window.dispatchEvent(new Event("snipra:saljlista-bestall"))}
+              className={btnSecondary}
+            >
+              {text(T.bestallLeads)}
+            </button>
+          ) : null}
+          {/* Fliken Körningar bär ingen Kör Iris-knapp (Sebbe 2026-10-07). */}
+          {segmentVal === "korningar" ? null : (
+            <button type="button" aria-expanded={korOppen} onClick={() => setKorOppen((v) => !v)} className={btnPrimary}>
+              {text(T.korIris)}
+            </button>
+          )}
+        </>
       }
     >
-      {korOppen ? (
+      {korOppen && segmentVal !== "korningar" ? (
         <div className="mb-10 rounded-card border border-ink/12 bg-paper2/40 p-5 md:p-6">
           <LeadsRunForm
             isTest={demo || isDemo || vy === "demo"}
@@ -187,7 +208,9 @@ export function IrisBolag({ demo = false }: Readonly<{ demo?: boolean }>) {
       ) : null}
 
       {/* Pilnavigering: vänster/höger flyttar fokus och val, och bara den valda
-          fliken ligger i tabbordningen. */}
+          fliken ligger i tabbordningen. En ensam flik (demon) är ingen
+          navigering — då ritas ingen flikrad alls. */}
+      {segment.length < 2 ? null : (
       <div
         className={fliklista}
         role="tablist"
@@ -225,6 +248,7 @@ export function IrisBolag({ demo = false }: Readonly<{ demo?: boolean }>) {
           </button>
         ))}
       </div>
+      )}
 
       <div className="mt-6" role="tabpanel" id="leads-flikpanel" aria-labelledby={`leads-flik-${segmentVal}`}>
         {segmentVal === "inkorg" ? (
@@ -233,27 +257,16 @@ export function IrisBolag({ demo = false }: Readonly<{ demo?: boolean }>) {
           ) : (
             <IrisInkorg />
           )
-        ) : segmentVal === "utkast" ? (
-          <IrisGranskning demo={demo} />
-        ) : segmentVal === "listor" ? (
-          harListaddon || demo ? (
-            <LeadslistorView demo={demo} crmOppen={crmOppen} />
-          ) : (
-            // CRM-kundlistan gäller Iris också (uteslutningen), så den står
-            // här även utan listtillägget.
-            <div className="grid gap-8">
-              <CrmKundlista startOppen={crmOppen} />
-              <ListorUpsell />
-            </div>
-          )
         ) : segmentVal === "korningar" ? (
           <IrisKorningar />
         ) : (
-          <LeadsTabell
+          <LeadsOversikt
             demo={demo}
+            crmOppen={crmOppen}
             valdId={valdId}
             exempel={exempelRader as unknown as SuiteProspekt[]}
-            onValj={(id) => satt({ lead: id })}
+            onValjLead={(id) => satt({ lead: id })}
+            onOppnaKorningar={(jobId) => satt({ vy: "korningar", lead: null, id: jobId })}
           />
         )}
       </div>

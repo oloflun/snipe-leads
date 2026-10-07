@@ -95,7 +95,7 @@ def bygg_signaturtext(sig: dict[str, str]) -> str:
     return "\n\n".join(grupper)
 
 
-def med_signatur(brodtext: str, sig: dict[str, str]) -> str:
+def med_signatur(brodtext: str, sig: dict[str, str], *, halsning: str | None = None) -> str:
     """Lägger på signaturen om den saknas. Idempotent.
 
     En uppföljning kan vara byggd ur ett tidigare mejl som redan bär
@@ -125,7 +125,71 @@ def med_signatur(brodtext: str, sig: dict[str, str]) -> str:
     if sista and (sista == sig["namn"] or sig["namn"].startswith(f"{sista} ")):
         stripped = stripped[: len(stripped) - len(stripped.rsplit("\n", 1)[-1])].rstrip()
         return f"{stripped}\n{text}"
+    if _AVSLUTNING.search(stripped):
+        return f"{stripped}\n{text}"
+    # Ingen avslutning alls: mejlet gick rakt från uppmaningen till namnet
+    # (uppmätt 2026-10-07 i 16 av 16 utkast i development). Hälsningsfrasen
+    # läggs på i kod, på mejlets språk.
+    if halsning:
+        return f"{stripped}\n\n{halsning}\n{text}"
     return f"{stripped}\n\n{text}"
+
+
+#: En avslutande hälsningsrad, med eller utan komma, svensk eller engelsk.
+#: Lösare än _HANGANDE_HALSNING (som speglar leads_agent och måste hållas lik).
+_AVSLUTNING = re.compile(
+    r"\n[ \t]*(?:(?:med\s+)?(?:vänliga|bästa|varma)\s+hälsningar|hälsningar|mvh|vänligen|"
+    r"best\s+regards|kind\s+regards|regards|best\s+wishes|best|cheers)[ \t]*[,!.]?[ \t]*$",
+    re.IGNORECASE,
+)
+
+#: Hälsningsfrasen per språk när brödtexten saknar en (`med_signatur`).
+HALSNING = {"sv": "Vänliga hälsningar,", "en": "Best regards,"}
+
+
+#: Första raden i den lagstadgade foten (utskicksfot.bygg_fot). Duplicerad
+#: hellre än importerad, av samma skäl som _HANGANDE_HALSNING ovan.
+_FOTSTART = "\n--\n"
+
+
+def dela_utkast(body: str, sig: dict[str, str] | None) -> tuple[str, str]:
+    """(brödtext, svans) — svansen är kodens egen text sist i mejlet:
+    signaturblocket och/eller den lagstadgade foten.
+
+    Granskningsvyn låter människan och AI-knapparna (Förbättra, Kortare …)
+    arbeta på brödtexten och bara den. Förut låg hela mejlet i textrutan, och
+    en omskrivning kunde stryka eller skriva om signaturen — då hittade
+    `bygg_html` inte blocket och mejlet gick ut utan logga — eller foten,
+    som send_guard sedan stoppade utskicket på.
+    """
+    text = body or ""
+    kandidater: list[int] = []
+    sigtext = bygg_signaturtext(sig) if sig else ""
+    if sigtext and (i := text.find(sigtext)) >= 0:
+        kandidater.append(i)
+    if (i := text.find(_FOTSTART)) >= 0:
+        kandidater.append(i + 1)
+    if not kandidater:
+        return text.rstrip(), ""
+    start = min(kandidater)
+    return text[:start].rstrip(), text[start:].strip("\n")
+
+
+def sla_ihop(
+    brodtext: str, svans: str, sig: dict[str, str] | None, *, halsning: str | None = None
+) -> str:
+    """Inversen av `dela_utkast`: den redigerade brödtexten plus den
+    oförändrade svansen. Börjar svansen med signaturen går skarven genom
+    `med_signatur`, som fullbordar en hängande hälsningsfras och stryker ett
+    avsändarnamn som omskrivningen själv skrev sist."""
+    brodtext = (brodtext or "").rstrip()
+    if not svans:
+        return brodtext
+    sigtext = bygg_signaturtext(sig) if sig else ""
+    if sigtext and svans.startswith(sigtext):
+        resten = svans[len(sigtext) :]
+        return med_signatur(brodtext, sig, halsning=halsning).rstrip() + resten  # type: ignore[arg-type]
+    return f"{brodtext}\n\n{svans}"
 
 
 def _radbryt_till_html(text: str) -> str:

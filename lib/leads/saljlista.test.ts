@@ -4,6 +4,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
+  arSaljstatus,
   byggSaljCsv,
   dagarSedan,
   dubblettnycklar,
@@ -64,10 +65,19 @@ test("CSV har BOM, semikolon och citerar fält med radbrytning", () => {
     kontaktmail: "a@b.se",
     senast_kontaktad: null,
     anteckningar: "rad 1\nrad \"2\"",
+    status: "salt",
     created_at: "",
     updated_at: ""
   };
-  const csv = byggSaljCsv([rad], ["A", "B", "C", "D", "E", "F", "G"]);
-  assert.ok(csv.startsWith("﻿A;B;C;D;E;F;G\r\n"));
-  assert.ok(csv.includes('"Bolag; AB";556677-8899;Anna;070;a@b.se;;"rad 1\nrad ""2"""'));
+  const csv = byggSaljCsv([rad], ["A", "B", "C", "D", "E", "F", "G", "H"], () => "Sålt");
+  assert.ok(csv.startsWith("﻿A;B;C;D;E;F;G;H\r\n"));
+  assert.ok(csv.includes('"Bolag; AB";556677-8899;Anna;070;a@b.se;;"rad 1\nrad ""2""";Sålt'));
+});
+
+test("statuskoderna är de fyra färgerna plus ingen", () => {
+  for (const kod of ["", "salt", "signering", "nej", "ej_svar"]) {
+    assert.equal(arSaljstatus(kod), true, kod);
+  }
+  assert.equal(arSaljstatus("grön"), false);
+  assert.equal(arSaljstatus("SALT"), false);
 });

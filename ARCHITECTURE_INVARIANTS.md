@@ -773,7 +773,9 @@ och blir varken Redo eller får ett utkast (`bedomning.bedom(har_underlag=...)`,
 `leads_research_v2`). Nivå A kräver minst ett uppfyllt kriterium. Ett lead
 uppfyller kraven: varje måste-kriterium styrkt och inget uttryckligt nej, och
 `GET /api/leads/prospects` returnerar aldrig ett bortvalt bolag (nivå C)
-(Antons krav 2026-10-06). Varje bolag bedöms dessutom på produktmatchningen
+(Antons krav 2026-10-06). Bortvalt är DOLT, inte raderat: den uttryckliga
+vyn `?bortvalda=1` listar dem, och ett prospekt raderas aldrig av systemet —
+bara av en uttrycklig användarhandling (Sebbes krav 2026-10-06). Varje bolag bedöms dessutom på produktmatchningen
 `kp`, oavsett profil: bara ett belagt ja (citat, eller ett webbkriterium som
 koden avgjort som träff) blir ett lead, och när kunden har en produktlista
 måste researchen ha valt en av produkterna (`bedomning._produktmatch_rad`,
@@ -800,7 +802,9 @@ då med en tratt som namnger det strypande kriteriet.
 Varför: uppmätt 2026-09-29 — 3 beställda leads blev 3 kandidater som Iris
 själv underkände, inga utkast, och körningen stannade vid "1/3 jobb".
 Leverbart är skärpt 2026-10-02 (Antons krav, plan del C): kvalificerat, över
-tröskeln, kontaktperson MED roll, telefon ELLER arbetsmejl, och en
+tröskeln, NAMNGIVEN kontaktperson (rollen föredras men krävs inte sedan
+Sebbes revidering 2026-10-07 — en namngiven anställd duger i sista hand),
+telefon ELLER arbetsmejl, och en
 lägesbeskrivning (migration 083) — `_leverbarhet` i `app/api/leads.py`.
 Test: snajp-support/tests/invariants/test_inv_leads_n_001.py
 Införd: 2026-09-30 · Upphävs endast genom waiver

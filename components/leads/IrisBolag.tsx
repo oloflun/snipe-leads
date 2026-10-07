@@ -235,15 +235,15 @@ export function ListorUpsell() {
   return (
     <div className="min-w-0 border-t border-ink/15 py-6">
       <div className="flex min-w-0 flex-wrap items-baseline justify-between gap-x-6 gap-y-2">
-        <h4 className="min-w-0 break-words text-[17px]">{spec.name}</h4>
+        <h4 className="min-w-0 break-words text-[17px]">{text(spec.name)}</h4>
         <span className="kicker shrink-0 text-mineral">{text(T.tillval)}</span>
       </div>
-      <p className="mt-3 max-w-[64ch] text-[15px] leading-7">{spec.what}</p>
+      <p className="mt-3 max-w-[64ch] text-[15px] leading-7">{text(spec.what)}</p>
       <a
-        href={mejlaOss(text({ sv: `Tillägg: ${spec.name}`, en: `Add-on: ${spec.name}` }))}
+        href={mejlaOss(text({ sv: `Tillägg: ${spec.name.sv}`, en: `Add-on: ${spec.name.en}` }))}
         className="mt-4 inline-block text-[13px] underline underline-offset-4 transition hover:text-ochre"
       >
-        {text({ sv: `Hör av dig om ${spec.name.toLowerCase()}`, en: `Ask us about ${spec.name.toLowerCase()}` })}
+        {text({ sv: `Hör av dig om ${spec.name.sv.toLowerCase()}`, en: `Ask us about ${spec.name.en.toLowerCase()}` })}
       </a>
     </div>
   );

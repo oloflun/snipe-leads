@@ -137,12 +137,18 @@ def test_leverbart_kraver_kontaktperson_kontaktvag_och_lagesbeskrivning():
 
     regler = eskalering.normalisera({"kvalificeringstroskel": 50})
     ok = {"qualified": True, "icp_fit": 0.9, "score_total": 90, "lagesbeskrivning": "Bolaget …"}
-    rad = {"contact_name": "Test Testsson", "contact_role": "VD", "contact_phone": "070-1", "website": "https://alfa.se"}
+    rad = {"contact_name": "Test Testsson", "contact_role": "VD", "contact_email": "test@alfa.se", "website": "https://alfa.se"}
     assert leads_api._leverbarhet(rad, ok, regler) is None
-    assert leads_api._leverbarhet({**rad, "contact_role": None}, ok, regler) == "Ingen kontaktperson med roll"
-    assert leads_api._leverbarhet({**rad, "contact_phone": None}, ok, regler).startswith("Ingen kontaktväg")
-    # Arbetsmejl räcker som kontaktväg när telefon saknas.
-    assert leads_api._leverbarhet({**rad, "contact_phone": None, "contact_email": "vd@alfa.se"}, ok, regler) is None
+    # Sebbes beslut 2026-10-07: det enda kontaktkravet är en kontaktmejl till
+    # bolaget. Namn och roll föredras men krävs inte; info@ duger.
+    assert leads_api._leverbarhet({**rad, "contact_role": None}, ok, regler) is None
+    assert leads_api._leverbarhet({**rad, "contact_name": None, "contact_email": "info@alfa.se"}, ok, regler) is None
+    # En telefon ensam når inte fram med ett utkast.
+    utan_mejl = {**rad, "contact_email": None, "contact_phone": "070-1"}
+    assert leads_api._leverbarhet(utan_mejl, ok, regler) == "Ingen kontaktmejl till bolaget"
+    # Främmande domän, privat adress eller HR-adress är ingen kontaktmejl.
+    for fel in ("info@annat.se", "alfa@gmail.com", "rekrytering@alfa.se"):
+        assert leads_api._leverbarhet({**rad, "contact_email": fel}, ok, regler) == "Ingen kontaktmejl till bolaget", fel
     assert leads_api._leverbarhet(rad, {**ok, "lagesbeskrivning": "  "}, regler) == "Ingen lägesbeskrivning"
     # Lägesbeskrivningen får komma från raden (sparad av researchen).
     assert leads_api._leverbarhet({**rad, "lagesbeskrivning": "Sparad."}, {**ok, "lagesbeskrivning": None}, regler) is None

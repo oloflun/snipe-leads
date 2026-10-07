@@ -1,9 +1,12 @@
 "use client";
 
 import { X } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { EjAktiverad } from "@/components/EjAktiverad";
-import { Badge, Cell, SkeletonRows, Tabell, Tomt, btnSecondary, etikett, btnLiten, faltDiskret, faltTatt, chip, chipAktiv, chipInaktiv, chiplista, meta, tabellRad } from "@/components/ui";
+import { Badge, Cell, SkeletonRows, Tabell, Tomt, btnPrimary, btnSecondary, etikett, btnLiten, faltDiskret, faltTatt, chip, chipAktiv, chipInaktiv, chiplista, meta, rubrikPanel, tabellRad } from "@/components/ui";
+import { useSmal } from "@/components/leads/smal";
+import { SkickatLista, type SkickatRad } from "@/components/leads/SkickatLista";
+import { useRadrorelse } from "@/components/leads/useRadrorelse";
 import { demoOversiktSvar } from "@/lib/demo/oversikt";
 import { felmeddelande } from "@/lib/http/json";
 import { useLocale, type Localized } from "@/lib/i18n";
@@ -65,6 +68,15 @@ const T = {
   sparaVy: { sv: "Spara vy", en: "Save view" },
   sparar: { sv: "Sparar…", en: "Saving…" },
   statusSparadesInte: { sv: "Statusen sparades inte", en: "The status was not saved" },
+  bortvalda: { sv: "Bortvalda", en: "Dropped" },
+  bortvaldaRubrik: { sv: "Bortvalda bolag", en: "Dropped companies" },
+  bortvaldaText: {
+    sv: "Bolag Iris valde bort för att de inte uppfyller kraven. Inget är raderat: de står kvar här och nästa sökning hoppar över dem. Radera går bara att göra inne på bolaget.",
+    en: "Companies Iris dropped because they do not meet the requirements. Nothing is deleted: they stay here and the next search skips them. Deleting is only done on the company itself."
+  },
+  bortvaldaTomt: { sv: "Inga bortvalda bolag.", en: "No dropped companies." },
+  bortvaldaFel: { sv: "De bortvalda bolagen kunde inte hämtas.", en: "The dropped companies could not be loaded." },
+  bortvald: { sv: "Bortvald", en: "Dropped" },
   sidodata: {
     sv: "Uppgifter eller sparade vyer kunde inte hämtas",
     en: "Tasks or saved views could not be loaded"
@@ -73,7 +85,9 @@ const T = {
   statusFor: { sv: "Status för", en: "Status for" },
   statusAndrad: { sv: "Status ändrad till", en: "Status changed to" },
   exempel: { sv: "Exempel", en: "Example" },
-  researchar: { sv: "Researchar", en: "Researching" },
+  ingenPoang: { sv: "Ingen poäng än", en: "No score yet" },
+  vyer2: { sv: "Andra vyer", en: "Other views" },
+  live: { sv: "Uppdateras live", en: "Updating live" },
   oppna: { sv: "Öppna", en: "Open" },
   modernitet: { sv: "Modernitet", en: "Modernity" }
 } satisfies Record<string, Localized>;
@@ -88,7 +102,37 @@ const KONTAKT_ETIKETT: Record<Kontaktvag, Localized> = {
 const TYPER: LeadTyp[] = ["iris", "lista", "import", "inkorg"];
 
 /** Stegen i remsan: arbetsflödets ordning, utan Spärrad (den har egen väg). */
-const REMSA = STATUS_ORDNING.filter((s) => s !== "suppressed");
+const REMSA = ["researching", "new", "ready", "contacted", "replied", "meeting", "won", "lost"] as const;
+
+/** Lägen som systemet sätter, aldrig kunden: research pågår medan ett jobb
+ *  lever (härlett i API:t) och spärrad via avregistreringen. I statusvalet
+ *  visas de bara när raden redan står i dem. */
+const SYSTEMSTATUS = new Set(["researching", "suppressed"]);
+
+/** Statusar där ett mejl gått ut, och där leadet svarat. Demons Skickat-lista
+ *  och nyckeltal räknas ur dem, så att demon säger samma sak på båda ställena. */
+const SKICKADE = new Set(["contacted", "replied", "meeting", "won", "lost"]);
+const SVARADE = new Set(["replied", "meeting", "won"]);
+
+/**
+ * Pipelinestatus i säljlistans färgsystem (Sebbe 2026-10-06): grönt = i hamn,
+ * blått = på väg mot affär, rött = nej, gult = kontaktad utan svar. Samma
+ * tokens som components/leads/Saljlista.tsx (moss/chart-blue/danger/ochre).
+ */
+const STATUSPRICK: Record<string, string> = {
+  won: "bg-moss",
+  replied: "bg-chart-blue",
+  meeting: "bg-chart-blue",
+  contacted: "bg-ochre",
+  lost: "bg-danger"
+};
+
+/** Antalet i ett chip. En muted token, aldrig opacity (DESIGN.md: genomskinlig
+ *  text har ingen kontrastgaranti): paper-muted på det aktiva ink-chipet,
+ *  ink-subtle annars. */
+function Antal({ aktiv, children }: Readonly<{ aktiv: boolean; children: React.ReactNode }>) {
+  return <span className={cn("num tabular-nums", aktiv ? "text-paper-muted" : "text-ink-subtle")}>{children}</span>;
+}
 
 function matchar(p: SuiteProspekt, f: VyFilter): boolean {
   if (f.status && p.status !== f.status) return false;
@@ -121,23 +165,95 @@ function forstaMening(p: SuiteProspekt): string | null {
   return slut > 0 ? text.slice(0, slut + 1) : text;
 }
 
-/** Researchen är köad eller pågår: raden finns men är inte bedömd än. */
+/** Researchen är köad eller pågår: backenden säger det (status härledd ur
+ *  jobbliggaren), eller raden finns men är inte bedömd än. */
 function researchPagar(p: SuiteProspekt): boolean {
-  return p.origin !== "example" && !p.niva && p.score_total == null && p.icp_fit == null;
+  if (p.origin === "example") return false;
+  return p.status === "researching" || (!p.niva && p.score_total == null && p.icp_fit == null);
 }
 
-/** Nyaste överst — exemplen först. Sorteringen på nivå och poäng lade nya
- *  leads mitt i listan (Antons krav 2026-10-06). */
-function sortera(rader: SuiteProspekt[]): SuiteProspekt[] {
-  const rang = (p: SuiteProspekt) => (p.origin === "example" ? 0 : 1);
-  return [...rader].sort((a, b) => rang(a) - rang(b) || (b.created_at ?? "").localeCompare(a.created_at ?? ""));
+/** Backendens härledda status: ett researchjobb är köat eller körs nu. Bara
+ *  den styr livetakten — en importerad rad utan poäng ser ut som research
+ *  men väntar inte på något. */
+function iResearch(p: SuiteProspekt): boolean {
+  return p.origin !== "example" && p.status === "researching";
 }
+
+const NIVA_RANG: Record<string, number> = { A: 0, B: 1 };
+
+function kvalitet(p: SuiteProspekt): number {
+  if (typeof p.score_total === "number") return p.score_total;
+  if (typeof p.icp_fit === "number") return p.icp_fit * 100;
+  return -1;
+}
+
+function nyast(a: SuiteProspekt, b: SuiteProspekt): number {
+  return (b.created_at ?? "").localeCompare(a.created_at ?? "");
+}
+
+/**
+ * De bästa leadsen överst (Sebbe 2026-10-07): poäng, sedan nivå (Stark före
+ * Möjlig) vid lika poäng, sedan nyast. Poängen är rangpoängen
+ * (snajp-support/app/leads/rangpoang.py) och mäter just hur bra leadet är;
+ * med nivån först stod "Stark 58" över "Möjlig 78". Bolag under research har
+ * inget betyg än och står överst, så att man ser dem bli klara och glida ner
+ * till sin plats. Exemplen sorteras som allt annat (kritiken 2026-10-07: med
+ * exemplen först läste demon 91, 79, research, 88).
+ *
+ * Ersätter Antons "nyaste överst" (2026-10-06), vars skäl var att nya leads
+ * hamnade mitt i listan: de nya har nu en egen flik, Ny.
+ */
+function sortera(rader: SuiteProspekt[]): SuiteProspekt[] {
+  const grupp = (p: SuiteProspekt) => (iResearch(p) ? 0 : 1);
+  return [...rader].sort(
+    (a, b) =>
+      grupp(a) - grupp(b) ||
+      kvalitet(b) - kvalitet(a) ||
+      (NIVA_RANG[a.niva ?? ""] ?? 2) - (NIVA_RANG[b.niva ?? ""] ?? 2) ||
+      nyast(a, b)
+  );
+}
+
+/** Tidtakten medan något pågår: tätt nog att se ett bolag byta flik. */
+const LIVE_MS = 4000;
+
+/**
+ * Demons uppspelade körning (kritiken 2026-10-07: det som Sebbe beställt,
+ * leads som flyttar live från Research pågår till Ny, syntes aldrig i demon,
+ * som är säljytan). Två påhittade bolag dyker upp under research och blir
+ * klara ett i taget. Exempeldata, märkt som allt annat i demon.
+ */
+const DEMO_KORNING: { id: string; namn: string; ort: Localized; webb: string; niva: "A" | "B"; poang: number; varfor: Localized }[] = [
+  {
+    id: "demo-live-1",
+    namn: "Norrsken Snickeri AB",
+    ort: { sv: "Umeå", en: "Umeå" },
+    webb: "norrskensnickeri.se",
+    niva: "B",
+    poang: 71,
+    varfor: { sv: "Snickeri med sju anställda som just öppnat en andra verkstad.", en: "Joinery with seven employees that just opened a second workshop." }
+  },
+  {
+    id: "demo-live-2",
+    namn: "Kustvik Elteknik AB",
+    ort: { sv: "Luleå", en: "Luleå" },
+    webb: "kustvikel.se",
+    niva: "A",
+    poang: 86,
+    varfor: { sv: "Elfirma som söker fler företagskunder och rekryterar en säljare.", en: "Electrical firm looking for more business customers and hiring a salesperson." }
+  }
+];
+/** När i demons körning: bolagen dyker upp, och när vart och ett blir klart. */
+const DEMO_TIDER = { start: 2500, klara: [6500, 10000] };
 
 export function LeadsTabell({
   onValj,
   valdId = null,
   exempel = [],
-  demo = false
+  demo = false,
+  flyttbar = false,
+  korningPagar = false,
+  onAntal
 }: Readonly<{
   onValj?: (id: string) => void;
   /** Leadet vars låda är öppen: raden markeras. */
@@ -145,8 +261,17 @@ export function LeadsTabell({
   /** Demons exempelbolag, överst i listan. */
   exempel?: SuiteProspekt[];
   demo?: boolean;
+  /** Plattformsadmin i development: markera leads och flytta dem till main. */
+  flyttbar?: boolean;
+  /** En Iris-körning pågår (översiktens körningsruta): listan hämtas tätt
+   *  även innan första bolaget hunnit köas. */
+  korningPagar?: boolean;
+  /** Översiktens nyckeltal: listans egna tal, så att de aldrig säger
+   *  något annat än listan. `skickat`/`svarat` är null tills de hämtats. */
+  onAntal?: (tal: { alla: number; nya: number; skickat: number | null; svarat: number | null }) => void;
 }>) {
   const { locale, text } = useLocale();
+  const smal = useSmal();
   const [prospekt, setProspekt] = useState<SuiteProspekt[] | null>(null);
   const [uppgifter, setUppgifter] = useState<Uppgift[]>([]);
   const [vyer, setVyer] = useState<Vy[]>([]);
@@ -163,6 +288,42 @@ export function LeadsTabell({
     if (fokusId) (document.getElementById(`leads-status-${fokusId}`) ?? document.getElementById("leads-remsa-alla"))?.focus();
   }, [fokusId, prospekt]);
   const [filter, setFilter] = useState<VyFilter>({});
+  // Flytta till main (admin, development): markerade leads skickas genom
+  // samma signerade flyttväg som Byt kund-panelen (lib/actions/flytt.ts).
+  const [valda, setValda] = useState<Set<string>>(new Set());
+  const [flyttar, setFlyttar] = useState(false);
+  const [flyttNotis, setFlyttNotis] = useState<string | null>(null);
+  // Skicka de markerades utkast (Sebbe 2026-10-07: markera alla med en knapp
+  // och skicka ut alla därifrån).
+  const [skickar, setSkickar] = useState(false);
+  const [skickaNotis, setSkickaNotis] = useState<{ text: string; fel: boolean } | null>(null);
+  // Bortvalda (nivå C): dolda som standard (Antons krav), nåbara på begäran
+  // (Sebbes krav: inget får se ut som raderat). Hämtas först vid klick.
+  const [visaBortvalda, setVisaBortvalda] = useState(false);
+  const [bortvalda, setBortvalda] = useState<SuiteProspekt[] | null>(null);
+  // Skickat (Sebbe 2026-10-07): varje leadsmejl som gått ut. Hämtas direkt,
+  // så att antalet står på fliken; listan ersätter tabellen när fliken är vald.
+  const [visaSkickat, setVisaSkickat] = useState(false);
+  const [skickat, setSkickat] = useState<SkickatRad[] | null>(null);
+  const [skickatFel, setSkickatFel] = useState<string | null>(null);
+  useEffect(() => {
+    if (demo) {
+      setSkickat([]);
+      return;
+    }
+    let aktiv = true;
+    leadsAnrop<{ skickat?: SkickatRad[] }>("/leads/skickat")
+      .then((svar) => aktiv && setSkickat(svar.skickat ?? []))
+      .catch((orsak) => {
+        if (!aktiv) return;
+        setSkickatFel(felmeddelande(orsak));
+        setSkickat([]);
+      });
+    return () => {
+      aktiv = false;
+    };
+  }, [demo]);
+  const [bortvaldaFel, setBortvaldaFel] = useState<string | null>(null);
   const [vyNamn, setVyNamn] = useState("");
   const [sparar, setSparar] = useState(false);
 
@@ -198,6 +359,73 @@ export function LeadsTabell({
     void hamta();
   }, [hamta]);
 
+  // Demons körning spelas upp en gång per besök, i stället för att polla.
+  const [demoKorning, setDemoKorning] = useState(false);
+  useEffect(() => {
+    if (!demo) return;
+    const nu = new Date().toISOString();
+    const rad = (k: (typeof DEMO_KORNING)[number], klar: boolean): SuiteProspekt => ({
+      id: k.id,
+      company_name: k.namn,
+      ort: text(k.ort),
+      website: k.webb,
+      origin: "manual",
+      created_at: nu,
+      status: klar ? "new" : "researching",
+      niva: klar ? k.niva : null,
+      score_total: klar ? k.poang : null,
+      motivering: klar ? text(k.varfor) : null,
+      contact_email: klar ? `info@${k.webb}` : null
+    });
+    const timers = [
+      window.setTimeout(() => {
+        setDemoKorning(true);
+        setProspekt((forra) => [...(forra ?? []), ...DEMO_KORNING.map((k) => rad(k, false))]);
+      }, DEMO_TIDER.start),
+      ...DEMO_KORNING.map((k, i) =>
+        window.setTimeout(() => {
+          setProspekt((forra) => (forra ?? []).map((p) => (p.id === k.id ? rad(k, true) : p)));
+          if (i === DEMO_KORNING.length - 1) setDemoKorning(false);
+        }, DEMO_TIDER.klara[i])
+      )
+    ];
+    return () => timers.forEach((t) => window.clearTimeout(t));
+    // Språket läses när raden blir klar; ett språkbyte mitt i spelar inte om körningen.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [demo]);
+
+  // Bara leadsen, tyst: livetakten ska inte blinka fram fel eller skelett.
+  const hamtaLeads = useCallback(async () => {
+    if (demo) return;
+    try {
+      const svar = await leadsAnrop<{ prospects?: SuiteProspekt[] }>("/leads/prospects");
+      setProspekt(svar.prospects ?? []);
+    } catch {
+      // Nästa varv försöker igen; ett tillfälligt fel är ingen nyhet.
+    }
+  }, [demo]);
+
+  // Live (Sebbe 2026-10-07): medan en körning pågår eller något bolag
+  // researchas hämtas listan var fjärde sekund, så att bolagen syns flytta
+  // från Research pågår till Ny. När det tystnar hämtas allt en sista gång.
+  // Demon: bara den uppspelade körningen. Dess exempelrad som står i
+  // research för alltid får inte hålla indikatorn tänd.
+  const live = demo ? demoKorning : korningPagar || (prospekt ?? []).some(iResearch);
+  const varLive = useRef(false);
+  useEffect(() => {
+    if (demo) return;
+    if (!live) {
+      if (varLive.current) void hamta();
+      varLive.current = false;
+      return;
+    }
+    varLive.current = true;
+    const id = window.setInterval(() => {
+      if (document.visibilityState === "visible") void hamtaLeads();
+    }, LIVE_MS);
+    return () => window.clearInterval(id);
+  }, [demo, live, hamta, hamtaLeads]);
+
   // En pågående körning (Kör Iris) lägger till rader medan man tittar.
   useEffect(() => {
     const uppdatera = () => void hamta();
@@ -217,6 +445,40 @@ export function LeadsTabell({
   }, [uppgifter]);
 
   const allaRader = useMemo(() => sortera([...exempel, ...(prospekt ?? [])]), [exempel, prospekt]);
+  const listref = useRef<HTMLDivElement>(null);
+  useRadrorelse(listref, prospekt === null ? null : allaRader);
+  // Demon har ingen utskickslogg: dess Skickat byggs av samma exempelleads
+  // som listan (kritiken 2: "Skickade 1 122" bredvid "Skickat 0").
+  const skickatVisat = useMemo<SkickatRad[] | null>(() => {
+    if (!demo) return skickat;
+    return allaRader
+      .filter((p) => SKICKADE.has(p.status))
+      .map((p) => ({
+        id: `demo-skickat-${p.id}`,
+        subject: text({ sv: `Hej ${p.company_name}`, en: `Hello ${p.company_name}` }),
+        body: text({
+          sv: "Exempelmejl i demon. I din arbetsyta står mejlet som det skickades.",
+          en: "Example email in the demo. In your workspace the email appears as it was sent."
+        }),
+        sent_at: p.senaste_handelse_at ?? p.created_at ?? new Date().toISOString(),
+        prospect_id: p.id,
+        company_name: p.company_name,
+        contact_name: p.contact_name ?? null,
+        prospect_email: p.contact_email ?? null,
+        svarat: SVARADE.has(p.status)
+      }));
+  }, [demo, skickat, allaRader, text]);
+
+  useEffect(() => {
+    if (prospekt === null) return;
+    onAntal?.({
+      alla: allaRader.length,
+      nya: allaRader.filter((p) => p.status === "new").length,
+      skickat: skickatVisat ? skickatVisat.length : null,
+      svarat: skickatVisat ? skickatVisat.filter((r) => r.svarat).length : null
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prospekt, allaRader, skickatVisat]);
   // Bortvalda bolag når aldrig listan: API:t lämnar bara leads som uppfyller
   // kraven (snajp-support/app/api/leads.py, list_prospects).
   const urval = allaRader;
@@ -227,6 +489,25 @@ export function LeadsTabell({
     for (const p of urval) if (matchar(p, { ...filter, status: undefined })) karta.set(p.status, (karta.get(p.status) ?? 0) + 1);
     return karta;
   }, [urval, filter]);
+
+  async function vaxlaBortvalda() {
+    const nu = !visaBortvalda;
+    setVisaBortvalda(nu);
+    if (!nu || bortvalda !== null) return;
+    // Demon har inga bortvalda bolag; utan det här stod chippen och laddade.
+    if (demo) {
+      setBortvalda([]);
+      return;
+    }
+    setBortvaldaFel(null);
+    try {
+      const svar = await leadsAnrop<{ prospects?: SuiteProspekt[] }>("/leads/prospects?bortvalda=1");
+      setBortvalda([...(svar.prospects ?? [])].sort(nyast));
+    } catch (orsak) {
+      setBortvaldaFel(felmeddelande(orsak));
+      setBortvalda([]);
+    }
+  }
 
   async function bytStatus(id: string, status: string) {
     const forra = prospekt?.find((p) => p.id === id)?.status;
@@ -245,6 +526,130 @@ export function LeadsTabell({
     } catch (orsak) {
       setProspekt((rader) => rader?.map((p) => (p.id === id ? { ...p, status: forra } : p)) ?? null);
       setNotis(`${text(T.statusSparadesInte)}: ${felmeddelande(orsak)}`);
+    }
+  }
+
+  function vaxlaVald(id: string) {
+    setValda((nu) => {
+      const nasta = new Set(nu);
+      if (nasta.has(id)) nasta.delete(id);
+      else nasta.add(id);
+      return nasta;
+    });
+  }
+
+  /**
+   * Godkänn och skicka de markerade leadsens väntande utkast, ett i taget,
+   * genom samma väg som granskningen (POST /leads/queue/{id}/approve:
+   * tidsgrinden, språkgrinden och de sex sändspärrarna). Ett markerat lead
+   * utan väntande utkast hoppas över och räknas i beskedet.
+   */
+  async function skickaValda() {
+    if (valda.size === 0 || skickar) return;
+    setSkickaNotis(null);
+    if (demo) {
+      setSkickaNotis({
+        text: text({
+          sv: `Demo: utkasten till de ${valda.size} markerade bolagen skulle godkännas och skickas. Inget skickas i demon.`,
+          en: `Demo: the drafts to the ${valda.size} selected companies would be approved and sent. Nothing is sent in the demo.`
+        }),
+        fel: false
+      });
+      setValda(new Set());
+      return;
+    }
+    setSkickar(true);
+    try {
+      const ko = await leadsAnrop<{ items?: { id: string; prospect_id?: string | null }[] }>("/leads/queue?limit=200");
+      const poster = (ko.items ?? []).filter((i) => i.prospect_id && valda.has(i.prospect_id));
+      const utan = valda.size - new Set(poster.map((i) => i.prospect_id)).size;
+      if (poster.length === 0) {
+        setSkickaNotis({
+          text: text({
+            sv: "Inget av de markerade bolagen har ett utkast som väntar. Utkast skrivs under Körningar eller av Iris i nästa körning.",
+            en: "None of the selected companies has a draft waiting. Drafts are written under Runs or by Iris in the next run."
+          }),
+          fel: true
+        });
+        return;
+      }
+      const fraga = text({
+        sv: `Godkänna och skicka ${poster.length} utkast?${utan ? ` ${utan} av de markerade har inget utkast och hoppas över.` : ""} Varje mejl går genom sändspärrarna; utanför vardagar 08–16 skickas det när fönstret öppnar.`,
+        en: `Approve and send ${poster.length} drafts?${utan ? ` ${utan} of the selected have no draft and are skipped.` : ""} Every email passes the send guards; outside weekdays 08–16 it goes out when the window opens.`
+      });
+      if (!window.confirm(fraga)) return;
+      let skickade = 0;
+      let vantar = 0;
+      const stoppade: string[] = [];
+      for (const post of poster) {
+        try {
+          const svar = await leadsAnrop<{ utfall?: string; besked?: string }>(
+            `/leads/queue/${encodeURIComponent(post.id)}/approve`,
+            { method: "POST" }
+          );
+          if (svar.utfall === "sent") skickade += 1;
+          else if (svar.utfall === "requeued") vantar += 1;
+          else stoppade.push(svar.besked ?? post.id);
+        } catch (orsak) {
+          stoppade.push(felmeddelande(orsak));
+        }
+      }
+      setSkickaNotis({
+        text: text({
+          sv: [
+            `${skickade} skickade`,
+            vantar ? `${vantar} skickas när sändfönstret öppnar (vardagar 08–16)` : null,
+            stoppade.length ? `${stoppade.length} stoppades: ${stoppade.join("; ")}` : null,
+            utan ? `${utan} saknade utkast` : null
+          ].filter(Boolean).join(", ") + ".",
+          en: [
+            `${skickade} sent`,
+            vantar ? `${vantar} go out when the sending window opens (weekdays 08–16)` : null,
+            stoppade.length ? `${stoppade.length} were stopped: ${stoppade.join("; ")}` : null,
+            utan ? `${utan} had no draft` : null
+          ].filter(Boolean).join(", ") + "."
+        }),
+        fel: stoppade.length > 0
+      });
+      setValda(new Set());
+      await hamta();
+    } catch (orsak) {
+      setSkickaNotis({ text: felmeddelande(orsak), fel: true });
+    } finally {
+      setSkickar(false);
+    }
+  }
+
+  async function flyttaValda() {
+    if (valda.size === 0 || flyttar) return;
+    setFlyttar(true);
+    setFlyttNotis(null);
+    try {
+      const { flyttaProspektTillMain } = await import("@/lib/actions/flytt");
+      const svar = await flyttaProspektTillMain([...valda]);
+      if (svar.error) {
+        const kand: Record<string, Localized> = {
+          miljo: { sv: "Flytt till main går bara från development.", en: "Moving to main only works from development." },
+          arbetsyta: { sv: "Arbetsytan gick inte att läsa.", en: "The workspace could not be read." },
+          antal: { sv: "Markera 1–50 leads.", en: "Select 1–50 leads." }
+        };
+        setFlyttNotis(svar.felkod ? text(kand[svar.felkod]) : svar.error);
+        return;
+      }
+      const ok = (svar.rader ?? []).filter((r) => r.resultat === "importerad").length;
+      const redan = (svar.rader ?? []).filter((r) => r.resultat === "redan_flyttad").length;
+      const fel = (svar.rader ?? []).filter((r) => r.resultat === "fel").length;
+      setFlyttNotis(
+        text({
+          sv: `Flytt till main: ${ok} flyttade${redan ? `, ${redan} fanns redan` : ""}${fel ? `, ${fel} föll` : ""}.`,
+          en: `Move to main: ${ok} moved${redan ? `, ${redan} already there` : ""}${fel ? `, ${fel} failed` : ""}.`
+        })
+      );
+      if (fel === 0) setValda(new Set());
+    } catch (orsak) {
+      setFlyttNotis(felmeddelande(orsak));
+    } finally {
+      setFlyttar(false);
     }
   }
 
@@ -283,7 +688,7 @@ export function LeadsTabell({
   if (fel) {
     return (
       <div>
-        <p role="alert" className="text-[15px] text-danger">
+        <p role="alert" className="text-[0.9375rem] text-danger">
           {text(T.hamtaFel)} {fel}
         </p>
         <button type="button" onClick={() => void hamta()} className={cn(btnSecondary, "mt-4")}>
@@ -299,8 +704,13 @@ export function LeadsTabell({
 
   const statusVal = (p: SuiteProspekt) =>
     p.origin === "example" ? (
-      <span className="text-ink-muted">{text(STATUS_ETIKETT[p.status] ?? { sv: p.status, en: p.status })}</span>
+      <span className="inline-flex items-center gap-1.5 text-ink-muted">
+        {STATUSPRICK[p.status] ? <span aria-hidden className={cn("h-2 w-2 shrink-0 rounded-full", STATUSPRICK[p.status])} /> : null}
+        {text(STATUS_ETIKETT[p.status] ?? { sv: p.status, en: p.status })}
+      </span>
     ) : (
+      <span className="flex items-center gap-1.5">
+        {STATUSPRICK[p.status] ? <span aria-hidden className={cn("h-2 w-2 shrink-0 rounded-full", STATUSPRICK[p.status])} /> : null}
       <select
         id={`leads-status-${p.id}`}
         value={p.status}
@@ -308,8 +718,8 @@ export function LeadsTabell({
         aria-label={`${text(T.statusFor)} ${p.company_name}`}
         className={cn(faltDiskret, "w-full")}
       >
-        {STATUS_ORDNING.map((s) => (
-          <option key={s} value={s}>
+        {STATUS_ORDNING.filter((s) => !SYSTEMSTATUS.has(s) || s === p.status).map((s) => (
+          <option key={s} value={s} disabled={SYSTEMSTATUS.has(s)}>
             {text(STATUS_ETIKETT[s])}
           </option>
         ))}
@@ -317,6 +727,7 @@ export function LeadsTabell({
           <option value={p.status}>{p.status}</option>
         )}
       </select>
+      </span>
     );
 
   const bolag = (p: SuiteProspekt) => {
@@ -348,14 +759,20 @@ export function LeadsTabell({
     );
   };
 
+  // Under research är poängen ett streck (kritiken 2026-10-07: "Researchar"
+  // här och "Research pågår" i statusvalet var två uppgifter om samma sak).
+  // Statusen bär läget; skärmläsaren får veta varför fältet är tomt.
   const poangCell = (p: SuiteProspekt) =>
     researchPagar(p) ? (
-      <span className={meta}>{text(T.researchar)}</span>
+      <span className="text-ink-subtle">
+        <span aria-hidden>–</span>
+        <span className="sr-only">{text(T.ingenPoang)}</span>
+      </span>
     ) : (
       <span className="inline-flex flex-col items-end leading-tight">
         <span className="num font-semibold tabular-nums">{poangAv(p)}</span>
         {p.niva ? (
-          <span className={cn("text-[0.75rem]", p.niva === "C" ? "text-danger" : "text-ink-subtle")}>
+          <span className={cn("text-[0.8125rem]", p.niva === "C" ? "text-danger" : "text-ink-subtle")}>
             {nivaEtikett(p.niva, locale)}
           </span>
         ) : null}
@@ -398,40 +815,111 @@ export function LeadsTabell({
   };
 
   return (
-    <div className="space-y-5">
-      {/* Statusremsan: pipelinen som räknare. Ett klick filtrerar, ett till släpper. */}
-      <nav aria-label={text(T.pipeline)} className="-mx-1 overflow-x-auto px-1">
-        <ul className="flex min-w-max gap-1.5">
+    <div ref={listref} className="space-y-5">
+      {live ? (
+        <p className={cn(meta, "inline-flex items-center gap-2")}>
+          <span aria-hidden className="relative flex h-2 w-2">
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-ochre opacity-60 motion-reduce:hidden" />
+            <span className="relative inline-flex h-2 w-2 rounded-full bg-ochre" />
+          </span>
+          {text(T.live)}
+        </p>
+      ) : null}
+      {/* Statusremsan: pipelinen som räknare. Ett klick filtrerar, ett till släpper.
+          Kritiken 2026-10-07: elva chips i tre rader, fem av dem med 0, och två
+          som inte var statusar alls. Nu visas bara steg som har leads (och det
+          valda), och Bortvalda och Skickat står för sig till höger: de byter
+          vy, de filtrerar inte listan. Antalen bär ett mellanslag så att
+          skärmläsaren läser "Skickat 4", inte "Skickat4". */}
+      <nav aria-label={text(T.pipeline)} className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+        <ul className={chiplista}>
           <li>
             <button
               type="button"
               id="leads-remsa-alla"
-              aria-pressed={!filter.status}
-              onClick={() => setFilter((f) => ({ ...f, status: undefined }))}
-              className={cn(chip, !filter.status ? chipAktiv : chipInaktiv)}
+              aria-pressed={!filter.status && !visaSkickat && !visaBortvalda}
+              onClick={() => {
+                setVisaSkickat(false);
+                setVisaBortvalda(false);
+                setFilter((f) => ({ ...f, status: undefined }));
+              }}
+              className={cn(chip, !filter.status && !visaSkickat && !visaBortvalda ? chipAktiv : chipInaktiv)}
             >
-              {text(T.alla)} <span className="num ml-1 tabular-nums opacity-70">{urval.filter((p) => matchar(p, { ...filter, status: undefined })).length}</span>
+              {text(T.alla)}{" "}
+              <Antal aktiv={!filter.status && !visaSkickat && !visaBortvalda}>
+                {urval.filter((p) => matchar(p, { ...filter, status: undefined })).length}
+              </Antal>
             </button>
           </li>
           {REMSA.map((s) => {
             const antal = perStatus.get(s) ?? 0;
-            const aktiv = filter.status === s;
+            const aktiv = filter.status === s && !visaSkickat && !visaBortvalda;
+            const halls = live && (s === "researching" || s === "new");
+            if (antal === 0 && !aktiv && !halls) return null;
             return (
               <li key={s}>
                 <button
                   type="button"
                   aria-pressed={aktiv}
-                  onClick={() => setFilter((f) => ({ ...f, status: aktiv ? undefined : s }))}
-                  className={cn(chip, aktiv ? chipAktiv : chipInaktiv, antal === 0 && !aktiv && "text-ink-subtle")}
+                  onClick={() => {
+                    setVisaSkickat(false);
+                    setVisaBortvalda(false);
+                    setFilter((f) => ({ ...f, status: aktiv ? undefined : s }));
+                  }}
+                  className={cn(chip, aktiv ? chipAktiv : chipInaktiv)}
                 >
-                  {text(STATUS_ETIKETT[s])} <span className="num ml-1 tabular-nums opacity-70">{antal}</span>
+                  {text(STATUS_ETIKETT[s])} <Antal aktiv={aktiv}>{antal}</Antal>
                 </button>
               </li>
             );
           })}
         </ul>
+        <ul className={chiplista} aria-label={text(T.vyer2)}>
+          <li>
+            <button
+              type="button"
+              aria-pressed={visaBortvalda}
+              onClick={() => {
+                setVisaSkickat(false);
+                void vaxlaBortvalda();
+              }}
+              className={cn(chip, visaBortvalda ? chipAktiv : chipInaktiv)}
+            >
+              {text(T.bortvalda)}
+              {bortvalda !== null ? (
+                <>
+                  {" "}
+                  <Antal aktiv={visaBortvalda}>{bortvalda.length}</Antal>
+                </>
+              ) : null}
+            </button>
+          </li>
+          <li>
+            <button
+              type="button"
+              aria-pressed={visaSkickat}
+              onClick={() => {
+                setVisaBortvalda(false);
+                setVisaSkickat((v) => !v);
+              }}
+              className={cn(chip, visaSkickat ? chipAktiv : chipInaktiv)}
+            >
+              {text({ sv: "Skickat", en: "Sent" })}
+              {skickatVisat !== null ? (
+                <>
+                  {" "}
+                  <Antal aktiv={visaSkickat}>{skickatVisat.length}</Antal>
+                </>
+              ) : null}
+            </button>
+          </li>
+        </ul>
       </nav>
 
+      {visaSkickat ? (
+        <SkickatLista rader={skickatVisat} fel={skickatFel} onValj={onValj} />
+      ) : visaBortvalda ? null : (
+      <>
       <div className="flex flex-wrap items-end gap-2">
         <label className={cn(etikett, "flex flex-col gap-1")}>
           {text(T.filterNiva)}
@@ -441,7 +929,7 @@ export function LeadsTabell({
             className={faltTatt}
           >
             <option value="">{text(T.alla)}</option>
-            {(["A", "B", "C"] as const).map((n) => (
+            {(["A", "B"] as const).map((n) => (
               <option key={n} value={n}>
                 {nivaEtikett(n, locale)}
               </option>
@@ -541,8 +1029,64 @@ export function LeadsTabell({
         </div>
       ) : null}
 
+      {synliga.length > 0 ? (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+          {(() => {
+            const markerbara = synliga.filter((p) => p.origin !== "example" || demo).map((p) => p.id);
+            const allaValda = markerbara.length > 0 && markerbara.every((id) => valda.has(id));
+            return (
+              <button
+                type="button"
+                onClick={() => setValda(allaValda ? new Set() : new Set(markerbara))}
+                className={cn(btnSecondary, btnLiten)}
+              >
+                {allaValda
+                  ? text({ sv: "Avmarkera alla", en: "Clear all" })
+                  : text({ sv: `Markera alla (${markerbara.length})`, en: `Select all (${markerbara.length})` })}
+              </button>
+            );
+          })()}
+          {valda.size > 0 ? (
+            <>
+              <span className="num text-[0.875rem] font-medium">
+                {text({ sv: `${valda.size} markerade`, en: `${valda.size} selected` })}
+              </span>
+              <button type="button" disabled={skickar} onClick={() => void skickaValda()} className={cn(btnPrimary, btnLiten)}>
+                {skickar
+                  ? text({ sv: "Skickar…", en: "Sending…" })
+                  : text({ sv: "Skicka utkasten", en: "Send the drafts" })}
+              </button>
+              {flyttbar ? (
+                <button type="button" disabled={flyttar} onClick={() => void flyttaValda()} className={cn(btnSecondary, btnLiten)}>
+                  {flyttar
+                    ? text({ sv: "Flyttar…", en: "Moving…" })
+                    : text({ sv: "Flytta till main", en: "Move to main" })}
+                </button>
+              ) : null}
+              <button
+                type="button"
+                onClick={() => setValda(new Set())}
+                className="focus-ring text-[0.8125rem] text-ink-muted underline underline-offset-4 hover:text-ink"
+              >
+                {text({ sv: "Avmarkera", en: "Clear selection" })}
+              </button>
+            </>
+          ) : null}
+        </div>
+      ) : null}
+      {skickaNotis ? (
+        <p role={skickaNotis.fel ? "alert" : "status"} className={cn("text-[0.875rem]", skickaNotis.fel ? "text-danger" : "text-moss")}>
+          {skickaNotis.text}
+        </p>
+      ) : null}
+      {flyttNotis ? (
+        <p role="status" className="text-[0.875rem] text-ink-muted">
+          {flyttNotis}
+        </p>
+      ) : null}
+
       {notis ? (
-        <p role="alert" className="text-[15px] text-danger">
+        <p role="alert" className="text-[0.9375rem] text-danger">
           {notis}
         </p>
       ) : null}
@@ -554,11 +1098,12 @@ export function LeadsTabell({
         <Tomt>{text(T.ingaTraffar)}</Tomt>
       ) : (
         <>
-          <div className="hidden lg:block">
+          <div className={smal ? "hidden" : "hidden lg:block"}>
             <Tabell
               ariaLabel={text(T.tabell)}
               minBredd={1040}
               kolumner={[
+                { rubrik: text({ sv: "Markera", en: "Select" }), bredd: "36px", srOnly: true },
                 { rubrik: text(T.kolBolag), bredd: harWebb ? "32%" : "38%" },
                 { rubrik: text(T.kolStatus), bredd: "13%" },
                 { rubrik: text(T.kolPoang), bredd: "7%", hoger: true },
@@ -572,7 +1117,20 @@ export function LeadsTabell({
               ]}
             >
               {synliga.map((p) => (
-                <tr key={p.id} className={cn(tabellRad, "align-top", p.id === valdId && "bg-ochre/10")}>
+                <tr key={p.id} data-rad-id={p.id} className={cn(tabellRad, "align-top", p.id === valdId && "bg-ochre/10")}>
+                  {p.origin !== "example" || demo ? (
+                    <Cell>
+                      <input
+                        type="checkbox"
+                        checked={valda.has(p.id)}
+                        onChange={() => vaxlaVald(p.id)}
+                        aria-label={text({ sv: `Markera ${p.company_name}`, en: `Select ${p.company_name}` })}
+                        className="h-4 w-4 accent-ink"
+                      />
+                    </Cell>
+                  ) : (
+                    <Cell>{null}</Cell>
+                  )}
                   <Cell titel>{bolag(p)}</Cell>
                   <Cell>{statusVal(p)}</Cell>
                   <Cell hoger>{poangCell(p)}</Cell>
@@ -586,10 +1144,23 @@ export function LeadsTabell({
             </Tabell>
           </div>
 
-          <ul className="space-y-3 lg:hidden" aria-label={text(T.tabell)}>
+          <ul className={cn("space-y-3", !smal && "lg:hidden")} aria-label={text(T.tabell)}>
             {synliga.map((p) => (
-              <li key={p.id} className={cn("rounded-card border border-ink/12 bg-paper2/40 p-4", p.id === valdId && "border-ochre/50")}>
+              <li
+                key={p.id}
+                data-rad-id={p.id}
+                className={cn("rounded-card border border-ink/12 bg-paper2/40 p-4", p.id === valdId && "border-ochre/50")}
+              >
                 <div className="flex items-start justify-between gap-3">
+                  {p.origin !== "example" || demo ? (
+                    <input
+                      type="checkbox"
+                      checked={valda.has(p.id)}
+                      onChange={() => vaxlaVald(p.id)}
+                      aria-label={text({ sv: `Markera ${p.company_name}`, en: `Select ${p.company_name}` })}
+                      className="mt-1.5 h-4 w-4 shrink-0 accent-ink"
+                    />
+                  ) : null}
                   {bolag(p)}
                   <div className="shrink-0 text-right">{poangCell(p)}</div>
                 </div>
@@ -610,6 +1181,53 @@ export function LeadsTabell({
           </ul>
         </>
       )}
+
+      </>
+      )}
+
+      {/* ------------------------------------------ BORTVALDA (nivå C) */}
+      {visaBortvalda && !visaSkickat ? (
+        <section aria-labelledby="leads-bortvalda" className="rounded-card border border-ink/12 bg-paper2/40 p-4 sm:p-5">
+          <h3 id="leads-bortvalda" className={rubrikPanel}>
+            {text(T.bortvaldaRubrik)}
+          </h3>
+          <p className="mt-1 max-w-[72ch] text-[0.875rem] leading-6 text-ink-subtle">{text(T.bortvaldaText)}</p>
+          {bortvaldaFel ? (
+            <p role="alert" className="mt-3 text-[0.875rem] text-danger">
+              {bortvaldaFel}
+            </p>
+          ) : bortvalda === null ? (
+            <div className="mt-4">
+              <SkeletonRows />
+            </div>
+          ) : bortvalda.length === 0 ? (
+            <p className={cn(meta, "mt-3")}>{text(T.bortvaldaTomt)}</p>
+          ) : (
+            <ul className="mt-3 divide-y divide-ink/10">
+              {bortvalda.map((p) => (
+                <li key={p.id} className="py-2.5">
+                  <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+                    <button
+                      type="button"
+                      onClick={() => onValj?.(p.id)}
+                      className="focus-ring min-w-0 truncate text-left text-[0.9375rem] font-medium text-ink-muted underline-offset-4 hover:text-ink hover:underline"
+                    >
+                      {p.company_name}
+                    </button>
+                    <span className="flex shrink-0 items-center gap-2">
+                      <Badge tone="warn">{text(T.bortvald)}</Badge>
+                      <span className={meta}>{relativTid(p.senaste_handelse_at ?? p.created_at, locale)}</span>
+                    </span>
+                  </div>
+                  {(p.disqualifiers?.[0] || p.motivering) ? (
+                    <p className={cn(meta, "mt-0.5 max-w-[80ch]")}>{p.disqualifiers?.[0] ?? p.motivering}</p>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      ) : null}
     </div>
   );
 }

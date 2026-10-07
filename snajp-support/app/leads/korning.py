@@ -21,9 +21,10 @@ till dem (INV-LEADS-N-001).
     kriterium som strypte.
 
 Körningens tillstånd bor i batchjobbets eget resultat (jobbstoret, TTL 1 h)
-— ingen ny tabell. ponytail: en leads-worker per process (config
-leads_workers=1) gör läs-ändra-skriv sekventiellt; fler workers eller
-repliker kräver ett lås runt `uppdatera`.
+— ingen ny tabell. Läs-ändra-skriv skyddas av ett lås per körning
+(`_korningslas` i app/api/leads.py, infört 2026-10-06 när leads_workers
+höjdes över 1): workers i samma process serialiseras per körning, olika
+körningar går parallellt. Fler REPLIKER av processen kräver ett Redis-lås.
 """
 
 from __future__ import annotations
@@ -170,7 +171,19 @@ def registrera_utfall(
 
 
 def avsluta(korning: dict[str, Any], orsak: str) -> None:
-    """Sätter slutet — och namnger flaskhalsen när målet inte nåddes."""
+    """Sätter slutet — och namnger flaskhalsen när målet inte nåddes.
+
+    "Slut på kandidater" utan ett enda bolag att pröva är inte en tom
+    målgrupp, det är en sökning som inte hittade något: den heter
+    `inga_traffar` och säger åt kunden vad som går att ändra."""
+    if (
+        orsak == "slut_pa_kandidater"
+        and not korning["undersokta"]
+        and not korning["levererade"]
+        and not korning["tratt"]
+        and not korning.get("listspar")
+    ):
+        orsak = "inga_traffar"
     korning["klar"] = True
     korning["slut_orsak"] = orsak
     if korning["levererade"] < korning["mal"] and korning["tratt"]:
@@ -197,6 +210,11 @@ def _skalstyp(skal: object) -> str:
 
 def sammanfatta(korning: dict[str, Any]) -> str:
     """Tratten i en mening, för kunden."""
+    if korning.get("slut_orsak") == "inga_traffar":
+        return (
+            "Sökningen hittade inga bolag i målgruppen. Kontrollera stavningen på orterna "
+            "eller bredda bransch eller område och kör igen."
+        )
     delar = [f"{korning['undersokta']} undersökta"]
     typer = Counter(_skalstyp(t.get("skal")) for t in korning["tratt"])
     delar += [f"{antal} bortvalda: {typ.lower()}" for typ, antal in typer.most_common(3) if typ]
@@ -205,9 +223,15 @@ def sammanfatta(korning: dict[str, Any]) -> str:
     if korning["levererade"] < korning["mal"] and korning.get("flaskhals"):
         text += f" Det som strypte mest: {korning['flaskhals'].lower()}."
     skrap = korning.get("skrap") or {}
-    betalda = sum(int(v) for k, v in skrap.items() if k != "cache" and isinstance(v, (int, float)))
+    betalda = sum(
+        int(v) for k, v in skrap.items() if k not in ("cache", "tjanstefel") and isinstance(v, (int, float))
+    )
     if skrap:
         text += f" {betalda} betalda sidhämtningar, {int(skrap.get('cache') or 0)} ur cachen."
+    # Sanningsregeln: ett slut som beror på tjänsten ska säga det, inte låta
+    # som att målgruppen var tom (tre körningar 2026-10-06 slutade så).
+    if int(skrap.get("tjanstefel") or 0) > 0:
+        text += f" {int(skrap['tjanstefel'])} hämtningar föll hos tjänsten (kredit, kvot eller tidsgräns)."
     return text
 
 

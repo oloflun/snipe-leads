@@ -8,7 +8,7 @@ import { useDashboard } from "@/components/dashboard/DashboardContext";
 import { EmailStudioEditor } from "@/components/email/EmailStudioEditor";
 import { CrmKundlista } from "@/components/leads/CrmKundlista";
 import { ImportCsv } from "@/components/leads/ImportCsv";
-import { Saljlista } from "@/components/leads/Saljlista";
+import { SaljlistaSektion } from "@/components/leads/Saljlista";
 import { btnPrimary, btnSecondary, EmptyState, SkeletonRows, chip, chipAktiv, chipInaktiv, chiplista } from "@/components/ui";
 import { offertForUtkast } from "@/lib/leads/offert";
 import type { EmailStudioData } from "@/lib/data/emails";
@@ -65,7 +65,63 @@ type ListRad = {
   source_url?: string | null;
   signal?: string | null;
   signal_detalj?: string | null;
+  /** Listutkastet (migration 106, app/leads/listutkast.py): generellt
+   *  erbjudande, köas när VD:s adress läggs in. `fel` = skrivningen föll. */
+  utkast?: {
+    subject?: string;
+    body?: string;
+    fel?: string;
+    anmarkning?: string;
+    queue_item_id?: string;
+  } | null;
 };
+
+/** Raden har ett användbart listutkast (skrivet, inte fallet). */
+function harListutkast(rad: ListRad): boolean {
+  return Boolean(rad.utkast?.body && !rad.utkast.fel);
+}
+
+/** Sant från md (768px) och uppåt; null innan fönstret mätts.
+ *  Tabellen (md+) och korten (under md) står båda i DOM:en, och mejlrutan
+ *  monterades därför två gånger: för en rad med adress startade varje
+ *  instans sitt eget utkastjobb (och köningen av listutkast hade köat två).
+ *  Rutan monteras nu bara i den layout som syns. */
+function useBredSkarm(): boolean | null {
+  const [bred, setBred] = useState<boolean | null>(null);
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 768px)");
+    const satt = () => setBred(mq.matches);
+    satt();
+    mq.addEventListener("change", satt);
+    return () => mq.removeEventListener("change", satt);
+  }, []);
+  return bred;
+}
+
+/** En rad under bolagsnamnet: var listutkastet står. Inget utkast, ingen rad. */
+function ListutkastStatus({ rad }: Readonly<{ rad: ListRad }>) {
+  const { text } = useLocale();
+  if (!rad.utkast) return null;
+  if (rad.utkast.fel) {
+    return (
+      <p className="mt-1 text-[13px] text-danger">
+        {text({ sv: "Utkastet kunde inte skrivas", en: "The draft could not be written" })}
+      </p>
+    );
+  }
+  if (rad.utkast.queue_item_id) {
+    return (
+      <p className="mt-1 text-[13px] text-ink-muted">
+        {text({ sv: "Utkast köat för granskning", en: "Draft queued for review" })}
+      </p>
+    );
+  }
+  return (
+    <p className="mt-1 text-[13px] text-moss" title={rad.utkast.subject}>
+      {text({ sv: "Utkast klart, väntar på VD:s adress", en: "Draft ready, needs the CEO's address" })}
+    </p>
+  );
+}
 
 /** Backendens statusvärden, som text — samma mönster som Bolagsregistret. */
 const STATUS_ETIKETT: Record<string, Localized> = {
@@ -401,11 +457,8 @@ export function LeadslistorView({
   demo = false,
   crmOppen = false
 }: Readonly<{ demo?: boolean; crmOppen?: boolean }> = {}) {
-  const { isDemo, vy, isPlatformAdmin, impersonation } = useDashboard();
+  const { isDemo, vy } = useDashboard();
   const { locale, text } = useLocale();
-  // Snajps egen säljlista (migration 100): bara plattformsadmin i sin egen
-  // adminvy — aldrig i demovyn eller när admin tittar som en kund.
-  const visaSaljlista = isPlatformAdmin && vy === "admin" && !impersonation && !demo && !isDemo;
 
   const [titel, setTitel] = useState("");
   const [antal, setAntal] = useState("25");
@@ -538,6 +591,17 @@ export function LeadslistorView({
     }
   }
 
+  /** Hämtar den öppna listans rader igen utan att fälla ihop den — när
+   *  listutkasten skrivs i bakgrunden dyker de upp rad för rad. */
+  async function uppdatera(listaId: string) {
+    try {
+      const svar = await anropa<{ list?: Lista; items?: ListRad[] }>(`/leads/listor/${encodeURIComponent(listaId)}`);
+      setVald((nu) => (nu && nu.lista.id === listaId ? { lista: svar.list ?? nu.lista, items: svar.items ?? nu.items } : nu));
+    } catch {
+      // En missad uppdatering rättar nästa; listan står kvar som den var.
+    }
+  }
+
   async function oppna(lista: Lista) {
     if (lista.status !== "klar") return;
     if (vald?.lista.id === lista.id) {
@@ -559,9 +623,9 @@ export function LeadslistorView({
   }
 
   return (
-    <div className="grid gap-12">
-      {/* ------------------------------- SNAJPS SÄLJLISTA (100) */}
-      {visaSaljlista ? <Saljlista /> : null}
+    <div className="flex min-w-0 flex-col gap-12">
+      {/* ------------------------------ SÄLJLISTAN (100, 103) */}
+      <SaljlistaSektion demo={demo} />
 
       {/* ------------------------------------- CRM-KUNDLISTAN (098) */}
       <CrmKundlista
@@ -660,7 +724,7 @@ export function LeadslistorView({
           </div>
         ) : (
           <>
-          {listor.filter((l) => l.status === "klar" && l.kalla !== "crm").length >= 2 ? (
+          {listor.filter((l) => l.status === "klar" && l.kalla !== "crm" && l.kalla !== "saljlista").length >= 2 ? (
             <div className="mt-4 rounded-card border border-ink/12 bg-paper2/40 p-4">
               <p className="text-[15px] font-semibold">{text(T.kombineraRubrik)}</p>
               <p className="mt-1 text-[13px] text-ink-subtle">{text(T.kombineraHjalp)}</p>
@@ -711,7 +775,11 @@ export function LeadslistorView({
             </div>
           ) : null}
           <ul className="mt-4 divide-y divide-ink/15 border-y border-ink/15">
-            {listor.map((lista) => {
+            {listor
+              // En säljlistebeställning (105) är ingen lista att öppna:
+              // raderna ligger i säljlistan ovanför, resten är uteslutning.
+              .filter((lista) => lista.kalla !== "saljlista")
+              .map((lista) => {
               const oppen = vald?.lista.id === lista.id;
               const klar = lista.status === "klar";
               return (
@@ -795,7 +863,9 @@ export function LeadslistorView({
                     ) : null}
                   </button>
 
-                  {oppen && vald ? <Listtabell lista={vald.lista} items={vald.items} /> : null}
+                  {oppen && vald ? (
+                    <Listtabell lista={vald.lista} items={vald.items} onUppdatera={() => uppdatera(vald.lista.id)} />
+                  ) : null}
                 </li>
               );
             })}
@@ -885,6 +955,30 @@ async function skrivUtkastForRad(
   locale: Locale,
   steg: (text: Localized) => void = () => {}
 ): Promise<Utkast> {
+  // Listutkastet (generellt erbjudande, redan skrivet) köas direkt till
+  // adressen: befordran, adress, signatur och fot sköts av backenden i ett
+  // anrop. Ingen ny skrivning, ingen research (regel 8).
+  if (harListutkast(rad)) {
+    steg(T.laggerBolaget);
+    const koat = await anropa<{
+      prospect_id: string;
+      queue_item_id: string;
+      subject?: string | null;
+      body?: string | null;
+    }>(`/leads/listor/${encodeURIComponent(lista.id)}/items/${encodeURIComponent(rad.id)}/koa`, {
+      method: "POST",
+      body: JSON.stringify({ email: adress })
+    });
+    return {
+      prospectId: koat.prospect_id,
+      subject: koat.subject ?? rad.utkast?.subject,
+      body: koat.body ?? rad.utkast?.body ?? "",
+      queueItemId: koat.queue_item_id,
+      offert: null,
+      fanns: false
+    };
+  }
+
   steg(T.laggerBolaget);
   const befordran = await anropa<{ prospect?: { id: string } }>(
     `/leads/listor/${encodeURIComponent(lista.id)}/items/${encodeURIComponent(rad.id)}/prospekt`,
@@ -1023,7 +1117,11 @@ type Svep =
  * Raderna i EN klar lista. Samma form som Bolagsregistret: tabell från md och
  * upp, kort under — sex kolumner krympta till 375px blir oläsliga.
  */
-function Listtabell({ lista, items }: Readonly<{ lista: Lista; items: ListRad[] }>) {
+function Listtabell({
+  lista,
+  items,
+  onUppdatera
+}: Readonly<{ lista: Lista; items: ListRad[]; onUppdatera: () => Promise<void> }>) {
   // I demon finns ingen riktig utkastkedja att köra mot — mejlrutan döljs,
   // CSV:n står kvar.
   const { isDemo, vy } = useDashboard();
@@ -1039,6 +1137,70 @@ function Listtabell({ lista, items }: Readonly<{ lista: Lista; items: ListRad[] 
   const [laggerAlla, setLaggerAlla] = useState(false);
   const [allaResultat, setAllaResultat] = useState<Localized | null>(null);
   const [radFel, setRadFel] = useState<string | null>(null);
+  const bred = useBredSkarm();
+
+  // Listutkast (Sebbe 2026-10-07): ett utkast med det generella erbjudandet
+  // per bolag, skrivet i bakgrunden. Listan hämtas om var fjärde sekund tills
+  // varje rad som saknade utkast har fått ett (eller ett fel).
+  const utanUtkast = items.filter((rad) => !harListutkast(rad));
+  const medUtkast = items.length - utanUtkast.length;
+  const [skriverUtkast, setSkriverUtkast] = useState(false);
+  const [utkastBesked, setUtkastBesked] = useState<Localized | null>(null);
+  const [utkastFel, setUtkastFel] = useState<string | null>(null);
+  const pollUtkast = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      if (pollUtkast.current) clearTimeout(pollUtkast.current);
+    },
+    []
+  );
+  // Polling slutar när ingen rad väntar längre (utkast eller fel på alla).
+  const vantarPaUtkast = items.some((rad) => !rad.utkast);
+  useEffect(() => {
+    if (!skriverUtkast) return;
+    if (!vantarPaUtkast) {
+      setSkriverUtkast(false);
+      return;
+    }
+    let forsok = 0;
+    const tick = () => {
+      forsok += 1;
+      void onUppdatera().finally(() => {
+        if (forsok < 90) pollUtkast.current = setTimeout(tick, 4000);
+        else setSkriverUtkast(false);
+      });
+    };
+    pollUtkast.current = setTimeout(tick, 4000);
+    return () => {
+      if (pollUtkast.current) clearTimeout(pollUtkast.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [skriverUtkast, vantarPaUtkast]);
+
+  async function skrivAllaListutkast() {
+    setUtkastFel(null);
+    setUtkastBesked(null);
+    try {
+      const svar = await anropa<{ count?: number }>(`/leads/listor/${encodeURIComponent(lista.id)}/utkast`, {
+        method: "POST"
+      });
+      const antal = svar.count ?? 0;
+      setUtkastBesked(
+        antal
+          ? {
+              sv: `Iris skriver ${antal} utkast med ert generella erbjudande. De dyker upp på raderna allteftersom.`,
+              en: `Iris is writing ${antal} drafts with your general offer. They appear on the rows as they finish.`
+            }
+          : { sv: "Alla bolag i listan har redan ett utkast.", en: "Every company in the list already has a draft." }
+      );
+      if (antal) {
+        await onUppdatera();
+        setSkriverUtkast(true);
+      }
+    } catch (orsak) {
+      setUtkastFel(felmeddelande(orsak));
+    }
+  }
 
   // Snabbmail: utkast till alla rader med adress, i omgångar om SVEP_TAK.
   // `hanterade` minns vilka rader svepet redan tagit (lyckade som felade), så
@@ -1236,6 +1398,24 @@ function Listtabell({ lista, items }: Readonly<{ lista: Lista; items: ListRad[] 
               ersattes 2026-10-02: utkast ska utgå från bolagets läge, inte en
               mall ur radens metadata. (ponytail: svepets kod står kvar
               oanropad tills /simplify tar den.) */}
+          {mejlbro && utanUtkast.length > 0 ? (
+            <button
+              type="button"
+              onClick={() => void skrivAllaListutkast()}
+              disabled={skriverUtkast}
+              className={cn(btnPrimary, "disabled:opacity-60")}
+            >
+              {skriverUtkast
+                ? text({
+                    sv: `Skriver utkast, ${medUtkast} av ${items.length} klara`,
+                    en: `Writing drafts, ${medUtkast} of ${items.length} done`
+                  })
+                : text({
+                    sv: `Skriv utkast till ${utanUtkast.length} bolag`,
+                    en: `Write drafts for ${utanUtkast.length} companies`
+                  })}
+            </button>
+          ) : null}
           {mejlbro ? (
             <>
               <select
@@ -1276,6 +1456,22 @@ function Listtabell({ lista, items }: Readonly<{ lista: Lista; items: ListRad[] 
           {flyttFel}
         </p>
       ) : null}
+      <div aria-live="polite">
+        {utkastBesked ? <p className="mt-3 max-w-[70ch] text-[15px] text-moss">{text(utkastBesked)}</p> : null}
+        {utkastFel ? (
+          <p role="alert" className="mt-3 max-w-[70ch] text-[15px] text-danger">
+            {utkastFel}
+          </p>
+        ) : null}
+        {medUtkast > 0 && mejlbro ? (
+          <p className="mt-3 max-w-[70ch] text-[14px] leading-6 text-ink-muted">
+            {text({
+              sv: "Öppna Skriv mejl på en rad och lägg in VD:s mejladress, så köas utkastet med signatur och syns under Utkast att godkänna.",
+              en: "Open Write email on a row and add the CEO's email address; the draft is queued with your signature and shows under Drafts to approve."
+            })}
+          </p>
+        ) : null}
+      </div>
       {flyttKvitto ? (
         <p role="status" className="mt-3 text-[15px] text-moss">
           {text({
@@ -1445,6 +1641,7 @@ function Listtabell({ lista, items }: Readonly<{ lista: Lista; items: ListRad[] 
                   {rad.website ? (
                     <p className="mt-1 break-all text-sm text-ink-subtle">{rad.website}</p>
                   ) : null}
+                  <ListutkastStatus rad={rad} />
                 </th>
                 <td className="kicker py-4 pr-6 text-mineral">{rad.ort ?? "—"}</td>
                 <td className="py-4 pr-6">
@@ -1483,12 +1680,12 @@ function Listtabell({ lista, items }: Readonly<{ lista: Lista; items: ListRad[] 
                     efter den i stället. */}
                 {mejlbro ? <td className="py-4 text-right">{skrivMejlKnapp(rad)}</td> : null}
               </tr>,
-              oppenRad === rad.id ? (
+              bred === true && oppenRad === rad.id ? (
                 <tr key={`${rad.id}-mejl`}>
                   {/* Samma villkor som colgroup och huvudet: sex kolumner utan
                       mejlbro, sju med. */}
                   <td colSpan={mejlbro ? 7 : 6} className="pb-6 pt-1">
-                    <MejlRuta lista={lista} rad={rad} />
+                    <MejlRuta lista={lista} rad={rad} onKoat={() => void onUppdatera()} />
                   </td>
                 </tr>
               ) : null
@@ -1514,6 +1711,7 @@ function Listtabell({ lista, items }: Readonly<{ lista: Lista; items: ListRad[] 
             <p className="kicker mt-1 text-mineral">
               {[rad.ort, rad.website].filter(Boolean).join(" · ") || "—"}
             </p>
+            <ListutkastStatus rad={rad} />
             <p className="mt-2 text-sm leading-6 text-ink-muted">{signaltext(rad)}</p>
             <div className="mt-2 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
               <span className="min-w-0 break-all text-sm text-ink-muted">
@@ -1539,9 +1737,9 @@ function Listtabell({ lista, items }: Readonly<{ lista: Lista; items: ListRad[] 
               ) : null}
             </div>
             {mejlbro ? skrivMejlKnapp(rad, "mt-3 w-full") : null}
-            {mejlbro && oppenRad === rad.id ? (
+            {mejlbro && bred === false && oppenRad === rad.id ? (
               <div className="mt-3">
-                <MejlRuta lista={lista} rad={rad} />
+                <MejlRuta lista={lista} rad={rad} onKoat={() => void onUppdatera()} />
               </div>
             ) : null}
           </li>
@@ -1571,7 +1769,11 @@ const ADRESS_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
  * samma sändkö som alla andra prospekt (INV-SEC-004 består: listjobbet har
  * inget sändverktyg, det har bara människan efter granskning).
  */
-function MejlRuta({ lista, rad }: Readonly<{ lista: Lista; rad: ListRad }>) {
+function MejlRuta({
+  lista,
+  rad,
+  onKoat
+}: Readonly<{ lista: Lista; rad: ListRad; onKoat?: () => void }>) {
   const { locale, text } = useLocale();
   const [fas, setFas] = useState<"adress" | "skapar" | "klar" | "fel">(
     rad.contact_email ? "skapar" : "adress"
@@ -1595,13 +1797,15 @@ function MejlRuta({ lista, rad }: Readonly<{ lista: Lista; rad: ListRad }>) {
         const utkast = await skrivUtkastForRad(lista, rad, mottagare, locale, setSteg);
         setData(byggStudioData(rad, utkast.prospectId, utkast.subject, utkast.body, utkast.offert));
         setQueueItemId(utkast.queueItemId);
+        // Radens status ("Utkast köat") läses ur listan; hämta den igen.
+        if (harListutkast(rad)) onKoat?.();
         setFas("klar");
       } catch (orsak) {
         setFel(felmeddelande(orsak));
         setFas("fel");
       }
     },
-    [lista, rad, locale]
+    [lista, rad, locale, onKoat]
   );
 
   useEffect(() => {
@@ -1651,9 +1855,32 @@ function MejlRuta({ lista, rad }: Readonly<{ lista: Lista; rad: ListRad }>) {
             sparaAdress();
           }}
         >
-          <p className="text-[14px] leading-6 text-ink-muted">{text(T.radenSaknarAdress)}</p>
+          {harListutkast(rad) ? (
+            // Listutkastet läses innan adressen läggs in: det är det som köas.
+            <div className="max-w-[72ch] rounded-input border border-ink/12 bg-paper px-4 py-3">
+              <p className="text-[13px] font-medium text-ink-subtle">{text({ sv: "Utkast", en: "Draft" })}</p>
+              <p className="mt-1 text-[15px] font-semibold">{rad.utkast?.subject}</p>
+              <p className="mt-2 whitespace-pre-wrap text-[15px] leading-7 text-ink">{rad.utkast?.body}</p>
+              <p className="mt-2 text-[13px] text-ink-subtle">
+                {text({
+                  sv: "Signatur med logga och avregistreringsrad läggs till när utkastet köas.",
+                  en: "Signature with logo and the unsubscribe line are added when the draft is queued."
+                })}
+              </p>
+            </div>
+          ) : null}
+          <p className="mt-3 text-[14px] leading-6 text-ink-muted">
+            {harListutkast(rad)
+              ? text({
+                  sv: "Lägg in VD:s mejladress. En adress som inte kan knytas till VD hör inte hemma här.",
+                  en: "Add the CEO's email address. An address that cannot be tied to the CEO does not belong here."
+                })
+              : text(T.radenSaknarAdress)}
+          </p>
           <label className="mt-3 block max-w-[420px]">
-            <span className="text-[13px] font-medium text-ink-muted">{text(T.mejladress)}</span>
+            <span className="text-[13px] font-medium text-ink-muted">
+              {harListutkast(rad) ? text({ sv: "VD:s mejladress", en: "CEO's email address" }) : text(T.mejladress)}
+            </span>
             <input
               type="email"
               value={adressfalt}
@@ -1671,7 +1898,7 @@ function MejlRuta({ lista, rad }: Readonly<{ lista: Lista; rad: ListRad }>) {
             </p>
           ) : null}
           <button type="submit" className={cn(btnPrimary, "mt-3")}>
-            {text(T.sparaOchSkriv)}
+            {harListutkast(rad) ? text({ sv: "Köa utkastet för granskning", en: "Queue the draft for review" }) : text(T.sparaOchSkriv)}
           </button>
         </form>
       ) : null}

@@ -132,6 +132,8 @@ export const ADMIN: Record<string, Localized> = {
 
   /* -------------------------------------------------- Sidrubriker och railnamn */
   korningarRubrik: { sv: "Körningar", en: "Runs" },
+  visaAllaKorningar: { sv: "Visa alla", en: "Show all" },
+  visaFarre: { sv: "Visa färre", en: "Show fewer" },
   korningRubrik: { sv: "Körning", en: "Run" },
   paketRubrik: { sv: "Paket", en: "Packages" },
   paketEtt: { sv: "Paket", en: "Package" },

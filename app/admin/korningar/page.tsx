@@ -1,9 +1,13 @@
 import Link from "next/link";
 import { AdminTabell, AdminText } from "@/components/admin/AdminText";
-import { Cell, Tomt, chip, chipAktiv, chipInaktiv, chiplista, tabellRad } from "@/components/ui";
+import { Cell, Tomt, chip, chipAktiv, chipInaktiv, chiplista, tabellRad, panelKort } from "@/components/ui";
 import { listRuns, unwrap } from "@/lib/data/admin";
 import { cn } from "@/lib/utils";
 import { AdminVyhuvud } from "@/components/admin/AdminVyhuvud";
+import { KorningsOversikt } from "@/components/admin/KorningsOversikt";
+import { Panelrubrik } from "@/components/dashboard/OversiktPaneler";
+import { KORNINGSTYPER, KORNINGSTYPNAMN } from "@/lib/admin/korningstyper";
+import { ADMIN } from "@/lib/admin/sprak";
 
 export const dynamic = "force-dynamic";
 
@@ -11,26 +15,15 @@ export const dynamic = "force-dynamic";
 // Utan detta dödar Vercel renderingen mitt i uppvakningen. Se app/admin/page.tsx.
 export const maxDuration = 60;
 
-// "bookkeeping" saknades ända tills agenten fick en adminvy. Filtret är en
-// uppräkning, alltså en lista som glider: en ny agenttyp syns i tabellen men
-// går inte att filtrera på förrän någon lägger till den här.
-//
-// Namnen är produktens (railens Iris, Kundtjänst, Kvitton), inte agent_type-
-// koderna: en kod som etikett är en intern detalj på fel ställe. En okänd typ
-// visas i tabellen som koden själv, i mono, så att ingen ny typ döljs bakom ett
-// påhittat namn. Andra kolumnen är en nyckel i ADMIN (lib/admin/sprak.ts).
-const TYPES: [string, string][] = [
-  ["", "filterAlla"],
-  ["support", "railKundtjanst"],
-  ["leads_research", "typIrisResearch"],
-  ["leads_outreach", "typIrisUtskick"],
-  // Samma typer som Kostnad per agent räknar (agentanvandning/page.tsx).
-  ["leads_svar", "typIrisSvar"],
-  ["leads_followup", "typIrisUppfoljning"],
-  ["bookkeeping", "railKvitton"],
-  ["demo", "typDemo"]
-];
-const TYPNAMN = new Map(TYPES);
+// Agenttyperna och deras namn bor i lib/admin/korningstyper.ts: översikten
+// ovanför tabellen läser samma lista.
+const TYPES = KORNINGSTYPER;
+const TYPNAMN = KORNINGSTYPNAMN;
+
+/** Hämtningen. Backendens tak per anrop (admin.py, `min(limit, 200)`). */
+const HAMTA = 200;
+/** Tabellens rader innan "Visa alla": översikten räknar på alla hämtade. */
+const VISA = 50;
 
 export default async function Page({
   searchParams
@@ -39,6 +32,7 @@ export default async function Page({
   const query = new URLSearchParams();
   if (params.tenant_id) query.set("tenant_id", params.tenant_id);
   if (params.agent_type) query.set("agent_type", params.agent_type);
+  query.set("limit", String(HAMTA));
 
   const queryString = query.toString();
   const { data, error } = unwrap(await listRuns(queryString ? `?${queryString}` : ""));
@@ -56,6 +50,17 @@ export default async function Page({
 
   const runs = data ?? [];
   const active = params.agent_type ?? "";
+  const alla = params.alla === "1";
+  const visade = alla ? runs : runs.slice(0, VISA);
+  // "Visa alla" behåller filtret: länken bygger på samma parametrar.
+  const allaHref = (pa: boolean) => {
+    const q = new URLSearchParams();
+    if (params.tenant_id) q.set("tenant_id", params.tenant_id);
+    if (active) q.set("agent_type", active);
+    if (pa) q.set("alla", "1");
+    const qs = q.toString();
+    return qs ? `/admin/korningar?${qs}` : "/admin/korningar";
+  };
 
   return (
     <div>
@@ -74,6 +79,8 @@ export default async function Page({
         ))}
       </div>
 
+      <KorningsOversikt runs={runs} filter={active} />
+
       {/* En tom lista för leads var en gång migration 025 som saknades: check-
           villkoret avvisade varje leads-körning och ingen sparades. Det syns
           som en tom lista, inte som ett fel. */}
@@ -84,7 +91,8 @@ export default async function Page({
           </Tomt>
         </div>
       ) : (
-        <div className="mt-6">
+        <section aria-labelledby="logg-tabell" className={cn(panelKort, "mt-4 min-w-0")}>
+          <Panelrubrik id="logg-tabell" titel={ADMIN.korningarRubrik} antal={runs.length} />
           <AdminTabell
             minBredd={880}
             aria="korningarRubrik"
@@ -98,7 +106,7 @@ export default async function Page({
               { rubrik: <AdminText n="kolSpar" />, bredd: "10%", hoger: true, srOnly: true }
             ]}
           >
-            {runs.map((run) => (
+            {visade.map((run) => (
               <tr key={run.id} className={tabellRad}>
                 <Cell className="num">{run.created_at.slice(0, 16).replace("T", " ")}</Cell>
                 <Cell className="break-words">{run.tenant_name || run.tenant_slug || "–"}</Cell>
@@ -129,7 +137,17 @@ export default async function Page({
               </tr>
             ))}
           </AdminTabell>
-        </div>
+          {runs.length > VISA ? (
+            <Link
+              href={allaHref(!alla)}
+              scroll={false}
+              className="focus-ring mt-3 inline-flex items-center rounded-input text-[0.8125rem] font-medium text-ink-muted underline-offset-4 hover:text-ink hover:underline"
+            >
+              {alla ? <AdminText n="visaFarre" /> : <AdminText n="visaAllaKorningar" />}
+              {alla ? null : <span className="num ml-1 tabular-nums">({runs.length})</span>}
+            </Link>
+          ) : null}
+        </section>
       )}
     </div>
   );

@@ -17,6 +17,17 @@ export const SALJLISTA_FALT = [
 
 export type Saljfalt = (typeof SALJLISTA_FALT)[number];
 
+/**
+ * Radens statusfärg: hur samtalet gick. Koden lagras i databasen (104),
+ * färgen och etiketten bor i komponenten. '' = ingen färg.
+ */
+export const SALJSTATUSAR = ["salt", "signering", "nej", "ej_svar"] as const;
+export type Saljstatus = "" | (typeof SALJSTATUSAR)[number];
+
+export function arSaljstatus(varde: string): varde is Saljstatus {
+  return varde === "" || (SALJSTATUSAR as readonly string[]).includes(varde);
+}
+
 export type Saljrad = {
   id: string;
   foretagsnamn: string;
@@ -27,12 +38,16 @@ export type Saljrad = {
   /** YYYY-MM-DD eller null. */
   senast_kontaktad: string | null;
   anteckningar: string;
+  status: Saljstatus;
   created_at: string;
   updated_at: string;
 };
 
 export type Saljfel =
-  | "ej_admin"
+  | "ej_inloggad"
+  | "fel_vy"
+  | "saknar_tillagg"
+  | "las_roll"
   | "migration_saknas"
   | "databasfel"
   | "namn_saknas"
@@ -144,8 +159,17 @@ function csvFalt(varde: string | null): string {
   return /[";\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
-/** Semikolonseparerad CSV med BOM — öppnas rätt i svensk Excel. */
-export function byggSaljCsv(rader: Saljrad[], rubriker: string[]): string {
-  const rader2 = rader.map((rad) => SALJLISTA_FALT.map((namn) => csvFalt(rad[namn])).join(";"));
+/**
+ * Semikolonseparerad CSV med BOM — öppnas rätt i svensk Excel. `status` är
+ * radens statusetikett i klartext ("Sålt", inte koden), sist på raden.
+ */
+export function byggSaljCsv(
+  rader: Saljrad[],
+  rubriker: string[],
+  status: (rad: Saljrad) => string
+): string {
+  const rader2 = rader.map((rad) =>
+    [...SALJLISTA_FALT.map((namn) => csvFalt(rad[namn])), csvFalt(status(rad))].join(";")
+  );
   return `﻿${[rubriker.map(csvFalt).join(";"), ...rader2].join("\r\n")}\r\n`;
 }

@@ -8,8 +8,10 @@ from app.agent.leads_tools import _queue_outreach_draft_impl
 from app.leads.signatur import (
     bygg_html,
     bygg_signaturtext,
+    dela_utkast,
     med_signatur,
     normalisera,
+    sla_ihop,
 )
 from app.storage.memory import MemoryStorage
 
@@ -177,3 +179,52 @@ async def test_queue_outreach_draft_utan_signatur_lamnar_brodtexten_ifred():
     )
 
     assert "Sebastian" not in storage.outreach_messages[TENANT][0]["body"]
+
+
+# -- granskningsvyns delning (brödtext / svans) ------------------------------
+
+FOT = "--\nBolaget AB, org.nr 556000-0000\n\nVill du inte få fler mejl från oss: https://x.se/avregistrera/abc"
+
+
+def test_dela_utkast_skiljer_brodtext_fran_signatur_och_fot():
+    sig = normalisera(SIG)
+    body = med_signatur("Hej!\n\nMed vänliga hälsningar,", sig) + "\n\n" + FOT
+    brodtext, svans = dela_utkast(body, sig)
+    assert brodtext == "Hej!\n\nMed vänliga hälsningar,"
+    assert svans.startswith("Sebastian Bergman\n") and svans.endswith("abc")
+    assert sla_ihop(brodtext, svans, sig) == body
+
+
+@pytest.mark.parametrize(
+    "brodtext, vantat",
+    [
+        ("Hej!\n\nHör av dig.", "Hör av dig.\n\nVänliga hälsningar,\nSebastian Bergman\n"),
+        ("Hej!\n\nHör av dig.\n\nVänliga hälsningar", "Vänliga hälsningar\nSebastian Bergman\n"),
+        ("Hej!\n\nHör av dig.\n\nMvh", "Mvh\nSebastian Bergman\n"),
+    ],
+)
+def test_med_signatur_lagger_pa_halsningsfras_bara_nar_den_saknas(brodtext, vantat):
+    resultat = med_signatur(brodtext, normalisera(SIG), halsning="Vänliga hälsningar,")
+    assert vantat in resultat
+    assert resultat.count("hälsningar") <= 1
+
+
+def test_dela_utkast_utan_signatur_tar_bara_foten():
+    brodtext, svans = dela_utkast("Hej!\n\n" + FOT, None)
+    assert brodtext == "Hej!"
+    assert svans == FOT
+
+
+def test_dela_utkast_utan_svans_lamnar_texten():
+    assert dela_utkast("Hej!\n", normalisera(SIG)) == ("Hej!", "")
+
+
+def test_sla_ihop_efter_omskrivning_behaller_signatur_och_fot():
+    """Förbättra skrev om brödtexten och avslutade själv med förnamnet —
+    signaturens namnrad tar över raden, och logga + fot står kvar."""
+    sig = normalisera(SIG)
+    _, svans = dela_utkast(med_signatur("Hej!", sig) + "\n\n" + FOT, sig)
+    ihop = sla_ihop("Hej igen, kort fråga.\n\nVänliga hälsningar,\nSebastian", svans, sig)
+    assert ihop.startswith("Hej igen, kort fråga.\n\nVänliga hälsningar,\nSebastian Bergman\n")
+    assert ihop.endswith(FOT)
+    assert "<img" in bygg_html(ihop, sig)

@@ -195,6 +195,8 @@ class MemoryStorage:
         self.leads_job_ledger: dict[str, dict[str, Any]] = {}
         # Leadslistor (tillägget 'leadlists', migration 060).
         self.lead_lists: dict[str, list[dict[str, Any]]] = {}
+        #: Säljlistan (public.saljlista) som motorn fyller på (migration 105).
+        self._saljlista: dict[str, list[dict[str, Any]]] = {}
         self.lead_list_items: list[dict[str, Any]] = []
         # Leads Suite (migration 086): platta listor, samma form som tabellerna.
         self.lead_anteckningar: list[dict[str, Any]] = []
@@ -776,7 +778,9 @@ class MemoryStorage:
         docs = self.context_docs.get(tenant_id, [])
         if kind:
             docs = [d for d in docs if d["kind"] == kind]
-        return sorted(docs, key=lambda d: d["created_at"], reverse=True)
+        # Versionen bryter lika tidsstämplar: två sparningar inom samma
+        # klockslag (Windows upplösning ~15 ms) ska ändå ge nyast först.
+        return sorted(docs, key=lambda d: (d["created_at"], d.get("version") or 0), reverse=True)
 
     async def get_latest_context_doc(self, tenant_id: str, *, kind: str) -> dict[str, Any] | None:
         docs = [d for d in self.context_docs.get(tenant_id, []) if d["kind"] == kind]
@@ -883,6 +887,25 @@ class MemoryStorage:
             and m.get("foretagsnyckel") == foretagsnyckel
         ]
         return max(tidpunkter) if tidpunkter else None
+
+    async def get_send_queue_item(self, tenant_id: str, item_id: str) -> dict[str, Any] | None:
+        for item in self.send_queue.get(tenant_id, []):
+            if item["id"] == item_id:
+                return item
+        return None
+
+    async def senaste_ko_for_trad(self, tenant_id: str, thread_id: str) -> dict[str, Any] | None:
+        poster = [i for i in self.send_queue.get(tenant_id, []) if i["thread_id"] == thread_id]
+        return poster[-1] if poster else None
+
+    async def update_outreach_message_text(
+        self, tenant_id: str, message_id: str, *, subject: str, body: str
+    ) -> None:
+        for message in self.outreach_messages.get(tenant_id, []):
+            if message["id"] == message_id and message["sent_at"] is None:
+                message["subject"] = subject
+                message["body"] = body
+                return
 
     async def get_pending_outreach_message(
         self, tenant_id: str, thread_id: str
@@ -1583,6 +1606,16 @@ class MemoryStorage:
     def _korningsrad(self, rad: dict[str, Any]) -> dict[str, Any]:
         return {f: rad.get(f) for f in self._KORNINGSFALT}
 
+    async def list_prospekt_i_research(self, tenant_id: str) -> set[str]:
+        return {
+            str(r["prospect_id"])
+            for r in self.leads_job_ledger.values()
+            if r["tenant_id"] == tenant_id
+            and r.get("prospect_id")
+            and r["status"] in ("queued", "processing")
+            and r["scope"] in ("research", "research_and_draft")
+        }
+
     async def list_leads_korningar(self, tenant_id: str, *, limit: int = 20) -> list[dict[str, Any]]:
         rader = [
             r for r in self.leads_job_ledger.values()
@@ -1624,7 +1657,7 @@ class MemoryStorage:
     _LEAD_LIST_STATUSAR = ("bestalld", "byggs", "klar", "fel")
     _LEAD_ITEM_TYPER = ("bolag", "privatperson")
 
-    _LEAD_LIST_KALLOR = ("sok", "kombinerad", "import", "crm")
+    _LEAD_LIST_KALLOR = ("sok", "kombinerad", "import", "crm", "saljlista")
     _KONTAKTFILTER = ("alla", "telefon", "mejl", "bada")
 
     async def create_lead_list(
@@ -1662,6 +1695,40 @@ class MemoryStorage:
         }
         self.lead_lists.setdefault(tenant_id, []).append(rad)
         return dict(rad)
+
+
+    async def saljlista_fyll_pa(self, tenant_id: str, rader: list[dict[str, Any]]) -> int:
+        """Minnesformen av 105:ans SQL-funktion: samma dedupnycklar
+        (orgnr-siffror eller gement bolagsnamn), samma fält."""
+        lista = self._saljlista.setdefault(tenant_id, [])
+
+        def _siffror(v: Any) -> str:
+            return "".join(c for c in str(v or "") if c.isdigit())
+
+        n = 0
+        for rad in rader:
+            namn = str(rad.get("foretagsnamn") or "").strip()
+            if not namn:
+                continue
+            orgnr = _siffror(rad.get("orgnr"))
+            if any(
+                (orgnr and _siffror(r.get("orgnr")) == orgnr)
+                or r.get("foretagsnamn", "").casefold() == namn.casefold()
+                for r in lista
+            ):
+                continue
+            lista.append(
+                {
+                    "foretagsnamn": namn,
+                    "orgnr": str(rad.get("orgnr") or ""),
+                    "kontaktperson": str(rad.get("kontaktperson") or ""),
+                    "kontaktnummer": str(rad.get("kontaktnummer") or ""),
+                    "kontaktmail": str(rad.get("kontaktmail") or ""),
+                    "anteckningar": str(rad.get("anteckningar") or ""),
+                }
+            )
+            n += 1
+        return n
 
     async def set_lead_list_status(
         self, tenant_id: str, list_id: str, *, status: str, felorsak: str | None = None
@@ -1726,6 +1793,13 @@ class MemoryStorage:
             for i in self.lead_list_items
             if i["list_id"] == list_id and i["tenant_id"] == tenant_id
         ]
+
+    async def spara_listutkast(
+        self, tenant_id: str, item_id: str, utkast: dict[str, Any] | None
+    ) -> None:
+        for i in self.lead_list_items:
+            if str(i["id"]) == str(item_id) and i["tenant_id"] == tenant_id:
+                i["utkast"] = json.loads(json.dumps(utkast)) if utkast is not None else None
 
     async def lista_upptagna_bolag(self, tenant_id: str) -> list[dict[str, Any]]:
         rader = [*self.prospects.get(tenant_id, []), *(i for i in self.lead_list_items if i["tenant_id"] == tenant_id)]
@@ -1829,6 +1903,78 @@ class MemoryStorage:
                 continue
             total += int(r.get("tokens_in") or 0) + int(r.get("tokens_out") or 0)
         return total
+
+    async def support_oversikt_underlag(
+        self, tenant_id: str, *, sedan: str, is_test: bool | None
+    ) -> dict[str, Any]:
+        # Speglar SQL-varianten i postgres.py: samma urval, samma fält.
+        def _tid(iso: str | None) -> datetime | None:
+            if not iso:
+                return None
+            t = datetime.fromisoformat(iso)
+            return t if t.tzinfo else t.replace(tzinfo=timezone.utc)
+
+        fran = _tid(sedan)
+        svar: dict[str, datetime] = {}
+        for d in self.decisions:
+            if d["tenant_id"] != tenant_id or d["event"] not in ("auto_sent", "approved_and_sent"):
+                continue
+            eid = d.get("email_id")
+            tid = _tid(d["created_at"])
+            if eid and tid and (eid not in svar or tid < svar[eid]):
+                svar[eid] = tid
+
+        mejl = []
+        for e in self.emails.values():
+            if e["tenant_id"] != tenant_id:
+                continue
+            if e["status"] in ("att_hantera", "lead", "ej_relaterat"):
+                continue
+            if (e.get("klass") or "support") != "support":
+                continue
+            if is_test is not None and bool(e.get("is_test")) != is_test:
+                continue
+            mottaget = _tid(e["received_at"])
+            if fran and mottaget and mottaget < fran:
+                continue
+            c = self.classifications.get(e["id"]) or {}
+            kallor = c.get("kb_sources")
+            forsta = svar.get(e["id"])
+            mejl.append(
+                {
+                    "id": e["id"],
+                    "received_at": mottaget.isoformat() if mottaget else e["received_at"],
+                    "status": e["status"],
+                    "category": c.get("category"),
+                    "escalate": c.get("escalate"),
+                    "kb_traffar": len(kallor) if isinstance(kallor, list) else None,
+                    "forsta_svar": forsta.isoformat() if forsta else None,
+                }
+            )
+
+        korningar = [
+            r
+            for r in self.agent_runs.get(tenant_id, [])
+            if r["agent_type"] == "support"
+            and not r.get("is_test")
+            and (not fran or (_tid(r["created_at"]) or fran) >= fran)
+        ]
+        modeller: dict[str, int] = {}
+        for r in korningar:
+            m = r.get("model")
+            if m and m != "svarscache":
+                modeller[m] = modeller.get(m, 0) + 1
+        return {
+            "mejl": mejl,
+            "korningar": {
+                "antal": len(korningar),
+                "tokens_in": sum(int(r.get("tokens_in") or 0) for r in korningar),
+                "tokens_out": sum(int(r.get("tokens_out") or 0) for r in korningar),
+                "cache": sum(1 for r in korningar if r.get("model") == "svarscache"),
+                "modell": max(modeller, key=lambda k: modeller[k]) if modeller else None,
+            },
+            "kb_artiklar": len(self.kb.get(tenant_id, [])),
+        }
 
     async def weekly_analytics(self, tenant_id: str, *, weeks: int = 8) -> dict[str, Any]:
         # Speglar SQL-varianten i postgres.py, inklusive de tomma veckorna:
@@ -2342,6 +2488,34 @@ class MemoryStorage:
         self.api_keys[key_hash] = record
         return record
 
+    async def list_skickade(self, tenant_id: str, *, limit: int = 200) -> list[dict[str, Any]]:
+        limit = max(1, min(limit, 500))
+        trådar = self.outreach_threads.get(tenant_id, {})
+        prospekt = {p["id"]: p for p in self.prospects.get(tenant_id, [])}
+        rader = []
+        for m in self.outreach_messages.get(tenant_id, []):
+            if m["direction"] != "outbound" or not m.get("sent_at"):
+                continue
+            tråd = trådar.get(m["thread_id"]) or {}
+            p = prospekt.get(tråd.get("prospect_id")) or {}
+            rader.append(
+                {
+                    "id": m["id"],
+                    "subject": m.get("subject"),
+                    "body": m["body"],
+                    "sent_at": m["sent_at"],
+                    "thread_id": m["thread_id"],
+                    "last_inbound_at": tråd.get("last_inbound_at"),
+                    "prospect_id": p.get("id"),
+                    "company_name": p.get("company_name"),
+                    "contact_name": p.get("contact_name"),
+                    "prospect_email": p.get("contact_email"),
+                    "status": p.get("status"),
+                }
+            )
+        rader.sort(key=lambda r: str(r["sent_at"]), reverse=True)
+        return rader[:limit]
+
     async def list_replies(self, tenant_id: str, *, limit: int = 50) -> list[dict[str, Any]]:
         # Speglar SQL-varianten: inbound över alla trådar, senast först, med
         # prospektets namn hopslaget. En avvikelse här hade gett en grön svit
@@ -2481,12 +2655,32 @@ class MemoryStorage:
         return dict(rad)
 
     async def list_review_queue(self, tenant_id: str, *, limit: int = 100) -> list[dict[str, Any]]:
-        items = [
-            item
-            for item in self.send_queue.get(tenant_id, [])
-            if item["status"] == "awaiting_review"
-        ]
-        return items[:limit]
+        # Speglar Postgres-joinen: väntande meddelandets text plus prospektets
+        # mottagar- och lägesfält.
+        trader = self.outreach_threads.get(tenant_id, {})
+        prospekt = {p["id"]: p for p in self.prospects.get(tenant_id, [])}
+        svar: list[dict[str, Any]] = []
+        for item in self.send_queue.get(tenant_id, []):
+            if item["status"] != "awaiting_review":
+                continue
+            m = await self.get_pending_outreach_message(tenant_id, item["thread_id"]) or {}
+            p = prospekt.get((trader.get(item["thread_id"]) or {}).get("prospect_id"), {})
+            svar.append({
+                **item,
+                "subject": m.get("subject"),
+                "body": m.get("body"),
+                "message_id": m.get("id"),
+                "prospect_id": p.get("id"),
+                "prospect_email": p.get("contact_email"),
+                "company_name": p.get("company_name"),
+                "contact_name": p.get("contact_name"),
+                "contact_role": p.get("contact_role"),
+                "website": p.get("website"),
+                "lagesbeskrivning": p.get("lagesbeskrivning"),
+                "signaler": p.get("signaler"),
+            })
+        svar.sort(key=lambda r: str(r.get("scheduled_at") or ""))
+        return svar[:limit]
 
     # -- Rate limiting ------------------------------------------------------
     #

@@ -54,7 +54,7 @@ NASTA_SPEGLING = "04:00 svensk sommartid (02:00 UTC)"
 
 class FlyttRequest(BaseModel):
     slug: str = Field(..., min_length=1, max_length=120)
-    typ: Literal["mejl", "korning"]
+    typ: Literal["mejl", "korning", "prospekt"]
     ids: list[str] = Field(..., min_length=1, max_length=50)
 
 
@@ -117,6 +117,14 @@ async def _bygg_paket(storage, tenant: dict[str, Any], typ: str, ids: list[str])
                 **{f: rad.get(f) for f in _MEJLFALT},
                 "classification": {f: k.get(f) for f in _KLASSFALT} if k else None,
             })
+    elif typ == "prospekt":
+        # Enstaka leads, markerade i leadsvyn (Sebbe 2026-10-06): paketet bär
+        # samma fält som körningsflytten, utan körningen runt omkring.
+        for pid in ids:
+            p = await storage.get_prospect(tenant_id, pid)
+            if not p:
+                raise HTTPException(status_code=404, detail=f"Leadet {pid} finns inte.")
+            poster.append({"ref_id": pid, "prospekt": [{f: p.get(f) for f in _PROSPEKTFALT}]})
     else:
         for bid in ids:
             korning = await storage.get_leads_korning(tenant_id, bid)
@@ -256,7 +264,7 @@ async def flytt_importera(
         paket = json.loads(kropp)
     except ValueError as fel:
         raise HTTPException(status_code=422, detail="Paketet är inte giltig JSON.") from fel
-    if paket.get("version") != 1 or paket.get("typ") not in ("mejl", "korning"):
+    if paket.get("version") != 1 or paket.get("typ") not in ("mejl", "korning", "prospekt"):
         raise HTTPException(status_code=422, detail="Okänt paketformat.")
     tenant_id = str(paket.get("tenant_id") or "")
     if not tenant_id or not await storage.get_tenant(tenant_id):
@@ -267,6 +275,8 @@ async def flytt_importera(
         try:
             if paket["typ"] == "mejl":
                 rader.append(await _importera_mejl(storage, tenant_id, post, fran))
+            elif paket["typ"] == "prospekt":
+                rader.append(await _importera_prospekt(storage, tenant_id, post, fran))
             else:
                 rader.append(await _importera_korning(storage, tenant_id, post, fran))
         except Exception as fel:  # noqa: BLE001 — en rad som faller stoppar inte resten
@@ -307,6 +317,36 @@ async def _importera_mejl(storage, tenant_id: str, post: dict[str, Any], fran: s
         detail={"importerad_fran": fran, "ref_id": post["ref_id"]},
     )
     return {"ref_id": post["ref_id"], "resultat": "importerad", "id": rad["id"]}
+
+
+async def _importera_prospekt(storage, tenant_id: str, post: dict[str, Any], fran: str) -> dict[str, Any]:
+    """Ett markerat lead ur leadsvyn. Samma dedupnyckel som körningsimporten:
+    bolagsnamnet — finns bolaget redan hos kunden i main är det flyttat."""
+    p = (post.get("prospekt") or [{}])[0]
+    namn = str(p.get("company_name") or "").strip()
+    if not namn:
+        return {"ref_id": post.get("ref_id"), "resultat": "fel", "fel": "Leadet saknar bolagsnamn."}
+    befintliga = {str(x.get("company_name") or "").casefold() for x in await storage.list_prospects(tenant_id, limit=500)}
+    if namn.casefold() in befintliga:
+        return {"ref_id": post.get("ref_id"), "resultat": "redan_flyttad"}
+    profil = {
+        f: p[f]
+        for f in _PROSPEKTFALT
+        if f not in ("company_name", "contact_name", "contact_email", "origin") and p.get(f) is not None
+    }
+    profil["importerad_fran"] = fran
+    skapad = await storage.create_prospect(
+        tenant_id, company_name=namn, contact_name=p.get("contact_name"),
+        contact_email=p.get("contact_email"),
+        origin=str(p.get("origin") or "import") if p.get("origin") in ("manual", "example", "import", "test", "inkorg", "lista", "iris") else "import",
+        profil=profil,
+    )
+    # Bedömningen följer med, som i körningsflytten nedan: create_prospect tar
+    # bara grundfälten, och leadet hade annars landat i main obedömt.
+    bedomning = {f: p[f] for f in BEDOMNINGSFALT if p.get(f) is not None}
+    if bedomning:
+        await storage.spara_bedomning(tenant_id, skapad["id"], bedomning=bedomning)
+    return {"ref_id": post.get("ref_id"), "resultat": "importerad", "id": skapad["id"]}
 
 
 async def _importera_korning(storage, tenant_id: str, post: dict[str, Any], fran: str) -> dict[str, Any]:

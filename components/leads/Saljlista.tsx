@@ -1,18 +1,24 @@
 "use client";
 
 import { Download, Mail, Phone, Plus, Search, Trash2 } from "lucide-react";
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
-import { hamtaSaljlista, laggTillSaljrad, taBortSaljrad, uppdateraSaljrad } from "@/lib/actions/saljlista";
+import { createContext, useCallback, useContext, useEffect, useId, useMemo, useRef, useState } from "react";
+import { useDashboard } from "@/components/dashboard/DashboardContext";
+import { hamtaSaljlista, laggTillSaljrad, sattSaljstatus, taBortSaljrad, uppdateraSaljrad } from "@/lib/actions/saljlista";
+import { mejlaOss } from "@/components/marketing/copy";
+import { useSmal } from "@/components/leads/smal";
+import { SALJLISTA_EXEMPEL } from "@/lib/demo/saljlista-exempel";
 import {
   SALJLISTA_FALT,
   byggSaljCsv,
   dagarSedan,
   dubblettnycklar,
   idagLokalt,
+  normaliseraFalt,
   telefonlank,
   type Saljfalt,
   type Saljfel,
   type Saljrad,
+  type Saljstatus,
   type Saljsvar
 } from "@/lib/leads/saljlista";
 import {
@@ -34,18 +40,21 @@ import {
   tabellRad,
   Tomt
 } from "@/components/ui";
+import { felmeddelande } from "@/lib/http/json";
 import { useLocale, type Localized } from "@/lib/i18n";
+import { leadsAnrop } from "@/lib/leads/suite";
 import { cn } from "@/lib/utils";
 
 /**
- * Snajps säljlista (Sebbes beställning 2026-10-06): CRM:et över bolagen vi
- * ringt för att få in kunder till Snajp. Kolumnerna är kalkylarkets —
- * Företagsnamn, Organisationsnummer, Kontaktperson, Kontaktnummer,
- * Kontaktmail, Senast kontaktad, Anteckningar/Info.
+ * Säljlistan (Sebbes beställning 2026-10-06): CRM:et över bolagen man ringt.
+ * Kolumnerna är kalkylarkets — Företagsnamn, Organisationsnummer,
+ * Kontaktperson, Kontaktnummer, Kontaktmail, Senast kontaktad,
+ * Anteckningar/Info.
  *
- * Står överst i Leads › Listor, bara för plattformsadmin i adminvyn (inte i
- * demovyn, inte i kundbesök). Tabellen `snajp_saljlista` (migration 100) är
- * plattformens och påverkar inte vad kundernas Iris hittar.
+ * Ingår i tillägget Leadslistor, som vi slår på när kunden hört av sig; en
+ * lista per arbetsyta (tabellen `saljlista`, migration 100 + 103). Snajps egen
+ * arbetsyta har tillägget och använder listan för vår egen utringning. Står
+ * överst i Leads › Listor; läsrollen ser listan men kan inte ändra den.
  *
  * Varje cell sparas när fältet lämnas (eller på Enter); Esc ångrar. `api` går
  * att byta ut så att ytan kan provas utan databas.
@@ -55,6 +64,7 @@ export type SaljlistaApi = {
   hamta: () => Promise<Saljsvar<Saljrad[]>>;
   laggTill: (falt: Partial<Record<Saljfalt, string | null>>) => Promise<Saljsvar<Saljrad>>;
   uppdatera: (id: string, namn: Saljfalt, varde: string | null) => Promise<Saljsvar<Saljrad>>;
+  sattStatus: (id: string, status: Saljstatus) => Promise<Saljsvar<Saljrad>>;
   taBort: (id: string) => Promise<Saljsvar<{ id: string }>>;
 };
 
@@ -62,12 +72,14 @@ const SERVERAPI: SaljlistaApi = {
   hamta: hamtaSaljlista,
   laggTill: laggTillSaljrad,
   uppdatera: uppdateraSaljrad,
+  sattStatus: sattSaljstatus,
   taBort: taBortSaljrad
 };
 
 const T = {
-  rubrik: { sv: "Snajps säljlista", en: "Snajp sales list" },
-  baraAdmin: { sv: "Bara admin", en: "Admin only" },
+  rubrik: { sv: "Säljlista", en: "Sales list" },
+  ingarTillagg: { sv: "Ingår i Leadslistor", en: "Included in Lead lists" },
+  lasbehorighet: { sv: "Läsbehörighet", en: "Read-only" },
   laggTill: { sv: "Lägg till företag", en: "Add company" },
   exportera: { sv: "Exportera CSV", en: "Export CSV" },
   sok: { sv: "Sök företag, person, nummer eller anteckning", en: "Search company, person, number or note" },
@@ -90,9 +102,48 @@ const T = {
   senastKontaktad: { sv: "Senast kontaktad", en: "Last contacted" },
   anteckningar: { sv: "Anteckningar/Info", en: "Notes/Info" },
   atgarder: { sv: "Åtgärder", en: "Actions" },
-  idag: { sv: "Idag", en: "Today" },
-  satIdag: { sv: "Sätt senast kontaktad till idag", en: "Set last contacted to today" },
-  igar: { sv: "Igår", en: "Yesterday" },
+  status: { sv: "Status", en: "Status" },
+  statusIngen: { sv: "Ingen status", en: "No status" },
+  statusSalt: { sv: "Sålt", en: "Sold" },
+  statusSignering: { sv: "Väntar på signering", en: "Awaiting signing" },
+  statusNej: { sv: "Nej", en: "No" },
+  statusEjSvar: { sv: "Ej svar", en: "No answer" },
+  valjStatus: { sv: "Sätt status för", en: "Set status for" },
+  demoMarke: { sv: "Demo", en: "Demo" },
+  demoNotis: { sv: "Demon är ifylld med påhittade bolag. Ändringarna sparas inte.", en: "The demo is filled with fictional companies. Changes are not saved." },
+  tillval: { sv: "Tillval", en: "Add-on" },
+  utforska: { sv: "Utforska i demo", en: "Explore in demo" },
+  bestallLeads: { sv: "Beställ leads-lista", en: "Order a lead list" },
+  bestallText: {
+    sv: "Iris gör en färdig körning och lägger bolagen direkt här i säljlistan. Bara bolag med allt ifyllt kommer med: organisationsnummer, kontaktperson, kontaktnummer och kontaktmail.",
+    en: "Iris runs a full search and puts the companies straight into this sales list. Only companies with everything filled in make it: registration number, contact person, phone number and contact email."
+  },
+  bestallVilka: { sv: "Vilka bolag letar vi efter?", en: "What companies are we looking for?" },
+  bestallVilkaExempel: { sv: "t.ex. Byggbolag i Umeå", en: "e.g. Construction companies in Umeå" },
+  bestallAntal: { sv: "Antal bolag", en: "Number of companies" },
+  bestallStarta: { sv: "Beställ körningen", en: "Order the run" },
+  bestaller: { sv: "Beställer…", en: "Ordering…" },
+  bestallPagar: {
+    sv: "Körningen pågår. Bolagen läggs här i säljlistan när den är klar, och du kan lämna sidan under tiden.",
+    en: "The run is in progress. The companies are added to this sales list when it finishes, and you can leave the page meanwhile."
+  },
+  bestallKlar: { sv: "Körningen är klar", en: "The run is done" },
+  bestallKlarInga: {
+    sv: "Körningen är klar, men inget bolag bar full kontaktinformation. Inget lades i listan.",
+    en: "The run finished, but no company carried full contact information. Nothing was added to the list."
+  },
+  bestallFel: { sv: "Beställningen gick inte att starta.", en: "The order could not be started." },
+  bestallFoll: { sv: "Körningen föll", en: "The run failed" },
+  nyaBolag: { sv: "nya bolag i listan", en: "new companies in the list" },
+  stangDemo: { sv: "Stäng demon", en: "Close the demo" },
+  horAvDig: { sv: "Hör av dig om leadslistor", en: "Ask us about lead lists" },
+  utforskaText: {
+    sv: "Håll ordning på bolagen ni ringt: kontaktuppgifter, senaste samtalet och statusfärger för sålt, väntar på signering, nej och ej svar. Säljlistan ingår i tillägget Leadslistor. Hör av dig så slår vi på det.",
+    en: "Keep track of the companies you have called: contact details, the latest call and status colours for sold, awaiting signing, no and no answer. The sales list is included in the Lead lists add-on. Get in touch and we will turn it on."
+  },
+  idag: { sv: "I dag", en: "Today" },
+  satIdag: { sv: "Sätt senast kontaktad till i dag", en: "Set last contacted to today" },
+  igar: { sv: "I går", en: "Yesterday" },
   aldrig: { sv: "Ej kontaktad", en: "Not contacted" },
   ring: { sv: "Ring", en: "Call" },
   mejla: { sv: "Mejla", en: "Email" },
@@ -119,7 +170,13 @@ const T = {
 } satisfies Record<string, Localized>;
 
 const FEL: Record<Saljfel, Localized> = {
-  ej_admin: { sv: "Bara Snajps administratörer kan använda säljlistan.", en: "Only Snajp administrators can use the sales list." },
+  ej_inloggad: { sv: "Du är inte inloggad. Logga in igen och ladda om sidan.", en: "You are not signed in. Sign in again and reload the page." },
+  fel_vy: { sv: "Säljlistan går bara att använda i din egen arbetsyta.", en: "The sales list can only be used in your own workspace." },
+  saknar_tillagg: {
+    sv: "Säljlistan ingår i tillägget Leadslistor. Hör av dig till oss så slår vi på det.",
+    en: "The sales list is included in the Lead lists add-on. Get in touch and we will turn it on."
+  },
+  las_roll: { sv: "Ditt konto har läsbehörighet och kan inte ändra säljlistan.", en: "Your account is read-only and cannot change the sales list." },
   migration_saknas: {
     sv: "Säljlistans tabell finns inte i den här miljön än (migration 100). Kör migrationerna och ladda om sidan.",
     en: "The sales list table does not exist in this environment yet (migration 100). Run the migrations and reload the page."
@@ -145,6 +202,28 @@ const FALTETIKETT: Record<Saljfalt, Localized> = {
   senast_kontaktad: T.senastKontaktad,
   anteckningar: T.anteckningar
 };
+
+/**
+ * Statusfärgerna: hur samtalet gick. `prick` är bollen i förklaringsrutan och
+ * menyn, `yta` radens ton, `kant` kortets vänsterkant. Tonerna är låga nog
+ * att texten behåller sin kontrast i både ljust och mörkt läge.
+ */
+const STATUSVAL: {
+  kod: Exclude<Saljstatus, "">;
+  etikett: Localized;
+  prick: string;
+  yta: string;
+  kant: string;
+}[] = [
+  { kod: "salt", etikett: T.statusSalt, prick: "bg-moss", yta: "bg-moss/[0.09]", kant: "border-l-moss" },
+  { kod: "signering", etikett: T.statusSignering, prick: "bg-chart-blue", yta: "bg-chart-blue/[0.09]", kant: "border-l-chart-blue" },
+  { kod: "nej", etikett: T.statusNej, prick: "bg-danger", yta: "bg-danger/[0.08]", kant: "border-l-danger" },
+  { kod: "ej_svar", etikett: T.statusEjSvar, prick: "bg-ochre", yta: "bg-ochre/[0.16]", kant: "border-l-ochre" }
+];
+
+function statusInfo(status: Saljstatus) {
+  return STATUSVAL.find((val) => val.kod === status) ?? null;
+}
 
 const PLATSHALLARE: Partial<Record<Saljfalt, Localized>> = {
   foretagsnamn: T.platsNamn,
@@ -177,8 +256,43 @@ function relativ(datum: string | null, idag: string, text: (v: Localized) => str
   return text({ sv: `för ${dagar} dagar sedan`, en: `${dagar} days ago` });
 }
 
-export function Saljlista({ api = SERVERAPI }: Readonly<{ api?: SaljlistaApi }>) {
+/** Läsrollen ser listan men kan inte ändra den. */
+const LasLage = createContext(false);
+
+/**
+ * Säljlistan med sin grind: arbetsytan har tillägget Leadslistor (som slås på
+ * av oss när kunden hört av sig), och det är den egna vyn — aldrig demovyn
+ * eller ett kundbesök, där skrivningarna hade hamnat i adminens egen
+ * arbetsyta. Samma villkor står i server actions (lib/actions/saljlista.ts).
+ */
+export function SaljlistaSektion({ demo = false }: Readonly<{ demo?: boolean }>) {
+  const { addons, vy, impersonation, isDemo, arLasare } = useDashboard();
+  // Demoytorna (marknadsdemon och demovyn) visar utforskaren med exempelbolag,
+  // öppen direkt — det är den som säljer tillvalet.
+  if (demo || isDemo || vy === "demo") return <SaljlistaUtforska startOppen />;
+  // Kundbesök: datan hade hämtats ur adminens EGEN arbetsyta medan skärmen
+  // visar kundens — därför ingenting alls.
+  if (impersonation || vy !== "admin") return null;
+  if (!addons.includes("leadlists")) return <SaljlistaUtforska />;
+  return <Saljlista las={arLasare} />;
+}
+
+export function Saljlista({
+  api = SERVERAPI,
+  las = false,
+  demo = false
+}: Readonly<{ api?: SaljlistaApi; las?: boolean; demo?: boolean }>) {
+  return (
+    <LasLage.Provider value={las}>
+      <SaljlistaYta api={api} demo={demo} />
+    </LasLage.Provider>
+  );
+}
+
+function SaljlistaYta({ api, demo }: Readonly<{ api: SaljlistaApi; demo: boolean }>) {
   const { text } = useLocale();
+  const smal = useSmal();
+  const las = useContext(LasLage);
   const [rader, setRader] = useState<Saljrad[] | null>(null);
   const [laddFel, setLaddFel] = useState<string | null>(null);
   const [fel, setFel] = useState<string | null>(null);
@@ -189,6 +303,30 @@ export function Saljlista({ api = SERVERAPI }: Readonly<{ api?: SaljlistaApi }>)
   const [sortering, setSortering] = useState<Sortering>("nya");
   const [formOppen, setFormOppen] = useState(false);
   const [idag, setIdag] = useState("");
+  // Beställ leads-lista (migration 105): Iris listspår rakt in i säljlistan.
+  const [bestallOppen, setBestallOppen] = useState(false);
+  const [bestallFraga, setBestallFraga] = useState("");
+  const [bestallAntal, setBestallAntal] = useState("10");
+  const [bestaller, setBestaller] = useState(false);
+  const [bestallStatus, setBestallStatus] = useState<Localized | null>(null);
+  const [bestallFel, setBestallFel] = useState<string | null>(null);
+  const raknareFore = useRef(0);
+  const pollRef = useRef<number | null>(null);
+  const rotRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => () => {
+    if (pollRef.current) window.clearInterval(pollRef.current);
+  }, []);
+
+  // Sidhuvudets knapp på Listor-fliken öppnar beställningen härifrån.
+  useEffect(() => {
+    function oppna() {
+      setBestallOppen(true);
+      rotRef.current?.scrollIntoView({ block: "start", behavior: "smooth" });
+    }
+    window.addEventListener("snipra:saljlista-bestall", oppna);
+    return () => window.removeEventListener("snipra:saljlista-bestall", oppna);
+  }, []);
 
   useEffect(() => setIdag(idagLokalt()), []);
 
@@ -240,6 +378,14 @@ export function Saljlista({ api = SERVERAPI }: Readonly<{ api?: SaljlistaApi }>)
         return true;
       }
       return false;
+    },
+    [api, skriv]
+  );
+
+  const sattStatus = useCallback(
+    async (id: string, status: Saljstatus) => {
+      const svar = await skriv(() => api.sattStatus(id, status));
+      if (svar?.ok) setRader((nu) => nu?.map((r) => (r.id === id ? svar.data : r)) ?? nu);
     },
     [api, skriv]
   );
@@ -319,8 +465,12 @@ export function Saljlista({ api = SERVERAPI }: Readonly<{ api?: SaljlistaApi }>)
 
   function exportera() {
     if (!rader?.length) return;
-    const rubriker = SALJLISTA_FALT.map((namn) => text(FALTETIKETT[namn]));
-    const blob = new Blob([byggSaljCsv(synliga, rubriker)], { type: "text/csv;charset=utf-8" });
+    const rubriker = [...SALJLISTA_FALT.map((namn) => text(FALTETIKETT[namn])), text(T.status)];
+    const csv = byggSaljCsv(synliga, rubriker, (rad) => {
+      const val = statusInfo(rad.status);
+      return val ? text(val.etikett) : "";
+    });
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -328,6 +478,65 @@ export function Saljlista({ api = SERVERAPI }: Readonly<{ api?: SaljlistaApi }>)
     a.click();
     URL.revokeObjectURL(url);
   }
+
+  async function bestallKorning(e: React.FormEvent) {
+    e.preventDefault();
+    const titel = bestallFraga.trim();
+    const antal = Math.min(50, Math.max(1, Number(bestallAntal) || 10));
+    if (!titel || bestaller) return;
+    setBestaller(true);
+    setBestallFel(null);
+    setBestallStatus(null);
+    raknareFore.current = rader?.length ?? 0;
+    try {
+      const svar = await leadsAnrop<{ list_id: string }>("/leads/listor", {
+        method: "POST",
+        // Det kunden skrev STYR sökningen (samma form som LeadslistorView);
+        // utan overrides blev "Byggbolag i Umeå" bara listans namn.
+        body: JSON.stringify({ titel, antal, mal: "saljlista", overrides: { must_have: [titel] } })
+      });
+      setBestallStatus(T.bestallPagar);
+      setBestallOppen(false);
+      // Pollar listan tills den är klar eller föll; bolagen dyker upp här.
+      if (pollRef.current) window.clearInterval(pollRef.current);
+      pollRef.current = window.setInterval(async () => {
+        try {
+          const lage = await leadsAnrop<{ list?: { status?: string; felorsak?: string | null } }>(
+            `/leads/listor/${encodeURIComponent(svar.list_id)}`
+          );
+          const status = lage.list?.status;
+          if (status === "klar" || status === "fel") {
+            if (pollRef.current) window.clearInterval(pollRef.current);
+            pollRef.current = null;
+            if (status === "fel") {
+              setBestallStatus(null);
+              setBestallFel(`${text(T.bestallFoll)}: ${lage.list?.felorsak ?? ""}`.trim());
+              return;
+            }
+            await hamta();
+          }
+        } catch {
+          // Nästa varv försöker igen; körningen fortsätter på servern.
+        }
+      }, 5000);
+    } catch (orsak) {
+      setBestallFel(`${text(T.bestallFel)} ${felmeddelande(orsak)}`.trim());
+    } finally {
+      setBestaller(false);
+    }
+  }
+
+  // När pollningen hämtat om efter "klar": säg vad som hände.
+  useEffect(() => {
+    if (!bestallStatus || bestallStatus !== T.bestallPagar || rader === null || pollRef.current) return;
+    const nya = rader.length - raknareFore.current;
+    setBestallStatus(
+      nya > 0
+        ? { sv: `Körningen är klar: ${nya} nya bolag i listan.`, en: `The run is done: ${nya} new companies in the list.` }
+        : T.bestallKlarInga
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rader]);
 
   const filterval: { id: Filter; etikett: Localized }[] = [
     { id: "alla", etikett: T.filterAlla },
@@ -340,8 +549,9 @@ export function Saljlista({ api = SERVERAPI }: Readonly<{ api?: SaljlistaApi }>)
 
   return (
     <section
+      ref={rotRef}
       aria-labelledby="saljlista-rubrik"
-      className="rounded-card border border-ink/12 bg-paper p-4 shadow-hairline sm:p-6"
+      className="scroll-mt-24 rounded-card border border-ink/12 bg-paper p-4 shadow-hairline sm:p-6"
     >
       {/* ------------------------------------------------ HUVUD */}
       <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-4">
@@ -350,10 +560,24 @@ export function Saljlista({ api = SERVERAPI }: Readonly<{ api?: SaljlistaApi }>)
             <h2 id="saljlista-rubrik" className="text-[1.25rem] font-semibold tracking-[-0.015em]">
               {text(T.rubrik)}
             </h2>
-            <Badge>{text(T.baraAdmin)}</Badge>
+            <Badge tone={demo ? "warn" : "neutral"}>
+              {demo ? text(T.demoMarke) : las ? text(T.lasbehorighet) : text(T.ingarTillagg)}
+            </Badge>
           </div>
+          {demo ? <p className="mt-1.5 text-[14px] leading-6 text-ink-subtle">{text(T.demoNotis)}</p> : null}
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          {las || demo ? null : (
+            <button
+              type="button"
+              aria-expanded={bestallOppen}
+              aria-controls="saljlista-bestall"
+              onClick={() => setBestallOppen((v) => !v)}
+              className={cn(btnSecondary, btnLiten)}
+            >
+              {text(T.bestallLeads)}
+            </button>
+          )}
           <button
             type="button"
             onClick={exportera}
@@ -363,21 +587,85 @@ export function Saljlista({ api = SERVERAPI }: Readonly<{ api?: SaljlistaApi }>)
             <Download aria-hidden className="h-4 w-4" />
             {text(T.exportera)}
           </button>
-          <button
-            type="button"
-            aria-expanded={formOppen}
-            aria-controls="saljlista-ny"
-            onClick={() => setFormOppen((v) => !v)}
-            className={cn(btnPrimary, btnLiten)}
-          >
-            <Plus aria-hidden className="h-4 w-4" />
-            {text(T.laggTill)}
-          </button>
+          {las ? null : (
+            <button
+              type="button"
+              aria-expanded={formOppen}
+              aria-controls="saljlista-ny"
+              onClick={() => setFormOppen((v) => !v)}
+              className={cn(btnPrimary, btnLiten)}
+            >
+              <Plus aria-hidden className="h-4 w-4" />
+              {text(T.laggTill)}
+            </button>
+          )}
         </div>
       </div>
 
+      {/* ------------------------------- BESTÄLL LEADS-LISTA (105) */}
+      {bestallOppen && !las && !demo ? (
+        <form
+          id="saljlista-bestall"
+          onSubmit={(e) => void bestallKorning(e)}
+          className="mt-5 rounded-input border border-ink/12 bg-paper2/50 p-4 sm:p-5"
+          onKeyDown={(e) => {
+            if (e.key === "Escape") setBestallOppen(false);
+          }}
+        >
+          <h3 className="text-[0.9375rem] font-semibold">{text(T.bestallLeads)}</h3>
+          <p className="mt-1 max-w-[70ch] text-[14px] leading-6 text-ink-subtle">{text(T.bestallText)}</p>
+          <div className="mt-3 grid gap-3 sm:grid-cols-[minmax(0,1fr)_140px]">
+            <label className="grid min-w-0 gap-1">
+              <span className={etikett}>
+                {text(T.bestallVilka)}
+                <span aria-hidden className="text-copper"> *</span>
+              </span>
+              <input
+                value={bestallFraga}
+                onChange={(e) => setBestallFraga(e.target.value)}
+                placeholder={text(T.bestallVilkaExempel)}
+                maxLength={200}
+                className={cn(faltTatt, "w-full placeholder:text-ink-subtle/60")}
+              />
+            </label>
+            <label className="grid gap-1">
+              <span className={etikett}>{text(T.bestallAntal)}</span>
+              <input
+                type="number"
+                min={1}
+                max={50}
+                value={bestallAntal}
+                onChange={(e) => setBestallAntal(e.target.value)}
+                className={cn(faltTatt, "w-full")}
+              />
+            </label>
+          </div>
+          <div className="mt-4 flex flex-wrap items-center gap-2">
+            <button type="submit" disabled={bestaller || !bestallFraga.trim()} className={cn(btnPrimary, btnLiten)}>
+              {bestaller ? text(T.bestaller) : text(T.bestallStarta)}
+            </button>
+            <button type="button" onClick={() => setBestallOppen(false)} className={cn(btnSecondary, btnLiten)}>
+              {text(T.avbryt)}
+            </button>
+          </div>
+        </form>
+      ) : null}
+      {bestallStatus ? (
+        <p role="status" aria-live="polite" className="mt-4 rounded-input border border-ink/12 bg-paper2/60 px-3.5 py-2.5 text-[14px] text-ink">
+          {text(bestallStatus)}
+        </p>
+      ) : null}
+      {bestallFel ? (
+        <p role="alert" className="mt-4 text-[14px] text-danger">
+          {bestallFel}
+        </p>
+      ) : null}
+
+      {/* ----------------------------------- STATUSFÄRGERNA (104) */}
+      <Statusforklaring />
+
       {/* --------------------------------------------- NYTT BOLAG */}
-      {formOppen ? (
+      {formOppen && !las ? (
         <NyttForetag
           rader={rader ?? []}
           onSpara={laggTill}
@@ -417,7 +705,7 @@ export function Saljlista({ api = SERVERAPI }: Readonly<{ api?: SaljlistaApi }>)
                 className={cn(faltTatt, "w-full pl-8")}
               />
             </label>
-            <label className="w-full sm:w-auto">
+            <label className="relative w-full sm:w-auto">
               <span className="sr-only">{text(T.sortera)}</span>
               <select
                 value={sortering}
@@ -451,7 +739,7 @@ export function Saljlista({ api = SERVERAPI }: Readonly<{ api?: SaljlistaApi }>)
         ) : rader.length === 0 ? (
           <Tomt
             action={
-              formOppen ? null : (
+              formOppen || las ? null : (
                 <button type="button" onClick={() => setFormOppen(true)} className={cn(btnPrimary, btnLiten)}>
                   <Plus aria-hidden className="h-4 w-4" />
                   {text(T.laggTill)}
@@ -466,7 +754,7 @@ export function Saljlista({ api = SERVERAPI }: Readonly<{ api?: SaljlistaApi }>)
         ) : (
           <>
             {/* Bred skärm: tabellen, med kolumnerna i kalkylarkets ordning. */}
-            <div className="hidden md:block">
+            <div className={smal ? "hidden" : "hidden md:block"}>
               <Tabell
                 minBredd={1080}
                 ariaLabel={text(T.rubrik)}
@@ -478,18 +766,18 @@ export function Saljlista({ api = SERVERAPI }: Readonly<{ api?: SaljlistaApi }>)
                   { rubrik: text(T.kontaktmail), bredd: "17%" },
                   { rubrik: text(T.senastKontaktad), bredd: "13%" },
                   { rubrik: text(T.anteckningar) },
-                  { rubrik: text(T.atgarder), bredd: "44px", srOnly: true }
+                  { rubrik: text(T.atgarder), bredd: "80px", srOnly: true }
                 ]}
               >
                 {synliga.map((rad) => (
-                  <TabellRad key={rad.id} rad={rad} idag={idag} onSpara={uppdatera} onTaBort={taBort} />
+                  <TabellRad key={rad.id} rad={rad} idag={idag} onSpara={uppdatera} onStatus={sattStatus} onTaBort={taBort} />
                 ))}
               </Tabell>
             </div>
             {/* Telefon: ett kort per bolag, numret överst att ringa från. */}
-            <ul className="grid gap-3 md:hidden" aria-label={text(T.rubrik)}>
+            <ul className={cn("grid gap-3", !smal && "md:hidden")} aria-label={text(T.rubrik)}>
               {synliga.map((rad) => (
-                <Kort key={rad.id} rad={rad} idag={idag} onSpara={uppdatera} onTaBort={taBort} />
+                <Kort key={rad.id} rad={rad} idag={idag} onSpara={uppdatera} onStatus={sattStatus} onTaBort={taBort} />
               ))}
             </ul>
           </>
@@ -549,6 +837,7 @@ function Falt({
   className?: string;
   etikettText: string;
 }>) {
+  const las = useContext(LasLage);
   const sparat = rad[namn] ?? "";
   const [varde, setVarde] = useState(sparat);
   const [fokus, setFokus] = useState(false);
@@ -577,6 +866,7 @@ function Falt({
     value: varde,
     "aria-label": `${etikettText}, ${rad.foretagsnamn}`,
     "aria-invalid": felaktigt || undefined,
+    readOnly: las,
     // Ett tomt fält ska gå att se och träffa, men aldrig se ut som ett värde.
     placeholder: typ === "date" ? undefined : "–",
     onFocus: () => setFokus(true),
@@ -588,6 +878,7 @@ function Falt({
       faltDiskret,
       "w-full min-w-0 placeholder:text-ink-subtle/50",
       felaktigt && "!border-danger/60",
+      las && "hover:!border-transparent",
       className
     )
   };
@@ -667,6 +958,7 @@ function Kontaktdatum({
   onSpara
 }: Readonly<{ rad: Saljrad; idag: string; onSpara: SaljlistaFn }>) {
   const { text } = useLocale();
+  const las = useContext(LasLage);
   const relativText = relativ(rad.senast_kontaktad, idag, text);
   const dagar = rad.senast_kontaktad && idag ? dagarSedan(rad.senast_kontaktad, idag) : null;
   return (
@@ -680,7 +972,7 @@ function Kontaktdatum({
         ) : (
           <Badge tone="warn">{text(T.aldrig)}</Badge>
         )}
-        {idag && rad.senast_kontaktad !== idag ? (
+        {idag && rad.senast_kontaktad !== idag && !las ? (
           <button
             type="button"
             title={text(T.satIdag)}
@@ -696,8 +988,144 @@ function Kontaktdatum({
   );
 }
 
+/**
+ * Förklaringsrutan: en boll per färg med betydelsen bredvid. Står alltid
+ * framme — den är nyckeln till radernas färger och demons säljargument.
+ */
+function Statusforklaring() {
+  const { text } = useLocale();
+  return (
+    <div className="mt-5 flex max-w-full flex-wrap items-center gap-x-5 gap-y-2 rounded-input border border-ink/12 bg-paper2/50 px-3.5 py-2.5">
+      <span className={etikett}>{text(T.status)}</span>
+      {STATUSVAL.map((val) => (
+        <span key={val.kod} className="inline-flex items-center gap-1.5 text-[0.8125rem] text-ink-muted">
+          <span aria-hidden className={cn("h-2.5 w-2.5 shrink-0 rounded-full", val.prick)} />
+          {text(val.etikett)}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+type StatusFn = (id: string, status: Saljstatus) => void;
+
+/**
+ * Radens statusboll. Klicket öppnar en liten meny med de fyra färgerna och
+ * "Ingen status"; att välja den aktiva igen släcker den. Menyn ligger
+ * position:fixed — tabellen scrollar i sidled och en absolut meny hade
+ * klippts av scrollbehållaren. Läsrollen ser bollen men får ingen knapp.
+ */
+function StatusKnapp({ rad, onStatus }: Readonly<{ rad: Saljrad; onStatus: StatusFn }>) {
+  const { text } = useLocale();
+  const las = useContext(LasLage);
+  const [meny, setMeny] = useState<{ x: number; y: number; uppat: boolean } | null>(null);
+  const aktiv = statusInfo(rad.status);
+
+  if (las) {
+    return aktiv ? (
+      <span
+        role="img"
+        aria-label={`${text(T.status)}: ${text(aktiv.etikett)}`}
+        title={text(aktiv.etikett)}
+        className="inline-flex h-8 w-8 items-center justify-center"
+      >
+        <span className={cn("h-3 w-3 rounded-full", aktiv.prick)} />
+      </span>
+    ) : null;
+  }
+
+  function oppna(e: React.MouseEvent<HTMLButtonElement>) {
+    if (meny) {
+      setMeny(null);
+      return;
+    }
+    const r = e.currentTarget.getBoundingClientRect();
+    // ~250 px meny: ryms den inte nedåt öppnas den uppåt.
+    const uppat = r.bottom + 250 > window.innerHeight;
+    setMeny({ x: r.right, y: uppat ? r.top - 4 : r.bottom + 4, uppat });
+  }
+
+  function valj(kod: Saljstatus) {
+    setMeny(null);
+    onStatus(rad.id, kod);
+  }
+
+  const alternativ: { kod: Saljstatus; etikett: Localized; prick: string | null }[] = [
+    ...STATUSVAL.map((val) => ({ kod: val.kod as Saljstatus, etikett: val.etikett, prick: val.prick as string | null })),
+    { kod: "", etikett: T.statusIngen, prick: null }
+  ];
+
+  return (
+    <div
+      onKeyDown={(e) => {
+        if (e.key === "Escape") setMeny(null);
+      }}
+    >
+      <button
+        type="button"
+        aria-haspopup="menu"
+        aria-expanded={meny !== null}
+        aria-label={`${text(T.valjStatus)} ${rad.foretagsnamn}. ${aktiv ? text(aktiv.etikett) : text(T.statusIngen)}`}
+        title={aktiv ? text(aktiv.etikett) : text(T.status)}
+        onClick={oppna}
+        className="focus-ring inline-flex h-8 w-8 items-center justify-center rounded-input transition-colors hover:bg-paper2"
+      >
+        {aktiv ? (
+          <span aria-hidden className={cn("h-3 w-3 rounded-full", aktiv.prick)} />
+        ) : (
+          <span aria-hidden className="h-3 w-3 rounded-full border-[1.5px] border-ink/35" />
+        )}
+      </button>
+      {meny ? (
+        <>
+          <button
+            type="button"
+            aria-hidden
+            tabIndex={-1}
+            onClick={() => setMeny(null)}
+            className="fixed inset-0 z-20 cursor-default"
+          />
+          <div
+            role="menu"
+            aria-label={`${text(T.status)}, ${rad.foretagsnamn}`}
+            style={{
+              top: meny.y,
+              left: meny.x,
+              transform: meny.uppat ? "translate(-100%, -100%)" : "translateX(-100%)"
+            }}
+            className="fixed z-30 w-60 rounded-input border border-ink/15 bg-paper p-1 shadow-lift"
+          >
+            {alternativ.map((val) => (
+              <button
+                key={val.kod || "ingen"}
+                type="button"
+                role="menuitemradio"
+                aria-checked={rad.status === val.kod}
+                onClick={() => valj(rad.status === val.kod && val.kod !== "" ? "" : val.kod)}
+                className={cn(
+                  "focus-ring flex w-full items-center gap-2.5 rounded-[6px] px-2.5 py-2 text-left text-[0.875rem] transition-colors hover:bg-paper2",
+                  val.prick === null && "text-ink-muted",
+                  rad.status === val.kod && "bg-paper2 font-medium"
+                )}
+              >
+                {val.prick ? (
+                  <span aria-hidden className={cn("h-3 w-3 shrink-0 rounded-full", val.prick)} />
+                ) : (
+                  <span aria-hidden className="h-3 w-3 shrink-0 rounded-full border-[1.5px] border-ink/35" />
+                )}
+                {text(val.etikett)}
+              </button>
+            ))}
+          </div>
+        </>
+      ) : null}
+    </div>
+  );
+}
+
 function TaBortKnapp({ rad, onTaBort }: Readonly<{ rad: Saljrad; onTaBort: (rad: Saljrad) => void }>) {
   const { text } = useLocale();
+  if (useContext(LasLage)) return null;
   return (
     <button
       type="button"
@@ -715,11 +1143,13 @@ function TabellRad({
   rad,
   idag,
   onSpara,
+  onStatus,
   onTaBort
-}: Readonly<{ rad: Saljrad; idag: string; onSpara: SaljlistaFn; onTaBort: (rad: Saljrad) => void }>) {
+}: Readonly<{ rad: Saljrad; idag: string; onSpara: SaljlistaFn; onStatus: StatusFn; onTaBort: (rad: Saljrad) => void }>) {
   const { text } = useLocale();
+  const ton = statusInfo(rad.status);
   return (
-    <tr className={cn(tabellRad, "align-top")}>
+    <tr className={cn("align-top transition-colors", ton ? ton.yta : "hover:bg-paper2/60")}>
       <Cell titel className="!align-top">
         <Falt rad={rad} namn="foretagsnamn" radbryt onSpara={onSpara} etikettText={text(T.foretagsnamn)} className="font-semibold" />
       </Cell>
@@ -748,7 +1178,10 @@ function TabellRad({
         <Falt rad={rad} namn="anteckningar" multiline onSpara={onSpara} etikettText={text(T.anteckningar)} />
       </Cell>
       <Cell className="!align-top">
-        <TaBortKnapp rad={rad} onTaBort={onTaBort} />
+        <div className="flex items-center">
+          <StatusKnapp rad={rad} onStatus={onStatus} />
+          <TaBortKnapp rad={rad} onTaBort={onTaBort} />
+        </div>
       </Cell>
     </tr>
   );
@@ -758,16 +1191,22 @@ function Kort({
   rad,
   idag,
   onSpara,
+  onStatus,
   onTaBort
-}: Readonly<{ rad: Saljrad; idag: string; onSpara: SaljlistaFn; onTaBort: (rad: Saljrad) => void }>) {
+}: Readonly<{ rad: Saljrad; idag: string; onSpara: SaljlistaFn; onStatus: StatusFn; onTaBort: (rad: Saljrad) => void }>) {
   const { text } = useLocale();
   const rubrikId = useId();
+  const ton = statusInfo(rad.status);
   return (
-    <li aria-labelledby={rubrikId} className="rounded-input border border-ink/12 bg-paper p-3">
+    <li
+      aria-labelledby={rubrikId}
+      className={cn("rounded-input border border-ink/12 bg-paper p-3", ton && cn("border-l-4", ton.kant, ton.yta))}
+    >
       <div className="flex items-start gap-1">
         <div className="min-w-0 flex-1" id={rubrikId}>
           <Falt rad={rad} namn="foretagsnamn" radbryt onSpara={onSpara} etikettText={text(T.foretagsnamn)} className="font-semibold" />
         </div>
+        <StatusKnapp rad={rad} onStatus={onStatus} />
         <TaBortKnapp rad={rad} onTaBort={onTaBort} />
       </div>
       <dl className="mt-2 grid grid-cols-1 gap-x-4 gap-y-2 min-[440px]:grid-cols-2">
@@ -957,4 +1396,111 @@ function NyttForetag({
       </div>
     </form>
   );
+}
+
+/* ====================================================== UTFORSKA I DEMO */
+
+/**
+ * "Utforska säljlistan i demo" (Sebbes beställning 2026-10-06): kunder utan
+ * tillägget — och demoytorna — får prova listan med påhittade exempelbolag.
+ * Allt sker i minnet i webbläsaren; inget når databasen, och en omladdning
+ * börjar om. Teaserrutan frontar tillvalet med mejlvägen in.
+ */
+export function SaljlistaUtforska({ startOppen = false }: Readonly<{ startOppen?: boolean }>) {
+  const { text } = useLocale();
+  const [oppen, setOppen] = useState(startOppen);
+  const [api] = useState(() => demoApi());
+
+  return (
+    <section aria-labelledby="saljlista-utforska" className="flex min-w-0 flex-col gap-4">
+      <div className="rounded-card border border-ink/12 bg-paper2/40 p-4 sm:p-5">
+        <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
+          <div className="min-w-0 max-w-[64ch]">
+            <div className="flex flex-wrap items-center gap-2.5">
+              <h2 id="saljlista-utforska" className="text-[1.125rem] font-semibold tracking-[-0.01em]">
+                {text(T.rubrik)}
+              </h2>
+              <Badge tone="warn">{text(T.tillval)}</Badge>
+            </div>
+            <p className="mt-1 text-[14px] leading-6 text-ink-subtle">{text(T.utforskaText)}</p>
+            <a
+              href={mejlaOss(text({ sv: "Tillägg: Leadslistor", en: "Add-on: Lead lists" }))}
+              className="mt-2 inline-block text-[13px] underline underline-offset-4 transition-colors hover:text-ochre"
+            >
+              {text(T.horAvDig)}
+            </a>
+          </div>
+          <button type="button" aria-expanded={oppen} onClick={() => setOppen((v) => !v)} className={btnSecondary}>
+            {oppen ? text(T.stangDemo) : text(T.utforska)}
+          </button>
+        </div>
+      </div>
+      {oppen ? <Saljlista api={api} demo /> : null}
+    </section>
+  );
+}
+
+/** Exempeldatan bakom demon: samma API-form som servern, fast i minnet. */
+function demoApi(): SaljlistaApi {
+  let rader: Saljrad[] = SALJLISTA_EXEMPEL.map((rad) => ({ ...rad }));
+  let lopnummer = 0;
+
+  function kopia(rad: Saljrad): Saljrad {
+    return { ...rad };
+  }
+
+  return {
+    hamta: async () => ({ ok: true, data: rader.map(kopia) }),
+
+    laggTill: async (falt) => {
+      const varden = {} as Record<Saljfalt, string | null>;
+      for (const namn of SALJLISTA_FALT) {
+        const n = normaliseraFalt(namn, falt[namn] ?? null);
+        if (!n.ok) return { ok: false, fel: n.fel };
+        varden[namn] = n.varde;
+      }
+      if (!varden.foretagsnamn) return { ok: false, fel: "namn_saknas" };
+      lopnummer += 1;
+      const rad: Saljrad = {
+        id: `00000000-0000-4000-a000-${String(lopnummer).padStart(12, "0")}`,
+        foretagsnamn: varden.foretagsnamn,
+        orgnr: varden.orgnr ?? "",
+        kontaktperson: varden.kontaktperson ?? "",
+        kontaktnummer: varden.kontaktnummer ?? "",
+        kontaktmail: varden.kontaktmail ?? "",
+        senast_kontaktad: varden.senast_kontaktad,
+        anteckningar: varden.anteckningar ?? "",
+        status: "",
+        created_at: new Date().toISOString(),
+        updated_at: ""
+      };
+      rader = [rad, ...rader];
+      return { ok: true, data: kopia(rad) };
+    },
+
+    uppdatera: async (id, namn, varde) => {
+      const n = normaliseraFalt(namn, varde);
+      if (!n.ok) return { ok: false, fel: n.fel };
+      if (namn === "foretagsnamn" && !n.varde) return { ok: false, fel: "namn_saknas" };
+      const plats = rader.findIndex((rad) => rad.id === id);
+      if (plats < 0) return { ok: false, fel: "finns_inte" };
+      rader[plats] = {
+        ...rader[plats],
+        [namn]: namn === "senast_kontaktad" ? n.varde : (n.varde ?? "")
+      };
+      return { ok: true, data: kopia(rader[plats]) };
+    },
+
+    sattStatus: async (id, status) => {
+      const plats = rader.findIndex((rad) => rad.id === id);
+      if (plats < 0) return { ok: false, fel: "finns_inte" };
+      rader[plats] = { ...rader[plats], status };
+      return { ok: true, data: kopia(rader[plats]) };
+    },
+
+    taBort: async (id) => {
+      rader = rader.filter((rad) => rad.id !== id);
+      return { ok: true, data: { id } };
+    }
+  };
 }

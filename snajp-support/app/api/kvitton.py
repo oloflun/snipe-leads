@@ -24,7 +24,7 @@ import uuid
 from datetime import date
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, UploadFile
+from fastapi import APIRouter, Depends, Form, HTTPException, Request, Response, UploadFile
 from fastapi import File as FastAPIFile
 
 from ..agent.bookkeeping_agent import bygg_verifikat
@@ -48,7 +48,6 @@ from ..bookkeeping.verifieringsgrind import STATUS_GRANSKA, check_underlag
 from ..config import get_settings
 from ..kvitton.mejl import MejlkontofelError, valj_mejlkonto
 from ..kvitton.sammanfattning import (
-    bara_utlagg,
     kategorietikett,
     sammanstall,
     summeringstext,
@@ -79,6 +78,9 @@ def _kvitto_ut(rad: dict[str, Any]) -> dict[str, Any]:
         "momssats": None if rad.get("momssats") is None else f"{rad['momssats']:f}",
         "kategori": rad.get("kategori"),
         "kategorietikett": kategorietikett(rad.get("kategori")),
+        # "intakt" = företagets egen faktura till en kund. Rader utan riktning
+        # (flaggade, oavlästa) är kvitton, samma regel som bara_utlagg.
+        "riktning": "intakt" if rad.get("riktning") == "intakt" else "kostnad",
         "status": rad.get("status"),
         "betalstatus": rad.get("betalstatus"),
         "kalla": rad.get("kalla") or "uppladdning",
@@ -123,10 +125,12 @@ def _granskning_ut(rad: dict[str, Any]) -> dict[str, Any]:
 async def _rader(request: Request, tenant_id: str, fran: date | None, till: date | None):
     # Utan tak: storage-lagrets standard är 200 rader, och en period med fler
     # kvitton gav summor som tyst stannade vid de 200 första.
-    rader = await request.app.state.storage.list_bk_underlag(
+    # Utläggen OCH kundfakturorna (intäkterna) sedan 2026-10-07. Summorna
+    # skiljer dem själva: `sammanstall` räknar utläggen via `bara_utlagg` och
+    # intäkterna för sig, så en faktura blir aldrig ett utlägg.
+    return await request.app.state.storage.list_bk_underlag(
         tenant_id, fran=fran, till=till, limit=100_000
     )
-    return bara_utlagg(rader)
 
 
 # -- Mejlkontot -------------------------------------------------------------
@@ -283,7 +287,12 @@ async def rensa_period(
 
 
 async def ta_emot_kvittofil(
-    storage: Any, tenant_id: str, data: bytes, mimetyp: str, filnamn: str
+    storage: Any,
+    tenant_id: str,
+    data: bytes,
+    mimetyp: str,
+    filnamn: str,
+    riktning: str | None = None,
 ) -> dict[str, Any]:
     """Kvittot in via fil: kontrollera, läs av, spara fälten — kasta filen.
 
@@ -322,7 +331,7 @@ async def ta_emot_kvittofil(
             )
 
     hantering = await hantera(
-        storage, tenant_id, Inkommande.fran_fil(data, mimetyp, filnamn)
+        storage, tenant_id, Inkommande.fran_fil(data, mimetyp, filnamn), riktning=riktning
     )
     if not hantering.resultat["underlag"]:
         raise UnderlagsfelError(
@@ -359,8 +368,12 @@ async def ta_emot_kvittofil(
 async def ladda_upp(
     request: Request,
     fil: UploadFile = FastAPIFile(...),
+    riktning: str | None = Form(None),
     tenant: dict = Depends(require_tenant),
 ) -> dict:
+    """`riktning=intakt`: människan säger att filen är en kundfaktura."""
+    if riktning not in (None, "", "kostnad", "intakt"):
+        raise HTTPException(status_code=422, detail="Riktningen ska vara kostnad eller intakt.")
     try:
         resultat = await ta_emot_kvittofil(
             request.app.state.storage,
@@ -368,6 +381,7 @@ async def ladda_upp(
             await fil.read(),
             fil.content_type or "",
             fil.filename or "kvitto",
+            riktning=riktning or None,
         )
     except UnderlagsfelError as fel:
         raise HTTPException(status_code=422, detail=str(fel)) from fel
@@ -461,12 +475,18 @@ async def godkann(
             raise HTTPException(status_code=422, detail="Momssatsen ska vara 25, 12, 6 eller 0 %.")
         andringar["momssats"] = tolkad
 
-    # Riktningen sätts: produkten tar bara emot utlägg, så en rad utan riktning
-    # är en kostnad. BETALSTATUS sätts däremot ALDRIG av koden — den avgör
+    riktning = kropp.get("riktning")
+    if isinstance(riktning, str) and riktning.strip():
+        if riktning.strip() not in ("kostnad", "intakt"):
+            raise HTTPException(status_code=422, detail="Riktningen ska vara kostnad eller intakt.")
+        andringar["riktning"] = riktning.strip()
+
+    # En rad utan riktning är ett kvitto, alltså en kostnad (kundfakturor
+    # känns igen vid avläsningen eller märks av människan). BETALSTATUS sätts däremot ALDRIG av koden — den avgör
     # motkontot (1930 mot 2440, se kontoplan.BETALKONTO_INKOP), och en tyst
     # "betald" bokför en obetald faktura mot bankkontot. Saknas den frågar
     # gränssnittet, och grinden nedan fäller tills svaret finns.
-    if not rad.get("riktning"):
+    if not rad.get("riktning") and "riktning" not in andringar:
         andringar["riktning"] = "kostnad"
 
     if andringar:
@@ -513,6 +533,50 @@ async def godkann(
     return {"godkand": True, "underlag": _kvitto_ut(rad)}
 
 
+@router.post("/api/kvitton/{kvitto_id}/riktning")
+async def byt_riktning(
+    request: Request,
+    kvitto_id: str,
+    kropp: dict | None = None,
+    tenant: dict = Depends(require_tenant),
+) -> dict:
+    """Människans besked om ett underlag är en kundfaktura (intäkt) eller ett
+    kvitto (kostnad), när igenkänningen inte räckte till.
+
+    Bara på rader i granskningskön: ett klart underlag har ett verifikat på
+    den gamla riktningen. Motparten följer med: kunden för en intäkt,
+    leverantören för en kostnad, när avläsningen har dem.
+    """
+    storage = request.app.state.storage
+    tenant_id = tenant["tenant_id"]
+    try:
+        uuid.UUID(kvitto_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Kvittot finns inte.") from None
+    riktning = str((kropp or {}).get("riktning") or "").strip()
+    if riktning not in ("kostnad", "intakt"):
+        raise HTTPException(status_code=422, detail="Riktningen ska vara kostnad eller intakt.")
+    rad = await storage.get_bk_underlag(tenant_id, kvitto_id)
+    if rad is None:
+        raise HTTPException(status_code=404, detail="Kvittot finns inte.")
+    if rad.get("status") != STATUS_GRANSKA:
+        raise HTTPException(
+            status_code=409,
+            detail="Underlaget är redan godkänt. Rensa perioden och läs in det igen för att ändra det.",
+        )
+    gr = rad.get("granskning") if isinstance(rad.get("granskning"), dict) else {}
+    falt = gr.get("fält") if isinstance(gr.get("fält"), dict) else {}
+    namnfalt = "köpare_namn" if riktning == "intakt" else "leverantör_namn"
+    motpart = (falt.get(namnfalt) or {}).get("värde")
+    rad = await storage.update_bk_underlag(
+        tenant_id,
+        kvitto_id,
+        riktning=riktning,
+        **({"motpart": str(motpart)} if motpart else {}),
+    )
+    return {"underlag": _kvitto_ut(rad)}
+
+
 # -- Exporten ---------------------------------------------------------------
 
 
@@ -537,7 +601,8 @@ async def exportera_csv(
     writer.writerow(
         [
             "Datum",
-            "Leverantör",
+            "Typ",
+            "Motpart",
             "Belopp (SEK)",
             "Originalbelopp",
             "Moms",
@@ -551,11 +616,12 @@ async def exportera_csv(
         writer.writerow(
             [
                 r.get("datum") or "",
+                "Intäkt" if r.get("riktning") == "intakt" else "Kostnad",
                 r.get("motpart") or r.get("filnamn") or "",
                 "" if r.get("brutto") is None else f"{r['brutto']:f}",
                 r.get("belopp_original") or "",
                 "" if r.get("momssats") is None else f"{r['momssats']:f}",
-                kategorietikett(r.get("kategori")),
+                "Kundfaktura" if r.get("riktning") == "intakt" else kategorietikett(r.get("kategori")),
                 r.get("kalla") or "uppladdning",
                 r.get("status") or "",
                 r.get("anmarkning") or "",

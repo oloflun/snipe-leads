@@ -750,6 +750,62 @@ def _asci(text: str) -> str:
     return "".join(t for t in bas if not unicodedata.combining(t))
 
 
+#: mailto-länkens adress lyfts in i den synliga texten INTILL länktexten
+#: (namnet), annars försvinner den med taggen: `<a href="mailto:eva@b.se">Eva
+#: Ek</a>` blev bara "Eva Ek" efter taggstrippen, och sajter som enbart bär
+#: adressen i länken gav aldrig en kontakt (körningarna 2026-10-07: 8 bolag
+#: med sajt, 0 styrkta kontakter).
+_MAILTO = re.compile(r"""<a[^>]+href\s*=\s*["']mailto:([^"'?>]+)["'][^>]*>""", re.IGNORECASE)
+#: Utskriven obfuskering: "eva (at) bolaget (punkt) se", snabel-a.
+_OBFUSKERAT_AT = re.compile(r"\s*[\(\[\{]\s*(?:at|snabel-?a)\s*[\)\]\}]\s*", re.IGNORECASE)
+_OBFUSKERAT_PUNKT = re.compile(r"\s*[\(\[\{]\s*(?:dot|punkt)\s*[\)\]\}]\s*", re.IGNORECASE)
+
+
+def _synliggor_adresser(html: str) -> str:
+    """Gör sidans adresser läsbara för närhetsmatchningen: mailto-länkar
+    skrivs ut intill sin länktext och (at)/(punkt)-obfuskering vecklas ut.
+    Körs FÖRE taggstrippen i båda kontaktvägarna."""
+    # Ersättningen är ren text — ett löst "<" här hade ätit länktexten
+    # (namnet) i taggstrippen steget efter.
+    text = _MAILTO.sub(lambda m: f" {m.group(1)} ", html)
+    text = _OBFUSKERAT_AT.sub("@", text)
+    return _OBFUSKERAT_PUNKT.sub(".", text)
+
+
+#: Funktionsadresser som aldrig är en säljingång: ett utkast dit når HR,
+#: ekonomi eller en robot, inte någon som köper (provkörningen 2026-10-05
+#: skrev ett utkast till rekrytering@).
+_EJ_SALJADRESS = re.compile(
+    r"(?i)^(?:no-?reply|do-?not-?reply|rekrytering|jobb|jobs?|career|karriar|"
+    r"faktura|fakturor|invoice|ekonomi|lon|payroll|gdpr|dataskydd|privacy|press|"
+    r"abuse|postmaster|webmaster|bounce)"
+)
+
+
+def ar_saljadress(epost: str | None) -> bool:
+    """Inte en HR-, ekonomi- eller robotadress (se _EJ_SALJADRESS)."""
+    return bool(epost) and "@" in str(epost) and not _EJ_SALJADRESS.search(str(epost).split("@", 1)[0])
+
+
+def bolagsadress_i_text(text: str, website: str) -> str | None:
+    """Bolagets bästa kontaktadress på sidan: en adress på bolagets EGEN
+    domän, info@/kontakt@ duger (Sebbes beslut 2026-10-07: det enda kravet
+    för ett Iris-lead är en kontaktmejl till bolaget som utkastet kan nå
+    fram till). Rankas som plocka_arbetsmejl: en roll-lik lokaldel före
+    info@, en främmande domän eller privat adress aldrig. Kastar aldrig."""
+    from urllib.parse import unquote
+
+    ren = unquote(_synliggor_adresser(text or ""))
+    tillatna = [
+        a.rstrip(".,;:)>\"'")
+        for a in _EPOST_PA_SIDA.findall(ren)
+        if ar_saljadress(a)
+    ]
+    epost = plocka_arbetsmejl(" ".join(tillatna), website)
+    epost = epost.strip() if epost else None
+    return epost if epost and ar_arbetsmejl(epost, webb=website) else None
+
+
 def vd_uppgift_i_text(text: str, vd_namn: str, website: str) -> dict[str, Any] | None:
     """VD:ns mejl eller telefon ur sidtext, BARA när uppgiften går att knyta
     till VD (Antons regel 2026-10-04: ett nummer som inte kan styrkas tillhöra
@@ -761,7 +817,7 @@ def vd_uppgift_i_text(text: str, vd_namn: str, website: str) -> dict[str, Any] |
     led = [d for d in re.findall(r"[a-z]+", _asci(vd_namn)) if len(d) >= 3]
     if len(led) < 2:
         return None
-    ren = re.sub(r"<[^>]+>", " ", text)
+    ren = re.sub(r"<[^>]+>", " ", _synliggor_adresser(text))
     ren = re.sub(r"\s+", " ", ren)
     asc = _asci(ren)
     for adress in dict.fromkeys(_EPOST_PA_SIDA.findall(ren)):
@@ -789,24 +845,163 @@ def ar_vd(roll: object) -> bool:
     return bool(_VD_ROLL.search(str(roll or "")))
 
 
-def vd_mottagare(prospekt: dict[str, Any]) -> str | None:
+def mottagare(prospekt: dict[str, Any]) -> str | None:
     """Adressen ett Iris-utkast får skickas till, eller None.
 
-    Antons regel 3 (2026-10-04): kontakta bara VD, och bara med en uppgift som
-    går att styrka tillhöra VD. Det kräver att rollen är VD och att adressens
-    lokaldel bär VD:ns för- eller efternamn på bolagets egen domän, samma krav
-    som `vd_uppgift_i_text`. En funktionsadress (info@, rekrytering@) går inte
-    att knyta till en person. Provkörningen 2026-10-05 skrev ett utkast till
-    rekrytering@ och ett till en inköpschef."""
-    namn = str(prospekt.get("contact_name") or "")
+    Sebbes beslut 2026-10-07 (andra revideringen, ersätter stycket nedan):
+    det enda kravet är en kontaktmejl till BOLAGET. En namngiven persons
+    styrkta adress föredras; annars duger bolagets egen adress (info@,
+    kontakt@) på bolagets domän. Aldrig en privat adress, en främmande
+    domän eller en HR-/ekonomi-/robotadress (_EJ_SALJADRESS) — provkörningen
+    2026-10-05 skrev ett utkast till rekrytering@."""
     epost = str(prospekt.get("contact_email") or "").strip()
-    if not (ar_vd(prospekt.get("contact_role")) and namn and epost):
+    if not epost or not ar_arbetsmejl(epost, webb=prospekt.get("website")):
         return None
-    if not ar_arbetsmejl(epost, webb=prospekt.get("website")):
+    return epost if ar_saljadress(epost) else None
+
+
+#: Äldre namn, från tiden då bara VD fick utkast. Semantiken är mottagare():s.
+vd_mottagare = mottagare
+
+
+#: Roller som pekar ut en beslutsfattare som inte är VD: ägare, grundare,
+#: chefer och ansvariga. Ordet fångas som det står så att rollen på leadet
+#: är sajtens egen, aldrig vår tolkning (INV-DATA-001).
+_LEDNINGSROLL = re.compile(
+    r"(?i)(?<![a-zåäö])("
+    r"ägare|delägare|grundare|medgrundare|founder|co-?founder|partner|"
+    r"[a-zåäö]{0,15}chef|c[ofto]o|[a-zåäö]{0,15}ansvarig|platsansvarig|"
+    r"verksamhetsledare|teamleader|team\s?lead"
+    r")(?![a-zåäö])"
+)
+
+#: Två versalinledda ord = ett personnamn som det står på sidan. Medvetet
+#: strikt: hellre ingen kontakt än ett gissat namn.
+_PERSONNAMN = re.compile(r"\b([A-ZÅÄÖ][a-zåäöé]{2,})\s+([A-ZÅÄÖ][a-zåäöé\-]{1,})\b")  # Ek, Alm: korta efternamn finns
+
+
+def person_kontakt_i_text(text: str, website: str) -> dict[str, Any] | None:
+    """Bästa NAMNGIVNA kontakt på sidan, VD eller inte (Sebbes revidering
+    2026-10-07 av regel 3: kontaktpersonen måste vara namngiven och styrkt,
+    men behöver inte vara VD — en annan roll duger, en namngiven anställd i
+    sista hand).
+
+    Beviskedjan är densamma som för VD, fast åt andra hållet: för varje
+    arbetsmejl på bolagets egen domän måste ett personnamn stå inom räckhåll
+    OCH adressens lokaldel bära namnets led. Rollen läses ur texten intill
+    namnet om den står där. `rang`: 0 = VD, 1 = ägare/chef/ansvarig,
+    2 = namngiven utan uttalad roll. Funktionsadresser (info@, kontakt@)
+    passerar aldrig: lokaldelen bär inget namn."""
+    ren = re.sub(r"<[^>]+>", " ", _synliggor_adresser(text))
+    ren = re.sub(r"\s+", " ", ren)
+    basta: dict[str, Any] | None = None
+    for traff in _EPOST_PA_SIDA.finditer(ren):
+        adress = traff.group(0)
+        if not ar_arbetsmejl(adress, webb=website):
+            continue
+        lokal = _asci(adress.split("@", 1)[0])
+        narhet = ren[max(0, traff.start() - 160): traff.end() + 160]
+        for namn_traff in _PERSONNAMN.finditer(narhet):
+            led = [d for d in (_asci(namn_traff.group(1)), _asci(namn_traff.group(2))) if len(d) >= 3]
+            if not led or not any(d in lokal for d in led):
+                continue
+            namn = f"{namn_traff.group(1)} {namn_traff.group(2)}"
+            # Rollen står intill SITT namn ("Eva Ek, VD — eva@…"), inte hos
+            # grannen på raden under: fönstret är snålt med flit, annars
+            # ärvde "Per Palm, Försäljningschef" grannens "VD" (testet).
+            intill = narhet[max(0, namn_traff.start() - 25): namn_traff.end() + 35]
+            roll_vd = _VD_ROLL.search(intill)
+            roll_ledning = _LEDNINGSROLL.search(intill)
+            if roll_vd:
+                rang, roll = 0, roll_vd.group(0)
+            elif roll_ledning:
+                rang, roll = 1, roll_ledning.group(0)
+            else:
+                rang, roll = 2, None
+            kandidat = {
+                "contact_name": namn,
+                "contact_role": roll,
+                "contact_email": adress,
+                "contact_phone": None,
+                "rang": rang,
+            }
+            if basta is None or rang < basta["rang"]:
+                basta = kandidat
+            if basta["rang"] == 0:
+                return basta
+            break  # första styrkta namnet per adress räcker
+    return basta
+
+
+async def hamta_person_kontakt(
+    website: str, vd_namn: str | None = None, *, bolagsadress_racker: bool = False
+) -> dict[str, Any] | None:
+    """Bästa namngivna kontakt på sajten: VD först (när registret namngett
+    en), sedan ägare/chef, sist en namngiven anställd. Startsidan plus upp
+    till tre kontakt-/om oss-sidor.
+
+    Sidorna går genom sidhämtningen (app/leads/sidhamtning.py): gratis
+    direkthämtning först, ScrapeGraph som reserv — en JS-renderad sajt gav
+    annars noll text och noll kontakt (körningarna 2026-10-07) — cachat per
+    kund och räknat mot körningens sidtak. Kastar aldrig.
+
+    Returen bär contact_name/contact_role/contact_email/contact_phone och
+    contact_level ('named_role_match' när rollen står på sajten,
+    'named_other' för en namngiven person utan uttalad roll).
+
+    `bolagsadress_racker` (Iris, Sebbes beslut 2026-10-07): finns ingen
+    namngiven person duger bolagets egen adress (info@, kontakt@), som
+    'role_address' utan namn. Samma sidor, inga extra hämtningar."""
+    from . import sidhamtning
+
+    basta: dict[str, Any] | None = None
+    bolagsadress: str | None = None
+
+    def vag(sidtext: str) -> dict[str, Any] | None:
+        nonlocal basta, bolagsadress
+        if bolagsadress_racker and bolagsadress is None:
+            bolagsadress = bolagsadress_i_text(sidtext, website)
+        if vd_namn:
+            hit = vd_uppgift_i_text(sidtext, vd_namn, website)
+            if hit:
+                return {
+                    "contact_name": vd_namn, "contact_role": "VD",
+                    "contact_level": "named_role_match", **hit,
+                }
+        kandidat = person_kontakt_i_text(sidtext, website)
+        if kandidat:
+            if kandidat["rang"] == 0:
+                kandidat.pop("rang")
+                return {**kandidat, "contact_level": "named_role_match"}
+            if basta is None or kandidat["rang"] < basta["rang"]:
+                basta = kandidat
         return None
-    led = [d for d in re.findall(r"[a-z]+", _asci(namn)) if len(d) >= 3]
-    lokal = _asci(epost.split("@", 1)[0])
-    return epost if any(d in lokal for d in led) else None
+
+    try:
+        text, _fel, _via = await sidhamtning.hamta(website, fas="webb", direkt=True)
+        if not text:
+            return None
+        vinnare = vag(text)
+        if vinnare:
+            return vinnare
+        for lank in extrahera_kontaktlankar(text, website, tak=3):
+            undersida, _fel, _via = await sidhamtning.hamta(lank, fas="webb", direkt=True)
+            if undersida:
+                vinnare = vag(undersida)
+                if vinnare:
+                    return vinnare
+    except Exception:  # noqa: BLE001 — kontaktjakten får aldrig fälla sökningen;
+        # ett redan funnet (lägre rankat) fynd behålls och rankas nedan.
+        logger.exception("Kontaktjakten föll för %s", website)
+    if basta is None:
+        if bolagsadress:
+            return {
+                "contact_name": None, "contact_role": None, "contact_email": bolagsadress,
+                "contact_phone": None, "contact_level": "role_address",
+            }
+        return None
+    rang = basta.pop("rang")
+    return {**basta, "contact_level": "named_role_match" if rang == 1 else "named_other"}
 
 
 async def hamta_vd_kontakt(website: str, vd_namn: str) -> dict[str, Any] | None:
@@ -1169,22 +1364,43 @@ async def hitta_bolag(
 
     # Registerkällan först (merinfo via ScrapeGraphAI, TILLFÄLLIG tills ett
     # API-avtal finns, se sources/merinfo.py). Bara när LEADS_MERINFO är
-    # satt. Färre träffar än beställt levereras som de är: utfyllnaden nedan
-    # saknar telefon och skulle bryta kontaktkravet. None betyder att
-    # målgruppen inte gick att översätta till merinfos träd, och då tar den
-    # gamla kedjan vid.
+    # satt. None betyder att målgruppen inte gick att översätta till merinfos
+    # träd, och då tar den gamla kedjan vid helt.
+    #
+    # Färre träffar än beställt fylls på med den gamla kedjan (Sebbes beslut
+    # 2026-10-07: "det ska gå att hitta leads som innan"). Förut levererades
+    # registrets få träffar som de var, eftersom utfyllnaden saknade VD-
+    # kontakt; sedan kravet blev en kontaktmejl till bolaget, hämtad ur
+    # bolagets egen sajt i researchen, bryter utfyllnaden inget krav.
+    # Existensgrinden (leads/existens.py) står kvar för varje sökträff.
     from .sources import merinfo
 
+    fran_register: list[dict[str, Any]] = []
+    registret_oanvant = False
     if merinfo.aktiv():
-        fran_register = await merinfo.sok(icp, antal, uteslut=uteslut, profil=profil, listspar=listspar)
-        if fran_register is not None:
+        try:
+            registret = await merinfo.sok(icp, antal, uteslut=uteslut, profil=profil, listspar=listspar)
+        except DiscoveryError:
+            # Registret gick inte att läsa (429, kredit, tjänsten nere). Förut
+            # föll hela sökrundan, tre rundor i rad, och körningen slutade med
+            # 0 leads. Sedan 2026-10-07 fyller sökkedjan på (regel 11), och
+            # existensgrinden står kvar för varje sökträff.
+            logger.warning("Registret gick inte att läsa — sökkedjan tar hela rundan.")
+            registret = None
+        registret_oanvant = registret is None
+        if registret is not None:
             # Register ∩ signaler (plan del C, 2026-10-02): annons- och
             # nyhetskällorna avgör inte urvalet, de rankar det. Ett
             # registerbolag med en signal går först; en signalträff utanför
             # registret är inte målgruppen och faller. Körs bara när kunden
             # kräver signaler, som den gamla kedjan.
             signaler = await _sok_registrerade_kallor(icp, antal, uteslut) if icp.get("must_have") else []
-            return _med_signaler(fran_register, signaler)[:antal]
+            fran_register = _med_signaler(registret, signaler)[:antal]
+            if len(fran_register) >= antal:
+                return fran_register
+            uteslut = uteslut | {upptagna.nyckel(t["company_name"]) for t in fran_register}
+            prompt_namn |= {t["company_name"].casefold() for t in fran_register}
+            antal -= len(fran_register)
 
     from .platshallare import utan_platshallare
 
@@ -1200,7 +1416,7 @@ async def hitta_bolag(
     kor_kallor = profil is None or bool(icp.get("must_have"))
     fran_kallor = await _sok_registrerade_kallor(icp, antal, uteslut) if kor_kallor else []
     if len(fran_kallor) >= antal:
-        return fran_kallor[:antal]
+        return fran_register + fran_kallor[:antal]
     uteslut = uteslut | {upptagna.nyckel(t["company_name"]) for t in fran_kallor}
     prompt_namn |= {t["company_name"].casefold() for t in fran_kallor}
     antal_kvar = antal - len(fran_kallor)
@@ -1245,24 +1461,45 @@ async def hitta_bolag(
     try:
         text = await _gemini_med_sokning(prompt)
     except DiscoveryError:
-        if fran_kallor:
-            # Källträffarna är redan verifierade — en fallen utfyllnad ska
-            # inte kasta bort dem. Färre än beställt är ett giltigt utfall.
-            logger.warning("Discovery-utfyllnaden misslyckades — levererar källträffarna.")
-            return fran_kallor
+        if fran_register or fran_kallor:
+            # Register- och källträffarna är redan verifierade — en fallen
+            # utfyllnad ska inte kasta bort dem. Färre än beställt är giltigt.
+            logger.warning("Discovery-utfyllnaden misslyckades — levererar register- och källträffarna.")
+            return fran_register + fran_kallor
         logger.warning("Discovery-sokningen misslyckades.")
         raise
     utan_webb = bool(profil and profil.get("utan_webbplats"))
-    rena = _rena_traffar(_plocka_json(text), uteslut=uteslut, tak=antal_begart, tillat_utan_webb=utan_webb)
+    raa = _plocka_json(text)
+    rena = _rena_traffar(raa, uteslut=uteslut, tak=antal_begart, tillat_utan_webb=utan_webb)
+    # En tom sökning syntes inte i loggen alls (463a9087, tre rundor utan ett
+    # bolag): var svaret tomt, eller föll träffarna på webbplats/uteslutning?
+    logger.info(
+        "Discovery-sökningen (ring %d): %d träffar i svaret, %d efter rensning, %d från register/källor.",
+        ring, len(raa), len(rena), len(fran_register) + len(fran_kallor),
+    )
     # En platshållarsida ("under konstruktion") ÄR målgruppen när kunden
     # söker bolag utan fungerande webbplats — den mäts av webbsignal i stället.
     if not utan_webb:
         rena = await utan_platshallare(rena)
+    if not rena and not fran_register and not fran_kallor and registret_oanvant:
+        # Sista skyddsnätet (Sebbe 2026-10-07: "körningar ska köras
+        # felfritt"): målgruppen gick inte att översätta till registret och
+        # den öppna sökningen svarade tomt. Förut slutade rundan där, tre
+        # gånger, med 0 undersökta. Registret söks nu brett i kundens område
+        # och Jev klassar mot kriterierna — samma grindar som alltid.
+        try:
+            breda = await merinfo.sok(icp, antal_kvar, uteslut=uteslut, profil=profil, listspar=listspar, bred=True)
+        except DiscoveryError:
+            logger.warning("Den breda registersökningen gick inte att läsa.")
+            breda = None
+        if breda:
+            logger.info("Discovery (ring %d): bred registersökning gav %d bolag.", ring, len(breda))
+            return breda[:antal_kvar]
     # Märks som sökträffar: allt på raden är modellens påstående tills
     # existensgrinden (leads/existens.py) och researchen styrkt det. Kontakten
     # följer därför inte med till prospektet (api/leads.py), och ort och
     # storlek räknas inte som fakta i bedömningen (leads/bedomning.py).
-    return fran_kallor + [{**rad, "kalla": "gemini"} for rad in rena[:antal_kvar]]
+    return fran_register + fran_kallor + [{**rad, "kalla": "gemini"} for rad in rena[:antal_kvar]]
 
 
 async def sla_upp_webbplats(company_name: str, *, geografi: str | None = None) -> str | None:

@@ -2067,6 +2067,22 @@ async def run_support_agent(
         # synas för kunden. Dev-testet 2026-10-06: garantifrågan lämnades över
         # med ett svar som inte nämnde det — kunden hade väntat på ingenting.
         reply = f"{reply}\n\n{support_texter.text("overlamningsrad", svar_sprak)}"
+    elif (
+        not escalated
+        and not abuse.ska_eskalera
+        and reply
+        and svarslage == "besvara"
+        and (
+            utkastbeslut["beslut"] == "DELVIS"
+            or (arligt_utanfor_kb and utkastbeslut["beslut"] not in ("SVARA", "MOTFRÅGA"))
+        )
+        and not _NAMNER_KOLLEGA.search(reply)
+    ):
+        # Driftregeln i kod: en kunskapslucka ERBJUDER en kollega. Dev-testet
+        # 2026-10-06 slutade Fortnox-svaret med en motfråga i stället, och
+        # kunden fick aldrig veta att en människa fanns att få.
+        reply = f"{reply}\n\n{support_texter.text('erbjudande', svar_sprak)}"
+        erbjod_manniska = True
 
     # Påhoppsspärren appliceras EFTER humaniseraren, och det är hela poängen.
     # Ett kontrollerat säkerhetssvar ska inte formuleras om av en modell — den

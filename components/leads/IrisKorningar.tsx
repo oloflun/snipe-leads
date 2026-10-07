@@ -8,6 +8,7 @@ import { Cell, Nyckeltal, Tabell, Tomt, btnLiten, btnSecondary, meta, tabellRad 
 import { felmeddelande, readJsonBody } from "@/lib/http/json";
 import { useLocale, type Locale, type Localized } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
+import { KorningensUtkast } from "./KorningensUtkast";
 
 /**
  * Körningar — det kunden kan följa, lämna och återvända till.
@@ -123,7 +124,9 @@ const T = {
     sv: "Avbryts. Körningen avslutas när bolagen som redan researchas är klara.",
     en: "Cancelling. The run ends once the companies already in research are done."
   },
-  styrFel: { sv: "Körningen gick inte att styra.", en: "The run could not be controlled." }
+  styrFel: { sv: "Körningen gick inte att styra.", en: "The run could not be controlled." },
+  stannade: { sv: "Stannade utan leads", en: "Stalled without leads" },
+  underMalet: { sv: "Klar, under målet", en: "Done, under target" }
 } satisfies Record<string, Localized>;
 
 export const KORNINGSSTATUS: Record<KorningsRad["status"], Localized> = {
@@ -142,6 +145,10 @@ const SLUT_ETIKETT: Record<string, Localized> = {
   },
   slut_pa_kandidater: { sv: "Inga fler bolag att pröva i målgruppen", en: "No more companies to try in the target group" },
   sokningen_foll: { sv: "Sökningen gick inte att genomföra", en: "The search could not be completed" },
+  inga_traffar: {
+    sv: "Sökningen hittade inga bolag. Kontrollera orterna eller bredda bransch eller område.",
+    en: "The search found no companies. Check the locations or widen the industry or area."
+  },
   budget: { sv: "Dagens budget för körningar är slut", en: "Today's budget for runs is used up" },
   kredittak: {
     sv: "Körningens tak för sidhämtningar är nått",
@@ -154,10 +161,32 @@ const SLUT_ETIKETT: Record<string, Localized> = {
   avbruten: { sv: "Avbruten", en: "Cancelled" }
 };
 
+/**
+ * Hur gick det? En avslutad körning utan ett enda lead är ett MISSLYCKANDE
+ * för kunden, inte ett grönt "Klar" (Sebbe 2026-10-06: tre körningar
+ * stannade på 0 och såg klara ut). Under målet är gult: den levererade,
+ * men inte det som beställdes.
+ */
+export type Utfallston = "ok" | "under" | "stannade";
+
+export function utfallston(rad: KorningsRad): Utfallston {
+  const k = rad.korning;
+  if (rad.status !== "completed" || !k?.klar || !k.mal) return "ok";
+  if (k.slut_orsak === "avbruten") return "ok";
+  if (k.levererade === 0) return "stannade";
+  if (k.levererade < k.mal) return "under";
+  return "ok";
+}
+
 /** Statusen i kundens ord. Paus och avbrott har ingen egen liggarstatus:
  *  raden står i 'processing' tills motorn säger klar. */
-function statusText(rad: KorningsRad): Localized {
-  if (!pagar(rad)) return KORNINGSSTATUS[rad.status];
+export function statusText(rad: KorningsRad): Localized {
+  if (!pagar(rad)) {
+    const ton = utfallston(rad);
+    if (ton === "stannade") return T.stannade;
+    if (ton === "under") return T.underMalet;
+    return KORNINGSSTATUS[rad.status];
+  }
   if (rad.korning?.styrning === "paus") return T.pausad;
   if (rad.korning?.styrning === "avbruten") return T.avbryter;
   return T.pagar;
@@ -178,26 +207,37 @@ export function korningsTyp(rad: KorningsRad): Localized {
 
 /** Pågår? Både liggarens status och motorns eget `klar` räknas: raden kan
  *  stå i 'completed' från sökjobbet medan motorn fortfarande fyller på. */
-function pagar(rad: KorningsRad): boolean {
+export function pagar(rad: KorningsRad): boolean {
   if (rad.status === "queued" || rad.status === "processing") return true;
   return Boolean(rad.korning && !rad.korning.klar && rad.status !== "failed");
 }
 
-export function IrisKorningar() {
+export function IrisKorningar({
+  demoRader,
+  tak
+}: Readonly<{
+  /** /demo: fasta rader, ingen hämtning och ingen styrning (lib/demo/aktivitet.ts). */
+  demoRader?: KorningsRad[];
+  /** Visa högst så många rader tills användaren ber om alla (Aktivitet). */
+  tak?: number;
+}> = {}) {
   const { locale, text } = useLocale();
+  const demo = demoRader !== undefined;
   const pathname = usePathname() ?? "/dashboard/aktivitet";
   const sok = useSearchParams();
   // Samma vy under /dashboard och /admin: Leads-länken följer basen. Vyn
   // renderas i Aktivitet sedan Snajp Suite (2026-10-03).
   const bas = pathname.replace(/\/(aktivitet|iris)(\/.*)?$/, "/leads");
-  const [rader, setRader] = useState<KorningsRad[] | null>(null);
+  const [rader, setRader] = useState<KorningsRad[] | null>(demoRader ?? null);
   const [fel, setFel] = useState<string | null>(null);
   const [oppen, setOppen] = useState<string | null>(sok?.get("id") ?? null);
+  const [visaAlla, setVisaAlla] = useState(false);
   // Stoppad = sessionen är borta (401/403) eller vyn saknas (404): att polla
   // vidare var tredje sekund ger bara samma svar.
   const [stoppad, setStoppad] = useState(false);
 
   const hamta = useCallback(async () => {
+    if (demo) return;
     try {
       const response = await fetch("/api/snajp-support/leads/korningar?limit=30", { cache: "no-store" });
       const kropp = await readJsonBody<{ korningar?: KorningsRad[]; detail?: string }>(response);
@@ -211,16 +251,20 @@ export function IrisKorningar() {
     } catch (cause) {
       setFel(felmeddelande(cause));
     }
-  }, [text]);
+  }, [text, demo]);
 
   useEffect(() => {
     void hamta();
   }, [hamta]);
 
+  useEffect(() => {
+    if (demoRader) setRader(demoRader);
+  }, [demoRader]);
+
   // Poll bara när något pågår, och nästa hämtning schemaläggs först när den
   // förra svarat: ett intervall överlappade sig självt vid kallstart (proxyn
   // tillåter 60 s) och kunde skriva ett äldre svar över ett nyare.
-  const nagotPagar = !stoppad && (rader ?? []).some(pagar);
+  const nagotPagar = !demo && !stoppad && (rader ?? []).some(pagar);
   useEffect(() => {
     if (!nagotPagar) return;
     let timer = 0;
@@ -271,8 +315,9 @@ export function IrisKorningar() {
     );
   }
 
-  const aktiv = rader.find(pagar) ?? null;
-
+  // Styrningen (Pausa/Avbryt) bor i den utfällda raden, inte ovanför
+  // tabellen: med flera pågående körningar gick det inte att se vilken
+  // panelen gällde (den tog bara den första). Sebbe 2026-10-07.
   return (
     <div className="space-y-10">
       {fel ? (
@@ -280,7 +325,6 @@ export function IrisKorningar() {
           {fel}
         </p>
       ) : null}
-      {aktiv ? <Pagaende rad={aktiv} onStyrd={hamta} /> : null}
 
       <Tabell
         ariaLabel={text(T.tabell)}
@@ -293,7 +337,7 @@ export function IrisKorningar() {
           { rubrik: text(T.kolUtfall) }
         ]}
       >
-        {rader.map((rad) => {
+        {(tak && !visaAlla ? rader.slice(0, tak) : rader).map((rad) => {
           const k = rad.korning;
           const arOppen = oppen === rad.job_id;
           return (
@@ -303,6 +347,8 @@ export function IrisKorningar() {
               bas={bas}
               oppen={arOppen}
               onToggle={() => setOppen(arOppen ? null : rad.job_id)}
+              onStyrd={hamta}
+              styrbar={!demo}
             >
               <Cell>{text(korningsTyp(rad))}</Cell>
               <Cell hoger>{k ? k.mal : "–"}</Cell>
@@ -320,14 +366,22 @@ export function IrisKorningar() {
                 <span
                   className={cn(
                     "inline-flex items-center gap-1.5",
-                    rad.status === "failed" ? "text-danger" : pagar(rad) ? "text-warning" : "text-ink"
+                    rad.status === "failed" || utfallston(rad) === "stannade"
+                      ? "text-danger"
+                      : pagar(rad) || utfallston(rad) === "under"
+                        ? "text-warning"
+                        : "text-ink"
                   )}
                 >
                   <span
                     aria-hidden
                     className={cn(
                       "h-1.5 w-1.5 rounded-full",
-                      rad.status === "failed" ? "bg-danger" : pagar(rad) ? "bg-ochre" : "bg-moss"
+                      rad.status === "failed" || utfallston(rad) === "stannade"
+                        ? "bg-danger"
+                        : pagar(rad) || utfallston(rad) === "under"
+                          ? "bg-ochre"
+                          : "bg-moss"
                     )}
                   />
                   {text(statusText(rad))}
@@ -350,13 +404,29 @@ export function IrisKorningar() {
           );
         })}
       </Tabell>
+      {tak && rader.length > tak ? (
+        <button
+          type="button"
+          onClick={() => setVisaAlla((v) => !v)}
+          aria-expanded={visaAlla}
+          className="focus-ring -mt-6 inline-flex items-center rounded-input text-[0.8125rem] font-medium text-ink-muted underline-offset-4 hover:text-ink hover:underline"
+        >
+          {visaAlla
+            ? text({ sv: "Visa färre", en: "Show fewer" })
+            : text({ sv: `Visa alla (${rader.length})`, en: `Show all (${rader.length})` })}
+        </button>
+      ) : null}
     </div>
   );
 }
 
 type Atgard = "pausa" | "aterupta" | "avbryt";
 
-function Pagaende({ rad, onStyrd }: Readonly<{ rad: KorningsRad; onStyrd: () => Promise<void> }>) {
+function Pagaende({
+  rad,
+  onStyrd,
+  styrbar = true
+}: Readonly<{ rad: KorningsRad; onStyrd: () => Promise<void>; styrbar?: boolean }>) {
   const { locale, text } = useLocale();
   const k = rad.korning;
   const [skickar, setSkickar] = useState<Atgard | null>(null);
@@ -422,7 +492,7 @@ function Pagaende({ rad, onStyrd }: Readonly<{ rad: KorningsRad; onStyrd: () => 
             : text(T.fortsatter)}
       </p>
       {/* Avbrott är slutgiltigt: då finns inget kvar att styra. */}
-      {k.styrning !== "avbruten" ? (
+      {styrbar && k.styrning !== "avbruten" ? (
         <div role="group" aria-label={text(T.styrning)} className="mt-4 flex flex-wrap gap-2">
           {k.styrning === "paus" ? (
             <StyrKnapp atgard="aterupta" skickar={skickar} onClick={styr}>
@@ -487,12 +557,16 @@ function RadMedDetalj({
   bas,
   oppen,
   onToggle,
+  onStyrd,
+  styrbar,
   children
 }: Readonly<{
   rad: KorningsRad;
   bas: string;
   oppen: boolean;
   onToggle: () => void;
+  onStyrd: () => Promise<void>;
+  styrbar: boolean;
   children: React.ReactNode;
 }>) {
   const { locale, text } = useLocale();
@@ -522,8 +596,20 @@ function RadMedDetalj({
       {oppen ? (
         <tr id={`korning-${rad.job_id}`}>
           <td colSpan={kolumner} className="bg-paper2/60 px-4 py-5">
+            {pagar(rad) ? (
+              <div className="mb-8 border-b border-ink/15 pb-8">
+                <Pagaende rad={rad} onStyrd={onStyrd} styrbar={styrbar} />
+              </div>
+            ) : null}
             <div className="grid gap-8 md:grid-cols-2">
               <div>
+                {/* Utkastpanelen ersätter namnlistan i den riktiga vyn: varje
+                    lead med utkaststatus, och skriv/skicka för alla på en gång.
+                    Demon (styrbar=false) har ingen backend och behåller listan. */}
+                {styrbar && rad.scope === "batch" && k?.jobs?.length ? (
+                  <KorningensUtkast jobId={rad.job_id} />
+                ) : (
+                <>
                 <h3 className="text-[1.0625rem] font-semibold">{text(T.undersoktaBolag)}</h3>
                 {k?.jobs?.length ? (
                   <ul className="mt-3 divide-y divide-ink/12 border-y border-ink/15">
@@ -542,6 +628,8 @@ function RadMedDetalj({
                   <p className={cn(meta, "mt-3")}>
                     {rad.scope === "lista" ? text(T.raderUnderListor) : text(T.ingaUndersokta)}
                   </p>
+                )}
+                </>
                 )}
                 {rad.error ? (
                   <p className="mt-4 text-[15px] text-danger" role="alert">

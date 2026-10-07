@@ -716,8 +716,13 @@ async def hantera(
     konto: Mejlkonto | None = None,
     profil: Foretagsprofil | None = None,
     nu: datetime | None = None,
+    riktning: str | None = None,
 ) -> Hantering:
-    """Hela avläsningen av ett meddelande, utan att spara något."""
+    """Hela avläsningen av ett meddelande, utan att spara något.
+
+    `riktning="intakt"` är människans besked vid uppladdning ("det här är en
+    kundfaktura") och vinner över igenkänningen i granskningen.
+    """
     profil = profil or await hamta_profil(storage, tenant_id)
     deterministisk = anvand_deterministisk()
     bilagor = await las_bilagor(ink.bilagor, med_bild=True)
@@ -774,8 +779,15 @@ async def hantera(
         idag=dagens_datum(nu),
         dagar_varning=profil.dagar_forfallo_varning,
         foretag_orgnr=profil.orgnummer,
+        # "företaget" är profilens platshållare när tenanten saknar namn.
+        foretag_namn="" if profil.foretagsnamn == "företaget" else profil.foretagsnamn,
         tidigare=tidigare,
     )
+    if riktning == "intakt":
+        for u in resultat["underlag"]:
+            if u["riktning"] != "intakt":
+                granskning.markera_som_intakt(u)
+                u["status"] = granskning.berakna_status(u, resultat["klass"])
 
     # Samma FIL som redan finns hos tenanten (uppladdad, eller bifogad i ett
     # annat mejl) är en möjlig dubblett oavsett vad fälten säger.
@@ -845,7 +857,8 @@ async def spara(
     valuta hamnar i belopp_original, aldrig i brutto.
     """
     f = u["fält"]
-    falt: dict[str, Any] = {"riktning": "kostnad"}
+    intakt = u.get("riktning") == "intakt"
+    falt: dict[str, Any] = {"riktning": "intakt" if intakt else "kostnad"}
     anm: list[str] = []
     if f["dokumentdatum"]["värde"]:
         falt["datum"] = date.fromisoformat(f["dokumentdatum"]["värde"])
@@ -858,8 +871,14 @@ async def spara(
             anm.append("Datumet är mejlets mottagningsdag")
         except ValueError:
             pass
-    if f["leverantör_namn"]["värde"]:
-        falt["motpart"] = f["leverantör_namn"]["värde"]
+    # Motparten är den ANDRA parten: leverantören på ett kvitto, kunden
+    # (köparen) på företagets egen faktura. Saknas kunden står fältet tomt och
+    # grinden skickar raden till granskning — hellre än företagets eget namn.
+    motpart = f["köpare_namn"]["värde"] if intakt else f["leverantör_namn"]["värde"]
+    if motpart:
+        falt["motpart"] = motpart
+    elif intakt:
+        anm.append("Kunden framgår inte av fakturan, ange den vid godkännandet")
 
     valuta = f["valuta"]["värde"]
     total = f["totalbelopp"]["värde"]
@@ -885,7 +904,7 @@ async def spara(
     betalstatus = f["betalstatus"]["värde"]
     if betalstatus in ("betald", "obetald"):
         falt["betalstatus"] = betalstatus
-    if u["kategori"]:
+    if u["kategori"] and not intakt:
         falt["kategori"] = u["kategori"]
 
     verdikt = check_underlag(falt)

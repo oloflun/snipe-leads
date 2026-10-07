@@ -4,6 +4,7 @@ import { proxyWithApiKey } from "@/app/api/snajp-support/_lib";
 import { getPlatformAdmin } from "@/lib/auth/admin";
 import { readJsonBody } from "@/lib/http/json";
 import { aktivMiljo } from "@/lib/miljo";
+import { getWorkspaceContext } from "@/lib/workspace";
 
 /**
  * Flytta till main — serveractions för panelen i Byt kund (plan del E).
@@ -56,7 +57,7 @@ export async function hamtaFlyttbart(slug: string): Promise<{ status: FlyttStatu
 
 export async function flyttaTillMain(
   slug: string,
-  typ: "mejl" | "korning",
+  typ: "mejl" | "korning" | "prospekt",
   ids: string[]
 ): Promise<{ rader?: { ref_id: string; resultat: string; fel?: string }[]; error?: string }> {
   if (aktivMiljo() !== "development") return { error: "Flytt till main går bara från development." };
@@ -66,4 +67,27 @@ export async function flyttaTillMain(
     body: JSON.stringify({ slug, typ, ids })
   });
   return error ? { error } : { rader: data?.rader ?? [] };
+}
+
+/**
+ * Markerade leads ur leadsvyn (Sebbe 2026-10-06). Sluggen härleds ur den
+ * INLOGGADES arbetsyta på servern — klienten väljer aldrig vems leads som
+ * flyttas. Bara plattformsadmin (masterFetch), bara från development.
+ */
+export async function flyttaProspektTillMain(
+  ids: string[]
+): Promise<{
+  rader?: { ref_id: string; resultat: string; fel?: string }[];
+  error?: string;
+  /** Det här lagrets egna fel, översatta i vyn (LeadsTabell). */
+  felkod?: "miljo" | "arbetsyta" | "antal";
+}> {
+  if (aktivMiljo() !== "development") return { error: "Flytt till main går bara från development.", felkod: "miljo" };
+  const context = await getWorkspaceContext();
+  const slug = context?.workspace?.slug;
+  if (!slug) return { error: "Arbetsytan gick inte att läsa.", felkod: "arbetsyta" };
+  if (!Array.isArray(ids) || ids.length === 0 || ids.length > 50) {
+    return { error: "Markera 1–50 leads.", felkod: "antal" };
+  }
+  return flyttaTillMain(String(slug), "prospekt", ids.map(String));
 }

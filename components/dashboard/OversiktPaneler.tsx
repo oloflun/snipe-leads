@@ -9,7 +9,7 @@
 import { ArrowDownRight, ArrowUpRight, Minus } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useId, useState } from "react";
-import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { Area, AreaChart, Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Badge, etikett as etikettKlass, meta } from "@/components/ui";
 import { useLocale, type Localized } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
@@ -51,6 +51,11 @@ function tal(n: number | null, locale: "sv" | "en"): string {
   return new Intl.NumberFormat(locale === "en" ? "en-GB" : "sv-SE").format(n);
 }
 
+/** Veckoetiketten kommer som "v41"; på engelska skrivs den "W41". */
+function veckoetikett(v: string, locale: "sv" | "en"): string {
+  return locale === "en" ? v.replace(/^v(\d+)$/, "W$1") : v;
+}
+
 /** Förändring mot föregående period i hela procent; null när jämförelsen saknar grund. */
 export function forandring(nu: number, forra: number): number | null {
   if (forra === 0) return nu === 0 ? 0 : null;
@@ -66,6 +71,8 @@ export type Kpi = {
   /** Visas i stället för talet, t.ex. en procentsats. */
   visning?: string;
   forandring?: number | null;
+  /** "pe": förändringen är procentenheter (andelar), inte procent. */
+  forandringEnhet?: "procent" | "pe";
   /** Är en ökning bra (nya leads) eller dålig (eskalerade)? */
   battre?: "upp" | "ner";
   serie?: number[];
@@ -94,18 +101,21 @@ export function KpiKort({ kpi, perioden }: Readonly<{ kpi: Kpi; perioden: Locali
         {f !== undefined ? (
           <Badge tone={bra === null ? "neutral" : bra ? "good" : "danger"}>
             <Pil className="h-3 w-3" aria-hidden />
-            <span className="num tabular-nums">{f === null ? text({ sv: "ny", en: "new" }) : `${f > 0 ? "+" : ""}${f} %`}</span>
+            <span className="num tabular-nums">{f === null
+                ? text({ sv: "ny", en: "new" })
+                : `${f > 0 ? "+" : ""}${f}${kpi.forandringEnhet === "pe" ? text({ sv: " p.e.", en: " pp" }) : " %"}`}</span>
             <span className="sr-only">{text({ sv: `jämfört med ${perioden.sv}`, en: `compared with ${perioden.en}` })}</span>
           </Badge>
         ) : null}
       </div>
-      <p className="num mt-3 text-[2.25rem] font-semibold leading-none tracking-[-0.03em] text-ink tabular-nums">
-        {kpi.visning ?? tal(kpi.varde, locale)}
-      </p>
+      {/* Talet och sparklinen delar rad, undertexten får hela bredden under:
+          bredvid sparklinen bröts den i tre korta rader. */}
       <div className="mt-3 flex items-end justify-between gap-4">
-        <p className={cn(meta, "max-w-[22ch]")}>{text(kpi.detalj)}</p>
+        <p className="num shrink-0 whitespace-nowrap text-[2.25rem] font-semibold leading-none tracking-[-0.03em] text-ink tabular-nums">
+          {kpi.visning ?? tal(kpi.varde, locale)}
+        </p>
         {kpi.serie && kpi.serie.length > 1 ? (
-          <div className="h-9 w-28 shrink-0" aria-hidden>
+          <div className="h-9 min-w-0 max-w-28 flex-1" aria-hidden>
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={kpi.serie.map((v, i) => ({ i, v }))} margin={{ top: 2, right: 2, bottom: 2, left: 2 }}>
                 <defs>
@@ -127,6 +137,7 @@ export function KpiKort({ kpi, perioden }: Readonly<{ kpi: Kpi; perioden: Locali
           </div>
         ) : null}
       </div>
+      <p className={cn(meta, "mt-3")}>{text(kpi.detalj)}</p>
     </>
   );
   const ram = cn(
@@ -145,7 +156,33 @@ export function KpiKort({ kpi, perioden }: Readonly<{ kpi: Kpi; perioden: Locali
 
 // -- Aktivitetsgrafen ---------------------------------------------------------
 
-export type Vecka = { week: string; new_leads?: number; replies?: number; sent?: number; tickets?: number; resolved?: number; escalated?: number };
+export type Vecka = {
+  week: string;
+  new_leads?: number;
+  replies?: number;
+  sent?: number;
+  tickets?: number;
+  resolved?: number;
+  escalated?: number;
+  /** Kvittohanteraren: utlägg och ingående moms i hela kronor, antal kvitton. */
+  utlagg?: number;
+  moms?: number;
+  kvitton?: number;
+  /** Kvittohanteraren: fakturerat (kundfakturor) i hela kronor. */
+  intakter?: number;
+  /** Aktivitet: Iris beställda och levererade leads, kundtjänstens körningar. */
+  bestallt?: number;
+  levererade?: number;
+  korningar?: number;
+  korningar_test?: number;
+  /** Adminytan: nya kunder och signerade avtal, körningar per agent, händelser per nivå. */
+  nya_kunder?: number;
+  avtal?: number;
+  kundtjanst?: number;
+  iris?: number;
+  fel?: number;
+  varningar?: number;
+};
 
 type Serie = { nyckel: keyof Vecka; etikett: Localized; ton: "chart-ochre" | "chart-blue" };
 
@@ -155,14 +192,110 @@ type Serie = { nyckel: keyof Vecka; etikett: Localized; ton: "chart-ochre" | "ch
  * låga kontrast mot papper har en synlig etikett (dataviz-validatorns krav).
  * Hårkors och tooltip vid hovring.
  */
-export function Aktivitetsgraf({ veckor, serier }: Readonly<{ veckor: Vecka[]; serier: Serie[] }>) {
+export function Aktivitetsgraf({
+  veckor,
+  serier,
+  axelbredd = 44,
+  typ = "yta"
+}: Readonly<{
+  veckor: Vecka[];
+  serier: Serie[];
+  /** Bredare för kronbelopp, så att 3 500 inte klipps. */
+  axelbredd?: number;
+  /**
+   * "staplar" för glesa heltal (nya kunder per vecka, händelser per dag): en
+   * mjuk yta mellan 0 och 1 ritar kullar som inte finns i datat.
+   */
+  typ?: "yta" | "staplar";
+}>) {
   const { locale, text } = useLocale();
   const farger = useTokenfarger();
   const id = useId().replace(/:/g, "");
   const data = veckor.map((v) => ({ ...v }));
   const sista = data[data.length - 1];
+  const marginal = { top: 8, right: 8, bottom: 0, left: axelbredd > 44 ? -4 : -18 };
+  // Rutnät, axlar och tooltip är desamma i båda formerna. En lista och inte
+  // ett fragment: recharts letar upp barnen per typ.
+  const gemensamt = [
+    <CartesianGrid key="rutnat" vertical={false} stroke={farger["ink-subtle"]} strokeOpacity={0.18} />,
+    <XAxis
+      key="x"
+      dataKey="week"
+      tickLine={false}
+      axisLine={false}
+      tick={{ fill: farger["ink-subtle"], fontSize: 12 }}
+      interval="preserveStartEnd"
+      minTickGap={24}
+      tickFormatter={(v: string) => veckoetikett(v, locale)}
+    />,
+    <YAxis key="y" allowDecimals={false} tickLine={false} axisLine={false} tick={{ fill: farger["ink-subtle"], fontSize: 12 }} tickFormatter={(v: number) => tal(v, locale)} width={axelbredd} />,
+    <Tooltip
+      key="tips"
+      cursor={typ === "staplar" ? { fill: farger["ink-subtle"], fillOpacity: 0.08 } : { stroke: farger["ink-subtle"], strokeOpacity: 0.5, strokeWidth: 1 }}
+      content={({ active, payload, label }) =>
+        active && payload?.length ? (
+          <div className="rounded-input border border-ink/12 bg-paper px-3 py-2 text-[0.8125rem] shadow-sm">
+            <p className="font-medium text-ink">{veckoetikett(String(label ?? ""), locale)}</p>
+            {serier.map((s) => {
+              const rad = payload.find((p) => p.dataKey === s.nyckel);
+              return (
+                <p key={String(s.nyckel)} className="mt-1 flex items-center gap-2 text-ink-muted">
+                  <span className={cn("h-2 w-2 rounded-full", s.ton === "chart-ochre" ? "bg-chart-ochre" : "bg-chart-blue")} aria-hidden />
+                  {text(s.etikett)}
+                  <span className="num ml-auto pl-3 font-medium text-ink tabular-nums">{tal(Number(rad?.value ?? 0), locale)}</span>
+                </p>
+              );
+            })}
+          </div>
+        ) : null
+      }
+    />
+  ];
+  const diagram =
+    typ === "staplar" ? (
+      <BarChart data={data} margin={marginal} barGap={2} barCategoryGap="22%">
+        {gemensamt}
+        {serier.map((s) => (
+          <Bar
+            key={String(s.nyckel)}
+            dataKey={String(s.nyckel)}
+            fill={farger[s.ton]}
+            radius={[3, 3, 0, 0]}
+            maxBarSize={18}
+            isAnimationActive={false}
+          />
+        ))}
+      </BarChart>
+    ) : (
+      <AreaChart data={data} margin={marginal}>
+        <defs>
+          {serier.map((s) => (
+            <linearGradient key={String(s.nyckel)} id={`${id}-${String(s.nyckel)}`} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={farger[s.ton]} stopOpacity={0.2} />
+              <stop offset="100%" stopColor={farger[s.ton]} stopOpacity={0} />
+            </linearGradient>
+          ))}
+        </defs>
+        {gemensamt}
+        {serier.map((s) => (
+          <Area
+            key={String(s.nyckel)}
+            type="monotone"
+            dataKey={String(s.nyckel)}
+            stroke={farger[s.ton]}
+            strokeWidth={2}
+            fill={`url(#${id}-${String(s.nyckel)})`}
+            activeDot={{ r: 4, stroke: farger.paper, strokeWidth: 2 }}
+            dot={false}
+            isAnimationActive={false}
+          />
+        ))}
+      </AreaChart>
+    );
   return (
-    <figure className="m-0">
+    // relative: den sr-only tabellen nedan (absolute) förankras annars mot
+    // sidan och drog ut dokumentet i sidled på mobil (uppmätt 32 px vid 375).
+    <figure className="relative m-0">
       <figcaption className="mb-3 flex flex-wrap gap-x-5 gap-y-1.5">
         {serier.map((s) => (
           <span key={String(s.nyckel)} className="inline-flex items-center gap-2 text-[0.8125rem] text-ink-muted">
@@ -175,59 +308,7 @@ export function Aktivitetsgraf({ veckor, serier }: Readonly<{ veckor: Vecka[]; s
       </figcaption>
       <div className="h-56 w-full">
         <ResponsiveContainer width="100%" height="100%">
-          <AreaChart data={data} margin={{ top: 8, right: 8, bottom: 0, left: -18 }}>
-            <defs>
-              {serier.map((s) => (
-                <linearGradient key={String(s.nyckel)} id={`${id}-${String(s.nyckel)}`} x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor={farger[s.ton]} stopOpacity={0.2} />
-                  <stop offset="100%" stopColor={farger[s.ton]} stopOpacity={0} />
-                </linearGradient>
-              ))}
-            </defs>
-            <CartesianGrid vertical={false} stroke={farger["ink-subtle"]} strokeOpacity={0.18} />
-            <XAxis
-              dataKey="week"
-              tickLine={false}
-              axisLine={false}
-              tick={{ fill: farger["ink-subtle"], fontSize: 12 }}
-              interval="preserveStartEnd"
-              minTickGap={24}
-            />
-            <YAxis allowDecimals={false} tickLine={false} axisLine={false} tick={{ fill: farger["ink-subtle"], fontSize: 12 }} width={44} />
-            <Tooltip
-              cursor={{ stroke: farger["ink-subtle"], strokeOpacity: 0.5, strokeWidth: 1 }}
-              content={({ active, payload, label }) =>
-                active && payload?.length ? (
-                  <div className="rounded-input border border-ink/12 bg-paper px-3 py-2 text-[0.8125rem] shadow-sm">
-                    <p className="font-medium text-ink">{label}</p>
-                    {serier.map((s) => {
-                      const rad = payload.find((p) => p.dataKey === s.nyckel);
-                      return (
-                        <p key={String(s.nyckel)} className="mt-1 flex items-center gap-2 text-ink-muted">
-                          <span className={cn("h-2 w-2 rounded-full", s.ton === "chart-ochre" ? "bg-chart-ochre" : "bg-chart-blue")} aria-hidden />
-                          {text(s.etikett)}
-                          <span className="num ml-auto pl-3 font-medium text-ink tabular-nums">{tal(Number(rad?.value ?? 0), locale)}</span>
-                        </p>
-                      );
-                    })}
-                  </div>
-                ) : null
-              }
-            />
-            {serier.map((s) => (
-              <Area
-                key={String(s.nyckel)}
-                type="monotone"
-                dataKey={String(s.nyckel)}
-                stroke={farger[s.ton]}
-                strokeWidth={2}
-                fill={`url(#${id}-${String(s.nyckel)})`}
-                activeDot={{ r: 4, stroke: farger.paper, strokeWidth: 2 }}
-                dot={false}
-                isAnimationActive={false}
-              />
-            ))}
-          </AreaChart>
+          {diagram}
         </ResponsiveContainer>
       </div>
       {/* Tabellvyn: samma tal för skärmläsare och för den som vill läsa exakt. */}
@@ -323,6 +404,89 @@ export function PipelineStapel({ steg, href }: Readonly<{ steg: Steg[]; href: st
   );
 }
 
+// -- Fördelningsmunken ----------------------------------------------------------
+
+export type Andel = { id: string; etikett: Localized; antal: number; /** CSS-färg, t.ex. oklch(var(--moss)). */ farg: string };
+
+/**
+ * Munkdiagram (Leads › Översikt, Sebbe 2026-10-07): en helhet uppdelad i
+ * delar, totalen i mitten och en teckenförklaring med antal och andel bredvid,
+ * så att ingen del bärs av färg ensam. Färgerna går som style, inte attribut:
+ * ett SVG-attribut löser inte upp var(--x).
+ */
+export function Munkdiagram({
+  delar,
+  etikett,
+  mitt,
+  mittVarde
+}: Readonly<{
+  delar: Andel[];
+  etikett: Localized;
+  mitt: Localized;
+  /** Talet i mitten när det inte är delarnas summa (t.ex. in minus ut). */
+  mittVarde?: string;
+}>) {
+  const { locale, text } = useLocale();
+  const synliga = delar.filter((d) => d.antal > 0);
+  const total = synliga.reduce((s, d) => s + d.antal, 0);
+  const r = 34;
+  const omkrets = 2 * Math.PI * r;
+  const glapp = synliga.length > 1 ? 2 : 0;
+  let forskjutning = 0;
+  return (
+    <figure className="m-0 flex flex-wrap items-center gap-x-6 gap-y-4">
+      <div className="relative h-28 w-28 shrink-0">
+        <svg viewBox="0 0 80 80" className="h-full w-full -rotate-90" aria-hidden>
+          <circle cx="40" cy="40" r={r} fill="none" strokeWidth="10" className="stroke-ink/10" />
+          {synliga.map((d) => {
+            const langd = (d.antal / total) * omkrets;
+            const segment = (
+              <circle
+                key={d.id}
+                cx="40"
+                cy="40"
+                r={r}
+                fill="none"
+                strokeWidth="10"
+                strokeDasharray={`${Math.max(0, langd - glapp)} ${omkrets}`}
+                strokeDashoffset={-forskjutning}
+                style={{ stroke: d.farg }}
+              >
+                <title>{`${text(d.etikett)}: ${d.antal}`}</title>
+              </circle>
+            );
+            forskjutning += langd;
+            return segment;
+          })}
+        </svg>
+        <span className="absolute inset-0 grid place-items-center text-center">
+          <span>
+            <span className="num block text-[1.375rem] font-semibold leading-none tabular-nums text-ink">{mittVarde ?? tal(total, locale)}</span>
+            <span className="mt-1 block text-[0.6875rem] text-ink-subtle">{text(mitt)}</span>
+          </span>
+        </span>
+      </div>
+      <figcaption className="min-w-[10rem] flex-1">
+        <p className={etikettKlass}>{text(etikett)}</p>
+        {total === 0 ? (
+          <p className={cn(meta, "mt-2")}>{text({ sv: "Inget att visa än.", en: "Nothing to show yet." })}</p>
+        ) : (
+          <ul className="mt-2 space-y-1.5">
+            {synliga.map((d) => (
+              <li key={d.id} className="flex items-center gap-2 text-[0.8125rem] text-ink-muted">
+                <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: d.farg }} aria-hidden />
+                <span className="min-w-0 flex-1 truncate">{text(d.etikett)}</span>
+                <span className="num font-medium tabular-nums text-ink">{tal(d.antal, locale)}</span>
+                <span className="num w-10 text-right tabular-nums text-ink-subtle">{Math.round((d.antal / total) * 100)} %</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </figcaption>
+    </figure>
+  );
+}
+
 // -- Självlösningsgraden ------------------------------------------------------
 
 /** En ring, inte en paj: en andel av en helhet, med talet i mitten. */
@@ -348,6 +512,112 @@ export function Andelsring({ andel, etikett }: Readonly<{ andel: number | null; 
       <span className="num absolute inset-0 grid place-items-center text-[1.25rem] font-semibold tabular-nums text-ink">
         {andel === null ? "–" : `${Math.round(andel * 100)} %`}
       </span>
+    </div>
+  );
+}
+
+// -- Fördelningsstaplar ---------------------------------------------------------
+
+export type Stapel = { id: string; etikett: Localized; antal: number; /** CSS-färg, t.ex. oklch(var(--danger)). */ farg: string };
+
+/**
+ * Liggande staplar med antal och andel (Kundtjänst › Svarstider, Att göra ›
+ * Hur länge det väntat). Ordningen är given — hinkar, inte en topplista — så
+ * raderna sorteras aldrig om. Varje stapel har sin etikett och sitt tal i
+ * klartext; färgen förstärker bara.
+ */
+export function Fordelningsstaplar({ staplar }: Readonly<{ staplar: Stapel[] }>) {
+  const { text, locale } = useLocale();
+  const total = staplar.reduce((s, x) => s + x.antal, 0);
+  const storst = Math.max(1, ...staplar.map((x) => x.antal));
+  return (
+    <ul className="space-y-3">
+      {staplar.map((x) => (
+        <li key={x.id} className="grid grid-cols-[6.5rem_1fr_4.75rem] items-center gap-3 text-[0.8125rem] sm:grid-cols-[8rem_1fr_5rem]">
+          <span className="truncate text-ink-muted">{text(x.etikett)}</span>
+          <span className="h-2 overflow-hidden rounded-full bg-ink/[0.06]">
+            <span
+              className="block h-full rounded-full"
+              style={{ width: x.antal ? `max(0.5rem, ${(x.antal / storst) * 100}%)` : 0, background: x.farg }}
+            />
+          </span>
+          <span className="num text-right tabular-nums">
+            <span className="font-medium text-ink">{tal(x.antal, locale)}</span>
+            <span className="ml-1.5 inline-block w-9 text-ink-subtle">{total ? `${Math.round((x.antal / total) * 100)} %` : "–"}</span>
+          </span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+// -- Rangstaplar ------------------------------------------------------------------
+
+export type Rang = {
+  id: string;
+  namn: string;
+  /** Talet stapeln ritas efter. */
+  varde: number;
+  /** Talet som det skrivs, t.ex. "1 240 kr" eller "$3.10". */
+  visning: string;
+  /** Andra raden, t.ex. "38 körningar · 12 ärenden". */
+  under?: string;
+  href?: string;
+};
+
+/**
+ * En topplista med namn, tal och en stapel relativt den största (adminens
+ * Störst kostnad, Mest aktivitet, Dyraste kunderna). Till skillnad från
+ * Fordelningsstaplar är ordningen här värdet, så raderna sorteras störst först.
+ */
+export function Rangstaplar({ rader, tom, farg = "oklch(var(--chart-blue))" }: Readonly<{ rader: Rang[]; tom: Localized; farg?: string }>) {
+  const { text } = useLocale();
+  const sorterade = [...rader].filter((r) => r.varde > 0).sort((x, y) => y.varde - x.varde);
+  const storst = Math.max(1, ...sorterade.map((r) => r.varde));
+  if (sorterade.length === 0) return <p className={meta}>{text(tom)}</p>;
+  return (
+    <ul className="divide-y divide-ink/10">
+      {sorterade.map((r) => (
+        <li key={r.id} className="py-2.5">
+          <div className="flex items-baseline justify-between gap-3">
+            {r.href ? (
+              <Link href={r.href} className="focus-ring min-w-0 truncate rounded-input text-[0.9375rem] font-medium underline decoration-ink/20 underline-offset-4 hover:text-ochre">
+                {r.namn}
+              </Link>
+            ) : (
+              <span className="min-w-0 truncate text-[0.9375rem] font-medium">{r.namn}</span>
+            )}
+            <span className="num shrink-0 text-[0.875rem] font-medium tabular-nums text-ink">{r.visning}</span>
+          </div>
+          <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-ink/[0.06]">
+            <span className="block h-full rounded-full" style={{ width: `max(0.375rem, ${(r.varde / storst) * 100}%)`, background: farg }} />
+          </div>
+          {r.under ? <p className={cn(meta, "mt-1 truncate")}>{r.under}</p> : null}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/** Rubriken i en panel, och raden under den. */
+export function Panelrubrik({
+  id,
+  titel,
+  antal,
+  under,
+  action
+}: Readonly<{ id: string; titel: Localized; antal?: number | null; under?: Localized; action?: React.ReactNode }>) {
+  const { text, locale } = useLocale();
+  return (
+    <div className="mb-4">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+        <h2 id={id} className="text-[1rem] font-semibold">
+          {text(titel)}
+          {antal ? <span className="num ml-2 font-normal tabular-nums text-ink-subtle">{tal(antal, locale)}</span> : null}
+        </h2>
+        {action}
+      </div>
+      {under ? <p className={cn(meta, "mt-1 max-w-[75ch]")}>{text(under)}</p> : null}
     </div>
   );
 }

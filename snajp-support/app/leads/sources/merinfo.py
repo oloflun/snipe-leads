@@ -46,6 +46,7 @@ till en viss person, och styrelseledamöter kontaktas inte.
 from __future__ import annotations
 
 import asyncio
+import difflib
 import json
 import logging
 import os
@@ -296,6 +297,39 @@ def _slug(text: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", _norm(text)).strip("-")
 
 
+#: Ord som aldrig blir en egen merinfo-slugg: de säger vem kunden säljer
+#: till, inte vilken bransch bolaget har. "B2B/B2C" blev /b2b-b2c/…, 404 på
+#: varje sida och en körning utan ett enda bolag (2026-10-06, 463a9087).
+_EJ_SLUGG = {"b2b", "b2c", "b2b-b2c", "b2c-b2b", "b2g", "smb", "sme", "foretag", "bolag", "kunder", "alla"}
+
+
+#: Breda B2B-branscher för en målgrupp utan bransch ("B2B", "företag som
+#: söker kunder"). Registret filtrerar då bara på område och storlek, och Jev
+#: klassar mot kundens kriterier (Antons regel 1–2). Före 2026-10-07 gav en
+#: sådan målgrupp None, den öppna sökningen svarade [] i tre rundor och
+#: körningen slutade med 0 undersökta (6ed99585, f92ed14d).
+BRED_B2B = ("foretagstjanster", "byggbranschen", "grossister")
+
+
+def ar_generisk_bransch(termer: list[str]) -> bool:
+    """Inga branschord alls, eller bara ord om VEM bolaget säljer till."""
+    delar = [_slug(t) for t in termer if str(t or "").strip()]
+    return all(d in _EJ_SLUGG or set(d.split("-")) <= _EJ_SLUGG for d in delar)
+
+
+def _delfraser(termer: list[str]) -> list[str]:
+    """Kundens branschfält delat i sina delar: "e-utbildning & möblerfirmor
+    för företagskontor" är två branscher, och som en fras matchade den ingen
+    (2026-10-06: registret föll bort helt). Delarna provas efter frasen."""
+    ut: list[str] = []
+    for term in termer:
+        ut.append(term)
+        delar = [d.strip() for d in re.split(r"\s*(?:[&,;/+]|\boch\b|\bsamt\b|\bfor\b|\bför\b|\btill\b)\s*", str(term)) if d.strip()]
+        if len(delar) > 1:
+            ut += delar
+    return list(dict.fromkeys(ut))
+
+
 def valj_branscher(termer: list[str]) -> list[str]:
     """Kundens branschord → merinfos branschsluggar, en per ord, högst tre.
 
@@ -307,7 +341,7 @@ def valj_branscher(termer: list[str]) -> list[str]:
     ponytail: stammatchning, inget LLM; byt mot ett modellval när en kund
     beskriver branschen i fraser som ingen stam träffar."""
     ut: list[str] = []
-    for term in termer:
+    for term in _delfraser(termer):
         stammar = _stammar(term)
         if not stammar:
             continue
@@ -324,7 +358,10 @@ def valj_branscher(termer: list[str]) -> list[str]:
         # merinfo-bransch, noll träffar och ett "ärligt nej" i stället för
         # reservkedjan (provkörningen 2026-10-04).
         ensamt_ord = len(re.findall(r"[a-z0-9]+", _norm(term))) <= 2
-        slug = bast[2] if bast and bast[0] >= 0.5 else (_slug(term) if ensamt_ord else None)
+        egen = _slug(term) if ensamt_ord else None
+        if egen and (egen in _EJ_SLUGG or set(egen.split("-")) <= _EJ_SLUGG):
+            egen = None
+        slug = bast[2] if bast and bast[0] >= 0.5 else egen
         if slug and slug not in ut:
             ut.append(slug)
     return ut[:3]
@@ -346,6 +383,25 @@ LANDSDELAR: dict[str, tuple[str, ...]] = {
     "goteborgsomradet": ("vastra-gotalands-lan",),
     "storgoteborg": ("vastra-gotalands-lan",),
 }
+
+
+#: Vardagsnamn som ingen stavningsjämförelse når.
+ORTALIAS: dict[str, str] = {
+    "ovik": "ornskoldsvik",
+    "o-vik": "ornskoldsvik",
+    "gbg": "goteborg",
+    "sthlm": "stockholm",
+    "stockholms stad": "stockholm",
+}
+
+
+def _narmaste(n: str, index: dict[str, Any]) -> str | None:
+    """En felstavning ('Luelå') → närmaste kända namn, men bara när den är
+    entydigt nära. Korta ord jämförs inte: 'Mora' ska inte bli 'Mola'."""
+    if len(n) < 4:
+        return None
+    traff = difflib.get_close_matches(n, list(index), n=1, cutoff=0.8)
+    return traff[0] if traff else None
 
 
 def _geoindex() -> tuple[dict[str, str], dict[str, tuple[str, str]]]:
@@ -380,6 +436,12 @@ def valj_platser(termer: list[str]) -> list[str | None] | None:
     for term in termer:
         hel = _norm(term).strip()
         n = hel.removesuffix(" lan").strip()
+        n = ORTALIAS.get(n, n)
+        if n not in LANDSDELAR and n not in kommun_index and n not in lan_index and not hel.endswith(" lan"):
+            gissning = _narmaste(n, kommun_index) or _narmaste(n, lan_index)
+            if gissning:
+                logger.info("merinfo: området %r tolkas som %r.", term, gissning)
+                n = gissning
         # Kommunen före länet: "Stockholm" är staden, "Stockholms län" länet.
         if n in LANDSDELAR:
             lan += list(LANDSDELAR[n])
@@ -526,6 +588,7 @@ async def sok(
     puls: Callable[[], Awaitable[Any]] | None = None,
     lage: str = "iris",
     listspar: list[dict[str, Any]] | None = None,
+    bred: bool = False,
 ) -> list[dict[str, Any]] | None:
     """Antons arbetsflöde: bransch → län/kommun → listsidor → bolagssidor →
     filter på bolagsfakta → Jev mot kundens kriterier (första filtret) →
@@ -534,11 +597,18 @@ async def sok(
 
     None = målgruppen gick inte att översätta till merinfos träd (anroparen
     faller tillbaka på den gamla kedjan). [] = översatt, men inget bolag
-    klarade filtret och steget efter — ett ärligt nej, ingen utfyllnad."""
+    klarade filtret och steget efter — ett ärligt nej, ingen utfyllnad.
+
+    `bred=True` (sista skyddsnätet i discovery.hitta_bolag): sök i de breda
+    B2B-branscherna i kundens område oavsett branschord."""
     p = profil or {}
-    branscher = valj_branscher(list(dict.fromkeys([*(icp.get("industries") or []), *(p.get("branscher") or [])])))
+    branschord = list(dict.fromkeys([*(icp.get("industries") or []), *(p.get("branscher") or [])]))
+    branscher = valj_branscher(branschord)
     if not branscher and p.get("malgrupp"):
         branscher = valj_branscher([p["malgrupp"]])
+    if bred or (not branscher and ar_generisk_bransch(branschord)):
+        logger.info("merinfo: bred B2B-sökning (branschord=%s, bred=%s).", branschord, bred)
+        branscher = list(BRED_B2B)
     # Regionnycklarna (icp.geo, app/leads/geo.py) är redan kommuner i
     # profilen; utan profil (listjobb som inte kunde läsa den) expanderas de
     # här, annars blev "goteborg" bara staden i stället för området.
@@ -741,13 +811,14 @@ async def _komplettera(
     rankade: list[dict[str, Any]], antal: int, *, lage: str, puls: Callable[[], Awaitable[Any]] | None,
     listspar: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
-    """Iris: bolag MED webbplats och en VD-kontakt på sajten (regel 3 och 4).
-    Lista: bolag där VD:ns mejl eller telefon står på sajten, eller där VD är
-    ensam i bolaget och registrets nummer därför är VD:s.
+    """Iris: bolag MED webbplats och en kontaktmejl till bolaget på sajten —
+    en namngiven person föredras (VD, ägare/chef, anställd), annars duger
+    bolagets egen adress, info@/kontakt@ (Sebbes beslut 2026-10-07). Lista: oförändrat VD-krav —
+    VD:ns mejl eller telefon på sajten, eller ensam-VD-undantaget.
 
-    Iris-kandidater utan sajt, med parkerad domän eller utan VD-kontakt på
-    sajten läggs i `listspar` (plan 2026-10-05, fas 3) i stället för att
-    kastas, och får ingen dyr research."""
+    Iris-kandidater utan sajt, med parkerad domän eller utan en namngiven
+    kontakt på sajten läggs i `listspar` (plan 2026-10-05, fas 3) i stället
+    för att kastas, och får ingen dyr research."""
     from .. import discovery
     from ..platshallare import platshallare_for_webbplats
 
@@ -776,15 +847,29 @@ async def _komplettera(
             if parkerad:
                 till_lista(k, f"Parkerad domän: {parkerad}")
                 continue
-        kontakt = await discovery.hamta_vd_kontakt(webb, k["vd_namn"]) if k.get("vd_namn") else None
+        if lage == "iris":
+            # Vilken namngiven person som helst duger, i prioritetsordning;
+            # hamta_person_kontakt provar VD först när registret namngett en.
+            kontakt = await discovery.hamta_person_kontakt(
+                webb, k.get("vd_namn"), bolagsadress_racker=True
+            )
+        else:
+            kontakt = await discovery.hamta_vd_kontakt(webb, k["vd_namn"]) if k.get("vd_namn") else None
         if not kontakt:
             if lage == "lista" and k.get("_ensam_vd_telefon"):
                 ut.append({**_listrad(k, "VD är ensam i bolaget"), "signal": None})
             else:
-                till_lista(k, "Ingen VD-kontakt på webbplatsen")
+                till_lista(
+                    k,
+                    "Ingen VD-kontakt på webbplatsen" if lage == "lista"
+                    else "Ingen kontaktmejl på webbplatsen",
+                )
             continue
-        k = {**k, **kontakt, "contact_name": k["vd_namn"], "contact_role": "VD",
-             "contact_level": "named_role_match"}
+        if lage == "iris":
+            k = {**k, **kontakt}
+        else:
+            k = {**k, **kontakt, "contact_name": k["vd_namn"], "contact_role": "VD",
+                 "contact_level": "named_role_match"}
         ut.append(k)
     return ut
 

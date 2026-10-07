@@ -202,6 +202,48 @@ async def test_utkast_ovrigt_leverantorsfel_lacker_ingen_ratext(monkeypatch, lar
     larm.assert_not_awaited()
 
 
+async def test_stoppat_utkast_star_inte_som_koat(monkeypatch, larm, utan_kontextpaket):
+    """Faktagrinden eller utdatakontraktet stoppar utkastet (queued=False).
+    Jobbresultatet sa ändå "queued: True" (2026-10-07: tre "köade" utkast,
+    tom granskningskö). Nu bär det utkaststegets eget besked och skälet."""
+    app_state = _app_state()
+    storage = app_state.storage
+    prospekt = await storage.create_prospect(
+        TENANT, company_name="Nordkap Moduler AB", contact_name="Anna Berg",
+        contact_email="anna@nordkapmoduler.se", profil={"contact_role": "VD"},
+    )
+    job_id = await app_state.jobs.create(tenant_id=TENANT, status="queued")
+
+    async def research(*_a, **_k):
+        return {
+            "qualified": True,
+            "lagesbeskrivning": "Bolaget bygger moduler och hallar.",
+            "citat": ["Vi bygger moduler och hallar."],
+        }
+
+    async def utkast(*_a, **_k):
+        return {
+            "queued": False,
+            "subject": "Moduler",
+            "escalation_reason": "Grindningen hittade påståenden utan stöd i underlaget.",
+        }
+
+    monkeypatch.setattr(leads_api, "_valj_leads_kedja", lambda: (research, utkast))
+    monkeypatch.setattr("app.leads.discovery.ar_arbetsmejl", lambda *a, **k: True)
+    monkeypatch.setattr(
+        "app.leads.business_context.require_business_context",
+        AsyncMock(return_value="Vi säljer moduler."),
+    )
+    await leads_api._run_batch_prospect(
+        app_state, job_id, {"tenant_id": TENANT, "tenant_name": "Snajp"},
+        prospect_id=prospekt["id"], scope="research_and_draft",
+    )
+
+    resultat = (await app_state.jobs.get(job_id))["result"]
+    assert resultat["draft"]["queued"] is False
+    assert "påståenden utan stöd" in resultat["draft_note"]
+
+
 # -- Utkast- och batchjobben ------------------------------------------------
 
 

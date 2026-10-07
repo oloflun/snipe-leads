@@ -324,7 +324,7 @@ class PostgresStorage:
             records = await conn.fetch(
                 """
                 select id, tenant_id, provider, address, status, imap_host,
-                       secret_enc, last_sync_at, last_error
+                       secret_enc, last_sync_at, last_error, syfte
                 from ss_mailboxes where tenant_id = $1 order by created_at
                 """,
                 tenant_id,
@@ -1041,14 +1041,14 @@ class PostgresStorage:
                 records = await conn.fetch(
                     """
                     select * from agent_context_docs where tenant_id = $1 and kind = $2
-                    order by created_at desc
+                    order by created_at desc, version desc
                     """,
                     tenant_id,
                     kind,
                 )
             else:
                 records = await conn.fetch(
-                    "select * from agent_context_docs where tenant_id = $1 order by created_at desc",
+                    "select * from agent_context_docs where tenant_id = $1 order by created_at desc, version desc",
                     tenant_id,
                 )
         return [_row(r) for r in records]
@@ -1201,6 +1201,37 @@ class PostgresStorage:
                 """,
                 tenant_id,
                 foretagsnyckel,
+            )
+
+    async def get_send_queue_item(self, tenant_id: str, item_id: str) -> dict[str, Any] | None:
+        async with self._scoped(tenant_id) as conn:
+            record = await conn.fetchrow(
+                "select * from send_queue where tenant_id = $1 and id = $2", tenant_id, item_id
+            )
+        return _avkoda_jsonb(_row(record), "gate_checks") if record else None
+
+    async def senaste_ko_for_trad(self, tenant_id: str, thread_id: str) -> dict[str, Any] | None:
+        async with self._scoped(tenant_id) as conn:
+            record = await conn.fetchrow(
+                """
+                select * from send_queue where tenant_id = $1 and thread_id = $2
+                order by scheduled_at desc limit 1
+                """,
+                tenant_id,
+                thread_id,
+            )
+        return _avkoda_jsonb(_row(record), "gate_checks") if record else None
+
+    async def update_outreach_message_text(
+        self, tenant_id: str, message_id: str, *, subject: str, body: str
+    ) -> None:
+        async with self._scoped(tenant_id) as conn:
+            await conn.execute(
+                """
+                update outreach_messages set subject = $3, body = $4
+                 where tenant_id = $1 and id = $2 and sent_at is null
+                """,
+                tenant_id, message_id, subject, body,
             )
 
     async def get_pending_outreach_message(
@@ -2150,6 +2181,19 @@ class PostgresStorage:
          where tenant_id = $1 and scope in ('batch', 'lista')
     """
 
+    async def list_prospekt_i_research(self, tenant_id: str) -> set[str]:
+        async with self._scoped(tenant_id) as conn:
+            records = await conn.fetch(
+                """
+                select distinct prospect_id from leads_job_ledger
+                 where tenant_id = $1 and prospect_id is not null
+                   and status in ('queued', 'processing')
+                   and scope in ('research', 'research_and_draft')
+                """,
+                tenant_id,
+            )
+        return {str(r["prospect_id"]) for r in records}
+
     async def list_leads_korningar(self, tenant_id: str, *, limit: int = 20) -> list[dict[str, Any]]:
         async with self._scoped(tenant_id) as conn:
             records = await conn.fetch(
@@ -2268,6 +2312,19 @@ class PostgresStorage:
             )
         return [_avkoda_jsonb(_row(r), "icp") for r in records]
 
+    async def saljlista_fyll_pa(self, tenant_id: str, rader: list[dict[str, Any]]) -> int:
+        """Via 105:ans security definer-funktion: säljlistan ägs av webben
+        (RLS för snajp_web) och funktionen är motorns enda väg in."""
+        if not rader:
+            return 0
+        async with self._scoped(tenant_id) as conn:
+            varde = await conn.fetchval(
+                "select public.saljlista_fyll_pa($1::uuid, $2::jsonb)",
+                tenant_id,
+                json.dumps(rader, ensure_ascii=False),
+            )
+        return int(varde or 0)
+
     async def get_lead_list(self, tenant_id: str, list_id: str) -> dict[str, Any] | None:
         async with self._scoped(tenant_id) as conn:
             record = await conn.fetchrow(
@@ -2318,7 +2375,18 @@ class PostgresStorage:
                 tenant_id,
                 list_id,
             )
-        return [_row(r) for r in records]
+        return [_avkoda_jsonb(_row(r), "utkast") for r in records]
+
+    async def spara_listutkast(
+        self, tenant_id: str, item_id: str, utkast: dict[str, Any] | None
+    ) -> None:
+        async with self._scoped(tenant_id) as conn:
+            await conn.execute(
+                "update lead_list_items set utkast = $3::jsonb where tenant_id = $1 and id = $2",
+                tenant_id,
+                item_id,
+                json.dumps(utkast, ensure_ascii=False) if utkast is not None else None,
+            )
 
     async def lista_upptagna_bolag(self, tenant_id: str) -> list[dict[str, Any]]:
         async with self._scoped(tenant_id) as conn:
@@ -2476,6 +2544,94 @@ class PostgresStorage:
             }
             for r in records
         ]
+
+    async def support_oversikt_underlag(
+        self, tenant_id: str, *, sedan: str, is_test: bool | None
+    ) -> dict[str, Any]:
+        # Se protokollet i base.py. kb_sources läses rått och avkodas i
+        # Python: en dubbelkodad jsonb-sträng hade gett jsonb_array_length
+        # ett fel i stället för ett tal.
+        from datetime import datetime as _dt
+
+        fran = _dt.fromisoformat(sedan)
+        async with self._scoped(tenant_id) as conn:
+            mejl = await conn.fetch(
+                """
+                select e.id, e.received_at, e.status,
+                       c.category, c.escalate, c.kb_sources,
+                       (select min(d.created_at) from ss_decision_log d
+                         where d.email_id = e.id
+                           and d.event in ('auto_sent', 'approved_and_sent')) as forsta_svar
+                  from ss_emails e
+                  left join lateral (
+                    select c.category, c.escalate, c.kb_sources
+                      from ss_classifications c
+                     where c.email_id = e.id
+                     order by c.created_at desc
+                     limit 1
+                  ) c on true
+                 where e.tenant_id = $1
+                   and e.received_at >= $2
+                   and e.status not in ('att_hantera', 'lead', 'ej_relaterat')
+                   and coalesce(e.klass, 'support') = 'support'
+                   and ($3::boolean is null or e.is_test = $3)
+                """,
+                tenant_id,
+                fran,
+                is_test,
+            )
+            korning = await conn.fetchrow(
+                """
+                select count(*) as antal,
+                       coalesce(sum(tokens_in), 0) as tokens_in,
+                       coalesce(sum(tokens_out), 0) as tokens_out,
+                       count(*) filter (where model = 'svarscache') as cache,
+                       mode() within group (order by model)
+                         filter (where model is not null and model <> 'svarscache') as modell
+                  from agent_runs
+                 where tenant_id = $1 and agent_type = 'support'
+                   and not is_test and created_at >= $2
+                """,
+                tenant_id,
+                fran,
+            )
+            kb = await conn.fetchval(
+                "select count(*) from ss_knowledge_base where tenant_id = $1",
+                tenant_id,
+            )
+
+        def _traffar(varde: Any) -> int | None:
+            if varde is None:
+                return None
+            if isinstance(varde, str):
+                try:
+                    varde = json.loads(varde)
+                except ValueError:
+                    return None
+            return len(varde) if isinstance(varde, list) else None
+
+        return {
+            "mejl": [
+                {
+                    "id": str(r["id"]),
+                    "received_at": r["received_at"].isoformat(),
+                    "status": r["status"],
+                    "category": r["category"],
+                    "escalate": r["escalate"],
+                    "kb_traffar": _traffar(r["kb_sources"]),
+                    "forsta_svar": r["forsta_svar"].isoformat() if r["forsta_svar"] else None,
+                }
+                for r in mejl
+            ],
+            "korningar": {
+                "antal": int(korning["antal"]),
+                "tokens_in": int(korning["tokens_in"]),
+                "tokens_out": int(korning["tokens_out"]),
+                "cache": int(korning["cache"]),
+                "modell": korning["modell"],
+            },
+            "kb_artiklar": int(kb or 0),
+        }
 
     async def weekly_analytics(self, tenant_id: str, *, weeks: int = 8) -> dict[str, Any]:
         # Se protokollet i base.py för varför `coverage` finns.
@@ -3119,6 +3275,29 @@ class PostgresStorage:
             )
         return [_row(r) for r in records]
 
+    async def list_skickade(self, tenant_id: str, *, limit: int = 200) -> list[dict[str, Any]]:
+        limit = max(1, min(limit, 500))
+        async with self._scoped(tenant_id) as conn:
+            records = await conn.fetch(
+                """
+                select m.id, m.subject, m.body, m.sent_at, m.thread_id,
+                       t.last_inbound_at,
+                       p.id as prospect_id, p.company_name, p.contact_name,
+                       p.contact_email as prospect_email, p.status
+                  from outreach_messages m
+                  join outreach_threads t on t.id = m.thread_id and t.tenant_id = m.tenant_id
+                  left join prospects p on p.id = t.prospect_id and p.tenant_id = m.tenant_id
+                 where m.tenant_id = $1
+                   and m.direction = 'outbound'
+                   and m.sent_at is not null
+                 order by m.sent_at desc
+                 limit $2
+                """,
+                tenant_id,
+                limit,
+            )
+        return [_row(r) for r in records]
+
     async def list_outreach_messages(
         self, tenant_id: str, thread_id: str
     ) -> list[dict[str, Any]]:
@@ -3307,7 +3486,11 @@ class PostgresStorage:
             records = await conn.fetch(
                 """
                 select q.*, m.subject, m.body, m.id as message_id,
-                       p.contact_email as prospect_email, p.company_name
+                       p.contact_email as prospect_email, p.company_name,
+                       -- Kontexten AI-knapparna (Förbättra, Personalisera …)
+                       -- skriver om utifrån: vem mejlet går till och läget hos bolaget.
+                       p.id as prospect_id, p.contact_name, p.contact_role, p.website,
+                       p.lagesbeskrivning, p.signaler
                 from send_queue q
                 join outreach_threads t on t.id = q.thread_id
                 left join prospects p on p.id = t.prospect_id

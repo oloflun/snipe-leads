@@ -10,7 +10,9 @@ så att Fas B/C kan köra på det som finns i stället för att dödlåsa sig.
 import asyncio
 import json
 import logging
+import re
 import uuid
+import weakref
 from datetime import datetime, timezone
 from typing import Literal
 
@@ -63,7 +65,7 @@ from ..leads.icp import (
     validate_icp,
 )
 from ..leads.icp import is_empty as icp_ar_tomt
-from ..leads.signatur import bygg_signaturtext
+from ..leads.signatur import HALSNING, bygg_signaturtext, dela_utkast, sla_ihop
 from ..leads.signatur import normalisera as normalisera_signatur
 from ..leads.sni import SNI_NAMN, beskriv_kod
 from ..leads.onboarding_state import REQUIRED_KINDS, get_onboarding_state
@@ -520,7 +522,13 @@ async def list_prospects(request: Request, tenant: dict = Depends(require_tenant
     # Bara leads som uppfyller kraven visas (Antons krav 2026-10-06): ett
     # bortvalt bolag med motiveringen "uppfyller inte ..." är brus för kunden.
     # Raden står kvar i databasen så att nästa sökning utesluter bolaget.
-    prospects = [p for p in prospects if p.get("niva") != "C" and p.get("qualified") is not False]
+    # `?bortvalda=1` listar i stället just de bortvalda (Sebbe 2026-10-06:
+    # inget får SE UT som raderat — ett dolt bolag måste gå att hitta igen;
+    # raderas görs bara med uttrycklig handling).
+    if request.query_params.get("bortvalda") == "1":
+        prospects = [p for p in prospects if p.get("niva") == "C" or p.get("qualified") is False]
+    else:
+        prospects = [p for p in prospects if p.get("niva") != "C" and p.get("qualified") is not False]
     # Senaste händelse (Leads Suite): EN läsning av statusloggen, grupperad
     # här, i stället för en fråga per prospekt.
     senast: dict[str, str] = {}
@@ -528,6 +536,15 @@ async def list_prospects(request: Request, tenant: dict = Depends(require_tenant
         pid = str(rad["prospect_id"])
         if rad["created_at"] > senast.get(pid, ""):
             senast[pid] = rad["created_at"]
+    # "Research pågår" (Sebbe 2026-10-07): ett Ny-bolag vars researchjobb är
+    # köat eller körs visas med status researching, och står som Ny igen när
+    # jobbet är klart. Härlett ur liggaren, aldrig lagrat — se
+    # storage.list_prospekt_i_research för varför.
+    try:
+        i_research = await request.app.state.storage.list_prospekt_i_research(tenant["tenant_id"])
+    except Exception:  # noqa: BLE001 — en visningsdetalj får inte fälla listan
+        logger.exception("Kunde inte läsa pågående research för %s.", tenant["tenant_id"])
+        i_research = set()
     # rollkoppling_oklar: underlag för intresseavvägningen, härlett vid
     # läsning — se app/leads/rollkoppling.py för varför den inte lagras.
     return {
@@ -535,6 +552,11 @@ async def list_prospects(request: Request, tenant: dict = Depends(require_tenant
             {
                 **med_rollflagga(p),
                 "senaste_handelse_at": senast.get(str(p["id"])) or p.get("created_at"),
+                **(
+                    {"status": "researching"}
+                    if (p.get("status") or "new") == "new" and str(p["id"]) in i_research
+                    else {}
+                ),
             }
             for p in prospects
         ]
@@ -1295,6 +1317,23 @@ async def list_replies(
     return {"replies": svar}
 
 
+@router.get("/api/leads/skickat")
+async def list_skickat(
+    request: Request, limit: int = 200, tenant: dict = Depends(require_tenant)
+) -> dict:
+    """Alla skickade leadsmejl, senast först — fliken Skickat i Iris-leads
+    (Sebbe 2026-10-07): mejlet, vad som skrevs och vilket bolag det gick till.
+    `svarat` är sant när bolaget svarat efter utskicket."""
+    rader = await request.app.state.storage.list_skickade(tenant["tenant_id"], limit=limit)
+    for r in rader:
+        inn, ut = r.get("last_inbound_at"), r.get("sent_at")
+        try:
+            r["svarat"] = bool(inn and ut and inn >= ut)
+        except TypeError:  # datetime mot sträng (MemoryStorage): jämför ISO-texten
+            r["svarat"] = bool(inn and ut and str(inn) >= str(ut))
+    return {"skickat": rader}
+
+
 @router.get("/api/leads/config")
 async def get_leads_config(request: Request, tenant: dict = Depends(require_tenant)) -> dict:
     settings = await request.app.state.storage.get_agent_settings(
@@ -1514,6 +1553,165 @@ async def hamta_korning(
     return _utan_kandidater(rad)
 
 
+# -- En körnings utkast: se, skriv och skicka för alla leads på en gång -----
+#
+# Sebbe 2026-10-07: "Det ska inte vara svårt" att skicka ut till alla leads
+# Iris hittar. Före de här tre endpointsen fanns körningens leads bara som
+# namn i körningsvyn; utkasten låg i granskningskön utan koppling till
+# körningen, och "Godkänn och skicka" gick en post i taget.
+
+
+async def _korningens_leads(request: Request, tenant: dict, job_id: str) -> tuple[dict, list[dict]]:
+    """(körningsraden, en post per lead med utkaststatus).
+
+    status: 'vantar' (utkastet väntar på godkännande), 'godkant' (godkänt,
+    skickas när sändfönstret öppnar), 'skickat', 'avvisat', 'stoppat' (en
+    sändspärr sa nej) eller 'saknas' (inget utkast). `notis` är skälet när
+    utkast saknas — ur barnjobbets resultat, annars härlett ur prospektet.
+    """
+    from ..leads.discovery import mottagare
+
+    storage = request.app.state.storage
+    tenant_id = tenant["tenant_id"]
+    rad = await storage.get_leads_korning(tenant_id, job_id)
+    if rad is None:
+        raise HTTPException(status_code=404, detail="Körningen finns inte.")
+    jobb = [j for j in ((rad.get("korning") or {}).get("jobs") or []) if j.get("prospect_id")]
+    vantande = {
+        i.get("prospect_id"): i for i in await storage.list_review_queue(tenant_id, limit=200)
+    }
+    leads: list[dict] = []
+    sedda: set[str] = set()
+    for j in jobb:
+        pid = j["prospect_id"]
+        if pid in sedda:
+            continue
+        sedda.add(pid)
+        prospect = await storage.get_prospect(tenant_id, pid)
+        if not prospect:
+            continue
+        post = {
+            "prospect_id": pid,
+            "company_name": prospect.get("company_name") or j.get("company_name"),
+            "contact_email": prospect.get("contact_email"),
+            "kan_mejlas": bool(mottagare(prospect)),
+            "status": "saknas",
+            "queue_item_id": None,
+            "subject": None,
+            # Utkastets text (Sebbe 2026-10-07: klicka på ett lead i listan och
+            # se dess utkast). Det väntande utkastet, annars senaste meddelandet.
+            "body": None,
+            "notis": None,
+        }
+        if pid in vantande:
+            item = vantande[pid]
+            post.update(status="vantar", queue_item_id=item["id"], subject=item.get("subject"), body=item.get("body"))
+        else:
+            trad = await storage.find_outreach_thread(tenant_id, prospect_id=pid)
+            meddelanden = await storage.list_outreach_messages(tenant_id, trad["id"]) if trad else []
+            if any(m.get("sent_at") for m in meddelanden):
+                post["status"] = "skickat"
+            elif meddelanden and trad:
+                ko = await storage.senaste_ko_for_trad(tenant_id, trad["id"]) or {}
+                post["status"] = {
+                    "queued": "godkant",
+                    "cancelled": "avvisat",
+                    "blocked": "stoppat",
+                    "sent": "skickat",
+                }.get(ko.get("status") or "", "saknas")
+            if meddelanden:
+                post["subject"] = meddelanden[-1].get("subject")
+                post["body"] = meddelanden[-1].get("body")
+        if post["status"] == "saknas":
+            barn = await request.app.state.jobs.get(j["job_id"]) or {}
+            notis = ((barn.get("result") or {}) if isinstance(barn.get("result"), dict) else {}).get("draft_note")
+            if not notis:
+                notis = (
+                    "Inget arbetsmejl hittades på bolagets sajt."
+                    if not post["kan_mejlas"]
+                    else "Inget utkast skrevs i körningen."
+                )
+            post["notis"] = notis
+        leads.append(post)
+    return rad, leads
+
+
+def _antal_per_status(leads: list[dict]) -> dict[str, int]:
+    antal: dict[str, int] = {}
+    for lead in leads:
+        antal[lead["status"]] = antal.get(lead["status"], 0) + 1
+    antal["kan_skrivas"] = sum(1 for l in leads if l["status"] == "saknas" and l["kan_mejlas"])
+    return antal
+
+
+@router.get("/api/leads/korningar/{job_id}/utkast")
+async def korningens_utkast(
+    request: Request, job_id: str, tenant: dict = Depends(require_tenant)
+) -> dict:
+    """Körningens leads med utkaststatus per lead och antal per status."""
+    _, leads = await _korningens_leads(request, tenant, job_id)
+    return {"leads": leads, "antal": _antal_per_status(leads)}
+
+
+@router.post("/api/leads/korningar/{job_id}/utkast/skriv", status_code=202)
+async def skriv_korningens_utkast(
+    request: Request, job_id: str, tenant: dict = Depends(require_tenant)
+) -> dict:
+    """Skriver utkast till körningens leads som saknar ett men har en
+    kontaktmejl (regel 10). Samma kedja som "Processa om" med utkast — ingen
+    egen utkastväg — så faktagrinden, underlagsgolvet och mottagarregeln
+    gäller precis som i körningen. Leads utan kontaktmejl hoppas över."""
+    _require_live_llm()
+    storage = request.app.state.storage
+    rad, leads = await _korningens_leads(request, tenant, job_id)
+    att_skriva = [l for l in leads if l["status"] == "saknas" and l["kan_mejlas"]][:50]
+    if not att_skriva:
+        return {"count": 0, "jobs": []}
+    await _kraev_leads_budget(storage, tenant["tenant_id"])
+    prospekt = [p for l in att_skriva if (p := await storage.get_prospect(tenant["tenant_id"], l["prospect_id"]))]
+    jobs = await _lagg_prospektjobb(
+        request.app.state,
+        tenant,
+        prospekt,
+        scope="research_and_draft",
+        overrides=None,
+        is_test=bool(rad.get("is_test")),
+        limit=len(prospekt),
+    )
+    return {"count": len(jobs), "jobs": jobs}
+
+
+@router.post("/api/leads/korningar/{job_id}/utkast/skicka")
+async def skicka_korningens_utkast(
+    request: Request, job_id: str, tenant: dict = Depends(require_tenant)
+) -> dict:
+    """Godkänn och skicka ALLA körningens väntande utkast. Varje utkast går
+    genom samma väg som ett enskilt klick (scheduler.skicka_godkant): tids-
+    grinden, språkgrinden och de sex sändspärrarna — ett ja här går aldrig
+    förbi dem. I tur och ordning, inte parallellt."""
+    from datetime import datetime, timezone
+
+    from ..leads.scheduler import skicka_godkant
+    from ..leads.send_provider import get_send_provider
+
+    _, leads = await _korningens_leads(request, tenant, job_id)
+    provider = get_send_provider()
+    utfall: list[dict] = []
+    for lead in leads:
+        if lead["status"] != "vantar" or not lead["queue_item_id"]:
+            continue
+        res, skal = await skicka_godkant(
+            request.app.state.storage, tenant["tenant_id"], lead["queue_item_id"], provider,
+            now=datetime.now(timezone.utc),
+        )
+        utfall.append({"company_name": lead["company_name"], "utfall": res, "skal": skal})
+    return {
+        "skickade": sum(1 for u in utfall if u["utfall"] == "sent"),
+        "vantar_pa_fonstret": sum(1 for u in utfall if u["utfall"] == "requeued"),
+        "stoppade": [u for u in utfall if u["utfall"] not in ("sent", "requeued")],
+    }
+
+
 @router.get("/api/leads/queue")
 async def list_review_queue(
     request: Request, tenant: dict = Depends(require_tenant), limit: int = 100
@@ -1528,28 +1726,94 @@ async def list_review_queue(
     items = await storage.list_review_queue(tenant["tenant_id"], limit=min(limit, 200))
     settings = await storage.get_agent_settings(tenant["tenant_id"], agent_type="leads")
     sig = normalisera_signatur(settings.get("signatur"))
+    # Brödtexten är det granskaren och AI-knapparna arbetar på; svansen
+    # (signatur + lagstadgad fot) är kodens text och visas, men redigeras
+    # aldrig — se signatur.dela_utkast.
+    for item in items:
+        item["brodtext"], item["svans"] = dela_utkast(item.get("body") or "", sig)
     svar: dict = {"items": items}
     if sig:
         svar["signatur"] = {**sig, "text": bygg_signaturtext(sig)}
     return svar
 
 
+@router.put("/api/leads/queue/{item_id}")
+async def update_queue_item_text(
+    request: Request, item_id: str, payload: dict, tenant: dict = Depends(require_tenant)
+) -> dict:
+    """Granskarens redigering (Skriv om, Förbättra, egen text) sparas i
+    utkastet före godkännandet, så att det är den texten som skickas. Bara
+    ett utkast som väntar; ett skickat mejl går inte att skriva om."""
+    storage = request.app.state.storage
+    tenant_id = tenant["tenant_id"]
+    item = await storage.get_send_queue_item(tenant_id, item_id)
+    if item is None:
+        raise HTTPException(status_code=404, detail="Utkastet finns inte.")
+    if item.get("status") not in ("awaiting_review", "queued"):
+        raise HTTPException(status_code=409, detail="Utkastet är redan hanterat och kan inte ändras.")
+    amne = str(payload.get("subject") or "").strip()
+    brodtext = payload.get("brodtext")
+    text = str((brodtext if brodtext is not None else payload.get("body")) or "").strip()
+    if not amne or not text:
+        raise HTTPException(status_code=422, detail="Ämnesrad och text får inte vara tomma.")
+    if len(amne) > 200 or len(text) > 8000:
+        raise HTTPException(status_code=422, detail="Ämnesraden får vara högst 200 tecken och texten 8 000.")
+    meddelande = await storage.get_pending_outreach_message(tenant_id, item["thread_id"])
+    if meddelande is None:
+        raise HTTPException(status_code=409, detail="Utkastet har ingen text att ändra.")
+    # Signaturen och den lagstadgade foten är kodens text: de följer med från
+    # det köade utkastet oavsett vad redigeringen gjorde. Utan dem gick mejlet
+    # ut utan logga (bygg_html hittar inte blocket) eller stoppades av
+    # send_guard (foten saknas). Skickas hela mejlet (`body`, äldre klient)
+    # skalas en eventuell svans av först, så att den inte hamnar dubbelt.
+    settings = await storage.get_agent_settings(tenant_id, agent_type="leads")
+    sig = normalisera_signatur(settings.get("signatur"))
+    _, svans = dela_utkast(meddelande.get("body") or "", sig)
+    if brodtext is None:
+        text, _ = dela_utkast(text, sig)
+    trad = await storage.get_outreach_thread(tenant_id, item["thread_id"]) or {}
+    sprak = "en" if trad.get("language_state") == "en_confirmed" else "sv"
+    text = sla_ihop(text, svans, sig, halsning=HALSNING[sprak])
+    await storage.update_outreach_message_text(tenant_id, meddelande["id"], subject=amne, body=text)
+    return {"id": item_id, "subject": amne}
+
+
+#: Granskarens besked per utfall (Godkänn och skicka).
+_UTFALL_TEXT = {
+    "sent": "Skickat.",
+    "requeued": "Godkänt. Mejlet skickas när sändfönstret öppnar (vardagar 08–16).",
+    "blocked": "Stoppat av en sändspärr",
+    "awaiting_review": "Inte skickat, behöver granskas",
+    "redan_hanterad": "Utkastet är redan hanterat.",
+}
+
+
 @router.post("/api/leads/queue/{item_id}/approve")
 async def approve_queue_item(
     request: Request, item_id: str, tenant: dict = Depends(require_tenant)
 ) -> dict:
-    """Släpper ett granskat utkast till schemaläggaren.
+    """Godkänn och skicka (2026-10-07): skickar just det här utkastet direkt,
+    genom samma grindar som schemaläggaren — tidsgrinden (INV-TIME-001),
+    språkgrinden och de sex sändspärrarna. Utanför sändfönstret står det
+    kvar som godkänt och skickas när fönstret öppnar (run_godkand_sandare).
+    Före 2026-10-07 satte knappen bara status 'queued', och eftersom ingen
+    schemaläggare körde skickades ingenting."""
+    from datetime import datetime, timezone
 
-    Går via status 'queued', inte direkt till utskick: schemaläggaren kör
-    språk- och tidsgrindarna en gång till vid faktisk utskickstid, och den
-    kontrollen ska inte gå att hoppa över genom att godkänna."""
-    await request.app.state.storage.update_send_queue_status(
-        tenant["tenant_id"],
-        item_id,
-        status="queued",
-        gate_checks={"approved_by": "human", "via": "granskningskön"},
+    from ..leads.scheduler import skicka_godkant
+    from ..leads.send_provider import get_send_provider
+
+    utfall, skal = await skicka_godkant(
+        request.app.state.storage, tenant["tenant_id"], item_id, get_send_provider(),
+        now=datetime.now(timezone.utc),
     )
-    return {"id": item_id, "status": "queued"}
+    if utfall == "saknas":
+        raise HTTPException(status_code=404, detail="Utkastet finns inte.")
+    besked = _UTFALL_TEXT.get(utfall, utfall)
+    if skal and utfall in ("blocked", "awaiting_review"):
+        besked = f"{besked}: {skal}"
+    status = {"sent": "sent", "requeued": "queued"}.get(utfall, utfall)
+    return {"id": item_id, "status": status, "utfall": utfall, "besked": besked}
 
 
 @router.post("/api/leads/queue/{item_id}/reject")
@@ -1885,6 +2149,31 @@ async def _lagg_prospektjobb(
     return jobs
 
 
+#: Ett lås per körning (Sebbes krav 2026-10-06: flera användare på samma
+#: konto kör agenter samtidigt, och leads_workers > 1 låter två barn i SAMMA
+#: körning rapportera parallellt). Motorns tillstånd uppdateras med
+#: läs-ändra-skriv (_las_korning → mutera → _spara_korning), och utan låset
+#: skriver den sist sparande över den andras rapport: `pagaende` når aldrig
+#: noll och körningen står i 'processing' för evigt (INV-JOB-003-slutet).
+#: Låsen är per PROCESS — workers är asyncio-tasks i samma process
+#: (app/main.py) — och rensas aldrig per körning: ett Lock per körning under
+#: processens livstid är några hundra byte, och en rensning som poppar ett
+#: lås någon fortfarande väntar på hade släppt in två skrivare igen. Yttre
+#: nyckeln är event-loopen (weakref: en död testloop städar sina lås själv) —
+#: ett asyncio.Lock är bundet till sin loop, och i driften finns bara en.
+#: Fler REPLIKER av api-processen kräver ett Redis-lås i stället — höj inte
+#: replikantalet utan att bygga det.
+_KORNINGSLAS: "weakref.WeakKeyDictionary[asyncio.AbstractEventLoop, dict[str, asyncio.Lock]]" = (
+    weakref.WeakKeyDictionary()
+)
+
+
+def _korningslas(batch_id: str) -> asyncio.Lock:
+    # setdefault är atomärt nog här: ingen await mellan uppslag och insättning.
+    tabell = _KORNINGSLAS.setdefault(asyncio.get_running_loop(), {})
+    return tabell.setdefault(batch_id, asyncio.Lock())
+
+
 async def _spara_korning(app_state, tenant_id: str, batch_id: str, k: dict) -> None:
     """Liggaren får motorns tillstånd efter varje steg (migration 080,
     INV-JOB-003). Redis-posten är snabbvägen; den här raden är det kunden
@@ -1999,7 +2288,18 @@ async def _fyll_pa(app_state, tenant: dict, batch_id: str) -> None:
     Läser körningens tillstånd ur batchjobbets resultat, köar så många
     kandidater som behövs, kör en ny sökrunda i nästa geo-ring när poolen är
     tom, och avslutar ärligt när målet är nått eller det inte går längre.
-    Se app/leads/korning.py."""
+    Se app/leads/korning.py.
+
+    Hela påfyllningen håller körningens lås: en väckning som kommer medan en
+    annan worker redan fyller på ska läsa det tillstånd den påfyllningen
+    skrev, inte en kopia från före den — annars köas samma kandidat två
+    gånger. Priset är att en barnrapport för samma körning väntar ut en
+    pågående sökrunda; andra körningar har egna lås och går parallellt."""
+    async with _korningslas(batch_id):
+        await _fyll_pa_last(app_state, tenant, batch_id)
+
+
+async def _fyll_pa_last(app_state, tenant: dict, batch_id: str) -> None:
     jobs = app_state.jobs
     storage = app_state.storage
     tenant_id = tenant["tenant_id"]
@@ -2033,7 +2333,12 @@ async def _fyll_pa(app_state, tenant: dict, batch_id: str) -> None:
             break
         if not k["kandidater"]:
             if k["rundor"] >= iris_korning.MAX_RUNDOR:
-                orsak = "slut_pa_kandidater"
+                # "Slut på kandidater" förutsätter att sidorna gick att hämta.
+                # Föll hämtningarna hos tjänsten (kredit, kvot, 429) och inget
+                # levererades är det sökningen som föll — kunden ska se rött,
+                # inte ett grönt "Klar" med noll leads (Sebbe 2026-10-06).
+                tjanstefel = int((k.get("skrap") or {}).get("tjanstefel") or 0)
+                orsak = "sokningen_foll" if tjanstefel and k["levererade"] == 0 else "slut_pa_kandidater"
                 break
             if not iris_korning.har_malgrupp(profil, sok_icp):
                 # Ingenting att sikta på: varken bransch, segment, kriterium
@@ -2049,8 +2354,17 @@ async def _fyll_pa(app_state, tenant: dict, batch_id: str) -> None:
             }
             # Kredittaket gäller hela körningen (plan 2026-10-05): varje runda
             # får det som återstår, och summan står i liggaren (Körningar).
+            # Taket skalar med beställningen (Sebbe 2026-10-07: Iris måste
+            # kunna hitta leads igen): 40 sidor räckte till ~29 granskade
+            # bolag och svalt varje liten körning; en beställning på 50 var
+            # omöjlig per konstruktion. 20 sidor per beställt lead, golv 40,
+            # tak 160 — kostnadsvakten finns kvar, men i proportion.
+            # 40 räckte till ~29 granskade bolag i en målgrupp där tre av
+            # fyra saknar webbplats — en 2-beställning svalt ändå. 30 per
+            # beställt lead med golvet 60 ger småbeställningar en ärlig chans.
+            korningstak = min(160, max(60, 30 * int(k["mal"])))
             skrap = sidhamtning.starta(
-                storage, tenant_id, tak=sidhamtning.STANDARD_TAK - sidhamtning.betalda(k.get("skrap"))
+                storage, tenant_id, tak=korningstak - sidhamtning.betalda(k.get("skrap"))
             )
             try:
                 # Sökningen och Jev-triagen loggas som en egen post (Fas 7).
@@ -2107,6 +2421,11 @@ async def _fyll_pa(app_state, tenant: dict, batch_id: str) -> None:
         if styr == "avbruten":
             iris_korning.avsluta(k, "avbruten")
         else:
+            if not orsak and k["levererade"] < k["mal"]:
+                # Samma sanningsregel som i loopen: tjänstefel utan leverans
+                # är "sökningen föll", inte "slut på kandidater".
+                tjanstefel = int((k.get("skrap") or {}).get("tjanstefel") or 0)
+                orsak = "sokningen_foll" if tjanstefel and k["levererade"] == 0 else "slut_pa_kandidater"
             iris_korning.avsluta(k, "klar" if k["levererade"] >= k["mal"] else (orsak or "slut_pa_kandidater"))
         k["sammanfattning"] = iris_korning.sammanfatta(k)
         await _spara_listspar(storage, tenant_id, k)
@@ -2157,20 +2476,23 @@ async def _rapportera_till_korning(
 
     Idempotent per `job_id` (`korning.rapporterade`): ett barn som körts två
     gånger (återtag efter deploy) räknas en gång. `fyll=False` sparar bara
-    utfallet; anroparen väcker motorn själv (_vacka_korning)."""
+    utfallet; anroparen väcker motorn själv (_vacka_korning). Läs-ändra-skriv
+    under körningens lås: med leads_workers > 1 rapporterar två barn annars
+    över varandra och den enas utfall försvinner."""
     try:
-        resultat, k = await _las_korning(app_state, tenant["tenant_id"], batch_id)
-        if not k:
-            return
-        rapporterade = k.setdefault("rapporterade", [])
-        if job_id not in rapporterade:
-            rapporterade.append(job_id)
-            iris_korning.registrera_utfall(k, namn=namn, leverbar=leverbar, skal=skal, undersokt=undersokt)
-            if skrap:
-                k["skrap"] = sidhamtning.summera(k.get("skrap"), skrap)
-            resultat["korning"] = k
-            await app_state.jobs.complete(batch_id, resultat)
-            await _spara_korning(app_state, tenant["tenant_id"], batch_id, k)
+        async with _korningslas(batch_id):
+            resultat, k = await _las_korning(app_state, tenant["tenant_id"], batch_id)
+            if not k:
+                return
+            rapporterade = k.setdefault("rapporterade", [])
+            if job_id not in rapporterade:
+                rapporterade.append(job_id)
+                iris_korning.registrera_utfall(k, namn=namn, leverbar=leverbar, skal=skal, undersokt=undersokt)
+                if skrap:
+                    k["skrap"] = sidhamtning.summera(k.get("skrap"), skrap)
+                resultat["korning"] = k
+                await app_state.jobs.complete(batch_id, resultat)
+                await _spara_korning(app_state, tenant["tenant_id"], batch_id, k)
     except Exception as fel:  # noqa: BLE001 — se docstringen
         logger.exception("Kunde inte rapportera till körning %s", batch_id)
         await _markera_korning_fallen(app_state, tenant["tenant_id"], batch_id, fel)
@@ -2367,19 +2689,29 @@ async def start_batch_run(
 def _leverbarhet(rad: dict, result: dict, regler: dict) -> str | None:
     """None = leverbart, annars skälet (tratten). Antons krav 2026-10-01,
     kodat 2026-10-02 (plan del C): kvalificerat, över kundens tröskel, en
-    kontaktperson MED roll, en kontaktväg (telefon eller arbetsmejl) och en
-    lägesbeskrivning. Det är vad en körnings N räknar (INV-LEADS-N-001)."""
-    from ..leads.discovery import ar_arbetsmejl
+    NAMNGIVEN kontaktperson (Sebbes revidering 2026-10-07: rollen föredras
+    men krävs inte — en namngiven anställd duger i sista hand), en
+    kontaktväg (telefon eller arbetsmejl) och en lägesbeskrivning. Det är
+    vad en körnings N räknar (INV-LEADS-N-001).
+
+    Sebbes beslut 2026-10-07 (ersätter namn- och telefonkravet): kontakten
+    som krävs är en kontaktmejl till bolaget som utkastet kan nå fram till
+    (discovery.mottagare) — en namngiven person föredras, info@ duger, en
+    telefon ensam räcker inte."""
+    from ..leads.discovery import mottagare
 
     if not result.get("qualified"):
         return (result.get("disqualifiers") or ["Uppfyllde inte kriterierna"])[0]
     if eskalering.under_troskel(regler, qualified=True, icp_fit=result.get("icp_fit")):
-        return f"Under tröskeln: poäng {result.get('score_total')} av {regler['kvalificeringstroskel']} krävda"
-    if not (rad.get("contact_name") and rad.get("contact_role")):
-        return "Ingen kontaktperson med roll"
-    mejl = rad.get("contact_email")
-    if not (rad.get("contact_phone") or (mejl and ar_arbetsmejl(mejl, webb=rad.get("website")))):
-        return "Ingen kontaktväg: varken telefon eller arbetsadress"
+        # Tröskeln jämför träffsäkerheten (icp_fit), inte rangpoängen i
+        # score_total (app/leads/rangpoang.py) — skälet ska citera samma tal.
+        try:
+            traff = round(float(result.get("icp_fit")) * 100)
+        except (TypeError, ValueError):
+            traff = result.get("score_total")
+        return f"Under tröskeln: träffsäkerhet {traff} av {regler['kvalificeringstroskel']} krävda"
+    if not mottagare(rad):
+        return "Ingen kontaktmejl till bolaget"
     if not str(result.get("lagesbeskrivning") or rad.get("lagesbeskrivning") or "").strip():
         return "Ingen lägesbeskrivning"
     return None
@@ -2499,7 +2831,7 @@ async def _run_batch_prospect(
                 )
         elif scope == "research_and_draft" and _skal:
             # Utkast skrivs bara för ett LEVERBART lead (_leverbarhet): en
-            # namngiven kontaktperson med roll, en kontaktväg och en
+            # kontaktmejl till bolaget (Sebbe 2026-10-07) och en
             # lägesbeskrivning. Kontrollen räknade förut bara in körningens
             # utfall, och ett bolag som stod som "bortvalt: ingen
             # kontaktperson med roll" fick ändå status Redo och ett utkast
@@ -2516,18 +2848,18 @@ async def _run_batch_prospect(
             result["contact_role"] = prospect.get("contact_role")
             result["contact_level"] = prospect.get("contact_level")
             result["contact_form_url"] = prospect.get("contact_form_url")
-            from ..leads.discovery import ar_arbetsmejl, vd_mottagare
+            from ..leads.discovery import ar_arbetsmejl, mottagare
 
             if email and not ar_arbetsmejl(email, webb=prospect.get("website")):
                 email = None
-            # Bara VD, och bara en adress som bär VD:ns namn (Antons regel 3,
-            # discovery.vd_mottagare). En funktionsadress eller en annan roll
-            # ger inget utkast; telefonen till VD står kvar på leadet.
-            vd_epost = vd_mottagare(prospect) if email else None
+            # Bolagets kontaktmejl: personens adress eller info@ på bolagets
+            # domän (Sebbes beslut 2026-10-07, discovery.mottagare). En HR-,
+            # ekonomi- eller robotadress ger inget utkast.
+            vd_epost = mottagare(prospect) if email else None
             if email and not vd_epost:
                 result["draft_note"] = (
-                    "Research klar. Inget utkast: e-postadressen går inte att knyta till bolagets VD"
-                    + (", ring VD i stället." if prospect.get("contact_phone") else ".")
+                    "Research klar. Inget utkast: e-postadressen är ingen säljingång (HR, ekonomi eller automatisk)"
+                    + (", ring i stället." if prospect.get("contact_phone") else ".")
                 )
             elif email and not result.get("citat"):
                 # Underlagsgolvet: utan ett enda ordagrant citat ur bolagets
@@ -2621,10 +2953,20 @@ async def _run_batch_prospect(
                         research_evidence=tuple(result.get("research_evidence") or ()),
                         is_test=is_test,
                     )
+                    # `queued` är utkaststegets eget besked, inte en konstant:
+                    # ett utkast som faktagrinden eller utdatakontraktet stoppade
+                    # stod här som köat (verifieringen 2026-10-07 läste "3 köade"
+                    # ur jobbresultaten medan granskningskön var tom).
+                    koad = bool(draft.get("queued"))
                     result["draft"] = {
                         "subject": draft.get("subject"),
-                        "queued": True,
+                        "queued": koad,
                     }
+                    if not koad:
+                        result["draft_note"] = (
+                            "Research klar, men utkastet stoppades före kön: "
+                            + (draft.get("escalation_reason") or _FEL_UTKAST)
+                        )
                 except MissingBusinessContextError as fel:
                     result["draft_note"] = str(fel)
                 except Exception as fel:  # noqa: BLE001 — researchen är klar, utkastet är bonus
@@ -2640,6 +2982,12 @@ async def _run_batch_prospect(
                         + (kundtext_for(fel) or _FEL_UTKAST)
                     )
 
+        # Utfallet följer med jobbposten: dör processen mellan complete() och
+        # rapporten nedan (rapporten väntar på körningens lås, som en sökrunda
+        # kan hålla i minuter) slutför återtaget bokföringen ur posten i
+        # stället för att lämna körningen väntande på ett barn som aldrig
+        # rapporterar (1fdbcf8e, 2026-10-06: 2 av 3 leads, stod still).
+        result["_korningsutfall"] = {**utfall, "skrap": skrap.som_dict()}
         await app_state.jobs.complete(job_id, result)
         slutstatus = "completed"
     except Exception as error:  # noqa: BLE001 — ett trasigt prospekt fäller inte batchen
@@ -2756,6 +3104,9 @@ async def bestall_leadslista(
         icp=icp,
         antal=payload.antal,
         is_test=payload.is_test,
+        # "Beställ leads-lista" (migration 105): raderna landar i säljlistan,
+        # inte under "Dina listor".
+        kalla="saljlista" if payload.mal == "saljlista" else "sok",
     )
     job_id = await request.app.state.jobs.create(tenant_id=tenant["tenant_id"], status="queued")
     await storage.set_leads_job_status(
@@ -2798,13 +3149,39 @@ def _dedupnyckel(rad: dict) -> str:
 
 
 _FEL_CRM_LISTA = "En CRM-kundlista är kundens befintliga kunder. Den prospekteras inte och kombineras inte."
+_FEL_SALJLISTA_LISTA = "Den här körningens rader ligger i säljlistan. Listan lyfts inte till Iris och kombineras inte."
+
+
+def saljlista_kvalificerade(rader: list[dict], *, titel: str) -> list[dict]:
+    """Raderna som får ligga i säljlistan: ALLA kolumner kalkylarket kräver
+    (Sebbe 2026-10-06 — orgnr, kontaktperson, kontaktnummer, kontaktmail;
+    namn förstås). En rad som saknar något är inte relevant nog och blir
+    kvar i den dolda listan i stället. Ren funktion, testad för sig."""
+    ut: list[dict] = []
+    for rad in rader:
+        falt = {
+            "foretagsnamn": str(rad.get("company_name") or "").strip(),
+            "orgnr": str(rad.get("orgnr") or "").strip(),
+            "kontaktperson": str(rad.get("contact_name") or "").strip(),
+            "kontaktnummer": str(rad.get("contact_phone") or "").strip(),
+            "kontaktmail": str(rad.get("contact_email") or "").strip(),
+        }
+        if not all(falt.values()):
+            continue
+        detalj = str(rad.get("signal_detalj") or "").strip()
+        falt["anteckningar"] = f"Ur beställningen ”{titel}”." + (f" {detalj}" if detalj else "")
+        ut.append(falt)
+    return ut
 
 
 def _kraev_ej_crm(lista: dict) -> None:
     """CRM-kundlistan (migration 098) finns för att UTESLUTA bolag, inte för
-    att bearbeta dem: den lyfts aldrig till Iris eller in i en annan lista."""
+    att bearbeta dem: den lyfts aldrig till Iris eller in i en annan lista.
+    Samma sak gäller en säljlistebeställning (105): raderna bor i säljlistan."""
     if lista.get("kalla") == "crm":
         raise HTTPException(status_code=409, detail=_FEL_CRM_LISTA)
+    if lista.get("kalla") == "saljlista":
+        raise HTTPException(status_code=409, detail=_FEL_SALJLISTA_LISTA)
 
 
 @router.post("/api/leads/listor/kombinera", status_code=201)
@@ -3028,6 +3405,152 @@ async def _befordra_listrad(storage, tenant_id: str, lista: dict, rad: dict) -> 
     return prospect, True
 
 
+# -- Listutkast: generellt erbjudande till listspårets bolag (regel 8) -------
+#
+# Sebbe 2026-10-07: "Bygg utkast till listan Utan webbplats också". Utkastet
+# skrivs av app/leads/listutkast.py (ett anrop per bolag, ingen research) och
+# sparas på listraden; det köas först när kunden lagt in VD:s mejladress.
+
+_EPOST = re.compile(r"^[^@\s]+@[^@\s]+\.[a-z]{2,}$", re.IGNORECASE)
+_LISTUTKAST_TAK = 100
+
+
+async def _skriv_listans_utkast(app_state, tenant: dict, rader: list[dict], erbjudande: str) -> None:
+    from datetime import datetime, timezone
+
+    from ..leads.listutkast import skriv_listutkast
+
+    storage = app_state.storage
+    grind = asyncio.Semaphore(3)
+
+    async def en(rad: dict) -> None:
+        async with grind:
+            nu = datetime.now(timezone.utc).isoformat()
+            try:
+                utkast = await skriv_listutkast(rad, avsandare=tenant["tenant_name"], erbjudande=erbjudande)
+                await storage.spara_listutkast(tenant["tenant_id"], str(rad["id"]), {**utkast, "skrivet_at": nu})
+            except Exception as fel:  # noqa: BLE001 — en rad som faller ska inte fälla resten
+                logger.exception("Listutkast misslyckades för rad %s", rad.get("id"))
+                await _larma_vid_kreditslut(app_state, tenant["tenant_id"], fel)
+                await storage.spara_listutkast(
+                    tenant["tenant_id"], str(rad["id"]), {"fel": _jobbfeltext(fel), "skrivet_at": nu}
+                )
+
+    await asyncio.gather(*(en(r) for r in rader))
+
+
+@router.post("/api/leads/listor/{list_id}/utkast", status_code=202)
+async def skriv_listutkast_for_listan(
+    request: Request, list_id: str, tenant: dict = Depends(require_tenant)
+) -> dict:
+    """Skriver utkast med kundens generella erbjudande till listans bolag som
+    saknar ett (eller där förra försöket föll). Körs i bakgrunden; listan
+    (GET /api/leads/listor/{id}) visar utkasten på raderna allteftersom."""
+    from ..leads.business_context import require_business_context
+
+    kraev_uuid(list_id, "listan")
+    _require_live_llm()
+    storage = request.app.state.storage
+    tenant_id = tenant["tenant_id"]
+    lista = await storage.get_lead_list(tenant_id, list_id)
+    if not lista:
+        raise HTTPException(status_code=404, detail="Listan finns inte.")
+    _kraev_ej_crm(lista)
+    try:
+        erbjudande = await require_business_context(storage, tenant_id)
+    except MissingBusinessContextError as fel:
+        raise HTTPException(status_code=422, detail=str(fel)) from fel
+    await _kraev_leads_budget(storage, tenant_id)
+    rader = [
+        r
+        for r in await storage.list_lead_list_items(tenant_id, list_id)
+        if (r.get("company_name") or "").strip()
+        and (not isinstance(r.get("utkast"), dict) or r["utkast"].get("fel"))
+    ][:_LISTUTKAST_TAK]
+    if rader:
+        asyncio.create_task(_skriv_listans_utkast(request.app.state, tenant, rader, erbjudande))
+    return {"count": len(rader)}
+
+
+@router.post("/api/leads/listor/{list_id}/items/{item_id}/koa")
+async def koa_listutkast(
+    request: Request, list_id: str, item_id: str, payload: dict, tenant: dict = Depends(require_tenant)
+) -> dict:
+    """Köar listradens utkast till en mejladress kunden angett (VD:s, regel 5).
+
+    Raden lyfts in i prospektregistret (_befordra_listrad), adressen sparas på
+    prospektet, och utkastet köas via samma väg som Iris utkast
+    (_queue_outreach_draft_impl): textkvalitet, signatur med logga, lagstadgad
+    fot och språkgrind. Alltid till granskning, aldrig direkt till utskick.
+    `subject`/`body` i anropet ersätter det sparade utkastet (granskarens
+    redigering i rutan)."""
+    from ..agent.leads_context import OutreachContext
+    from ..agent.leads_tools import _queue_outreach_draft_impl
+    from ..leads.discovery import ar_saljadress
+    from ..leads.listutkast import HUMANIZER
+
+    kraev_uuid(list_id, "listan")
+    kraev_uuid(item_id, "raden")
+    storage = request.app.state.storage
+    tenant_id = tenant["tenant_id"]
+    epost = str(payload.get("email") or "").strip().lower()
+    if not _EPOST.match(epost):
+        raise HTTPException(status_code=422, detail="Ange en giltig mejladress.")
+    if not ar_saljadress(epost):
+        raise HTTPException(
+            status_code=422, detail="Adressen är en HR-, ekonomi- eller robotadress och tar inte emot säljmejl."
+        )
+    lista = await storage.get_lead_list(tenant_id, list_id)
+    if not lista:
+        raise HTTPException(status_code=404, detail="Listan finns inte.")
+    _kraev_ej_crm(lista)
+    rad = next(
+        (r for r in await storage.list_lead_list_items(tenant_id, list_id) if str(r.get("id")) == item_id),
+        None,
+    )
+    if rad is None:
+        raise HTTPException(status_code=404, detail="Raden finns inte i listan.")
+    utkast = rad.get("utkast") if isinstance(rad.get("utkast"), dict) else {}
+    amne = str(payload.get("subject") or utkast.get("subject") or "").strip()
+    brod = str(payload.get("body") or utkast.get("body") or "").strip()
+    if not amne or not brod:
+        raise HTTPException(status_code=409, detail="Raden har inget utkast än. Skriv utkasten först.")
+    if utkast.get("queue_item_id"):
+        return {"queue_item_id": utkast["queue_item_id"], "prospect_id": utkast.get("prospect_id"), "fanns": True}
+
+    prospect, _ = await _befordra_listrad(storage, tenant_id, lista, rad)
+    if (prospect.get("contact_email") or "").lower() != epost:
+        await storage.update_prospect(tenant_id, prospect["id"], contact_email=epost)
+    trad = await storage.ensure_outreach_thread(tenant_id, prospect_id=prospect["id"])
+    ctx = OutreachContext(
+        storage=storage,
+        tenant_id=tenant_id,
+        thread_id=trad["id"],
+        prospect_email=epost,
+        is_test=bool(lista.get("is_test")),
+    )
+    svar = json.loads(
+        await _queue_outreach_draft_impl(
+            ctx, subject=amne, body=brod, language_state="sv", humanizer_variant=HUMANIZER, force_review=True
+        )
+    )
+    if not svar.get("queued"):
+        raise HTTPException(status_code=422, detail=svar.get("error") or "Utkastet kunde inte köas.")
+    await storage.spara_listutkast(
+        tenant_id,
+        item_id,
+        {**utkast, "subject": amne, "body": brod, "queue_item_id": svar["queue_item_id"], "prospect_id": prospect["id"]},
+    )
+    koat = await storage.get_pending_outreach_message(tenant_id, trad["id"]) or {}
+    return {
+        "queue_item_id": svar["queue_item_id"],
+        "prospect_id": prospect["id"],
+        "subject": koat.get("subject") or amne,
+        "body": koat.get("body") or brod,
+        "fanns": False,
+    }
+
+
 @router.post("/api/leads/listor/{list_id}/till-iris", status_code=202)
 async def listan_till_iris(
     request: Request, list_id: str, payload: TillIrisRequest, tenant: dict = Depends(require_tenant)
@@ -3242,9 +3765,25 @@ async def _run_list_job(app_state, payload: dict) -> None:
                 signal=traff.get("signal"),
                 signal_detalj=traff.get("signal_detalj"),
             )
+        # Säljlistebeställningen (migration 105): raderna som bär ALLT
+        # säljlistan kräver läggs direkt där. Resten står kvar i den dolda
+        # listan — de är inte relevanta nog (Sebbes krav 2026-10-06).
+        # FÖRE 'klar': säljlistevyn slutar polla och hämtar om när den ser
+        # 'klar', och hade annars kunnat hämta innan raderna fanns.
+        saljlista_inlagda = None
+        if lista.get("kalla") == "saljlista":
+            saljlista_inlagda = await storage.saljlista_fyll_pa(
+                tenant_id, saljlista_kvalificerade(rader, titel=str(lista.get("titel") or ""))
+            )
+            logger.info(
+                "Säljlistebeställning %s: %d av %d rader kvalificerade in i säljlistan.",
+                lista["id"], saljlista_inlagda, len(rader),
+            )
         await storage.set_lead_list_status(tenant_id, lista["id"], status="klar")
         await app_state.jobs.complete(
-            job_id, {"list_id": lista["id"], "count": len(traffar), "status": "klar"}
+            job_id,
+            {"list_id": lista["id"], "count": len(traffar), "status": "klar",
+             **({"saljlista_inlagda": saljlista_inlagda} if saljlista_inlagda is not None else {})},
         )
         await storage.set_leads_job_status(tenant_id, job_id=job_id, status="completed", scope="lista")
     except Exception as fel:  # noqa: BLE001 — listan ska bli 'fel', inte tyst dö
@@ -3332,6 +3871,8 @@ async def hantera_leads_jobb(app_state, payload: dict) -> None:
 
     befintligt = await jobs.get(job_id) or {}
     if befintligt.get("status") == "completed":
+        if tenant_id and payload.get("batch_id") and liggarstatus in ("queued", "processing"):
+            await _slutfor_aterupptaget_barn(app_state, payload, befintligt.get("result") or {})
         return
 
     if payload.get("kind") == "batch":
@@ -3359,6 +3900,35 @@ async def hantera_leads_jobb(app_state, payload: dict) -> None:
         is_test=bool(payload.get("is_test")),
         batch_id=payload.get("batch_id"),
     )
+
+
+async def _slutfor_aterupptaget_barn(app_state, payload: dict, resultat: dict) -> None:
+    """Ett barn vars research blev klar (Redis-posten completed) men vars
+    process dog innan körningen fick rapporten och liggaren sin slutstatus.
+
+    Vakten kvitterade förut bara posten: körningen väntade sedan för evigt på
+    ett barn som aldrig rapporterade, och städaren fällde den efter en timme
+    som "avbruten", med leads som redan var klara. Här görs resten av
+    _run_batch_prospects slut i samma ordning (INV-JOB-003): rapport,
+    liggare, väckning. Rapporten är idempotent per job_id."""
+    tenant = {"tenant_id": payload["tenant_id"], "tenant_name": payload.get("tenant_name")}
+    utfall = resultat.get("_korningsutfall") or {}
+    if not utfall:
+        # Posten skrevs av kod från före utfallsfältet: räkna barnet som
+        # bortvalt hellre än att låta körningen stå still.
+        prospekt = await app_state.storage.get_prospect(tenant["tenant_id"], payload["prospect_id"]) or {}
+        utfall = {"namn": prospekt.get("company_name") or "", "leverbar": False,
+                  "skal": "Researchen avbröts av en omstart."}
+    await _rapportera_till_korning(
+        app_state, tenant, payload["batch_id"], job_id=payload["job_id"], fyll=False,
+        namn=str(utfall.get("namn") or ""), leverbar=bool(utfall.get("leverbar")),
+        skal=utfall.get("skal"), skrap=utfall.get("skrap"),
+    )
+    await app_state.storage.set_leads_job_status(
+        tenant["tenant_id"], job_id=payload["job_id"], status="completed",
+        scope=payload.get("scope") or "research", prospect_id=payload.get("prospect_id"),
+    )
+    await _vacka_korning(app_state, tenant, payload["batch_id"])
 
 
 #: nyttolastens `kind` -> liggarens scope (prospektjobb bär sitt eget `scope`).
