@@ -2,15 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useDashboard } from "@/components/dashboard/DashboardContext";
-import {
-  Aktivitetsgraf,
-  KpiKort,
-  Munkdiagram,
-  forandring,
-  type Andel,
-  type Kpi,
-  type Vecka
-} from "@/components/dashboard/OversiktPaneler";
+import type { Vecka } from "@/components/dashboard/OversiktPaneler";
 import { CrmKundlista } from "@/components/leads/CrmKundlista";
 import { IrisGranskning } from "@/components/leads/IrisGranskning";
 import {
@@ -22,25 +14,29 @@ import {
   type KorningsRad
 } from "@/components/leads/IrisKorningar";
 import { ListorUpsell } from "@/components/leads/IrisBolag";
+import { useLeadsdata } from "@/components/leads/LeadsDiagram";
 import { LeadsTabell } from "@/components/leads/LeadsTabell";
 import { LeadslistorView } from "@/components/leads/LeadslistorView";
 import { SaljlistaUtforska } from "@/components/leads/Saljlista";
 import { SmalKolumn } from "@/components/leads/smal";
-import { btnLiten, btnSecondary, meta } from "@/components/ui";
-import { demoOversiktSvar } from "@/lib/demo/oversikt";
+import { Nyckeltal, btnLiten, btnSecondary, meta, rubrikPanel } from "@/components/ui";
 import { readJsonBody } from "@/lib/http/json";
 import { useLocale, type Localized } from "@/lib/i18n";
-import { kontaktvagAv, type SuiteProspekt } from "@/lib/leads/suite";
-import { STATUS_ETIKETT } from "@/lib/prospekt";
+import type { SuiteProspekt } from "@/lib/leads/suite";
 import { cn } from "@/lib/utils";
 
 /**
  * Leads › Översikt (Sebbes beställning 2026-10-06, omgjord 2026-10-07).
  *
- *   nyckeltal som i Min arbetsyta (kort med förändring och sparkline)
- *   aktivitet per vecka · munkdiagram för status och kontaktväg
- *   de tre senaste utkasten (expanderbar, skicka direkt) · körningarna
+ *   en rad nyckeltal (hårlinjer, inga kort)
  *   Iris-leads | listor och säljlista   (split view från 1280 px)
+ *   de tre senaste utkasten (expanderbar, skicka direkt) · körningarna
+ *
+ * Impeccable-kritiken 2026-10-07 (26/40): första skärmen var statistik och
+ * listan började under vecket. Listan står nu först; aktivitetsdiagrammet och
+ * munkdiagrammen flyttade till Aktivitet, under Iris rubrik
+ * (components/leads/LeadsDiagram.tsx). Kolumnerna rullar inte längre inuti
+ * sidan: två rullningar i varandra var svåra att styra.
  *
  * Sebbe 2026-10-07: utkasten och de platta siffrorna tog all plats, och
  * leads och listor byggde på höjden. Utkasten är nu en liten ruta som visar
@@ -54,13 +50,7 @@ const T = {
   vantarPaDig: { sv: "väntar på ditt ja", en: "waiting for your yes" },
   skickade: { sv: "Skickade mejl", en: "Emails sent" },
   svar: { sv: "Svar från leads", en: "Replies from leads" },
-  nyaLeads: { sv: "Nya leads", en: "New leads" },
-  aktivitet: { sv: "Aktivitet per vecka", en: "Activity per week" },
-  ingenAktivitet: { sv: "Ingen aktivitet att visa än.", en: "No activity to show yet." },
-  fordelning: { sv: "Fördelning", en: "Breakdown" },
-  status: { sv: "Status", en: "Status" },
-  kontaktvag: { sv: "Kontaktväg", en: "Contact path" },
-  leadsMitt: { sv: "leads", en: "leads" },
+  leadsIListan: { sv: "Leads i listan", en: "Leads in the list" },
   utkastRubrik: { sv: "Senaste utkasten", en: "Latest drafts" },
   pagaendeKorningar: { sv: "Pågående körningar", en: "Runs in progress" },
   senasteKorning: { sv: "Senaste körningen", en: "Latest run" },
@@ -68,9 +58,11 @@ const T = {
   oppna: { sv: "Öppna", en: "Open" },
   allaKorningar: { sv: "Alla körningar", en: "All runs" },
   irisLeads: { sv: "Iris-leads", en: "Iris leads" },
+  // Poängen förklaras där den visas (kritiken: poäng och nivå förklarades
+  // ingenstans). Samma vikter som app/leads/rangpoang.py.
   irisLeadsText: {
-    sv: "Bolagen Iris researchat åt dig, med status i samma färger som säljlistan.",
-    en: "The companies Iris has researched for you, with status in the same colours as the sales list."
+    sv: "De bästa överst. Poängen väger hur väl bolaget passar, styrkta citat från sajten, kontakten och om tidpunkten är rätt.",
+    en: "Best first. The score weighs how well the company fits, verified quotes from its site, the contact and whether the timing is right."
   },
   listorRubrik: { sv: "Listor och säljlista", en: "Lists and sales list" },
   av: { sv: "av", en: "of" },
@@ -78,25 +70,6 @@ const T = {
 } satisfies Record<string, Localized>;
 
 const PERIOD = 4;
-
-const KONTAKT: { id: ReturnType<typeof kontaktvagAv>; etikett: Localized; farg: string }[] = [
-  { id: "bada", etikett: { sv: "Tel och mejl", en: "Phone and email" }, farg: "oklch(var(--moss))" },
-  { id: "telefon", etikett: { sv: "Tel", en: "Phone" }, farg: "oklch(var(--chart-blue))" },
-  { id: "mejl", etikett: { sv: "Mejl", en: "Email" }, farg: "oklch(var(--chart-ochre))" },
-  { id: "saknas", etikett: { sv: "Saknas", en: "Missing" }, farg: "oklch(var(--danger))" }
-];
-
-/** Pipelinens steg i ordning: blå rampa ljust till mörkt, förlorad i grått. */
-const STATUSFARG: Record<string, string> = {
-  new: "oklch(var(--chart-ramp-1))",
-  researching: "oklch(var(--chart-ramp-2))",
-  ready: "oklch(var(--chart-ramp-3))",
-  contacted: "oklch(var(--chart-ramp-4))",
-  replied: "oklch(var(--chart-ramp-5))",
-  meeting: "oklch(var(--chart-ramp-6))",
-  won: "oklch(var(--moss))",
-  lost: "oklch(var(--ink-subtle))"
-};
 
 const kort = "rounded-card border border-ink/12 bg-paper p-4 sm:p-5";
 
@@ -115,45 +88,6 @@ function useBred(): boolean {
     return () => mq.removeEventListener("change", satt);
   }, []);
   return bred;
-}
-
-/** Översiktens egna tal. Ett fel blir null, och rutan visar tankstreck. */
-function useOversiktsdata(demo: boolean) {
-  const [prospekt, setProspekt] = useState<SuiteProspekt[] | null>(null);
-  const [veckor, setVeckor] = useState<Vecka[] | null>(null);
-
-  const hamta = useCallback(
-    async <T,>(path: string): Promise<T | null> => {
-      if (demo) return (demoOversiktSvar(path) as T | undefined) ?? null;
-      try {
-        const response = await fetch(`/api/snajp-support${path}`, { cache: "no-store" });
-        if (!response.ok) return null;
-        return await readJsonBody<T>(response);
-      } catch {
-        return null;
-      }
-    },
-    [demo]
-  );
-
-  const ladda = useCallback(async () => {
-    const [p, w] = await Promise.all([
-      hamta<{ prospects?: SuiteProspekt[] }>("/leads/prospects?limit=500"),
-      hamta<{ weeks?: Vecka[] }>("/analytics/weekly?weeks=24")
-    ]);
-    setProspekt(p ? (p.prospects ?? []) : []);
-    setVeckor(w ? (w.weeks ?? []) : []);
-  }, [hamta]);
-
-  useEffect(() => {
-    void ladda();
-    // En körning eller ett skickat utkast flyttar talen medan man tittar.
-    const uppdatera = () => void ladda();
-    window.addEventListener("snipra:leads-korning-klar", uppdatera);
-    return () => window.removeEventListener("snipra:leads-korning-klar", uppdatera);
-  }, [ladda]);
-
-  return { prospekt, veckor };
 }
 
 /**
@@ -213,7 +147,7 @@ function KorningsRuta({ onOppna, onPagaende }: Readonly<{ onOppna: (jobId: strin
   return (
     <section aria-labelledby="leads-korningsruta" className={kort}>
       <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2">
-        <h2 id="leads-korningsruta" className="text-[1rem] font-semibold">
+        <h2 id="leads-korningsruta" className={rubrikPanel}>
           {pagaende.length > 0 ? text(T.pagaendeKorningar) : text(T.senasteKorning)}
         </h2>
         <button
@@ -291,12 +225,14 @@ export function LeadsOversikt({
   onOppnaKorningar?: (jobId: string | null) => void;
 }>) {
   const { addons, isDemo, vy, isPlatformAdmin, impersonation } = useDashboard();
-  const { text } = useLocale();
+  const { text, locale } = useLocale();
   const arDemo = demo || isDemo || vy === "demo";
   const harListaddon = addons.includes("leadlists");
   const bred = useBred();
-  const { prospekt, veckor } = useOversiktsdata(arDemo);
-  const [antalLeads, setAntalLeads] = useState<number | null>(null);
+  const { veckor } = useLeadsdata(arDemo);
+  // Listans egna tal (LeadsTabell.onAntal): samma rader som Alla och Ny visar,
+  // så att nyckeltalet och listan aldrig säger två olika saker.
+  const [antalLeads, setAntalLeads] = useState<{ alla: number; nya: number } | null>(null);
   const [antalUtkast, setAntalUtkast] = useState<number | null>(null);
   // Körningsrutan vet om en Iris-körning pågår; tabellen går då i livetakt.
   const [pagaendeKorningar, setPagaendeKorningar] = useState(0);
@@ -308,128 +244,33 @@ export function LeadsOversikt({
   const v = veckor ?? [];
   const n = v.length;
   const nu = (k: keyof Vecka) => summa(v, k, Math.max(0, n - PERIOD), n);
-  const forra = (k: keyof Vecka) => summa(v, k, Math.max(0, n - 2 * PERIOD), Math.max(0, n - PERIOD));
-  const serie = (k: keyof Vecka) => v.slice(-8).map((x) => Number(x[k] ?? 0));
   const harVeckor = veckor !== null && n > 0;
-  const perioden: Localized = { sv: `de ${PERIOD} veckorna före`, en: `the ${PERIOD} weeks before` };
-  const detalj: Localized = { sv: `senaste ${PERIOD} veckorna`, en: `last ${PERIOD} weeks` };
+  const fmt = (varde: number | null) => (varde === null ? "–" : varde.toLocaleString(locale === "en" ? "en-GB" : "sv-SE"));
+  const senaste = text({ sv: `senaste ${PERIOD} veckorna`, en: `last ${PERIOD} weeks` });
 
-  const kpier: Kpi[] = [
-    // Periodens nya leads, som i Min arbetsyta. Listans antal står som
-    // detalj: veckotalet räknar även bortvalda, så de två är olika tal.
+  const nyckeltal = [
     {
-      id: "leads",
-      etikett: T.nyaLeads,
-      varde: harVeckor ? nu("new_leads") : null,
-      forandring: harVeckor ? forandring(nu("new_leads"), forra("new_leads")) : undefined,
-      serie: harVeckor ? serie("new_leads") : undefined,
-      detalj:
-        antalLeads === null
-          ? detalj
-          : { sv: `${detalj.sv} · ${antalLeads} i listan`, en: `${detalj.en} · ${antalLeads} in the list` }
+      etikett: text(T.leadsIListan),
+      varde: fmt(antalLeads?.alla ?? null),
+      notis: antalLeads ? text({ sv: `${antalLeads.nya} nya`, en: `${antalLeads.nya} new` }) : null
     },
-    {
-      id: "utkast",
-      etikett: T.utkastVantar,
-      varde: antalUtkast,
-      larm: (antalUtkast ?? 0) > 0,
-      detalj: T.vantarPaDig
-    },
-    {
-      id: "skickat",
-      etikett: T.skickade,
-      varde: harVeckor ? nu("sent") : null,
-      forandring: harVeckor ? forandring(nu("sent"), forra("sent")) : undefined,
-      serie: harVeckor ? serie("sent") : undefined,
-      detalj
-    },
-    {
-      id: "svar",
-      etikett: T.svar,
-      varde: harVeckor ? nu("replies") : null,
-      forandring: harVeckor ? forandring(nu("replies"), forra("replies")) : undefined,
-      serie: harVeckor ? serie("replies") : undefined,
-      detalj
-    }
+    { etikett: text(T.utkastVantar), varde: fmt(antalUtkast), notis: text(T.vantarPaDig) },
+    { etikett: text(T.skickade), varde: fmt(harVeckor ? nu("sent") : null), notis: senaste },
+    { etikett: text(T.svar), varde: fmt(harVeckor ? nu("replies") : null), notis: senaste }
   ];
 
-  const riktiga = [...exempel, ...(prospekt ?? [])].filter((p, i, alla) => alla.findIndex((q) => q.id === p.id) === i);
-  const statusdelar: Andel[] = Object.keys(STATUSFARG).map((s) => ({
-    id: s,
-    etikett: STATUS_ETIKETT[s],
-    antal: riktiga.filter((p) => (p.status ?? "new") === s).length,
-    farg: STATUSFARG[s]
-  }));
-  const kontaktdelar: Andel[] = KONTAKT.map((k) => ({
-    id: k.id,
-    etikett: k.etikett,
-    farg: k.farg,
-    antal: riktiga.filter((p) => kontaktvagAv(p) === k.id).length
-  }));
-
-  // relative: en rullbar kolumn utan position släpper sina absoluta barn
-  // (sr-only-etiketter) till <body>, som då placerar dem på deras plats LÅNGT
-  // ner i det rullade innehållet. Dokumentet växte ~600 px under kolumnerna,
-  // och vänsterraden tog slut mitt på sidan (Sebbe 2026-10-07, /admin/leads).
-  const kolumn = cn(kort, "relative min-w-0", bred && "thin-scrollbar max-h-[56rem] overflow-y-auto");
+  const kolumn = cn(kort, "relative min-w-0");
 
   return (
     // flex-kolumn, inte grid: ett grid-items min-width:auto lät tabellernas
     // minsta bredd växa hela sidan i sidled (uppmätt 1318 px vid 1280).
     <div className="flex min-w-0 flex-col gap-6">
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {kpier.map((k) => (
-          <KpiKort key={k.id} kpi={k} perioden={perioden} />
-        ))}
-      </div>
-
-      <div className="grid min-w-0 gap-4 lg:grid-cols-12">
-        <section aria-labelledby="leads-aktivitet" className={cn(kort, "min-w-0 lg:col-span-7")}>
-          <h2 id="leads-aktivitet" className="mb-4 text-[1rem] font-semibold">
-            {text(T.aktivitet)}
-          </h2>
-          {harVeckor ? (
-            <Aktivitetsgraf
-              veckor={v.slice(-12)}
-              serier={[
-                { nyckel: "new_leads", etikett: T.nyaLeads, ton: "chart-ochre" },
-                { nyckel: "replies", etikett: T.svar, ton: "chart-blue" }
-              ]}
-            />
-          ) : (
-            <p className={meta}>{veckor === null ? "…" : text(T.ingenAktivitet)}</p>
-          )}
-        </section>
-        <section aria-labelledby="leads-fordelning" className={cn(kort, "min-w-0 lg:col-span-5")}>
-          <h2 id="leads-fordelning" className="mb-4 text-[1rem] font-semibold">
-            {text(T.fordelning)}
-          </h2>
-          {prospekt === null ? (
-            <p className={meta}>…</p>
-          ) : (
-            <div className="grid gap-6">
-              <Munkdiagram delar={statusdelar} etikett={T.status} mitt={T.leadsMitt} />
-              <Munkdiagram delar={kontaktdelar} etikett={T.kontaktvag} mitt={T.leadsMitt} />
-            </div>
-          )}
-        </section>
-      </div>
-
-      <div className={cn("grid min-w-0 gap-4", !arDemo && "lg:grid-cols-2")}>
-        <section aria-labelledby="leads-utkastruta" className={cn(kort, "min-w-0")}>
-          <h2 id="leads-utkastruta" className="mb-3 text-[1rem] font-semibold">
-            {text(T.utkastRubrik)}
-            {antalUtkast ? <span className="num ml-2 font-normal tabular-nums text-ink-subtle">{antalUtkast}</span> : null}
-          </h2>
-          <IrisGranskning demo={arDemo} onAntal={setAntalUtkast} kompakt />
-        </section>
-        {arDemo ? null : <KorningsRuta onOppna={(jobId) => onOppnaKorningar?.(jobId)} onPagaende={setPagaendeKorningar} />}
-      </div>
+      <Nyckeltal poster={nyckeltal} />
 
       <SmalKolumn value={bred}>
-        <div className="grid min-w-0 gap-4 xl:grid-cols-2">
+        <div className="grid min-w-0 items-start gap-4 xl:grid-cols-2">
           <section aria-labelledby="leads-iris" className={kolumn}>
-            <h2 id="leads-iris" className="text-[1.0625rem] font-semibold tracking-[-0.01em]">
+            <h2 id="leads-iris" className={rubrikPanel}>
               {text(T.irisLeads)}
             </h2>
             <p className={cn(meta, "mb-4 mt-1 max-w-[70ch]")}>{text(T.irisLeadsText)}</p>
@@ -440,12 +281,12 @@ export function LeadsOversikt({
               onValj={onValjLead}
               flyttbar={flyttbar}
               korningPagar={pagaendeKorningar > 0}
-              onAntal={setAntalLeads}
+              onAntal={(alla, nya) => setAntalLeads({ alla, nya })}
             />
           </section>
 
           <section aria-labelledby="leads-listor" className={kolumn}>
-            <h2 id="leads-listor" className="mb-4 text-[1.0625rem] font-semibold tracking-[-0.01em]">
+            <h2 id="leads-listor" className={cn(rubrikPanel, "mb-4")}>
               {text(T.listorRubrik)}
             </h2>
             {harListaddon || arDemo ? (
@@ -460,6 +301,17 @@ export function LeadsOversikt({
           </section>
         </div>
       </SmalKolumn>
+
+      <div className={cn("grid min-w-0 items-start gap-4", !arDemo && "lg:grid-cols-2")}>
+        <section aria-labelledby="leads-utkastruta" className={cn(kort, "min-w-0")}>
+          <h2 id="leads-utkastruta" className={cn(rubrikPanel, "mb-3")}>
+            {text(T.utkastRubrik)}
+            {antalUtkast ? <>{" "}<span className="num ml-1 font-normal tabular-nums text-ink-subtle">{antalUtkast}</span></> : null}
+          </h2>
+          <IrisGranskning demo={arDemo} onAntal={setAntalUtkast} kompakt />
+        </section>
+        {arDemo ? null : <KorningsRuta onOppna={(jobId) => onOppnaKorningar?.(jobId)} onPagaende={setPagaendeKorningar} />}
+      </div>
     </div>
   );
 }

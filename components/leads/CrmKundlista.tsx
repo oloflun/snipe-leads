@@ -42,7 +42,7 @@ export function CrmKundlista({
   }, [startOppen]);
 
   return (
-    <section ref={ref} aria-labelledby="crm-kundlista" className="scroll-mt-32rounded-card border border-ink/12 bg-paper2/40 p-4 sm:p-5">
+    <section ref={ref} aria-labelledby="crm-kundlista" className="scroll-mt-32 rounded-card border border-ink/12 bg-paper2/40 p-4 sm:p-5">
       <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
         <div className="min-w-0 max-w-[64ch]">
           <h2 id="crm-kundlista" className="text-[1.125rem] font-semibold tracking-[-0.01em]">

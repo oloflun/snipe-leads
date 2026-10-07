@@ -85,7 +85,8 @@ const T = {
   statusFor: { sv: "Status för", en: "Status for" },
   statusAndrad: { sv: "Status ändrad till", en: "Status changed to" },
   exempel: { sv: "Exempel", en: "Example" },
-  researchar: { sv: "Researchar", en: "Researching" },
+  ingenPoang: { sv: "Ingen poäng än", en: "No score yet" },
+  vyer2: { sv: "Andra vyer", en: "Other views" },
   live: { sv: "Uppdateras live", en: "Updating live" },
   oppna: { sv: "Öppna", en: "Open" },
   modernitet: { sv: "Modernitet", en: "Modernity" }
@@ -115,6 +116,13 @@ const STATUSPRICK: Record<string, string> = {
   contacted: "bg-ochre",
   lost: "bg-danger"
 };
+
+/** Antalet i ett chip. En muted token, aldrig opacity (DESIGN.md: genomskinlig
+ *  text har ingen kontrastgaranti): paper-muted på det aktiva ink-chipet,
+ *  ink-subtle annars. */
+function Antal({ aktiv, children }: Readonly<{ aktiv: boolean; children: React.ReactNode }>) {
+  return <span className={cn("num tabular-nums", aktiv ? "text-paper-muted" : "text-ink-subtle")}>{children}</span>;
+}
 
 function matchar(p: SuiteProspekt, f: VyFilter): boolean {
   if (f.status && p.status !== f.status) return false;
@@ -219,7 +227,7 @@ export function LeadsTabell({
    *  även innan första bolaget hunnit köas. */
   korningPagar?: boolean;
   /** Översiktens nyckeltal: hur många leads listan bär. */
-  onAntal?: (antal: number) => void;
+  onAntal?: (alla: number, nya: number) => void;
 }>) {
   const { locale, text } = useLocale();
   const smal = useSmal();
@@ -357,9 +365,9 @@ export function LeadsTabell({
   const listref = useRef<HTMLDivElement>(null);
   useRadrorelse(listref, prospekt === null ? null : allaRader);
   useEffect(() => {
-    if (prospekt !== null) onAntal?.(allaRader.length);
+    if (prospekt !== null) onAntal?.(allaRader.length, allaRader.filter((p) => p.status === "new").length);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [prospekt, allaRader.length]);
+  }, [prospekt, allaRader]);
   // Bortvalda bolag når aldrig listan: API:t lämnar bara leads som uppfyller
   // kraven (snajp-support/app/api/leads.py, list_prospects).
   const urval = allaRader;
@@ -558,11 +566,14 @@ export function LeadsTabell({
     );
   };
 
+  // Under research är poängen ett streck (kritiken 2026-10-07: "Researchar"
+  // här och "Research pågår" i statusvalet var två uppgifter om samma sak).
+  // Statusen bär läget; skärmläsaren får veta varför fältet är tomt.
   const poangCell = (p: SuiteProspekt) =>
     researchPagar(p) ? (
-      <span className={cn(meta, "inline-flex items-center gap-1.5")}>
-        <span aria-hidden className="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-ochre" />
-        {text(T.researchar)}
+      <span className="text-ink-subtle">
+        <span aria-hidden>–</span>
+        <span className="sr-only">{text(T.ingenPoang)}</span>
       </span>
     ) : (
       <span className="inline-flex flex-col items-end leading-tight">
@@ -621,28 +632,36 @@ export function LeadsTabell({
           {text(T.live)}
         </p>
       ) : null}
-      {/* Statusremsan: pipelinen som räknare. Ett klick filtrerar, ett till släpper. */}
-      <nav aria-label={text(T.pipeline)} className="-mx-1 overflow-x-auto px-1">
-        {/* Radbryts under md (Sebbe 2026-10-07): på mobil låg Skickat och
-            Bortvalda utanför skärmen och nåddes bara genom att svepa. */}
-        <ul className={cn("flex flex-wrap gap-1.5", !smal && "md:min-w-max md:flex-nowrap")}>
+      {/* Statusremsan: pipelinen som räknare. Ett klick filtrerar, ett till släpper.
+          Kritiken 2026-10-07: elva chips i tre rader, fem av dem med 0, och två
+          som inte var statusar alls. Nu visas bara steg som har leads (och det
+          valda), och Bortvalda och Skickat står för sig till höger: de byter
+          vy, de filtrerar inte listan. Antalen bär ett mellanslag så att
+          skärmläsaren läser "Skickat 4", inte "Skickat4". */}
+      <nav aria-label={text(T.pipeline)} className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+        <ul className={chiplista}>
           <li>
             <button
               type="button"
               id="leads-remsa-alla"
-              aria-pressed={!filter.status}
+              aria-pressed={!filter.status && !visaSkickat && !visaBortvalda}
               onClick={() => {
                 setVisaSkickat(false);
+                setVisaBortvalda(false);
                 setFilter((f) => ({ ...f, status: undefined }));
               }}
-              className={cn(chip, !filter.status && !visaSkickat ? chipAktiv : chipInaktiv)}
+              className={cn(chip, !filter.status && !visaSkickat && !visaBortvalda ? chipAktiv : chipInaktiv)}
             >
-              {text(T.alla)} <span className="num ml-1 tabular-nums opacity-70">{urval.filter((p) => matchar(p, { ...filter, status: undefined })).length}</span>
+              {text(T.alla)}{" "}
+              <Antal aktiv={!filter.status && !visaSkickat && !visaBortvalda}>
+                {urval.filter((p) => matchar(p, { ...filter, status: undefined })).length}
+              </Antal>
             </button>
           </li>
           {REMSA.map((s) => {
             const antal = perStatus.get(s) ?? 0;
-            const aktiv = filter.status === s && !visaSkickat;
+            const aktiv = filter.status === s && !visaSkickat && !visaBortvalda;
+            if (antal === 0 && !aktiv) return null;
             return (
               <li key={s}>
                 <button
@@ -650,25 +669,34 @@ export function LeadsTabell({
                   aria-pressed={aktiv}
                   onClick={() => {
                     setVisaSkickat(false);
+                    setVisaBortvalda(false);
                     setFilter((f) => ({ ...f, status: aktiv ? undefined : s }));
                   }}
-                  className={cn(chip, aktiv ? chipAktiv : chipInaktiv, antal === 0 && !aktiv && "text-ink-subtle")}
+                  className={cn(chip, aktiv ? chipAktiv : chipInaktiv)}
                 >
-                  {text(STATUS_ETIKETT[s])} <span className="num ml-1 tabular-nums opacity-70">{antal}</span>
+                  {text(STATUS_ETIKETT[s])} <Antal aktiv={aktiv}>{antal}</Antal>
                 </button>
               </li>
             );
           })}
+        </ul>
+        <ul className={chiplista} aria-label={text(T.vyer2)}>
           <li>
             <button
               type="button"
               aria-pressed={visaBortvalda}
-              onClick={() => void vaxlaBortvalda()}
+              onClick={() => {
+                setVisaSkickat(false);
+                void vaxlaBortvalda();
+              }}
               className={cn(chip, visaBortvalda ? chipAktiv : chipInaktiv)}
             >
               {text(T.bortvalda)}
               {bortvalda !== null ? (
-                <span className="num ml-1 tabular-nums opacity-70">{bortvalda.length}</span>
+                <>
+                  {" "}
+                  <Antal aktiv={visaBortvalda}>{bortvalda.length}</Antal>
+                </>
               ) : null}
             </button>
           </li>
@@ -676,11 +704,19 @@ export function LeadsTabell({
             <button
               type="button"
               aria-pressed={visaSkickat}
-              onClick={() => setVisaSkickat((v) => !v)}
+              onClick={() => {
+                setVisaBortvalda(false);
+                setVisaSkickat((v) => !v);
+              }}
               className={cn(chip, visaSkickat ? chipAktiv : chipInaktiv)}
             >
               {text({ sv: "Skickat", en: "Sent" })}
-              {skickat !== null ? <span className="num ml-1 tabular-nums opacity-70">{skickat.length}</span> : null}
+              {skickat !== null ? (
+                <>
+                  {" "}
+                  <Antal aktiv={visaSkickat}>{skickat.length}</Antal>
+                </>
+              ) : null}
             </button>
           </li>
         </ul>
@@ -688,7 +724,7 @@ export function LeadsTabell({
 
       {visaSkickat ? (
         <SkickatLista rader={skickat} fel={skickatFel} onValj={onValj} />
-      ) : (
+      ) : visaBortvalda ? null : (
       <>
       <div className="flex flex-wrap items-end gap-2">
         <label className={cn(etikett, "flex flex-col gap-1")}>

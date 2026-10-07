@@ -22,7 +22,8 @@ import {
   utfallston,
   type KorningsRad
 } from "@/components/leads/IrisKorningar";
-import { Badge, btnLiten, btnSecondary, etikett, meta } from "@/components/ui";
+import { LeadsDiagram } from "@/components/leads/LeadsDiagram";
+import { Badge, btnLiten, btnSecondary, etikett, meta, rubrikSektion } from "@/components/ui";
 import { isoVecka } from "@/lib/admin/statistik";
 import { TOKENKOSTNAD_MODELL, tokenkostnad } from "@/lib/admin/halsa";
 import { demoChattar, demoKorningar, demoUsage } from "@/lib/demo/aktivitet";
@@ -431,11 +432,16 @@ function Felruta({ besked, onForsok }: Readonly<{ besked: Localized; onForsok: (
   );
 }
 
+/**
+ * En agents avsnitt. Avsnittsrubriken (DESIGN.md: Fraunces 1.5rem) och en
+ * hårlinje ovanför skiljer agenterna åt, så att det syns vilken agent varje
+ * diagram gäller (Sebbe 2026-10-07, när leadsdiagrammen flyttade hit).
+ */
 function Avsnitt({ id, titel, children }: Readonly<{ id: string; titel: Localized; children: React.ReactNode }>) {
   const { text } = useLocale();
   return (
-    <section aria-labelledby={id} className="flex min-w-0 flex-col gap-4">
-      <h2 id={id} className="mt-2 text-[1.125rem] font-semibold tracking-[-0.01em] text-ink">
+    <section aria-labelledby={id} className="flex min-w-0 flex-col gap-4 border-t border-ink/15 pt-6">
+      <h2 id={id} className={cn(rubrikSektion, "text-ink")}>
         {text(titel)}
       </h2>
       {children}
@@ -712,7 +718,7 @@ export function Aktivitet({ demo = false }: Readonly<{ demo?: boolean }>) {
                 <section aria-labelledby="aktivitet-iris-fordelning" className={cn(kort, "min-w-0 lg:col-span-5")}>
                   <h3 id="aktivitet-iris-fordelning" className={cn(rubrik, "mb-4")}>
                     {text(T.fordelning)}
-                    <span className={cn(meta, "ml-2 font-normal")}>{text(senaste)}</span>
+                    {" "}<span className={cn(meta, "ml-1 font-normal")}>{text(senaste)}</span>
                   </h3>
                   {it === null ? (
                     <Laddar hojd="h-64" />
@@ -724,6 +730,8 @@ export function Aktivitet({ demo = false }: Readonly<{ demo?: boolean }>) {
                   )}
                 </section>
               </div>
+
+              <LeadsDiagram demo={demo} />
 
               <section aria-labelledby="aktivitet-iris-tabell" className={cn(kort, "min-w-0")}>
                 <h3 id="aktivitet-iris-tabell" className={rubrik}>
@@ -820,7 +828,7 @@ export function Aktivitet({ demo = false }: Readonly<{ demo?: boolean }>) {
                 <section aria-labelledby="aktivitet-overlamnade" className={kolumn}>
                   <h3 id="aktivitet-overlamnade" className="text-[1.0625rem] font-semibold tracking-[-0.01em]">
                     {text(T.overlamnadeRubrik)}
-                    {chattar?.length ? <span className="num ml-2 font-normal tabular-nums text-ink-subtle">{chattar.length}</span> : null}
+                    {chattar?.length ? <>{" "}<span className="num ml-1 font-normal tabular-nums text-ink-subtle">{chattar.length}</span></> : null}
                   </h3>
                   <p className={cn(meta, "mb-2 mt-1")}>{text(T.overlamnadeText)}</p>
                   {chattar === null ? <Laddar hojd="h-48" /> : <OverlamningsLista chattar={chattar} />}
