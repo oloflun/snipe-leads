@@ -620,7 +620,9 @@ export function LeadsTabell({
       ) : null}
       {/* Statusremsan: pipelinen som räknare. Ett klick filtrerar, ett till släpper. */}
       <nav aria-label={text(T.pipeline)} className="-mx-1 overflow-x-auto px-1">
-        <ul className={cn("flex gap-1.5", smal ? "flex-wrap" : "min-w-max")}>
+        {/* Radbryts under md (Sebbe 2026-10-07): på mobil låg Skickat och
+            Bortvalda utanför skärmen och nåddes bara genom att svepa. */}
+        <ul className={cn("flex flex-wrap gap-1.5", !smal && "md:min-w-max md:flex-nowrap")}>
           <li>
             <button
               type="button"
