@@ -95,3 +95,37 @@ async def test_skickat_listar_skickade_mejl_med_bolag():
             assert rad["subject"] == "Nya kontoret" and rad["body"].startswith("Hej!")
             assert rad["prospect_email"] == "info@skickat.se" and rad["prospect_id"] == prospekt["id"]
             assert rad["svarat"] is False
+
+
+async def test_godkant_som_vantar_pa_sandfonstret_star_overst_i_skickat():
+    """Godkänn och skicka efter 16:00 ger ett godkänt utkast som går ut nästa
+    vardag 08:00. Det ska synas i Skickat direkt, märkt schemalagt med tiden
+    (Sebbe 2026-10-08) — inte försvinna ur Iris-listan till ingenstans."""
+    async with app.router.lifespan_context(app):
+        storage = app.state.storage
+        prospekt = await storage.create_prospect(
+            DEFAULT_TENANT_ID, company_name="Kvällsgodkänt AB", contact_email="info@kvall.se"
+        )
+        trad = await storage.ensure_outreach_thread(DEFAULT_TENANT_ID, prospect_id=prospekt["id"])
+        koat = await storage.queue_outreach_message(
+            DEFAULT_TENANT_ID, thread_id=trad["id"], subject="Er nya hall", body="Hej!\n\nText.",
+            humanizer_variant="x", scheduled_at=WITHIN_WINDOW_UTC, status="awaiting_review",
+        )
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            fore = (await client.get("/api/leads/skickat", headers=DEMO)).json()["skickat"]
+            assert all(r["company_name"] != "Kvällsgodkänt AB" for r in fore), "ett väntande utkast är inte skickat"
+
+            post = next(q for q in storage.send_queue[DEFAULT_TENANT_ID] if q["id"] == koat["queue_item"]["id"])
+            post["status"] = "queued"
+            post["gate_checks"] = {"approved_by": "human"}
+            rader = (await client.get("/api/leads/skickat", headers=DEMO)).json()["skickat"]
+            rad = next(r for r in rader if r["company_name"] == "Kvällsgodkänt AB")
+            assert rad["schemalagt"] is True and rad["sent_at"] is None and rad["skickas_tidigast"]
+            assert rad["subject"] == "Er nya hall" and rad["prospect_id"] == prospekt["id"]
+            assert rader[0]["schemalagt"] is True, "de schemalagda står överst"
+
+            await storage.mark_outreach_message_sent(DEFAULT_TENANT_ID, koat["message"]["id"], WITHIN_WINDOW_UTC)
+            post["status"] = "sent"
+            rader = (await client.get("/api/leads/skickat", headers=DEMO)).json()["skickat"]
+            egna = [r for r in rader if r["company_name"] == "Kvällsgodkänt AB"]
+            assert len(egna) == 1 and egna[0]["schemalagt"] is False and egna[0]["sent_at"]

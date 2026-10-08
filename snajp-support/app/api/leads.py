@@ -1363,15 +1363,69 @@ async def list_skickat(
 ) -> dict:
     """Alla skickade leadsmejl, senast först — fliken Skickat i Iris-leads
     (Sebbe 2026-10-07): mejlet, vad som skrevs och vilket bolag det gick till.
-    `svarat` är sant när bolaget svarat efter utskicket."""
-    rader = await request.app.state.storage.list_skickade(tenant["tenant_id"], limit=limit)
+    `svarat` är sant när bolaget svarat efter utskicket.
+
+    Överst står de godkända som väntar på sändfönstret (`schemalagt`, Sebbe
+    2026-10-08): ett utkast som godkänts 17:55 lämnade Iris-listan men syntes
+    ingenstans förrän 08:00 nästa vardag. Nu flyttar Godkänn och skicka det
+    hit direkt, med tiden det går ut (`skickas_tidigast`)."""
+    storage = request.app.state.storage
+    tenant_id = tenant["tenant_id"]
+    rader = await storage.list_skickade(tenant_id, limit=limit)
     for r in rader:
         inn, ut = r.get("last_inbound_at"), r.get("sent_at")
         try:
             r["svarat"] = bool(inn and ut and inn >= ut)
         except TypeError:  # datetime mot sträng (MemoryStorage): jämför ISO-texten
             r["svarat"] = bool(inn and ut and str(inn) >= str(ut))
-    return {"skickat": rader}
+        r["schemalagt"] = False
+    return {"skickat": await _schemalagda_utskick(storage, tenant_id) + rader}
+
+
+async def _schemalagda_utskick(storage, tenant_id: str) -> list[dict]:
+    """Människogodkända utkast som väntar på sändfönstret, först ut överst.
+    Samma härledning som listan och lådan (utkaststatus.harled == godkant);
+    texten är köpostens väntande meddelande. Arkiverade leads har fått sina
+    utskick inställda och står aldrig här."""
+    try:
+        lagen = await storage.utkast_lagen(tenant_id, med_text=True)
+    except Exception:  # noqa: BLE001 — de skickade ska visas även om detta faller
+        logger.exception("Kunde inte läsa schemalagda utskick för %s.", tenant_id)
+        return []
+    nu = datetime.now(timezone.utc)
+    godkanda = {
+        pid: (lage, harlett)
+        for pid, lage in lagen.items()
+        if (harlett := utkaststatus.harled(lage, now=nu))["utkast_status"] == "godkant"
+    }
+    if not godkanda:
+        return []
+    prospekt = {str(p["id"]): p for p in await storage.list_prospects(tenant_id, limit=1000)}
+    rader = []
+    for pid, (lage, harlett) in godkanda.items():
+        p = prospekt.get(pid)
+        if p is None or p.get("arkiverad_at"):
+            continue
+        rader.append(
+            {
+                "id": f"ko-{harlett['queue_item_id']}",
+                "queue_item_id": harlett["queue_item_id"],
+                "subject": lage.get("subject"),
+                "body": lage.get("body") or "",
+                "sent_at": None,
+                "skickas_tidigast": harlett["skickas_tidigast"],
+                "schemalagt": True,
+                "svarat": False,
+                "thread_id": lage.get("thread_id"),
+                "prospect_id": pid,
+                "company_name": p.get("company_name"),
+                "contact_name": p.get("contact_name"),
+                "prospect_email": p.get("contact_email"),
+                "status": p.get("status"),
+            }
+        )
+    rader.sort(key=lambda r: (r["skickas_tidigast"] or "", r["company_name"] or ""))
+    return rader
 
 
 @router.get("/api/leads/config")

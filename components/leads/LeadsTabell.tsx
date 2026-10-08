@@ -1,8 +1,6 @@
 "use client";
 
 import { X } from "lucide-react";
-import Link from "next/link";
-import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { EjAktiverad } from "@/components/EjAktiverad";
 import { Badge, Cell, SkeletonRows, Tabell, Tomt, btnPrimary, btnSecondary, etikett, btnLiten, faltDiskret, faltTatt, chip, chipAktiv, chipInaktiv, chiplista, meta, rubrikPanel, tabellRad } from "@/components/ui";
@@ -53,8 +51,8 @@ const T = {
   tomt: { sv: "Inga leads ännu. Kör Iris eller importera en lista.", en: "No leads yet. Run Iris or import a list." },
   ingaTraffar: { sv: "Inga leads matchar filtret.", en: "No leads match the filter." },
   allaKontaktade: {
-    sv: "Inga leads väntar på utskick. De kontaktade finns under Inkorg › Skickat.",
-    en: "No leads are waiting to be emailed. The contacted ones are under Inbox › Sent."
+    sv: "Inga leads väntar på utskick. De kontaktade finns under Skickat.",
+    en: "No leads are waiting to be emailed. The contacted ones are under Sent."
   },
   kolBolag: { sv: "Bolag", en: "Company" },
   kolStatus: { sv: "Status", en: "Status" },
@@ -95,7 +93,8 @@ const T = {
   arkiveradeFel: { sv: "De arkiverade leadsen kunde inte hämtas.", en: "The archived leads could not be loaded." },
   arkiverad: { sv: "Arkiverad", en: "Archived" },
   kolUtkast: { sv: "Utkast", en: "Draft" },
-  skickatLank: { sv: "Skickade mejl finns under Inkorg › Skickat", en: "Sent emails are under Inbox › Sent" },
+  skickat: { sv: "Skickat", en: "Sent" },
+  visaSkickat: { sv: "Visa Skickat", en: "Show Sent" },
   sidodata: {
     sv: "Uppgifter eller sparade vyer kunde inte hämtas",
     en: "Tasks or saved views could not be loaded"
@@ -123,7 +122,7 @@ const TYPER: LeadTyp[] = ["iris", "lista", "import", "inkorg"];
 /**
  * Iris-listan visar bara leads FÖRE utskick (Antons beställning 2026-10-07):
  * research pågår, Ny och Redo. Ett kontaktat lead tar inte plats bland de
- * genererade — det bor under Inkorg › Skickat, där svaren flyttar det mellan
+ * genererade — det bor under Skickat (här och i Inkorgen), där svaren flyttar det mellan
  * filtren. Remsan är därför bara de tre stegen.
  */
 const FORE_UTSKICK = new Set(["researching", "new", "ready"]);
@@ -328,7 +327,6 @@ export function LeadsTabell({
 }>) {
   const { locale, text } = useLocale();
   const smal = useSmal();
-  const pathname = usePathname();
   const [prospekt, setProspekt] = useState<SuiteProspekt[] | null>(null);
   const [uppgifter, setUppgifter] = useState<Uppgift[]>([]);
   const [vyer, setVyer] = useState<Vy[]>([]);
@@ -353,7 +351,7 @@ export function LeadsTabell({
   // Massåtgärderna (Sebbe 2026-10-07, Anton 2026-10-07): skapa, skapa om,
   // skicka, arkivera, återställ och ta bort de markerade. En åtgärd i taget.
   const [atgard, setAtgard] = useState<string | null>(null);
-  const [atgardNotis, setAtgardNotis] = useState<{ text: string; fel: boolean } | null>(null);
+  const [atgardNotis, setAtgardNotis] = useState<{ text: string; fel: boolean; tillSkickat?: boolean } | null>(null);
   // Bortvalda (nivå C): dolda som standard (Antons krav), nåbara på begäran
   // (Sebbes krav: inget får se ut som raderat). Hämtas först vid klick.
   const [visaBortvalda, setVisaBortvalda] = useState(false);
@@ -363,8 +361,8 @@ export function LeadsTabell({
   const [arkiverade, setArkiverade] = useState<SuiteProspekt[] | null>(null);
   const [arkiveradeFel, setArkiveradeFel] = useState<string | null>(null);
   // Skickat (Sebbe 2026-10-07): varje leadsmejl som gått ut. Hämtas direkt:
-  // nyckeltalen räknas ur samma lista som Inkorg › Skickat visar. Listan
-  // själv bor i Inkorgen; bara demon (som saknar Inkorg) visar den här.
+  // nyckeltalen räknas ur samma lista som Skickat visar. Sedan 2026-10-08
+  // visas den här, bredvid Ny (och fortfarande under Inkorg › Skickat).
   const [visaSkickat, setVisaSkickat] = useState(false);
   const [skickat, setSkickat] = useState<SkickatRad[] | null>(null);
   const [skickatFel, setSkickatFel] = useState<string | null>(null);
@@ -575,7 +573,13 @@ export function LeadsTabell({
   const allaRader = useMemo(() => sortera([...exempel, ...(prospekt ?? [])]), [exempel, prospekt]);
   // Bara leads före utskick (FORE_UTSKICK). Bortvalda och arkiverade når
   // aldrig listan: API:t lämnar dem bara på begäran.
-  const urvalSorterat = useMemo(() => allaRader.filter((p) => FORE_UTSKICK.has(p.status)), [allaRader]);
+  // Ett godkänt utkast som väntar på sändfönstret är också "skickat" för
+  // kunden (Sebbe 2026-10-08): det står överst i Skickat med tiden det går
+  // ut, inte kvar i listan som ett lead att göra något med.
+  const urvalSorterat = useMemo(
+    () => allaRader.filter((p) => FORE_UTSKICK.has(p.status) && p.utkast_status !== "godkant"),
+    [allaRader]
+  );
   // Kritik 4: livetakten sorterade om raderna medan man markerade, så raden
   // man siktade på flyttade. Medan något är markerat står ordningen still
   // (nya rader överst); den sorteras om när markeringen släpps.
@@ -622,7 +626,7 @@ export function LeadsTabell({
     const fonster = skickatVisat
       ? demo
         ? skickatVisat
-        : skickatVisat.filter((r) => new Date(r.sent_at).getTime() >= grans)
+        : skickatVisat.filter((r) => r.sent_at && new Date(r.sent_at).getTime() >= grans)
       : null;
     onAntal?.({
       alla: urval.length,
@@ -688,7 +692,7 @@ export function LeadsTabell({
 
   /** En massåtgärd i taget: knapparna låses, beskedet ersätter det förra.
    *  `gor` returnerar beskedet, eller null när användaren ångrade sig. */
-  async function utfor(namn: string, gor: () => Promise<{ text: string; fel: boolean } | null>) {
+  async function utfor(namn: string, gor: () => Promise<{ text: string; fel: boolean; tillSkickat?: boolean } | null>) {
     if (atgard) return;
     setAtgard(namn);
     setAtgardNotis(null);
@@ -850,7 +854,8 @@ export function LeadsTabell({
             utan ? `${utan} had no draft` : null
           ].filter(Boolean).join(", ") + "."
         }),
-        fel: stoppade.length > 0
+        fel: stoppade.length > 0,
+        tillSkickat: skickade + vantar > 0
       };
     });
   }
@@ -1337,8 +1342,8 @@ export function LeadsTabell({
           Kritiken 2026-10-07: elva chips i tre rader, fem av dem med 0, och två
           som inte var statusar alls. Nu visas bara stegen före utskick som har
           leads (och det valda). Bortvalda och Arkiverade står för sig till
-          höger: de byter vy, de filtrerar inte listan. Skickat är en länk till
-          Inkorg › Skickat (Fas 4: kontaktade leads bor där). Antalen bär ett
+          höger: de byter vy, de filtrerar inte listan. Skickat står efter Ny,
+          som pipelinens nästa steg, och visar listan på plats. Antalen bär ett
           mellanslag så att skärmläsaren läser "Skickat 4", inte "Skickat4". */}
       <nav aria-label={text(T.pipeline)} className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
         <ul className={chiplista}>
@@ -1380,6 +1385,28 @@ export function LeadsTabell({
               </li>
             );
           })}
+          {/* Skickat är pipelinens nästa steg och står därför direkt efter Ny
+              (Sebbe 2026-10-08), som en vy i listan i stället för en länk bort
+              till Inkorgen. Godkända utkast hamnar här i samma stund som
+              Godkänn och skicka trycks, även de som väntar på sändfönstret. */}
+          <li className="flex items-center gap-2">
+            <span aria-hidden className="h-4 w-px bg-ink/15" />
+            <button
+              type="button"
+              id="leads-remsa-skickat"
+              aria-pressed={visaSkickat}
+              onClick={() => valjVy("skickat")}
+              className={cn(chip, visaSkickat ? chipAktiv : chipInaktiv)}
+            >
+              {text(T.skickat)}
+              {skickatVisat !== null ? (
+                <>
+                  {" "}
+                  <Antal aktiv={visaSkickat}>{skickatVisat.length}</Antal>
+                </>
+              ) : null}
+            </button>
+          </li>
         </ul>
         <ul className={chiplista} aria-label={text(T.vyer2)}>
           <li>
@@ -1414,45 +1441,24 @@ export function LeadsTabell({
               ) : null}
             </button>
           </li>
-          <li>
-            {demo ? (
-              // Demon har ingen Inkorg: dess Skickat visas här, som förut.
-              <button
-                type="button"
-                aria-pressed={visaSkickat}
-                onClick={() => valjVy("skickat")}
-                className={cn(chip, visaSkickat ? chipAktiv : chipInaktiv)}
-              >
-                {text({ sv: "Skickat", en: "Sent" })}
-                {skickatVisat !== null ? (
-                  <>
-                    {" "}
-                    <Antal aktiv={visaSkickat}>{skickatVisat.length}</Antal>
-                  </>
-                ) : null}
-              </button>
-            ) : (
-              <Link
-                href={`${pathname}?vy=inkorg&flik=skickat`}
-                title={text(T.skickatLank)}
-                className={cn(chip, chipInaktiv, "underline decoration-ink/25 underline-offset-4")}
-              >
-                {text({ sv: "Skickat", en: "Sent" })}
-                {skickatVisat !== null ? (
-                  <>
-                    {" "}
-                    <Antal aktiv={false}>{skickatVisat.length}</Antal>
-                  </>
-                ) : null}
-              </Link>
-            )}
-          </li>
         </ul>
       </nav>
 
       {atgardNotis ? (
         <p role={atgardNotis.fel ? "alert" : "status"} className={cn("text-[0.875rem]", atgardNotis.fel ? "text-danger" : "text-moss")}>
           {atgardNotis.text}
+          {atgardNotis.tillSkickat && !visaSkickat ? (
+            <>
+              {" "}
+              <button
+                type="button"
+                onClick={() => valjVy("skickat")}
+                className="focus-ring font-medium text-ink underline underline-offset-4 hover:text-ink-muted"
+              >
+                {text(T.visaSkickat)}
+              </button>
+            </>
+          ) : null}
         </p>
       ) : null}
       {flyttNotis ? (
@@ -1462,7 +1468,7 @@ export function LeadsTabell({
       ) : null}
 
       {visaSkickat ? (
-        <SkickatLista rader={skickatVisat} fel={skickatFel} onValj={onValj} />
+        <SkickatLista rader={skickatVisat} fel={skickatFel} onValj={onValj} filtrerbar={!demo} />
       ) : !iListan ? null : (
       <>
       {/* Kritik 3: filtren och de sparade vyerna delar rad när bredden räcker. */}

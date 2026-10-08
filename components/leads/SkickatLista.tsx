@@ -1,10 +1,11 @@
 "use client";
 
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, Clock } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Badge, SkeletonRows, Tomt, chip, chipAktiv, chipInaktiv, chiplista, meta } from "@/components/ui";
 import { useLocale, type Localized } from "@/lib/i18n";
 import { relativTid } from "@/lib/leads/suite";
+import { sandtid } from "@/lib/leads/utkast";
 import { STATUS_ETIKETT } from "@/lib/prospekt";
 import { cn } from "@/lib/utils";
 
@@ -13,6 +14,10 @@ import { cn } from "@/lib/utils";
  * 2026-10-08): varje leadsmejl som gått ut, med bolaget, mottagaren och hela
  * texten så som den skickades (signatur och lagstadgad fot ingår). Backend:
  * GET /api/leads/skickat.
+ *
+ * Överst står de godkända som väntar på sändfönstret (`schemalagt`, Sebbe
+ * 2026-10-08): Godkänn och skicka flyttar leadet hit direkt, även efter 16:00,
+ * med tiden mejlet går ut.
  *
  * Varje rad bär leadets NUVARANDE status. Svarshanteringen
  * (snajp-support/app/leads/svar.py) och samtalsutfallen flyttar statusen, så
@@ -24,7 +29,12 @@ export type SkickatRad = {
   id: string;
   subject: string | null;
   body: string;
-  sent_at: string;
+  /** null för ett schemalagt utkast: det har inte gått ut än. */
+  sent_at: string | null;
+  /** Godkänt, väntar på sändfönstret (vardagar 08–16). */
+  schemalagt?: boolean;
+  /** När ett schemalagt utkast tidigast går ut. */
+  skickas_tidigast?: string | null;
   prospect_id: string | null;
   company_name: string | null;
   contact_name: string | null;
@@ -34,9 +44,10 @@ export type SkickatRad = {
   status?: string | null;
 };
 
-type Filter = "alla" | "vantar" | "svarat" | "mote" | "ej";
+type Filter = "alla" | "schemalagt" | "vantar" | "svarat" | "mote" | "ej";
 
 const FILTER: { id: Exclude<Filter, "alla">; etikett: Localized; statusar: string[] }[] = [
+  { id: "schemalagt", etikett: { sv: "Skickas snart", en: "Scheduled" }, statusar: [] },
   { id: "vantar", etikett: { sv: "Väntar på svar", en: "Awaiting reply" }, statusar: ["contacted"] },
   { id: "svarat", etikett: { sv: "Svarat", en: "Replied" }, statusar: ["replied"] },
   { id: "mote", etikett: { sv: "Möte", en: "Meeting" }, statusar: ["meeting", "won"] },
@@ -46,6 +57,7 @@ const FILTER: { id: Exclude<Filter, "alla">; etikett: Localized; statusar: strin
 /** Filtret en rad hör till. Ett lead vars status inte flyttats (äldre utskick
  *  före 2026-10-07 satte ingen status) väntar fortfarande på svar. */
 function filterFor(r: SkickatRad): Exclude<Filter, "alla"> {
+  if (r.schemalagt) return "schemalagt";
   return FILTER.find((f) => f.statusar.includes(r.status ?? ""))?.id ?? "vantar";
 }
 
@@ -106,7 +118,10 @@ export function SkickatLista({
     <div className="space-y-4">
       {filtrerbar ? (
         <ul className={chiplista} aria-label={text({ sv: "Filtrera skickade mejl", en: "Filter sent emails" })}>
-          {([{ id: "alla", etikett: { sv: "Alla", en: "All" } }, ...FILTER] as { id: Filter; etikett: Localized }[]).map((f) => (
+          {([{ id: "alla", etikett: { sv: "Alla", en: "All" } }, ...FILTER] as { id: Filter; etikett: Localized }[])
+            // Skickas snart bara när något väntar: annars en nolla som aldrig ändras.
+            .filter((f) => f.id !== "schemalagt" || (antal.get("schemalagt") ?? 0) > 0 || filter === "schemalagt")
+            .map((f) => (
             <li key={f.id}>
               <button
                 type="button"
@@ -127,7 +142,8 @@ export function SkickatLista({
         <ul className="divide-y divide-ink/12 border-y border-ink/15" aria-label={text({ sv: "Skickade mejl", en: "Sent emails" })}>
           {synliga.map((r) => {
             const oppnad = oppen === r.id;
-            const nar = new Date(r.sent_at);
+            const nar = r.sent_at ? new Date(r.sent_at) : null;
+            const skickas = r.schemalagt && r.skickas_tidigast ? sandtid(r.skickas_tidigast, locale) : "";
             return (
               <li key={r.id} className="py-3">
                 <button
@@ -145,11 +161,18 @@ export function SkickatLista({
                         {r.subject || text({ sv: "Utan ämnesrad", en: "No subject line" })}
                       </p>
                       <p className={cn(meta, "mt-0.5 truncate")}>
-                        {[r.prospect_email, relativTid(r.sent_at, locale)].filter(Boolean).join(" · ")}
+                        {[r.prospect_email, r.sent_at ? relativTid(r.sent_at, locale) : null].filter(Boolean).join(" · ")}
                       </p>
                     </div>
                     <span className="flex shrink-0 items-center gap-2">
-                      {r.status && STATUS_ETIKETT[r.status] ? (
+                      {r.schemalagt ? (
+                        <span className="inline-flex items-center gap-1.5 text-[0.8125rem] text-ink-muted">
+                          <Clock aria-hidden className="h-3.5 w-3.5 shrink-0 text-ochre" />
+                          {skickas
+                            ? text({ sv: `Skickas ${skickas}`, en: `Sends ${skickas}` })
+                            : text({ sv: "Skickas snart", en: "Sending soon" })}
+                        </span>
+                      ) : r.status && STATUS_ETIKETT[r.status] ? (
                         <span className="inline-flex items-center gap-1.5 text-[0.8125rem] text-ink-muted">
                           <span aria-hidden className={cn("h-2 w-2 shrink-0 rounded-full", PRICK[r.status] ?? "bg-ochre")} />
                           {text(STATUS_ETIKETT[r.status])}
@@ -169,13 +192,23 @@ export function SkickatLista({
                     <dl className="grid gap-1 text-[0.8125rem] sm:grid-cols-[auto_1fr] sm:gap-x-4">
                       <dt className="text-ink-subtle">{text({ sv: "Till", en: "To" })}</dt>
                       <dd className="break-all text-ink">{r.prospect_email ?? "–"}</dd>
-                      <dt className="text-ink-subtle">{text({ sv: "Skickat", en: "Sent" })}</dt>
+                      <dt className="text-ink-subtle">
+                        {r.schemalagt ? text({ sv: "Skickas", en: "Sends" }) : text({ sv: "Skickat", en: "Sent" })}
+                      </dt>
                       <dd className="num tabular-nums text-ink">
-                        {nar.toLocaleString(locale === "sv" ? "sv-SE" : "en-GB", {
-                          dateStyle: "medium",
-                          timeStyle: "short",
-                          timeZone: "Europe/Stockholm"
-                        })}
+                        {nar
+                          ? nar.toLocaleString(locale === "sv" ? "sv-SE" : "en-GB", {
+                              dateStyle: "medium",
+                              timeStyle: "short",
+                              timeZone: "Europe/Stockholm"
+                            })
+                          : r.skickas_tidigast
+                            ? `${new Date(r.skickas_tidigast).toLocaleString(locale === "sv" ? "sv-SE" : "en-GB", {
+                                dateStyle: "medium",
+                                timeStyle: "short",
+                                timeZone: "Europe/Stockholm"
+                              })} ${text({ sv: "(nästa sändfönster, vardagar 08–16)", en: "(next sending window, weekdays 08–16)" })}`
+                            : "–"}
                       </dd>
                       <dt className="text-ink-subtle">{text({ sv: "Ämne", en: "Subject" })}</dt>
                       <dd className="text-ink">{r.subject || "–"}</dd>
