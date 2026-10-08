@@ -31,6 +31,9 @@ from .deps import kraev_uuid, require_master_key
 router = APIRouter(prefix="/api/admin", dependencies=[Depends(require_master_key)])
 
 #: Listradens fält som följer med. Samma som Kombinera listor (leads.py).
+#: Webbplatsbedömningen (webbrevision, webbniva, lan; migration 108) följer
+#: ALDRIG med till en annan kund: den är hemlig och syns bara för Admin,
+#: Umeå Webdesign och Alunix (Antons beslut 2026-10-08).
 LISTRADSFALT = (
     "item_typ", "company_name", "website", "ort", "contact_name", "contact_role",
     "contact_email", "contact_level", "contact_phone", "orgnr", "source_name",
