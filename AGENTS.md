@@ -26,6 +26,16 @@ hämtade grenen: Sebbe pushar flera gånger per dag, och en plan byggd på en
 inaktuell gren gör om arbete som redan finns. Projektets SessionStart-hook
 (`.claude/settings.json`) hämtar och säger hur många commits grenen ligger efter.
 
+**Webbplatsbedömningen är hemlig (Antons beslut 2026-10-08).** Webbrevisionen
+och allt som härleds ur den (`webbrevision`, `webbniva`, betyg, brister,
+platshållarskäl, webbpoolens listor och `lan`-fördelningen) syns BARA för
+plattformsadmin och kunderna Umeå Webdesign och Alunix. Varje API-svar, UI,
+CSV-export, listkopiering, utkast och prompt som bär den ska grindas på det:
+övriga kunder får aldrig se fälten, inte heller via en kopierad lista
+(`app/api/admin_listor.py:LISTRADSFALT` saknar dem med flit) eller en flytt
+till main. Lägger du till ett ställe som visar eller skickar vidare
+bedömningen: grinda det i samma commit, annars är det en läcka.
+
 **Varje komponent med användarvänd text är tvåspråkig, utan undantag.**
 Svenska och engelska via `lib/i18n.tsx` (`useLocale().text({ sv, en })`, `t(nyckel)`
 eller en modulkonstant av `Localized`; adminytan via `lib/admin/sprak.ts`). Det
