@@ -1433,6 +1433,20 @@ class PostgresStorage:
             )
         return int(resultat.split()[-1])
 
+    async def list_pending_sends(self, tenant_id: str, thread_id: str) -> list[dict[str, Any]]:
+        async with self._scoped(tenant_id) as conn:
+            records = await conn.fetch(
+                """
+                select * from send_queue
+                where tenant_id = $1 and thread_id = $2
+                  and status in ('queued', 'awaiting_review')
+                order by created_at, scheduled_at
+                """,
+                tenant_id,
+                thread_id,
+            )
+        return [_avkoda_jsonb(_row(r), "gate_checks") for r in records]
+
     async def reschedule_pending_sends(
         self, tenant_id: str, thread_id: str, *, until
     ) -> int:

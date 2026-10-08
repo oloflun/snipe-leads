@@ -81,6 +81,12 @@ MAX_LEVERANSER = 3
 #: senaste livstecknet, och en research som tog mer än 60 s togs över av en
 #: syskonprocess (överlappet vid en Railway-deploy) och kördes två gånger
 #: parallellt. Dör processen tystnar hjärtslaget och återtaget sker som förut.
+#:
+#: Hela batchen bär hjärtslag, inte bara posten som körs (2026-10-08): ett
+#: varv läser upp till READ_COUNT poster och kör dem en i taget, så post två
+#: till tio låg tysta medan den första researchades. Efter MIN_IDLE_MS tog en
+#: syskonkonsument över dem och samma lead researchades och fick utkast tre
+#: gånger inom fem sekunder (uppmätt i development: 21 jobb, 29 utkast).
 HJARTSLAG_S = 20
 
 
@@ -210,18 +216,43 @@ class ChattStrom:
             hjartslag.cancel()
         await self.client.xack(self.stream_key, self.group, msg_id)
 
-    async def _hjartslag(self, msg_id: str, namn: str) -> None:
+    async def _hjartslag(self, msg_id: str | set[str], namn: str) -> None:
         """Se HJARTSLAG_S. JUSTID: räknar inte upp leveransräknaren, så
-        MAX_LEVERANSER fortsätter räkna riktiga omleveranser."""
+        MAX_LEVERANSER fortsätter räkna riktiga omleveranser. En mängd är
+        batchens poster som ännu inte kvitterats; den krymper medan varvet
+        kör, och slaget gäller det som är kvar."""
         while True:
             await asyncio.sleep(HJARTSLAG_S)
+            ids = sorted(msg_id) if isinstance(msg_id, set) else [msg_id]
+            if not ids:
+                continue
             try:
                 await self.client.xclaim(
                     self.stream_key, self.group, namn, min_idle_time=0,
-                    message_ids=[msg_id], justid=True,
+                    message_ids=ids, justid=True,
                 )
             except Exception:  # noqa: BLE001 — ett missat slag ger i värsta fall ett återtag
-                logger.warning("Ström %s: hjärtslaget för %s misslyckades.", self.stream_key, msg_id)
+                logger.warning("Ström %s: hjärtslaget för %s misslyckades.", self.stream_key, ids)
+
+    async def _kor_batch(
+        self,
+        meddelanden: list,
+        hanterare: Callable[[dict[str, Any]], Awaitable[None]],
+        namn: str,
+    ) -> int:
+        """Kör en batch i ordning medan hela resten av batchen hålls vid liv
+        (se HJARTSLAG_S). Returnerar antal körda poster."""
+        kvar = {msg_id for msg_id, _falt in meddelanden}
+        slag = asyncio.create_task(self._hjartslag(kvar, namn))
+        antal = 0
+        try:
+            for msg_id, falt in meddelanden:
+                await self._kor_och_kvittera(msg_id, falt, hanterare, namn)
+                kvar.discard(msg_id)
+                antal += 1
+        finally:
+            slag.cancel()
+        return antal
 
     async def kor_ett_varv(
         self, namn: str, hanterare: Callable[[dict[str, Any]], Awaitable[None]]
@@ -239,9 +270,7 @@ class ChattStrom:
             return 0
         antal = 0
         for _stream_namn, meddelanden in svar:
-            for msg_id, falt in meddelanden:
-                await self._kor_och_kvittera(msg_id, falt, hanterare, namn)
-                antal += 1
+            antal += await self._kor_batch(meddelanden, hanterare, namn)
         return antal
 
     async def worker_loop(
@@ -316,6 +345,7 @@ class ChattStrom:
                 self.stream_key, self.group, agent, min_idle_time=MIN_IDLE_MS, start_id=cursor
             )
             leveranser = await self._leveransantal() if meddelanden else {}
+            att_kora = []
             for msg_id, falt in meddelanden:
                 if leveranser.get(msg_id, 0) > MAX_LEVERANSER:
                     logger.warning(
@@ -337,8 +367,10 @@ class ChattStrom:
                             )
                     await self.client.xack(self.stream_key, self.group, msg_id)
                     continue
-                await self._kor_och_kvittera(msg_id, falt, hanterare, agent)
-                antal += 1
+                att_kora.append((msg_id, falt))
+            # De återtagna körs i ordning, med hjärtslag för hela svepet: annars
+            # tog nästa syskon över dem medan den första kördes.
+            antal += await self._kor_batch(att_kora, hanterare, agent)
             # Slutvillkor, TVÅ ben med flit. "0-0" är riktig Redis egen
             # signal att genomsökningen gått hela varvet — men fakeredis
             # (testberoendet) returnerar den ALDRIG efter en full

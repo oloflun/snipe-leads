@@ -3214,6 +3214,17 @@ async def processa_om(
             hittade.append(rad)
     if not hittade:
         raise HTTPException(status_code=404, detail="Inga av de valda prospekten finns.")
+    # Redan i research (köat eller körs) köas inte igen: ett andra klick, eller
+    # ett nytt urval som överlappade det förra, gav samma lead två jobb och två
+    # utkast i samma tråd (development 2026-10-08, anropen 15:39:58 och 15:40:25).
+    pagar = await storage.list_prospekt_i_research(tenant_id)
+    pagar_redan = [str(p["id"]) for p in hittade if str(p["id"]) in pagar]
+    hittade = [p for p in hittade if str(p["id"]) not in pagar]
+    if not hittade:
+        return {
+            "jobs": [], "scope": payload.scope, "count": 0, "fase": "research",
+            "hoppade_over": [], "pagar_redan": pagar_redan,
+        }
     hoppade: list[str] = []
     if payload.ersatt:
         lagen = await storage.utkast_lagen(tenant_id)
@@ -3223,7 +3234,10 @@ async def processa_om(
         for p in hittade:
             await avbryt_utskick_for_prospekt(storage, tenant_id, str(p["id"]))
         if not hittade:
-            return {"jobs": [], "scope": payload.scope, "count": 0, "fase": "research", "hoppade_over": hoppade}
+            return {
+                "jobs": [], "scope": payload.scope, "count": 0, "fase": "research",
+                "hoppade_over": hoppade, "pagar_redan": pagar_redan,
+            }
     jobs = await _lagg_prospektjobb(
         request.app.state,
         tenant,
@@ -3239,6 +3253,7 @@ async def processa_om(
         "count": len(jobs),
         "fase": "research",
         "hoppade_over": hoppade,
+        "pagar_redan": pagar_redan,
     }
 
 

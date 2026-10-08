@@ -225,3 +225,38 @@ async def test_admin_kopierar_och_flyttar_lista_till_annan_kund():
             assert (flytt["kopierade"], flytt["flyttad"]) == (3, True)
             assert await storage.get_lead_list(T, lista["id"]) is None
             assert await storage.list_lead_list_items(T, lista["id"]) == []
+
+
+async def test_skapa_utkast_koar_inte_ett_lead_som_redan_researchas(monkeypatch):
+    """Två Skapa utkast-anrop 27 s isär gav fem leads två jobb och två utkast
+    var (development 2026-10-08). Ett lead med ett köat eller pågående
+    researchjobb hoppas över och rapporteras i `pagar_redan`."""
+    async with app.router.lifespan_context(app):
+        storage = app.state.storage
+        pagaende = await _lead(storage, "Pågående AB")
+        ledig = await _lead(storage, "Ledig AB")
+        await storage.set_leads_job_status(
+            T, job_id="j-pagar", status="processing", scope="research_and_draft", prospect_id=pagaende["id"]
+        )
+        koade: list[str] = []
+
+        async def fejk_lagg(app_state, tenant, prospects, **kw):
+            koade.extend(p["id"] for p in prospects)
+            return [{"job_id": f"j-{p['id']}", "prospect_id": p["id"]} for p in prospects]
+
+        monkeypatch.setattr(leads_api, "_require_live_llm", lambda: None)
+        monkeypatch.setattr(leads_api, "_lagg_prospektjobb", fejk_lagg)
+        async with _klient() as klient:
+            svar = await klient.post(
+                "/api/leads/prospects/processa-om",
+                headers=DEMO,
+                json={"prospect_ids": [pagaende["id"], ledig["id"]], "scope": "research_and_draft"},
+            )
+            assert svar.status_code == 202, svar.text
+            assert koade == [ledig["id"]] and svar.json()["pagar_redan"] == [pagaende["id"]]
+            bara = await klient.post(
+                "/api/leads/prospects/processa-om",
+                headers=DEMO,
+                json={"prospect_ids": [pagaende["id"]], "scope": "research_and_draft"},
+            )
+        assert bara.json()["count"] == 0 and koade == [ledig["id"]]

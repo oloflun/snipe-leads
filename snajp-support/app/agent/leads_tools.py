@@ -146,12 +146,33 @@ async def _queue_outreach_draft_impl(
         outreach.escalation_reason = f"Språkgrinden vägrade köa utkastet: {error}"
         return json.dumps({"queued": False, "error": str(error)}, ensure_ascii=False)
 
+    # Ett väntande utkast per tråd (2026-10-08). Kön har ingen koppling till
+    # VILKET utkast en post gäller: sändaren tar trådens senaste osända. Två
+    # jobb för samma lead gav två utkast, och ett godkänt utkast hade gått ut
+    # med det nyare, ogranskade utkastets text. Ett godkänt utkast står kvar
+    # (granskaren har sagt ja till just det); ett ogranskat ersätts.
+    from ..leads.scheduler import godkannande
+
+    vantande = await outreach.storage.list_pending_sends(outreach.tenant_id, outreach.thread_id)
+    if any(p.get("status") == "queued" and godkannande(p) for p in vantande):
+        return json.dumps(
+            {"queued": False, "error": "Ett godkänt utkast väntar redan på att skickas i den här tråden."},
+            ensure_ascii=False,
+        )
+    if vantande:
+        await outreach.storage.cancel_pending_sends(outreach.tenant_id, outreach.thread_id)
+
     now = datetime.now(timezone.utc)
     timing = check_cold_outreach_gate(now)
     # Köar ändå om vi är utanför fönstret just NU — scheduled_at sätts till
     # nästa dag 08:00 lokal tid i stället för "nu". Schemaläggaren kör
     # grindarna igen ändå vid faktisk utskickstid (Del J).
-    scheduled_at = now if timing.allowed else now.replace(hour=8, minute=0, second=0, microsecond=0)
+    # nasta_sandtid: nästa vardag 08:00 svensk tid. Förut sattes dagens 08:00
+    # UTC, en tid som redan passerat (ofarligt, grinden prövar igen, men fel).
+    from ..leads.utkaststatus import nasta_sandtid
+
+    nasta = None if timing.allowed else nasta_sandtid(now, now=now)
+    scheduled_at = datetime.fromisoformat(nasta) if nasta else now
 
     # Kundens autonominivå avgör om utkastet får gå till schemaläggaren eller
     # måste granskas av en människa först. Regeln bor i app/leads/autonomy.py

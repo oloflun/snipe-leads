@@ -1068,6 +1068,13 @@ class MemoryStorage:
                 m["kasserad_at"] = m.get("kasserad_at") or _now()
         return antal
 
+    async def list_pending_sends(self, tenant_id: str, thread_id: str) -> list[dict[str, Any]]:
+        return [
+            dict(item)
+            for item in self.send_queue.get(tenant_id, [])
+            if item["thread_id"] == thread_id and item["status"] in ("queued", "awaiting_review")
+        ]
+
     async def reschedule_pending_sends(
         self, tenant_id: str, thread_id: str, *, until: Any
     ) -> int:

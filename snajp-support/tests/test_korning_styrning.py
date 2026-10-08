@@ -213,3 +213,31 @@ async def test_hjartslaget_hindrar_overtag(monkeypatch):
     await forsta
     assert korda == ["a"]
     await client.aclose()
+
+
+async def test_hjartslaget_haller_hela_batchen_vid_liv(monkeypatch):
+    """Ett varv läser flera poster och kör dem en i taget. De som väntar på
+    sin tur fick förut inget hjärtslag och togs över av ett syskon: samma
+    lead researchades och fick utkast tre gånger (development 2026-10-08)."""
+    monkeypatch.setattr(stream_mod, "HJARTSLAG_S", 0.05)
+    monkeypatch.setattr(stream_mod, "MIN_IDLE_MS", 150)
+    client = fakeredis_aio.FakeRedis(decode_responses=True)
+    strom = ChattStrom(client, stream_key="test:hjartslag-batch")
+    for jobb in ("j1", "j2", "j3"):
+        await strom.enqueue({"job_id": jobb})
+    korda: list[str] = []
+
+    async def _langsam(payload):
+        korda.append(f"a:{payload['job_id']}")
+        await asyncio.sleep(0.3)
+
+    async def _syskon(payload):
+        korda.append(f"b:{payload['job_id']}")
+
+    forsta = asyncio.create_task(strom.kor_ett_varv("process-a", _langsam))
+    for _ in range(10):
+        await asyncio.sleep(0.08)
+        assert await strom.atertag(_syskon, konsument="process-b") == 0
+    await forsta
+    assert korda == ["a:j1", "a:j2", "a:j3"]
+    await client.aclose()

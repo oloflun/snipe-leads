@@ -624,6 +624,12 @@ class Storage(Protocol):
         väntande text igen. Returnerar antalet inställda poster."""
         ...
 
+    async def list_pending_sends(self, tenant_id: str, thread_id: str) -> list[dict[str, Any]]:
+        """Trådens köade/väntande send_queue-poster (queued, awaiting_review),
+        äldst först. Köningen läser dem så att en tråd aldrig bär två väntande
+        utkast (2026-10-08)."""
+        ...
+
     async def reschedule_pending_sends(
         self, tenant_id: str, thread_id: str, *, until: Any
     ) -> int:

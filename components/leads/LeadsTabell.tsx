@@ -739,8 +739,9 @@ export function LeadsTabell({
       }
       let koade = 0;
       const hoppade: string[] = [];
+      const pagar: string[] = [];
       for (let i = 0; i < valt.length; i += PROCESSA_TAK) {
-        const svar = await leadsAnrop<{ count?: number; hoppade_over?: string[] }>("/leads/prospects/processa-om", {
+        const svar = await leadsAnrop<{ count?: number; hoppade_over?: string[]; pagar_redan?: string[] }>("/leads/prospects/processa-om", {
           method: "POST",
           body: JSON.stringify({
             prospect_ids: valt.slice(i, i + PROCESSA_TAK).map((p) => p.id),
@@ -750,13 +751,14 @@ export function LeadsTabell({
         });
         koade += svar.count ?? 0;
         hoppade.push(...(svar.hoppade_over ?? []));
+        pagar.push(...(svar.pagar_redan ?? []));
       }
       setValda(new Set());
       meddelaLeadsUppdaterade("tabell");
       return {
         text: text({
-          sv: `Utkast skrivs för ${koade} leads. De står under Research pågår tills de är klara.${hoppade.length ? ` ${hoppade.length} har redan fått mejl och hoppades över.` : ""}`,
-          en: `Drafts are being written for ${koade} leads. They show as Researching until they are done.${hoppade.length ? ` ${hoppade.length} have already been emailed and were skipped.` : ""}`
+          sv: `Utkast skrivs för ${koade} leads. De står under Research pågår tills de är klara.${hoppade.length ? ` ${hoppade.length} har redan fått mejl och hoppades över.` : ""}${pagar.length ? ` ${pagar.length} researchas redan och hoppades över.` : ""}`,
+          en: `Drafts are being written for ${koade} leads. They show as Researching until they are done.${hoppade.length ? ` ${hoppade.length} have already been emailed and were skipped.` : ""}${pagar.length ? ` ${pagar.length} are already being researched and were skipped.` : ""}`
         }),
         fel: false
       };

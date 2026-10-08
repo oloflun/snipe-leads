@@ -72,6 +72,7 @@ const T = {
     en: "The sales list, customer lists from your CRM and ordered lists."
   },
   av: { sv: "av", en: "of" },
+  test: { sv: "test", en: "test" },
   leadsKlara: { sv: "leads klara", en: "leads done" }
 } satisfies Record<string, Localized>;
 
@@ -131,7 +132,11 @@ function KorningsRuta({ onOppna, onPagaende }: Readonly<{ onOppna: (jobId: strin
     return () => window.clearInterval(id);
   }, [pagaende.length, hamta]);
 
-  const visade = pagaende.length > 0 ? pagaende.slice(0, 4) : (rader ?? []).slice(0, 1);
+  // Senaste RIKTIGA körningen (Sebbe 2026-10-08): en testkörning från natten
+  // stod här som "Stannade utan leads" över dagens arbete. Testkörningar
+  // visas bara när det inte finns något annat, och märks då.
+  const senaste = (rader ?? []).find((r) => !r.is_test) ?? (rader ?? [])[0];
+  const visade = pagaende.length > 0 ? pagaende.slice(0, 4) : senaste ? [senaste] : [];
 
   return (
     <section aria-labelledby="leads-korningsruta" className={kort}>
@@ -162,6 +167,7 @@ function KorningsRuta({ onOppna, onPagaende }: Readonly<{ onOppna: (jobId: strin
               <li key={rad.job_id} className="flex flex-wrap items-center justify-between gap-x-6 gap-y-1 py-2.5">
                 <span className="min-w-0">
                   <span className="text-[0.9375rem] font-medium">{text(korningsTyp(rad))}</span>
+                  {rad.is_test ? <span className={cn(meta, "ml-2")}>{text(T.test)}</span> : null}
                   {k ? (
                     <span className={cn(meta, "num ml-2 tabular-nums")}>
                       {k.levererade} {text(T.av)} {k.mal} {text(T.leadsKlara)}
