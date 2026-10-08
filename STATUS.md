@@ -1,5 +1,16 @@
 # Snipra Status
 
+## 2026-10-08 (2) — Claude — Iris live, rangpoäng, sökning som hittar, Leads-översikten genom fyra kritiker
+
+Iris-leads visas live: bolag under research står i Research pågår (härlett ur jobbliggaren) och landar i
+Ny, "Alla" sorteras på en rangpoäng som skiljer leadsen åt (46–78 i stället för 100 på alla). Körningar med
+generell målgrupp ("B2B", felstavade orter) hittar bolag igen (bred registersökning, ortstolkning,
+`inga_traffar`). Leads-översikten: listan och utkasten först, diagrammen på Aktivitet under Iris, utkast som
+läses och godkänns/avvisas per lead, markera alla och en bekräftelse på sidan för varje massåtgärd. Impeccable
+26 → 24 → 24 → 26. Pushat till development (`ee82a15`). **Kvar:** kritik 5; prova bekräftelserna inloggat;
+Antons release till main och därefter `flytta_redo_till_ny.py` + `omrakna_rangpoang.py` mot main.
+Logg: `session-logs/2026-10-08-session-log-2.md`.
+
 ## 2026-10-08 — Claude — CRM-flödet: Översikt, utkast som stämmer, massåtgärder, kontaktsökning, Samtal
 
 Antons beställning 2026-10-07 är byggd och pushad till development (`ed31791`, migration 107 körd där).
