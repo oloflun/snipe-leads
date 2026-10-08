@@ -177,3 +177,35 @@ async def test_postgres_sparar_bedomningen_med_update_inte_upsert():
     await storage.webbpool_spara({"doman": "x.se", "webbniva": "dalig", "webbrevision": {"modernitet": 4}})
     await storage.webbpool_spara({"doman": "x.se", "website": "https://x.se/"})
     assert sql[0].startswith("update webbpool") and "insert" in sql[1]
+
+
+@pytest.mark.anyio
+async def test_korningens_slut_startar_webbpoolen_en_gang(monkeypatch):
+    """Kroken i api/leads._fyll_pa_last: när körningen är slutgiltig startas
+    webbpoolen med körningens bolag, och en väckning till startar den inte igen."""
+    import asyncio
+
+    from app.api import leads as leads_api
+    from app.main import app
+
+    anrop: list[dict] = []
+
+    async def efter(storage, k, tenant_id):
+        anrop.append(k)
+
+    monkeypatch.setattr(webbpool, "efter_korning", efter)
+    async with app.router.lifespan_context(app):
+        state = app.state
+        tenant = await state.storage.create_tenant(slug="kalla-ab", name="Källa AB")
+        kund = {"tenant_id": tenant["id"], "tenant_name": "Källa AB"}
+        batch = await state.jobs.create(tenant_id=tenant["id"], status="processing")
+        k = korning.ny_korning(mal=1, scope="research", overrides=None, is_test=True)
+        k["rundor"] = korning.MAX_RUNDOR  # slut på kandidater: körningen avslutas direkt
+        korning.pool_in(k, {"company_name": "Gbg Bygg AB", "website": "https://gbgbygg.se", "ort": "Göteborg"})
+        await state.jobs.complete(batch, {"fase": "research", "jobs": [], "count": 0, "korning": k})
+        await leads_api._spara_korning(state, tenant["id"], batch, k)
+        await leads_api._fyll_pa_last(state, kund, batch)
+        await leads_api._fyll_pa_last(state, kund, batch)
+        await asyncio.sleep(0)
+    assert len(anrop) == 1
+    assert list(anrop[0]["webbpool"]) == ["gbgbygg.se"]

@@ -200,6 +200,32 @@ Kod för 12–17: `sources/merinfo.py:fordela` (fördelningen),
 `app/leads/samtal.py` (ringlista och återkoppling, Leads › Samtal) och
 `scripts/omklassa_listspar.py` (äldre listspårsrader genom samma sökning).
 
+**Ändring 2026-10-08 (Anton) — webbplatsbedömningen och webbpoolen:**
+
+18. **Fyra webbnivåer, inget gränsfall.** Bildbedömningen ger akut (1–2),
+    dålig (3–5), bra (6–8) eller mycket bra (9–10), avgjort i kod
+    (`app/leads/webbrevision.py:webbniva`). Akut avgörs utan bild för parkerad
+    domän, felsida (404 hos Netlify/Wix), fillistning, "under konstruktion" och
+    en sajt som inte svarar ens på www-varianten. En katalogsida (thingsreview,
+    hitta, eniro …) som enda webbnärvaro är bolagets sida och aldrig bättre än
+    dålig. Startsidan bedöms, aldrig en undersida. Kalibrerad mot Antons facit
+    (`tests/leads/fixtures/webbfacit_2026-10-08.json`,
+    `scripts/kalibrera_webbrevision.py`, grind 85 %).
+19. **Avvecklade bolag kastas** i alla spår ("under avveckling", "bedriver
+    inte längre", konkurs; `platshallare.AVVECKLAT`).
+20. **Webbpoolen.** Varje körning och listbygge hos varje kund bildbedöms efter
+    körningen, och bolag med akut eller dålig sajt fördelas tyst efter län:
+    Alunix (Västra Götaland, Halland) och Umeå Webbdesign (Norrland) får en
+    veckolista, mycket bra blir Alunix inspirationslista, bra fördelas aldrig.
+    Bara bolagsnivå lämnar källkunden (INV-SEC-008): inga kontakter, inget
+    kundinnehåll, aldrig vilken kund som hittade bolaget. Webbyråkunder och
+    enskilda firmor är aldrig källa. Utan sajt, parkerad eller trasig är just
+    de akuta leadsen för webbyråerna; regel 8 gäller fortfarande källkundens
+    egen körning. Kod: `app/leads/webbpool.py`, flaggor `WEBBPOOL_*`.
+21. **Skärmbilden.** ScrapeGraph i JS-läge med samtyckescookies (2 krediter),
+    stealth bara som andra försök när rutan ändå skymmer (7 krediter).
+    PageSpeed bara på mobil, för siffrorna.
+
 Koden: `snajp-support/app/leads/sources/merinfo.py` (filtret, `lage="iris"`
 och `lage="lista"`), `app/leads/discovery.py:hamta_person_kontakt`
 (kontaktkontrollen; `hamta_vd_kontakt` är listspårets strängare VD-variant).
