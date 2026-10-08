@@ -28,6 +28,7 @@ from typing import Any
 from .geo import _prefix_ur_postnr
 from .profil import KOMMUNER, PRODUKTMATCH, produktmatch_text
 from .scoring import MISS, OKAND, TRAFF
+from .webbrevision import webbniva
 
 UTSLAG = {"ja": TRAFF, "nej": MISS, "okänt": OKAND, "okant": OKAND}
 _VARDE = {TRAFF: 1.0, OKAND: 0.5, MISS: 0.0}
@@ -72,12 +73,6 @@ _VILL_HA_DALIG = re.compile(
 )
 _INGEN_SAJT_INGAR = re.compile(r"(ingen|utan|saknar)\s+(hem)?sid|(ingen|utan|saknar)\s+webb|no\s+website", re.I)
 _VILL_HA_BRA = re.compile(r"modern|snabb|ny |nya |professionell|fast|new ", re.I)
-#: Gränserna på bildbedömningens tiogradiga skala (webbrevision.VISIONPROMPT).
-#: Kalibrerade mot Antons facit 2026-10-04: Byggarna Berggren och Vicht
-#: (dåliga) under, Björkekärr och Eustaff (bra) över, Ställningskompaniet
-#: (gränsfall) mellan.
-DALIG_HOGST = 4
-BRA_MINST = 7
 
 
 def webbutslag(kriterium: str, rev: dict[str, Any] | None, *, utan_webbplats: bool = False) -> tuple[str, str] | None:
@@ -87,7 +82,8 @@ def webbutslag(kriterium: str, rev: dict[str, Any] | None, *, utan_webbplats: bo
     Avgörs i kod för att samma citat inte ska kunna styrka båda hållen: före
     2026-10-05 räckte raden "Ingen webbplats hittades" som belägg både för ja
     (100 poäng) och nej (fälld)."""
-    if not rev or (rev.get("modernitet") is None and not rev.get("saknas") and not rev.get("svarar_inte")):
+    if not rev or (rev.get("modernitet") is None and not rev.get("saknas") and not rev.get("svarar_inte")
+                   and not rev.get("platshallare")):
         return None
     if _VILL_HA_DALIG.search(kriterium):
         vill_dalig = True
@@ -105,18 +101,22 @@ def webbutslag(kriterium: str, rev: dict[str, Any] | None, *, utan_webbplats: bo
     if rev.get("svarar_inte") and rev.get("modernitet") is None:
         # Vicht (facit 2026-10-04): en sajt som inte svarar är en dålig sajt.
         return (TRAFF if vill_dalig else MISS), "Webbplatsen svarade inte när den mättes."
+    if rev.get("platshallare") and rev.get("modernitet") is None:
+        return (TRAFF if vill_dalig else MISS), f"Webbplatsen är ingen riktig sajt ({rev['platshallare']})."
+    # Fyra nivåer och inget gränsfall (Antons facit 2026-10-08). Gränserna
+    # bor i webbrevision.webbniva och ingen annanstans.
+    niva = webbniva(rev)
     m = int(rev["modernitet"])
     brister = "; ".join(rev.get("brister") or [])
-    if m <= DALIG_HOGST:
-        lage, text = "dalig", f"Startsidan bedöms som föråldrad (modernitet {m} av 10)."
-    elif m >= BRA_MINST:
-        lage, text = "bra", f"Startsidan bedöms som modern och professionell (modernitet {m} av 10)."
+    if niva == "okand":
+        return OKAND, f"Startsidan skymdes av en ruta och kunde inte bedömas (modernitet {m} av 10)."
+    if niva in ("akut", "dalig"):
+        text = f"Startsidan bedöms som föråldrad (modernitet {m} av 10)." + (f" Brister: {brister}." if brister else "")
+        if rev.get("katalog"):
+            text = "Bolagets enda webbnärvaro är en katalogsida. " + text
     else:
-        return OKAND, f"Gränsfall: startsidan är varken tydligt föråldrad eller modern (modernitet {m} av 10)." + (
-            f" Brister: {brister}." if brister else "")
-    if brister and lage == "dalig":
-        text += f" Brister: {brister}."
-    return (TRAFF if (lage == "dalig") == vill_dalig else MISS), text
+        text = f"Startsidan bedöms som modern och professionell (modernitet {m} av 10)."
+    return (TRAFF if (niva in ("akut", "dalig")) == vill_dalig else MISS), text
 
 
 def _rad(nyckel: str, etikett: str, vikt: int, utfall: str, motivering: str, *, hart: bool,

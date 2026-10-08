@@ -108,6 +108,8 @@ async def sokrunda(
         if rad.get("spar", "ej_kvalificerad") == "ej_kvalificerad":
             korning["tratt"].append({"namn": rad["company_name"], "steg": "listspår", "skal": rad["signal_detalj"]})
     korning.setdefault("listspar", []).extend(listspar)
+    for rad in listspar:
+        pool_in(korning, rad)
     kvar: list[dict[str, Any]] = []
     for kandidat in fynd:
         namn = kandidat["company_name"]
@@ -125,6 +127,9 @@ async def sokrunda(
         if ostyrkt:
             korning["tratt"].append({"namn": namn, "steg": "existens", "skal": ostyrkt})
             continue
+        # Webbpoolen (plan 2026-10-08): varje styrkt bolag med webbplats, även
+        # de Jev fäller nedan. Bara bolagsnivå (webbpool.POOLFALT).
+        pool_in(korning, kandidat)
         kandidat["webbsignaler"] = fakta.get("rader") or []
         # Registerkällan (merinfo) har redan triagerat sina kandidater; en
         # andra Jev-fråga på samma bolag är bara kostnad.
@@ -147,6 +152,16 @@ async def sokrunda(
         kvar.append(kandidat)
     kvar.sort(key=lambda k: _ring_index(profil, k))
     korning["kandidater"].extend(kvar)
+
+
+def pool_in(korning: dict[str, Any], kandidat: dict[str, Any]) -> None:
+    """Bolagets poolrad i körningens tillstånd, en per domän. Läses av
+    webbpool.efter_korning när körningen är klar."""
+    from .webbpool import bolagsrad
+
+    rad = bolagsrad(kandidat, "korning")
+    if rad:
+        korning.setdefault("webbpool", {})[rad["doman"]] = rad
 
 
 def utslag(korning: dict[str, Any], namn: str, grind: str, skal: str | None) -> None:

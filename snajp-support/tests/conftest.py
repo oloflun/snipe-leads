@@ -68,6 +68,9 @@ def _force_simulation_mode(monkeypatch):
         # Webbrevisionen (app/leads/webbrevision.py) anropar PageSpeed och
         # bildmodellen för varje researchad sajt. Tom = av. Nionde gången.
         "LEADS_WEBBREVISION",
+        # Webbpoolen (app/leads/webbpool.py, 2026-10-08) bedömer varje
+        # körnings sajter efter körningen. Tom = av. Elfte gången.
+        "WEBBPOOL",
         "TYPESAFE_API_KEY",
         "IRIS_JEV",
         # Vertex-kontot: med JSON-nyckeln i .env tar bolagssökningen

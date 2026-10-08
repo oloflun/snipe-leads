@@ -198,6 +198,8 @@ class MemoryStorage:
         #: Säljlistan (public.saljlista) som motorn fyller på (migration 105).
         self._saljlista: dict[str, list[dict[str, Any]]] = {}
         self.lead_list_items: list[dict[str, Any]] = []
+        self.webbpool: dict[str, dict[str, Any]] = {}
+        self.webbpool_fordelad: set[tuple[str, str]] = set()
         # Leads Suite (migration 086): platta listor, samma form som tabellerna.
         self.lead_anteckningar: list[dict[str, Any]] = []
         self.lead_samtal: list[dict[str, Any]] = []
@@ -1283,8 +1285,6 @@ class MemoryStorage:
         origin: str = "manual",
         profil: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        prospect = {
-            "id": str(uuid.uuid4()),
         if origin not in ("example", "test"):
             # Speglar grinden i Postgres: ett bolag, ett prospekt.
             from ..leads import upptagna
@@ -1294,6 +1294,8 @@ class MemoryStorage:
                     befintlig, company_name, (profil or {}).get("orgnr")
                 ):
                     return {**befintlig, "fanns_redan": True}
+        prospect = {
+            "id": str(uuid.uuid4()),
             "tenant_id": tenant_id,
             "company_name": company_name,
             "contact_name": contact_name,
@@ -1787,7 +1789,7 @@ class MemoryStorage:
     _LEAD_LIST_STATUSAR = ("bestalld", "byggs", "klar", "fel")
     _LEAD_ITEM_TYPER = ("bolag", "privatperson")
 
-    _LEAD_LIST_KALLOR = ("sok", "kombinerad", "import", "crm", "saljlista")
+    _LEAD_LIST_KALLOR = ("sok", "kombinerad", "import", "crm", "saljlista", "webbpool")  # 108
     _KONTAKTFILTER = ("alla", "telefon", "mejl", "bada")
 
     async def create_lead_list(
@@ -1912,6 +1914,10 @@ class MemoryStorage:
             "signal_detalj": falt.get("signal_detalj"),
             "contact_phone": falt.get("contact_phone"),
             "orgnr": falt.get("orgnr"),
+            "lan": falt.get("lan"),
+            "postnr": falt.get("postnr"),
+            "webbniva": falt.get("webbniva"),
+            "webbrevision": falt.get("webbrevision"),
             "created_at": _now(),
         }
         self.lead_list_items.append(rad)
@@ -1924,15 +1930,9 @@ class MemoryStorage:
             dict(i)
             for i in self.lead_list_items
             if i["list_id"] == list_id and i["tenant_id"] == tenant_id
+            and (med_flyttade or i.get("signal") != "flyttad")
         ]
 
-    async def spara_listutkast(
-        self, tenant_id: str, item_id: str, utkast: dict[str, Any] | None
-    ) -> None:
-        for i in self.lead_list_items:
-            and (med_flyttade or i.get("signal") != "flyttad")
-            if str(i["id"]) == str(item_id) and i["tenant_id"] == tenant_id:
-                i["utkast"] = json.loads(json.dumps(utkast)) if utkast is not None else None
     async def uppdatera_listrad(self, tenant_id: str, item_id: str, falt: dict[str, Any]) -> None:
         from .base import LISTRAD_UPPDATERBARA
 
@@ -1945,6 +1945,12 @@ class MemoryStorage:
             if str(i["id"]) == str(item_id) and i["tenant_id"] == tenant_id:
                 i["signal"], i["signal_detalj"] = "flyttad", signal_detalj
 
+    async def spara_listutkast(
+        self, tenant_id: str, item_id: str, utkast: dict[str, Any] | None
+    ) -> None:
+        for i in self.lead_list_items:
+            if str(i["id"]) == str(item_id) and i["tenant_id"] == tenant_id:
+                i["utkast"] = json.loads(json.dumps(utkast)) if utkast is not None else None
 
     async def lista_upptagna_bolag(self, tenant_id: str) -> list[dict[str, Any]]:
         rader = [*self.prospects.get(tenant_id, []), *(i for i in self.lead_list_items if i["tenant_id"] == tenant_id)]
@@ -2214,6 +2220,26 @@ class MemoryStorage:
             seen.add(key)
             added += 1
         return added
+
+    async def webbpool_hamta(self, domaner: list[str]) -> dict[str, dict[str, Any]]:
+        return {d: dict(self.webbpool[d]) for d in domaner if d in self.webbpool}
+
+    async def webbpool_spara(self, rad: dict[str, Any]) -> None:
+        gammal = self.webbpool.get(rad["doman"], {"created_at": _now()})
+        ny = {k: v for k, v in rad.items() if v is not None}
+        self.webbpool[rad["doman"]] = {**gammal, **ny, "sedd_at": _now()}
+
+    async def webbpool_ofordelade(
+        self, mottagare: str, *, lan: list[str], nivaer: list[str], limit: int = 200
+    ) -> list[dict[str, Any]]:
+        rader = [
+            dict(r) for d, r in self.webbpool.items()
+            if r.get("lan") in lan and r.get("webbniva") in nivaer and (d, mottagare) not in self.webbpool_fordelad
+        ]
+        return sorted(rader, key=lambda r: str(r.get("bedomd_at") or ""))[:limit]
+
+    async def webbpool_markera_fordelad(self, mottagare: str, domaner: list[str], list_id: str | None) -> None:
+        self.webbpool_fordelad |= {(d, mottagare) for d in domaner}
 
     async def get_segment_ab_aggregate(self) -> list[dict[str, Any]]:
         from ..leads.segment_aggregate import AbResultRow, compute_segment_aggregate

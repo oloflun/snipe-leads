@@ -65,6 +65,8 @@ _PROSPEKT_PROFILFALT = frozenset(
         "contact_form_url",
         # Migration 081: kontaktpersonens telefon (registerkällan).
         "contact_phone",
+        # Migration 108: länet (webbpoolens fördelning).
+        "lan",
         # Migration 085: varifrån ett prospekt importerades (admin_flytt).
         "importerad_fran",
     }
@@ -1760,8 +1762,6 @@ class PostgresStorage:
         platshallare = ", ".join(f"${i}" for i in range(6, 6 + len(extra)))
 
         async with self._scoped(tenant_id) as conn:
-            try:
-                record = await conn.fetchrow(
             if origin not in ("example", "test"):
                 # Ett bolag, ett prospekt (Antons krav 2026-10-08): finns bolaget
                 # redan returneras det befintliga. Låset per kund gör att två
@@ -1776,6 +1776,8 @@ class PostgresStorage:
                 ):
                     if upptagna.samma_bolag(dict(rad), company_name, extra.get("orgnr")):
                         return {**_avkoda_prospekt(_row(rad)), "fanns_redan": True}
+            try:
+                record = await conn.fetchrow(
                     f"""
                     insert into prospects
                       (tenant_id, company_name, contact_name, contact_email, origin
@@ -2523,8 +2525,9 @@ class PostgresStorage:
                   (list_id, tenant_id, item_typ, company_name, website, ort,
                    contact_name, contact_role, contact_email, contact_level,
                    source_name, source_url, signal, signal_detalj,
-                   contact_phone, orgnr)
-                values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+                   contact_phone, orgnr, lan, postnr, webbniva, webbrevision)
+                values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16,
+                        $17, $18, $19, $20::jsonb)
                 returning *
                 """,
                 list_id,
@@ -2543,8 +2546,12 @@ class PostgresStorage:
                 falt.get("signal_detalj"),
                 falt.get("contact_phone"),
                 falt.get("orgnr"),
+                falt.get("lan"),
+                falt.get("postnr"),
+                falt.get("webbniva"),
+                json.dumps(falt["webbrevision"]) if falt.get("webbrevision") is not None else None,
             )
-        return _row(record)
+        return _avkoda_jsonb(_row(record), "webbrevision")
 
     async def list_lead_list_items(
         self, tenant_id: str, list_id: str, *, med_flyttade: bool = False
@@ -2557,13 +2564,6 @@ class PostgresStorage:
                    order by created_at""",
                 tenant_id,
                 list_id,
-            )
-        return [_avkoda_jsonb(_row(r), "utkast") for r in records]
-
-    async def spara_listutkast(
-        self, tenant_id: str, item_id: str, utkast: dict[str, Any] | None
-    ) -> None:
-        async with self._scoped(tenant_id) as conn:
                 med_flyttade,
             )
         return [_avkoda_jsonb(_avkoda_jsonb(_row(r), "utkast"), "webbrevision") for r in records]
@@ -2591,6 +2591,12 @@ class PostgresStorage:
                 tenant_id,
                 item_id,
                 signal_detalj,
+            )
+
+    async def spara_listutkast(
+        self, tenant_id: str, item_id: str, utkast: dict[str, Any] | None
+    ) -> None:
+        async with self._scoped(tenant_id) as conn:
             await conn.execute(
                 "update lead_list_items set utkast = $3::jsonb where tenant_id = $1 and id = $2",
                 tenant_id,
@@ -2987,6 +2993,53 @@ class PostgresStorage:
                 ],
             )
         return len(rows) if result is None else len(rows)
+
+    # Webbpoolen (migration 108, INV-SEC-008): plattformstabeller utan
+    # tenant_id, som prompt_lager. AVSIKTLIGT ingen _scoped(): det finns inget
+    # kundsammanhang, och raderna bär bara bolagsnivå.
+
+    async def webbpool_hamta(self, domaner: list[str]) -> dict[str, dict[str, Any]]:
+        if not domaner:
+            return {}
+        async with self.pool.acquire() as conn:
+            records = await conn.fetch("select * from webbpool where doman = any($1::text[])", domaner)
+        return {r["doman"]: _avkoda_jsonb(_row(r), "webbrevision") for r in records}
+
+    async def webbpool_spara(self, rad: dict[str, Any]) -> None:
+        from ..leads.webbpool import POOLFALT
+
+        falt = ["doman", *(f for f in POOLFALT if f in rad)]
+        varden = [json.dumps(rad[f]) if f == "webbrevision" and rad[f] is not None else rad[f] for f in falt]
+        platser = ", ".join(f"${i + 1}" + ("::jsonb" if f == "webbrevision" else "") for i, f in enumerate(falt))
+        uppdatera = ", ".join([f"{f} = coalesce(excluded.{f}, webbpool.{f})" for f in falt[1:]] + ["sedd_at = now()"])
+        async with self.pool.acquire() as conn:
+            await conn.execute(
+                f"insert into webbpool ({', '.join(falt)}) values ({platser}) "
+                f"on conflict (doman) do update set {uppdatera}",
+                *varden,
+            )
+
+    async def webbpool_ofordelade(
+        self, mottagare: str, *, lan: list[str], nivaer: list[str], limit: int = 200
+    ) -> list[dict[str, Any]]:
+        async with self.pool.acquire() as conn:
+            records = await conn.fetch(
+                """select w.* from webbpool w
+                   where w.lan = any($2::text[]) and w.webbniva = any($3::text[])
+                     and not exists (select 1 from webbpool_fordelad f
+                                     where f.doman = w.doman and f.mottagare = $1::uuid)
+                   order by w.bedomd_at nulls last limit $4""",
+                mottagare, lan, nivaer, limit,
+            )
+        return [_avkoda_jsonb(_row(r), "webbrevision") for r in records]
+
+    async def webbpool_markera_fordelad(self, mottagare: str, domaner: list[str], list_id: str | None) -> None:
+        async with self.pool.acquire() as conn:
+            await conn.executemany(
+                """insert into webbpool_fordelad (doman, mottagare, list_id) values ($1, $2::uuid, $3::uuid)
+                   on conflict do nothing""",
+                [(d, mottagare, list_id) for d in domaner],
+            )
 
     async def get_segment_ab_aggregate(self) -> list[dict[str, Any]]:
         # AVSIKTLIGT ingen _scoped(tenant_id) — den här funktionen har inget

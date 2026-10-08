@@ -34,6 +34,7 @@ import logging
 import os
 import re
 from typing import Any
+from urllib.parse import urlsplit
 
 import httpx
 
@@ -48,12 +49,114 @@ _LAYOUT_TEXT = {
     "modern": "modern layout",
 }
 
-VISIONPROMPT = """You audit the website of a small Swedish company for a web design agency \
-that sells new websites. Judge only what you can see in the screenshot plus the measured facts.
+#: Antons facit 2026-10-08 (57 sajter) har fyra nivåer och inget gränsfall.
+#: Gränserna på modellens tiogradiga skala; `webbniva` är den enda som läser dem.
+AKUT_HOGST = 2
+DALIG_HOGST = 5
+BRA_HOGST = 8
+NIVAER = ("akut", "dalig", "bra", "mycket_bra")
+
+#: Samtyckescookies som säger "besökaren har redan nekat" hos de vanligaste
+#: plattformarna. Utan dem täckte rutan halva skärmbilden på ungefär var
+#: fjärde sajt i facit 2026-10-08, och bedömningen dömde rutan i stället för
+#: sajten. Prövat samma dag: rutan försvann på 5 av 5 (Cookiebot, Complianz,
+#: Cookie Information). Neka är det integritetsvänliga svaret.
+SAMTYCKE = {
+    "CookieConsent": "{stamp:%27-1%27%2Cnecessary:true%2Cpreferences:false%2Cstatistics:false%2C"
+                     "marketing:false%2Cmethod:%27explicit%27%2Cver:1%2Cregion:%27se%27}",
+    "cmplz_banner-status": "dismissed",
+    "cmplz_functional": "allow",
+    "cmplz_marketing": "deny",
+    "cmplz_statistics": "deny",
+    "cmplz_preferences": "deny",
+    "CookieInformationConsent": json.dumps({
+        "consents_approved": ["cookie_cat_necessary"],
+        "consents_denied": ["cookie_cat_functional", "cookie_cat_statistic", "cookie_cat_marketing",
+                            "cookie_cat_unclassified"],
+    }),
+    "OptanonAlertBoxClosed": "2026-10-08T00:00:00.000Z",
+    "cookieyes-consent": "consent:no,action:yes,necessary:yes,functional:no,analytics:no,"
+                         "performance:no,advertisement:no",
+    "moove_gdpr_popup": json.dumps({"strict": "1", "thirdparty": "0", "advanced": "0"}),
+    "cookie_notice_accepted": "false",
+}
+
+#: Kataloger och plattformar som kan vara ett bolags ENDA webbnärvaro.
+#: Facit 2026-10-08: VM Måleris sida på thingsreview.com är deras faktiska
+#: sida, och "väldigt dålig, sådana ska absolut kontaktas" (Anton). En sådan
+#: närvaro kan aldrig bli bättre än dålig: bolaget har ingen egen sajt.
+KATALOGDOMANER = (
+    "thingsreview.com", "hitta.se", "eniro.se", "allabolag.se", "merinfo.se", "proff.se", "ratsit.se",
+    "121.nu", "facebook.com", "instagram.com", "linkedin.com", "foretagsfakta.se", "reco.se",
+)
+
+
+def _nu() -> str:
+    from datetime import UTC, datetime
+
+    return datetime.now(UTC).isoformat()
+
+
+def startsida(url: str | None) -> str | None:
+    """Sajtens startsida. Facit 2026-10-08 hade sex undersidor (`/kopa`,
+    `/om-oss` ...) och Carlén dömdes på en tom lagersida. En katalogsida är
+    bolagets sida och behåller sin sökväg."""
+    if not url:
+        return None
+    if "://" not in url:
+        url = f"https://{url}"
+    if ar_katalog(url):
+        return url
+    delar = urlsplit(url)
+    return f"{delar.scheme}://{delar.netloc}/"
+
+
+def doman(url: str | None) -> str:
+    """Värdnamnet utan www., gemener. Nyckeln i webbpoolen."""
+    if not url:
+        return ""
+    host = urlsplit(url if "://" in url else f"https://{url}").hostname or ""
+    host = host.lower()
+    return host[4:] if host.startswith("www.") else host
+
+
+def ar_katalog(url: str | None) -> bool:
+    d = doman(url)
+    return any(d == k or d.endswith("." + k) for k in KATALOGDOMANER)
+
+
+def webbniva(rev: dict[str, Any] | None) -> str:
+    """Revisionens nivå: akut, dalig, bra, mycket_bra eller okand.
+
+    Akut avgörs i kod utan bild: ingen sajt, platshållare (parkerad, 404,
+    fillistning, under konstruktion) eller en sajt som inte svarar ens på
+    andra försöket. En katalogsida stannar på dålig, aldrig bättre."""
+    if not rev:
+        return "okand"
+    if rev.get("saknas") or rev.get("platshallare") or rev.get("svarar_inte"):
+        return "akut"
+    m = rev.get("modernitet")
+    if rev.get("katalog") and (rev.get("skymd") or not isinstance(m, (int, float))):
+        return "dalig"  # en katalogsida är aldrig bättre, vad bilden än visar
+    if rev.get("skymd") or not isinstance(m, (int, float)):
+        return "okand"
+    niva = "akut" if m <= AKUT_HOGST else "dalig" if m <= DALIG_HOGST else "bra" if m <= BRA_HOGST else "mycket_bra"
+    if rev.get("katalog") and niva in ("bra", "mycket_bra"):
+        return "dalig"
+    return niva
+
+
+VISIONPROMPT = """You audit the website of a small Swedish company or organisation for a web \
+design agency that sells new websites. Judge only what you can see in the screenshot plus the \
+measured facts. The one question that matters: would the owner immediately SEE that a new \
+website is a clear upgrade? If yes, the site is dated or poor, however well it works.
+
+Ignore cookie banners, newsletter pop-ups, chat bubbles and language prompts: judge the page \
+BEHIND them. Set "skymd" to true only if an overlay hides most of the page so you cannot judge it.
 
 Return ONLY a JSON object with these keys:
 - navigering_tydlig: true/false — is there a clear, visible navigation menu?
-- hero_modern: true/false — does the top section look current (large imagery or strong \
+- hero_modern: true/false — does the top section look current (large own imagery or strong \
 typography, clear message, call to action)?
 - layout_era: "tabeller" | "tidig_responsiv" | "modern"
 - typografi_och_luft: "bra" | "medel" | "dalig" — font sizes, hierarchy, whitespace
@@ -61,17 +164,29 @@ typography, clear message, call to action)?
 - fortroende: "bra" | "medel" | "dalig" — contact details, references, professional finish
 - uppskattat_byggar: integer year the design most likely dates from, or null
 - modernitet: integer 1-10
+- skymd: true/false
 - top_3_brister: up to 3 short, concrete, VISIBLE design flaws written in Swedish; [] if none \
 worth raising with the owner
 - intern_eller_internationell: "lokal" | "internationell" | "okand" — "internationell" if the site \
 presents an international group, offices in several countries, or is English-only
 
+Signs of a DATED or POOR site (two or more → modernitet 3-5):
+fixed-width or boxed layout with background visible at the sides; text starts at the top with no \
+large image; small or justified body text; stock photos, clip art or drawings instead of the \
+company's own photos; visible defects (duplicate logo, image not loaded, empty bands, misaligned \
+elements, overlapping text); a default theme with no identity of its own (plain WordPress, \
+Bootstrap, Wix or shop theme); clutter of badges, banners or sliders; dated typefaces (Times, \
+default Arial, thin all-caps serif).
+Signs of a GOOD site (modernitet 6-8): a large full-width top image or video with the company's \
+own photos, a clear headline and button, generous and consistent spacing, a deliberate typeface, \
+a modern menu. A site built on a theme is still GOOD when it looks like this.
+
 Calibration for modernitet:
-1-2 = a logo and a contact line, no navigation, or a parked/placeholder page.
-3-4 = a dated template (around 2012-2017): small fonts, cluttered header, stock photos, sliders.
-5-6 = a clean, responsive but generic template.
-7-8 = a crafted, current site: strong typography, consistent spacing, good imagery.
-9-10 = agency-grade work with motion, scroll effects and a distinct visual identity.
+1-2 = broken or not a real site: an error page, a placeholder, unstyled HTML, a file listing, only \
+a logo and a contact line, or a third-party directory page as the company's only presence.
+3-5 = dated (around 2005-2017) or generic and plain: a new site would be a clear upgrade.
+6-8 = current and professional: the owner would not see a reason to replace it.
+9-10 = agency-grade work with a distinct visual identity, custom type or illustration, motion.
 Animations cannot be seen in a screenshot: trust the measured facts for motion."""
 
 
@@ -127,9 +242,25 @@ def _som_data_url(varde: Any) -> str | None:
     return f"data:image/jpeg;base64,{varde}"
 
 
-async def skarmbild_via_scrapegraph(url: str) -> str | None:
-    """Reserv när PageSpeed inte ger en skärmbild: ScrapeGraphs screenshot-
-    format (2 krediter). Räknas mot körningens kredittak. Kastar aldrig."""
+#: Krediter per lyckad skärmbild, uppmätt 2026-10-08 mot kreditsaldot:
+#: JS-läge med väntan och cookies 2, med stealth 7. Ett misslyckat anrop
+#: kostar ingenting. Stealth används därför bara som andra försök (Nimbus
+#: visade annars en ruta om "gammal webbläsare" eller fallerade).
+SKARMBILD_KREDITER = 2
+STEALTH_KREDITER = 7
+
+
+def _skarmbild_ur_svar(svar: Any) -> Any:
+    if getattr(svar, "status", None) != "success":
+        return None
+    return ((svar.data.results or {}).get("screenshot") or {}).get("data")
+
+
+async def skarmbild_via_scrapegraph(url: str, *, bara_stealth: bool = False) -> str | None:
+    """Skärmbilden, förstahandskällan sedan 2026-10-08: en riktig webbläsare
+    (JS, 2,5 s väntan) med samtyckescookies som håller cookierutan borta.
+    PageSpeeds bild kan inte bära cookies, och dess nyckellösa kvot är ändå
+    slut. Räknas mot körningens kredittak. Kastar aldrig."""
     import base64
 
     from ..config import get_settings
@@ -137,19 +268,34 @@ async def skarmbild_via_scrapegraph(url: str) -> str | None:
 
     nyckel = get_settings().scrapegraphai_api_key
     kontext = sidhamtning.aktuell()
-    if not nyckel or (kontext and kontext.tak - kontext.totalt < 2):
+
+    def rymms(krediter: int) -> bool:
+        return not kontext or kontext.tak - kontext.totalt >= krediter
+
+    if not nyckel or not rymms(SKARMBILD_KREDITER):
         return None
+    data = None
     try:
-        from scrapegraph_py import ScrapeGraphAI, ScreenshotFormatConfig
+        from scrapegraph_py import FetchConfig, ScrapeGraphAI, ScreenshotFormatConfig
 
         client = ScrapeGraphAI(api_key=nyckel)
-        if kontext:
-            kontext.anrop["skarmbild"] = kontext.anrop.get("skarmbild", 0) + 2
-        svar = await asyncio.wait_for(
-            asyncio.to_thread(client.scrape, url, formats=[ScreenshotFormatConfig(width=1440, height=900)]),
-            timeout=60,
-        )
-        data = ((svar.data.results or {}).get("screenshot") or {}).get("data") if svar.status == "success" else None
+        forsok = ((True, STEALTH_KREDITER),) if bara_stealth else ((False, SKARMBILD_KREDITER), (True, STEALTH_KREDITER))
+        for stealth, krediter in forsok:
+            if not rymms(krediter):
+                break
+            svar = await asyncio.wait_for(
+                asyncio.to_thread(
+                    client.scrape, url,
+                    formats=[ScreenshotFormatConfig(width=1440, height=900)],
+                    fetch_config=FetchConfig(mode="js", stealth=stealth, wait=2500, cookies=SAMTYCKE),
+                ),
+                timeout=90,
+            )
+            data = _skarmbild_ur_svar(svar)
+            if data:
+                if kontext:
+                    kontext.anrop["skarmbild"] = kontext.anrop.get("skarmbild", 0) + krediter
+                break
     except Exception as fel:  # noqa: BLE001
         logger.info("Skärmbilden via ScrapeGraph för %s föll: %s", url, type(fel).__name__)
         return None
@@ -251,6 +397,10 @@ def citerbara_rader(rev: dict[str, Any]) -> list[str]:
             + "."
         )
     rader += [f"Synlig brist på startsidan: {b}" for b in rev.get("brister") or []]
+    if rev.get("platshallare"):
+        rader.append(f"Webbplatsen är ingen riktig sajt: {rev['platshallare']}.")
+    if rev.get("katalog"):
+        rader.append("Bolagets enda webbnärvaro är en sida i en katalog, ingen egen webbplats.")
     return rader
 
 
@@ -259,17 +409,35 @@ async def revidera(url: str | None, fakta: dict[str, Any]) -> dict[str, Any]:
     saknas. Kastar aldrig."""
     if not url or not aktiv():
         return {}
-    mobil, desktop = await asyncio.gather(pagespeed(url, "mobile"), pagespeed(url, "desktop"))
-    skarmbild = (desktop or {}).get("skarmbild") or (mobil or {}).get("skarmbild")
-    if not skarmbild:
-        skarmbild = await skarmbild_via_scrapegraph(url)
+    url = startsida(fakta.get("url") or url) or url
+    # En sajt som är trasig enligt mätningen kostar ingen skärmbild: den är
+    # akut redan (facit 2026-10-08: 404 hos Netlify och Wix, Bohlin svarar inte).
+    status = fakta.get("http_status")
+    if fakta.get("platshallare") or fakta.get("svarar_inte") or status in (404, 410) or (status or 0) >= 500:
+        rev: dict[str, Any] = {
+            "platshallare": fakta.get("platshallare") or (f"felsida ({status})" if status else None),
+            "svarar_inte": bool(fakta.get("svarar_inte")),
+        }
+        rev["webbniva"] = webbniva(rev)
+        rev["bedomd"] = _nu()
+        rev["rader"] = citerbara_rader(rev)
+        return rev
+    # PageSpeed bara på mobil och bara för siffrorna (säljargumentet); bilden
+    # kommer från ScrapeGraph, med PageSpeeds som reserv.
+    mobil, skarmbild = await asyncio.gather(pagespeed(url, "mobile"), skarmbild_via_scrapegraph(url))
+    skarmbild = skarmbild or (mobil or {}).get("skarmbild")
     vis = await visuell(url, skarmbild, fakta) if skarmbild else None
-    rev: dict[str, Any] = {
-        "pagespeed": {
-            namn: {k: v for k, v in (ps or {}).items() if k != "skarmbild"}
-            for namn, ps in (("mobil", mobil), ("desktop", desktop)) if ps
-        },
-    }
+    if skarmbild and vis is None:
+        # Ett tomt eller trasigt modellsvar (Anna Åberg, kalibreringen 2026-10-08).
+        vis = await visuell(url, skarmbild, fakta)
+    if vis and vis.get("skymd") is True:
+        # En ruta som paketet inte når (bot-kontroll, TCF-samtycke, "gammal
+        # webbläsare"): ett andra försök med stealth, 7 krediter.
+        andra = await skarmbild_via_scrapegraph(url, bara_stealth=True)
+        vis2 = await visuell(url, andra, fakta) if andra else None
+        if vis2 and vis2.get("skymd") is not True:
+            vis = vis2
+    rev = {"pagespeed": {"mobil": {k: v for k, v in mobil.items() if k != "skarmbild"}} if mobil else {}}
     if vis:
         rev.update(
             modernitet=vis["modernitet"],
@@ -277,9 +445,14 @@ async def revidera(url: str | None, fakta: dict[str, Any]) -> dict[str, Any]:
             uppskattat_byggar=vis.get("uppskattat_byggar"),
             brister=vis["top_3_brister"],
             internationell=vis.get("intern_eller_internationell") == "internationell",
+            skymd=vis.get("skymd") is True,
             detaljer={k: vis.get(k) for k in (
                 "navigering_tydlig", "hero_modern", "typografi_och_luft", "bildkvalitet", "fortroende")},
         )
+    if ar_katalog(url):
+        rev["katalog"] = True
+    rev["webbniva"] = webbniva(rev)
+    rev["bedomd"] = _nu()
     rev["rader"] = citerbara_rader(rev)
     return rev
 
@@ -292,6 +465,15 @@ def demo() -> None:
     assert "modernitet 3 av 10, tabellbaserad layout" in rader[1] and "2014" in rader[1]
     assert rader[2] == "Synlig brist på startsidan: Liten text i menyn"
     assert _json_ur('Svar: {"modernitet": 4}') == {"modernitet": 4}
+    assert [webbniva({"modernitet": m}) for m in (2, 3, 5, 6, 8, 9)] == [
+        "akut", "dalig", "dalig", "bra", "bra", "mycket_bra"]
+    assert webbniva({"modernitet": 8, "katalog": True}) == "dalig"
+    assert webbniva({"modernitet": 8, "skymd": True}) == "okand"
+    assert webbniva({"katalog": True}) == "dalig"
+    assert webbniva({"svarar_inte": True}) == webbniva({"saknas": True}) == "akut"
+    assert startsida("https://www.carlenbil.se/kopa") == "https://www.carlenbil.se/"
+    assert startsida("thingsreview.com/generic/vm-maleri") == "https://thingsreview.com/generic/vm-maleri"
+    assert doman("https://WWW.Pectus.se/x") == "pectus.se"
     print("webbrevision: ok")
 
 

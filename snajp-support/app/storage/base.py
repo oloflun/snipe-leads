@@ -678,6 +678,25 @@ class Storage(Protocol):
 
     # -- G11: segmentaggregatet (den enda avsiktliga tenantgränsöverskridningen) --
 
+    # -- Webbpoolen (migration 108, INV-SEC-008): plattformstabell utan tenant --
+
+    async def webbpool_hamta(self, domaner: list[str]) -> dict[str, dict[str, Any]]:
+        """Poolens rader för domänerna, nycklade på domän."""
+        ...
+
+    async def webbpool_spara(self, rad: dict[str, Any]) -> None:
+        """Upsert på domän. Bara bolagsnivå (webbpool.POOLFALT); ett befintligt
+        värde skrivs aldrig över med None."""
+        ...
+
+    async def webbpool_ofordelade(
+        self, mottagare: str, *, lan: list[str], nivaer: list[str], limit: int = 200
+    ) -> list[dict[str, Any]]:
+        """Bedömda rader i länen och nivåerna som mottagaren inte fått."""
+        ...
+
+    async def webbpool_markera_fordelad(self, mottagare: str, domaner: list[str], list_id: str | None) -> None: ...
+
     async def get_segment_ab_aggregate(self) -> list[dict[str, Any]]:
         """Inget tenant_id-argument — se app/leads/segment_aggregate.py och
         migration 013 för varför det är avsiktligt."""

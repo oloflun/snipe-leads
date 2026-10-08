@@ -566,6 +566,8 @@ def till_kandidat(b: dict[str, Any], icp: dict[str, Any], profil: dict[str, Any]
         "orgnr": b.get("orgnr"),
         "ort": b.get("ort"),
         "postnr": b.get("postnr"),
+        # Webbpoolens fördelning efter län (migration 108).
+        "lan": b.get("lan"),
         "contact_name": None,
         "contact_role": None,
         "contact_phone": None,
@@ -991,7 +993,7 @@ async def _komplettera(
     Lista: oförändrat VD-krav — VD:ns mejl eller telefon på sajten, eller
     ensam-VD-undantaget."""
     from .. import discovery, sidhamtning
-    from ..platshallare import ar_platshallare
+    from ..platshallare import AVVECKLAT, ar_platshallare
 
     ut: list[dict[str, Any]] = []
     for k in rankade[: max(antal, 1) * PROV_PER_LEAD]:
@@ -1020,6 +1022,9 @@ async def _komplettera(
         if puls:
             await puls()
         parkerad = await ar_platshallare(webb) if webb else None
+        if parkerad == AVVECKLAT:
+            # Ett avvecklat bolag är inget lead i något spår (Anton 2026-10-08).
+            continue
         k = {**k, "website": None if parkerad else webb}
         kontakt = (
             await discovery.hamta_person_kontakt(

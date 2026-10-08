@@ -119,6 +119,29 @@ def analysera(
     return fakta
 
 
+_WEBBLASARE = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36"
+
+
+def andra_varianten(url: str) -> str:
+    """Samma adress med www. om den saknas, utan om den finns."""
+    schema, _, rest = url.partition("://")
+    if not rest:
+        return url
+    return f"{schema}://{rest[4:]}" if rest.startswith("www.") else f"{schema}://www.{rest}"
+
+
+async def _hamta_med_reserv(url: str) -> httpx.Response:
+    """Startsidan, och vid nätverksfel ett andra försök på www-varianten med
+    en vanlig webbläsarprofil. Facit 2026-10-08: www.futurenautic.com hängde
+    medan futurenautic.com svarade på 1,4 s, och den bra sajten dömdes som
+    död. Kastar httpx.HTTPError när båda fallerar."""
+    async with httpx.AsyncClient(timeout=_TIMEOUT, follow_redirects=True) as client:
+        try:
+            return await client.get(url, headers={"User-Agent": "Mozilla/5.0 (Snajp Iris)"})
+        except httpx.HTTPError:
+            return await client.get(andra_varianten(url), headers={"User-Agent": _WEBBLASARE})
+
+
 async def mat_webbplats(url: str | None) -> dict[str, Any]:
     """Hämtar startsidan och analyserar den. Kastar aldrig: en sajt som inte
     svarar är i sig en signal."""
@@ -136,8 +159,7 @@ async def mat_webbplats(url: str | None) -> dict[str, Any]:
         return {"har_webbplats": True, "url": url, "rader": [], "utdrag": "", "matt": False}
     start = time.monotonic()
     try:
-        async with httpx.AsyncClient(timeout=_TIMEOUT, follow_redirects=True) as client:
-            svar = await client.get(url, headers={"User-Agent": "Mozilla/5.0 (Snajp Iris)"})
+        svar = await _hamta_med_reserv(url)
         tid = time.monotonic() - start
         if svar.status_code >= 400:
             return {"har_webbplats": True, "url": url, "matt": True, "http_status": svar.status_code,

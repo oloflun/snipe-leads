@@ -49,7 +49,26 @@ _MARKORER: tuple[tuple[str, tuple[str, ...]], ...] = (
         "webbhotellets standardsida",
         ("welcome to nginx", "apache2 default page", "default web site page", "it works!"),
     ),
+    # Facit 2026-10-08: Netlify ("Site not found") och Wix ("Error: page not
+    # found") svarar med en felsida på sajtens adress, Kanotcentrum visar bara
+    # en fillistning. Alla tre är akuta leads för en webbyrå.
+    (
+        "felsida",
+        ("site not found", "page not found", "this page isn't available", "sidan kunde inte hittas",
+         "sidan finns inte", "404 not found", "error 404"),
+    ),
+    ("fillistning", ("index of /",)),
+    (
+        # Såg & Betong 2026-10-08. Ett avvecklat bolag är inget lead alls:
+        # det kastas i stället för att bli en akut webbsajt (Anton).
+        "bolaget avvecklas",
+        ("under avveckling", "bedriver inte längre", "försatt i konkurs", "har upphört med sin verksamhet",
+         "verksamheten är avvecklad", "verksamheten har avvecklats", "har lagt ner verksamheten"),
+    ),
 )
+
+#: Skälet som betyder att bolaget ska kastas, inte bli ett akut lead.
+AVVECKLAT = "bolaget avvecklas"
 
 #: Längre text än så här (utan länkadresser) är en riktig sida som råkar
 #: nämna en markör. Loopias parkeringssida är ~1 000 tecken.

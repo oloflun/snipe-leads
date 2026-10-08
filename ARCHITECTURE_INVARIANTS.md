@@ -167,11 +167,29 @@ standard på nya publika funktioner) har en `HAVING count(distinct tenant_id)
 >= 3`-spärr inbyggd i frågan, inte ett app-lagerfilter. Resultatraderna
 saknar helt en `tenant_id`-kolumn. `app/leads/segment_aggregate.py` är
 samma logik i ren Python, testbar utan databas.
-Varför: segmentlärande är den enda avsiktliga tenantgränsöverskridningen i
-hela arkitekturen (G11) — med två kunder går det att räkna baklänges till
+Varför: segmentlärande var den första avsiktliga tenantgränsöverskridningen i
+arkitekturen (G11; den andra är webbpoolen, INV-SEC-008) — med två kunder går det att räkna baklänges till
 den andra.
 Test: snajp-support/tests/leads/test_segment_aggregate.py
 Införd: 2026-08-07 · Upphävs endast genom waiver
+
+### INV-SEC-008 — Webbpoolen bär bara bolagsnivå och saknar tenant_id
+Tabellen `webbpool` (migration 108, `app/leads/webbpool.py`) är den andra
+avsiktliga tenantgränsöverskridningen, godkänd av Anton 2026-10-08: varje
+körnings bolag bedöms och fördelas efter län till webbyråkunderna (Alunix,
+Umeå Webbdesign). Raden bär bara `webbpool.POOLFALT`: offentliga
+bolagsuppgifter (namn, orgnr, webbplats, ort, postnr, län, SNI) och
+sidbedömningen. Aldrig kontaktperson, mejl, telefon, kundens utkast eller
+status, och aldrig vilken kund som hittade bolaget (`forsta_kalla_typ` säger
+bara körning eller lista). Webbyråkunder är aldrig källa
+(`webbpool.utesluten_kalla`). Bedömningen syns bara för webbyråerna
+(`webbpool.far_se`); övriga kunder får den varken beräknad i research eller
+i API-svaren.
+Varför: källkunden är personuppgiftsansvarig för sina leads (pilotavtalet).
+Det som lämnar kunden får inte vara kundens data, bara offentlig bolagsdata
+och en mätning av en publik sajt; villkoren säger det (preliminärt 2026-10-08).
+Test: snajp-support/tests/leads/test_webbpool.py
+Införd: 2026-10-08 · Upphävs endast genom waiver
 
 ### INV-SEC-002 — Tenant kommer aldrig från modellen
 Ingen `@function_tool` i `ALL_TOOLS`/`DEMO_TOOLS` exponerar `tenant_id`,
@@ -834,6 +852,7 @@ Ids this plan will introduce, in the order `Genomförandeordning` builds them. N
 | --- | --- | --- |
 | INV-SEC-006 | Hemligheter i env, aldrig i databasen | En nyckelkolumn införs |
 | INV-SEC-007 | Segmentaggregat kräver ≥3 kunder och saknar tenant_id | Vyn exponerar färre |
+| INV-SEC-008 | Webbpoolen bär bara bolagsnivå och saknar tenant_id | En kontakt- eller kundkolumn läggs till |
 | INV-AGENT-001 | Agenten erbjuder aldrig något utanför retentionsplaybooken | Ett erbjudande genereras fritt |
 | INV-AGENT-002 | En kund flyttas aldrig till ny baseline utan godkännande | Pin ändras automatiskt |
 

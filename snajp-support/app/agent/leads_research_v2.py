@@ -256,13 +256,28 @@ async def _research_v2(
         webbfakta = await mat_webbplats(prospect_row.get("website"))
         # Hur sajten ser ut och presterar (PageSpeed + bildbedömning). Raderna är
         # citerbara fakta som webbsignalerna; betyget avgör webbkriterierna i kod.
+        from ..leads.webbpool import farsk_revision
         from ..leads.webbrevision import revidera
 
-        webbrevision = (
-            await revidera(prospect_row.get("website"), webbfakta)
-            if webbfakta.get("har_webbplats")
-            else {"saknas": True}
-        )
+        # En färsk bedömning (prospektets egen från listan, eller webbpoolens)
+        # används i stället för en ny: samma sidkritik som listan visade blir
+        # utkastets underlag, och krediterna betalas en gång (plan 2026-10-08).
+        # Den gäller även när sajten saknas, för en parkerad eller trasig sajt
+        # är just Alunix akuta lead.
+        # Bedömningen är hemlig (Anton 2026-10-08): bara webbyråerna får den i
+        # sina prospekt, motiveringar och utkast. Den GÖRS ändå för varje
+        # körning hos varje kund, i webbpoolen efter körningen
+        # (webbpool.efter_korning), så att inga webbleads missas.
+        from ..leads.webbpool import far_se
+
+        if not await far_se(storage, tenant_id):
+            webbrevision = {} if webbfakta.get("har_webbplats") else {"saknas": True}
+        else:
+            webbrevision = await farsk_revision(storage, prospect_row) or (
+                await revidera(prospect_row.get("website"), webbfakta)
+                if webbfakta.get("har_webbplats")
+                else {"saknas": True}
+            )
         if webbfakta.get("har_webbplats") and webbrevision.get("modernitet") is None and any(
             "svarade inte" in r or "svarade med fel" in r for r in webbfakta.get("rader") or []
         ):

@@ -563,6 +563,11 @@ async def list_prospects(
     except Exception:  # noqa: BLE001 — en visningsdetalj får inte fälla listan
         logger.exception("Kunde inte läsa pågående research för %s.", tenant["tenant_id"])
         i_research = set()
+    # Webbplatsbedömningen är hemlig (Anton 2026-10-08): bara webbyråerna ser den.
+    from ..leads import webbpool
+
+    if not await webbpool.far_se(storage, tenant["tenant_id"]):
+        prospects = [webbpool.dolj(p) for p in prospects]
     # rollkoppling_oklar: underlag för intresseavvägningen, härlett vid
     # läsning — se app/leads/rollkoppling.py för varför den inte lagras.
     return {
@@ -607,6 +612,10 @@ async def get_prospect(
     )
     # Sorterad lista och inte set: JSON har ingen mängdtyp, och en ordning som
     # varierar mellan anrop ger en sida som hoppar utan att något ändrats.
+    from ..leads import webbpool
+
+    if not await webbpool.far_se(request.app.state.storage, tenant["tenant_id"]):
+        prospect = webbpool.dolj(prospect)
     return {"prospect": med_rollflagga(prospect), "sources": sorted(urls)}
 
 
@@ -1932,6 +1941,7 @@ async def _korningens_profil(storage, tenant_id: str, overrides: dict | None) ->
 
 async def _skapa_prospekt_ur_kandidat(storage, tenant_id: str, bolag: dict, origin: str) -> dict:
     from ..leads.discovery import ar_arbetsmejl
+    from ..leads.webbpool import lan_for
 
     if bolag.get("kalla") == "gemini":
         # En sökträff bär modellens PÅSTÅENDEN om kontakt, ort och storlek.
@@ -1983,16 +1993,20 @@ async def _skapa_prospekt_ur_kandidat(storage, tenant_id: str, bolag: dict, orig
                 "omsattning",
             )
             if bolag.get(k) is not None
-        },
+        } | ({"lan": lan} if (lan := lan_for(bolag)) else {}),
     )
-    if bolag.get("jev_triage"):
     if prospect.get("fanns_redan"):
         # Bolaget finns redan (dubblettgrinden i create_prospect): det
         # befintliga prospektet rörs inte.
         return prospect
+    if bolag.get("jev_triage"):
         await storage.spara_bedomning(
             tenant_id, prospect["id"], bedomning={"jev": {"triage": bolag["jev_triage"]}}
         )
+    if isinstance(bolag.get("webbrevision"), dict):
+        # Sidbedömningen från en webbpoollista (plan 2026-10-08) följer med,
+        # så att researchen använder samma kritik i stället för att betala igen.
+        await storage.spara_bedomning(tenant_id, prospect["id"], bedomning={"webbrevision": bolag["webbrevision"]})
     if bolag.get("website"):
         await _registrera_webb(storage, tenant_id, prospect["id"], bolag["website"])
     # Registersidan (merinfo) är det enda källmaterialet för ett bolag utan
@@ -2488,6 +2502,15 @@ async def _fyll_pa_last(app_state, tenant: dict, batch_id: str) -> None:
             iris_korning.avsluta(k, "klar" if k["levererade"] >= k["mal"] else (orsak or "slut_pa_kandidater"))
         # Före sammanfattningen: den läser fördelningen listspåret sparade.
         await _spara_listspar(storage, tenant_id, k)
+        if k.get("webbpool") and not k.get("webbpool_startad"):
+            # Webbpoolen (plan 2026-10-08): körningens bolag bedöms och
+            # fördelas till webbyråerna i en egen uppgift som aldrig kastar.
+            # Flaggan följer tillståndet till liggaren, så att en väckning
+            # efter deploy inte startar den två gånger.
+            from ..leads import webbpool
+
+            k["webbpool_startad"] = True
+            asyncio.create_task(webbpool.efter_korning(storage, dict(k), tenant_id))
         k["sammanfattning"] = iris_korning.sammanfatta(k)
     resultat.update(korning=k, jobs=k["jobs"], count=len(k["jobs"]))
     await jobs.complete(batch_id, resultat)
@@ -3375,7 +3398,12 @@ async def hamta_leadslista(
     lista = await storage.get_lead_list(tenant["tenant_id"], list_id)
     if not lista:
         raise HTTPException(status_code=404, detail="Listan finns inte.")
-    return {"list": lista, "items": await storage.list_lead_list_items(tenant["tenant_id"], list_id)}
+    from ..leads import webbpool
+
+    items = await storage.list_lead_list_items(tenant["tenant_id"], list_id)
+    if not await webbpool.far_se(storage, tenant["tenant_id"]):
+        items = [webbpool.dolj(i) for i in items]
+    return {"list": lista, "items": items}
 
 
 #: Art. 14-grunden för en listträff som blir prospekt: raden kom ur publika
@@ -3470,11 +3498,6 @@ async def _befordra_listrad(storage, tenant_id: str, lista: dict, rad: dict) -> 
     if not namn:
         raise HTTPException(status_code=422, detail="Raden saknar bolagsnamn.")
 
-    befintliga = await storage.list_prospects(tenant_id, limit=500)
-    for p in befintliga:
-        if str(p.get("company_name") or "").casefold() == namn.casefold():
-            return p, False
-
     prospect = await storage.create_prospect(
         tenant_id,
         company_name=namn,
@@ -3483,10 +3506,21 @@ async def _befordra_listrad(storage, tenant_id: str, lista: dict, rad: dict) -> 
         origin=_listans_origin(lista),
         profil={
             k: rad[k]
-            for k in ("website", "ort", "contact_role", "contact_level", "contact_phone", "orgnr")
+            for k in ("website", "ort", "contact_role", "contact_level", "contact_phone", "orgnr", "postnr", "lan")
             if rad.get(k) is not None
         },
     )
+    if isinstance(rad.get("webbrevision"), dict) and not prospect.get("fanns_redan"):
+        # Webbpoolens sidkritik följer med till Iris (plan 2026-10-08), så att
+        # researchen och utkastet bygger på samma bedömning som listan visade.
+        await storage.spara_bedomning(tenant_id, prospect["id"], bedomning={"webbrevision": rad["webbrevision"]})
+    if rad.get("id"):
+        await storage.markera_listrad_flyttad(
+            tenant_id, str(rad["id"]),
+            signal_detalj=omprova.ny_signal_detalj(rad.get("signal_detalj"), "iris", date.today().isoformat()),
+        )
+    if prospect.get("fanns_redan"):
+        return prospect, False
 
     website = rad.get("website")
     if website:
@@ -3496,13 +3530,6 @@ async def _befordra_listrad(storage, tenant_id: str, lista: dict, rad: dict) -> 
         källnamn = str(rad.get("source_name") or "").casefold()
         source_type = next(
             (typ for nyckel, typ in _LISTKALLA_TILL_SOURCE_TYPE.items() if nyckel in källnamn),
-    if rad.get("id"):
-        await storage.markera_listrad_flyttad(
-            tenant_id, str(rad["id"]),
-            signal_detalj=omprova.ny_signal_detalj(rad.get("signal_detalj"), "iris", date.today().isoformat()),
-        )
-    if prospect.get("fanns_redan"):
-        return prospect, False
             "other",
         )
         try:
@@ -3733,7 +3760,6 @@ async def _starta_listkorning(
         )
         typ = "import" if lista.get("kalla") == "import" else "lista"
         scope = "research_and_draft" if regler["per_typ"][typ]["utkast_auto"] else "research"
-    app_state = request.app.state
     batch_id = await app_state.jobs.create(tenant_id=tenant_id, status="processing")
     k = iris_korning.ny_korning(mal=len(prospekt), scope=scope, overrides=None, is_test=is_test)
     k.update(kalla="lista", list_id=list_id, list_titel=lista.get("titel"))
@@ -3970,6 +3996,19 @@ async def _run_list_job(app_state, payload: dict) -> None:
              **({"saljlista_inlagda": saljlista_inlagda} if saljlista_inlagda is not None else {})},
         )
         await storage.set_leads_job_status(tenant_id, job_id=job_id, status="completed", scope="lista")
+        # Webbpoolen även för listbyggen (Anton 2026-10-08: varje körning ska
+        # bildbedömas, så att inga webbleads missas). Bara rader vars webbplats
+        # kommer ur registret: listbygget har ingen existensgrind, och en gissad
+        # domän som inte svarar hade blivit ett "akut" lead hos en webbyrå.
+        from ..leads import webbpool
+
+        pool = {
+            r["doman"]: r
+            for traff in rader
+            if traff.get("source_name") == "merinfo" and (r := webbpool.bolagsrad(traff, "lista"))
+        }
+        if pool and webbpool.aktiv():
+            asyncio.create_task(webbpool.efter_korning(storage, {"webbpool": pool}, tenant_id))
     except Exception as fel:  # noqa: BLE001 — listan ska bli 'fel', inte tyst dö
         if not isinstance(fel, DiscoveryError):
             logger.exception("Listbygget misslyckades (%s)", job_id)

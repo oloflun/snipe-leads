@@ -225,3 +225,38 @@ def test_reservantalet():
     from app.leads.discovery import _reserver
 
     assert [_reserver(n) for n in (1, 2, 3, 5, 10, 50)] == [2, 2, 2, 3, 5, 5]
+
+
+@pytest.mark.parametrize(
+    ("text", "skal"),
+    [
+        ("Site not found\nLooks like you followed a broken link on Netlify.", "felsida"),
+        ("ERROR: PAGE NOT FOUND 404 This page isn't available. Go to Wix.com", "felsida"),
+        ("Index of /\nName Last modified Size\nindex.html", "fillistning"),
+        ("Viktig information: Såg & Betong Sverige AB är under avveckling och bedriver inte längre "
+         "någon verksamhet.", platshallare.AVVECKLAT),
+    ],
+)
+def test_felsidor_fillistning_och_avveckling_facit_2026_10_08(text, skal):
+    assert platshallarskal(text) == skal
+
+
+@pytest.mark.anyio
+async def test_www_varianten_provas_nar_forsta_adressen_hanger(monkeypatch):
+    """www.futurenautic.com hängde 2026-10-08 medan futurenautic.com svarade."""
+    from app.leads import webbsignal
+
+    anrop: list[str] = []
+
+    async def get(self, url, headers=None):
+        anrop.append(url)
+        if "www." in url:
+            raise httpx.ConnectTimeout("hänger")
+        return httpx.Response(200, text="<html><body>ok</body></html>", request=httpx.Request("GET", url))
+
+    monkeypatch.setenv("LEADS_WEBBSIGNAL", "1")
+    monkeypatch.setattr(httpx.AsyncClient, "get", get)
+    fakta = await webbsignal.mat_webbplats("https://www.futurenautic.com/")
+    assert anrop == ["https://www.futurenautic.com/", "https://futurenautic.com/"]
+    assert not fakta.get("svarar_inte")
+    assert webbsignal.andra_varianten("https://x.se/") == "https://www.x.se/"

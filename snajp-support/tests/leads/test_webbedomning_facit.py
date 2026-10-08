@@ -4,7 +4,8 @@ Facit, med Antons ord i korthet:
   Byggarna Berggren  — en verkligt dålig/gammal sida            → träff
   Vicht Engineering  — påståendet stämde (sidan svarar inte)   → träff
   Torbens Byggservice— parkerad domän                           → listspåret, inte Iris
-  Ställningskompaniet— gränsfall, "kan vara värt att höra av sig" → okänt
+  Ställningskompaniet— gränsfall, "kan vara värt att höra av sig" → träff sedan
+                       facit 2026-10-08 (fyra nivåer, inget gränsfall: 3-5 är dålig)
   Björkekärrs Bygg   — bra sida                                 → miss
   Eustaff            — verkligt professionell, scrollanimationer → miss
   Ostia              — internationellt bolag, fel målgrupp      → fälls på storlek
@@ -27,7 +28,8 @@ KRITERIUM = "Företag med gamla hemsidor"
 FACIT = [
     ("Byggarna Berggren", 2, TRAFF),
     ("Vicht Engineering", 3, TRAFF),
-    ("Ställningskompaniet", 5, OKAND),
+    ("Ställningskompaniet", 5, TRAFF),
+    ("Bjorkmans Maleri (facit 2026-10-08, bra)", 6, MISS),
     ("Björkekärrs Bygg", 7, MISS),
     ("Eustaff", 9, MISS),
 ]
@@ -84,3 +86,12 @@ def test_internationellt_bolag_falls_pa_storlek():
     ut = bedom(_profil(), fynd, korpus="", kandidat={}, webbrevision={"modernitet": 6, "internationell": True})
     rad = next(r for r in ut["score_breakdown"] if r["nyckel"] == "storlek")
     assert rad["utfall"] == MISS and ut["niva"] == "C"
+
+
+def test_fyra_nivaer_facit_2026_10_08():
+    """Antons facit 2026-10-08: trasiga sajter är akuta, en katalogsida som
+    enda närvaro är dålig, och en ruta som skymmer sidan avgör ingenting."""
+    assert webbutslag(KRITERIUM, {"platshallare": "felsida (404)"})[0] == TRAFF
+    assert webbutslag(KRITERIUM, {"modernitet": 7, "katalog": True})[0] == TRAFF
+    assert webbutslag(KRITERIUM, {"modernitet": 7, "skymd": True})[0] == OKAND
+    assert webbutslag("Har en modern och snabb webbplats", {"platshallare": "fillistning"})[0] == MISS

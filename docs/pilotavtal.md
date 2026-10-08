@@ -89,6 +89,15 @@ kontaktuppgifter, samt bokföringsunderlag.
 5.2 Snajp behandlar uppgifterna endast enligt Kundens dokumenterade
 instruktioner, som utgörs av detta avtal och Kundens inställningar i tjänsten.
 
+5.2a **Offentlig bolagsdata** *(preliminär lydelse 2026-10-08, ej juridiskt
+granskad)*. Uppgifter om juridiska personer som är offentliga — bolagsnamn,
+organisationsnummer, webbplats, ort och län, bransch — samt Snajps egen
+bedömning av ett bolags publika webbplats är inte Kundens data i avtalets
+mening. Snajp får använda dem för egna ändamål, även i tjänster till andra
+kunder. Det gäller aldrig personuppgifter (kontaktpersoner, e-postadresser,
+telefonnummer), Kundens utkast, anteckningar eller status, eller uppgiften om
+att just Kunden har bearbetat ett visst bolag.
+
 5.3 Snajp anlitar de underbiträden som anges i **Bilaga 1**. Byte eller tillägg
 meddelas Kunden minst [30] dagar i förväg; Kunden får invända och säga upp
 piloten utan kostnad.

@@ -42,6 +42,18 @@ Det vi behandlar för vår egen räkning.
 | **Lagringstid** | **[fylls i]**. Undantag: raden i `suppressions` behålls tills vidare — den finns för att personen inte ska kontaktas igen |
 | **Var i systemet** | `contacts`, `prospects`, `companies`, `outreach_threads`, `outreach_messages`, `suppressions`, `workspace_invites`. Adressen kan dessutom stå i löptext i `generated_emails` och `agent_runs` |
 
+### A2b. Webbpoolen (bedömning av bolagssajter) — preliminär 2026-10-08
+
+| | |
+|---|---|
+| **Ändamål** | Bedöma bolags publika webbplatser och fördela bolag med trasig eller föråldrad sajt till webbyråkunderna efter län |
+| **Kategorier av registrerade** | Inga: bara juridiska personer. Enskilda firmor (orgnr = personnummer) utesluts i kod, `webbpool.ar_enskild_firma` |
+| **Kategorier av uppgifter** | Bolagsnamn, organisationsnummer, webbplats, ort, postnummer, län, SNI, sidbedömning |
+| **Rättslig grund** | Ej personuppgifter (juridiska personer) |
+| **Mottagare** | Webbyråkunderna (Alunix, Umeå Webbdesign), Google (bildbedömning), ScrapeGraph (skärmbild) |
+| **Lagringstid** | **[fylls i — förslag: 12 månader efter senaste observation]** |
+| **Var i systemet** | `webbpool`, `webbpool_fordelad` (migration 108), `app/leads/webbpool.py`, INV-SEC-008 |
+
 ### A3. Support till våra egna kunder
 
 | | |

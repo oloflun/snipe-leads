@@ -66,6 +66,11 @@ type ListRad = {
   source_url?: string | null;
   signal?: string | null;
   signal_detalj?: string | null;
+  /** Webbpoolen (migration 108): länets slug och sidbedömningen. Bara
+   *  webbyråerna får nivån och revisionen (backenden döljer dem för övriga). */
+  lan?: string | null;
+  webbniva?: Webbniva | null;
+  webbrevision?: { modernitet?: number | null; brister?: string[] | null; platshallare?: string | null } | null;
   /** Listutkastet (migration 106, app/leads/listutkast.py): generellt
    *  erbjudande, köas när VD:s adress läggs in. `fel` = skrivningen föll. */
   utkast?: {
@@ -136,7 +141,7 @@ const STATUS_ETIKETT: Record<string, Localized> = {
  *  (2026-10-02) sitter i SAMMA lista, inte som en separat mejllista. */
 type Kontaktvag = "telefon" | "mejl" | "bada";
 type Kontaktfilter = "alla" | Kontaktvag;
-type Sortering = "kontakt" | "bolag";
+type Sortering = "kontakt" | "bolag" | "niva";
 
 function kontaktvag(rad: ListRad): Kontaktvag | null {
   const tel = Boolean(rad.contact_phone);
@@ -162,10 +167,48 @@ const KONTAKTVAG_ETIKETT: Record<Kontaktvag, Localized> = {
 
 /** Filtrerad och sorterad vy över listans rader. Sortering på kontaktväg:
  *  båda först, sedan telefon, sedan mejl; inom gruppen bolagsnamn A–Ö. */
-function synligaRader(items: ListRad[], filter: Kontaktfilter, sortering: Sortering): ListRad[] {
+type Webbniva = "akut" | "dalig" | "bra" | "mycket_bra";
+/** Webbpoolens filter (plan 2026-10-08): webbplats, nivå och län. */
+type Webbfilter = { webb: "alla" | "med" | "utan"; niva: "alla" | Webbniva; lan: string };
+const INGET_WEBBFILTER: Webbfilter = { webb: "alla", niva: "alla", lan: "alla" };
+const NIVAORDNING: Record<Webbniva, number> = { akut: 0, dalig: 1, mycket_bra: 2, bra: 3 };
+const NIVAETIKETT: Record<Webbniva, Localized> = {
+  akut: { sv: "Akut", en: "Urgent" },
+  dalig: { sv: "Dålig", en: "Poor" },
+  bra: { sv: "Bra", en: "Good" },
+  mycket_bra: { sv: "Inspiration", en: "Inspiration" }
+};
+const LANNAMN: Record<string, Localized> = {
+  "vastra-gotalands-lan": { sv: "Västra Götaland", en: "Västra Götaland" },
+  "hallands-lan": { sv: "Halland", en: "Halland" },
+  "gavleborgs-lan": { sv: "Gävleborg", en: "Gävleborg" },
+  "jamtlands-lan": { sv: "Jämtland", en: "Jämtland" },
+  "vasternorrlands-lan": { sv: "Västernorrland", en: "Västernorrland" },
+  "vasterbottens-lan": { sv: "Västerbotten", en: "Västerbotten" },
+  "norrbottens-lan": { sv: "Norrbotten", en: "Norrbotten" }
+};
+
+function synligaRader(
+  items: ListRad[],
+  filter: Kontaktfilter,
+  sortering: Sortering,
+  webbfilter: Webbfilter = INGET_WEBBFILTER
+): ListRad[] {
   const ordning: Record<string, number> = { bada: 0, telefon: 1, mejl: 2 };
-  const kvar = filter === "alla" ? items : items.filter((rad) => kontaktvag(rad) === filter);
+  const kvar = items.filter(
+    (rad) =>
+      (filter === "alla" || kontaktvag(rad) === filter) &&
+      (webbfilter.webb === "alla" || Boolean(rad.website) === (webbfilter.webb === "med")) &&
+      (webbfilter.niva === "alla" || rad.webbniva === webbfilter.niva) &&
+      (webbfilter.lan === "alla" || rad.lan === webbfilter.lan)
+  );
   return [...kvar].sort((a, b) => {
+    if (sortering === "niva") {
+      const d = (a.webbniva ? NIVAORDNING[a.webbniva] : 9) - (b.webbniva ? NIVAORDNING[b.webbniva] : 9);
+      if (d !== 0) return d;
+      const m = (a.webbrevision?.modernitet ?? 11) - (b.webbrevision?.modernitet ?? 11);
+      if (m !== 0) return m;
+    }
     if (sortering === "kontakt") {
       const d = (ordning[kontaktvag(a) ?? "z"] ?? 3) - (ordning[kontaktvag(b) ?? "z"] ?? 3);
       if (d !== 0) return d;
@@ -1244,8 +1287,12 @@ function Listtabell({
   const [flyttKvitto, setFlyttKvitto] = useState<{ batchId: string; antal: number; nya: number } | null>(null);
   const [flyttFel, setFlyttFel] = useState<string | null>(null);
   const [kontaktfilter, setKontaktfilter] = useState<Kontaktfilter>("alla");
-  const [sortering, setSortering] = useState<Sortering>("kontakt");
-  const visade = synligaRader(items, kontaktfilter, sortering);
+  const harNiva = items.some((rad) => rad.webbniva);
+  const [sortering, setSortering] = useState<Sortering>(harNiva ? "niva" : "kontakt");
+  const [webbfilter, setWebbfilter] = useState<Webbfilter>(INGET_WEBBFILTER);
+  const visade = synligaRader(items, kontaktfilter, sortering, webbfilter);
+  const lanIListan = [...new Set(items.map((rad) => rad.lan).filter((l): l is string => Boolean(l)))].sort();
+  const nivaerIListan = (Object.keys(NIVAORDNING) as Webbniva[]).filter((n) => items.some((rad) => rad.webbniva === n));
   const antalPer = (f: Kontaktfilter) => (f === "alla" ? items.length : items.filter((rad) => kontaktvag(rad) === f).length);
   const omgang = kandidater.slice(0, SVEP_TAK);
   const svepKor = svep?.fas === "kor";
@@ -1637,10 +1684,72 @@ function Listtabell({
             onChange={(e) => setSortering(e.target.value as Sortering)}
             className="focus-ring min-h-9 rounded-input border border-ink/15 bg-paper px-2 text-[13px] text-ink"
           >
+            {harNiva ? <option value="niva">{text({ sv: "Webbnivå, akut först", en: "Website level, urgent first" })}</option> : null}
             <option value="kontakt">{text({ sv: "Kontaktväg", en: "Contact channel" })}</option>
             <option value="bolag">{text({ sv: "Bolag A–Ö", en: "Company A–Z" })}</option>
           </select>
         </label>
+      </div>
+
+      {/* Webbpoolens filter (plan 2026-10-08). Nivå och län visas bara när
+          listan bär dem, alltså hos webbyråerna (bedömningen är hemlig). */}
+      <div className="mt-2 flex flex-wrap items-center gap-x-6 gap-y-2">
+        <div className={chiplista} role="group" aria-label={text({ sv: "Webbplats", en: "Website" })}>
+          {(
+            [
+              ["alla", { sv: "Med och utan webbplats", en: "With and without website" }],
+              ["med", { sv: "Med webbplats", en: "With website" }],
+              ["utan", { sv: "Utan webbplats", en: "Without website" }]
+            ] as const
+          ).map(([id, etikett]) => (
+            <button
+              key={id}
+              type="button"
+              aria-pressed={webbfilter.webb === id}
+              onClick={() => setWebbfilter({ ...webbfilter, webb: id })}
+              className={cn(chip, webbfilter.webb === id ? chipAktiv : chipInaktiv)}
+            >
+              {text(etikett)}{" "}
+              <span className="num tabular-nums">
+                {id === "alla" ? items.length : items.filter((rad) => Boolean(rad.website) === (id === "med")).length}
+              </span>
+            </button>
+          ))}
+        </div>
+        {nivaerIListan.length ? (
+          <label className="flex items-center gap-2 text-[13px] text-ink-subtle">
+            {text({ sv: "Webbnivå", en: "Website level" })}
+            <select
+              value={webbfilter.niva}
+              onChange={(e) => setWebbfilter({ ...webbfilter, niva: e.target.value as Webbfilter["niva"] })}
+              className="focus-ring min-h-9 rounded-input border border-ink/15 bg-paper px-2 text-[13px] text-ink"
+            >
+              <option value="alla">{text({ sv: "Alla nivåer", en: "All levels" })}</option>
+              {nivaerIListan.map((n) => (
+                <option key={n} value={n}>
+                  {text(NIVAETIKETT[n])} ({items.filter((rad) => rad.webbniva === n).length})
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
+        {lanIListan.length > 1 ? (
+          <label className="flex items-center gap-2 text-[13px] text-ink-subtle">
+            {text({ sv: "Län", en: "County" })}
+            <select
+              value={webbfilter.lan}
+              onChange={(e) => setWebbfilter({ ...webbfilter, lan: e.target.value })}
+              className="focus-ring min-h-9 rounded-input border border-ink/15 bg-paper px-2 text-[13px] text-ink"
+            >
+              <option value="alla">{text({ sv: "Alla län", en: "All counties" })}</option>
+              {lanIListan.map((l) => (
+                <option key={l} value={l}>
+                  {LANNAMN[l] ? text(LANNAMN[l]) : l}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
       </div>
 
       <div className="mt-4 hidden overflow-x-auto border-y border-ink/15 md:block">
