@@ -1392,7 +1392,7 @@ export function LeadsTabell({
               till Inkorgen. Godkända utkast hamnar här i samma stund som
               Godkänn och skicka trycks, även de som väntar på sändfönstret. */}
           <li className="flex items-center gap-2">
-            <span aria-hidden className="h-4 w-px bg-ink/15" />
+            <span aria-hidden className="hidden h-4 w-px bg-ink/15 sm:block" />
             <button
               type="button"
               id="leads-remsa-skickat"
