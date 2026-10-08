@@ -11,9 +11,10 @@ bor i Inkorg › Skickat och flyttar mellan filtren när prospektet svarar. Uppf
 till granskning. Kontaktsökningen hittar adresser den missade (w-domäner, VD-telefon som avbröt, Om
 oss-länkar, skyddade adresser, gissade kontaktsidor, eget sidtak) och fördelar till Iris, ringlista, ej
 kvalificerade eller prövas om (regel 12–17). Leads › Samtal har återkopplingen och ringlistan med utfall
-som verkställs. Listor går att ta bort och (admin) kopiera/flytta till annan kund. **Kvar för Anton:** ja
-till `omklassa_listspar.py --apply` efter torrkörningens siffror; release till main. Handoff:
-`HANDOFF-2026-10-08-CRM-FLODE.md`.
+som verkställs. Listor går att ta bort och (admin) kopiera/flytta till annan kund. Därtill (natten): ett bolag på ett ställe (dubblettgrind i create_prospect), Processa om på listor,
+ta bort/kopiera listor mellan kunder, webbplatsbedömningen hemlig (regel). Pushat `e816bd8` ihop med
+webbpoolen (andra sessionen), migration 107 + 108 körda i development. **Kvar:** Processa om på de
+gamla listorna; skarp körning N=5; Antons release till main. Handoff: `HANDOFF-2026-10-08-CRM-FLODE.md`.
 
 ## 2026-10-06 (4) — Claude — bara leads som uppfyller kraven, insyn, kundens yta, dubblettspärr
 

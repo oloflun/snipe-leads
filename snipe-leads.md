@@ -15,7 +15,7 @@ milestone_blockers:
   - "Vantar pa kundens bekraftelse av garantiperioden"
   - "Migration 099 kord i development 2026-10-06; 101 (prompt_lager) och 102 (kundonskemal) ej korda nagonstans; 096-102 mot main vantar pa Antons ja"
   - "Nio ostyrkta Iris-leads i development ska raderas av Anton (scripts/radera_prospekt.py, agenten nekades); development-instruktionerna ska aterstallas (agenten nekades)"
-updated: 2026-10-06
+updated: 2026-10-08
 ---
 
 # Snipra / Snajp
@@ -427,6 +427,14 @@ inte uppdaterats till Railway-topologin.** Det gör de fem maskinella stegen
 mot den döda kedjan; en riktig onboarding just nu kräver manuella steg mot
 Railway tills skriptet är omskrivet. Se `TENANTS.md` för den nuvarande
 processen och flagga skriptet innan du litar på det.
+
+## Current status (2026-10-08)
+
+CRM-flödet för leads på development (`e816bd8`): Översikt = Aktivitet, utkast/skickat som stämmer,
+massåtgärder, Inkorg › Skickat, kontaktsökning + fördelning (regel 12–17), Leads › Samtal (ringlista,
+återkoppling), Processa om på listor, ett bolag på ett ställe, ta bort/kopiera listor mellan kunder,
+webbpoolen (parallell session). Webbplatsbedömningen är hemlig (admin, Umeå Webdesign, Alunix).
+Migration 107/108 körda i development; main väntar på release. Handoff: `HANDOFF-2026-10-08-CRM-FLODE.md`.
 
 ## Current status (2026-10-06)
 
