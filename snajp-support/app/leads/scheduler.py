@@ -461,6 +461,13 @@ async def skicka_godkant(
     return utfall, (None if utfall == "sent" else skal)
 
 
+def _efter(tidpunkt, seedad: str) -> bool:
+    """Ligger tidpunkten (ISO-sträng eller datetime) efter speglingen?"""
+    if hasattr(tidpunkt, "isoformat"):
+        tidpunkt = tidpunkt.isoformat()
+    return bool(tidpunkt) and str(tidpunkt) > seedad
+
+
 async def process_godkanda(storage: Storage, provider: SendProvider) -> list[dict]:
     """Skickar BARA utkast en människa har godkänt och som väntat på
     sändfönstret. Autonomt köade utkast rörs inte — den vägen är
@@ -468,7 +475,12 @@ async def process_godkanda(storage: Storage, provider: SendProvider) -> list[dic
 
     I en spegel (development, mirror_meta) räknas bara godkännanden gjorda
     EFTER speglingen: ett godkännande som kopierats in från produktionen
-    skickas av produktionen, och hade annars gått ut två gånger."""
+    skickas av produktionen, och hade annars gått ut två gånger.
+
+    En köpost som SKAPATS efter speglingen finns bara i spegeln, så dess
+    godkännande kan inte vara produktionens (2026-10-08). Godkännanden gjorda
+    före 2026-10-07 saknar godkand_at och stod annars kvar i kön för evigt,
+    medan listan lovade att de skickas när fönstret öppnar."""
     now = datetime.now(timezone.utc)
     spegel = None
     try:
@@ -483,7 +495,7 @@ async def process_godkanda(storage: Storage, provider: SendProvider) -> list[dic
             godkant = godkannande(item)
             if not godkant:
                 continue
-            if spegel and str(godkant.get("godkand_at") or "") <= seedad:
+            if spegel and not (_efter(godkant.get("godkand_at"), seedad) or _efter(item.get("created_at"), seedad)):
                 continue
             try:
                 outcome = await process_due_item(storage, tenant["id"], item, provider, now=now, godkant=godkant)

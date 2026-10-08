@@ -107,6 +107,35 @@ async def test_spegeln_skickar_inte_ett_godkannande_fran_produktionen(monkeypatc
     assert provider.sent == []
 
 
+@pytest.mark.parametrize(
+    ("skapad_efter_speglingen", "skickas"),
+    [(True, True), (False, False)],
+)
+async def test_spegeln_skickar_ett_aldre_godkannande_bara_om_posten_ar_spegelns_egen(
+    monkeypatch, skapad_efter_speglingen, skickas
+):
+    """Godkännanden före 2026-10-07 saknar godkand_at. En köpost skapad efter
+    speglingen finns inte i produktionen och ska skickas; en kopierad ska inte."""
+    storage, provider = MemoryStorage(), _FakeSendProvider()
+    seedad = OUTSIDE_WINDOW_UTC
+    item_id, _, _ = _ny_kund(storage, scheduled_at=OUTSIDE_WINDOW_UTC)
+    post = _post(storage, item_id)
+    post.update(
+        status="queued",
+        gate_checks={"approved_by": "human", "via": "granskningskön"},
+        created_at=seedad + timedelta(hours=1 if skapad_efter_speglingen else -1),
+    )
+
+    async def spegel():
+        return {"environment": "development", "seeded_at": seedad.isoformat()}
+
+    monkeypatch.setattr(storage, "spegel_info", spegel)
+    monkeypatch.setattr(scheduler, "datetime", _Klocka(OUTSIDE_WINDOW_UTC + timedelta(hours=12)))
+    resultat = await process_godkanda(storage, provider)
+    assert [r["outcome"] for r in resultat] == (["sent"] if skickas else [])
+    assert bool(provider.sent) is skickas
+
+
 async def test_ovriga_sparrar_galler_aven_godkant():
     storage, provider = MemoryStorage(), _FakeSendProvider()
     utan_lank = GODKAND_BRODTEXT.replace("Avregistrera dig: https://testbolaget.example/avregistrera?t=abc\n", "")
