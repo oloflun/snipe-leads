@@ -1393,7 +1393,9 @@ export function LeadsTabell({
         <SkickatLista rader={skickatVisat} fel={skickatFel} onValj={onValj} />
       ) : !iListan ? null : (
       <>
-      <div className="flex flex-wrap items-end gap-2">
+      {/* Kritik 3: filtren och de sparade vyerna delar rad när bredden räcker. */}
+      <div className="flex flex-wrap items-end gap-x-6 gap-y-3">
+      <div className="flex min-w-0 flex-[2_1_28rem] flex-wrap items-end gap-2">
         <label className={cn(etikett, "flex flex-col gap-1")}>
           {text(T.filterNiva)}
           <select
@@ -1437,7 +1439,7 @@ export function LeadsTabell({
       </div>
 
       {vyer.length || !demo ? (
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex min-h-9 flex-wrap items-center gap-2">
           <span className={etikett}>{text(T.vyer)}</span>
           <ul className={chiplista}>
             {vyer.map((vy) => {
@@ -1501,6 +1503,7 @@ export function LeadsTabell({
           )}
         </div>
       ) : null}
+      </div>
 
       {verktygsrad(synliga, "aktiva")}
       {bekraftaSkick ? (
@@ -1545,7 +1548,9 @@ export function LeadsTabell({
               // Typ står inte som kolumn sedan Utkast kom in (2026-10-08): med den
               // rullade tabellen i sidled vid 1440. Typfiltret ovanför och lådan
               // visar typen.
-              minBredd={1040}
+              // 900, inte 1040 (kritik 3): på 1280 är kortet ~914 px och tabellen
+              // gömde Nästa uppgift bakom en sidledsrullning.
+              minBredd={900}
               kolumner={[
                 { rubrik: text({ sv: "Markera", en: "Select" }), bredd: "36px", srOnly: true },
                 { rubrik: text(T.kolBolag), bredd: harWebb ? "27%" : "33%" },
