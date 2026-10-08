@@ -444,7 +444,20 @@ function kontakt(rad: ListRad): string {
   return namnRoll || rad.contact_email || "—";
 }
 
-function signaltext(rad: ListRad): string {
+function signaltext(rad: ListRad, text?: (s: Localized) => string): string {
+  // Webbpoolens rader (plan 2026-10-08): nivån och betyget byggs här på
+  // användarens språk; bristen är bildmodellens fritext och står som den är.
+  if (text && rad.webbniva) {
+    const m = rad.webbrevision?.modernitet;
+    const detalj = rad.webbrevision?.platshallare ?? rad.webbrevision?.brister?.[0];
+    return [
+      text(NIVAETIKETT[rad.webbniva]),
+      typeof m === "number" ? text({ sv: `modernitet ${m}/10`, en: `modernity ${m}/10` }) : null,
+      detalj
+    ]
+      .filter(Boolean)
+      .join(" · ");
+  }
   return [rad.signal, rad.signal_detalj].filter(Boolean).join(" — ") || "—";
 }
 
@@ -862,6 +875,8 @@ export function LeadslistorView({
                                 ? text(T.kallaCrm)
                                 : lista.kalla === "import"
                                 ? text(T.kallaImport)
+                                : lista.kalla === "webbpool"
+                                ? text({ sv: "Webbpoolen, bedömda sajter", en: "Website pool, assessed sites" })
                                 : text({ sv: `${lista.antal} beställda`, en: `${lista.antal} ordered` }),
                             typeof lista.item_count === "number"
                               ? text({ sv: `${lista.item_count} träffar`, en: `${lista.item_count} matches` })
@@ -1809,7 +1824,7 @@ function Listtabell({
                   ) : null}
                 </td>
                 <td className="py-4 pr-6 text-[14px] text-ink-muted">{kontaktniva(rad, locale) ?? "—"}</td>
-                <td className="py-4 pr-6 text-[15px] leading-6 text-ink-muted">{signaltext(rad)}</td>
+                <td className="py-4 pr-6 text-[15px] leading-6 text-ink-muted">{signaltext(rad, text)}</td>
                 <td className="py-4 pr-6">
                   {rad.source_url ? (
                     <a
@@ -1862,7 +1877,7 @@ function Listtabell({
               {[rad.ort, rad.website].filter(Boolean).join(" · ") || "—"}
             </p>
             <ListutkastStatus rad={rad} />
-            <p className="mt-2 text-sm leading-6 text-ink-muted">{signaltext(rad)}</p>
+            <p className="mt-2 text-sm leading-6 text-ink-muted">{signaltext(rad, text)}</p>
             <div className="mt-2 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
               <span className="min-w-0 break-all text-sm text-ink-muted">
                 {kontakt(rad)}
