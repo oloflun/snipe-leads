@@ -34,7 +34,11 @@ const AUTONOMI_DRAFT = "Agenterna researchar och skriver. Ingenting skickas för
  */
 const DEMOSTATUS: Record<string, string> = {
   recommended: "ready",
-  researching: "researching",
+  // "new", inte "researching" (kritik 3, 2026-10-07): en exempelrad som står
+  // i research för alltid ("för 11 timmar sedan") fick produkten att se
+  // hängd ut. Research visas i stället av demons uppspelade körning
+  // (LeadsTabell, DEMO_KORNING), som blir klar.
+  researching: "new",
   queued: "ready",
   contacted: "contacted",
   replied: "replied"

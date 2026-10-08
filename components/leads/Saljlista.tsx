@@ -686,8 +686,8 @@ function SaljlistaYta({ api, demo }: Readonly<{ api: SaljlistaApi; demo: boolean
                 onClick={() => setFilter(val.id)}
                 className={cn(chip, filter === val.id ? chipAktiv : chipInaktiv)}
               >
-                {text(val.etikett)}
-                <span className={cn("num text-[0.75rem]", filter === val.id ? "text-paper/70" : "text-ink-subtle")}>
+                {text(val.etikett)}{" "}
+                <span className={cn("num text-[0.75rem]", filter === val.id ? "text-paper-muted" : "text-ink-subtle")}>
                   {antal[val.id]}
                 </span>
               </button>

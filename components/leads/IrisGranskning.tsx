@@ -10,6 +10,7 @@ import { felmeddelande, readJsonBody } from "@/lib/http/json";
 import { offertForUtkast } from "@/lib/leads/offert";
 import { LEADS_UPPDATERADE, meddelaLeadsUppdaterade } from "@/lib/leads/utkast";
 import { cn } from "@/lib/utils";
+import { BekraftaUtskick } from "@/components/leads/BekraftaUtskick";
 import { useLocale, type Localized } from "@/lib/i18n";
 
 const UTAN_AMNE: Localized = { sv: "Utan ämnesrad", en: "No subject line" };
@@ -362,7 +363,12 @@ export function IrisGranskning({
     }
   }
 
+  // Massgodkännandet bekräftas på sidan med mottagarlistan (kritik 3), inte
+  // i webbläsarens confirm-ruta som inte sa till vem.
+  const [bekrafta, setBekrafta] = useState<string[] | null>(null);
+
   async function avgorValda(handling: "approve" | "reject", ids: string[] = [...valda]) {
+    setBekrafta(null);
     if (ids.length === 0 || svep) return;
     if (
       handling === "reject" &&
@@ -440,19 +446,10 @@ export function IrisGranskning({
           <button
             type="button"
             disabled={svep !== null || pagar !== null}
-            onClick={() => {
-              const ids = poster.map((p) => p.id);
-              if (
-                window.confirm(
-                  text({
-                    sv: `Godkänna och skicka alla ${ids.length} utkast? Varje mejl går genom sändspärrarna.`,
-                    en: `Approve and send all ${ids.length} drafts? Every email passes the send guards.`
-                  })
-                )
-              )
-                void avgorValda("approve", ids);
-            }}
-            className={cn(btnPrimary, btnLiten)}
+            onClick={() => setBekrafta(poster.map((p) => p.id))}
+            // Sekundär (kritik 3): att öppna ett utkast är huvudvägen, inte
+            // att godkänna alla oläst.
+            className={cn(btnSecondary, btnLiten)}
           >
             {svep === "approve" ? (
               <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
@@ -480,7 +477,7 @@ export function IrisGranskning({
               <button
                 type="button"
                 disabled={svep !== null || pagar !== null}
-                onClick={() => void avgorValda("approve")}
+                onClick={() => setBekrafta([...valda])}
                 className={cn(btnPrimary, btnLiten)}
               >
                 {svep === "approve" ? (
@@ -501,6 +498,19 @@ export function IrisGranskning({
               </button>
             </>
           ) : null}
+        </div>
+      ) : null}
+
+      {bekrafta && poster ? (
+        <div className="mb-4">
+          <BekraftaUtskick
+            poster={poster
+              .filter((p) => bekrafta.includes(p.id))
+              .map((p) => ({ id: p.id, bolag: p.company_name ?? null, mottagare: p.prospect_email ?? null, amne: p.subject ?? null }))}
+            upptagen={svep === "approve"}
+            onBekrafta={() => void avgorValda("approve", bekrafta)}
+            onAvbryt={() => setBekrafta(null)}
+          />
         </div>
       ) : null}
 

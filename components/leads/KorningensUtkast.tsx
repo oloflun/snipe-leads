@@ -6,6 +6,7 @@ import { btnLiten, btnPrimary, btnSecondary, meta, rubrikPanel } from "@/compone
 import { felmeddelande, readJsonBody } from "@/lib/http/json";
 import { useLocale, type Localized } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
+import { BekraftaUtskick } from "@/components/leads/BekraftaUtskick";
 
 /**
  * En körnings leads med utkaststatus, och två knappar: skriv utkast till de
@@ -138,16 +139,11 @@ export function KorningensUtkast({ jobId }: Readonly<{ jobId: string }>) {
     }
   }
 
-  async function skicka(antal: number) {
-    if (
-      !window.confirm(
-        text({
-          sv: `Godkänna och skicka ${antal} utkast? Varje mejl går genom sändspärrarna; utanför vardagar 08–16 skickas det när fönstret öppnar.`,
-          en: `Approve and send ${antal} drafts? Every email passes the send guards; outside weekdays 08–16 it goes out when the window opens.`
-        })
-      )
-    )
-      return;
+  // Bekräftelsen med mottagarlistan (kritik 3) i stället för confirm-rutan.
+  const [bekrafta, setBekrafta] = useState(false);
+
+  async function skicka() {
+    setBekrafta(false);
     setPagar("skicka");
     setFel(null);
     setBesked(null);
@@ -287,7 +283,7 @@ export function KorningensUtkast({ jobId }: Readonly<{ jobId: string }>) {
             <button
               type="button"
               disabled={pagar !== null}
-              onClick={() => void skicka(vantar)}
+              onClick={() => setBekrafta(true)}
               className={cn(btnPrimary, btnLiten)}
             >
               {pagar === "skicka" ? (
@@ -312,9 +308,22 @@ export function KorningensUtkast({ jobId }: Readonly<{ jobId: string }>) {
               )}
               {skriver > 0
                 ? text({ sv: "Iris skriver…", en: "Iris is writing…" })
-                : text({ sv: `Skriv utkast till ${kanSkrivas} som saknar`, en: `Write drafts for ${kanSkrivas} missing` })}
+                : text({ sv: `Skriv utkast till ${kanSkrivas} som saknar utkast`, en: `Write drafts for ${kanSkrivas} missing` })}
             </button>
           ) : null}
+        </div>
+      ) : null}
+
+      {bekrafta && svar ? (
+        <div className="mt-3">
+          <BekraftaUtskick
+            poster={svar.leads
+              .filter((l) => l.status === "vantar")
+              .map((l) => ({ id: l.prospect_id, bolag: l.company_name, mottagare: l.contact_email, amne: l.subject }))}
+            upptagen={pagar === "skicka"}
+            onBekrafta={() => void skicka()}
+            onAvbryt={() => setBekrafta(false)}
+          />
         </div>
       ) : null}
 
