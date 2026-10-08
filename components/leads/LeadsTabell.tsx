@@ -9,6 +9,7 @@ import { Badge, Cell, SkeletonRows, Tabell, Tomt, btnPrimary, btnSecondary, etik
 import { useSmal } from "@/components/leads/smal";
 import { SkickatLista, type SkickatRad } from "@/components/leads/SkickatLista";
 import { useRadrorelse } from "@/components/leads/useRadrorelse";
+import { BekraftaUtskick } from "@/components/leads/BekraftaUtskick";
 import { demoOversiktSvar } from "@/lib/demo/oversikt";
 import { felmeddelande } from "@/lib/http/json";
 import { useLocale, type Localized } from "@/lib/i18n";
@@ -274,7 +275,7 @@ const DEMO_KORNING: { id: string; namn: string; ort: Localized; webb: string; ni
   }
 ];
 /** När i demons körning: bolagen dyker upp, och när vart och ett blir klart. */
-const DEMO_TIDER = { start: 2500, klara: [6500, 10000] };
+const DEMO_TIDER = { start: 1200, klara: [5000, 8500] };
 
 export function LeadsTabell({
   onValj,
@@ -421,19 +422,47 @@ export function LeadsTabell({
       motivering: klar ? text(k.varfor) : null,
       contact_email: klar ? `info@${k.webb}` : null
     });
-    const timers = [
-      window.setTimeout(() => {
-        setDemoKorning(true);
-        setProspekt((forra) => [...(forra ?? []), ...DEMO_KORNING.map((k) => rad(k, false))]);
-      }, DEMO_TIDER.start),
-      ...DEMO_KORNING.map((k, i) =>
+    const timers: number[] = [];
+    const spela = () => {
+      timers.push(
         window.setTimeout(() => {
-          setProspekt((forra) => (forra ?? []).map((p) => (p.id === k.id ? rad(k, true) : p)));
-          if (i === DEMO_KORNING.length - 1) setDemoKorning(false);
-        }, DEMO_TIDER.klara[i])
-      )
-    ];
-    return () => timers.forEach((t) => window.clearTimeout(t));
+          setDemoKorning(true);
+          setProspekt((forra) => [...(forra ?? []), ...DEMO_KORNING.map((k) => rad(k, false))]);
+        }, DEMO_TIDER.start),
+        ...DEMO_KORNING.map((k, i) =>
+          window.setTimeout(() => {
+            setProspekt((forra) => (forra ?? []).map((p) => (p.id === k.id ? rad(k, true) : p)));
+            if (i === DEMO_KORNING.length - 1) setDemoKorning(false);
+          }, DEMO_TIDER.klara[i])
+        )
+      );
+    };
+    // Kritik 3: körningen spelades upp innan besökaren nått listan och
+    // missades. Den startar nu när listan syns; utan IntersectionObserver
+    // (eller utan lista) som förut, från sidladdningen.
+    let observer: IntersectionObserver | null = null;
+    const vantare = window.setTimeout(() => {
+      const el = listref.current;
+      if (!el || typeof IntersectionObserver === "undefined") {
+        spela();
+        return;
+      }
+      observer = new IntersectionObserver(
+        (poster) => {
+          if (poster.some((x) => x.isIntersecting)) {
+            observer?.disconnect();
+            spela();
+          }
+        },
+        { threshold: 0.2 }
+      );
+      observer.observe(el);
+    }, 300);
+    return () => {
+      window.clearTimeout(vantare);
+      observer?.disconnect();
+      timers.forEach((t) => window.clearTimeout(t));
+    };
     // Språket läses när raden blir klar; ett språkbyte mitt i spelar inte om körningen.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [demo]);
@@ -711,7 +740,15 @@ export function LeadsTabell({
    * (utkast_status), så ingen extra hämtning av kön behövs. Redan godkända
    * utkast väntar på sändfönstret och räknas för sig.
    */
-  async function skickaValda(rader: SuiteProspekt[]) {
+  // Bekräftelsen med mottagarlistan (impeccable-kritik 3, Sebbes val:
+  // massutskick ja, men aldrig utan att se vem som får mejlet). Ersätter
+  // webbläsarens confirm-ruta, som bara sa ett antal.
+  const [bekraftaSkick, setBekraftaSkick] = useState<SuiteProspekt[] | null>(null);
+  useEffect(() => {
+    setBekraftaSkick(null);
+  }, [valda]);
+
+  async function skickaValda(rader: SuiteProspekt[], bekraftat = false) {
     await utfor("skicka", async () => {
       if (demo) {
         return demoNotis({
@@ -739,11 +776,11 @@ export function LeadsTabell({
               fel: true
             };
       }
-      const fraga = text({
-        sv: `Godkänna och skicka ${poster.length} utkast?${utan ? ` ${utan} av de markerade har inget utkast och hoppas över.` : ""} Varje mejl går genom sändspärrarna; utanför vardagar 08–16 skickas det när fönstret öppnar.`,
-        en: `Approve and send ${poster.length} drafts?${utan ? ` ${utan} of the selected have no draft and are skipped.` : ""} Every email passes the send guards; outside weekdays 08–16 it goes out when the window opens.`
-      });
-      if (!window.confirm(fraga)) return null;
+      if (!bekraftat) {
+        setBekraftaSkick(rader);
+        return null;
+      }
+      setBekraftaSkick(null);
       let skickade = 0;
       let vantar = 0;
       const stoppade: string[] = [];
@@ -1054,13 +1091,15 @@ export function LeadsTabell({
   };
 
   const kryss = (p: SuiteProspekt, extra?: string) => (
-    <input
-      type="checkbox"
-      checked={valda.has(p.id)}
-      onChange={() => vaxlaVald(p.id)}
-      aria-label={text({ sv: `Markera ${p.company_name}`, en: `Select ${p.company_name}` })}
-      className={cn("h-4 w-4 accent-ink", extra)}
-    />
+    <label className={cn("-m-2 inline-flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center", extra)}>
+      <input
+        type="checkbox"
+        checked={valda.has(p.id)}
+        onChange={() => vaxlaVald(p.id)}
+        aria-label={text({ sv: `Markera ${p.company_name}`, en: `Select ${p.company_name}` })}
+        className="h-4 w-4 accent-ink"
+      />
+    </label>
   );
 
   /** Listan (inte en undanvy eller demons Skickat) visas. */
@@ -1464,6 +1503,28 @@ export function LeadsTabell({
       ) : null}
 
       {verktygsrad(synliga, "aktiva")}
+      {bekraftaSkick ? (
+        (() => {
+          const poster = bekraftaSkick.filter(
+            (p) => (p.utkast_status === "vantar" || p.utkast_status === "koad") && p.queue_item_id
+          );
+          const godkanda = bekraftaSkick.filter((p) => p.utkast_status === "godkant").length;
+          return (
+            <BekraftaUtskick
+              poster={poster.map((p) => ({
+                id: p.id,
+                bolag: p.company_name,
+                mottagare: p.contact_email ?? null,
+                amne: null
+              }))}
+              overhoppade={bekraftaSkick.length - poster.length - godkanda}
+              upptagen={atgard === "skicka"}
+              onBekrafta={() => void skickaValda(bekraftaSkick, true)}
+              onAvbryt={() => setBekraftaSkick(null)}
+            />
+          );
+        })()
+      ) : null}
 
       {notis ? (
         <p role="alert" className="text-[0.9375rem] text-danger">
