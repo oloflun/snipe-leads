@@ -45,87 +45,56 @@ ROT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROT / "snajp-support"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-#: Märkningen i signal_detalj, per spår. Raden raderas aldrig.
-MARKERING = {"iris": "Iris", "ring": "ringlistan"}
-_MARKERAD = " → flyttad till "
-#: Prospektets profilkolumner som skriptet sätter (migration 031, 058, 081).
-PROSPEKTFALT = (
-    "orgnr", "website", "ort", "postnr", "anstallda", "omsattning", "sni",
-    "contact_role", "contact_level", "contact_phone",
-)
 LAGLIG_GRUND_REGISTER = (
     "Berättigat intresse för B2B-prospektering; uppgiften hämtad ur en "
     "publik källa (GDPR art. 6.1 f), källänk bevarad."
 )
 
 
+def _omprova():
+    # Sent: main() stänger av de betalda nycklarna innan appen läses in.
+    from app.leads import omprova
+
+    return omprova
+
+
 def ar_markerad(signal_detalj: str | None) -> bool:
-    return _MARKERAD in (signal_detalj or "")
+    return _omprova().ar_markerad(signal_detalj)
 
 
 def ny_signal_detalj(signal_detalj: str | None, spar: str, dag: str) -> str:
-    """Skälet som stod kvar, plus vart bolaget flyttades och när."""
-    return f"{(signal_detalj or '').strip()}{_MARKERAD}{MARKERING[spar]} {dag}".strip()
+    return _omprova().ny_signal_detalj(signal_detalj, spar, dag)
 
 
 def kandidat_ur_rad(rad: dict[str, Any], bolag: dict[str, Any] | None) -> dict[str, Any]:
-    """Listraden med registrets bolagsfakta (merinfo.tolka_bolag ur
-    sidcachen) i kandidatens form, som körningen ser den."""
-    from app.leads.sources import merinfo
-
-    k = merinfo.till_kandidat(bolag, {}, None) if bolag and bolag.get("company_name") else {}
-    return {
-        **k,
-        "company_name": rad["company_name"],
-        "orgnr": rad.get("orgnr") or k.get("orgnr"),
-        "ort": rad.get("ort") or k.get("ort"),
-        "website": rad.get("website") or k.get("website"),
-        "source_name": rad.get("source_name") or k.get("source_name"),
-        "source_url": rad.get("source_url") or k.get("source_url"),
-    }
+    return _omprova().kandidat_ur_rad(rad, bolag)
 
 
 def planera(
     rad: dict[str, Any], kandidat: dict[str, Any], kontakt: dict[str, Any] | None
 ) -> tuple[str, str | None, dict[str, Any] | None]:
-    """(spår, skäl, prospektrad). Spåret är merinfo.fordela:s, eller
-    "redan_flyttad" för en rad som redan märkts. Prospektraden (bara för
-    iris och ring) är det som skrivs till prospects."""
-    from app.leads.sources import merinfo
-
-    if ar_markerad(rad.get("signal_detalj")):
-        return "redan_flyttad", None, None
-    spar, skal = merinfo.fordela(kandidat, kontakt)
-    if spar not in MARKERING:
+    """(spår, skäl, prospektrad) — app/leads/omprova.planera med kandidaten
+    gjord till den prospektrad skriptet skriver."""
+    om = _omprova()
+    spar, skal, k = om.planera(rad, kandidat, kontakt)
+    if k is None:
         return spar, skal, None
-    k = merinfo.iris_kandidat(kandidat, kontakt) if spar == "iris" else merinfo.ringrad(kandidat, kontakt)
-    prospekt = {
+    return spar, skal, {
         "company_name": k["company_name"],
         "contact_name": k.get("contact_name"),
         "contact_email": k.get("contact_email"),
-        **{f: k[f] for f in PROSPEKTFALT if k.get(f) is not None},
+        **{f: k[f] for f in om.PROSPEKTFALT if k.get(f) is not None},
     }
-    return spar, skal, prospekt
 
 
-async def _sok(rad: dict[str, Any], bolag: dict[str, Any] | None) -> tuple[dict[str, Any], dict[str, Any] | None]:
-    """Kandidaten med webbplats och kontaktsökningens svar. Bara gratis vägar."""
-    from app.leads import discovery
-    from app.leads.platshallare import ar_platshallare
-    from app.leads.sources import merinfo
+async def _sok_alla(par: list[tuple[dict[str, Any], dict[str, Any] | None]]):
+    """Bara gratis vägar, åtta åt gången, förlopp var 25:e."""
 
-    kandidat = kandidat_ur_rad(rad, bolag)
-    webb = await merinfo._webbplats(kandidat, betald=False)
-    if webb and await ar_platshallare(webb):
-        webb = None
-    kandidat = {**kandidat, "website": webb}
-    kontakt = (
-        await discovery.hamta_person_kontakt(
-            webb, kandidat.get("vd_namn"), bolagsadress_racker=True, bolagsnamn=kandidat["company_name"]
-        )
-        if webb else None
-    )
-    return kandidat, kontakt
+    def forlopp(klara: int, totalt: int) -> None:
+        if klara % 25 == 0 or klara == totalt:
+            print(f"  … {klara}/{totalt} sökta", flush=True)
+
+    return await _omprova().sok_alla(par, betald=False, forlopp=forlopp)
 
 
 def _skriv(cur, tenant_id: str, rad: dict[str, Any], spar: str, prospekt: dict[str, Any], dag: str) -> None:
@@ -136,7 +105,7 @@ def _skriv(cur, tenant_id: str, rad: dict[str, Any], spar: str, prospekt: dict[s
     kolumner = ["tenant_id", "company_name", "contact_name", "contact_email", "origin"]
     varden: list[Any] = [tenant_id, prospekt["company_name"], prospekt.get("contact_name"),
                          prospekt.get("contact_email"), origin]
-    for falt in PROSPEKTFALT:
+    for falt in _omprova().PROSPEKTFALT:
         if falt in prospekt:
             kolumner.append(falt)
             varden.append(prospekt[falt])
@@ -157,7 +126,7 @@ def _skriv(cur, tenant_id: str, rad: dict[str, Any], spar: str, prospekt: dict[s
             (tenant_id, prospekt_id, url, typ, grund),
         )
     cur.execute(
-        "update lead_list_items set signal_detalj = %s where id = %s and tenant_id = %s",
+        "update lead_list_items set signal = 'flyttad', signal_detalj = %s where id = %s and tenant_id = %s",
         (ny_signal_detalj(rad.get("signal_detalj"), spar, dag), rad["id"], tenant_id),
     )
     if cur.rowcount != 1:
@@ -220,8 +189,9 @@ def main() -> int:
                 )
             if not rader:
                 continue
-            print(f"\n## {slug}: {len(rader)} listspårsrader")
+            print(f"\n## {slug}: {len(rader)} listspårsrader", flush=True)
             per_kund: Counter[str] = Counter()
+            bolagen = []
             for rad in rader:
                 bolag = None
                 if rad.get("source_url"):
@@ -232,7 +202,11 @@ def main() -> int:
                         )
                         cache = cur.fetchone()
                     bolag = merinfo.tolka_bolag(cache[0], rad["source_url"]) if cache else None
-                kandidat, kontakt = asyncio.run(_sok(rad, bolag))
+                bolagen.append(bolag)
+            # Sökningarna går parallellt (bara gratis direkthämtning): en i taget
+            # tog över 50 minuter för ~300 rader. Skrivningarna nedan är sekventiella.
+            svar = asyncio.run(_sok_alla(list(zip(rader, bolagen))))
+            for rad, (kandidat, kontakt) in zip(rader, svar):
                 spar, skal, prospekt = planera(rad, kandidat, kontakt)
                 if prospekt and upptagna.upptagen(upptagna_nu, rad["company_name"], rad.get("orgnr")):
                     spar, skal, prospekt = "finns_redan", "Bolaget är redan ett prospekt eller en CRM-kund", None

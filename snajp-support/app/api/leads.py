@@ -13,7 +13,7 @@ import logging
 import re
 import uuid
 import weakref
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -70,7 +70,7 @@ from ..leads.signatur import normalisera as normalisera_signatur
 from ..leads.sni import SNI_NAMN, beskriv_kod
 from ..leads.onboarding_state import REQUIRED_KINDS, get_onboarding_state
 from ..leads import korning as iris_korning
-from ..leads import utkaststatus
+from ..leads import omprova, utkaststatus
 from ..leads.profil import las_kundtext, sakerstall_profil, slå_ihop, som_icp
 from .deps import kraev_uuid, require_tenant
 from ..agent.leads_research_v2 import las_produkter
@@ -1986,6 +1986,10 @@ async def _skapa_prospekt_ur_kandidat(storage, tenant_id: str, bolag: dict, orig
         },
     )
     if bolag.get("jev_triage"):
+    if prospect.get("fanns_redan"):
+        # Bolaget finns redan (dubblettgrinden i create_prospect): det
+        # befintliga prospektet rörs inte.
+        return prospect
         await storage.spara_bedomning(
             tenant_id, prospect["id"], bedomning={"jev": {"triage": bolag["jev_triage"]}}
         )
@@ -3432,7 +3436,7 @@ async def listrad_till_prospekt(
     rad = next(
         (
             r
-            for r in await storage.list_lead_list_items(tenant_id, list_id)
+            for r in await storage.list_lead_list_items(tenant_id, list_id, med_flyttade=True)
             if str(r.get("id")) == item_id
         ),
         None,
@@ -3454,9 +3458,14 @@ def _listans_origin(lista: dict) -> str:
 
 
 async def _befordra_listrad(storage, tenant_id: str, lista: dict, rad: dict) -> tuple[dict, bool]:
-    """Listrad → prospekt (dedup på bolagsnamn casefold). Telefon och orgnr
-    (migration 081) följer med via profil-allowlisten. Returnerar
-    (prospekt, skapad). 422 om raden saknar bolagsnamn."""
+    """Listrad → prospekt. Telefon och orgnr (migration 081) följer med via
+    profil-allowlisten. Returnerar (prospekt, skapad). 422 om raden saknar
+    bolagsnamn.
+
+    Ett bolag, ett ställe (Antons krav 2026-10-08): create_prospect
+    returnerar ett befintligt prospekt för samma bolag (org.nr, annars namnet
+    utan bolagsform), och raden märks flyttad så att listan inte visar
+    bolaget en gång till."""
     namn = (rad.get("company_name") or "").strip()
     if not namn:
         raise HTTPException(status_code=422, detail="Raden saknar bolagsnamn.")
@@ -3487,6 +3496,13 @@ async def _befordra_listrad(storage, tenant_id: str, lista: dict, rad: dict) -> 
         källnamn = str(rad.get("source_name") or "").casefold()
         source_type = next(
             (typ for nyckel, typ in _LISTKALLA_TILL_SOURCE_TYPE.items() if nyckel in källnamn),
+    if rad.get("id"):
+        await storage.markera_listrad_flyttad(
+            tenant_id, str(rad["id"]),
+            signal_detalj=omprova.ny_signal_detalj(rad.get("signal_detalj"), "iris", date.today().isoformat()),
+        )
+    if prospect.get("fanns_redan"):
+        return prospect, False
             "other",
         )
         try:
@@ -3603,7 +3619,7 @@ async def koa_listutkast(
         raise HTTPException(status_code=404, detail="Listan finns inte.")
     _kraev_ej_crm(lista)
     rad = next(
-        (r for r in await storage.list_lead_list_items(tenant_id, list_id) if str(r.get("id")) == item_id),
+        (r for r in await storage.list_lead_list_items(tenant_id, list_id, med_flyttade=True) if str(r.get("id")) == item_id),
         None,
     )
     if rad is None:
@@ -3697,7 +3713,20 @@ async def listan_till_iris(
         raise HTTPException(status_code=422, detail="Ingen rad gick att flytta.")
 
     is_test = payload.is_test or bool(lista.get("is_test"))
-    scope = payload.scope
+    batch_id, scope = await _starta_listkorning(
+        request.app.state, tenant, lista, prospekt, scope=payload.scope, is_test=is_test
+    )
+    return {"batch_id": batch_id, "prospekt": len(prospekt), "nya": nya, "scope": scope}
+
+
+async def _starta_listkorning(
+    app_state, tenant: dict, lista: dict, prospekt: list[dict], *, scope: str | None, is_test: bool
+) -> tuple[str, str]:
+    """En riktig körning med research per bolag för prospekt ur en lista
+    (Flytta till Iris och Pröva mot Iris igen). Returnerar (batch_id, scope)."""
+    tenant_id = tenant["tenant_id"]
+    storage = app_state.storage
+    list_id = lista["id"]
     if scope is None:
         regler = automation.normalisera(
             (await storage.get_agent_settings(tenant_id, agent_type="leads")).get("automation")
@@ -3722,7 +3751,64 @@ async def listan_till_iris(
         app_state, tenant, prospekt,
         scope=scope, overrides=None, is_test=is_test, limit=len(prospekt), batch_id=batch_id,
     )
-    return {"batch_id": batch_id, "prospekt": len(prospekt), "nya": nya, "scope": scope}
+    return batch_id, scope
+
+
+@router.post("/api/leads/listor/{list_id}/omprova", status_code=202)
+async def omprova_listan(
+    request: Request, list_id: str, payload: TillIrisRequest | None = None, tenant: dict = Depends(require_tenant)
+) -> dict:
+    """Processa om (Antons beställning 2026-10-08): registret och sajten
+    hämtas på nytt och den nya kontaktsökningen körs på listans bolag
+    (app/leads/omprova.py). Fynden — mejl, telefon, kontaktperson, webbplats
+    och nytt skäl — skrivs på raderna. Inget flyttas automatiskt: användaren
+    flyttar sedan raderna till Iris eller skriver utkast till dem som fått
+    en mejladress. Går i bakgrunden; inga modellanrop, bara gratis
+    sidhämtning."""
+    kraev_uuid(list_id, "listan")
+    storage = request.app.state.storage
+    tenant_id = tenant["tenant_id"]
+    lista = await storage.get_lead_list(tenant_id, list_id)
+    if not lista:
+        raise HTTPException(status_code=404, detail="Listan finns inte.")
+    _kraev_ej_crm(lista)
+    if lista.get("status") in ("bestalld", "byggs"):
+        raise HTTPException(status_code=409, detail="Listan byggs fortfarande.")
+    rader = [r for r in await storage.list_lead_list_items(tenant_id, list_id) if r.get("company_name")]
+    if payload and payload.item_ids:
+        # Bara de valda/synliga raderna (t.ex. ett filter på webbnivå).
+        valda = {str(x) for x in payload.item_ids}
+        rader = [r for r in rader if str(r.get("id")) in valda]
+    if not rader:
+        raise HTTPException(status_code=422, detail="Listan har inga bolag att processa.")
+    asyncio.create_task(_omprova_bakgrund(request.app.state, tenant_id, rader))
+    return {"rader": len(rader)}
+
+
+#: Skälet på raden efter Processa om, per spår.
+_OMPROVAT_SKAL = {
+    "iris": "Mejladress hittad, kan flyttas till Iris",
+    "ring": "Bara telefon",
+}
+
+
+async def _omprova_bakgrund(app_state, tenant_id: str, rader: list[dict]) -> dict[str, int]:
+    storage = app_state.storage
+    utfall: dict[str, int] = {}
+    try:
+        sidhamtning.starta(storage, tenant_id)
+        bolagen = [await omprova.hamta_bolag(r) for r in rader]
+        svar = await omprova.sok_alla(list(zip(rader, bolagen)))
+        for rad, (kandidat, kontakt) in zip(rader, svar):
+            spar, skal, k = omprova.planera(rad, kandidat, kontakt)
+            utfall[spar] = utfall.get(spar, 0) + 1
+            falt = {**(k or {}), "website": (k or kandidat).get("website") or rad.get("website")}
+            falt["signal_detalj"] = _OMPROVAT_SKAL.get(spar) or skal or rad.get("signal_detalj")
+            await storage.uppdatera_listrad(tenant_id, str(rad["id"]), {k_: v for k_, v in falt.items() if v})
+        logger.info("Processa om (%s, %s rader): %s", tenant_id, len(rader), utfall)
+    except Exception:  # noqa: BLE001 — bakgrundsjobbet får inte dö tyst
+        logger.exception("Processa om föll för %s", tenant_id)
+    return utfall
 
 
 async def _run_list_job(app_state, payload: dict) -> None:

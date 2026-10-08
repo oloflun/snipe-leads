@@ -20,6 +20,8 @@ from typing import Any
 
 import asyncpg
 
+from ..leads import upptagna
+
 from .base import (
     BEDOMNINGSFALT,
     ANALYTICS_COVERAGE,
@@ -1760,6 +1762,20 @@ class PostgresStorage:
         async with self._scoped(tenant_id) as conn:
             try:
                 record = await conn.fetchrow(
+            if origin not in ("example", "test"):
+                # Ett bolag, ett prospekt (Antons krav 2026-10-08): finns bolaget
+                # redan returneras det befintliga. Låset per kund gör att två
+                # samtidiga körningar inte båda hinner se "finns inte".
+                # ponytail: läser kundens riktiga prospekt varje gång; en
+                # nyckelkolumn med unikt index när en kund har tiotusentals.
+                await conn.execute("select pg_advisory_xact_lock(hashtext($1))", f"prospekt:{tenant_id}")
+                for rad in await conn.fetch(
+                    """select * from prospects where tenant_id = $1
+                       and coalesce(origin, '') not in ('example', 'test')""",
+                    tenant_id,
+                ):
+                    if upptagna.samma_bolag(dict(rad), company_name, extra.get("orgnr")):
+                        return {**_avkoda_prospekt(_row(rad)), "fanns_redan": True}
                     f"""
                     insert into prospects
                       (tenant_id, company_name, contact_name, contact_email, origin
@@ -2464,7 +2480,7 @@ class PostgresStorage:
                 """
                 select l.*, count(i.id)::int as item_count
                 from lead_lists l
-                left join lead_list_items i on i.list_id = l.id
+                left join lead_list_items i on i.list_id = l.id and coalesce(i.signal, '') <> 'flyttad'
                 where l.tenant_id = $1
                 group by l.id
                 order by l.created_at desc
@@ -2530,11 +2546,15 @@ class PostgresStorage:
             )
         return _row(record)
 
-    async def list_lead_list_items(self, tenant_id: str, list_id: str) -> list[dict[str, Any]]:
+    async def list_lead_list_items(
+        self, tenant_id: str, list_id: str, *, med_flyttade: bool = False
+    ) -> list[dict[str, Any]]:
         async with self._scoped(tenant_id) as conn:
             records = await conn.fetch(
                 """select * from lead_list_items
-                   where list_id = $2 and tenant_id = $1 order by created_at""",
+                   where list_id = $2 and tenant_id = $1
+                     and ($3 or coalesce(signal, '') <> 'flyttad')
+                   order by created_at""",
                 tenant_id,
                 list_id,
             )
@@ -2544,6 +2564,33 @@ class PostgresStorage:
         self, tenant_id: str, item_id: str, utkast: dict[str, Any] | None
     ) -> None:
         async with self._scoped(tenant_id) as conn:
+                med_flyttade,
+            )
+        return [_avkoda_jsonb(_avkoda_jsonb(_row(r), "utkast"), "webbrevision") for r in records]
+
+    async def uppdatera_listrad(self, tenant_id: str, item_id: str, falt: dict[str, Any]) -> None:
+        from .base import LISTRAD_UPPDATERBARA
+
+        valda = {k: v for k, v in falt.items() if k in LISTRAD_UPPDATERBARA}
+        if not valda:
+            return
+        satt = ", ".join(f"{k} = ${i}" for i, k in enumerate(valda, start=3))
+        async with self._scoped(tenant_id) as conn:
+            await conn.execute(
+                f"update lead_list_items set {satt} where tenant_id = $1 and id = $2",
+                tenant_id,
+                item_id,
+                *valda.values(),
+            )
+
+    async def markera_listrad_flyttad(self, tenant_id: str, item_id: str, *, signal_detalj: str) -> None:
+        async with self._scoped(tenant_id) as conn:
+            await conn.execute(
+                """update lead_list_items set signal = 'flyttad', signal_detalj = $3
+                   where tenant_id = $1 and id = $2""",
+                tenant_id,
+                item_id,
+                signal_detalj,
             await conn.execute(
                 "update lead_list_items set utkast = $3::jsonb where tenant_id = $1 and id = $2",
                 tenant_id,

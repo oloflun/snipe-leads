@@ -92,6 +92,12 @@ BEDOMNINGSFALT = (
     "webbrevision",
 )
 
+#: Fälten Processa om får skriva på en listrad (app/leads/omprova.py).
+LISTRAD_UPPDATERBARA = (
+    "website", "contact_name", "contact_role", "contact_email", "contact_phone", "contact_level", "signal_detalj",
+)
+
+
 class Storage(Protocol):
     name: str
 
@@ -880,8 +886,22 @@ class Storage(Protocol):
         ...
 
     async def list_lead_list_items(
-        self, tenant_id: str, list_id: str
-    ) -> list[dict[str, Any]]: ...
+        self, tenant_id: str, list_id: str, *, med_flyttade: bool = False
+    ) -> list[dict[str, Any]]:
+        """Listans rader utom de som flyttats till Iris eller ringlistan
+        (`signal='flyttad'`): ett bolag visas på ett ställe (2026-10-08).
+        `med_flyttade` för åtgärder på EN rad som redan kan ha flyttats."""
+        ...
+
+    async def uppdatera_listrad(self, tenant_id: str, item_id: str, falt: dict[str, Any]) -> None:
+        """Processa om (2026-10-08): kontaktsökningens fynd skrivs på raden.
+        Bara LISTRAD_UPPDATERBARA; övriga nycklar ignoreras."""
+        ...
+
+    async def markera_listrad_flyttad(self, tenant_id: str, item_id: str, *, signal_detalj: str) -> None:
+        """Raden blev ett prospekt. Den raderas aldrig (Antons beslut
+        2026-10-07) men döljs: `signal='flyttad'` och var den hamnade."""
+        ...
 
     async def spara_listutkast(
         self, tenant_id: str, item_id: str, utkast: dict[str, Any] | None

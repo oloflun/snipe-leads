@@ -175,9 +175,6 @@ function synligaRader(items: ListRad[], filter: Kontaktfilter, sortering: Sorter
 }
 
 const T = {
-  flyttOmfattning: { sv: "Vad Iris ska göra", en: "What Iris should do" },
-  flyttResearchOchUtkast: { sv: "Research och utkast", en: "Research and drafts" },
-  flyttBaraResearch: { sv: "Bara research", en: "Research only" },
   flyttar: { sv: "Flyttar…", en: "Moving…" },
   foljKorningen: { sv: "Följ körningen", en: "Follow the run" },
   kombineraRubrik: { sv: "Kombinera listor", en: "Combine lists" },
@@ -1244,7 +1241,6 @@ function Listtabell({
   // Ytans rot (/dashboard eller /admin): körningen följs i Leads › Körningar.
   const bas = pathname.replace(/\/(leads|iris)(\/.*)?$/, "");
   const [flyttar, setFlyttar] = useState(false);
-  const [flyttScope, setFlyttScope] = useState<"research" | "research_and_draft">("research_and_draft");
   const [flyttKvitto, setFlyttKvitto] = useState<{ batchId: string; antal: number; nya: number } | null>(null);
   const [flyttFel, setFlyttFel] = useState<string | null>(null);
   const [kontaktfilter, setKontaktfilter] = useState<Kontaktfilter>("alla");
@@ -1253,6 +1249,30 @@ function Listtabell({
   const antalPer = (f: Kontaktfilter) => (f === "alla" ? items.length : items.filter((rad) => kontaktvag(rad) === f).length);
   const omgang = kandidater.slice(0, SVEP_TAK);
   const svepKor = svep?.fas === "kor";
+
+  // Processa om (Antons beställning 2026-10-08): registret och sajten hämtas
+  // på nytt och den nya kontaktsökningen körs i bakgrunden. Mejl, telefon och
+  // kontaktperson skrivs på raderna; inget flyttas. Sedan Flytta till Iris
+  // eller Skriv utkast till alla med mejladress.
+  const [provar, setProvar] = useState(false);
+  const [provBesked, setProvBesked] = useState<number | null>(null);
+  async function provaMotIris() {
+    setProvar(true);
+    setFlyttFel(null);
+    setProvBesked(null);
+    try {
+      const ut = await anropa<{ rader: number }>(`/leads/listor/${encodeURIComponent(lista.id)}/omprova`, {
+        method: "POST",
+        // De rader som syns, som Flytta till Iris: filtret avgör vad som processas.
+        body: JSON.stringify({ item_ids: kontaktfilter === "alla" ? null : visade.map((rad) => rad.id) })
+      });
+      setProvBesked(ut.rader);
+    } catch (cause) {
+      setFlyttFel(felmeddelande(cause));
+    } finally {
+      setProvar(false);
+    }
+  }
 
   async function flyttaTillIris() {
     setFlyttar(true);
@@ -1264,7 +1284,8 @@ function Listtabell({
         {
           method: "POST",
           body: JSON.stringify({
-            scope: flyttScope,
+            // En väg (Antons beställning 2026-10-08): research och utkast.
+            scope: "research_and_draft",
             // De rader som syns: filtret på kontaktväg avgör vad som flyttas.
             item_ids: kontaktfilter === "alla" ? null : visade.map((rad) => rad.id)
           })
@@ -1431,15 +1452,6 @@ function Listtabell({
           ) : null}
           {mejlbro ? (
             <>
-              <select
-                value={flyttScope}
-                onChange={(e) => setFlyttScope(e.target.value as typeof flyttScope)}
-                aria-label={text(T.flyttOmfattning)}
-                className="focus-ring min-h-11 rounded-input border border-ink/15 bg-paper px-2 text-[13px] text-ink"
-              >
-                <option value="research_and_draft">{text(T.flyttResearchOchUtkast)}</option>
-                <option value="research">{text(T.flyttBaraResearch)}</option>
-              </select>
               <button
                 type="button"
                 onClick={() => void flyttaTillIris()}
@@ -1449,6 +1461,14 @@ function Listtabell({
                 {flyttar
                   ? text(T.flyttar)
                   : text({ sv: `Flytta ${visade.length} till Iris`, en: `Move ${visade.length} to Iris` })}
+              </button>
+              <button
+                type="button"
+                onClick={() => void provaMotIris()}
+                disabled={provar || items.length === 0}
+                className={cn(btnSecondary, "disabled:opacity-60")}
+              >
+                {provar ? text({ sv: "Startar…", en: "Starting…" }) : text({ sv: "Processa om", en: "Reprocess" })}
               </button>
             </>
           ) : null}
@@ -1485,6 +1505,14 @@ function Listtabell({
           </p>
         ) : null}
       </div>
+      {provBesked !== null ? (
+        <p role="status" className="mt-3 max-w-[70ch] text-[15px] text-moss">
+          {text({
+            sv: `${provBesked} bolag processas om i bakgrunden: registret och webbplatsen läses på nytt, och mejl, telefon och kontaktperson fylls i på raderna. Ladda om om en stund, och flytta sedan till Iris eller skriv utkast till dem med mejladress.`,
+            en: `${provBesked} companies are being reprocessed in the background: the register and website are read again, and email, phone and contact are filled in on the rows. Reload in a while, then move them to Iris or write drafts for those with an email address.`
+          })}
+        </p>
+      ) : null}
       {flyttKvitto ? (
         <p role="status" className="mt-3 text-[15px] text-moss">
           {text({

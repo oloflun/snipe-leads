@@ -1285,6 +1285,15 @@ class MemoryStorage:
     ) -> dict[str, Any]:
         prospect = {
             "id": str(uuid.uuid4()),
+        if origin not in ("example", "test"):
+            # Speglar grinden i Postgres: ett bolag, ett prospekt.
+            from ..leads import upptagna
+
+            for befintlig in self.prospects.get(tenant_id, []):
+                if befintlig.get("origin") not in ("example", "test") and upptagna.samma_bolag(
+                    befintlig, company_name, (profil or {}).get("orgnr")
+                ):
+                    return {**befintlig, "fanns_redan": True}
             "tenant_id": tenant_id,
             "company_name": company_name,
             "contact_name": contact_name,
@@ -1869,7 +1878,7 @@ class MemoryStorage:
             self.lead_lists.get(tenant_id, []), key=lambda r: r["created_at"], reverse=True
         )[:limit]
         return [
-            {**r, "item_count": sum(1 for i in self.lead_list_items if i["list_id"] == r["id"])}
+            {**r, "item_count": sum(1 for i in self.lead_list_items if i["list_id"] == r["id"] and i.get("signal") != "flyttad")}
             for r in rader
         ]
 
@@ -1908,7 +1917,9 @@ class MemoryStorage:
         self.lead_list_items.append(rad)
         return dict(rad)
 
-    async def list_lead_list_items(self, tenant_id: str, list_id: str) -> list[dict[str, Any]]:
+    async def list_lead_list_items(
+        self, tenant_id: str, list_id: str, *, med_flyttade: bool = False
+    ) -> list[dict[str, Any]]:
         return [
             dict(i)
             for i in self.lead_list_items
@@ -1919,8 +1930,21 @@ class MemoryStorage:
         self, tenant_id: str, item_id: str, utkast: dict[str, Any] | None
     ) -> None:
         for i in self.lead_list_items:
+            and (med_flyttade or i.get("signal") != "flyttad")
             if str(i["id"]) == str(item_id) and i["tenant_id"] == tenant_id:
                 i["utkast"] = json.loads(json.dumps(utkast)) if utkast is not None else None
+    async def uppdatera_listrad(self, tenant_id: str, item_id: str, falt: dict[str, Any]) -> None:
+        from .base import LISTRAD_UPPDATERBARA
+
+        for i in self.lead_list_items:
+            if str(i["id"]) == str(item_id) and i["tenant_id"] == tenant_id:
+                i.update({k: v for k, v in falt.items() if k in LISTRAD_UPPDATERBARA})
+
+    async def markera_listrad_flyttad(self, tenant_id: str, item_id: str, *, signal_detalj: str) -> None:
+        for i in self.lead_list_items:
+            if str(i["id"]) == str(item_id) and i["tenant_id"] == tenant_id:
+                i["signal"], i["signal_detalj"] = "flyttad", signal_detalj
+
 
     async def lista_upptagna_bolag(self, tenant_id: str) -> list[dict[str, Any]]:
         rader = [*self.prospects.get(tenant_id, []), *(i for i in self.lead_list_items if i["tenant_id"] == tenant_id)]

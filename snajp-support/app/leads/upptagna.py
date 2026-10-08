@@ -74,6 +74,16 @@ def upptagen(sedda: set[str], namn: str | None, orgnr: str | None = None) -> boo
     return bool((namn and nyckel(namn) in sedda) or (o and o in sedda))
 
 
+def samma_bolag(rad: dict[str, Any], namn: str | None, orgnr: str | None = None) -> bool:
+    """Samma bolag som raden? Org.nr avgör när båda har ett (två bolag kan
+    heta likadant), annars namnet utan bolagsform. Grinden i
+    storage.create_prospect (Antons krav 2026-10-08: ett bolag, ett ställe)."""
+    a, b = orgnr_nyckel(rad.get("orgnr")), orgnr_nyckel(orgnr)
+    if a and b:
+        return a == b
+    return bool(namn) and nyckel(rad.get("company_name")) == nyckel(namn)
+
+
 def bara_namn(sedda: Iterable[str]) -> list[str]:
     """Namnposterna, för en prompt som ska få veta vad som redan är taget."""
     return sorted(p for p in sedda if not p.startswith(_ORGNR))

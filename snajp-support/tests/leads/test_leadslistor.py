@@ -609,6 +609,12 @@ async def test_flytta_till_iris_koar_korning_med_research_per_bolag(monkeypatch)
     alfa = next(p for p in await storage.list_prospects(TENANT, limit=50) if p["company_name"] == "Alfa Bygg AB")
     assert alfa.get("contact_phone") == "070-1" and alfa.get("orgnr") == "556000-0001"
 
-    # Samma rader igen: inga nya prospekt, ny körning.
-    ut2 = await leads_api.listan_till_iris(req, lista["id"], TillIrisRequest(scope="research"), tenant)
-    assert ut2["nya"] == 0 and ut2["prospekt"] == 2 and ut2["batch_id"] != ut["batch_id"]
+    from fastapi import HTTPException
+
+    # Ett bolag, ett ställe (2026-10-08): de flyttade raderna har lämnat
+    # listan, så samma flytt igen har inget att flytta och skapar inget nytt.
+    assert [r["company_name"] for r in await storage.list_lead_list_items(TENANT, lista["id"])] == [""]
+    with pytest.raises(HTTPException) as fel:
+        await leads_api.listan_till_iris(req, lista["id"], TillIrisRequest(scope="research"), tenant)
+    assert fel.value.status_code == 422
+    assert len([p for p in await storage.list_prospects(TENANT, limit=50) if p["company_name"]]) == 2

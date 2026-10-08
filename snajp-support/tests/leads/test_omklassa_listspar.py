@@ -106,5 +106,5 @@ def test_skrivningen_skapar_och_marker_men_raderar_aldrig(spar):
     assert satser[0].startswith("insert into prospects")
     assert spar in cur.satser[0][1], "origin är spåret ('iris' eller 'ring')"
     assert [s.split(" (")[0] for s in satser[1:3]] == ["insert into prospect_sources"] * 2
-    assert satser[-1].startswith("update lead_list_items set signal_detalj")
-    assert cur.satser[-1][1][0].endswith(f"→ flyttad till {ok.MARKERING[spar]} 2026-10-08")
+    assert satser[-1].startswith("update lead_list_items set signal = 'flyttad', signal_detalj")
+    assert cur.satser[-1][1][0].endswith(f"→ flyttad till {ok._omprova().MARKERING[spar]} 2026-10-08")
