@@ -205,6 +205,10 @@ def main() -> int:
                 bolagen.append(bolag)
             # Sökningarna går parallellt (bara gratis direkthämtning): en i taget
             # tog över 50 minuter för ~300 rader. Skrivningarna nedan är sekventiella.
+            # Läsningarna är klara: släpp transaktionen innan den långa
+            # sökningen, annars står anslutningen "idle in transaction" och
+            # håller lås som blockerar migrationer (hände 2026-10-08).
+            conn.rollback()
             svar = asyncio.run(_sok_alla(list(zip(rader, bolagen))))
             for rad, (kandidat, kontakt) in zip(rader, svar):
                 spar, skal, prospekt = planera(rad, kandidat, kontakt)
