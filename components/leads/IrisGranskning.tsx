@@ -10,7 +10,7 @@ import { felmeddelande, readJsonBody } from "@/lib/http/json";
 import { offertForUtkast } from "@/lib/leads/offert";
 import { LEADS_UPPDATERADE, meddelaLeadsUppdaterade } from "@/lib/leads/utkast";
 import { cn } from "@/lib/utils";
-import { BekraftaUtskick } from "@/components/leads/BekraftaUtskick";
+import { BekraftaUtskick, forstaMening } from "@/components/leads/BekraftaUtskick";
 import { useLocale, type Localized } from "@/lib/i18n";
 
 const UTAN_AMNE: Localized = { sv: "Utan ämnesrad", en: "No subject line" };
@@ -365,16 +365,12 @@ export function IrisGranskning({
 
   // Massgodkännandet bekräftas på sidan med mottagarlistan (kritik 3), inte
   // i webbläsarens confirm-ruta som inte sa till vem.
-  const [bekrafta, setBekrafta] = useState<string[] | null>(null);
+  // Kritik 4: avvisningen bekräftas på samma sätt, med namnen.
+  const [bekrafta, setBekrafta] = useState<{ typ: "skicka" | "avvisa"; ids: string[] } | null>(null);
 
   async function avgorValda(handling: "approve" | "reject", ids: string[] = [...valda]) {
     setBekrafta(null);
     if (ids.length === 0 || svep) return;
-    if (
-      handling === "reject" &&
-      !window.confirm(text({ sv: `Avvisa ${ids.length} utkast?`, en: `Reject ${ids.length} drafts?` }))
-    )
-      return;
     setSvep(handling);
     try {
       // I tur och ordning, inte parallellt: varje beslut går genom samma
@@ -439,28 +435,6 @@ export function IrisGranskning({
         </p>
       ) : null}
 
-      {/* Den kompakta rutan (översikten) visar bara de senaste; en knapp
-          räcker för att skicka hela kön, utan att först fälla ut listan. */}
-      {begransad && poster && poster.length > 1 ? (
-        <div className="mb-3">
-          <button
-            type="button"
-            disabled={svep !== null || pagar !== null}
-            onClick={() => setBekrafta(poster.map((p) => p.id))}
-            // Sekundär (kritik 3): att öppna ett utkast är huvudvägen, inte
-            // att godkänna alla oläst.
-            className={cn(btnSecondary, btnLiten)}
-          >
-            {svep === "approve" ? (
-              <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-            ) : (
-              <Check className="h-4 w-4" aria-hidden />
-            )}
-            {text({ sv: `Godkänn och skicka alla ${poster.length}`, en: `Approve and send all ${poster.length}` })}
-          </button>
-        </div>
-      ) : null}
-
       {poster && poster.length > 1 && !begransad ? (
         <div className="mb-4 flex flex-wrap items-center gap-2">
           <label className="inline-flex min-h-9 items-center gap-2 text-[0.8125rem] font-medium text-ink-muted">
@@ -477,7 +451,7 @@ export function IrisGranskning({
               <button
                 type="button"
                 disabled={svep !== null || pagar !== null}
-                onClick={() => setBekrafta([...valda])}
+                onClick={() => setBekrafta({ typ: "skicka", ids: [...valda] })}
                 className={cn(btnPrimary, btnLiten)}
               >
                 {svep === "approve" ? (
@@ -490,7 +464,7 @@ export function IrisGranskning({
               <button
                 type="button"
                 disabled={svep !== null || pagar !== null}
-                onClick={() => void avgorValda("reject")}
+                onClick={() => setBekrafta({ typ: "avvisa", ids: [...valda] })}
                 className={cn(btnSecondary, btnLiten)}
               >
                 <X className="h-4 w-4" aria-hidden />
@@ -501,14 +475,21 @@ export function IrisGranskning({
         </div>
       ) : null}
 
-      {bekrafta && poster ? (
-        <div className="mb-4">
+      {bekrafta && poster && !kompakt ? (
+        <div className={kompakt ? "mt-3" : "mb-4"}>
           <BekraftaUtskick
+            typ={bekrafta.typ}
             poster={poster
-              .filter((p) => bekrafta.includes(p.id))
-              .map((p) => ({ id: p.id, bolag: p.company_name ?? null, mottagare: p.prospect_email ?? null, amne: p.subject ?? null }))}
-            upptagen={svep === "approve"}
-            onBekrafta={() => void avgorValda("approve", bekrafta)}
+              .filter((p) => bekrafta.ids.includes(p.id))
+              .map((p) => ({
+                id: p.id,
+                bolag: p.company_name ?? null,
+                mottagare: p.prospect_email ?? null,
+                amne: p.subject ?? null,
+                utdrag: forstaMening(brodtextFor(p))
+              }))}
+            upptagen={svep !== null}
+            onBekrafta={() => void avgorValda(bekrafta.typ === "skicka" ? "approve" : "reject", bekrafta.ids)}
             onAvbryt={() => setBekrafta(null)}
           />
         </div>
@@ -622,20 +603,59 @@ export function IrisGranskning({
         </div>
       )}
 
-      {kompakt && poster && poster.length > max ? (
-        <button
-          type="button"
-          aria-expanded={allaVisas}
-          onClick={() => {
-            setAllaVisas((v) => !v);
-            setValda(new Set());
-          }}
-          className="focus-ring mt-3 text-[0.8125rem] font-medium text-ink-muted underline underline-offset-4 hover:text-ink"
-        >
-          {allaVisas
-            ? text({ sv: "Visa färre", en: "Show fewer" })
-            : text({ sv: `Visa alla ${poster.length} utkast`, en: `Show all ${poster.length} drafts` })}
-        </button>
+      {kompakt && poster && poster.length > 1 ? (
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+          {poster.length > max ? (
+            <button
+              type="button"
+              aria-expanded={allaVisas}
+              onClick={() => {
+                setAllaVisas((v) => !v);
+                setValda(new Set());
+              }}
+              // 24 px klickyta (kritik 4: länken var 20 px).
+              className="focus-ring inline-flex min-h-6 items-center text-[0.8125rem] font-medium text-ink-muted underline underline-offset-4 hover:text-ink"
+            >
+              {allaVisas
+                ? text({ sv: "Visa färre", en: "Show fewer" })
+                : text({ sv: `Visa alla ${poster.length} utkast`, en: `Show all ${poster.length} drafts` })}
+            </button>
+          ) : (
+            <span />
+          )}
+          <button
+            type="button"
+            disabled={svep !== null || pagar !== null}
+            onClick={() => setBekrafta({ typ: "skicka", ids: poster.map((p) => p.id) })}
+            className={cn(btnSecondary, btnLiten)}
+          >
+            {svep === "approve" ? (
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+            ) : (
+              <Check className="h-4 w-4" aria-hidden />
+            )}
+            {text({ sv: `Godkänn och skicka alla ${poster.length}`, en: `Approve and send all ${poster.length}` })}
+          </button>
+        </div>
+      ) : null}
+      {bekrafta && poster && kompakt ? (
+        <div className={kompakt ? "mt-3" : "mb-4"}>
+          <BekraftaUtskick
+            typ={bekrafta.typ}
+            poster={poster
+              .filter((p) => bekrafta.ids.includes(p.id))
+              .map((p) => ({
+                id: p.id,
+                bolag: p.company_name ?? null,
+                mottagare: p.prospect_email ?? null,
+                amne: p.subject ?? null,
+                utdrag: forstaMening(brodtextFor(p))
+              }))}
+            upptagen={svep !== null}
+            onBekrafta={() => void avgorValda(bekrafta.typ === "skicka" ? "approve" : "reject", bekrafta.ids)}
+            onAvbryt={() => setBekrafta(null)}
+          />
+        </div>
       ) : null}
 
       {demo && Object.keys(besked).length > 0 ? (

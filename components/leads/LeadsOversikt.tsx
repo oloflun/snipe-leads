@@ -1,5 +1,6 @@
 "use client";
 
+import { ChevronDown } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useDashboard } from "@/components/dashboard/DashboardContext";
 import { CrmKundlista } from "@/components/leads/CrmKundlista";
@@ -66,6 +67,10 @@ const T = {
     en: "Best first. The score weighs how well the company fits, verified quotes from its site, the contact and whether the timing is right. New is companies Iris just found, Ready the ones you have reviewed and want to contact."
   },
   listorRubrik: { sv: "Listor och säljlista", en: "Lists and sales list" },
+  listorInnehall: {
+    sv: "Säljlistan, kundlistor från ditt CRM och beställda listor.",
+    en: "The sales list, customer lists from your CRM and ordered lists."
+  },
   av: { sv: "av", en: "of" },
   leadsKlara: { sv: "leads klara", en: "leads done" }
 } satisfies Record<string, Localized>;
@@ -226,6 +231,7 @@ export function LeadsOversikt({
     godkanda: number;
   } | null>(null);
   const [antalUtkast, setAntalUtkast] = useState<number | null>(null);
+  const [listorOppna, setListorOppna] = useState(crmOppen);
   // Körningsrutan vet om en Iris-körning pågår; tabellen går då i livetakt.
   const [pagaendeKorningar, setPagaendeKorningar] = useState(0);
 
@@ -240,7 +246,9 @@ export function LeadsOversikt({
     {
       etikett: text(T.leadsIListan),
       varde: fmt(antalLeads?.alla ?? null),
-      notis: antalLeads ? text({ sv: `${antalLeads.nya} nya`, en: `${antalLeads.nya} new` }) : null
+      notis: antalLeads
+        ? text({ sv: `${antalLeads.nya} ${antalLeads.nya === 1 ? "ny" : "nya"}`, en: `${antalLeads.nya} new` })
+        : null
     },
     {
       etikett: text(T.utkastVantar),
@@ -294,18 +302,36 @@ export function LeadsOversikt({
         />
       </section>
 
+      {/* Hopfälld under rubriken (kritik 4, Sebbes val): listdelen är ett eget
+          arbete och lade ~3 000 px under leadsen. En länk till CRM-uppladdningen
+          (crmOppen) fäller ut den direkt. */}
       <section aria-labelledby="leads-listor" className={kolumn}>
-        <h2 id="leads-listor" className={cn(rubrikPanel, "mb-4")}>
-          {text(T.listorRubrik)}
+        <h2 id="leads-listor" className={rubrikPanel}>
+          <button
+            type="button"
+            aria-expanded={listorOppna}
+            aria-controls="leads-listor-innehall"
+            onClick={() => setListorOppna((v) => !v)}
+            className="focus-ring -mx-1 inline-flex min-h-9 items-center gap-1.5 rounded-input px-1 text-left hover:text-ink-muted"
+          >
+            {text(T.listorRubrik)}
+            <ChevronDown aria-hidden className={cn("h-4 w-4 transition-transform", listorOppna && "rotate-180")} />
+          </button>
         </h2>
-        {harListaddon || arDemo ? (
-          <LeadslistorView demo={demo} crmOppen={crmOppen} />
-        ) : (
-          <div className="grid gap-8">
-            <SaljlistaUtforska />
-            <CrmKundlista startOppen={crmOppen} />
-            <ListorUpsell />
+        {listorOppna ? (
+          <div id="leads-listor-innehall" className="mt-4">
+            {harListaddon || arDemo ? (
+              <LeadslistorView demo={demo} crmOppen={crmOppen} />
+            ) : (
+              <div className="grid gap-8">
+                <SaljlistaUtforska />
+                <CrmKundlista startOppen={crmOppen} />
+                <ListorUpsell />
+              </div>
+            )}
           </div>
+        ) : (
+          <p className={cn(meta, "mt-1")}>{text(T.listorInnehall)}</p>
         )}
       </section>
     </div>

@@ -9,7 +9,7 @@ import { Badge, Cell, SkeletonRows, Tabell, Tomt, btnPrimary, btnSecondary, etik
 import { useSmal } from "@/components/leads/smal";
 import { SkickatLista, type SkickatRad } from "@/components/leads/SkickatLista";
 import { useRadrorelse } from "@/components/leads/useRadrorelse";
-import { BekraftaUtskick } from "@/components/leads/BekraftaUtskick";
+import { BekraftaUtskick, type Bekraftelsetyp } from "@/components/leads/BekraftaUtskick";
 import { demoOversiktSvar } from "@/lib/demo/oversikt";
 import { felmeddelande } from "@/lib/http/json";
 import { useLocale, type Localized } from "@/lib/i18n";
@@ -177,6 +177,23 @@ function matchar(p: SuiteProspekt, f: VyFilter): boolean {
 /** Bara de nycklar som är satta, så att en sparad vy är jämförbar. */
 function rensat(f: VyFilter): VyFilter {
   return Object.fromEntries(Object.entries(f).filter(([, v]) => typeof v === "string" && v.trim() !== "")) as VyFilter;
+}
+
+/** Kort tid för tabellen: "nu", "12 min", "20 h", "3 d", annars datum
+ *  (kritik 4: "för 20 timmar sedan" bröts på tre rader). Den långa formen
+ *  står i title och i korten. */
+function kortTid(iso: string | null | undefined, locale: "sv" | "en"): string {
+  if (!iso) return "";
+  const ms = Date.now() - new Date(iso).getTime();
+  if (!Number.isFinite(ms)) return "";
+  const min = Math.floor(ms / 60_000);
+  if (min < 1) return locale === "en" ? "now" : "nu";
+  if (min < 60) return `${min} min`;
+  const h = Math.floor(min / 60);
+  if (h < 24) return `${h} h`;
+  const d = Math.floor(h / 24);
+  if (d < 30) return `${d} d`;
+  return new Date(iso).toLocaleDateString(locale === "en" ? "en-GB" : "sv-SE", { day: "numeric", month: "short" });
 }
 
 function domanAv(url: string | null | undefined): string | null {
@@ -558,7 +575,20 @@ export function LeadsTabell({
   const allaRader = useMemo(() => sortera([...exempel, ...(prospekt ?? [])]), [exempel, prospekt]);
   // Bara leads före utskick (FORE_UTSKICK). Bortvalda och arkiverade når
   // aldrig listan: API:t lämnar dem bara på begäran.
-  const urval = useMemo(() => allaRader.filter((p) => FORE_UTSKICK.has(p.status)), [allaRader]);
+  const urvalSorterat = useMemo(() => allaRader.filter((p) => FORE_UTSKICK.has(p.status)), [allaRader]);
+  // Kritik 4: livetakten sorterade om raderna medan man markerade, så raden
+  // man siktade på flyttade. Medan något är markerat står ordningen still
+  // (nya rader överst); den sorteras om när markeringen släpps.
+  const frysOrdning = useRef<Map<string, number> | null>(null);
+  const markerar = valda.size > 0;
+  if (!markerar) frysOrdning.current = null;
+  else if (!frysOrdning.current) frysOrdning.current = new Map(urvalSorterat.map((p, i) => [p.id, i]));
+  const urval = useMemo(() => {
+    const karta = frysOrdning.current;
+    if (!markerar || !karta) return urvalSorterat;
+    return [...urvalSorterat].sort((a, b) => (karta.get(a.id) ?? -1) - (karta.get(b.id) ?? -1));
+  }, [urvalSorterat, markerar]);
+  const ordningFryst = markerar && urval.some((p, i) => urvalSorterat[i]?.id !== p.id);
   const listref = useRef<HTMLDivElement>(null);
   useRadrorelse(listref, prospekt === null ? null : urval);
   // Demon har ingen utskickslogg: dess Skickat byggs av samma exempelleads
@@ -605,6 +635,8 @@ export function LeadsTabell({
   }, [prospekt, allaRader, urval, skickatVisat]);
   const synliga = useMemo(() => urval.filter((p) => matchar(p, filter)), [urval, filter]);
   const harWebb = synliga.some((p) => typeof p.webbrevision?.modernitet === "number");
+  const harUtkast = synliga.some((p) => Boolean(p.utkast_status));
+  const harUppgift = synliga.some((p) => nastaUppgift.has(p.id));
   const perStatus = useMemo(() => {
     const karta = new Map<string, number>();
     for (const p of urval) if (matchar(p, { ...filter, status: undefined })) karta.set(p.status, (karta.get(p.status) ?? 0) + 1);
@@ -686,26 +718,20 @@ export function LeadsTabell({
    * mottagarregeln gäller. Leadsen står under Research pågår tills utkastet
    * är skrivet, och listan går i livetakt under tiden.
    */
-  async function skapaUtkast(rader: SuiteProspekt[], ersatt: boolean) {
+  async function skapaUtkast(rader: SuiteProspekt[], ersatt: boolean, bekraftat = false) {
     const valt = ersatt ? rader : rader.filter((p) => UTAN_UTKAST.has(p.utkast_status ?? "saknas"));
     if (valt.length === 0) return;
+    if (ersatt && !bekraftat) {
+      setBekraftelse({ typ: "skapa-om", lage: "aktiva", rader: valt });
+      return;
+    }
     await utfor(ersatt ? "skapa-om" : "skapa", async () => {
+      setBekraftelse(null);
       if (demo) {
         return demoNotis({
           sv: `utkast skulle skrivas till ${valt.length} bolag.`,
           en: `drafts would be written to ${valt.length} companies.`
         });
-      }
-      if (
-        ersatt &&
-        !window.confirm(
-          text({
-            sv: `Skapa om utkasten för ${valt.length} leads? Väntande och godkända utkast ersätts och skickas aldrig.`,
-            en: `Recreate the drafts for ${valt.length} leads? Waiting and approved drafts are replaced and never sent.`
-          })
-        )
-      ) {
-        return null;
       }
       let koade = 0;
       const hoppade: string[] = [];
@@ -743,13 +769,28 @@ export function LeadsTabell({
   // Bekräftelsen med mottagarlistan (impeccable-kritik 3, Sebbes val:
   // massutskick ja, men aldrig utan att se vem som får mejlet). Ersätter
   // webbläsarens confirm-ruta, som bara sa ett antal.
-  const [bekraftaSkick, setBekraftaSkick] = useState<SuiteProspekt[] | null>(null);
+  // Kritik 4 (Sebbes val "en bekräftelse för allt"): skicka, skriv om och ta
+  // bort bekräftas på samma sätt, under verktygsraden där knappen trycktes.
+  const [bekraftelse, setBekraftelse] = useState<{
+    typ: Bekraftelsetyp;
+    lage: "aktiva" | "bortvalda" | "arkiverade";
+    rader: SuiteProspekt[];
+  } | null>(null);
   useEffect(() => {
-    setBekraftaSkick(null);
+    setBekraftelse(null);
   }, [valda]);
 
   async function skickaValda(rader: SuiteProspekt[], bekraftat = false) {
+    // Bekräftelsen först, även i demon: den är en del av det demon visar.
+    // Har inget av de markerade ett väntande utkast går vi direkt till
+    // beskedet om det, i stället för en tom bekräftelse.
+    const harVantande = rader.some((p) => (p.utkast_status === "vantar" || p.utkast_status === "koad") && p.queue_item_id);
+    if (!bekraftat && (demo || harVantande)) {
+      setBekraftelse({ typ: "skicka", lage: "aktiva", rader });
+      return;
+    }
     await utfor("skicka", async () => {
+      setBekraftelse(null);
       if (demo) {
         return demoNotis({
           sv: `utkasten till de ${rader.length} markerade bolagen skulle godkännas och skickas.`,
@@ -776,11 +817,6 @@ export function LeadsTabell({
               fel: true
             };
       }
-      if (!bekraftat) {
-        setBekraftaSkick(rader);
-        return null;
-      }
-      setBekraftaSkick(null);
       let skickade = 0;
       let vantar = 0;
       const stoppade: string[] = [];
@@ -851,16 +887,16 @@ export function LeadsTabell({
 
   /** Ta bort för gott — bara leads som aldrig fått mejl (backenden vägrar
    *  resten: utskicksloggen bär 90-dagarsspärren och avregistreringarna). */
-  async function taBort(rader: SuiteProspekt[]) {
+  async function taBort(rader: SuiteProspekt[], lage: "aktiva" | "bortvalda" | "arkiverade", bekraftat = false) {
+    if (!bekraftat) {
+      setBekraftelse({ typ: "ta-bort", lage, rader });
+      return;
+    }
     await utfor("ta-bort", async () => {
+      setBekraftelse(null);
       if (demo) {
         return demoNotis({ sv: `${rader.length} leads skulle tas bort.`, en: `${rader.length} leads would be deleted.` });
       }
-      const fraga = text({
-        sv: `Ta bort ${rader.length} leads för gott? Det går inte att ångra. Leads som redan fått mejl tas inte bort; arkivera dem i stället.`,
-        en: `Delete ${rader.length} leads for good? This cannot be undone. Leads that have already been emailed are not deleted; archive them instead.`
-      });
-      if (!window.confirm(fraga)) return null;
       const svar = await leadsAnrop<{ raderade?: string[]; vagrade?: { id: string; skal: string }[] }>(
         "/leads/prospects/radera",
         { method: "POST", body: JSON.stringify({ ids: rader.map((p) => p.id) }) }
@@ -960,21 +996,18 @@ export function LeadsTabell({
 
   const aktivtFilter = JSON.stringify(rensat(filter));
 
-  const statusVal = (p: SuiteProspekt) =>
-    p.origin === "example" ? (
-      <span className="inline-flex items-center gap-1.5 text-ink-muted">
-        {STATUSPRICK[p.status] ? <span aria-hidden className={cn("h-2 w-2 shrink-0 rounded-full", STATUSPRICK[p.status])} /> : null}
-        {text(STATUS_ETIKETT[p.status] ?? { sv: p.status, en: p.status })}
-      </span>
-    ) : (
+  // En form för alla rader (kritik 4: exempelraderna visade text, de andra
+  // ett val). Exemplen får samma val, låst: de är demons, inte kundens.
+  const statusVal = (p: SuiteProspekt) => (
       <span className="flex items-center gap-1.5">
         {STATUSPRICK[p.status] ? <span aria-hidden className={cn("h-2 w-2 shrink-0 rounded-full", STATUSPRICK[p.status])} /> : null}
       <select
         id={`leads-status-${p.id}`}
         value={p.status}
         onChange={(e) => void bytStatus(p.id, e.target.value)}
+        disabled={p.origin === "example"}
         aria-label={`${text(T.statusFor)} ${p.company_name}`}
-        className={cn(faltDiskret, "w-full")}
+        className={cn(faltDiskret, "w-full disabled:cursor-default disabled:hover:border-transparent")}
       >
         {STATUS_ORDNING.filter((s) => !SYSTEMSTATUS.has(s) || s === p.status).map((s) => (
           <option key={s} value={s} disabled={SYSTEMSTATUS.has(s)}>
@@ -1133,7 +1166,16 @@ export function LeadsTabell({
         {atgard === namn ? text(pagar) : text(etikett)}
       </button>
     );
+    const panel = bekraftelse && bekraftelse.lage === lage ? bekraftelsePanel(bekraftelse) : null;
     return (
+      // Fast i överkant medan något är markerat (kritik 4: i en lång lista
+      // försvann åtgärderna när man scrollat ner till raderna man markerat).
+      <div
+        className={cn(
+          "flex flex-col gap-3",
+          valt.length > 0 && "sticky top-14 z-20 -mx-1 border-b border-ink/12 bg-paper px-1 py-2 lg:top-0"
+        )}
+      >
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
         <button
           type="button"
@@ -1166,7 +1208,7 @@ export function LeadsTabell({
             {lage === "arkiverade"
               ? knapp("aterstall", { sv: "Återställ", en: "Restore" }, { sv: "Återställer…", en: "Restoring…" }, () => void arkivera(valt, false))
               : knapp("arkivera", { sv: "Arkivera", en: "Archive" }, { sv: "Arkiverar…", en: "Archiving…" }, () => void arkivera(valt, true))}
-            {knapp("ta-bort", { sv: "Ta bort", en: "Delete" }, { sv: "Tar bort…", en: "Deleting…" }, () => void taBort(valt))}
+            {knapp("ta-bort", { sv: "Ta bort", en: "Delete" }, { sv: "Tar bort…", en: "Deleting…" }, () => void taBort(valt, lage))}
             {flyttbar && lage === "aktiva" ? (
               <button type="button" disabled={flyttar} onClick={() => void flyttaValda()} className={cn(btnSecondary, btnLiten)}>
                 {flyttar
@@ -1184,9 +1226,39 @@ export function LeadsTabell({
                 {text({ sv: "Avmarkera", en: "Clear selection" })}
               </button>
             )}
+            {ordningFryst && lage === "aktiva" ? (
+              <span className={meta}>
+                {text({ sv: "Ordningen står still medan du markerar.", en: "The order holds still while you select." })}
+              </span>
+            ) : null}
           </>
         ) : null}
       </div>
+      {panel}
+      </div>
+    );
+  };
+
+  /** Bekräftelsens innehåll per åtgärd: vilka som berörs, och vad som görs. */
+  const bekraftelsePanel = (b: NonNullable<typeof bekraftelse>) => {
+    const berorda =
+      b.typ === "skicka" && !demo
+        ? b.rader.filter((p) => (p.utkast_status === "vantar" || p.utkast_status === "koad") && p.queue_item_id)
+        : b.rader;
+    const godkanda = b.typ === "skicka" ? b.rader.filter((p) => p.utkast_status === "godkant").length : 0;
+    return (
+      <BekraftaUtskick
+        typ={b.typ}
+        poster={berorda.map((p) => ({ id: p.id, bolag: p.company_name, mottagare: p.contact_email ?? null, amne: null }))}
+        overhoppade={b.rader.length - berorda.length - godkanda}
+        upptagen={atgard !== null}
+        onBekrafta={() => {
+          if (b.typ === "skicka") void skickaValda(b.rader, true);
+          else if (b.typ === "skapa-om") void skapaUtkast(b.rader, true, true);
+          else if (b.typ === "ta-bort") void taBort(b.rader, b.lage, true);
+        }}
+        onAvbryt={() => setBekraftelse(null)}
+      />
     );
   };
 
@@ -1506,28 +1578,6 @@ export function LeadsTabell({
       </div>
 
       {verktygsrad(synliga, "aktiva")}
-      {bekraftaSkick ? (
-        (() => {
-          const poster = bekraftaSkick.filter(
-            (p) => (p.utkast_status === "vantar" || p.utkast_status === "koad") && p.queue_item_id
-          );
-          const godkanda = bekraftaSkick.filter((p) => p.utkast_status === "godkant").length;
-          return (
-            <BekraftaUtskick
-              poster={poster.map((p) => ({
-                id: p.id,
-                bolag: p.company_name,
-                mottagare: p.contact_email ?? null,
-                amne: null
-              }))}
-              overhoppade={bekraftaSkick.length - poster.length - godkanda}
-              upptagen={atgard === "skicka"}
-              onBekrafta={() => void skickaValda(bekraftaSkick, true)}
-              onAvbryt={() => setBekraftaSkick(null)}
-            />
-          );
-        })()
-      ) : null}
 
       {notis ? (
         <p role="alert" className="text-[0.9375rem] text-danger">
@@ -1550,19 +1600,23 @@ export function LeadsTabell({
               // visar typen.
               // 900, inte 1040 (kritik 3): på 1280 är kortet ~914 px och tabellen
               // gömde Nästa uppgift bakom en sidledsrullning.
-              minBredd={900}
+              minBredd={896}
               kolumner={[
                 { rubrik: text({ sv: "Markera", en: "Select" }), bredd: "36px", srOnly: true },
-                { rubrik: text(T.kolBolag), bredd: harWebb ? "27%" : "33%" },
+                // Bolag saknar bredd och tar det som blir över när tomma
+                // kolumner döljs (kritik 4); övriga har fasta andelar.
+                { rubrik: text(T.kolBolag) },
                 { rubrik: text(T.kolStatus), bredd: "12%" },
                 { rubrik: text(T.kolPoang), bredd: "7%", hoger: true },
                 // Webbkolumnen bara när någon rad har ett betyg (webbrevisionen):
                 // en tom kolumn är bredd utan information.
                 ...(harWebb ? [{ rubrik: text(T.kolWebb), bredd: "10%" }] : []),
-                { rubrik: text(T.kolUtkast), bredd: "14%" },
+                // Kritik 4: en kolumn utan ett enda värde är bredd utan
+                // information, samma regel som webbkolumnen.
+                ...(harUtkast ? [{ rubrik: text(T.kolUtkast), bredd: "14%" }] : []),
                 { rubrik: text(T.kolKontakt), bredd: "9%" },
-                { rubrik: text(T.kolSenaste), bredd: "11%" },
-                { rubrik: text(T.kolUppgift) }
+                { rubrik: text(T.kolSenaste), bredd: "9%" },
+                ...(harUppgift ? [{ rubrik: text(T.kolUppgift), bredd: "11%" }] : [])
               ]}
             >
               {synliga.map((p) => (
@@ -1576,10 +1630,17 @@ export function LeadsTabell({
                   <Cell>{statusVal(p)}</Cell>
                   <Cell hoger>{poangCell(p)}</Cell>
                   {harWebb ? <Cell>{webbCell(p)}</Cell> : null}
-                  <Cell>{utkastCell(p)}</Cell>
+                  {harUtkast ? <Cell>{utkastCell(p)}</Cell> : null}
                   <Cell>{kontaktChip(p)}</Cell>
-                  <Cell className="text-ink-muted">{relativTid(p.senaste_handelse_at ?? p.created_at, locale)}</Cell>
-                  <Cell>{uppgiftText(p)}</Cell>
+                  <Cell className="text-ink-muted">
+                    <time
+                      dateTime={p.senaste_handelse_at ?? p.created_at ?? undefined}
+                      title={relativTid(p.senaste_handelse_at ?? p.created_at, locale)}
+                    >
+                      {kortTid(p.senaste_handelse_at ?? p.created_at, locale)}
+                    </time>
+                  </Cell>
+                  {harUppgift ? <Cell>{uppgiftText(p)}</Cell> : null}
                 </tr>
               ))}
             </Tabell>

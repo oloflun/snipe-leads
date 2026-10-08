@@ -6,7 +6,7 @@ import { btnLiten, btnPrimary, btnSecondary, meta, rubrikPanel } from "@/compone
 import { felmeddelande, readJsonBody } from "@/lib/http/json";
 import { useLocale, type Localized } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
-import { BekraftaUtskick } from "@/components/leads/BekraftaUtskick";
+import { BekraftaUtskick, forstaMening } from "@/components/leads/BekraftaUtskick";
 
 /**
  * En körnings leads med utkaststatus, och två knappar: skriv utkast till de
@@ -319,7 +319,13 @@ export function KorningensUtkast({ jobId }: Readonly<{ jobId: string }>) {
           <BekraftaUtskick
             poster={svar.leads
               .filter((l) => l.status === "vantar")
-              .map((l) => ({ id: l.prospect_id, bolag: l.company_name, mottagare: l.contact_email, amne: l.subject }))}
+              .map((l) => ({
+                id: l.prospect_id,
+                bolag: l.company_name,
+                mottagare: l.contact_email,
+                amne: l.subject,
+                utdrag: forstaMening(l.body)
+              }))}
             upptagen={pagar === "skicka"}
             onBekrafta={() => void skicka()}
             onAvbryt={() => setBekrafta(false)}
