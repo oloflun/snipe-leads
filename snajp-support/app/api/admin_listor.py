@@ -103,7 +103,11 @@ async def lista_till_kund(request: Request, list_id: str, payload: TillKundReque
         kontaktfilter=lista.get("kontaktfilter"),
     )
     for rad in rader:
-        await storage.add_lead_list_item(str(till["id"]), list_id=ny["id"], **{f: rad.get(f) for f in LISTRADSFALT})
+        falt = {f: rad.get(f) for f in LISTRADSFALT}
+        if rad.get("source_name") == "webbpool" or lista.get("kalla") == "webbpool":
+            # Webbpoolens skäl ("Akut · modernitet 3/10 · …") ÄR bedömningen.
+            falt["signal_detalj"] = None
+        await storage.add_lead_list_item(str(till["id"]), list_id=ny["id"], **falt)
     await storage.set_lead_list_status(str(till["id"]), ny["id"], status="klar")
     ny["status"] = "klar"
     svar.update(list=ny, kopierade=len(rader))
