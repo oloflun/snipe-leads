@@ -147,3 +147,33 @@ async def test_bedomningen_ar_hemlig_utom_for_webbyraerna(monkeypatch):
     assert not await webbpool.far_se(storage, None)
     rad = {"company_name": "X", "webbrevision": {"modernitet": 3}, "webbniva": "dalig"}
     assert webbpool.dolj(rad) == {"company_name": "X"}
+
+
+@pytest.mark.anyio
+async def test_postgres_sparar_bedomningen_med_update_inte_upsert():
+    """Livetestet 2026-10-08: en upsert utan website föll på NOT NULL innan
+    konflikten avgjordes. En bedömning på en befintlig rad är en UPDATE."""
+    from app.storage.postgres import PostgresStorage
+
+    sql: list[str] = []
+
+    class Conn:
+        async def execute(self, q, *args):
+            sql.append(q)
+
+    class Acquire:
+        async def __aenter__(self):
+            return Conn()
+
+        async def __aexit__(self, *a):
+            return False
+
+    class Pool:
+        def acquire(self):
+            return Acquire()
+
+    storage = PostgresStorage.__new__(PostgresStorage)
+    storage.pool = Pool()
+    await storage.webbpool_spara({"doman": "x.se", "webbniva": "dalig", "webbrevision": {"modernitet": 4}})
+    await storage.webbpool_spara({"doman": "x.se", "website": "https://x.se/"})
+    assert sql[0].startswith("update webbpool") and "insert" in sql[1]

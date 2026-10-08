@@ -3012,6 +3012,15 @@ class PostgresStorage:
         varden = [json.dumps(rad[f]) if f == "webbrevision" and rad[f] is not None else rad[f] for f in falt]
         platser = ", ".join(f"${i + 1}" + ("::jsonb" if f == "webbrevision" else "") for i, f in enumerate(falt))
         uppdatera = ", ".join([f"{f} = coalesce(excluded.{f}, webbpool.{f})" for f in falt[1:]] + ["sedd_at = now()"])
+        if "website" not in rad:
+            # Bara en bedömning på en befintlig rad. En upsert hade fallit:
+            # Postgres prövar NOT NULL (website) innan konflikten avgörs
+            # (livetestet mot development 2026-10-08).
+            satt = ", ".join([f"{f} = coalesce(${i + 2}{'::jsonb' if f == 'webbrevision' else ''}, {f})"
+                              for i, f in enumerate(falt[1:])] + ["sedd_at = now()"])
+            async with self.pool.acquire() as conn:
+                await conn.execute(f"update webbpool set {satt} where doman = $1", *varden)
+            return
         async with self.pool.acquire() as conn:
             await conn.execute(
                 f"insert into webbpool ({', '.join(falt)}) values ({platser}) "
