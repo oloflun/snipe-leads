@@ -751,6 +751,30 @@ async def befordra_prospekt(
             if uppdaterad:
                 prospect = uppdaterad
 
+    # Saknas org.nr slås det upp på bolagets egen sajt (Sebbe 2026-10-09): leads
+    # från den gamla sökkedjan har inget, och flytten föll då med 422.
+    from ..leads.orgnr import OgiltigtOrgnrError, validera_format
+
+    try:
+        validera_format(prospect.get("orgnr"))
+        orgnr_saknas = False
+    except OgiltigtOrgnrError:
+        orgnr_saknas = True
+    orgnr_hamtat = False
+    from ..leads.befordran import _webbplats_ar_exempel
+
+    if orgnr_saknas and prospect.get("website") and not _webbplats_ar_exempel(str(prospect["website"])):
+        from ..leads import sidhamtning
+        from ..leads.orgnr_uppslag import hitta_orgnr
+
+        sidhamtning.starta(storage, tenant["tenant_id"])
+        hittat = await hitta_orgnr(prospect.get("website"))
+        if hittat:
+            prospect = await storage.update_prospect(tenant["tenant_id"], prospect_id, orgnr=hittat) or {
+                **prospect, "orgnr": hittat
+            }
+            orgnr_hamtat = True
+
     brister = saknade_falt(
         orgnr=prospect.get("orgnr"),
         website=prospect.get("website"),
@@ -760,13 +784,14 @@ async def befordra_prospekt(
         raise HTTPException(
             status_code=422,
             detail={
-                "message": "Prospektet saknar det som krävs för att flyttas över.",
+                "message": "Prospektet saknar det som krävs för att flyttas över."
+                + (" Org.nr hittades inte heller på bolagets webbplats." if orgnr_saknas and not orgnr_hamtat else ""),
                 "saknas": brister,
             },
         )
 
     updated = await storage.update_prospect(tenant["tenant_id"], prospect_id, origin="manual")
-    return {"prospect": updated, "andrad": True}
+    return {"prospect": updated, "andrad": True, "orgnr_hamtat": orgnr_hamtat}
 
 
 @router.post("/api/leads/prospects/{prospect_id}/degradera")

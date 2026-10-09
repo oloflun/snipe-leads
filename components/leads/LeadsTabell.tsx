@@ -826,10 +826,16 @@ export function LeadsTabell({
       const prov = skickbara.filter((p) => p.origin === "test");
       const flyttade: SuiteProspekt[] = [];
       const ejFlyttade: string[] = [];
+      let orgnrHamtade = 0;
       if (flyttaProv) {
         for (const p of prov) {
           try {
-            await leadsAnrop(`/leads/prospects/${encodeURIComponent(p.id)}/befordra`, { method: "POST" });
+            // Saknat org.nr slås upp på bolagets egen sajt (orgnr_uppslag.py).
+            const svar = await leadsAnrop<{ orgnr_hamtat?: boolean }>(
+              `/leads/prospects/${encodeURIComponent(p.id)}/befordra`,
+              { method: "POST" }
+            );
+            if (svar.orgnr_hamtat) orgnrHamtade += 1;
             flyttade.push(p);
           } catch (orsak) {
             ejFlyttade.push(`${p.company_name}: ${felmeddelande(orsak)}`);
@@ -909,6 +915,7 @@ export function LeadsTabell({
             `${skickade} skickade`,
             vantar + godkanda ? `${vantar + godkanda} skickas när sändfönstret öppnar (vardagar 08–16)` : null,
             flyttade.length ? `${flyttade.length} flyttades över från provkörningen` : null,
+            orgnrHamtade ? `org.nr hämtades från ${orgnrHamtade} ${orgnrHamtade === 1 ? "bolags" : "bolagens"} webbplats` : null,
             antalStopp + kvarProv ? `${antalStopp + kvarProv} skickades inte` : null,
             utan ? `${utan} saknade utkast` : null
           ].filter(Boolean).join(", ") + ".",
@@ -916,6 +923,7 @@ export function LeadsTabell({
             `${skickade} sent`,
             vantar + godkanda ? `${vantar + godkanda} go out when the sending window opens (weekdays 08–16)` : null,
             flyttade.length ? `${flyttade.length} moved over from the test run` : null,
+            orgnrHamtade ? `company number found on ${orgnrHamtade} ${orgnrHamtade === 1 ? "company's" : "companies'"} website` : null,
             antalStopp + kvarProv ? `${antalStopp + kvarProv} were not sent` : null,
             utan ? `${utan} had no draft` : null
           ].filter(Boolean).join(", ") + "."
