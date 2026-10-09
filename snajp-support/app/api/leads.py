@@ -2790,6 +2790,37 @@ async def _rapportera_till_korning(
         await _vacka_korning(app_state, tenant, batch_id)
 
 
+async def vack_stillastaende_korningar(app_state) -> int:
+    """Puttar på körningar som står still (2026-10-09): `processing`, inget
+    bolag i research, ingen levande sökrunda och inte pausade. En körning
+    vars sökrunda dog med processen (en deploy mitt i en återupptagning
+    eller en väckning från ett barn) hade annars ingen som drev den vidare,
+    och stod i "Pågår" tills städaren fällde den efter en timme. Körs av
+    leads-städarens slinga varje minut. Returnerar antalet väckta."""
+    from ..jobs.stadare import aktiva
+
+    storage = app_state.storage
+    antal = 0
+    for tenant in await storage.list_tenants():
+        try:
+            rader = await storage.list_leads_korningar(tenant["id"], limit=10)
+        except Exception:  # noqa: BLE001 — en tenant stoppar inte de andra
+            logger.exception("Kunde inte läsa körningarna för %s.", tenant.get("id"))
+            continue
+        for rad in rader:
+            k = rad.get("korning") or {}
+            if rad.get("status") != "processing" or rad.get("scope") != "batch" or not k or k.get("klar"):
+                continue
+            if k.get("pagaende") or k.get("styrning") == "paus" or _soker(k) or rad["job_id"] in aktiva():
+                continue
+            logger.info("Körning %s stod still; väcks.", rad["job_id"])
+            asyncio.create_task(
+                _vacka_korning(app_state, {"tenant_id": tenant["id"], "tenant_name": tenant.get("name") or ""}, rad["job_id"])
+            )
+            antal += 1
+    return antal
+
+
 async def _vacka_korning(app_state, tenant: dict, batch_id: str) -> None:
     """Låt motorn fylla på (eller avsluta). Kastar aldrig."""
     try:

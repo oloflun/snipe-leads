@@ -330,3 +330,25 @@ async def test_sokmarke_fran_en_dod_process_galler_inte():
     from app.jobs.stream import consumer_name
 
     assert leads_api._soker({**k, "soker_process": consumer_name()}) is True
+
+
+async def test_stillastaende_korning_vacks(monkeypatch):
+    """En körning vars sökrunda dog med processen (en deploy mitt i en
+    återupptagning) stod i Pågår tills städaren fällde den (2026-10-09).
+    Väckaren puttar på den, och en färdig körning avslutas."""
+    _installera(monkeypatch)
+    storage, ko = MemoryStorage(), _Kö()
+    app_state = SimpleNamespace(jobs=MemoryJobStore(), storage=storage, leadsstrom=ko)
+    storage.tenants[TID] = {"id": TID, "name": "Testbolaget"}
+    job_id = await _ny_korning(storage, ["Ett AB"])
+    k = await _k(storage, job_id)
+    k["soker_sedan"] = datetime.now(timezone.utc).isoformat()
+    k["soker_process"] = "dod-process:1"
+    await storage.set_leads_job_status(TID, job_id=job_id, status="processing", scope="batch", korning=k, is_test=True)
+
+    assert await leads_api.vack_stillastaende_korningar(app_state) == 1
+    for _ in range(20):
+        await asyncio.sleep(0)
+    assert len(ko.poster) == 1, "väckningen köade körningens kandidat"
+    # Medan bolaget researchas finns inget att väcka.
+    assert await leads_api.vack_stillastaende_korningar(app_state) == 0

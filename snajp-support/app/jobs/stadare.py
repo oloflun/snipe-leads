@@ -179,15 +179,30 @@ async def stada_alla(app_state: Any) -> dict[str, dict[str, list[str]]]:
     return resultat
 
 
+#: Väckningen av stillastående körningar (api/leads.py,
+#: vack_stillastaende_korningar) körs oftare än städningen: en körning ska
+#: stå still i högst en minut, inte fem.
+VACKNING_SEKUNDER = 60
+
+
 async def run_leads_stadare(app_state: Any) -> None:
-    """Bakgrundsloopen. Första svepet direkt — det ÄR uppstartsstädningen."""
+    """Bakgrundsloopen. Första svepet direkt — det ÄR uppstartsstädningen.
+    Varje varv väcker dessutom körningar som står still (2026-10-09)."""
+    import time
+
     intervall = max(get_settings().leads_stadning_sekunder, 30)
     logger.info("Leads-städaren aktiv: var %s sekund.", intervall)
+    senast = float("-inf")
     while True:
         try:
-            await stada_alla(app_state)
+            if time.monotonic() - senast >= intervall:
+                await stada_alla(app_state)
+                senast = time.monotonic()
+            from ..api.leads import vack_stillastaende_korningar
+
+            await vack_stillastaende_korningar(app_state)
         except asyncio.CancelledError:
             raise
         except Exception:  # noqa: BLE001 — städaren får aldrig dö
             logger.exception("Oväntat fel i leads-städaren — fortsätter nästa varv.")
-        await asyncio.sleep(intervall)
+        await asyncio.sleep(min(VACKNING_SEKUNDER, intervall))
