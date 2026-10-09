@@ -326,6 +326,8 @@ export function IrisKorningar({
         </p>
       ) : null}
 
+      {/* Behållaren som detaljradens 100cqw mäter mot (RadMedDetalj). */}
+      <div style={{ containerType: "inline-size" }}>
       <Tabell
         ariaLabel={text(T.tabell)}
         kolumner={[
@@ -404,6 +406,7 @@ export function IrisKorningar({
           );
         })}
       </Tabell>
+      </div>
       {tak && rader.length > tak ? (
         <button
           type="button"
@@ -631,7 +634,11 @@ function RadMedDetalj({
       </tr>
       {oppen ? (
         <tr id={`korning-${rad.job_id}`}>
-          <td colSpan={kolumner} className="bg-paper2/60 px-4 py-5">
+          <td colSpan={kolumner} className="bg-paper2/60 p-0">
+            {/* Detaljen följer den SYNLIGA bredden (2026-10-09): tabellen rullar i
+                sidled under 720 px, och utan det här klipptes nyckeltalen och
+                knapparna i högerkanten. 100cqw = tabellbehållarens bredd. */}
+            <div className="sticky left-0 px-4 py-5" style={{ width: "100cqw", maxWidth: "100%" }}>
             {pagar(rad) ? (
               <div className="mb-8 border-b border-ink/15 pb-8">
                 <Pagaende rad={rad} onStyrd={onStyrd} styrbar={styrbar} />
@@ -703,6 +710,7 @@ function RadMedDetalj({
             <p className={cn(meta, "mt-5 font-mono text-[0.8125rem]")}>
               {rad.job_id} · {text(T.uppdaterad)} {nar(rad.updated_at, locale)}
             </p>
+            </div>
           </td>
         </tr>
       ) : null}
