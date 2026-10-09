@@ -1,5 +1,15 @@
 # Snipra Status
 
+## 2026-10-09 — Claude — körningar på 30–50 leads, skicka alla, provmejl, snabbare flikbyten (handoff)
+
+Tre sessioner under dagen, 35 commits på development (`5e189b7` … `d9028d6`), allt driftsatt.
+Markera alla → skicka fungerar även för stoppade utkast. Org.nr hämtas vid körningen från sajten
+och merinfo (ny merinfo-användning som Anton bör godkänna). Körningar på 30–50 leads når målet:
+10 av 10 på 7:08 i stället för 15:44. Utkasten håller bättre kvalitet, provmejl skickar med
+signatur och logga, och flikbyten tar 0,15–0,6 s. **Kritiskt:** 73 godkända utkast köade till
+måndag 08:00; Snajps org.nr och adress saknas i Kunder & Data, annars stoppas alla av regel 1.
+Handoff: `HANDOFF-2026-10-09-SKALA-UTSKICK-SNABBHET.md`. Logg: `session-logs/2026-10-09-session-log.md`.
+
 ## 2026-10-08 (2) — Claude — Iris live, rangpoäng, sökning som hittar, Leads-översikten genom fyra kritiker
 
 Iris-leads visas live: bolag under research står i Research pågår (härlett ur jobbliggaren) och landar i
