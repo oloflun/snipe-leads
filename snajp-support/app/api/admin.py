@@ -49,9 +49,12 @@ async def list_runs(
     tenant_id: str | None = None,
     agent_type: str | None = None,
     limit: int = 50,
+    sammandrag: bool = False,
 ) -> dict:
+    # `sammandrag=true`: bara listans fält, utan input/output/step_log (se
+    # storage.list_agent_runs_all). Spåret per körning hämtas via /runs/{id}.
     runs = await request.app.state.storage.list_agent_runs_all(
-        tenant_id=tenant_id, agent_type=agent_type, limit=min(limit, 200)
+        tenant_id=tenant_id, agent_type=agent_type, limit=min(limit, 200), sammandrag=sammandrag
     )
     return {"runs": runs}
 

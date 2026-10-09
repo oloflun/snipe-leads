@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { resolveDashboardState } from "@/lib/data/dashboard";
 import { requireSnajpTenant, SnajpTenantError } from "@/lib/snajp/tenant";
 import { SNAJP_SUPPORT_URL } from "../../_lib";
+import { komprimera } from "@/lib/http/komprimera";
 
 /**
  * Kvittohanterarens proxy â€” samma skÃ¤l och samma form som bokfÃ¶ringens
@@ -82,7 +83,7 @@ async function vidarebefordra(
       continue;
     }
 
-    return new NextResponse(kropp, {
+    return komprimera(request, new NextResponse(kropp, {
       status: svar.status,
       headers: {
         "Content-Type": svar.headers.get("content-type") ?? "application/octet-stream",
@@ -90,7 +91,7 @@ async function vidarebefordra(
           ? { "Content-Disposition": svar.headers.get("content-disposition") as string }
           : {})
       }
-    });
+    }));
   }
 
   console.error("kvittoproxyn: backenden svarade inte efter omtag:", sistaOrsak);

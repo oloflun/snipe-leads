@@ -1515,6 +1515,9 @@ class Storage(Protocol):
         limit: int = 50,
         # Insynens kedja per bolag (Fas 7). None = alla.
         prospect_id: str | None = None,
+        # Bara listans fält (SAMMANDRAG_FALT) — utan input, output och
+        # step_log, som är 99 % av radens vikt. Adminlistorna läser inget mer.
+        sammandrag: bool = False,
     ) -> list[dict[str, Any]]: ...
 
     async def get_agent_run(self, run_id: str) -> dict[str, Any] | None: ...

@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 
 import { auth } from "@/lib/auth";
 import { isPlatformAdmin } from "@/lib/auth/admin";
-import { hasCompletedOnboarding } from "@/lib/workspace";
+import { getWorkspaceContext, hasCompletedOnboarding } from "@/lib/workspace";
 
 /**
  * Onboardingdirigeringen — läst FÄRSKT ur databasen, aldrig ur sessionen.
@@ -37,7 +37,13 @@ export async function requireOnboarded(): Promise<void> {
   if (await isPlatformAdmin(userId)) {
     return;
   }
-  if (!(await hasCompletedOnboarding(userId))) {
+  // Arbetsytans kontext (React-cachad per request) bär redan
+  // affärskontexten, läst i samma request — alltså lika färsk som en egen
+  // fråga. Layouterna har nästan alltid hämtat den före grinden, så svaret
+  // kostar ingen rundtur. Saknas kontexten (ingen profil eller arbetsyta) är
+  // svaret detsamma som hasCompletedOnboarding hade gett: inte klar.
+  const context = await getWorkspaceContext();
+  if (!context?.businessContext) {
     redirect("/onboarding");
   }
 }

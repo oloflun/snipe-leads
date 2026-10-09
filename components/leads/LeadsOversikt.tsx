@@ -128,7 +128,10 @@ function KorningsRuta({ onOppna, onPagaende }: Readonly<{ onOppna: (jobId: strin
 
   useEffect(() => {
     if (pagaende.length === 0 || stoppad.current) return;
-    const id = window.setInterval(() => void hamta(), 10_000);
+    // Bara när fliken syns — samma skäl som pollningen i IrisKorningar.
+    const id = window.setInterval(() => {
+      if (document.visibilityState === "visible") void hamta();
+    }, 10_000);
     return () => window.clearInterval(id);
   }, [pagaende.length, hamta]);
 

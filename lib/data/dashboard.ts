@@ -7,6 +7,7 @@ import { hamtaTillagg } from "@/lib/actions/tillagg";
 import { listTenants, unwrap } from "@/lib/data/admin";
 import { DEMO_ARBETSYTA, aktivVy, type Vy } from "@/lib/vy";
 import { cookies } from "next/headers";
+import { cache } from "react";
 
 /**
  * What the dashboard needs to know before it renders anything.
@@ -160,7 +161,13 @@ async function tillaggForKundbesok(
   }
 }
 
-export async function resolveDashboardState(): Promise<DashboardState> {
+/**
+ * Avdupliceras per request med React `cache`, av samma skäl som
+ * `getWorkspaceContext`: layouten OCH `WorkspaceSection` frågar båda, och i
+ * kundbesöket kostade varje fråga en adminlistning mot backenden. Två
+ * identiska svar per sidbyte är inte fel, bara betalda två gånger.
+ */
+export const resolveDashboardState = cache(async function resolveDashboardState(): Promise<DashboardState> {
   if (!hasDatabase()) {
     return ANONYMOUS;
   }
@@ -264,7 +271,7 @@ export async function resolveDashboardState(): Promise<DashboardState> {
     arLasare: (context.profile.role ?? "") === "viewer",
     initialScope: await scopeFranCookie(products)
   };
-}
+});
 
 /**
  * `workspaceHasData` och `variant` är BORTA, och det var inte en förenkling.

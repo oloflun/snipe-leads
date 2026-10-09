@@ -2955,6 +2955,7 @@ class MemoryStorage:
         agent_type: str | None = None,
         limit: int = 50,
         prospect_id: str | None = None,
+        sammandrag: bool = False,
     ) -> list[dict[str, Any]]:
         runs = [
             run
@@ -2967,6 +2968,15 @@ class MemoryStorage:
         if prospect_id:
             runs = [r for r in runs if str(r.get("prospect_id") or "") == str(prospect_id)]
         runs.sort(key=lambda r: r["created_at"], reverse=True)
+        if sammandrag:
+            # Samma form som Postgres-grenen: de tunga fälten utelämnas.
+            return [
+                {
+                    **{k: v for k, v in run.items() if k not in ("input", "output", "step_log", "grounding", "skills_used")},
+                    "bokforingschatt": "bokforing-chatt" in json.dumps(run.get("step_log") or "", default=str),
+                }
+                for run in runs[:limit]
+            ]
         return runs[:limit]
 
     async def get_agent_run(self, run_id: str) -> dict[str, Any] | None:

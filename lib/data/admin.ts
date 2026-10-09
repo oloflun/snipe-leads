@@ -113,6 +113,11 @@ export type RunRow = {
   prospect_id?: string | null;
   /** Systemlagrens text per hash (prompt_lager), bara på GET /runs/{id}. */
   lagertexter?: Record<string, string>;
+  /**
+   * Bara i sammandraget (`?sammandrag=true`), som saknar step_log: om
+   * körningen var Kvittohanterarens chatt. Räknas i databasen.
+   */
+  bokforingschatt?: boolean;
 };
 
 export type StepLogEntry = {

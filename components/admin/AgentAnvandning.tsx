@@ -35,6 +35,8 @@ export type Slagdelning = {
 };
 
 function arBokforingschatt(run: RunRow): boolean {
+  // Sammandraget (agentanvändningssidan) bär svaret färdigräknat och ingen logg.
+  if (typeof run.bokforingschatt === "boolean") return run.bokforingschatt;
   try {
     return JSON.stringify(run.step_log ?? "").includes("bokforing-chatt");
   } catch {

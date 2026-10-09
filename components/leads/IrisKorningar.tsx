@@ -269,14 +269,22 @@ export function IrisKorningar({
     if (!nagotPagar) return;
     let timer = 0;
     let aktiv = true;
+    // En flik i bakgrunden hämtar inte: listan är ~365 KB, och två glömda
+    // flikar pollade den var tredje sekund under hela körningen (uppmätt
+    // 2026-10-09). När fliken syns igen hämtas den direkt.
     const varv = async () => {
-      await hamta();
+      if (document.visibilityState === "visible") await hamta();
       if (aktiv) timer = window.setTimeout(() => void varv(), 3000);
     };
+    const synlig = () => {
+      if (document.visibilityState === "visible") void hamta();
+    };
     timer = window.setTimeout(() => void varv(), 3000);
+    document.addEventListener("visibilitychange", synlig);
     return () => {
       aktiv = false;
       window.clearTimeout(timer);
+      document.removeEventListener("visibilitychange", synlig);
     };
   }, [nagotPagar, hamta]);
 

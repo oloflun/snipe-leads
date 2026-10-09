@@ -33,6 +33,9 @@ export default async function Page({
   if (params.tenant_id) query.set("tenant_id", params.tenant_id);
   if (params.agent_type) query.set("agent_type", params.agent_type);
   query.set("limit", String(HAMTA));
+  // Listan visar aldrig spåret (det öppnas per körning på /admin/korningar/[id]).
+  // Med hela raderna var sidan 7,3 MB per besök.
+  query.set("sammandrag", "true");
 
   const queryString = query.toString();
   const { data, error } = unwrap(await listRuns(queryString ? `?${queryString}` : ""));

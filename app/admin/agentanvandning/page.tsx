@@ -31,11 +31,15 @@ const LEADS_TYPER = ["leads", "leads_research", "leads_outreach", "leads_svar", 
  */
 const TAK = 200;
 
+// `sammandrag=true`: utan input/output/step_log. Hela raderna var 17,7 MB som
+// serialiserades in i sidan (uppmätt 2026-10-09) för tabeller som bara läser
+// tokens, kund och tid.
+
 export default async function Page() {
   const [bokforing, support, ...leadsDelar] = await Promise.all([
-    listRuns(`?agent_type=bookkeeping&limit=${TAK}`),
-    listRuns(`?agent_type=support&limit=${TAK}`),
-    ...LEADS_TYPER.map((typ) => listRuns(`?agent_type=${typ}&limit=${TAK}`))
+    listRuns(`?agent_type=bookkeeping&limit=${TAK}&sammandrag=true`),
+    listRuns(`?agent_type=support&limit=${TAK}&sammandrag=true`),
+    ...LEADS_TYPER.map((typ) => listRuns(`?agent_type=${typ}&limit=${TAK}&sammandrag=true`))
   ]);
 
   const bok = unwrap(bokforing);

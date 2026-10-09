@@ -3994,11 +3994,23 @@ class PostgresStorage:
         agent_type: str | None = None,
         limit: int = 50,
         prospect_id: str | None = None,
+        sammandrag: bool = False,
     ) -> list[dict[str, Any]]:
+        # Sammandraget läser inte input/output/step_log alls: 200 leadskörningar
+        # var 17 MB JSON som avkodades i händelseloopen för en tabell som visar
+        # tokens och latens. Bokföringens delning (underlag/frågor) behöver bara
+        # veta OM chattsteget finns i loggen — det avgörs i databasen.
+        kolumner = (
+            "r.id, r.tenant_id, r.agent_type, r.pack_version, r.tokens_in, r.tokens_out, "
+            "r.latency_ms, r.is_test, r.prospect_id, r.created_at, "
+            "coalesce(r.step_log::text like '%bokforing-chatt%', false) as bokforingschatt"
+            if sammandrag
+            else "r.*"
+        )
         async with self.pool.acquire() as conn:
             records = await conn.fetch(
-                """
-                select r.*, t.slug as tenant_slug, t.name as tenant_name
+                f"""
+                select {kolumner}, t.slug as tenant_slug, t.name as tenant_name
                 from agent_runs r
                 join ss_tenants t on t.id = r.tenant_id
                 where ($1::uuid is null or r.tenant_id = $1)
@@ -4012,6 +4024,8 @@ class PostgresStorage:
                 limit,
                 prospect_id,
             )
+        if sammandrag:
+            return [_row(r) for r in records]
         return [_avkoda_jsonb(_row(r), "step_log", "grounding") for r in records]
 
     async def get_agent_run(self, run_id: str) -> dict[str, Any] | None:

@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server";
+import { komprimera } from "@/lib/http/komprimera";
 import { proxyAsTenant } from "../_auth";
 
 // Catch-all-proxy för inkorg/utkast/regler/kunskapsbas/leads — specifika routes
@@ -23,35 +24,35 @@ type Params = { params: Promise<{ path: string[] }> };
 
 export async function GET(request: NextRequest, { params }: Params) {
   const { path } = await params;
-  return proxyAsTenant(backendPath(path, request.nextUrl.search), { method: "GET" });
+  return komprimera(request, await proxyAsTenant(backendPath(path, request.nextUrl.search), { method: "GET" }));
 }
 
 export async function POST(request: NextRequest, { params }: Params) {
   const { path } = await params;
   const body = await request.text();
-  return proxyAsTenant(backendPath(path, request.nextUrl.search), {
+  return komprimera(request, await proxyAsTenant(backendPath(path, request.nextUrl.search), {
     method: "POST",
     body: body || undefined
-  });
+  }));
 }
 
 export async function PUT(request: NextRequest, { params }: Params) {
   const { path } = await params;
   const body = await request.text();
-  return proxyAsTenant(backendPath(path, request.nextUrl.search), {
+  return komprimera(request, await proxyAsTenant(backendPath(path, request.nextUrl.search), {
     method: "PUT",
     body: body || undefined
-  });
+  }));
 }
 
 // PATCH för delvisa uppdateringar (prospektets bedömning).
 export async function PATCH(request: NextRequest, { params }: Params) {
   const { path } = await params;
   const body = await request.text();
-  return proxyAsTenant(backendPath(path, request.nextUrl.search), {
+  return komprimera(request, await proxyAsTenant(backendPath(path, request.nextUrl.search), {
     method: "PATCH",
     body: body || undefined
-  });
+  }));
 }
 
 // DELETE fick sin första mottagare 2026-09-21 (koppla ur inkorg,
@@ -59,5 +60,5 @@ export async function PATCH(request: NextRequest, { params }: Params) {
 // inte — en metod utan mottagare är bara en yta att hålla stängd.
 export async function DELETE(request: NextRequest, { params }: Params) {
   const { path } = await params;
-  return proxyAsTenant(backendPath(path, request.nextUrl.search), { method: "DELETE" });
+  return komprimera(request, await proxyAsTenant(backendPath(path, request.nextUrl.search), { method: "DELETE" }));
 }
