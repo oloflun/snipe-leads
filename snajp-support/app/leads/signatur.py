@@ -127,6 +127,14 @@ def med_signatur(brodtext: str, sig: dict[str, str], *, halsning: str | None = N
         return f"{stripped}\n{text}"
     if _AVSLUTNING.search(stripped):
         return f"{stripped}\n{text}"
+    # "Vänliga hälsningar,\nSnajp": sign_off satte arbetsytans namn efter
+    # modellens hälsningsfras, och signaturen fick en hälsningsfras till
+    # ovanför personens namn (4 av 6 utkast i development 2026-10-09). En
+    # kort namnrad direkt efter hälsningsfrasen ersätts av signaturen.
+    fore, _, namnrad = stripped.rpartition("\n")
+    namnrad = namnrad.strip()
+    if fore and _AVSLUTNING.search(fore.rstrip()) and 0 < len(namnrad) <= 40 and not namnrad.endswith((".", "?", "!", ":")):
+        return f"{fore.rstrip()}\n{text}"
     # Ingen avslutning alls: mejlet gick rakt från uppmaningen till namnet
     # (uppmätt 2026-10-07 i 16 av 16 utkast i development). Hälsningsfrasen
     # läggs på i kod, på mejlets språk.

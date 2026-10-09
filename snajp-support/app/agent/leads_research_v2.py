@@ -771,6 +771,24 @@ async def run_outreach_draft_v2(
         f"Kalla bolaget \"{kortnamn(company_name)}\", utan bolagsform (AB, Aktiebolag), "
         "och nämn namnet EN gång i hela mejlet, ämnesraden medräknad; "
         "annars \"ni\" och \"er\".\n\n"
+        # Granskningen 2026-10-09 av sex utkast i development (Sebbe: "proffsiga,
+        # välformulerade, inga stavfel och anpassade för leadet"): påhittade
+        # antaganden ("mycket som är trasigt efter helgen"), smicker ("visar ett
+        # aktivt engagemang"), du/ni blandat och en egen avslutning ovanpå
+        # signaturen.
+        "## Skrivregler\n"
+        "- Varje påstående om bolaget ska stå i researchen. Gissa aldrig hur deras "
+        "vardag ser ut: inga veckodagar, ingen arbetsbelastning och inga problem "
+        "som inte står i källmaterialet.\n"
+        "- Inget smicker och ingen värdering av bolaget (\"visar ett aktivt "
+        "engagemang\", \"imponerande\"). Konstatera det du såg och gå vidare.\n"
+        "- Tilltal: har mejlet en namngiven mottagare används \"du\" och \"dig\"; "
+        "annars \"ni\" och \"er\" genomgående. Blanda aldrig.\n"
+        "- Skriv produktnamnen exakt som i erbjudandet, med samma stora och små "
+        "bokstäver varje gång.\n"
+        "- Avsluta med frågan eller uppmaningen. Skriv INGEN hälsningsfras och "
+        "inget namn: signaturen läggs på automatiskt.\n"
+        "- Korrekt svenska utan stavfel, korta meningar, inga talesätt.\n\n"
         f"## Brief\n{brief}\n\n"
         f"## Erbjudandet som styr vinkeln\n{offer_summary}\n\n"
         f"## Språkläge\n{language_state}\n\n"

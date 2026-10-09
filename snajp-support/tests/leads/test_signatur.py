@@ -228,3 +228,16 @@ def test_sla_ihop_efter_omskrivning_behaller_signatur_och_fot():
     assert ihop.startswith("Hej igen, kort fråga.\n\nVänliga hälsningar,\nSebastian Bergman\n")
     assert ihop.endswith(FOT)
     assert "<img" in bygg_html(ihop, sig)
+
+
+def test_arbetsytans_namn_efter_halsningen_ger_inte_dubbel_avslutning():
+    """sign_off satte "Snajp" efter modellens hälsningsfras, och signaturen
+    fick en hälsningsfras till: "Vänliga hälsningar,\nSnajp\n\nVänliga
+    hälsningar,\nSebastian Bergman" (4 av 6 utkast, development 2026-10-09)."""
+    ut = med_signatur("Hej,\n\nText.\n\nVänliga hälsningar,\nSnajp", SIG, halsning="Vänliga hälsningar,")
+    assert ut.count("Vänliga hälsningar") == 1
+    assert ut.endswith(bygg_signaturtext(SIG))
+    assert "\nSnajp\n" not in ut.split("Sebastian Bergman")[0]
+    # En vanlig mening sist rörs inte.
+    ut2 = med_signatur("Hej,\n\nVänliga hälsningar,\nHör av dig.", SIG, halsning="Vänliga hälsningar,")
+    assert "Hör av dig." in ut2

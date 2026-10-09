@@ -15,6 +15,8 @@ humanizern får inte återinföra formatering.
 
 from __future__ import annotations
 
+import re
+
 from ..agent.tools import strip_markdown
 from ..agentcore.packs import Playbook, PlaybookStep, RunLedger, check_preconditions
 
@@ -318,4 +320,36 @@ def finalize_outreach_body(draft: str) -> str:
     bold, or other markdown', SKILL.md rad 291). Humanizern får inte
     återinföra formatering; det här är kodgrinden som garanterar det
     oavsett vad modellen faktiskt skrev, samma princip som hela Del C."""
-    return strip_markdown(draft)
+    return tilltala_med_ni(strip_markdown(draft))
+
+
+#: du-formerna och deras ni-motsvarighet. "Hör av dig" → "Hör av er".
+_DU_TILL_NI = {"du": "ni", "dig": "er", "din": "er", "ditt": "ert", "dina": "era"}
+_DU_ORD = re.compile(r"\b(du|dig|din|ditt|dina)\b", re.IGNORECASE)
+_ANONYM_HALSNING = re.compile(r"^\s*(hej|hejsan|god dag|hallå)\s*[,!]?\s*$", re.IGNORECASE)
+
+
+def tilltala_med_ni(body: str) -> str:
+    """Ett mejl som börjar "Hej," utan namn går till bolaget, inte en person
+    (Antons regel 14): det tilltalar då med "ni" rakt igenom. Utkasten
+    blandade "Hej," med "Skulle du vilja" och "Vi kan visa dig" (development
+    2026-10-09). Bara brödtexten före signaturen ändras; ett mejl med namn i
+    hälsningen ("Hej Peter,") rörs inte."""
+    rader = body.split("\n")
+    forsta = next((i for i, r in enumerate(rader) if r.strip()), None)
+    if forsta is None or not _ANONYM_HALSNING.match(rader[forsta]):
+        return body
+
+    def byt(m: re.Match[str]) -> str:
+        ord_ = m.group(1)
+        ny = _DU_TILL_NI[ord_.casefold()]
+        return ny.capitalize() if ord_[0].isupper() else ny
+
+    ut = []
+    for i, rad in enumerate(rader):
+        # Hälsningsfrasen och allt efter den (signaturen) lämnas orört.
+        if i > forsta and re.match(r"^\s*(med\s+)?(vänliga|bästa)\s+hälsningar", rad, re.IGNORECASE):
+            ut.extend(rader[i:])
+            break
+        ut.append(_DU_ORD.sub(byt, rad) if i > forsta else rad)
+    return "\n".join(ut)
