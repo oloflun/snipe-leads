@@ -208,13 +208,19 @@ async def _fot_vid_godkannande(storage: Storage, tenant_id: str, item: dict) -> 
     kundregistret nu har underlaget. Foten är kodens text (utskicksfot.py),
     inte en ändring av det granskaren sagt ja till."""
     from ..agent.leads_tools import lagstadgad_fot
+    from .outreach_playbook import _intervallstreck, tilltala_med_ni
     from .utskicksfot import har_fot
 
     thread = await storage.get_outreach_thread(tenant_id, item["thread_id"])
     message = await storage.get_pending_outreach_message(tenant_id, item["thread_id"]) if thread else None
-    if not message or har_fot(message.get("body") or ""):
+    if not message:
         return
-    ny = await lagstadgad_fot(storage, tenant_id, thread.get("prospect_email"), message["body"])
+    # Kodens textputs (tilltal, tankstreck) även på utkast skrivna innan den
+    # fanns (2026-10-09: "Hej Verkstad," i redan köade utkast). Rör bara
+    # hälsningen och tilltalet, aldrig innehållet granskaren sagt ja till.
+    ny = _intervallstreck(tilltala_med_ni(message["body"]))
+    if not har_fot(ny):
+        ny = await lagstadgad_fot(storage, tenant_id, thread.get("prospect_email"), ny)
     if ny != message["body"]:
         await storage.update_outreach_message_text(
             tenant_id, message["id"], subject=message.get("subject") or "", body=ny

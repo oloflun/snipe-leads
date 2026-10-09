@@ -209,3 +209,15 @@ async def test_stoppat_utan_kvarvarande_text_sager_skapa_utkast():
     lage = (await storage.utkast_lagen(TENANT))["p-1"]
     assert lage["antal_osanda"] == 0
     assert utkaststatus.harled(lage)["utkast_status"] == "saknas"
+
+
+async def test_godkannandet_putsar_tilltalet_i_ett_redan_koat_utkast():
+    """Utkast köade innan textputsen fanns ("Hej Verkstad," + "Skulle du")
+    rättas när de godkänns, utan att innehållet i övrigt ändras."""
+    storage, provider = MemoryStorage(), _FakeSendProvider()
+    body = GODKAND_BRODTEXT.replace("Hej, jag såg", "Hej Verkstad,\n\nSkulle du vilja höra mer? Jag såg")
+    item_id, _, _ = _ny_kund(storage, scheduled_at=WITHIN_WINDOW_UTC, body=body)
+    utfall, _ = await skicka_godkant(storage, TENANT, item_id, provider, now=WITHIN_WINDOW_UTC)
+    assert utfall == "sent"
+    skickat = provider.sent[0]["body"]
+    assert skickat.startswith("Hej,\n\nSkulle ni vilja") and "Verkstad" not in skickat
