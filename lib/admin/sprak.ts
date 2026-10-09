@@ -284,6 +284,10 @@ export const ADMIN: Record<string, Localized> = {
   aktiv: { sv: "Aktiv", en: "Active" },
   kundeInteStrukturera: { sv: "Kunde inte strukturera texten.", en: "Could not structure the text." },
   kundeInteSpara: { sv: "Kunde inte spara.", en: "Could not save." },
+  sparandetNaddeInteFram: {
+    sv: "Sparandet nådde inte fram, inget är sparat. Ladda om sidan (F5) och försök igen.",
+    en: "The save did not go through and nothing was saved. Reload the page (F5) and try again."
+  },
   forhandsgranskningEjSparad: {
     sv: "Förhandsgranskning. Ingenting är sparat ännu.",
     en: "Preview. Nothing is saved yet."
