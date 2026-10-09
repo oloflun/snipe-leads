@@ -188,10 +188,13 @@ async def lifespan(app: FastAPI):
                 atertagna,
                 settings.chat_workers,
             )
-            for i in range(max(settings.chat_workers, 1)):
-                chat_worker_tasks.append(
-                    asyncio.create_task(chattstrom.worker_loop(consumer_name(i), hanterare))
+            # En läsare och en pool (stream.worker_pool): en blockerande
+            # Redis-anslutning i stället för en per worker (2026-10-09).
+            chat_worker_tasks.append(
+                asyncio.create_task(
+                    chattstrom.worker_pool(consumer_name("chatt"), hanterare, max(settings.chat_workers, 1))
                 )
+            )
         except Exception as error:  # noqa: BLE001 — samma gracefulla nedgradering som Redis-anslutningen ovan
             logger.warning(
                 "Chattström kunde inte startas (%s) — /api/chat faller tillbaka på "
@@ -232,8 +235,8 @@ async def lifespan(app: FastAPI):
             # Inget engångssvep för leads (2026-10-09): det körde VARJE övergivet
             # jobb i följd, i uppstarten, innan någon worker fanns — en körning
             # som avbröts av en deploy fick 25 researchjobb körda ett i taget.
-            # Varje worker tar i stället ett övergivet jobb per varv
-            # (worker_loop → atertag(max_antal=1)), så de fördelas på alla.
+            # Poolens läsare tar i stället ett övergivet jobb i taget när en
+            # plats är ledig (stream.worker_pool → _nasta_post).
             leads_atertagna = 0
             logger.info(
                 "Leadsström: Redis-baserad jobbkö aktiv (%d poster återtagna vid "
@@ -241,12 +244,14 @@ async def lifespan(app: FastAPI):
                 leads_atertagna,
                 settings.leads_workers,
             )
-            for i in range(max(settings.leads_workers, 1)):
-                leads_worker_tasks.append(
-                    asyncio.create_task(
-                        leadsstrom.worker_loop(consumer_name(f"leads-{i}"), leads_hanterare)
-                    )
+            # En läsare och en pool med leads_workers platser (stream.worker_pool):
+            # tio blockerande anslutningar slog i Redis anslutningstak
+            # ("max number of clients reached", 2026-10-09).
+            leads_worker_tasks.append(
+                asyncio.create_task(
+                    leadsstrom.worker_pool(consumer_name("leads"), leads_hanterare, max(settings.leads_workers, 1))
                 )
+            )
         except Exception as error:  # noqa: BLE001 — samma gracefulla nedgradering som chattströmmen
             logger.warning(
                 "Leadsström kunde inte startas (%s) — /api/leads/runs/batch faller "

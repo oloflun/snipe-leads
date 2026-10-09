@@ -352,3 +352,44 @@ async def test_stillastaende_korning_vacks(monkeypatch):
     assert len(ko.poster) == 1, "väckningen köade körningens kandidat"
     # Medan bolaget researchas finns inget att väcka.
     assert await leads_api.vack_stillastaende_korningar(app_state) == 0
+
+
+async def test_poolen_kor_parallellt_med_en_lasare(monkeypatch):
+    """En läsare och en pool (2026-10-09): tio blockerande läsare slog i
+    Redis anslutningstak. Poolen ska ändå köra jobben samtidigt, och ett
+    jobb som faller ska ligga kvar för återtag i stället för att fälla poolen."""
+    monkeypatch.setattr(stream_mod, "BLOCK_MS", 20)  # fakeredis blockerar slingan under BLOCK
+    client = fakeredis_aio.FakeRedis(decode_responses=True)
+    strom = ChattStrom(client, stream_key="test:pool")
+    for jobb in ("j1", "j2", "j3", "j4", "trasig"):
+        await strom.enqueue({"job_id": jobb})
+    samtidigt = toppen = 0
+    klara: list[str] = []
+    fallit = asyncio.Event()
+
+    async def _jobb(payload):
+        nonlocal samtidigt, toppen
+        if payload["job_id"] == "trasig":
+            fallit.set()
+            raise RuntimeError("fel")
+        samtidigt += 1
+        toppen = max(toppen, samtidigt)
+        await asyncio.sleep(0.2)
+        samtidigt -= 1
+        klara.append(payload["job_id"])
+
+    pool = asyncio.create_task(strom.worker_pool("pool-a", _jobb, 4))
+    for _ in range(40):
+        await asyncio.sleep(0.05)
+        if len(klara) == 4 and fallit.is_set():
+            break
+    await asyncio.sleep(0.05)  # låt det trasiga jobbets task avsluta
+    pool.cancel()
+    try:
+        await pool
+    except asyncio.CancelledError:
+        pass
+    assert sorted(klara) == ["j1", "j2", "j3", "j4"] and toppen == 4
+    pending = await client.xpending(strom.stream_key, strom.group)
+    assert pending["pending"] == 1, "det trasiga jobbet ligger kvar för återtag"
+    await client.aclose()

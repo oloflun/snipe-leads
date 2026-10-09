@@ -302,6 +302,90 @@ class ChattStrom:
                 )
                 await asyncio.sleep(1)
 
+    async def _nasta_post(self, namn: str) -> tuple[str, dict[str, str]] | None:
+        """Nästa post för poolen: ett övergivet jobb (XAUTOCLAIM, en post),
+        annars ett nytt (XREADGROUP, en post, blockerar högst BLOCK_MS).
+        En post som levererats för många gånger ges upp här, som i atertag.
+        None = inget att göra just nu."""
+        _cursor, meddelanden, *_ = await self.client.xautoclaim(
+            self.stream_key, self.group, namn, min_idle_time=MIN_IDLE_MS, start_id="0-0", count=1
+        )
+        if meddelanden:
+            msg_id, falt = meddelanden[0]
+            leveranser = await self._leveransantal()
+            if leveranser.get(msg_id, 0) > MAX_LEVERANSER:
+                logger.warning(
+                    "Ström %s: posten %s har levererats %s gånger — ger upp och kvitterar (tak %s).",
+                    self.stream_key, msg_id, leveranser[msg_id], MAX_LEVERANSER,
+                )
+                if self.vid_uppgivet is not None:
+                    try:
+                        await self.vid_uppgivet(self._packa_upp(falt))
+                    except Exception:  # noqa: BLE001 — kvitteringen ska ske ändå
+                        logger.exception("Ström %s: vid_uppgivet kastade för %s.", self.stream_key, msg_id)
+                await self.client.xack(self.stream_key, self.group, msg_id)
+                return None
+            return msg_id, falt
+        svar = await self.client.xreadgroup(
+            self.group, namn, {self.stream_key: ">"}, count=1, block=BLOCK_MS
+        )
+        for _stream_namn, nya in svar or []:
+            for msg_id, falt in nya:
+                return msg_id, falt
+        return None
+
+    async def worker_pool(
+        self, namn: str, hanterare: Callable[[dict[str, Any]], Awaitable[None]], antal: int
+    ) -> None:
+        """EN läsare och `antal` samtidiga jobb (2026-10-09).
+
+        Med en worker_loop per worker höll varje worker en egen anslutning i
+        en blockerande XREADGROUP. Med 10 leadsworkers och 4 chattworkers
+        (och två processer under en deploy) slog det i Redis anslutningstak
+        ("max number of clients reached") och en körning fälldes. Nu läser en
+        enda läsare en post i taget när det finns en ledig plats, och jobben
+        körs som egna tasks: en blockerande anslutning per ström och process.
+        Hjärtslag, kvittering och uppgivning är desamma som förut."""
+        await self._sakerstall_grupp()
+        platser = asyncio.Semaphore(max(antal, 1))
+        pagaende: set[asyncio.Task] = set()
+
+        async def kor(msg_id: str, falt: dict[str, str]) -> None:
+            try:
+                await self._kor_och_kvittera(msg_id, falt, hanterare, namn)
+            except Exception:  # noqa: BLE001 — posten ligger kvar okvitterad och tas om
+                logger.exception("Ström %s: jobbet %s föll — tas om efter MIN_IDLE_MS.", self.stream_key, msg_id)
+            finally:
+                platser.release()
+
+        try:
+            while True:
+                await platser.acquire()
+                try:
+                    post = await self._nasta_post(namn)
+                except asyncio.CancelledError:
+                    platser.release()
+                    raise
+                except Exception:  # noqa: BLE001 — läsaren får aldrig dö av en Redis-hicka
+                    platser.release()
+                    logger.exception("Ström %s: fel i läsaren (%s) — försöker igen om en sekund.", self.stream_key, namn)
+                    await asyncio.sleep(1)
+                    continue
+                if post is None:
+                    platser.release()
+                    # En kort paus efter en tom läsning: en klient som svarar
+                    # utan att släppa händelseslingan (fakeredis) hade annars
+                    # svält ut jobben. I drift har läsningen redan väntat BLOCK_MS.
+                    await asyncio.sleep(0.05)
+                    continue
+                task = asyncio.create_task(kor(*post))
+                pagaende.add(task)
+                task.add_done_callback(pagaende.discard)
+        except asyncio.CancelledError:
+            for task in pagaende:
+                task.cancel()
+            raise
+
     async def _leveransantal(self) -> dict[str, int]:
         """message_id -> times_delivered för gruppens pending-poster.
 
