@@ -96,6 +96,7 @@ from .schemas import (
     ProspectRequest,
     ProspectSourceRequest,
     ProspektsvarRequest,
+    ProvmejlRequest,
     ResearchStepRequest,
     OnskemalRequest,
     SoulRequest,
@@ -1408,7 +1409,19 @@ async def list_skickat(
         except TypeError:  # datetime mot sträng (MemoryStorage): jämför ISO-texten
             r["svarat"] = bool(inn and ut and str(inn) >= str(ut))
         r["schemalagt"] = False
-    return {"skickat": await _schemalagda_utskick(storage, tenant_id) + rader}
+    svar: dict = {"skickat": await _schemalagda_utskick(storage, tenant_id) + rader}
+    return await _med_signatur(storage, tenant_id, svar)
+
+
+async def _med_signatur(storage, tenant_id: str, svar: dict) -> dict:
+    """Signaturen (med logotyp-URL och textblocket) i ett svar med mejltexter,
+    så att vyn visar mejlet med loggan så som mottagaren ser det (Sebbe
+    2026-10-09). Samma form som granskningskön (list_review_queue)."""
+    settings = await storage.get_agent_settings(tenant_id, agent_type="leads")
+    sig = normalisera_signatur(settings.get("signatur"))
+    if sig:
+        svar["signatur"] = {**sig, "text": bygg_signaturtext(sig)}
+    return svar
 
 
 async def _schemalagda_utskick(storage, tenant_id: str) -> list[dict]:
@@ -1758,7 +1771,8 @@ async def korningens_utkast(
 ) -> dict:
     """Körningens leads med utkaststatus per lead och antal per status."""
     _, leads = await _korningens_leads(request, tenant, job_id)
-    return {"leads": leads, "antal": _antal_per_status(leads)}
+    svar: dict = {"leads": leads, "antal": _antal_per_status(leads)}
+    return await _med_signatur(request.app.state.storage, tenant["tenant_id"], svar)
 
 
 @router.post("/api/leads/korningar/{job_id}/utkast/skriv", status_code=202)
@@ -1923,6 +1937,41 @@ async def approve_queue_item(
     status = {"sent": "sent", "requeued": "queued"}.get(utfall, utfall)
     # `skal` för sig: listans massutskick grupperar stoppen per orsak.
     return {"id": item_id, "status": status, "utfall": utfall, "besked": besked, "skal": skal}
+
+
+@router.get("/api/leads/provmejl/mottagare")
+async def provmejl_mottagare(request: Request, tenant: dict = Depends(require_tenant)) -> dict:
+    """Kundens egna adresser som ett provmejl får gå till (app/leads/provmejl.py)."""
+    from ..leads.provmejl import tillatna_mottagare
+
+    return {"mottagare": await tillatna_mottagare(request.app.state.storage, tenant["tenant_id"])}
+
+
+@router.post("/api/leads/provmejl")
+async def skicka_provmejl_endpoint(
+    request: Request, payload: ProvmejlRequest, tenant: dict = Depends(require_tenant)
+) -> dict:
+    """Skickar ett utkast eller ett skickat leadsmejl till kunden själv, så
+    som mottagaren ser det (signatur med logga, avsändare, svarsadress).
+    Rör varken kön, leadet eller Skickat — se app/leads/provmejl.py."""
+    from ..leads.provmejl import ProvmejlFel, skicka_provmejl
+    from ..leads.send_provider import get_send_provider
+
+    if payload.queue_item_id:
+        kraev_uuid(payload.queue_item_id, "Utkastet")
+    if payload.message_id:
+        kraev_uuid(payload.message_id, "Mejlet")
+    try:
+        return await skicka_provmejl(
+            request.app.state.storage,
+            tenant["tenant_id"],
+            get_send_provider(),
+            till=payload.till,
+            queue_item_id=payload.queue_item_id,
+            message_id=payload.message_id,
+        )
+    except ProvmejlFel as fel:
+        raise HTTPException(status_code=fel.status, detail=fel.text) from fel
 
 
 @router.post("/api/leads/queue/{item_id}/reject")

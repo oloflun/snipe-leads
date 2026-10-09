@@ -333,6 +333,14 @@ class ProspectPatchRequest(BaseModel):
     contact_email: str | None = Field(default=None, max_length=200)
 
 
+class ProvmejlRequest(BaseModel):
+    """Provmejl (app/leads/provmejl.py): ett utkast ELLER ett skickat mejl."""
+
+    till: str = Field(..., min_length=3, max_length=320)
+    queue_item_id: str | None = Field(default=None, max_length=64)
+    message_id: str | None = Field(default=None, max_length=64)
+
+
 class BefordraRequest(BaseModel):
     """Ifyllnad vid flytta-över. Tom kropp = validera det som redan ligger."""
 

@@ -8,6 +8,8 @@ import { relativTid } from "@/lib/leads/suite";
 import { sandtid } from "@/lib/leads/utkast";
 import { STATUS_ETIKETT } from "@/lib/prospekt";
 import { cn } from "@/lib/utils";
+import { ProvmejlKnapp } from "@/components/leads/ProvmejlKnapp";
+import { MejlMedSignatur, type Signatur } from "@/components/leads/IrisGranskning";
 
 /**
  * Skickat (Sebbe 2026-10-07, flyttad till Leads › Inkorg › Skickat av Fas 4
@@ -35,6 +37,8 @@ export type SkickatRad = {
   schemalagt?: boolean;
   /** När ett schemalagt utkast tidigast går ut. */
   skickas_tidigast?: string | null;
+  /** Köposten bakom ett schemalagt utkast (provmejlet går på den). */
+  queue_item_id?: string | null;
   prospect_id: string | null;
   company_name: string | null;
   contact_name: string | null;
@@ -80,13 +84,19 @@ export function SkickatLista({
   rader,
   fel,
   onValj,
-  filtrerbar = false
+  filtrerbar = false,
+  provmejl = true,
+  signatur = null
 }: Readonly<{
   rader: SkickatRad[] | null;
   fel: string | null;
   onValj?: (prospektId: string) => void;
   /** Statusfiltren (Inkorg › Skickat). Demons lista i Iris-listan har dem inte. */
   filtrerbar?: boolean;
+  /** Knappen Skicka provmejl på varje rad. Demon har den inte: den skickar på riktigt. */
+  provmejl?: boolean;
+  /** Signaturen med logotypen, så att mejlet visas så som mottagaren såg det. */
+  signatur?: Signatur | null;
 }>) {
   const { locale, text } = useLocale();
   const [oppen, setOppen] = useState<string | null>(null);
@@ -230,7 +240,18 @@ export function SkickatLista({
                       <dt className="text-ink-subtle">{text({ sv: "Ämne", en: "Subject" })}</dt>
                       <dd className="text-ink">{r.subject || "–"}</dd>
                     </dl>
-                    <p className="mt-4 whitespace-pre-wrap break-words text-[0.9375rem] leading-7 text-ink">{r.body}</p>
+                    <MejlMedSignatur
+                      body={r.body}
+                      signatur={signatur}
+                      className="mt-4 whitespace-pre-wrap break-words text-[0.9375rem] leading-7 text-ink"
+                    />
+                    {provmejl ? (
+                      <ProvmejlKnapp
+                        className="mt-4"
+                        queueItemId={r.schemalagt ? (r.queue_item_id ?? null) : null}
+                        messageId={r.schemalagt ? null : r.id}
+                      />
+                    ) : null}
                     {r.prospect_id && onValj ? (
                       <button
                         type="button"

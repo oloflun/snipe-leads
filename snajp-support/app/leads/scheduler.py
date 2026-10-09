@@ -34,6 +34,7 @@ from .send_guard import (
     foretagsnyckel,
 )
 from .send_provider import SendProvider, get_send_provider
+from .signatur import HALSNING, med_signatur_fore_fot
 from .signatur import bygg_html as bygg_signatur_html
 from .signatur import normalisera as normalisera_signatur
 
@@ -219,6 +220,15 @@ async def _fot_vid_godkannande(storage: Storage, tenant_id: str, item: dict) -> 
     # fanns (2026-10-09: "Hej Verkstad," i redan köade utkast). Rör bara
     # hälsningen och tilltalet, aldrig innehållet granskaren sagt ja till.
     ny = _intervallstreck(tilltala_med_ni(message["body"]))
+    # Signaturen även på utkast köade innan tenanten satte den (Sebbe
+    # 2026-10-09: alla utkast och mejl ska bära den). Före foten, som alltid
+    # är sist.
+    sig = normalisera_signatur(
+        (await storage.get_agent_settings(tenant_id, agent_type="leads")).get("signatur")
+    )
+    if sig:
+        sprak = "en" if thread.get("language_state") == "en_confirmed" else "sv"
+        ny = med_signatur_fore_fot(ny, sig, halsning=HALSNING[sprak])
     if not har_fot(ny):
         ny = await lagstadgad_fot(storage, tenant_id, thread.get("prospect_email"), ny)
     if ny != message["body"]:

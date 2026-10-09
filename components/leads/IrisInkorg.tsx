@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { SkickatLista, type SkickatRad } from "@/components/leads/SkickatLista";
+import type { Signatur } from "@/components/leads/IrisGranskning";
 import { Dashboard } from "@/components/snajp/Dashboard";
 import { chip, chipAktiv, chipInaktiv, chiplista } from "@/components/ui";
 import { felmeddelande } from "@/lib/http/json";
@@ -36,12 +37,14 @@ export function IrisInkorg({
 }> = {}) {
   const { text } = useLocale();
   const [rader, setRader] = useState<SkickatRad[] | null>(null);
+  const [signatur, setSignatur] = useState<Signatur | null>(null);
   const [fel, setFel] = useState<string | null>(null);
 
   const hamta = useCallback(async () => {
     try {
-      const svar = await leadsAnrop<{ skickat?: SkickatRad[] }>("/leads/skickat?limit=500");
+      const svar = await leadsAnrop<{ skickat?: SkickatRad[]; signatur?: Signatur }>("/leads/skickat?limit=500");
       setRader(svar.skickat ?? []);
+      setSignatur(svar.signatur ?? null);
       setFel(null);
     } catch (orsak) {
       setFel(felmeddelande(orsak));
@@ -88,7 +91,7 @@ export function IrisInkorg({
         ))}
       </ul>
       {flik === "skickat" ? (
-        <SkickatLista rader={rader} fel={fel} onValj={onValjLead} filtrerbar />
+        <SkickatLista rader={rader} fel={fel} onValj={onValjLead} filtrerbar signatur={signatur} />
       ) : (
         <Dashboard lager="leads" />
       )}

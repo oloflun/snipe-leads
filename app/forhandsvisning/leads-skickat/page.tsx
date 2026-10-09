@@ -40,6 +40,17 @@ const PROSPEKT = [
 
 const SIGNATUR = "Vänliga hälsningar,\nSebastian Bergman\nSnajp Support | AI för leads och kundtjänst\n\nUmeå & Göteborg\nwww.snajp.se\n\nSnajp AB";
 
+/** Signaturinställningen så som API:t skickar den: `text` är blocket i mejlet. */
+const SIGNATURINSTALLNING = {
+  namn: "Sebastian Bergman",
+  titel: "Snajp Support | AI för leads och kundtjänst",
+  ort: "Umeå & Göteborg",
+  webb: "www.snajp.se",
+  bolag: "Snajp AB",
+  logotyp_url: "/epost/snajp-logga.png",
+  text: SIGNATUR.split("\n").slice(1).join("\n")
+};
+
 const SKICKAT = [
   {
     id: "ko-q4",
@@ -104,7 +115,9 @@ function installeraFetch() {
   window.fetch = (input, init) => {
     const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
     if (!url.includes("/api/snajp-support/")) return riktig(input, init);
-    if (url.includes("/leads/skickat")) return svar({ skickat: SKICKAT });
+    if (url.includes("/leads/skickat")) return svar({ skickat: SKICKAT, signatur: SIGNATURINSTALLNING });
+    if (url.includes("/leads/provmejl/mottagare")) return svar({ mottagare: ["support@snajp.example", "faktura@snajp.example"] });
+    if (url.includes("/leads/provmejl")) return svar({ till: "support@snajp.example", saknar_fot: true });
     if (url.includes("/befordra")) return svar({ andrad: true });
     if (url.includes("/approve")) {
       // q3 och de flyttade provkörningsleadsen går ut; övriga stoppas av regel 1.

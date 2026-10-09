@@ -123,13 +123,27 @@ def test_bygg_html_bar_logotypen_och_escapar_brodtexten():
     assert "Umeå &amp; Göteborg" in html
 
 
-def test_bygg_html_utan_blocket_visar_ingen_logga():
-    # Ett äldre köat utkast utan signaturblock: HTML-delen får aldrig visa
-    # något som inte granskats — texten renderas som den är, utan logga.
+def test_bygg_html_utan_blocket_har_loggan_men_ingen_ny_text():
+    # Sebbe 2026-10-09: loggan ska med i varje mejl. Ett utkast utan
+    # signaturblocket (äldre, eller signaturen ändrad efter köningen) får
+    # loggan men ingen text som inte granskats: inget namn, ingen titel.
     sig = normalisera(SIG)
     html = bygg_html("Hej! En text utan signatur.", sig)
-    assert "<img" not in html
+    assert "<img" in html
     assert "En text utan signatur." in html
+    assert sig["namn"] not in html.split("alt=")[0]
+
+
+def test_bygg_html_utan_blocket_lagger_loggan_fore_foten():
+    sig = normalisera(SIG)
+    html = bygg_html("Hej!\n\n--\nBolaget AB, org.nr 556000-0000", sig)
+    assert html.index("<img") < html.index("556000-0000")
+
+
+def test_bygg_html_utan_logotyp_och_block_ar_bara_texten():
+    sig = normalisera({k: v for k, v in SIG.items() if k != "logotyp_url"})
+    html = bygg_html("Hej! En text utan signatur.", sig)
+    assert "<img" not in html
 
 
 def test_bygg_html_signaturen_star_fore_den_lagstadgade_foten():

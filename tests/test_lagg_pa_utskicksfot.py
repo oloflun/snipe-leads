@@ -72,6 +72,29 @@ def test_ingen_andra_fot():
     assert skript.med_fot(en_gang, kund=KUND, lank=LANK) is None
 
 
+SIG = {"namn": "Sara Ek", "titel": "VD", "telefon": "070-000 00 00", "bolag": "Exempelbolaget AB"}
+
+
+def test_signaturen_laggs_fore_foten_och_utkastet_slapps_igenom():
+    """Sebbe 2026-10-09: alla utkast ska bära signaturen. Den läggs före
+    foten, och mejlet klarar fortfarande alla sex spärrar."""
+    ny = skript.med_fot(skript.med_signatur(BRODTEXT, sig=SIG, sprak="sv"), kund=KUND, lank=LANK)
+    assert ny.index("Sara Ek\nVD") < ny.index("\n--\n")
+    assert _dom(ny, personlig=False).atgard == SKICKA
+
+
+def test_signaturen_laggs_in_fore_en_befintlig_fot_och_bara_en_gang():
+    med_fot = skript.med_fot(BRODTEXT, kund=KUND, lank=LANK)
+    ny = skript.med_signatur(med_fot, sig=SIG, sprak="sv")
+    assert ny.index("Sara Ek\nVD") < ny.index("\n--\n")
+    assert skript.med_signatur(ny, sig=SIG, sprak="sv") == ny
+    assert _dom(ny, personlig=False).atgard == SKICKA
+
+
+def test_utan_signaturinstallning_rors_texten_inte():
+    assert skript.med_signatur(BRODTEXT, sig=None, sprak="sv") == BRODTEXT
+
+
 def test_saknade_uppgifter_namnges():
     assert skript.saknade_uppgifter({**KUND, "orgnr": "", "adress": None}) == ["organisationsnummer", "företagsadress"]
     assert skript.saknade_uppgifter(KUND) == []

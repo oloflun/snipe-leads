@@ -955,7 +955,7 @@ function UtkastIRutan({
   // Stoppat ingår sedan 2026-10-09: spärren kan vara åtgärdad (sidfoten, kundregistret)
   // och alla spärrar prövas om vid sändningen.
   const kanGodkannas = skarp && Boolean(lage.queueItemId) && (status === "vantar" || status === "koad" || status === "stoppat");
-  const svans = lage.svans ? <MejlSvans signatur={lage.signatur ?? null} svans={lage.svans} /> : null;
+  const svans = lage.svans || lage.signatur?.logotyp_url ? <MejlSvans signatur={lage.signatur ?? null} svans={lage.svans ?? ""} /> : null;
 
   async function spara(): Promise<boolean> {
     if (!andring || !andrad || !lage.queueItemId) return true;

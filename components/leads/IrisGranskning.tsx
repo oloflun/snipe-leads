@@ -11,6 +11,7 @@ import { offertForUtkast } from "@/lib/leads/offert";
 import { LEADS_UPPDATERADE, meddelaLeadsUppdaterade } from "@/lib/leads/utkast";
 import { cn } from "@/lib/utils";
 import { BekraftaUtskick, forstaMening } from "@/components/leads/BekraftaUtskick";
+import { ProvmejlKnapp } from "@/components/leads/ProvmejlKnapp";
 import { useLocale, type Localized } from "@/lib/i18n";
 
 const UTAN_AMNE: Localized = { sv: "Utan ämnesrad", en: "No subject line" };
@@ -76,7 +77,10 @@ export function MejlSvans({ signatur, svans }: Readonly<{ signatur: Signatur | n
   const { text } = useLocale();
   const sig = signatur && svans.startsWith(signatur.text) ? signatur : null;
   const fot = (sig ? svans.slice(sig.text.length) : svans).trim();
-  if (!sig && !fot) return null;
+  // Loggan följer med i varje mejl även när blocket inte står ordagrant
+  // (signatur.bygg_html, Sebbe 2026-10-09): visas här på samma plats.
+  const baraLogga = !sig && signatur?.logotyp_url ? signatur : null;
+  if (!sig && !fot && !baraLogga) return null;
   const webbHref = sig?.webb ? (sig.webb.startsWith("http") ? sig.webb : `https://${sig.webb}`) : null;
   return (
     <div className="mt-2 rounded-card border border-ink/12 bg-paper px-5 py-4">
@@ -114,9 +118,48 @@ export function MejlSvans({ signatur, svans }: Readonly<{ signatur: Signatur | n
           ) : null}
           {sig.bolag ? <p className="mt-3">{sig.bolag}</p> : null}
         </div>
+      ) : baraLogga?.logotyp_url ? (
+        // eslint-disable-next-line @next/next/no-img-element -- samma externa URL som i mejlet
+        <img
+          src={baraLogga.logotyp_url}
+          alt={baraLogga.bolag ?? baraLogga.namn}
+          width={120}
+          className="mt-3 block h-auto w-[120px]"
+        />
       ) : null}
       {fot ? <p className="mt-4 whitespace-pre-wrap text-[0.75rem] leading-5 text-ink-subtle">{fot}</p> : null}
     </div>
+  );
+}
+
+/** Mejlet delat som `signatur.dela_utkast` delar det: brödtexten, och
+ *  svansen (signaturblocket och/eller den lagstadgade foten) från där den
+ *  första av dem börjar. */
+export function delaMejl(body: string, signatur: Signatur | null): [string, string] {
+  const start: number[] = [];
+  const sigIndex = signatur?.text ? body.indexOf(signatur.text) : -1;
+  if (sigIndex >= 0) start.push(sigIndex);
+  const fotIndex = body.indexOf("\n--\n");
+  if (fotIndex >= 0) start.push(fotIndex + 1);
+  if (start.length === 0) return [body.trimEnd(), ""];
+  const forst = Math.min(...start);
+  return [body.slice(0, forst).trimEnd(), body.slice(forst).replace(/^\n+|\n+$/g, "")];
+}
+
+/** Ett utkast eller skickat mejl så som mottagaren ser det: texten, och
+ *  signaturen med logotypen och foten (Sebbe 2026-10-09: loggan ska synas i
+ *  alla utkast). Utan signatur i svaret visas texten som den är. */
+export function MejlMedSignatur({
+  body,
+  signatur,
+  className
+}: Readonly<{ body: string; signatur: Signatur | null; className?: string }>) {
+  const [brodtext, svans] = delaMejl(body, signatur);
+  return (
+    <>
+      <p className={className}>{brodtext}</p>
+      <MejlSvans signatur={signatur} svans={svans} />
+    </>
   );
 }
 
@@ -566,13 +609,13 @@ export function IrisGranskning({
                       onAndring={(subject, body) =>
                         setAndrat((f) => ({ ...f, [post.id]: { subject, brodtext: body } }))
                       }
-                      efterText={post.svans ? <MejlSvans signatur={signatur} svans={post.svans} /> : null}
+                      efterText={post.svans || signatur?.logotyp_url ? <MejlSvans signatur={signatur} svans={post.svans ?? ""} /> : null}
                     />
                   </div>
                 ) : null}
 
                 {kompakt && !öppen ? null : (
-                <div className="mt-4 flex shrink-0 items-center gap-2">
+                <div className="mt-4 flex flex-wrap items-start gap-2">
                   <button
                     type="button"
                     disabled={pagar !== null}
@@ -595,6 +638,7 @@ export function IrisGranskning({
                     <X className="h-4 w-4" aria-hidden />
                     {text({ sv: "Avvisa", en: "Reject" })}
                   </button>
+                  {demo ? null : <ProvmejlKnapp queueItemId={post.id} fore={() => sparaAndring(post)} />}
                 </div>
                 )}
               </article>

@@ -200,6 +200,24 @@ def sla_ihop(
     return f"{brodtext}\n\n{svans}"
 
 
+def med_signatur_fore_fot(body: str, sig: dict[str, str], *, halsning: str | None = None) -> str:
+    """Signaturen på ett redan skrivet utkast, före en eventuell lagstadgad fot.
+
+    Utkast köade innan tenanten satte sin signatur saknar blocket (Sebbe
+    2026-10-09: "alla mail måste ha signaturen"). `med_signatur` lägger det
+    sist i texten, vilket hade hamnat efter foten; här delas texten vid
+    fotens början och signaturen går in före den. Idempotent."""
+    text = body or ""
+    i = text.find(_FOTSTART)
+    if i < 0:
+        return med_signatur(text, sig, halsning=halsning)
+    huvud, fot = text[:i], text[i + 1 :]
+    ny = med_signatur(huvud, sig, halsning=halsning)
+    if ny == huvud:
+        return text
+    return f"{ny.rstrip()}\n\n{fot}"
+
+
 def _radbryt_till_html(text: str) -> str:
     """Escapad text med <br> — stycken hålls ihop, inget tolkas som markup."""
     stycken = _html.escape(text).split("\n\n")
@@ -208,6 +226,18 @@ def _radbryt_till_html(text: str) -> str:
         for stycke in stycken
         if stycke.strip()
     )
+
+
+def _logotyp_img(sig: dict[str, str]) -> str:
+    return (
+        f'<img src="{_html.escape(sig["logotyp_url"], quote=True)}" alt="{_html.escape(sig.get("bolag") or sig["namn"])}"'
+        ' width="120" style="display:block;width:120px;height:auto;border:0;margin:12px 0;">'
+    )
+
+
+def _logotyp_html(sig: dict[str, str]) -> str:
+    """Bara loggan, för ett mejl där signaturblocket inte står ordagrant."""
+    return f'<div style="margin:1.5em 0 0 0;">{_logotyp_img(sig)}</div>'
 
 
 def _signatur_html(sig: dict[str, str]) -> str:
@@ -222,10 +252,7 @@ def _signatur_html(sig: dict[str, str]) -> str:
         person[0] = f'<div style="margin:0;font-weight:bold;">{_html.escape(sig["namn"])}</div>'
         delar.append("".join(person))
     if sig.get("logotyp_url"):
-        delar.append(
-            f'<img src="{_html.escape(sig["logotyp_url"], quote=True)}" alt="{_html.escape(sig.get("bolag") or sig["namn"])}"'
-            ' width="120" style="display:block;width:120px;height:auto;border:0;margin:12px 0;">'
-        )
+        delar.append(_logotyp_img(sig))
     plats: list[str] = []
     if sig.get("ort"):
         plats.append(rad.format(_html.escape(sig["ort"])))
@@ -252,13 +279,28 @@ def bygg_html(brodtext: str, sig: dict[str, str]) -> str:
     Textblocket som `med_signatur` la dit byts mot HTML-signaturen (med
     logotyp); texten före och efter (brödtext respektive lagstadgad fot)
     escapas och radbryts, ingenting annat. Finns blocket inte i texten — ett
-    äldre köat utkast, en tenant som slog på signaturen efter köningen —
-    renderas texten som den är, utan logga: HTML-delen får aldrig visa något
-    som inte granskats.
+    äldre köat utkast, en signatur ändrad efter köningen — renderas texten
+    som den är och bara loggan läggs till, före en eventuell fot (Sebbe
+    2026-10-09: loggan ska med i varje mejl). Ingen text som inte granskats.
     """
     text = bygg_signaturtext(sig)
     index = brodtext.find(text) if text else -1
-    if index < 0:
+    if index < 0 and sig.get("logotyp_url"):
+        # Blocket finns inte ordagrant (signaturen ändrades efter köningen,
+        # eller texten skrevs före den). Loggan ska ändå med i varje mejl
+        # (Sebbe 2026-10-09): texten renderas oförändrad och bara bilden
+        # läggs till, före en eventuell fot — ingen text som inte granskats.
+        fotstart = brodtext.find(_FOTSTART)
+        fore = brodtext if fotstart < 0 else brodtext[:fotstart]
+        efter = "" if fotstart < 0 else brodtext[fotstart + 1 :]
+        kropp = _radbryt_till_html(fore.rstrip()) + _logotyp_html(sig)
+        if efter.strip():
+            kropp += (
+                '<div style="margin-top:1.5em;color:#6b6b6b;font-size:12px;">'
+                + _radbryt_till_html(efter.strip("\n"))
+                + "</div>"
+            )
+    elif index < 0:
         kropp = _radbryt_till_html(brodtext)
     else:
         fore = brodtext[:index].rstrip()

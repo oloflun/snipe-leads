@@ -6,6 +6,7 @@ import { EjAktiverad } from "@/components/EjAktiverad";
 import { Badge, Cell, SkeletonRows, Tabell, Tomt, btnPrimary, btnSecondary, etikett, btnLiten, faltDiskret, faltTatt, chip, chipAktiv, chipInaktiv, chiplista, meta, rubrikPanel, tabellRad } from "@/components/ui";
 import { useSmal } from "@/components/leads/smal";
 import { SkickatLista, type SkickatRad } from "@/components/leads/SkickatLista";
+import type { Signatur } from "@/components/leads/IrisGranskning";
 import { useRadrorelse } from "@/components/leads/useRadrorelse";
 import { BekraftaUtskick, type Bekraftelsetyp } from "@/components/leads/BekraftaUtskick";
 import { demoOversiktSvar } from "@/lib/demo/oversikt";
@@ -381,6 +382,7 @@ export function LeadsTabell({
   // visas den här, bredvid Ny (och fortfarande under Inkorg › Skickat).
   const [visaSkickat, setVisaSkickat] = useState(false);
   const [skickat, setSkickat] = useState<SkickatRad[] | null>(null);
+  const [skickatSignatur, setSkickatSignatur] = useState<Signatur | null>(null);
   const [skickatFel, setSkickatFel] = useState<string | null>(null);
   const hamtaSkickat = useCallback(async () => {
     if (demo) {
@@ -388,8 +390,9 @@ export function LeadsTabell({
       return;
     }
     try {
-      const svar = await leadsAnrop<{ skickat?: SkickatRad[] }>("/leads/skickat?limit=500");
+      const svar = await leadsAnrop<{ skickat?: SkickatRad[]; signatur?: Signatur }>("/leads/skickat?limit=500");
       setSkickat(svar.skickat ?? []);
+      setSkickatSignatur(svar.signatur ?? null);
       setSkickatFel(null);
     } catch (orsak) {
       setSkickatFel(felmeddelande(orsak));
@@ -1609,7 +1612,7 @@ export function LeadsTabell({
       ) : null}
 
       {visaSkickat ? (
-        <SkickatLista rader={skickatVisat} fel={skickatFel} onValj={onValj} filtrerbar={!demo} />
+        <SkickatLista rader={skickatVisat} fel={skickatFel} onValj={onValj} filtrerbar={!demo} provmejl={!demo} signatur={skickatSignatur} />
       ) : !iListan ? null : (
       <>
       {/* Kritik 3: filtren och de sparade vyerna delar rad när bredden räcker. */}

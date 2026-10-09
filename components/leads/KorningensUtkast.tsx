@@ -7,6 +7,8 @@ import { felmeddelande, readJsonBody } from "@/lib/http/json";
 import { useLocale, type Localized } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { BekraftaUtskick, forstaMening } from "@/components/leads/BekraftaUtskick";
+import { ProvmejlKnapp } from "@/components/leads/ProvmejlKnapp";
+import { MejlMedSignatur, type Signatur } from "@/components/leads/IrisGranskning";
 
 /**
  * En körnings leads med utkaststatus, och två knappar: skriv utkast till de
@@ -46,7 +48,7 @@ type Lead = {
   notis: string | null;
 };
 
-type Svar = { leads: Lead[]; antal: Partial<Record<Status | "kan_skrivas", number>> };
+type Svar = { leads: Lead[]; antal: Partial<Record<Status | "kan_skrivas", number>>; signatur?: Signatur };
 
 const STATUS: Record<Status, { etikett: Localized; ton: string }> = {
   vantar: { etikett: { sv: "Utkast väntar", en: "Draft waiting" }, ton: "text-warning" },
@@ -415,9 +417,11 @@ export function KorningensUtkast({ jobId }: Readonly<{ jobId: string }>) {
                       ) : null}
                     </dl>
                     {l.body ? (
-                      <p className="mt-3 max-w-[70ch] whitespace-pre-wrap border-t border-ink/10 pt-3 text-[0.9375rem] leading-6 text-ink">
-                        {l.body}
-                      </p>
+                      <MejlMedSignatur
+                        body={l.body}
+                        signatur={svar.signatur ?? null}
+                        className="mt-3 max-w-[70ch] whitespace-pre-wrap border-t border-ink/10 pt-3 text-[0.9375rem] leading-6 text-ink"
+                      />
                     ) : (
                       <p className={cn(meta, "mt-3")}>
                         {text({ sv: "Utkastets text gick inte att läsa.", en: "The draft text could not be read." })}
@@ -458,6 +462,9 @@ export function KorningensUtkast({ jobId }: Readonly<{ jobId: string }>) {
                           })}
                         </span>
                       </div>
+                    ) : null}
+                    {l.queue_item_id && ["vantar", "godkant", "koad", "stoppat"].includes(l.status) ? (
+                      <ProvmejlKnapp queueItemId={l.queue_item_id} className="mt-3 border-t border-ink/10 pt-3" />
                     ) : null}
                   </div>
                 ) : null}
