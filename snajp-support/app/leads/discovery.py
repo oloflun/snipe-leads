@@ -1353,6 +1353,10 @@ _GENERISKA_NAMNLED = frozenset(
         "aktiebolag", "gruppen", "group", "svenska", "sverige", "sweden",
         "nordic", "norden", "holding", "invest", "konsult", "consulting",
         "partner", "partners", "service", "services", "entreprenad",
+        # Branschord (2026-10-09): "utbildning" i jmforarutbildning.se gav
+        # "JM Utbildning & säkerhet AB" i Östersund en förarskola i Gävle.
+        "utbildning", "sakerhet", "teknik", "transport", "fastighet", "fastigheter",
+        "redovisning", "installation", "maleri", "stadning", "byggservice",
     }
 )
 

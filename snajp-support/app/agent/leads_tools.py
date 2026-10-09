@@ -122,7 +122,7 @@ async def _queue_outreach_draft_impl(
     ]
 
     finalized_body = finalize_outreach_body(body)
-    kvalitet = await sakra_utgaende_text(finalized_body, sprak=sprak)
+    kvalitet = await sakra_utgaende_text(finalized_body, sprak=sprak, alltid_korrektur=True)
     finalized_body = kvalitet.text
     textkvalitet_granskning: str | None = None
     if kvalitet.kraver_granskning or platshallare:

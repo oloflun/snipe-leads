@@ -424,3 +424,21 @@ async def test_enskild_firma_falls_innan_bolagssidan_hamtas(monkeypatch):
     hamtade = _installera_sidor(monkeypatch, {"https://www.merinfo.se/byggbranschen/molndal/foretag/1": lista})
     assert await m.sok({"industries": ["Bygg"], "geography": ["Mölndal"]}, 3) == []
     assert not any("Anna-Andersson" in u for u in hamtade)
+
+
+# -- Sajtens adress mot registrets ort (2026-10-09) ---------------------------
+
+
+def test_sajt_med_adress_pa_annan_ort_ar_inte_bolagets():
+    from app.leads.sources.merinfo import adress_motsager_registret
+
+    piteå = {"ort": "Piteå", "postnr": "941 41"}
+    # landin.se: bilverkstaden i Sollentuna fick "Landin & Markström AB" i Piteå.
+    assert adress_motsager_registret("Landin & Pettersson Bilservice\nBox 12, 192 79 Sollentuna", piteå)
+    # Samma postnummerområde, samma ort, eller orten nämnd: bolagets.
+    assert not adress_motsager_registret("Storgatan 1, 941 33 Piteå", piteå)
+    assert not adress_motsager_registret("Industrivägen 4, 943 31 Öjebyn", piteå)
+    assert not adress_motsager_registret("Vi bygger i Piteå och Luleå. Kontor: 972 41 Luleå", piteå)
+    # Ingen adress alls, eller ingen registerort: inget att pröva.
+    assert not adress_motsager_registret("Välkommen till oss!", piteå)
+    assert not adress_motsager_registret("192 79 Sollentuna", {})

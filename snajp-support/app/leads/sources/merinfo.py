@@ -816,6 +816,52 @@ def _epostdomanens_sajt(epost: object) -> str | None:
     return url if discovery.webbplats_ar_bolagets(url) else None
 
 
+#: "192 79 Sollentuna": postnummer och postort på en sajt.
+_POSTADRESS = re.compile(r"\b(\d{3})\s?(\d{2})\s+([A-ZÅÄÖ][a-zåäöé]+(?:[ -][A-ZÅÄÖ][a-zåäöé]+)?)")
+
+
+def adress_motsager_registret(text: str, k: dict[str, Any]) -> bool:
+    """Säger sajtens egen adress att den hör till ett bolag på en annan ort än
+    registrets? 2026-10-09: "Landin & Markström AB" i Piteå fick landin.se
+    (en bilverkstad i Sollentuna) och "JM Utbildning & säkerhet AB" i
+    Östersund en förarskola i Gävle; namnkontrollen godtog båda, och
+    researchen valde sedan bort dem på geografin, med leadet förlorat.
+
+    Motsägelse kräver en postadress på sidan och att ingen av dem stämmer:
+    samma två första siffror i postnumret eller samma ort. Står registrets ort
+    någonstans på sidan, eller finns ingen adress alls, godtas sajten."""
+    ort = str(k.get("ort") or "").strip()
+    postnr = re.sub(r"\D", "", str(k.get("postnr") or ""))
+    if not text or not (ort or postnr):
+        return False
+    if ort and ort.casefold() in text.casefold():
+        return False
+    adresser = _POSTADRESS.findall(text)
+    if not adresser:
+        return False
+    for a, b, stad in adresser:
+        if postnr and (a + b)[:2] == postnr[:2]:
+            return False
+        if ort and stad.casefold() == ort.casefold():
+            return False
+    return True
+
+
+async def _ligger_annorstades(url: str, k: dict[str, Any]) -> bool:
+    """Startsidan läses (samma cache som kontaktsökningen, ingen extra
+    kostnad när sajten ändå blir vald) och prövas mot registrets ort."""
+    from .. import sidhamtning
+
+    text, _fel, _via = await sidhamtning.hamta(url, fas="webb", direkt=True)
+    if adress_motsager_registret(text or "", k):
+        logger.info(
+            "merinfo: %s har en adress på annan ort än %s (%s) — inte bolagets sajt.",
+            url, k.get("company_name"), k.get("ort"),
+        )
+        return True
+    return False
+
+
 async def _webbplats(k: dict[str, Any], *, betald: bool = True) -> str | None:
     """Bolagets webbplats, billigaste vägen först (Antons regel 12, 2026-10-07):
 
@@ -844,7 +890,7 @@ async def _webbplats(k: dict[str, Any], *, betald: bool = True) -> str | None:
             gissad = await discovery.gissa_webbplats_via_head(namn)
         except Exception:  # noqa: BLE001 — en gissning får inte fälla körningen
             gissad = None
-        if gissad and discovery.webbplats_ar_bolagets(gissad):
+        if gissad and discovery.webbplats_ar_bolagets(gissad) and not await _ligger_annorstades(gissad, k):
             return gissad
     if not betald:
         return None
@@ -857,7 +903,12 @@ async def _webbplats(k: dict[str, Any], *, betald: bool = True) -> str | None:
         return None
     if not discovery.webbplats_matchar_namn(namn, webb):
         return None
-    return webb if webb.startswith("http") else f"https://{webb}"
+    webb = webb if webb.startswith("http") else f"https://{webb}"
+    # Gissningen och uppslaget är namnmatchningar, inte registrets uppgift:
+    # en sajt vars adress ligger på en annan ort är någon annans.
+    if await _ligger_annorstades(webb, k):
+        return None
+    return webb
 
 
 def ensam_vd_telefon(b: dict[str, Any]) -> str | None:

@@ -101,6 +101,11 @@ _SUPERLATIV_IDIOM = re.compile(
     r"|på största allvar"
     r"|i största möjliga mån"
     r"|med största sannolikhet"
+    # Mottagaren är subjektet (2026-10-09): "fokusera på det ni är bäst på"
+    # fällde ett annars rent utkast till Magnusgårdens bygg, två rundor i rad.
+    # "vi är bäst" står inte här och fälls som förut.
+    r"|(?:ni|du)\s+(?:är|gör|kan)\s+bäst(?:\s+på)?"
+    r"|passar\s+(?:er|dig)\s+bäst"
     r")(?![a-zåäö])",
     re.IGNORECASE,
 )
