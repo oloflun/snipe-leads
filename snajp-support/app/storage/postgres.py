@@ -12,6 +12,7 @@ precis som referensarkitekturen. Saknas embeddings används
 import hashlib
 import json
 import logging
+import os
 import uuid
 from contextlib import asynccontextmanager
 from datetime import date
@@ -192,10 +193,13 @@ class PostgresStorage:
 
     @classmethod
     async def connect(cls, database_url: str) -> "PostgresStorage":
+        # 20, inte 5 (2026-10-09): leadsarbetarna (LEADS_WORKERS), chatten och
+        # webbens anrop delar poolen, och med fler parallella researchjobb
+        # köade de om anslutningarna. Railways Postgres tar 100.
         pool = await asyncpg.create_pool(
             database_url,
             min_size=1,
-            max_size=5,
+            max_size=int(os.environ.get("DB_POOL_MAX", "20")),
             init=_init_connection,
             statement_cache_size=0,  # krävs bakom Supabase transaction pooler
         )

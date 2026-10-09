@@ -269,7 +269,12 @@ class Settings(BaseSettings):
     # leads-jobb är ÅTTA LLM-anrop och en batch upp till 50 prospekt, så
     # fler workers bränner timkvoten snabbare — är sedan Vertex-flytten
     # (betald kvot, 2026-09-14) en svagare invändning än väntande kunder.
-    leads_workers: int = 3
+    # 10 sedan 2026-10-09 (Sebbe: "körningarna kan inte ta 10–15 minuter"):
+    # med 3 researchades två–tre bolag åt gången, ~75 s styck, och en körning
+    # på 40 tog en kvart efter sökningen. Databaspoolen höjdes samtidigt
+    # (postgres.py, DB_POOL_MAX). Vertex-kvoten är betald; ScrapeGraph har
+    # sin egen semafor (sidhamtning) och påverkas inte av antalet workers.
+    leads_workers: int = 10
     # V2-kostnadsarbetet (2026-09-02): vilken leads-kedja som körs.
     # "v1" = niostegsresearchen + fyrstegsutkastet (dagens beteende).
     # "v2" = 1 research-anrop + 2 utkastanrop (RESEARCH_V2/OUTREACH_V2,

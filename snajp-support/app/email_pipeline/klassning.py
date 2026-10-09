@@ -83,7 +83,10 @@ async def _prospektmatch(storage, tenant_id: str, fran: str) -> dict[str, Any] |
     if not fran:
         return None
     doman = _doman(fran)
-    for p in await storage.list_prospects(tenant_id, limit=500):
+    # Alla prospekt, inte de 500 senaste (2026-10-09): ett lead som kontaktats
+    # för länge sedan svarar ofta sist, och dess svar ska nå Inkorgen och
+    # flytta leadet till Svarat precis som ett nytt.
+    for p in await storage.list_prospects(tenant_id, limit=20_000):
         if str(p.get("contact_email") or "").casefold() == fran:
             return p
         if doman and _webbdoman(p.get("website")) == doman and doman not in _ALLMANNA_DOMANER:
