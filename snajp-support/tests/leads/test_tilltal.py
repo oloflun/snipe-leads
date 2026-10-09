@@ -51,3 +51,10 @@ def test_funktionsadress_med_versalord_blir_ingen_person():
     hit = person_kontakt_i_text(sida, "https://granec.se")
     assert hit and hit["contact_name"] == "Peter Holm"
     assert person_kontakt_i_text("<p>Verkstad Granec</p><p>verkstad@granec.se</p>", "https://granec.se") is None
+
+
+def test_produktnamnen_i_genitiv_och_med_versal():
+    """"Snajps Kvittohanteraren" och "supportagent" (granskningen 2026-10-09)."""
+    ut = finalize_outreach_body("Hej,\n\nSnajps Kvittohanteraren hittar kvitton och vår supportagent svarar.")
+    assert "Snajps Kvittohanterare hittar" in ut and "vår Supportagent svarar" in ut
+    assert finalize_outreach_body("Hej,\n\nSupportagenten svarar.").endswith("Supportagenten svarar.")

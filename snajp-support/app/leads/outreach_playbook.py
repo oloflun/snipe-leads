@@ -331,7 +331,22 @@ _INTERVALL = re.compile(
 
 
 def _intervallstreck(text: str) -> str:
-    return _INTERVALL.sub(r"\1–\2", text)
+    return _produktnamn(_INTERVALL.sub(r"\1–\2", text))
+
+
+#: Snajps produkter som de heter i erbjudandet. Genitiv följs av obestämd
+#: form ("Snajps Kvittohanterare", inte "Snajps Kvittohanteraren"), och
+#: namnet skrivs med versal (granskningen 2026-10-09).
+_PRODUKTER = {"kvittohanterare": "Kvittohanterare", "supportagent": "Supportagent"}
+_GENITIV_BESTAMD = re.compile(
+    r"\b(Snajps|[Vv]år|[Vv]åra)\s+(kvittohanterare|supportagent)(n|en)\b", re.IGNORECASE
+)
+_PRODUKT_GEMEN = re.compile(r"\b(kvittohanterare|supportagent)(n|en)?\b")
+
+
+def _produktnamn(text: str) -> str:
+    text = _GENITIV_BESTAMD.sub(lambda m: f"{m.group(1)} {_PRODUKTER[m.group(2).casefold()]}", text)
+    return _PRODUKT_GEMEN.sub(lambda m: _PRODUKTER[m.group(1)] + (m.group(2) or ""), text)
 
 
 #: du-formerna och deras ni-motsvarighet. "Hör av dig" → "Hör av er".
