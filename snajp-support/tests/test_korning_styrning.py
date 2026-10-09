@@ -241,3 +241,40 @@ async def test_hjartslaget_haller_hela_batchen_vid_liv(monkeypatch):
     await forsta
     assert korda == ["a:j1", "a:j2", "a:j3"]
     await client.aclose()
+
+
+async def test_ett_klart_bolag_rapporterar_medan_sokrundan_pagar(monkeypatch):
+    """Sökrundan höll körningens lås i minuter, och varje bolag som blev klart
+    under tiden fastnade på rapporten: dess worker stod still och körningen
+    tog en kvart (development 2026-10-09). Rundan körs nu utanför låset."""
+    _installera(monkeypatch)
+    rundan_startad = asyncio.Event()
+    slapp_rundan = asyncio.Event()
+
+    async def _langsam_runda(*_a, **_k):
+        rundan_startad.set()
+        await slapp_rundan.wait()
+        return [_bolag("Nytt Från Rundan AB")]
+
+    monkeypatch.setattr(korningsmodul, "hitta_bolag", _langsam_runda)
+    monkeypatch.setattr(korningsmodul, "har_malgrupp", lambda *_a: True)
+    storage, ko = MemoryStorage(), _Kö()
+    app_state = SimpleNamespace(jobs=MemoryJobStore(), storage=storage, leadsstrom=ko)
+    job_id = await _ny_korning(storage, ["Ett AB"])
+    k = await _k(storage, job_id)
+    k["mal"] = 3  # ett i poolen, två till ska sökas fram
+    await storage.set_leads_job_status(TID, job_id=job_id, status="processing", scope="batch", korning=k, is_test=True)
+
+    fyll = asyncio.create_task(leads_api._fyll_pa(app_state, TENANT, job_id))
+    await asyncio.wait_for(rundan_startad.wait(), timeout=2)
+    assert len(ko.poster) == 1 and (await _k(storage, job_id)).get("soker_sedan")
+
+    # Barnet blir klart medan rundan pågår: rapporten får inte vänta ut den.
+    await asyncio.wait_for(_kor_barn(app_state, ko.poster[0]), timeout=2)
+    assert (await _k(storage, job_id))["levererade"] == 1
+
+    slapp_rundan.set()
+    await asyncio.wait_for(fyll, timeout=5)
+    k = await _k(storage, job_id)
+    assert "soker_sedan" not in k and k["rundor"] >= 1
+    assert any(p.get("prospect_id") for p in ko.poster[1:]), "rundans fynd köades efter inslagningen"

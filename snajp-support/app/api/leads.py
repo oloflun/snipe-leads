@@ -2434,16 +2434,98 @@ async def _fyll_pa(app_state, tenant: dict, batch_id: str) -> None:
     tom, och avslutar ärligt när målet är nått eller det inte går längre.
     Se app/leads/korning.py.
 
-    Hela påfyllningen håller körningens lås: en väckning som kommer medan en
-    annan worker redan fyller på ska läsa det tillstånd den påfyllningen
-    skrev, inte en kopia från före den — annars köas samma kandidat två
-    gånger. Priset är att en barnrapport för samma körning väntar ut en
-    pågående sökrunda; andra körningar har egna lås och går parallellt."""
-    async with _korningslas(batch_id):
-        await _fyll_pa_last(app_state, tenant, batch_id)
+    Köandet håller körningens lås: en väckning som kommer medan en annan
+    worker redan fyller på ska läsa det tillstånd den påfyllningen skrev, inte
+    en kopia från före den — annars köas samma kandidat två gånger.
+
+    SÖKRUNDAN körs UTANFÖR låset (2026-10-09). Förut höll den låset i 3–5
+    minuter, och varje bolag som blev klart under tiden fastnade när det
+    skulle rapportera: dess worker stod still, inga nya jobb togs, och en
+    körning på 40 tog en kvart oavsett antalet workers. Nu märks körningen
+    "söker" under låset, rundan körs mot en egen kopia, och fynden slås in
+    under låset igen. En väckning medan någon annan söker köar bara det som
+    finns och går vidare."""
+    for _varv in range(16):
+        async with _korningslas(batch_id):
+            uppdrag = await _fyll_pa_last(app_state, tenant, batch_id)
+        if uppdrag is None:
+            return
+        rond = await _kor_sokrunda(app_state, tenant, batch_id, uppdrag)
+        async with _korningslas(batch_id):
+            await _sla_in_sokrunda(app_state, tenant, batch_id, rond)
 
 
-async def _fyll_pa_last(app_state, tenant: dict, batch_id: str) -> None:
+#: En sökrunda som inte slagits in efter så här lång tid räknas som död
+#: (processen startades om mitt i den): nästa väckning får söka igen.
+SOKRUNDA_MAX_S = 15 * 60
+
+
+def _soker(k: dict) -> bool:
+    """Kör en annan worker körningens sökrunda just nu?"""
+    sedan = k.get("soker_sedan")
+    if not sedan:
+        return False
+    try:
+        start = datetime.fromisoformat(str(sedan))
+    except ValueError:
+        return False
+    return (datetime.now(timezone.utc) - start).total_seconds() < SOKRUNDA_MAX_S
+
+
+async def _kor_sokrunda(app_state, tenant: dict, batch_id: str, u: dict) -> dict:
+    """En sökrunda UTAN körningens lås, mot en egen kopia av det rundan rör.
+    Kastar aldrig: ett fel blir `fel` i svaret och slås in som vilket utfall
+    som helst."""
+    storage = app_state.storage
+    tmp: dict = {
+        "mal": u["mal"], "levererade": u["levererade"], "rundor": u["rundor"],
+        "kandidater": [], "tratt": [], "listspar": [], "webbpool": {}, "utslag": [],
+    }
+    skrap = sidhamtning.starta(storage, tenant["tenant_id"], tak=u["tak"], webb_tak=u["webb_tak"])
+    fel = None
+    try:
+        # Sökningen och Jev-triagen loggas som en egen post (Fas 7).
+        async with samla_anrop(storage, tenant["tenant_id"], is_test=u["is_test"], input_text=f"sökrunda {u['rundor'] + 1}"):
+            await iris_korning.sokrunda(u["profil"], u["sok_icp"], tmp, uteslut=u["uteslut"])
+    except DiscoveryError:
+        logger.warning("Sökrundan i körning %s misslyckades.", batch_id)
+        fel = "discovery"
+    except Exception:  # noqa: BLE001 — en trasig runda får inte lämna körningen i "söker"
+        logger.exception("Sökrundan i körning %s föll.", batch_id)
+        fel = "discovery"
+    tmp["rundor"] = max(int(tmp["rundor"]), int(u["rundor"]) + 1)
+    return {"tmp": tmp, "skrap": skrap, "slut": bool(skrap.slut or skrap.webb_slut), "fel": fel}
+
+
+async def _sla_in_sokrunda(app_state, tenant: dict, batch_id: str, rond: dict) -> None:
+    """Rundans fynd in i körningen, under låset. Sätter `stopp` när ingen
+    ny runda ska köras (sökningen föll i sista rundan, kredittaket nått)."""
+    resultat, k = await _las_korning(app_state, tenant["tenant_id"], batch_id)
+    if not k:
+        return
+    tmp = rond["tmp"]
+    k["rundor"] = max(int(k.get("rundor") or 0), int(tmp["rundor"]))
+    k["kandidater"] = list(k.get("kandidater") or []) + tmp["kandidater"]
+    k["tratt"] = list(k.get("tratt") or []) + tmp["tratt"]
+    k.setdefault("listspar", []).extend(tmp["listspar"])
+    if tmp["webbpool"]:
+        k.setdefault("webbpool", {}).update(tmp["webbpool"])
+    if tmp["utslag"]:
+        k.setdefault("utslag", []).extend(tmp["utslag"])
+    k["skrap"] = sidhamtning.summera(k.get("skrap"), rond["skrap"])
+    k.pop("soker_sedan", None)
+    if rond["fel"] and k["rundor"] >= iris_korning.max_rundor(k["mal"]):
+        k["stopp"] = "sokningen_foll"
+    elif rond["slut"] and not tmp["kandidater"]:
+        # Även webbsidornas tak: utan dem blir en ny runda bara betalda
+        # bolagssidor för bolag som ändå prövas om nästa körning.
+        k["stopp"] = "kredittak"
+    resultat.update(korning=k, jobs=k["jobs"], count=len(k["jobs"]))
+    await app_state.jobs.complete(batch_id, resultat)
+    await _spara_korning(app_state, tenant["tenant_id"], batch_id, k)
+
+
+async def _fyll_pa_last(app_state, tenant: dict, batch_id: str) -> dict | None:
     jobs = app_state.jobs
     storage = app_state.storage
     tenant_id = tenant["tenant_id"]
@@ -2466,6 +2548,8 @@ async def _fyll_pa_last(app_state, tenant: dict, batch_id: str) -> None:
     profil, sok_icp = await _korningens_profil(storage, tenant_id, k.get("overrides"))
     orsak = None
     styr = None
+    # En annan worker kör sökrundan: köa det som finns, avsluta aldrig.
+    vantar_pa_sokning = False
     while k["levererade"] + k["pagaende"] < k["mal"]:
         # Läses varje varv, inte en gång: en sökrunda kan ta minuter och
         # kunden ska kunna stoppa mellan två köade prospekt.
@@ -2476,6 +2560,12 @@ async def _fyll_pa_last(app_state, tenant: dict, batch_id: str) -> None:
             orsak = "tak"
             break
         if not k["kandidater"]:
+            if k.get("stopp"):
+                orsak = k["stopp"]
+                break
+            if _soker(k):
+                vantar_pa_sokning = True
+                break
             if k["rundor"] >= iris_korning.max_rundor(k["mal"]):
                 # "Slut på kandidater" förutsätter att sidorna gick att hämta.
                 # Föll hämtningarna hos tjänsten (kredit, kvot, 429) och inget
@@ -2513,28 +2603,22 @@ async def _fyll_pa_last(app_state, tenant: dict, batch_id: str) -> None:
             # 2026-10-07): förut delade de taket med merinfo-sidorna, och när
             # det tog slut blev resten "Ingen kontaktmejl" i listspåret.
             webb_betalda = int((k.get("skrap") or {}).get("webb") or 0)
-            skrap = sidhamtning.starta(
-                storage, tenant_id,
-                tak=korningstak - (sidhamtning.betalda(k.get("skrap")) - webb_betalda),
-                webb_tak=korningstak - webb_betalda,
-            )
-            try:
-                # Sökningen och Jev-triagen loggas som en egen post (Fas 7).
-                async with samla_anrop(storage, tenant_id, is_test=bool(k.get("is_test")), input_text=f"sökrunda {k['rundor'] + 1}"):
-                    await iris_korning.sokrunda(profil, sok_icp, k, uteslut=uteslut)
-            except DiscoveryError:
-                logger.warning("Sökrundan i körning %s misslyckades.", batch_id)
-                if k["rundor"] >= iris_korning.max_rundor(k["mal"]):
-                    orsak = "sokningen_foll"
-                    break
-            finally:
-                k["skrap"] = sidhamtning.summera(k.get("skrap"), skrap)
-            # Även webbsidornas tak: utan dem blir en ny runda bara betalda
-            # bolagssidor för bolag som ändå prövas om nästa körning.
-            if (skrap.slut or skrap.webb_slut) and not k["kandidater"]:
-                orsak = "kredittak"
-                break
-            continue
+            # Sökrundan körs av _fyll_pa utanför låset (se dess docstring).
+            k["soker_sedan"] = datetime.now(timezone.utc).isoformat()
+            resultat.update(korning=k, jobs=k["jobs"], count=len(k["jobs"]))
+            await jobs.complete(batch_id, resultat)
+            await _spara_korning(app_state, tenant_id, batch_id, k)
+            return {
+                "profil": profil,
+                "sok_icp": sok_icp,
+                "uteslut": uteslut,
+                "tak": korningstak - (sidhamtning.betalda(k.get("skrap")) - webb_betalda),
+                "webb_tak": korningstak - webb_betalda,
+                "mal": k["mal"],
+                "levererade": k["levererade"],
+                "rundor": k["rundor"],
+                "is_test": bool(k.get("is_test")),
+            }
         try:
             await kontrollera_leads_budget(storage, tenant_id)
         except LeadsBudgetExceededError:
@@ -2571,7 +2655,7 @@ async def _fyll_pa_last(app_state, tenant: dict, batch_id: str) -> None:
         resultat.update(korning=k, jobs=k["jobs"], count=len(k["jobs"]))
         await jobs.complete(batch_id, resultat)
         await _spara_korning(app_state, tenant_id, batch_id, k)
-    if k["pagaende"] == 0 and styr != "paus":
+    if k["pagaende"] == 0 and styr != "paus" and not vantar_pa_sokning:
         if styr == "avbruten":
             iris_korning.avsluta(k, "avbruten")
         else:
@@ -2596,6 +2680,7 @@ async def _fyll_pa_last(app_state, tenant: dict, batch_id: str) -> None:
     resultat.update(korning=k, jobs=k["jobs"], count=len(k["jobs"]))
     await jobs.complete(batch_id, resultat)
     await _spara_korning(app_state, tenant_id, batch_id, k)
+    return None
 
 
 async def _spara_listspar(storage, tenant_id: str, k: dict) -> None:
