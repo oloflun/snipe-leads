@@ -133,13 +133,27 @@ def losenord_for(mailbox: dict, tenant_slug: str) -> str:
     token = mailbox.get("secret_enc")
     if not token:
         return ""
-    from ..integrationer.hemligheter import dekryptera
+    from ..integrationer.hemligheter import OlasbarHemlighetError, dekryptera
 
     try:
         return dekryptera(token).get("losenord", "")
+    except OlasbarHemlighetError:
+        # En gång per brevlåda och process, utan stackspårning (2026-10-09):
+        # i development bär spegelns brevlådor produktionens krypterade
+        # lösenord, och felet skrevs med full spårning varje minut och
+        # dränkte riktiga fel i loggen. Brevlådans last_error säger det ändå.
+        adress = str(mailbox.get("address") or "")
+        if adress not in _OLASBARA:
+            _OLASBARA.add(adress)
+            logger.warning("Inkorgslösenordet för %s gick inte att läsa med INTEGRATION_NYCKEL.", adress)
+        return ""
     except Exception:  # noqa: BLE001 — fel nyckel/skadad rad ska ge "saknas", inte 500
         logger.exception("Kunde inte dekryptera inkorgshemligheten för %s", mailbox.get("address"))
         return ""
+
+
+#: Brevlådor vars lösenord redan rapporterats oläsbart i den här processen.
+_OLASBARA: set[str] = set()
 
 
 def host_for_mailbox(mailbox: dict) -> str | None:
