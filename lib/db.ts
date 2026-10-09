@@ -33,7 +33,12 @@ export function pool(): Pool {
   if (!globalThis.__snajpPool) {
     globalThis.__snajpPool = new Pool({
       connectionString: connectionString(),
-      max: 5,
+      // 10 och inte 5: varje proxat API-anrop tar 2–3 transaktioner
+      // (arbetsytan, admingrinden, tenantnyckeln), och Att göra skickar nio
+      // samtidigt. Med fem platser köade de i omgångar om ~100 ms
+      // (uppmätt 2026-10-10). api:ts pool är 20 (DB_POOL_MAX); Postgres-
+      // standardtaket 100 rymmer båda med marginal.
+      max: 10,
       idleTimeoutMillis: 30_000,
       // Railway-Postgres kör med självsignerat certifikat i sitt privata nät.
       // rejectUnauthorized: false är rätt här och bara här: trafiken lämnar

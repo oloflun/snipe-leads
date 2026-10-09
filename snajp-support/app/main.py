@@ -83,6 +83,10 @@ async def lifespan(app: FastAPI):
         logger.critical("Startvägran: %s", master_fel)
         raise RuntimeError(master_fel)
 
+    from .loopvakt import starta as starta_loopvakt
+
+    starta_loopvakt(settings.loopvakt_ms)
+
     storage = None
     if settings.database_url:
         try:
