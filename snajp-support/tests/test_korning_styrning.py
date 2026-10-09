@@ -393,3 +393,44 @@ async def test_poolen_kor_parallellt_med_en_lasare(monkeypatch):
     pending = await client.xpending(strom.stream_key, strom.group)
     assert pending["pending"] == 1, "det trasiga jobbet ligger kvar för återtag"
     await client.aclose()
+
+
+async def test_research_som_faller_pa_kvoten_kors_om_och_levereras(monkeypatch):
+    """Vertex svarade 429 i minuter och åtta researchjobb föll med
+    'Researchen misslyckades' (2026-10-09). Ett kvotfel ger nu en ny körning
+    av samma bolag efter en paus, och bolaget räknas först när det är klart."""
+    _installera(monkeypatch)
+
+    class _Kvot(Exception):
+        status_code = 429
+
+    anrop = {"n": 0}
+
+    async def _research(storage, tenant_id, *, prospect_id, **_k):
+        anrop["n"] += 1
+        if anrop["n"] == 1:
+            raise _Kvot("Resource exhausted")
+        return {"qualified": True, "icp_fit": 0.9, "score_total": 90, "disqualifiers": [],
+                "stopped_early": None, "lagesbeskrivning": "Bolaget växer enligt sajten."}
+
+    async def _utkast(*_a, **_k):
+        return {"subject": "Hej"}
+
+    monkeypatch.setattr(leads_api, "_valj_leads_kedja", lambda: (_research, _utkast))
+    pauser: list[float] = []
+    verklig_somn = asyncio.sleep
+
+    async def _somn(sek):
+        pauser.append(sek)
+        await verklig_somn(0)
+
+    monkeypatch.setattr(leads_api.asyncio, "sleep", _somn)
+    storage, ko = MemoryStorage(), _Kö()
+    app_state = SimpleNamespace(jobs=MemoryJobStore(), storage=storage, leadsstrom=ko)
+    job_id = await _ny_korning(storage, ["Ett AB"])
+    await leads_api._fyll_pa(app_state, TENANT, job_id)
+    await _kor_barn(app_state, ko.poster[0])
+
+    assert anrop["n"] == 2 and pauser and pauser[0] >= leads_api.KVOT_PAUS_S
+    rad = await storage.get_leads_korning(TID, job_id)
+    assert rad["korning"]["levererade"] == 1 and rad["status"] == "completed"

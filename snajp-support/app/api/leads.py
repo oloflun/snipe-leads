@@ -3054,13 +3054,35 @@ def _leverbarhet(rad: dict, result: dict, regler: dict) -> str | None:
     return None
 
 
+#: Hur många gånger ett researchjobb som föll på modellens kvot (429) körs
+#: om, och grundpausen före varje omkörning (se _ar_tillfallig_kvot).
+KVOT_OMFORSOK = 3
+KVOT_PAUS_S = 60.0
+
+
+def _ar_tillfallig_kvot(fel: BaseException) -> bool:
+    """429 från modellen som inte är kreditslut: kapaciteten är tillfälligt
+    full och går över (2026-10-09: Vertex svarade 429 på nästan allt i
+    flera minuter, och åtta researchjobb föll med 'Researchen misslyckades')."""
+    led: BaseException | None = fel
+    for _ in range(5):
+        if led is None:
+            return False
+        if getattr(led, "status_code", None) == 429:
+            return not ar_kreditslut(led)
+        led = led.__cause__ or led.__context__
+    return False
+
+
 async def _run_batch_prospect(
     app_state, job_id: str, tenant: dict, *, prospect_id: str, scope: str,
     overrides: dict | None = None,
     is_test: bool = False,
     batch_id: str | None = None,
+    kvotforsok: int = 0,
 ) -> None:
     run_research_step, run_outreach_draft = _valj_leads_kedja()
+    omkor_efter_kvot = False
     utfall: dict = {"namn": "", "leverbar": False, "skal": "Researchen misslyckades."}
 
     storage = app_state.storage
@@ -3335,18 +3357,37 @@ async def _run_batch_prospect(
         await app_state.jobs.complete(job_id, result)
         slutstatus = "completed"
     except Exception as error:  # noqa: BLE001 — ett trasigt prospekt fäller inte batchen
-        logger.exception("Leads-jobb %s (prospekt %s) misslyckades", job_id, prospect_id)
-        await _larma_vid_kreditslut(app_state, tenant["tenant_id"], error)
-        # Kvotklassens text står ensam: prospekt-id:t framför en mening om att
-        # AI-kapaciteten är slut säger kunden ingenting, och kreditslutet
-        # gäller alla prospekt lika.
-        kundtext = kundtext_for(error)
-        await app_state.jobs.fail(
-            job_id, kundtext or f"Prospekt {prospect_id}: {_jobbfeltext(error)}"
-        )
-        slutstatus = "failed"
+        if _ar_tillfallig_kvot(error) and kvotforsok < KVOT_OMFORSOK:
+            # Inget utfall än: bolaget står kvar i research och körningen
+            # väntar på det. Jobbet behåller sin plats och sitt hjärtslag i
+            # kön, så en deploy under pausen tar upp det som vanligt.
+            logger.warning(
+                "Leads-jobb %s föll på modellens kvot (429); körs om (försök %d av %d).",
+                job_id, kvotforsok + 1, KVOT_OMFORSOK,
+            )
+            omkor_efter_kvot = True
+        else:
+            logger.exception("Leads-jobb %s (prospekt %s) misslyckades", job_id, prospect_id)
+            await _larma_vid_kreditslut(app_state, tenant["tenant_id"], error)
+            # Kvotklassens text står ensam: prospekt-id:t framför en mening om
+            # att AI-kapaciteten är slut säger kunden ingenting, och
+            # kreditslutet gäller alla prospekt lika.
+            kundtext = kundtext_for(error)
+            await app_state.jobs.fail(
+                job_id, kundtext or f"Prospekt {prospect_id}: {_jobbfeltext(error)}"
+            )
+            slutstatus = "failed"
     finally:
         avregistrera_aktiv(job_id)
+    if omkor_efter_kvot:
+        import random
+
+        await asyncio.sleep(KVOT_PAUS_S * (kvotforsok + 1) + random.uniform(0, 30))
+        await _run_batch_prospect(
+            app_state, job_id, tenant, prospect_id=prospect_id, scope=scope, overrides=overrides,
+            is_test=is_test, batch_id=batch_id, kvotforsok=kvotforsok + 1,
+        )
+        return
     # Här och inte i finally: avbröts tasken (deploy, SIGTERM) finns inget
     # utfall att rapportera. Förr rapporterades då "Researchen misslyckades"
     # och återtaget rapporterade en gång till, så `pagaende` räknades ned två
