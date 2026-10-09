@@ -52,8 +52,7 @@ EXPOSE 8000
 # Render (och liknande) injicerar $PORT; lokalt defaultar den till 8000.
 ENV PORT=8000
 HEALTHCHECK CMD python -c "import os,urllib.request; urllib.request.urlopen(f\"http://127.0.0.1:{os.environ.get('PORT','8000')}/health/live\")"
-# `::` och inte 0.0.0.0: Railways privata nät (webben → api via
-# *.railway.internal) går över IPv6, och en IPv4-bindning gjorde att webben
-# måste ta omvägen genom den publika edgen. Linux binder `::` dual-stack, så
-# IPv4 (edgen, healthchecken mot 127.0.0.1) fungerar som förut.
-CMD ["sh", "-c", "uvicorn app.main:app --host :: --port ${PORT:-8000}"]
+# 0.0.0.0 och inte `::`: asyncio sätter IPV6_V6ONLY på en IPv6-socket, så `::`
+# tappade IPv4 och Railways healthcheck (2026-10-09). Privata nätet
+# (webben → api via *.railway.internal) når 0.0.0.0 ändå, uppmätt samma dag.
+CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
