@@ -29,6 +29,7 @@ from agents import RunContextWrapper, function_tool
 from ..leads.platshallare import html_till_text, platshallarskal
 from ..leads.untrusted_content import wrap_untrusted_content
 from .leads_context import ResearchContext
+from ..tls import ssl_kontext
 
 logger = logging.getLogger("snajp-support.research-tools")
 
@@ -167,6 +168,7 @@ async def _hamta_direkt(url: str) -> tuple[str | None, str | None]:
     """
     try:
         async with httpx.AsyncClient(
+            verify=ssl_kontext(),
             timeout=_DIREKT_TIMEOUT, follow_redirects=True, headers=_DIREKT_HEADERS
         ) as client:
             svar = await client.get(url)

@@ -44,6 +44,7 @@ from typing import Any
 import httpx
 
 from ..config import get_settings
+from ..tls import ssl_kontext
 
 logger = logging.getLogger("snajp-support.leads.jev")
 
@@ -86,7 +87,7 @@ async def fraga(state: dict[str, Any], fragor: dict[str, Any]) -> dict[str, Any]
 
     nyckel = get_settings().typesafe_api_key
     with Tidtagare() as tid:
-        async with httpx.AsyncClient(timeout=TIMEOUT_S) as client:
+        async with httpx.AsyncClient(verify=ssl_kontext(), timeout=TIMEOUT_S) as client:
             svar = await client.post(
                 ENDPOINT,
                 json={"state": state, "model": MODELL, "questions": fragor},

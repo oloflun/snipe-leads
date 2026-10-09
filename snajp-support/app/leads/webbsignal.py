@@ -20,6 +20,7 @@ from datetime import date
 from typing import Any
 
 import httpx
+from ..tls import ssl_kontext
 
 _TIMEOUT = 10.0
 _AR = re.compile(r"(?:©|&copy;|copyright)\s*(?:\d{4}\s*[-–]\s*)?((?:19|20)\d{2})", re.IGNORECASE)
@@ -135,7 +136,7 @@ async def _hamta_med_reserv(url: str) -> httpx.Response:
     en vanlig webbläsarprofil. Facit 2026-10-08: www.futurenautic.com hängde
     medan futurenautic.com svarade på 1,4 s, och den bra sajten dömdes som
     död. Kastar httpx.HTTPError när båda fallerar."""
-    async with httpx.AsyncClient(timeout=_TIMEOUT, follow_redirects=True) as client:
+    async with httpx.AsyncClient(verify=ssl_kontext(), timeout=_TIMEOUT, follow_redirects=True) as client:
         try:
             return await client.get(url, headers={"User-Agent": "Mozilla/5.0 (Snajp Iris)"})
         except httpx.HTTPError:

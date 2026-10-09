@@ -134,6 +134,27 @@ def test_cloudflare_skyddad_adress_avkodas():
             assert discovery.bolagsadress_i_text(underlag, "https://alfa.se") == "info@alfa.se"
 
 
+def test_skyddad_lank_med_fullstandig_adress_avkodas():
+    kod = _cfemail("info@alfa.se")
+    for href in (f"https://www.alfa.se/cdn-cgi/l/email-protection#{kod}", f"//alfa.se/cdn-cgi/l/email-protection#{kod}"):
+        html = f'<p><a href="{href}">Skicka mejl</a></p>'
+        assert f'href="mailto:info@alfa.se"' in avkoda_cfemail(html)
+        assert "E-post: info@alfa.se" in html_till_text(html)
+
+
+def test_lang_rad_utan_citattecken_laser_inte_processen():
+    """optera.se 2026-10-09: en lång rad utan citattecken eller blanksteg
+    (inbäddad base64) gav kvadratisk tid i adresskyddets mönster och låste
+    händelseloopen i två minuter. Samma sida ska nu ta bråkdelen av en sekund."""
+    import time
+
+    html = '<img src="data:image/png;base64,' + "A" * 200_000 + '"><p>info@alfa.se</p>'
+    start = time.monotonic()
+    html_till_text(html)
+    avkoda_cfemail(html)
+    assert time.monotonic() - start < 2.0
+
+
 def test_namn_intill_skyddad_adress_blir_personlig_kontakt():
     html = f'<p>Eva Ek, VD — <span class="__cf_email__" data-cfemail="{_cfemail("eva@bolaget.se")}">[email protected]</span></p>'
     for underlag in _bada(html):

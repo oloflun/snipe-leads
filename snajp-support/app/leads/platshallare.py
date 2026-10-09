@@ -22,6 +22,7 @@ import re
 from typing import Any
 
 import httpx
+from ..tls import ssl_kontext
 
 logger = logging.getLogger("snajp-support.leads.platshallare")
 
@@ -88,7 +89,14 @@ _MD_ADRESS_RE = re.compile(r"\]\([^)]*\)")
 _CFEMAIL_ELEMENT = re.compile(
     r"""<(a|span)\b[^>]*\bdata-cfemail\s*=\s*["']([0-9a-fA-F]+)["'][^>]*>.*?</\1\s*>""", re.S | re.I
 )
-_CFEMAIL_HREF = re.compile(r"""[^"'\s>]*/cdn-cgi/l/email-protection#([0-9a-fA-F]+)""", re.I)
+#: Värddatorn före sökvägen är valfri och avgränsad. Före 2026-10-09 började
+#: mönstret med ett oankrat [^"'\s>]*: på en sida med en lång rad utan
+#: citattecken (inbäddad base64, minifierat skript) skannade varje startposition
+#: hela raden, och optera.se (197 kB) låste api-processens händelseloop i två
+#: minuter, chatten och alla körningar med den.
+_CFEMAIL_HREF = re.compile(
+    r"""(?:(?:https?:)?//[^"'\s>/]{1,253})?/cdn-cgi/l/email-protection#([0-9a-fA-F]+)""", re.I
+)
 #: JSON-LD (schema.org) bär ofta bolagets e-post och telefon, men ligger i ett
 #: script som taggstrippen tar bort.
 _JSONLD_RE = re.compile(r"""<script\b[^>]*type\s*=\s*["']application/ld\+json["'][^>]*>(.*?)</script\s*>""", re.S | re.I)
@@ -197,6 +205,7 @@ async def platshallare_for_webbplats(url: str | None) -> str | None:
         return None
     try:
         async with httpx.AsyncClient(
+            verify=ssl_kontext(),
             timeout=httpx.Timeout(6.0, connect=4.0),
             follow_redirects=True,
             headers={"user-agent": "Mozilla/5.0 (compatible; snajp-leads/1.0; +https://snajp.se)"},

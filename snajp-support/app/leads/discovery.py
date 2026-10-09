@@ -24,6 +24,7 @@ import httpx
 
 from ..config import get_settings
 from . import upptagna
+from ..tls import ssl_kontext
 
 logger = logging.getLogger("snajp-support.leads-discovery")
 
@@ -509,7 +510,7 @@ async def _gemini_med_sokning(prompt: str) -> str:
     for forsok in range(1, _SOKNING_FORSOK + 1):
         sista_forsoket = forsok == _SOKNING_FORSOK
         try:
-            async with httpx.AsyncClient(timeout=_SOKNING_TIMEOUT) as client:
+            async with httpx.AsyncClient(verify=ssl_kontext(), timeout=_SOKNING_TIMEOUT) as client:
                 svar = await client.post(url, params=params, headers=headers, json=kropp)
         except httpx.ReadTimeout as fel:
             # Sökningen hann inte svara inom lästaket. Ett omförsök startar
@@ -708,7 +709,7 @@ def skala_karriarsubdoman(url: str) -> str | None:
 
 
 async def _head_ok(url: str) -> bool:
-    async with httpx.AsyncClient(timeout=httpx.Timeout(5.0), follow_redirects=False) as client:
+    async with httpx.AsyncClient(verify=ssl_kontext(), timeout=httpx.Timeout(5.0), follow_redirects=False) as client:
         try:
             svar = await client.head(url)
         except httpx.HTTPError:
@@ -727,6 +728,7 @@ async def hamta_kontaktvag(website: str) -> dict[str, Any]:
     tomt = {"contact_email": None, "contact_level": None}
     try:
         async with httpx.AsyncClient(
+            verify=ssl_kontext(),
             timeout=httpx.Timeout(8.0), follow_redirects=True,
             headers={"user-agent": "snajp-leads/1.0 (+https://snajp.se)"},
         ) as client:
@@ -1309,6 +1311,7 @@ async def hamta_vd_kontakt(website: str, vd_namn: str) -> dict[str, Any] | None:
     går att knyta till VD vinner. Kastar aldrig."""
     try:
         async with httpx.AsyncClient(
+            verify=ssl_kontext(),
             timeout=httpx.Timeout(8.0), follow_redirects=True,
             headers={"user-agent": "snajp-leads/1.0 (+https://snajp.se)"},
         ) as client:
@@ -1412,7 +1415,7 @@ async def gissa_webbplats_via_head(namn: str) -> str | None:
     if len(slug) < 3:
         return None
     kandidater = (f"https://{slug}.se", f"https://www.{slug}.se", f"http://{slug}.se")
-    async with httpx.AsyncClient(timeout=httpx.Timeout(5.0), follow_redirects=False) as client:
+    async with httpx.AsyncClient(verify=ssl_kontext(), timeout=httpx.Timeout(5.0), follow_redirects=False) as client:
         for url in kandidater:
             try:
                 svar = await client.head(url)

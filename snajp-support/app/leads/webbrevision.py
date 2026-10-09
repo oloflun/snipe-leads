@@ -37,6 +37,7 @@ from typing import Any
 from urllib.parse import urlsplit
 
 import httpx
+from ..tls import ssl_kontext
 
 logger = logging.getLogger("snajp-support.leads.webbrevision")
 
@@ -209,7 +210,7 @@ async def pagespeed(url: str, strategi: str) -> dict[str, Any] | None:
     if nyckel:
         params.append(("key", nyckel))
     try:
-        async with httpx.AsyncClient(timeout=PSI_TIMEOUT) as client:
+        async with httpx.AsyncClient(verify=ssl_kontext(), timeout=PSI_TIMEOUT) as client:
             svar = await client.get(PSI_URL, params=params)
         if svar.status_code != 200:
             logger.info("PageSpeed %s för %s: HTTP %s", strategi, url, svar.status_code)
@@ -303,7 +304,7 @@ async def skarmbild_via_scrapegraph(url: str, *, bara_stealth: bool = False) -> 
     lank = data.get("url") if isinstance(data, dict) else data
     if bild is None and isinstance(lank, str) and lank.startswith("http"):
         try:
-            async with httpx.AsyncClient(timeout=30) as client:
+            async with httpx.AsyncClient(verify=ssl_kontext(), timeout=30) as client:
                 r = await client.get(lank)
             if r.status_code == 200:
                 typ = (r.headers.get("content-type") or "image/png").split(";")[0]
