@@ -24,7 +24,7 @@ import {
   type Vy,
   type VyFilter
 } from "@/lib/leads/suite";
-import { LEADS_UPPDATERADE, UTAN_UTKAST, UTKAST_TON, meddelaLeadsUppdaterade, utkastText } from "@/lib/leads/utkast";
+import { LEADS_UPPDATERADE, UTAN_UTKAST, UTKAST_TON, kanSkickas, meddelaLeadsUppdaterade, utkastText } from "@/lib/leads/utkast";
 import { LEAD_TYP_ETIKETT, STATUS_ETIKETT, STATUS_ORDNING, leadTyp, nivaEtikett, type LeadTyp } from "@/lib/prospekt";
 import { cn } from "@/lib/utils";
 
@@ -103,6 +103,15 @@ const T = {
   statusFor: { sv: "Status för", en: "Status for" },
   statusAndrad: { sv: "Status ändrad till", en: "Status changed to" },
   exempel: { sv: "Exempel", en: "Example" },
+  provkorning: { sv: "Provkörning", en: "Test run" },
+  provkorningHjalp: {
+    sv: "Hittat i en provkörning. Mejlas bara om du flyttar över det till dina riktiga leads, vilket du kan göra när du skickar.",
+    en: "Found in a test run. Emailed only if you move it to your real leads, which you can do when you send."
+  },
+  fyllKundregistret: {
+    sv: "Fyll i avsändarens org.nr, postadress och integritetspolicy i kundregistret (Kunder & Data) och skicka igen.",
+    en: "Fill in the sender's company number, postal address and privacy policy in the customer register (Customers & Data) and send again."
+  },
   ingenPoang: { sv: "Ingen poäng än", en: "No score yet" },
   vyer2: { sv: "Andra vyer", en: "Other views" },
   live: { sv: "Uppdateras live", en: "Updating live" },
@@ -156,6 +165,10 @@ const STATUSPRICK: Record<string, string> = {
   contacted: "bg-ochre",
   lost: "bg-danger"
 };
+
+/** Beskedet efter en massåtgärd. `orsaker` är en rad per orsak (stoppen
+ *  grupperade), `tillSkickat` visar genvägen till Skickat. */
+type Atgardsbesked = { text: string; fel: boolean; tillSkickat?: boolean; orsaker?: string[] };
 
 /** Antalet i ett chip. En muted token, aldrig opacity (DESIGN.md: genomskinlig
  *  text har ingen kontrastgaranti): paper-muted på det aktiva ink-chipet,
@@ -351,7 +364,7 @@ export function LeadsTabell({
   // Massåtgärderna (Sebbe 2026-10-07, Anton 2026-10-07): skapa, skapa om,
   // skicka, arkivera, återställ och ta bort de markerade. En åtgärd i taget.
   const [atgard, setAtgard] = useState<string | null>(null);
-  const [atgardNotis, setAtgardNotis] = useState<{ text: string; fel: boolean; tillSkickat?: boolean } | null>(null);
+  const [atgardNotis, setAtgardNotis] = useState<Atgardsbesked | null>(null);
   // Bortvalda (nivå C): dolda som standard (Antons krav), nåbara på begäran
   // (Sebbes krav: inget får se ut som raderat). Hämtas först vid klick.
   const [visaBortvalda, setVisaBortvalda] = useState(false);
@@ -692,7 +705,7 @@ export function LeadsTabell({
 
   /** En massåtgärd i taget: knapparna låses, beskedet ersätter det förra.
    *  `gor` returnerar beskedet, eller null när användaren ångrade sig. */
-  async function utfor(namn: string, gor: () => Promise<{ text: string; fel: boolean; tillSkickat?: boolean } | null>) {
+  async function utfor(namn: string, gor: () => Promise<Atgardsbesked | null>) {
     if (atgard) return;
     setAtgard(namn);
     setAtgardNotis(null);
@@ -777,6 +790,9 @@ export function LeadsTabell({
   // webbläsarens confirm-ruta, som bara sa ett antal.
   // Kritik 4 (Sebbes val "en bekräftelse för allt"): skicka, skriv om och ta
   // bort bekräftas på samma sätt, under verktygsraden där knappen trycktes.
+  // Bekräftelsens val: flytta över provkörningens bolag och skicka dem också.
+  // Av som standard: spärr noll finns för att ingen ska mejla dem av misstag.
+  const [flyttaProv, setFlyttaProv] = useState(false);
   const [bekraftelse, setBekraftelse] = useState<{
     typ: Bekraftelsetyp;
     lage: "aktiva" | "bortvalda" | "arkiverade";
@@ -790,8 +806,9 @@ export function LeadsTabell({
     // Bekräftelsen först, även i demon: den är en del av det demon visar.
     // Har inget av de markerade ett väntande utkast går vi direkt till
     // beskedet om det, i stället för en tom bekräftelse.
-    const harVantande = rader.some((p) => (p.utkast_status === "vantar" || p.utkast_status === "koad") && p.queue_item_id);
+    const harVantande = rader.some(kanSkickas);
     if (!bekraftat && (demo || harVantande)) {
+      setFlyttaProv(false);
       setBekraftelse({ typ: "skicka", lage: "aktiva", rader });
       return;
     }
@@ -803,10 +820,27 @@ export function LeadsTabell({
           en: `the drafts to the ${rader.length} selected companies would be approved and sent.`
         });
       }
-      const poster = rader.filter((p) => (p.utkast_status === "vantar" || p.utkast_status === "koad") && p.queue_item_id);
+      // Provkörningens bolag skickas bara om granskaren uttryckligen flyttat
+      // över dem i bekräftelsen (spärr noll, scheduler._kor_send_guard).
+      const skickbara = rader.filter(kanSkickas);
+      const prov = skickbara.filter((p) => p.origin === "test");
+      const flyttade: SuiteProspekt[] = [];
+      const ejFlyttade: string[] = [];
+      if (flyttaProv) {
+        for (const p of prov) {
+          try {
+            await leadsAnrop(`/leads/prospects/${encodeURIComponent(p.id)}/befordra`, { method: "POST" });
+            flyttade.push(p);
+          } catch (orsak) {
+            ejFlyttade.push(`${p.company_name} (${felmeddelande(orsak)})`);
+          }
+        }
+      }
+      const poster = skickbara.filter((p) => p.origin !== "test" || flyttade.includes(p));
+      const kvarProv = prov.length - flyttade.length - ejFlyttade.length;
       const godkanda = rader.filter((p) => p.utkast_status === "godkant").length;
-      const utan = rader.length - poster.length - godkanda;
-      if (poster.length === 0) {
+      const utan = rader.length - skickbara.length - godkanda;
+      if (poster.length === 0 && prov.length === 0) {
         return godkanda
           ? {
               text: text({
@@ -825,38 +859,69 @@ export function LeadsTabell({
       }
       let skickade = 0;
       let vantar = 0;
-      const stoppade: string[] = [];
+      // Stoppen grupperade per orsak (2026-10-09: 35 stopp blev en röd vägg
+      // där två orsaker upprepades 35 gånger).
+      const stopp = new Map<string, string[]>();
+      const stoppa = (skal: string, bolag: string) => stopp.set(skal, [...(stopp.get(skal) ?? []), bolag]);
       for (const p of poster) {
         try {
-          const svar = await leadsAnrop<{ utfall?: string; besked?: string }>(
+          const svar = await leadsAnrop<{ utfall?: string; besked?: string; skal?: string | null }>(
             `/leads/queue/${encodeURIComponent(p.queue_item_id ?? "")}/approve`,
             { method: "POST" }
           );
           if (svar.utfall === "sent") skickade += 1;
           else if (svar.utfall === "requeued") vantar += 1;
-          else stoppade.push(`${p.company_name}: ${svar.besked ?? svar.utfall ?? ""}`);
+          else stoppa(svar.skal || svar.besked || svar.utfall || "", p.company_name);
         } catch (orsak) {
-          stoppade.push(`${p.company_name}: ${felmeddelande(orsak)}`);
+          stoppa(felmeddelande(orsak), p.company_name);
         }
+      }
+      for (const rad of ejFlyttade) {
+        stoppa(text({ sv: "Kunde inte flyttas över från provkörningen.", en: "Could not be moved over from the test run." }), rad);
       }
       setValda(new Set());
       meddelaLeadsUppdaterade("tabell");
+      const antalStopp = [...stopp.values()].reduce((n, b) => n + b.length, 0);
+      const namn = (bolag: string[]) =>
+        bolag.length <= 3
+          ? bolag.join(", ")
+          : text({
+              sv: `${bolag.slice(0, 3).join(", ")} och ${bolag.length - 3} till`,
+              en: `${bolag.slice(0, 3).join(", ")} and ${bolag.length - 3} more`
+            });
+      const orsaker = [
+        ...[...stopp.entries()].map(([skal, bolag]) => {
+          const atgard = /organisationsnummer|postadress|integritetspolicy|policy/i.test(skal) ? ` ${text(T.fyllKundregistret)}` : "";
+          return `${bolag.length} · ${skal}${atgard} (${namn(bolag)})`;
+        }),
+        ...(kvarProv
+          ? [
+              text({
+                sv: `${kvarProv} · Kommer från en provkörning och skickades inte. Kryssa i Flytta över i bekräftelsen för att skicka dem.`,
+                en: `${kvarProv} · From a test run and not sent. Tick Move over in the confirmation to send them.`
+              })
+            ]
+          : [])
+      ];
       return {
         text: text({
           sv: [
             `${skickade} skickade`,
             vantar + godkanda ? `${vantar + godkanda} skickas när sändfönstret öppnar (vardagar 08–16)` : null,
-            stoppade.length ? `${stoppade.length} stoppades: ${stoppade.join("; ")}` : null,
+            flyttade.length ? `${flyttade.length} flyttades över från provkörningen` : null,
+            antalStopp + kvarProv ? `${antalStopp + kvarProv} skickades inte` : null,
             utan ? `${utan} saknade utkast` : null
           ].filter(Boolean).join(", ") + ".",
           en: [
             `${skickade} sent`,
             vantar + godkanda ? `${vantar + godkanda} go out when the sending window opens (weekdays 08–16)` : null,
-            stoppade.length ? `${stoppade.length} were stopped: ${stoppade.join("; ")}` : null,
+            flyttade.length ? `${flyttade.length} moved over from the test run` : null,
+            antalStopp + kvarProv ? `${antalStopp + kvarProv} were not sent` : null,
             utan ? `${utan} had no draft` : null
           ].filter(Boolean).join(", ") + "."
         }),
-        fel: stoppade.length > 0,
+        orsaker,
+        fel: antalStopp + kvarProv > 0,
         tillSkickat: skickade + vantar > 0
       };
     });
@@ -1048,6 +1113,13 @@ export function LeadsTabell({
             <span className="font-semibold">{p.company_name}</span>
           )}
           {p.origin === "example" ? <Badge>{text(T.exempel)}</Badge> : null}
+          {/* Spärr noll skickar aldrig till en provkörnings bolag: märkt, så
+              att det syns innan man markerar och skickar. */}
+          {p.origin === "test" ? (
+            <span title={text(T.provkorningHjalp)}>
+              <Badge tone="warn">{text(T.provkorning)}</Badge>
+            </span>
+          ) : null}
         </div>
         {p.ort || doman ? <p className={cn(meta, "mt-0.5 truncate")}>{[p.ort, doman].filter(Boolean).join(" · ")}</p> : null}
         {motivering ? (
@@ -1248,16 +1320,39 @@ export function LeadsTabell({
 
   /** Bekräftelsens innehåll per åtgärd: vilka som berörs, och vad som görs. */
   const bekraftelsePanel = (b: NonNullable<typeof bekraftelse>) => {
-    const berorda =
-      b.typ === "skicka" && !demo
-        ? b.rader.filter((p) => (p.utkast_status === "vantar" || p.utkast_status === "koad") && p.queue_item_id)
-        : b.rader;
+    const skickbara = b.typ === "skicka" && !demo ? b.rader.filter(kanSkickas) : b.rader;
+    const prov = b.typ === "skicka" && !demo ? skickbara.filter((p) => p.origin === "test") : [];
+    const berorda = flyttaProv ? skickbara : skickbara.filter((p) => !prov.includes(p));
     const godkanda = b.typ === "skicka" ? b.rader.filter((p) => p.utkast_status === "godkant").length : 0;
     return (
       <BekraftaUtskick
         typ={b.typ}
         poster={berorda.map((p) => ({ id: p.id, bolag: p.company_name, mottagare: p.contact_email ?? null, amne: null }))}
-        overhoppade={b.rader.length - berorda.length - godkanda}
+        overhoppade={b.rader.length - skickbara.length - godkanda}
+        tillagg={
+          prov.length ? (
+            <label className="mt-3 flex max-w-[72ch] cursor-pointer items-start gap-2 rounded-input border border-warning/30 bg-paper px-3 py-2 text-[0.875rem] leading-6">
+              <input
+                type="checkbox"
+                checked={flyttaProv}
+                onChange={(e) => setFlyttaProv(e.target.checked)}
+                className="mt-1 h-4 w-4 shrink-0 accent-ink"
+              />
+              <span>
+                {text({
+                  sv: `Flytta över ${prov.length} ${prov.length === 1 ? "lead" : "leads"} från provkörningar till dina riktiga leads och skicka ${prov.length === 1 ? "det" : "dem"} också.`,
+                  en: `Move ${prov.length} ${prov.length === 1 ? "lead" : "leads"} from test runs to your real leads and send ${prov.length === 1 ? "it" : "them"} too.`
+                })}
+                <span className="block text-ink-muted">
+                  {text({
+                    sv: "Annars skickas de inte: en provkörnings bolag mejlas aldrig av misstag.",
+                    en: "Otherwise they are not sent: a test run's companies are never emailed by mistake."
+                  })}
+                </span>
+              </span>
+            </label>
+          ) : null
+        }
         upptagen={atgard !== null}
         onBekrafta={() => {
           if (b.typ === "skicka") void skickaValda(b.rader, true);
@@ -1447,21 +1542,52 @@ export function LeadsTabell({
       </nav>
 
       {atgardNotis ? (
-        <p role={atgardNotis.fel ? "alert" : "status"} className={cn("text-[0.875rem]", atgardNotis.fel ? "text-danger" : "text-moss")}>
-          {atgardNotis.text}
-          {atgardNotis.tillSkickat && !visaSkickat ? (
-            <>
-              {" "}
+        // Summeringen först, sedan en rad per orsak (2026-10-09: 35 stopp i
+        // en röd mening gick inte att läsa).
+        <div
+          role={atgardNotis.fel ? "alert" : "status"}
+          className={cn(
+            "text-[0.875rem] leading-6",
+            Boolean(atgardNotis.orsaker?.length) && "rounded-input border border-ink/12 bg-paper2/60 px-4 py-3"
+          )}
+        >
+          <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+            <p className={cn("font-medium", atgardNotis.orsaker?.length ? "text-ink" : atgardNotis.fel ? "text-danger" : "text-moss")}>
+              {atgardNotis.text}
+              {atgardNotis.tillSkickat && !visaSkickat ? (
+                <>
+                  {" "}
+                  <button
+                    type="button"
+                    onClick={() => valjVy("skickat")}
+                    className="focus-ring font-medium text-ink underline underline-offset-4 hover:text-ink-muted"
+                  >
+                    {text(T.visaSkickat)}
+                  </button>
+                </>
+              ) : null}
+            </p>
+            {atgardNotis.orsaker?.length ? (
               <button
                 type="button"
-                onClick={() => valjVy("skickat")}
-                className="focus-ring font-medium text-ink underline underline-offset-4 hover:text-ink-muted"
+                onClick={() => setAtgardNotis(null)}
+                className="focus-ring text-[0.8125rem] text-ink-muted underline underline-offset-4 hover:text-ink"
               >
-                {text(T.visaSkickat)}
+                {text({ sv: "Stäng", en: "Close" })}
               </button>
-            </>
+            ) : null}
+          </div>
+          {atgardNotis.orsaker?.length ? (
+            <ul className="mt-2 space-y-1.5">
+              {atgardNotis.orsaker.map((rad) => (
+                <li key={rad} className="flex max-w-[90ch] gap-2 text-ink-muted">
+                  <span aria-hidden className="mt-2.5 h-1.5 w-1.5 shrink-0 rounded-full bg-danger" />
+                  <span>{rad}</span>
+                </li>
+              ))}
+            </ul>
           ) : null}
-        </p>
+        </div>
       ) : null}
       {flyttNotis ? (
         <p role="status" className="text-[0.875rem] text-ink-muted">

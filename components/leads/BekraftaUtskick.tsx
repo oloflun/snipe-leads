@@ -65,6 +65,7 @@ export function BekraftaUtskick({
   typ = "skicka",
   overhoppade = 0,
   upptagen = false,
+  tillagg,
   onBekrafta,
   onAvbryt
 }: Readonly<{
@@ -73,6 +74,8 @@ export function BekraftaUtskick({
   /** Markerade som inte berörs (inget väntande utkast) och hoppas över. */
   overhoppade?: number;
   upptagen?: boolean;
+  /** Ett val eller en upplysning som hör till åtgärden, före förklaringen. */
+  tillagg?: React.ReactNode;
   onBekrafta: () => void;
   onAvbryt: () => void;
 }>) {
@@ -132,6 +135,7 @@ export function BekraftaUtskick({
           })}
         </p>
       ) : null}
+      {tillagg}
       {t.forklaring ? <p className={cn(meta, "mt-2")}>{text(t.forklaring)}</p> : null}
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <button

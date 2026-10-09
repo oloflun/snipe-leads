@@ -61,8 +61,13 @@ def test_varje_utkaststatus_harleds(lage, status):
 
 
 def test_stoppat_bar_skalet_och_godkant_bar_nasta_sandtid():
-    stopp = utkaststatus.harled(_lage(ko_status="blocked", gate_checks='{"send_guard_skal": "Avregistrerad."}'))
-    assert stopp["utkast_skal"] == "Avregistrerad." and stopp["queue_item_id"] is None
+    stopp = utkaststatus.harled(
+        _lage(ko_status="blocked", gate_checks='{"send_guard_skal": "Avregistrerad.", "send_guard_regel": "3_suppression"}')
+    )
+    # Köposten följer med sedan 2026-10-09: ett stoppat utkast kan godkännas
+    # igen när orsaken är åtgärdad (spärrarna prövas om vid sändningen).
+    assert stopp["utkast_skal"] == "Avregistrerad." and stopp["queue_item_id"] == "q"
+    assert stopp["utkast_regel"] == "3_suppression"
     # Godkänt onsdag 16:41 svensk tid (14:41 UTC) går ut torsdag 08:00.
     onsdag_kvall = datetime(2026, 10, 7, 14, 41, tzinfo=timezone.utc)
     godkant = utkaststatus.harled(

@@ -1892,7 +1892,8 @@ async def approve_queue_item(
     if skal and utfall in ("blocked", "awaiting_review"):
         besked = f"{besked}: {skal}"
     status = {"sent": "sent", "requeued": "queued"}.get(utfall, utfall)
-    return {"id": item_id, "status": status, "utfall": utfall, "besked": besked}
+    # `skal` för sig: listans massutskick grupperar stoppen per orsak.
+    return {"id": item_id, "status": status, "utfall": utfall, "besked": besked, "skal": skal}
 
 
 @router.post("/api/leads/queue/{item_id}/reject")

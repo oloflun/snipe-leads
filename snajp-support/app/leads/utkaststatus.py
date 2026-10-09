@@ -84,7 +84,7 @@ def harled(lage: dict[str, Any] | None, *, now: datetime | None = None) -> dict[
 
     Returnerar `utkast_status`, `utkast_skal` (sändspärrens eller
     granskningens skäl), `queue_item_id` (köposten ett godkännande eller en
-    redigering gäller; bara för vantar/godkant/koad), `skickas_tidigast`
+    redigering gäller; vantar/godkant/koad/stoppat), `utkast_regel` (stoppat), `skickas_tidigast`
     (för godkant/koad) och `skickat_at`."""
     ut: dict[str, Any] = {
         "utkast_status": "saknas",
@@ -92,6 +92,7 @@ def harled(lage: dict[str, Any] | None, *, now: datetime | None = None) -> dict[
         "queue_item_id": None,
         "skickas_tidigast": None,
         "skickat_at": None,
+        "utkast_regel": None,
     }
     if not lage:
         return ut
@@ -113,7 +114,15 @@ def harled(lage: dict[str, Any] | None, *, now: datetime | None = None) -> dict[
     elif ko == "cancelled":
         ut["utkast_status"] = "avvisat"
     elif ko == "blocked":
-        ut.update(utkast_status="stoppat", utkast_skal=skal or grind.get("decision"))
+        # Köposten följer med (2026-10-09): Godkänn och skicka prövar ett
+        # stoppat utkast igen när orsaken är åtgärdad. `utkast_regel` säger
+        # vilken spärr, så att listan kan säga vad som ska göras.
+        ut.update(
+            utkast_status="stoppat",
+            utkast_skal=skal or grind.get("decision"),
+            queue_item_id=lage.get("queue_item_id"),
+            utkast_regel=grind.get("send_guard_regel"),
+        )
     return ut
 
 

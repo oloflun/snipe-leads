@@ -150,3 +150,44 @@ async def test_ett_hanterat_utkast_skickas_inte_igen():
     await skicka_godkant(storage, TENANT, item_id, provider, now=WITHIN_WINDOW_UTC)
     assert (await skicka_godkant(storage, TENANT, item_id, provider, now=WITHIN_WINDOW_UTC))[0] == "redan_hanterad"
     assert len(provider.sent) == 1
+
+
+async def test_stoppat_for_saknad_fot_far_foten_och_gar_ut_nar_kunduppgifterna_finns(monkeypatch):
+    """Utkast skrivna innan kundregistret var ifyllt saknade foten, regel 1
+    stoppade dem och 'blocked' var en slutstatus (development 2026-10-09: 18
+    leads). Nu får utkastet foten när det godkänns, och går ut."""
+    from app.config import get_settings
+
+    monkeypatch.setattr(get_settings(), "publik_bas_url", "https://snajp.test")
+    storage, provider = MemoryStorage(), _FakeSendProvider()
+    item_id, _, message_id = _ny_kund(storage, scheduled_at=WITHIN_WINDOW_UTC, body="Hej, jag såg en signal.\n")
+    storage.tenants[TENANT]["policy_url"] = "https://testbolaget.example/integritetspolicy"
+    post = _post(storage, item_id)
+    post["status"] = "blocked"
+    post["gate_checks"] = {"send_guard_regel": "1_avsandaridentifikation"}
+
+    utfall, skal = await skicka_godkant(storage, TENANT, item_id, provider, now=WITHIN_WINDOW_UTC)
+    assert (utfall, skal) == ("sent", None)
+    skickat = provider.sent[0]["body"]
+    assert "556000-0000" in skickat and "Testgatan 1" in skickat and "snajp.test" in skickat
+    assert _post(storage, item_id)["status"] == "sent"
+
+
+async def test_stoppat_utkast_utan_underlag_stoppas_igen_med_samma_besked():
+    storage, provider = MemoryStorage(), _FakeSendProvider()
+    item_id, _, _ = _ny_kund(storage, scheduled_at=WITHIN_WINDOW_UTC, body="Hej, ingen fot.\n")
+    storage.tenants[TENANT]["orgnr"] = ""
+    _post(storage, item_id)["status"] = "blocked"
+    utfall, skal = await skicka_godkant(storage, TENANT, item_id, provider, now=WITHIN_WINDOW_UTC)
+    assert utfall == "blocked" and "organisationsnummer" in skal and provider.sent == []
+
+
+async def test_stoppat_utkast_skickas_inte_om_ett_nyare_vantar_i_traden():
+    storage, provider = MemoryStorage(), _FakeSendProvider()
+    item_id, thread_id, _ = _ny_kund(storage, scheduled_at=WITHIN_WINDOW_UTC)
+    _post(storage, item_id)["status"] = "blocked"
+    storage.send_queue[TENANT].append(
+        {"id": "nyare", "thread_id": thread_id, "scheduled_at": WITHIN_WINDOW_UTC, "status": "awaiting_review", "gate_checks": {}}
+    )
+    utfall, _ = await skicka_godkant(storage, TENANT, item_id, provider, now=WITHIN_WINDOW_UTC)
+    assert utfall == "redan_hanterad" and provider.sent == []

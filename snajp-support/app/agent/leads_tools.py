@@ -60,20 +60,26 @@ async def _med_lagstadgad_fot(outreach: OutreachContext, brodtext: str) -> str:
     regel 1 med hela listan över vad som saknas, vilket är det besked som går
     att åtgärda.
     """
+    return await lagstadgad_fot(outreach.storage, outreach.tenant_id, outreach.prospect_email, brodtext)
+
+
+async def lagstadgad_fot(storage, tenant_id: str, prospect_email: str | None, brodtext: str) -> str:
+    """Foten för en brödtext, eller texten oförändrad när underlaget saknas
+    (se _med_lagstadgad_fot). Också Godkänn och skicka går hit
+    (scheduler.skicka_godkant): ett utkast skrivet innan kundregistret var
+    ifyllt får sin fot när det godkänns, i stället för att stoppas av regel 1."""
     from ..config import get_settings  # lokalt: undviker cirkulär import vid modulladdning
 
     bas_url = get_settings().publik_bas_url
-    tenant = await outreach.storage.get_tenant(outreach.tenant_id) or {}
+    tenant = await storage.get_tenant(tenant_id) or {}
     foretagsnamn = str(tenant.get("company_name") or tenant.get("name") or "").strip()
     orgnr = str(tenant.get("orgnr") or "").strip()
     postadress = str(tenant.get("postal_address") or "").strip()
 
-    if not (bas_url and foretagsnamn and orgnr and postadress and outreach.prospect_email):
+    if not (bas_url and foretagsnamn and orgnr and postadress and prospect_email):
         return brodtext
 
-    token = await outreach.storage.avregistreringstoken(
-        outreach.tenant_id, email=outreach.prospect_email
-    )
+    token = await storage.avregistreringstoken(tenant_id, email=prospect_email)
     return med_fot(
         brodtext,
         fot=bygg_fot(

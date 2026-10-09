@@ -196,6 +196,30 @@ _sandlas: dict[str, asyncio.Lock] = {}
 #: Statusar en post kan skickas från. Allt annat är redan hanterat.
 _SANDBARA = ("queued", "awaiting_review")
 
+#: Godkänn och skicka tar också ett stoppat utkast (2026-10-09): en spärr som
+#: sa nej (sidfoten saknades, leadet kom från en provkörning) kan vara
+#: åtgärdad sedan dess, och alla spärrar prövas ändå om vid sändningen. Förut
+#: var 'blocked' en slutstatus och utkastet måste skrivas om från början.
+_GODKANNBARA = _SANDBARA + ("blocked",)
+
+
+async def _fot_vid_godkannande(storage: Storage, tenant_id: str, item: dict) -> None:
+    """Lägger på den lagstadgade foten om utkastet saknar den och
+    kundregistret nu har underlaget. Foten är kodens text (utskicksfot.py),
+    inte en ändring av det granskaren sagt ja till."""
+    from ..agent.leads_tools import lagstadgad_fot
+    from .utskicksfot import har_fot
+
+    thread = await storage.get_outreach_thread(tenant_id, item["thread_id"])
+    message = await storage.get_pending_outreach_message(tenant_id, item["thread_id"]) if thread else None
+    if not message or har_fot(message.get("body") or ""):
+        return
+    ny = await lagstadgad_fot(storage, tenant_id, thread.get("prospect_email"), message["body"])
+    if ny != message["body"]:
+        await storage.update_outreach_message_text(
+            tenant_id, message["id"], subject=message.get("subject") or "", body=ny
+        )
+
 
 async def process_due_item(
     storage: Storage,
@@ -444,8 +468,14 @@ async def skicka_godkant(
         item = await storage.get_send_queue_item(tenant_id, item_id)
         if item is None:
             return "saknas", None
-        if item.get("status") not in _SANDBARA:
+        if item.get("status") not in _GODKANNBARA:
             return "redan_hanterad", None
+        # Ett stoppat utkast skickas bara om det är trådens enda: finns ett
+        # nyare väntande utkast är det det som gäller (sändaren tar trådens
+        # senaste osända text).
+        if item.get("status") == "blocked" and await storage.list_pending_sends(tenant_id, item["thread_id"]):
+            return "redan_hanterad", None
+        await _fot_vid_godkannande(storage, tenant_id, item)
         godkant = {"approved_by": "human", "via": "granskningskön", "godkand_at": now.isoformat()}
         await storage.update_send_queue_status(tenant_id, item_id, status="queued", gate_checks=godkant)
         utfall = await _process_due_item(

@@ -13,6 +13,8 @@ export type Utkastfalt = {
   utkast_status?: UtkastStatus | null;
   /** Sändspärrens eller granskningens skäl (stoppat, ibland väntar). */
   utkast_skal?: string | null;
+  /** Spärren som stoppade utkastet (send_guard_regel), bara för stoppat. */
+  utkast_regel?: string | null;
   /** Köposten ett godkännande eller en redigering gäller (väntar, godkänt, köat). */
   queue_item_id?: string | null;
   /** När ett godkänt eller köat utkast tidigast går ut (nästa sändfönster). */
@@ -41,6 +43,12 @@ export const UTKAST_TON: Record<UtkastStatus, string> = {
   avvisat: "text-ink-subtle",
   stoppat: "text-danger"
 };
+
+/** Utkast som Godkänn och skicka tar: väntande, äldre köade och stoppade
+ *  (2026-10-09: ett stopp kan vara åtgärdat, och spärrarna prövas om). */
+export function kanSkickas(p: Utkastfalt): boolean {
+  return Boolean(p.queue_item_id) && (p.utkast_status === "vantar" || p.utkast_status === "koad" || p.utkast_status === "stoppat");
+}
 
 /** Utkast som saknas eller avvisats: Skapa utkast skriver ett nytt. */
 export const UTAN_UTKAST: ReadonlySet<string> = new Set(["saknas", "avvisat"]);
