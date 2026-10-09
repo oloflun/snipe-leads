@@ -365,6 +365,9 @@ export function LeadsTabell({
   // skicka, arkivera, återställ och ta bort de markerade. En åtgärd i taget.
   const [atgard, setAtgard] = useState<string | null>(null);
   const [atgardNotis, setAtgardNotis] = useState<Atgardsbesked | null>(null);
+  // Hur långt ett massutskick kommit ("Skickar 12/50"): 50 godkännanden i
+  // följd tar en stund, och en knapp som bara säger Skickar… ser hängd ut.
+  const [framsteg, setFramsteg] = useState<{ klara: number; totalt: number } | null>(null);
   // Bortvalda (nivå C): dolda som standard (Antons krav), nåbara på begäran
   // (Sebbes krav: inget får se ut som raderat). Hämtas först vid klick.
   const [visaBortvalda, setVisaBortvalda] = useState(false);
@@ -716,6 +719,7 @@ export function LeadsTabell({
       setAtgardNotis({ text: felmeddelande(orsak), fel: true });
     } finally {
       setAtgard(null);
+      setFramsteg(null);
     }
   }
 
@@ -869,7 +873,8 @@ export function LeadsTabell({
       // där två orsaker upprepades 35 gånger).
       const stopp = new Map<string, string[]>();
       const stoppa = (skal: string, bolag: string) => stopp.set(skal, [...(stopp.get(skal) ?? []), bolag]);
-      for (const p of poster) {
+      for (const [i, p] of poster.entries()) {
+        setFramsteg({ klara: i, totalt: poster.length });
         try {
           const svar = await leadsAnrop<{ utfall?: string; besked?: string; skal?: string | null }>(
             `/leads/queue/${encodeURIComponent(p.queue_item_id ?? "")}/approve`,
@@ -1250,7 +1255,7 @@ export function LeadsTabell({
         onClick={gor}
         className={cn(primar ? btnPrimary : btnSecondary, btnLiten, "disabled:opacity-60")}
       >
-        {atgard === namn ? text(pagar) : text(etikett)}
+        {atgard === namn ? `${text(pagar)}${framsteg ? ` ${framsteg.klara}/${framsteg.totalt}` : ""}` : text(etikett)}
       </button>
     );
     const panel = bekraftelse && bekraftelse.lage === lage ? bekraftelsePanel(bekraftelse) : null;
