@@ -105,18 +105,28 @@ async def _scrape_registered_source_impl(research: ResearchContext, url: str) ->
     return json.dumps({"content": wrapped}, ensure_ascii=False)
 
 
-async def _hamta_via_scrapegraph(api_key: str, url: str) -> tuple[str | None, str | None]:
+async def _hamta_via_scrapegraph(api_key: str, url: str, *, js: bool = False) -> tuple[str | None, str | None]:
     """(markdown, fel). Det synkrona SDK:t körs i en tråd: `client.scrape` är
     ett blockerande nätverksanrop, och direkt i en async-funktion stod hela
     api-processens händelseloop still medan det pågick - 54 s för
-    itkonsulterna.se 2026-09-15, med kundchatten i samma process."""
+    itkonsulterna.se 2026-09-15, med kundchatten i samma process.
+
+    `js`: en riktig webbläsare med 2,5 s väntan och samtyckescookies (2
+    krediter), för sidor vars innehåll laddas med JavaScript, som merinfos
+    sökresultat (orgnr_uppslag.py)."""
     from scrapegraph_py import ScrapeGraphAI
 
     try:
         client = ScrapeGraphAI(api_key=api_key)
-        result = await asyncio.wait_for(
-            asyncio.to_thread(client.scrape, url), timeout=SGAI_TAK_SEKUNDER
-        )
+        if js:
+            from scrapegraph_py import FetchConfig
+
+            from ..leads.webbrevision import SAMTYCKE
+
+            anrop = lambda: client.scrape(url, fetch_config=FetchConfig(mode="js", wait=2500, cookies=SAMTYCKE))  # noqa: E731
+        else:
+            anrop = lambda: client.scrape(url)  # noqa: E731
+        result = await asyncio.wait_for(asyncio.to_thread(anrop), timeout=SGAI_TAK_SEKUNDER)
     except asyncio.TimeoutError:
         return None, f"ScrapeGraphAI svarade inte inom {int(SGAI_TAK_SEKUNDER)} s."
     except Exception as fel:  # noqa: BLE001 — tjänstefel ska ge reservhämtning, inte krasch

@@ -177,7 +177,7 @@ def _js_skal(text: str) -> bool:
     return len(text) < 400 and any(s in text.casefold() for s in _JS_SKAL)
 
 
-async def _scrapegraph(url: str) -> tuple[str | None, str | None]:
+async def _scrapegraph(url: str, *, js: bool = False) -> tuple[str | None, str | None]:
     """Ett betalt anrop, med väntan vid hastighetsgränsen. Kastar aldrig."""
     from ..agent.research_tools import _hamta_via_scrapegraph
     from ..config import get_settings
@@ -193,7 +193,7 @@ async def _scrapegraph(url: str) -> tuple[str | None, str | None]:
             while (vanta := max(_PAUS_TILL[0], _SENAST[0] + MIN_INTERVALL_S) - time.monotonic()) > 0:
                 await asyncio.sleep(vanta)
             _SENAST[0] = time.monotonic()
-            md, fel = await _hamta_via_scrapegraph(nyckel, url)
+            md, fel = await _hamta_via_scrapegraph(nyckel, url, js=js) if js else await _hamta_via_scrapegraph(nyckel, url)
             if md is not None or not _rate_limit(fel):
                 _RAD_429[0] = 0
                 break
@@ -221,7 +221,7 @@ _CACHEVERSION = {"webb": "#v2", "research": "#v2"}
 
 
 async def hamta(
-    url: str, *, fas: str, direkt: bool, betald: bool = True, utan_cache: bool = False
+    url: str, *, fas: str, direkt: bool, betald: bool = True, utan_cache: bool = False, js: bool = False
 ) -> tuple[str | None, str | None, str]:
     """(text, fel, via). `via` är cache, direkt, scrapegraphai eller tak.
 
@@ -230,13 +230,15 @@ async def hamta(
     med direkt=False och går alltid via ScrapeGraph. `betald=False`: bara
     gratis direkthämtning, aldrig ScrapeGraph (gissade sökvägar, regel 12).
     `utan_cache`: cachen läses inte (startsidans betalda reserv när den
-    direkthämtade texten var för tunn). Kastar aldrig."""
+    direkthämtade texten var för tunn). `js`: ScrapeGraph i webbläsarläge
+    (sidor som laddar innehållet med JavaScript), egen cachenyckel. Kastar
+    aldrig."""
     from ..agent.research_tools import _hamta_direkt
     from ..config import get_settings
 
     kontext = aktuell()
     lager = kontext.storage if kontext and kontext.tenant_id else None
-    nyckel = url + _CACHEVERSION.get(fas, "")
+    nyckel = url + _CACHEVERSION.get(fas, "") + ("#js" if js else "")
     if lager is not None and not utan_cache:
         try:
             rad = await lager.get_sidcache(kontext.tenant_id, nyckel)
@@ -275,7 +277,7 @@ async def hamta(
             return None, fel, "tak"
         if kontext and get_settings().scrapegraphai_api_key:
             kontext.anrop[fas] = kontext.anrop.get(fas, 0) + 1
-        md, sg_fel = await _scrapegraph(url)
+        md, sg_fel = await _scrapegraph(url, js=js) if js else await _scrapegraph(url)
         if md:
             text, fel, via = md, None, "scrapegraphai"
         else:

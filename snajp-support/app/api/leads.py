@@ -751,8 +751,9 @@ async def befordra_prospekt(
             if uppdaterad:
                 prospect = uppdaterad
 
-    # Saknas org.nr slås det upp på bolagets egen sajt (Sebbe 2026-10-09): leads
-    # från den gamla sökkedjan har inget, och flytten föll då med 422.
+    # Saknas org.nr slås det upp på bolagets egen sajt och sedan i registret
+    # (Sebbe 2026-10-09): leads från den gamla sökkedjan har inget, och flytten
+    # föll då med 422.
     from ..leads.orgnr import OgiltigtOrgnrError, validera_format
 
     try:
@@ -768,7 +769,7 @@ async def befordra_prospekt(
         from ..leads.orgnr_uppslag import hitta_orgnr
 
         sidhamtning.starta(storage, tenant["tenant_id"])
-        hittat = await hitta_orgnr(prospect.get("website"))
+        hittat = await hitta_orgnr(prospect.get("website"), prospect.get("company_name"), prospect.get("ort"))
         if hittat:
             prospect = await storage.update_prospect(tenant["tenant_id"], prospect_id, orgnr=hittat) or {
                 **prospect, "orgnr": hittat
@@ -785,7 +786,7 @@ async def befordra_prospekt(
             status_code=422,
             detail={
                 "message": "Prospektet saknar det som krävs för att flyttas över."
-                + (" Org.nr hittades inte heller på bolagets webbplats." if orgnr_saknas and not orgnr_hamtat else ""),
+                + (" Org.nr hittades varken på bolagets webbplats eller i registret." if orgnr_saknas and not orgnr_hamtat else ""),
                 "saknas": brister,
             },
         )
@@ -2872,6 +2873,20 @@ async def start_batch_run(
     }
 
 
+async def _komplettera_orgnr(storage, tenant_id: str, rad: dict) -> None:
+    """Slår upp leadets org.nr (bolagets sajt, sedan registret; se
+    app/leads/orgnr_uppslag.py) och sparar det. Kastar aldrig: ett saknat
+    org.nr får inte fälla researchen."""
+    from ..leads.orgnr_uppslag import hitta_orgnr
+
+    try:
+        nr = await hitta_orgnr(rad.get("website"), rad.get("company_name"), rad.get("ort"))
+        if nr:
+            await storage.update_prospect(tenant_id, str(rad["id"]), orgnr=nr)
+    except Exception:  # noqa: BLE001
+        logger.exception("Org.nr kunde inte kompletteras för %s", rad.get("company_name"))
+
+
 def _leverbarhet(rad: dict, result: dict, regler: dict) -> str | None:
     """None = leverbart, annars skälet (tratten). Antons krav 2026-10-01,
     kodat 2026-10-02 (plan del C): kvalificerat, över kundens tröskel, en
@@ -2979,6 +2994,12 @@ async def _run_batch_prospect(
             )
         else:
             utfall.update(leverbar=True, skal=None)
+            # Org.nr till varje leverbart lead (Sebbe 2026-10-09: "all info
+            # från bolagen som behövs hämtas vid körning"). Bolag ur den gamla
+            # sökkedjan saknade det, och utan org.nr kunde ett lead från en
+            # provkörning inte flyttas över och skickas.
+            if not _rad.get("orgnr"):
+                await _komplettera_orgnr(storage, tenant["tenant_id"], _rad)
 
         # Kundens eskaleringsregel (leads/eskalering.py). Här och inte i
         # researchstegen: då gäller den både V1 och V2, och ett utkast som
