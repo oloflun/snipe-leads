@@ -66,7 +66,11 @@ MIN_IDLE_MS = 60_000
 #: worker_loop får en chans att köra sitt periodiska återtagssvep även när
 #: strömmen är tyst.
 BLOCK_MS = 5_000
-READ_COUNT = 10
+#: EN post per läsning (2026-10-09). Med 10 tog första workern tio köade
+#: jobb och körde dem ett i taget medan de andra stod sysslolösa: en körning
+#: som köade 25 researchjobb researchade 2–3 åt gången oavsett antalet
+#: workers. Med 1 tar varje worker nästa jobb, och N workers kör N jobb.
+READ_COUNT = 1
 
 #: Tak för hur många gånger EN post får levereras (första läsningen +
 #: återtag) innan atertag() ger upp och kvitterar den oprövad. Hängslen
@@ -286,7 +290,7 @@ class ChattStrom:
         await self._sakerstall_grupp()
         while True:
             try:
-                await self.atertag(hanterare, konsument=namn)
+                await self.atertag(hanterare, konsument=namn, max_antal=1)
                 await self.kor_ett_varv(namn, hanterare)
             except asyncio.CancelledError:
                 raise
@@ -328,9 +332,14 @@ class ChattStrom:
         hanterare: Callable[[dict[str, Any]], Awaitable[None]],
         *,
         konsument: str | None = None,
+        max_antal: int | None = None,
     ) -> int:
         """Tar över poster som legat okvitterade längre än MIN_IDLE_MS
         (XAUTOCLAIM) och kör om dem. Returnerar antal återtagna poster.
+
+        `max_antal` (worker_loop: 1): ta högst så många per svep, så att
+        övergivna jobb efter en omstart fördelas över alla workers i stället
+        för att en worker tar alla och kör dem i följd.
 
         `konsument` defaultar till den här processens eget namn — de
         återtagna posterna övergår alltså till "min" identitet i gruppen,
@@ -341,8 +350,9 @@ class ChattStrom:
         antal = 0
         cursor = "0-0"
         while True:
+            extra = {"count": max_antal - antal} if max_antal else {}
             cursor, meddelanden, _borttagna = await self.client.xautoclaim(
-                self.stream_key, self.group, agent, min_idle_time=MIN_IDLE_MS, start_id=cursor
+                self.stream_key, self.group, agent, min_idle_time=MIN_IDLE_MS, start_id=cursor, **extra
             )
             leveranser = await self._leveransantal() if meddelanden else {}
             att_kora = []
@@ -381,6 +391,6 @@ class ChattStrom:
             # Ofarligt mot riktig Redis: kommer noll poster tillbaka på ETT
             # varv finns inget AKUT att göra — nästa periodiska anrop (varje
             # varv i worker_loop) tar vid.
-            if cursor == "0-0" or not meddelanden:
+            if cursor == "0-0" or not meddelanden or (max_antal and antal >= max_antal):
                 break
         return antal

@@ -219,6 +219,7 @@ async def test_hjartslaget_haller_hela_batchen_vid_liv(monkeypatch):
     """Ett varv läser flera poster och kör dem en i taget. De som väntar på
     sin tur fick förut inget hjärtslag och togs över av ett syskon: samma
     lead researchades och fick utkast tre gånger (development 2026-10-08)."""
+    monkeypatch.setattr(stream_mod, "READ_COUNT", 3)  # flera poster per läsning
     monkeypatch.setattr(stream_mod, "HJARTSLAG_S", 0.05)
     monkeypatch.setattr(stream_mod, "MIN_IDLE_MS", 150)
     client = fakeredis_aio.FakeRedis(decode_responses=True)
@@ -278,3 +279,26 @@ async def test_ett_klart_bolag_rapporterar_medan_sokrundan_pagar(monkeypatch):
     k = await _k(storage, job_id)
     assert "soker_sedan" not in k and k["rundor"] >= 1
     assert any(p.get("prospect_id") for p in ko.poster[1:]), "rundans fynd köades efter inslagningen"
+
+
+async def test_varje_worker_tar_ett_jobb_i_taget(monkeypatch):
+    """Med READ_COUNT 10 tog första workern tio köade jobb och körde dem i
+    följd medan de andra stod still (development 2026-10-09: 25 köade
+    researchjobb, 2–3 åt gången). Två workers ska köra två jobb samtidigt."""
+    client = fakeredis_aio.FakeRedis(decode_responses=True)
+    strom = ChattStrom(client, stream_key="test:ett-i-taget")
+    for jobb in ("j1", "j2", "j3", "j4"):
+        await strom.enqueue({"job_id": jobb})
+    samtidigt = 0
+    toppen = 0
+
+    async def _jobb(payload):
+        nonlocal samtidigt, toppen
+        samtidigt += 1
+        toppen = max(toppen, samtidigt)
+        await asyncio.sleep(0.1)
+        samtidigt -= 1
+
+    await asyncio.gather(*(strom.kor_ett_varv(f"w{i}", _jobb) for i in range(4)))
+    assert toppen == 4
+    await client.aclose()

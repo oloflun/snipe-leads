@@ -229,10 +229,12 @@ async def lifespan(app: FastAPI):
                 vid_uppgivet=partial(ge_upp_leadsjobb, app.state),
             )
             leads_hanterare = partial(hantera_leads_jobb, app.state)
-            # Engångssvep INNAN några leads-worker-tasks startar — samma skäl
-            # som chattströmmens engångssvep ovan: en batch som stod mitt i
-            # när en tidigare process dog ska plockas upp direkt vid uppstart.
-            leads_atertagna = await leadsstrom.atertag(leads_hanterare)
+            # Inget engångssvep för leads (2026-10-09): det körde VARJE övergivet
+            # jobb i följd, i uppstarten, innan någon worker fanns — en körning
+            # som avbröts av en deploy fick 25 researchjobb körda ett i taget.
+            # Varje worker tar i stället ett övergivet jobb per varv
+            # (worker_loop → atertag(max_antal=1)), så de fördelas på alla.
+            leads_atertagna = 0
             logger.info(
                 "Leadsström: Redis-baserad jobbkö aktiv (%d poster återtagna vid "
                 "uppstart, %d workers).",
