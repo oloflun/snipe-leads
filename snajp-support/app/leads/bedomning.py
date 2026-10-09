@@ -25,7 +25,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from .geo import _prefix_ur_postnr
+from .geo import _prefix_ur_postnr, malomradets_serier
 from .profil import KOMMUNER, PRODUKTMATCH, produktmatch_text
 from .scoring import MISS, OKAND, TRAFF
 from .webbrevision import webbniva
@@ -134,21 +134,36 @@ def _rad(nyckel: str, etikett: str, vikt: int, utfall: str, motivering: str, *, 
 
 def _ort_rad(profil: dict[str, Any], fynd: dict[str, Any], kand: dict[str, Any]) -> dict[str, Any] | None:
     kommuner = profil.get("kommuner") or []
-    if not kommuner:
+    if not kommuner and not profil.get("omraden"):
         return None
     postnr = fynd.get("postnummer") or kand.get("postnr")
     ort = str(fynd.get("ort") or kand.get("ort") or "").strip()
     valda = [KOMMUNER[k.casefold()] for k in kommuner if k.casefold() in KOMMUNER]
     prefix = _prefix_ur_postnr(postnr)
-    etikett = "Ligger i " + " eller ".join(kommuner)
+    # Områden utan kända postnummer (Luleå, "Resten av Norrland") följer med
+    # i etiketten, och ett postnummer utanför de kända kommunerna är då
+    # OKÄNT, inte en miss: det kan ligga i ett av dem (forfilter.py, samma
+    # vakt; development 2026-10-08).
+    omraden = [o for o in profil.get("omraden") or [] if o]
+    etikett = "Ligger i " + " eller ".join([*kommuner, *omraden])
     if prefix is not None:
-        inne = any(k.innehaller_prefix(prefix) for k in valda)
+        serier = malomradets_serier(valda, omraden)
+        if serier is None:
+            # Ett område utan kända postnummer: inne i de kända är en träff,
+            # utanför dem okänt (det kan ligga i det oöversatta området).
+            if any(k.innehaller_prefix(prefix) for k in valda):
+                return _rad("ort", etikett, 2, TRAFF, f"Postnummer {postnr} ligger i målområdet.", hart=True)
+            return _rad("ort", etikett, 2, OKAND,
+                        f"Om postnummer {postnr} ligger i {', '.join(omraden)} kunde inte avgöras.", hart=True)
+        inne = any(lag <= prefix <= hog for lag, hog in serier)
         return _rad("ort", etikett, 2, TRAFF if inne else MISS,
                     f"Postnummer {postnr} {'ligger' if inne else 'ligger inte'} i målområdet.", hart=True)
     if ort:
         if ort.casefold() in {k.namn.casefold() for k in valda}:
             return _rad("ort", etikett, 2, TRAFF, f"Orten {ort} ligger i målområdet.", hart=True)
-        if ort.casefold() in KOMMUNER:
+        if any(ort.casefold() == o.casefold() for o in omraden):
+            return _rad("ort", etikett, 2, TRAFF, f"Orten {ort} ligger i målområdet.", hart=True)
+        if ort.casefold() in KOMMUNER and not omraden:
             return _rad("ort", etikett, 2, MISS, f"Orten {ort} ligger utanför målområdet.", hart=True)
         # En ort vi inte känner igen fäller inte: stadsdelar heter annat än
         # kommunen (Västra Frölunda är Göteborg).

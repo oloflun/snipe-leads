@@ -18,7 +18,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from .geo import _prefix_ur_postnr
+from .geo import _prefix_ur_postnr, malomradets_serier
 from .offentlig import offentlig_eller_skola
 from .profil import KOMMUNER
 
@@ -59,12 +59,20 @@ def forfiltrera(profil: dict[str, Any], kandidat: dict[str, Any], *, exclude_dom
             return f"För litet: {antal} anställda enligt källan (minst {lo})."
 
     kommuner = [KOMMUNER[k.casefold()] for k in profil.get("kommuner") or [] if k.casefold() in KOMMUNER]
-    if kommuner:
+    # Bara när HELA kundens område är kommuner med kända postnummer kan
+    # postnumret fälla. Områden vi inte kan översätta (Luleå, "Resten av
+    # Norrland") ligger i profil["omraden"]; utan den här vakten fälldes 22
+    # bolag i Skellefteå, Luleå och Sundsvall som "utanför målområdet" i en
+    # körning där just de orterna var valda (development 2026-10-08, 40
+    # beställda, 6 levererade). Okänt fäller aldrig.
+    omraden = [o for o in profil.get("omraden") or [] if o]
+    serier = malomradets_serier(kommuner, omraden) if (kommuner or omraden) else None
+    if serier:
         prefix = _prefix_ur_postnr(kandidat.get("postnr"))
         ort = str(kandidat.get("ort") or "").strip().casefold()
-        if prefix is not None and not any(k.innehaller_prefix(prefix) for k in kommuner):
+        if prefix is not None and not any(lag <= prefix <= hog for lag, hog in serier):
             return f"Utanför målområdet: postnummer {kandidat.get('postnr')}."
-        if prefix is None and ort in KOMMUNER and ort not in {k.namn.casefold() for k in kommuner}:
+        if prefix is None and not omraden and ort in KOMMUNER and ort not in {k.namn.casefold() for k in kommuner}:
             return f"Utanför målområdet: {kandidat.get('ort')}."
 
     text = f"{kandidat.get('company_name') or ''} {kandidat.get('website') or ''} {kandidat.get('signal_detalj') or ''}"

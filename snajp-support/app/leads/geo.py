@@ -92,6 +92,57 @@ REGIONER: dict[str, Region] = {
 }
 
 
+#: Fler kommuner som kan stå som ort i kundens område, utan att vara en
+#: valbar region (REGIONER är regionvalet i inställningarna). Grova serier,
+#: samma förbehåll som modulens docstring: de följer PostNords tilldelning.
+#: Utan dem blev "Luleå, Sundsvall, Skellefteå" fritext som postnumret inte
+#: kunde pröva (development 2026-10-08).
+FLER_KOMMUNER: tuple[Kommun, ...] = (
+    Kommun("Skellefteå", ((931, 934),)),
+    Kommun("Luleå", ((971, 977),)),
+    Kommun("Piteå", ((941, 946),)),
+    Kommun("Boden", ((961, 961),)),
+    Kommun("Kiruna", ((981, 981),)),
+    Kommun("Sundsvall", ((851, 857), (862, 862))),
+    Kommun("Härnösand", ((871, 871),)),
+    Kommun("Örnsköldsvik", ((891, 896),)),
+    Kommun("Östersund", ((831, 832),)),
+    Kommun("Gävle", ((802, 806),)),
+    Kommun("Lycksele", ((921, 921),)),
+)
+
+#: Landsdelar som fritext i kundens område, med sina postnummerserier.
+#: Norrland är Gävleborg, Västernorrland, Jämtland, Västerbotten och
+#: Norrbotten: postnummer 800–989. Varje ort i Norrland (Luleå 97x,
+#: Skellefteå 93x, Sundsvall 85x) ligger inom serien.
+LANDSDELAR: dict[str, tuple[tuple[int, int], ...]] = {
+    "norrland": ((800, 989),),
+}
+
+
+def prefix_for_omrade(text: str) -> tuple[tuple[int, int], ...] | None:
+    """Postnummerserierna för ett fritextområde ("Resten av Norrland",
+    "Norrland"), eller None när området inte går att översätta."""
+    t = (text or "").casefold()
+    for namn, serier in LANDSDELAR.items():
+        if namn in t:
+            return serier
+    return None
+
+
+def malomradets_serier(kommuner: list, omraden: list[str]) -> list[tuple[int, int]] | None:
+    """Alla postnummerserier i kundens område, eller None när någon del inte
+    går att översätta: då kan postnumret inte avgöra att ett bolag ligger
+    utanför (okänt fäller aldrig)."""
+    serier = [s for k in kommuner for s in k.prefix]
+    for omrade in omraden:
+        extra = prefix_for_omrade(omrade)
+        if extra is None:
+            return None
+        serier += list(extra)
+    return serier
+
+
 class OkandRegionError(ValueError):
     """Höjs när ett ICP pekar på en region som inte finns.
 

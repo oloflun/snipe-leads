@@ -33,7 +33,7 @@ import json
 import re
 from typing import Any
 
-from .geo import REGIONER
+from .geo import FLER_KOMMUNER, REGIONER
 from .icp import normalize_icp
 from .untrusted_content import wrap_untrusted_content
 
@@ -56,6 +56,7 @@ BELAGG = ("webbsignal", "kalltext")
 #: Kommunerna vi kan filtrera på (postnummerprefix i geo.py). Nyckel =
 #: casefoldat namn.
 KOMMUNER = {k.namn.casefold(): k for r in REGIONER.values() for k in r.kommuner}
+KOMMUNER.update({k.namn.casefold(): k for k in FLER_KOMMUNER if k.namn.casefold() not in KOMMUNER})
 
 #: Rader i produkttexten som är ADMINISTRATION, inte säljunderlag. De hör
 #: hemma i kundregistret och får aldrig nå en prompt: orgnr för en enskild

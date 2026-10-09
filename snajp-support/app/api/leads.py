@@ -2476,7 +2476,7 @@ async def _fyll_pa_last(app_state, tenant: dict, batch_id: str) -> None:
             orsak = "tak"
             break
         if not k["kandidater"]:
-            if k["rundor"] >= iris_korning.MAX_RUNDOR:
+            if k["rundor"] >= iris_korning.max_rundor(k["mal"]):
                 # "Slut på kandidater" förutsätter att sidorna gick att hämta.
                 # Föll hämtningarna hos tjänsten (kredit, kvot, 429) och inget
                 # levererades är det sökningen som föll — kunden ska se rött,
@@ -2508,7 +2508,7 @@ async def _fyll_pa_last(app_state, tenant: dict, batch_id: str) -> None:
             # 40 räckte till ~29 granskade bolag i en målgrupp där tre av
             # fyra saknar webbplats — en 2-beställning svalt ändå. 30 per
             # beställt lead med golvet 60 ger småbeställningar en ärlig chans.
-            korningstak = min(160, max(60, 30 * int(k["mal"])))
+            korningstak = iris_korning.korningstak(k["mal"])
             # Bolagens webbsidor har ett eget tak (Antons regel 12,
             # 2026-10-07): förut delade de taket med merinfo-sidorna, och när
             # det tog slut blev resten "Ingen kontaktmejl" i listspåret.
@@ -2524,7 +2524,7 @@ async def _fyll_pa_last(app_state, tenant: dict, batch_id: str) -> None:
                     await iris_korning.sokrunda(profil, sok_icp, k, uteslut=uteslut)
             except DiscoveryError:
                 logger.warning("Sökrundan i körning %s misslyckades.", batch_id)
-                if k["rundor"] >= iris_korning.MAX_RUNDOR:
+                if k["rundor"] >= iris_korning.max_rundor(k["mal"]):
                     orsak = "sokningen_foll"
                     break
             finally:

@@ -41,7 +41,25 @@ from .webbsignal import mat_webbplats
 
 MAX_RUNDOR = 3
 TAK_FAKTOR = 4
-MAX_PER_RUNDA = 10
+#: Kandidater per sökrunda. Var 10, och med tre rundor kunde en körning
+#: aldrig se fler än 30 kandidater: en beställning på 40 gav 6 leads
+#: (development 2026-10-08). Sebbe 2026-10-09: 30–50 leads per körning.
+MAX_PER_RUNDA = 25
+
+
+def max_rundor(mal: int) -> int:
+    """Sökrundor för en beställning: tre för små, en till per tiotal över
+    tjugo (40 → 5, 50 → 6). Varje runda söker nästa geo-ring."""
+    return max(MAX_RUNDOR, MAX_RUNDOR + (int(mal) - 11) // 10)
+
+
+def korningstak(mal: int) -> int:
+    """Betalda sidhämtningar för hela körningen. 30 per beställt lead med
+    golvet 60 (små beställningar) och taket 160 räckte inte: i en målgrupp
+    där de flesta registerbolag saknar webbplats tog 101 registersidor slut
+    på 8 granskade. Nu 12 per lead över golvet, tak 600 (50 leads)."""
+    mal = int(mal)
+    return min(600, max(60, 30 * mal if mal <= 5 else max(150, 12 * mal)))
 
 
 def ny_korning(*, mal: int, scope: str, overrides: dict | None, is_test: bool) -> dict[str, Any]:
