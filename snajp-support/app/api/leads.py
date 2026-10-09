@@ -155,7 +155,10 @@ _FEL_INGEN_MALGRUPP_LISTA = (
 )
 
 #: Moduler vars undantag bär leverantörens eller transportens råtext.
-_LEVERANTORSMODULER = ("openai", "httpx", "httpcore", "google", "agents")
+# redis/asyncpg sedan 2026-10-09: "max number of clients reached" nådde kunden
+# ordagrant på engelska i körningslistan. Infrastrukturens fel är våra, inte
+# kundens att tolka; de loggas och kunden får _FEL_INTERNT.
+_LEVERANTORSMODULER = ("openai", "httpx", "httpcore", "google", "agents", "redis", "asyncpg", "psycopg2")
 
 
 def _ar_leverantorsfel(fel: BaseException) -> bool:
