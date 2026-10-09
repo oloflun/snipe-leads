@@ -1668,12 +1668,22 @@ async def lista_korningar(
     return {"korningar": [_utan_kandidater(r) for r in rader]}
 
 
+#: Motorns arbetsminne i körningens tillstånd — inget av det är kundens vy.
+#:  - kandidater: registrets namn, roller och telefon
+#:  - webbpool: bolag med län på väg till webbyråernas pool; länfördelningen
+#:    är hemlig för alla utom plattformsadmin och webbyråkunderna (CLAUDE.md
+#:    2026-10-08) och läckte här till varje kund fram till 2026-10-10
+#:  - listspar, utslag, rapporterade: underlag som sparas på annat håll
+#:    (listspåret, prospekten). Ingen vy läser dem, och de var ~80 % av
+#:    körningslistans 640 KB per hämtning.
+_ARBETSMINNE = frozenset({"kandidater", "webbpool", "listspar", "utslag", "rapporterade"})
+
+
 def _utan_kandidater(rad: dict) -> dict:
-    """Körningens kandidatpool (namn, roller, telefon från registret) är
-    motorns arbetsminne, inte kundens vy: den lämnar aldrig API:t."""
+    """Körningen utan motorns arbetsminne (_ARBETSMINNE): det lämnar aldrig API:t."""
     k = rad.get("korning")
-    if isinstance(k, dict) and "kandidater" in k:
-        return {**rad, "korning": {f: v for f, v in k.items() if f != "kandidater"}}
+    if isinstance(k, dict) and _ARBETSMINNE & k.keys():
+        return {**rad, "korning": {f: v for f, v in k.items() if f not in _ARBETSMINNE}}
     return rad
 
 
