@@ -300,13 +300,13 @@ function useOvrigaKoer(demo: boolean, iris: boolean, kvitton: boolean) {
         return null;
       }
     };
-    type Samtal = { ring_idag?: number };
-    const [svar, ko, aterkoppling, ring, kv] = await Promise.all([
+    type Samtalsantal = { aterkoppling?: number; ring?: number };
+    const [svar, ko, samtal, kv] = await Promise.all([
       iris ? hamta<Svar>("/inbox?klass=lead&limit=200") : Promise.resolve(null),
       iris ? hamta<Utkast>("/leads/queue") : Promise.resolve(null),
-      // Återkopplingen och ringlistan (Leads › Samtal): de som ska ringas i dag.
-      iris ? hamta<Samtal>("/leads/samtal?lista=aterkoppling") : Promise.resolve(null),
-      iris ? hamta<Samtal>("/leads/samtal?lista=ring") : Promise.resolve(null),
+      // Återkopplingen och ringlistan (Leads › Samtal): de som ska ringas i
+      // dag. Bara antalen, i ett anrop — förut hämtades båda listorna hela.
+      iris ? hamta<Samtalsantal>("/leads/samtal/antal") : Promise.resolve(null),
       // Ett år bakåt: ett kvitto att granska äldre än så är inte längre ett beslut som väntar.
       kvitton
         ? hamta<{ kvitton?: KvittoRad[] }>(
@@ -333,10 +333,9 @@ function useOvrigaKoer(demo: boolean, iris: boolean, kvitton: boolean) {
               .filter((t): t is number => t !== null),
           }
         : null,
-      samtal:
-        aterkoppling && ring
-          ? { antal: (aterkoppling.ring_idag ?? 0) + (ring.ring_idag ?? 0), tider: [] }
-          : null,
+      samtal: samtal
+        ? { antal: (samtal.aterkoppling ?? 0) + (samtal.ring ?? 0), tider: [] }
+        : null,
       kvitton: kv ? { antal: granska.length, tider: [] } : null,
     });
     setKvittorader(kv ? granska : null);
