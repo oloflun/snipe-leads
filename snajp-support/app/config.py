@@ -178,6 +178,12 @@ class Settings(BaseSettings):
     # i stället för AI Studio med en enkel API-nyckel.
     google_service_account_json: str = ""
     google_cloud_region: str = "europe-west1"
+    #: EU-regioner som bakgrundsjobben byter till vid 429 (2026-10-09):
+    #: "Resource exhausted" på Vertex är regionens delade kapacitet, och en
+    #: körning med stora researchprompter fick 429 på varje anrop i
+    #: europe-west1 i flera minuter medan ett litet anrop gick igenom i alla
+    #: tre. Bara EU-regioner: data lämnar aldrig EU. Komma emellan.
+    vertex_reservregioner: str = "europe-west4,europe-north1"
     model: str = "gpt-4o-mini"
     embedding_model: str = "gemini-embedding-001"
     #: MÅSTE stämma med kolumnen `ss_knowledge_base.embedding`, som är

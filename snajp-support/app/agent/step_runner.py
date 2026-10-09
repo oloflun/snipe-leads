@@ -32,7 +32,7 @@ from ..agentcore.overlays import load_overlay
 from ..agentcore.packs import PlaybookStep, RunLedger, check_output_contract, check_preconditions
 from ..config import get_settings
 from ..kvotfel import ar_kreditslut
-from .llm import _uses_vertex, gemini_tank_kwargs, get_llm_client
+from .llm import _uses_vertex, gemini_tank_kwargs, get_llm_client, vertex_regioner
 
 #: Bakgrundsjobbens samtidiga LLM-anrop (talamod_429), per process och
 #: händelseloop (2026-10-09). Med tio parallella researchjobb slog Vertex
@@ -526,6 +526,15 @@ async def run_step(
                 import random
 
                 paus = (3.0 if vanta_forsok == 1 else 8.0) if vertex_kort else 15.0 * vanta_forsok + random.uniform(0, 10)
+                # Bakgrundsjobb på Vertex byter EU-region vid 429 (2026-10-09):
+                # en full region går inte över av att vänta, en annan har
+                # oftast plats. Kort paus när regionen byts.
+                if talamod_429 and _uses_vertex(settings):
+                    regioner = vertex_regioner(settings)
+                    if len(regioner) > 1:
+                        client = get_llm_client(region=regioner[vanta_forsok % len(regioner)])
+                        if vanta_forsok < len(regioner):
+                            paus = 1.0 + random.uniform(0, 2)
                 svar_huvud = getattr(getattr(fel, "response", None), "headers", None)
                 if svar_huvud is not None:
                     try:
