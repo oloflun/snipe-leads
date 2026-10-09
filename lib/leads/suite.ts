@@ -106,6 +106,14 @@ function detaljtext(kropp: unknown): string | null {
   if (!kropp || typeof kropp !== "object") return null;
   const k = kropp as { detail?: unknown; error?: unknown };
   if (typeof k.detail === "string") return k.detail;
+  // {message, saknas: [...]} (t.ex. /befordra): beskedet och vad som saknas,
+  // i stället för "HTTP 422".
+  if (k.detail && typeof k.detail === "object" && !Array.isArray(k.detail)) {
+    const d = k.detail as { message?: unknown; saknas?: unknown };
+    const saknas = Array.isArray(d.saknas) ? d.saknas.map(String) : [];
+    const text = [typeof d.message === "string" ? d.message : null, ...saknas].filter(Boolean).join(" ");
+    if (text) return text;
+  }
   if (Array.isArray(k.detail)) {
     return k.detail
       .map((d) => (d && typeof d === "object" && "msg" in d ? String((d as { msg: unknown }).msg) : String(d)))

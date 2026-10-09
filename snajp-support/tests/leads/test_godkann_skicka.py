@@ -191,3 +191,21 @@ async def test_stoppat_utkast_skickas_inte_om_ett_nyare_vantar_i_traden():
     )
     utfall, _ = await skicka_godkant(storage, TENANT, item_id, provider, now=WITHIN_WINDOW_UTC)
     assert utfall == "redan_hanterad" and provider.sent == []
+
+
+async def test_stoppat_utan_kvarvarande_text_sager_skapa_utkast():
+    """Dubbletterna städades och lämnade stoppade poster utan utkast
+    (2026-10-09). Godkänn och skicka säger då vad som ska göras i stället
+    för sändbeslutets interna "tråd eller köat meddelande saknas"."""
+    from app.leads import utkaststatus
+
+    storage, provider = MemoryStorage(), _FakeSendProvider()
+    item_id, thread_id, message_id = _ny_kund(storage, scheduled_at=WITHIN_WINDOW_UTC)
+    _post(storage, item_id)["status"] = "blocked"
+    next(m for m in storage.outreach_messages[TENANT] if m["id"] == message_id)["kasserad_at"] = WITHIN_WINDOW_UTC
+    utfall, skal = await skicka_godkant(storage, TENANT, item_id, provider, now=WITHIN_WINDOW_UTC)
+    assert utfall == "blocked" and "Skapa utkast" in skal and provider.sent == []
+    storage.outreach_threads[TENANT][thread_id]["prospect_id"] = "p-1"
+    lage = (await storage.utkast_lagen(TENANT))["p-1"]
+    assert lage["antal_osanda"] == 0
+    assert utkaststatus.harled(lage)["utkast_status"] == "saknas"

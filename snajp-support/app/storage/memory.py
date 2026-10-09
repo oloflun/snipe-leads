@@ -1106,6 +1106,7 @@ class MemoryStorage:
                 "thread_id": thread["id"],
                 "skickat_at": max(skickade, default=None),
                 "antal_skickade": len(skickade),
+                "antal_osanda": sum(1 for m in utgaende if not m.get("sent_at") and not m.get("kasserad_at")),
                 "queue_item_id": senaste.get("id"),
                 "ko_status": senaste.get("status"),
                 "gate_checks": senaste.get("gate_checks") if senaste else None,

@@ -113,6 +113,11 @@ def harled(lage: dict[str, Any] | None, *, now: datetime | None = None) -> dict[
         ut["utkast_status"] = "skickat"
     elif ko == "cancelled":
         ut["utkast_status"] = "avvisat"
+    elif ko == "blocked" and lage.get("antal_osanda") == 0:
+        # Stoppat, men texten är kasserad (2026-10-09: dubbletterna städades
+        # och lämnade stoppade poster utan utkast). Inget att skicka: leadet
+        # saknar utkast, och Skapa utkast skriver ett nytt.
+        pass
     elif ko == "blocked":
         # Köposten följer med (2026-10-09): Godkänn och skicka prövar ett
         # stoppat utkast igen när orsaken är åtgärdad. `utkast_regel` säger

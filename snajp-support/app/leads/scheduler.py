@@ -475,6 +475,10 @@ async def skicka_godkant(
         # senaste osända text).
         if item.get("status") == "blocked" and await storage.list_pending_sends(tenant_id, item["thread_id"]):
             return "redan_hanterad", None
+        if item.get("status") == "blocked" and not await storage.get_pending_outreach_message(
+            tenant_id, item["thread_id"]
+        ):
+            return "blocked", "Utkastet finns inte längre. Välj Skapa utkast för att skriva ett nytt."
         await _fot_vid_godkannande(storage, tenant_id, item)
         godkant = {"approved_by": "human", "via": "granskningskön", "godkand_at": now.isoformat()}
         await storage.update_send_queue_status(tenant_id, item_id, status="queued", gate_checks=godkant)

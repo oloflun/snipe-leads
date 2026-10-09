@@ -832,7 +832,7 @@ export function LeadsTabell({
             await leadsAnrop(`/leads/prospects/${encodeURIComponent(p.id)}/befordra`, { method: "POST" });
             flyttade.push(p);
           } catch (orsak) {
-            ejFlyttade.push(`${p.company_name} (${felmeddelande(orsak)})`);
+            ejFlyttade.push(`${p.company_name}: ${felmeddelande(orsak)}`);
           }
         }
       }
@@ -876,12 +876,11 @@ export function LeadsTabell({
           stoppa(felmeddelande(orsak), p.company_name);
         }
       }
-      for (const rad of ejFlyttade) {
-        stoppa(text({ sv: "Kunde inte flyttas över från provkörningen.", en: "Could not be moved over from the test run." }), rad);
-      }
+      // En rad per bolag: skälet (vad som saknas) skiljer sig mellan dem.
+      const flyttfel = text({ sv: "Kunde inte flyttas över från provkörningen", en: "Could not be moved over from the test run" });
       setValda(new Set());
       meddelaLeadsUppdaterade("tabell");
-      const antalStopp = [...stopp.values()].reduce((n, b) => n + b.length, 0);
+      const antalStopp = [...stopp.values()].reduce((n, b) => n + b.length, 0) + ejFlyttade.length;
       const namn = (bolag: string[]) =>
         bolag.length <= 3
           ? bolag.join(", ")
@@ -894,6 +893,7 @@ export function LeadsTabell({
           const atgard = /organisationsnummer|postadress|integritetspolicy|policy/i.test(skal) ? ` ${text(T.fyllKundregistret)}` : "";
           return `${bolag.length} · ${skal}${atgard} (${namn(bolag)})`;
         }),
+        ...ejFlyttade.map((rad) => `1 · ${flyttfel}. ${rad}`),
         ...(kvarProv
           ? [
               text({

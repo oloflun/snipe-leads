@@ -1489,14 +1489,16 @@ class PostgresStorage:
                 select distinct on (t.prospect_id)
                        t.prospect_id, t.id as thread_id,
                        s.skickat_at, coalesce(s.antal_skickade, 0) as antal_skickade,
+                       coalesce(s.antal_osanda, 0) as antal_osanda,
                        q.id as queue_item_id, q.status as ko_status, q.gate_checks, q.scheduled_at
                        {text_kolumner}
                   from outreach_threads t
                   left join lateral (
-                    select max(om.sent_at) as skickat_at, count(*)::int as antal_skickade
+                    select max(om.sent_at) as skickat_at,
+                           (count(*) filter (where om.sent_at is not null))::int as antal_skickade,
+                           (count(*) filter (where om.sent_at is null and om.kasserad_at is null))::int as antal_osanda
                       from outreach_messages om
                      where om.thread_id = t.id and om.direction = 'outbound'
-                       and om.sent_at is not null
                   ) s on true
                   left join lateral (
                     select sq.id, sq.status, sq.gate_checks, sq.scheduled_at
