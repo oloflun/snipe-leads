@@ -431,9 +431,17 @@ function Pagaende({
   const k = rad.korning;
   const [skickar, setSkickar] = useState<Atgard | null>(null);
   const [styrFel, setStyrFel] = useState<string | null>(null);
+  // Avbrottet bekräftas på sidan, som varje annan åtgärd på Leads-ytan
+  // (2026-10-09: webbläsarens confirm-ruta avvisades tyst i appens
+  // webbläsarpanel, och knappen såg ut att inte göra något).
+  const [bekraftar, setBekraftar] = useState(false);
 
-  async function styr(atgard: Atgard) {
-    if (atgard === "avbryt" && !window.confirm(text(T.bekraftaAvbryt))) return;
+  async function styr(atgard: Atgard, bekraftat = false) {
+    if (atgard === "avbryt" && !bekraftat) {
+      setBekraftar(true);
+      return;
+    }
+    setBekraftar(false);
     setSkickar(atgard);
     setStyrFel(null);
     try {
@@ -506,6 +514,34 @@ function Pagaende({
           <StyrKnapp atgard="avbryt" skickar={skickar} onClick={styr} className="!text-danger">
             {text(T.avbryt)}
           </StyrKnapp>
+        </div>
+      ) : null}
+      {bekraftar ? (
+        <div
+          role="alertdialog"
+          aria-modal="false"
+          aria-label={text(T.avbryt)}
+          tabIndex={-1}
+          ref={(el) => el?.focus()}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") setBekraftar(false);
+          }}
+          className="focus-ring mt-3 max-w-[60ch] rounded-input border border-ink/15 bg-paper2 px-4 py-3"
+        >
+          <p className="text-[0.9375rem] text-ink">{text(T.bekraftaAvbryt)}</p>
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => void styr("avbryt", true)}
+              className={cn(btnSecondary, btnLiten, "border-danger/40 text-danger")}
+            >
+              {text(T.avbryt)}
+            </button>
+            <button type="button" onClick={() => setBekraftar(false)} className={cn(btnSecondary, btnLiten)}>
+              {text({ sv: "Behåll körningen", en: "Keep the run" })}
+            </button>
+            <span className={meta}>{text({ sv: "Esc stänger", en: "Esc closes" })}</span>
+          </div>
         </div>
       ) : null}
       {styrFel ? (
