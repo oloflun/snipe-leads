@@ -320,13 +320,25 @@ def finalize_outreach_body(draft: str) -> str:
     bold, or other markdown', SKILL.md rad 291). Humanizern får inte
     återinföra formatering; det här är kodgrinden som garanterar det
     oavsett vad modellen faktiskt skrev, samma princip som hela Del C."""
-    return tilltala_med_ni(strip_markdown(draft))
+    return _intervallstreck(tilltala_med_ni(strip_markdown(draft)))
+
+
+#: "15-20 minuter" → "15–20 minuter": tankstreck i intervall, bara före en
+#: enhet, så att telefonnummer (070-360 …) och org.nr aldrig rörs.
+_INTERVALL = re.compile(
+    r"\b(\d{1,3})-(\d{1,3})(?=\s*(?:minuter|min|timmar|tim|dagar|veckor|månader|procent|%|kr|kronor|år|personer|anställda)\b)"
+)
+
+
+def _intervallstreck(text: str) -> str:
+    return _INTERVALL.sub(r"\1–\2", text)
 
 
 #: du-formerna och deras ni-motsvarighet. "Hör av dig" → "Hör av er".
 _DU_TILL_NI = {"du": "ni", "dig": "er", "din": "er", "ditt": "ert", "dina": "era"}
 _DU_ORD = re.compile(r"\b(du|dig|din|ditt|dina)\b", re.IGNORECASE)
 _ANONYM_HALSNING = re.compile(r"^\s*(hej|hejsan|god dag|hallå)\s*[,!]?\s*$", re.IGNORECASE)
+_NAMNGIVEN_HALSNING = re.compile(r"^\s*(hej|hejsan|hallå)\s+([A-ZÅÄÖÉ][\wåäöé-]*(?:\s+[A-ZÅÄÖÉ][\wåäöé-]*)?)\s*[,!]\s*$", re.IGNORECASE)
 
 
 def tilltala_med_ni(body: str) -> str:
@@ -337,7 +349,19 @@ def tilltala_med_ni(body: str) -> str:
     hälsningen ("Hej Peter,") rörs inte."""
     rader = body.split("\n")
     forsta = next((i for i, r in enumerate(rader) if r.strip()), None)
-    if forsta is None or not _ANONYM_HALSNING.match(rader[forsta]):
+    if forsta is None:
+        return body
+    # "Hej Verkstad," och "Hej Luleå," (development 2026-10-09): ett namn
+    # som är en avdelning eller en ort är inget tilltal. Hälsningen blir
+    # "Hej," och mejlet tilltalar bolaget, med ni.
+    namn = _NAMNGIVEN_HALSNING.match(rader[forsta])
+    if namn:
+        from .discovery import ar_personled
+
+        if all(ar_personled(o) for o in namn.group(2).split()):
+            return body
+        rader[forsta] = f"{namn.group(1)},"
+    elif not _ANONYM_HALSNING.match(rader[forsta]):
         return body
 
     def byt(m: re.Match[str]) -> str:

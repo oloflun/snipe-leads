@@ -29,3 +29,25 @@ def test_signaturen_efter_halsningen_rors_inte():
 
 def test_finaliseringen_gor_det_for_varje_utkast():
     assert "Skulle ni" in finalize_outreach_body("Hej,\n\n**Skulle du** vilja?")
+
+
+def test_avdelning_eller_ort_i_halsningen_blir_hej_och_ni():
+    """"Hej Verkstad," och "Hej Luleå," (development 2026-10-09): namnet kom
+    från en funktionsadress eller en ortsrad på sajten."""
+    assert tilltala_med_ni("Hej Verkstad,\n\nSkulle du vilja?") == "Hej,\n\nSkulle ni vilja?"
+    assert tilltala_med_ni("Hej Luleå,\n\nHör av dig.") == "Hej,\n\nHör av er."
+    assert tilltala_med_ni("Hej Anna Karin,\n\nDu bestämmer.") == "Hej Anna Karin,\n\nDu bestämmer."
+
+
+def test_intervall_far_tankstreck_men_telefonnummer_rors_inte():
+    ut = finalize_outreach_body("Hej,\n\nEtt samtal på 15-20 minuter. Ring 070-360 05 64.")
+    assert "15–20 minuter" in ut and "070-360 05 64" in ut
+
+
+def test_funktionsadress_med_versalord_blir_ingen_person():
+    from app.leads.discovery import person_kontakt_i_text
+
+    sida = "<p>Verkstad Granec</p><p>verkstad@granec.se</p><p>Peter Holm, VD peter.holm@granec.se</p>"
+    hit = person_kontakt_i_text(sida, "https://granec.se")
+    assert hit and hit["contact_name"] == "Peter Holm"
+    assert person_kontakt_i_text("<p>Verkstad Granec</p><p>verkstad@granec.se</p>", "https://granec.se") is None

@@ -985,6 +985,31 @@ _LEDNINGSROLL = re.compile(
 _PERSONNAMN = re.compile(r"\b([A-ZÅÄÖ][a-zåäöé]{2,})\s+([A-ZÅÄÖ][a-zåäöé\-]{1,})\b")  # Ek, Alm: korta efternamn finns
 
 
+#: Avdelningar och funktioner som står med versal intill en funktionsadress
+#: ("Verkstad Granec" vid verkstad@granec.se) och annars blev ett tilltal:
+#: "Hej Verkstad," (development 2026-10-09).
+AVDELNINGSORD = frozenset(
+    {
+        "verkstad", "verkstaden", "kontor", "kontoret", "kundtjanst", "kundservice", "support", "service",
+        "forsaljning", "salj", "saljavdelning", "ekonomi", "ekonomiavdelning", "faktura", "fakturor",
+        "fakturering", "order", "ordrar", "butik", "butiken", "reception", "vaxel", "vaxeln",
+        "administration", "admin", "bokning", "bokningar", "offert", "offerter", "jobb", "lager", "lagret",
+        "inkop", "marknad", "marknadsforing", "teknik", "montage", "drift", "redovisning", "lon", "hr",
+        "personal", "rekrytering", "kansli", "expedition", "garanti", "reklamation", "leverans",
+        "transport", "logistik", "produktion", "fabrik", "huvudkontor", "filial", "avdelning",
+    }
+)
+
+
+def ar_personled(ord_: str) -> bool:
+    """Kan ordet vara ett för- eller efternamn? Nej för avdelningar,
+    funktioner, sajtord och orter vi känner (Luleå, Umeå …)."""
+    from .profil import KOMMUNER
+
+    led = _asci(ord_ or "")
+    return bool(led) and led not in AVDELNINGSORD and led not in _EJ_NAMNORD and (ord_ or "").casefold() not in KOMMUNER
+
+
 def person_kontakt_i_text(text: str, website: str) -> dict[str, Any] | None:
     """Bästa NAMNGIVNA kontakt på sidan, VD eller inte (Sebbes revidering
     2026-10-07 av regel 3: kontaktpersonen måste vara namngiven och styrkt,
@@ -1009,6 +1034,8 @@ def person_kontakt_i_text(text: str, website: str) -> dict[str, Any] | None:
         for namn_traff in _PERSONNAMN.finditer(narhet):
             led = [d for d in (_asci(namn_traff.group(1)), _asci(namn_traff.group(2))) if len(d) >= 3]
             if not led or not any(d in lokal for d in led):
+                continue
+            if not (ar_personled(namn_traff.group(1)) and ar_personled(namn_traff.group(2))):
                 continue
             namn = f"{namn_traff.group(1)} {namn_traff.group(2)}"
             # Rollen står intill SITT namn ("Eva Ek, VD — eva@…"), inte hos
