@@ -41,16 +41,22 @@ from .webbsignal import mat_webbplats
 
 MAX_RUNDOR = 3
 TAK_FAKTOR = 4
-#: Kandidater per sökrunda. Var 10, och med tre rundor kunde en körning
-#: aldrig se fler än 30 kandidater: en beställning på 40 gav 6 leads
-#: (development 2026-10-08). Sebbe 2026-10-09: 30–50 leads per körning.
-MAX_PER_RUNDA = 25
+#: Kandidater per sökrunda. Små rundor med flit (2026-10-09): en runda
+#: levererar ingenting förrän den är klar, och med 25 per runda granskade
+#: den första rundan i en körning på 40 bolagssidor och kontaktsökte i 13
+#: minuter innan ett enda bolag researchades. Med 8 börjar researchen efter
+#: några minuter, och nästa runda söker medan den pågår (sökrundan körs
+#: utanför körningens lås, api/leads.py:_fyll_pa). Var 10 med tre rundor
+#: före 2026-10-08: en körning kunde aldrig se fler än 30 kandidater.
+MAX_PER_RUNDA = 8
 
 
 def max_rundor(mal: int) -> int:
-    """Sökrundor för en beställning: tre för små, en till per tiotal över
-    tjugo (40 → 5, 50 → 6). Varje runda söker nästa geo-ring."""
-    return max(MAX_RUNDOR, MAX_RUNDOR + (int(mal) - 11) // 10)
+    """Sökrundor för en beställning: tre för små, annars så många att
+    MAX_PER_RUNDA räcker till beställningen med marginal (40 → 9, 50 → 11).
+    Varje runda söker nästa geo-ring; kredittaket (korningstak) gäller
+    hela körningen oavsett antalet rundor."""
+    return max(MAX_RUNDOR, -(-int(mal) // (MAX_PER_RUNDA - 2)) + 2)
 
 
 def korningstak(mal: int) -> int:
