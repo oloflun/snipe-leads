@@ -1,4 +1,7 @@
-FROM python:3.12-slim
+# Samma officiella image, hämtad via Dockers spegel på AWS ECR Public. Docker
+# Hub svarade 429 på Railways delade byggare (anonyma hämtningar, 2026-10-09)
+# och fällde tre api-byggen i rad.
+FROM public.ecr.aws/docker/library/python:3.12-slim
 
 # Byggkontexten är REPO-ROTEN, inte snajp-support/ (render.yaml: rootDir: .).
 #
