@@ -302,3 +302,31 @@ async def test_varje_worker_tar_ett_jobb_i_taget(monkeypatch):
     await asyncio.gather(*(strom.kor_ett_varv(f"w{i}", _jobb) for i in range(4)))
     assert toppen == 4
     await client.aclose()
+
+
+async def test_en_igangvarande_korning_falls_inte_nar_dess_post_ges_upp(monkeypatch):
+    """Tre deployer under en lång sökrunda gav körningsposten tre leveranser,
+    och hela körningen märktes misslyckad medan 20 av dess bolag fortfarande
+    researchades (development 2026-10-09)."""
+    _installera(monkeypatch)
+    storage, ko = MemoryStorage(), _Kö()
+    app_state = SimpleNamespace(jobs=MemoryJobStore(), storage=storage, leadsstrom=ko)
+    job_id = await _ny_korning(storage, ["Ett AB", "Två AB"])
+    await leads_api._fyll_pa(app_state, TENANT, job_id)
+    assert len(ko.poster) == 2
+
+    await leads_api.ge_upp_leadsjobb(app_state, {"job_id": job_id, "tenant_id": TID, "kind": "batch"})
+    rad = await storage.get_leads_korning(TID, job_id)
+    assert rad["status"] == "processing" and not rad.get("error")
+    for post in list(ko.poster):
+        await _kor_barn(app_state, post)
+    rad = await storage.get_leads_korning(TID, job_id)
+    assert rad["status"] == "completed" and rad["korning"]["levererade"] == 2
+
+
+async def test_sokmarke_fran_en_dod_process_galler_inte():
+    k = {"soker_sedan": datetime.now(timezone.utc).isoformat(), "soker_process": "annan-vard:123"}
+    assert leads_api._soker(k) is False
+    from app.jobs.stream import consumer_name
+
+    assert leads_api._soker({**k, "soker_process": consumer_name()}) is True

@@ -2330,6 +2330,10 @@ async def _spara_korning(app_state, tenant_id: str, batch_id: str, k: dict) -> N
         scope="batch",
         korning=k,
         is_test=bool(k.get("is_test")),
+        # En körning som sparar sitt tillstånd lever: ett gammalt felbesked
+        # (en uppgiven körningspost efter deployer) rensas. Tom sträng, inte
+        # None: kolumnen skrivs med coalesce och None rör den inte.
+        error="",
     )
 
 
@@ -2461,9 +2465,18 @@ SOKRUNDA_MAX_S = 15 * 60
 
 
 def _soker(k: dict) -> bool:
-    """Kör en annan worker körningens sökrunda just nu?"""
+    """Kör en annan worker körningens sökrunda just nu?
+
+    Märket bär processen som söker. api-tjänsten kör EN process (fler
+    repliker kräver ett Redis-lås, se _korningslas), så ett märke från en
+    annan process är en rest från en process som dött mitt i rundan, och
+    gäller inte: annars stod körningen still tills märket löpt ut."""
+    from ..jobs.stream import consumer_name
+
     sedan = k.get("soker_sedan")
     if not sedan:
+        return False
+    if k.get("soker_process") and k["soker_process"] != consumer_name():
         return False
     try:
         start = datetime.fromisoformat(str(sedan))
@@ -2514,6 +2527,7 @@ async def _sla_in_sokrunda(app_state, tenant: dict, batch_id: str, rond: dict) -
         k.setdefault("utslag", []).extend(tmp["utslag"])
     k["skrap"] = sidhamtning.summera(k.get("skrap"), rond["skrap"])
     k.pop("soker_sedan", None)
+    k.pop("soker_process", None)
     if rond["fel"] and k["rundor"] >= iris_korning.max_rundor(k["mal"]):
         k["stopp"] = "sokningen_foll"
     elif rond["slut"] and not tmp["kandidater"]:
@@ -2604,7 +2618,10 @@ async def _fyll_pa_last(app_state, tenant: dict, batch_id: str) -> dict | None:
             # det tog slut blev resten "Ingen kontaktmejl" i listspåret.
             webb_betalda = int((k.get("skrap") or {}).get("webb") or 0)
             # Sökrundan körs av _fyll_pa utanför låset (se dess docstring).
+            from ..jobs.stream import consumer_name
+
             k["soker_sedan"] = datetime.now(timezone.utc).isoformat()
+            k["soker_process"] = consumer_name()
             resultat.update(korning=k, jobs=k["jobs"], count=len(k["jobs"]))
             await jobs.complete(batch_id, resultat)
             await _spara_korning(app_state, tenant_id, batch_id, k)
@@ -4378,6 +4395,19 @@ async def ge_upp_leadsjobb(app_state, payload: dict) -> None:
     try:
         if await storage.get_leads_job_status(tenant_id, job_id) == "completed":
             return
+        if payload.get("kind") == "batch":
+            # En körning som redan är igång fälls inte (2026-10-09): tre
+            # deployer under en lång sökrunda gav körningsposten tre
+            # leveranser, och hela körningen märktes misslyckad medan 20 av
+            # dess bolag fortfarande researchades. Bolagens rapporter driver
+            # körningen vidare; posten kvitteras och körningen väcks.
+            rad = await storage.get_leads_korning(tenant_id, job_id)
+            k = (rad or {}).get("korning") or {}
+            if k.get("jobs") or k.get("pagaende") or k.get("levererade"):
+                logger.warning("Körningsposten %s gavs upp; körningen är igång och fortsätter.", job_id)
+                tenant = {"tenant_id": tenant_id, "tenant_name": payload.get("tenant_name")}
+                asyncio.create_task(_vacka_korning(app_state, tenant, job_id))
+                return
         await faila_jobb_om_oppet(app_state.jobs, job_id, UPPGIVET_JOBB)
         await storage.set_leads_job_status(
             tenant_id,

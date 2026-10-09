@@ -701,24 +701,30 @@ async def sok(
     )
 
     async def ranka(granskade: list[dict[str, Any]]) -> list[dict[str, Any]]:
-        rankade: list[tuple[float, dict[str, Any]]] = []
-        for b in granskade:
+        # Jev-bedömningarna körs samtidigt (2026-10-09): en i taget tog 2–3 s
+        # styck, minuter per sökrunda. Ordningen avgörs av poängen nedan.
+        sem = asyncio.Semaphore(SAMTIDIGA)
+
+        async def bedom(b: dict[str, Any]) -> tuple[float, dict[str, Any]] | None:
             if kontrollera(b, icp, profil) is not None:
-                continue
+                return None
             k = till_kandidat(b, icp, profil)
             poang = _kodpoang(b, icp, profil)
             if jev_profil and jev.aktiv():
-                triage = await jev.triage(
-                    jev_profil, k, utdrag="\n".join(filter(None, [b.get("verksamhet"), b.get("sni_namn")])), signaler=[]
-                )
+                async with sem:
+                    triage = await jev.triage(
+                        jev_profil, k, utdrag="\n".join(filter(None, [b.get("verksamhet"), b.get("sni_namn")])), signaler=[]
+                    )
                 if triage:
                     k["jev_triage"] = triage
                     if triage.get("beslut") == "fall":
-                        continue
+                        return None
                     if isinstance(triage.get("fit"), (int, float)):
                         poang += 10 * triage["fit"]
             k["merinfo_poang"] = round(poang, 2)
-            rankade.append((poang, k))
+            return poang, k
+
+        rankade = [r for r in await asyncio.gather(*(bedom(b) for b in granskade)) if r]
         rankade.sort(key=lambda t: t[0], reverse=True)
         return [k for _, k in rankade]
 
@@ -777,6 +783,11 @@ async def sok(
 #: Hur många rangordnade bolag som provas per beställt lead i steget efter
 #: filtret. Varje prov kan kosta ett webbplatsuppslag (ett grounded anrop).
 PROV_PER_LEAD = 4
+
+#: Bolag som bedöms (Jev) och kontaktsöks samtidigt. Sidhämtningen har sin
+#: egen semafor mot ScrapeGraph; det här taket skonar Vertex och bolagens
+#: egna sajter (2026-10-09: förut ett bolag i taget, minuter per sökrunda).
+SAMTIDIGA = 6
 
 
 #: Operatörer och e-posttjänster utöver discovery._PRIVATA_DOMÄNER: en
@@ -992,10 +1003,11 @@ async def _komplettera(
 
     Lista: oförändrat VD-krav — VD:ns mejl eller telefon på sajten, eller
     ensam-VD-undantaget."""
-    from .. import discovery, sidhamtning
-    from ..platshallare import AVVECKLAT, ar_platshallare
+    from .. import discovery
 
     ut: list[dict[str, Any]] = []
+    if lage == "iris":
+        return await _komplettera_iris(rankade, antal, puls=puls, listspar=listspar)
     for k in rankade[: max(antal, 1) * PROV_PER_LEAD]:
         if len(ut) >= antal:
             break
@@ -1013,18 +1025,29 @@ async def _komplettera(
                 skal = "VD är ensam i bolaget" if webb else "Ingen webbplats; VD är ensam i bolaget"
                 ut.append({**_listrad({**k, "website": webb}, skal), "signal": None})
             continue
-        kontext = sidhamtning.aktuell()
-        if kontext and kontext.webb_slut:
-            # Resten prövas nästa körning: inget av dem skrivs till en lista
-            # eller hamnar i uteslutningen (regel 12).
-            break
+    return ut
+
+
+async def _komplettera_iris(
+    rankade: list[dict[str, Any]], antal: int, *, puls: Callable[[], Awaitable[Any]] | None,
+    listspar: list[dict[str, Any]] | None,
+) -> list[dict[str, Any]]:
+    """Iris-spåret i `_komplettera`, SAMTIDIGT i omgångar om SAMTIDIGA
+    bolag (2026-10-09). Förut ett bolag i taget: webbplatsuppslag,
+    parkeringskontroll och kontaktsökning på flera sidor, 5–10 s per bolag.
+    Fördelningen görs i rangordning efter varje omgång, och stoppet (nog
+    många leads, webbtaket) prövas mellan omgångarna."""
+    from .. import discovery, sidhamtning
+    from ..platshallare import AVVECKLAT, ar_platshallare
+
+    async def sok(k: dict[str, Any]) -> tuple[dict[str, Any], str | None, dict[str, Any] | None, Any] | None:
         webb = await _webbplats(k)
         if puls:
             await puls()
         parkerad = await ar_platshallare(webb) if webb else None
         if parkerad == AVVECKLAT:
             # Ett avvecklat bolag är inget lead i något spår (Anton 2026-10-08).
-            continue
+            return None
         k = {**k, "website": None if parkerad else webb}
         kontakt = (
             await discovery.hamta_person_kontakt(
@@ -1032,24 +1055,47 @@ async def _komplettera(
             )
             if k["website"] else None
         )
-        spar, skal = fordela(k, kontakt)
-        if spar == "iris":
-            ut.append(iris_kandidat(k, kontakt))
-        elif listspar is None:
-            continue
-        elif spar == "ring":
-            listspar.append(ringrad(k, kontakt))
-        elif spar == "prova_om":
-            listspar.append({
-                **{f: k.get(f) for f in ("company_name", "orgnr", "website")},
-                "signal_detalj": skal, "spar": spar, "tak": bool((kontakt or {}).get("tak")),
-            })
-        else:
-            if parkerad:
-                skal = f"{skal}; parkerad domän ({parkerad})"
-            # Ingen kontaktuppgift på raden: ett nummer utan namngiven VD, eller
-            # en enskild firmas (NIX), hör inte hemma i en lista (regel 5, 15).
-            listspar.append(_listrad({**k, "website": webb, "_ensam_vd_telefon": None}, skal or "Inget kontaktsätt"))
+        return k, webb, kontakt, parkerad
+
+    ut: list[dict[str, Any]] = []
+    prov = rankade[: max(antal, 1) * PROV_PER_LEAD]
+    for start in range(0, len(prov), SAMTIDIGA):
+        if len(ut) >= antal:
+            break
+        kontext = sidhamtning.aktuell()
+        if kontext and kontext.webb_slut:
+            # Resten prövas nästa körning: inget av dem skrivs till en lista
+            # eller hamnar i uteslutningen (regel 12).
+            break
+        for svar in await asyncio.gather(*(sok(k) for k in prov[start:start + SAMTIDIGA])):
+            if svar is None:
+                continue
+            k, webb, kontakt, parkerad = svar
+            spar, skal = fordela(k, kontakt)
+            if spar == "iris":
+                if len(ut) < antal:
+                    ut.append(iris_kandidat(k, kontakt))
+                elif listspar is not None:
+                    # Fler än behövs i den sista omgången: prövas nästa körning.
+                    listspar.append({
+                        **{f: k.get(f) for f in ("company_name", "orgnr", "website")},
+                        "signal_detalj": "Fler än körningen behövde", "spar": "prova_om", "tak": False,
+                    })
+            elif listspar is None:
+                continue
+            elif spar == "ring":
+                listspar.append(ringrad(k, kontakt))
+            elif spar == "prova_om":
+                listspar.append({
+                    **{f: k.get(f) for f in ("company_name", "orgnr", "website")},
+                    "signal_detalj": skal, "spar": spar, "tak": bool((kontakt or {}).get("tak")),
+                })
+            else:
+                if parkerad:
+                    skal = f"{skal}; parkerad domän ({parkerad})"
+                # Ingen kontaktuppgift på raden: ett nummer utan namngiven VD, eller
+                # en enskild firmas (NIX), hör inte hemma i en lista (regel 5, 15).
+                listspar.append(_listrad({**k, "website": webb, "_ensam_vd_telefon": None}, skal or "Inget kontaktsätt"))
     return ut
 
 
