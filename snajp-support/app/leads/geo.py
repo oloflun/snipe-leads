@@ -77,13 +77,16 @@ REGIONER: dict[str, Region] = {
         nyckel="goteborg",
         etikett="Göteborgsområdet",
         kommuner=(
-            Kommun("Göteborg", ((400, 426),)),
-            Kommun("Mölndal", ((431, 431),)),
+            # Billdal 427 och Askim/Hovås 436 hör till Göteborg; Kållered 428
+            # och Lindome 437 till Mölndal; Särö/Kullavik 429 till Kungsbacka
+            # (2026-10-09: Askim och Kullavik fälldes som utanför Göteborg).
+            Kommun("Göteborg", ((400, 427), (436, 436))),
+            Kommun("Mölndal", ((428, 428), (431, 431), (437, 437))),
             Kommun("Partille", ((433, 433),)),
             # Mölnlycke 435, Landvetter och Härryda 438.
             Kommun("Härryda", ((435, 435), (438, 438))),
             # Kungsbacka 434, Åsa/Fjärås 439.
-            Kommun("Kungsbacka", ((434, 434), (439, 439))),
+            Kommun("Kungsbacka", ((429, 429), (434, 434), (439, 439))),
             # Kungälv/Ytterby/Kode 442, Marstrand 440.
             Kommun("Kungälv", ((440, 440), (442, 442))),
             Kommun("Lerum", ((443, 443),)),

@@ -268,10 +268,14 @@ async def test_kreditslut_far_inget_talamod(monkeypatch):
 
 @pytest.mark.anyio
 async def test_minutkvot_far_fortfarande_talamod(monkeypatch):
-    """Kontrollgruppen: den transienta halvan ska bete sig exakt som förut
-    (20 s + 40 s innan tredje försöket får kasta)."""
+    """Kontrollgruppen: den transienta halvan väntar och försöker om. Sedan
+    2026-10-09 fem försök med slumpad paus (15/30/45/60 s + 0–10 s), så att
+    samtidiga bakgrundsjobb inte försöker om i takt."""
+    import random
+
+    monkeypatch.setattr(random, "uniform", lambda a, b: 0.0)
     somnar = await _kor_steg_mot(_Minutkvotfel(), monkeypatch)
-    assert somnar == [20.0, 40.0]
+    assert somnar == [15.0, 30.0, 45.0, 60.0]
 
 
 # -- Jobbläsvägen -----------------------------------------------------------

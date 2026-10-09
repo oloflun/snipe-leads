@@ -34,6 +34,21 @@ from ..config import get_settings
 from ..kvotfel import ar_kreditslut
 from .llm import _uses_vertex, gemini_tank_kwargs, get_llm_client
 
+#: Bakgrundsjobbens samtidiga LLM-anrop (talamod_429), per process och
+#: händelseloop (2026-10-09). Med tio parallella researchjobb slog Vertex
+#: 429 i en minut i sträck, och alla åtta researchjobb i en körning föll
+#: efter sina omtag. Taket gäller bara bakgrundsjobben: chatten väntar
+#: aldrig på leadsjobben. Sidhämtning och kontaktsökning går fortfarande
+#: parallellt; bara själva modellanropen köas.
+_BAKGRUNDSTAK: dict[int, asyncio.Semaphore] = {}
+
+
+def _bakgrundstak() -> asyncio.Semaphore:
+    loop = id(asyncio.get_running_loop())
+    if loop not in _BAKGRUNDSTAK:
+        _BAKGRUNDSTAK[loop] = asyncio.Semaphore(max(1, get_settings().leads_llm_samtidiga))
+    return _BAKGRUNDSTAK[loop]
+
 _OVERLAY_OPEN = """## TILLÄGGSINSTRUKTIONER (Snajp-overlay: {name})
 Dessa kommer FRÅN OSS, inte från skillen ovan, och gäller ÖVER den där de
 krockar. De ersätter aldrig kodgrindarna — grindarna körs efter dig.
@@ -465,15 +480,25 @@ async def run_step(
         # = dygnskvoten, och då ska jobbet bli failed, precis som förut.
         # Uppmätt utan detta: batchkörning 16:06 fällde 2/2 researchjobb
         # på fyra minut-429 i rad medan discovery-skrapningen var grön.
-        for vanta_forsok in (1, 2, 3):
+        for vanta_forsok in (1, 2, 3, 4, 5):
             try:
-                response = await client.chat.completions.create(
-                    model=effective_model,
-                    response_format={"type": "json_object"},
-                    temperature=effective_temperature,
-                    messages=messages,
-                    **extra,
-                )
+                if talamod_429:
+                    async with _bakgrundstak():
+                        response = await client.chat.completions.create(
+                            model=effective_model,
+                            response_format={"type": "json_object"},
+                            temperature=effective_temperature,
+                            messages=messages,
+                            **extra,
+                        )
+                else:
+                    response = await client.chat.completions.create(
+                        model=effective_model,
+                        response_format={"type": "json_object"},
+                        temperature=effective_temperature,
+                        messages=messages,
+                        **extra,
+                    )
                 break
             except Exception as fel:  # noqa: BLE001 — bara 429 särbehandlas
                 ar_429 = getattr(fel, "status_code", None) == 429
@@ -493,9 +518,14 @@ async def run_step(
                 # som inte får vänta länge. Gemini-API:ts dygnskvot är
                 # oförändrad: där hjälper ingen väntan.
                 vertex_kort = ar_429 and not talamod_429 and _uses_vertex(settings)
-                if not ((talamod_429 or vertex_kort) and ar_429 and vanta_forsok < 3):
+                # Bakgrundsjobben får fem försök (2026-10-09; var tre), och
+                # pausen slumpas så att samtidiga jobb inte försöker om i takt.
+                max_forsok = 5 if talamod_429 else 3
+                if not ((talamod_429 or vertex_kort) and ar_429 and vanta_forsok < max_forsok):
                     raise
-                paus = (3.0 if vanta_forsok == 1 else 8.0) if vertex_kort else 20.0 * vanta_forsok
+                import random
+
+                paus = (3.0 if vanta_forsok == 1 else 8.0) if vertex_kort else 15.0 * vanta_forsok + random.uniform(0, 10)
                 svar_huvud = getattr(getattr(fel, "response", None), "headers", None)
                 if svar_huvud is not None:
                     try:

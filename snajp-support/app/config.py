@@ -275,6 +275,10 @@ class Settings(BaseSettings):
     # (postgres.py, DB_POOL_MAX). Vertex-kvoten är betald; ScrapeGraph har
     # sin egen semafor (sidhamtning) och påverkas inte av antalet workers.
     leads_workers: int = 10
+    # Samtidiga LLM-anrop från bakgrundsjobben (step_runner._bakgrundstak).
+    # 4 sedan 2026-10-09: tio samtidiga researchanrop gav Vertex 429 i en
+    # minut i sträck och föll. Höj försiktigt; mät 429 i loggen.
+    leads_llm_samtidiga: int = 4
     # V2-kostnadsarbetet (2026-09-02): vilken leads-kedja som körs.
     # "v1" = niostegsresearchen + fyrstegsutkastet (dagens beteende).
     # "v2" = 1 research-anrop + 2 utkastanrop (RESEARCH_V2/OUTREACH_V2,
