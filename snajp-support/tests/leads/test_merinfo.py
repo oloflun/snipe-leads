@@ -442,3 +442,26 @@ def test_sajt_med_adress_pa_annan_ort_ar_inte_bolagets():
     # Ingen adress alls, eller ingen registerort: inget att pröva.
     assert not adress_motsager_registret("Välkommen till oss!", piteå)
     assert not adress_motsager_registret("192 79 Sollentuna", {})
+
+
+@pytest.mark.anyio
+async def test_iris_hamtar_bolag_med_levande_doman_forst(monkeypatch):
+    """2026-10-09: 52 köpta bolagssidor för 8 leads. Rader vars namn ger en
+    levande domän (gratis HEAD) hämtas först; de andra står kvar sist."""
+    rader, sidor = _sidor_for_sokningen()
+    hamtade = _installera_sidor(monkeypatch, sidor)
+    monkeypatch.setenv("LEADS_DIREKTHAMTNING", "1")
+
+    async def _gissa(namn):
+        return {"Beta Måleri AB": "https://betamaleri.se", "Delta Snickeri AB": "https://deltasnickeri.se"}.get(namn)
+
+    async def _komplettera(rankade, antal, **_):
+        return rankade[:antal]
+
+    monkeypatch.setattr(discovery, "gissa_webbplats_via_head", _gissa)
+    monkeypatch.setattr(m, "_komplettera", _komplettera)
+    icp = {"industries": ["Bygg"], "geography": ["Mölndal"], "size": {"anstallda_min": 1, "anstallda_max": 49}}
+    await m.sok(icp, 1, uteslut=set(), profil=None)
+
+    bolagssidor = [u for u in hamtade if "merinfo.se/foretag/" in u]
+    assert bolagssidor[:2] == [rader["Beta Måleri AB"], rader["Delta Snickeri AB"]]

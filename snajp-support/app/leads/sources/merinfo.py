@@ -67,6 +67,11 @@ TAXONOMI_FIL = Path(__file__).with_name("merinfo_taxonomi.json")
 
 MAX_LISTSIDOR = 40          # per (bransch, plats)
 MAX_BOLAGSSIDOR = 90        # tak per körning, oavsett antal
+#: Iris: listrader per bolagssida som förhandsprövas med en gratis gissad
+#: domän (HEAD på namn.se) innan bolagssidan köps. 2026-10-09 köptes 52
+#: bolagssidor för 8 leads: de flesta bolagen saknade sajt och föll först
+#: efter köpet. Rader med en levande domän hämtas först; ingen utesluts.
+FORSORTERA = 3
 
 
 
@@ -734,12 +739,32 @@ async def sok(
     # filter kördes först efteråt.
     ut: list[dict[str, Any]] = []
     granskade_n = godkanda_n = 0
+    forsortera = lage == "iris" and sidhamtning._direkt_forst()
+    from ..discovery import gissa_webbplats_via_head
+
+    head_sem = asyncio.Semaphore(12)
+
+    async def gissa(r: dict[str, Any]) -> None:
+        if "_gissad" in r:
+            return
+        async with head_sem:
+            try:
+                r["_gissad"] = await gissa_webbplats_via_head(r["company_name"])
+            except Exception:  # noqa: BLE001 — en gissning är bara en ordning
+                r["_gissad"] = None
+
     while len(ut) < antal and granskade_n < MAX_BOLAGSSIDOR:
         behov = antal - len(ut)
         omgang = min(behov * 2, MAX_BOLAGSSIDOR - granskade_n)
-        await fyll_rader(omgang)
+        await fyll_rader(omgang * FORSORTERA if forsortera else omgang)
         if not rader:
             break
+        if forsortera:
+            pool = rader[: omgang * FORSORTERA]
+            await asyncio.gather(*(gissa(r) for r in pool))
+            # Stabil sortering: registrets ordning står kvar inom grupperna.
+            pool.sort(key=lambda r: 0 if r.get("_gissad") else 1)
+            rader[: len(pool)] = pool
         batch, rader[:] = rader[:omgang], rader[omgang:]
         granskade_n += len(batch)
         granskade = [b for b in await asyncio.gather(*(granska(r) for r in batch)) if b]
