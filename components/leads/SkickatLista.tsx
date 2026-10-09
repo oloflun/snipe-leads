@@ -161,7 +161,24 @@ export function SkickatLista({
                         {r.subject || text({ sv: "Utan ämnesrad", en: "No subject line" })}
                       </p>
                       <p className={cn(meta, "mt-0.5 truncate")}>
-                        {[r.prospect_email, r.sent_at ? relativTid(r.sent_at, locale) : null].filter(Boolean).join(" · ")}
+                        {/* Datum och klockslag på raden (Sebbe 2026-10-09: "se när det
+                            skickades ut"), den relativa tiden i title. */}
+                        {[r.prospect_email].filter(Boolean).join("")}
+                        {r.sent_at ? (
+                          <>
+                            {r.prospect_email ? " · " : null}
+                            <time dateTime={r.sent_at} title={relativTid(r.sent_at, locale)} className="num tabular-nums">
+                              {text({ sv: "Skickat ", en: "Sent " })}
+                              {new Date(r.sent_at).toLocaleString(locale === "sv" ? "sv-SE" : "en-GB", {
+                                day: "numeric",
+                                month: "short",
+                                hour: "2-digit",
+                                minute: "2-digit",
+                                timeZone: "Europe/Stockholm"
+                              })}
+                            </time>
+                          </>
+                        ) : null}
                       </p>
                     </div>
                     <span className="flex shrink-0 items-center gap-2">
