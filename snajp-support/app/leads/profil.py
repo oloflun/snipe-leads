@@ -77,10 +77,10 @@ PRODUKTMATCH = "kp"
 
 
 def produktmatch_text(profil: dict[str, Any] | None) -> str:
-    """Kriteriets etikett, med kundens erbjudande när profilen bär det."""
-    erbjudande = _text((profil or {}).get("erbjudande"), 160)
-    if erbjudande:
-        return f"Har ett belagt behov av det kunden säljer: {erbjudande}"
+    """Kriteriets etikett. Kort och hel: med kundens erbjudande inklistrat
+    klipptes den vid 160 tecken mitt i en mening ("… hyr ut AI-agenter till
+    företag. Varje agent tar över … Kunden", lådan 2026-10-09). Motiveringen
+    under rubriken säger hur bolaget matchar erbjudandet."""
     return "Har ett belagt behov av det kunden säljer"
 
 
