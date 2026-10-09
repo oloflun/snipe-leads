@@ -9,7 +9,15 @@ import { LeadsTabell } from "@/components/leads/LeadsTabell";
  * Utkast (en status per lead) och Leads › Inkorg › Skickat med statusfilter.
  * Syntetiska bolag och mejl, ingen databas; samma mönster som
  * /forhandsvisning/kundinstallningar.
+ *
+ * 2026-10-09: markera alla och skicka. Två leads från en provkörning (märkta,
+ * bekräftelsen erbjuder att flytta över dem), stoppade utkast som går att
+ * skicka igen, ett godkänt utkast som väntar på sändfönstret i Skickat, och
+ * approve-svar med regel 1-stopp så att beskedet grupperas per orsak.
  */
+
+/** Regel 1:s besked, så som send_guard skriver det. */
+const SIDFOT = "Sidfoten saknar organisationsnummer, postadress. Marknadsföringslagen kräver att avsändaren går att identifiera i varje utskick.";
 
 const nu = Date.now();
 const iso = (timmar: number) => new Date(nu - timmar * 36e5).toISOString();
@@ -23,12 +31,30 @@ const PROSPEKT = [
   { id: "p3", company_name: "Testmåleri AB", status: "new", niva: "A", score_total: 77, ort: "Umeå", origin: "iris", created_at: iso(3), contact_email: "info@testmaleri.example", utkast_status: "vantar", queue_item_id: "q3" },
   { id: "p4", company_name: "Fiktiva Fönster AB", status: "ready", niva: "A", score_total: 74, ort: "Skellefteå", origin: "iris", created_at: iso(5), contact_email: "info@fonster.example", utkast_status: "godkant", queue_item_id: "q4", skickas_tidigast: imorgon.toISOString() },
   { id: "p5", company_name: "Låtsasel i Norr AB", status: "new", niva: "B", score_total: 63, ort: "Piteå", origin: "iris", created_at: iso(6), contact_email: "kontakt@latsasel.example", utkast_status: "stoppat", utkast_skal: "Klockan är 03:14 svensk tid. Utskick sker 8–17 på vardagar." },
-  { id: "p6", company_name: "Påhittat Plåt AB", status: "new", niva: "B", score_total: 58, ort: "Luleå", origin: "iris", created_at: iso(8), utkast_status: "saknas" }
+  { id: "p6", company_name: "Påhittat Plåt AB", status: "new", niva: "B", score_total: 58, ort: "Luleå", origin: "iris", created_at: iso(8), utkast_status: "saknas" },
+  { id: "p8", company_name: "Provkörda Bygg AB", status: "new", niva: "B", score_total: 69, ort: "Göteborg", origin: "test", created_at: iso(9), contact_email: "info@provkorda.example", utkast_status: "stoppat", queue_item_id: "q8", utkast_regel: "testkorning", utkast_skal: "Prospektet kommer från en egen provkörning och kan aldrig kontaktas." },
+  { id: "p9", company_name: "Testade Tak AB", status: "new", niva: "B", score_total: 66, ort: "Göteborg", origin: "test", created_at: iso(9), contact_email: "info@testadetak.example", utkast_status: "vantar", queue_item_id: "q9" },
+  { id: "p10", company_name: "Fotlösa Fasader AB", status: "new", niva: "A", score_total: 72, ort: "Mölndal", origin: "iris", created_at: iso(10), contact_email: "info@fotlosa.example", utkast_status: "stoppat", queue_item_id: "q10", utkast_regel: "1_avsandaridentifikation", utkast_skal: SIDFOT },
+  { id: "p11", company_name: "Saknad Sidfot AB", status: "new", niva: "B", score_total: 61, ort: "Kungälv", origin: "iris", created_at: iso(11), contact_email: "info@sidfot.example", utkast_status: "vantar", queue_item_id: "q11" }
 ];
 
 const SIGNATUR = "Vänliga hälsningar,\nSebastian Bergman\nSnajp Support | AI för leads och kundtjänst\n\nUmeå & Göteborg\nwww.snajp.se\n\nSnajp AB";
 
 const SKICKAT = [
+  {
+    id: "ko-q4",
+    subject: "Ert nya lager",
+    body: `Hej,\n\nEtt godkänt utkast som väntar på sändfönstret.\n\n${SIGNATUR}`,
+    sent_at: null,
+    schemalagt: true,
+    skickas_tidigast: imorgon.toISOString(),
+    prospect_id: "p4",
+    company_name: "Fiktiva Fönster AB",
+    contact_name: null,
+    prospect_email: "info@fonster.example",
+    svarat: false,
+    status: "ready"
+  },
   {
     id: "m1",
     subject: "Nya kontoret i Holmsund",
@@ -79,6 +105,12 @@ function installeraFetch() {
     const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
     if (!url.includes("/api/snajp-support/")) return riktig(input, init);
     if (url.includes("/leads/skickat")) return svar({ skickat: SKICKAT });
+    if (url.includes("/befordra")) return svar({ andrad: true });
+    if (url.includes("/approve")) {
+      // q3 och de flyttade provkörningsleadsen går ut; övriga stoppas av regel 1.
+      const ok = ["q3", "q8", "q9"].some((q) => url.includes(`/queue/${q}/`));
+      return svar(ok ? { utfall: "requeued" } : { utfall: "blocked", skal: SIDFOT, besked: `Stoppat av en sändspärr: ${SIDFOT}` });
+    }
     if (url.includes("/leads/prospects")) {
       return svar({ prospects: url.includes("bortvalda") || url.includes("arkiverade") ? [] : PROSPEKT });
     }
