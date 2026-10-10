@@ -11,6 +11,7 @@ import asyncio
 import json
 import logging
 import re
+import time
 import uuid
 import weakref
 from datetime import date, datetime, timedelta, timezone
@@ -196,8 +197,25 @@ def _jobbfeltext(fel: BaseException, *, reserv: str = _FEL_INTERNT) -> str:
     return str(fel) or reserv
 
 
+#: Lat städning högst så här ofta per tenant. Se _stada_lat.
+_STADA_LAT_S = 60.0
+
+
 async def _stada_lat(app_state, tenant_id: str) -> None:
-    """Lat städning vid läsning (app/jobs/stadare.py). Får aldrig fälla läsningen."""
+    """Lat städning vid läsning (app/jobs/stadare.py). Får aldrig fälla läsningen.
+
+    Högst en gång per minut och tenant: den letar jobb och listor som hängt i
+    MINUTER, men kördes vid varje läsning — två skrivande transaktioner per
+    hämtning, och listvyn pollar var femte sekund (2026-10-10)."""
+    # Tidpunkterna bor på app_state: de hör till appinstansen, inte modulen.
+    senast = getattr(app_state, "senast_stadad_lat", None)
+    if senast is None:
+        senast = {}
+        app_state.senast_stadad_lat = senast
+    nu = time.monotonic()
+    if nu - senast.get(str(tenant_id), -_STADA_LAT_S) < _STADA_LAT_S:
+        return
+    senast[str(tenant_id)] = nu
     try:
         await stada_tenant(app_state, tenant_id)
     except Exception:  # noqa: BLE001 — kunden ska se sina listor även om städningen hickar
@@ -523,7 +541,30 @@ async def list_prospects(
     request: Request, limit: int = 500, tenant: dict = Depends(require_tenant)
 ) -> dict:
     storage = request.app.state.storage
-    prospects = await storage.list_prospects(tenant["tenant_id"], limit=max(1, min(limit, 1000)))
+    tenant_id = tenant["tenant_id"]
+    from ..leads import webbpool
+
+    async def _i_research() -> set:
+        # "Research pågår" (Sebbe 2026-10-07): ett Ny-bolag vars researchjobb
+        # är köat eller körs visas med status researching. Härlett ur
+        # liggaren, aldrig lagrat — se storage.list_prospekt_i_research.
+        try:
+            return await storage.list_prospekt_i_research(tenant_id)
+        except Exception:  # noqa: BLE001 — en visningsdetalj får inte fälla listan
+            logger.exception("Kunde inte läsa pågående research för %s.", tenant_id)
+            return set()
+
+    # Sex oberoende läsningar PARALLELLT, var och en på sin anslutning. I följd
+    # var de 33 frågor och ~95 ms databastid per hämtning av Leads-fliken
+    # (Server-Timing, 2026-10-10); nu är väntan den längsta, inte summan.
+    prospects, kopplade, lagen, statuslogg, i_research, far_se_webb = await asyncio.gather(
+        storage.list_prospects(tenant_id, limit=max(1, min(limit, 1000))),
+        storage.listkopplade_prospekt(tenant_id),
+        storage.utkast_lagen(tenant_id),
+        storage.list_status_logg(tenant_id),
+        _i_research(),
+        webbpool.far_se(storage, tenant_id),
+    )
     # Exempelbolag syns bara hos demotenanten. Kvarlämnade rader från den
     # gamla default-checkboxen ska inte dyka upp som "fynd" hos en kund.
     if tenant["tenant_id"] != DEFAULT_TENANT_ID:
@@ -533,7 +574,6 @@ async def list_prospects(
     prospects = [p for p in prospects if p.get("origin") != "ring"]
     # Listans leads stannar i listan (migration 110, Anton 2026-10-10): deras
     # bakgrundsprospekt hör inte hemma i Iris-tabellen.
-    kopplade = await storage.listkopplade_prospekt(tenant["tenant_id"])
     prospects = [p for p in prospects if str(p["id"]) not in kopplade]
     # Arkiverade (107) är dolda; `?arkiverade=1` listar just dem, så att de
     # går att återställa. Inget får se ut som raderat.
@@ -553,29 +593,16 @@ async def list_prospects(
         ]
     # Utkaststatusen per lead (app/leads/utkaststatus.py): EN fråga för hela
     # tenanten, samma härledning som körningsvyn och lådan läser.
-    utkast = utkaststatus.per_prospekt(
-        await storage.utkast_lagen(tenant["tenant_id"]), [p["id"] for p in prospects]
-    )
+    utkast = utkaststatus.per_prospekt(lagen, [p["id"] for p in prospects])
     # Senaste händelse (Leads Suite): EN läsning av statusloggen, grupperad
     # här, i stället för en fråga per prospekt.
     senast: dict[str, str] = {}
-    for rad in await request.app.state.storage.list_status_logg(tenant["tenant_id"]):
+    for rad in statuslogg:
         pid = str(rad["prospect_id"])
         if rad["created_at"] > senast.get(pid, ""):
             senast[pid] = rad["created_at"]
-    # "Research pågår" (Sebbe 2026-10-07): ett Ny-bolag vars researchjobb är
-    # köat eller körs visas med status researching, och står som Ny igen när
-    # jobbet är klart. Härlett ur liggaren, aldrig lagrat — se
-    # storage.list_prospekt_i_research för varför.
-    try:
-        i_research = await request.app.state.storage.list_prospekt_i_research(tenant["tenant_id"])
-    except Exception:  # noqa: BLE001 — en visningsdetalj får inte fälla listan
-        logger.exception("Kunde inte läsa pågående research för %s.", tenant["tenant_id"])
-        i_research = set()
     # Webbplatsbedömningen är hemlig (Anton 2026-10-08): bara webbyråerna ser den.
-    from ..leads import webbpool
-
-    if not await webbpool.far_se(storage, tenant["tenant_id"]):
+    if not far_se_webb:
         prospects = [webbpool.dolj(p) for p in prospects]
     # rollkoppling_oklar: underlag för intresseavvägningen, härlett vid
     # läsning — se app/leads/rollkoppling.py för varför den inte lagras.
@@ -1406,7 +1433,13 @@ async def list_skickat(
     hit direkt, med tiden det går ut (`skickas_tidigast`)."""
     storage = request.app.state.storage
     tenant_id = tenant["tenant_id"]
-    rader = await storage.list_skickade(tenant_id, limit=limit)
+    # De tre läsningarna är oberoende: parallellt i stället för i följd
+    # (23 frågor, ~63 ms databastid per hämtning, uppmätt 2026-10-10).
+    rader, schemalagda, leadsinst = await asyncio.gather(
+        storage.list_skickade(tenant_id, limit=limit),
+        _schemalagda_utskick(storage, tenant_id),
+        storage.get_agent_settings(tenant_id, agent_type="leads"),
+    )
     for r in rader:
         inn, ut = r.get("last_inbound_at"), r.get("sent_at")
         try:
@@ -1414,15 +1447,17 @@ async def list_skickat(
         except TypeError:  # datetime mot sträng (MemoryStorage): jämför ISO-texten
             r["svarat"] = bool(inn and ut and str(inn) >= str(ut))
         r["schemalagt"] = False
-    svar: dict = {"skickat": await _schemalagda_utskick(storage, tenant_id) + rader}
-    return await _med_signatur(storage, tenant_id, svar)
+    svar: dict = {"skickat": schemalagda + rader}
+    return await _med_signatur(storage, tenant_id, svar, settings=leadsinst)
 
 
-async def _med_signatur(storage, tenant_id: str, svar: dict) -> dict:
+async def _med_signatur(storage, tenant_id: str, svar: dict, *, settings: dict | None = None) -> dict:
     """Signaturen (med logotyp-URL och textblocket) i ett svar med mejltexter,
     så att vyn visar mejlet med loggan så som mottagaren ser det (Sebbe
-    2026-10-09). Samma form som granskningskön (list_review_queue)."""
-    settings = await storage.get_agent_settings(tenant_id, agent_type="leads")
+    2026-10-09). Samma form som granskningskön (list_review_queue).
+    `settings` = redan lästa leadsinställningar (sparar en läsning)."""
+    if settings is None:
+        settings = await storage.get_agent_settings(tenant_id, agent_type="leads")
     sig = normalisera_signatur(settings.get("signatur"))
     if sig:
         svar["signatur"] = {**sig, "text": bygg_signaturtext(sig)}

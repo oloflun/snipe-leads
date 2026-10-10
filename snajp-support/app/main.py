@@ -408,6 +408,30 @@ app.include_router(kvitton.router)
 install_exception_handler(app)
 
 
+def _cachefel() -> tuple[type[BaseException], ...]:
+    try:
+        from asyncpg.exceptions import InvalidCachedStatementError, OutdatedSchemaCacheError
+    except ImportError:  # asyncpg saknas (minneslagringen i testsviten)
+        return ()
+    return (InvalidCachedStatementError, OutdatedSchemaCacheError)
+
+
+async def _inaktuell_cachad_fraga(request, error):  # noqa: ANN001, ANN202
+    """En migrering ändrade en tabell som en cachad fråga läser (statement-
+    cachen, storage/postgres.py). Transaktionen hann inte köra något. Poolens
+    anslutningar byts ut — nästa anrop förbereder frågan på nytt — och svaret
+    är 503 utan kropp, som webbens proxy gör om för GET."""
+    logger.warning("Inaktuell cachad fråga efter schemaändring (%s); poolen byts ut.", type(error).__name__)
+    pool = getattr(request.app.state.storage, "pool", None)
+    if pool is not None:
+        await pool.expire_connections()
+    return Response(status_code=503)
+
+
+for _fel in _cachefel():
+    app.add_exception_handler(_fel, _inaktuell_cachad_fraga)
+
+
 @app.get("/health")
 async def health() -> dict:
     settings = get_settings()

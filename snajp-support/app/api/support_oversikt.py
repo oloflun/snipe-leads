@@ -6,6 +6,7 @@ anropet. Testmail räknas med samma regel som Ärenden (`/api/inbox`):
 test- och demokonton ser dem, riktiga kunder gör det inte.
 """
 
+import asyncio
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, Request
@@ -22,9 +23,15 @@ async def support_oversikt(request: Request, tenant: dict = Depends(require_tena
     storage = request.app.state.storage
     tid = tenant["tenant_id"]
     nu = datetime.now(timezone.utc)
-    is_test = None if await _visar_test_i_arenden(storage, tenant) else False
-    underlag = await storage.support_oversikt_underlag(
-        tid, sedan=underlagets_start(nu).isoformat(), is_test=is_test
+
+    async def _underlag() -> dict:
+        is_test = None if await _visar_test_i_arenden(storage, tenant) else False
+        return await storage.support_oversikt_underlag(
+            tid, sedan=underlagets_start(nu).isoformat(), is_test=is_test
+        )
+
+    # Förslagen beror inte på underlaget: parallellt, inte i följd.
+    underlag, forslag = await asyncio.gather(
+        _underlag(), storage.list_agent_suggestions(tid, status="ny", limit=200)
     )
-    forslag = await storage.list_agent_suggestions(tid, status="ny", limit=200)
     return bygg_oversikt(underlag, forslag, nu=nu)

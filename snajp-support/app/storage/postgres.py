@@ -13,6 +13,7 @@ import hashlib
 import json
 import logging
 import os
+import time
 import uuid
 from contextlib import asynccontextmanager
 from datetime import date
@@ -87,6 +88,25 @@ async def _init_connection(conn: asyncpg.Connection) -> None:
         schema="public",
         format="text",
     )
+
+
+async def _ingen_sessionsaterstallning(conn: asyncpg.Connection) -> None:
+    """Poolens återställning vid release — medvetet tom.
+
+    asyncpg:s standard kör `pg_advisory_unlock_all(); CLOSE ALL; UNLISTEN *;
+    RESET ALL` vid varje release: en extra rundtur per lagringsanrop, ~20 %
+    av frågorna i ett typiskt API-anrop (uppmätt 2026-10-10). Koden har inget
+    sessionstillstånd att städa: set_config och `set local` är
+    transaktionslokala, låsen är pg_advisory_xact_lock, och ingen LISTEN.
+    En transaktion som lämnats öppen rullas ändå tillbaka av asyncpg innan
+    den här anropas (Connection._reset).
+    """
+
+
+#: Giltiga API-nycklar i minnet: sha256 → (rad, giltig till). Se validate_api_key.
+_NYCKEL_TTL_S = 30.0
+#: last_used_at skrivs högst så här ofta per nyckel.
+_SENAST_ANVAND_S = 300.0
 
 
 def _row(record: asyncpg.Record | None) -> dict[str, Any] | None:
@@ -194,6 +214,7 @@ class PostgresStorage:
 
     def __init__(self, pool: asyncpg.Pool) -> None:
         self.pool = pool
+        self._nycklar: dict[str, tuple[dict[str, Any], float]] = {}
 
     @classmethod
     async def connect(cls, database_url: str) -> "PostgresStorage":
@@ -205,19 +226,35 @@ class PostgresStorage:
             min_size=1,
             max_size=int(os.environ.get("DB_POOL_MAX", "20")),
             init=_init_connection,
-            statement_cache_size=0,  # krävs bakom Supabase transaction pooler
+            reset=_ingen_sessionsaterstallning,
+            # Statement-cachen PÅ (asyncpg:s standard, 100 per anslutning).
+            # Den stod på 0 för Supabases transaction pooler, som inte finns
+            # kvar: utan cache förbereddes varje parametriserad fråga i en
+            # egen rundtur före körningen. Efter en migrering kan en cachad
+            # `select *` fallera en gång (InvalidCachedStatementError) —
+            # app/main.py tömmer då poolen och svarar 503 utan kropp, som
+            # webbens proxy gör om för GET.
         )
         return cls(pool)
 
     @asynccontextmanager
     async def _scoped(self, tenant_id: str):
         """Transaktion med app.tenant_id satt, så RLS-policyerna gäller."""
-        async with self.pool.acquire() as conn:
-            async with conn.transaction():
-                await conn.fetchval(
-                    "select set_config('app.tenant_id', $1, true)", tenant_id
-                )
-                yield conn
+        try:
+            async with self.pool.acquire() as conn:
+                async with conn.transaction():
+                    await conn.fetchval(
+                        "select set_config('app.tenant_id', $1, true)", tenant_id
+                    )
+                    yield conn
+        except (asyncpg.exceptions.InvalidCachedStatementError, asyncpg.exceptions.OutdatedSchemaCacheError):
+            # En migrering ändrade en tabell som en cachad fråga läser
+            # (statement-cachen, se connect). asyncpg gör om sådana frågor
+            # själv utanför transaktioner, men inte här. Alla anslutningar
+            # byts så att nästa försök — även bakgrundsjobbens — förbereder
+            # frågan på nytt; HTTP-anropet svarar 503 (app/main.py).
+            await self.pool.expire_connections()
+            raise
 
     # -- Tenants ------------------------------------------------------------
 
@@ -276,6 +313,9 @@ class PostgresStorage:
                 tenant_id,
                 active,
             )
+        # Avstängningen ska gälla direkt i den här processen, inte efter
+        # nyckelcachens 30 s (validate_api_key).
+        self._nycklar.clear()
         return _row(record)
 
     async def set_tenant_status(self, tenant_id: str, *, status: str) -> dict[str, Any] | None:
@@ -293,6 +333,9 @@ class PostgresStorage:
                 tenant_id,
                 status,
             )
+        # Avstängningen ska gälla direkt i den här processen, inte efter
+        # nyckelcachens 30 s (validate_api_key).
+        self._nycklar.clear()
         return _row(record)
 
     async def get_tenant_products(self, tenant_id: str) -> list[str] | None:
@@ -3547,7 +3590,19 @@ class PostgresStorage:
 
     async def validate_api_key(self, raw_key: str) -> dict[str, Any] | None:
         # Körs INNAN tenant är känd — utan tenant-kontext (se api_key_lookup-policyn).
+        #
+        # Körs på VARJE anrop. Uppslaget plus `last_used_at`-skrivningen var
+        # tre av ett enkelt anrops åtta frågor, och skrivningen tog radlås på
+        # samma nyckelrad: Att görans sju parallella anrop köade på varandra
+        # (uppmätt 2026-10-10). En giltig nyckel hålls därför i minnet i
+        # _NYCKEL_TTL_S — en spärrad nyckel eller avstängd tenant slutar alltså
+        # gälla inom 30 s, inte direkt — och last_used_at skrivs högst var
+        # femte minut. Ogiltiga nycklar cachas aldrig.
         key_hash = hashlib.sha256(raw_key.encode()).hexdigest()
+        nu = time.monotonic()
+        traff = self._nycklar.get(key_hash)
+        if traff and traff[1] > nu:
+            return dict(traff[0])
         async with self.pool.acquire() as conn:
             record = await conn.fetchrow(
                 """
@@ -3558,10 +3613,15 @@ class PostgresStorage:
                 key_hash,
             )
             if record and record["tenant_active"]:
-                await conn.execute(
-                    "update ss_api_keys set last_used_at = now() where id = $1", record["id"]
-                )
-                return _row(record)
+                senast = record["last_used_at"]
+                if senast is None or (time.time() - senast.timestamp()) > _SENAST_ANVAND_S:
+                    await conn.execute(
+                        "update ss_api_keys set last_used_at = now() where id = $1", record["id"]
+                    )
+                rad = _row(record)
+                self._nycklar[key_hash] = (rad, nu + _NYCKEL_TTL_S)
+                return dict(rad)
+        self._nycklar.pop(key_hash, None)
         return None
 
     async def create_api_key(
