@@ -2,6 +2,7 @@
 
 import { LeadsControls } from "@/components/leads/LeadsControls";
 import { IrisAutomation } from "@/components/leads/IrisAutomation";
+import { IrisErbjudanden } from "@/components/leads/IrisErbjudanden";
 import { IrisEskalering } from "@/components/leads/IrisEskalering";
 import { IrisProdukter } from "@/components/leads/IrisProdukter";
 import { IrisProfil } from "@/components/leads/IrisProfil";
@@ -45,6 +46,9 @@ export function IrisInstallningar({ demo = false }: Readonly<{ demo?: boolean }>
           </div>
           <div className="border-t border-ink/15 pt-8">
             <IrisProdukter />
+          </div>
+          <div className="border-t border-ink/15 pt-8">
+            <IrisErbjudanden />
           </div>
           <div className="border-t border-ink/15 pt-8">
             <IrisAutomation />

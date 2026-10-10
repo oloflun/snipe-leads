@@ -36,7 +36,7 @@ from ..leads.autonomy import kan_aktivera_auto_send
 from ..leads.autonomy import normalize as normalize_autonomy
 from ..leads.befordran import saknade_falt
 from ..leads.rollkoppling import med_rollflagga
-from ..leads import automation, crm_synk, eskalering
+from ..leads import automation, crm_synk, erbjudanden, eskalering
 from ..leads.business_context import (
     MissingBusinessContextError,
     ar_ifyllt as business_context_ar_ifyllt,
@@ -84,6 +84,7 @@ from .schemas import (
     ContextDocRequest,
     ExempelbolagRequest,
     LeadsBatchRequest,
+    ErbjudandenRequest,
     LeadsConfigRequest,
     KombineraListorRequest,
     LeadsListaRequest,
@@ -1622,6 +1623,48 @@ async def put_leads_config(
         "crm_synk": _crm_synk_val(saved),
         "signatur": normalisera_signatur(saved.get("signatur")),
     }
+
+
+async def _erbjudandelage(storage, tenant_id: str, settings: dict) -> dict:
+    """Katalogen, kundens val och utfallet per erbjudande. Bara kundens egna
+    trådar och statusar räknas; inget härlett ur webbedömningen ingår."""
+    val = erbjudanden.normalisera(settings.get("erbjudanden"))
+    return {
+        "katalog": [{"nyckel": e.nyckel, "namn": e.namn} for e in erbjudanden.katalog().values()],
+        # Kundens produkter: villkoren kan skrivas per produkt.
+        "produkter": [p["namn"] for p in las_produkter(settings)],
+        **val,
+        "resultat": erbjudanden.sammanstall(await storage.erbjudande_utfall(tenant_id)),
+    }
+
+
+@router.get("/api/leads/erbjudanden")
+async def get_leads_erbjudanden(request: Request, tenant: dict = Depends(require_tenant)) -> dict:
+    """Erbjudandena Iris A/B-testar i kalla mejl (app/leads/erbjudanden.py)."""
+    storage = request.app.state.storage
+    settings = await storage.get_agent_settings(tenant["tenant_id"], agent_type="leads")
+    return await _erbjudandelage(storage, tenant["tenant_id"], settings)
+
+
+@router.put("/api/leads/erbjudanden")
+async def put_leads_erbjudanden(
+    request: Request, payload: ErbjudandenRequest, tenant: dict = Depends(require_tenant)
+) -> dict:
+    """Aktiva erbjudanden, vikter och villkor. Ett utelämnat fält behåller det
+    sparade. Ett byte påverkar bara utkast som skrivs efteråt."""
+    storage = request.app.state.storage
+    current = await storage.get_agent_settings(tenant["tenant_id"], agent_type="leads")
+    sparat = erbjudanden.normalisera(current.get("erbjudanden"))
+    aktiva = [a.model_dump() for a in payload.aktiva] if payload.aktiva is not None else sparat["aktiva"]
+    villkor = payload.villkor if payload.villkor is not None else sparat["villkor"]
+    try:
+        nytt = erbjudanden.validera(aktiva, villkor, [p["namn"] for p in las_produkter(current)])
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from None
+    saved = await storage.set_agent_settings(
+        tenant["tenant_id"], agent_type="leads", settings={**current, "erbjudanden": nytt}
+    )
+    return await _erbjudandelage(storage, tenant["tenant_id"], saved)
 
 
 def _crm_synk_val(settings: dict) -> dict:

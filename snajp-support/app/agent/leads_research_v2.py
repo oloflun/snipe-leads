@@ -37,6 +37,7 @@ from ..agentcore.instruktioner import las_instruktioner
 from ..agentcore.overlays import pack_version
 from ..agentcore.packs import RunLedger
 from ..config import get_settings
+from ..leads import erbjudanden
 from ..leads.business_context import require_business_context
 from ..leads.grounding_gate import build_permitted_facts
 from ..leads.language_gate import last_humanizer_variant
@@ -765,6 +766,13 @@ async def run_outreach_draft_v2(
     # Iris grundprompt (agent-core/prompts/leads-systemprompt.md, eller en sparad
     # version) som eget lager i varje steg, före skillen.
     lager = replace(lager, agent_md=leads_systemprompt.rendera(foretagsnamn=tenant_name, steg="utkast", mall=lager.agent_mall or None))
+    # Kundens erbjudande för just det här prospektet (A/B, app/leads/erbjudanden.py).
+    # None = inget aktivt med villkor, och då är prompten exakt som förut.
+    # Villkoren gäller produkten researchen valde (vald_produkt), aldrig en annan.
+    erbjudande = await erbjudanden.for_trad(
+        storage, tenant_id, thread, erbjudanden.produkt_ur_research(research_summary)
+    )
+    erbjudandeblock = f"{erbjudande.block()}\n\n" if erbjudande else ""
 
     base = (
         f"## Uppdrag\nDu skriver ett kallt första mejl till {kortnamn(company_name)} åt {tenant_name}. "
@@ -787,6 +795,10 @@ async def run_outreach_draft_v2(
         "engagemang\", \"imponerande\"). Konstatera det du såg och gå vidare.\n"
         "- Tilltal: har mejlet en namngiven mottagare används \"du\" och \"dig\"; "
         "annars \"ni\" och \"er\" genomgående. Blanda aldrig.\n"
+        # Provkörningen 2026-10-10: skrivstilens exempel saknar hälsning, och
+        # 63 av 72 utkast började mitt i ingången utan "Hej".
+        "- Börja med hälsningen på en egen rad: \"Hej [förnamn],\" till en namngiven "
+        "mottagare, annars \"Hej,\".\n"
         "- Skriv produktnamnen exakt som i erbjudandet, med samma stora och små "
         "bokstäver varje gång.\n"
         "- Avsluta med frågan eller uppmaningen. Skriv INGEN hälsningsfras och "
@@ -798,6 +810,7 @@ async def run_outreach_draft_v2(
         f"## Skrivstil (gäller före skillernas mallar för formuleringen)\n{leads_systemprompt.skrivstil()}\n\n"
         f"## Brief\n{brief}\n\n"
         f"## Erbjudandet som styr vinkeln\n{offer_summary}\n\n"
+        f"{erbjudandeblock}"
         f"## Språkläge\n{language_state}\n\n"
         f"{context_pack}"
         + (f"\n\n{soul_block}" if soul_block else "")
@@ -813,6 +826,8 @@ async def run_outreach_draft_v2(
         f"## Språkläge\n{language_state}\n\n"
         # Utan stilen platta humanizern tillbaka ingången och uppmaningen.
         f"## Skrivstil (behåll mejlets struktur och uppmaning enligt den)\n{leads_systemprompt.skrivstil()}"
+        # Utan blocket stryker eller skriver humanizern om erbjudandet och villkoren.
+        + (f"\n\n{erbjudande.block()}" if erbjudande else "")
     )
 
     ledger = RunLedger(satisfied={"offer_selected", "context_pack"})
@@ -914,7 +929,8 @@ async def run_outreach_draft_v2(
             facts=build_permitted_facts(
                 context_pack=context_pack,
                 research_evidence=research_evidence,
-                offer_summary=offer_summary,
+                # Villkorens siffror är kundens egna och får stå i mejlet.
+                offer_summary=f"{offer_summary}\n{erbjudande.villkor}" if erbjudande else offer_summary,
                 brief=brief,
                 tenant_name=tenant_name,
                 company_name=company_name,
@@ -948,6 +964,7 @@ async def run_outreach_draft_v2(
                     body=body,
                     language_state=language_state,
                     humanizer_variant=last_humanizer_variant(trace.skills_used),
+                    stilkontroll=True,
                 )
             )
 

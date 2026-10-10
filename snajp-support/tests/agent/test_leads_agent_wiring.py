@@ -1284,3 +1284,30 @@ async def test_research_byter_ut_privat_epost_mot_arbetsmejl():
         )
     efter = await storage.get_prospect(TENANT, prospect["id"])
     assert efter["contact_email"] == "info@exempelbolaget.se"
+
+
+@pytest.mark.anyio
+async def test_v1_bar_kundens_erbjudande_i_alla_fyra_stegen():
+    """A/B-erbjudandet (app/leads/erbjudanden.py) ligger i basen, så också
+    humanizern ser det och stryker det inte."""
+    storage, llm = MemoryStorage(), _FakeLLM()
+    villkor = "Första månaden utan kostnad. Ingen bindningstid."
+    await storage.set_agent_settings(
+        TENANT, agent_type="leads",
+        settings={"erbjudanden": {"aktiva": [{"nyckel": "gratis_prov", "vikt": 1}],
+                                  "villkor": {"gratis_prov": villkor}}},
+    )
+    meddelanden: list[str] = []
+    original = llm.create
+
+    async def spionera(**kwargs):
+        meddelanden.append(kwargs["messages"][-1]["content"])
+        return await original(**kwargs)
+
+    llm.create = spionera
+    result = await _run_outreach(storage, llm)
+
+    assert result["queued"] is True
+    assert len(meddelanden) == len(OUTREACH_ORDER)
+    for text in meddelanden:
+        assert f"### Villkor för erbjudandet\n{villkor}" in text
