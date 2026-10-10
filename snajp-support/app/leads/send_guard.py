@@ -84,6 +84,9 @@ class Utskick:
     #: True när mottagaradressen är personlig (`fornamn.efternamn@`) snarare
     #: än funktionell. Sätts av `Prospect.epost_ar_personlig`.
     personlig_adress: bool
+    #: Skicka nu ur kön (Anton 2026-10-10): en människa har valt att mejlet
+    #: går direkt. Bara kontorstiden (regel 5a) släpps; övriga spärrar gäller.
+    direkt: bool = False
 
 
 @dataclass(frozen=True)
@@ -138,7 +141,7 @@ def check_send_guard(
 
 
 def _regel_1_avsandaridentifikation(*, avsandare, utskick, historik, nu) -> GuardBeslut | None:
-    """Fullständigt företagsnamn, org.nr och fysisk adress i varje mejls sidfot.
+    """Företagsnamnet i varje mejls sidfot (org.nr och adress när de finns).
 
     VARFÖR: marknadsföringslagen kräver att avsändaren går att identifiera, och
     e-handelslagen kräver organisationsnummer. Kravet gäller HYRESKUNDEN, inte
@@ -149,20 +152,16 @@ def _regel_1_avsandaridentifikation(*, avsandare, utskick, historik, nu) -> Guar
     det är brödtexten som skickas. En mall som är rätt hjälper inte om
     sammanslagningen tappade fältet.
     """
-    saknas = [
-        etikett
-        for etikett, varde in (
-            ("företagsnamn", avsandare.foretagsnamn),
-            ("organisationsnummer", avsandare.orgnr),
-            ("postadress", avsandare.postadress),
-        )
-        if not str(varde).strip() or _normaliserad(varde) not in _normaliserad(utskick.brodtext)
-    ]
-    if saknas:
+    # Antons beslut 2026-10-10 (docs/BESLUT.md): org.nr och postadress får
+    # aldrig stoppa ett utskick. Foten bär dem när kundregistret har dem
+    # (leads_tools.lagstadgad_fot); spärren kräver bara att avsändaren går att
+    # identifiera med namn.
+    namn = avsandare.foretagsnamn
+    if not str(namn).strip() or _normaliserad(namn) not in _normaliserad(utskick.brodtext):
         return GuardBeslut(
             BLOCKERA,
             "1_avsandaridentifikation",
-            "Sidfoten saknar " + ", ".join(saknas) + ". Marknadsföringslagen kräver "
+            "Sidfoten saknar företagsnamn. Marknadsföringslagen kräver "
             "att avsändaren går att identifiera i varje utskick.",
         )
     return None
@@ -327,9 +326,12 @@ def _regel_5_volymtak(*, avsandare, utskick, historik, nu) -> GuardBeslut | None
     """
     lokal_tid = nu.astimezone(STOCKHOLM)
 
+    # 5a hoppas över för Skicka nu (utskick.direkt): människan har valt tiden.
+    if utskick.direkt:
+        pass
     # 5a. Kontorstid, vardagar. Ett kallmejl 03:14 läses som maskinellt även
     # när texten är bra. Söndag är inte en arbetsdag för mottagaren heller.
-    if lokal_tid.weekday() >= 5:
+    elif lokal_tid.weekday() >= 5:
         veckodag = _VECKODAGAR[lokal_tid.weekday()]
         return GuardBeslut(
             KOLA_OM,
@@ -337,7 +339,7 @@ def _regel_5_volymtak(*, avsandare, utskick, historik, nu) -> GuardBeslut | None
             f"{veckodag.capitalize()} är helg. Utskick sker på vardagar "
             f"{TIDIGAST_TIMME}–{SENAST_TIMME} svensk tid.",
         )
-    if not (TIDIGAST_TIMME <= lokal_tid.hour < SENAST_TIMME):
+    elif not (TIDIGAST_TIMME <= lokal_tid.hour < SENAST_TIMME):
         return GuardBeslut(
             KOLA_OM,
             "5_volymtak",

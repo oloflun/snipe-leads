@@ -1,8 +1,7 @@
 import type { Metadata } from "next";
 
-import { FelOchEskaleringar } from "@/components/admin/FelOchEskaleringar";
-import { Kundstatistik } from "@/components/admin/Kundstatistik";
 import { Kundtabell } from "@/components/admin/Kundtabell";
+import { KunderOversikt } from "@/components/admin/KunderOversikt";
 import { berikaAlla } from "@/lib/admin/exempeldata";
 import { beraknaKundstatistik } from "@/lib/admin/statistik";
 import { listEvents, listTenants, unwrap } from "@/lib/data/admin";
@@ -33,8 +32,9 @@ export const maxDuration = 60;
  * förrän en riktig datakälla är vald. Det stod förut i en fotnot längst ned på
  * sidan; den togs bort 2026-09-27 (F-016), regeln gäller fortfarande.
  *
- * Ordningen är tabellen, sedan fel och eskaleringar, sist statistiken: det som
- * väntar på admin före talen som bara ska läsas.
+ * Ordningen sedan 2026-10-07 (Sebbe: samma layout som de andra översikterna):
+ * nyckeltalen och statistiken överst, sedan tabellen, sist fel och
+ * eskaleringar bredvid provperioderna. Se components/admin/KunderOversikt.tsx.
  */
 
 /** Händelsetaket. Fullt svar => talen i felsektionen prefixas "minst". */
@@ -74,32 +74,24 @@ export default async function Page() {
     <div>
       <AdminVyhuvud grupp="kunder" />
 
-      <Kundtabell kunder={kunder} />
+      {kunder.length === 0 ? (
+        <Kundtabell kunder={kunder} />
+      ) : (
+        /* Fel & eskaleringar renderas även när händelselistan inte gick att
+           hämta, då med tom lista: eskaleringstalet kommer ur tenantraderna.
 
-      {/* Fel & eskaleringar: sammanfattar det som redan loggas. Renderas även
-          när händelselistan inte gick att hämta — då med tom lista, eftersom
-          eskaleringstalet kommer ur tenantraderna och står på egna ben. */}
-      {kunder.length > 0 ? (
-        <FelOchEskaleringar
-          tenants={kunder}
+           Statistiken räknas på SAMMA rader som tabellen, inte en egen
+           hämtning, och test- och demoarbetsytor räknas inte
+           (`raknasSomKund()` i lib/admin/statistik.ts). Exempelraderna räknas
+           däremot, eftersom de är märkta, och vyn säger hur många de är. */
+        <KunderOversikt
+          kunder={kunder}
           events={events ?? []}
           taketNaddes={(events?.length ?? 0) >= HANDELSETAK}
           nu={nu.getTime()}
+          stat={beraknaKundstatistik(kunder, nu)}
         />
-      ) : null}
-
-      {/* Statistiken räknas på SAMMA rader som tabellen ovan, inte en egen
-          hämtning — två uträkningar av samma tal blir förr eller senare två
-          olika tal. `new Date()` är okej i en force-dynamic server component:
-          sidan renderas per anrop.
-
-          Test- och demoarbetsytor räknas inte (`raknasSomKund()` i
-          lib/admin/statistik.ts) — en testyta som syns i en försäljningskurva
-          fattar beslut åt någon. Exempelraderna räknas däremot, eftersom de är
-          märkta, och Kundstatistik säger hur många de är. */}
-      {kunder.length > 0 ? (
-        <Kundstatistik stat={beraknaKundstatistik(kunder, nu)} />
-      ) : null}
+      )}
     </div>
   );
 }

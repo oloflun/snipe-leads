@@ -150,12 +150,12 @@ export const shared = {
   gdprText: {
     sv: "Varje kunds data ligger i en egen avgränsning och kan bara läsas av den kunden — " +
       "det är en spärr i databasen, inte en inställning i koden. Ingenting publiceras, och " +
-      "ingenting delas mellan kunder. För att skriva svaret skickas mejltexten till vår " +
+      "ingen kunds uppgifter delas med en annan kund. För att skriva svaret skickas mejltexten till vår " +
       "AI-leverantör, som behandlar den åt oss och inte tränar på den. Inget mejl går ut " +
       "utan att en människa godkänt det.",
     en: "Every customer's data sits in its own boundary and can only be read by that customer — " +
-      "enforced in the database, not by a setting in the code. Nothing is published, and nothing " +
-      "is shared between customers. To write the reply, the email text is sent to our AI " +
+      "enforced in the database, not by a setting in the code. Nothing is published, and no " +
+      "customer's data is shared with another customer. To write the reply, the email text is sent to our AI " +
       "provider, which processes it on our behalf and does not train on it. No email goes out " +
       "without a person approving it."
   },

@@ -29,11 +29,30 @@ SUPPORT_V1 = Playbook(
         # temperature 0.5: utkastet är ett formuleringssteg, och 0.3 gav
         # svar som öppnade likadant i ärende efter ärende. Fakta kommer ur
         # KB-underlaget och grindas efteråt — det är formen som får variera.
+        #
+        # Skopad 2026-10-06: utkaststeget bär grundprompten i sin helhet
+        # (support_systemprompt.py — arbetsflöde, beslut, mallar, längd,
+        # eskalering, självkontroll). Skillens egna delar för samma saker
+        # dubblerade den, och dess "Draft Response / Notes for You"-mall var
+        # roten till To/Re/Notes-formatfelet som koden har en omkörningsgrind
+        # för. Kvar: tonen och skrivstilen, som grundprompten inte beskriver.
+        # 14 581 -> ~3 800 tecken, vilket betalar för grundprompten i steget.
         PlaybookStep(
             skill="cs:draft-response",
             requires=("skill:cs:customer-research",),
             overlay="support-conversation",
             temperature=0.5,
+            scope=(
+                "§ Core Principles",
+                "§ Tone Spectrum",
+                "§ Writing Style Rules",
+                "§ Situation-Specific Approaches",
+            ),
+            rationale=(
+                "Grundprompten (agent-core/prompts/support-systemprompt.md) bär "
+                "arbetsflödet, besluten, mallarna och eskaleringen i det här "
+                "steget. Skillen laddas bara för ton och skrivstil."
+            ),
         ),
         # thinking PÅ, medvetet mot den globala AV-defaulten: det enda steget
         # där "ska detta till en människa?" avgörs. En felaktig eskalering
@@ -60,7 +79,12 @@ SUPPORT_V1 = Playbook(
         # (agent_suggestions, migration 051) i stället för att kastas.
         PlaybookStep(
             skill="cs:kb-article",
-            requires=("skill:cs:customer-escalation",),
+            # 2026-10-05: research, inte escalation. Ärligt-läget (KB-miss
+            # med tydlig fråga) hoppar numera över bedömningssteget, och en
+            # lucka som besvaras ärligt är fortfarande en lucka värd ett
+            # artikelförslag. Research körs alltid före och är det underlag
+            # steget faktiskt resonerar kring.
+            requires=("skill:cs:customer-research",),
             condition="kb_gap_or_escalation",
         ),
         # ÖPPEN FRÅGA: thinking-läge inte beslutat här. Triggas bara när

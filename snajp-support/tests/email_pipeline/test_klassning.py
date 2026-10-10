@@ -122,3 +122,31 @@ async def test_lagret_bar_klass_och_filtrerar():
     rader = await storage.list_emails(TENANT, klass="lead", is_test=None)
     assert [r["id"] for r in rader] == [e["id"]] and rader[0]["klass_kalla"] == "regel"
     assert await storage.list_emails(TENANT, klass="support", is_test=None) == []
+
+
+async def test_utskick_enligt_headers_och_maskinadress_ar_ej_relaterat():
+    """Alunix 2026-10-04: Railway-, Google Cloud- och Render-notiser blev
+    kundärenden och eskalerades. Headerflaggan, maskinadressen var som helst i
+    lokaldelen och sidfoten fäller dem före Jev."""
+    storage = MemoryStorage()
+    med_header = {**_mejl("team@railway.app", amne="Sandboxes are here"), "automatutskick": True}
+    assert (await klassning.klassa(storage, TENANT, med_header))["klass"] == "ej_relaterat"
+    for fran in ("CloudPlatform-noreply@google.com", "notifications@github.com", "mailer-daemon@x.se"):
+        assert (await klassning.klassa(storage, TENANT, _mejl(fran)))["klass"] == "ej_relaterat", fran
+    sidfot = _mejl("hej@verktyg.io", amne="Nyheter i oktober", text="Massa text.\n\nAvregistrera dig här.")
+    assert (await klassning.klassa(storage, TENANT, sidfot))["klass"] == "ej_relaterat"
+    # En kund som nämner no-reply mitt i ett ärende är fortfarande ett ärende.
+    kund = _mejl("anna@kund.se", text="Jag fick ett mejl från no-reply men inget kvitto. Kan ni hjälpa?")
+    assert (await klassning.klassa(storage, TENANT, kund))["klass"] == "support"
+
+
+async def test_kontaktpersonens_svar_med_listheader_ar_lead_men_bolagets_utskick_inte():
+    storage = MemoryStorage()
+    await storage.create_prospect(
+        TENANT, company_name="Alfa Bygg AB", contact_email="vd@alfabygg.se", origin="import",
+        profil={"website": "https://www.alfabygg.se"},
+    )
+    svar = {**_mejl("vd@alfabygg.se"), "automatutskick": True}
+    assert (await klassning.klassa(storage, TENANT, svar))["klass"] == "lead"
+    nyhetsbrev = {**_mejl("nyheter@alfabygg.se"), "automatutskick": True}
+    assert (await klassning.klassa(storage, TENANT, nyhetsbrev))["klass"] == "ej_relaterat"

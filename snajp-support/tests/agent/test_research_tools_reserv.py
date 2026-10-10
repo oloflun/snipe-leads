@@ -43,6 +43,15 @@ def _fake_sgai_key(monkeypatch):
     get_settings.cache_clear()
 
 
+@pytest.fixture(autouse=True)
+def _ingen_vantan_mellan_tester():
+    """sidhamtning glesar ut ScrapeGraph-anropen (en per sekund). Utan
+    nollställningen väntar ett test på föregående tests anrop."""
+    from app.leads import sidhamtning
+
+    sidhamtning._SENAST[0] = 0.0
+
+
 async def _ctx() -> ResearchContext:
     storage = MemoryStorage()
     await storage.create_prospect_source(

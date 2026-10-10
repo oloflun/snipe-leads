@@ -1,3 +1,4 @@
+import type { Localized } from "@/lib/i18n";
 import type { ProductKey } from "@/lib/routes";
 
 /**
@@ -12,15 +13,14 @@ export type AgentSajt = "support";
 
 export const AGENTSAJTER: Record<
   AgentSajt,
-  { produkt: ProductKey; envUrl: string; rubrik: string; beskrivning: string; knapp: string }
+  { produkt: ProductKey; envUrl: string; knapp: Localized }
 > = {
+  // Rubriken ("Supportagenten har fått en egen arbetsyta") och beskrivningen
+  // togs bort 2026-10-07 på Sebbes begäran: knappen står ensam.
   support: {
     produkt: "support",
     envUrl: "SUPPORT_EXTERN_URL",
-    rubrik: "Supportagenten har fått en egen arbetsyta",
-    beskrivning:
-      "Ärendena, utkasten och kunskapsbasen som egna flikar, med mer plats att arbeta. Du loggas in automatiskt.",
-    knapp: "Kör Agent"
+    knapp: { sv: "Kör agent", en: "Run agent" }
   }
 };
 

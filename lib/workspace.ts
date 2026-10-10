@@ -12,6 +12,12 @@ export type WorkspaceContext = {
   profile: Profile;
   workspace: Workspace;
   businessContext: BusinessContext | null;
+  /**
+   * Raden i `platform_admins` finns — läst i samma fråga som resten, så att
+   * admingrinden (lib/auth/admin.ts:getPlatformAdmin) inte kostar en egen
+   * transaktion per anrop.
+   */
+  isPlatformAdmin: boolean;
 };
 
 export async function getProfileForUser(userId: string): Promise<Profile | null> {
@@ -72,11 +78,13 @@ export const getWorkspaceContext = cache(async function getWorkspaceContext(): P
     profile: Profile;
     workspace: Workspace;
     business_context: BusinessContext | null;
+    is_platform_admin: boolean;
   }>(
     userId,
     `select to_jsonb(p.*)  as profile,
             to_jsonb(w.*)  as workspace,
-            to_jsonb(bc.*) as business_context
+            to_jsonb(bc.*) as business_context,
+            exists (select 1 from public.platform_admins pa where pa.user_id = p.id) as is_platform_admin
        from public.profiles p
        join public.workspaces w on w.id = p.workspace_id
        left join public.business_contexts bc on bc.workspace_id = w.id
@@ -98,7 +106,8 @@ export const getWorkspaceContext = cache(async function getWorkspaceContext(): P
     },
     profile: row.profile,
     workspace: row.workspace,
-    businessContext: row.business_context ?? null
+    businessContext: row.business_context ?? null,
+    isPlatformAdmin: row.is_platform_admin === true
   };
 });
 

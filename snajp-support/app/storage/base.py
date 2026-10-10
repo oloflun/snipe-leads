@@ -88,7 +88,20 @@ BEDOMNINGSFALT = (
     "ort",
     "postnr",
     "anstallda",
+    # Migration 094 (plan 2026-10-05, fas 3): PageSpeed och bildbedömningen.
+    "webbrevision",
 )
+
+#: Fälten Processa om får skriva på en listrad (app/leads/omprova.py).
+LISTRAD_UPPDATERBARA = (
+    "website", "contact_name", "contact_role", "contact_email", "contact_phone", "contact_level", "signal_detalj",
+    # Migration 108 och 110: Processa om (leads/omprova.py) och kopplingen
+    # till radens prospekt.
+    "orgnr", "webbniva", "webbrevision", "kallor", "processad_at", "prospect_id",
+)
+#: Kolumnerna ovan som är jsonb och skrivs som JSON.
+LISTRAD_JSONB = ("webbrevision", "kallor")
+
 
 class Storage(Protocol):
     name: str
@@ -357,6 +370,13 @@ class Storage(Protocol):
         åt, och det ska de vara). Kräver migration 069 (delete-grant)."""
         ...
 
+    async def kb_utan_vektor(self, tenant_id: str, *, limit: int = 50) -> list[dict[str, Any]]:
+        """Artiklar som sparades medan inbäddningarna var trasiga (2026-09-12
+        till 2026-10-06), äldst först. Omindexeringen fyller på dem."""
+        ...
+
+    async def satt_kb_vektor(self, tenant_id: str, artikel_id: str, embedding: list[float]) -> None: ...
+
     # -- Agentens föreslagna lärdomar (självlärning, 2026-08-26) -------------
     #
     # Supportens cs:kb-article och leads _fanga_kunskap RÄKNADE UT lärdomar på
@@ -488,6 +508,22 @@ class Storage(Protocol):
 
     async def get_outreach_thread(self, tenant_id: str, thread_id: str) -> dict[str, Any] | None: ...
 
+    async def get_send_queue_item(self, tenant_id: str, item_id: str) -> dict[str, Any] | None:
+        """En send_queue-post, eller None om den inte finns hos tenanten."""
+        ...
+
+    async def senaste_ko_for_trad(self, tenant_id: str, thread_id: str) -> dict[str, Any] | None:
+        """Trådens senaste send_queue-post (vilken status som helst), eller None.
+        Körningens utkastvy läser status per lead härifrån."""
+        ...
+
+    async def update_outreach_message_text(
+        self, tenant_id: str, message_id: str, *, subject: str, body: str
+    ) -> None:
+        """Skriver om ett EJ skickat utkasts ämne och text (granskarens
+        redigering). Ett skickat meddelande rörs aldrig."""
+        ...
+
     async def get_pending_outreach_message(
         self, tenant_id: str, thread_id: str
     ) -> dict[str, Any] | None:
@@ -495,6 +531,12 @@ class Storage(Protocol):
         ...
 
     async def mark_outreach_message_sent(self, tenant_id: str, message_id: str, sent_at: Any) -> None: ...
+
+    async def list_skickade(self, tenant_id: str, *, limit: int = 200) -> list[dict[str, Any]]:
+        """Skickade leadsmejl (outbound, sent_at satt) över alla trådar, senast
+        först, med bolag och mottagare — fliken Skickat i Iris-leads
+        (Sebbe 2026-10-07). `last_inbound_at` säger om bolaget svarat."""
+        ...
 
     async def list_replies(self, tenant_id: str, *, limit: int = 50) -> list[dict[str, Any]]:
         """Inkomna svar över ALLA trådar, senast först — arbetsytans Svar-flik.
@@ -555,17 +597,42 @@ class Storage(Protocol):
 
     async def list_outreach_threads(self, tenant_id: str) -> list[dict[str, Any]]:
         """Alla trådar med de aggregat uppföljningssvepet dömer på:
-        outbound_sent_count, last_outbound_sent_at, last_inbound_at och
-        has_pending_item (köad/väntande post eller osänt utkast), plus
-        prospektets `origin` för automationsreglerna per typ. Aggregaten
-        räknas i lagringen — policyn (NÄR en uppföljning är förfallen) bor i
+        outbound_sent_count, first_outbound_sent_at, last_outbound_sent_at,
+        last_inbound_at och has_pending_item (köad/väntande post eller osänt,
+        icke-kasserat utkast), plus prospektets `origin` för automationsreglerna
+        per typ och `prospect_status`/`arkiverad_at` (ett avslutat eller
+        arkiverat lead följs inte upp). Aggregaten räknas i lagringen, varje
+        rad en gång (count distinct: två joinade tabeller multiplicerade annars
+        varandra) — policyn (NÄR en uppföljning är förfallen) bor i
         app/leads/follow_up_generator.py och är testbar utan databas."""
+        ...
+
+    async def utkast_lagen(
+        self, tenant_id: str, *, med_text: bool = False, prospect_id: str | None = None
+    ) -> dict[str, dict[str, Any]]:
+        """Underlaget för utkaststatusen per lead (app/leads/utkaststatus.py),
+        nycklat på prospect_id, i EN fråga för hela tenanten (eller ett lead).
+
+        Per lead: thread_id, skickat_at (senaste skickade utgående),
+        antal_skickade, och trådens SENASTE köpost (queue_item_id, ko_status,
+        gate_checks, scheduled_at; ordnad på created_at). `med_text` lägger
+        till det aktuella meddelandet (message_id, subject, body): det väntande
+        (osänt, icke-kasserat, senast skapade) i första hand, annars det
+        senaste. Ett lead utan tråd saknas i svaret."""
         ...
 
     async def cancel_pending_sends(self, tenant_id: str, thread_id: str) -> int:
         """Ställer in trådens köade/väntande send_queue-poster. Körs när ett
         svar kommit in: det som låg i kön skrevs till någon som inte hade
-        svarat, och den premissen gäller inte längre. Returnerar antalet."""
+        svarat, och den premissen gäller inte längre. Trådens osända utkast
+        kasseras samtidigt (migration 107), så att inget av dem väljs som
+        väntande text igen. Returnerar antalet inställda poster."""
+        ...
+
+    async def list_pending_sends(self, tenant_id: str, thread_id: str) -> list[dict[str, Any]]:
+        """Trådens köade/väntande send_queue-poster (queued, awaiting_review),
+        äldst först. Köningen läser dem så att en tråd aldrig bär två väntande
+        utkast (2026-10-08)."""
         ...
 
     async def reschedule_pending_sends(
@@ -609,14 +676,37 @@ class Storage(Protocol):
         ...
 
     async def last_contact_with_company(
-        self, tenant_id: str, foretagsnyckel: str
+        self, tenant_id: str, foretagsnyckel: str, *, utom_trad: str | None = None
     ) -> Any | None:
         """När bolaget senast kontaktades, oavsett kontaktperson. Nyckeln är
         FÖRETAGET — ett bolag som byter kontaktperson ska inte kunna få ett
-        nytt kallmejl dagen efter."""
+        nytt kallmejl dagen efter.
+
+        `utom_trad`: leadets egen tråd räknas inte. 90-dagarsspärren gäller ett
+        NYTT kallmejl; en uppföljning eller ett svarsutkast i samma samtal
+        stoppades annars av samtalets eget första mejl (2026-10-08)."""
         ...
 
     # -- G11: segmentaggregatet (den enda avsiktliga tenantgränsöverskridningen) --
+
+    # -- Webbpoolen (migration 108, INV-SEC-008): plattformstabell utan tenant --
+
+    async def webbpool_hamta(self, domaner: list[str]) -> dict[str, dict[str, Any]]:
+        """Poolens rader för domänerna, nycklade på domän."""
+        ...
+
+    async def webbpool_spara(self, rad: dict[str, Any]) -> None:
+        """Upsert på domän. Bara bolagsnivå (webbpool.POOLFALT); ett befintligt
+        värde skrivs aldrig över med None."""
+        ...
+
+    async def webbpool_ofordelade(
+        self, mottagare: str, *, lan: list[str], nivaer: list[str], limit: int = 200
+    ) -> list[dict[str, Any]]:
+        """Bedömda rader i länen och nivåerna som mottagaren inte fått."""
+        ...
+
+    async def webbpool_markera_fordelad(self, mottagare: str, domaner: list[str], list_id: str | None) -> None: ...
 
     async def get_segment_ab_aggregate(self) -> list[dict[str, Any]]:
         """Inget tenant_id-argument — se app/leads/segment_aggregate.py och
@@ -644,6 +734,15 @@ class Storage(Protocol):
         # körde någon modell alls. None för anropare som (ännu) inte skickar
         # det — kolumnen är nullable av samma skäl.
         model: str | None = None,
+        # Fas 7 (migration 101): systemlagrens text, {hash: text}, ur
+        # RunTrace.lagertexter(). Läggs EN gång per unik hash i prompt_lager
+        # (insert … on conflict do nothing); step_log bär bara hashen. Ett fel
+        # där fäller aldrig loggningen av körningen.
+        prompt_lager: dict[str, str] | None = None,
+        # Kolumnen finns sedan migration 025 men skrevs aldrig. Insynens kedja
+        # per bolag (GET /api/admin/prospects/{id}/kedja) hittar körningarna
+        # genom den.
+        prospect_id: str | None = None,
     ) -> dict[str, Any]:
         """Skrivs för VARJE körning. Krävs för DSAR och för att kunna felsöka
         ett dåligt svar i efterhand (plan G10).
@@ -659,6 +758,12 @@ class Storage(Protocol):
     async def list_agent_runs(
         self, tenant_id: str, *, agent_type: str | None = None, limit: int = 50
     ) -> list[dict[str, Any]]: ...
+
+    async def get_prompt_lager(self, hashar: list[str]) -> dict[str, str]:
+        """Lagertexterna för de givna hasharna (prompt_lager, migration 101).
+        Saknade hashar saknas i svaret — en äldre körning, eller en text vars
+        skrivning föll."""
+        ...
 
     # -- Leads-jobbens liggare (INV-JOB-002) --------------------------------
 
@@ -697,12 +802,37 @@ class Storage(Protocol):
         migration 059, eller en annan miljös jobb)."""
         ...
 
+    async def list_prospekt_i_research(self, tenant_id: str) -> set[str]:
+        """Prospekten vars researchjobb står i queued eller processing i
+        liggaren (scope research/research_and_draft; ett rent utkastjobb är
+        ingen research). Underlaget för den härledda statusen "Research
+        pågår" i GET /api/leads/prospects (Sebbe 2026-10-07): härledd i
+        stället för lagrad, så att en process som dör aldrig lämnar ett bolag
+        fast i den — städaren failar jobbet och bolaget står som Ny igen."""
+        ...
+
     async def list_leads_korningar(self, tenant_id: str, *, limit: int = 20) -> list[dict[str, Any]]:
         """Tenantens körningar (liggarens batch- och listrader), nyast
         först: job_id, status, scope, is_test, created_at, updated_at,
         completed_at, error, korning (INV-JOB-003). Prospektjobben (scope
         research/research_and_draft/draft) är inte körningar och tas inte
         med — de är körningens barn och står i `korning.jobs`."""
+        ...
+
+    async def get_sidcache(self, tenant_id: str, url: str) -> dict[str, Any] | None:
+        """Sidcachen (migration 093, app/leads/sidhamtning.py): {innehall, fel, hamtad_at}."""
+        ...
+
+    async def put_sidcache(self, tenant_id: str, url: str, *, innehall: str | None, fel: str | None) -> None:
+        """Skriver över raden för (kund, url) och stämplar hamtad_at = nu."""
+        ...
+
+    async def set_korning_styrning(self, tenant_id: str, job_id: str, styrning: str | None) -> bool:
+        """Sätter `korning.styrning` ('paus' | 'avbruten' | None) atomiskt på
+        en pågående Iris-körning. Bara den här metoden skriver fältet:
+        set_leads_job_status bevarar det, så motorns helskrivning av
+        tillståndet (som kan ha läst före pausen) aldrig nollar den. False när
+        körningen inte finns, inte är en pågående batch eller redan är klar."""
         ...
 
     async def get_leads_korning(self, tenant_id: str, job_id: str) -> dict[str, Any] | None:
@@ -768,6 +898,14 @@ class Storage(Protocol):
         """Nyaste först, med `item_count` per rad."""
         ...
 
+    async def saljlista_fyll_pa(self, tenant_id: str, rader: list[dict[str, Any]]) -> int:
+        """Skriver färdiga rader till arbetsytans säljlista (public.saljlista,
+        migration 103/105): nycklarna foretagsnamn, orgnr, kontaktperson,
+        kontaktnummer, kontaktmail, anteckningar. Dedupliklerar mot befintliga
+        rader på orgnr-siffror eller bolagsnamn och returnerar antalet
+        inlagda. Finns ingen arbetsyta för tenanten skrivs ingenting (0)."""
+        ...
+
     async def get_lead_list(self, tenant_id: str, list_id: str) -> dict[str, Any] | None: ...
 
     async def add_lead_list_item(
@@ -778,8 +916,44 @@ class Storage(Protocol):
         ...
 
     async def list_lead_list_items(
-        self, tenant_id: str, list_id: str
-    ) -> list[dict[str, Any]]: ...
+        self, tenant_id: str, list_id: str, *, med_flyttade: bool = False
+    ) -> list[dict[str, Any]]:
+        """Listans rader utom de som flyttats till Iris eller ringlistan
+        (`signal='flyttad'`): ett bolag visas på ett ställe (2026-10-08).
+        `med_flyttade` för åtgärder på EN rad som redan kan ha flyttats."""
+        ...
+
+    async def uppdatera_listrad(self, tenant_id: str, item_id: str, falt: dict[str, Any]) -> None:
+        """Processa om (2026-10-08): kontaktsökningens fynd skrivs på raden.
+        Bara LISTRAD_UPPDATERBARA; övriga nycklar ignoreras."""
+        ...
+
+    async def satt_listprocessering(self, tenant_id: str, list_id: str, processering: dict[str, Any] | None) -> None:
+        """Förloppet för listans Processa om / Skapa utkast (migration 110)."""
+        ...
+
+    async def listkopplade_prospekt(self, tenant_id: str) -> set[str]:
+        """Prospekt som är en listrads bakgrundspost (migration 110). Iris-
+        tabellen visar dem inte: bolaget står i sin lista."""
+        ...
+
+    async def markera_listrad_flyttad(self, tenant_id: str, item_id: str, *, signal_detalj: str) -> None:
+        """Raden blev ett prospekt. Den raderas aldrig (Antons beslut
+        2026-10-07) men döljs: `signal='flyttad'` och var den hamnade."""
+        ...
+
+    async def spara_listutkast(
+        self, tenant_id: str, item_id: str, utkast: dict[str, Any] | None
+    ) -> None:
+        """Sätter (eller nollar) listradens utkast (migration 106,
+        app/leads/listutkast.py)."""
+        ...
+
+    async def lista_upptagna_bolag(self, tenant_id: str) -> list[dict[str, Any]]:
+        """`company_name` och `orgnr` för varje bolag kunden redan har: alla
+        prospekt och alla rader i alla leadslistor (CRM-kunder inräknade).
+        Iris och listbygget utesluter dem (app/leads/upptagna.py)."""
+        ...
 
     async def rensa_lead_list_items(self, tenant_id: str, list_id: str) -> int:
         """Tar bort EN listas rader. Returnerar antal borttagna.
@@ -789,11 +963,17 @@ class Storage(Protocol):
         stod i 'byggs' i dagar)."""
         ...
 
+    async def delete_lead_list(self, tenant_id: str, list_id: str) -> bool:
+        """Raderar EN lista; raderna följer med (on delete cascade, 060).
+        Bara kundens eller adminens uttryckliga Ta bort lista, och flytten av
+        en lista till en annan kund, går hit. False om listan inte fanns."""
+        ...
+
     async def stada_hangande_leadsjobb(
         self, tenant_id: str, *, aldre_an_minuter: int, utom: list[str] | None = None
     ) -> list[str]:
-        """Markerar liggarrader i queued/processing med created_at äldre än
-        `aldre_an_minuter` som failed. `utom` är job_id som körs i den här
+        """Markerar liggarrader i queued/processing med updated_at äldre än
+        `aldre_an_minuter` som failed (pausade körningar undantagna). `utom` är job_id som körs i den här
         processen och aldrig ska städas. Returnerar de städade job_id:na.
         Se app/jobs/stadare.py."""
         ...
@@ -809,6 +989,24 @@ class Storage(Protocol):
         """Markerar listor i bestalld/byggs äldre än `aldre_an_minuter` som
         'fel' med `felorsak`, och tar bort deras rader i samma svep.
         Returnerar de städade list_id:na. Se app/jobs/stadare.py."""
+        ...
+
+    async def support_oversikt_underlag(
+        self, tenant_id: str, *, sedan: str, is_test: bool | None
+    ) -> dict[str, Any]:
+        """Råraderna bakom Kundtjänst › Översikt (app/support_oversikt.py).
+
+        Returnerar `{"mejl": [...], "korningar": {...}, "kb_artiklar": int}`.
+        Varje mejl: `id, received_at, status, category, escalate,
+        kb_traffar (int | None), forsta_svar (iso | None)`, för supportmejl
+        mottagna från och med `sedan`. Larm, leads och dolda räknas inte.
+        `forsta_svar` är första `auto_sent`/`approved_and_sent` i
+        beslutsloggen. `korningar` summerar periodens supportkörningar
+        (utan is_test): `antal, tokens_in, tokens_out, cache, modell`.
+
+        Aggregeringen sker i Python och inte här, så att Postgres och minnet
+        inte kan räkna olika.
+        """
         ...
 
     async def weekly_analytics(self, tenant_id: str, *, weeks: int = 8) -> dict[str, Any]:
@@ -870,6 +1068,7 @@ class Storage(Protocol):
         humanizer_variant: str,
         scheduled_at: Any,
         status: str = "queued",
+        gate_checks: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Skapar meddelandet (sent_at=NULL) OCH send_queue-raden i samma
         operation — det finns ingen kodväg som skapar det ena utan det andra.
@@ -877,7 +1076,30 @@ class Storage(Protocol):
         `status` avgörs av kundens autonominivå (app/leads/autonomy.py):
         'queued' släpps till schemaläggaren, 'awaiting_review' väntar på att
         en människa godkänner. Default är 'queued' för att inte ändra
-        beteendet för anropare som inte känner till nivån."""
+        beteendet för anropare som inte känner till nivån.
+
+        `gate_checks` blir köpostens första grindanteckning. Köningen lägger
+        `held` där när text- eller stilkontrollen tvingat granskning, så att
+        granskaren ser varför (utkaststatus.harled läser den)."""
+        ...
+
+    async def tilldela_erbjudande(self, tenant_id: str, thread_id: str, *, nyckel: str) -> str:
+        """Kopplar tråden till kundens erbjudande `nyckel` (app/leads/erbjudanden.py):
+        get-or-create en `offers`-rad per kund och nyckel (name = nyckeln) och
+        sätt `outreach_threads.offer_id`. Returnerar offer-id:t."""
+        ...
+
+    async def erbjudande_utfall(self, tenant_id: str) -> list[dict[str, Any]]:
+        """Utfallet per erbjudande, räknat på trådar med `offer_id`: en rad per
+        nyckel med `utkast` (trådar med ett utgående meddelande), `skickade`
+        (med ett skickat), och bland de skickade `svar`, `positiva` och `moten`.
+
+        Härledningen, eftersom svarsklassen inte sparas i en egen kolumn:
+        app/leads/svar.py är den enda kodvägen som sätter prospektets status
+        med källan 'kod' till replied/meeting/lost/suppressed (statusloggen,
+        migration 086), och 'meeting' med 'kod' är just klassen positivt. Ett
+        möte är ett samtalsutfall 'mote' (lead_samtal), en manuell flytt till
+        'meeting' eller status 'won'. Bara loggrader från trådens start räknas."""
         ...
 
     # -- Leads: proveniensregister (Fas B, INV-DATA-001, research-verktygets allowlist) --
@@ -898,7 +1120,23 @@ class Storage(Protocol):
 
     async def get_prospect(self, tenant_id: str, prospect_id: str) -> dict[str, Any] | None: ...
 
-    async def list_prospects(self, tenant_id: str, *, limit: int = 100) -> list[dict[str, Any]]: ...
+    async def list_prospects(self, tenant_id: str, *, limit: int = 500) -> list[dict[str, Any]]: ...
+
+    async def arkivera_prospekt(
+        self, tenant_id: str, prospect_ids: list[str], *, arkivera: bool
+    ) -> list[str]:
+        """Sätter (arkivera=True) eller nollar `arkiverad_at` (migration 107).
+        Ett arkiverat lead är dolt i Iris-listan men behåller historiken och
+        står kvar i uteslutningsmängden. Returnerar id:na som fanns."""
+        ...
+
+    async def radera_prospekt(self, tenant_id: str, prospect_ids: list[str]) -> dict[str, list[str]]:
+        """Raderar de leads som ALDRIG kontaktats (inget utgående meddelande
+        med sent_at), i en transaktion. {"raderade": [...], "kontaktade": [...]}:
+        ett kontaktat lead raderas aldrig — utskicksloggen bär 90-dagars-
+        spärren och avregistreringarna, så det arkiveras i stället. Trådar,
+        utkast, köposter och Suite-raderna följer med (on delete cascade)."""
+        ...
 
     async def update_prospect(
         self,
@@ -970,6 +1208,24 @@ class Storage(Protocol):
         """Nyast först."""
         ...
 
+    # -- Samtal (migration 107, app/leads/samtal.py) ---------------------------
+
+    async def add_lead_samtal(
+        self,
+        tenant_id: str,
+        *,
+        prospect_id: str,
+        utfall: str,
+        aterkom_datum: str | None,
+        anteckning: str | None,
+    ) -> dict[str, Any]: ...
+
+    async def list_lead_samtal(
+        self, tenant_id: str, *, prospect_id: str | None = None
+    ) -> list[dict[str, Any]]:
+        """Äldst först. Utan `prospect_id`: hela tenantens samtal."""
+        ...
+
     async def list_lead_views(self, tenant_id: str) -> list[dict[str, Any]]: ...
 
     async def create_lead_view(
@@ -1022,6 +1278,8 @@ class Storage(Protocol):
         body_text: str,
         received_at: str | None = None,
         is_test: bool = False,
+        automatutskick: bool = False,
+        mailbox_id: str | None = None,
     ) -> dict[str, Any] | None:
         """Sparar ett inkommande mail. Returnerar None vid dublett (dedupe)."""
         ...
@@ -1203,8 +1461,9 @@ class Storage(Protocol):
     # affärskontext, KB) ligger kvar i USERposition — se app/leads/soul.py för
     # varför den skillnaden är mekanismen och inte en försiktighetsåtgärd.
 
-    async def get_global_instructions(self) -> dict[str, Any] | None:
-        """Den aktiva globala instruktionen, eller None.
+    async def get_global_instructions(self, agent_type: str = "alla") -> dict[str, Any] | None:
+        """Den aktiva globala instruktionen för `agent_type` (migration 099:
+        'alla', 'support' eller 'leads'), eller None.
 
         None betyder "ingen har skrivit någon ännu" och är inte ett fel:
         app/agentcore/instruktioner.py faller då tillbaka på den incheckade
@@ -1219,15 +1478,24 @@ class Storage(Protocol):
         strukturerad_md: str,
         kalla: str = "ai",
         uppdaterad_av: str | None = None,
+        agent_type: str = "alla",
+        feedback: str = "",
     ) -> dict[str, Any]:
-        """Ny version. Avaktiverar den föregående i SAMMA transaktion — det
+        """Ny version för `agent_type`. Avaktiverar den föregående i SAMMA transaktion — det
         partiella unika indexet tillåter bara en aktiv rad, så två steg utan
         transaktion hade kunnat lämna noll aktiva efter ett avbrott."""
         ...
 
-    async def list_global_instructions(self, *, limit: int = 20) -> list[dict[str, Any]]:
-        """Historiken, nyast först. Driftverktyg: svarar på 'vad stod det när
+    async def list_global_instructions(
+        self, *, limit: int = 20, agent_type: str = "alla", med_text: bool = False
+    ) -> list[dict[str, Any]]:
+        """Historiken för `agent_type`, nyast först. `med_text` tar med
+        dokumentet och feedbacken (för återställning och visning). Driftverktyg: svarar på 'vad stod det när
         den där körningen gjordes?'."""
+        ...
+
+    async def get_global_instruction(self, instruktion_id: str) -> dict[str, Any] | None:
+        """En version, aktiv eller inte, med hela texten. För återställning."""
         ...
 
     async def get_agent_config(self, tenant_id: str, *, agent_type: str) -> dict[str, Any]:
@@ -1283,6 +1551,11 @@ class Storage(Protocol):
         tenant_id: str | None = None,
         agent_type: str | None = None,
         limit: int = 50,
+        # Insynens kedja per bolag (Fas 7). None = alla.
+        prospect_id: str | None = None,
+        # Bara listans fält (SAMMANDRAG_FALT) — utan input, output och
+        # step_log, som är 99 % av radens vikt. Adminlistorna läser inget mer.
+        sammandrag: bool = False,
     ) -> list[dict[str, Any]]: ...
 
     async def get_agent_run(self, run_id: str) -> dict[str, Any] | None: ...
@@ -1383,8 +1656,15 @@ class Storage(Protocol):
         mejl_avsandare: str | None = None,
         valuta: str = "SEK",
         belopp_original: str | None = None,
+        granskning: dict[str, Any] | None = None,
+        granskningsstatus: str | None = None,
     ) -> dict[str, Any]:
         """Ett underlag, med de fält avläsningen faktiskt hittade.
+
+        `granskning`/`granskningsstatus` (migration 096) bär kvittohanterarens
+        hela avläsning enligt grundprompten: varje fält med säkerhet och källa,
+        flaggorna, kontrollräkningarna och statusen ur avsnitt 9.2. De platta
+        kolumnerna ovan är det verifikatet och summorna räknar på.
 
         Kvittofälten (migration 063): `kalla` säger VAR kvittot kom ifrån
         (uppladdning eller mejl), mejl_*-fälten bär avsändare och ämne när
@@ -1397,6 +1677,16 @@ class Storage(Protocol):
         Grinden, inte databasen, avgör om det får bli en periodrapport.
         """
         ...
+
+    async def markera_kvittomejl_last(
+        self, tenant_id: str, fingeravtryck: str, *, klass: str
+    ) -> None:
+        """Ett mejl kvittohanteraren läst och som INTE gav något underlag
+        (migration 096). Utan minnet hade samma nyhetsbrev lästs av modellen
+        vid varje skanning. Idempotent."""
+        ...
+
+    async def ar_kvittomejl_last(self, tenant_id: str, fingeravtryck: str) -> bool: ...
 
     async def get_bk_underlag(
         self, tenant_id: str, underlag_id: str
@@ -1519,6 +1809,9 @@ AGENT_RUN_TYPES = (
     # regel: konstanten och migrationen i SAMMA ändring.
     "leads_svar",
     "leads_followup",
+    # Anropen utanför stegmotorn — bolagssökningen, Jev-triagen och
+    # profilkompileringen (migration 101, app/agentcore/insyn.samla_anrop).
+    "leads_underlag",
 )
 
 #: Agenttyperna som räknas mot leads-budgeten (sum_leads_tokens /
@@ -1587,6 +1880,25 @@ def kontrollera_bk_kalla(kalla: str) -> None:
     if kalla not in BK_KALLOR:
         raise BkValideringsfel(
             f"kalla={kalla!r} finns inte i bk_underlag check-villkoret {BK_KALLOR}."
+        )
+
+
+#: Kvittohanterarens status ur grundpromptens avsnitt 9.2 (migration 096).
+#: Spegel av check-villkoret; `kvitton/granskning.GRANSKNINGSSTATUSAR` ska
+#: vara samma lista (testas i tests/kvitton/test_granskning.py).
+BK_GRANSKNINGSSTATUSAR: tuple[str, ...] = (
+    "KLAR_FÖR_GRANSKNING",
+    "BEHÖVER_GRANSKNING",
+    "PRIORITERAD_GRANSKNING",
+    "KRÄVER_MANUELL_HÄMTNING",
+)
+
+
+def kontrollera_bk_granskningsstatus(status: str | None) -> None:
+    if status is not None and status not in BK_GRANSKNINGSSTATUSAR:
+        raise BkValideringsfel(
+            f"granskningsstatus={status!r} finns inte i bk_underlag "
+            f"check-villkoret {BK_GRANSKNINGSSTATUSAR}."
         )
 
 
@@ -1681,6 +1993,7 @@ ANALYTICS_COVERAGE: dict[str, bool] = {
     "tickets": True,
     "escalated": True,
     "resolved": True,
+    "new_leads": True,
     "meetings": False,
 }
 

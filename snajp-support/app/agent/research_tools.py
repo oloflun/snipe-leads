@@ -26,10 +26,10 @@ from urllib.parse import urlparse
 import httpx
 from agents import RunContextWrapper, function_tool
 
-from ..config import get_settings
 from ..leads.platshallare import html_till_text, platshallarskal
 from ..leads.untrusted_content import wrap_untrusted_content
 from .leads_context import ResearchContext
+from ..tls import ssl_kontext
 
 logger = logging.getLogger("snajp-support.research-tools")
 
@@ -81,23 +81,14 @@ async def _scrape_registered_source_impl(research: ResearchContext, url: str) ->
             ensure_ascii=False,
         )
 
-    settings = get_settings()
-    if not settings.scrapegraphai_api_key:
-        return json.dumps(
-            {"error": "SCRAPEGRAPHAI_API_KEY saknas — research-skrapning är inte konfigurerad."}
-        )
+    # Cache, kredittak och ordningen gratis-först bor i sidhamtning (plan
+    # 2026-10-05). Ett register (merinfo) blockerar direkthämtning och går
+    # bara via ScrapeGraph; bolagets egen sajt hämtas direkt först.
+    from ..leads import sidhamtning
 
-    markdown, sgai_fel = await _hamta_via_scrapegraph(settings.scrapegraphai_api_key, url)
-    via = "scrapegraphai"
+    markdown, fel, via = await sidhamtning.hamta(url, fas="research", direkt=not ar_registersida(url))
     if markdown is None:
-        markdown, direkt_fel = await _hamta_direkt(url)
-        via = "direkt"
-        if markdown is None:
-            return json.dumps(
-                {"error": f"{sgai_fel} Reservhämtningen gav inget heller: {direkt_fel}."},
-                ensure_ascii=False,
-            )
-        logger.info("ScrapeGraphAI fallerade för %s (%s) — direkthämtningen tog vid.", url, sgai_fel)
+        return json.dumps({"error": fel or "Sidan gick inte att hämta."}, ensure_ascii=False)
 
     platshallare = platshallarskal(markdown)
     post: dict = {"url": url, "length": len(markdown), "via": via}
@@ -115,18 +106,28 @@ async def _scrape_registered_source_impl(research: ResearchContext, url: str) ->
     return json.dumps({"content": wrapped}, ensure_ascii=False)
 
 
-async def _hamta_via_scrapegraph(api_key: str, url: str) -> tuple[str | None, str | None]:
+async def _hamta_via_scrapegraph(api_key: str, url: str, *, js: bool = False) -> tuple[str | None, str | None]:
     """(markdown, fel). Det synkrona SDK:t körs i en tråd: `client.scrape` är
     ett blockerande nätverksanrop, och direkt i en async-funktion stod hela
     api-processens händelseloop still medan det pågick - 54 s för
-    itkonsulterna.se 2026-09-15, med kundchatten i samma process."""
+    itkonsulterna.se 2026-09-15, med kundchatten i samma process.
+
+    `js`: en riktig webbläsare med 2,5 s väntan och samtyckescookies (2
+    krediter), för sidor vars innehåll laddas med JavaScript, som merinfos
+    sökresultat (orgnr_uppslag.py)."""
     from scrapegraph_py import ScrapeGraphAI
 
     try:
         client = ScrapeGraphAI(api_key=api_key)
-        result = await asyncio.wait_for(
-            asyncio.to_thread(client.scrape, url), timeout=SGAI_TAK_SEKUNDER
-        )
+        if js:
+            from scrapegraph_py import FetchConfig
+
+            from ..leads.webbrevision import SAMTYCKE
+
+            anrop = lambda: client.scrape(url, fetch_config=FetchConfig(mode="js", wait=2500, cookies=SAMTYCKE))  # noqa: E731
+        else:
+            anrop = lambda: client.scrape(url)  # noqa: E731
+        result = await asyncio.wait_for(asyncio.to_thread(anrop), timeout=SGAI_TAK_SEKUNDER)
     except asyncio.TimeoutError:
         return None, f"ScrapeGraphAI svarade inte inom {int(SGAI_TAK_SEKUNDER)} s."
     except Exception as fel:  # noqa: BLE001 — tjänstefel ska ge reservhämtning, inte krasch
@@ -138,6 +139,16 @@ async def _hamta_via_scrapegraph(api_key: str, url: str) -> tuple[str | None, st
     if not markdown:
         return None, "Skrapningen gav inget markdown-innehåll."
     return markdown, None
+
+
+#: Bolagsregister som researchen läser bolagsfakta ur. De blockerar vanlig
+#: hämtning och är aldrig bolagets egen sajt (ingen kontaktjakt där).
+REGISTERDOMANER = ("merinfo.se", "allabolag.se")
+
+
+def ar_registersida(url: str) -> bool:
+    host = urlparse(url).netloc.lower()
+    return any(host == d or host.endswith("." + d) for d in REGISTERDOMANER)
 
 
 def _samma_varddator(a: str, b: str) -> bool:
@@ -157,6 +168,7 @@ async def _hamta_direkt(url: str) -> tuple[str | None, str | None]:
     """
     try:
         async with httpx.AsyncClient(
+            verify=ssl_kontext(),
             timeout=_DIREKT_TIMEOUT, follow_redirects=True, headers=_DIREKT_HEADERS
         ) as client:
             svar = await client.get(url)

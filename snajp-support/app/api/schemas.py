@@ -2,6 +2,8 @@
 
 from typing import Literal
 
+from datetime import datetime
+
 from pydantic import BaseModel, Field, model_validator
 
 
@@ -21,6 +23,11 @@ class ChatRequest(BaseModel):
     #: medan fältet saknades här, så varje admintest räknades som kundvolym.
     #: Samma fält och samma innebörd som LeadsBatchRequest.is_test.
     is_test: bool = False
+    #: 2026-10-05: arbetsytans hjälpchatt får ett sifferblock med tenantens
+    #: egna nyckeltal (app/agent/arbetsyta_siffror.py). Flaggan sätts BARA av
+    #: den autentiserade testchatt-routen i Next och STRIPPAS av den publika
+    #: chat-routen — en slutkund ska aldrig kunna fråga ut företagets siffror.
+    arbetsyta: bool = False
 
 
 class TriageEmail(BaseModel):
@@ -66,6 +73,24 @@ class ProspectRequest(BaseModel):
     contact_email: str | None = None
 
 
+class ProduktRequest(BaseModel):
+    """En av kundens produkter. Kundskriven text: hamnar i användarposition."""
+
+    model_config = {"extra": "forbid"}
+
+    namn: str = Field(min_length=1, max_length=80)
+    nytta: str = Field(default="", max_length=400)
+
+
+class SegmentRequest(BaseModel):
+    """Ett målsegment: ett sökbart branschord och varför det passar."""
+
+    model_config = {"extra": "forbid"}
+
+    bransch: str = Field(min_length=1, max_length=80)
+    varfor: str = Field(default="", max_length=240)
+
+
 class LeadsConfigRequest(BaseModel):
     """Båda fälten är valfria: UI:t har två separata formulär, och en PUT från
     det ena får inte nolla det andra."""
@@ -81,6 +106,41 @@ class LeadsConfigRequest(BaseModel):
     automation: "AutomationRequest | None" = None
     crm_synk: "CrmSynkRequest | None" = None
     signatur: "SignaturRequest | None" = None
+    #: Kundens produkter: Iris väljer EN per bolag (leads_research_v2).
+    produkter: "list[ProduktRequest] | None" = Field(default=None, max_length=8)
+    #: Rangordnade målsegment, bäst först (leads/profil.py).
+    segment: "list[SegmentRequest] | None" = Field(default=None, max_length=6)
+    #: True bara när kunden själv säljer till offentlig sektor eller skolor.
+    offentlig_sektor: bool | None = None
+
+
+class ErbjudandeArmRequest(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    nyckel: str = Field(max_length=40)
+    vikt: int = Field(default=1, ge=0, le=10)
+
+
+class ErbjudandenRequest(BaseModel):
+    """PUT /api/leads/erbjudanden (app/leads/erbjudanden.py). Båda fälten
+    valfria: ett utelämnat fält behåller det sparade. Nycklarna och kravet på
+    villkor för ett aktivt erbjudande prövas mot katalogen i routen."""
+
+    model_config = {"extra": "forbid"}
+
+    aktiva: list[ErbjudandeArmRequest] | None = Field(default=None, max_length=6)
+    #: Per erbjudande: en text för alla produkter, eller {produktnamn: text}.
+    villkor: dict[str, str | dict[str, str]] | None = None
+
+    @model_validator(mode="after")
+    def _villkorslangd(self) -> "ErbjudandenRequest":
+        from ..leads.erbjudanden import VILLKOR_MAX
+
+        for nyckel, varde in (self.villkor or {}).items():
+            texter = varde.values() if isinstance(varde, dict) else [varde]
+            if any(len(text) > VILLKOR_MAX for text in texter):
+                raise ValueError(f"Villkoren för {nyckel} är längre än {VILLKOR_MAX} tecken.")
+        return self
 
 
 class SignaturRequest(BaseModel):
@@ -138,6 +198,15 @@ class AutomationPerTypRequest(BaseModel):
     inkorg: AutomationTypRequest | None = None
 
 
+class AutopilotRequest(BaseModel):
+    """Iris autopilot (app/leads/autopilot.py): en körning per vardag."""
+
+    model_config = {"extra": "forbid"}
+
+    pa: bool | None = None
+    leads_per_dag: int | None = Field(default=None, ge=1, le=50)
+
+
 class AutomationRequest(BaseModel):
     """Automationsreglerna per lead-typ. Sammanslås fältvis per typ i
     PUT /api/leads/config — resten står kvar."""
@@ -146,6 +215,7 @@ class AutomationRequest(BaseModel):
 
     per_typ: AutomationPerTypRequest | None = None
     jev_bortval: bool | None = None
+    autopilot: AutopilotRequest | None = None
 
 
 class CrmSynkRequest(BaseModel):
@@ -304,6 +374,14 @@ class ProspectPatchRequest(BaseModel):
     contact_email: str | None = Field(default=None, max_length=200)
 
 
+class ProvmejlRequest(BaseModel):
+    """Provmejl (app/leads/provmejl.py): ett utkast ELLER ett skickat mejl."""
+
+    till: str = Field(..., min_length=3, max_length=320)
+    queue_item_id: str | None = Field(default=None, max_length=64)
+    message_id: str | None = Field(default=None, max_length=64)
+
+
 class BefordraRequest(BaseModel):
     """Ifyllnad vid flytta-över. Tom kropp = validera det som redan ligger."""
 
@@ -353,9 +431,15 @@ class ProcessaOmRequest(BaseModel):
     innan kontakt/utkast — 'Processa om' i registret.
     """
 
-    prospect_ids: list[str] = Field(..., min_length=1, max_length=50)
+    # 200 (2026-10-08): Skapa utkast och Skapa om i Iris-listan körs på alla
+    # markerade, och listan visar upp till 500 leads.
+    prospect_ids: list[str] = Field(..., min_length=1, max_length=200)
     scope: str = Field(default="research_and_draft", pattern=r"^(research|research_and_draft)$")
     is_test: bool = False
+    #: Skapa om utkast: leadets väntande utkast ersätts. Köposterna ställs in
+    #: och de osända utkasten kasseras FÖRE omskrivningen, så att det gamla
+    #: aldrig kan godkännas eller gå ut efter det nya.
+    ersatt: bool = False
 
 
 class LeadsListaRequest(BaseModel):
@@ -371,6 +455,10 @@ class LeadsListaRequest(BaseModel):
     antal: int = Field(default=25, ge=1, le=200)
     is_test: bool = False
     overrides: LeadsRunOverrides | None = None
+    #: 'saljlista' (migration 105): körningens färdiga rader med full
+    #: kontaktinformation läggs direkt i arbetsytans säljlista, och listan
+    #: själv visas aldrig under "Dina listor". 'lista' är den vanliga listan.
+    mal: Literal["lista", "saljlista"] = "lista"
 
 
 class KombineraListorRequest(BaseModel):
@@ -384,6 +472,20 @@ class KombineraListorRequest(BaseModel):
     #: alla = varje rad; telefon = rader med telefon; mejl = rader med mejl;
     #: bada = rader med både telefon och mejl.
     kontaktfilter: Literal["alla", "telefon", "mejl", "bada"] = "alla"
+
+
+class SchemalaggRequest(BaseModel):
+    """Ny utskickstid för markerade godkända utkast (Anton 2026-10-10)."""
+
+    ids: list[str] = Field(min_length=1, max_length=500)
+    tid: datetime
+
+
+class TillbakaTillIrisRequest(BaseModel):
+    """Markerade utkast ur sändlistan tillbaka till Iris för att skrivas om
+    (Anton 2026-10-10)."""
+
+    ids: list[str] = Field(min_length=1, max_length=50)
 
 
 class TillIrisRequest(BaseModel):
@@ -426,6 +528,18 @@ class SoulRequest(BaseModel):
     content: str = Field(default="", max_length=4000)
 
 
+class OnskemalRequest(BaseModel):
+    """Kundens feedback till sin agent (app/leads/onskemal.py).
+
+    `feedback` = vad kunden skrev; `dokument` = den förhandsgranskade texten
+    kunden godkänt. Utan `dokument` bakas feedbacken in vid sparningen."""
+
+    model_config = {"extra": "forbid"}
+
+    feedback: str = Field(default="", max_length=4000)
+    dokument: str | None = Field(default=None, max_length=4000)
+
+
 class InstruktionRequest(BaseModel):
     """Globala eller kundspecifika agentinstruktioner, skrivna av admin.
 
@@ -439,10 +553,16 @@ class InstruktionRequest(BaseModel):
     """
 
     ravtext: str = Field(default="", max_length=12_000)
-    #: Sätts av den som redigerat modellens utkast direkt. Tom => struktureras
-    #: ur ravtext.
-    strukturerad_md: str | None = Field(default=None, max_length=12_000)
+    #: Det färdiga dokumentet: den granskade förhandsvisningen eller en
+    #: handredigering. Tom => feedbacken bakas in (agentcore/baka_in.py).
+    #: Taket följer agentens grundprompt; endpointen kapar per agent.
+    strukturerad_md: str | None = Field(default=None, max_length=40_000)
     strukturera: bool = True
+    #: Vilket lager: 'alla' (gemensamt), 'support' eller 'leads' (migration 099).
+    agent: str = Field(default="alla", pattern="^(alla|support|leads)$")
+    #: Admins feedback, ordagrant. Bakas in i dokumentet som gäller och sparas
+    #: bredvid versionen. None => `ravtext` används (äldre klienter).
+    feedback: str | None = Field(default=None, max_length=20_000)
 
 
 class TenantAktivRequest(BaseModel):
@@ -620,8 +740,17 @@ class SorteraRequest(BaseModel):
     """Provsortera: klassa mejlen nu och visa förslaget; `tillampa` skriver
     det. Taket håller ett knapptryck inom några sekunder även med Jev."""
 
-    email_ids: list[str] = Field(..., min_length=1, max_length=25)
+    email_ids: list[str] = Field(default_factory=list, max_length=25)
     tillampa: bool = False
+    # Omsortering i bulk (plan 2026-10-05): alla mejl i en status, i stället
+    # för 25 synliga. Rader som pipelinen fortfarande håller i nås aldrig.
+    status: Literal["escalated", "awaiting_approval"] | None = None
+
+    @model_validator(mode="after")
+    def _ett_urval(self) -> "SorteraRequest":
+        if not self.email_ids and not self.status:
+            raise ValueError("Ange email_ids eller status.")
+        return self
 
 
 class OmformuleraDraftRequest(BaseModel):

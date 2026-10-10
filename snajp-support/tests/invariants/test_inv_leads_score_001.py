@@ -89,5 +89,8 @@ async def test_poang_och_motivering_sparas_alltid(svar):
 async def test_modellens_fria_omdome_faller_aldrig():
     result, rad = await _kor(MODELLSVAR[1])
     assert result["qualified"] is True
-    assert rad["niva"] == "B"
+    # A sedan 2026-10-05: prospektet saknar sajt och kriteriet säger "ingen
+    # hemsida", så webbkriteriet är en träff i kod (bedomning.webbutslag) i
+    # stället för modellens okänt. Poängen här är att modellen inte fäller.
+    assert rad["niva"] in ("A", "B")
     assert "Jurist" not in " ".join(rad.get("disqualifiers") or [])

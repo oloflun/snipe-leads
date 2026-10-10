@@ -103,6 +103,11 @@ FAKTAKONTROLL = ("tillatande", "forsiktig", "strikt")
 #: "same as user"); "svenska" = alltid svenska, oavsett vad kunden skriver.
 SPRAKVAL = ("kundens", "svenska")
 
+#: Språken Snajp erbjuder (Sebbe 2026-10-06): svenska och engelska. "kundens"
+#: betyder kundens språk BLAND dessa — fram till dess svarade agenten på
+#: vilket språk som helst (bd snipe-xtr).
+TILLATNA_SPRAK = ("sv", "en")
+
 #: Språknamn för prompten. En ISO-kod utanför listan skickas som kod —
 #: modellen känner dem — men de vanligaste får ett namn, så att instruktionen
 #: inte kan läsas som något annat än ett språk.
@@ -149,8 +154,18 @@ def svarsprak(
     for kandidat in (signal, tidigare):
         kod = str(kandidat or "").strip().lower()[:2]
         if _ISO_KOD.match(kod):
-            return kod
+            # Snajp erbjuder svenska och engelska (Sebbe 2026-10-06). Ett
+            # tredje språk får svenska — och grundprompten 8.3 säger att
+            # svaret då nämner att ärendet kan hanteras på svenska eller
+            # engelska.
+            return kod if kod in TILLATNA_SPRAK else "sv"
     return "sv"
+
+
+def utanfor_sprakstodet(signal: Any) -> bool:
+    """Skriver kunden på ett språk utanför svenska och engelska?"""
+    kod = str(signal or "").strip().lower()[:2]
+    return bool(_ISO_KOD.match(kod)) and kod not in TILLATNA_SPRAK
 
 
 def spraknamn(kod: str) -> str:
@@ -234,11 +249,38 @@ _NEKANDE_FORE = re.compile(r"\b(inte|ej|ingen|inga|slippa|slipper|utan\s+att)\b"
 
 def ber_om_manniska(text: str) -> bool:
     """Ber texten uttryckligen om en människa? Nekade formuleringar räknas inte."""
+    if fragar_om_ai(text) and not _UTTRYCKLIG_ONSKAN.search(text or ""):
+        return False
     for traff in _BER_OM_MANNISKA.finditer(text or ""):
         fore = (text or "")[max(0, traff.start() - 30) : traff.start()]
         if not _NEKANDE_FORE.search(fore):
             return True
     return False
+
+
+#: Kunden frågar om agenten är en människa eller en AI. Ingen begäran om en
+#: människa i sig (grundprompten 7.3): svaret är ärligt och ERBJUDER en kollega.
+_IDENTITETSFRAGA = re.compile(
+    r"\b(pratar|chattar|skriver|talar)\s+jag\s+med\s+(en\s+)?(riktig|äkta|levande|"
+    r"verklig|människa|person|bot|robot|ai|maskin)|"
+    r"\bär\s+du\s+(en\s+)?(riktig|äkta|levande|människa|person|bot|robot|ai|maskin)\b|"
+    r"\bare\s+you\s+(a\s+)?(real|human|person|bot|robot|ai)\b|"
+    r"\bam\s+i\s+(talking|chatting)\s+(to|with)\s+(a\s+)?(real|human|person|bot|robot|ai)\b",
+    re.IGNORECASE,
+)
+
+#: En uttrycklig önskan, som gäller även i en identitetsfråga ("är du en bot?
+#: jag vill prata med en människa").
+_UTTRYCKLIG_ONSKAN = re.compile(
+    r"\b(vill|önskar|kan\s+jag\s+få|får\s+jag|snälla|want\s+to|can\s+i)\b[^.?!]{0,40}"
+    r"\b(prata|tala|chatta|snacka|talk|speak|chat)\b",
+    re.IGNORECASE,
+)
+
+
+def fragar_om_ai(text: str) -> bool:
+    """Frågar kunden om agenten är en människa eller AI?"""
+    return bool(_IDENTITETSFRAGA.search(text or ""))
 
 
 #: Ett kort jakande svar. Läses BARA när agenten i förra repliken erbjöd en

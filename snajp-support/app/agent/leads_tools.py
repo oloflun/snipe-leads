@@ -20,7 +20,7 @@ from agents import RunContextWrapper, function_tool
 from ..leads.autonomy import allowed_action
 from ..leads.language_gate import LanguageGateError, check_send_gate
 from ..leads.outreach_playbook import finalize_outreach_body
-from ..leads.signatur import med_signatur, normalisera as normalisera_signatur
+from ..leads.signatur import HALSNING, med_signatur, normalisera as normalisera_signatur
 from ..leads.timing_gate import check_cold_outreach_gate
 from ..leads.utskicksfot import avregistreringslank, bygg_fot, med_fot
 from ..notifications.prioriterat_mejl import skicka_prioriterat
@@ -60,20 +60,28 @@ async def _med_lagstadgad_fot(outreach: OutreachContext, brodtext: str) -> str:
     regel 1 med hela listan över vad som saknas, vilket är det besked som går
     att åtgärda.
     """
+    return await lagstadgad_fot(outreach.storage, outreach.tenant_id, outreach.prospect_email, brodtext)
+
+
+async def lagstadgad_fot(storage, tenant_id: str, prospect_email: str | None, brodtext: str) -> str:
+    """Foten för en brödtext, eller texten oförändrad när underlaget saknas
+    (se _med_lagstadgad_fot). Också Godkänn och skicka går hit
+    (scheduler.skicka_godkant): ett utkast skrivet innan kundregistret var
+    ifyllt får sin fot när det godkänns, i stället för att stoppas av regel 1."""
     from ..config import get_settings  # lokalt: undviker cirkulär import vid modulladdning
 
     bas_url = get_settings().publik_bas_url
-    tenant = await outreach.storage.get_tenant(outreach.tenant_id) or {}
+    tenant = await storage.get_tenant(tenant_id) or {}
     foretagsnamn = str(tenant.get("company_name") or tenant.get("name") or "").strip()
     orgnr = str(tenant.get("orgnr") or "").strip()
     postadress = str(tenant.get("postal_address") or "").strip()
 
-    if not (bas_url and foretagsnamn and orgnr and postadress and outreach.prospect_email):
+    # Org.nr och postadress är inte krav (Anton 2026-10-10): foten tar med dem
+    # när kundregistret har dem.
+    if not (bas_url and foretagsnamn and prospect_email):
         return brodtext
 
-    token = await outreach.storage.avregistreringstoken(
-        outreach.tenant_id, email=outreach.prospect_email
-    )
+    token = await storage.avregistreringstoken(tenant_id, email=prospect_email)
     return med_fot(
         brodtext,
         fot=bygg_fot(
@@ -98,6 +106,7 @@ async def _queue_outreach_draft_impl(
     language_state: str,
     humanizer_variant: str,
     force_review: bool = False,
+    stilkontroll: bool = False,
 ) -> str:
     # Textkvalitetslagret (app/textkvalitet.py): sista efterkontrollen innan
     # texten kan nå en kund. Platshållare ("[förnamn]") kontrolleras på
@@ -116,15 +125,35 @@ async def _queue_outreach_draft_impl(
     ]
 
     finalized_body = finalize_outreach_body(body)
-    kvalitet = await sakra_utgaende_text(finalized_body, sprak=sprak)
+    kvalitet = await sakra_utgaende_text(finalized_body, sprak=sprak, alltid_korrektur=True)
     finalized_body = kvalitet.text
-    textkvalitet_granskning: str | None = None
+    granskningsskal: str | None = None
     if kvalitet.kraver_granskning or platshallare:
         force_review = True
         delar = [a.beskrivning for a in platshallare] + (
             [kvalitet.sammanfattning()] if kvalitet.kraver_granskning else []
         )
-        textkvalitet_granskning = "; ".join(delar)
+        granskningsskal = "; ".join(delar)
+
+    # Stilkontrollen (app/leads/stilkontroll.py) för kalla första mejl: AI-
+    # och robotmarkörer, och samma ingång eller uppmaning som ett annat utkast
+    # som väntar på granskning (körningens andra mejl). Fäller inget, men ett
+    # fynd tvingar granskning, och skälet står på köposten (`held`) så att
+    # granskaren ser det.
+    if stilkontroll:
+        from ..leads import stilkontroll as stil
+
+        andra = [
+            str(r.get("body") or "")
+            for r in await outreach.storage.list_review_queue(outreach.tenant_id)
+            if r.get("thread_id") != outreach.thread_id
+        ]
+        stilfynd = stil.kontrollera(finalized_body).anmarkningar + stil.mot_andra(finalized_body, andra)
+        if stilfynd:
+            force_review = True
+            granskningsskal = "; ".join(
+                [*([granskningsskal] if granskningsskal else []), *(a.beskrivning for a in stilfynd)]
+            )
 
     # Signaturen (kodens text, inte modellens) läggs på efter kvalitets-
     # kontrollen och före foten — vid köningen, så att granskningstexten är
@@ -135,7 +164,7 @@ async def _queue_outreach_draft_impl(
     )
     signatur = normalisera_signatur(agent_settings.get("signatur"))
     if signatur:
-        finalized_body = med_signatur(finalized_body, signatur)
+        finalized_body = med_signatur(finalized_body, signatur, halsning=HALSNING[sprak])
 
     finalized_body = await _med_lagstadgad_fot(outreach, finalized_body)
 
@@ -146,12 +175,33 @@ async def _queue_outreach_draft_impl(
         outreach.escalation_reason = f"Språkgrinden vägrade köa utkastet: {error}"
         return json.dumps({"queued": False, "error": str(error)}, ensure_ascii=False)
 
+    # Ett väntande utkast per tråd (2026-10-08). Kön har ingen koppling till
+    # VILKET utkast en post gäller: sändaren tar trådens senaste osända. Två
+    # jobb för samma lead gav två utkast, och ett godkänt utkast hade gått ut
+    # med det nyare, ogranskade utkastets text. Ett godkänt utkast står kvar
+    # (granskaren har sagt ja till just det); ett ogranskat ersätts.
+    from ..leads.scheduler import godkannande
+
+    vantande = await outreach.storage.list_pending_sends(outreach.tenant_id, outreach.thread_id)
+    if any(p.get("status") == "queued" and godkannande(p) for p in vantande):
+        return json.dumps(
+            {"queued": False, "error": "Ett godkänt utkast väntar redan på att skickas i den här tråden."},
+            ensure_ascii=False,
+        )
+    if vantande:
+        await outreach.storage.cancel_pending_sends(outreach.tenant_id, outreach.thread_id)
+
     now = datetime.now(timezone.utc)
     timing = check_cold_outreach_gate(now)
     # Köar ändå om vi är utanför fönstret just NU — scheduled_at sätts till
     # nästa dag 08:00 lokal tid i stället för "nu". Schemaläggaren kör
     # grindarna igen ändå vid faktisk utskickstid (Del J).
-    scheduled_at = now if timing.allowed else now.replace(hour=8, minute=0, second=0, microsecond=0)
+    # nasta_sandtid: nästa vardag 08:00 svensk tid. Förut sattes dagens 08:00
+    # UTC, en tid som redan passerat (ofarligt, grinden prövar igen, men fel).
+    from ..leads.utkaststatus import nasta_sandtid
+
+    nasta = None if timing.allowed else nasta_sandtid(now, now=now)
+    scheduled_at = datetime.fromisoformat(nasta) if nasta else now
 
     # Kundens autonominivå avgör om utkastet får gå till schemaläggaren eller
     # måste granskas av en människa först. Regeln bor i app/leads/autonomy.py
@@ -161,7 +211,13 @@ async def _queue_outreach_draft_impl(
     # tvärtom: ett svar i ett levande samtal (app/leads/svar.py) granskas
     # alltid av en människa, oavsett vilken nivå kunden valt för den utgående
     # sekvensen.
-    if force_review:
+    # Två skäl till granskning oavsett nivå (2026-10-07): en testkörning
+    # skickar aldrig till riktiga bolag, och utan schemaläggare
+    # (SEND_QUEUE_POLL_SECONDS osatt, i dag i båda miljöerna) blev ett
+    # 'queued' utkast liggande osynligt — varken skickat eller granskningsbart.
+    from ..config import get_settings
+
+    if force_review or outreach.is_test or get_settings().send_queue_poll_seconds <= 0:
         queue_status = "awaiting_review"
     else:
         action = allowed_action(agent_settings.get("autonomy"), outreach.sequence_index)
@@ -175,6 +231,7 @@ async def _queue_outreach_draft_impl(
         humanizer_variant=humanizer_variant,
         scheduled_at=scheduled_at,
         status=queue_status,
+        gate_checks={"held": granskningsskal} if granskningsskal else None,
     )
     outreach.queued = True
     svar = {
@@ -183,8 +240,8 @@ async def _queue_outreach_draft_impl(
         "status": queue_status,
         "awaiting_review": queue_status == "awaiting_review",
     }
-    if textkvalitet_granskning:
-        svar["textkvalitet"] = textkvalitet_granskning
+    if granskningsskal:
+        svar["textkvalitet"] = granskningsskal
     return json.dumps(svar, ensure_ascii=False)
 
 

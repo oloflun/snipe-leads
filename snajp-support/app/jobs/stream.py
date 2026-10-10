@@ -66,7 +66,11 @@ MIN_IDLE_MS = 60_000
 #: worker_loop får en chans att köra sitt periodiska återtagssvep även när
 #: strömmen är tyst.
 BLOCK_MS = 5_000
-READ_COUNT = 10
+#: EN post per läsning (2026-10-09). Med 10 tog första workern tio köade
+#: jobb och körde dem ett i taget medan de andra stod sysslolösa: en körning
+#: som köade 25 researchjobb researchade 2–3 åt gången oavsett antalet
+#: workers. Med 1 tar varje worker nästa jobb, och N workers kör N jobb.
+READ_COUNT = 1
 
 #: Tak för hur många gånger EN post får levereras (första läsningen +
 #: återtag) innan atertag() ger upp och kvitterar den oprövad. Hängslen
@@ -75,6 +79,19 @@ READ_COUNT = 10
 #: omkörningsmaskin — tre leveranser är två återtag mer än ett friskt jobb
 #: någonsin behöver.
 MAX_LEVERANSER = 3
+
+#: Hjärtslag medan hanteraren kör: XCLAIM till sig själv nollar postens
+#: idle-tid. Utan det mätte MIN_IDLE_MS tid sedan LEVERANSEN, inte sedan
+#: senaste livstecknet, och en research som tog mer än 60 s togs över av en
+#: syskonprocess (överlappet vid en Railway-deploy) och kördes två gånger
+#: parallellt. Dör processen tystnar hjärtslaget och återtaget sker som förut.
+#:
+#: Hela batchen bär hjärtslag, inte bara posten som körs (2026-10-08): ett
+#: varv läser upp till READ_COUNT poster och kör dem en i taget, så post två
+#: till tio låg tysta medan den första researchades. Efter MIN_IDLE_MS tog en
+#: syskonkonsument över dem och samma lead researchades och fick utkast tre
+#: gånger inom fem sekunder (uppmätt i development: 21 jobb, 29 utkast).
+HJARTSLAG_S = 20
 
 
 def consumer_name(suffix: str | int | None = None) -> str:
@@ -172,6 +189,7 @@ class ChattStrom:
         msg_id: str,
         falt: dict[str, Any],
         hanterare: Callable[[dict[str, Any]], Awaitable[None]],
+        namn: str | None = None,
     ) -> None:
         """Kör hanteraren och kvitterar (XACK) när den är KLAR.
 
@@ -195,8 +213,50 @@ class ChattStrom:
             )
             await self.client.xack(self.stream_key, self.group, msg_id)
             return
-        await hanterare(payload)
+        hjartslag = asyncio.create_task(self._hjartslag(msg_id, namn or consumer_name()))
+        try:
+            await hanterare(payload)
+        finally:
+            hjartslag.cancel()
         await self.client.xack(self.stream_key, self.group, msg_id)
+
+    async def _hjartslag(self, msg_id: str | set[str], namn: str) -> None:
+        """Se HJARTSLAG_S. JUSTID: räknar inte upp leveransräknaren, så
+        MAX_LEVERANSER fortsätter räkna riktiga omleveranser. En mängd är
+        batchens poster som ännu inte kvitterats; den krymper medan varvet
+        kör, och slaget gäller det som är kvar."""
+        while True:
+            await asyncio.sleep(HJARTSLAG_S)
+            ids = sorted(msg_id) if isinstance(msg_id, set) else [msg_id]
+            if not ids:
+                continue
+            try:
+                await self.client.xclaim(
+                    self.stream_key, self.group, namn, min_idle_time=0,
+                    message_ids=ids, justid=True,
+                )
+            except Exception:  # noqa: BLE001 — ett missat slag ger i värsta fall ett återtag
+                logger.warning("Ström %s: hjärtslaget för %s misslyckades.", self.stream_key, ids)
+
+    async def _kor_batch(
+        self,
+        meddelanden: list,
+        hanterare: Callable[[dict[str, Any]], Awaitable[None]],
+        namn: str,
+    ) -> int:
+        """Kör en batch i ordning medan hela resten av batchen hålls vid liv
+        (se HJARTSLAG_S). Returnerar antal körda poster."""
+        kvar = {msg_id for msg_id, _falt in meddelanden}
+        slag = asyncio.create_task(self._hjartslag(kvar, namn))
+        antal = 0
+        try:
+            for msg_id, falt in meddelanden:
+                await self._kor_och_kvittera(msg_id, falt, hanterare, namn)
+                kvar.discard(msg_id)
+                antal += 1
+        finally:
+            slag.cancel()
+        return antal
 
     async def kor_ett_varv(
         self, namn: str, hanterare: Callable[[dict[str, Any]], Awaitable[None]]
@@ -214,9 +274,7 @@ class ChattStrom:
             return 0
         antal = 0
         for _stream_namn, meddelanden in svar:
-            for msg_id, falt in meddelanden:
-                await self._kor_och_kvittera(msg_id, falt, hanterare)
-                antal += 1
+            antal += await self._kor_batch(meddelanden, hanterare, namn)
         return antal
 
     async def worker_loop(
@@ -232,7 +290,7 @@ class ChattStrom:
         await self._sakerstall_grupp()
         while True:
             try:
-                await self.atertag(hanterare, konsument=namn)
+                await self.atertag(hanterare, konsument=namn, max_antal=1)
                 await self.kor_ett_varv(namn, hanterare)
             except asyncio.CancelledError:
                 raise
@@ -243,6 +301,90 @@ class ChattStrom:
                     namn,
                 )
                 await asyncio.sleep(1)
+
+    async def _nasta_post(self, namn: str) -> tuple[str, dict[str, str]] | None:
+        """Nästa post för poolen: ett övergivet jobb (XAUTOCLAIM, en post),
+        annars ett nytt (XREADGROUP, en post, blockerar högst BLOCK_MS).
+        En post som levererats för många gånger ges upp här, som i atertag.
+        None = inget att göra just nu."""
+        _cursor, meddelanden, *_ = await self.client.xautoclaim(
+            self.stream_key, self.group, namn, min_idle_time=MIN_IDLE_MS, start_id="0-0", count=1
+        )
+        if meddelanden:
+            msg_id, falt = meddelanden[0]
+            leveranser = await self._leveransantal()
+            if leveranser.get(msg_id, 0) > MAX_LEVERANSER:
+                logger.warning(
+                    "Ström %s: posten %s har levererats %s gånger — ger upp och kvitterar (tak %s).",
+                    self.stream_key, msg_id, leveranser[msg_id], MAX_LEVERANSER,
+                )
+                if self.vid_uppgivet is not None:
+                    try:
+                        await self.vid_uppgivet(self._packa_upp(falt))
+                    except Exception:  # noqa: BLE001 — kvitteringen ska ske ändå
+                        logger.exception("Ström %s: vid_uppgivet kastade för %s.", self.stream_key, msg_id)
+                await self.client.xack(self.stream_key, self.group, msg_id)
+                return None
+            return msg_id, falt
+        svar = await self.client.xreadgroup(
+            self.group, namn, {self.stream_key: ">"}, count=1, block=BLOCK_MS
+        )
+        for _stream_namn, nya in svar or []:
+            for msg_id, falt in nya:
+                return msg_id, falt
+        return None
+
+    async def worker_pool(
+        self, namn: str, hanterare: Callable[[dict[str, Any]], Awaitable[None]], antal: int
+    ) -> None:
+        """EN läsare och `antal` samtidiga jobb (2026-10-09).
+
+        Med en worker_loop per worker höll varje worker en egen anslutning i
+        en blockerande XREADGROUP. Med 10 leadsworkers och 4 chattworkers
+        (och två processer under en deploy) slog det i Redis anslutningstak
+        ("max number of clients reached") och en körning fälldes. Nu läser en
+        enda läsare en post i taget när det finns en ledig plats, och jobben
+        körs som egna tasks: en blockerande anslutning per ström och process.
+        Hjärtslag, kvittering och uppgivning är desamma som förut."""
+        await self._sakerstall_grupp()
+        platser = asyncio.Semaphore(max(antal, 1))
+        pagaende: set[asyncio.Task] = set()
+
+        async def kor(msg_id: str, falt: dict[str, str]) -> None:
+            try:
+                await self._kor_och_kvittera(msg_id, falt, hanterare, namn)
+            except Exception:  # noqa: BLE001 — posten ligger kvar okvitterad och tas om
+                logger.exception("Ström %s: jobbet %s föll — tas om efter MIN_IDLE_MS.", self.stream_key, msg_id)
+            finally:
+                platser.release()
+
+        try:
+            while True:
+                await platser.acquire()
+                try:
+                    post = await self._nasta_post(namn)
+                except asyncio.CancelledError:
+                    platser.release()
+                    raise
+                except Exception:  # noqa: BLE001 — läsaren får aldrig dö av en Redis-hicka
+                    platser.release()
+                    logger.exception("Ström %s: fel i läsaren (%s) — försöker igen om en sekund.", self.stream_key, namn)
+                    await asyncio.sleep(1)
+                    continue
+                if post is None:
+                    platser.release()
+                    # En kort paus efter en tom läsning: en klient som svarar
+                    # utan att släppa händelseslingan (fakeredis) hade annars
+                    # svält ut jobben. I drift har läsningen redan väntat BLOCK_MS.
+                    await asyncio.sleep(0.05)
+                    continue
+                task = asyncio.create_task(kor(*post))
+                pagaende.add(task)
+                task.add_done_callback(pagaende.discard)
+        except asyncio.CancelledError:
+            for task in pagaende:
+                task.cancel()
+            raise
 
     async def _leveransantal(self) -> dict[str, int]:
         """message_id -> times_delivered för gruppens pending-poster.
@@ -274,9 +416,14 @@ class ChattStrom:
         hanterare: Callable[[dict[str, Any]], Awaitable[None]],
         *,
         konsument: str | None = None,
+        max_antal: int | None = None,
     ) -> int:
         """Tar över poster som legat okvitterade längre än MIN_IDLE_MS
         (XAUTOCLAIM) och kör om dem. Returnerar antal återtagna poster.
+
+        `max_antal` (worker_loop: 1): ta högst så många per svep, så att
+        övergivna jobb efter en omstart fördelas över alla workers i stället
+        för att en worker tar alla och kör dem i följd.
 
         `konsument` defaultar till den här processens eget namn — de
         återtagna posterna övergår alltså till "min" identitet i gruppen,
@@ -287,10 +434,12 @@ class ChattStrom:
         antal = 0
         cursor = "0-0"
         while True:
+            extra = {"count": max_antal - antal} if max_antal else {}
             cursor, meddelanden, _borttagna = await self.client.xautoclaim(
-                self.stream_key, self.group, agent, min_idle_time=MIN_IDLE_MS, start_id=cursor
+                self.stream_key, self.group, agent, min_idle_time=MIN_IDLE_MS, start_id=cursor, **extra
             )
             leveranser = await self._leveransantal() if meddelanden else {}
+            att_kora = []
             for msg_id, falt in meddelanden:
                 if leveranser.get(msg_id, 0) > MAX_LEVERANSER:
                     logger.warning(
@@ -312,8 +461,10 @@ class ChattStrom:
                             )
                     await self.client.xack(self.stream_key, self.group, msg_id)
                     continue
-                await self._kor_och_kvittera(msg_id, falt, hanterare)
-                antal += 1
+                att_kora.append((msg_id, falt))
+            # De återtagna körs i ordning, med hjärtslag för hela svepet: annars
+            # tog nästa syskon över dem medan den första kördes.
+            antal += await self._kor_batch(att_kora, hanterare, agent)
             # Slutvillkor, TVÅ ben med flit. "0-0" är riktig Redis egen
             # signal att genomsökningen gått hela varvet — men fakeredis
             # (testberoendet) returnerar den ALDRIG efter en full
@@ -324,6 +475,6 @@ class ChattStrom:
             # Ofarligt mot riktig Redis: kommer noll poster tillbaka på ETT
             # varv finns inget AKUT att göra — nästa periodiska anrop (varje
             # varv i worker_loop) tar vid.
-            if cursor == "0-0" or not meddelanden:
+            if cursor == "0-0" or not meddelanden or (max_antal and antal >= max_antal):
                 break
         return antal

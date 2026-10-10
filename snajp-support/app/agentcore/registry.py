@@ -188,6 +188,34 @@ def load_section(name: str, heading: str) -> str:
     return text[match.start() : end].strip()
 
 
+def reference_files(name: str) -> list[str]:
+    """references/-filerna en hel laddning tar med, i laddningsordning."""
+    return _list_reference_files(parse_skill_name(name))
+
+
+def fil_kontroll(name: str, relative_path: str) -> dict[str, object]:
+    """sha256 för filen som den läses nu, och om den är orörd mot manifestet.
+
+    Insynens märke "orörd" (Fas 7). Samma bytes som manifestet hashar
+    (build_manifest._hash_file) och samma läsväg som promptbygget: i db-läget
+    har read_mirrored_file redan vägrat en avvikande rad, så en fil som går att
+    läsa där ÄR orörd."""
+    import hashlib
+
+    # Samma cachade läsning av manifestet som spegelns verifiering använder.
+    from .skill_mirror import _pinned_hashes
+
+    ref = parse_skill_name(name)
+    pinnad = _pinned_hashes().get((ref.namespace, f"{ref.skill_id}/{relative_path}"), "")
+    if _mirror_backend() == "db":
+        text = _read_skill_file(ref, relative_path)
+        faktisk = hashlib.sha256(text.encode("utf-8")).hexdigest()
+    else:
+        path = ref.dir / relative_path
+        faktisk = hashlib.sha256(path.read_bytes()).hexdigest() if path.is_file() else ""
+    return {"sha256": faktisk, "manifest": pinnad, "orord": bool(pinnad) and faktisk == pinnad}
+
+
 def skill_exists(name: str) -> bool:
     try:
         parse_skill_name(name)

@@ -248,25 +248,46 @@ async function skickaTillAgenten(
  * Om arbetsytan har produkttext: använd den och backfilla kontextdokumentet.
  * 5xx från agenten är inte "inte ifylld".
  */
-export async function lasOffertForUtkast(): Promise<string> {
-  const workspace = await hamtaAffarskontext();
-  if (!workspace) {
-    throw new Error("Du måste vara inloggad för att skapa utkast.");
-  }
-  const franWorkspace = workspace.product.trim() ? tillDokument(workspace) : "";
-  if (franWorkspace) {
-    await skickaTillAgenten(workspace, workspace.product.trim());
-    return franWorkspace.slice(0, 2000);
-  }
+export type OffertSvar = { ok: true; text: string } | { ok: false; fel: { sv: string; en: string } };
 
-  const franAgent = await hamtaFranAgenten();
-  const dokument = franAgent && franAgent.product.trim() ? tillDokument(franAgent) : "";
-  if (dokument) {
-    return dokument.slice(0, 2000);
-  }
+/**
+ * Returnerar i stället för att kasta (plan 2026-10-05, fas 4): ett fel som
+ * kastas ur en server action ersätts av Next.js i produktion med "An error
+ * occurred in the Server Components render", och kunden såg aldrig att det
+ * bara var Vad ni säljer som saknades. Klientsidan läser svaret via
+ * `lib/leads/offert.ts`.
+ */
+export async function lasOffertForUtkast(): Promise<OffertSvar> {
+  try {
+    const workspace = await hamtaAffarskontext();
+    if (!workspace) {
+      return { ok: false, fel: { sv: "Du måste vara inloggad för att skapa utkast.", en: "You need to be signed in to create drafts." } };
+    }
+    const franWorkspace = workspace.product.trim() ? tillDokument(workspace) : "";
+    if (franWorkspace) {
+      await skickaTillAgenten(workspace, workspace.product.trim());
+      return { ok: true, text: franWorkspace.slice(0, 2000) };
+    }
 
-  throw new Error(
-    "Affärskontexten (Vad ni säljer) är inte ifylld ännu. Fyll i den under Inställningar, " +
-      "Vad agenterna vet, Affärskontext innan utkast kan skapas."
-  );
+    const franAgent = await hamtaFranAgenten();
+    const dokument = franAgent && franAgent.product.trim() ? tillDokument(franAgent) : "";
+    if (dokument) {
+      return { ok: true, text: dokument.slice(0, 2000) };
+    }
+  } catch {
+    return {
+      ok: false,
+      fel: {
+        sv: "Affärskontexten kunde inte läsas just nu. Försök igen om en stund.",
+        en: "The business context could not be read right now. Try again in a moment."
+      }
+    };
+  }
+  return {
+    ok: false,
+    fel: {
+      sv: "Fyll i Vad ni säljer under Inställningar, Vad agenterna vet, Affärskontext innan utkast kan skapas.",
+      en: "Fill in What you sell under Settings, What the agents know, Business context before drafts can be created."
+    }
+  };
 }

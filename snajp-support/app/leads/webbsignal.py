@@ -20,12 +20,33 @@ from datetime import date
 from typing import Any
 
 import httpx
+from ..tls import ssl_kontext
 
 _TIMEOUT = 10.0
 _AR = re.compile(r"(?:©|&copy;|copyright)\s*(?:\d{4}\s*[-–]\s*)?((?:19|20)\d{2})", re.IGNORECASE)
 _GENERATOR = re.compile(r"<meta[^>]+name=[\"']generator[\"'][^>]+content=[\"']([^\"']+)", re.IGNORECASE)
 _JQUERY = re.compile(r"jquery[.-]?(\d+\.\d+(?:\.\d+)?)(?:\.min)?\.js", re.IGNORECASE)
 _VIEWPORT = re.compile(r"<meta[^>]+name=[\"']viewport[\"']", re.IGNORECASE)
+
+#: Plattformar som syns i markupen även utan generator-tagg.
+_PLATTFORMAR = (
+    ("Wix", re.compile(r"static\.wixstatic\.com|wix-code|_wixCIDX", re.I)),
+    ("Squarespace", re.compile(r"squarespace\.com|static1\.squarespace", re.I)),
+    ("Webflow", re.compile(r"data-wf-page|webflow\.js|assets\.website-files\.com", re.I)),
+    ("Next.js", re.compile(r"/_next/static/|__NEXT_DATA__", re.I)),
+    ("WordPress", re.compile(r"/wp-content/|/wp-includes/", re.I)),
+    ("Joomla", re.compile(r"/media/jui/|joomla", re.I)),
+    ("Shopify", re.compile(r"cdn\.shopify\.com", re.I)),
+)
+#: Rörelse: bibliotek och CSS-mekanismer som bara finns på sajter med animationer.
+_ANIMATION = re.compile(
+    r"gsap|scrolltrigger|framer-motion|lottie|aos\.js|data-aos=|swiper|splide|locomotive-scroll|lenis|"
+    r"@keyframes|animation\s*:|scroll-behavior\s*:\s*smooth|IntersectionObserver",
+    re.I,
+)
+_MODERN_LAYOUT = re.compile(r"display\s*:\s*(flex|grid)|\b(d-flex|flex|grid|grid-cols-\d+)\b", re.I)
+_MODERNA_BILDER = re.compile(r"\.(webp|avif)\b|<picture\b|srcset=", re.I)
+_NAV_LANK = re.compile(r"<nav\b.*?</nav>", re.I | re.S)
 
 
 def analysera(
@@ -65,6 +86,22 @@ def analysera(
         if int(jq.group(1).split(".")[0]) < 3:
             rader.append(f"Webbplatsen använder jQuery {jq.group(1)}, en äldre version.")
 
+    plattform = next((namn for namn, m in _PLATTFORMAR if m.search(html)), None)
+    if plattform:
+        fakta["plattform"] = plattform
+        if not gen:
+            rader.append(f"Webbplatsen är byggd med {plattform}.")
+    fakta["animationer"] = bool(_ANIMATION.search(html))
+    fakta["modern_layout"] = bool(_MODERN_LAYOUT.search(html))
+    fakta["moderna_bilder"] = bool(_MODERNA_BILDER.search(html))
+    if not fakta["animationer"]:
+        rader.append("Startsidan har inga animationer eller rörliga element.")
+    if not fakta["moderna_bilder"] and "<img" in html.lower():
+        rader.append("Bilderna saknar moderna format och storleksanpassning (webp, avif, srcset).")
+    nav = _NAV_LANK.search(html)
+    if nav:
+        fakta["menyval"] = len(re.findall(r"<a\b", nav.group(0), re.I))
+
     fakta["sidvikt_kb"] = round(len(html.encode("utf-8", "ignore")) / 1024)
     if svarstid_s is not None:
         fakta["svarstid_s"] = round(svarstid_s, 1)
@@ -83,6 +120,29 @@ def analysera(
     return fakta
 
 
+_WEBBLASARE = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36"
+
+
+def andra_varianten(url: str) -> str:
+    """Samma adress med www. om den saknas, utan om den finns."""
+    schema, _, rest = url.partition("://")
+    if not rest:
+        return url
+    return f"{schema}://{rest[4:]}" if rest.startswith("www.") else f"{schema}://www.{rest}"
+
+
+async def _hamta_med_reserv(url: str) -> httpx.Response:
+    """Startsidan, och vid nätverksfel ett andra försök på www-varianten med
+    en vanlig webbläsarprofil. Facit 2026-10-08: www.futurenautic.com hängde
+    medan futurenautic.com svarade på 1,4 s, och den bra sajten dömdes som
+    död. Kastar httpx.HTTPError när båda fallerar."""
+    async with httpx.AsyncClient(verify=ssl_kontext(), timeout=_TIMEOUT, follow_redirects=True) as client:
+        try:
+            return await client.get(url, headers={"User-Agent": "Mozilla/5.0 (Snajp Iris)"})
+        except httpx.HTTPError:
+            return await client.get(andra_varianten(url), headers={"User-Agent": _WEBBLASARE})
+
+
 async def mat_webbplats(url: str | None) -> dict[str, Any]:
     """Hämtar startsidan och analyserar den. Kastar aldrig: en sajt som inte
     svarar är i sig en signal."""
@@ -90,20 +150,31 @@ async def mat_webbplats(url: str | None) -> dict[str, Any]:
         return analysera(url=None, html=None)
     # LEADS_WEBBSIGNAL: OSATT = på, tom/"0" = av — testsvitens läge
     # (tests/conftest.py), samma mönster som platshållarkontrollen.
+    #
+    # `matt` säger om sidan faktiskt hämtades. Existensgrinden
+    # (leads/existens.py) fäller bara på en MÄTNING: `svarar_inte` (DNS-fel,
+    # timeout) eller `http_status` (felsvar). Före 2026-10-06 såg en domän
+    # som inte finns likadan ut som en långsam sajt, och tre påhittade bolag
+    # gick vidare till research.
     if os.environ.get("LEADS_WEBBSIGNAL", "1").strip() in ("", "0"):
-        return {"har_webbplats": True, "url": url, "rader": [], "utdrag": ""}
+        return {"har_webbplats": True, "url": url, "rader": [], "utdrag": "", "matt": False}
     start = time.monotonic()
     try:
-        async with httpx.AsyncClient(timeout=_TIMEOUT, follow_redirects=True) as client:
-            svar = await client.get(url, headers={"User-Agent": "Mozilla/5.0 (Snajp Iris)"})
+        svar = await _hamta_med_reserv(url)
         tid = time.monotonic() - start
         if svar.status_code >= 400:
-            return {"har_webbplats": True, "url": url,
+            return {"har_webbplats": True, "url": url, "matt": True, "http_status": svar.status_code,
                     "rader": [f"Startsidan svarade med fel ({svar.status_code})."]}
-        return analysera(url=str(svar.url), html=svar.text[:400_000], headers=dict(svar.headers),
-                         svarstid_s=tid)
+        html = svar.text[:400_000]
+        return {
+            **analysera(url=str(svar.url), html=html, headers=dict(svar.headers), svarstid_s=tid),
+            "matt": True,
+            # Hela sidans synliga text (utdraget är kapat vid 3 000 tecken, och
+            # bolagsnamnet står ofta bara i sidfoten).
+            "sidtext": synlig_text(html, tak=200_000),
+        }
     except httpx.HTTPError:
-        return {"har_webbplats": True, "url": url,
+        return {"har_webbplats": True, "url": url, "matt": True, "svarar_inte": True,
                 "rader": [f"Startsidan svarade inte inom {int(_TIMEOUT)} sekunder."]}
 
 
@@ -134,8 +205,15 @@ def demo() -> None:
     )
     assert not gammal["https"] and not gammal["mobilanpassad"] and gammal["copyright_ar"] == 2013
     assert any("jQuery 1.8.3" in r for r in gammal["rader"])
-    ny = analysera(url="https://ny.se", html='<meta name="viewport" content="x"><div>© 2026</div>', idag=date(2026, 9, 30))
-    assert ny["rader"] == ["Inga tecken på föråldrad teknik hittades på startsidan."]
+    ny = analysera(
+        url="https://ny.se",
+        html='<meta name="viewport" content="x"><div class="grid">© 2026</div><script src="/_next/static/a.js">'
+        '</script><style>@keyframes in{}</style><img srcset="a.webp 1x">',
+        idag=date(2026, 9, 30),
+    )
+    assert ny["rader"] == ["Webbplatsen är byggd med Next.js."]
+    assert ny["animationer"] and ny["modern_layout"] and ny["moderna_bilder"]
+    assert "Startsidan har inga animationer eller rörliga element." in gammal["rader"]
     assert analysera(url=None, html=None)["har_webbplats"] is False
     print("webbsignal: ok")
 

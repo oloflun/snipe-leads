@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  Activity,
   ArrowLeftRight,
   FileText,
   LayoutDashboard,
@@ -103,7 +102,6 @@ export const RUTT_IKONER: Record<string, LucideIcon> = {
   "/dashboard": LayoutDashboard,
   "/dashboard/att-gora": ListTodo,
   "/dashboard/leads": Target,
-  "/dashboard/aktivitet": Activity,
   "/dashboard/support": MessagesSquare,
   "/dashboard/companies": Users,
   "/dashboard/contacts": Users,
@@ -133,7 +131,13 @@ function iAdminlage(pathname: string): boolean {
 }
 
 function demoAnpassa(href: string, pathname: string): string {
-  return iDemolage(pathname) ? (DEMO_VAGAR[href] ?? href) : href;
+  if (!iDemolage(pathname)) return href;
+  // Sökvägen mappas, frågan följer med: `/dashboard/leads?vy=listor` ska bli
+  // `/demo/leads?vy=listor`, inte falla igenom kartan och lämna demon.
+  const i = href.search(/[?#]/);
+  const vag = i === -1 ? href : href.slice(0, i);
+  const resten = i === -1 ? "" : href.slice(i);
+  return (DEMO_VAGAR[vag] ?? vag) + resten;
 }
 
 /**

@@ -1,4 +1,4 @@
-"""INV-JOB-003 — En körnings tillstånd finns i liggaren efter varje steg;
+﻿"""INV-JOB-003 — En körnings tillstånd finns i liggaren efter varje steg;
 Redis-TTL:n är aldrig enda platsen.
 
 ## Buggen den här stänger
@@ -29,6 +29,7 @@ from types import SimpleNamespace
 import pytest
 
 from app.api import leads as leads_api
+from tests.orgnr_fixtur import orgnr_for
 from app.jobs.store import MemoryJobStore
 from app.leads import korning as korningsmodul
 from app.storage.memory import MemoryStorage
@@ -47,7 +48,7 @@ def _bolag(namn: str) -> dict:
     return {
         "company_name": namn,
         "website": f"https://{slug}.se",
-        "orgnr": "556824-9022",
+        "orgnr": orgnr_for(namn),
         "ort": "Göteborg",
         "postnr": "421 32",
         "contact_email": f"info@{slug}.se",
@@ -60,7 +61,7 @@ def _bolag(namn: str) -> dict:
 
 
 def _installera(monkeypatch, pool: list[dict], bra: set[str]) -> None:
-    async def _hitta(icp, antal, *, uteslut_namn=None, profil=None, ring=0):
+    async def _hitta(icp, antal, *, uteslut_namn=None, profil=None, ring=0, listspar=None):
         uteslut = {n.casefold() for n in (uteslut_namn or set())}
         return [b for b in pool if b["company_name"].casefold() not in uteslut][:antal]
 
@@ -89,7 +90,8 @@ def _payload(job_id: str, mal: int) -> dict:
         "job_id": job_id,
         **TENANT,
         "scope": "research",
-        "overrides": None,
+        # En körning behöver en målgrupp att söka i (korning.har_malgrupp).
+        "overrides": {"industries": ["Redovisning"]},
         "is_test": True,
         "limit": mal,
         "company_names": [],
@@ -225,7 +227,9 @@ async def test_atertag_fortsatter_ur_liggaren_utan_jobbstore(monkeypatch):
     storage = MemoryStorage()
     app_state = SimpleNamespace(jobs=MemoryJobStore(), storage=storage, leadsstrom=None)
     t = TENANT["tenant_id"]
-    k = korningsmodul.ny_korning(mal=1, scope="research", overrides=None, is_test=True)
+    k = korningsmodul.ny_korning(
+        mal=1, scope="research", overrides={"industries": ["Redovisning"]}, is_test=True
+    )
     await storage.set_leads_job_status(t, job_id="b-deploy", status="processing", scope="batch", korning=k, is_test=True)
     assert await app_state.jobs.get("b-deploy") is None
 
@@ -233,7 +237,9 @@ async def test_atertag_fortsatter_ur_liggaren_utan_jobbstore(monkeypatch):
 
     rad = await storage.get_leads_korning(t, "b-deploy")
     assert rad["korning"]["klar"] is True and rad["status"] == "completed"
-    assert rad["korning"]["slut_orsak"] == "slut_pa_kandidater"
+    # Ingen sökning gav något bolag: sedan 2026-10-07 heter det inga_traffar
+    # (app/leads/korning.py, avsluta), inte "slut på kandidater".
+    assert rad["korning"]["slut_orsak"] == "inga_traffar"
 
 
 async def test_kandidatpoolen_lamnar_aldrig_apiet():
@@ -242,3 +248,36 @@ async def test_kandidatpoolen_lamnar_aldrig_apiet():
     ut = leads_api._utan_kandidater(rad)
     assert "kandidater" not in ut["korning"] and ut["korning"]["mal"] == 1
     assert "kandidater" in rad["korning"], "originalet muteras inte"
+
+
+async def test_aterupptaget_barn_som_hann_bli_klart_rapporteras(monkeypatch):
+    """(g). Barnets research blev klar (jobbposten completed) men processen
+    dog innan rapporten till körningen: 1fdbcf8e 2026-10-06 stod på 2 av 3
+    leads med `pagaende` 1 för evigt, eftersom vakten bara kvitterade
+    posten. Återtaget ska slutföra rapporten ur jobbposten."""
+    _installera(monkeypatch, [], bra=set())
+    storage = MemoryStorage()
+    app_state = SimpleNamespace(jobs=MemoryJobStore(), storage=storage, leadsstrom=None)
+    t = TENANT["tenant_id"]
+    batch_id = await app_state.jobs.create(tenant_id=t, status="processing")
+    prospekt = await storage.create_prospect(t, company_name="Klara AB", contact_name=None, contact_email=None, origin="test")
+    k = korningsmodul.ny_korning(mal=1, scope="research", overrides=None, is_test=True)
+    k["pagaende"] = 1
+    barn = await app_state.jobs.create(tenant_id=t, status="processing")
+    k["jobs"] = [{"job_id": barn, "prospect_id": prospekt["id"], "company_name": "Klara AB"}]
+    await app_state.jobs.complete(batch_id, {"korning": k, "jobs": k["jobs"], "count": 1})
+    await storage.set_leads_job_status(t, job_id=batch_id, status="processing", scope="batch", korning=k, is_test=True)
+    await storage.set_leads_job_status(t, job_id=barn, status="processing", scope="research", prospect_id=prospekt["id"])
+    await app_state.jobs.complete(
+        barn, {"_korningsutfall": {"namn": "Klara AB", "leverbar": True, "skal": None, "skrap": {"webb": 1}}}
+    )
+
+    await leads_api.hantera_leads_jobb(
+        app_state,
+        {"job_id": barn, **TENANT, "scope": "research", "prospect_id": prospekt["id"], "batch_id": batch_id},
+    )
+
+    rad = await storage.get_leads_korning(t, batch_id)
+    assert rad["korning"]["pagaende"] == 0 and rad["korning"]["levererade"] == 1
+    assert rad["korning"]["klar"] is True and rad["status"] == "completed"
+    assert await storage.get_leads_job_status(t, barn) == "completed"

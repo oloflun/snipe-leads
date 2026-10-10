@@ -8,8 +8,10 @@ from app.agent.leads_tools import _queue_outreach_draft_impl
 from app.leads.signatur import (
     bygg_html,
     bygg_signaturtext,
+    dela_utkast,
     med_signatur,
     normalisera,
+    sla_ihop,
 )
 from app.storage.memory import MemoryStorage
 
@@ -121,13 +123,27 @@ def test_bygg_html_bar_logotypen_och_escapar_brodtexten():
     assert "Umeå &amp; Göteborg" in html
 
 
-def test_bygg_html_utan_blocket_visar_ingen_logga():
-    # Ett äldre köat utkast utan signaturblock: HTML-delen får aldrig visa
-    # något som inte granskats — texten renderas som den är, utan logga.
+def test_bygg_html_utan_blocket_har_loggan_men_ingen_ny_text():
+    # Sebbe 2026-10-09: loggan ska med i varje mejl. Ett utkast utan
+    # signaturblocket (äldre, eller signaturen ändrad efter köningen) får
+    # loggan men ingen text som inte granskats: inget namn, ingen titel.
     sig = normalisera(SIG)
     html = bygg_html("Hej! En text utan signatur.", sig)
-    assert "<img" not in html
+    assert "<img" in html
     assert "En text utan signatur." in html
+    assert sig["namn"] not in html.split("alt=")[0]
+
+
+def test_bygg_html_utan_blocket_lagger_loggan_fore_foten():
+    sig = normalisera(SIG)
+    html = bygg_html("Hej!\n\n--\nBolaget AB, org.nr 556000-0000", sig)
+    assert html.index("<img") < html.index("556000-0000")
+
+
+def test_bygg_html_utan_logotyp_och_block_ar_bara_texten():
+    sig = normalisera({k: v for k, v in SIG.items() if k != "logotyp_url"})
+    html = bygg_html("Hej! En text utan signatur.", sig)
+    assert "<img" not in html
 
 
 def test_bygg_html_signaturen_star_fore_den_lagstadgade_foten():
@@ -177,3 +193,65 @@ async def test_queue_outreach_draft_utan_signatur_lamnar_brodtexten_ifred():
     )
 
     assert "Sebastian" not in storage.outreach_messages[TENANT][0]["body"]
+
+
+# -- granskningsvyns delning (brödtext / svans) ------------------------------
+
+FOT = "--\nBolaget AB, org.nr 556000-0000\n\nVill du inte få fler mejl från oss: https://x.se/avregistrera/abc"
+
+
+def test_dela_utkast_skiljer_brodtext_fran_signatur_och_fot():
+    sig = normalisera(SIG)
+    body = med_signatur("Hej!\n\nMed vänliga hälsningar,", sig) + "\n\n" + FOT
+    brodtext, svans = dela_utkast(body, sig)
+    assert brodtext == "Hej!\n\nMed vänliga hälsningar,"
+    assert svans.startswith("Sebastian Bergman\n") and svans.endswith("abc")
+    assert sla_ihop(brodtext, svans, sig) == body
+
+
+@pytest.mark.parametrize(
+    "brodtext, vantat",
+    [
+        ("Hej!\n\nHör av dig.", "Hör av dig.\n\nVänliga hälsningar,\nSebastian Bergman\n"),
+        ("Hej!\n\nHör av dig.\n\nVänliga hälsningar", "Vänliga hälsningar\nSebastian Bergman\n"),
+        ("Hej!\n\nHör av dig.\n\nMvh", "Mvh\nSebastian Bergman\n"),
+    ],
+)
+def test_med_signatur_lagger_pa_halsningsfras_bara_nar_den_saknas(brodtext, vantat):
+    resultat = med_signatur(brodtext, normalisera(SIG), halsning="Vänliga hälsningar,")
+    assert vantat in resultat
+    assert resultat.count("hälsningar") <= 1
+
+
+def test_dela_utkast_utan_signatur_tar_bara_foten():
+    brodtext, svans = dela_utkast("Hej!\n\n" + FOT, None)
+    assert brodtext == "Hej!"
+    assert svans == FOT
+
+
+def test_dela_utkast_utan_svans_lamnar_texten():
+    assert dela_utkast("Hej!\n", normalisera(SIG)) == ("Hej!", "")
+
+
+def test_sla_ihop_efter_omskrivning_behaller_signatur_och_fot():
+    """Förbättra skrev om brödtexten och avslutade själv med förnamnet —
+    signaturens namnrad tar över raden, och logga + fot står kvar."""
+    sig = normalisera(SIG)
+    _, svans = dela_utkast(med_signatur("Hej!", sig) + "\n\n" + FOT, sig)
+    ihop = sla_ihop("Hej igen, kort fråga.\n\nVänliga hälsningar,\nSebastian", svans, sig)
+    assert ihop.startswith("Hej igen, kort fråga.\n\nVänliga hälsningar,\nSebastian Bergman\n")
+    assert ihop.endswith(FOT)
+    assert "<img" in bygg_html(ihop, sig)
+
+
+def test_arbetsytans_namn_efter_halsningen_ger_inte_dubbel_avslutning():
+    """sign_off satte "Snajp" efter modellens hälsningsfras, och signaturen
+    fick en hälsningsfras till: "Vänliga hälsningar,\nSnajp\n\nVänliga
+    hälsningar,\nSebastian Bergman" (4 av 6 utkast, development 2026-10-09)."""
+    ut = med_signatur("Hej,\n\nText.\n\nVänliga hälsningar,\nSnajp", SIG, halsning="Vänliga hälsningar,")
+    assert ut.count("Vänliga hälsningar") == 1
+    assert ut.endswith(bygg_signaturtext(SIG))
+    assert "\nSnajp\n" not in ut.split("Sebastian Bergman")[0]
+    # En vanlig mening sist rörs inte.
+    ut2 = med_signatur("Hej,\n\nVänliga hälsningar,\nHör av dig.", SIG, halsning="Vänliga hälsningar,")
+    assert "Hör av dig." in ut2

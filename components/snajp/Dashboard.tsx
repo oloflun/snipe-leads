@@ -27,6 +27,7 @@ import { mejlaOss } from "@/components/marketing/copy";
 import { createDemoSupportApi } from "@/lib/demo/support-inbox";
 import { readJsonBody } from "@/lib/http/json";
 import { useLocale, type Localized } from "@/lib/i18n";
+import { useSmal } from "@/components/leads/smal";
 import { cn } from "@/lib/utils";
 
 type Classification = {
@@ -102,6 +103,7 @@ type Forslag = {
   klass: string;
   kalla: string;
   jev: { klass: string; konfidens: number } | null;
+  hoppad?: boolean;
 };
 
 const CATEGORY_LABELS: Record<string, Localized> = {
@@ -285,20 +287,28 @@ function ConfidenceBar({ value }: Readonly<{ value: number }>) {
 export function Dashboard({
   demo = false,
   lager = "arenden",
-  onMeta
+  onMeta,
+  tak,
+  onAntal
 }: Readonly<{
   demo?: boolean;
   /** "leads" (migration 084): leadsmejlen, klass=lead. "vantar" (Snajp Suite
    *  2026-10-03): bara utkast som väntar på godkännande, för Att göra;
    *  "eskalerade" på samma sätt för ärenden agenten lämnat över. */
-  lager?: "arenden" | "testmail" | "att_hantera" | "leads" | "vantar" | "eskalerade";
+  lager?: "arenden" | "testmail" | "att_hantera" | "leads" | "vantar" | "eskalerade" | "ej_relaterat";
   onMeta?: (meta: { visar_test_i_arenden: boolean }) => void;
+  /** Visa högst så många rader tills användaren ber om alla (Att göra). */
+  tak?: number;
+  /** Antalet mejl i vyn och när de kom, för Att görasummeringen (köns ålder). */
+  onAntal?: (antal: number, rader: { received_at: string; subject: string }[]) => void;
 }>) {
   const vag = useArbetsvag();
   const { text, locale } = useLocale();
   // Kölägena (Att göra): bara poster som väntar på ett beslut, utan
   // inkorgens verktygsrad, statusfilter och fack.
   const arKo = lager === "att_hantera" || lager === "vantar" || lager === "eskalerade";
+  // Leads och Dolda: läsvyer utan testmail, provsortering och statusfilter.
+  const smalVy = lager === "leads" || lager === "ej_relaterat";
   const [emails, setEmails] = useState<EmailRow[]>([]);
   const [categoryCounts, setCategoryCounts] = useState<Record<string, number>>({});
   const [selected, setSelected] = useState<EmailDetail | null>(null);
@@ -391,6 +401,10 @@ export function Dashboard({
     return payload;
   }, [demo]);
 
+  // Första svaret (eller felet) har kommit. Före det är listan tom för att
+  // den inte hämtats, och Att göra ska inte hinna visa "inget väntar".
+  const [hamtad, setHamtad] = useState(false);
+
   const refresh = useCallback(async () => {
     try {
       setError(null);
@@ -406,6 +420,9 @@ export function Dashboard({
       if (lager === "eskalerade") params.set("status", "escalated");
       // Leads-inkorgen (084): raderna Jev eller reglerna klassat som lead.
       if (lager === "leads") params.set("klass", "lead");
+      // Dolda (plan 2026-10-05): utskick och notiser som klassningen lyfte
+      // ur kundtjänsten. Utan den här vyn försvann de spårlöst.
+      if (lager === "ej_relaterat") params.set("klass", "ej_relaterat");
       const data = await api(`/inbox?${params.toString()}`);
       setEmails(data.emails);
       setCategoryCounts(data.category_counts);
@@ -419,6 +436,8 @@ export function Dashboard({
         return;
       }
       setError(tillCopy(caught, T.hamtaFel));
+    } finally {
+      setHamtad(true);
     }
   }, [api, sokning, statusFilter, categoryFilter, lager]);
 
@@ -437,6 +456,11 @@ export function Dashboard({
   const [inkorgKopplad, setInkorgKopplad] = useState<boolean | null>(null);
 
   useEffect(() => {
+    // Kölägena (Att göra) visar varken synk- eller kopplingsknappen, och varje
+    // villkor som läser inkorgKopplad kortsluts av arKo. Att göra monterar tre
+    // köer: tre onödiga anrop, och brevlådelistan var sidans långsammaste
+    // (~0,4 s, uppmätt 2026-10-10).
+    if (arKo) return;
     let avbruten = false;
     void (async () => {
       try {
@@ -452,7 +476,7 @@ export function Dashboard({
     return () => {
       avbruten = true;
     };
-  }, [api]);
+  }, [api, arKo]);
 
   const openEmail = useCallback(
     async (id: string) => {
@@ -668,6 +692,27 @@ export function Dashboard({
     selected &&
     act("takeover", () => api(`/inbox/${selected.id}/takeover`, { method: "POST" }));
 
+  /** Tillbaka från Dolda: mejlet var ett ärende ändå. Backenden sätter det
+   * till 'new' så nästa bearbetning tar det, och beslutet blir lärdata. */
+  const tillbakaTillKundtjanst = () =>
+    selected &&
+    act("klassa", async () => {
+      await api(`/inbox/${selected.id}/klassa`, { method: "POST", body: JSON.stringify({ klass: "support" }) });
+      setSelected(null);
+    });
+
+  /** Sortera om hela den eskalerade kön med kodreglerna (utskick, notiser,
+   * maskinadresser). Ärenden och utkast följer med bort. */
+  const [omsorterat, setOmsorterat] = useState<number | null>(null);
+  const sorteraBortUtskick = () =>
+    act("omsortera", async () => {
+      const svar = await api<{ forslag: Forslag[] }>("/inbox/sortera", {
+        method: "POST",
+        body: JSON.stringify({ status: "escalated", tillampa: true })
+      });
+      setOmsorterat(svar.forslag.filter((f) => f.klass !== "support" && !f.hoppad).length);
+    });
+
   const flyttaTillArenden = () =>
     selected &&
     act("befordra", async () => {
@@ -685,6 +730,41 @@ export function Dashboard({
         body: JSON.stringify({ hanterad: !selected.hanterad_at })
       })
     );
+
+  // Kölägena i Att göra (plan 2026-10-05, fas 5): larm med samma ämne blir en
+  // rad med räknare i stället för tolv likadana, och listan visar `tak` rader
+  // tills man ber om alla.
+  const [visaAlla, setVisaAlla] = useState(false);
+  const larmgrupper = useMemo(() => {
+    const grupper = new Map<string, EmailRow[]>();
+    if (lager !== "att_hantera") return grupper;
+    for (const e of emails) {
+      const nyckel = e.subject || "";
+      grupper.set(nyckel, [...(grupper.get(nyckel) ?? []), e]);
+    }
+    return grupper;
+  }, [emails, lager]);
+  const allaRader = useMemo(() => {
+    const bas = baraOhanterade ? emails.filter((e) => !e.hanterad_at) : emails;
+    if (lager !== "att_hantera") return bas;
+    const sedda = new Set<string>();
+    return bas.filter((e) => {
+      const nyckel = e.subject || "";
+      if (sedda.has(nyckel)) return false;
+      sedda.add(nyckel);
+      return true;
+    });
+  }, [emails, baraOhanterade, lager]);
+  const radertotalt = allaRader.length;
+  const synligaRader = tak && !visaAlla ? allaRader.slice(0, tak) : allaRader;
+  const onAntalRef = useRef(onAntal);
+  onAntalRef.current = onAntal;
+  useEffect(() => {
+    if (hamtad) onAntalRef.current?.(emails.length, emails);
+  }, [emails, hamtad]);
+  // Att göra ställer köerna i kolumner: där får detaljpanelen hamna under
+  // listan, inte bredvid den i en halv kolumn.
+  const smal = useSmal();
 
   const totalPending = useMemo(
     () => emails.filter((e) => e.status === "awaiting_approval").length,
@@ -712,7 +792,7 @@ export function Dashboard({
             Göms när en riktig inkorg är kopplad. Testmail bland en kunds
             verkliga ärenden är inte en demo, det är skräp i deras inkorg —
             och de har redan sett hur produkten fungerar. */}
-        {inkorgKopplad || arKo || lager === "leads" || (lager === "arenden" && visarTestIArenden === false) ? null : (
+        {inkorgKopplad || arKo || smalVy || (lager === "arenden" && visarTestIArenden === false) ? null : (
           <button
             type="button"
             onClick={() => void seedMock(null)}
@@ -757,13 +837,13 @@ export function Dashboard({
         <button
           type="button"
           onClick={() =>
-            inkorgKopplad || arKo || lager === "leads" || (lager === "arenden" && visarTestIArenden === false)
+            inkorgKopplad || arKo || smalVy || (lager === "arenden" && visarTestIArenden === false)
               ? void refresh()
               : void seedMock(categoryFilter)
           }
           disabled={busy !== null}
           title={
-            inkorgKopplad || arKo || lager === "leads" || (lager === "arenden" && visarTestIArenden === false)
+            inkorgKopplad || arKo || smalVy || (lager === "arenden" && visarTestIArenden === false)
               ? text(T.lasOm)
               : categoryFilter
                 ? text(T.nyaFack)
@@ -778,7 +858,7 @@ export function Dashboard({
           )}
           {text(T.uppdatera)}
         </button>
-        {demo || arKo || lager === "leads" || emails.length === 0 ? null : (
+        {demo || arKo || smalVy || emails.length === 0 ? null : (
           <button
             type="button"
             onClick={provsortera}
@@ -802,7 +882,7 @@ export function Dashboard({
             className="focus-ring h-9 w-full rounded-input border border-ink/15 bg-paper pl-9 pr-3 text-[1rem] outline-none placeholder:text-ink/35"
           />
         </div>
-        {arKo || lager === "leads" ? null : (
+        {arKo || smalVy ? null : (
           <select
           value={statusFilter ?? ""}
           onChange={(event) => setStatusFilter(event.target.value || null)}
@@ -818,7 +898,7 @@ export function Dashboard({
         )}
         {/* Reglerna bor numera under Inställningar, bredvid leads-agentens
             motsvarande kontroll. Se components/settings/SupportRegler.tsx. */}
-        {demo || arKo || lager === "leads" ? null : (
+        {demo || arKo || smalVy ? null : (
           <Link href={vag("/settings/regler")} className={cn(btnSecondary, btnLiten)}>
             <Settings2 className="h-4 w-4" />
             {text(T.regler)}
@@ -926,12 +1006,40 @@ export function Dashboard({
         </div>
       )}
 
-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-12">
+      {lager === "eskalerade" && !demo && emails.length > 0 ? (
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            onClick={sorteraBortUtskick}
+            disabled={busy !== null}
+            title={text({
+              sv: "Flyttar nyhetsbrev, notiser och automatiska utskick till Dolda under Kundtjänst. Riktiga ärenden står kvar.",
+              en: "Moves newsletters, notices and automated mail to Hidden under Customer service. Real cases stay."
+            })}
+            className={cn(btnSecondary, btnLiten)}
+          >
+            {busy === "omsortera" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+            {text({ sv: "Sortera bort utskick", en: "Clear out automated mail" })}
+          </button>
+          {omsorterat !== null ? (
+            <p role="status" className="text-[0.875rem] text-ink-subtle">
+              {text({
+                sv: `${omsorterat} mejl flyttade till Dolda.`,
+                en: `${omsorterat} emails moved to Hidden.`
+              })}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+
+      <div className={cn("grid grid-cols-1 gap-6", !smal && "xl:grid-cols-12")}>
         {/* Maillista */}
         <div className={cn("min-w-0", selected ? "xl:col-span-6" : "xl:col-span-12")}>
-          {emails.length === 0 && arKo && error ? null : emails.length === 0 && arKo ? (
+          {emails.length === 0 && arKo && error ? null : emails.length === 0 && (arKo || lager === "ej_relaterat") ? (
             <p className="text-[0.875rem] leading-6 text-ink-subtle">
-              {lager === "vantar"
+              {lager === "ej_relaterat"
+                ? text({ sv: "Inget har sorterats bort. Nyhetsbrev och automatiska utskick hamnar här.", en: "Nothing has been sorted out. Newsletters and automated mail land here." })
+                : lager === "vantar"
                 ? text({ sv: "Inga svar väntar på godkännande.", en: "No replies are waiting for approval." })
                 : lager === "eskalerade"
                   ? text({ sv: "Inga eskalerade ärenden.", en: "No escalated tickets." })
@@ -956,7 +1064,7 @@ export function Dashboard({
                   <>{text(T.ingaArenden)}</>
                 )}
               </p>
-              {inkorgKopplad || arKo || lager === "leads" ? null : (
+              {inkorgKopplad || arKo || smalVy ? null : (
                 <p className="mx-auto mt-3 max-w-md text-sm leading-6 text-ink-subtle">
                   {text(T.kopplaRiktig)}{" "}
                   <Link
@@ -976,8 +1084,9 @@ export function Dashboard({
                står som text i metaraden; konfidensen och motiveringen finns
                kvar i detaljpanelen, där de faktiskt läses. */
             <div className="divide-y divide-ink/10 overflow-hidden rounded-card bg-paper">
-              {(baraOhanterade ? emails.filter((e) => !e.hanterad_at) : emails).map((email) => {
+              {synligaRader.map((email) => {
                 const meta = STATUS_META[email.status] ?? STATUS_META.new;
+                const likadana = larmgrupper.get(email.subject || "")?.length ?? 1;
                 const lasesNu = bearbetas && !email.classification;
                 const statusText = lasesNu ? text(T.agentenLaser) : text(meta.label);
                 const prick = lasesNu
@@ -1012,6 +1121,14 @@ export function Dashboard({
                       </span>
                       {email.has_image ? <ImageIcon className="h-3.5 w-3.5 shrink-0 text-ink-subtle" /> : null}
                       {email.is_test ? <span className="kicker shrink-0 text-mineral">Test</span> : null}
+                      {likadana > 1 ? (
+                        <span
+                          className="num shrink-0 rounded-[6px] bg-paper2 px-1.5 text-[0.75rem] font-medium tabular-nums text-ink-muted"
+                          aria-label={text({ sv: `${likadana} likadana`, en: `${likadana} identical` })}
+                        >
+                          ×{likadana}
+                        </span>
+                      ) : null}
                     </span>
                     <span className="flex items-center gap-1.5 whitespace-nowrap text-[0.8125rem] text-ink-muted">
                       {email.hanterad_at ? (
@@ -1045,6 +1162,18 @@ export function Dashboard({
                   </button>
                 );
               })}
+              {tak && radertotalt > tak ? (
+                <button
+                  type="button"
+                  onClick={() => setVisaAlla((v) => !v)}
+                  aria-expanded={visaAlla}
+                  className="focus-ring w-full px-4 py-2.5 text-left text-[0.8125rem] font-medium text-ink-muted transition hover:bg-paper2/50 hover:text-ink"
+                >
+                  {visaAlla
+                    ? text({ sv: "Visa färre", en: "Show fewer" })
+                    : text({ sv: `Visa alla (${radertotalt})`, en: `Show all (${radertotalt})` })}
+                </button>
+              ) : null}
             </div>
           )}
         </div>
@@ -1107,6 +1236,17 @@ export function Dashboard({
                   )}
                   {selected.hanterad_at ? text(T.markeraOhanterat) : text(T.markeraHanterat)}
                 </button>
+                {lager === "ej_relaterat" ? (
+                  <button
+                    type="button"
+                    onClick={() => void tillbakaTillKundtjanst()}
+                    disabled={busy !== null}
+                    className={btnSecondary}
+                  >
+                    {busy === "klassa" ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                    {text({ sv: "Flytta till kundtjänst", en: "Move to customer service" })}
+                  </button>
+                ) : null}
                 {selected.is_test ? (
                   <button
                     type="button"

@@ -44,7 +44,8 @@ async def _hangande_jobb(storage, jobs, *, status="processing", alder=120, scope
     if status == "processing":
         await jobs.start(job_id)
     await storage.set_leads_job_status(TENANT, job_id=job_id, status=status, scope=scope)
-    storage.leads_job_ledger[job_id]["created_at"] = _gammal(alder)
+    # Städaren mäter tystnad (updated_at), inte ålder.
+    storage.leads_job_ledger[job_id]["created_at"] = storage.leads_job_ledger[job_id]["updated_at"] = _gammal(alder)
     return job_id
 
 
@@ -142,7 +143,7 @@ async def test_bakgrundsloopen_stadar_vid_forsta_varvet(monkeypatch):
     jobs = MemoryJobStore()
     job_id = await jobs.create(tenant_id=tenant["id"], status="queued")
     await storage.set_leads_job_status(tenant["id"], job_id=job_id, status="processing")
-    storage.leads_job_ledger[job_id]["created_at"] = _gammal(24 * 60)
+    storage.leads_job_ledger[job_id]["created_at"] = storage.leads_job_ledger[job_id]["updated_at"] = _gammal(24 * 60)
 
     async def avbryt(_sekunder):
         raise asyncio.CancelledError

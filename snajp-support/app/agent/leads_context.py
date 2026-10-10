@@ -38,6 +38,8 @@ class OutreachContext:
     #: Avgör tillsammans med autonominivån om utkastet får skickas eller
     #: måste granskas (app/leads/autonomy.py).
     sequence_index: int = 0
+    #: Testkörning: utkastet går alltid till granskning, aldrig till utskick.
+    is_test: bool = False
     queued: bool = False
     escalated: bool = False
     escalation_reason: str | None = None

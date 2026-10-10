@@ -121,9 +121,6 @@ export const appRoutes: AppRoute[] = [
   // (migration 047), och en nyckel i databasen byter man inte namn på för att
   // produkten gjorde det. Grindas på entitlement som leads och support.
   { href: "/dashboard/kvitton", labelKey: "nav.kvitton", product: "bookkeeping" },
-  // Alla agenters körningar på ett ställe: Iris jobbliggare (migration 080)
-  // och kundtjänstens journal. Innehållet följer vilka agenter arbetsytan har.
-  { href: "/dashboard/aktivitet", labelKey: "nav.aktivitet", product: "shared" },
   { href: "/settings", labelKey: "nav.settings", product: "shared" }
 ];
 

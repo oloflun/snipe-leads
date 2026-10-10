@@ -4,6 +4,11 @@ import {
 } from "@/components/admin/Handelselista";
 import { listEvents, unwrap } from "@/lib/data/admin";
 import { AdminVyhuvud } from "@/components/admin/AdminVyhuvud";
+import { HandelseOversikt } from "@/components/admin/HandelseOversikt";
+import { Panelrubrik } from "@/components/dashboard/OversiktPaneler";
+import { panelKort } from "@/components/ui";
+import { ADMIN } from "@/lib/admin/sprak";
+import { cn } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
@@ -13,6 +18,9 @@ export const maxDuration = 60;
 
 /** Nivåerna filtret får skicka vidare. Allt annat behandlas som "alla". */
 const NIVAER = new Set(["error", "warning", "info"]);
+
+/** Fönstret översikten och listan räknar på. Backendens tak är 500. */
+const HAMTA = 300;
 
 /**
  * Notiscentret.
@@ -30,7 +38,9 @@ export default async function Page({
   // backenden, och en parameter som kommer ur URL:en ska inte kunna vara vad
   // som helst bara för att den råkar tolkas snällt i andra änden.
   const niva = NIVAER.has(params.level ?? "") ? (params.level as string) : "";
-  const { data, error } = unwrap(await listEvents(niva ? `?level=${niva}` : ""));
+  const { data, error } = unwrap(
+    await listEvents(niva ? `?level=${niva}&limit=${HAMTA}` : `?limit=${HAMTA}`)
+  );
 
   if (error) {
     return (
@@ -46,8 +56,12 @@ export default async function Page({
   return (
     <div>
       <AdminVyhuvud grupp="logg" />
-      <Handelsefilter niva={niva} />
-      <Handelselista events={data ?? []} niva={niva} />
+      <HandelseOversikt events={data ?? []} niva={niva} />
+      <section aria-labelledby="handelser-lista" className={cn(panelKort, "mt-4 min-w-0")}>
+        <Panelrubrik id="handelser-lista" titel={ADMIN.handelser} under={ADMIN.handelserIngress} />
+        <Handelsefilter niva={niva} />
+        <Handelselista events={data ?? []} niva={niva} />
+      </section>
     </div>
   );
 }

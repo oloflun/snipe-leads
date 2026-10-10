@@ -53,7 +53,11 @@ SPRAKREGLER = (
 )
 
 #: Namn som aldrig får "rättas" — produktnamn och varumärken.
-SKYDDADE_NAMN = ("Snajp", "Iris", "Snipra", "Livrustning", "TypeSafe", "JobTech")
+#: Produktnamnen sedan 2026-10-09: korrekturen gjorde "Kvittohanteraren" till
+#: "kvittohanteraren" och ångrade därmed produktnamnsputsen i leadsutkasten.
+SKYDDADE_NAMN = (
+    "Snajp", "Iris", "Snipra", "Livrustning", "TypeSafe", "JobTech", "Kvittohanterare", "Supportagent",
+)
 
 #: Entydiga felstavningar → rättning. BARA ord där rättningen är säker
 #: oavsett sammanhang. Kontextberoende fel (de/dem, var/vart) hör INTE
@@ -90,6 +94,10 @@ FELSTAVNINGAR: dict[str, str] = {
     "rekomenderar": "rekommenderar",
     "rekomendation": "rekommendation",
     "resturang": "restaurang",
+    "scanna": "skanna",
+    "scannar": "skannar",
+    "scannade": "skannade",
+    "scannat": "skannat",
     "sammarbete": "samarbete",
     "sammarbeta": "samarbeta",
     "sucessivt": "successivt",
@@ -314,13 +322,22 @@ def _verifiera_korrektur(original: str, korrigerad: str) -> bool:
 _KORREKTUR_PROMPT = """Du är korrekturläsare. Rätta ENBART språket i texten nedan:
 stavning, grammatik, särskrivningar, skiljetecken och meningsbyggnad.
 
+En mening som är grammatiskt trasig eller hakar upp sig (en bisats som inte
+hänger ihop, ett ord som står två gånger, fel numerus som "era
+kärnverksamheter") skrivs om så att den blir korrekt och naturlig svenska,
+med exakt samma innehåll. Exempel: "Jag såg att ni, som ni drivit sedan
+2006, har lång erfarenhet" blir "Jag såg att ni har drivit företaget sedan
+2006 och har lång erfarenhet".
+
 Absoluta regler:
 1. Ändra ALDRIG fakta, namn, siffror, belopp, datum, länkar,
    e-postadresser, organisationsnummer eller budskap.
 2. Lägg inte till och ta inte bort innehåll — bara språkrättning.
 3. Behåll styckeindelning, hälsning och avslutning exakt där de står.
-4. Är texten redan korrekt: returnera den oförändrad.
-5. Svara ENBART med texten — ingen kommentar, inga citattecken.
+4. Behåll tilltalet (du eller ni) och versalerna i produkt- och bolagsnamn
+   (Snajp, Iris, Kvittohanteraren, Supportagenten).
+5. Är texten redan korrekt: returnera den oförändrad.
+6. Svara ENBART med texten — ingen kommentar, inga citattecken.
 
 Kända fel som flaggats:
 {anmarkningar}
@@ -334,8 +351,8 @@ async def korrekturlas_llm(
 ) -> tuple[str, bool]:
     """Kort LLM-korrekturpass. Returnerar (text, accepterad).
 
-    Körs BARA när den deterministiska kontrollen flaggat något — det håller
-    kostnaden på noll extra anrop för den friska majoriteten. I simulering
+    Körs när den deterministiska kontrollen flaggat något, och för
+    leadsutkasten alltid (sakra_utgaende_text(alltid_korrektur=True)). I simulering
     (ingen nyckel) görs ingenting. Fälls verifieringen returneras
     originalet med accepterad=False, och anroparen ska då tvinga granskning.
     """
@@ -370,15 +387,35 @@ async def korrekturlas_llm(
     return text, False
 
 
-async def sakra_utgaende_text(text: str, *, sprak: str = "sv") -> Kontrollresultat:
+async def sakra_utgaende_text(
+    text: str, *, sprak: str = "sv", alltid_korrektur: bool = False
+) -> Kontrollresultat:
     """Hela kedjan för text som KAN skickas utan människa: kontrollera,
     LLM-korrektur vid behov, kontrollera igen. Kvarstår allvarliga
     anmärkningar är `kraver_granskning` sant och anroparen ska degradera
     till mänsklig granskning.
+
+    `alltid_korrektur`: korrekturen körs även på text utan anmärkning
+    (leadsutkasten sedan 2026-10-09: kunderna godkänner dem i klump med
+    Markera alla, och en körning gav "Jag såg att ni, som ni drivit sedan
+    2006, har …" och "scannar", inget av det fångat här). En korrektur som
+    verifieringen fäller lämnar texten orörd och tvingar ingen granskning.
     """
     resultat = kontrollera(text, sprak=sprak)
     if not resultat.kraver_granskning:
-        return resultat
+        if not alltid_korrektur:
+            return resultat
+        korrigerad, accepterad = await korrekturlas_llm(resultat.text)
+        if not accepterad or korrigerad == resultat.text:
+            return resultat
+        om_resultat = kontrollera(korrigerad, sprak=sprak)
+        if om_resultat.kraver_granskning:
+            # Korrekturen fick inte göra en ren text sämre.
+            return resultat
+        om_resultat.anmarkningar.append(
+            Anmarkning("llm_korrektur", "LLM-korrektur utförd och verifierad")
+        )
+        return om_resultat
 
     korrigerad, accepterad = await korrekturlas_llm(
         resultat.text, anmarkningar=resultat.allvarliga

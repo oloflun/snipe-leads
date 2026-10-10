@@ -34,7 +34,8 @@ from .mejl import Mejl
 _KVITTOORD = re.compile(
     r"(?i)\b(kvitto|receipt|faktura|invoice|orderbekräftelse|order confirmation"
     r"|betalning|payment|betalt|paid|tack för ditt köp|thank you for your purchase"
-    r"|prenumeration|subscription)\b"
+    r"|prenumeration|subscription|kreditfaktura|credit note|påminnelse|betalningspåminnelse"
+    r"|reminder|förfallodatum|bankgiro|plusgiro|swish|verifikat)\b"
 )
 
 #: Beloppsraden. Kräver en etikett FÖRE talet — ett årtal eller ett
@@ -117,6 +118,12 @@ def ar_kvittokandidat(mejl: Mejl) -> bool:
     går vidare — och faller sedan i avläsningen på att belopp saknas. Hellre
     en kandidat för mycket än ett kvitto som aldrig lästes.
     """
+    # Ett mejl med en PDF- eller bildbilaga är alltid en kandidat: "Scan
+    # 2026-10-01" från en skrivare eller en kollega som vidarebefordrar ett
+    # kvittofoto bär sällan något av orden. Kvittohanteraren klassar sedan
+    # (EJ_UNDERLAG minns, så samma mejl läses inte av modellen två gånger).
+    if mejl.bilagor:
+        return True
     samlat = f"{mejl.amne}\n{mejl.text}"
     return bool(_KVITTOORD.search(samlat))
 

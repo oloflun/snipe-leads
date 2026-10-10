@@ -45,9 +45,13 @@ Införd: 2026-08-07 · Upphävs endast genom waiver
 
 ### INV-SKILL-003 — Skopad laddning kräver `rationale`
 `PlaybookStep.__post_init__` kastar `ScopeWithoutRationaleError` om `scope`
-är satt utan `rationale`. Standard är hel skill.
+är satt utan `rationale`. Standard är hel skill. Samma krav gäller en
+textändring i den lästa skilltexten (`radandringar`, 2026-10-06): varje
+ändring bär ett skäl, och en ändring vars text inte längre finns i skillen
+kastar `RadandringSaknasError` vid import. Skillfilen rörs aldrig.
 Varför: skopning utan motivering är hur "spara utrymme" i tysthet blir
-"tyst urholkning av läsgarantin" (Del C).
+"tyst urholkning av läsgarantin" (Del C). Textändringarna prövas i
+snajp-support/tests/agentcore/test_radandringar.py.
 Test: snajp-support/tests/agentcore/test_packs.py
 Införd: 2026-08-07 · Upphävs endast genom waiver
 
@@ -163,11 +167,29 @@ standard på nya publika funktioner) har en `HAVING count(distinct tenant_id)
 >= 3`-spärr inbyggd i frågan, inte ett app-lagerfilter. Resultatraderna
 saknar helt en `tenant_id`-kolumn. `app/leads/segment_aggregate.py` är
 samma logik i ren Python, testbar utan databas.
-Varför: segmentlärande är den enda avsiktliga tenantgränsöverskridningen i
-hela arkitekturen (G11) — med två kunder går det att räkna baklänges till
+Varför: segmentlärande var den första avsiktliga tenantgränsöverskridningen i
+arkitekturen (G11; den andra är webbpoolen, INV-SEC-008) — med två kunder går det att räkna baklänges till
 den andra.
 Test: snajp-support/tests/leads/test_segment_aggregate.py
 Införd: 2026-08-07 · Upphävs endast genom waiver
+
+### INV-SEC-008 — Webbpoolen bär bara bolagsnivå och saknar tenant_id
+Tabellen `webbpool` (migration 108, `app/leads/webbpool.py`) är den andra
+avsiktliga tenantgränsöverskridningen, godkänd av Anton 2026-10-08: varje
+körnings bolag bedöms och fördelas efter län till webbyråkunderna (Alunix,
+Umeå Webbdesign). Raden bär bara `webbpool.POOLFALT`: offentliga
+bolagsuppgifter (namn, orgnr, webbplats, ort, postnr, län, SNI) och
+sidbedömningen. Aldrig kontaktperson, mejl, telefon, kundens utkast eller
+status, och aldrig vilken kund som hittade bolaget (`forsta_kalla_typ` säger
+bara körning eller lista). Webbyråkunder är aldrig källa
+(`webbpool.utesluten_kalla`). Bedömningen syns bara för webbyråerna
+(`webbpool.far_se`); övriga kunder får den varken beräknad i research eller
+i API-svaren.
+Varför: källkunden är personuppgiftsansvarig för sina leads (pilotavtalet).
+Det som lämnar kunden får inte vara kundens data, bara offentlig bolagsdata
+och en mätning av en publik sajt; villkoren säger det (preliminärt 2026-10-08).
+Test: snajp-support/tests/leads/test_webbpool.py
+Införd: 2026-10-08 · Upphävs endast genom waiver
 
 ### INV-SEC-002 — Tenant kommer aldrig från modellen
 Ingen `@function_tool` i `ALL_TOOLS`/`DEMO_TOOLS` exponerar `tenant_id`,
@@ -663,7 +685,7 @@ test_uppdateringsprompten_bar_kontamineringssparren — regressionstest på
 KONTAMINERINGSSPARR:s exakta formulering)
 Införd: 2026-08-29 · Upphävs endast genom waiver
 
-### INV-ESC-001 — En kund som ber om en människa får en, och ett överlämnat samtal får aldrig ett AI-svar
+### INV-ESC-001 — En kund som ber om en människa får en, och agenten häver aldrig en överlämning
 Överlämningen avgörs i KOD i `app/agent/support_agent.run_support_agent`, med
 en orsakskod ur `app/agent/support_regler.ORSAKER`. En uttrycklig begäran
 (`support_regler.ber_om_manniska`, triagens `ber_om_manniska`, eller ett ja på
@@ -671,19 +693,29 @@ agentens eget erbjudande) lämnar över utan att eskaleringssteget ens körs —
 modellen kan inte rösta nej. Därefter äger en människa samtalet
 (`ss_chat_state.lage = 'overlamnad'`, migration 066): kundens nästa
 meddelanden hamnar i DET överlämnade ärendets tråd via
-`_svara_under_overlamning`, som inte gör ett enda LLM-anrop, och agenten
-tiger helt när en medarbetare svarat. Samtalet går tillbaka till agenten
-bara när medarbetaren lämnar tillbaka det (`overlamning.aterlamna`) eller
-efter `OVERLAMNING_GILTIG_TIMMAR` utan livstecken. Medarbetarens svar sparas
+`_svara_under_overlamning`, och agenten tiger helt så fort en medarbetare
+svarat (`author='human'`). I VÄNTFASEN — innan någon medarbetare hunnit
+svara — kvitteras korta bekräftelser utan LLM-anrop, medan en ny fråga
+besvaras av kedjan i GÄSTLÄGE (reviderat 2026-10-05 på Sebbes beställning:
+"Noterat i ärendet" på "vilka har grundat snajp" låste chatten): svaret går
+i SAMMA ärende via `aterta`, samtalsläget skrivs tillbaka som
+`overlamnad` med ursprunglig orsak och ärende, och ingen ny
+överlämningssidoeffekt dubbleras. Agenten sätter ALDRIG själv
+`lage='agent'` på ett överlämnat samtal: tillbaka går det bara när
+medarbetaren lämnar tillbaka det (`overlamning.aterlamna`) eller efter
+`OVERLAMNING_GILTIG_TIMMAR` utan livstecken. Medarbetarens svar sparas
 med `author='human'` och når kundens eget chattfönster (`POST /api/chat/samtal`,
 som bara läser tillbaka sessionsidentiteter).
 Varför: Ebbot-researchen 2026-09-18 (bd snipe-1fl). Före ändringen kunde
 eskaleringssteget rösta nej till "jag vill prata med en människa", och ett
 överlämnat samtal fick ett nytt AI-svar på nästa meddelande — ett ärende som
 en människa redan ägde besvarades av en bot i hennes namn, och kunden fick
-börja om i en annan kanal.
+börja om i en annan kanal. 2026-10-05-revideringen behåller den kärnan
+(människan äger samtalet, agenten tar det aldrig tillbaka, tystnad när
+medarbetaren är aktiv) men slutar straffa kunden som ställer en ny fråga
+medan hen väntar.
 Test: snajp-support/tests/agent/test_support_eskalering.py
-Införd: 2026-09-18 · Upphävs endast genom waiver
+Införd: 2026-09-18 · Reviderad: 2026-10-05 · Upphävs endast genom waiver
 
 ### INV-UI-001 — Appytorna bär ingen mikrotext och ingen andra typografi
 Ingen fil under `/admin`, `/dashboard`, `/settings` eller deras komponentkataloger
@@ -697,17 +729,22 @@ plans/2026-09-27-appytor-enhetlighet.md.
 Test: tests/invariants/test_inv_ui_001.py
 Införd: 2026-09-28 · Upphävs endast genom waiver
 
-### INV-DATA-003 — Enda skrivvägen från development till main är admin_flytt.importera
-`scripts/railway_seed_dev.py` speglar envägs main → development (målet
-hårdkodat, `mirror_meta`-markören, ingen `--target`). Det enda som går andra
-vägen är ett HMAC-signerat paket (`FLYTT_NYCKEL`) som `POST /api/admin/flytt/
-importera` tar emot utan masternyckel, vägrar i en spegel (409) och importerar
-idempotent med `importerad_fran` på raden. Ingen annan modul skriver det fältet.
-Varför: Antons beställning 2026-10-01: alla konton skapas i main, development
-ska vara en isolerad spegel för att testa kundproblem, och tester får aldrig
-dyka upp i kundmiljön — men EN admin-väg tillbaka ska finnas, och bara en.
+### INV-DATA-003 — Development och main skrivs bara av synken och admin_flytt
+Mellan miljöerna går data bara två vägar. `scripts/railway_synk.py` synkar
+körningar och supportärenden åt båda hållen (senast ändrad vinner, migration
+111) och rör ALDRIG provkörningar: varje synkad tabell har ett testvillkor i
+`SYNK`. Provkörningar når main bara som ett HMAC-signerat paket (`FLYTT_NYCKEL`)
+till `POST /api/admin/flytt/importera`, som vägrar i en spegel (409) och
+importerar idempotent med `importerad_fran` på raden; ingen annan modul skriver
+det fältet. Varje godkänt utkast skickas av EN miljö, den där det godkändes
+(`leads/scheduler.skickas_har`); autonoma utskick, uppföljningssvepet,
+inkorgsläsningen och autopiloten körs bara i main (`leads/scheduler.tvavags`).
+Varför: Antons beställning 2026-10-01 gjorde development till en isolerad
+envägsspegel. Den 2026-10-10 ändrade han det (docs/BESLUT.md): allt utom
+provkörningar speglas åt båda hållen för att kunna testa pålitligt, och
+provkörningar får aldrig dyka upp i kundmiljön av sig själva.
 Test: snajp-support/tests/invariants/test_inv_data_003.py
-Införd: 2026-10-02 · Upphävs endast genom waiver
+Införd: 2026-10-02 · Ändrad: 2026-10-10 · Upphävs endast genom waiver
 
 ### INV-COPY-001 — Varje komponent med användarvänd text är tvåspråkig
 Ingen rad i appytorna, demon, produktsidorna, marknadsytan, inloggningen eller de
@@ -748,6 +785,36 @@ bransch lästes som målbransch.
 Test: snajp-support/tests/invariants/test_inv_leads_score_001.py
 Införd: 2026-09-30 · Upphävs endast genom waiver
 
+### INV-LEADS-EXIST-001 — Ett bolag som inte går att styrka blir aldrig ett lead
+Varje kandidat som inte kommer ur registret måste styrkas av sin egen
+webbplats innan den blir ett prospekt: startsidan svarar, och bolagsnamnet står
+på sidan eller i domänen (`app/leads/existens.py`, anropad i
+`korning.sokrunda`). Grinden fäller vid osäkerhet. En sökträffs påstådda
+kontakt, ort och storlek följer aldrig med till prospektet. Utan hämtat
+källmaterial görs inget modellanrop, bolaget får nivå C med skälet utskrivet
+och blir varken Redo eller får ett utkast (`bedomning.bedom(har_underlag=...)`,
+`leads_research_v2`). Nivå A kräver minst ett uppfyllt kriterium. Ett lead
+uppfyller kraven: varje måste-kriterium styrkt och inget uttryckligt nej, och
+`GET /api/leads/prospects` returnerar aldrig ett bortvalt bolag (nivå C)
+(Antons krav 2026-10-06). Bortvalt är DOLT, inte raderat: den uttryckliga
+vyn `?bortvalda=1` listar dem, och ett prospekt raderas aldrig av systemet —
+bara av en uttrycklig användarhandling (Sebbes krav 2026-10-06). Varje bolag bedöms dessutom på produktmatchningen
+`kp`, oavsett profil: bara ett belagt ja (citat, eller ett webbkriterium som
+koden avgjort som träff) blir ett lead, och när kunden har en produktlista
+måste researchen ha valt en av produkterna (`bedomning._produktmatch_rad`,
+Sebbes krav 2026-10-06: ett lead kunden inte kan sälja sin produkt till är
+värdelöst). Sändspärren
+blockerar ett Iris-lead utan godkänd bedömning (`app/leads/scheduler.py`).
+Det sista undantaget från INV-LEADS-PROFIL-001: "inget källmaterial" fäller i
+kod, inte modellen.
+Varför: provkörningen 2026-10-05 gav tre bolag som inte finns ("Exempel
+E-handel AB", "Detaljhandel Design AB", "Byggmästarna i Göteborg AB") med
+påhittade domäner, poäng 100, status Redo och färdiga utkast. De kom ur den
+grounded sökningen, och ingenting mellan sökningen och utkastet kontrollerade
+att bolaget fanns.
+Test: snajp-support/tests/invariants/test_inv_leads_exist_001.py
+Införd: 2026-10-06 · Upphävs endast genom waiver
+
 ### INV-LEADS-N-001 — En körning levererar N leverbara leads eller säger ärligt varför inte
 En Iris-körning utan egna bolagsnamn räknar LEVERBARA leads (kvalificerade,
 över kundens tröskel, med mejlväg) — inte kandidater. `_fyll_pa`
@@ -758,7 +825,9 @@ då med en tratt som namnger det strypande kriteriet.
 Varför: uppmätt 2026-09-29 — 3 beställda leads blev 3 kandidater som Iris
 själv underkände, inga utkast, och körningen stannade vid "1/3 jobb".
 Leverbart är skärpt 2026-10-02 (Antons krav, plan del C): kvalificerat, över
-tröskeln, kontaktperson MED roll, telefon ELLER arbetsmejl, och en
+tröskeln, NAMNGIVEN kontaktperson (rollen föredras men krävs inte sedan
+Sebbes revidering 2026-10-07 — en namngiven anställd duger i sista hand),
+telefon ELLER arbetsmejl, och en
 lägesbeskrivning (migration 083) — `_leverbarhet` i `app/api/leads.py`.
 Test: snajp-support/tests/invariants/test_inv_leads_n_001.py
 Införd: 2026-09-30 · Upphävs endast genom waiver
@@ -788,6 +857,7 @@ Ids this plan will introduce, in the order `Genomförandeordning` builds them. N
 | --- | --- | --- |
 | INV-SEC-006 | Hemligheter i env, aldrig i databasen | En nyckelkolumn införs |
 | INV-SEC-007 | Segmentaggregat kräver ≥3 kunder och saknar tenant_id | Vyn exponerar färre |
+| INV-SEC-008 | Webbpoolen bär bara bolagsnivå och saknar tenant_id | En kontakt- eller kundkolumn läggs till |
 | INV-AGENT-001 | Agenten erbjuder aldrig något utanför retentionsplaybooken | Ett erbjudande genereras fritt |
 | INV-AGENT-002 | En kund flyttas aldrig till ny baseline utan godkännande | Pin ändras automatiskt |
 

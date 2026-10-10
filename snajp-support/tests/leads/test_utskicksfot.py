@@ -96,3 +96,11 @@ def test_lanken_bar_ordet_guarden_letar_efter():
     """Regel 2 letar efter avregistrera/unsubscribe/optout i en http-länk. En
     kortare sökväg (/u/<token>) hade blockerat varje utskick."""
     assert "avregistrera" in avregistreringslank("https://snajp.se", "x" * 32)
+
+
+def test_fot_utan_orgnr_och_adress_har_namn_och_lank():
+    """Antons beslut 2026-10-10: org.nr och postadress tas med när de finns."""
+    from app.leads.utskicksfot import bygg_fot as _bygg
+
+    fot = _bygg(foretagsnamn="Snajp AB", orgnr="", postadress="", lank="https://x.se/avregistrera/t")
+    assert "Snajp AB" in fot and "org.nr" not in fot and "avregistrera" in fot

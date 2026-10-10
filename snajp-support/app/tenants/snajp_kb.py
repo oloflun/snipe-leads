@@ -16,6 +16,12 @@ inte skrivna någonstans i repot. En agent som gissar dem åt kundens räkning �
 värre än en som lämnar över till en människa — se TENANTS.md.
 """
 
+#: Rubriker som funnits i den här filen men döpts om — seedningen raderar
+#: dem så att en omdöpt artikel inte lämnar en föråldrad dubblett i basen.
+FORLEGADE_RUBRIKER: tuple[str, ...] = (
+    "Hur man kommer igång, och hur lång tid det tar",
+)
+
 KB_ARTICLES: list[dict] = [
     # -- Företaget och produkten -------------------------------------------
     {
@@ -24,11 +30,68 @@ KB_ARTICLES: list[dict] = [
         "content": (
             "Snajp bygger AI-agenter för svenska B2B-bolag. Vi levererar tre agenter: en "
             "kundservice-agent som svarar på inkommande ärenden utifrån kundens egen "
-            "kunskapsbas, en leads-agent som hittar företag med konkreta signaler och "
-            "skriver utkast till mejl, och en bokföringsagent som läser kvitton och "
-            "fakturor och föreslår kontering. Verksamheten drivs från Göteborg och Umeå och "
-            "arbetar med bolag i hela landet. Vi bygger inte om kundens hemsida — kunden "
+            "kunskapsbas, Iris — leads-agenten som hittar företag med konkreta signaler "
+            "och skriver utkast till mejl — och Kvittohanteraren, som läser kvitton ur "
+            "mejlen och sammanställer dem. Kvittohanteraren bokför ingenting själv; den "
+            "läser av, sammanställer och exporterar som SIE4 till kundens eget "
+            "bokföringsprogram. Verksamheten drivs från Göteborg och Umeå och arbetar "
+            "med bolag i hela landet. Vi bygger inte om kundens hemsida — kunden "
             "behåller sin egen sajt, och det vi levererar är agenterna."
+        ),
+    },
+    {
+        "title": "Vilka står bakom Snajp",
+        "category": "ovrigt",
+        # Speglar lib/team.ts och /vart-team (2026-10-05). Namnen är
+        # bekräftade uppgifter, inte härledda — se team.ts egen docstring.
+        "content": (
+            "Snajp har två grundare: Sebastian Bergman och Anton Lundin. Båda har "
+            "titeln Grundare — det finns ingen uppdelning i vd eller teknikchef, och "
+            "det är medvetet: två grundare i ett litet bolag som gör allting "
+            "tillsammans. Sebastian har byggt det mesta av plattformen: agenternas "
+            "backend, databasen och gränssnittet kunderna arbetar i. Anton har byggt "
+            "agenternas färdighetsregister — spelböckerna som avgör vad de kan och hur "
+            "de resonerar. Snajp byggs i Göteborg och Umeå. Mer om teamet finns på "
+            "sidan /vart-team på snajp.se."
+        ),
+    },
+    {
+        "title": "Kontakt med Snajp",
+        "category": "ovrigt",
+        "content": (
+            "Mejladressen till Snajp är kontakt@snajp.se — den gäller både frågor om "
+            "tjänsten och övriga ärenden. En demo bokas på /boka-demo (15–20 minuter). "
+            "Telefonnummer och supporttider är inte fastställda i vårt underlag; "
+            "frågar kunden efter dem, hänvisa till mejladressen eller koppla in en "
+            "kollega."
+        ),
+    },
+    {
+        "title": "Hitta rätt på arbetsytan",
+        "category": "teknisk_support",
+        # Speglar arbetsytans faktiska navigering (components/AppShell.tsx,
+        # vyerna under components/). Uppdatera när menyn ändras.
+        "content": (
+            "Arbetsytan nås efter inloggning på snajp.se och har en meny till "
+            "vänster:\n"
+            "• Översikt — nyckeltalen överst (väntande utkast, nya leads, ärenden) "
+            "och Att göra för alla agenter.\n"
+            "• Iris — leads-agenten: Bolag (prospekten med bedömning och utkast), "
+            "Granskning (utkast som väntar på godkännande), Inställningar (målgrupp "
+            "och automation) och CRM-lista. Knappen \"Kör Iris\" startar en körning.\n"
+            "• Kundtjänst — Inkorgen (mejl med svarsutkast att godkänna, knapparna "
+            "Förbättra, Kortare och Mer personlig skriver om utkastet) och "
+            "Kundchatten.\n"
+            "• Kvitton — Kvittohanteraren: koppla inkorgen och tryck \"Skanna "
+            "inkorgen\", ställ frågor till kvittoassistenten i chatten.\n"
+            "• Inställningar — här kopplas mejlinkorgen, till exempel en Gmail-"
+            "inkorg, med ett app-lösenord från mejlleverantören (för Gmail skapas "
+            "det i Google-kontots säkerhetsinställningar). Här fylls också "
+            "kunskapsbasen på, affärskontexten \"Vad ni "
+            "säljer\" skrivs in, och eskaleringsregler ställs in.\n\n"
+            "Ingenting skickas till riktiga mottagare utan godkännande enligt den "
+            "autonominivå kunden valt. Går något inte att hitta: be kunden beskriva "
+            "vad den försöker göra, eller koppla in en kollega."
         ),
     },
     {
@@ -40,8 +103,10 @@ KB_ARTICLES: list[dict] = [
             "och skriver färdiga svarsutkast grundade i kundens egen kunskapsbas. "
             "I paketet ingår kundservice-agent, egen kunskapsbas, obegränsade chattar och "
             "e-posttriage. Agenten svarar aldrig ur en allmän modell — saknas svaret i "
-            "kunskapsbasen säger den det och lämnar över till en människa i stället för "
-            "att gissa."
+            "kunskapsbasen säger den det rakt ut i stället för att gissa, svarar på det "
+            "den har stöd för och erbjuder att en kollega tittar på resten. Ärenden som "
+            "rör pengar tillbaka, fakturafel, juridik, GDPR, säkerhet eller en kund i "
+            "kris lämnar den alltid över till en människa direkt."
         ),
     },
     {
@@ -67,12 +132,13 @@ KB_ARTICLES: list[dict] = [
             "egen kunskapsbas.\n"
             "• Snajp Leads — 4 490 kr/mån. Leads-agenten som hittar och skriver till rätt "
             "företag.\n"
-            "• Snajp Bokföring — 2 690 kr/mån. Bokföringsagenten som läser kvitton och "
-            "föreslår kontering.\n"
+            "• Snajp Kvitton — 2 690 kr/mån. Kvittohanteraren som läser kvitton ur "
+            "mejlen (endast läsbehörighet) och exporterar som SIE4. Den bokför "
+            "ingenting själv.\n"
             "• Snajp Duo — 6 990 kr/mån. Leads- och kundservice-agenten i samma dashboard, "
             "med delad kunddata.\n"
             "• Snajp Trio — 9 990 kr/mån. Alla tre agenterna: leads, kundtjänst och "
-            "bokföring.\n"
+            "kvitton.\n"
             "Duo kostar 1 490 kr mindre per månad än att köpa Support och Leads var för "
             "sig (3 990 + 4 490 = 8 480 kr). Trio kostar 1 180 kr mindre än alla tre var "
             "för sig (3 990 + 4 490 + 2 690 = 11 170 kr)."
@@ -101,7 +167,7 @@ KB_ARTICLES: list[dict] = [
             "3 kr.\n\n"
             "Snajp Support har obegränsade chattar — där finns alltså inget volymtak att "
             "räkna på.\n\n"
-            "Snajp Bokföring säljs med en kampanj: en extra bokföringsagent kostar 999 kr. "
+            "Snajp Kvitton säljs med en kampanj: en extra kvittoagent kostar 999 kr. "
             "Frågar kunden hur länge kampanjen gäller, eller vad en extra agent innebär i "
             "praktiken: det är inte fastställt i vårt underlag. Lämna över till en "
             "människa.\n\n"
@@ -137,10 +203,15 @@ KB_ARTICLES: list[dict] = [
             "uppstarten utifrån kundens webbplats, villkor och det kunden berättar. Den "
             "hämtar alltså inte svar ur en allmän språkmodell.\n\n"
             "Hittar agenten inget stöd för ett svar i kunskapsbasen svarar den inte ändå. "
-            "Då säger den att den inte har uppgiften och kopplar in en människa. Det är ett "
-            "medvetet val: ett trovärdigt men felaktigt svar i kundens namn är värre än ett "
-            "ärligt överlämnande. Samma regel gäller motstridiga uppgifter — står två olika "
-            "saker i underlaget jämkar agenten inte ihop dem, den eskalerar."
+            "Då säger den att den inte har uppgiften, svarar på det den har stöd för, och "
+            "erbjuder att en kollega tittar på frågan — tackar kunden ja lämnas ärendet "
+            "över i samma samtal. Det är ett medvetet val: ett trovärdigt men felaktigt "
+            "svar i kundens namn är värre än ett ärligt \"det vet jag inte\", och kunden "
+            "slipper vänta på en människa för en fråga hen kanske inte behöver svar på.\n\n"
+            "Vissa ärenden lämnar agenten alltid över direkt: pengar tillbaka, fakturafel, "
+            "juridik, GDPR-begäranden, säkerhet, en kund i kris, en arg kund eller en "
+            "kund som ber om en människa. Samma sak gäller motstridiga uppgifter — står "
+            "två olika saker i underlaget jämkar agenten inte ihop dem, den eskalerar."
         ),
     },
     {
@@ -164,20 +235,25 @@ KB_ARTICLES: list[dict] = [
     # med "TODO: bekräfta med Sebbe" (provperiodens längd, uppsägningstid)
     # speglas INTE — de är kodade som eskalering i artikeln nedan. ----------
     {
-        "title": "Hur man kommer igång, och hur lång tid det tar",
+        "title": "Komma igång: testa, demo och hur lång tid det tar",
         "category": "ovrigt",
+        # "testa/test" måste stå i texten: fulltextsökningen hittade inte
+        # artikeln på "Hur kommer vi igång om vi vill testa?" när den bara
+        # sa "prova" (batteritestet 2026-10-05).
         "content": (
-            "Första steget är en demo på 15–20 minuter, bokas på /boka-demo. Vi går "
-            "igenom kundens egna ärenden eller kunder live, kunden ser vad agenten "
-            "föreslår, och vi säger rakt ut om vi tror att det passar. Inga "
-            "förpliktelser.\n\n"
+            "Vill ni testa Snajp finns två vägar. Alla tre agenterna går att testa "
+            "direkt i webbläsaren utan konto, med exempeldata — på produktsidorna "
+            "för leads, support och kvitton. Nästa steg är en demo på 15–20 "
+            "minuter, bokas på /boka-demo: vi går igenom kundens egna ärenden "
+            "eller kunder live, kunden ser vad agenten föreslår, och vi säger "
+            "rakt ut om vi tror att det passar. Inga förpliktelser.\n\n"
             "Att koppla en inkorg och fylla kunskapsbasen är dagens arbete, inte "
             "månadens. Det som tar tid är att komma överens om tonen i svaren, och det "
             "görs bäst genom att köra agenten i utkastläge ett par dagar och rätta det "
             "som blir fel.\n\n"
-            "Alla tre agenterna går dessutom att prova direkt i webbläsaren utan "
-            "konto, med exempeldata — på produktsidorna för leads, support och "
-            "bokföring."
+            "Frågar kunden om en längre kostnadsfri testperiod eller provperiod på "
+            "ett eget konto: villkoren är inte fastställda i vårt underlag — lämna "
+            "över till en människa i stället för att gissa."
         ),
     },
     {
@@ -186,7 +262,37 @@ KB_ARTICLES: list[dict] = [
         "content": (
             "Ja. Agenterna hämtar sina formuleringar ur kundens egen kunskapsbas, så "
             "tonen blir kundens egen och inte en översättning. Produkten är byggd för "
-            "svensk B2B från början, inte lokaliserad i efterhand."
+            "svensk B2B från början, inte lokaliserad i efterhand. Utöver svenska "
+            "svarar agenterna på engelska."
+        ),
+    },
+    {
+        # Sebbe 2026-10-06: svenska och engelska, inga andra språk. Agenten
+        # följer samma gräns i kod (support_regler.TILLATNA_SPRAK).
+        "title": "Vilka språk agenterna svarar på",
+        "category": "teknisk_support",
+        "content": (
+            "Snajps agenter svarar på svenska och engelska. Kundservice-agenten svarar "
+            "på samma språk som den som skriver, så länge det är svenska eller "
+            "engelska — en engelskspråkig kund får alltså svar på engelska, även om "
+            "kunskapsbasen är skriven på svenska.\n\n"
+            "Andra språk än svenska och engelska erbjuds inte. Skriver någon på ett "
+            "annat språk svarar agenten på svenska och berättar att ärendet kan "
+            "hanteras på svenska eller engelska."
+        ),
+    },
+    {
+        # Sebbe 2026-10-06: inkorgen och hemsidans chatt, inga sociala medier.
+        "title": "Var supportagenten svarar: inkorgen och chatten på hemsidan",
+        "category": "teknisk_support",
+        "content": (
+            "Snajp Support arbetar i två kanaler: kundens mejlinkorg och som chattbot "
+            "på kundens egen hemsida. I inkorgen läser agenten inkommande mejl, "
+            "sorterar dem och skriver svarsutkast. I chatten svarar den besökarna på "
+            "hemsidan direkt.\n\n"
+            "Agenten svarar inte i sociala medier — inte på Facebook, Instagram, "
+            "LinkedIn, Messenger eller WhatsApp — och inte i några andra kanaler än "
+            "mejlinkorgen och chatten på hemsidan."
         ),
     },
     {

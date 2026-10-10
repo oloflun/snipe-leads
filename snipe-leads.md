@@ -9,10 +9,13 @@ money_weight: 4
 goal: "AI outbound SaaS: Snipra (leads-dashboard) + Snajp (support-agent) i ett repo, multi-tenant Next.js/Supabase"
 next_milestone: "main uppdaterad till samma kod som development, och Livrustning-tenantens garantiperiod bekraftad av kund"
 milestone_blockers:
-  - "PR #22 (support-eskalering, sprak, integrationer/kanaler, Iris-menyn) vantar bara pa Antons merge; migrationer och INTEGRATION_NYCKEL klara i main (2026-09-19)"
+  - "PR #31 (release development -> main) vantar pa Antons ja till migrationerna 096-099 mot main (torrkorda 2026-10-06) och pa hans merge"
+  - "ScrapeGraph-krediten slut: 21 leads i development foll utan bedomning vid ombedomningen 2026-10-06 (kor ombedom_leads.py --utan-underlag efter pafyllning)"
   - "IMAP_PASSWORD_LIVRUSTNING saknas pa Railway api (bade main och development)"
   - "Vantar pa kundens bekraftelse av garantiperioden"
-updated: 2026-10-02
+  - "Migration 099 kord i development 2026-10-06; 101 (prompt_lager) och 102 (kundonskemal) ej korda nagonstans; 096-102 mot main vantar pa Antons ja"
+  - "Nio ostyrkta Iris-leads i development ska raderas av Anton (scripts/radera_prospekt.py, agenten nekades); development-instruktionerna ska aterstallas (agenten nekades)"
+updated: 2026-10-10
 ---
 
 # Snipra / Snajp
@@ -424,6 +427,28 @@ inte uppdaterats till Railway-topologin.** Det gör de fem maskinella stegen
 mot den döda kedjan; en riktig onboarding just nu kräver manuella steg mot
 Railway tills skriptet är omskrivet. Se `TENANTS.md` för den nuvarande
 processen och flagga skriptet innan du litar på det.
+
+## Current status (2026-10-08)
+
+CRM-flödet för leads på development (`e816bd8`): Översikt = Aktivitet, utkast/skickat som stämmer,
+massåtgärder, Inkorg › Skickat, kontaktsökning + fördelning (regel 12–17), Leads › Samtal (ringlista,
+återkoppling), Processa om på listor, ett bolag på ett ställe, ta bort/kopiera listor mellan kunder,
+webbpoolen (parallell session). Webbplatsbedömningen är hemlig (admin, Umeå Webdesign, Alunix).
+Migration 107/108 körda i development; main väntar på release. Handoff: `HANDOFF-2026-10-08-CRM-FLODE.md`.
+
+## Current status (2026-10-06)
+
+Iris och leadslistorna delar aldrig bolag: en gemensam uteslutningsmängd
+(`snajp-support/app/leads/upptagna.py`, orgnr eller namn utan bolagsform) av
+Iris-prospekt, alla listrader och CRM-kunder läses av Iris-sökningen
+(`app/api/leads.py`, `app/leads/discovery.py`, `app/leads/sources/merinfo.py`),
+listbygget och listspåret. CRM-kundlistan (`components/leads/CrmKundlista.tsx`,
+`kalla='crm'`, migration 098) laddas upp i Leads › Listor och prospekteras
+aldrig (409 på flytt/befordran/kombinera). Gotcha: en ny leadskälla måste få
+`await upptagna.hamta(storage, tenant_id)` som uteslutning, annars återkommer
+överlappen. Verifiera: `snajp-support/tests/leads/test_upptagna_bolag.py`.
+Development driftsatt med 098; main väntar på Antons ja till 096–098 och hans
+merge av PR #31.
 
 ## Current status (2026-10-02, session 4)
 

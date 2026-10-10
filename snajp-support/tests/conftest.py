@@ -61,8 +61,23 @@ def _force_simulation_mode(monkeypatch):
         "LEADS_WEBBSIGNAL",
         # Registerkällan (merinfo via ScrapeGraphAI, 2026-10-01): sjunde gången.
         "LEADS_MERINFO",
+        # Gratis-först-hämtningen (app/leads/sidhamtning.py, 2026-10-05) gör
+        # en riktig httpx-förfrågan före ScrapeGraph. Tom = ScrapeGraph först
+        # som förut, med direkthämtningen som reserv. Åttonde gången.
+        "LEADS_DIREKTHAMTNING",
+        # Webbrevisionen (app/leads/webbrevision.py) anropar PageSpeed och
+        # bildmodellen för varje researchad sajt. Tom = av. Nionde gången.
+        "LEADS_WEBBREVISION",
+        # Webbpoolen (app/leads/webbpool.py, 2026-10-08) bedömer varje
+        # körnings sajter efter körningen. Tom = av. Elfte gången.
+        "WEBBPOOL",
         "TYPESAFE_API_KEY",
         "IRIS_JEV",
+        # Vertex-kontot: med JSON-nyckeln i .env tar bolagssökningen
+        # (discovery._gemini_med_sokning) Vertex-grenen även när GEMINI_API_KEY
+        # är tom, och ett omockat test hade gjort ett riktigt sökanrop. Tionde
+        # gången.
+        "GOOGLE_SERVICE_ACCOUNT_JSON",
     ):
         monkeypatch.setenv(name, "")
     get_settings.cache_clear()

@@ -28,13 +28,16 @@ Den körs på tre ställen:
      send_queue-schemaläggaren i app/leads/scheduler.py),
   3. lat, när kunden läser sina listor (GET /api/leads/listor[/{id}]).
 
-## Varför klockan räknar från created_at, och varför det är ofarligt
+## Varför klockan räknar från updated_at
 
-Liggaren har ingen uppdaterad-kolumn, och en migration bara för en livssignal
-vore en deployordningsfälla (koden skriver kolumnen innan den finns — se
-kommentaren sist i migration 059). Tröskeln är därför generös (default 60
-min, räknat från köandet) och två skydd gör en felaktig städning självläkande
-i stället för skadlig:
+Tidigare räknade den från created_at, och då fälldes varje Iris-körning som
+levt längre än en timme, även en frisk: batchraden står i `processing` tills
+motorn säger klar, och efter första sökrundan körs den inte längre "i den här
+processen". Sedan migration 080 skriver motorn liggaren efter varje steg och
+`updated_at` följer med, så tröskeln (default 60 min) mäter tystnad, inte
+ålder. En pausad körning (`korning.styrning = 'paus'`) är tyst med flit och
+städas aldrig. Två skydd gör en felaktig städning självläkande i stället för
+skadlig:
 
   * Jobb som körs i DEN HÄR processen står i `_aktiva` och städas aldrig.
   * En städad men i själva verket köad post körs ändå när workern når den:
@@ -176,15 +179,32 @@ async def stada_alla(app_state: Any) -> dict[str, dict[str, list[str]]]:
     return resultat
 
 
+#: Väckningen av stillastående körningar (api/leads.py,
+#: vack_stillastaende_korningar) körs oftare än städningen: en körning ska
+#: stå still i högst en minut, inte fem.
+VACKNING_SEKUNDER = 60
+
+
 async def run_leads_stadare(app_state: Any) -> None:
-    """Bakgrundsloopen. Första svepet direkt — det ÄR uppstartsstädningen."""
+    """Bakgrundsloopen. Första svepet direkt — det ÄR uppstartsstädningen.
+    Varje varv väcker dessutom körningar som står still (2026-10-09)."""
+    import time
+
     intervall = max(get_settings().leads_stadning_sekunder, 30)
     logger.info("Leads-städaren aktiv: var %s sekund.", intervall)
+    senast = float("-inf")
     while True:
         try:
-            await stada_alla(app_state)
+            if time.monotonic() - senast >= intervall:
+                await stada_alla(app_state)
+                senast = time.monotonic()
+            from ..api.leads import vack_stillastaende_korningar
+            from ..leads import autopilot
+
+            await vack_stillastaende_korningar(app_state)
+            await autopilot.svep(app_state)
         except asyncio.CancelledError:
             raise
         except Exception:  # noqa: BLE001 — städaren får aldrig dö
             logger.exception("Oväntat fel i leads-städaren — fortsätter nästa varv.")
-        await asyncio.sleep(intervall)
+        await asyncio.sleep(min(VACKNING_SEKUNDER, intervall))

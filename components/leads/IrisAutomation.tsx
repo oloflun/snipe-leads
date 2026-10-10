@@ -19,7 +19,8 @@ import { cn } from "@/lib/utils";
  */
 
 type PerTyp = { utkast_auto: boolean; uppfoljning_dagar: number };
-type Automation = { per_typ: Record<LeadTyp, PerTyp>; jev_bortval: boolean };
+type Autopilot = { pa: boolean; leads_per_dag: number };
+type Automation = { per_typ: Record<LeadTyp, PerTyp>; jev_bortval: boolean; autopilot?: Autopilot };
 type CrmSynk = { leverantor: "hubspot" | "pipedrive" | null; integration_id: string | null };
 type Config = { automation?: Automation; crm_synk?: CrmSynk | null };
 /** `GET /api/integrationer`: `hemligheter` är namn → maskerat värde, aldrig riktiga värden (lagring.offentlig). */
@@ -64,6 +65,13 @@ const T = {
     sv: "Inga integrationer ännu. Lägg till en under Inställningar › Integrationer.",
     en: "No integrations yet. Add one under Settings › Integrations."
   },
+  autopilot: { sv: "Autopilot: en körning varje vardag", en: "Autopilot: one run every weekday" },
+  autopilotHjalp: {
+    sv: "Iris startar en körning med research och utkast varje vardag från 06:00. Vad som skickas utan ert ja styrs av inställningen Hur långt agenterna får gå.",
+    en: "Iris starts a run with research and drafts every weekday from 06:00. What is sent without your approval is set by How far the agents may go."
+  },
+  leadsPerDag: { sv: "Leads per vardag", en: "Leads per weekday" },
+  leadsPerDagHjalp: { sv: "1–50. Körningen syns i Körningar.", en: "1–50. The run appears in Runs." },
   sparat: { sv: "Sparat.", en: "Saved." }
 } satisfies Record<string, Localized>;
 
@@ -73,6 +81,7 @@ export function IrisAutomation() {
   const { text } = useLocale();
   const [lage, setLage] = useState<Lage>({ fas: "laddar" });
   const [dagarText, setDagarText] = useState<Partial<Record<LeadTyp, string>>>({});
+  const [antalText, setAntalText] = useState("");
   const [integrationer, setIntegrationer] = useState<Integration[]>([]);
   const [sparar, setSparar] = useState(false);
   const [sparfel, setSparfel] = useState<string | null>(null);
@@ -88,6 +97,7 @@ export function IrisAutomation() {
       crm: config.crm_synk ?? { leverantor: null, integration_id: null }
     });
     setDagarText(Object.fromEntries(TYPER.map((t) => [t, String(automation.per_typ[t]?.uppfoljning_dagar ?? 0)])));
+    setAntalText(String(automation.autopilot?.leads_per_dag ?? 10));
     return true;
   }
 
@@ -154,6 +164,23 @@ export function IrisAutomation() {
     sparaTyp(typ, { uppfoljning_dagar: varde });
   }
 
+  function sparaAutopilot(andring: Partial<Autopilot>) {
+    if (lage.fas !== "klar") return;
+    const autopilot = { pa: false, leads_per_dag: 10, ...lage.automation.autopilot, ...andring };
+    void spara({ automation: { autopilot: andring } }, { ...lage, automation: { ...lage.automation, autopilot } });
+  }
+
+  function sparaAntal() {
+    if (lage.fas !== "klar") return;
+    const nu = lage.automation.autopilot?.leads_per_dag ?? 10;
+    const varde = Math.min(50, Math.max(1, Math.round(Number(antalText.trim()))));
+    if (antalText.trim() === "" || Number.isNaN(varde) || varde === nu) {
+      setAntalText(String(nu));
+      return;
+    }
+    sparaAutopilot({ leads_per_dag: varde });
+  }
+
   function sparaCrm(andring: Partial<CrmSynk>) {
     if (lage.fas !== "klar") return;
     const crm = { ...lage.crm, ...andring };
@@ -179,6 +206,39 @@ export function IrisAutomation() {
         </p>
       ) : (
         <div className="mt-5 divide-y divide-ink/12 border-y border-ink/15">
+          <div className="py-4">
+            <Vaxel
+              paslagen={Boolean(lage.automation.autopilot?.pa)}
+              etikett={text(T.autopilot)}
+              beskrivning={text(T.autopilotHjalp)}
+              upptagen={sparar}
+              onByt={(v) => sparaAutopilot({ pa: v })}
+            />
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+              <label htmlFor="iris-autopilot-antal" className="text-[0.9375rem] font-medium text-ink">
+                {text(T.leadsPerDag)}
+              </label>
+              <input
+                id="iris-autopilot-antal"
+                type="number"
+                inputMode="numeric"
+                min={1}
+                max={50}
+                value={antalText}
+                disabled={sparar}
+                aria-describedby="iris-autopilot-antal-hjalp"
+                onChange={(e) => setAntalText(e.target.value)}
+                onBlur={sparaAntal}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") e.currentTarget.blur();
+                }}
+                className={cn(faltKlass, "w-24")}
+              />
+              <span id="iris-autopilot-antal-hjalp" className={meta}>
+                {text(T.leadsPerDagHjalp)}
+              </span>
+            </div>
+          </div>
           {TYPER.map((typ) => {
             const regel = lage.automation.per_typ[typ] ?? { utkast_auto: false, uppfoljning_dagar: 0 };
             const namn = text(TYP_NAMN[typ]);

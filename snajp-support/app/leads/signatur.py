@@ -95,7 +95,7 @@ def bygg_signaturtext(sig: dict[str, str]) -> str:
     return "\n\n".join(grupper)
 
 
-def med_signatur(brodtext: str, sig: dict[str, str]) -> str:
+def med_signatur(brodtext: str, sig: dict[str, str], *, halsning: str | None = None) -> str:
     """Lägger på signaturen om den saknas. Idempotent.
 
     En uppföljning kan vara byggd ur ett tidigare mejl som redan bär
@@ -125,7 +125,97 @@ def med_signatur(brodtext: str, sig: dict[str, str]) -> str:
     if sista and (sista == sig["namn"] or sig["namn"].startswith(f"{sista} ")):
         stripped = stripped[: len(stripped) - len(stripped.rsplit("\n", 1)[-1])].rstrip()
         return f"{stripped}\n{text}"
+    if _AVSLUTNING.search(stripped):
+        return f"{stripped}\n{text}"
+    # "Vänliga hälsningar,\nSnajp": sign_off satte arbetsytans namn efter
+    # modellens hälsningsfras, och signaturen fick en hälsningsfras till
+    # ovanför personens namn (4 av 6 utkast i development 2026-10-09). En
+    # kort namnrad direkt efter hälsningsfrasen ersätts av signaturen.
+    fore, _, namnrad = stripped.rpartition("\n")
+    namnrad = namnrad.strip()
+    if fore and _AVSLUTNING.search(fore.rstrip()) and 0 < len(namnrad) <= 40 and not namnrad.endswith((".", "?", "!", ":")):
+        return f"{fore.rstrip()}\n{text}"
+    # Ingen avslutning alls: mejlet gick rakt från uppmaningen till namnet
+    # (uppmätt 2026-10-07 i 16 av 16 utkast i development). Hälsningsfrasen
+    # läggs på i kod, på mejlets språk.
+    if halsning:
+        return f"{stripped}\n\n{halsning}\n{text}"
     return f"{stripped}\n\n{text}"
+
+
+#: En avslutande hälsningsrad, med eller utan komma, svensk eller engelsk.
+#: Lösare än _HANGANDE_HALSNING (som speglar leads_agent och måste hållas lik).
+_AVSLUTNING = re.compile(
+    r"\n[ \t]*(?:(?:med\s+)?(?:vänliga|bästa|varma)\s+hälsningar|hälsningar|mvh|vänligen|"
+    r"best\s+regards|kind\s+regards|regards|best\s+wishes|best|cheers)[ \t]*[,!.]?[ \t]*$",
+    re.IGNORECASE,
+)
+
+#: Hälsningsfrasen per språk när brödtexten saknar en (`med_signatur`).
+HALSNING = {"sv": "Vänliga hälsningar,", "en": "Best regards,"}
+
+
+#: Första raden i den lagstadgade foten (utskicksfot.bygg_fot). Duplicerad
+#: hellre än importerad, av samma skäl som _HANGANDE_HALSNING ovan.
+_FOTSTART = "\n--\n"
+
+
+def dela_utkast(body: str, sig: dict[str, str] | None) -> tuple[str, str]:
+    """(brödtext, svans) — svansen är kodens egen text sist i mejlet:
+    signaturblocket och/eller den lagstadgade foten.
+
+    Granskningsvyn låter människan och AI-knapparna (Förbättra, Kortare …)
+    arbeta på brödtexten och bara den. Förut låg hela mejlet i textrutan, och
+    en omskrivning kunde stryka eller skriva om signaturen — då hittade
+    `bygg_html` inte blocket och mejlet gick ut utan logga — eller foten,
+    som send_guard sedan stoppade utskicket på.
+    """
+    text = body or ""
+    kandidater: list[int] = []
+    sigtext = bygg_signaturtext(sig) if sig else ""
+    if sigtext and (i := text.find(sigtext)) >= 0:
+        kandidater.append(i)
+    if (i := text.find(_FOTSTART)) >= 0:
+        kandidater.append(i + 1)
+    if not kandidater:
+        return text.rstrip(), ""
+    start = min(kandidater)
+    return text[:start].rstrip(), text[start:].strip("\n")
+
+
+def sla_ihop(
+    brodtext: str, svans: str, sig: dict[str, str] | None, *, halsning: str | None = None
+) -> str:
+    """Inversen av `dela_utkast`: den redigerade brödtexten plus den
+    oförändrade svansen. Börjar svansen med signaturen går skarven genom
+    `med_signatur`, som fullbordar en hängande hälsningsfras och stryker ett
+    avsändarnamn som omskrivningen själv skrev sist."""
+    brodtext = (brodtext or "").rstrip()
+    if not svans:
+        return brodtext
+    sigtext = bygg_signaturtext(sig) if sig else ""
+    if sigtext and svans.startswith(sigtext):
+        resten = svans[len(sigtext) :]
+        return med_signatur(brodtext, sig, halsning=halsning).rstrip() + resten  # type: ignore[arg-type]
+    return f"{brodtext}\n\n{svans}"
+
+
+def med_signatur_fore_fot(body: str, sig: dict[str, str], *, halsning: str | None = None) -> str:
+    """Signaturen på ett redan skrivet utkast, före en eventuell lagstadgad fot.
+
+    Utkast köade innan tenanten satte sin signatur saknar blocket (Sebbe
+    2026-10-09: "alla mail måste ha signaturen"). `med_signatur` lägger det
+    sist i texten, vilket hade hamnat efter foten; här delas texten vid
+    fotens början och signaturen går in före den. Idempotent."""
+    text = body or ""
+    i = text.find(_FOTSTART)
+    if i < 0:
+        return med_signatur(text, sig, halsning=halsning)
+    huvud, fot = text[:i], text[i + 1 :]
+    ny = med_signatur(huvud, sig, halsning=halsning)
+    if ny == huvud:
+        return text
+    return f"{ny.rstrip()}\n\n{fot}"
 
 
 def _radbryt_till_html(text: str) -> str:
@@ -136,6 +226,18 @@ def _radbryt_till_html(text: str) -> str:
         for stycke in stycken
         if stycke.strip()
     )
+
+
+def _logotyp_img(sig: dict[str, str]) -> str:
+    return (
+        f'<img src="{_html.escape(sig["logotyp_url"], quote=True)}" alt="{_html.escape(sig.get("bolag") or sig["namn"])}"'
+        ' width="120" style="display:block;width:120px;height:auto;border:0;margin:12px 0;">'
+    )
+
+
+def _logotyp_html(sig: dict[str, str]) -> str:
+    """Bara loggan, för ett mejl där signaturblocket inte står ordagrant."""
+    return f'<div style="margin:1.5em 0 0 0;">{_logotyp_img(sig)}</div>'
 
 
 def _signatur_html(sig: dict[str, str]) -> str:
@@ -150,10 +252,7 @@ def _signatur_html(sig: dict[str, str]) -> str:
         person[0] = f'<div style="margin:0;font-weight:bold;">{_html.escape(sig["namn"])}</div>'
         delar.append("".join(person))
     if sig.get("logotyp_url"):
-        delar.append(
-            f'<img src="{_html.escape(sig["logotyp_url"], quote=True)}" alt="{_html.escape(sig.get("bolag") or sig["namn"])}"'
-            ' width="120" style="display:block;width:120px;height:auto;border:0;margin:12px 0;">'
-        )
+        delar.append(_logotyp_img(sig))
     plats: list[str] = []
     if sig.get("ort"):
         plats.append(rad.format(_html.escape(sig["ort"])))
@@ -180,13 +279,28 @@ def bygg_html(brodtext: str, sig: dict[str, str]) -> str:
     Textblocket som `med_signatur` la dit byts mot HTML-signaturen (med
     logotyp); texten före och efter (brödtext respektive lagstadgad fot)
     escapas och radbryts, ingenting annat. Finns blocket inte i texten — ett
-    äldre köat utkast, en tenant som slog på signaturen efter köningen —
-    renderas texten som den är, utan logga: HTML-delen får aldrig visa något
-    som inte granskats.
+    äldre köat utkast, en signatur ändrad efter köningen — renderas texten
+    som den är och bara loggan läggs till, före en eventuell fot (Sebbe
+    2026-10-09: loggan ska med i varje mejl). Ingen text som inte granskats.
     """
     text = bygg_signaturtext(sig)
     index = brodtext.find(text) if text else -1
-    if index < 0:
+    if index < 0 and sig.get("logotyp_url"):
+        # Blocket finns inte ordagrant (signaturen ändrades efter köningen,
+        # eller texten skrevs före den). Loggan ska ändå med i varje mejl
+        # (Sebbe 2026-10-09): texten renderas oförändrad och bara bilden
+        # läggs till, före en eventuell fot — ingen text som inte granskats.
+        fotstart = brodtext.find(_FOTSTART)
+        fore = brodtext if fotstart < 0 else brodtext[:fotstart]
+        efter = "" if fotstart < 0 else brodtext[fotstart + 1 :]
+        kropp = _radbryt_till_html(fore.rstrip()) + _logotyp_html(sig)
+        if efter.strip():
+            kropp += (
+                '<div style="margin-top:1.5em;color:#6b6b6b;font-size:12px;">'
+                + _radbryt_till_html(efter.strip("\n"))
+                + "</div>"
+            )
+    elif index < 0:
         kropp = _radbryt_till_html(brodtext)
     else:
         fore = brodtext[:index].rstrip()

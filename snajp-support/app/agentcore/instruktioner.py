@@ -10,6 +10,8 @@ läsvägen som saknades.
 ## Skiktordningen, och varför den ser ut så
 
     1. GLOBAL      DB (agent_global_instructions) → annars agent-core/AGENTS.md
+    1b. AGENT      agenttypens grundprompt, satt av anroparen (support:
+                   agent-core/prompts/support-systemprompt.md, 2026-10-05)
     2. skill       vendorad metodik (agent-core/skills/)
     3. overlay     agent-core/overlays/<namn>.md
     4. KUND        agent_configs.instructions_md
@@ -64,6 +66,12 @@ Dessa gäller ÖVER skillen nedan där de krockar. De är policy, inte stil.
 """
 _GLOBAL_CLOSE = "## SLUT GLOBALA REGLER"
 
+_AGENT_OPEN = """## GRUNDPROMPT (Snajp — gäller varje steg i den här agentens körning)
+Den gäller ÖVER skillen och tilläggsinstruktionerna nedan där de krockar, men
+aldrig över de globala reglerna ovan och aldrig över kodgrindarna.
+"""
+_AGENT_CLOSE = "## SLUT GRUNDPROMPT"
+
 _KUND_OPEN = """## KUNDSPECIFIKA INSTRUKTIONER ({tenant})
 Dessa kommer FRÅN OSS och gäller för just den här kunden. De gäller ÖVER både
 skillen och overlayen där de krockar, men ALDRIG över de globala reglerna ovan
@@ -91,12 +99,27 @@ class Instruktionslager:
     #: rad fanns i databasen. Går till spårvyn: "ingen har skrivit några
     #: instruktioner" och "instruktionerna nådde inte fram" ser annars likadana ut.
     global_fran_fil: bool = True
+    #: Agenttypens grundprompt, redan renderad för kunden och kanalen. Läses
+    #: inte ur databasen utan sätts av anroparen (dataclasses.replace) när
+    #: kanalen är känd — support_systemprompt.rendera. Tom = inget lager.
+    agent_md: str = ""
+    #: En sparad version av agenttypens grundprompt (agent_global_instructions,
+    #: agent_type 'support' eller 'leads', migration 099), ännu inte ifylld.
+    #: Tom = filen i agent-core/prompts/ gäller. Anroparen renderar den till
+    #: agent_md när kanalen och kunden är kända.
+    agent_mall: str = ""
 
     @property
     def global_block(self) -> str:
         if not self.global_md:
             return ""
         return f"{_GLOBAL_OPEN}\n{self.global_md}\n{_GLOBAL_CLOSE}"
+
+    @property
+    def agent_block(self) -> str:
+        if not self.agent_md:
+            return ""
+        return f"{_AGENT_OPEN}\n{self.agent_md}\n{_AGENT_CLOSE}"
 
     @property
     def kund_block(self) -> str:
@@ -113,8 +136,12 @@ class Instruktionslager:
         raden går att redigera. Två körningar med samma hash läste bevisligen
         samma text.
         """
-        underlag = f"{self.global_md}\x00{self.kund_md}".encode("utf-8")
-        return hashlib.sha256(underlag).hexdigest()
+        # Grundprompten läggs bara till när den finns, så att hashen för en
+        # körning utan den är densamma som före 2026-10-05.
+        underlag = f"{self.global_md}\x00{self.kund_md}" + (
+            f"\x00{self.agent_md}" if self.agent_md else ""
+        )
+        return hashlib.sha256(underlag.encode("utf-8")).hexdigest()
 
 
 def _kapa(text: str | None) -> str:
@@ -140,7 +167,7 @@ async def las_instruktioner(
     global_md = ""
     fran_fil = True
     try:
-        rad = await storage.get_global_instructions()
+        rad = await storage.get_global_instructions("alla")
     except Exception:  # noqa: BLE001 — se docstringen
         rad = None
     if rad and (rad.get("strukturerad_md") or "").strip():
@@ -148,6 +175,8 @@ async def las_instruktioner(
         fran_fil = False
     else:
         global_md = _kapa(load_global_instructions_fil())
+
+    agent_mall = await las_agent_mall(storage, agent_type)
 
     kund_md = ""
     if tenant_id:
@@ -162,7 +191,25 @@ async def las_instruktioner(
         kund_md=kund_md,
         tenant_namn=tenant_namn,
         global_fran_fil=fran_fil,
+        agent_mall=agent_mall,
     )
+
+
+#: Agenttyperna som har en egen grundprompt (migration 099).
+AGENTER_MED_GRUNDPROMPT = ("support", "leads")
+MAX_TECKEN_GRUNDPROMPT = 40_000
+
+
+async def las_agent_mall(storage, agent_type: str) -> str:
+    """Den sparade versionen av agenttypens grundprompt, eller tom sträng
+    (filen gäller). Felar aldrig."""
+    if agent_type not in AGENTER_MED_GRUNDPROMPT:
+        return ""
+    try:
+        rad = await storage.get_global_instructions(agent_type)
+    except Exception:  # noqa: BLE001 — en trasig läsning ger filen, inte ett dött ärende
+        return ""
+    return ((rad or {}).get("strukturerad_md") or "").strip()[:MAX_TECKEN_GRUNDPROMPT]
 
 
 def demo() -> None:

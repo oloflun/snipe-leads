@@ -178,6 +178,12 @@ class Settings(BaseSettings):
     # i stället för AI Studio med en enkel API-nyckel.
     google_service_account_json: str = ""
     google_cloud_region: str = "europe-west1"
+    #: EU-regioner som bakgrundsjobben byter till vid 429 (2026-10-09):
+    #: "Resource exhausted" på Vertex är regionens delade kapacitet, och en
+    #: körning med stora researchprompter fick 429 på varje anrop i
+    #: europe-west1 i flera minuter medan ett litet anrop gick igenom i alla
+    #: tre. Bara EU-regioner: data lämnar aldrig EU. Komma emellan.
+    vertex_reservregioner: str = "europe-west4,europe-north1"
     model: str = "gpt-4o-mini"
     embedding_model: str = "gemini-embedding-001"
     #: MÅSTE stämma med kolumnen `ss_knowledge_base.embedding`, som är
@@ -241,23 +247,47 @@ class Settings(BaseSettings):
     # Fas B research (G4). Tomt => research-verktyget vägrar med ett tydligt
     # fel i stället för att krascha eller tyst hoppa över skrapningen.
     scrapegraphai_api_key: str = ""
+    # Google PageSpeed Insights (app/leads/webbrevision.py). Valfri: utan nyckel
+    # fungerar API:t med lägre dygnsgräns. Ingen kunddata går dit, bara en publik URL.
+    pagespeed_api_key: str = ""
     database_url: str = ""
     redis_url: str = ""
     # Fas R1 (bd snipe-lr7): antal worker-tasks som läser crm:jobb:chatt
     # (app/jobs/stream.py) PER PROCESS. Bara relevant när redis_url är satt
     # — utan Redis finns ingen ström att läsa, och app.state.chattstrom är
     # None (se app/main.py). Fler än 1 så en enskild långsam agentkörning
-    # inte blockerar nästa chattmeddelande i kön.
-    chat_workers: int = 2
+    # inte blockerar nästa chattmeddelande i kön. 2 -> 4 (Sebbes krav
+    # 2026-10-06): varje arbetsyta har flera användare som kör agenter
+    # samtidigt, och med 2 workers stod tredje samtidiga chatten bakom en
+    # agentkörning på uppåt en minut.
+    chat_workers: int = 4
     # Fas R4 (bd snipe-2xj): antal worker-tasks som läser crm:jobb:leads
     # (samma ChattStrom-klass som chatten, andra stream_key/group — se
-    # app/jobs/stream.py) PER PROCESS. Default 1, inte 2 som chatten: ett
-    # leads-jobb är ÅTTA LLM-anrop (research-steget, app/agent/leads_agent.py)
-    # mot chattens sex-sju, och en batch kan innehålla upp till 50 prospekt
-    # (LeadsBatchRequest.limit) — flera parallella workers hade kunnat
-    # brännsprinta genom hela tenant-timkvoten på sekunder i stället för att
-    # köa disciplinerat. Höjs bara efter att kvotmarginalen mätts i drift.
-    leads_workers: int = 1
+    # app/jobs/stream.py) PER PROCESS. 1 -> 3 (Sebbes krav 2026-10-06:
+    # flera användare på samma konto — och flera konton — ska kunna köra
+    # körningar samtidigt; med 1 worker stod Antons körning i kö bakom
+    # Sebbes). Säkert sedan körningslåset i app/api/leads.py
+    # (_korningslas): två barn i samma körning som rapporterar parallellt
+    # serialiseras per körning, olika körningar går parallellt.
+    # Kostnadsvakterna som motiverade 1:an finns kvar och gäller per tenant
+    # oavsett workers: dygnsbudgeten (leads_daily_token_budget, 429 vid
+    # taket) och sidhämtningstaket per körning. Ursprungsskälet — ett
+    # leads-jobb är ÅTTA LLM-anrop och en batch upp till 50 prospekt, så
+    # fler workers bränner timkvoten snabbare — är sedan Vertex-flytten
+    # (betald kvot, 2026-09-14) en svagare invändning än väntande kunder.
+    # 10 sedan 2026-10-09 (Sebbe: "körningarna kan inte ta 10–15 minuter"):
+    # med 3 researchades två–tre bolag åt gången, ~75 s styck, och en körning
+    # på 40 tog en kvart efter sökningen. Databaspoolen höjdes samtidigt
+    # (postgres.py, DB_POOL_MAX). Vertex-kvoten är betald; ScrapeGraph har
+    # sin egen semafor (sidhamtning) och påverkas inte av antalet workers.
+    leads_workers: int = 10
+    # Loopvakten (app/loopvakt.py): loggar stacken när händelseloopen står
+    # still längre än så här många ms. 0 = av.
+    loopvakt_ms: int = 250
+    # Samtidiga LLM-anrop från bakgrundsjobben (step_runner._bakgrundstak).
+    # 4 sedan 2026-10-09: tio samtidiga researchanrop gav Vertex 429 i en
+    # minut i sträck och föll. Höj försiktigt; mät 429 i loggen.
+    leads_llm_samtidiga: int = 4
     # V2-kostnadsarbetet (2026-09-02): vilken leads-kedja som körs.
     # "v1" = niostegsresearchen + fyrstegsutkastet (dagens beteende).
     # "v2" = 1 research-anrop + 2 utkastanrop (RESEARCH_V2/OUTREACH_V2,
@@ -342,6 +372,12 @@ class Settings(BaseSettings):
     # inbox_poll_seconds: 0 = av (ingen bakgrundstask), sätts explicit i
     # produktion. Håller test/dev-uppstart fri från överraskande bakgrundsjobb.
     send_queue_poll_seconds: int = 0
+    # Sändaren för GODKÄNDA utkast (2026-10-07, app/leads/scheduler.
+    # run_godkand_sandare): skickar bara det en människa godkänt i
+    # granskningskön och som väntat på sändfönstret. Startar bara när den
+    # fulla schemaläggaren ovan är avstängd (den hanterar godkända själv).
+    # 0 stänger av.
+    godkanda_utskick_sekunder: int = 60
     auto_send_min_confidence: float = 0.75
     imap_host: str = ""  # t.ex. imap.gmail.com eller outlook.office365.com
     imap_user: str = ""
@@ -372,6 +408,11 @@ class Settings(BaseSettings):
     # "auto" = modellen när nyckel finns; "deterministisk" tvingar regexläsaren
     # (kvitton/tolkning.py) — testsvitens och den lokala stackens läge.
     kvitto_tolkning: str = "auto"
+    # Kvittohanterarens grundprompt (agent-core/prompts/kvittohanterare-
+    # systemprompt.md): {{BOKFÖRINGSPROGRAM}} och {{DAGAR_FÖRFALLO_VARNING}}.
+    # Tomt program => "sitt eget bokföringsprogram".
+    kvitto_bokforingsprogram: str = ""
+    kvitto_dagar_forfallo_varning: int = 7
 
     # Publik bas-URL för länkar som hamnar i utgående mejl (idag bara
     # avregistreringslänken). MÅSTE peka på Next-appen, inte på det här API:t —

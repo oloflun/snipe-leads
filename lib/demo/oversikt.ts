@@ -1,5 +1,6 @@
 import { EXEMPELBOLAG } from "@/lib/demo/iris-exempel";
 import { grundmejl } from "@/lib/demo/support-inbox";
+import { isoVecka } from "@/lib/admin/statistik";
 import { analyticsSeries, companies } from "@/lib/mock-data";
 
 /**
@@ -33,7 +34,11 @@ const AUTONOMI_DRAFT = "Agenterna researchar och skriver. Ingenting skickas för
  */
 const DEMOSTATUS: Record<string, string> = {
   recommended: "ready",
-  researching: "researching",
+  // "new", inte "researching" (kritik 3, 2026-10-07): en exempelrad som står
+  // i research för alltid ("för 11 timmar sedan") fick produkten att se
+  // hängd ut. Research visas i stället av demons uppspelade körning
+  // (LeadsTabell, DEMO_KORNING), som blir klar.
+  researching: "new",
   queued: "ready",
   contacted: "contacted",
   replied: "replied"
@@ -248,11 +253,16 @@ export function demoOversiktSvar(path: string): unknown | undefined {
     const avslutadeAndel = mejl.filter((m) => m.status === "auto_sent").length / mejl.length;
     const toppSkick = Math.max(...analyticsSeries.map((p) => p.sent), 1);
 
+    // Veckoetiketterna räknas bakåt från innevarande vecka. Mock-seriens
+    // egna (v16–v21) låg ett halvår bak i tiden bredvid "senaste 4 veckorna".
+    const nu = Date.now();
+    const sista = analyticsSeries.length - 1;
+
     return {
-      weeks: analyticsSeries.map((punkt) => {
+      weeks: analyticsSeries.map((punkt, i) => {
         const arenden = Math.round(mejl.length * (punkt.sent / toppSkick) * 3);
         return {
-          week: punkt.week,
+          week: `v${isoVecka(new Date(nu - (sista - i) * 7 * 86_400_000))}`,
           start: null,
           sent: punkt.sent,
           replies: punkt.replies,
@@ -260,7 +270,9 @@ export function demoOversiktSvar(path: string): unknown | undefined {
           support_runs: arenden,
           tickets: arenden,
           escalated: Math.round(arenden * eskaleradeAndel),
-          resolved: Math.round(arenden * avslutadeAndel)
+          resolved: Math.round(arenden * avslutadeAndel),
+          // Samma form som leadsserien: ungefär en ny lead per sex skick.
+          new_leads: Math.round(punkt.sent / 6)
         };
       }),
       coverage: {
@@ -271,6 +283,7 @@ export function demoOversiktSvar(path: string): unknown | undefined {
         tickets: true,
         escalated: true,
         resolved: true,
+        new_leads: true,
         // Även i demon. Möten mäts inte i drift, och en demo som visar en
         // möteskolumn säljer in en funktion som inte finns.
         meetings: false

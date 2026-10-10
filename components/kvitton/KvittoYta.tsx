@@ -57,7 +57,7 @@ const STEG_MS = 420;
 
 type Mejlkonto = { kopplad: boolean; leverantor?: string; adress?: string };
 
-type Kvitto = {
+export type Kvitto = {
   id: string;
   datum: string | null;
   motpart: string | null;
@@ -66,6 +66,8 @@ type Kvitto = {
   momssats: string | null;
   kategori: string | null;
   kategorietikett: string;
+  /** "intakt" = företagets egen faktura till en kund (sedan 2026-10-07). */
+  riktning?: "kostnad" | "intakt";
   status: string;
   betalstatus: string | null;
   kalla: string;
@@ -74,9 +76,108 @@ type Kvitto = {
   valuta: string;
   belopp_original: string | null;
   anmarkning: string;
+  // Kvittohanterarens granskning (grundprompten, migration 096). Saknas på
+  // rader som lästes in före 2026-10-06.
+  granskningsstatus?: Granskningsstatus | null;
+  flaggor?: string[];
+  forfallodatum?: string | null;
+};
+
+export type Granskningsstatus =
+  | "KLAR_FÖR_GRANSKNING" // inte-copy: backendens statuskod
+  | "BEHÖVER_GRANSKNING" // inte-copy: backendens statuskod
+  | "PRIORITERAD_GRANSKNING" // inte-copy: backendens statuskod
+  | "KRÄVER_MANUELL_HÄMTNING"; // inte-copy: backendens statuskod
+
+export const PRIORITERAD: Granskningsstatus = "PRIORITERAD_GRANSKNING"; // inte-copy: backendens statuskod
+export const MANUELL_HAMTNING: Granskningsstatus = "KRÄVER_MANUELL_HÄMTNING"; // inte-copy: backendens statuskod
+
+/** Flaggorna ur grundpromptens avsnitt 9.1, som granskaren läser dem. */
+export const FLAGGETIKETT: Record<string, Localized> = {
+  "oläsligt": { sv: "Svårläst", en: "Hard to read" },
+  "belopp_stämmer_inte": { sv: "Beloppen går inte ihop", en: "Amounts don't add up" },
+  "saknar_moms": { sv: "Moms saknas", en: "VAT missing" },
+  "saknar_obligatoriska_fält": { sv: "Uppgifter saknas", en: "Details missing" },
+  "utländsk_valuta": { sv: "Utländsk valuta", en: "Foreign currency" },
+  "utländsk_leverantör": { sv: "Utländsk leverantör", en: "Foreign supplier" },
+  "omvänd_skattskyldighet": { sv: "Omvänd skattskyldighet", en: "Reverse charge" },
+  "tvetydigt_datum": { sv: "Tvetydigt datum", en: "Ambiguous date" },
+  "osäker_klassning": { sv: "Osäker klassning", en: "Uncertain classification" },
+  "osäker_dokumenttyp": { sv: "Osäker dokumenttyp", en: "Uncertain document type" },
+  "fel_mottagare": { sv: "Annan mottagare", en: "Different recipient" },
+  "möjligt_privat_köp": { sv: "Möjligt privat köp", en: "Possible private purchase" },
+  "möjlig_dubblett": { sv: "Möjlig dubblett", en: "Possible duplicate" },
+  "misstänkt_bedrägeri": { sv: "Kontrollera betalningsuppgifterna", en: "Check the payment details" },
+  "instruktion_i_innehåll": { sv: "Innehåller instruktioner", en: "Contains instructions" },
+  "många_rader": { sv: "Många rader", en: "Many lines" },
+  "förfaller_snart": { sv: "Förfaller snart", en: "Due soon" },
+  "förfallen": { sv: "Förfallen", en: "Overdue" }
+};
+
+/** Prioriterade först, sedan de som kräver hämtning, sedan resten. */
+const GRANSKNINGSORDNING: Record<string, number> = {
+  "PRIORITERAD_GRANSKNING": 0, // inte-copy: backendens statuskod
+  "KRÄVER_MANUELL_HÄMTNING": 1, // inte-copy: backendens statuskod
+  "BEHÖVER_GRANSKNING": 2, // inte-copy: backendens statuskod
+  "KLAR_FÖR_GRANSKNING": 3 // inte-copy: backendens statuskod
+};
+
+export function granskningsordning(rad: Kvitto): number {
+  return GRANSKNINGSORDNING[rad.granskningsstatus ?? ""] ?? 2;
+}
+
+/**
+ * Märket för ett kvitto som väntar på granskning. ETT märke per rad: det
+ * skarpaste skälet ersätter "Granska" i stället för att staplas ovanpå.
+ */
+export function Granskningsmarke({ rad }: Readonly<{ rad: Kvitto }>) {
+  const { text } = useLocale();
+  if (rad.granskningsstatus === PRIORITERAD) {
+    return <Badge tone="danger">{text({ sv: "Prioriterad", en: "Priority" })}</Badge>;
+  }
+  if (rad.granskningsstatus === MANUELL_HAMTNING) {
+    return <Badge tone="warn">{text({ sv: "Hämta själv", en: "Fetch it" })}</Badge>;
+  }
+  return <Badge tone="warn">{text({ sv: "Granska", en: "Review" })}</Badge>;
+}
+
+/** Flaggorna som små etiketter. `mork` för Att göra-kortets inverterade yta. */
+export function Flaggrad({ flaggor, mork = false }: Readonly<{ flaggor?: string[]; mork?: boolean }>) {
+  const { text } = useLocale();
+  const kanda = (flaggor ?? []).filter((f) => FLAGGETIKETT[f]);
+  if (kanda.length === 0) return null;
+  return (
+    <ul
+      aria-label={text({ sv: "Flaggor", en: "Flags" })}
+      className="mt-1.5 flex flex-wrap gap-1.5"
+    >
+      {kanda.map((f) => (
+        <li
+          key={f}
+          className={cn(
+            "rounded-[3px] border px-1.5 py-0.5 text-[0.75rem]",
+            mork ? "border-paper/25 text-paper-muted" : "border-ink/15 text-ink-muted"
+          )}
+        >
+          {text(FLAGGETIKETT[f])}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+type Intakter = {
+  antal: number;
+  antal_klara: number;
+  antal_granska: number;
+  totalt: string;
+  moms: string;
+  antal_obetalda: number;
+  obetalt: string;
 };
 
 type Sammanfattning = {
+  intakter?: Intakter;
   antal: number;
   antal_klara: number;
   antal_granska: number;
@@ -96,9 +197,10 @@ type Handelse = {
   belopp_original?: string | null;
   kategori?: string | null;
   motpart?: string | null;
+  granskningsstatus?: Granskningsstatus | null;
 };
 
-function innevarandeManad(): { fran: string; till: string } {
+export function innevarandeManad(): { fran: string; till: string } {
   const nu = new Date();
   const fran = new Date(nu.getFullYear(), nu.getMonth(), 1);
   const till = new Date(nu.getFullYear(), nu.getMonth() + 1, 0);
@@ -107,12 +209,42 @@ function innevarandeManad(): { fran: string; till: string } {
   return { fran: iso(fran), till: iso(till) };
 }
 
-function kronor(varde: string | null): string {
+export function kronor(varde: string | null): string {
   if (varde === null) return "—";
   const negativt = varde.startsWith("-");
   const [heltal, decimaler = "00"] = varde.replace("-", "").split(".");
   const grupperat = heltal.replace(/\B(?=(\d{3})+(?!\d))/g, " ");
   return `${negativt ? "−" : ""}${grupperat},${decimaler.padEnd(2, "0")} kr`;
+}
+
+export function arIntakt(rad: Pick<Kvitto, "riktning">): boolean {
+  return rad.riktning === "intakt";
+}
+
+/** Beloppet som det står i listorna: en intäkt med plustecken. */
+export function radbelopp(rad: Kvitto): string {
+  if (rad.brutto === null) return rad.belopp_original ?? "—";
+  return `${arIntakt(rad) ? "+" : ""}${kronor(rad.brutto)}`;
+}
+
+export const KUNDFAKTURA: Localized = { sv: "Kundfaktura", en: "Customer invoice" };
+
+/**
+ * Människans besked om att ett underlag i granskningen är en kundfaktura
+ * (intäkt) eller ett kvitto (kostnad). Svarar null eller felet att visa.
+ */
+export async function bytRiktning(rad: Kvitto, riktning: "kostnad" | "intakt"): Promise<Localized | null> {
+  try {
+    const svar = await fetch(`${BAS}/${rad.id}/riktning`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ riktning })
+    });
+    await readJson(svar);
+    return null;
+  } catch (orsak) {
+    return ord(feltext(orsak));
+  }
 }
 
 const MOMSETIKETT: Record<string, string> = {
@@ -168,24 +300,32 @@ export function KvittoAttGora({
           : text({ sv: `${rader.length} kvitton väntar på dig`, en: `${rader.length} receipts are waiting for you` })}
       </h2>
       <ul className="mt-5 border-t border-paper/15">
-        {rader.slice(0, 5).map((rad) => (
+        {[...rader].sort((a, b) => granskningsordning(a) - granskningsordning(b)).slice(0, 5).map((rad) => (
           <li
             key={rad.id}
             className="grid grid-cols-12 items-center gap-x-4 border-b border-paper/15 py-3.5"
           >
             <div className="col-span-12 min-w-0 sm:col-span-7">
-              <p className="truncate text-[0.9375rem] font-semibold">
-                {rad.motpart || rad.mejl_amne || rad.filnamn || text({ sv: "Kvitto", en: "Receipt" })}
+              <p className="flex min-w-0 items-center gap-2 text-[0.9375rem] font-semibold">
+                <span className="truncate">
+                  {rad.motpart || rad.mejl_amne || rad.filnamn || text({ sv: "Kvitto", en: "Receipt" })}
+                </span>
+                {rad.granskningsstatus === PRIORITERAD ? (
+                  <span className="shrink-0 rounded-[3px] bg-paper px-1.5 py-0.5 text-[0.6875rem] font-semibold uppercase tracking-[0.04em] text-ink">
+                    {text({ sv: "Prioriterad", en: "Priority" })}
+                  </span>
+                ) : null}
               </p>
-              <p className="mt-0.5 truncate text-[0.8125rem] text-paper-muted">
+              <p className="mt-0.5 line-clamp-2 text-[0.8125rem] text-paper-muted">
                 {rad.anmarkning ||
                   [rad.datum, rad.kategorietikett].filter(Boolean).join(" · ") ||
                   text({ sv: "Uppgifter saknas.", en: "Details missing." })}
               </p>
+              <Flaggrad flaggor={rad.flaggor} mork />
             </div>
             <div className="col-span-12 mt-2 flex items-center justify-between gap-4 sm:col-span-5 sm:mt-0 sm:justify-end">
               <span className="num text-[0.875rem] tabular-nums text-paper-muted">
-                {rad.brutto !== null ? kronor(rad.brutto) : (rad.belopp_original ?? "—")}
+                {radbelopp(rad)}
               </span>
               <button
                 type="button"
@@ -209,6 +349,106 @@ export function KvittoAttGora({
   );
 }
 
+/**
+ * Godkännandet av ett flaggat kvitto: frågar efter det som saknas (belopp,
+ * moms, datum, butik, kategori, betalstatus) och postar. Fristående så att
+ * Översikten (KvittoOversikt) godkänner med exakt samma frågor som tabellen.
+ *
+ * Svarar null när kvittot gick igenom, "avbrutet" när en fråga stängdes, och
+ * annars felet att visa.
+ */
+export async function godkannKvitto(
+  rad: Kvitto,
+  text: (v: Localized) => string
+): Promise<Localized | "avbrutet" | null> {
+  const kropp: Record<string, string> = {};
+  if (rad.brutto === null) {
+    const belopp = window.prompt(
+      rad.belopp_original
+        ? text({
+            sv: `Kvittot är på ${rad.belopp_original}. Ange beloppet omräknat till kronor (t.ex. 495,00):`,
+            en: `The receipt is for ${rad.belopp_original}. Enter the amount converted to SEK (e.g. 495.00):`
+          })
+        : text({
+            sv: "Kvittot saknar läsbart belopp. Ange beloppet i kronor (t.ex. 495,00):",
+            en: "The receipt has no readable amount. Enter the amount in SEK (e.g. 495.00):"
+          })
+    );
+    if (!belopp) return "avbrutet";
+    kropp.brutto = belopp.replace(/\s/g, "").replace(",", ".");
+  }
+  if (rad.momssats === null) {
+    const sats = window.prompt(
+      text({ sv: "Ange momssatsen i procent (25, 12, 6 eller 0):", en: "Enter the VAT rate in percent (25, 12, 6 or 0):" })
+    );
+    if (sats === null) return "avbrutet";
+    const normaliserad = { "25": "0.25", "12": "0.12", "6": "0.06", "0": "0" }[sats.trim()];
+    if (!normaliserad) {
+      return { sv: "Momssatsen ska vara 25, 12, 6 eller 0.", en: "The VAT rate must be 25, 12, 6 or 0." };
+    }
+    kropp.momssats = normaliserad;
+  }
+  if (rad.datum === null) {
+    const datum = window.prompt(
+      text({ sv: "Kvittot saknar datum. Ange köpdatum (ÅÅÅÅ-MM-DD):", en: "The receipt has no date. Enter the purchase date (YYYY-MM-DD):" })
+    );
+    if (!datum) return "avbrutet";
+    kropp.datum = datum.trim();
+  }
+  if (rad.motpart === null) {
+    const motpart = window.prompt(
+      arIntakt(rad)
+        ? text({ sv: "Vilken kund är fakturan till?", en: "Which customer is the invoice to?" })
+        : text({ sv: "Vilken butik eller leverantör är kvittot från?", en: "Which shop or supplier is the receipt from?" })
+    );
+    if (!motpart) return "avbrutet";
+    kropp.motpart = motpart.trim();
+  }
+  if (rad.kategori === null && !arIntakt(rad)) {
+    const kategori = window.prompt(
+      text({
+        sv: "Ange kategori: drivmedel, biljett, kost_och_logi, representation, kontorsmateriel, programvara, forbrukningsinventarier eller ovrig_extern_kostnad:",
+        en: "Enter category: drivmedel, biljett, kost_och_logi, representation, kontorsmateriel, programvara, forbrukningsinventarier or ovrig_extern_kostnad:"
+      })
+    );
+    if (!kategori) return "avbrutet";
+    kropp.kategori = kategori.trim().toLowerCase();
+  }
+  if (rad.betalstatus === null) {
+    // Frågas, gissas aldrig: betalstatus avgör om kvittot bokas mot
+    // bankkontot eller som en obetald skuld.
+    const betald = window.confirm(
+      arIntakt(rad)
+        ? text({
+            sv: "Har kunden redan betalat fakturan?\n\nOK = betald\nAvbryt = obetald (kundfordran)",
+            en: "Has the customer already paid the invoice?\n\nOK = paid\nCancel = unpaid (receivable)"
+          })
+        : text({
+            sv: "Är kvittot redan betalt?\n\nOK = betalt (kort, Swish, kontant)\nAvbryt = obetald faktura",
+            en: "Is the receipt already paid?\n\nOK = paid (card, Swish, cash)\nCancel = unpaid invoice"
+          })
+    );
+    kropp.betalstatus = betald ? "betald" : "obetald";
+  }
+  try {
+    const svar = await fetch(`${BAS}/${rad.id}/godkann`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(kropp)
+    });
+    const data = await readJson<{ godkand: boolean; brister?: string[] }>(svar);
+    if (data && !data.godkand) {
+      return {
+        sv: `Kvittot kunde inte godkännas ännu: ${(data.brister ?? []).join("; ") || "fält saknas."}`,
+        en: `The receipt could not be approved yet: ${(data.brister ?? []).join("; ") || "fields missing."}`
+      };
+    }
+    return null;
+  } catch (orsak) {
+    return ord(feltext(orsak));
+  }
+}
+
 export function KvittoYta() {
   const { text } = useLocale();
   const [konto, setKonto] = useState<Mejlkonto | null>(null);
@@ -225,6 +465,7 @@ export function KvittoYta() {
   const [uppladdningsfel, setUppladdningsfel] = useState<string[]>([]);
   const [rensar, setRensar] = useState(false);
   const filväljare = useRef<HTMLInputElement>(null);
+  const fakturaväljare = useRef<HTMLInputElement>(null);
 
   const hamta = useCallback(async () => {
     setFel(null);
@@ -293,7 +534,7 @@ export function KvittoYta() {
     }
   }
 
-  async function laddaUpp(filer: File[]) {
+  async function laddaUpp(filer: File[], riktning: "kostnad" | "intakt" = "kostnad") {
     if (!filer.length) return;
     setLaddarUpp(true);
     setFel(null);
@@ -304,6 +545,7 @@ export function KvittoYta() {
         try {
           const kropp = new FormData();
           kropp.append("fil", fil);
+          if (riktning === "intakt") kropp.append("riktning", "intakt");
           const svar = await fetch(`${BAS}/underlag`, { method: "POST", body: kropp });
           await readJson(svar);
         } catch (orsak) {
@@ -319,85 +561,17 @@ export function KvittoYta() {
 
   async function godkann(rad: Kvitto) {
     setFel(null);
-    const kropp: Record<string, string> = {};
-    if (rad.brutto === null) {
-      const belopp = window.prompt(
-        rad.belopp_original
-          ? text({
-              sv: `Kvittot är på ${rad.belopp_original}. Ange beloppet omräknat till kronor (t.ex. 495,00):`,
-              en: `The receipt is for ${rad.belopp_original}. Enter the amount converted to SEK (e.g. 495.00):`
-            })
-          : text({
-              sv: "Kvittot saknar läsbart belopp. Ange beloppet i kronor (t.ex. 495,00):",
-              en: "The receipt has no readable amount. Enter the amount in SEK (e.g. 495.00):"
-            })
-      );
-      if (!belopp) return;
-      kropp.brutto = belopp.replace(/\s/g, "").replace(",", ".");
-    }
-    if (rad.momssats === null) {
-      const sats = window.prompt(
-        text({ sv: "Ange momssatsen i procent (25, 12, 6 eller 0):", en: "Enter the VAT rate in percent (25, 12, 6 or 0):" })
-      );
-      if (sats === null) return;
-      const normaliserad = { "25": "0.25", "12": "0.12", "6": "0.06", "0": "0" }[sats.trim()];
-      if (!normaliserad) {
-        setFel({ sv: "Momssatsen ska vara 25, 12, 6 eller 0.", en: "The VAT rate must be 25, 12, 6 or 0." });
-        return;
-      }
-      kropp.momssats = normaliserad;
-    }
-    if (rad.datum === null) {
-      const datum = window.prompt(
-        text({ sv: "Kvittot saknar datum. Ange köpdatum (ÅÅÅÅ-MM-DD):", en: "The receipt has no date. Enter the purchase date (YYYY-MM-DD):" })
-      );
-      if (!datum) return;
-      kropp.datum = datum.trim();
-    }
-    if (rad.motpart === null) {
-      const motpart = window.prompt(
-        text({ sv: "Vilken butik eller leverantör är kvittot från?", en: "Which shop or supplier is the receipt from?" })
-      );
-      if (!motpart) return;
-      kropp.motpart = motpart.trim();
-    }    if (rad.kategori === null) {
-      const kategori = window.prompt(
-        text({
-          sv: "Ange kategori: drivmedel, biljett, kost_och_logi, representation, kontorsmateriel, programvara, forbrukningsinventarier eller ovrig_extern_kostnad:",
-          en: "Enter category: drivmedel, biljett, kost_och_logi, representation, kontorsmateriel, programvara, forbrukningsinventarier or ovrig_extern_kostnad:"
-        })
-      );
-      if (!kategori) return;
-      kropp.kategori = kategori.trim().toLowerCase();
-    }
-    if (rad.betalstatus === null) {
-      // Frågas, gissas aldrig: betalstatus avgör om kvittot bokas mot
-      // bankkontot eller som en obetald skuld.
-      const betald = window.confirm(
-        text({
-          sv: "Är kvittot redan betalt?\n\nOK = betalt (kort, Swish, kontant)\nAvbryt = obetald faktura",
-          en: "Is the receipt already paid?\n\nOK = paid (card, Swish, cash)\nCancel = unpaid invoice"
-        })
-      );
-      kropp.betalstatus = betald ? "betald" : "obetald";
-    }
-    try {
-      const svar = await fetch(`${BAS}/${rad.id}/godkann`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(kropp)
-      });
-      const data = await readJson<{ godkand: boolean; brister?: string[] }>(svar);
-      if (data && !data.godkand) {
-        setFel({
-          sv: `Kvittot kunde inte godkännas ännu: ${(data.brister ?? []).join("; ") || "fält saknas."}`,
-          en: `The receipt could not be approved yet: ${(data.brister ?? []).join("; ") || "fields missing."}`
-        });
-      }
-      await hamta();
-    } catch (orsak) {
-      setFel(ord(feltext(orsak)));
-    }
+    const utfall = await godkannKvitto(rad, text);
+    if (utfall === "avbrutet") return;
+    if (utfall) setFel(utfall);
+    await hamta();
+  }
+
+  async function andraRiktning(rad: Kvitto) {
+    setFel(null);
+    const utfall = await bytRiktning(rad, arIntakt(rad) ? "kostnad" : "intakt");
+    if (utfall) setFel(utfall);
+    await hamta();
   }
 
   async function rensa() {
@@ -494,6 +668,19 @@ export function KvittoYta() {
               )}
               {text({ sv: "Ladda upp kvitto", en: "Upload receipt" })}
             </button>
+            <button
+              type="button"
+              disabled={laddarUpp}
+              onClick={() => fakturaväljare.current?.click()}
+              title={text({
+                sv: "En faktura ni skickat till en kund. Den räknas som intäkt, inte som utlägg.",
+                en: "An invoice you sent to a customer. It counts as income, not as an expense."
+              })}
+              className={cn(btnSecondary, btnLiten)}
+            >
+              <Upload className="h-4 w-4" aria-hidden />
+              {text({ sv: "Ladda upp kundfaktura", en: "Upload customer invoice" })}
+            </button>
             <a
               href={
                 harKvitton
@@ -583,6 +770,8 @@ export function KvittoYta() {
                   <span className="shrink-0">
                     {h.utfall === "kvitto" ? (
                       <Badge tone="good">{text({ sv: "Kvitto", en: "Receipt" })}</Badge>
+                    ) : h.utfall === "kvitto_granska" && h.granskningsstatus === PRIORITERAD ? (
+                      <Badge tone="danger">{text({ sv: "Prioriterad", en: "Priority" })}</Badge>
                     ) : h.utfall === "kvitto_granska" ? (
                       <Badge tone="warn">{text({ sv: "Granska", en: "Review" })}</Badge>
                     ) : h.utfall === "redan_last" ? (
@@ -662,7 +851,7 @@ export function KvittoYta() {
               ariaLabel={text({ sv: "Kvitton i perioden", en: "Receipts in the period" })}
               kolumner={[
                 { rubrik: text({ sv: "Datum", en: "Date" }), bredd: "12%" },
-                { rubrik: text({ sv: "Butik", en: "Shop" }), bredd: "32%" },
+                { rubrik: text({ sv: "Motpart", en: "Counterparty" }), bredd: "32%" },
                 { rubrik: text({ sv: "Kategori", en: "Category" }), bredd: "16%" },
                 { rubrik: text({ sv: "Källa", en: "Source" }), bredd: "10%" },
                 { rubrik: text({ sv: "Moms", en: "VAT" }), bredd: "8%", hoger: true },
@@ -682,9 +871,14 @@ export function KvittoYta() {
                         {rad.anmarkning}
                       </p>
                     ) : null}
+                    <Flaggrad flaggor={rad.flaggor} />
                   </Cell>
                   <Cell>
-                    <span className="text-ink-muted">{rad.kategorietikett}</span>
+                    {arIntakt(rad) ? (
+                      <Badge tone="good">{text(KUNDFAKTURA)}</Badge>
+                    ) : (
+                      <span className="text-ink-muted">{rad.kategorietikett}</span>
+                    )}
                   </Cell>
                   <Cell>
                     <span className="text-ink-muted">
@@ -695,15 +889,15 @@ export function KvittoYta() {
                     <span className="text-ink-muted">{procent(rad.momssats)}</span>
                   </Cell>
                   <Cell hoger>
-                    <span className="font-medium">
-                      {rad.brutto !== null ? kronor(rad.brutto) : (rad.belopp_original ?? "—")}
-                    </span>
+                    <span className={cn("font-medium", arIntakt(rad) && "text-moss")}>{radbelopp(rad)}</span>
                   </Cell>
                   <Cell hoger>
                     <span className="flex flex-wrap items-center justify-end gap-1.5">
-                      <Badge tone={rad.status === "granska_manuellt" ? "warn" : "good"}>
-                        {rad.status === "granska_manuellt" ? text({ sv: "Granska", en: "Review" }) : text({ sv: "Klar", en: "Done" })}
-                      </Badge>
+                      {rad.status === "granska_manuellt" ? (
+                        <Granskningsmarke rad={rad} />
+                      ) : (
+                        <Badge tone="good">{text({ sv: "Klar", en: "Done" })}</Badge>
+                      )}
                       {rad.status === "granska_manuellt" ? (
                         <button
                           type="button"
@@ -711,6 +905,17 @@ export function KvittoYta() {
                           className="focus-ring rounded-input text-[0.8125rem] font-medium text-ink underline underline-offset-4 hover:text-ochre"
                         >
                           {text({ sv: "Godkänn", en: "Approve" })}
+                        </button>
+                      ) : null}
+                      {rad.status === "granska_manuellt" ? (
+                        <button
+                          type="button"
+                          onClick={() => void andraRiktning(rad)}
+                          className="focus-ring rounded-input text-[0.8125rem] text-ink-muted underline underline-offset-4 hover:text-ink"
+                        >
+                          {arIntakt(rad)
+                            ? text({ sv: "Är ett kvitto", en: "Is a receipt" })
+                            : text({ sv: "Är en kundfaktura", en: "Is a customer invoice" })}
                         </button>
                       ) : null}
                     </span>
@@ -729,6 +934,17 @@ export function KvittoYta() {
         accept={LASBARA}
         onChange={(e) => {
           void laddaUpp(Array.from(e.target.files ?? []));
+          e.target.value = "";
+        }}
+        className="sr-only"
+      />
+      <input
+        ref={fakturaväljare}
+        type="file"
+        multiple
+        accept={LASBARA}
+        onChange={(e) => {
+          void laddaUpp(Array.from(e.target.files ?? []), "intakt");
           e.target.value = "";
         }}
         className="sr-only"
@@ -771,7 +987,7 @@ export function KvittoSammanfattning() {
       <p className="kicker text-mineral">{text({ sv: "Sammanfattning", en: "Summary" })}</p>
       {samman === null ? (
         <p className="mt-3 text-[0.875rem] text-ink-subtle">{text({ sv: "Hämtar…", en: "Loading…" })}</p>
-      ) : samman.antal === 0 ? (
+      ) : samman.antal === 0 && !samman.intakter?.antal ? (
         <p className="mt-3 text-[0.875rem] leading-6 text-ink-subtle">{text({ sv: "Inga inlästa kvitton.", en: "No receipts read." })}</p>
       ) : (
         <>
@@ -784,6 +1000,15 @@ export function KvittoSammanfattning() {
               en: `${samman.antal_klara} receipts read · input VAT ${kronor(samman.moms)}`
             })}
           </p>
+          {samman.intakter?.antal_klara ? (
+            <p className="mt-3 flex items-baseline justify-between gap-4 rounded-input bg-moss/10 px-3 py-2 text-[0.875rem]">
+              <span className="text-ink-muted">
+                {text({ sv: "Fakturerat", en: "Invoiced" })}
+                <span className="ml-1.5 text-[0.75rem] text-mineral">×{samman.intakter.antal_klara}</span>
+              </span>
+              <span className="num font-medium text-ink">+{kronor(samman.intakter.totalt)}</span>
+            </p>
+          ) : null}
           {samman.per_kategori.length ? (
             <dl className="mt-4 divide-y divide-ink/10 border-y border-ink/10">
               {samman.per_kategori.map((rad) => (

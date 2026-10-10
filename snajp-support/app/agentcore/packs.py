@@ -22,11 +22,15 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Callable
 
-from .registry import load_full_skill, load_reference, load_section, parse_skill_name
+from .registry import load_full_skill, load_reference, load_section, load_skill_md, parse_skill_name
 
 
 class ScopeWithoutRationaleError(ValueError):
     """INV-SKILL-003: en skopa utan motivering. Standard är hel skill."""
+
+
+class RadandringSaknasError(ValueError):
+    """En textändring pekar på text som inte finns i den lästa skillen."""
 
 
 class MissingRequirementError(RuntimeError):
@@ -82,6 +86,17 @@ class PlaybookStep:
     # anropet, modellen väljer aldrig. En skopad extra-skill kräver att
     # STEGET bär en rationale (INV-SKILL-003 gäller även här).
     extra_skills: tuple[tuple[str, tuple[str, ...]], ...] = ()
+    # Textändringar i den lästa skilltexten (2026-10-06): (exakt text ur
+    # skillen, ersättning, skäl). Tom ersättning stryker texten. Skillfilen
+    # rörs aldrig (INV-SKILL-005); ändringen sker på texten efter läsningen,
+    # står här i playbooken med sitt skäl och syns i spåret. Behövdes när en
+    # enda rad i en annars användbar sektion fick fel effekt: sa:draft-outreachs
+    # "[Brief proof: We helped [Similar Company] achieve [Result]]" gav ett
+    # påhittat case i ett svenskt kallmejl, och att skopa bort hela sektionen
+    # hade tagit arbetsflödet och exemplet med sig. Finns texten inte i skillen
+    # (efter en ny vendoring) faller importen: en ändring kan aldrig tyst sluta
+    # gälla.
+    radandringar: tuple[tuple[str, str, str], ...] = ()
 
     @property
     def overlay_names(self) -> tuple[str, ...]:
@@ -120,6 +135,18 @@ class PlaybookStep:
             raise ValueError(
                 f"{self.skill}: thinking måste vara None/'enabled'/'disabled', fick {self.thinking!r}."
             )
+        if self.radandringar:
+            lasta = self._rendera_last()
+            for gammal, _ny, skal in self.radandringar:
+                if not skal.strip():
+                    raise ScopeWithoutRationaleError(
+                        f"{self.skill}: en textändring kräver ett skäl (INV-SKILL-003)."
+                    )
+                if not gammal or gammal not in lasta:
+                    raise RadandringSaknasError(
+                        f"{self.skill}: texten som ska ändras finns inte i den lästa skillen "
+                        f"(ny vendoring?): {gammal[:80]!r}"
+                    )
 
     @staticmethod
     def _render_scoped(skill: str, scope: tuple[str, ...], rationale: str | None) -> str:
@@ -138,7 +165,45 @@ class PlaybookStep:
         Skopad = exakt de deklarerade referensfilerna, aldrig något modellen
         väljer vid körning (Del C, 'Playbooken bestämmer, aldrig modellen').
         Deklarerade extra_skills renderas EFTER huvudskillen, var och en
-        under sin egen rubrik — samma motor-injektionsgaranti."""
+        under sin egen rubrik — samma motor-injektionsgaranti. Textändringarna
+        (`radandringar`) tillämpas sist."""
+        text = self._rendera_last()
+        for gammal, ny, _skal in self.radandringar:
+            text = text.replace(gammal, ny)
+        return text
+
+    def lasta_delar(self) -> list[dict[str, object]]:
+        """Filerna och sektionerna steget läser, i den ordning de renderas.
+
+        Insynens utfällning av skill-lagret (Fas 7). Följer _rendera_last gren
+        för gren — hel skill = SKILL.md + references/, skopa = exakt de
+        deklarerade posterna — och läser texten med samma funktioner, så
+        teckenantalen är de som faktiskt hamnar i prompten. Varje post bär
+        kontrollen mot manifestet (registry.fil_kontroll)."""
+        from .registry import fil_kontroll, reference_files
+
+        delar: list[dict[str, object]] = []
+
+        def _skill(namn: str, skopa: tuple[str, ...]) -> None:
+            poster = skopa or ("SKILL.md", *reference_files(namn))
+            for post in poster:
+                if post.startswith("§ "):
+                    fil, text = "SKILL.md", load_section(namn, post[2:])
+                elif post == "SKILL.md":
+                    fil, text = post, load_skill_md(namn)
+                else:
+                    fil, text = post, load_reference(namn, post)
+                delar.append(
+                    {"skill": namn, "del": post, "fil": fil, "tecken": len(text), **fil_kontroll(namn, fil)}
+                )
+
+        _skill(self.skill, self.scope)
+        for extra_namn, extra_skopa in self.extra_skills:
+            _skill(extra_namn, extra_skopa)
+        return delar
+
+    def _rendera_last(self) -> str:
+        """Skilltexten exakt som den läses, före textändringarna."""
         if not self.scope:
             rendered = load_full_skill(self.skill)
         else:

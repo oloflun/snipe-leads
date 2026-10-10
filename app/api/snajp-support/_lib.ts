@@ -9,6 +9,47 @@ export const SNAJP_SUPPORT_URL = process.env.SNAJP_SUPPORT_URL ?? "http://127.0.
 export const SNAJP_INTERNAL_API_KEY =
   process.env.SNAJP_INTERNAL_API_KEY ?? "snajp_demo_2f8c1a9e4b7d";
 
+/**
+ * Railways privata nät till api-tjänsten (t.ex. http://snipe-leads.railway.internal:8080).
+ *
+ * Utan den gick VARJE proxat anrop ut genom api:ts publika edge: TLS, en
+ * extra proxyhopp och utgående trafik som Railway debiterar. Uppmätt
+ * 2026-10-09: 652 av 653 anrop i development tog den vägen.
+ *
+ * Den publika adressen står kvar som reserv. Når vi inte det interna nätet
+ * (fel port, en tjänst som inte lyssnar på IPv6) faller proxyn över direkt
+ * och prövar det interna igen först efter fem minuter — ett felkonfigurerat
+ * värde kostar alltså ett misslyckat anslutningsförsök, aldrig ett fel i UI:t.
+ */
+const SNAJP_SUPPORT_INTERNAL_URL = process.env.SNAJP_SUPPORT_INTERNAL_URL || null;
+const INTERN_VILA_MS = 5 * 60_000;
+let internNereTill = 0;
+
+/** Basadressen för nästa anrop: det interna nätet om det är satt och svarar. */
+export function backendBas(): string {
+  return SNAJP_SUPPORT_INTERNAL_URL && Date.now() >= internNereTill
+    ? SNAJP_SUPPORT_INTERNAL_URL
+    : SNAJP_SUPPORT_URL;
+}
+
+/**
+ * Anropas när en fetch mot `bas` kastade utan att ha avbrutits av vår egen
+ * timeout. Returnerar true om det var det interna nätet — då ska anropet
+ * göras om mot den publika adressen, och det är säkert även för POST:
+ * anslutningen kom aldrig fram, så ingenting hann köras.
+ */
+export function internFel(bas: string, orsak: unknown): boolean {
+  if (!SNAJP_SUPPORT_INTERNAL_URL || bas !== SNAJP_SUPPORT_INTERNAL_URL) {
+    return false;
+  }
+  internNereTill = Date.now() + INTERN_VILA_MS;
+  console.warn(
+    `snajp-support: interna nätet svarar inte (${orsak instanceof Error ? orsak.message : String(orsak)}), ` +
+      "använder den publika adressen i fem minuter."
+  );
+  return true;
+}
+
 // Skiljer på "env-varen är inte satt" och "backenden svarar inte" — utan detta
 // ser båda felen likadana ut i UI:t och man felsöker åt fel håll.
 const URL_IS_CONFIGURED = Boolean(process.env.SNAJP_SUPPORT_URL);
@@ -154,8 +195,9 @@ export async function proxyWithApiKey(
   for (let attempt = 0; attempt < forsok; attempt += 1) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), budgetMs);
+    const bas = backendBas();
     try {
-      const response = await fetch(`${SNAJP_SUPPORT_URL}${path}`, {
+      const response = await fetch(`${bas}${path}`, {
         ...init,
         headers: {
           "Content-Type": "application/json",
@@ -218,7 +260,13 @@ export async function proxyWithApiKey(
             parsed.error = parsed.detail;
           }
         }
-        return NextResponse.json(parsed, { status: response.status });
+        // api:ts mätning (frågor och databastid, app/matning.py) följer med
+        // till webbläsarens nätverkspanel.
+        const timing = response.headers.get("server-timing");
+        return NextResponse.json(parsed, {
+          status: response.status,
+          headers: timing ? { "Server-Timing": timing } : undefined
+        });
       } catch {
         if (arGatewayStatus && farGorasOm && attempt < forsok - 1) {
           lastCause = new Error(`uppströms ${response.status} med icke-JSON-kropp`);
@@ -238,6 +286,14 @@ export async function proxyWithApiKey(
       }
     } catch (cause) {
       lastCause = cause;
+      // Det interna nätet föll — samma försök igen, mot den publika adressen.
+      // En timeout räknas också som fel på det interna nätet (ett nät som
+      // tappar paket svarar aldrig "refused"), men görs inte om här: en
+      // avbruten POST kan ha hunnit köras, och GET tar omförsöket nedan.
+      if (internFel(bas, cause) && !controller.signal.aborted) {
+        attempt -= 1;
+        continue;
+      }
       // Bara timeout/nätverksfel är värt att göra om — ett riktigt HTTP-svar
       // har redan returnerats ovan.
       if (farGorasOm && attempt < forsok - 1) {

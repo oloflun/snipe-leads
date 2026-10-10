@@ -21,9 +21,10 @@ till dem (INV-LEADS-N-001).
     kriterium som strypte.
 
 Körningens tillstånd bor i batchjobbets eget resultat (jobbstoret, TTL 1 h)
-— ingen ny tabell. ponytail: en leads-worker per process (config
-leads_workers=1) gör läs-ändra-skriv sekventiellt; fler workers eller
-repliker kräver ett lås runt `uppdatera`.
+— ingen ny tabell. Läs-ändra-skriv skyddas av ett lås per körning
+(`_korningslas` i app/api/leads.py, infört 2026-10-06 när leads_workers
+höjdes över 1): workers i samma process serialiseras per körning, olika
+körningar går parallellt. Fler REPLIKER av processen kräver ett Redis-lås.
 """
 
 from __future__ import annotations
@@ -33,13 +34,38 @@ from typing import Any
 
 from . import jev
 from .discovery import hitta_bolag
+from .existens import styrk
 from .forfilter import forfiltrera
 from .geo import _prefix_ur_postnr
 from .webbsignal import mat_webbplats
 
 MAX_RUNDOR = 3
 TAK_FAKTOR = 4
-MAX_PER_RUNDA = 10
+#: Kandidater per sökrunda. Små rundor med flit (2026-10-09): en runda
+#: levererar ingenting förrän den är klar, och med 25 per runda granskade
+#: den första rundan i en körning på 40 bolagssidor och kontaktsökte i 13
+#: minuter innan ett enda bolag researchades. Med 8 börjar researchen efter
+#: några minuter, och nästa runda söker medan den pågår (sökrundan körs
+#: utanför körningens lås, api/leads.py:_fyll_pa). Var 10 med tre rundor
+#: före 2026-10-08: en körning kunde aldrig se fler än 30 kandidater.
+MAX_PER_RUNDA = 8
+
+
+def max_rundor(mal: int) -> int:
+    """Sökrundor för en beställning: tre för små, annars så många att
+    MAX_PER_RUNDA räcker till beställningen med marginal (40 → 9, 50 → 11).
+    Varje runda söker nästa geo-ring; kredittaket (korningstak) gäller
+    hela körningen oavsett antalet rundor."""
+    return max(MAX_RUNDOR, -(-int(mal) // (MAX_PER_RUNDA - 2)) + 2)
+
+
+def korningstak(mal: int) -> int:
+    """Betalda sidhämtningar för hela körningen. 30 per beställt lead med
+    golvet 60 (små beställningar) och taket 160 räckte inte: i en målgrupp
+    där de flesta registerbolag saknar webbplats tog 101 registersidor slut
+    på 8 granskade. Nu 12 per lead över golvet, tak 600 (50 leads)."""
+    mal = int(mal)
+    return min(600, max(60, 30 * mal if mal <= 5 else max(150, 12 * mal)))
 
 
 def ny_korning(*, mal: int, scope: str, overrides: dict | None, is_test: bool) -> dict[str, Any]:
@@ -62,6 +88,23 @@ def ny_korning(*, mal: int, scope: str, overrides: dict | None, is_test: bool) -
     }
 
 
+def har_malgrupp(profil: dict[str, Any], icp: dict[str, Any]) -> bool:
+    """Har körningen något att sikta på utöver ort och storlek?
+
+    Bransch (kundens filter, profilens segment eller SNI), ett kriterium eller
+    en signal kunden kräver, eller en målgruppstext som sökningen kan läsa.
+    Standarduteslutningen räknas inte: den säger bara vad som INTE söks."""
+    return bool(
+        icp.get("industries")
+        or icp.get("sni_codes")
+        or icp.get("must_have")
+        or profil.get("branscher")
+        or profil.get("segment")
+        or profil.get("kriterier")
+        or str(profil.get("malgrupp") or "").strip()
+    )
+
+
 def _ring_index(profil: dict[str, Any], kandidat: dict[str, Any]) -> int:
     """Lägre = tidigare i kundens geografiska prioritet. Okänt sist."""
     prefix = _prefix_ur_postnr(kandidat.get("postnr"))
@@ -81,14 +124,36 @@ async def sokrunda(
     antal = min(MAX_PER_RUNDA, max(3, 2 * behov))
     ring = korning["rundor"]
     korning["rundor"] += 1
-    fynd = await hitta_bolag(icp, antal, uteslut_namn=uteslut, profil=profil, ring=ring)
+    listspar: list[dict[str, Any]] = []
+    fynd = await hitta_bolag(icp, antal, uteslut_namn=uteslut, profil=profil, ring=ring, listspar=listspar)
+    # Bara de ej kvalificerade är bortval i tratten. Ringlistan och de som
+    # prövas om räknas för sig i sammanfattningen (fordelning nedan).
+    for rad in listspar:
+        if rad.get("spar", "ej_kvalificerad") == "ej_kvalificerad":
+            korning["tratt"].append({"namn": rad["company_name"], "steg": "listspår", "skal": rad["signal_detalj"]})
+    korning.setdefault("listspar", []).extend(listspar)
+    for rad in listspar:
+        pool_in(korning, rad)
     kvar: list[dict[str, Any]] = []
     for kandidat in fynd:
+        namn = kandidat["company_name"]
         skal = forfiltrera(profil, kandidat, exclude_domains=icp.get("exclude_domains"))
+        utslag(korning, namn, "förfilter", skal)
         if skal:
-            korning["tratt"].append({"namn": kandidat["company_name"], "steg": "förfilter", "skal": skal})
+            korning["tratt"].append({"namn": namn, "steg": "förfilter", "skal": skal})
             continue
         fakta = await mat_webbplats(kandidat.get("website"))
+        # Existensgrinden (leads/existens.py): en kandidat som inte kommer ur
+        # registret måste styrkas av sin egen webbplats innan den kostar ett
+        # Jev- eller researchanrop.
+        ostyrkt = styrk(kandidat, fakta)
+        utslag(korning, namn, "existens", ostyrkt)
+        if ostyrkt:
+            korning["tratt"].append({"namn": namn, "steg": "existens", "skal": ostyrkt})
+            continue
+        # Webbpoolen (plan 2026-10-08): varje styrkt bolag med webbplats, även
+        # de Jev fäller nedan. Bara bolagsnivå (webbpool.POOLFALT).
+        pool_in(korning, kandidat)
         kandidat["webbsignaler"] = fakta.get("rader") or []
         # Registerkällan (merinfo) har redan triagerat sina kandidater; en
         # andra Jev-fråga på samma bolag är bara kostnad.
@@ -97,6 +162,7 @@ async def sokrunda(
         )
         if triage:
             kandidat["jev_triage"] = triage
+            utslag(korning, namn, "jev", "; ".join(triage.get("fall_skal") or []) if triage.get("beslut") == "fall" else None)
             if triage.get("beslut") == "fall":
                 korning["tratt"].append(
                     {
@@ -112,9 +178,34 @@ async def sokrunda(
     korning["kandidater"].extend(kvar)
 
 
-def registrera_utfall(korning: dict[str, Any], *, namn: str, leverbar: bool, skal: str | None) -> None:
+def pool_in(korning: dict[str, Any], kandidat: dict[str, Any]) -> None:
+    """Bolagets poolrad i körningens tillstånd, en per domän. Läses av
+    webbpool.efter_korning när körningen är klar."""
+    from .webbpool import bolagsrad
+
+    rad = bolagsrad(kandidat, "korning")
+    if rad:
+        korning.setdefault("webbpool", {})[rad["doman"]] = rad
+
+
+def utslag(korning: dict[str, Any], namn: str, grind: str, skal: str | None) -> None:
+    """Kodgrindens utslag för ett bolag, släppt som fällt (Fas 7, insynen).
+
+    Tratten bär bara bortvalen och räknas i sammanfattningen till kunden; en
+    släppt rad där hade blivit en "bortvald" utan skäl. Utslagen ligger därför
+    bredvid, i korning["utslag"], och följer med körningens tillstånd till
+    liggaren (set_leads_job_status)."""
+    korning.setdefault("utslag", []).append(
+        {"namn": namn, "grind": grind, "utslag": "falld" if skal else "slappt", "skal": skal}
+    )
+
+
+def registrera_utfall(
+    korning: dict[str, Any], *, namn: str, leverbar: bool, skal: str | None, undersokt: bool = True
+) -> None:
     korning["pagaende"] = max(0, korning["pagaende"] - 1)
-    korning["undersokta"] += 1
+    korning["undersokta"] += int(undersokt)
+    utslag(korning, namn, "research", None if leverbar else (skal or "inte leverbar"))
     if leverbar:
         korning["levererade"] += 1
     elif skal:
@@ -122,23 +213,90 @@ def registrera_utfall(korning: dict[str, Any], *, namn: str, leverbar: bool, ska
 
 
 def avsluta(korning: dict[str, Any], orsak: str) -> None:
-    """Sätter slutet — och namnger flaskhalsen när målet inte nåddes."""
+    """Sätter slutet — och namnger flaskhalsen när målet inte nåddes.
+
+    "Slut på kandidater" utan ett enda bolag att pröva är inte en tom
+    målgrupp, det är en sökning som inte hittade något: den heter
+    `inga_traffar` och säger åt kunden vad som går att ändra."""
+    if (
+        orsak == "slut_pa_kandidater"
+        and not korning["undersokta"]
+        and not korning["levererade"]
+        and not korning["tratt"]
+        and not korning.get("listspar")
+    ):
+        orsak = "inga_traffar"
     korning["klar"] = True
     korning["slut_orsak"] = orsak
     if korning["levererade"] < korning["mal"] and korning["tratt"]:
-        typer = Counter(str(t.get("skal") or "").split(":")[0].strip() for t in korning["tratt"])
+        typer = Counter(_skalstyp(t.get("skal")) for t in korning["tratt"])
         korning["flaskhals"] = typer.most_common(1)[0][0] or None
+
+
+def _skalstyp(skal: object) -> str:
+    """Skälets rubrik, för räkningen i sammanfattningen.
+
+    De flesta skäl är redan "Rubrik: detalj". Bedömningens bortval
+    (bedomning.py) har formen "<kriteriets namn>: <vad som föll>", och
+    kriteriets namn är det kunden VILL ha: sammanfattningen sa "3 bortvalda:
+    ligger i göteborg" om bolag som låg utanför Göteborg (provkörningen
+    2026-10-05). Ort och storlek får därför sin egen rubrik."""
+    text = str(skal or "").strip()
+    rubrik = text.split(":")[0].strip()
+    if rubrik.casefold().startswith("ligger i "):
+        return "Utanför målområdet"
+    if rubrik.casefold().startswith("storlek "):
+        return "Fel storlek"
+    return rubrik
+
+
+def fordelning(korning: dict[str, Any]) -> dict[str, int]:
+    """Hur bolagen utanför Iris fördelades (Antons regler 12–16, 2026-10-07).
+    Det körningen sparade (api/leads.py:_spara_listspar sätter "fordelning",
+    efter dubblettkontrollen) går före räkningen ur listspåret."""
+    if korning.get("fordelning"):
+        return {"ring": 0, "ej_kvalificerade": 0, "prova_om": 0, "tak": 0, **korning["fordelning"]}
+    rader = korning.get("listspar") or []
+    spar = Counter(r.get("spar", "ej_kvalificerad") for r in rader)
+    tak = sum(1 for r in rader if r.get("spar") == "prova_om" and r.get("tak"))
+    return {
+        "ring": spar["ring"],
+        "ej_kvalificerade": spar["ej_kvalificerad"],
+        "prova_om": spar["prova_om"] - tak,
+        "tak": tak,
+    }
 
 
 def sammanfatta(korning: dict[str, Any]) -> str:
     """Tratten i en mening, för kunden."""
+    if korning.get("slut_orsak") == "inga_traffar":
+        return (
+            "Sökningen hittade inga bolag i målgruppen. Kontrollera stavningen på orterna "
+            "eller bredda bransch eller område och kör igen."
+        )
     delar = [f"{korning['undersokta']} undersökta"]
-    typer = Counter(str(t.get("skal") or "").split(":")[0].strip() for t in korning["tratt"])
+    typer = Counter(_skalstyp(t.get("skal")) for t in korning["tratt"])
     delar += [f"{antal} bortvalda: {typ.lower()}" for typ, antal in typer.most_common(3) if typ]
-    levererade = korning["levererade"]
-    text = ", ".join(delar) + f" → {levererade} lead{'' if levererade == 1 else 's'}."
+    f = fordelning(korning)
+    text = ", ".join(delar) + (
+        f" → {korning['levererade']} Iris-leads, {f['ring']} till ringlistan, "
+        f"{f['ej_kvalificerade']} ej kvalificerade, {f['prova_om']} sajter utan hittad kontakt (prövas om)"
+    )
+    if f["tak"]:
+        text += f", {f['tak']} stoppade av sidtaket (prövas om)"
+    text += "."
     if korning["levererade"] < korning["mal"] and korning.get("flaskhals"):
         text += f" Det som strypte mest: {korning['flaskhals'].lower()}."
+    skrap = korning.get("skrap") or {}
+    betalda = sum(
+        int(v) for k, v in skrap.items() if k not in ("cache", "tjanstefel") and isinstance(v, (int, float))
+    )
+    if skrap:
+        text += f" {betalda} betalda sidhämtningar, {int(skrap.get('cache') or 0)} ur cachen."
+    # Sanningsregeln: ett slut som beror på tjänsten ska säga det, inte låta
+    # som att målgruppen var tom (tre körningar 2026-10-06 slutade så).
+    if int(skrap.get("tjanstefel") or 0) > 0:
+        text += f" {int(skrap['tjanstefel'])} hämtningar föll hos tjänsten (kredit, kvot eller tidsgräns)."
     return text
 
 

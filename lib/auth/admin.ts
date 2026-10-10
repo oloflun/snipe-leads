@@ -17,7 +17,12 @@ import { getWorkspaceContext } from "@/lib/workspace";
  * går att sätta till true.
  */
 
-export async function isPlatformAdmin(userId: string): Promise<boolean> {
+/**
+ * Per request och användare (React `cache`): layoutens onboardinggrind,
+ * `getPlatformAdmin` och vyväxeln ställer annars samma fråga var för sig vid
+ * varje sidbyte.
+ */
+export const isPlatformAdmin = cache(async function isPlatformAdmin(userId: string): Promise<boolean> {
   try {
     const rows = await sqlAsUser<{ user_id: string }>(
       userId,
@@ -31,7 +36,7 @@ export async function isPlatformAdmin(userId: string): Promise<boolean> {
     console.error("isPlatformAdmin:", (error as Error).message);
     return false;
   }
-}
+});
 
 export type PlatformAdmin = {
   userId: string;
@@ -48,7 +53,9 @@ export const getPlatformAdmin = cache(async function getPlatformAdmin(): Promise
   if (!context) {
     return null;
   }
-  if (!(await isPlatformAdmin(context.user.id))) {
+  // Samma uppslag som isPlatformAdmin, läst i arbetsytans fråga (samma
+  // användare, samma RLS) i stället för i en egen transaktion.
+  if (!context.isPlatformAdmin) {
     return null;
   }
   return { userId: context.user.id, email: context.user.email };

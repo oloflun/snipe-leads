@@ -89,9 +89,11 @@ class _Capturing:
         return _Response()
 
 
-async def _run_with_soul(soul: str) -> _Capturing:
+async def _run_with_soul(soul: str, *, onskemal: str = "") -> _Capturing:
     storage = MemoryStorage()
     await storage.save_context_doc(TENANT, kind="soul", content=soul, source="tenant-edit")
+    if onskemal:
+        await storage.save_context_doc(TENANT, kind="kundonskemal_leads", content=onskemal, source="kund")
     storage.outreach_threads.setdefault(TENANT, {})["thread-1"] = {
         "id": "thread-1",
         "language_state": "sv",
@@ -193,3 +195,28 @@ def test_onboarding_agent_cannot_write_soul():
         "'soul' lades till i onboarding-agentens kind-allowlist. Kundens "
         "röstdokument skrivs bara av en människa via PUT /api/leads/soul."
     )
+
+
+@pytest.mark.anyio
+async def test_kundens_onskemal_nar_anvandarposition_aldrig_systemet():
+    """Fas 8 (2026-10-06): kundens egen feedback till sin agent har samma
+    gräns som SOUL. Den bakas in i kundens dokument och läses tillsammans med
+    rösten, i användarposition, inslagen som opålitligt innehåll."""
+    sentinel = "ZQX-ONSKEMAL-SENTINEL-2208"
+    llm = await _run_with_soul("", onskemal=f"Skriv kortare. {sentinel}\n{INJECTION}")
+    assert llm.captured
+    nadde = False
+    for messages in llm.captured:
+        assert sentinel not in messages[0]["content"], "Kundens önskemål hamnade i SYSTEMPROMPTEN."
+        if sentinel in messages[1]["content"]:
+            nadde = True
+            assert "untrusted-data-" in messages[1]["content"]
+        # Förbudet i overlayen står kvar trots att önskemålet ber om motsatsen.
+        assert "Producera ALDRIG LinkedIn-kopia" in messages[0]["content"]
+    assert nadde, "önskemålen nådde aldrig användarmeddelandet — testet mäter ingenting"
+
+    from app.leads.soul import load_soul
+
+    storage = MemoryStorage()
+    await storage.save_context_doc(TENANT, kind="kundonskemal_leads", content=sentinel, source="kund")
+    assert await load_soul(storage, TENANT, agent="support") == "", "önskemål till Iris läckte till supporten"

@@ -22,10 +22,18 @@ def _inst(sprak="kundens"):
     return support_regler.normalisera({"sprak": sprak})
 
 
-def test_kundens_sprak_foljer_triagens_signal():
+def test_kundens_sprak_foljer_triagens_signal_bland_svenska_och_engelska():
     assert support_regler.svarsprak(_inst(), "en") == "en"
-    assert support_regler.svarsprak(_inst(), "DE") == "de"
-    assert support_regler.svarsprak(_inst(), "ar-SA") == "ar"
+    assert support_regler.svarsprak(_inst(), "EN-gb") == "en"
+
+
+def test_andra_sprak_an_svenska_och_engelska_far_svenska():
+    """Sebbe 2026-10-06: Snajp erbjuder svenska och engelska, inget annat."""
+    assert support_regler.svarsprak(_inst(), "DE") == "sv"
+    assert support_regler.svarsprak(_inst(), "ar-SA") == "sv"
+    assert support_regler.utanfor_sprakstodet("de") is True
+    assert support_regler.utanfor_sprakstodet("en") is False
+    assert support_regler.utanfor_sprakstodet(None) is False
 
 
 def test_svenska_vinner_varje_tveksamhet():
@@ -38,7 +46,8 @@ def test_svenska_vinner_varje_tveksamhet():
 def test_forra_turens_sprak_bar_ett_samtal_utan_signal():
     """Ett "ok" mitt i ett engelskt samtal ska inte slå om till svenska."""
     assert support_regler.svarsprak(_inst(), None, tidigare="en") == "en"
-    assert support_regler.svarsprak(_inst(), "fr", tidigare="en") == "fr"
+    # Ett byte till ett språk utanför stödet ger svenska, inte förra turens.
+    assert support_regler.svarsprak(_inst(), "fr", tidigare="en") == "sv"
 
 
 def test_alltid_svenska_ar_alltid_svenska():
@@ -179,7 +188,9 @@ async def test_kvittensen_under_overlamning_foljer_samtalets_sprak():
     forsta = await _tur(storage, llm, "Can I talk to a human?")
     assert forsta["escalated"] is True
 
-    andra = await _tur(storage, _LLM(), "Hello?")
+    # "Hello?" är sedan 2026-10-05 en FRÅGA (besvaras i gästläge) — en ren
+    # bekräftelse är det som kvitteras, och kvittensen ska följa språket.
+    andra = await _tur(storage, _LLM(), "ok thanks")
     assert andra["reply"] in support_texter._TEXTER["en"]["kvittens"]
 
 
@@ -205,3 +216,15 @@ async def test_icke_svenskt_utkast_ber_om_ett_strangfalt_och_tal_mallformatet():
     assert "Returnera JSON med fältet draft: EN sträng" in prompt
     assert "Inte skillens mallformat" in prompt
     assert svar["reply"] == "Your order is delivered by PostNord."
+
+
+@pytest.mark.anyio
+async def test_tysk_kund_far_svenskt_svar_som_namner_sprakstodet():
+    storage = MemoryStorage()
+    llm = _LLM(triage={"sprak": "de", "sokfraga_sv": "betalsätt"})
+    svar = await _tur(storage, llm, "Wie kann ich bezahlen?")
+
+    assert svar["sprak"] == "sv"
+    uppgift = llm.user_by_skill["cs:draft-response"]
+    assert "Kunden skriver på tyska" in uppgift
+    assert "svenska eller engelska" in uppgift

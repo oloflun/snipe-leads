@@ -268,10 +268,14 @@ async def test_kreditslut_far_inget_talamod(monkeypatch):
 
 @pytest.mark.anyio
 async def test_minutkvot_far_fortfarande_talamod(monkeypatch):
-    """Kontrollgruppen: den transienta halvan ska bete sig exakt som förut
-    (20 s + 40 s innan tredje försöket får kasta)."""
+    """Kontrollgruppen: den transienta halvan väntar och försöker om. Sedan
+    2026-10-09 fem försök med slumpad paus (15/30/45/60 s + 0–10 s), så att
+    samtidiga bakgrundsjobb inte försöker om i takt."""
+    import random
+
+    monkeypatch.setattr(random, "uniform", lambda a, b: 0.0)
     somnar = await _kor_steg_mot(_Minutkvotfel(), monkeypatch)
-    assert somnar == [20.0, 40.0]
+    assert somnar == [15.0, 30.0, 45.0, 60.0]
 
 
 # -- Jobbläsvägen -----------------------------------------------------------
@@ -308,3 +312,43 @@ async def test_jobblasvagen_oversatter_lagrat_kreditfel():
     await jobs.fail(job2, "Prospektet saknar mottagaradress.")
     svar2 = await get_job(_Request(), job2, {"tenant_id": "t-1"})
     assert svar2["error"] == "Prospektet saknar mottagaradress."
+
+
+@pytest.mark.anyio
+async def test_vertex_byter_eu_region_vid_429(monkeypatch):
+    """"Resource exhausted" på Vertex är regionens delade kapacitet: en
+    körning fick 429 på varje anrop i europe-west1 i minuter medan ett litet
+    anrop gick igenom i alla tre EU-regioner (2026-10-09). Bakgrundsjobb byter
+    region med kort paus, och bara till EU-regioner."""
+    from app.agent import step_runner
+
+    monkeypatch.setattr(step_runner, "_uses_vertex", lambda _s: True)
+    monkeypatch.setattr(
+        step_runner, "vertex_regioner", lambda _s: ["europe-west1", "europe-west4", "europe-north1"]
+    )
+    import random
+
+    monkeypatch.setattr(random, "uniform", lambda a, b: 0.0)
+    regioner: list[str | None] = []
+    klient = _AlltidFel(_Minutkvotfel())
+
+    def fejkklient(region=None):
+        regioner.append(region)
+        return klient
+
+    monkeypatch.setattr(step_runner, "get_llm_client", fejkklient)
+    from app.agentcore.packs import RunLedger
+
+    somnar: list[float] = []
+
+    async def fejksomn(sekunder: float) -> None:
+        somnar.append(sekunder)
+
+    monkeypatch.setattr(step_runner.asyncio, "sleep", fejksomn)
+    with pytest.raises(_Minutkvotfel):
+        await step_runner.run_step(
+            _fejksteg(), RunLedger(), step_runner.RunTrace(), task="testa", case_context="test", talamod_429=True
+        )
+    assert regioner[1:5] == ["europe-west4", "europe-north1", "europe-west1", "europe-west4"]
+    assert somnar[:2] == [1.0, 1.0], "kort paus när regionen byts"
+    assert all(r and r.startswith("europe-") for r in regioner[1:])

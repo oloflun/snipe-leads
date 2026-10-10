@@ -106,8 +106,14 @@ def test_bolagssidan_ger_kontaktperson_med_roll_och_telefon():
         (["Stockholms län"], ["stockholms-lan"]),
         (["Göteborg", "Västra Götalands län"], ["vastra-gotalands-lan"]),
         (["Norrland"], ["norrbottens-lan", "vasterbottens-lan", "jamtlands-lan", "vasternorrlands-lan", "gavleborgs-lan"]),
-        # Okänd ort: ingen sökning i hela landet på en felstavning.
-        (["Gbg"], None),
+        # Okänt ord: ingen sökning i hela landet på något som inte är en ort.
+        (["Qwrtzx"], None),
+        # Felstavning och vardagsnamn tolkas (2026-10-07: "Luelå" och "Övik"
+        # tappades, och körningen sökte utan dem).
+        (["Gbg"], ["goteborg"]),
+        (["Luelå"], ["lulea"]),
+        (["Övik"], ["ornskoldsvik"]),
+        (["Umeå", "Luelå", "Skellefteå"], ["umea", "skelleftea", "lulea"]),
     ],
 )
 def test_geografiregeln(termer, vantat):
@@ -177,7 +183,7 @@ def anyio_backend():
 def _installera_sidor(monkeypatch, sidor: dict[str, str]) -> list[str]:
     hamtade: list[str] = []
 
-    async def _hamta(url):
+    async def _hamta(url, **_):
         hamtade.append(url)
         return sidor.get(url)
 
@@ -200,23 +206,57 @@ def _sidor_for_sokningen():
 
 
 @pytest.mark.anyio
-async def test_iris_far_bolag_med_webbplats_och_ingen_registerkontakt(monkeypatch):
+async def test_iris_kraver_mejl_resten_fordelas(monkeypatch):
+    """Antons regler 12–16 (2026-10-07), som ersätter 3–4 och 8 här: ett
+    Iris-lead har en mejladress, aldrig registrets telefon. Gamma (ingen sajt,
+    bara registrets nummer, ingen VD) blir ej kvalificerad; Delta (sajt där
+    inget hittades) prövas om och skrivs inte som listrad."""
     rader, sidor = _sidor_for_sokningen()
     _installera_sidor(monkeypatch, sidor)
 
     async def _uppslag(namn, geografi=None):
         return {"Beta Måleri AB": "https://www.betamaleri.se"}.get(namn)
 
-    monkeypatch.setattr(discovery, "sla_upp_webbplats", _uppslag)
-    icp = {"industries": ["Bygg"], "geography": ["Mölndal"], "size": {"anstallda_min": 1, "anstallda_max": 49}}
-    leads = await m.sok(icp, 5, uteslut=set(), profil=None)
+    async def _kontakt(webb, vd=None, *, bolagsadress_racker=False, **_k):
+        # Sebbes beslut 2026-10-07: Iris godtar bolagets egen adress när ingen
+        # namngiven person finns. Testets sajter bär bara VD:n ur registret.
+        assert bolagsadress_racker
+        if not vd:
+            return None
+        return {"contact_email": f"vd@{webb.split('www.')[-1]}", "contact_phone": None,
+                "contact_name": vd, "contact_role": "VD", "contact_level": "named_role_match"}
 
-    # Gamma saknar webbplats: Iris går vidare (Anton 2026-10-04).
-    assert sorted(k["company_name"] for k in leads) == ["Alfa Bygg AB", "Beta Måleri AB", "Delta Snickeri AB"]
-    assert all(k["contact_name"] is None and k["contact_phone"] is None for k in leads)
+    monkeypatch.setattr(discovery, "sla_upp_webbplats", _uppslag)
+    monkeypatch.setattr(discovery, "hamta_person_kontakt", _kontakt)
+    icp = {"industries": ["Bygg"], "geography": ["Mölndal"], "size": {"anstallda_min": 1, "anstallda_max": 49}}
+    listspar: list[dict] = []
+    leads = await m.sok(icp, 5, uteslut=set(), profil=None, listspar=listspar)
+
+    assert sorted(k["company_name"] for k in leads) == ["Alfa Bygg AB", "Beta Måleri AB"]
+    assert all((k["contact_name"], k["contact_role"]) == ("Test Testsson", "VD") for k in leads)
+    assert all(k["contact_phone"] is None for k in leads), "registrets nummer blir aldrig Iris-kontakt"
     beta = next(k for k in leads if k["company_name"] == "Beta Måleri AB")
     assert beta["website"] == "https://www.betamaleri.se"
-    assert all(k["source_name"] == "merinfo" for k in leads)
+    assert {r["company_name"]: (r["spar"], r["signal_detalj"]) for r in listspar} == {
+        "Gamma Golv AB": ("ej_kvalificerad", "Ingen namngiven VD"),
+        "Delta Snickeri AB": ("prova_om", "Sajt utan hittad kontakt"),
+    }
+    # Ett nummer utan namngiven VD hör inte hemma på en listrad (regel 5).
+    gamma = next(r for r in listspar if r["company_name"] == "Gamma Golv AB")
+    assert gamma["contact_phone"] is None
+
+
+def test_ensam_vd_far_registrets_nummer_men_bara_da():
+    """Antons beslut 2026-10-05: registrets telefonnummer får användas när VD
+    är den enda personen i bolaget (högst en anställd, ingen annan med roll)."""
+    ensam = m.tolka_bolag(bolagssida("Ett AB", "556000-0009", anstallda=1, telefon="070-999 99 99"), "u")
+    assert m.ensam_vd_telefon(ensam) == "070-999 99 99"
+    tva = m.tolka_bolag(bolagssida("Två AB", "556000-0010", anstallda=2), "u")
+    assert m.ensam_vd_telefon(tva) is None
+    ledamot = m.tolka_bolag(bolagssida("Led AB", "556000-0011", anstallda=1, roll="Styrelseledamot"), "u")
+    assert m.ensam_vd_telefon(ledamot) is None
+    # Suppleanten i mallen räknas inte som en annan person med roll.
+    assert all(p["roll"] != "Styrelsesuppleant" for p in ensam["personer"])
 
 
 @pytest.mark.anyio
@@ -250,7 +290,7 @@ async def test_uteslutna_och_okand_malgrupp(monkeypatch):
     assert await m.sok(icp, 3, uteslut=uteslut) == []
     # Okänd ort, och en bransch utan någon lista hos merinfo: None, så den
     # gamla kedjan tar vid i stället för ett tomt svar.
-    assert await m.sok({"industries": ["Bygg"], "geography": ["Gbg"]}, 3) is None
+    assert await m.sok({"industries": ["Bygg"], "geography": ["Qwrtzx"]}, 3) is None
     assert await m.sok({"industries": ["Finns Inte"], "geography": ["Mölndal"]}, 3) is None
 
 
@@ -277,6 +317,36 @@ async def test_hitta_bolag_anvander_registret_bara_nar_flaggan_ar_satt(monkeypat
     assert anrop == [2]
 
 
+@pytest.mark.anyio
+async def test_fa_registertraffar_fylls_pa_med_sokningen(monkeypatch):
+    """Sebbes beslut 2026-10-07: registret först, men ger det färre bolag än
+    beställt fyller den gamla sökkedjan på, utan registrets bolag och med
+    bara det antal som fattas."""
+    monkeypatch.setenv("LEADS_MERINFO", "scrapegraph")
+    monkeypatch.setenv("LEADS_KALLOR", "")
+
+    async def _sok(icp, antal, **_k):
+        return [{"company_name": "Alfa Bygg AB", "website": "https://alfabygg.se"}]
+
+    prompter: list[str] = []
+
+    async def _gemini(prompt):
+        prompter.append(prompt)
+        return '[{"company_name":"Beta Bygg AB","website":"https://betabygg.se"},' \
+               '{"company_name":"Gamma Bygg AB","website":"https://gammabygg.se"}]'
+
+    async def _utan(rader):
+        return rader
+
+    monkeypatch.setattr(m, "sok", _sok)
+    monkeypatch.setattr(discovery, "_gemini_med_sokning", _gemini)
+    monkeypatch.setattr("app.leads.platshallare.utan_platshallare", _utan)
+    ut = await discovery.hitta_bolag({"industries": ["Bygg"]}, 2)
+    assert [r["company_name"] for r in ut] == ["Alfa Bygg AB", "Beta Bygg AB"]
+    assert ut[1]["kalla"] == "gemini" and "kalla" not in ut[0]
+    assert "Uteslut dessa namn: alfa bygg ab" in prompter[0], "registrets bolag ska uteslutas ur utfyllnaden"
+
+
 def test_regionnyckel_expanderas_utan_profil(monkeypatch):
     """icp.geo bär regionnycklar (app/leads/geo.py). Profilen expanderar dem
     normalt; utan profil ska `sok` göra det själv, annars blev "goteborg"
@@ -287,7 +357,7 @@ def test_regionnyckel_expanderas_utan_profil(monkeypatch):
         sedda.append((bransch, plats, sida))
         return f"https://x/{bransch}/{plats}/{sida}"
 
-    async def _tom(url):
+    async def _tom(url, **_):
         return None
 
     monkeypatch.setattr(m, "listsida_url", _url)
@@ -316,3 +386,82 @@ def test_register_rankas_av_signaler_inte_valjs_av_dem():
     assert [r["company_name"] for r in ut] == ["Beta Måleri AB", "Alfa Bygg AB"]
     assert ut[0]["signal"] == "rekryterar" and ut[0]["signal_kalla"] == "https://af.se/1"
     assert "signal" not in ut[1] or ut[1].get("signal") is None
+
+
+@pytest.mark.anyio
+async def test_sokningen_hamtar_i_takt_med_behovet(monkeypatch):
+    """Plan 2026-10-05: N=5 får inte kosta mer än 20 hämtningar när målgruppen
+    är tät. Förut: alla listsidor en sida djupare och tre bolagssidor per
+    beställt lead (15) på en gång, före något filter."""
+    rader = "\n".join(
+        f"##  [ Bolag {i} AB ](https://www.merinfo.se/foretag/Bolag-{i}-AB-55600{i:05d}/2k{i})" for i in range(60)
+    )
+    sidor = {f"https://www.merinfo.se/byggbranschen/molndal/foretag/{s}": rader for s in (1, 2, 3)}
+    for i in range(60):
+        sidor[f"https://www.merinfo.se/foretag/Bolag-{i}-AB-55600{i:05d}/2k{i}"] = bolagssida(
+            f"Bolag {i} AB", f"55600{i:05d}"[:6] + "-" + f"55600{i:05d}"[6:], hemsida=f"www.bolag{i}.se"
+        )
+    hamtade = _installera_sidor(monkeypatch, sidor)
+    monkeypatch.setattr(discovery, "webbplats_matchar_namn", lambda namn, webb: True)
+
+    async def _kontakt(webb, vd=None, **_k):
+        return {"contact_email": "vd@exempel.se", "contact_phone": None,
+                "contact_name": vd or "Namn Namnsson", "contact_role": "VD" if vd else None,
+                "contact_level": "named_role_match" if vd else "named_other"}
+
+    monkeypatch.setattr(discovery, "hamta_person_kontakt", _kontakt)
+    icp = {"industries": ["Bygg"], "geography": ["Mölndal"], "size": {"anstallda_min": 1, "anstallda_max": 49}}
+    leads = await m.sok(icp, 5, uteslut=set(), profil=None)
+    assert len(leads) == 5
+    assert len(hamtade) <= 20, hamtade
+    # En listsida räckte: loopen bläddrar inte vidare när raderna räcker.
+    assert sum("/foretag/1" in u or "/foretag/2" in u for u in hamtade if "byggbranschen" in u) == 1
+
+
+@pytest.mark.anyio
+async def test_enskild_firma_falls_innan_bolagssidan_hamtas(monkeypatch):
+    lista = "##  [ Anna Andersson Bygg ](https://www.merinfo.se/foretag/Anna-Andersson-Bygg-8001011234/2k0e)\n"
+    hamtade = _installera_sidor(monkeypatch, {"https://www.merinfo.se/byggbranschen/molndal/foretag/1": lista})
+    assert await m.sok({"industries": ["Bygg"], "geography": ["Mölndal"]}, 3) == []
+    assert not any("Anna-Andersson" in u for u in hamtade)
+
+
+# -- Sajtens adress mot registrets ort (2026-10-09) ---------------------------
+
+
+def test_sajt_med_adress_pa_annan_ort_ar_inte_bolagets():
+    from app.leads.sources.merinfo import adress_motsager_registret
+
+    piteå = {"ort": "Piteå", "postnr": "941 41"}
+    # landin.se: bilverkstaden i Sollentuna fick "Landin & Markström AB" i Piteå.
+    assert adress_motsager_registret("Landin & Pettersson Bilservice\nBox 12, 192 79 Sollentuna", piteå)
+    # Samma postnummerområde, samma ort, eller orten nämnd: bolagets.
+    assert not adress_motsager_registret("Storgatan 1, 941 33 Piteå", piteå)
+    assert not adress_motsager_registret("Industrivägen 4, 943 31 Öjebyn", piteå)
+    assert not adress_motsager_registret("Vi bygger i Piteå och Luleå. Kontor: 972 41 Luleå", piteå)
+    # Ingen adress alls, eller ingen registerort: inget att pröva.
+    assert not adress_motsager_registret("Välkommen till oss!", piteå)
+    assert not adress_motsager_registret("192 79 Sollentuna", {})
+
+
+@pytest.mark.anyio
+async def test_iris_hamtar_bolag_med_levande_doman_forst(monkeypatch):
+    """2026-10-09: 52 köpta bolagssidor för 8 leads. Rader vars namn ger en
+    levande domän (gratis HEAD) hämtas först; de andra står kvar sist."""
+    rader, sidor = _sidor_for_sokningen()
+    hamtade = _installera_sidor(monkeypatch, sidor)
+    monkeypatch.setenv("LEADS_DIREKTHAMTNING", "1")
+
+    async def _gissa(namn):
+        return {"Beta Måleri AB": "https://betamaleri.se", "Delta Snickeri AB": "https://deltasnickeri.se"}.get(namn)
+
+    async def _komplettera(rankade, antal, **_):
+        return rankade[:antal]
+
+    monkeypatch.setattr(discovery, "gissa_webbplats_via_head", _gissa)
+    monkeypatch.setattr(m, "_komplettera", _komplettera)
+    icp = {"industries": ["Bygg"], "geography": ["Mölndal"], "size": {"anstallda_min": 1, "anstallda_max": 49}}
+    await m.sok(icp, 1, uteslut=set(), profil=None)
+
+    bolagssidor = [u for u in hamtade if "merinfo.se/foretag/" in u]
+    assert bolagssidor[:2] == [rader["Beta Måleri AB"], rader["Delta Snickeri AB"]]

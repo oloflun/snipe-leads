@@ -12,6 +12,8 @@ precis som referensarkitekturen. Saknas embeddings används
 import hashlib
 import json
 import logging
+import os
+import time
 import uuid
 from contextlib import asynccontextmanager
 from datetime import date
@@ -19,6 +21,8 @@ from decimal import Decimal
 from typing import Any
 
 import asyncpg
+
+from ..leads import upptagna
 
 from .base import (
     BEDOMNINGSFALT,
@@ -31,6 +35,7 @@ from .base import (
     bk_datum,
     kontrollera_bk_balans,
     kontrollera_bk_betalstatus,
+    kontrollera_bk_granskningsstatus,
     kontrollera_bk_kalla,
     kontrollera_bk_riktning,
     kontrollera_bk_status,
@@ -62,6 +67,8 @@ _PROSPEKT_PROFILFALT = frozenset(
         "contact_form_url",
         # Migration 081: kontaktpersonens telefon (registerkällan).
         "contact_phone",
+        # Migration 108: länet (webbpoolens fördelning).
+        "lan",
         # Migration 085: varifrån ett prospekt importerades (admin_flytt).
         "importerad_fran",
     }
@@ -69,6 +76,10 @@ _PROSPEKT_PROFILFALT = frozenset(
 
 
 async def _init_connection(conn: asyncpg.Connection) -> None:
+    # Frågornas antal och tid per anrop (app/matning.py, Server-Timing).
+    from ..matning import logga_fraga
+
+    conn.add_query_logger(logga_fraga)
     # pgvector skickas som text: '[0.1,0.2,...]'
     await conn.set_type_codec(
         "vector",
@@ -77,6 +88,25 @@ async def _init_connection(conn: asyncpg.Connection) -> None:
         schema="public",
         format="text",
     )
+
+
+async def _ingen_sessionsaterstallning(conn: asyncpg.Connection) -> None:
+    """Poolens återställning vid release — medvetet tom.
+
+    asyncpg:s standard kör `pg_advisory_unlock_all(); CLOSE ALL; UNLISTEN *;
+    RESET ALL` vid varje release: en extra rundtur per lagringsanrop, ~20 %
+    av frågorna i ett typiskt API-anrop (uppmätt 2026-10-10). Koden har inget
+    sessionstillstånd att städa: set_config och `set local` är
+    transaktionslokala, låsen är pg_advisory_xact_lock, och ingen LISTEN.
+    En transaktion som lämnats öppen rullas ändå tillbaka av asyncpg innan
+    den här anropas (Connection._reset).
+    """
+
+
+#: Giltiga API-nycklar i minnet: sha256 → (rad, giltig till). Se validate_api_key.
+_NYCKEL_TTL_S = 30.0
+#: last_used_at skrivs högst så här ofta per nyckel.
+_SENAST_ANVAND_S = 300.0
 
 
 def _row(record: asyncpg.Record | None) -> dict[str, Any] | None:
@@ -121,6 +151,11 @@ def _rrf_fusion(
             rader.setdefault(nyckel, rad)
     ordnade = sorted(poang, key=lambda n: poang[n], reverse=True)
     return [rader[n] for n in ordnade[:limit]]
+
+
+def _bk_rad(record: asyncpg.Record | None) -> dict[str, Any] | None:
+    """En bk_underlag-rad med `granskning` (jsonb, migration 096) avkodad."""
+    return _avkoda_jsonb(_row(record), "granskning")
 
 
 def _avkoda_jsonb(data: dict[str, Any] | None, *nycklar: str) -> dict[str, Any] | None:
@@ -171,7 +206,7 @@ def _avkoda_prospekt(data: dict[str, Any] | None) -> dict[str, Any] | None:
     på prospects ska behöva läggas till på ETT ställe, inte fyra. Fyra platser
     som måste ändras tillsammans är hur den här buggen såg ut från början.
     """
-    return _avkoda_jsonb(data, "score_breakdown", "jev", "signaler")
+    return _avkoda_jsonb(data, "score_breakdown", "jev", "signaler", "webbrevision")
 
 
 class PostgresStorage:
@@ -179,27 +214,47 @@ class PostgresStorage:
 
     def __init__(self, pool: asyncpg.Pool) -> None:
         self.pool = pool
+        self._nycklar: dict[str, tuple[dict[str, Any], float]] = {}
 
     @classmethod
     async def connect(cls, database_url: str) -> "PostgresStorage":
+        # 20, inte 5 (2026-10-09): leadsarbetarna (LEADS_WORKERS), chatten och
+        # webbens anrop delar poolen, och med fler parallella researchjobb
+        # köade de om anslutningarna. Railways Postgres tar 100.
         pool = await asyncpg.create_pool(
             database_url,
             min_size=1,
-            max_size=5,
+            max_size=int(os.environ.get("DB_POOL_MAX", "20")),
             init=_init_connection,
-            statement_cache_size=0,  # krävs bakom Supabase transaction pooler
+            reset=_ingen_sessionsaterstallning,
+            # Statement-cachen PÅ (asyncpg:s standard, 100 per anslutning).
+            # Den stod på 0 för Supabases transaction pooler, som inte finns
+            # kvar: utan cache förbereddes varje parametriserad fråga i en
+            # egen rundtur före körningen. Efter en migrering kan en cachad
+            # `select *` fallera en gång (InvalidCachedStatementError) —
+            # app/main.py tömmer då poolen och svarar 503 utan kropp, som
+            # webbens proxy gör om för GET.
         )
         return cls(pool)
 
     @asynccontextmanager
     async def _scoped(self, tenant_id: str):
         """Transaktion med app.tenant_id satt, så RLS-policyerna gäller."""
-        async with self.pool.acquire() as conn:
-            async with conn.transaction():
-                await conn.fetchval(
-                    "select set_config('app.tenant_id', $1, true)", tenant_id
-                )
-                yield conn
+        try:
+            async with self.pool.acquire() as conn:
+                async with conn.transaction():
+                    await conn.fetchval(
+                        "select set_config('app.tenant_id', $1, true)", tenant_id
+                    )
+                    yield conn
+        except (asyncpg.exceptions.InvalidCachedStatementError, asyncpg.exceptions.OutdatedSchemaCacheError):
+            # En migrering ändrade en tabell som en cachad fråga läser
+            # (statement-cachen, se connect). asyncpg gör om sådana frågor
+            # själv utanför transaktioner, men inte här. Alla anslutningar
+            # byts så att nästa försök — även bakgrundsjobbens — förbereder
+            # frågan på nytt; HTTP-anropet svarar 503 (app/main.py).
+            await self.pool.expire_connections()
+            raise
 
     # -- Tenants ------------------------------------------------------------
 
@@ -258,6 +313,9 @@ class PostgresStorage:
                 tenant_id,
                 active,
             )
+        # Avstängningen ska gälla direkt i den här processen, inte efter
+        # nyckelcachens 30 s (validate_api_key).
+        self._nycklar.clear()
         return _row(record)
 
     async def set_tenant_status(self, tenant_id: str, *, status: str) -> dict[str, Any] | None:
@@ -275,6 +333,9 @@ class PostgresStorage:
                 tenant_id,
                 status,
             )
+        # Avstängningen ska gälla direkt i den här processen, inte efter
+        # nyckelcachens 30 s (validate_api_key).
+        self._nycklar.clear()
         return _row(record)
 
     async def get_tenant_products(self, tenant_id: str) -> list[str] | None:
@@ -318,7 +379,7 @@ class PostgresStorage:
             records = await conn.fetch(
                 """
                 select id, tenant_id, provider, address, status, imap_host,
-                       secret_enc, last_sync_at, last_error
+                       secret_enc, last_sync_at, last_error, syfte
                 from ss_mailboxes where tenant_id = $1 order by created_at
                 """,
                 tenant_id,
@@ -947,6 +1008,27 @@ class PostgresStorage:
             )
         return str(resultat).endswith(" 1")
 
+    async def kb_utan_vektor(self, tenant_id: str, *, limit: int = 50) -> list[dict[str, Any]]:
+        async with self._scoped(tenant_id) as conn:
+            records = await conn.fetch(
+                """
+                select id, title, content from ss_knowledge_base
+                where tenant_id = $1 and embedding is null order by created_at limit $2
+                """,
+                tenant_id,
+                limit,
+            )
+        return [_row(r) for r in records]
+
+    async def satt_kb_vektor(self, tenant_id: str, artikel_id: str, embedding: list[float]) -> None:
+        async with self._scoped(tenant_id) as conn:
+            await conn.execute(
+                "update ss_knowledge_base set embedding = $3 where tenant_id = $1 and id = $2::uuid",
+                tenant_id,
+                str(artikel_id),
+                embedding,
+            )
+
     # -- Kanaler & metrics --------------------------------------------------
 
     async def get_channel_config(self, tenant_id: str, channel: str) -> dict[str, Any]:
@@ -1014,14 +1096,14 @@ class PostgresStorage:
                 records = await conn.fetch(
                     """
                     select * from agent_context_docs where tenant_id = $1 and kind = $2
-                    order by created_at desc
+                    order by created_at desc, version desc
                     """,
                     tenant_id,
                     kind,
                 )
             else:
                 records = await conn.fetch(
-                    "select * from agent_context_docs where tenant_id = $1 order by created_at desc",
+                    "select * from agent_context_docs where tenant_id = $1 order by created_at desc, version desc",
                     tenant_id,
                 )
         return [_row(r) for r in records]
@@ -1154,7 +1236,9 @@ class PostgresStorage:
                 since,
             )
 
-    async def last_contact_with_company(self, tenant_id: str, foretagsnyckel: str):
+    async def last_contact_with_company(
+        self, tenant_id: str, foretagsnyckel: str, *, utom_trad: str | None = None
+    ):
         if not foretagsnyckel:
             return None
         async with self._scoped(tenant_id) as conn:
@@ -1171,9 +1255,43 @@ class PostgresStorage:
                    and m.direction = 'outbound'
                    and m.sent_at is not null
                    and p.foretagsnyckel = $2
+                   -- Leadets egen tråd räknas inte (uppföljning, svarsutkast).
+                   and ($3::uuid is null or m.thread_id <> $3::uuid)
                 """,
                 tenant_id,
                 foretagsnyckel,
+                utom_trad,
+            )
+
+    async def get_send_queue_item(self, tenant_id: str, item_id: str) -> dict[str, Any] | None:
+        async with self._scoped(tenant_id) as conn:
+            record = await conn.fetchrow(
+                "select * from send_queue where tenant_id = $1 and id = $2", tenant_id, item_id
+            )
+        return _avkoda_jsonb(_row(record), "gate_checks") if record else None
+
+    async def senaste_ko_for_trad(self, tenant_id: str, thread_id: str) -> dict[str, Any] | None:
+        async with self._scoped(tenant_id) as conn:
+            record = await conn.fetchrow(
+                """
+                select * from send_queue where tenant_id = $1 and thread_id = $2
+                order by scheduled_at desc limit 1
+                """,
+                tenant_id,
+                thread_id,
+            )
+        return _avkoda_jsonb(_row(record), "gate_checks") if record else None
+
+    async def update_outreach_message_text(
+        self, tenant_id: str, message_id: str, *, subject: str, body: str
+    ) -> None:
+        async with self._scoped(tenant_id) as conn:
+            await conn.execute(
+                """
+                update outreach_messages set subject = $3, body = $4
+                 where tenant_id = $1 and id = $2 and sent_at is null
+                """,
+                tenant_id, message_id, subject, body,
             )
 
     async def get_pending_outreach_message(
@@ -1183,8 +1301,9 @@ class PostgresStorage:
             record = await conn.fetchrow(
                 """
                 select * from outreach_messages
-                where tenant_id = $1 and thread_id = $2 and direction = 'outbound' and sent_at is null
-                order by id limit 1
+                where tenant_id = $1 and thread_id = $2 and direction = 'outbound'
+                  and sent_at is null and kasserad_at is null
+                order by created_at desc, id desc limit 1
                 """,
                 tenant_id,
                 thread_id,
@@ -1210,6 +1329,7 @@ class PostgresStorage:
         humanizer_variant: str,
         scheduled_at,
         status: str = "queued",
+        gate_checks: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         async with self._scoped(tenant_id) as conn:
             message = await conn.fetchrow(
@@ -1228,15 +1348,90 @@ class PostgresStorage:
             queue_item = await conn.fetchrow(
                 """
                 insert into send_queue (tenant_id, thread_id, scheduled_at, status, gate_checks)
-                values ($1, $2, $3, $4, '{}'::jsonb)
+                values ($1, $2, $3, $4, $5::jsonb)
                 returning *
                 """,
                 tenant_id,
                 thread_id,
                 scheduled_at,
                 status,
+                json.dumps(gate_checks or {}, ensure_ascii=False),
             )
         return {"message": _row(message), "queue_item": _row(queue_item)}
+
+    async def tilldela_erbjudande(self, tenant_id: str, thread_id: str, *, nyckel: str) -> str:
+        async with self._scoped(tenant_id) as conn:
+            # offers saknar unique(tenant_id, name) (010) och en migration för
+            # det är inte värd det: två samtidiga utkast kan i värsta fall ge
+            # två rader med samma namn, och utfallet grupperas på namnet.
+            offer_id = await conn.fetchval(
+                """
+                with befintlig as (
+                  select id from offers where tenant_id = $1 and name = $2
+                  order by created_at limit 1
+                ), ny as (
+                  insert into offers (tenant_id, name)
+                  select $1, $2 where not exists (select 1 from befintlig)
+                  returning id
+                )
+                select id from befintlig union all select id from ny limit 1
+                """,
+                tenant_id,
+                nyckel,
+            )
+            await conn.execute(
+                "update outreach_threads set offer_id = $3 where tenant_id = $1 and id = $2",
+                tenant_id,
+                thread_id,
+                offer_id,
+            )
+        return str(offer_id)
+
+    async def erbjudande_utfall(self, tenant_id: str) -> list[dict[str, Any]]:
+        # Härledningen står i base.py. Statuslistan speglar memory.SVARSSTATUS.
+        async with self._scoped(tenant_id) as conn:
+            records = await conn.fetch(
+                """
+                with tradar as (
+                  select o.name as nyckel,
+                    exists (select 1 from outreach_messages m
+                            where m.tenant_id = t.tenant_id and m.thread_id = t.id
+                              and m.direction = 'outbound') as utkast,
+                    exists (select 1 from outreach_messages m
+                            where m.tenant_id = t.tenant_id and m.thread_id = t.id
+                              and m.direction = 'outbound' and m.sent_at is not null) as skickat,
+                    exists (select 1 from prospect_status_logg l
+                            where l.tenant_id = t.tenant_id and l.prospect_id = t.prospect_id
+                              and l.created_at >= t.created_at and l.kalla = 'kod'
+                              and l.till in ('replied', 'meeting', 'lost', 'suppressed')) as svar,
+                    exists (select 1 from prospect_status_logg l
+                            where l.tenant_id = t.tenant_id and l.prospect_id = t.prospect_id
+                              and l.created_at >= t.created_at and l.kalla = 'kod'
+                              and l.till = 'meeting') as positivt,
+                    (exists (select 1 from lead_samtal s
+                             where s.tenant_id = t.tenant_id and s.prospect_id = t.prospect_id
+                               and s.utfall = 'mote')
+                     or exists (select 1 from prospect_status_logg l
+                                where l.tenant_id = t.tenant_id and l.prospect_id = t.prospect_id
+                                  and l.created_at >= t.created_at
+                                  and (l.till = 'won' or (l.till = 'meeting' and l.kalla = 'manuell')))
+                    ) as mote
+                  from outreach_threads t
+                  join offers o on o.id = t.offer_id
+                  where t.tenant_id = $1
+                )
+                select nyckel,
+                       count(*) filter (where utkast) as utkast,
+                       count(*) filter (where skickat) as skickade,
+                       count(*) filter (where skickat and svar) as svar,
+                       count(*) filter (where skickat and positivt) as positiva,
+                       count(*) filter (where skickat and mote) as moten
+                from tradar
+                group by nyckel
+                """,
+                tenant_id,
+            )
+        return [_row(r) for r in records]
 
     async def find_outreach_thread(
         self, tenant_id: str, *, prospect_id: str
@@ -1310,16 +1505,24 @@ class PostgresStorage:
                        p.company_name,
                        p.contact_email,
                        p.origin,
-                       count(m.id) filter (
+                       p.status as prospect_status,
+                       p.arkiverad_at,
+                       -- distinct: joinen mot send_queue multiplicerar
+                       -- meddelanderaderna (två köposter = varje mejl två gånger).
+                       count(distinct m.id) filter (
                          where m.direction = 'outbound' and m.sent_at is not null
                        ) as outbound_sent_count,
+                       min(m.sent_at) filter (
+                         where m.direction = 'outbound'
+                       ) as first_outbound_sent_at,
                        max(m.sent_at) filter (
                          where m.direction = 'outbound'
                        ) as last_outbound_sent_at,
-                       (count(m.id) filter (
+                       (count(distinct m.id) filter (
                           where m.direction = 'outbound' and m.sent_at is null
+                            and m.kasserad_at is null
                         ) > 0
-                        or count(q.id) filter (
+                        or count(distinct q.id) filter (
                           where q.status in ('queued', 'awaiting_review')
                         ) > 0) as has_pending_item
                 from outreach_threads t
@@ -1327,7 +1530,7 @@ class PostgresStorage:
                 left join outreach_messages m on m.thread_id = t.id
                 left join send_queue q on q.thread_id = t.id
                 where t.tenant_id = $1
-                group by t.id, p.company_name, p.contact_email, p.origin
+                group by t.id, p.company_name, p.contact_email, p.origin, p.status, p.arkiverad_at
                 """,
                 tenant_id,
             )
@@ -1344,7 +1547,32 @@ class PostgresStorage:
                 tenant_id,
                 thread_id,
             )
+            # Utkastet bakom en inställd post skickas aldrig: kasserat, så att
+            # det inte väljs som väntande text eller spärrar uppföljningar (107).
+            await conn.execute(
+                """
+                update outreach_messages set kasserad_at = now()
+                where tenant_id = $1 and thread_id = $2 and direction = 'outbound'
+                  and sent_at is null and kasserad_at is null
+                """,
+                tenant_id,
+                thread_id,
+            )
         return int(resultat.split()[-1])
+
+    async def list_pending_sends(self, tenant_id: str, thread_id: str) -> list[dict[str, Any]]:
+        async with self._scoped(tenant_id) as conn:
+            records = await conn.fetch(
+                """
+                select * from send_queue
+                where tenant_id = $1 and thread_id = $2
+                  and status in ('queued', 'awaiting_review')
+                order by created_at, scheduled_at
+                """,
+                tenant_id,
+                thread_id,
+            )
+        return [_avkoda_jsonb(_row(r), "gate_checks") for r in records]
 
     async def reschedule_pending_sends(
         self, tenant_id: str, thread_id: str, *, until
@@ -1360,6 +1588,61 @@ class PostgresStorage:
                 until,
             )
         return int(resultat.split()[-1])
+
+    async def utkast_lagen(
+        self, tenant_id: str, *, med_text: bool = False, prospect_id: str | None = None
+    ) -> dict[str, dict[str, Any]]:
+        # Texten bara på begäran: listan över alla leads ska inte bära 500
+        # mejlkroppar. Väntande meddelande först (osänt, icke-kasserat),
+        # därefter det senaste; created_at kom med 107, och äldre rader har
+        # samma värde — sent_at och id bryter den oavgjorda ordningen.
+        text_kolumner = ", m.id as message_id, m.subject, m.body" if med_text else ""
+        text_join = (
+            """
+              left join lateral (
+                select om.id, om.subject, om.body from outreach_messages om
+                 where om.thread_id = t.id and om.direction = 'outbound'
+                 order by (om.sent_at is null and om.kasserad_at is null) desc,
+                          om.created_at desc, om.sent_at desc nulls last, om.id desc
+                 limit 1
+              ) m on true
+            """
+            if med_text
+            else ""
+        )
+        async with self._scoped(tenant_id) as conn:
+            records = await conn.fetch(
+                f"""
+                select distinct on (t.prospect_id)
+                       t.prospect_id, t.id as thread_id,
+                       s.skickat_at, coalesce(s.antal_skickade, 0) as antal_skickade,
+                       coalesce(s.antal_osanda, 0) as antal_osanda,
+                       q.id as queue_item_id, q.status as ko_status, q.gate_checks, q.scheduled_at
+                       {text_kolumner}
+                  from outreach_threads t
+                  left join lateral (
+                    select max(om.sent_at) as skickat_at,
+                           (count(*) filter (where om.sent_at is not null))::int as antal_skickade,
+                           (count(*) filter (where om.sent_at is null and om.kasserad_at is null))::int as antal_osanda
+                      from outreach_messages om
+                     where om.thread_id = t.id and om.direction = 'outbound'
+                  ) s on true
+                  left join lateral (
+                    select sq.id, sq.status, sq.gate_checks, sq.scheduled_at
+                      from send_queue sq
+                     where sq.thread_id = t.id
+                     order by sq.created_at desc, sq.scheduled_at desc
+                     limit 1
+                  ) q on true
+                  {text_join}
+                 where t.tenant_id = $1
+                   and ($2::uuid is null or t.prospect_id = $2::uuid)
+                 order by t.prospect_id, t.created_at
+                """,
+                tenant_id,
+                prospect_id,
+            )
+        return {str(r["prospect_id"]): _avkoda_jsonb(_row(r), "gate_checks") for r in records}
 
     # -- Agentens föreslagna lärdomar (migration 051) -----------------------
 
@@ -1622,6 +1905,20 @@ class PostgresStorage:
         platshallare = ", ".join(f"${i}" for i in range(6, 6 + len(extra)))
 
         async with self._scoped(tenant_id) as conn:
+            if origin not in ("example", "test"):
+                # Ett bolag, ett prospekt (Antons krav 2026-10-08): finns bolaget
+                # redan returneras det befintliga. Låset per kund gör att två
+                # samtidiga körningar inte båda hinner se "finns inte".
+                # ponytail: läser kundens riktiga prospekt varje gång; en
+                # nyckelkolumn med unikt index när en kund har tiotusentals.
+                await conn.execute("select pg_advisory_xact_lock(hashtext($1))", f"prospekt:{tenant_id}")
+                for rad in await conn.fetch(
+                    """select * from prospects where tenant_id = $1
+                       and coalesce(origin, '') not in ('example', 'test')""",
+                    tenant_id,
+                ):
+                    if upptagna.samma_bolag(dict(rad), company_name, extra.get("orgnr")):
+                        return {**_avkoda_prospekt(_row(rad)), "fanns_redan": True}
             try:
                 record = await conn.fetchrow(
                     f"""
@@ -1680,7 +1977,7 @@ class PostgresStorage:
             )
         return _avkoda_prospekt(_row(record))
 
-    async def list_prospects(self, tenant_id: str, *, limit: int = 100) -> list[dict[str, Any]]:
+    async def list_prospects(self, tenant_id: str, *, limit: int = 500) -> list[dict[str, Any]]:
         async with self._scoped(tenant_id) as conn:
             records = await conn.fetch(
                 "select * from prospects where tenant_id = $1 order by created_at desc limit $2",
@@ -1688,6 +1985,53 @@ class PostgresStorage:
                 limit,
             )
         return [_avkoda_prospekt(_row(r)) for r in records]
+
+    async def arkivera_prospekt(
+        self, tenant_id: str, prospect_ids: list[str], *, arkivera: bool
+    ) -> list[str]:
+        async with self._scoped(tenant_id) as conn:
+            records = await conn.fetch(
+                """
+                update prospects
+                   set arkiverad_at = case when $3 then coalesce(arkiverad_at, now()) else null end
+                 where tenant_id = $1 and id = any($2::uuid[])
+                returning id
+                """,
+                tenant_id,
+                list(prospect_ids),
+                arkivera,
+            )
+        return [str(r["id"]) for r in records]
+
+    async def radera_prospekt(self, tenant_id: str, prospect_ids: list[str]) -> dict[str, list[str]]:
+        async with self._scoped(tenant_id) as conn:
+            # Kontrollen och raderingen i SAMMA transaktion (_scoped): ett
+            # utskick som hinner gå mellan dem ska inte ge ett raderat lead
+            # med en skickad tråd. Barnraderna följer med via on delete
+            # cascade (010, 086, 107); agent_runs.prospect_id blir null (025).
+            kontaktade = await conn.fetch(
+                """
+                select distinct t.prospect_id
+                  from outreach_threads t
+                  join outreach_messages m on m.thread_id = t.id
+                 where t.tenant_id = $1 and t.prospect_id = any($2::uuid[])
+                   and m.direction = 'outbound' and m.sent_at is not null
+                """,
+                tenant_id,
+                list(prospect_ids),
+            )
+            spärrade = [str(r["prospect_id"]) for r in kontaktade]
+            raderade = await conn.fetch(
+                """
+                delete from prospects
+                 where tenant_id = $1 and id = any($2::uuid[]) and not (id = any($3::uuid[]))
+                returning id
+                """,
+                tenant_id,
+                list(prospect_ids),
+                spärrade,
+            )
+        return {"raderade": [str(r["id"]) for r in raderade], "kontaktade": sorted(spärrade)}
 
     async def update_prospect(
         self,
@@ -1778,6 +2122,44 @@ class PostgresStorage:
                 text,
             )
         return _row(record)
+
+    async def add_lead_samtal(
+        self,
+        tenant_id: str,
+        *,
+        prospect_id: str,
+        utfall: str,
+        aterkom_datum: str | None,
+        anteckning: str | None,
+    ) -> dict[str, Any]:
+        async with self._scoped(tenant_id) as conn:
+            record = await conn.fetchrow(
+                """
+                insert into lead_samtal (tenant_id, prospect_id, utfall, aterkom_datum, anteckning)
+                values ($1, $2, $3, $4, $5) returning *
+                """,
+                tenant_id,
+                prospect_id,
+                utfall,
+                date.fromisoformat(aterkom_datum) if aterkom_datum else None,
+                anteckning,
+            )
+        return _row(record)
+
+    async def list_lead_samtal(
+        self, tenant_id: str, *, prospect_id: str | None = None
+    ) -> list[dict[str, Any]]:
+        async with self._scoped(tenant_id) as conn:
+            records = await conn.fetch(
+                """
+                select * from lead_samtal
+                where tenant_id = $1 and ($2::uuid is null or prospect_id = $2::uuid)
+                order by created_at, id
+                """,
+                tenant_id,
+                prospect_id,
+            )
+        return [_row(r) for r in records]
 
     async def list_lead_notes(self, tenant_id: str, prospect_id: str) -> list[dict[str, Any]]:
         async with self._scoped(tenant_id) as conn:
@@ -1905,14 +2287,14 @@ class PostgresStorage:
         self, tenant_id: str, prospect_id: str, *, bedomning: dict[str, Any]
     ) -> dict[str, Any] | None:
         fields = {f: bedomning[f] for f in BEDOMNINGSFALT if bedomning.get(f) is not None}
-        for falt in ("score_breakdown", "jev", "signaler"):
+        for falt in ("score_breakdown", "jev", "signaler", "webbrevision"):
             if falt in fields:
                 fields[falt] = json.dumps(fields[falt], ensure_ascii=False)
         if not fields:
             return await self.get_prospect(tenant_id, prospect_id)
         # Kolumnnamnen kommer ur BEDOMNINGSFALT, aldrig ur anroparen.
         assignments = ", ".join(
-            f"{name} = ${index}" + ("::jsonb" if name in ("score_breakdown", "jev", "signaler") else "")
+            f"{name} = ${index}" + ("::jsonb" if name in ("score_breakdown", "jev", "signaler", "webbrevision") else "")
             for index, name in enumerate(fields, start=3)
         )
         async with self._scoped(tenant_id) as conn:
@@ -1974,14 +2356,34 @@ class PostgresStorage:
         is_test: bool = False,
         # Migration 055. Se base.py:s docstring för värdemängden.
         model: str | None = None,
+        prompt_lager: dict[str, str] | None = None,
+        prospect_id: str | None = None,
     ) -> dict[str, Any]:
+        if prompt_lager:
+            # Egen anslutning och egen transaktion, FÖRE körningen: ett fel här
+            # (tabellen saknas därför att migration 101 inte körts) hade annars
+            # avbrutit transaktionen och tagit körningsraden med sig. Lagren
+            # är visningens råvara; körningen är revisionsloggen.
+            try:
+                async with self.pool.acquire() as conn:
+                    await conn.execute(
+                        """
+                        insert into prompt_lager (hash, text)
+                        select * from unnest($1::text[], $2::text[])
+                        on conflict (hash) do nothing
+                        """,
+                        list(prompt_lager.keys()),
+                        list(prompt_lager.values()),
+                    )
+            except Exception:  # noqa: BLE001 — se kommentaren ovan
+                logger.exception("Kunde inte spara promptlagren (migration 101 körd?).")
         async with self._scoped(tenant_id) as conn:
             record = await conn.fetchrow(
                 """
                 insert into agent_runs
                   (tenant_id, agent_type, pack_version, skills_used, input, output,
-                   step_log, tokens_in, tokens_out, latency_ms, is_test, model)
-                values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+                   step_log, tokens_in, tokens_out, latency_ms, is_test, prospect_id, model)
+                values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
                 returning *
                 """,
                 tenant_id,
@@ -1995,9 +2397,19 @@ class PostgresStorage:
                 tokens_out,
                 latency_ms,
                 is_test,
+                prospect_id,
                 model,
             )
         return _row(record)
+
+    async def get_prompt_lager(self, hashar: list[str]) -> dict[str, str]:
+        if not hashar:
+            return {}
+        async with self.pool.acquire() as conn:
+            records = await conn.fetch(
+                "select hash, text from prompt_lager where hash = any($1::text[])", list(hashar)
+            )
+        return {r["hash"]: r["text"] for r in records}
 
     async def list_agent_runs(
         self, tenant_id: str, *, agent_type: str | None = None, limit: int = 50
@@ -2052,7 +2464,14 @@ class PostgresStorage:
                 values ($1, $2, $3, $4, $5, $6::jsonb, $7, coalesce($8, false))
                 on conflict (job_id) do update set
                   status = excluded.status,
-                  korning = coalesce(excluded.korning, leads_job_ledger.korning),
+                  -- `styrning` (paus/avbrott) ägs av set_korning_styrning:
+                  -- motorns helskrivning av tillståndet får aldrig skriva över den.
+                  korning = case when excluded.korning is null then leads_job_ledger.korning
+                    else (excluded.korning - 'styrning')
+                         || case when leads_job_ledger.korning ? 'styrning'
+                              then jsonb_build_object('styrning', leads_job_ledger.korning -> 'styrning')
+                              else '{}'::jsonb end
+                  end,
                   error = coalesce(excluded.error, leads_job_ledger.error),
                   is_test = coalesce($8, leads_job_ledger.is_test),
                   updated_at = now(),
@@ -2086,12 +2505,60 @@ class PostgresStorage:
          where tenant_id = $1 and scope in ('batch', 'lista')
     """
 
+    async def list_prospekt_i_research(self, tenant_id: str) -> set[str]:
+        async with self._scoped(tenant_id) as conn:
+            records = await conn.fetch(
+                """
+                select distinct prospect_id from leads_job_ledger
+                 where tenant_id = $1 and prospect_id is not null
+                   and status in ('queued', 'processing')
+                   and scope in ('research', 'research_and_draft')
+                """,
+                tenant_id,
+            )
+        return {str(r["prospect_id"]) for r in records}
+
     async def list_leads_korningar(self, tenant_id: str, *, limit: int = 20) -> list[dict[str, Any]]:
         async with self._scoped(tenant_id) as conn:
             records = await conn.fetch(
                 self._KORNING_SQL + " order by created_at desc limit $2", tenant_id, limit
             )
         return [_avkoda_jsonb(_row(r), "korning") for r in records]
+
+    async def get_sidcache(self, tenant_id: str, url: str) -> dict[str, Any] | None:
+        async with self._scoped(tenant_id) as conn:
+            record = await conn.fetchrow(
+                "select innehall, fel, hamtad_at from leads_sidcache where tenant_id = $1 and url = $2",
+                tenant_id, url,
+            )
+        return _row(record) if record else None
+
+    async def put_sidcache(self, tenant_id: str, url: str, *, innehall: str | None, fel: str | None) -> None:
+        async with self._scoped(tenant_id) as conn:
+            await conn.execute(
+                """
+                insert into leads_sidcache (tenant_id, url, innehall, fel, hamtad_at)
+                values ($1, $2, $3, $4, now())
+                on conflict (tenant_id, url) do update
+                  set innehall = excluded.innehall, fel = excluded.fel, hamtad_at = now()
+                """,
+                tenant_id, url, innehall, (fel or "")[:500] or None,
+            )
+
+    async def set_korning_styrning(self, tenant_id: str, job_id: str, styrning: str | None) -> bool:
+        async with self._scoped(tenant_id) as conn:
+            # coalesce: to_jsonb(null) är SQL-null, och jsonb_set med null nollar hela tillståndet.
+            return bool(await conn.fetchval(
+                """
+                update leads_job_ledger
+                   set korning = jsonb_set(korning, '{styrning}', coalesce(to_jsonb($3::text), 'null'::jsonb)),
+                       updated_at = now()
+                 where job_id = $1 and tenant_id = $2 and scope = 'batch' and status = 'processing'
+                   and korning is not null and not coalesce((korning ->> 'klar')::boolean, false)
+                returning true
+                """,
+                job_id, tenant_id, styrning,
+            ))
 
     async def get_leads_korning(self, tenant_id: str, job_id: str) -> dict[str, Any] | None:
         async with self._scoped(tenant_id) as conn:
@@ -2158,7 +2625,7 @@ class PostgresStorage:
                 """
                 select l.*, count(i.id)::int as item_count
                 from lead_lists l
-                left join lead_list_items i on i.list_id = l.id
+                left join lead_list_items i on i.list_id = l.id and coalesce(i.signal, '') <> 'flyttad'
                 where l.tenant_id = $1
                 group by l.id
                 order by l.created_at desc
@@ -2169,6 +2636,19 @@ class PostgresStorage:
             )
         return [_avkoda_jsonb(_row(r), "icp") for r in records]
 
+    async def saljlista_fyll_pa(self, tenant_id: str, rader: list[dict[str, Any]]) -> int:
+        """Via 105:ans security definer-funktion: säljlistan ägs av webben
+        (RLS för snajp_web) och funktionen är motorns enda väg in."""
+        if not rader:
+            return 0
+        async with self._scoped(tenant_id) as conn:
+            varde = await conn.fetchval(
+                "select public.saljlista_fyll_pa($1::uuid, $2::jsonb)",
+                tenant_id,
+                json.dumps(rader, ensure_ascii=False),
+            )
+        return int(varde or 0)
+
     async def get_lead_list(self, tenant_id: str, list_id: str) -> dict[str, Any] | None:
         async with self._scoped(tenant_id) as conn:
             record = await conn.fetchrow(
@@ -2176,7 +2656,23 @@ class PostgresStorage:
                 tenant_id,
                 list_id,
             )
-        return _avkoda_jsonb(_row(record), "icp") if record else None
+        return _avkoda_jsonb(_row(record), "icp", "processering") if record else None
+
+    async def satt_listprocessering(self, tenant_id: str, list_id: str, processering: dict[str, Any] | None) -> None:
+        async with self._scoped(tenant_id) as conn:
+            await conn.execute(
+                "update lead_lists set processering = $3::jsonb where tenant_id = $1 and id = $2",
+                tenant_id, list_id,
+                json.dumps(processering, ensure_ascii=False, default=str) if processering is not None else None,
+            )
+
+    async def listkopplade_prospekt(self, tenant_id: str) -> set[str]:
+        async with self._scoped(tenant_id) as conn:
+            records = await conn.fetch(
+                "select distinct prospect_id from lead_list_items where tenant_id = $1 and prospect_id is not null",
+                tenant_id,
+            )
+        return {str(r["prospect_id"]) for r in records}
 
     async def add_lead_list_item(
         self, tenant_id: str, *, list_id: str, **falt: Any
@@ -2188,8 +2684,9 @@ class PostgresStorage:
                   (list_id, tenant_id, item_typ, company_name, website, ort,
                    contact_name, contact_role, contact_email, contact_level,
                    source_name, source_url, signal, signal_detalj,
-                   contact_phone, orgnr)
-                values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+                   contact_phone, orgnr, lan, postnr, webbniva, webbrevision)
+                values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16,
+                        $17, $18, $19, $20::jsonb)
                 returning *
                 """,
                 list_id,
@@ -2208,16 +2705,76 @@ class PostgresStorage:
                 falt.get("signal_detalj"),
                 falt.get("contact_phone"),
                 falt.get("orgnr"),
+                falt.get("lan"),
+                falt.get("postnr"),
+                falt.get("webbniva"),
+                json.dumps(falt["webbrevision"]) if falt.get("webbrevision") is not None else None,
             )
-        return _row(record)
+        return _avkoda_jsonb(_row(record), "webbrevision")
 
-    async def list_lead_list_items(self, tenant_id: str, list_id: str) -> list[dict[str, Any]]:
+    async def list_lead_list_items(
+        self, tenant_id: str, list_id: str, *, med_flyttade: bool = False
+    ) -> list[dict[str, Any]]:
         async with self._scoped(tenant_id) as conn:
             records = await conn.fetch(
                 """select * from lead_list_items
-                   where list_id = $2 and tenant_id = $1 order by created_at""",
+                   where list_id = $2 and tenant_id = $1
+                     and ($3 or coalesce(signal, '') <> 'flyttad')
+                   order by created_at""",
                 tenant_id,
                 list_id,
+                med_flyttade,
+            )
+        return [_avkoda_jsonb(_row(r), "utkast", "webbrevision", "kallor") for r in records]
+
+    async def uppdatera_listrad(self, tenant_id: str, item_id: str, falt: dict[str, Any]) -> None:
+        from .base import LISTRAD_JSONB, LISTRAD_UPPDATERBARA
+
+        valda = {
+            k: (json.dumps(v, ensure_ascii=False, default=str) if k in LISTRAD_JSONB and v is not None else v)
+            for k, v in falt.items() if k in LISTRAD_UPPDATERBARA
+        }
+        if not valda:
+            return
+        satt = ", ".join(
+            f"{k} = ${i}" + ("::jsonb" if k in LISTRAD_JSONB else "") for i, k in enumerate(valda, start=3)
+        )
+        async with self._scoped(tenant_id) as conn:
+            await conn.execute(
+                f"update lead_list_items set {satt} where tenant_id = $1 and id = $2",
+                tenant_id,
+                item_id,
+                *valda.values(),
+            )
+
+    async def markera_listrad_flyttad(self, tenant_id: str, item_id: str, *, signal_detalj: str) -> None:
+        async with self._scoped(tenant_id) as conn:
+            await conn.execute(
+                """update lead_list_items set signal = 'flyttad', signal_detalj = $3
+                   where tenant_id = $1 and id = $2""",
+                tenant_id,
+                item_id,
+                signal_detalj,
+            )
+
+    async def spara_listutkast(
+        self, tenant_id: str, item_id: str, utkast: dict[str, Any] | None
+    ) -> None:
+        async with self._scoped(tenant_id) as conn:
+            await conn.execute(
+                "update lead_list_items set utkast = $3::jsonb where tenant_id = $1 and id = $2",
+                tenant_id,
+                item_id,
+                json.dumps(utkast, ensure_ascii=False) if utkast is not None else None,
+            )
+
+    async def lista_upptagna_bolag(self, tenant_id: str) -> list[dict[str, Any]]:
+        async with self._scoped(tenant_id) as conn:
+            records = await conn.fetch(
+                """select company_name, orgnr from prospects where tenant_id = $1
+                   union
+                   select company_name, orgnr from lead_list_items where tenant_id = $1""",
+                tenant_id,
             )
         return [_row(r) for r in records]
 
@@ -2234,6 +2791,17 @@ class PostgresStorage:
         except ValueError:
             return 0
 
+    async def delete_lead_list(self, tenant_id: str, list_id: str) -> bool:
+        async with self._scoped(tenant_id) as conn:
+            # Raderna följer med via on delete cascade (060); delete-grant på
+            # lead_lists finns sedan 060.
+            raderad = await conn.fetchval(
+                "delete from lead_lists where tenant_id = $1 and id = $2 returning id",
+                tenant_id,
+                list_id,
+            )
+        return raderad is not None
+
     async def stada_hangande_leadsjobb(
         self, tenant_id: str, *, aldre_an_minuter: int, utom: list[str] | None = None
     ) -> list[str]:
@@ -2245,7 +2813,10 @@ class PostgresStorage:
                   completed_at = now()
                 where tenant_id = $1
                   and status in ('queued', 'processing')
-                  and created_at < now() - make_interval(mins => $2)
+                  -- updated_at (080), inte created_at: en Iris-körning skriver
+                  -- liggaren efter varje steg och får leva längre än en timme.
+                  and updated_at < now() - make_interval(mins => $2)
+                  and coalesce(korning ->> 'styrning', '') <> 'paus'
                   and not (job_id = any($3::text[]))
                 returning job_id
                 """,
@@ -2365,6 +2936,94 @@ class PostgresStorage:
             for r in records
         ]
 
+    async def support_oversikt_underlag(
+        self, tenant_id: str, *, sedan: str, is_test: bool | None
+    ) -> dict[str, Any]:
+        # Se protokollet i base.py. kb_sources läses rått och avkodas i
+        # Python: en dubbelkodad jsonb-sträng hade gett jsonb_array_length
+        # ett fel i stället för ett tal.
+        from datetime import datetime as _dt
+
+        fran = _dt.fromisoformat(sedan)
+        async with self._scoped(tenant_id) as conn:
+            mejl = await conn.fetch(
+                """
+                select e.id, e.received_at, e.status,
+                       c.category, c.escalate, c.kb_sources,
+                       (select min(d.created_at) from ss_decision_log d
+                         where d.email_id = e.id
+                           and d.event in ('auto_sent', 'approved_and_sent')) as forsta_svar
+                  from ss_emails e
+                  left join lateral (
+                    select c.category, c.escalate, c.kb_sources
+                      from ss_classifications c
+                     where c.email_id = e.id
+                     order by c.created_at desc
+                     limit 1
+                  ) c on true
+                 where e.tenant_id = $1
+                   and e.received_at >= $2
+                   and e.status not in ('att_hantera', 'lead', 'ej_relaterat')
+                   and coalesce(e.klass, 'support') = 'support'
+                   and ($3::boolean is null or e.is_test = $3)
+                """,
+                tenant_id,
+                fran,
+                is_test,
+            )
+            korning = await conn.fetchrow(
+                """
+                select count(*) as antal,
+                       coalesce(sum(tokens_in), 0) as tokens_in,
+                       coalesce(sum(tokens_out), 0) as tokens_out,
+                       count(*) filter (where model = 'svarscache') as cache,
+                       mode() within group (order by model)
+                         filter (where model is not null and model <> 'svarscache') as modell
+                  from agent_runs
+                 where tenant_id = $1 and agent_type = 'support'
+                   and not is_test and created_at >= $2
+                """,
+                tenant_id,
+                fran,
+            )
+            kb = await conn.fetchval(
+                "select count(*) from ss_knowledge_base where tenant_id = $1",
+                tenant_id,
+            )
+
+        def _traffar(varde: Any) -> int | None:
+            if varde is None:
+                return None
+            if isinstance(varde, str):
+                try:
+                    varde = json.loads(varde)
+                except ValueError:
+                    return None
+            return len(varde) if isinstance(varde, list) else None
+
+        return {
+            "mejl": [
+                {
+                    "id": str(r["id"]),
+                    "received_at": r["received_at"].isoformat(),
+                    "status": r["status"],
+                    "category": r["category"],
+                    "escalate": r["escalate"],
+                    "kb_traffar": _traffar(r["kb_sources"]),
+                    "forsta_svar": r["forsta_svar"].isoformat() if r["forsta_svar"] else None,
+                }
+                for r in mejl
+            ],
+            "korningar": {
+                "antal": int(korning["antal"]),
+                "tokens_in": int(korning["tokens_in"]),
+                "tokens_out": int(korning["tokens_out"]),
+                "cache": int(korning["cache"]),
+                "modell": korning["modell"],
+            },
+            "kb_artiklar": int(kb or 0),
+        }
+
     async def weekly_analytics(self, tenant_id: str, *, weeks: int = 8) -> dict[str, Any]:
         # Se protokollet i base.py för varför `coverage` finns.
         #
@@ -2405,6 +3064,12 @@ class PostgresStorage:
                    where r.tenant_id = $1 and not r.is_test
                    group by 1
                 ),
+                nya as (
+                  select date_trunc('week', p.created_at) as vecka, count(*) as nya_leads
+                    from prospects p
+                   where p.tenant_id = $1 and coalesce(p.origin, '') not in ('example', 'test')
+                   group by 1
+                ),
                 arenden as (
                   select date_trunc('week', t.created_at) as vecka,
                          count(*)                                              as arenden,
@@ -2421,11 +3086,13 @@ class PostgresStorage:
                        coalesce(k.support_runs, 0)  as support_runs,
                        coalesce(a.arenden, 0)       as arenden,
                        coalesce(a.eskalerade, 0)    as eskalerade,
-                       coalesce(a.avslutade, 0)     as avslutade
+                       coalesce(a.avslutade, 0)     as avslutade,
+                       coalesce(n.nya_leads, 0)     as nya_leads
                   from veckor v
                   left join utskick   u on u.vecka = v.vecka
                   left join korningar k on k.vecka = v.vecka
                   left join arenden   a on a.vecka = v.vecka
+                  left join nya       n on n.vecka = v.vecka
                  order by v.vecka
                 """,
                 tenant_id,
@@ -2444,6 +3111,7 @@ class PostgresStorage:
                     "tickets": r["arenden"],
                     "escalated": r["eskalerade"],
                     "resolved": r["avslutade"],
+                    "new_leads": r["nya_leads"],
                 }
                 for r in records
             ],
@@ -2489,6 +3157,62 @@ class PostgresStorage:
                 ],
             )
         return len(rows) if result is None else len(rows)
+
+    # Webbpoolen (migration 108, INV-SEC-008): plattformstabeller utan
+    # tenant_id, som prompt_lager. AVSIKTLIGT ingen _scoped(): det finns inget
+    # kundsammanhang, och raderna bär bara bolagsnivå.
+
+    async def webbpool_hamta(self, domaner: list[str]) -> dict[str, dict[str, Any]]:
+        if not domaner:
+            return {}
+        async with self.pool.acquire() as conn:
+            records = await conn.fetch("select * from webbpool where doman = any($1::text[])", domaner)
+        return {r["doman"]: _avkoda_jsonb(_row(r), "webbrevision") for r in records}
+
+    async def webbpool_spara(self, rad: dict[str, Any]) -> None:
+        from ..leads.webbpool import POOLFALT
+
+        falt = ["doman", *(f for f in POOLFALT if f in rad)]
+        varden = [json.dumps(rad[f]) if f == "webbrevision" and rad[f] is not None else rad[f] for f in falt]
+        platser = ", ".join(f"${i + 1}" + ("::jsonb" if f == "webbrevision" else "") for i, f in enumerate(falt))
+        uppdatera = ", ".join([f"{f} = coalesce(excluded.{f}, webbpool.{f})" for f in falt[1:]] + ["sedd_at = now()"])
+        if "website" not in rad:
+            # Bara en bedömning på en befintlig rad. En upsert hade fallit:
+            # Postgres prövar NOT NULL (website) innan konflikten avgörs
+            # (livetestet mot development 2026-10-08).
+            satt = ", ".join([f"{f} = coalesce(${i + 2}{'::jsonb' if f == 'webbrevision' else ''}, {f})"
+                              for i, f in enumerate(falt[1:])] + ["sedd_at = now()"])
+            async with self.pool.acquire() as conn:
+                await conn.execute(f"update webbpool set {satt} where doman = $1", *varden)
+            return
+        async with self.pool.acquire() as conn:
+            await conn.execute(
+                f"insert into webbpool ({', '.join(falt)}) values ({platser}) "
+                f"on conflict (doman) do update set {uppdatera}",
+                *varden,
+            )
+
+    async def webbpool_ofordelade(
+        self, mottagare: str, *, lan: list[str], nivaer: list[str], limit: int = 200
+    ) -> list[dict[str, Any]]:
+        async with self.pool.acquire() as conn:
+            records = await conn.fetch(
+                """select w.* from webbpool w
+                   where w.lan = any($2::text[]) and w.webbniva = any($3::text[])
+                     and not exists (select 1 from webbpool_fordelad f
+                                     where f.doman = w.doman and f.mottagare = $1::uuid)
+                   order by w.bedomd_at nulls last limit $4""",
+                mottagare, lan, nivaer, limit,
+            )
+        return [_avkoda_jsonb(_row(r), "webbrevision") for r in records]
+
+    async def webbpool_markera_fordelad(self, mottagare: str, domaner: list[str], list_id: str | None) -> None:
+        async with self.pool.acquire() as conn:
+            await conn.executemany(
+                """insert into webbpool_fordelad (doman, mottagare, list_id) values ($1, $2::uuid, $3::uuid)
+                   on conflict do nothing""",
+                [(d, mottagare, list_id) for d in domaner],
+            )
 
     async def get_segment_ab_aggregate(self) -> list[dict[str, Any]]:
         # AVSIKTLIGT ingen _scoped(tenant_id) — den här funktionen har inget
@@ -2549,14 +3273,17 @@ class PostgresStorage:
         body_text: str,
         received_at: str | None = None,
         is_test: bool = False,
+        automatutskick: bool = False,
+        mailbox_id: str | None = None,
     ) -> dict[str, Any] | None:
         async with self._scoped(tenant_id) as conn:
             record = await conn.fetchrow(
                 """
                 insert into ss_emails
                   (tenant_id, provider, provider_message_id, from_email, from_name,
-                   subject, body_text, received_at, is_test)
-                values ($1, $2, $3, $4, $5, $6, $7, coalesce($8::timestamptz, now()), $9)
+                   subject, body_text, received_at, is_test, automatutskick, mailbox_id)
+                values ($1, $2, $3, $4, $5, $6, $7, coalesce($8::timestamptz, now()), $9, $10,
+                        $11::uuid)
                 on conflict (tenant_id, provider_message_id) do nothing
                 returning *
                 """,
@@ -2569,6 +3296,8 @@ class PostgresStorage:
                 body_text,
                 received_at,
                 is_test,
+                automatutskick,
+                mailbox_id,
             )
         return _row(record)
 
@@ -2937,7 +3666,19 @@ class PostgresStorage:
 
     async def validate_api_key(self, raw_key: str) -> dict[str, Any] | None:
         # Körs INNAN tenant är känd — utan tenant-kontext (se api_key_lookup-policyn).
+        #
+        # Körs på VARJE anrop. Uppslaget plus `last_used_at`-skrivningen var
+        # tre av ett enkelt anrops åtta frågor, och skrivningen tog radlås på
+        # samma nyckelrad: Att görans sju parallella anrop köade på varandra
+        # (uppmätt 2026-10-10). En giltig nyckel hålls därför i minnet i
+        # _NYCKEL_TTL_S — en spärrad nyckel eller avstängd tenant slutar alltså
+        # gälla inom 30 s, inte direkt — och last_used_at skrivs högst var
+        # femte minut. Ogiltiga nycklar cachas aldrig.
         key_hash = hashlib.sha256(raw_key.encode()).hexdigest()
+        nu = time.monotonic()
+        traff = self._nycklar.get(key_hash)
+        if traff and traff[1] > nu:
+            return dict(traff[0])
         async with self.pool.acquire() as conn:
             record = await conn.fetchrow(
                 """
@@ -2948,10 +3689,15 @@ class PostgresStorage:
                 key_hash,
             )
             if record and record["tenant_active"]:
-                await conn.execute(
-                    "update ss_api_keys set last_used_at = now() where id = $1", record["id"]
-                )
-                return _row(record)
+                senast = record["last_used_at"]
+                if senast is None or (time.time() - senast.timestamp()) > _SENAST_ANVAND_S:
+                    await conn.execute(
+                        "update ss_api_keys set last_used_at = now() where id = $1", record["id"]
+                    )
+                rad = _row(record)
+                self._nycklar[key_hash] = (rad, nu + _NYCKEL_TTL_S)
+                return dict(rad)
+        self._nycklar.pop(key_hash, None)
         return None
 
     async def create_api_key(
@@ -2993,6 +3739,29 @@ class PostgresStorage:
             )
         return [_row(r) for r in records]
 
+    async def list_skickade(self, tenant_id: str, *, limit: int = 200) -> list[dict[str, Any]]:
+        limit = max(1, min(limit, 500))
+        async with self._scoped(tenant_id) as conn:
+            records = await conn.fetch(
+                """
+                select m.id, m.subject, m.body, m.sent_at, m.thread_id,
+                       t.last_inbound_at,
+                       p.id as prospect_id, p.company_name, p.contact_name,
+                       p.contact_email as prospect_email, p.status
+                  from outreach_messages m
+                  join outreach_threads t on t.id = m.thread_id and t.tenant_id = m.tenant_id
+                  left join prospects p on p.id = t.prospect_id and p.tenant_id = m.tenant_id
+                 where m.tenant_id = $1
+                   and m.direction = 'outbound'
+                   and m.sent_at is not null
+                 order by m.sent_at desc
+                 limit $2
+                """,
+                tenant_id,
+                limit,
+            )
+        return [_row(r) for r in records]
+
     async def list_outreach_messages(
         self, tenant_id: str, thread_id: str
     ) -> list[dict[str, Any]]:
@@ -3001,7 +3770,10 @@ class PostgresStorage:
                 """
                 select * from outreach_messages
                 where tenant_id = $1 and thread_id = $2
-                order by id
+                -- created_at (107), inte id: id är ett slumpmässigt uuid, och
+                -- "senaste meddelandet" var därför slumpen. Rader från före
+                -- 107 har samma created_at; sent_at ordnar dem.
+                order by created_at, sent_at nulls last, id
                 """,
                 tenant_id,
                 thread_id,
@@ -3044,12 +3816,19 @@ class PostgresStorage:
 
     # -- Instruktionslagret (migration 049) ---------------------------------
 
-    async def get_global_instructions(self) -> dict[str, Any] | None:
+    async def get_global_instructions(self, agent_type: str = "alla") -> dict[str, Any] | None:
         # Ingen tenant-scoping: tabellen är plattformens och har ingen
         # tenant_id. Vägen hit går bara via master-nyckeln (api/deps.py).
         async with self.pool.acquire() as conn:
             record = await conn.fetchrow(
-                "select * from agent_global_instructions where aktiv"
+                "select * from agent_global_instructions where aktiv and agent_type = $1", agent_type
+            )
+        return _row(record)
+
+    async def get_global_instruction(self, instruktion_id: str) -> dict[str, Any] | None:
+        async with self.pool.acquire() as conn:
+            record = await conn.fetchrow(
+                "select * from agent_global_instructions where id = $1::uuid", instruktion_id
             )
         return _row(record)
 
@@ -3060,6 +3839,8 @@ class PostgresStorage:
         strukturerad_md: str,
         kalla: str = "ai",
         uppdaterad_av: str | None = None,
+        agent_type: str = "alla",
+        feedback: str = "",
     ) -> dict[str, Any]:
         async with self.pool.acquire() as conn:
             # EN transaktion. Det partiella unika indexet tillåter exakt en
@@ -3068,35 +3849,43 @@ class PostgresStorage:
             # faller tyst tillbaka på filen som om ingen instruktion fanns.
             async with conn.transaction():
                 await conn.execute(
-                    "update agent_global_instructions set aktiv = false where aktiv"
+                    "update agent_global_instructions set aktiv = false where aktiv and agent_type = $1",
+                    agent_type,
                 )
                 record = await conn.fetchrow(
                     """
                     insert into agent_global_instructions
-                        (ravtext, strukturerad_md, kalla, uppdaterad_av, aktiv)
-                    values ($1, $2, $3, $4, true)
+                        (ravtext, strukturerad_md, kalla, uppdaterad_av, aktiv, agent_type, feedback)
+                    values ($1, $2, $3, $4, true, $5, $6)
                     returning *
                     """,
                     ravtext,
                     strukturerad_md,
                     kalla,
                     uppdaterad_av,
+                    agent_type,
+                    feedback,
                 )
         return _row(record)
 
-    async def list_global_instructions(self, *, limit: int = 20) -> list[dict[str, Any]]:
+    async def list_global_instructions(
+        self, *, limit: int = 20, agent_type: str = "alla", med_text: bool = False
+    ) -> list[dict[str, Any]]:
         limit = max(1, min(limit, 200))
+        text_kolumner = ", strukturerad_md, feedback" if med_text else ""
         async with self.pool.acquire() as conn:
             records = await conn.fetch(
-                """
-                select id, kalla, aktiv, uppdaterad_av, created_at,
+                f"""
+                select id, agent_type, kalla, aktiv, uppdaterad_av, created_at,
                        length(ravtext) as ravtext_tecken,
-                       length(strukturerad_md) as strukturerad_tecken
+                       length(strukturerad_md) as strukturerad_tecken{text_kolumner}
                 from agent_global_instructions
+                where agent_type = $2
                 order by created_at desc
                 limit $1
                 """,
                 limit,
+                agent_type,
             )
         return [_row(r) for r in records]
 
@@ -3164,17 +3953,22 @@ class PostgresStorage:
             records = await conn.fetch(
                 """
                 select q.*, m.subject, m.body, m.id as message_id,
-                       p.contact_email as prospect_email, p.company_name
+                       p.contact_email as prospect_email, p.company_name,
+                       -- Kontexten AI-knapparna (Förbättra, Personalisera …)
+                       -- skriver om utifrån: vem mejlet går till och läget hos bolaget.
+                       p.id as prospect_id, p.contact_name, p.contact_role, p.website,
+                       p.lagesbeskrivning, p.signaler
                 from send_queue q
                 join outreach_threads t on t.id = q.thread_id
                 left join prospects p on p.id = t.prospect_id
                 left join lateral (
-                  -- order by id, inte created_at: outreach_messages HAR ingen
-                  -- created_at (migration 010). Samma sortering som
-                  -- get_pending_outreach_message redan använder.
+                  -- Samma val som get_pending_outreach_message: det senaste
+                  -- osända, icke-kasserade utkastet (107). Granskaren ser
+                  -- alltså exakt den text som skickas.
                   select * from outreach_messages om
-                  where om.thread_id = q.thread_id and om.sent_at is null
-                  order by om.id limit 1
+                  where om.thread_id = q.thread_id and om.direction = 'outbound'
+                    and om.sent_at is null and om.kasserad_at is null
+                  order by om.created_at desc, om.id desc limit 1
                 ) m on true
                 where q.tenant_id = $1 and q.status = 'awaiting_review'
                 order by q.scheduled_at
@@ -3242,7 +4036,15 @@ class PostgresStorage:
             finns = await conn.fetchval("select to_regclass('public.mirror_meta') is not null")
             if not finns:
                 return None
-            rad = await conn.fetchrow("select environment, seeded_at from public.mirror_meta limit 1")
+            # lage/synkad_at sätts av scripts/railway_synk.py (tvåvägssynken).
+            har_lage = await conn.fetchval(
+                "select exists (select 1 from information_schema.columns "
+                "where table_schema = 'public' and table_name = 'mirror_meta' and column_name = 'lage')"
+            )
+            rad = await conn.fetchrow(
+                "select environment, seeded_at" + (", lage, synkad_at" if har_lage else "")
+                + " from public.mirror_meta limit 1"
+            )
         return _row(rad) if rad else None
 
     async def logga_flytt(self, tenant_id: str, *, typ: str, ref_id: str, resultat: str) -> None:
@@ -3360,22 +4162,39 @@ class PostgresStorage:
         tenant_id: str | None = None,
         agent_type: str | None = None,
         limit: int = 50,
+        prospect_id: str | None = None,
+        sammandrag: bool = False,
     ) -> list[dict[str, Any]]:
+        # Sammandraget läser inte input/output/step_log alls: 200 leadskörningar
+        # var 17 MB JSON som avkodades i händelseloopen för en tabell som visar
+        # tokens och latens. Bokföringens delning (underlag/frågor) behöver bara
+        # veta OM chattsteget finns i loggen — det avgörs i databasen.
+        kolumner = (
+            "r.id, r.tenant_id, r.agent_type, r.pack_version, r.tokens_in, r.tokens_out, "
+            "r.latency_ms, r.is_test, r.prospect_id, r.created_at, "
+            "coalesce(r.step_log::text like '%bokforing-chatt%', false) as bokforingschatt"
+            if sammandrag
+            else "r.*"
+        )
         async with self.pool.acquire() as conn:
             records = await conn.fetch(
-                """
-                select r.*, t.slug as tenant_slug, t.name as tenant_name
+                f"""
+                select {kolumner}, t.slug as tenant_slug, t.name as tenant_name
                 from agent_runs r
                 join ss_tenants t on t.id = r.tenant_id
                 where ($1::uuid is null or r.tenant_id = $1)
                   and ($2::text is null or r.agent_type = $2)
+                  and ($4::uuid is null or r.prospect_id = $4)
                 order by r.created_at desc
                 limit $3
                 """,
                 tenant_id,
                 agent_type,
                 limit,
+                prospect_id,
             )
+        if sammandrag:
+            return [_row(r) for r in records]
         return [_avkoda_jsonb(_row(r), "step_log", "grounding") for r in records]
 
     async def get_agent_run(self, run_id: str) -> dict[str, Any] | None:
@@ -3593,20 +4412,24 @@ class PostgresStorage:
         mejl_avsandare: str | None = None,
         valuta: str = "SEK",
         belopp_original: str | None = None,
+        granskning: dict[str, Any] | None = None,
+        granskningsstatus: str | None = None,
     ) -> dict[str, Any]:
         kontrollera_bk_status(status)
         kontrollera_bk_riktning(riktning)
         kontrollera_bk_betalstatus(betalstatus)
         kontrollera_bk_kalla(kalla)
+        kontrollera_bk_granskningsstatus(granskningsstatus)
         async with self._scoped(tenant_id) as conn:
             record = await conn.fetchrow(
                 """
                 insert into bk_underlag
                   (tenant_id, sha256, filnamn, mimetyp, status, datum, motpart,
                    brutto, momssats, riktning, kategori, betalstatus, anmarkning,
-                   kalla, mejl_id, mejl_amne, mejl_avsandare, valuta, belopp_original)
+                   kalla, mejl_id, mejl_amne, mejl_avsandare, valuta, belopp_original,
+                   granskning, granskningsstatus)
                 values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13,
-                        $14, $15, $16, $17, $18, $19)
+                        $14, $15, $16, $17, $18, $19, $20::jsonb, $21)
                 returning *
                 """,
                 tenant_id,
@@ -3628,13 +4451,38 @@ class PostgresStorage:
                 mejl_avsandare,
                 valuta,
                 belopp_original,
+                None if granskning is None else json.dumps(granskning, ensure_ascii=False),
+                granskningsstatus,
             )
-        return _row(record)
+        return _bk_rad(record)
+
+    async def markera_kvittomejl_last(
+        self, tenant_id: str, fingeravtryck: str, *, klass: str
+    ) -> None:
+        async with self._scoped(tenant_id) as conn:
+            await conn.execute(
+                """
+                insert into kvitto_mejl_lasta (tenant_id, fingeravtryck, klass)
+                values ($1, $2, $3)
+                on conflict (tenant_id, fingeravtryck) do nothing
+                """,
+                tenant_id,
+                fingeravtryck,
+                klass,
+            )
+
+    async def ar_kvittomejl_last(self, tenant_id: str, fingeravtryck: str) -> bool:
+        async with self._scoped(tenant_id) as conn:
+            varde = await conn.fetchval(
+                "select 1 from kvitto_mejl_lasta where fingeravtryck = $1 limit 1",
+                fingeravtryck,
+            )
+        return varde is not None
 
     async def get_bk_underlag(self, tenant_id: str, underlag_id: str) -> dict[str, Any] | None:
         async with self._scoped(tenant_id) as conn:
             record = await conn.fetchrow("select * from bk_underlag where id = $1", underlag_id)
-        return _row(record)
+        return _bk_rad(record)
 
     async def get_bk_underlag_by_sha256(
         self, tenant_id: str, sha256: str
@@ -3644,7 +4492,7 @@ class PostgresStorage:
                 "select * from bk_underlag where sha256 = $1 order by created_at limit 1",
                 sha256,
             )
-        return _row(record)
+        return _bk_rad(record)
 
     async def list_bk_underlag(
         self,
@@ -3667,7 +4515,7 @@ class PostgresStorage:
                 bk_datum(till),
                 limit,
             )
-        return [_row(r) for r in records]
+        return [_bk_rad(r) for r in records]
 
     async def update_bk_underlag(
         self,
@@ -3720,7 +4568,7 @@ class PostgresStorage:
                 underlag_id,
                 *[varde for _, varde in satta],
             )
-        return _row(record)
+        return _bk_rad(record)
 
     async def create_bk_verifikat(
         self,

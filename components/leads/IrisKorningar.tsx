@@ -2,11 +2,13 @@
 
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
+import { Loader2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
-import { Cell, Nyckeltal, Tabell, Tomt, btnSecondary, meta, tabellRad } from "@/components/ui";
+import { Cell, Nyckeltal, Tabell, Tomt, btnLiten, btnSecondary, meta, tabellRad } from "@/components/ui";
 import { felmeddelande, readJsonBody } from "@/lib/http/json";
 import { useLocale, type Locale, type Localized } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
+import { KorningensUtkast } from "./KorningensUtkast";
 
 /**
  * Körningar — det kunden kan följa, lämna och återvända till.
@@ -22,6 +24,11 @@ import { cn } from "@/lib/utils";
  *
  * En pågående körning pollas var tredje sekund tills den säger `klar`.
  * Allt annat är statiskt tills användaren laddar om.
+ *
+ * Den pågående körningen går att pausa, återuppta och avbryta
+ * (POST /leads/korningar/{id}/pausa|aterupta|avbryt). Paus köar inga nya
+ * bolag; avbrott hoppar dessutom över köade bolag som inte hunnit startas.
+ * Bolag som redan researchas blir klara i båda fallen.
  */
 
 type Tratt = { namn: string; steg: string; skal: string; belagg?: string | null };
@@ -41,6 +48,8 @@ export type Korning = {
   scope?: string;
   tratt?: Tratt[];
   jobs?: Jobb[];
+  /** Kundens styrning: satt av pausa/avbryt, borta när körningen går. */
+  styrning?: "paus" | "avbruten" | null;
 };
 
 export type KorningsRad = {
@@ -96,7 +105,28 @@ const T = {
   ingaUndersokta: { sv: "Inga bolag undersökta.", en: "No companies researched." },
   ingetBortvalt: { sv: "Inget bolag valdes bort.", en: "No company was dropped." },
   uppdaterad: { sv: "uppdaterad", en: "updated" },
-  av: { sv: "av", en: "of" }
+  av: { sv: "av", en: "of" },
+  pausad: { sv: "Pausad", en: "Paused" },
+  avbryter: { sv: "Avbryts", en: "Cancelling" },
+  pausa: { sv: "Pausa", en: "Pause" },
+  aterupta: { sv: "Återuppta", en: "Resume" },
+  avbryt: { sv: "Avbryt körningen", en: "Cancel run" },
+  styrning: { sv: "Styr körningen", en: "Control the run" },
+  bekraftaAvbryt: {
+    sv: "Avbryta körningen? Bolag som redan researchas blir klara, inga nya startas. Det går inte att ångra.",
+    en: "Cancel the run? Companies already in research finish, no new ones start. This cannot be undone."
+  },
+  pausNotis: {
+    sv: "Pausad. Inga nya bolag startas; de som redan researchas blir klara.",
+    en: "Paused. No new companies start; those already in research finish."
+  },
+  avbrytNotis: {
+    sv: "Avbryts. Körningen avslutas när bolagen som redan researchas är klara.",
+    en: "Cancelling. The run ends once the companies already in research are done."
+  },
+  styrFel: { sv: "Körningen gick inte att styra.", en: "The run could not be controlled." },
+  stannade: { sv: "Stannade utan leads", en: "Stalled without leads" },
+  underMalet: { sv: "Klar, under målet", en: "Done, under target" }
 } satisfies Record<string, Localized>;
 
 export const KORNINGSSTATUS: Record<KorningsRad["status"], Localized> = {
@@ -115,8 +145,52 @@ const SLUT_ETIKETT: Record<string, Localized> = {
   },
   slut_pa_kandidater: { sv: "Inga fler bolag att pröva i målgruppen", en: "No more companies to try in the target group" },
   sokningen_foll: { sv: "Sökningen gick inte att genomföra", en: "The search could not be completed" },
-  budget: { sv: "Dagens budget för körningar är slut", en: "Today's budget for runs is used up" }
+  inga_traffar: {
+    sv: "Sökningen hittade inga bolag. Kontrollera orterna eller bredda bransch eller område.",
+    en: "The search found no companies. Check the locations or widen the industry or area."
+  },
+  budget: { sv: "Dagens budget för körningar är slut", en: "Today's budget for runs is used up" },
+  kredittak: {
+    sv: "Körningens tak för sidhämtningar är nått",
+    en: "The run's cap on page fetches was reached"
+  },
+  ingen_malgrupp: {
+    sv: "Ingen målgrupp att söka i. Fyll i målgrupp under Inställningar eller välj bransch i filtret.",
+    en: "No target group to search in. Fill in your target group under Settings or choose an industry in the filter."
+  },
+  avbruten: { sv: "Avbruten", en: "Cancelled" }
 };
+
+/**
+ * Hur gick det? En avslutad körning utan ett enda lead är ett MISSLYCKANDE
+ * för kunden, inte ett grönt "Klar" (Sebbe 2026-10-06: tre körningar
+ * stannade på 0 och såg klara ut). Under målet är gult: den levererade,
+ * men inte det som beställdes.
+ */
+export type Utfallston = "ok" | "under" | "stannade";
+
+export function utfallston(rad: KorningsRad): Utfallston {
+  const k = rad.korning;
+  if (rad.status !== "completed" || !k?.klar || !k.mal) return "ok";
+  if (k.slut_orsak === "avbruten") return "ok";
+  if (k.levererade === 0) return "stannade";
+  if (k.levererade < k.mal) return "under";
+  return "ok";
+}
+
+/** Statusen i kundens ord. Paus och avbrott har ingen egen liggarstatus:
+ *  raden står i 'processing' tills motorn säger klar. */
+export function statusText(rad: KorningsRad): Localized {
+  if (!pagar(rad)) {
+    const ton = utfallston(rad);
+    if (ton === "stannade") return T.stannade;
+    if (ton === "under") return T.underMalet;
+    return KORNINGSSTATUS[rad.status];
+  }
+  if (rad.korning?.styrning === "paus") return T.pausad;
+  if (rad.korning?.styrning === "avbruten") return T.avbryter;
+  return T.pagar;
+}
 
 function nar(iso: string | null, locale: Locale): string {
   if (!iso) return "–";
@@ -133,26 +207,37 @@ export function korningsTyp(rad: KorningsRad): Localized {
 
 /** Pågår? Både liggarens status och motorns eget `klar` räknas: raden kan
  *  stå i 'completed' från sökjobbet medan motorn fortfarande fyller på. */
-function pagar(rad: KorningsRad): boolean {
+export function pagar(rad: KorningsRad): boolean {
   if (rad.status === "queued" || rad.status === "processing") return true;
   return Boolean(rad.korning && !rad.korning.klar && rad.status !== "failed");
 }
 
-export function IrisKorningar() {
+export function IrisKorningar({
+  demoRader,
+  tak
+}: Readonly<{
+  /** /demo: fasta rader, ingen hämtning och ingen styrning (lib/demo/aktivitet.ts). */
+  demoRader?: KorningsRad[];
+  /** Visa högst så många rader tills användaren ber om alla (Aktivitet). */
+  tak?: number;
+}> = {}) {
   const { locale, text } = useLocale();
-  const pathname = usePathname() ?? "/dashboard/aktivitet";
+  const demo = demoRader !== undefined;
+  const pathname = usePathname() ?? "/dashboard";
   const sok = useSearchParams();
-  // Samma vy under /dashboard och /admin: Leads-länken följer basen. Vyn
-  // renderas i Aktivitet sedan Snajp Suite (2026-10-03).
-  const bas = pathname.replace(/\/(aktivitet|iris)(\/.*)?$/, "/leads");
-  const [rader, setRader] = useState<KorningsRad[] | null>(null);
+  // Samma vy på översikten (/dashboard, /admin/arbetsyta, /demo) och i
+  // Leads › Körningar: Leads-länken går alltid till ytans Leads.
+  const bas = `${pathname.replace(/\/(arbetsyta|aktivitet|iris|leads)(\/.*)?$/, "")}/leads`;
+  const [rader, setRader] = useState<KorningsRad[] | null>(demoRader ?? null);
   const [fel, setFel] = useState<string | null>(null);
   const [oppen, setOppen] = useState<string | null>(sok?.get("id") ?? null);
+  const [visaAlla, setVisaAlla] = useState(false);
   // Stoppad = sessionen är borta (401/403) eller vyn saknas (404): att polla
   // vidare var tredje sekund ger bara samma svar.
   const [stoppad, setStoppad] = useState(false);
 
   const hamta = useCallback(async () => {
+    if (demo) return;
     try {
       const response = await fetch("/api/snajp-support/leads/korningar?limit=30", { cache: "no-store" });
       const kropp = await readJsonBody<{ korningar?: KorningsRad[]; detail?: string }>(response);
@@ -166,28 +251,40 @@ export function IrisKorningar() {
     } catch (cause) {
       setFel(felmeddelande(cause));
     }
-  }, [text]);
+  }, [text, demo]);
 
   useEffect(() => {
     void hamta();
   }, [hamta]);
 
+  useEffect(() => {
+    if (demoRader) setRader(demoRader);
+  }, [demoRader]);
+
   // Poll bara när något pågår, och nästa hämtning schemaläggs först när den
   // förra svarat: ett intervall överlappade sig självt vid kallstart (proxyn
   // tillåter 60 s) och kunde skriva ett äldre svar över ett nyare.
-  const nagotPagar = !stoppad && (rader ?? []).some(pagar);
+  const nagotPagar = !demo && !stoppad && (rader ?? []).some(pagar);
   useEffect(() => {
     if (!nagotPagar) return;
     let timer = 0;
     let aktiv = true;
+    // En flik i bakgrunden hämtar inte: listan är ~365 KB, och två glömda
+    // flikar pollade den var tredje sekund under hela körningen (uppmätt
+    // 2026-10-09). När fliken syns igen hämtas den direkt.
     const varv = async () => {
-      await hamta();
+      if (document.visibilityState === "visible") await hamta();
       if (aktiv) timer = window.setTimeout(() => void varv(), 3000);
     };
+    const synlig = () => {
+      if (document.visibilityState === "visible") void hamta();
+    };
     timer = window.setTimeout(() => void varv(), 3000);
+    document.addEventListener("visibilitychange", synlig);
     return () => {
       aktiv = false;
       window.clearTimeout(timer);
+      document.removeEventListener("visibilitychange", synlig);
     };
   }, [nagotPagar, hamta]);
 
@@ -226,8 +323,9 @@ export function IrisKorningar() {
     );
   }
 
-  const aktiv = rader.find(pagar) ?? null;
-
+  // Styrningen (Pausa/Avbryt) bor i den utfällda raden, inte ovanför
+  // tabellen: med flera pågående körningar gick det inte att se vilken
+  // panelen gällde (den tog bara den första). Sebbe 2026-10-07.
   return (
     <div className="space-y-10">
       {fel ? (
@@ -235,8 +333,9 @@ export function IrisKorningar() {
           {fel}
         </p>
       ) : null}
-      {aktiv ? <Pagaende rad={aktiv} /> : null}
 
+      {/* Behållaren som detaljradens 100cqw mäter mot (RadMedDetalj). */}
+      <div style={{ containerType: "inline-size" }}>
       <Tabell
         ariaLabel={text(T.tabell)}
         kolumner={[
@@ -248,7 +347,7 @@ export function IrisKorningar() {
           { rubrik: text(T.kolUtfall) }
         ]}
       >
-        {rader.map((rad) => {
+        {(tak && !visaAlla ? rader.slice(0, tak) : rader).map((rad) => {
           const k = rad.korning;
           const arOppen = oppen === rad.job_id;
           return (
@@ -258,6 +357,8 @@ export function IrisKorningar() {
               bas={bas}
               oppen={arOppen}
               onToggle={() => setOppen(arOppen ? null : rad.job_id)}
+              onStyrd={hamta}
+              styrbar={!demo}
             >
               <Cell>{text(korningsTyp(rad))}</Cell>
               <Cell hoger>{k ? k.mal : "–"}</Cell>
@@ -275,17 +376,25 @@ export function IrisKorningar() {
                 <span
                   className={cn(
                     "inline-flex items-center gap-1.5",
-                    rad.status === "failed" ? "text-danger" : pagar(rad) ? "text-warning" : "text-ink"
+                    rad.status === "failed" || utfallston(rad) === "stannade"
+                      ? "text-danger"
+                      : pagar(rad) || utfallston(rad) === "under"
+                        ? "text-warning"
+                        : "text-ink"
                   )}
                 >
                   <span
                     aria-hidden
                     className={cn(
                       "h-1.5 w-1.5 rounded-full",
-                      rad.status === "failed" ? "bg-danger" : pagar(rad) ? "bg-ochre" : "bg-moss"
+                      rad.status === "failed" || utfallston(rad) === "stannade"
+                        ? "bg-danger"
+                        : pagar(rad) || utfallston(rad) === "under"
+                          ? "bg-ochre"
+                          : "bg-moss"
                     )}
                   />
-                  {pagar(rad) ? text(T.pagar) : text(KORNINGSSTATUS[rad.status])}
+                  {text(statusText(rad))}
                 </span>
               </Cell>
               <Cell className="text-ink-muted">
@@ -305,13 +414,64 @@ export function IrisKorningar() {
           );
         })}
       </Tabell>
+      </div>
+      {tak && rader.length > tak ? (
+        <button
+          type="button"
+          onClick={() => setVisaAlla((v) => !v)}
+          aria-expanded={visaAlla}
+          className="focus-ring -mt-6 inline-flex items-center rounded-input text-[0.8125rem] font-medium text-ink-muted underline-offset-4 hover:text-ink hover:underline"
+        >
+          {visaAlla
+            ? text({ sv: "Visa färre", en: "Show fewer" })
+            : text({ sv: `Visa alla (${rader.length})`, en: `Show all (${rader.length})` })}
+        </button>
+      ) : null}
     </div>
   );
 }
 
-function Pagaende({ rad }: Readonly<{ rad: KorningsRad }>) {
+type Atgard = "pausa" | "aterupta" | "avbryt";
+
+function Pagaende({
+  rad,
+  onStyrd,
+  styrbar = true
+}: Readonly<{ rad: KorningsRad; onStyrd: () => Promise<void>; styrbar?: boolean }>) {
   const { locale, text } = useLocale();
   const k = rad.korning;
+  const [skickar, setSkickar] = useState<Atgard | null>(null);
+  const [styrFel, setStyrFel] = useState<string | null>(null);
+  // Avbrottet bekräftas på sidan, som varje annan åtgärd på Leads-ytan
+  // (2026-10-09: webbläsarens confirm-ruta avvisades tyst i appens
+  // webbläsarpanel, och knappen såg ut att inte göra något).
+  const [bekraftar, setBekraftar] = useState(false);
+
+  async function styr(atgard: Atgard, bekraftat = false) {
+    if (atgard === "avbryt" && !bekraftat) {
+      setBekraftar(true);
+      return;
+    }
+    setBekraftar(false);
+    setSkickar(atgard);
+    setStyrFel(null);
+    try {
+      const response = await fetch(
+        `/api/snajp-support/leads/korningar/${encodeURIComponent(rad.job_id)}/${atgard}`,
+        { method: "POST" }
+      );
+      if (!response.ok) {
+        const kropp = await readJsonBody<{ detail?: string }>(response);
+        setStyrFel(kropp?.detail ?? text(T.styrFel));
+      }
+      await onStyrd();
+    } catch (cause) {
+      setStyrFel(felmeddelande(cause));
+    } finally {
+      setSkickar(null);
+    }
+  }
+
   if (!k) {
     return (
       <p className="text-[15px] text-ink-muted" role="status">
@@ -331,13 +491,103 @@ function Pagaende({ rad }: Readonly<{ rad: KorningsRad }>) {
           { etikett: text(T.bortvalda), varde: (k.tratt ?? []).length },
           {
             etikett: text(T.justNu),
-            varde: k.pagaende ? text(T.researchar) : text(T.letar),
+            varde:
+              k.styrning === "paus"
+                ? text(T.pausad)
+                : k.styrning === "avbruten"
+                  ? text(T.avbryter)
+                  : k.pagaende
+                    ? text(T.researchar)
+                    : text(T.letar),
             notis: k.pagaende ? `${k.pagaende} ${text(T.underResearch)}` : `${text(T.sokrunda)} ${(k.rundor ?? 0) + 1}`
           }
         ]}
       />
-      <p className={cn(meta, "mt-3")}>{text(T.fortsatter)}</p>
+      <p className={cn(meta, "mt-3")}>
+        {k.styrning === "paus"
+          ? text(T.pausNotis)
+          : k.styrning === "avbruten"
+            ? text(T.avbrytNotis)
+            : text(T.fortsatter)}
+      </p>
+      {/* Avbrott är slutgiltigt: då finns inget kvar att styra. */}
+      {styrbar && k.styrning !== "avbruten" ? (
+        <div role="group" aria-label={text(T.styrning)} className="mt-4 flex flex-wrap gap-2">
+          {k.styrning === "paus" ? (
+            <StyrKnapp atgard="aterupta" skickar={skickar} onClick={styr}>
+              {text(T.aterupta)}
+            </StyrKnapp>
+          ) : (
+            <StyrKnapp atgard="pausa" skickar={skickar} onClick={styr}>
+              {text(T.pausa)}
+            </StyrKnapp>
+          )}
+          <StyrKnapp atgard="avbryt" skickar={skickar} onClick={styr} className="!text-danger">
+            {text(T.avbryt)}
+          </StyrKnapp>
+        </div>
+      ) : null}
+      {bekraftar ? (
+        <div
+          role="alertdialog"
+          aria-modal="false"
+          aria-label={text(T.avbryt)}
+          tabIndex={-1}
+          ref={(el) => el?.focus()}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") setBekraftar(false);
+          }}
+          className="focus-ring mt-3 max-w-[60ch] rounded-input border border-ink/15 bg-paper2 px-4 py-3"
+        >
+          <p className="text-[0.9375rem] text-ink">{text(T.bekraftaAvbryt)}</p>
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => void styr("avbryt", true)}
+              className={cn(btnSecondary, btnLiten, "border-danger/40 text-danger")}
+            >
+              {text(T.avbryt)}
+            </button>
+            <button type="button" onClick={() => setBekraftar(false)} className={cn(btnSecondary, btnLiten)}>
+              {text({ sv: "Behåll körningen", en: "Keep the run" })}
+            </button>
+            <span className={meta}>{text({ sv: "Esc stänger", en: "Esc closes" })}</span>
+          </div>
+        </div>
+      ) : null}
+      {styrFel ? (
+        <p role="alert" className="mt-3 text-[15px] text-danger">
+          {styrFel}
+        </p>
+      ) : null}
     </div>
+  );
+}
+
+function StyrKnapp({
+  atgard,
+  skickar,
+  onClick,
+  className,
+  children
+}: Readonly<{
+  atgard: Atgard;
+  skickar: Atgard | null;
+  onClick: (atgard: Atgard) => Promise<void>;
+  className?: string;
+  children: React.ReactNode;
+}>) {
+  return (
+    <button
+      type="button"
+      className={cn(btnSecondary, btnLiten, className)}
+      disabled={skickar !== null}
+      aria-busy={skickar === atgard}
+      onClick={() => void onClick(atgard)}
+    >
+      {skickar === atgard ? <Loader2 aria-hidden className="h-4 w-4 animate-spin" /> : null}
+      {children}
+    </button>
   );
 }
 
@@ -354,12 +604,16 @@ function RadMedDetalj({
   bas,
   oppen,
   onToggle,
+  onStyrd,
+  styrbar,
   children
 }: Readonly<{
   rad: KorningsRad;
   bas: string;
   oppen: boolean;
   onToggle: () => void;
+  onStyrd: () => Promise<void>;
+  styrbar: boolean;
   children: React.ReactNode;
 }>) {
   const { locale, text } = useLocale();
@@ -388,9 +642,25 @@ function RadMedDetalj({
       </tr>
       {oppen ? (
         <tr id={`korning-${rad.job_id}`}>
-          <td colSpan={kolumner} className="bg-paper2/60 px-4 py-5">
+          <td colSpan={kolumner} className="bg-paper2/60 p-0">
+            {/* Detaljen följer den SYNLIGA bredden (2026-10-09): tabellen rullar i
+                sidled under 720 px, och utan det här klipptes nyckeltalen och
+                knapparna i högerkanten. 100cqw = tabellbehållarens bredd. */}
+            <div className="sticky left-0 px-4 py-5" style={{ width: "100cqw", maxWidth: "100%" }}>
+            {pagar(rad) ? (
+              <div className="mb-8 border-b border-ink/15 pb-8">
+                <Pagaende rad={rad} onStyrd={onStyrd} styrbar={styrbar} />
+              </div>
+            ) : null}
             <div className="grid gap-8 md:grid-cols-2">
               <div>
+                {/* Utkastpanelen ersätter namnlistan i den riktiga vyn: varje
+                    lead med utkaststatus, och skriv/skicka för alla på en gång.
+                    Demon (styrbar=false) har ingen backend och behåller listan. */}
+                {styrbar && rad.scope === "batch" && k?.jobs?.length ? (
+                  <KorningensUtkast jobId={rad.job_id} />
+                ) : (
+                <>
                 <h3 className="text-[1.0625rem] font-semibold">{text(T.undersoktaBolag)}</h3>
                 {k?.jobs?.length ? (
                   <ul className="mt-3 divide-y divide-ink/12 border-y border-ink/15">
@@ -409,6 +679,8 @@ function RadMedDetalj({
                   <p className={cn(meta, "mt-3")}>
                     {rad.scope === "lista" ? text(T.raderUnderListor) : text(T.ingaUndersokta)}
                   </p>
+                )}
+                </>
                 )}
                 {rad.error ? (
                   <p className="mt-4 text-[15px] text-danger" role="alert">
@@ -446,6 +718,7 @@ function RadMedDetalj({
             <p className={cn(meta, "mt-5 font-mono text-[0.8125rem]")}>
               {rad.job_id} · {text(T.uppdaterad)} {nar(rad.updated_at, locale)}
             </p>
+            </div>
           </td>
         </tr>
       ) : null}

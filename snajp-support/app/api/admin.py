@@ -49,19 +49,95 @@ async def list_runs(
     tenant_id: str | None = None,
     agent_type: str | None = None,
     limit: int = 50,
+    sammandrag: bool = False,
 ) -> dict:
+    # `sammandrag=true`: bara listans fält, utan input/output/step_log (se
+    # storage.list_agent_runs_all). Spåret per körning hämtas via /runs/{id}.
     runs = await request.app.state.storage.list_agent_runs_all(
-        tenant_id=tenant_id, agent_type=agent_type, limit=min(limit, 200)
+        tenant_id=tenant_id, agent_type=agent_type, limit=min(limit, 200), sammandrag=sammandrag
     )
     return {"runs": runs}
 
 
 @router.get("/runs/{run_id}")
 async def get_run(request: Request, run_id: str) -> dict:
-    run = await request.app.state.storage.get_agent_run(run_id)
+    storage = request.app.state.storage
+    run = await storage.get_agent_run(run_id)
     if not run:
         raise HTTPException(status_code=404, detail="Körningen finns inte.")
-    return {"run": run}
+    # Spår av version 2 (Fas 7) bär systemlagren som hashar; texterna står en
+    # gång per hash i prompt_lager. Spårvyn får dem bredvid körningen.
+    logg = run.get("step_log") if isinstance(run.get("step_log"), list) else []
+    hashar = sorted(
+        {
+            lager["hash"]
+            for steg in logg
+            if isinstance(steg, dict)
+            for lager in steg.get("lager") or []
+            if lager.get("position") == "system" and lager.get("hash")
+        }
+    )
+    return {"run": {**run, "lagertexter": await storage.get_prompt_lager(hashar)}}
+
+
+# -- Insyn (Fas 7): allt agenten läser, visat som flöde --------------------
+#
+# Läsning, som resten av filen. Visningen byggs ur samma funktioner som
+# bygger prompten (app/agentcore/insyn.py) — aldrig ur en egen beskrivning.
+
+
+@router.get("/tenants/{tenant_id}/insyn")
+async def tenant_insyn(request: Request, tenant_id: str, agent: str = "leads", kanal: str = "chat") -> dict:
+    from ..agentcore import insyn
+
+    if agent not in ("leads", "support"):
+        raise HTTPException(status_code=422, detail="agent måste vara leads eller support.")
+    if not await request.app.state.storage.get_tenant(tenant_id):
+        raise HTTPException(status_code=404, detail="Kunden finns inte.")
+    return {"insyn": await insyn.oversikt(request.app.state.storage, tenant_id, agent, kanal=kanal)}
+
+
+@router.get("/skills/fil")
+async def skill_fil(skill: str, fil: str) -> dict:
+    """Hela skillfilen och om den är orörd mot manifestet. Läser bara filer
+    registret känner till (parse_skill_name + registrets läsväg), så en
+    sökväg utanför agent-core/skills/ går inte att be om."""
+    from ..agentcore import insyn
+    from ..agentcore.registry import SkillRegistryError
+
+    if ".." in fil or fil.startswith(("/", "\\")):
+        raise HTTPException(status_code=422, detail="Ogiltig sökväg.")
+    try:
+        return {"fil": insyn.skillfil(skill, fil)}
+    except SkillRegistryError as fel:
+        raise HTTPException(status_code=404, detail=str(fel)) from fel
+
+
+@router.post("/tenants/{tenant_id}/insyn/kb-prov")
+async def kb_prov(request: Request, tenant_id: str, payload: dict) -> dict:
+    """Vilka kunskapsartiklar en fråga hade hämtat. POST bara för att frågan
+    kan vara lång och inte hör hemma i en url eller en åtkomstlogg; anropet
+    skriver ingenting och gör inget språkmodellanrop. Därför här i
+    läsroutern och inte i admin_profil.py, vars hela poäng är att den skriver."""
+    from ..agentcore import insyn
+
+    fraga = str((payload or {}).get("fraga") or "").strip()[:2000]
+    if not fraga:
+        raise HTTPException(status_code=422, detail="Skriv en fråga.")
+    return {"prov": await insyn.kb_prov(request.app.state.storage, tenant_id, fraga)}
+
+
+@router.get("/prospects/{prospect_id}/kedja")
+async def prospect_kedja(request: Request, prospect_id: str, tenant_id: str) -> dict:
+    """En körnings flöde för ett bolag: utfall per nod, in- och utdata,
+    grindarnas utslag och var kedjan stannade. `tenant_id` krävs: prospekten
+    läses alltid inom sin kund (RLS), även av admin."""
+    from ..agentcore import insyn
+
+    ut = await insyn.kedja(request.app.state.storage, tenant_id, prospect_id)
+    if ut is None:
+        raise HTTPException(status_code=404, detail="Bolaget finns inte hos kunden.")
+    return {"kedja": ut}
 
 
 @router.get("/events")
@@ -85,6 +161,46 @@ async def tenant_inbox(request: Request, tenant_id: str, limit: int = 50) -> dic
             tenant_id, limit=min(limit, 200), is_test=None
         )
     }
+
+
+@router.get("/tenants/{tenant_id}/leads-underlag")
+async def tenant_leads_underlag(request: Request, tenant_id: str, limit: int = 200) -> dict:
+    """Vad varje lead faktiskt vilar på: källor, hämtat material och bedömning.
+
+    Svarar på frågan "finns bolaget?" för redan sparade leads (scripts/
+    granska_leads_underlag.py). Bara bolagsuppgifter, aldrig kontaktpersoner:
+    granskningen gäller bolaget, och svaret skrivs ut i en terminal.
+    """
+    storage = request.app.state.storage
+    ut: list[dict] = []
+    for p in await storage.list_prospects(tenant_id, limit=min(limit, 500)):
+        webb = p.get("website")
+        cache = await storage.get_sidcache(tenant_id, webb) if webb else None
+        kallor = sorted(await storage.list_prospect_source_urls(tenant_id, str(p["id"])))
+        ut.append(
+            {
+                "id": str(p["id"]),
+                "company_name": p.get("company_name"),
+                "website": webb,
+                "origin": p.get("origin"),
+                "status": p.get("status"),
+                "niva": p.get("niva"),
+                "score_total": p.get("score_total"),
+                "kallor": kallor,
+                "register": any("merinfo.se" in k for k in kallor),
+                "hamtat_tecken": len((cache or {}).get("innehall") or ""),
+                "hamtfel": (cache or {}).get("fel"),
+                "created_at": p.get("created_at"),
+                # Bara nyckel och utfall ("kp:träff"): räcker för att se vilka
+                # regler ett lead bedömdes med, utan att motiveringen skrivs ut.
+                "bedomning": [
+                    f"{r.get('nyckel')}:{r.get('utfall')}"
+                    for r in (p.get("score_breakdown") or [])
+                    if isinstance(r, dict)
+                ],
+            }
+        )
+    return {"leads": ut}
 
 
 @router.get("/tenants/{tenant_id}/drafts")

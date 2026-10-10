@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 
 import { auth } from "@/lib/auth";
 import { isPlatformAdmin } from "@/lib/auth/admin";
-import { hasCompletedOnboarding } from "@/lib/workspace";
+import { getWorkspaceContext, hasCompletedOnboarding } from "@/lib/workspace";
 
 /**
  * Onboardingdirigeringen — läst FÄRSKT ur databasen, aldrig ur sessionen.
@@ -34,10 +34,17 @@ export async function requireOnboarded(): Promise<void> {
   // Plattformsadmin behöver inte gå igenom kund-onboardingen — deras startsida
   // är adminvyn, inte business-context-formuläret. De kan onboarda senare om de
   // vill använda leads/support i Snajps eget bolag.
-  if (await isPlatformAdmin(userId)) {
+  // Arbetsytans kontext (React-cachad per request) bär admin-flaggan och
+  // affärskontexten, lästa i samma request — alltså lika färska som egna
+  // frågor. Layouterna har nästan alltid hämtat den före grinden, så svaret
+  // kostar ingen rundtur. Saknas kontexten (ingen profil eller arbetsyta)
+  // frågas adminstatus direkt, och onboardingen räknas som inte klar — samma
+  // svar som hasCompletedOnboarding hade gett.
+  const context = await getWorkspaceContext();
+  if (context ? context.isPlatformAdmin : await isPlatformAdmin(userId)) {
     return;
   }
-  if (!(await hasCompletedOnboarding(userId))) {
+  if (!context?.businessContext) {
     redirect("/onboarding");
   }
 }

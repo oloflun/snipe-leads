@@ -13,9 +13,8 @@ import {
   ContactsView,
   InboxView
 } from "@/components/WorkspaceViews";
-import { IrisBolag } from "@/components/leads/IrisBolag";
+import { IrisBolag } from "@/components/leads/LeadsSida";
 import { AttGora } from "@/components/leads/AttGora";
-import { Aktivitet } from "@/components/dashboard/Aktivitet";
 import { resolveDashboardState } from "@/lib/data/dashboard";
 import type { ProductKey } from "@/lib/routes";
 
@@ -91,15 +90,9 @@ export async function WorkspaceSection({
     redirect(`${base}/kvitton`);
   }
 
-  // Aktivitet är delad: innehållet följer vilka agenter arbetsytan har (se
-  // components/dashboard/Aktivitet.tsx), så inloggningen bär grinden.
+  // Aktivitet är översikten sedan 2026-10-07 (StartView). Bokmärken landar där.
   if (section === "aktivitet") {
-    if (id) notFound();
-    return (
-      <PageShell title={{ sv: "Aktivitet", en: "Activity" }}>
-        <Aktivitet />
-      </PageShell>
-    );
+    redirect(base === "/admin" ? "/admin/arbetsyta" : base);
   }
 
   // Att göra är delad på samma sätt: kön visar bara agenter arbetsytan har.
@@ -164,10 +157,10 @@ export async function WorkspaceSection({
       // landa på sin nya plats, inte i en 404.
       const ny: Record<string, string> = {
         "": `${base}/leads`,
-        pipeline: `${base}/leads?vy=pipeline`,
-        korningar: `${base}/aktivitet`,
-        inkorg: `${base}/att-gora`,
-        granskning: `${base}/att-gora`,
+        pipeline: `${base}/leads`,
+        korningar: `${base}/leads?vy=korningar`,
+        inkorg: `${base}/leads?vy=inkorg`,
+        granskning: `${base}/leads?vy=utkast`,
         installningar: leadsInstallningar
       };
       const mal = ny[id ?? ""];

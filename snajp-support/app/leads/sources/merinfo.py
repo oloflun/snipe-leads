@@ -35,8 +35,11 @@ telefonnummer blir aldrig ett leads kontakt: bolagsnumret går inte att knyta
 till en viss person, och styrelseledamöter kontaktas inte.
 
 * Iris (`lage="iris"`): bolagets webbplats letas upp (merinfos fält, annars
-  ett uppslag); kontaktperson, roll och händelser hämtas därifrån i
-  researchen. Utan webbplats går körningen vidare till nästa bolag.
+  e-postdomänen, en gissning och sist ett uppslag) och kontaktsökningen
+  läser den. Sedan fördelas bolaget (`fordela`, Antons regler 12–16
+  2026-10-07): mejl → Iris, bara telefon och namngiven VD → ringlistan
+  (där registrets bolagsnummer och bolags-e-post får användas), sajt utan
+  hittad kontakt → prövas om, resten → ej kvalificerade.
 * Listor (`lage="lista"`): en rad kräver VD:ns mejl eller telefon, och bara
   om uppgiften går att knyta till VD (discovery.hamta_vd_kontakt). VD:ns
   namn kommer från merinfo, uppgiften från bolagets egen webbplats. Merinfos
@@ -46,11 +49,11 @@ till en viss person, och styrelseledamöter kontaktas inte.
 from __future__ import annotations
 
 import asyncio
+import difflib
 import json
 import logging
 import os
 import re
-import time
 import unicodedata
 from pathlib import Path
 from collections.abc import Awaitable, Callable
@@ -62,15 +65,14 @@ logger = logging.getLogger("snajp-support.leads.sources.merinfo")
 BAS = "https://www.merinfo.se"
 TAXONOMI_FIL = Path(__file__).with_name("merinfo_taxonomi.json")
 
-MIN_INTERVALL_S = 1.0
-SAMTIDIGA = 2
 MAX_LISTSIDOR = 40          # per (bransch, plats)
-KANDIDAT_FAKTOR = 3         # bolagssidor att granska per beställt lead
 MAX_BOLAGSSIDOR = 90        # tak per körning, oavsett antal
+#: Iris: listrader per bolagssida som förhandsprövas med en gratis gissad
+#: domän (HEAD på namn.se) innan bolagssidan köps. 2026-10-09 köptes 52
+#: bolagssidor för 8 leads: de flesta bolagen saknade sajt och föll först
+#: efter köpet. Rader med en levande domän hämtas först; ingen utesluts.
+FORSORTERA = 3
 
-_SEM = asyncio.Semaphore(SAMTIDIGA)
-_SENAST = [0.0]
-_CACHE: dict[str, str] = {}  # ponytail: processcache utan TTL; byt mot lead_source_cache (plan del B) vid fler repliker
 
 
 def aktiv() -> bool:
@@ -80,36 +82,15 @@ def aktiv() -> bool:
 # -- Hämtning ---------------------------------------------------------------
 
 
-async def hamta(url: str) -> str | None:
-    """Sidans markdown via ScrapeGraphAI, eller None. Kastar aldrig."""
-    if url in _CACHE:
-        return _CACHE[url]
-    from ...agent.research_tools import _hamta_via_scrapegraph
-    from ...config import get_settings
+async def hamta(url: str, *, fas: str = "bolag") -> str | None:
+    """Sidans markdown, eller None. Kastar aldrig. merinfo blockerar
+    direkthämtning, så sidan går via ScrapeGraph — genom sidhamtning, som
+    cachar per kund och räknar mot körningens kredittak (plan 2026-10-05)."""
+    from .. import sidhamtning
 
-    nyckel = get_settings().scrapegraphai_api_key
-    if not nyckel:
-        logger.warning("merinfo: SCRAPEGRAPHAI_API_KEY saknas.")
-        return None
-    md, fel = None, None
-    # ScrapeGraphAI har en egen hastighetsgräns ("Rate limited - slow down
-    # and retry", uppmätt 2026-10-01 under trädbygget). Vänta och försök igen
-    # i stället för att tappa sidan; andra fel försöks inte om.
-    for forsok in range(4):
-        async with _SEM:
-            vanta = MIN_INTERVALL_S - (time.monotonic() - _SENAST[0])
-            if vanta > 0:
-                await asyncio.sleep(vanta)
-            _SENAST[0] = time.monotonic()
-            md, fel = await _hamta_via_scrapegraph(nyckel, url)
-        if md is not None or "rate limit" not in str(fel).casefold():
-            break
-        if forsok < 3:
-            await asyncio.sleep(5 * (forsok + 1))
+    md, fel, _via = await sidhamtning.hamta(url, fas=fas, direkt=False)
     if md is None:
         logger.warning("merinfo: %s gick inte att hämta (%s).", url, fel)
-        return None
-    _CACHE[url] = md
     return md
 
 
@@ -201,7 +182,13 @@ def tolka_bolag(md: str, url: str) -> dict[str, Any]:
 
     epost = _falt(md, "E-post")
     hemsida = _falt(md, "Hemsida")
-    hemsida_url = re.search(r"(https?://[^\s\])]+|www\.[^\s\])]+)", hemsida or "")
+    # Registret skriver ibland bara "bolaget.se" (utan www. eller https://),
+    # och då fick bolaget ingen webbplats alls (Antons fynd 2026-10-07).
+    hemsida_url = re.search(
+        r"(https?://[^\s\])]+|www\.[^\s\])]+|(?<![@\w.-])[a-z0-9][a-z0-9-]*(?:\.[a-z0-9-]+)*\.[a-z]{2,}(?![\w@-]))",
+        hemsida if hemsida and "@" not in hemsida else "",
+        re.IGNORECASE,
+    )
     sni = re.search(r"^\s*\*\s*(?P<kod>\d{5})\s*\[(?P<namn>[^\]]+)\]", md, re.MULTILINE)
     verksamhet = re.search(r"###\s*Verksamhetsbeskrivning\s*\n\s*(?P<t>[^\n]+)", md)
 
@@ -224,6 +211,28 @@ def tolka_bolag(md: str, url: str) -> dict[str, Any]:
         "verksamhet": verksamhet.group("t").strip() if verksamhet else None,
         "url": url,
     }
+
+
+def bolagsfakta_text(md: str, url: str) -> str:
+    """Bolagssidan som källmaterial, utan personer och telefonnummer.
+
+    Registret är ett filter, inte en kontaktkälla (Antons regel 1,
+    2026-10-04): det som når researchprompten är bolagsfakta, aldrig namn
+    eller nummer som modellen kan göra till leadets kontakt."""
+    b = tolka_bolag(md, url)
+    falt = (
+        ("Bolag", b.get("company_name")),
+        ("Organisationsnummer", b.get("orgnr")),
+        ("Postadress", " ".join(filter(None, [b.get("postnr"), b.get("ort")])) or None),
+        ("Antal anställda", b.get("anstallda")),
+        ("Omsättning (kr)", b.get("omsattning")),
+        ("Bolagsform", b.get("bolagsform")),
+        ("Status", b.get("status")),
+        ("Bransch", b.get("sni_namn")),
+        ("Verksamhet", b.get("verksamhet")),
+        ("Webbplats enligt registret", b.get("website")),
+    )
+    return "\n".join(f"{namn}: {varde}" for namn, varde in falt if varde not in (None, ""))
 
 
 # -- Trädet (bransch + geografi) ---------------------------------------------
@@ -302,6 +311,39 @@ def _slug(text: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", _norm(text)).strip("-")
 
 
+#: Ord som aldrig blir en egen merinfo-slugg: de säger vem kunden säljer
+#: till, inte vilken bransch bolaget har. "B2B/B2C" blev /b2b-b2c/…, 404 på
+#: varje sida och en körning utan ett enda bolag (2026-10-06, 463a9087).
+_EJ_SLUGG = {"b2b", "b2c", "b2b-b2c", "b2c-b2b", "b2g", "smb", "sme", "foretag", "bolag", "kunder", "alla"}
+
+
+#: Breda B2B-branscher för en målgrupp utan bransch ("B2B", "företag som
+#: söker kunder"). Registret filtrerar då bara på område och storlek, och Jev
+#: klassar mot kundens kriterier (Antons regel 1–2). Före 2026-10-07 gav en
+#: sådan målgrupp None, den öppna sökningen svarade [] i tre rundor och
+#: körningen slutade med 0 undersökta (6ed99585, f92ed14d).
+BRED_B2B = ("foretagstjanster", "byggbranschen", "grossister")
+
+
+def ar_generisk_bransch(termer: list[str]) -> bool:
+    """Inga branschord alls, eller bara ord om VEM bolaget säljer till."""
+    delar = [_slug(t) for t in termer if str(t or "").strip()]
+    return all(d in _EJ_SLUGG or set(d.split("-")) <= _EJ_SLUGG for d in delar)
+
+
+def _delfraser(termer: list[str]) -> list[str]:
+    """Kundens branschfält delat i sina delar: "e-utbildning & möblerfirmor
+    för företagskontor" är två branscher, och som en fras matchade den ingen
+    (2026-10-06: registret föll bort helt). Delarna provas efter frasen."""
+    ut: list[str] = []
+    for term in termer:
+        ut.append(term)
+        delar = [d.strip() for d in re.split(r"\s*(?:[&,;/+]|\boch\b|\bsamt\b|\bfor\b|\bför\b|\btill\b)\s*", str(term)) if d.strip()]
+        if len(delar) > 1:
+            ut += delar
+    return list(dict.fromkeys(ut))
+
+
 def valj_branscher(termer: list[str]) -> list[str]:
     """Kundens branschord → merinfos branschsluggar, en per ord, högst tre.
 
@@ -313,7 +355,7 @@ def valj_branscher(termer: list[str]) -> list[str]:
     ponytail: stammatchning, inget LLM; byt mot ett modellval när en kund
     beskriver branschen i fraser som ingen stam träffar."""
     ut: list[str] = []
-    for term in termer:
+    for term in _delfraser(termer):
         stammar = _stammar(term)
         if not stammar:
             continue
@@ -330,7 +372,10 @@ def valj_branscher(termer: list[str]) -> list[str]:
         # merinfo-bransch, noll träffar och ett "ärligt nej" i stället för
         # reservkedjan (provkörningen 2026-10-04).
         ensamt_ord = len(re.findall(r"[a-z0-9]+", _norm(term))) <= 2
-        slug = bast[2] if bast and bast[0] >= 0.5 else (_slug(term) if ensamt_ord else None)
+        egen = _slug(term) if ensamt_ord else None
+        if egen and (egen in _EJ_SLUGG or set(egen.split("-")) <= _EJ_SLUGG):
+            egen = None
+        slug = bast[2] if bast and bast[0] >= 0.5 else egen
         if slug and slug not in ut:
             ut.append(slug)
     return ut[:3]
@@ -352,6 +397,25 @@ LANDSDELAR: dict[str, tuple[str, ...]] = {
     "goteborgsomradet": ("vastra-gotalands-lan",),
     "storgoteborg": ("vastra-gotalands-lan",),
 }
+
+
+#: Vardagsnamn som ingen stavningsjämförelse når.
+ORTALIAS: dict[str, str] = {
+    "ovik": "ornskoldsvik",
+    "o-vik": "ornskoldsvik",
+    "gbg": "goteborg",
+    "sthlm": "stockholm",
+    "stockholms stad": "stockholm",
+}
+
+
+def _narmaste(n: str, index: dict[str, Any]) -> str | None:
+    """En felstavning ('Luelå') → närmaste kända namn, men bara när den är
+    entydigt nära. Korta ord jämförs inte: 'Mora' ska inte bli 'Mola'."""
+    if len(n) < 4:
+        return None
+    traff = difflib.get_close_matches(n, list(index), n=1, cutoff=0.8)
+    return traff[0] if traff else None
 
 
 def _geoindex() -> tuple[dict[str, str], dict[str, tuple[str, str]]]:
@@ -386,6 +450,12 @@ def valj_platser(termer: list[str]) -> list[str | None] | None:
     for term in termer:
         hel = _norm(term).strip()
         n = hel.removesuffix(" lan").strip()
+        n = ORTALIAS.get(n, n)
+        if n not in LANDSDELAR and n not in kommun_index and n not in lan_index and not hel.endswith(" lan"):
+            gissning = _narmaste(n, kommun_index) or _narmaste(n, lan_index)
+            if gissning:
+                logger.info("merinfo: området %r tolkas som %r.", term, gissning)
+                n = gissning
         # Kommunen före länet: "Stockholm" är staden, "Stockholms län" länet.
         if n in LANDSDELAR:
             lan += list(LANDSDELAR[n])
@@ -432,6 +502,15 @@ def kontrollera(b: dict[str, Any], icp: dict[str, Any], profil: dict[str, Any] |
         return f"Inte aktivt: {b['status']}."
     if ar_enskild_firma(b.get("orgnr")) or "enskild" in str(b.get("bolagsform") or "").casefold():
         return "Enskild firma: personuppgifter, och e-post kräver förhandssamtycke (MFL 19 §)."
+    # Bara privata bolag, om kunden inte själv pekat ut offentlig sektor eller
+    # skolor (leads/offentlig.py). Registret bär bolagsformen, så här fälls
+    # även stiftelser och föreningar som namnet inte avslöjar.
+    if not (profil or {}).get("offentlig_sektor"):
+        from ..offentlig import offentlig_eller_skola
+
+        offentligt = offentlig_eller_skola(b)
+        if offentligt:
+            return offentligt
     lo, hi = _intervall(icp, profil)
     antal = b.get("anstallda")
     if isinstance(antal, int):
@@ -492,6 +571,8 @@ def till_kandidat(b: dict[str, Any], icp: dict[str, Any], profil: dict[str, Any]
         "orgnr": b.get("orgnr"),
         "ort": b.get("ort"),
         "postnr": b.get("postnr"),
+        # Webbpoolens fördelning efter län (migration 108).
+        "lan": b.get("lan"),
         "contact_name": None,
         "contact_role": None,
         "contact_phone": None,
@@ -508,6 +589,15 @@ def till_kandidat(b: dict[str, Any], icp: dict[str, Any], profil: dict[str, Any]
         "signal": "bransch" if b.get("sni_namn") else None,
         "signal_detalj": b.get("sni_namn"),
         "verksamhet": b.get("verksamhet"),
+        # Bara för listspåret (Antons beslut 2026-10-05); blir aldrig ett
+        # Iris-leads kontakt.
+        "_ensam_vd_telefon": ensam_vd_telefon(b),
+        # Bolagsnivå, för fördelningen efter kontaktsökningen (Antons regler
+        # 13 och 15, 2026-10-07): registrets bolags-e-post räcker för Iris,
+        # och bolagsnumret för ringlistan när VD är namngiven.
+        "_epost": b.get("epost"),
+        "_telefon": b.get("telefon"),
+        "_bolagsform": b.get("bolagsform"),
     }
 
 
@@ -519,6 +609,8 @@ async def sok(
     profil: dict[str, Any] | None = None,
     puls: Callable[[], Awaitable[Any]] | None = None,
     lage: str = "iris",
+    listspar: list[dict[str, Any]] | None = None,
+    bred: bool = False,
 ) -> list[dict[str, Any]] | None:
     """Antons arbetsflöde: bransch → län/kommun → listsidor → bolagssidor →
     filter på bolagsfakta → Jev mot kundens kriterier (första filtret) →
@@ -527,11 +619,18 @@ async def sok(
 
     None = målgruppen gick inte att översätta till merinfos träd (anroparen
     faller tillbaka på den gamla kedjan). [] = översatt, men inget bolag
-    klarade filtret och steget efter — ett ärligt nej, ingen utfyllnad."""
+    klarade filtret och steget efter — ett ärligt nej, ingen utfyllnad.
+
+    `bred=True` (sista skyddsnätet i discovery.hitta_bolag): sök i de breda
+    B2B-branscherna i kundens område oavsett branschord."""
     p = profil or {}
-    branscher = valj_branscher(list(dict.fromkeys([*(icp.get("industries") or []), *(p.get("branscher") or [])])))
+    branschord = list(dict.fromkeys([*(icp.get("industries") or []), *(p.get("branscher") or [])]))
+    branscher = valj_branscher(branschord)
     if not branscher and p.get("malgrupp"):
         branscher = valj_branscher([p["malgrupp"]])
+    if bred or (not branscher and ar_generisk_bransch(branschord)):
+        logger.info("merinfo: bred B2B-sökning (branschord=%s, bred=%s).", branschord, bred)
+        branscher = list(BRED_B2B)
     # Regionnycklarna (icp.geo, app/leads/geo.py) är redan kommuner i
     # profilen; utan profil (listjobb som inte kunde läsa den) expanderas de
     # här, annars blev "goteborg" bara staden i stället för området.
@@ -548,43 +647,49 @@ async def sok(
         logger.info("merinfo: målgruppen gick inte att översätta (branscher=%s, platser=%s).", branscher, platser)
         return None
     sokningar = [(b, pl) for b in branscher for pl in platser][:10]
-    mal = min(MAX_BOLAGSSIDOR, max(antal, 1) * KANDIDAT_FAKTOR)
-    sedda = {n.casefold() for n in uteslut}
-    kandidater: list[dict[str, Any]] = []
+    from .. import jev, sidhamtning
+    from ..forfilter import ar_enskild_firma
+
+    from .. import upptagna
+
+    # Namn och orgnr (app/leads/upptagna.py): Iris-prospekt, listrader och
+    # kundens CRM-kunder, så Iris och listorna aldrig hämtar samma bolag.
+    sedda = upptagna.nycklar(uteslut)
+    rader: list[dict[str, Any]] = []
     aktiva = list(sokningar)
     sida = 1
     gav_rader = False
-    while aktiva and len(kandidater) < mal and sida <= MAX_LISTSIDOR:
-        for s in list(aktiva):
-            md = await hamta(listsida_url(s[0], s[1], sida))
-            if puls:
-                await puls()
-            rader = tolka_lista(md) if md else []
-            if not rader:
-                aktiva.remove(s)
-                continue
-            gav_rader = True
-            for r in rader:
-                nyckel = r["company_name"].casefold()
-                if nyckel in sedda:
+
+    async def fyll_rader(behov: int) -> None:
+        """Listsidor tills `behov` rader väntar eller listorna är slut. Varje
+        listsida är ett betalt anrop: loopen bryts så fort det räcker, i
+        stället för att bläddra alla sökningar en sida djupare i onödan."""
+        nonlocal sida, gav_rader
+        while aktiva and len(rader) < behov and sida <= MAX_LISTSIDOR:
+            for s in list(aktiva):
+                if len(rader) >= behov:
+                    return
+                md = await hamta(listsida_url(s[0], s[1], sida), fas="lista")
+                if puls:
+                    await puls()
+                listrader = tolka_lista(md) if md else []
+                if not listrader:
+                    aktiva.remove(s)
                     continue
-                sedda.add(nyckel)
-                # Antons tillägg 2026-10-02: rader utan telefon sparas också,
-                # om bolagssidan (eller bolagets egen sajt) ger en mejladress.
-                # Mejl syns aldrig på listsidan, så raden måste få sin
-                # bolagssida hämtad; telefonraderna sorteras först så taket
-                # (MAX_BOLAGSSIDOR) träffar de rader som redan bär en kontakt.
-                kandidater.append(r)
-        sida += 1
-    if not gav_rader:
-        # Ingen sluggkombination gav en enda listrad: branschordet fanns inte
-        # som lista hos merinfo. Det är "kunde inte tolka", inte "inga bolag".
-        logger.info("merinfo: inga listrader för %s.", sokningar)
-        return None
-    kandidater = kandidater[:mal]
+                gav_rader = True
+                for r in listrader:
+                    if upptagna.upptagen(sedda, r["company_name"], r.get("orgnr")):
+                        continue
+                    sedda.add(upptagna.nyckel(r["company_name"]))
+                    # Förfilter utan hämtning: en enskild firma fälls ändå av
+                    # kontrollera(), och orgnr står redan på listraden.
+                    if ar_enskild_firma(r.get("orgnr")):
+                        continue
+                    rader.append(r)
+            sida += 1
 
     async def granska(r: dict[str, Any]) -> dict[str, Any] | None:
-        md = await hamta(r["url"])
+        md = await hamta(r["url"], fas="bolag")
         if puls:
             await puls()
         if not md:
@@ -593,32 +698,109 @@ async def sok(
         b["orgnr"] = b["orgnr"] or r["orgnr"]
         return b
 
-    granskade = [b for b in await asyncio.gather(*(granska(r) for r in kandidater)) if b]
-    godkanda = [b for b in granskade if kontrollera(b, icp, profil) is None]
+    # Jev frågas inte om webbkriterierna här: den har ingen sajt att titta på
+    # än, och utslaget räknas i kod ur webbrevisionen under researchen.
+    jev_profil = (
+        {**profil, "kriterier": [k for k in profil.get("kriterier") or [] if k.get("belagg") != "webbsignal"]}
+        if profil else None
+    )
 
-    from .. import jev
+    async def ranka(granskade: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        # Jev-bedömningarna körs samtidigt (2026-10-09): en i taget tog 2–3 s
+        # styck, minuter per sökrunda. Ordningen avgörs av poängen nedan.
+        sem = asyncio.Semaphore(SAMTIDIGA)
 
-    rankade: list[tuple[float, dict[str, Any]]] = []
-    for b in godkanda:
-        k = till_kandidat(b, icp, profil)
-        poang = _kodpoang(b, icp, profil)
-        if profil and jev.aktiv():
-            triage = await jev.triage(
-                profil, k, utdrag="\n".join(filter(None, [b.get("verksamhet"), b.get("sni_namn")])), signaler=[]
-            )
-            if triage:
-                k["jev_triage"] = triage
-                if triage.get("beslut") == "fall":
-                    continue
-                if isinstance(triage.get("fit"), (int, float)):
-                    poang += 10 * triage["fit"]
-        k["merinfo_poang"] = round(poang, 2)
-        rankade.append((poang, k))
-    rankade.sort(key=lambda t: t[0], reverse=True)
-    ut = await _komplettera([k for _, k in rankade], antal, lage=lage, puls=puls)
+        async def bedom(b: dict[str, Any]) -> tuple[float, dict[str, Any]] | None:
+            if kontrollera(b, icp, profil) is not None:
+                return None
+            k = till_kandidat(b, icp, profil)
+            poang = _kodpoang(b, icp, profil)
+            if jev_profil and jev.aktiv():
+                async with sem:
+                    triage = await jev.triage(
+                        jev_profil, k, utdrag="\n".join(filter(None, [b.get("verksamhet"), b.get("sni_namn")])), signaler=[]
+                    )
+                if triage:
+                    k["jev_triage"] = triage
+                    if triage.get("beslut") == "fall":
+                        return None
+                    if isinstance(triage.get("fit"), (int, float)):
+                        poang += 10 * triage["fit"]
+            k["merinfo_poang"] = round(poang, 2)
+            return poang, k
+
+        rankade = [r for r in await asyncio.gather(*(bedom(b) for b in granskade)) if r]
+        rankade.sort(key=lambda t: t[0], reverse=True)
+        return [k for _, k in rankade]
+
+    # I takt med behovet (plan 2026-10-05): bolagssidor för två kandidater per
+    # saknat lead åt gången, och fler bara om omgången inte räckte. Tidigare
+    # hämtades tre per beställt lead på en gång (upp till 90 sidor), och alla
+    # filter kördes först efteråt.
+    ut: list[dict[str, Any]] = []
+    granskade_n = godkanda_n = 0
+    forsortera = lage == "iris" and sidhamtning._direkt_forst()
+    from ..discovery import gissa_webbplats_via_head
+
+    head_sem = asyncio.Semaphore(12)
+
+    async def gissa(r: dict[str, Any]) -> None:
+        if "_gissad" in r:
+            return
+        async with head_sem:
+            try:
+                r["_gissad"] = await gissa_webbplats_via_head(r["company_name"])
+            except Exception:  # noqa: BLE001 — en gissning är bara en ordning
+                r["_gissad"] = None
+
+    while len(ut) < antal and granskade_n < MAX_BOLAGSSIDOR:
+        behov = antal - len(ut)
+        omgang = min(behov * 2, MAX_BOLAGSSIDOR - granskade_n)
+        await fyll_rader(omgang * FORSORTERA if forsortera else omgang)
+        if not rader:
+            break
+        if forsortera:
+            pool = rader[: omgang * FORSORTERA]
+            await asyncio.gather(*(gissa(r) for r in pool))
+            # Stabil sortering: registrets ordning står kvar inom grupperna.
+            pool.sort(key=lambda r: 0 if r.get("_gissad") else 1)
+            rader[: len(pool)] = pool
+        batch, rader[:] = rader[:omgang], rader[omgang:]
+        granskade_n += len(batch)
+        granskade = [b for b in await asyncio.gather(*(granska(r) for r in batch)) if b]
+        rankade = await ranka(granskade)
+        godkanda_n += len(rankade)
+        ut += await _komplettera(rankade, behov, lage=lage, puls=puls, listspar=listspar)
+        kontext = sidhamtning.aktuell()
+        if kontext and kontext.slut:
+            logger.info("merinfo: kredittaket (%d anrop) nått.", kontext.tak)
+            break
+        if kontext and lage == "iris" and kontext.webb_slut:
+            # Fler bolagssidor vore betalda för bolag vars sajter inte kan
+            # läsas i den här körningen; de prövas nästa körning (regel 12).
+            logger.info("merinfo: taket för webbsidor (%d anrop) nått.", kontext.webb_tak)
+            break
+    if not gav_rader:
+        # Sidorna gick inte att HÄMTA: kredittaket, slut på kredit hos
+        # ScrapeGraph eller tjänsten nere (sidhamtning räknar det). Det är
+        # inte "kunde inte tolka". Före 2026-10-06 gav även det None, och
+        # körningen föll tillbaka på den öppna Gemini-sökningen, som hittade
+        # på bolag.
+        kontext = sidhamtning.aktuell()
+        if kontext and kontext.slut:
+            logger.info("merinfo: kredittaket (%d anrop) nått före första listraden.", kontext.tak)
+            return []
+        if kontext and kontext.tjanstefel:
+            from ..discovery import DiscoveryError
+
+            raise DiscoveryError("Registret gick inte att läsa: listsidorna kunde inte hämtas.")
+        # Ingen sluggkombination gav en enda listrad: branschordet fanns inte
+        # som lista hos merinfo. Det är "kunde inte tolka", inte "inga bolag".
+        logger.info("merinfo: inga listrader för %s.", sokningar)
+        return None
     logger.info(
-        "merinfo (%s): %d sökningar, %d kandidater, %d granskade, %d klarade filtret, %d efter Jev → %d levereras.",
-        lage, len(sokningar), len(kandidater), len(granskade), len(godkanda), len(rankade), len(ut),
+        "merinfo (%s): %d sökningar, %d bolagssidor granskade, %d efter filter och Jev → %d levereras.",
+        lage, len(sokningar), granskade_n, godkanda_n, len(ut),
     )
     return ut
 
@@ -627,50 +809,377 @@ async def sok(
 #: filtret. Varje prov kan kosta ett webbplatsuppslag (ett grounded anrop).
 PROV_PER_LEAD = 4
 
+#: Bolag som bedöms (Jev) och kontaktsöks samtidigt. Sidhämtningen har sin
+#: egen semafor mot ScrapeGraph; det här taket skonar Vertex och bolagens
+#: egna sajter (2026-10-09: förut ett bolag i taget, minuter per sökrunda).
+SAMTIDIGA = 6
 
-async def _webbplats(k: dict[str, Any]) -> str | None:
+
+#: Operatörer och e-posttjänster utöver discovery._PRIVATA_DOMÄNER: en
+#: bolags-e-post där säger inget om bolagets webbplats.
+_LEVERANTORSDOMANER = frozenset(
+    {
+        "telia.se", "comhem.se", "tele2.se", "bredband2.com", "bahnhof.se", "ownit.se", "glocalnet.net",
+        "swipnet.se", "passagen.se", "home.se", "tiscali.se", "algonet.se", "telenor.se", "tre.se",
+        "yahoo.com", "gmx.com", "gmx.se", "mail.com", "zoho.com",
+    }
+)
+
+
+def _epostdomanens_sajt(epost: object) -> str | None:
+    """https://<domän> ur registrets bolags-e-post, eller None för en privat
+    adress eller en operatör."""
     from .. import discovery
 
+    epost = str(epost or "").strip()
+    if "@" not in epost or discovery.ar_privat_epost(epost):
+        return None
+    doman = discovery._epostdoman(epost)
+    if doman in _LEVERANTORSDOMANER:
+        return None
+    url = f"https://{doman}"
+    return url if discovery.webbplats_ar_bolagets(url) else None
+
+
+#: "192 79 Sollentuna": postnummer och postort på en sajt.
+_POSTADRESS = re.compile(r"\b(\d{3})\s?(\d{2})\s+([A-ZÅÄÖ][a-zåäöé]+(?:[ -][A-ZÅÄÖ][a-zåäöé]+)?)")
+
+
+def adress_motsager_registret(text: str, k: dict[str, Any]) -> bool:
+    """Säger sajtens egen adress att den hör till ett bolag på en annan ort än
+    registrets? 2026-10-09: "Landin & Markström AB" i Piteå fick landin.se
+    (en bilverkstad i Sollentuna) och "JM Utbildning & säkerhet AB" i
+    Östersund en förarskola i Gävle; namnkontrollen godtog båda, och
+    researchen valde sedan bort dem på geografin, med leadet förlorat.
+
+    Motsägelse kräver en postadress på sidan och att ingen av dem stämmer:
+    samma två första siffror i postnumret eller samma ort. Står registrets ort
+    någonstans på sidan, eller finns ingen adress alls, godtas sajten."""
+    ort = str(k.get("ort") or "").strip()
+    postnr = re.sub(r"\D", "", str(k.get("postnr") or ""))
+    if not text or not (ort or postnr):
+        return False
+    if ort and ort.casefold() in text.casefold():
+        return False
+    adresser = _POSTADRESS.findall(text)
+    if not adresser:
+        return False
+    for a, b, stad in adresser:
+        if postnr and (a + b)[:2] == postnr[:2]:
+            return False
+        if ort and stad.casefold() == ort.casefold():
+            return False
+    return True
+
+
+async def _ligger_annorstades(url: str, k: dict[str, Any]) -> bool:
+    """Startsidan läses (samma cache som kontaktsökningen, ingen extra
+    kostnad när sajten ändå blir vald) och prövas mot registrets ort."""
+    from .. import sidhamtning
+
+    text, _fel, _via = await sidhamtning.hamta(url, fas="webb", direkt=True)
+    if adress_motsager_registret(text or "", k):
+        logger.info(
+            "merinfo: %s har en adress på annan ort än %s (%s) — inte bolagets sajt.",
+            url, k.get("company_name"), k.get("ort"),
+        )
+        return True
+    return False
+
+
+async def _webbplats(k: dict[str, Any], *, betald: bool = True) -> str | None:
+    """Bolagets webbplats, billigaste vägen först (Antons regel 12, 2026-10-07):
+
+    1. registrets hemsida: bolagets egen uppgift, godtas utan namnmatchning
+       (förut fällde matchningen registrets egen hemsida),
+    2. domänen i registrets bolags-e-post, verifierad med HEAD,
+    3. en gissad domän ur namnet, verifierad med HEAD,
+    4. det betalda uppslaget (grounded Gemini), med namnmatchning.
+
+    Steg 2–3 är gratis men gör riktiga anrop, så de körs bara när
+    direkthämtningen är på (av i testsviten). `betald=False` hoppar över
+    steg 4 (omklassningsskriptet). Platshållarkontrollen gör anroparen."""
+    from .. import discovery, sidhamtning
+
+    namn = k["company_name"]
     webb = k.get("website")
-    if not webb:
+    if webb and discovery.webbplats_ar_bolagets(webb):
+        return webb if webb.startswith("http") else f"https://{webb}"
+    if sidhamtning._direkt_forst():
+        sajt = _epostdomanens_sajt(k.get("_epost"))
+        if sajt:
+            for url in (sajt, sajt.replace("https://", "https://www.", 1)):
+                if await discovery._head_ok(url):
+                    return url
         try:
-            webb = await discovery.sla_upp_webbplats(k["company_name"], geografi=k.get("ort"))
-        except Exception:  # noqa: BLE001 — ett uppslag får inte fälla körningen
-            logger.info("merinfo: webbplatsuppslaget för %s föll.", k["company_name"])
-            return None
+            gissad = await discovery.gissa_webbplats_via_head(namn)
+        except Exception:  # noqa: BLE001 — en gissning får inte fälla körningen
+            gissad = None
+        if gissad and discovery.webbplats_ar_bolagets(gissad) and not await _ligger_annorstades(gissad, k):
+            return gissad
+    if not betald:
+        return None
+    try:
+        webb = await discovery.sla_upp_webbplats(namn, geografi=k.get("ort"))
+    except Exception:  # noqa: BLE001 — ett uppslag får inte fälla körningen
+        logger.info("merinfo: webbplatsuppslaget för %s föll.", namn)
+        return None
     if not webb or not discovery.webbplats_ar_bolagets(webb):
         return None
-    if not discovery.webbplats_matchar_namn(k["company_name"], webb):
+    if not discovery.webbplats_matchar_namn(namn, webb):
         return None
-    return webb if webb.startswith("http") else f"https://{webb}"
+    webb = webb if webb.startswith("http") else f"https://{webb}"
+    # Gissningen och uppslaget är namnmatchningar, inte registrets uppgift:
+    # en sajt vars adress ligger på en annan ort är någon annans.
+    if await _ligger_annorstades(webb, k):
+        return None
+    return webb
+
+
+def ensam_vd_telefon(b: dict[str, Any]) -> str | None:
+    """Registrets telefonnummer när VD är den enda personen i bolaget, annars
+    None. Antons beslut 2026-10-05: då tillhör numret i praktiken VD (regel 5),
+    och undantaget från regel 1 gäller bara då. Ensam = högst en anställd och
+    ingen annan person med roll (suppleanter och revisorer räknas inte; de
+    är aldrig kontakt och tolkas inte in i `personer`)."""
+    vd = vd_namn(b)
+    if not vd or not b.get("telefon"):
+        return None
+    if not isinstance(b.get("anstallda"), int) or b["anstallda"] > 1:
+        return None
+    if any(p["namn"].casefold() != vd.casefold() for p in b.get("personer") or []):
+        return None
+    return b["telefon"]
+
+
+def _listrad(k: dict[str, Any], skal: str, *, spar: str = "ej_kvalificerad") -> dict[str, Any]:
+    """Ett bolag som inte blir ett Iris-lead men hör hemma i en lista, så att
+    kunden kan nå det med ett mer generellt erbjudande (Anton 2026-10-05:
+    bolag utan sajt är pengar på bordet för en webbyrå)."""
+    tel = k.get("_ensam_vd_telefon")
+    return {
+        **{f: k.get(f) for f in ("company_name", "website", "ort", "orgnr", "source_name", "source_url")},
+        "contact_name": k.get("vd_namn") if tel else None,
+        "contact_role": "VD" if tel else None,
+        "contact_phone": tel,
+        "contact_email": None,
+        "contact_level": "named_role_match" if tel else None,
+        "signal": "listspar",
+        "signal_detalj": skal,
+        "spar": spar,
+    }
+
+
+def ar_enskild(k: dict[str, Any]) -> bool:
+    from ..forfilter import ar_enskild_firma
+
+    return ar_enskild_firma(k.get("orgnr")) or "enskild" in str(k.get("_bolagsform") or "").casefold()
+
+
+def registrets_epost(k: dict[str, Any]) -> str | None:
+    """Registrets bolags-e-post när den duger som Iris-adress (regel 13)."""
+    from .. import discovery
+
+    epost = str(k.get("_epost") or "").strip().lower()
+    if not epost or not discovery.ar_saljadress(epost) or discovery._ar_skrapadress(epost):
+        return None
+    return epost
+
+
+def fordela(k: dict[str, Any], kontakt: dict[str, Any] | None) -> tuple[str, str | None]:
+    """Spåret efter kontaktsökningen, med skälet (Antons regler 12, 13, 15
+    och 16, 2026-10-07). `k` är kandidaten med `website` satt till den
+    webbplats som söktes (None utan sajt eller med en parkerad domän),
+    `kontakt` svaret från discovery.hamta_person_kontakt.
+
+    * "iris": en mejladress, från sajten eller registrets bolags-e-post.
+    * "ring": ingen mejladress men sajtens publicerade telefon, eller
+      registrets bolagsnummer och en VD namngiven i registret.
+    * "prova_om": sökningen stoppades av sidtaket, eller sajten finns men
+      inget kontaktsätt hittades på den. Varken lista eller uteslutning:
+      bolaget prövas nästa körning (regel 12).
+    * "ej_kvalificerad": enskild firma (NIX-spärren och MFL 19 §), registrets
+      nummer utan namngiven VD och utan sajt, eller varken sajt, mejl eller
+      telefon.
+
+    Tolkning (orkestratorn 2026-10-08): regel 12 går före VD-kravet. En sajt
+    vars enda kontaktsätt är en telefon hamnar på ringlistan även utan VD i
+    registret: numret är bolagets eget publicerade. VD-kravet i regel 15
+    gäller registrets nummer, som annars inte går att knyta till någon.
+
+    Ren funktion: används av körningen (_komplettera) och av
+    scripts/omklassa_listspar.py."""
+    if ar_enskild(k):
+        return "ej_kvalificerad", "Enskild firma (NIX-kontroll krävs)"
+    kontakt = kontakt or {}
+    if kontakt.get("tak") and not kontakt.get("contact_email"):
+        return "prova_om", "Stoppad av sidtaket"
+    if kontakt.get("contact_email") or registrets_epost(k):
+        return "iris", None
+    if kontakt.get("contact_phone"):
+        return "ring", None
+    if k.get("_telefon") and (k.get("vd_namn") or k.get("_telefon_katalog")):
+        # Katalogens nummer (leads/katalog.py) är bolagets publicerade, som
+        # sajtens: det kräver ingen VD i registret (Anton 2026-10-10).
+        return "ring", None
+    if k.get("website"):
+        return "prova_om", "Sajt utan hittad kontakt"
+    if k.get("_telefon"):
+        return "ej_kvalificerad", "Ingen namngiven VD"
+    return "ej_kvalificerad", "Inget kontaktsätt"
+
+
+def iris_kandidat(k: dict[str, Any], kontakt: dict[str, Any] | None) -> dict[str, Any]:
+    """Kandidaten på Iris-spåret. `kontakt_kalla` säger varifrån adressen kom
+    (webbplats eller register): bara de två får ligga utanför bolagets domän
+    (regel 13, se api/leads.py:_skapa_prospekt_ur_kandidat)."""
+    kontakt = {f: v for f, v in (kontakt or {}).items() if f != "tak"}
+    if kontakt.get("contact_email"):
+        return {**k, **kontakt, "kontakt_kalla": "webbplats"}
+    return {
+        **k, **kontakt,
+        "contact_email": registrets_epost(k),
+        "contact_level": "role_address",
+        "kontakt_kalla": "register",
+    }
+
+
+def ringrad(k: dict[str, Any], kontakt: dict[str, Any] | None) -> dict[str, Any]:
+    """Prospektet på ringlistan (regel 15): VD ur registret (annars personen
+    sajten nämner vid numret), bolagets telefon och antal anställda, så att
+    säljaren vet att numret kan gå till någon annan. contact_level ur
+    migration 058:s värden: 'named_role_match' när VD är namngiven,
+    'role_address' när numret bara är bolagets växel."""
+    kontakt = kontakt or {}
+    telefon = kontakt.get("contact_phone") or k.get("_telefon")
+    vd = k.get("vd_namn")
+    return {
+        **{f: k.get(f) for f in (
+            "company_name", "website", "ort", "postnr", "orgnr", "anstallda", "omsattning", "sni",
+            "source_name", "source_url", "jev_triage",
+        )},
+        "contact_name": vd or kontakt.get("contact_name"),
+        "contact_role": "VD" if vd else kontakt.get("contact_role"),
+        "contact_phone": telefon,
+        "contact_email": None,
+        "contact_level": "named_role_match" if vd else "role_address",
+        "signal": "ring",
+        "signal_detalj": (
+            "Bara telefon, VD namngiven i registret" if vd
+            else "Bara telefon på sajten" if kontakt.get("contact_phone")
+            else "Bara telefon, bolagets nummer i hitta.se"
+        ),
+        "spar": "ring",
+    }
 
 
 async def _komplettera(
-    rankade: list[dict[str, Any]], antal: int, *, lage: str, puls: Callable[[], Awaitable[Any]] | None
+    rankade: list[dict[str, Any]], antal: int, *, lage: str, puls: Callable[[], Awaitable[Any]] | None,
+    listspar: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
-    """Iris: bolag MED webbplats, utan kontakt (researchen hämtar den från
-    sajten). Lista: bolag där VD:ns mejl eller telefon står på sajten."""
+    """Iris: kontaktsökningen på bolagets sajt och fördelningen efter den
+    (fordela, Antons regler 12–16 2026-10-07). Bolagen på Iris-spåret
+    returneras; ringlistan, ej kvalificerade och de som prövas om läggs i
+    `listspar` med sitt spår, och körningen sparar dem när den är klar
+    (api/leads.py:_spara_listspar). Ingen dyr research körs på dem.
+
+    Lista: oförändrat VD-krav — VD:ns mejl eller telefon på sajten, eller
+    ensam-VD-undantaget."""
     from .. import discovery
 
     ut: list[dict[str, Any]] = []
+    if lage == "iris":
+        return await _komplettera_iris(rankade, antal, puls=puls, listspar=listspar)
     for k in rankade[: max(antal, 1) * PROV_PER_LEAD]:
         if len(ut) >= antal:
             break
-        if lage == "lista" and not k.get("vd_namn"):
+        if lage == "lista":
+            if not k.get("vd_namn"):
+                continue
+            webb = await _webbplats(k)
+            if puls:
+                await puls()
+            kontakt = await discovery.hamta_vd_kontakt(webb, k["vd_namn"]) if webb else None
+            if kontakt:
+                ut.append({**k, "website": webb, **kontakt, "contact_name": k["vd_namn"], "contact_role": "VD",
+                           "contact_level": "named_role_match"})
+            elif k.get("_ensam_vd_telefon"):
+                skal = "VD är ensam i bolaget" if webb else "Ingen webbplats; VD är ensam i bolaget"
+                ut.append({**_listrad({**k, "website": webb}, skal), "signal": None})
             continue
+    return ut
+
+
+async def _komplettera_iris(
+    rankade: list[dict[str, Any]], antal: int, *, puls: Callable[[], Awaitable[Any]] | None,
+    listspar: list[dict[str, Any]] | None,
+) -> list[dict[str, Any]]:
+    """Iris-spåret i `_komplettera`, SAMTIDIGT i omgångar om SAMTIDIGA
+    bolag (2026-10-09). Förut ett bolag i taget: webbplatsuppslag,
+    parkeringskontroll och kontaktsökning på flera sidor, 5–10 s per bolag.
+    Fördelningen görs i rangordning efter varje omgång, och stoppet (nog
+    många leads, webbtaket) prövas mellan omgångarna."""
+    from .. import discovery, katalog, sidhamtning
+    from ..platshallare import AVVECKLAT, ar_platshallare
+
+    async def sok(k: dict[str, Any]) -> tuple[dict[str, Any], str | None, dict[str, Any] | None, Any] | None:
+        # Katalogen först: dess e-post kan ge webbplatsen (steg 2 i _webbplats).
+        k = await katalog.berika(k)
         webb = await _webbplats(k)
         if puls:
             await puls()
-        if not webb:
-            continue  # Anton: "Om det inte finns en hemsida, gå vidare."
-        k = {**k, "website": webb}
-        if lage == "lista":
-            kontakt = await discovery.hamta_vd_kontakt(webb, k["vd_namn"])
-            if not kontakt:
+        parkerad = await ar_platshallare(webb) if webb else None
+        if parkerad == AVVECKLAT:
+            # Ett avvecklat bolag är inget lead i något spår (Anton 2026-10-08).
+            return None
+        k = {**k, "website": None if parkerad else webb}
+        kontakt = (
+            await discovery.hamta_person_kontakt(
+                k["website"], k.get("vd_namn"), bolagsadress_racker=True, bolagsnamn=k.get("company_name")
+            )
+            if k["website"] else None
+        )
+        return k, webb, kontakt, parkerad
+
+    ut: list[dict[str, Any]] = []
+    prov = rankade[: max(antal, 1) * PROV_PER_LEAD]
+    for start in range(0, len(prov), SAMTIDIGA):
+        if len(ut) >= antal:
+            break
+        kontext = sidhamtning.aktuell()
+        if kontext and kontext.webb_slut:
+            # Resten prövas nästa körning: inget av dem skrivs till en lista
+            # eller hamnar i uteslutningen (regel 12).
+            break
+        for svar in await asyncio.gather(*(sok(k) for k in prov[start:start + SAMTIDIGA])):
+            if svar is None:
                 continue
-            k = {**k, **kontakt, "contact_name": k["vd_namn"], "contact_role": "VD",
-                 "contact_level": "named_role_match"}
-        ut.append(k)
+            k, webb, kontakt, parkerad = svar
+            spar, skal = fordela(k, kontakt)
+            if spar == "iris":
+                if len(ut) < antal:
+                    ut.append(iris_kandidat(k, kontakt))
+                elif listspar is not None:
+                    # Fler än behövs i den sista omgången: prövas nästa körning.
+                    listspar.append({
+                        **{f: k.get(f) for f in ("company_name", "orgnr", "website")},
+                        "signal_detalj": "Fler än körningen behövde", "spar": "prova_om", "tak": False,
+                    })
+            elif listspar is None:
+                continue
+            elif spar == "ring":
+                listspar.append(ringrad(k, kontakt))
+            elif spar == "prova_om":
+                listspar.append({
+                    **{f: k.get(f) for f in ("company_name", "orgnr", "website")},
+                    "signal_detalj": skal, "spar": spar, "tak": bool((kontakt or {}).get("tak")),
+                })
+            else:
+                if parkerad:
+                    skal = f"{skal}; parkerad domän ({parkerad})"
+                # Ingen kontaktuppgift på raden: ett nummer utan namngiven VD, eller
+                # en enskild firmas (NIX), hör inte hemma i en lista (regel 5, 15).
+                listspar.append(_listrad({**k, "website": webb, "_ensam_vd_telefon": None}, skal or "Inget kontaktsätt"))
     return ut
 
 

@@ -19,7 +19,9 @@ from .api import (
     admin,
     admin_flytt,
     admin_konvertera,
+    admin_ombedom,
     admin_kunddata,
+    admin_listor,
     admin_profil,
     analytics,
     bookkeeping,
@@ -34,10 +36,12 @@ from .api import (
     keys,
     kvitton,
     leads,
+    leads_massatgard,
     leads_suite,
     rules,
     sending_domains_api,
     support_config,
+    support_oversikt,
     tickets,
     triage,
     usage,
@@ -78,6 +82,10 @@ async def lifespan(app: FastAPI):
     if master_fel:
         logger.critical("Startvägran: %s", master_fel)
         raise RuntimeError(master_fel)
+
+    from .loopvakt import starta as starta_loopvakt
+
+    starta_loopvakt(settings.loopvakt_ms)
 
     storage = None
     if settings.database_url:
@@ -184,10 +192,13 @@ async def lifespan(app: FastAPI):
                 atertagna,
                 settings.chat_workers,
             )
-            for i in range(max(settings.chat_workers, 1)):
-                chat_worker_tasks.append(
-                    asyncio.create_task(chattstrom.worker_loop(consumer_name(i), hanterare))
+            # En läsare och en pool (stream.worker_pool): en blockerande
+            # Redis-anslutning i stället för en per worker (2026-10-09).
+            chat_worker_tasks.append(
+                asyncio.create_task(
+                    chattstrom.worker_pool(consumer_name("chatt"), hanterare, max(settings.chat_workers, 1))
                 )
+            )
         except Exception as error:  # noqa: BLE001 — samma gracefulla nedgradering som Redis-anslutningen ovan
             logger.warning(
                 "Chattström kunde inte startas (%s) — /api/chat faller tillbaka på "
@@ -225,22 +236,26 @@ async def lifespan(app: FastAPI):
                 vid_uppgivet=partial(ge_upp_leadsjobb, app.state),
             )
             leads_hanterare = partial(hantera_leads_jobb, app.state)
-            # Engångssvep INNAN några leads-worker-tasks startar — samma skäl
-            # som chattströmmens engångssvep ovan: en batch som stod mitt i
-            # när en tidigare process dog ska plockas upp direkt vid uppstart.
-            leads_atertagna = await leadsstrom.atertag(leads_hanterare)
+            # Inget engångssvep för leads (2026-10-09): det körde VARJE övergivet
+            # jobb i följd, i uppstarten, innan någon worker fanns — en körning
+            # som avbröts av en deploy fick 25 researchjobb körda ett i taget.
+            # Poolens läsare tar i stället ett övergivet jobb i taget när en
+            # plats är ledig (stream.worker_pool → _nasta_post).
+            leads_atertagna = 0
             logger.info(
                 "Leadsström: Redis-baserad jobbkö aktiv (%d poster återtagna vid "
                 "uppstart, %d workers).",
                 leads_atertagna,
                 settings.leads_workers,
             )
-            for i in range(max(settings.leads_workers, 1)):
-                leads_worker_tasks.append(
-                    asyncio.create_task(
-                        leadsstrom.worker_loop(consumer_name(f"leads-{i}"), leads_hanterare)
-                    )
+            # En läsare och en pool med leads_workers platser (stream.worker_pool):
+            # tio blockerande anslutningar slog i Redis anslutningstak
+            # ("max number of clients reached", 2026-10-09).
+            leads_worker_tasks.append(
+                asyncio.create_task(
+                    leadsstrom.worker_pool(consumer_name("leads"), leads_hanterare, max(settings.leads_workers, 1))
                 )
+            )
         except Exception as error:  # noqa: BLE001 — samma gracefulla nedgradering som chattströmmen
             logger.warning(
                 "Leadsström kunde inte startas (%s) — /api/leads/runs/batch faller "
@@ -277,6 +292,11 @@ async def lifespan(app: FastAPI):
         from .leads.scheduler import run_send_scheduler
 
         send_scheduler_task = asyncio.create_task(run_send_scheduler(app.state))
+    elif settings.godkanda_utskick_sekunder > 0:
+        # Bara godkända utkast: autonomt köade rörs inte (se config).
+        from .leads.scheduler import run_godkand_sandare
+
+        send_scheduler_task = asyncio.create_task(run_godkand_sandare(app.state))
 
     # Leads-städaren: hängande leads-jobb och leadslistor (en krasch, en
     # uppgiven strömpost, en process som dog i en 429-sömn) får ett ärligt
@@ -315,6 +335,11 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Snajp-Support", version="0.1.0", lifespan=lifespan)
 
+# Frågor och databastid per anrop i Server-Timing (app/matning.py).
+from .matning import Matning  # noqa: E402
+
+app.add_middleware(Matning)
+
 # CORS är AV som default och behövs inte för vår egen frontend — Next-proxyn
 # anropar backenden server-side, så webbläsaren träffar aldrig den här
 # tjänsten direkt. Den finns för den dag en kund anropar API:t från sin egen
@@ -346,6 +371,8 @@ app.include_router(keys.router)
 app.include_router(kb.router)
 app.include_router(leads.router)
 app.include_router(leads_suite.router)
+# Massåtgärder i Iris-listan och Ta bort lista; se api/leads_massatgard.py.
+app.include_router(leads_massatgard.router)
 app.include_router(demo.router)
 app.include_router(inbox.router)
 app.include_router(drafts.router)
@@ -361,7 +388,13 @@ app.include_router(admin_profil.router)
 # se docstringen i api/admin_kunddata.py.
 app.include_router(admin_kunddata.router)
 app.include_router(admin_konvertera.router)
+# Ombedömning av sparade Iris-leads efter regelskärpningen 2026-10-06; se
+# docstringen i api/admin_ombedom.py.
+app.include_router(admin_ombedom.router)
+# Kopiera eller flytta en leadslista till en annan kund; se api/admin_listor.py.
+app.include_router(admin_listor.router)
 app.include_router(analytics.router)
+app.include_router(support_oversikt.router)
 # Journalens tenant-scopade förbrukning (Livrustning-piloten) — samma fråga
 # som /api/admin/usage men med kundens egen nyckel. Se api/usage.py.
 app.include_router(usage.router)
@@ -373,6 +406,30 @@ app.include_router(kvitton.router)
 # Ohanterade fel hamnar i platform_events i stället för att rulla förbi i
 # Renders stdout och försvinna vid nästa spin-down (migration 026).
 install_exception_handler(app)
+
+
+def _cachefel() -> tuple[type[BaseException], ...]:
+    try:
+        from asyncpg.exceptions import InvalidCachedStatementError, OutdatedSchemaCacheError
+    except ImportError:  # asyncpg saknas (minneslagringen i testsviten)
+        return ()
+    return (InvalidCachedStatementError, OutdatedSchemaCacheError)
+
+
+async def _inaktuell_cachad_fraga(request, error):  # noqa: ANN001, ANN202
+    """En migrering ändrade en tabell som en cachad fråga läser (statement-
+    cachen, storage/postgres.py). Transaktionen hann inte köra något. Poolens
+    anslutningar byts ut — nästa anrop förbereder frågan på nytt — och svaret
+    är 503 utan kropp, som webbens proxy gör om för GET."""
+    logger.warning("Inaktuell cachad fråga efter schemaändring (%s); poolen byts ut.", type(error).__name__)
+    pool = getattr(request.app.state.storage, "pool", None)
+    if pool is not None:
+        await pool.expire_connections()
+    return Response(status_code=503)
+
+
+for _fel in _cachefel():
+    app.add_exception_handler(_fel, _inaktuell_cachad_fraga)
 
 
 @app.get("/health")

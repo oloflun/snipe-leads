@@ -1,7 +1,7 @@
 ---
 type: goals
 project_slug: snipe-leads
-updated: 2026-09-02
+updated: 2026-10-06
 updated_by: claude
 ---
 
@@ -166,6 +166,11 @@ tydligt inte nått i dag, och de två sakerna som saknas är konkreta:
   sandlåda. Antons beslut. Följden är att den ska behandlas med samma sekretess.
 - **Gallringsperioden är medvetet inte satt** — det är ett affärsbeslut, inte ett
   tekniskt.
+- **Iris-leads och leadslistor är skilda spår som aldrig delar bolag.** Sebbe
+  2026-10-06: Iris tar de kvalificerade bolagen med research, listorna är
+  kallare och för samtal eller generella utskick. Kundens befintliga kunder,
+  uppladdade som CRM-kundlista, blir aldrig leads i något av spåren. Öppet:
+  om listorna bara ska innehålla bolag som underkänts för Iris.
 
 ### Föreslaget — ej beslutat
 
@@ -263,6 +268,33 @@ rebase. Ändringar behöver samordnas, inte bara pushas.
 
 ## Ändringslogg
 
+- 2026-10-10 — claude — delmål 2: hitta.se som kontaktkälla, listverktyg med förlopp, autopilot (avstängd) för dagliga körningar.
+- 2026-10-08 — claude — delmål 2 (leads-agenten): kontaktsökningen hittar det som finns på sajten och
+  fördelar till Iris, ringlista, ej kvalificerade eller prövas om (leadsregel 12–17); Leads › Samtal med
+  ringlista och återkoppling. Delmål 11 (mejlsändning): utkastens status är en sanning per lead,
+  massåtgärder, skickade flyttar till Inkorg › Skickat. Delmål 12 (uppföljningskedjan) inkopplad: svepet
+  körs i sändaren för godkända utkast, alltid som utkast till granskning. Delmålslistan orörd.
+
+- 2026-10-06 (4) — claude — delmål 2 (leads-agenten hittar inte på): ett lead måste
+  uppfylla kraven (inget nej, alla måste styrkta) och bortvalda visas aldrig; dubbletter
+  mellan Iris och listorna spärras även vid samtidiga körningar. Delmål 6: kunden kan
+  ge sin agent egna önskemål (användarposition) och admin ser allt agenten läser
+  (Underlag och flöde). Delmålslistan orörd.
+
+- 2026-10-06 — claude — delmål 2 (leads-agenten hittar inte på) skärpt i kod:
+  existensgrind, inget utkast utan hämtat underlag, bara privata bolag, bara
+  VD, faktagrind mot onamngivna case. Delmål 6 (instruktioner når agenten):
+  instruktioner per agent, feedback bakas in i stället för att ersätta, Iris
+  egen grundprompt. Opushat; migration 099 ej körd. Delmålslistan orörd.
+- 2026-10-06 — claude — delmål 2 (leads): Iris och leadslistorna delar aldrig
+  bolag (gemensam uteslutningsmängd), och kunder laddar upp sin befintliga
+  CRM-kundlista som aldrig prospekteras (migration 098). Ny post under
+  Beslutat. Delmål 10: PR #31 bär nu även 098; migrationerna 096–098 mot main
+  väntar på Antons ja. Delmålslistan är orörd.
+- 2026-10-05 — claude — Iris-kostnaden begränsad och webbbedömningen avgjord i
+  kod (delmål 2); inkorgen sorterar bort utskick; Leads, Att göra och Översikten
+  omgjorda; leadsregel 7–9 (ensam VD, listspår, webbkriterier i kod). Release-PR
+  #31 öppen, main migrerad till 095 (delmål 10 väntar på Antons merge).
 - 2026-10-02 — claude — Antons beställning 2026-10-01 byggd och driftsatt på
   development: Körningar, merinfo + Jev, obligatorisk lägesbeskrivning, Jev-
   sorterad inkorg med leads-inkorg, nattspegling main → development med Flytta
@@ -321,3 +353,14 @@ rebase. Ändringar behöver samordnas, inte bara pushas.
   `gemini-3.6-flash`, dubblas 2027-01-01). Målbilden i övrigt orörd — sessionen
   var gränssnittsarbete i adminytan, se
   `plans/2026-08-29-adminytan-exempeldata-och-sprak.md`.
+- 2026-10-04 — claude — punkt 10 (produktionen i fas med development) har nu
+  en konkret väg: release-PR #30 (Sebbe) bär allt; före Antons merge ska
+  migration 090/091 köras mot main och en Ej relaterat-vy finnas i inkorgen.
+  Ny bestående regel för leads (Anton): registret är ett filter, Jev första
+  filtret, bara VD-kontakter som går att styrka, Iris via bolagets webbplats
+  (CLAUDE.md § Leads). Handoff: `HANDOFF-2026-10-04-SUITE-JEV-MERINFO.md`.
+- 2026-10-06 — claude — delmål 2 skärpt: varje Iris-lead kräver ett belagt
+  behov av kundens produkt (kriteriet `kp`, även utan profilkriterier, och en
+  vald produkt när kunden har en produktlista). Sparade leads bedöms om med
+  `scripts/ombedom_leads.py`. Punkt 10 (main i fas) väntar på migrationerna
+  096–099 och Antons merge av PR #31.

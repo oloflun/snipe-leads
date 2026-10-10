@@ -122,6 +122,38 @@ FOLLOWUP_V1 = Playbook(
 )
 
 
+#: Prospektstatusar som aldrig får en uppföljning: svarat, möte, vunnen,
+#: ej intresserad och spärrad. Svaret flyttar statusen (app/leads/svar.py),
+#: samtalsutfallen likaså (app/leads/samtal.py).
+_AVSLUTADE = frozenset({"replied", "meeting", "won", "lost", "suppressed"})
+
+
+def _tidpunkt(varde: Any) -> datetime | None:
+    if isinstance(varde, datetime):
+        return varde
+    if isinstance(varde, str) and varde:
+        try:
+            return datetime.fromisoformat(varde)
+        except ValueError:
+            return None
+    return None
+
+
+def skickad_efter_spegling(thread: dict[str, Any], seedad: Any) -> bool:
+    """Gick trådens FÖRSTA utskick efter speglingen? Utan spegel: alltid sant.
+    Okänd tid åt det försiktiga hållet: falskt."""
+    if not seedad:
+        return True
+    forst, grans = _tidpunkt(thread.get("first_outbound_sent_at")), _tidpunkt(seedad)
+    if forst is None or grans is None:
+        return False
+    if forst.tzinfo is None:
+        forst = forst.replace(tzinfo=grans.tzinfo)
+    if grans.tzinfo is None:
+        grans = grans.replace(tzinfo=forst.tzinfo)
+    return forst > grans
+
+
 def trad_som_ar_forfallna(
     threads: list[dict[str, Any]], *, now: datetime, automation: dict[str, Any] | None = None
 ) -> list[tuple[dict[str, Any], int]]:
@@ -137,6 +169,8 @@ def trad_som_ar_forfallna(
     regler = automationsregler.normalisera(automation)
     forfallna: list[tuple[dict[str, Any], int]] = []
     for thread in threads:
+        if thread.get("arkiverad_at") or thread.get("prospect_status") in _AVSLUTADE:
+            continue  # arkiverat, eller leadet har redan sagt sitt
         dagar = regler["per_typ"][automationsregler.typ_av(thread.get("origin"))]["uppfoljning_dagar"]
         if dagar == 0:
             continue  # kunden har stängt av uppföljningar för typen
@@ -167,13 +201,20 @@ async def generate_due_follow_ups(
     now: datetime,
     tenant_name: str,
     context_pack: str,
+    forst_skickad_efter: Any = None,
 ) -> list[dict[str, Any]]:
     """Skriver och köar uppföljningsutkast för tenantens förfallna trådar.
 
     Returnerar en rad per behandlad tråd. Ett trasigt utkast fäller inte de
     andra trådarna — samma princip som batchkörningen.
+
+    `forst_skickad_efter` (spegelns seeded_at): bara trådar vars första
+    utskick gick efter den tidpunkten följs upp. Se scheduler.sweep_follow_ups.
     """
-    threads = await storage.list_outreach_threads(tenant_id)
+    threads = [
+        t for t in await storage.list_outreach_threads(tenant_id)
+        if skickad_efter_spegling(t, forst_skickad_efter)
+    ]
     settings = await storage.get_agent_settings(tenant_id, agent_type="leads")
     forfallna = trad_som_ar_forfallna(threads, now=now, automation=settings.get("automation"))
     if not forfallna:
@@ -314,6 +355,10 @@ async def _en_uppfoljning(
                 body=body,
                 language_state=str(thread.get("language_state") or "sv"),
                 humanizer_variant=last_humanizer_variant(trace.skills_used),
+                # Antons regel 2026-10-07: en uppföljning är alltid ett
+                # utkast som kräver godkännande, aldrig ett autonomt utskick,
+                # oavsett autonominivå.
+                force_review=True,
             )
         )
         utfall["queued"] = bool(svar.get("queued"))
@@ -328,6 +373,7 @@ async def _en_uppfoljning(
         input_text=f"uppföljning {sekvens} till {company_name}",
         output_text=f"{subject}\n\n{body}",
         step_log=trace.as_log(),
+        prompt_lager=trace.lagertexter(),
         tokens_in=trace.total_tokens_in,
         tokens_out=trace.total_tokens_out,
         latency_ms=int((time.monotonic() - started) * 1000),

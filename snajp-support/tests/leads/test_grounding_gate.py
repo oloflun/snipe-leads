@@ -163,6 +163,9 @@ def test_superlative_present_in_the_sources_is_allowed():
         "Vi försöker i största möjliga mån.",
         "Det är med största sannolikhet en reservation.",
         "Bästa hälsningar, Snajp",
+        "Det frigör tid så att ni kan fokusera på det ni är bäst på.",
+        "Mer tid till det du gör bäst.",
+        "Vi ringer när det passar er bäst.",
     ],
 )
 def test_idiom_med_superlativord_ar_inget_pastaende(mening):
@@ -187,7 +190,10 @@ def test_verkligt_superlativ_fangas_aven_bredvid_ett_idiom():
 
 @pytest.mark.parametrize(
     "mening",
-    ["Det här är vår bästa lösning.", "Vi är bäst på svensk kundtjänst.", "Den bästa supporten i Norden."],
+    [
+        "Det här är vår bästa lösning.", "Vi är bäst på svensk kundtjänst.", "Den bästa supporten i Norden.",
+        "Det ni får är bäst i klassen.",
+    ],
 )
 def test_bojt_superlativ_om_erbjudandet_fangas_fortfarande(mening):
     assert not check_grounding(mening, _facts()).ok

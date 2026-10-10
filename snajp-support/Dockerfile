@@ -1,4 +1,7 @@
-FROM python:3.12-slim
+# Samma officiella image, hämtad via Dockers spegel på AWS ECR Public. Docker
+# Hub svarade 429 på Railways delade byggare (anonyma hämtningar, 2026-10-09)
+# och fällde tre api-byggen i rad.
+FROM public.ecr.aws/docker/library/python:3.12-slim
 
 # Byggkontexten är REPO-ROTEN, inte snajp-support/ (render.yaml: rootDir: .).
 #
@@ -49,4 +52,7 @@ EXPOSE 8000
 # Render (och liknande) injicerar $PORT; lokalt defaultar den till 8000.
 ENV PORT=8000
 HEALTHCHECK CMD python -c "import os,urllib.request; urllib.request.urlopen(f\"http://127.0.0.1:{os.environ.get('PORT','8000')}/health/live\")"
+# 0.0.0.0 och inte `::`: asyncio sätter IPV6_V6ONLY på en IPv6-socket, så `::`
+# tappade IPv4 och Railways healthcheck (2026-10-09). Privata nätet
+# (webben → api via *.railway.internal) når 0.0.0.0 ändå, uppmätt samma dag.
 CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
