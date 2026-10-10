@@ -1,0 +1,108 @@
+<title>Tre kärnerbjudanden</title>
+<style>
+:root { --bg: #f6f4ef; --fg: #1d2430; --muted: #5d6573; --card: #ffffff; --line: #ddd8cd; --mark: #f6dcae; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg: #161b22; --fg: #ebe8e1; --muted: #a3a9b3; --card: #1e242d; --line: #333b46; --mark: #6b4a14; color-scheme: dark; } }
+:root[data-theme="dark"] { --bg: #161b22; --fg: #ebe8e1; --muted: #a3a9b3; --card: #1e242d; --line: #333b46; --mark: #6b4a14; color-scheme: dark; }
+body { background: var(--bg); color: var(--fg); font: 16px/1.6 system-ui, -apple-system, "Segoe UI", sans-serif; }
+main { max-width: 680px; margin: 0 auto; padding-inline: 16px; padding-block: 28px 64px; }
+h1 { font-size: 1.6rem; line-height: 1.2; margin: 0 0 8px; }
+h2 { font-size: 1.25rem; margin: 40px 0 6px; padding-top: 20px; border-top: 2px solid var(--fg); }
+.note { color: var(--muted); font-size: 0.92rem; margin: 0 0 12px; }
+.mail { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px; margin: 14px 0; }
+.mail .meta { color: var(--muted); font-size: 0.85rem; margin: 0 0 10px; }
+.mail .amne { font-weight: 600; margin: 0 0 12px; }
+.mail p { margin: 0 0 10px; }
+.mail .cta { font-weight: 600; }
+mark { background: var(--mark); color: inherit; padding: 0 2px; border-radius: 2px; }
+ul { padding-left: 20px; color: var(--muted); font-size: 0.92rem; }
+</style>
+
+<main>
+  <h1>Tre kärnerbjudanden, två mejl var</h1>
+  <p class="note">Kortare mejl, ett erbjudande som är svårt att tacka nej till och en uppmaning med så lite motstånd som möjligt. <mark>Markerat</mark> är exempelsiffror och villkor som vi bestämmer senare. Bolagen är påhittade, och signaturen läggs på i kod.</p>
+
+  <h2>1. Något gratis att testa</h2>
+  <p class="note">De får ett färdigt resultat innan de bestämt något. Resultatet är beviset.</p>
+
+  <div class="mail">
+    <p class="meta">Iris · ventilationsfirma · info@</p>
+    <p class="amne">Ämne: 5 nya kunder till Exempelvent, utan kostnad</p>
+    <p>Hej,</p>
+    <p>För en ventilationsfirma kommer de bästa uppdragen ofta från företag man aldrig hunnit kontakta.</p>
+    <p>Vår agent Iris hittar dem åt er. Ni får <mark>5 kvalificerade leads</mark> i er region, med kontaktperson och ett färdigt första mejl till var och en. Helt utan kostnad, och ni bestämmer själva vad ni gör med dem.</p>
+    <p class="cta">Svara "ja" så skickar jag dem <mark>inom två dagar</mark>.</p>
+  </div>
+
+  <div class="mail">
+    <p class="meta">Kvittohanteraren · elfirma · info@</p>
+    <p class="amne">Ämne: 5 kvitton klara för bokföringen, Exempel El</p>
+    <p>Hej,</p>
+    <p>När man jobbar ute hos kunder hela dagarna blir kvittona i mejlen ett kvällsjobb inför varje bokföring.</p>
+    <p>Vi gör <mark>5 av dem</mark> åt er, utan kostnad. Ni får tillbaka dem färdiga med belopp, moms och konto, klara att ladda ned till ert bokföringsprogram. Ingenting att installera och ingenting att koppla.</p>
+    <p class="cta">Vidarebefordra 5 kvitton till <mark>kvitton@snajp.se</mark>, så får ni dem tillbaka samma dag.</p>
+  </div>
+
+  <ul>
+    <li>Supporten får samma erbjudande som en demolänk (se mejlen under 2 och 3): de fyller i sina vanligaste frågor och villkor och testar själva. Ingen kunskapsbas behöver laddas upp.</li>
+    <li>Kräver: ett beslut om hur många gratisprov vi tar per vecka (Iris-provet kostar krediter), och adressen för kvittoprovet.</li>
+  </ul>
+
+  <h2>2. Garanti med siffror</h2>
+  <p class="note">Vi tar risken. Når de inte resultatet får de mer tid gratis.</p>
+
+  <div class="mail">
+    <p class="meta">Supportagenten · webbshop · info@</p>
+    <p class="amne">Ämne: Halva tiden på kundmejlen, Exempelshop</p>
+    <p>Hej,</p>
+    <p>För en webbshop är det samma frågor varje dag: leveranstid, retur och storlek. Varje svar tar några minuter, och de blir många.</p>
+    <p>Vår supportagent svarar på dem åt er dygnet runt, med era egna villkor. Vi lovar att ni lägger <mark>minst 50 % mindre tid på kundmejlen inom 60 dagar</mark>. Annars förlänger vi provperioden utan kostnad tills ni gör det.</p>
+    <p class="cta">Testa den på era egna frågor här, det tar fem minuter: <mark>snajp.se/demo</mark></p>
+  </div>
+
+  <div class="mail">
+    <p class="meta">Iris · redovisningsbyrå · namngiven kontakt</p>
+    <p class="amne">Ämne: Fler nya kunder, eller längre gratis</p>
+    <p>Hej Karin,</p>
+    <p>För en redovisningsbyrå kommer nya kunder oftast via rekommendationer, och det går inte att styra när nästa kommer.</p>
+    <p>Vår agent Iris letar upp företag som behöver er och skriver ett personligt första mejl till vart och ett, som du godkänner. Vi lovar <mark>minst 10 nya kunddialoger inom 90 dagar</mark>. Blir det färre förlänger vi provperioden utan kostnad tills ni har fått dem.</p>
+    <p class="cta">Svara på mejlet så bokar vi 20 minuter där jag visar vilka företag Iris redan hittar åt er.</p>
+  </div>
+
+  <ul>
+    <li>Siffrorna är exempel. Innan garantin används skarpt behöver vi siffror vi kan belägga och ett sätt att mäta dem hos kunden, eftersom garantin är ett avtalslöfte.</li>
+    <li>Garantin ska gälla något vi kan påverka, och kunden ska ha gjort sin del (kopplat inkorgen, godkänt utkasten).</li>
+  </ul>
+
+  <h2>3. Begränsad pilot</h2>
+  <p class="note">Ärlig knapphet: vi har en begränsad kapacitet, och pilotföretagen får ett pris som aldrig erbjuds igen.</p>
+
+  <div class="mail">
+    <p class="meta">Kvittohanteraren · byggföretag · info@</p>
+    <p class="amne">Ämne: 20 pilotplatser, Exempelbygg</p>
+    <p>Hej,</p>
+    <p>I ett byggföretag med några få anställda är det ofta kvittona som blir liggande tills bokslutet närmar sig.</p>
+    <p>Vi tar in <mark>20 företag</mark> i en pilot för vår Kvittohanterare, som hämtar kvittona ur er e-post och lägger dem klara för bokföringen. Pilotföretagen får <mark>50 % rabatt första året</mark> om de vill fortsätta, och <mark>25 % så länge de stannar</mark>. Vi tar bara 20 eftersom vi sätter upp varje företag personligen.</p>
+    <p class="cta">Svara "pilot" så håller jag en plats åt er.</p>
+  </div>
+
+  <div class="mail">
+    <p class="meta">Supportagenten · kursföretag · info@</p>
+    <p class="amne">Ämne: En av 10 pilotplatser, Exempelkurser</p>
+    <p>Hej,</p>
+    <p>När man driver ett kursföretag kommer samma frågor inför varje kursstart: datum, intyg och avbokning.</p>
+    <p>Vår supportagent svarar på dem åt er, med era egna villkor, och lämnar över det den är osäker på. Vi öppnar <mark>10 pilotplatser</mark>, och pilotföretagen får <mark>50 % rabatt första året</mark> och <mark>25 % så länge de stannar</mark>.</p>
+    <p class="cta">Prova den på era vanligaste frågor här, så håller jag en plats åt er i en vecka: <mark>snajp.se/demo</mark></p>
+  </div>
+
+  <ul>
+    <li>Antalet platser måste vara sant och hållas: när platserna är slut får nästa nej, annars är knappheten vilseledande.</li>
+    <li>Rabatten ska stå i avtalet för pilotföretagen.</li>
+  </ul>
+
+  <h2>Det som saknas i produkten</h2>
+  <ul>
+    <li><strong>Demolänken för supporten finns inte än.</strong> I dag kan man testa agenterna med exempeldata, men inte med sina egna frågor och villkor. Den behövs för supportmejlen i alla tre erbjudandena.</li>
+    <li><strong>Kvittoprovet</strong> behöver en adress som tar emot vidarebefordrade kvitton och skickar tillbaka en fil.</li>
+    <li><strong>Iris-provet</strong> har inget eget flöde. Vi måste köra en körning med mottagarens målgrupp åt dem och skicka resultatet.</li>
+  </ul>
+</main>
