@@ -25,7 +25,13 @@ filen i PROV_ENV_FIL (standard snajp-support/.env) och skrivs aldrig ut.
 Körning (från snajp-support/):
     PYTHONPATH=. PYTHONIOENCODING=utf-8 DATABASE_URL= SUPABASE_DB_URL= \\
         python scripts/prova_erbjudanden.py
-Valfritt: PROV_KUNDER=snajp,webbyra  PROV_ERBJUDANDEN=riskfri_start  PROV_SAMTIDIGA=6
+Valfritt: PROV_KUNDER=snajp,webbyra  PROV_ERBJUDANDEN=gratis_prov  PROV_SAMTIDIGA=6
+
+Torrkörning utan LLM och utan nyckel (PROV_TORR=1): bygger varje kombination
+som skarpt, väljer erbjudandet genom den riktiga `erbjudanden.for_trad` och
+kontrollerar att villkoret som skulle nå prompten är just den valda produktens.
+Snajps villkor står per agent (exemplen i katalogens artefakt), de andra
+säljarnas som en text för alla produkter (det bakåtkompatibla formatet).
 """
 
 from __future__ import annotations
@@ -49,8 +55,8 @@ os.environ["LLM_PROVIDER"] = "deepseek"
 os.environ["MODEL"] = os.environ.get("PROV_MODELL", "deepseek-v4-flash")
 for _namn in ("LEADS_DRAFT_MODEL", "LEADS_HUMANIZER_MODEL"):
     os.environ.pop(_namn, None)
-if not os.environ.get("DEEPSEEK_API_KEY"):
-    _fil = Path(os.environ.get("PROV_ENV_FIL") or ROT / ".env")
+_fil = Path(os.environ.get("PROV_ENV_FIL") or ROT / ".env")
+if not os.environ.get("DEEPSEEK_API_KEY") and _fil.is_file():
     for _rad in _fil.read_text(encoding="utf-8-sig").splitlines():
         if _rad.startswith("DEEPSEEK_API_KEY="):
             os.environ["DEEPSEEK_API_KEY"] = _rad.partition("=")[2].strip().strip('"')
@@ -83,13 +89,22 @@ KUNDER = {
             {"namn": "Supportagent", "nytta": "svarar på kundmejlen utifrån er egen kunskapsbas"},
             {"namn": "Kvittohanterare", "nytta": "plockar upp kvittona ur e-posten och lägger dem klara för bokföringen"},
         ],
+        # Per agent, enligt exemplen i katalogens artefakt (siffrorna är exempel).
         "villkor": {
-            "riskfri_start": "Första månaden utan kostnad. Ingen bindningstid, och ni avslutar när ni vill.",
-            "se_det_forst": "Vi tar fram tio bolag som passar er med färdiga första mejl, utan kostnad och utan att det binder er till något.",
-            "forsta_resultatet": "Har ni inte fått de första 20 granskade utkasten inom 14 dagar betalar ni ingenting för den första månaden, så länge ni har beskrivit er målgrupp i uppstarten.",
-            "gjort_at_er": "Vi sätter upp agenten åt er. Ni svarar på några frågor under en halvtimme, sedan sköter vi resten.",
-            "ratt_tid": "Före bokslutet vid årsskiftet: kvittona från hela året ligger klara i januari om ni börjar i november.",
-            "tva_vagar": "Antingen får ni bara utkasten och skickar dem själva, eller så sköter agenten hela flödet åt er.",
+            "gratis_prov": {
+                "Iris": "Fem kvalificerade leads i er region, med kontaktperson och ett färdigt första mejl till var och en, utan kostnad. Svara \"ja\" så skickar vi dem inom två dagar.",
+                "Kvittohanterare": "Vi gör fem kvitton klara åt er utan kostnad, med belopp, moms och konto, klara att ladda ned till bokföringsprogrammet. Vidarebefordra fem kvitton till kvitton@snajp.se så får ni dem tillbaka samma dag.",
+                "Supportagent": "En demolänk där ni lägger in era vanligaste frågor och villkor och testar agenten själva, utan kostnad. Det tar fem minuter: snajp.se/demo",
+            },
+            "garanti": {
+                "Iris": "Minst 10 nya kunddialoger inom 90 dagar. Blir det färre förlänger vi provperioden utan kostnad tills ni har fått dem, så länge ni godkänner utkasten. Svara på mejlet så bokar vi 20 minuter.",
+                "Kvittohanterare": "Minst 90 % av kvittona i e-posten klara för bokföringen inom 30 dagar. Annars förlänger vi provperioden utan kostnad, så länge inkorgen är kopplad. Svara \"ja\" så sätter vi upp det.",
+                "Supportagent": "Minst 50 % mindre tid på kundmejlen inom 60 dagar. Annars förlänger vi provperioden utan kostnad tills ni når dit, så länge inkorgen är kopplad. Testa den på era egna frågor: snajp.se/demo",
+            },
+            "pilot": {
+                produkt: f"20 pilotplatser för {produkt}. Pilotföretagen får 50 % rabatt första året och 25 % så länge de stannar. Vi tar bara 20 eftersom vi sätter upp varje företag personligen. Svara \"pilot\" så håller vi en plats åt er."
+                for produkt in ("Iris", "Kvittohanterare", "Supportagent")
+            },
         },
     },
     "webbyra": {
@@ -105,13 +120,11 @@ KUNDER = {
             {"namn": "Ny webbplats", "nytta": "en sajt som fungerar i mobilen och syns när kunder söker i närområdet"},
             {"namn": "Webbskötsel", "nytta": "uppdateringar och texter sköts åt er varje månad"},
         ],
+        # En text för alla produkter: det bakåtkompatibla formatet.
         "villkor": {
-            "riskfri_start": "Ni betalar först när ni har godkänt den färdiga sajten. Ingen handpenning.",
-            "se_det_forst": "Vi gör en skiss på er nya startsida utan kostnad. Ni bestämmer sedan om ni vill gå vidare.",
-            "forsta_resultatet": "Är sajten inte publicerad inom sex veckor från att vi fått era texter och bilder, sänker vi priset med 20 procent.",
-            "gjort_at_er": "Vi skriver texterna och väljer bilderna. Ni behöver avsätta en timme till ett möte.",
-            "ratt_tid": "Före vårsäsongen: beställer ni i februari är sajten klar till mars, när kunderna börjar söka.",
-            "tva_vagar": "Antingen en enkel sajt på en sida, eller en hel webbplats med skötsel varje månad.",
+            "gratis_prov": "Vi gör en skiss på er nya startsida utan kostnad. Svara \"ja\" så skickar vi den inom en vecka.",
+            "garanti": "Sajten är publicerad inom sex veckor från att vi fått era texter och bilder. Annars sänker vi priset med 20 procent. Svara på mejlet så bokar vi en genomgång.",
+            "pilot": "Tio pilotplatser i vår, till halva priset för sajten. Vi tar bara tio eftersom vi bygger varje sajt själva. Svara \"pilot\" så håller vi en plats åt er.",
         },
     },
     "redovisning": {
@@ -127,12 +140,9 @@ KUNDER = {
             {"namn": "Bokslutspaketet", "nytta": "bokslut och årsredovisning klara i tid"},
         ],
         "villkor": {
-            "riskfri_start": "De första två månaderna till halva priset. Ingen bindningstid efter det.",
-            "se_det_forst": "Vi går igenom er senaste momsdeklaration utan kostnad och säger vad vi skulle göra annorlunda.",
-            "forsta_resultatet": "Får ni en förseningsavgift från Skatteverket för något vi ansvarar för, betalar vi den, så länge underlaget kommit in i tid.",
-            "gjort_at_er": "Vi flyttar över bokföringen från er nuvarande byrå åt er. Ni skickar bara en fullmakt.",
-            "ratt_tid": "Bokslutet för räkenskapsåret som slutar 31 december: anlitar ni oss före 30 november hinner vi med det.",
-            "tva_vagar": "Antingen bara bokslutet, eller hela den löpande redovisningen med fast kontaktperson.",
+            "gratis_prov": "Vi går igenom er senaste momsdeklaration utan kostnad och säger vad vi skulle göra annorlunda. Svara \"ja\" så hör vi av oss i veckan.",
+            "garanti": "Får ni en förseningsavgift från Skatteverket för något vi ansvarar för, betalar vi den, så länge underlaget kommit in i tid. Svara på mejlet så bokar vi en tid.",
+            "pilot": "Fem nya kunder i höst får de två första månaderna till halva priset. Vi tar bara fem eftersom varje kund får en fast kontaktperson. Svara \"pilot\" så håller vi en plats.",
         },
     },
     "stad": {
@@ -148,12 +158,9 @@ KUNDER = {
             {"namn": "Storstädning", "nytta": "fönster, golv och kök en gång per kvartal"},
         ],
         "villkor": {
-            "riskfri_start": "Första städningen utan kostnad. Ingen bindningstid, uppsägning med en månads varsel.",
-            "se_det_forst": "Vi kommer och tittar på lokalen och lämnar ett fast pris samma vecka, utan kostnad.",
-            "forsta_resultatet": "Är ni inte nöjda med en städning kommer vi tillbaka inom 24 timmar och gör om den utan kostnad.",
-            "gjort_at_er": "Vi tar med allt material och alla maskiner. Ni lämnar bara en nyckel.",
-            "ratt_tid": "Inför julen: bokar ni före 15 november ingår en storstädning i december.",
-            "tva_vagar": "Antingen städning varannan vecka, eller varje vecka med storstädning varje kvartal.",
+            "gratis_prov": "Första städningen utan kostnad. Svara \"ja\" så bokar vi den.",
+            "garanti": "Är ni inte nöjda med en städning kommer vi tillbaka inom 24 timmar och gör om den utan kostnad. Svara på mejlet så lämnar vi ett fast pris.",
+            "pilot": "Tio nya kontor i höst får 20 % rabatt första året. Vi tar bara tio eftersom vi anställer städarna i takt med kunderna. Svara \"pilot\" så håller vi en plats.",
         },
     },
 }
@@ -220,7 +227,10 @@ async def _omdome(amne: str, brodtext: str) -> dict:
     return data if isinstance(data, dict) else {}
 
 
-async def _ett_utkast(kund_id: str, nyckel: str, mottagare: dict) -> dict:
+async def _forbered(kund_id: str, nyckel: str, mottagare: dict) -> dict:
+    """Lagringen, tråden och researchen för ett utkast, som i en riktig körning:
+    kundens produkter och erbjudandeval i inställningarna, den valda produkten
+    i research-JSON:en (vald_produkt)."""
     kund = KUNDER[kund_id]
     tenant = f"prov-{kund_id}"
     storage = MemoryStorage()
@@ -228,19 +238,34 @@ async def _ett_utkast(kund_id: str, nyckel: str, mottagare: dict) -> dict:
     await storage.set_agent_settings(
         tenant,
         agent_type="leads",
-        settings={"erbjudanden": {"aktiva": [{"nyckel": nyckel, "vikt": 1}], "villkor": {nyckel: kund["villkor"][nyckel]}}},
+        settings={
+            "produkter": kund["produkter"],
+            "erbjudanden": {"aktiva": [{"nyckel": nyckel, "vikt": 1}], "villkor": {nyckel: kund["villkor"][nyckel]}},
+        },
     )
     prospekt = await storage.create_prospect(tenant, company_name=mottagare["bolag"])
     trad = await storage.ensure_outreach_thread(tenant, prospect_id=prospekt["id"])
-    # Produkten: den första som passar mottagarens vardag; för provet räcker
-    # en rotation så att alla produkter förekommer.
+    # Produkten: en rotation så att alla produkter förekommer.
     produkt = kund["produkter"][MOTTAGARE.index(mottagare) % len(kund["produkter"])]
     sammanfattning = json.dumps(
         {k: mottagare[k] for k in ("company_summary", "likely_pains", "trigger_events", "citat", "lagesbeskrivning", "mottagare")}
         | {"vald_produkt": produkt},
         ensure_ascii=False,
     )
-    resultat = {"kund": kund_id, "nyckel": nyckel, "bolag": mottagare["bolag"], "villkor": kund["villkor"][nyckel]}
+    return {
+        "kund": kund, "tenant": tenant, "storage": storage, "trad": trad, "produkt": produkt,
+        "sammanfattning": sammanfattning,
+        "villkor": erbjudanden.villkor_for(kund["villkor"][nyckel], produkt["namn"]),
+    }
+
+
+async def _ett_utkast(kund_id: str, nyckel: str, mottagare: dict) -> dict:
+    f = await _forbered(kund_id, nyckel, mottagare)
+    kund, tenant, storage, trad, produkt, sammanfattning = (
+        f["kund"], f["tenant"], f["storage"], f["trad"], f["produkt"], f["sammanfattning"]
+    )
+    resultat = {"kund": kund_id, "nyckel": nyckel, "bolag": mottagare["bolag"],
+                "produkt": produkt["namn"], "villkor": f["villkor"]}
     try:
         utkast = await run_outreach_draft_v2(
             storage,
@@ -329,7 +354,7 @@ def _rapport(rader: list[dict]) -> str:
 
     ut.append("\n## Utkasten\n")
     for r in rader:
-        ut.append(f"### {KUNDER[r['kund']]['namn']} · {r['nyckel']} · {r['bolag']}\n")
+        ut.append(f"### {KUNDER[r['kund']]['namn']} · {r['nyckel']} · {r['bolag']} · {r['produkt']}\n")
         ut.append(f"*Villkor:* {r['villkor']}\n")
         if "brodtext" not in r:
             ut.append(f"**EJ KÖAT:** {r.get('fel')}\n")
@@ -344,16 +369,39 @@ def _rapport(rader: list[dict]) -> str:
     return "\n".join(ut)
 
 
+async def _torrkorning(kunder: list[str], nycklar: list[str]) -> int:
+    """Utan LLM: väljer erbjudandet genom den riktiga for_trad för varje
+    kombination och prövar att villkoret är den valda produktens och ingen
+    annans. Returnerar antalet fel."""
+    fel = 0
+    for kund_id in kunder:
+        for nyckel in nycklar:
+            for mottagare in MOTTAGARE:
+                f = await _forbered(kund_id, nyckel, mottagare)
+                produkt = erbjudanden.produkt_ur_research(f["sammanfattning"])
+                valt = await erbjudanden.for_trad(f["storage"], f["tenant"], f["trad"], produkt)
+                alla = KUNDER[kund_id]["villkor"][nyckel]
+                andras = set(alla.values()) - {f["villkor"]} if isinstance(alla, dict) else set()
+                ok = valt is not None and valt.villkor == f["villkor"] and valt.villkor not in andras
+                ok = ok and f"### Villkor för erbjudandet\n{f['villkor']}" in valt.block()
+                fel += not ok
+                print(f"{'ok ' if ok else 'FEL'} {kund_id:12} {nyckel:12} {produkt:20} {(valt.villkor if valt else '–')[:70]}")
+    print(f"Torrkörning: {fel} fel.")
+    return fel
+
+
 async def main() -> None:
     settings = get_settings()
     if settings.database_url or os.environ.get("SUPABASE_DB_URL"):
         print("AVBRYTER: en databas-URL är satt. Provet körs bara mot MemoryStorage.")
         sys.exit(2)
+    kunder = [k for k in (os.environ.get("PROV_KUNDER") or ",".join(KUNDER)).split(",") if k]
+    nycklar = [n for n in (os.environ.get("PROV_ERBJUDANDEN") or ",".join(erbjudanden.katalog())).split(",") if n]
+    if os.environ.get("PROV_TORR"):
+        sys.exit(1 if await _torrkorning(kunder, nycklar) else 0)
     if settings.is_simulation():
         print("AVBRYTER: ingen DeepSeek-nyckel hittades.")
         sys.exit(2)
-    kunder = [k for k in (os.environ.get("PROV_KUNDER") or ",".join(KUNDER)).split(",") if k]
-    nycklar = [n for n in (os.environ.get("PROV_ERBJUDANDEN") or ",".join(erbjudanden.katalog())).split(",") if n]
     grind = asyncio.Semaphore(int(os.environ.get("PROV_SAMTIDIGA", "6")))
 
     async def med_grind(kund_id, nyckel, mottagare):
