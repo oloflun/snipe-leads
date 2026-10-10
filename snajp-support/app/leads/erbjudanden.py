@@ -177,7 +177,17 @@ def block(nyckel: str, villkor: str) -> str:
         "## Erbjudandet i det här mejlet\n"
         "Kunden har valt det här erbjudandet för mejlet. Det bär stycke 3 och 4 i "
         "skrivstilen och går före vinkeln under \"Erbjudandet som styr vinkeln\". "
-        "Skriv det i skrivstilen, med villkoren nedan som det enda mejlet lovar.\n\n"
+        "Skriv det i skrivstilen, med villkoren nedan som det enda mejlet lovar.\n"
+        # Provkörningen 2026-10-10 (scripts/prova_erbjudanden.py): katalogens
+        # exempel på uppmaningar gick ordagrant in i mejlen, samma fråga i
+        # upp till elva av tolv, och villkor skrivna i ni-form blandade
+        # tilltalet i mejl till en namngiven person.
+        "- Citaten nedan visar formen, aldrig orden. Skriv uppmaningen med egna "
+        "ord, knuten till just det här bolagets situation.\n"
+        "- Återge villkorens innehåll exakt, varken mer eller mindre, men i mejlets "
+        "tilltal (du eller ni) och i hela meningar.\n"
+        "- Lägg erbjudandet i en egen mening efter meningen om vad tjänsten gör åt dem, "
+        "och håll båda under 20 ord.\n\n"
         f"{gemensamt()}\n\n"
         f"### {erbjudande.namn}\n{erbjudande.regler}\n\n"
         f"### Villkor för erbjudandet\n{villkor.strip()}"

@@ -13,7 +13,7 @@ Gemensamt för alla erbjudanden:
 **Namn:** Riskfri start
 **Hävstång:** upplevd sannolikhet. Den största invändningen mot något nytt är risken, och den tas bort innan den hinner uppstå.
 **Kräver villkor:** ja (till exempel provperiodens längd, betalning, bindningstid, vad som händer efteråt).
-**Så bär mejlet erbjudandet:** Efter meningen om vad agenten gör åt dem kommer EN mening som säger varför det inte kostar dem något att prova, med villkoren sakligt uppräknade i löptext. Villkoren upprepas kort i ett PS.
+**Så bär mejlet erbjudandet:** Efter meningen om vad agenten gör åt dem kommer EN mening som säger varför det inte kostar dem något att prova, med villkoren sakligt uppräknade i löptext. Villkoren står en gång: i den meningen eller i ett PS, aldrig i båda.
 **Uppmaningen:** att komma igång, inte att boka en demo ("Vill ni att jag sätter upp det åt er?").
 **Undvik:** "helt riskfritt", "ingenting att förlora", "gratis!" som rubrik. Säg vad som gäller, inte hur bra det är.
 
@@ -29,9 +29,9 @@ Gemensamt för alla erbjudanden:
 ## forsta_resultatet
 
 **Namn:** Garanti på första resultatet
-**Hävstång:** upplevd sannolikhet. Snajp tar risken för att det inte ger något, mot att kunden gör sin del.
-**Kräver villkor:** ja (vad första resultatet är, vad kunden ska göra, vad Snajp gör om det uteblir). Garantin får bara gälla sådant leverantören styr, aldrig affärsutfall som möten, kunder eller kronor.
-**Så bär mejlet erbjudandet:** En mening i formen "Har ni inte fått [första resultatet] när [tiden] är slut, [vad vi gör], så länge ni [kundens handling]." Den står efter nyttan, inte först i mejlet.
+**Hävstång:** upplevd sannolikhet. Avsändaren tar risken för att det inte ger något, mot att mottagaren gör sin del.
+**Kräver villkor:** ja (vad första resultatet är, vad mottagaren ska göra, vad avsändaren gör om det uteblir). Garantin får bara gälla sådant leverantören styr, aldrig affärsutfall som möten, kunder eller kronor.
+**Så bär mejlet erbjudandet:** En mening som säger garantin med villkorens innehåll: vad som ska ha hänt, vad avsändaren gör om det uteblir och vad mottagaren ska göra. När villkoren gäller ett resultat inom en tid passar formen "Får ni inte [första resultatet] inom [tiden], [vad vi gör], så länge ni [mottagarens handling]." Den står efter nyttan, inte först i mejlet.
 **Uppmaningen:** ett kort samtal eller att komma igång.
 **Undvik:** "garanterat", "100 %", och varje löfte om försäljning eller antal kunder.
 
@@ -39,9 +39,9 @@ Gemensamt för alla erbjudanden:
 
 **Namn:** Gjort åt er
 **Hävstång:** ansträngning. Köpare betalar för att slippa jobbet, och mest för att slippa sätta upp något nytt.
-**Kräver villkor:** ja (vad Snajp gör vid uppstarten och hur lång tid det tar för kunden).
-**Så bär mejlet erbjudandet:** Säg vem som gör jobbet: Snajp sätter upp agenten, kunden svarar på några frågor. Mottagaren ska förstå att de inte behöver lära sig ett nytt system. Använd villkorens tidsangivelse ordagrant.
-**Uppmaningen:** en tid för uppstarten, inte en demo ("Har ni en halvtimme nästa vecka, så sätter vi upp det tillsammans?" om villkoren säger en halvtimme).
+**Kräver villkor:** ja (vad avsändaren gör vid uppstarten och hur lång tid det tar för mottagaren).
+**Så bär mejlet erbjudandet:** Säg vem som gör jobbet: avsändaren sätter upp det, mottagaren svarar på några frågor. Mottagaren ska förstå att de inte behöver lära sig ett nytt system. Använd villkorens tidsangivelse ordagrant.
+**Uppmaningen:** en tid för uppstarten, inte en demo ("Har ni en halvtimme nästa vecka? Då sätter vi upp det tillsammans." om villkoren säger en halvtimme).
 **Undvik:** "smidigt", "enkelt", "sömlöst". Visa enkelheten med vad som händer, inte med adjektiv.
 
 ## ratt_tid

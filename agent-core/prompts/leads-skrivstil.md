@@ -26,9 +26,9 @@ Fyra korta stycken, i den här ordningen. Varje stycke är en till två meningar
 - "I en verkstad med ett litet team är det ofta [konkret moment] som får vänta."
 Har researchen en verklig signal (ny ägare, nyanställning, ny ort, ny tjänst) väver du in den i ingången som deras situation, inte som "jag såg": "Efter ett ägarbyte är det ofta nu man ser över hur [moment] sköts."
 
-**2. Igenkänningen, som en fråga.** En kort fråga som låter mottagaren känna igen sig själv. "Känner ni igen er?" "Kan det bli tidskrävande hos er också?" "Är det också så hos er?" Frågan ersätter varje påstående om deras problem.
+**2. Igenkänningen, som en fråga.** En kort fråga som låter mottagaren känna igen sig själv, och som nämner det konkreta momentet från ingången: "Blir offerterna liggande hos er också?" "Är det kvällarna som går åt till kvittona?" Frågan ersätter varje påstående om deras problem. En allmän fråga som skulle passa i vilket mejl som helst ("Känner ni igen er?") låter som en mall.
 
-**3. Erbjudandet: vad agenten gör åt dem och vad de vinner.** Mönster: "Vår [agent] [konkret handling] åt er, så att ni [vinst i deras eget arbete]." Namnge EN agent och EN sak den gör. Vinsten är deras tid, deras kunder eller deras hantverk, aldrig "effektivitet".
+**3. Erbjudandet: vad agenten gör åt dem och vad de vinner.** Mönster: "Vår [agent] [konkret handling] åt er, så att ni [vinst i deras eget arbete]." Namnge EN agent och EN sak den gör. Vinsten är deras tid, deras kunder eller deras hantverk, aldrig "effektivitet". Säg vinsten med ett verb ur deras arbete ("hinner med ett jobb till", "svarar kunden samma dag"), inte med formeln "lägga tiden på X i stället".
 
 **4. Uppmaningen.** Konkret och tidsatt, en enda fråga, och knuten till vinsten i stycke 3. Variera formen: ett kort samtal, en visning på deras egna mejl eller kvitton, eller en fråga om de vill se hur det skulle se ut för just dem. Ett erbjudande som står i affärskontexten (provperiod, gratis första månad, en demo på deras egna mejl) får lyftas här, med affärskontextens ord.
 
@@ -87,9 +87,9 @@ Exemplen visar riktningen. Skriv aldrig av dem (regel 7).
 "Jag såg att ni är specialister på renovering och byggprojekt i Göteborg. Med en anställd kan jag tänka mig att ni hanterar en del administrativt arbete själv, som kvittohantering. Snajp har en AI-agent som går igenom er e-post, hittar kvitton och samlar in de uppgifter som behövs för bokföringen. Skulle ni vilja ta ett kort samtal för att se hur Kvittohanteraren skulle kunna fungera i er verksamhet?"
 
 **Efter:**
-"När man driver ett byggföretag med ett litet team är det ofta kvittona som blir liggande tills bokföringen ska göras. Känner ni igen er?
+"När man driver ett byggföretag med ett litet team är det ofta kvittona som blir liggande tills bokföringen ska göras. Är det kvällarna som går åt till dem hos er också?
 
-Vår Kvittohanterare plockar upp kvittona direkt ur er e-post och lägger dem klara för bokföringen, så att ni kan lägga tiden på bygget i stället för på pappersjakt.
+Vår Kvittohanterare plockar upp kvittona direkt ur er e-post och lägger dem klara för bokföringen. Då slipper ni pappersjakten och hinner med bygget.
 
 Har ni 15 minuter nästa vecka? Då visar jag hur det skulle se ut hos er."
 
@@ -97,9 +97,9 @@ Har ni 15 minuter nästa vecka? Då visar jag hur det skulle se ut hos er."
 "Jag ser att ni har hjälpt maskinägare och entreprenörer med hjullastare och grävmaskiner sedan 2014. Många företag i er situation upplever att det tar mycket tid att hitta och kvalificera potentiella kunder manuellt. Snajps AI-agent Iris kan hitta och kvalificera potentiella kunder åt er."
 
 **Efter:**
-"För företag som ert, som säljer maskiner till entreprenörer, är det sällan affärerna som är svåra. Det är att hinna hitta nästa kund medan man tar hand om de befintliga. Kan det vara så hos er också?
+"För ett företag som ert, som säljer maskiner till entreprenörer, är det svårt att hinna leta nästa kund medan de befintliga ska tas om hand. Hinner ni med det just nu?
 
-Vår agent Iris letar upp entreprenörer som passar er och skriver ett personligt första mejl till var och en, så att ni kan lägga tiden på samtalen som faktiskt blir affärer.
+Vår agent Iris letar upp entreprenörer som passar er och skriver ett personligt första mejl till var och en. Ni tar bara samtalen som blir affärer.
 
 Passar det med ett kort samtal på 15 minuter nästa vecka?"
 
@@ -108,3 +108,7 @@ Passar det med ett kort samtal på 15 minuter nästa vecka?"
 ### Omgång 1 – Anton 2026-10-10
 
 Utkasten var anpassade efter varje bolag men kändes platta, nästan informerande. Beställningen: gör varje erbjudande mer attraktivt, tryck på vad vi gör för dem, och avsluta med en tydlig uppmaning. Inte "Jag ser att ni är …" utan "För företag som ert inom [bransch]" eller "När man jobbar med [typ av jobb] som ni, uppstår ofta …" / "Kan det här vara tidskrävande?". Inte "vi har skapat" utan "vår [agent] hjälper er med [specifikt] så att ni får mer tid till det ni gör bäst". Det vi säger är korrekt; det är strukturen, ordvalen och meningsbyggnaden som ska kännas verkligt personliga.
+
+### Omgång 2 – provkörningen av erbjudandena 2026-10-10
+
+72 utkast (fyra säljare, tre mottagare, sex erbjudanden) i `scripts/prova_erbjudanden.py`. Exemplens ord gick rakt in i mejlen: "Känner ni igen er?" stod i 67 av 72, "lägga tiden på … i stället" i 37 och "det är sällan X som … Det är att …" i 18, och en granskare läste just de raderna som mall. Igenkänningsfrågan ska därför nämna det konkreta momentet, vinsten sägas med ett verb ur deras arbete, och exemplen ovan är omskrivna utan de tre greppen.

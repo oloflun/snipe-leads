@@ -792,6 +792,10 @@ async def run_outreach_draft_v2(
         "engagemang\", \"imponerande\"). Konstatera det du såg och gå vidare.\n"
         "- Tilltal: har mejlet en namngiven mottagare används \"du\" och \"dig\"; "
         "annars \"ni\" och \"er\" genomgående. Blanda aldrig.\n"
+        # Provkörningen 2026-10-10: skrivstilens exempel saknar hälsning, och
+        # 63 av 72 utkast började mitt i ingången utan "Hej".
+        "- Börja med hälsningen på en egen rad: \"Hej [förnamn],\" till en namngiven "
+        "mottagare, annars \"Hej,\".\n"
         "- Skriv produktnamnen exakt som i erbjudandet, med samma stora och små "
         "bokstäver varje gång.\n"
         "- Avsluta med frågan eller uppmaningen. Skriv INGEN hälsningsfras och "
