@@ -104,6 +104,7 @@ async def _queue_outreach_draft_impl(
     language_state: str,
     humanizer_variant: str,
     force_review: bool = False,
+    stilkontroll: bool = False,
 ) -> str:
     # Textkvalitetslagret (app/textkvalitet.py): sista efterkontrollen innan
     # texten kan nå en kund. Platshållare ("[förnamn]") kontrolleras på
@@ -131,6 +132,26 @@ async def _queue_outreach_draft_impl(
             [kvalitet.sammanfattning()] if kvalitet.kraver_granskning else []
         )
         textkvalitet_granskning = "; ".join(delar)
+
+    # Stilkontrollen (app/leads/stilkontroll.py) för kalla första mejl: AI-
+    # och robotmarkörer, och samma ingång eller uppmaning som ett annat utkast
+    # som väntar på granskning (körningens andra mejl). Fäller inget, men ett
+    # fynd tvingar granskning, och skälet står på köposten (`held`) så att
+    # granskaren ser det.
+    if stilkontroll:
+        from ..leads import stilkontroll as stil
+
+        andra = [
+            str(r.get("body") or "")
+            for r in await outreach.storage.list_review_queue(outreach.tenant_id)
+            if r.get("thread_id") != outreach.thread_id
+        ]
+        stilfynd = stil.kontrollera(finalized_body).anmarkningar + stil.mot_andra(finalized_body, andra)
+        if stilfynd:
+            force_review = True
+            textkvalitet_granskning = "; ".join(
+                [*([textkvalitet_granskning] if textkvalitet_granskning else []), *(a.beskrivning for a in stilfynd)]
+            )
 
     # Signaturen (kodens text, inte modellens) läggs på efter kvalitets-
     # kontrollen och före foten — vid köningen, så att granskningstexten är
@@ -208,6 +229,7 @@ async def _queue_outreach_draft_impl(
         humanizer_variant=humanizer_variant,
         scheduled_at=scheduled_at,
         status=queue_status,
+        gate_checks={"held": textkvalitet_granskning} if textkvalitet_granskning else None,
     )
     outreach.queued = True
     svar = {

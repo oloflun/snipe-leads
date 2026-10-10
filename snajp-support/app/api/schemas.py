@@ -112,6 +112,33 @@ class LeadsConfigRequest(BaseModel):
     offentlig_sektor: bool | None = None
 
 
+class ErbjudandeArmRequest(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    nyckel: str = Field(max_length=40)
+    vikt: int = Field(default=1, ge=0, le=10)
+
+
+class ErbjudandenRequest(BaseModel):
+    """PUT /api/leads/erbjudanden (app/leads/erbjudanden.py). Båda fälten
+    valfria: ett utelämnat fält behåller det sparade. Nycklarna och kravet på
+    villkor för ett aktivt erbjudande prövas mot katalogen i routen."""
+
+    model_config = {"extra": "forbid"}
+
+    aktiva: list[ErbjudandeArmRequest] | None = Field(default=None, max_length=6)
+    villkor: dict[str, str] | None = None
+
+    @model_validator(mode="after")
+    def _villkorslangd(self) -> "ErbjudandenRequest":
+        from ..leads.erbjudanden import VILLKOR_MAX
+
+        for nyckel, text in (self.villkor or {}).items():
+            if len(text) > VILLKOR_MAX:
+                raise ValueError(f"Villkoren för {nyckel} är längre än {VILLKOR_MAX} tecken.")
+        return self
+
+
 class SignaturRequest(BaseModel):
     """Mejlsignaturen i Iris utgående leads-mejl (app/leads/signatur.py).
 
