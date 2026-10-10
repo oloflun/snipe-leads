@@ -1,5 +1,14 @@
 # Snipra Status
 
+## 2026-10-10 (2) — Claude — parallella körningar, hitta.se-kontakt, listverktyg, kö, autopilot
+
+Parallella körningar delar inte längre bolag; hitta.se slås upp på org.nr och ger kontakt till Norrtech,
+Örnbergs och Devoted Intelligence; listorna har detaljvy, utkast och Processa om med förlopp (migration 110,
+torrkörd, inte körd); kön kan skicka nu eller omplanera; autopiloten (10 leads/vardag, av tills
+`LEADS_AUTOPILOT=1`) är byggd. 3161 tester gröna. **Ocommittat.** **Kvar:** Anton frigör disk (C: gick till 0),
+svarar på commit/migration/push, hitta.se-nummer utan VD, sändfönster för Skicka nu och autopilot i main;
+visuell granskning. Handoff: `HANDOFF-2026-10-10-PARALLELL-KATALOG-AUTOPILOT.md`.
+
 ## 2026-10-08 (2) — Claude — Iris live, rangpoäng, sökning som hittar, Leads-översikten genom fyra kritiker
 
 Iris-leads visas live: bolag under research står i Research pågår (härlett ur jobbliggaren) och landar i

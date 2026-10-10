@@ -268,6 +268,7 @@ rebase. Ändringar behöver samordnas, inte bara pushas.
 
 ## Ändringslogg
 
+- 2026-10-10 — claude — delmål 2: hitta.se som kontaktkälla, listverktyg med förlopp, autopilot (avstängd) för dagliga körningar.
 - 2026-10-08 — claude — delmål 2 (leads-agenten): kontaktsökningen hittar det som finns på sajten och
   fördelar till Iris, ringlista, ej kvalificerade eller prövas om (leadsregel 12–17); Leads › Samtal med
   ringlista och återkoppling. Delmål 11 (mejlsändning): utkastens status är en sanning per lead,
