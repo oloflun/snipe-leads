@@ -28,9 +28,9 @@ Har researchen en verklig signal (ny ägare, nyanställning, ny ort, ny tjänst)
 
 **2. Igenkänningen, som en fråga.** En kort fråga som låter mottagaren känna igen sig själv, och som nämner det konkreta momentet från ingången: "Blir offerterna liggande hos er också?" "Är det kvällarna som går åt till kvittona?" Frågan ersätter varje påstående om deras problem. En allmän fråga som skulle passa i vilket mejl som helst ("Känner ni igen er?") låter som en mall.
 
-**3. Erbjudandet: vad agenten gör åt dem och vad de vinner.** Mönster: "Vår [agent] [konkret handling] åt er, så att ni [vinst i deras eget arbete]." Namnge EN agent och EN sak den gör. Vinsten är deras tid, deras kunder eller deras hantverk, aldrig "effektivitet". Säg vinsten med ett verb ur deras arbete ("hinner med ett jobb till", "svarar kunden samma dag"), inte med formeln "lägga tiden på X i stället".
+**3. Erbjudandet: vad agenten gör åt dem och vad de vinner.** Mönster: "Vår [agent] [konkret handling] åt er, så att ni [vinst i deras eget arbete]." Namnge EN agent och EN sak den gör. Är det avsändaren som gör jobbet (en tjänst som städning, redovisning eller en ny webbplats, inte en agent eller ett verktyg) är subjektet "vi": "Vi sköter bokföringen åt er …", aldrig "Vår löpande redovisning tar …". Vinsten är deras tid, deras kunder eller deras hantverk, aldrig "effektivitet". Säg vinsten med ett verb ur deras arbete ("hinner med ett jobb till", "svarar kunden samma dag"), inte med formeln "lägga tiden på X i stället".
 
-**4. Uppmaningen.** Konkret och tidsatt, en enda fråga, och knuten till vinsten i stycke 3. Variera formen: ett kort samtal, en visning på deras egna mejl eller kvitton, eller en fråga om de vill se hur det skulle se ut för just dem. Ett erbjudande som står i affärskontexten (provperiod, gratis första månad, en demo på deras egna mejl) får lyftas här, med affärskontextens ord.
+**4. Uppmaningen.** Konkret och tidsatt, en enda fråga, och knuten till vinsten i stycke 3. Den bär en detalj ur just deras situation när underlaget har en ("… innan de nya liftarna är ute?", "… före bokslutet?"), så att den inte kunde stå i ett mejl till ett annat bolag. Variera formen: ett kort samtal, en visning på deras egna mejl eller kvitton, eller en fråga om de vill se hur det skulle se ut för just dem. Ett erbjudande som står i affärskontexten (provperiod, gratis första månad, en demo på deras egna mejl) får lyftas här, med affärskontextens ord.
 
 ## Ordval
 
@@ -112,3 +112,5 @@ Utkasten var anpassade efter varje bolag men kändes platta, nästan informerand
 ### Omgång 2 – provkörningen av erbjudandena 2026-10-10
 
 72 utkast (fyra säljare, tre mottagare, sex erbjudanden) i `scripts/prova_erbjudanden.py`. Exemplens ord gick rakt in i mejlen: "Känner ni igen er?" stod i 67 av 72, "lägga tiden på … i stället" i 37 och "det är sällan X som … Det är att …" i 18, och en granskare läste just de raderna som mall. Igenkänningsfrågan ska därför nämna det konkreta momentet, vinsten sägas med ett verb ur deras arbete, och exemplen ovan är omskrivna utan de tre greppen.
+
+Varv 2 av samma prov: 42 av 54 mejl från säljare av tjänster (webbyrå, redovisning, städning) gjorde tjänsten till subjekt ("Vår löpande redovisning tar bokföring åt er"), och omdömet läste det som maskinöversatt. Mönstret "Vår [agent]" gäller agenter och verktyg; en tjänst säger "vi". Uppmaningen var fortfarande densamma i upp till elva mejl ("Har ni 15 minuter nästa vecka?", "Vilken väg passar er bäst?"), så den ska bära en detalj ur mottagarens situation.
