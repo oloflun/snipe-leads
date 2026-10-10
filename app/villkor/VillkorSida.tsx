@@ -66,6 +66,12 @@ const T = {
     en: ", but payment terms, indexation and what applies in case of non-payment are not governed here. Write to us at"
   },
   innanAvtal: { sv: "innan avtal tecknas.", en: "before entering into a contract." },
+  // Antons beslut 2026-10-10: garantiernas och pilotens siffror i utskicken är
+  // uppskattningar tills vi har egna mätdata, och det står här, inte i mejlen.
+  erbjudandenFinstilt: {
+    sv: "Erbjudanden i våra utskick: siffrorna i garantierna (till exempel tid som sparas eller antal nya kunddialoger) är Snajps egna uppskattningar och inte uppmätta resultat. Därför är garantin utformad som en förlängd provperiod utan kostnad om resultatet inte nås, förutsatt att Kunden använt tjänsten som avsett. Pilotrabatter gäller de företag som antagits till piloten och så länge villkoren i pilotavtalet uppfylls.",
+    en: "Offers in our outreach: the figures in our guarantees (for example time saved or number of new customer conversations) are Snajp's own estimates, not measured results. That is why the guarantee takes the form of a free extension of the trial period if the result is not reached, provided the Customer has used the service as intended. Pilot discounts apply to companies admitted to the pilot and for as long as the terms of the pilot agreement are met."
+  },
   ansvarsbegransning: { sv: "Ansvarsbegränsning", en: "Limitation of liability" },
   ansvarsbegransningText: {
     sv: "Det här avsnittet är inte fastställt. Klausulen avgör vad ett fel kostar, och vi skriver den inte själva — den ska formuleras av jurist. Tills dess finns ingen avtalad ansvarsbegränsning. Skriv till oss på",
@@ -128,6 +134,9 @@ export function VillkorSida() {
       <p>
         {text(T.pris1)} <Link href="/#priser">{text(T.prislistan)}</Link>
         {text(T.pris2)} {mejl} {text(T.innanAvtal)}
+      </p>
+      <p>
+        <small>{text(T.erbjudandenFinstilt)}</small>
       </p>
 
       <h2>{text(T.ansvarsbegransning)}</h2>

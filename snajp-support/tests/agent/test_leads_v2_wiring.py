@@ -593,3 +593,128 @@ def test_kedjevalet_styrs_av_flaggan(monkeypatch):
     assert research.__name__ == "run_research_step_v2"
     assert draft.__name__ == "run_outreach_draft_v2"
     get_settings.cache_clear()
+
+
+# --- Erbjudandena (A/B, app/leads/erbjudanden.py) ---------------------------
+
+_VILLKOR = "Två månader utan kostnad, sedan 60 dagars uppsägningstid. Ingen bindningstid."
+
+
+async def _utkast_v2(storage, thread_id, llm):
+    with patch("app.agent.step_runner.get_llm_client", return_value=llm):
+        return await run_outreach_draft_v2(
+            storage,
+            TENANT,
+            thread_id=thread_id,
+            prospect_email="kundservice@exempelbolaget.se",
+            tenant_name="Snajp",
+            company_name="Exempelbolaget",
+            offer_summary="Pilot på returfrågor",
+            context_pack="## Kontextpaket\nICP: svensk e-handel.",
+            brief="",
+            research_evidence=("Fri retur inom 30 dagar",),
+            is_test=True,
+        )
+
+
+async def _med_erbjudande(storage, villkor: dict) -> None:
+    await storage.set_agent_settings(
+        TENANT,
+        agent_type="leads",
+        settings={"erbjudanden": {"aktiva": [{"nyckel": "gratis_prov", "vikt": 1}], "villkor": villkor}},
+    )
+
+
+async def test_erbjudandet_nar_utkastet_och_humanizern_med_villkoren_ordagrant():
+    storage = MemoryStorage()
+    thread_id = await _prepare_outreach(storage)
+    await _med_erbjudande(storage, {"gratis_prov": _VILLKOR})
+    llm = _FakeLLM()
+
+    result = await _utkast_v2(storage, thread_id, llm)
+
+    assert result["queued"] is True
+    for steg in (0, 1):  # utkastet och humanizern
+        assert "## Erbjudandet i det här mejlet" in llm.user_messages[steg]
+        assert f"### Villkor för erbjudandet\n{_VILLKOR}" in llm.user_messages[steg]
+        # Kundens villkor är kundtext: aldrig i systemprompten (INV-SEC-009).
+        assert _VILLKOR not in llm.system_prompts[steg]
+    trad = await storage.get_outreach_thread(TENANT, thread_id)
+    assert trad["offer_id"] == storage.offers[0]["id"]
+    assert storage.offers[0]["name"] == "gratis_prov"
+
+
+async def test_utan_valbart_erbjudande_ar_prompten_oforandrad():
+    forut = MemoryStorage()
+    llm_forut = _FakeLLM()
+    await _utkast_v2(forut, await _prepare_outreach(forut), llm_forut)
+
+    # Aktivt men utan villkor är inte valbart: samma beteende som inget alls.
+    utan_villkor = MemoryStorage()
+    await _med_erbjudande(utan_villkor, {})
+    llm = _FakeLLM()
+    thread_id = await _prepare_outreach(utan_villkor)
+    await _utkast_v2(utan_villkor, thread_id, llm)
+
+    assert llm.user_messages == llm_forut.user_messages
+    assert "Erbjudandet i det här mejlet" not in llm.user_messages[0]
+    assert (await utan_villkor.get_outreach_thread(TENANT, thread_id))["offer_id"] is None
+    assert utan_villkor.offers == []
+
+
+async def test_faktagrinden_slapper_villkorens_siffra_bara_med_erbjudandet():
+    mejl = {"snajp:humanizer-svenska": {
+        "final_subject": "Returfrågor",
+        "final_body": "Hej,\n\nVår agent svarar på returfrågorna åt er. Uppsägningstiden är 60 dagar.\n\nPassar torsdag?",
+    }}
+    med = MemoryStorage()
+    await _med_erbjudande(med, {"gratis_prov": _VILLKOR})
+    llm = _FakeLLM(overrides=mejl)
+    result = await _utkast_v2(med, await _prepare_outreach(med), llm)
+    assert result["grounding"]["fired"] is False
+    assert llm.calls == ["sa:draft-outreach", "snajp:humanizer-svenska"]
+
+    utan = MemoryStorage()
+    llm2 = _FakeLLM(overrides=mejl)
+    result2 = await _utkast_v2(utan, await _prepare_outreach(utan), llm2)
+    assert result2["grounding"]["fired"] is True, "60 står inte i underlaget utan villkoren"
+
+
+async def test_villkoret_folger_produkten_researchen_valde():
+    """Varv 3: ett Supportagent-mejl fick Iris-villkoret. Nu når bara den
+    valda produktens villkor prompten."""
+    storage = MemoryStorage()
+    iris = "Fem kvalificerade leads med färdiga första mejl, utan kostnad."
+    support = "En demolänk där ni testar agenten på era egna frågor."
+    await _med_erbjudande(storage, {"gratis_prov": {"Iris": iris, "Supportagent": support}})
+    llm = _FakeLLM()
+    with patch("app.agent.step_runner.get_llm_client", return_value=llm):
+        await run_outreach_draft_v2(
+            storage,
+            TENANT,
+            thread_id=await _prepare_outreach(storage),
+            prospect_email="kundservice@exempelbolaget.se",
+            tenant_name="Snajp",
+            company_name="Exempelbolaget",
+            offer_summary="Supportagent: svarar på kundmejlen",
+            context_pack="## Kontextpaket\nICP: svensk e-handel.",
+            brief="",
+            research_summary=json.dumps({"vald_produkt": {"namn": "Supportagent", "nytta": "svar"}}),
+            research_evidence=("Fri retur inom 30 dagar",),
+            is_test=True,
+        )
+    for meddelande in llm.user_messages:
+        assert iris not in meddelande
+    assert f"### Villkor för erbjudandet\n{support}" in llm.user_messages[0]
+
+
+async def test_stilfynd_tvingar_granskning_med_skalet_pa_koposten():
+    storage = MemoryStorage()
+    thread_id = await _prepare_outreach(storage)
+    # Standardsvaret: "Hej! Jag såg att ni erbjuder fri retur i 30 dagar."
+    result = await _utkast_v2(storage, thread_id, _FakeLLM())
+    assert result["queued"] is True
+    post = storage.send_queue[TENANT][-1]
+    assert post["status"] == "awaiting_review"
+    assert "Stil:" in post["gate_checks"]["held"]
+    assert "Jag såg att" in post["gate_checks"]["held"]

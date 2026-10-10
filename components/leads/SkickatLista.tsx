@@ -24,7 +24,8 @@ import { MejlMedSignatur, type Signatur } from "@/components/leads/IrisGransknin
  *
  * De schemalagda går att markera (Anton 2026-10-10): Skicka nu (samma väg som
  * POST /leads/queue/{id}/skicka-nu, går direkt även utanför sändfönstret) eller Ändra tid
- * (POST /leads/queue/schemalagg) för just dem; övrigas tid rörs inte.
+ * (POST /leads/queue/schemalagg) för just dem; övrigas tid rörs inte. Tillbaka
+ * till Iris avbryter dem och låter Iris skriva om utkasten.
  *
  * Varje rad bär leadets NUVARANDE status. Svarshanteringen
  * (snajp-support/app/leads/svar.py) och samtalsutfallen flyttar statusen, så
@@ -107,7 +108,7 @@ export function SkickatLista({
   const [oppen, setOppen] = useState<string | null>(null);
   const [filter, setFilter] = useState<Filter>("alla");
   const [valda, setValda] = useState<Set<string>>(new Set());
-  const [atgard, setAtgard] = useState<{ namn: "skicka" | "tid"; klara?: number } | null>(null);
+  const [atgard, setAtgard] = useState<{ namn: "skicka" | "tid" | "iris"; klara?: number } | null>(null);
   const [tidOppen, setTidOppen] = useState(false);
   const [nyTid, setNyTid] = useState("");
   const [besked, setBesked] = useState<{ text: string; orsaker?: string[]; fel: boolean } | null>(null);
@@ -231,6 +232,44 @@ export function SkickatLista({
     }
   }
 
+  /** Tillbaka till Iris (Anton 2026-10-10): utkasten avbryts och Iris skriver
+   *  om dem med samma kedja som första gången (POST /leads/queue/tillbaka-till-iris). */
+  async function tillbakaTillIris() {
+    if (!valt.length || atgard) return;
+    if (
+      !window.confirm(
+        text({
+          sv: `Skicka tillbaka ${valt.length} utkast till Iris? De skickas inte, och Iris skriver nya utkast till samma bolag.`,
+          en: `Send ${valt.length} drafts back to Iris? They will not be sent, and Iris writes new drafts to the same companies.`
+        })
+      )
+    ) {
+      return;
+    }
+    setAtgard({ namn: "iris" });
+    setBesked(null);
+    try {
+      const svar = await leadsAnrop<{ count?: number }>("/leads/queue/tillbaka-till-iris", {
+        method: "POST",
+        body: JSON.stringify({ ids: valt.map((r) => r.queue_item_id) })
+      });
+      const antalOm = svar.count ?? 0;
+      setBesked({
+        text: text({
+          sv: `${antalOm} utkast är tillbaka hos Iris och skrivs om. De nya dyker upp i granskningen när de är klara.`,
+          en: `${antalOm} drafts are back with Iris and being rewritten. The new ones appear in review when they are ready.`
+        }),
+        fel: false
+      });
+      setValda(new Set());
+      meddelaLeadsUppdaterade("skickat");
+    } catch (orsak) {
+      setBesked({ text: felmeddelande(orsak), fel: true });
+    } finally {
+      setAtgard(null);
+    }
+  }
+
   if (fel) {
     return (
       <p role="alert" className="text-[14px] text-danger">
@@ -305,6 +344,16 @@ export function SkickatLista({
                   className={cn(btnSecondary, "disabled:opacity-60")}
                 >
                   {text({ sv: "Ändra tid", en: "Change time" })}
+                </button>
+                <button
+                  type="button"
+                  disabled={atgard !== null}
+                  onClick={() => void tillbakaTillIris()}
+                  className={cn(btnSecondary, "disabled:opacity-60")}
+                >
+                  {atgard?.namn === "iris"
+                    ? text({ sv: "Skickar tillbaka…", en: "Sending back…" })
+                    : text({ sv: `Tillbaka till Iris (${valt.length})`, en: `Back to Iris (${valt.length})` })}
                 </button>
               </>
             ) : null}

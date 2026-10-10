@@ -114,6 +114,35 @@ class LeadsConfigRequest(BaseModel):
     offentlig_sektor: bool | None = None
 
 
+class ErbjudandeArmRequest(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    nyckel: str = Field(max_length=40)
+    vikt: int = Field(default=1, ge=0, le=10)
+
+
+class ErbjudandenRequest(BaseModel):
+    """PUT /api/leads/erbjudanden (app/leads/erbjudanden.py). Båda fälten
+    valfria: ett utelämnat fält behåller det sparade. Nycklarna och kravet på
+    villkor för ett aktivt erbjudande prövas mot katalogen i routen."""
+
+    model_config = {"extra": "forbid"}
+
+    aktiva: list[ErbjudandeArmRequest] | None = Field(default=None, max_length=6)
+    #: Per erbjudande: en text för alla produkter, eller {produktnamn: text}.
+    villkor: dict[str, str | dict[str, str]] | None = None
+
+    @model_validator(mode="after")
+    def _villkorslangd(self) -> "ErbjudandenRequest":
+        from ..leads.erbjudanden import VILLKOR_MAX
+
+        for nyckel, varde in (self.villkor or {}).items():
+            texter = varde.values() if isinstance(varde, dict) else [varde]
+            if any(len(text) > VILLKOR_MAX for text in texter):
+                raise ValueError(f"Villkoren för {nyckel} är längre än {VILLKOR_MAX} tecken.")
+        return self
+
+
 class SignaturRequest(BaseModel):
     """Mejlsignaturen i Iris utgående leads-mejl (app/leads/signatur.py).
 
@@ -450,6 +479,13 @@ class SchemalaggRequest(BaseModel):
 
     ids: list[str] = Field(min_length=1, max_length=500)
     tid: datetime
+
+
+class TillbakaTillIrisRequest(BaseModel):
+    """Markerade utkast ur sändlistan tillbaka till Iris för att skrivas om
+    (Anton 2026-10-10)."""
+
+    ids: list[str] = Field(min_length=1, max_length=50)
 
 
 class TillIrisRequest(BaseModel):

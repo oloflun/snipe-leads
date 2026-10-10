@@ -1329,6 +1329,7 @@ class PostgresStorage:
         humanizer_variant: str,
         scheduled_at,
         status: str = "queued",
+        gate_checks: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         async with self._scoped(tenant_id) as conn:
             message = await conn.fetchrow(
@@ -1347,15 +1348,90 @@ class PostgresStorage:
             queue_item = await conn.fetchrow(
                 """
                 insert into send_queue (tenant_id, thread_id, scheduled_at, status, gate_checks)
-                values ($1, $2, $3, $4, '{}'::jsonb)
+                values ($1, $2, $3, $4, $5::jsonb)
                 returning *
                 """,
                 tenant_id,
                 thread_id,
                 scheduled_at,
                 status,
+                json.dumps(gate_checks or {}, ensure_ascii=False),
             )
         return {"message": _row(message), "queue_item": _row(queue_item)}
+
+    async def tilldela_erbjudande(self, tenant_id: str, thread_id: str, *, nyckel: str) -> str:
+        async with self._scoped(tenant_id) as conn:
+            # offers saknar unique(tenant_id, name) (010) och en migration för
+            # det är inte värd det: två samtidiga utkast kan i värsta fall ge
+            # två rader med samma namn, och utfallet grupperas på namnet.
+            offer_id = await conn.fetchval(
+                """
+                with befintlig as (
+                  select id from offers where tenant_id = $1 and name = $2
+                  order by created_at limit 1
+                ), ny as (
+                  insert into offers (tenant_id, name)
+                  select $1, $2 where not exists (select 1 from befintlig)
+                  returning id
+                )
+                select id from befintlig union all select id from ny limit 1
+                """,
+                tenant_id,
+                nyckel,
+            )
+            await conn.execute(
+                "update outreach_threads set offer_id = $3 where tenant_id = $1 and id = $2",
+                tenant_id,
+                thread_id,
+                offer_id,
+            )
+        return str(offer_id)
+
+    async def erbjudande_utfall(self, tenant_id: str) -> list[dict[str, Any]]:
+        # Härledningen står i base.py. Statuslistan speglar memory.SVARSSTATUS.
+        async with self._scoped(tenant_id) as conn:
+            records = await conn.fetch(
+                """
+                with tradar as (
+                  select o.name as nyckel,
+                    exists (select 1 from outreach_messages m
+                            where m.tenant_id = t.tenant_id and m.thread_id = t.id
+                              and m.direction = 'outbound') as utkast,
+                    exists (select 1 from outreach_messages m
+                            where m.tenant_id = t.tenant_id and m.thread_id = t.id
+                              and m.direction = 'outbound' and m.sent_at is not null) as skickat,
+                    exists (select 1 from prospect_status_logg l
+                            where l.tenant_id = t.tenant_id and l.prospect_id = t.prospect_id
+                              and l.created_at >= t.created_at and l.kalla = 'kod'
+                              and l.till in ('replied', 'meeting', 'lost', 'suppressed')) as svar,
+                    exists (select 1 from prospect_status_logg l
+                            where l.tenant_id = t.tenant_id and l.prospect_id = t.prospect_id
+                              and l.created_at >= t.created_at and l.kalla = 'kod'
+                              and l.till = 'meeting') as positivt,
+                    (exists (select 1 from lead_samtal s
+                             where s.tenant_id = t.tenant_id and s.prospect_id = t.prospect_id
+                               and s.utfall = 'mote')
+                     or exists (select 1 from prospect_status_logg l
+                                where l.tenant_id = t.tenant_id and l.prospect_id = t.prospect_id
+                                  and l.created_at >= t.created_at
+                                  and (l.till = 'won' or (l.till = 'meeting' and l.kalla = 'manuell')))
+                    ) as mote
+                  from outreach_threads t
+                  join offers o on o.id = t.offer_id
+                  where t.tenant_id = $1
+                )
+                select nyckel,
+                       count(*) filter (where utkast) as utkast,
+                       count(*) filter (where skickat) as skickade,
+                       count(*) filter (where skickat and svar) as svar,
+                       count(*) filter (where skickat and positivt) as positiva,
+                       count(*) filter (where skickat and mote) as moten
+                from tradar
+                group by nyckel
+                """,
+                tenant_id,
+            )
+        return [_row(r) for r in records]
 
     async def find_outreach_thread(
         self, tenant_id: str, *, prospect_id: str

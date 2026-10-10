@@ -1,63 +1,34 @@
 # Erbjudanden i kalla mejl
 
-> **Om filen:** Katalogen över erbjudanden som Iris kan bära i ett kallt mejl, ett avsnitt per erbjudande med nyckeln som rubrik. Koden (`app/leads/erbjudanden.py`) läser avsnitten, och kunden väljer vilka som är aktiva och med vilka villkor. Ett erbjudande gör bara stycke 3 och 4 i skrivstilen (`leads-skrivstil.md`) mer konkreta; ingången och igenkänningsfrågan är desamma. Villkoren skrivs ALDRIG här: de står i kundens inställningar, ordagrant, och är det enda mejlet får lova. Byggd 2026-10-10 ur Hormozis $100M Offers, $100M Leads och $100M Money Models (valvet, se `docs/hormozi-erbjudanden-2026-10-10.md`).
+> **Om filen:** Katalogen över erbjudanden som Iris kan bära i ett kallt mejl, ett avsnitt per erbjudande med nyckeln som rubrik. Koden (`app/leads/erbjudanden.py`) läser avsnitten, och kunden väljer vilka som är aktiva och skriver villkoren per produkt. Erbjudandet bär stycke 2 och 3 i skrivstilen (`leads-skrivstil.md`): vad mottagaren får och den enkla handlingen. Villkoren skrivs ALDRIG här: de står i kundens inställningar, ordagrant, och är det enda mejlet får lova. Omgjord 2026-10-10 efter Antons omgång 3: tre kärnerbjudanden i stället för sex (exempel: https://claude.ai/artifact/AvqAtFiVf7h3Rupe5E6Ryz). Grunden är Hormozis $100M Offers och $100M Leads, se `docs/hormozi-erbjudanden-2026-10-10.md`.
 
 Gemensamt för alla erbjudanden:
-- Erbjudandet sägs med kundens villkor och inget annat. Står ett villkor inte under "Villkor för erbjudandet" i ärendet får det inte stå i mejlet, inte ens omskrivet.
-- Ett erbjudande per mejl. Inga staplade förstärkare (inte garanti plus brådska plus bonus).
+- Grundkänslan: erbjudandet är skrivet just för dem, löser det som skaver i ingången och är för bra att ignorera. Kort, konkret och utan förklaringar av hur tekniken fungerar.
+- Erbjudandet sägs med villkorens innehåll och siffror och inget annat. Står något inte under "Villkor för erbjudandet" i ärendet får det inte stå i mejlet, inte ens omskrivet.
+- Ett erbjudande per mejl, och det gäller produkten mejlet handlar om.
+- Mejlet slutar med villkorens handling (svara "ja", följ länken, vidarebefordra, svara så bokar vi), aldrig med en fråga.
 - Sakligt, utan utropstecken och utan säljord ("unikt", "exklusivt", "missa inte").
-- Erbjudandet hör till stycke 3 (vad agenten gör och vad de vinner) och 4 (uppmaningen). Ingången ändras inte av erbjudandet.
 
-## riskfri_start
+## gratis_prov
 
-**Namn:** Riskfri start
-**Hävstång:** upplevd sannolikhet. Den största invändningen mot något nytt är risken, och den tas bort innan den hinner uppstå.
-**Kräver villkor:** ja (till exempel provperiodens längd, betalning, bindningstid, vad som händer efteråt).
-**Så bär mejlet erbjudandet:** Efter meningen om vad agenten gör åt dem kommer EN mening som säger varför det inte kostar dem något att prova, med villkoren sakligt uppräknade i löptext. Villkoren upprepas kort i ett PS.
-**Uppmaningen:** att komma igång, inte att boka en demo ("Vill ni att jag sätter upp det åt er?").
-**Undvik:** "helt riskfritt", "ingenting att förlora", "gratis!" som rubrik. Säg vad som gäller, inte hur bra det är.
+**Namn:** Testa gratis
+**Hävstång:** tidsfördröjning och upplevd sannolikhet. Mottagaren får ett färdigt resultat innan något är bestämt, och resultatet är beviset.
+**Kräver villkor:** ja, per produkt: vad provet innehåller (till exempel fem kvalificerade leads med färdiga mejl, fem kvitton klara att ladda ned, eller en demolänk där de lägger in sina vanligaste frågor och villkor och testar själva) och handlingen som ger dem det.
+**Så bär mejlet erbjudandet:** Efter meningen om vad agenten gör åt dem kommer provet, med villkorens antal och innehåll, och "utan kostnad". Sedan handlingen.
+**Undvik:** att lova vad provet kommer att visa, och att kalla det "demo" eller "test" när villkoren beskriver ett färdigt resultat.
 
-## se_det_forst
+## garanti
 
-**Namn:** Se det först
-**Hävstång:** tidsfördröjning och upplevd sannolikhet. Mottagaren får ett konkret resultat innan något är bestämt, och resultatet är beviset.
-**Kräver villkor:** ja (vad provet innehåller och hur många, till exempel antal företag med färdiga mejl, kvitton från förra månaden eller svarsförslag på deras vanligaste frågor).
-**Så bär mejlet erbjudandet:** Uppmaningen byts från ett samtal till en leverans: agenten gör ett litet, avgränsat jobb åt dem först, och de bedömer själva. Säg exakt vad de får, med villkorens ord, och att det inte binder dem till något.
-**Uppmaningen:** ett ja till provet ("Ska jag ta fram det åt er?", "Svara ja så skickar jag det i veckan").
-**Undvik:** att lova vad provet kommer att visa. Lova bara vad det innehåller.
+**Namn:** Garanti
+**Hävstång:** upplevd sannolikhet. Avsändaren tar risken: når de inte resultatet får de mer tid utan kostnad.
+**Kräver villkor:** ja, per produkt: det utlovade resultatet med siffra och tidsram, vad som händer om det inte nås, och vad mottagaren ska ha gjort.
+**Så bär mejlet erbjudandet:** En mening med löftet och siffran ("Vi lovar att …"), direkt följd av en mening om vad som händer annars. Båda med villkorens ord och siffror. Sedan handlingen.
+**Undvik:** "garanterat", "100 %", och varje siffra eller tidsram som inte står i villkoren.
 
-## forsta_resultatet
+## pilot
 
-**Namn:** Garanti på första resultatet
-**Hävstång:** upplevd sannolikhet. Snajp tar risken för att det inte ger något, mot att kunden gör sin del.
-**Kräver villkor:** ja (vad första resultatet är, vad kunden ska göra, vad Snajp gör om det uteblir). Garantin får bara gälla sådant leverantören styr, aldrig affärsutfall som möten, kunder eller kronor.
-**Så bär mejlet erbjudandet:** En mening i formen "Har ni inte fått [första resultatet] när [tiden] är slut, [vad vi gör], så länge ni [kundens handling]." Den står efter nyttan, inte först i mejlet.
-**Uppmaningen:** ett kort samtal eller att komma igång.
-**Undvik:** "garanterat", "100 %", och varje löfte om försäljning eller antal kunder.
-
-## gjort_at_er
-
-**Namn:** Gjort åt er
-**Hävstång:** ansträngning. Köpare betalar för att slippa jobbet, och mest för att slippa sätta upp något nytt.
-**Kräver villkor:** ja (vad Snajp gör vid uppstarten och hur lång tid det tar för kunden).
-**Så bär mejlet erbjudandet:** Säg vem som gör jobbet: Snajp sätter upp agenten, kunden svarar på några frågor. Mottagaren ska förstå att de inte behöver lära sig ett nytt system. Använd villkorens tidsangivelse ordagrant.
-**Uppmaningen:** en tid för uppstarten, inte en demo ("Har ni en halvtimme nästa vecka, så sätter vi upp det tillsammans?" om villkoren säger en halvtimme).
-**Undvik:** "smidigt", "enkelt", "sömlöst". Visa enkelheten med vad som händer, inte med adjektiv.
-
-## ratt_tid
-
-**Namn:** Rätt tid
-**Hävstång:** brådska, men bara sann brådska. Ett skäl till att ta det nu, hämtat ur deras kalender och inte ur vår.
-**Kräver villkor:** ja (det verkliga tillfället: bokslut, momsdeklaration, terminsstart, säsongens offertperiod, med datum eller period).
-**Så bär mejlet erbjudandet:** Tillfället nämns i ingången eller i igenkänningsfrågan som deras situation ("Med bokslutet framför sig …"), och nyttan i stycke 3 knyts till just det tillfället. Inget påhittat datum, ingen "begränsad tid".
-**Uppmaningen:** knuten till tillfället ("… så att det är på plats före bokslutet?").
-**Undvik:** falsk knapphet ("bara tre platser kvar"), datum som inte står i villkoren och tillfällen som inte gäller deras bransch.
-
-## tva_vagar
-
-**Namn:** Två vägar in
-**Hävstång:** ansträngning och upplevd sannolikhet. Ett lätt första steg bredvid det fulla erbjudandet gör att mottagaren väljer mellan två ja i stället för mellan ja och nej (Hormozis decoy-erbjudande, Money Models).
-**Kräver villkor:** ja (vad det lätta steget är och vad det fulla är, till exempel bara utkast som de skickar själva, eller agenten som sköter flödet).
-**Så bär mejlet erbjudandet:** Stycke 3 beskriver det fulla erbjudandet. Stycke 4 erbjuder två vägar i en mening, den lätta först och den fulla som det naturliga valet, med villkorens ord.
-**Uppmaningen:** en fråga om vilken väg som passar dem ("Vilken väg passar er bäst?").
-**Undvik:** fler än två vägar, priser i mejlet och att den lätta vägen låter som en nedskuren version.
+**Namn:** Begränsad pilot
+**Hävstång:** knapphet och pris. Ett fåtal platser, ett pris som inte erbjuds igen, och ett ärligt skäl till att platserna är få.
+**Kräver villkor:** ja, per produkt: antalet platser, pilotpriset (till exempel rabatt första året och så länge de stannar) och skälet till att platserna är få.
+**Så bär mejlet erbjudandet:** Säg vad agenten gör åt dem, sedan att platserna är få och varför, och pilotpriset med villkorens siffror. Sedan handlingen som håller en plats åt dem.
+**Undvik:** "bara några platser kvar" eller andra uppgifter om hur många som är tagna, om de inte står i villkoren, och varje deadline som inte står där.

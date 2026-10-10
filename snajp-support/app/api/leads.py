@@ -37,7 +37,7 @@ from ..leads.autonomy import kan_aktivera_auto_send
 from ..leads.autonomy import normalize as normalize_autonomy
 from ..leads.befordran import saknade_falt
 from ..leads.rollkoppling import med_rollflagga
-from ..leads import automation, crm_synk, eskalering
+from ..leads import automation, crm_synk, erbjudanden, eskalering
 from ..leads.business_context import (
     MissingBusinessContextError,
     ar_ifyllt as business_context_ar_ifyllt,
@@ -85,10 +85,12 @@ from .schemas import (
     ContextDocRequest,
     ExempelbolagRequest,
     LeadsBatchRequest,
+    ErbjudandenRequest,
     LeadsConfigRequest,
     KombineraListorRequest,
     LeadsListaRequest,
     SchemalaggRequest,
+    TillbakaTillIrisRequest,
     TillIrisRequest,
     LeadsRunOverrides,
     ProspectPatchRequest,
@@ -1659,6 +1661,48 @@ async def put_leads_config(
     }
 
 
+async def _erbjudandelage(storage, tenant_id: str, settings: dict) -> dict:
+    """Katalogen, kundens val och utfallet per erbjudande. Bara kundens egna
+    trådar och statusar räknas; inget härlett ur webbedömningen ingår."""
+    val = erbjudanden.normalisera(settings.get("erbjudanden"))
+    return {
+        "katalog": [{"nyckel": e.nyckel, "namn": e.namn} for e in erbjudanden.katalog().values()],
+        # Kundens produkter: villkoren kan skrivas per produkt.
+        "produkter": [p["namn"] for p in las_produkter(settings)],
+        **val,
+        "resultat": erbjudanden.sammanstall(await storage.erbjudande_utfall(tenant_id)),
+    }
+
+
+@router.get("/api/leads/erbjudanden")
+async def get_leads_erbjudanden(request: Request, tenant: dict = Depends(require_tenant)) -> dict:
+    """Erbjudandena Iris A/B-testar i kalla mejl (app/leads/erbjudanden.py)."""
+    storage = request.app.state.storage
+    settings = await storage.get_agent_settings(tenant["tenant_id"], agent_type="leads")
+    return await _erbjudandelage(storage, tenant["tenant_id"], settings)
+
+
+@router.put("/api/leads/erbjudanden")
+async def put_leads_erbjudanden(
+    request: Request, payload: ErbjudandenRequest, tenant: dict = Depends(require_tenant)
+) -> dict:
+    """Aktiva erbjudanden, vikter och villkor. Ett utelämnat fält behåller det
+    sparade. Ett byte påverkar bara utkast som skrivs efteråt."""
+    storage = request.app.state.storage
+    current = await storage.get_agent_settings(tenant["tenant_id"], agent_type="leads")
+    sparat = erbjudanden.normalisera(current.get("erbjudanden"))
+    aktiva = [a.model_dump() for a in payload.aktiva] if payload.aktiva is not None else sparat["aktiva"]
+    villkor = payload.villkor if payload.villkor is not None else sparat["villkor"]
+    try:
+        nytt = erbjudanden.validera(aktiva, villkor, [p["namn"] for p in las_produkter(current)])
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from None
+    saved = await storage.set_agent_settings(
+        tenant["tenant_id"], agent_type="leads", settings={**current, "erbjudanden": nytt}
+    )
+    return await _erbjudandelage(storage, tenant["tenant_id"], saved)
+
+
 def _crm_synk_val(settings: dict) -> dict:
     val = settings.get("crm_synk") if isinstance(settings.get("crm_synk"), dict) else {}
     leverantor = val.get("leverantor")
@@ -2015,6 +2059,48 @@ async def schemalagg_utskick(
         if item and item.get("status") == "queued":
             andrade += await storage.reschedule_pending_sends(tenant_id, str(item["thread_id"]), until=tid)
     return {"andrade": andrade, "skickas_tidigast": nasta_sandtid(tid, now=nu)}
+
+
+@router.post("/api/leads/queue/tillbaka-till-iris", status_code=202)
+async def tillbaka_till_iris(
+    request: Request, payload: TillbakaTillIrisRequest, tenant: dict = Depends(require_tenant)
+) -> dict:
+    """Markerade utkast ur sändlistan tillbaka till Iris, som skriver om dem
+    (Anton 2026-10-10). Utkasten avbryts som vid Avvisa, och bolagen går
+    genom samma kedja som "Skriv utkast" i en körning (research och utkast),
+    så skrivstilen, erbjudandet och grindarna gäller precis som första gången.
+    Ett redan skickat eller stoppat utkast rörs inte."""
+    _require_live_llm()
+    storage = request.app.state.storage
+    tenant_id = tenant["tenant_id"]
+    await _kraev_leads_budget(storage, tenant_id)
+    prospekt: dict[str, dict] = {}
+    for item_id in dict.fromkeys(payload.ids):
+        kraev_uuid(item_id, "utkastet")
+        item = await storage.get_send_queue_item(tenant_id, item_id)
+        if not item or item.get("status") not in ("awaiting_review", "queued"):
+            continue
+        trad = await storage.get_outreach_thread(tenant_id, str(item["thread_id"])) or {}
+        p = await storage.get_prospect(tenant_id, str(trad.get("prospect_id") or ""))
+        if p is None:
+            continue
+        await storage.update_send_queue_status(
+            tenant_id, item_id, status="cancelled", gate_checks={"rejected_by": "human", "via": "tillbaka till Iris"}
+        )
+        await storage.cancel_pending_sends(tenant_id, str(item["thread_id"]))
+        prospekt[str(p["id"])] = p
+    if not prospekt:
+        return {"count": 0, "jobs": []}
+    jobs = await _lagg_prospektjobb(
+        request.app.state,
+        tenant,
+        list(prospekt.values()),
+        scope="research_and_draft",
+        overrides=None,
+        is_test=any(bool(p.get("is_test")) for p in prospekt.values()),
+        limit=len(prospekt),
+    )
+    return {"count": len(jobs), "jobs": jobs}
 
 
 @router.post("/api/leads/queue/{item_id}/skicka-nu")

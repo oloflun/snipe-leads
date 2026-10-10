@@ -1068,6 +1068,7 @@ class Storage(Protocol):
         humanizer_variant: str,
         scheduled_at: Any,
         status: str = "queued",
+        gate_checks: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Skapar meddelandet (sent_at=NULL) OCH send_queue-raden i samma
         operation — det finns ingen kodväg som skapar det ena utan det andra.
@@ -1075,7 +1076,30 @@ class Storage(Protocol):
         `status` avgörs av kundens autonominivå (app/leads/autonomy.py):
         'queued' släpps till schemaläggaren, 'awaiting_review' väntar på att
         en människa godkänner. Default är 'queued' för att inte ändra
-        beteendet för anropare som inte känner till nivån."""
+        beteendet för anropare som inte känner till nivån.
+
+        `gate_checks` blir köpostens första grindanteckning. Köningen lägger
+        `held` där när text- eller stilkontrollen tvingat granskning, så att
+        granskaren ser varför (utkaststatus.harled läser den)."""
+        ...
+
+    async def tilldela_erbjudande(self, tenant_id: str, thread_id: str, *, nyckel: str) -> str:
+        """Kopplar tråden till kundens erbjudande `nyckel` (app/leads/erbjudanden.py):
+        get-or-create en `offers`-rad per kund och nyckel (name = nyckeln) och
+        sätt `outreach_threads.offer_id`. Returnerar offer-id:t."""
+        ...
+
+    async def erbjudande_utfall(self, tenant_id: str) -> list[dict[str, Any]]:
+        """Utfallet per erbjudande, räknat på trådar med `offer_id`: en rad per
+        nyckel med `utkast` (trådar med ett utgående meddelande), `skickade`
+        (med ett skickat), och bland de skickade `svar`, `positiva` och `moten`.
+
+        Härledningen, eftersom svarsklassen inte sparas i en egen kolumn:
+        app/leads/svar.py är den enda kodvägen som sätter prospektets status
+        med källan 'kod' till replied/meeting/lost/suppressed (statusloggen,
+        migration 086), och 'meeting' med 'kod' är just klassen positivt. Ett
+        möte är ett samtalsutfall 'mote' (lead_samtal), en manuell flytt till
+        'meeting' eller status 'won'. Bara loggrader från trådens start räknas."""
         ...
 
     # -- Leads: proveniensregister (Fas B, INV-DATA-001, research-verktygets allowlist) --

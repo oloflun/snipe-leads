@@ -45,6 +45,7 @@ from ..agentcore.instruktioner import Instruktionslager, las_instruktioner
 from ..agentcore.overlays import pack_version
 from ..agentcore.packs import PlaybookStep, RunLedger
 from ..config import get_settings
+from ..leads import erbjudanden
 from ..leads.business_context import require_business_context
 from ..leads.discovery import (
     LAGLIG_GRUND_EGEN_WEBB,
@@ -1091,12 +1092,18 @@ async def run_outreach_draft(
     # ställe i stället för duplicerad mellan den här strängen och
     # outreach_playbook._HEADER. Bara VÄRDET på språkläget hör hemma här:
     # det är kördata, inte en regel.
+    # Kundens erbjudande (A/B, app/leads/erbjudanden.py) ligger i basen och når
+    # därmed alla fyra stegen, humanizern med. None = prompten som förut.
+    erbjudande = await erbjudanden.for_trad(
+        storage, tenant_id, thread, erbjudanden.produkt_ur_research(research_summary)
+    )
     base = (
         f"## Uppdrag\nDu skriver ett kallt första mejl till {company_name} åt {tenant_name}.\n\n"
         f"## Skrivstil (gäller före skillernas mallar för formuleringen)\n{leads_systemprompt.skrivstil()}\n\n"
         f"## Brief\n{brief}\n\n"
         f"## Erbjudandet som styr vinkeln\n{offer_summary}\n\n"
-        f"## Språkläge\n{language_state}\n\n"
+        + (f"{erbjudande.block()}\n\n" if erbjudande else "")
+        + f"## Språkläge\n{language_state}\n\n"
         f"{context_pack}"
         + (f"\n\n{soul_block}" if soul_block else "")
         + (f"\n\n## Research om {company_name}\n{research_summary}" if research_summary else "")
@@ -1214,7 +1221,8 @@ async def run_outreach_draft(
             facts=build_permitted_facts(
                 context_pack=context_pack,
                 research_evidence=research_evidence,
-                offer_summary=offer_summary,
+                # Villkorens siffror är kundens egna och får stå i mejlet.
+                offer_summary=f"{offer_summary}\n{erbjudande.villkor}" if erbjudande else offer_summary,
                 brief=brief,
                 tenant_name=tenant_name,
                 company_name=company_name,
@@ -1247,6 +1255,7 @@ async def run_outreach_draft(
                     # delta-humanisering är det inte längre OUTREACH_V1:s
                     # fjärde steg som rörde texten sist (INV-LANG-002).
                     humanizer_variant=last_humanizer_variant(trace.skills_used),
+                    stilkontroll=True,
                 )
             )
 
