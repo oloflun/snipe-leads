@@ -30,6 +30,7 @@ from ..agentcore.registry import AGENT_CORE_ROOT
 from .support_systemprompt import dagens_datum
 
 PROMPT_FIL = AGENT_CORE_ROOT / "prompts" / "leads-systemprompt.md"
+SKRIVSTIL_FIL = AGENT_CORE_ROOT / "prompts" / "leads-skrivstil.md"
 
 _OM_FILEN = re.compile(r"^> \*\*Om filen:\*\*.*\n+", re.MULTILINE)
 _PLATSHALLARE = re.compile(r"\{\{([A-ZÅÄÖ_]+)\}\}")
@@ -50,6 +51,14 @@ class OkandPlatshallare(KeyError):
 @lru_cache(maxsize=1)
 def fil_mall() -> str:
     return PROMPT_FIL.read_text(encoding="utf-8")
+
+
+@lru_cache(maxsize=1)
+def skrivstil() -> str:
+    """Skrivstilen för kalla mejl (agent-core/prompts/leads-skrivstil.md) som
+    eget block i varje utkaststeg. Läggs i ärendet och inte i grundprompten,
+    så att en sparad grundprompt (agent_mall) inte skuggar den."""
+    return _OM_FILEN.sub("", SKRIVSTIL_FIL.read_text(encoding="utf-8")).strip()
 
 
 def _avsnitt(text: str, prefix: tuple[str, ...]) -> str:
@@ -89,6 +98,8 @@ def demo() -> None:
     assert "## 7. Arbetsflöde" in research and "## 7. Arbetsflöde" not in utkast
     assert "Du är Iris, leadsagent för **Snajp**" in utkast
     assert "Injicerade företagsinställningar" not in utkast
+    stil = skrivstil()
+    assert stil.startswith("# Skrivstil") and "Om filen" not in stil and "## Strukturen" in stil
     print("leads_systemprompt: ok", len(research), len(utkast))
 
 

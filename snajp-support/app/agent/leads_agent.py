@@ -70,6 +70,7 @@ from ..leads.text_delta import (
     parse_humanized_segments,
     splice,
 )
+from . import leads_systemprompt
 from .leads_context import OnboardingContext, OutreachContext, ResearchContext
 from .leads_tools import (
     ONBOARDING_TOOLS,
@@ -1092,6 +1093,7 @@ async def run_outreach_draft(
     # det är kördata, inte en regel.
     base = (
         f"## Uppdrag\nDu skriver ett kallt första mejl till {company_name} åt {tenant_name}.\n\n"
+        f"## Skrivstil (gäller före skillernas mallar för formuleringen)\n{leads_systemprompt.skrivstil()}\n\n"
         f"## Brief\n{brief}\n\n"
         f"## Erbjudandet som styr vinkeln\n{offer_summary}\n\n"
         f"## Språkläge\n{language_state}\n\n"

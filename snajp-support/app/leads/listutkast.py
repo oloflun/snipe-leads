@@ -57,10 +57,10 @@ Regler:
 - Nämn bolagets namn högst en gång, utan bolagsform (AB).
 - 45–80 ord i brödtexten. Ren text, inga listor, ingen markdown.
 - Välj EN sak ur erbjudandet, den som rimligast hjälper ett bolag i deras bransch och storlek. Räkna aldrig upp flera produkter eller funktioner.
-- Struktur: öppna med en konkret, vardaglig fråga eller iakttagelse om hur det brukar se ut i deras typ av verksamhet (till exempel var nya kunder kommer ifrån, eller mejlen som ska besvaras efter arbetsdagen), utan att påstå något om just dem; sedan EN till två meningar om den valda saken; sist EN låg-friktions-uppmaning (ett kort samtal eller ett exempel).
-- Förbjudna fraser: "förenkla er vardag", "effektivitet", "avgörande", "stor skillnad", "frigöra tid", "i dagens", "vi på {avsandare}", "Till er som". Inga allmänna påståenden om branschen.
+- Struktur och ordval: följ skrivstilen nedan. Ingången handlar om deras typ av verksamhet ("För företag som ert inom …", "När man jobbar med …"), aldrig om just dem; sedan en igenkänningsfråga, vad den valda saken gör åt dem och vad de vinner, sist EN konkret uppmaning.
+- Förbjudna fraser: "förenkla er vardag", "effektivitet", "avgörande", "stor skillnad", "frigöra tid", "i dagens", "vi på {avsandare}", "Till er som".
 - Hitta aldrig på kunder, case, siffror, resultat eller något om bolaget.
-- Avsluta med "Vänliga hälsningar," på egen rad. Ingen signatur, inget namn, ingen avregistreringsrad: de läggs på automatiskt.
+- Avsluta med "Vänliga hälsningar," på egen rad (det här gäller före skrivstilens regel om hälsningen). Ingen signatur, inget namn, ingen avregistreringsrad: de läggs på automatiskt.
 - Ämnesraden: kort och konkret, med bolagets namn eller ort, utan utropstecken. Aldrig produktkategorin ("AI-agenter", "AI för …") som ämne.
 
 Skriv först utkastet, och tillämpa sedan humanizern nedan på din egen text innan du svarar.
@@ -79,9 +79,16 @@ def _bolagsfakta(rad: dict[str, Any]) -> str:
 
 
 def _systemprompt(avsandare: str) -> str:
+    from ..agent.leads_systemprompt import skrivstil
     from ..agentcore.registry import load_skill_md
 
-    return _UPPDRAG.format(avsandare=avsandare) + "\n\n## humanizer-svenska\n\n" + load_skill_md(HUMANIZER)
+    return (
+        _UPPDRAG.format(avsandare=avsandare)
+        + "\n\n## Skrivstil\n\n"
+        + skrivstil()
+        + "\n\n## humanizer-svenska\n\n"
+        + load_skill_md(HUMANIZER)
+    )
 
 
 def _sim_utkast(rad: dict[str, Any], avsandare: str) -> dict[str, str]:

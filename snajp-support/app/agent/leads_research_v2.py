@@ -792,6 +792,10 @@ async def run_outreach_draft_v2(
         "- Avsluta med frågan eller uppmaningen. Skriv INGEN hälsningsfras och "
         "inget namn: signaturen läggs på automatiskt.\n"
         "- Korrekt svenska utan stavfel, korta meningar, inga talesätt.\n\n"
+        # Antons beställning 2026-10-10: utkasten var korrekta men platta och
+        # informerande. Stilen går före skillernas mallar för HUR det sägs;
+        # skrivreglerna ovan och grundprompten styr fortfarande VAD.
+        f"## Skrivstil (gäller före skillernas mallar för formuleringen)\n{leads_systemprompt.skrivstil()}\n\n"
         f"## Brief\n{brief}\n\n"
         f"## Erbjudandet som styr vinkeln\n{offer_summary}\n\n"
         f"## Språkläge\n{language_state}\n\n"
@@ -806,7 +810,9 @@ async def run_outreach_draft_v2(
     # overlayen (systemposition).
     humanizer_base = (
         f"## Uppdrag\nDu humaniserar ett kallt mejl till {company_name} åt {tenant_name}.\n\n"
-        f"## Språkläge\n{language_state}"
+        f"## Språkläge\n{language_state}\n\n"
+        # Utan stilen platta humanizern tillbaka ingången och uppmaningen.
+        f"## Skrivstil (behåll mejlets struktur och uppmaning enligt den)\n{leads_systemprompt.skrivstil()}"
     )
 
     ledger = RunLedger(satisfied={"offer_selected", "context_pack"})
