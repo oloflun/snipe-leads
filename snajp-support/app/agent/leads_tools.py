@@ -125,13 +125,13 @@ async def _queue_outreach_draft_impl(
     finalized_body = finalize_outreach_body(body)
     kvalitet = await sakra_utgaende_text(finalized_body, sprak=sprak, alltid_korrektur=True)
     finalized_body = kvalitet.text
-    textkvalitet_granskning: str | None = None
+    granskningsskal: str | None = None
     if kvalitet.kraver_granskning or platshallare:
         force_review = True
         delar = [a.beskrivning for a in platshallare] + (
             [kvalitet.sammanfattning()] if kvalitet.kraver_granskning else []
         )
-        textkvalitet_granskning = "; ".join(delar)
+        granskningsskal = "; ".join(delar)
 
     # Stilkontrollen (app/leads/stilkontroll.py) för kalla första mejl: AI-
     # och robotmarkörer, och samma ingång eller uppmaning som ett annat utkast
@@ -149,8 +149,8 @@ async def _queue_outreach_draft_impl(
         stilfynd = stil.kontrollera(finalized_body).anmarkningar + stil.mot_andra(finalized_body, andra)
         if stilfynd:
             force_review = True
-            textkvalitet_granskning = "; ".join(
-                [*([textkvalitet_granskning] if textkvalitet_granskning else []), *(a.beskrivning for a in stilfynd)]
+            granskningsskal = "; ".join(
+                [*([granskningsskal] if granskningsskal else []), *(a.beskrivning for a in stilfynd)]
             )
 
     # Signaturen (kodens text, inte modellens) läggs på efter kvalitets-
@@ -229,7 +229,7 @@ async def _queue_outreach_draft_impl(
         humanizer_variant=humanizer_variant,
         scheduled_at=scheduled_at,
         status=queue_status,
-        gate_checks={"held": textkvalitet_granskning} if textkvalitet_granskning else None,
+        gate_checks={"held": granskningsskal} if granskningsskal else None,
     )
     outreach.queued = True
     svar = {
@@ -238,8 +238,8 @@ async def _queue_outreach_draft_impl(
         "status": queue_status,
         "awaiting_review": queue_status == "awaiting_review",
     }
-    if textkvalitet_granskning:
-        svar["textkvalitet"] = textkvalitet_granskning
+    if granskningsskal:
+        svar["textkvalitet"] = granskningsskal
     return json.dumps(svar, ensure_ascii=False)
 
 
