@@ -30,6 +30,7 @@ resultaten löpande och kunna byta erbjudande enkelt.
 from __future__ import annotations
 
 import hashlib
+import json
 import logging
 import math
 import re
@@ -97,6 +98,52 @@ def gemensamt() -> str:
 # -- Kundens val ----------------------------------------------------------
 
 
+#: Villkoren för ett erbjudande: en text som gäller alla produkter, eller en
+#: text per produkt ({kundens produktnamn: text}). Per produkt sedan
+#: 2026-10-10: varv 3 av provkörningen gav ett Supportagent-mejl Iris-villkoret
+#: "tio bolag med färdiga mejl", eftersom villkoren bara fanns per erbjudande.
+Villkor = str | dict[str, str]
+
+
+def _villkoret(raw: Any) -> Villkor | None:
+    if isinstance(raw, str):
+        return raw.strip()[:VILLKOR_MAX] or None
+    if isinstance(raw, dict):
+        per = {
+            str(p).strip(): v.strip()[:VILLKOR_MAX]
+            for p, v in raw.items()
+            if str(p).strip() and isinstance(v, str) and v.strip()
+        }
+        return per or None
+    return None
+
+
+def villkor_for(villkor: Villkor | None, produkt: str | None) -> str:
+    """Villkoret som gäller för `produkt`, eller "". En text för alla gäller
+    alltid; en text per produkt bara när researchen valt en av kundens
+    produkter (namnet jämförs utan hänsyn till versaler)."""
+    if isinstance(villkor, str):
+        return villkor
+    if isinstance(villkor, dict) and produkt:
+        nyckel = produkt.strip().casefold()
+        return next((v for p, v in villkor.items() if p.casefold() == nyckel), "")
+    return ""
+
+
+def produkt_ur_research(research_summary: str) -> str | None:
+    """Produkten researchen valde (`vald_produkt` eller `produkt`, som
+    {namn, nytta} eller ett namn), ur utkastets research-JSON."""
+    try:
+        fynd = json.loads(research_summary or "{}")
+    except (TypeError, ValueError):
+        return None
+    if not isinstance(fynd, dict):
+        return None
+    vald = fynd.get("vald_produkt") or fynd.get("produkt")
+    namn = str((vald.get("namn") if isinstance(vald, dict) else vald) or "").strip()
+    return namn or None
+
+
 def normalisera(raw: Any) -> dict[str, Any]:
     """Kundens sparade val, tolerant läst: okända nycklar faller bort, vikten
     hålls inom 0–10 och villkoren strippas. Skrivvägen (`validera`) är strikt;
@@ -104,9 +151,9 @@ def normalisera(raw: Any) -> dict[str, Any]:
     raw = raw if isinstance(raw, dict) else {}
     kat = katalog()
     villkor = {
-        k: str(v).strip()[:VILLKOR_MAX]
-        for k, v in (raw.get("villkor") or {}).items()
-        if k in kat and isinstance(v, str) and v.strip()
+        k: v
+        for k, v in ((k, _villkoret(v)) for k, v in (raw.get("villkor") or {}).items())
+        if k in kat and v
     }
     aktiva: list[dict[str, Any]] = []
     for rad in raw.get("aktiva") or []:
@@ -122,34 +169,46 @@ def normalisera(raw: Any) -> dict[str, Any]:
     return {"aktiva": aktiva, "villkor": villkor}
 
 
-def validera(aktiva: list[dict[str, Any]], villkor: dict[str, str]) -> dict[str, Any]:
+def validera(
+    aktiva: list[dict[str, Any]], villkor: dict[str, Villkor], produkter: list[str] | None = None
+) -> dict[str, Any]:
     """Skrivvägen: kastar ValueError med ett svenskt besked. Typer och
-    gränser (vikt 0–10, villkorslängd) prövas redan av API-schemat."""
+    gränser (vikt 0–10, villkorslängd) prövas redan av API-schemat.
+    `produkter` är kundens produktnamn; villkor per produkt måste gälla en av dem."""
     kat = katalog()
+    kanda = {p.strip().casefold() for p in produkter or []}
     for nyckel in [a["nyckel"] for a in aktiva] + list(villkor):
         if nyckel not in kat:
             raise ValueError(f"Okänt erbjudande: {nyckel}.")
+    for nyckel, v in villkor.items():
+        for produkt in v if isinstance(v, dict) else ():
+            if produkt.strip().casefold() not in kanda:
+                raise ValueError(
+                    f"Villkoren för {kat[nyckel].namn} gäller produkten \"{produkt}\", "
+                    "som inte finns bland era produkter."
+                )
     nycklar = [a["nyckel"] for a in aktiva]
     if len(nycklar) != len(set(nycklar)):
         raise ValueError("Ett erbjudande står två gånger bland de aktiva.")
     for a in aktiva:
-        if not str(villkor.get(a["nyckel"]) or "").strip():
+        if not _villkoret(villkor.get(a["nyckel"])):
             raise ValueError(
                 f"Fyll i villkoren för {kat[a['nyckel']].namn} innan erbjudandet slås på."
             )
     return normalisera({"aktiva": aktiva, "villkor": villkor})
 
 
-def valbara(val: dict[str, Any]) -> list[tuple[str, int]]:
-    """De aktiva erbjudandena som får användas: i katalogen, vikt över noll och
-    med ifyllda villkor. Katalogens ordning, så att tilldelningen inte beror på
-    i vilken ordning kunden råkade slå på dem."""
+def valbara(val: dict[str, Any], produkt: str | None = None) -> list[tuple[str, int]]:
+    """De aktiva erbjudandena som får användas för ett prospekt vars mejl
+    handlar om `produkt`: i katalogen, vikt över noll och med villkor för just
+    den produkten. Katalogens ordning, så att tilldelningen inte beror på i
+    vilken ordning kunden råkade slå på dem."""
     vikter = {a["nyckel"]: a["vikt"] for a in val.get("aktiva") or []}
     villkor = val.get("villkor") or {}
     return [
         (nyckel, vikter[nyckel])
         for nyckel in katalog()
-        if vikter.get(nyckel, 0) > 0 and str(villkor.get(nyckel) or "").strip()
+        if vikter.get(nyckel, 0) > 0 and villkor_for(villkor.get(nyckel), produkt)
     ]
 
 
@@ -175,19 +234,17 @@ def block(nyckel: str, villkor: str) -> str:
     erbjudande = katalog()[nyckel]
     return (
         "## Erbjudandet i det här mejlet\n"
-        "Kunden har valt det här erbjudandet för mejlet. Det bär stycke 3 och 4 i "
+        "Kunden har valt det här erbjudandet för mejlet. Det bär stycke 2 och 3 i "
         "skrivstilen och går före vinkeln under \"Erbjudandet som styr vinkeln\". "
         "Skriv det i skrivstilen, med villkoren nedan som det enda mejlet lovar.\n"
         # Provkörningen 2026-10-10 (scripts/prova_erbjudanden.py): katalogens
         # exempel på uppmaningar gick ordagrant in i mejlen, samma fråga i
         # upp till elva av tolv, och villkor skrivna i ni-form blandade
         # tilltalet i mejl till en namngiven person.
-        "- Citaten nedan visar formen, aldrig orden. Skriv uppmaningen med egna "
-        "ord, knuten till just det här bolagets situation.\n"
+        "- Citaten nedan visar formen, aldrig orden.\n"
         "- Återge villkorens innehåll exakt, varken mer eller mindre, men i mejlets "
         "tilltal (du eller ni) och i hela meningar.\n"
-        "- Lägg erbjudandet i en egen mening efter meningen om vad tjänsten gör åt dem, "
-        "och håll båda under 20 ord.\n\n"
+        "- Mejlet slutar med villkorens handling, i en mening, aldrig med en fråga.\n\n"
         f"{gemensamt()}\n\n"
         f"### {erbjudande.namn}\n{erbjudande.regler}\n\n"
         f"### Villkor för erbjudandet\n{villkor.strip()}"
@@ -203,10 +260,14 @@ class Valt:
         return block(self.nyckel, self.villkor)
 
 
-async def for_trad(storage, tenant_id: str, thread: dict[str, Any]) -> Valt | None:
+async def for_trad(
+    storage, tenant_id: str, thread: dict[str, Any], produkt: str | None = None
+) -> Valt | None:
     """Erbjudandet för trådens nästa utkast, eller None (dagens beteende).
 
-    Sparar valet (offers-rad + outreach_threads.offer_id). Går sparandet fel
+    `produkt` är produkten researchen valde för mejlet: bara erbjudanden med
+    villkor för den (eller för alla produkter) kan väljas, och villkoret som
+    följer med är just den produktens. Sparar valet (offers-rad + outreach_threads.offer_id). Går sparandet fel
     skrivs utkastet utan erbjudande: ett mejl med ett erbjudande som inte
     räknas hade gjort mätningen tyst fel, och mätningen är skälet till att
     erbjudandet väljs här."""
@@ -214,7 +275,7 @@ async def for_trad(storage, tenant_id: str, thread: dict[str, Any]) -> Valt | No
         return None
     installningar = await storage.get_agent_settings(tenant_id, agent_type="leads")
     val = normalisera(installningar.get("erbjudanden"))
-    nyckel = tilldela(tenant_id, str(thread.get("prospect_id") or thread["id"]), valbara(val))
+    nyckel = tilldela(tenant_id, str(thread.get("prospect_id") or thread["id"]), valbara(val, produkt))
     if not nyckel:
         return None
     try:
@@ -222,7 +283,7 @@ async def for_trad(storage, tenant_id: str, thread: dict[str, Any]) -> Valt | No
     except Exception:  # noqa: BLE001 — se docstringen
         logger.exception("Kunde inte spara erbjudandet för tråd %s; utkastet skrivs utan.", thread["id"])
         return None
-    return Valt(nyckel=nyckel, villkor=val["villkor"][nyckel])
+    return Valt(nyckel=nyckel, villkor=villkor_for(val["villkor"][nyckel], produkt))
 
 
 # -- Mätningen ------------------------------------------------------------

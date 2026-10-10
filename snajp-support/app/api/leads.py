@@ -1624,6 +1624,8 @@ async def _erbjudandelage(storage, tenant_id: str, settings: dict) -> dict:
     val = erbjudanden.normalisera(settings.get("erbjudanden"))
     return {
         "katalog": [{"nyckel": e.nyckel, "namn": e.namn} for e in erbjudanden.katalog().values()],
+        # Kundens produkter: villkoren kan skrivas per produkt.
+        "produkter": [p["namn"] for p in las_produkter(settings)],
         **val,
         "resultat": erbjudanden.sammanstall(await storage.erbjudande_utfall(tenant_id)),
     }
@@ -1647,13 +1649,9 @@ async def put_leads_erbjudanden(
     current = await storage.get_agent_settings(tenant["tenant_id"], agent_type="leads")
     sparat = erbjudanden.normalisera(current.get("erbjudanden"))
     aktiva = [a.model_dump() for a in payload.aktiva] if payload.aktiva is not None else sparat["aktiva"]
-    villkor = (
-        {k: v.strip() for k, v in payload.villkor.items() if v.strip()}
-        if payload.villkor is not None
-        else sparat["villkor"]
-    )
+    villkor = payload.villkor if payload.villkor is not None else sparat["villkor"]
     try:
-        nytt = erbjudanden.validera(aktiva, villkor)
+        nytt = erbjudanden.validera(aktiva, villkor, [p["namn"] for p in las_produkter(current)])
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from None
     saved = await storage.set_agent_settings(

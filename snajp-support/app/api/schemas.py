@@ -127,14 +127,16 @@ class ErbjudandenRequest(BaseModel):
     model_config = {"extra": "forbid"}
 
     aktiva: list[ErbjudandeArmRequest] | None = Field(default=None, max_length=6)
-    villkor: dict[str, str] | None = None
+    #: Per erbjudande: en text för alla produkter, eller {produktnamn: text}.
+    villkor: dict[str, str | dict[str, str]] | None = None
 
     @model_validator(mode="after")
     def _villkorslangd(self) -> "ErbjudandenRequest":
         from ..leads.erbjudanden import VILLKOR_MAX
 
-        for nyckel, text in (self.villkor or {}).items():
-            if len(text) > VILLKOR_MAX:
+        for nyckel, varde in (self.villkor or {}).items():
+            texter = varde.values() if isinstance(varde, dict) else [varde]
+            if any(len(text) > VILLKOR_MAX for text in texter):
                 raise ValueError(f"Villkoren för {nyckel} är längre än {VILLKOR_MAX} tecken.")
         return self
 

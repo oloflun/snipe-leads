@@ -21,25 +21,24 @@ def anyio_backend():
 # -- Katalogen ------------------------------------------------------------
 
 
-def test_katalogen_har_sex_erbjudanden_och_gemensamma_regler():
+def test_katalogen_har_tre_erbjudanden_och_gemensamma_regler():
     katalog = erbjudanden.katalog()
-    assert list(katalog) == [
-        "riskfri_start", "se_det_forst", "forsta_resultatet", "gjort_at_er", "ratt_tid", "tva_vagar",
-    ]
-    assert katalog["riskfri_start"].namn == "Riskfri start"
+    assert list(katalog) == ["gratis_prov", "garanti", "pilot"]
+    assert katalog["gratis_prov"].namn == "Testa gratis"
     assert "Gemensamt för alla erbjudanden" in erbjudanden.gemensamt()
     for e in katalog.values():
         # Metaraderna är katalogens, inte skrivregler till modellen.
         assert "**Namn:**" not in e.regler and "**Kräver villkor:**" not in e.regler
-        assert "**Uppmaningen:**" in e.regler
+        assert "**Så bär mejlet erbjudandet:**" in e.regler
 
 
 def test_blocket_bar_gemensamt_avsnitt_och_villkoren_ordagrant():
-    villkor = "Två månader utan kostnad. Ingen bindningstid, uppsägning med 30 dagars varsel."
-    block = erbjudanden.block("riskfri_start", villkor)
+    villkor = "Fem kvalificerade leads med färdiga första mejl, utan kostnad. Svara ja så skickar vi dem."
+    block = erbjudanden.block("gratis_prov", villkor)
     assert block.startswith("## Erbjudandet i det här mejlet")
+    assert "stycke 2 och 3" in block and "aldrig med en fråga" in block
     assert "Gemensamt för alla erbjudanden" in block
-    assert "### Riskfri start" in block
+    assert "### Testa gratis" in block
     assert block.endswith(f"### Villkor för erbjudandet\n{villkor}")
 
 
@@ -50,40 +49,94 @@ def test_bara_aktiva_med_villkor_och_vikt_ar_valbara():
     val = erbjudanden.normalisera(
         {
             "aktiva": [
-                {"nyckel": "tva_vagar", "vikt": 2},
-                {"nyckel": "riskfri_start", "vikt": 1},
-                {"nyckel": "se_det_forst", "vikt": 3},  # saknar villkor
-                {"nyckel": "gjort_at_er", "vikt": 0},  # vikt noll
+                {"nyckel": "pilot", "vikt": 2},
+                {"nyckel": "gratis_prov", "vikt": 1},
+                {"nyckel": "garanti", "vikt": 3},  # saknar villkor
                 {"nyckel": "okant", "vikt": 5},
             ],
-            "villkor": {"tva_vagar": "Utkast eller hela flödet.", "riskfri_start": "En månad gratis.",
-                        "gjort_at_er": "Vi sätter upp det."},
+            "villkor": {"pilot": "20 platser.", "gratis_prov": "Fem leads gratis.", "garanti": "  "},
         }
     )
     # Katalogens ordning, inte kundens.
-    assert erbjudanden.valbara(val) == [("riskfri_start", 1), ("tva_vagar", 2)]
+    assert erbjudanden.valbara(val) == [("gratis_prov", 1), ("pilot", 2)]
+    val["aktiva"][0]["vikt"] = 0  # vikt noll
+    assert erbjudanden.valbara(val) == [("gratis_prov", 1)]
+
+
+#: Snajps tre agenter med villkor per produkt (exemplen i katalogens artefakt).
+VILLKOR_PER_PRODUKT = {
+    "gratis_prov": {
+        "Iris": "Fem kvalificerade leads med färdiga första mejl, utan kostnad.",
+        "Kvittohanterare": "Vi gör fem kvitton klara att ladda ned, utan kostnad.",
+        "Supportagent": "En demolänk där ni lägger in era vanligaste frågor och testar själva.",
+    },
+    "garanti": {"Iris": "Minst 10 nya kunddialoger inom 90 dagar, annars förlängd provperiod utan kostnad."},
+}
+
+
+def test_villkoret_valjs_per_produkt():
+    villkor = erbjudanden.normalisera({"villkor": VILLKOR_PER_PRODUKT})["villkor"]
+    assert erbjudanden.villkor_for(villkor["gratis_prov"], "supportagent").startswith("En demolänk")
+    assert erbjudanden.villkor_for(villkor["gratis_prov"], None) == ""
+    assert erbjudanden.villkor_for(villkor["garanti"], "Supportagent") == ""
+    # En text för alla produkter gäller alltid, också utan vald produkt.
+    assert erbjudanden.villkor_for("Gäller allt.", None) == "Gäller allt."
+
+
+def test_ett_supportagentprospekt_far_aldrig_ett_irisvillkor():
+    """Felet i varv 3: villkoren fanns per erbjudande, så ett Supportagent-mejl
+    fick Iris-villkoret "tio bolag med färdiga mejl"."""
+    val = erbjudanden.normalisera(
+        {"aktiva": [{"nyckel": "gratis_prov", "vikt": 1}, {"nyckel": "garanti", "vikt": 5}],
+         "villkor": VILLKOR_PER_PRODUKT}
+    )
+    # Garantin har bara ett Iris-villkor: den kan aldrig väljas för Supportagenten.
+    assert erbjudanden.valbara(val, "Supportagent") == [("gratis_prov", 1)]
+    assert erbjudanden.valbara(val, "Iris") == [("gratis_prov", 1), ("garanti", 5)]
+    # Utan vald produkt gäller bara villkor för alla produkter, och här finns inga.
+    assert erbjudanden.valbara(val, None) == []
+    iris_texter = set(VILLKOR_PER_PRODUKT["garanti"].values()) | {VILLKOR_PER_PRODUKT["gratis_prov"]["Iris"]}
+    for i in range(200):
+        nyckel = erbjudanden.tilldela(TENANT, f"p-{i}", erbjudanden.valbara(val, "Supportagent"))
+        assert erbjudanden.villkor_for(val["villkor"][nyckel], "Supportagent") not in iris_texter
 
 
 def test_tilldelningen_ar_deterministisk_och_foljer_vikterna():
-    armar = [("riskfri_start", 1), ("se_det_forst", 3)]
+    armar = [("gratis_prov", 1), ("garanti", 3)]
     assert erbjudanden.tilldela(TENANT, "p-1", armar) == erbjudanden.tilldela(TENANT, "p-1", armar)
     utfall = Counter(erbjudanden.tilldela(TENANT, f"p-{i}", armar) for i in range(1000))
-    assert set(utfall) == {"riskfri_start", "se_det_forst"}
-    assert 0.20 < utfall["riskfri_start"] / 1000 < 0.30, utfall
+    assert set(utfall) == {"gratis_prov", "garanti"}
+    assert 0.20 < utfall["gratis_prov"] / 1000 < 0.30, utfall
     assert erbjudanden.tilldela(TENANT, "p-1", []) is None
 
 
 def test_valideringen_kraver_kanda_nycklar_och_villkor():
     with pytest.raises(ValueError, match="Okänt erbjudande"):
         erbjudanden.validera([{"nyckel": "rabatt", "vikt": 1}], {})
-    with pytest.raises(ValueError, match="Fyll i villkoren för Riskfri start"):
-        erbjudanden.validera([{"nyckel": "riskfri_start", "vikt": 1}], {})
+    with pytest.raises(ValueError, match="Fyll i villkoren för Testa gratis"):
+        erbjudanden.validera([{"nyckel": "gratis_prov", "vikt": 1}], {})
+    with pytest.raises(ValueError, match="Fyll i villkoren för Testa gratis"):
+        erbjudanden.validera([{"nyckel": "gratis_prov", "vikt": 1}], {"gratis_prov": {"Iris": " "}}, ["Iris"])
     with pytest.raises(ValueError, match="två gånger"):
         erbjudanden.validera(
-            [{"nyckel": "ratt_tid", "vikt": 1}, {"nyckel": "ratt_tid", "vikt": 2}], {"ratt_tid": "Bokslutet."}
+            [{"nyckel": "pilot", "vikt": 1}, {"nyckel": "pilot", "vikt": 2}], {"pilot": "20 platser."}
         )
-    ok = erbjudanden.validera([{"nyckel": "ratt_tid", "vikt": 4}], {"ratt_tid": "Före bokslutet 31 december."})
-    assert ok == {"aktiva": [{"nyckel": "ratt_tid", "vikt": 4}], "villkor": {"ratt_tid": "Före bokslutet 31 december."}}
+    with pytest.raises(ValueError, match="inte finns bland era produkter"):
+        erbjudanden.validera([], {"pilot": {"Okänd agent": "20 platser."}}, ["Iris"])
+    ok = erbjudanden.validera([{"nyckel": "pilot", "vikt": 4}], {"pilot": "20 platser, 50 % första året."})
+    assert ok == {"aktiva": [{"nyckel": "pilot", "vikt": 4}], "villkor": {"pilot": "20 platser, 50 % första året."}}
+    # Villkor för minst en produkt räcker; tomma produktfält faller bort.
+    per = erbjudanden.validera(
+        [{"nyckel": "pilot", "vikt": 1}], {"pilot": {"iris": "10 platser.", "Supportagent": ""}}, ["Iris", "Supportagent"]
+    )
+    assert per["villkor"] == {"pilot": {"iris": "10 platser."}}
+
+
+def test_produkten_lases_ur_researchen():
+    assert erbjudanden.produkt_ur_research('{"vald_produkt": {"namn": "Iris", "nytta": "x"}}') == "Iris"
+    assert erbjudanden.produkt_ur_research('{"produkt": "Supportagent"}') == "Supportagent"
+    assert erbjudanden.produkt_ur_research('{"vald_produkt": null}') is None
+    assert erbjudanden.produkt_ur_research("inte json") is None
 
 
 @pytest.mark.anyio
@@ -100,18 +153,25 @@ async def test_for_trad_sparar_valet_en_offersrad_per_nyckel():
     storage = MemoryStorage()
     await storage.set_agent_settings(
         TENANT, agent_type="leads",
-        settings={"erbjudanden": {"aktiva": [{"nyckel": "se_det_forst", "vikt": 1}],
-                                  "villkor": {"se_det_forst": "Tre färdiga mejl till företag ni väljer."}}},
+        settings={"erbjudanden": {"aktiva": [{"nyckel": "gratis_prov", "vikt": 1}],
+                                  "villkor": VILLKOR_PER_PRODUKT}},
     )
     valda = []
     for namn in ("A", "B"):
         prospekt = await storage.create_prospect(TENANT, company_name=namn)
         trad = await storage.ensure_outreach_thread(TENANT, prospect_id=prospekt["id"])
-        valda.append(await erbjudanden.for_trad(storage, TENANT, trad))
+        valda.append(await erbjudanden.for_trad(storage, TENANT, trad, "Kvittohanterare"))
         assert trad["offer_id"] == storage.offers[0]["id"]
-    assert [v.nyckel for v in valda] == ["se_det_forst", "se_det_forst"]
-    assert valda[0].villkor == "Tre färdiga mejl till företag ni väljer."
+    assert [v.nyckel for v in valda] == ["gratis_prov", "gratis_prov"]
+    # Produktens eget villkor, inte en annan produkts.
+    assert valda[0].villkor == VILLKOR_PER_PRODUKT["gratis_prov"]["Kvittohanterare"]
     assert len(storage.offers) == 1
+
+    # Utan vald produkt finns inget villkor som gäller: dagens beteende.
+    prospekt = await storage.create_prospect(TENANT, company_name="C")
+    trad = await storage.ensure_outreach_thread(TENANT, prospect_id=prospekt["id"])
+    assert await erbjudanden.for_trad(storage, TENANT, trad) is None
+    assert trad["offer_id"] is None
 
 
 # -- Mätningen ------------------------------------------------------------
@@ -132,20 +192,20 @@ def _rad(nyckel, skickade, positiva, svar=None):
 
 def test_ledare_kraver_trettio_skickade_och_signifikans():
     # För få skickade i den ena armen: ingen ledare trots stor skillnad.
-    tidigt = erbjudanden.sammanstall([_rad("riskfri_start", 29, 15), _rad("tva_vagar", 100, 2)])
+    tidigt = erbjudanden.sammanstall([_rad("gratis_prov", 29, 15), _rad("pilot", 100, 2)])
     assert tidigt["ledare"] is None
     assert {a["lage"] for a in tidigt["armar"]} == {"for_tidigt"}
 
-    klart = erbjudanden.sammanstall([_rad("riskfri_start", 100, 30, svar=40), _rad("tva_vagar", 100, 10)])
-    assert klart["ledare"] == "riskfri_start"
-    arm = next(a for a in klart["armar"] if a["nyckel"] == "riskfri_start")
+    klart = erbjudanden.sammanstall([_rad("gratis_prov", 100, 30, svar=40), _rad("pilot", 100, 10)])
+    assert klart["ledare"] == "gratis_prov"
+    arm = next(a for a in klart["armar"] if a["nyckel"] == "gratis_prov")
     assert arm["lage"] == "leder"
     assert arm["svarsfrekvens"] == 0.4 and arm["positiv_andel"] == 0.3
     # Arm utan data finns med, utan andelar.
-    tom = next(a for a in klart["armar"] if a["nyckel"] == "ratt_tid")
+    tom = next(a for a in klart["armar"] if a["nyckel"] == "garanti")
     assert tom["skickade"] == 0 and tom["positiv_andel"] is None
 
-    jamnt = erbjudanden.sammanstall([_rad("riskfri_start", 100, 12), _rad("tva_vagar", 100, 10)])
+    jamnt = erbjudanden.sammanstall([_rad("gratis_prov", 100, 12), _rad("pilot", 100, 10)])
     assert jamnt["ledare"] is None and jamnt["p_varde"] > 0.05
 
 
@@ -171,18 +231,18 @@ async def test_utfallet_harleds_ur_tradarnas_lage():
             await storage.add_lead_samtal(TENANT, prospect_id=prospekt["id"], utfall=samtal,
                                           aterkom_datum=None, anteckning=None)
 
-    await trad_med("riskfri_start", skickat=False)  # bara utkast
-    await trad_med("riskfri_start", skickat=True)  # skickat, inget svar
-    await trad_med("riskfri_start", skickat=True, status="meeting")  # positivt svar (svar.py, kod)
-    await trad_med("riskfri_start", skickat=True, status="lost")  # negativt svar
-    await trad_med("tva_vagar", skickat=True, samtal="mote")  # möte via samtalslistan
-    await trad_med("tva_vagar", skickat=True, status="meeting", kalla="manuell")  # flyttad för hand
+    await trad_med("gratis_prov", skickat=False)  # bara utkast
+    await trad_med("gratis_prov", skickat=True)  # skickat, inget svar
+    await trad_med("gratis_prov", skickat=True, status="meeting")  # positivt svar (svar.py, kod)
+    await trad_med("gratis_prov", skickat=True, status="lost")  # negativt svar
+    await trad_med("pilot", skickat=True, samtal="mote")  # möte via samtalslistan
+    await trad_med("pilot", skickat=True, status="meeting", kalla="manuell")  # flyttad för hand
 
     rader = {r["nyckel"]: r for r in await storage.erbjudande_utfall(TENANT)}
-    assert rader["riskfri_start"] == {"nyckel": "riskfri_start", "utkast": 4, "skickade": 3, "svar": 2,
+    assert rader["gratis_prov"] == {"nyckel": "gratis_prov", "utkast": 4, "skickade": 3, "svar": 2,
                                       "positiva": 1, "moten": 0}
     # Ett mötesutfall och en manuell flytt till möte är möten, inte svar.
-    assert rader["tva_vagar"] == {"nyckel": "tva_vagar", "utkast": 2, "skickade": 2, "svar": 0,
+    assert rader["pilot"] == {"nyckel": "pilot", "utkast": 2, "skickade": 2, "svar": 0,
                                   "positiva": 0, "moten": 2}
 
 
@@ -211,8 +271,9 @@ BRA = (
     "Hej Anna,\n\n"
     "När man driver en redovisningsbyrå med få anställda är det ofta mejlen från kunderna som tar kvällarna. "
     "Känner du igen dig?\n\n"
-    "Vår Supportagent svarar på de vanliga frågorna åt er, så att du får mer tid till bokslutsarbetet.\n\n"
-    "Har du 15–20 minuter nästa vecka?"
+    "Vår Supportagent svarar på de vanliga frågorna åt er, så att du hinner med bokslutsarbetet. "
+    "Testa den på era egna frågor, det tar 15–20 minuter.\n\n"
+    "Följ länken så kommer du igång: snajp.se/demo"
 )
 
 
@@ -238,8 +299,10 @@ def test_ett_mejl_i_skrivstilen_ger_inga_fynd():
         ("Det här är en mening som har alldeles för många ord för att någon ska orka läsa den hela vägen "
          "fram till slutet utan att tappa bort sig på vägen.", "lang_mening"),
         ("Ni får tre saker: färdiga mejl, en lista och en uppföljning.", "kolonlista"),
-        ("Har ni tid i veckan?\n\nVänliga hälsningar,\nSnajp", "halsningsfras"),
-        ("Har ni tid i veckan?\n\nMed vänlig hälsning", "halsningsfras"),
+        ("Svara ja.\n\nVänliga hälsningar,\nSnajp", "halsningsfras"),
+        ("Svara ja.\n\nMed vänlig hälsning", "halsningsfras"),
+        ("Vår agent hittar kunderna. Har ni 15 minuter nästa vecka?", "slutar_med_fraga"),
+        ("Hej,\n\n" + "Vår agent hittar nya kunder åt er varje vecka. " * 11, "for_langt"),
     ],
 )
 def test_markorerna_fangas(text, kod):
@@ -250,8 +313,10 @@ def test_markorerna_fangas(text, kod):
 @pytest.mark.parametrize(
     "text",
     [
-        "Har ni 15–20 minuter nästa vecka?",
+        "Boka 15–20 minuter nästa vecka.",
         "Ring 070-123 45 67 om det passar.",
+        # En igenkänningsfråga tidigt är tillåten; bara avslutningen får inte vara en fråga.
+        "Blir offerterna liggande hos er också? Svara ja så skickar jag fem leads.",
         "Mötet börjar 10:30 på torsdag.",
         "Ni får mer tid till det ni gör bäst.",
         "PS: Provperioden är 30 dagar, utan bindningstid.",
@@ -262,12 +327,22 @@ def test_ofarliga_formuleringar_fangas_inte(text):
     assert stilkontroll.kontrollera(text).anmarkningar == []
 
 
+def test_nittio_ord_ar_okej_men_inte_nittioett():
+    nittio = "Hej,\n\n" + " ".join(["ord"] * 89) + " slut."
+    assert "for_langt" not in {a.kod for a in stilkontroll.kontrollera(nittio).anmarkningar}
+    nittioett = "Hej,\n\n" + " ".join(["ord"] * 90) + " slut."
+    assert "for_langt" in {a.kod for a in stilkontroll.kontrollera(nittioett).anmarkningar}
+    # Signaturen och foten räknas inte.
+    med_signatur = nittio + "\n\nVänliga hälsningar,\nAnna Andersson\nSnajp AB\n\n--\nSnajp AB, org.nr 556000-0000"
+    assert "for_langt" not in {a.kod for a in stilkontroll.kontrollera(med_signatur).anmarkningar}
+
+
 def test_batchkontrollen_hittar_samma_ingang_och_uppmaning():
     annan = (
         "Hej,\n\nFör ett litet byggbolag är det ofta offerterna som får vänta. Är det så hos er också?\n\n"
-        "Vår Iris hittar nya kunder åt er.\n\nHar du 15–20 minuter nästa vecka?"
+        "Vår Iris hittar nya kunder åt er.\n\nFölj länken så kommer du igång: snajp.se/demo"
     )
-    tredje = "Hej,\n\nFör en verkstad är det kvittona som skaver.\n\nPassar torsdag?"
+    tredje = "Hej,\n\nFör en verkstad är det kvittona som skaver.\n\nSvara ja så skickar jag dem."
     fynd = stilkontroll.kontrollera_batch([BRA, annan, tredje])
     assert [a.kod for a in fynd[0]] == ["samma_uppmaning"]
     assert [a.kod for a in fynd[1]] == ["samma_uppmaning"]
@@ -275,4 +350,4 @@ def test_batchkontrollen_hittar_samma_ingang_och_uppmaning():
     assert [a.kod for a in stilkontroll.mot_andra(BRA, [BRA])] == ["samma_ingang", "samma_uppmaning"]
     # Signaturen och foten räknas inte som uppmaning.
     med_fot = BRA + "\n\nVänliga hälsningar,\nSnajp\n\n--\nSnajp AB, org.nr 556000-0000"
-    assert stilkontroll.uppmaning(med_fot) == "har du 15–20 minuter nästa vecka?"
+    assert stilkontroll.uppmaning(med_fot) == "följ länken så kommer du igång: snajp.se/demo"

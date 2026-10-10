@@ -8,8 +8,9 @@ de markörer som går att känna igen mekaniskt prövas här efteråt:
   tankstreck i brödtext, "Jag ser/såg att", "vi har skapat/utvecklat",
   "X är en AI-agent som", effektivisera/effektivitet/optimera, "i dagens",
   superlativ om oss, utropstecken, två meningar i rad med samma första ord,
-  meningar över 25 ord, kolonuppräkningar i löptext och en hälsningsfras
-  skriven av modellen (signaturen läggs på i kod).
+  meningar över 25 ord, kolonuppräkningar i löptext, en hälsningsfras
+  skriven av modellen (signaturen läggs på i kod), ett mejl som slutar med en
+  fråga i stället för en handling och en brödtext över 90 ord.
 
 Batchkontrollen fångar regel 7: två mejl i samma körning får inte ha samma
 ingång eller samma uppmaning.
@@ -30,6 +31,8 @@ from .grounding_gate import _maska_idiom
 from .text_delta import split_sentences
 
 MAX_ORD = 25
+#: Skrivstilen: tre stycken och 50–90 ord i brödtexten.
+MAX_ORD_MEJL = 90
 
 _HALSNING = re.compile(
     r"^\s*(?:med\s+vänlig(?:a)?\s+hälsning(?:ar)?|vänliga\s+hälsningar|bästa\s+hälsningar|"
@@ -95,10 +98,10 @@ def ingang(text: str) -> str:
 
 
 def uppmaning(text: str) -> str:
-    """Sista frågan i mejlet, annars sista meningen."""
+    """Sista meningen i brödtexten: handlingen mejlet slutar med (skrivstilen,
+    omgång 3). Förr den sista frågan, men igenkänningsfrågan står nu tidigt."""
     meningar = _meningar(_brodtext(text))
-    fragor = [m for m in meningar if m.endswith("?")]
-    return _norm((fragor or meningar or [""])[-1])
+    return _norm(meningar[-1]) if meningar else ""
 
 
 def kontrollera(text: str) -> Kontrollresultat:
@@ -126,6 +129,13 @@ def kontrollera(text: str) -> Kontrollresultat:
         if a and b and a.group(0).casefold() == b.group(0).casefold():
             lagg("samma_start", f"två meningar i rad börjar med \"{b.group(0)}\"")
             break
+    # Skrivstilens regel 4 och strukturen (Antons omgång 3): mejlet slutar med
+    # en enkel handling, aldrig en fråga, och brödtexten är högst 90 ord.
+    if meningar and meningar[-1].endswith("?"):
+        lagg("slutar_med_fraga", f"slutar med en fråga i stället för en handling: \"{meningar[-1][:60]}\"")
+    antal_ord = sum(len(m.split()) for m in meningar)
+    if antal_ord > MAX_ORD_MEJL:
+        lagg("for_langt", f"brödtexten är {antal_ord} ord (högst {MAX_ORD_MEJL})")
     for mening in meningar:
         if len(mening.split()) > MAX_ORD:
             lagg("lang_mening", f"mening över {MAX_ORD} ord: \"{mening[:60]}…\"")

@@ -768,7 +768,10 @@ async def run_outreach_draft_v2(
     lager = replace(lager, agent_md=leads_systemprompt.rendera(foretagsnamn=tenant_name, steg="utkast", mall=lager.agent_mall or None))
     # Kundens erbjudande för just det här prospektet (A/B, app/leads/erbjudanden.py).
     # None = inget aktivt med villkor, och då är prompten exakt som förut.
-    erbjudande = await erbjudanden.for_trad(storage, tenant_id, thread)
+    # Villkoren gäller produkten researchen valde (vald_produkt), aldrig en annan.
+    erbjudande = await erbjudanden.for_trad(
+        storage, tenant_id, thread, erbjudanden.produkt_ur_research(research_summary)
+    )
     erbjudandeblock = f"{erbjudande.block()}\n\n" if erbjudande else ""
 
     base = (

@@ -1294,8 +1294,8 @@ async def test_v1_bar_kundens_erbjudande_i_alla_fyra_stegen():
     villkor = "Första månaden utan kostnad. Ingen bindningstid."
     await storage.set_agent_settings(
         TENANT, agent_type="leads",
-        settings={"erbjudanden": {"aktiva": [{"nyckel": "riskfri_start", "vikt": 1}],
-                                  "villkor": {"riskfri_start": villkor}}},
+        settings={"erbjudanden": {"aktiva": [{"nyckel": "gratis_prov", "vikt": 1}],
+                                  "villkor": {"gratis_prov": villkor}}},
     )
     meddelanden: list[str] = []
     original = llm.create

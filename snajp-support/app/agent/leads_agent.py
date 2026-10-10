@@ -1094,7 +1094,9 @@ async def run_outreach_draft(
     # det är kördata, inte en regel.
     # Kundens erbjudande (A/B, app/leads/erbjudanden.py) ligger i basen och når
     # därmed alla fyra stegen, humanizern med. None = prompten som förut.
-    erbjudande = await erbjudanden.for_trad(storage, tenant_id, thread)
+    erbjudande = await erbjudanden.for_trad(
+        storage, tenant_id, thread, erbjudanden.produkt_ur_research(research_summary)
+    )
     base = (
         f"## Uppdrag\nDu skriver ett kallt första mejl till {company_name} åt {tenant_name}.\n\n"
         f"## Skrivstil (gäller före skillernas mallar för formuleringen)\n{leads_systemprompt.skrivstil()}\n\n"

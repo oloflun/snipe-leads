@@ -621,14 +621,14 @@ async def _med_erbjudande(storage, villkor: dict) -> None:
     await storage.set_agent_settings(
         TENANT,
         agent_type="leads",
-        settings={"erbjudanden": {"aktiva": [{"nyckel": "riskfri_start", "vikt": 1}], "villkor": villkor}},
+        settings={"erbjudanden": {"aktiva": [{"nyckel": "gratis_prov", "vikt": 1}], "villkor": villkor}},
     )
 
 
 async def test_erbjudandet_nar_utkastet_och_humanizern_med_villkoren_ordagrant():
     storage = MemoryStorage()
     thread_id = await _prepare_outreach(storage)
-    await _med_erbjudande(storage, {"riskfri_start": _VILLKOR})
+    await _med_erbjudande(storage, {"gratis_prov": _VILLKOR})
     llm = _FakeLLM()
 
     result = await _utkast_v2(storage, thread_id, llm)
@@ -641,7 +641,7 @@ async def test_erbjudandet_nar_utkastet_och_humanizern_med_villkoren_ordagrant()
         assert _VILLKOR not in llm.system_prompts[steg]
     trad = await storage.get_outreach_thread(TENANT, thread_id)
     assert trad["offer_id"] == storage.offers[0]["id"]
-    assert storage.offers[0]["name"] == "riskfri_start"
+    assert storage.offers[0]["name"] == "gratis_prov"
 
 
 async def test_utan_valbart_erbjudande_ar_prompten_oforandrad():
@@ -668,7 +668,7 @@ async def test_faktagrinden_slapper_villkorens_siffra_bara_med_erbjudandet():
         "final_body": "Hej,\n\nVår agent svarar på returfrågorna åt er. Uppsägningstiden är 60 dagar.\n\nPassar torsdag?",
     }}
     med = MemoryStorage()
-    await _med_erbjudande(med, {"riskfri_start": _VILLKOR})
+    await _med_erbjudande(med, {"gratis_prov": _VILLKOR})
     llm = _FakeLLM(overrides=mejl)
     result = await _utkast_v2(med, await _prepare_outreach(med), llm)
     assert result["grounding"]["fired"] is False
@@ -678,6 +678,34 @@ async def test_faktagrinden_slapper_villkorens_siffra_bara_med_erbjudandet():
     llm2 = _FakeLLM(overrides=mejl)
     result2 = await _utkast_v2(utan, await _prepare_outreach(utan), llm2)
     assert result2["grounding"]["fired"] is True, "60 står inte i underlaget utan villkoren"
+
+
+async def test_villkoret_folger_produkten_researchen_valde():
+    """Varv 3: ett Supportagent-mejl fick Iris-villkoret. Nu når bara den
+    valda produktens villkor prompten."""
+    storage = MemoryStorage()
+    iris = "Fem kvalificerade leads med färdiga första mejl, utan kostnad."
+    support = "En demolänk där ni testar agenten på era egna frågor."
+    await _med_erbjudande(storage, {"gratis_prov": {"Iris": iris, "Supportagent": support}})
+    llm = _FakeLLM()
+    with patch("app.agent.step_runner.get_llm_client", return_value=llm):
+        await run_outreach_draft_v2(
+            storage,
+            TENANT,
+            thread_id=await _prepare_outreach(storage),
+            prospect_email="kundservice@exempelbolaget.se",
+            tenant_name="Snajp",
+            company_name="Exempelbolaget",
+            offer_summary="Supportagent: svarar på kundmejlen",
+            context_pack="## Kontextpaket\nICP: svensk e-handel.",
+            brief="",
+            research_summary=json.dumps({"vald_produkt": {"namn": "Supportagent", "nytta": "svar"}}),
+            research_evidence=("Fri retur inom 30 dagar",),
+            is_test=True,
+        )
+    for meddelande in llm.user_messages:
+        assert iris not in meddelande
+    assert f"### Villkor för erbjudandet\n{support}" in llm.user_messages[0]
 
 
 async def test_stilfynd_tvingar_granskning_med_skalet_pa_koposten():
