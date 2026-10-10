@@ -199,8 +199,10 @@ async def run_leads_stadare(app_state: Any) -> None:
                 await stada_alla(app_state)
                 senast = time.monotonic()
             from ..api.leads import vack_stillastaende_korningar
+            from ..leads import autopilot
 
             await vack_stillastaende_korningar(app_state)
+            await autopilot.svep(app_state)
         except asyncio.CancelledError:
             raise
         except Exception:  # noqa: BLE001 — städaren får aldrig dö

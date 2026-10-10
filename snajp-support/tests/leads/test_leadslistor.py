@@ -548,10 +548,10 @@ async def test_kombinera_vagrar_pa_ofardig_eller_okand_lista():
     assert len(await storage.list_lead_lists(TENANT)) == 3
 
 
-# -- Flytta till Iris --------------------------------------------------------
+# -- Skapa utkast (ersatte Flytta till Iris 2026-10-10) -----------------------
 
 
-async def test_flytta_till_iris_koar_korning_med_research_per_bolag(monkeypatch):
+async def test_skapa_utkast_koar_korning_med_research_per_bolag(monkeypatch):
     """Raderna blir prospekt med telefon och orgnr, och en körning med
     kalla='lista' går genom research (stubbad) tills alla barn rapporterat;
     ingen sökrunda startas och liggaren slutar i 'completed'."""
@@ -591,8 +591,8 @@ async def test_flytta_till_iris_koar_korning_med_research_per_bolag(monkeypatch)
     app_state = SimpleNamespace(jobs=MemoryJobStore(), storage=storage, leadsstrom=None)
     req = SimpleNamespace(app=SimpleNamespace(state=app_state))
     tenant = {"tenant_id": TENANT, "tenant_name": "Snajp"}
-    ut = await leads_api.listan_till_iris(req, lista["id"], TillIrisRequest(scope="research"), tenant)
-    assert ut["prospekt"] == 2 and ut["nya"] == 2
+    ut = await leads_api.skriv_listutkast_for_listan(req, lista["id"], TillIrisRequest(), tenant)
+    assert ut["count"] == 2
 
     rad = None
     for _ in range(200):
@@ -611,10 +611,13 @@ async def test_flytta_till_iris_koar_korning_med_research_per_bolag(monkeypatch)
 
     from fastapi import HTTPException
 
-    # Ett bolag, ett ställe (2026-10-08): de flyttade raderna har lämnat
-    # listan, så samma flytt igen har inget att flytta och skapar inget nytt.
-    assert [r["company_name"] for r in await storage.list_lead_list_items(TENANT, lista["id"])] == [""]
-    with pytest.raises(HTTPException) as fel:
-        await leads_api.listan_till_iris(req, lista["id"], TillIrisRequest(scope="research"), tenant)
-    assert fel.value.status_code == 422
+    # Raderna stannar i listan (Anton 2026-10-10) och är kopplade till sina
+    # bakgrundsprospekt; samma knapp igen skapar inga nya prospekt.
+    rader = await storage.list_lead_list_items(TENANT, lista["id"])
+    assert [r["company_name"] for r in rader] == ["Alfa Bygg AB", "Beta Måleri AB", ""]
+    assert all(r["prospect_id"] for r in rader if r["company_name"])
+    try:
+        await leads_api.skriv_listutkast_for_listan(req, lista["id"], TillIrisRequest(), tenant)
+    except HTTPException:
+        pass
     assert len([p for p in await storage.list_prospects(TENANT, limit=50) if p["company_name"]]) == 2

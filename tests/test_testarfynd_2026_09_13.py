@@ -28,50 +28,21 @@ def _las(fil: Path) -> str:
 
 
 # -- Fynd 1: Leadslistor ↔ Email studio ------------------------------------
+# Mejlrutan per rad (Skriv mejl) och utkastsvepet togs bort 2026-10-10 (Antons
+# beslut): raden öppnas i samma låda som ett Iris-lead, och Skapa utkast kör
+# samma research och utkast som Iris. Det som vaktas nu är det nya flödet.
 
 
-def test_skriv_mejl_grindas_inte_langre_pa_adress():
-    """Knappen syntes bara där `rad.contact_email` fanns. En lista utan
-    adresser hade alltså ingen väg till Email studio alls."""
+def test_listans_atgarder_skickar_uttryckliga_rader_och_foljs_i_listan():
+    """Skapa utkast och Processa om skickar alltid de markerade eller synliga
+    raderna (förut null utan kontaktfilter, så webbfiltren följde inte med),
+    och förloppet läses ur listans `processering`. Flytta till Iris finns inte."""
     text = _las(LISTVY)
-    assert "Skriv mejl" in text
-    # `(?<!!)`: mejlrutans "Ändra adressen" visas med flit bara när adressen
-    # SAKNAS (`!rad.contact_email ? (<button`) — det är inte grinden som
-    # testet vaktar mot.
-    assert not re.search(r"(?<!!)rad\.contact_email\s*\?\s*\(\s*<button", text), (
-        "Skriv mejl-knappen är åter villkorad på adressen."
-    )
-    assert not re.search(r"mejlbro\s*&&\s*rad\.contact_email", text), (
-        "Mobilkortets Skriv mejl-knapp är åter villkorad på adressen."
-    )
-
-
-def test_rad_utan_adress_sparar_adressen_innan_utkastet():
-    """Avregistreringsfoten byggs på mottagaradressen när utkastet köas —
-    ett utkast utan adress hade legat i kön utan fot. Adressen ska därför
-    sparas på prospektet (PATCH) innan kedjan skriver något."""
-    text = _las(LISTVY)
-    patch = text.find('method: "PATCH"')
-    utkast = text.find('"/leads/outreach/draft"')
-    assert patch != -1, "Listvyn sparar inte längre en angiven adress på prospektet."
-    assert utkast != -1
-    assert patch < utkast, "Adressen måste sparas FÖRE utkastjobbet."
-
-
-def test_snabbmail_ar_tackat_och_stannar_pa_kapacitetsfel():
-    text = _las(LISTVY)
-    tak = re.search(r"const SVEP_TAK = (\d+);", text)
-    assert tak and int(tak.group(1)) <= 25, "Svepet saknar tak eller taket har höjts över 25."
-    assert "status === 429" in text and "status === 503" in text, (
-        "Svepet stannar inte längre på budgettak (429) eller saknad LLM (503)."
-    )
-    assert "credits are depleted" in text, "Kreditslutstexten känns inte igen av svepet."
-
-
-def test_mejlrutan_och_svepet_delar_en_kedja():
-    """Två kopior av utkastkedjan glider isär — POST:en får bara finnas en gång."""
-    text = _las(LISTVY)
-    assert text.count('"/leads/outreach/draft"') == 1
+    assert "/till-iris" not in text, "Flytta till Iris är borttaget (2026-10-10)."
+    assert "item_ids: kontaktfilter" not in text, "Åtgärderna får inte skicka null utan kontaktfilter."
+    assert "JSON.stringify({ item_ids })" in text
+    assert "lista.processering" in text, "Förloppet i listan läses inte längre."
+    assert "/prospekt`" in text, "Raden öppnas inte längre i lådan via sitt prospekt."
 
 
 # -- Fynd 2: titeln styr sökningen -----------------------------------------

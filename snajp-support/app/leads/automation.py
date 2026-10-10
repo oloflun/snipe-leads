@@ -34,9 +34,13 @@ STANDARD: dict[str, Any] = {
         "inkorg": {"utkast_auto": False, "uppfoljning_dagar": 4},
     },
     "jev_bortval": True,
+    # Autopiloten (leads/autopilot.py, Anton 2026-10-10): en Iris-körning per
+    # vardag med så många leads. Av som standard.
+    "autopilot": {"pa": False, "leads_per_dag": 10},
 }
 
 MAX_DAGAR = 60
+MAX_LEADS_PER_DAG = 50
 
 
 def normalisera(ratt: Any) -> dict[str, Any]:
@@ -46,6 +50,13 @@ def normalisera(ratt: Any) -> dict[str, Any]:
         return regler
     if isinstance(ratt.get("jev_bortval"), bool):
         regler["jev_bortval"] = ratt["jev_bortval"]
+    ap = ratt.get("autopilot")
+    if isinstance(ap, dict):
+        if isinstance(ap.get("pa"), bool):
+            regler["autopilot"]["pa"] = ap["pa"]
+        antal = ap.get("leads_per_dag")
+        if isinstance(antal, (int, float)) and not isinstance(antal, bool):
+            regler["autopilot"]["leads_per_dag"] = max(1, min(MAX_LEADS_PER_DAG, int(antal)))
     per_typ = ratt.get("per_typ")
     if not isinstance(per_typ, dict):
         return regler

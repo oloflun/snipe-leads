@@ -1018,7 +1018,9 @@ def fordela(k: dict[str, Any], kontakt: dict[str, Any] | None) -> tuple[str, str
         return "iris", None
     if kontakt.get("contact_phone"):
         return "ring", None
-    if k.get("_telefon") and k.get("vd_namn"):
+    if k.get("_telefon") and (k.get("vd_namn") or k.get("_telefon_katalog")):
+        # Katalogens nummer (leads/katalog.py) är bolagets publicerade, som
+        # sajtens: det kräver ingen VD i registret (Anton 2026-10-10).
         return "ring", None
     if k.get("website"):
         return "prova_om", "Sajt utan hittad kontakt"
@@ -1062,7 +1064,11 @@ def ringrad(k: dict[str, Any], kontakt: dict[str, Any] | None) -> dict[str, Any]
         "contact_email": None,
         "contact_level": "named_role_match" if vd else "role_address",
         "signal": "ring",
-        "signal_detalj": "Bara telefon, VD namngiven i registret" if vd else "Bara telefon på sajten",
+        "signal_detalj": (
+            "Bara telefon, VD namngiven i registret" if vd
+            else "Bara telefon på sajten" if kontakt.get("contact_phone")
+            else "Bara telefon, bolagets nummer i hitta.se"
+        ),
         "spar": "ring",
     }
 
@@ -1113,10 +1119,12 @@ async def _komplettera_iris(
     parkeringskontroll och kontaktsökning på flera sidor, 5–10 s per bolag.
     Fördelningen görs i rangordning efter varje omgång, och stoppet (nog
     många leads, webbtaket) prövas mellan omgångarna."""
-    from .. import discovery, sidhamtning
+    from .. import discovery, katalog, sidhamtning
     from ..platshallare import AVVECKLAT, ar_platshallare
 
     async def sok(k: dict[str, Any]) -> tuple[dict[str, Any], str | None, dict[str, Any] | None, Any] | None:
+        # Katalogen först: dess e-post kan ge webbplatsen (steg 2 i _webbplats).
+        k = await katalog.berika(k)
         webb = await _webbplats(k)
         if puls:
             await puls()

@@ -44,7 +44,7 @@ _MARKORER: tuple[tuple[str, tuple[str, ...]], ...] = (
     ),
     (
         "under konstruktion",
-        ("under konstruktion", "under construction", "kommer snart", "coming soon"),
+        ("under konstruktion", "under construction", "under uppbyggnad", "kommer snart", "coming soon"),
     ),
     (
         "webbhotellets standardsida",

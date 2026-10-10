@@ -84,6 +84,9 @@ class Utskick:
     #: True när mottagaradressen är personlig (`fornamn.efternamn@`) snarare
     #: än funktionell. Sätts av `Prospect.epost_ar_personlig`.
     personlig_adress: bool
+    #: Skicka nu ur kön (Anton 2026-10-10): en människa har valt att mejlet
+    #: går direkt. Bara kontorstiden (regel 5a) släpps; övriga spärrar gäller.
+    direkt: bool = False
 
 
 @dataclass(frozen=True)
@@ -327,9 +330,12 @@ def _regel_5_volymtak(*, avsandare, utskick, historik, nu) -> GuardBeslut | None
     """
     lokal_tid = nu.astimezone(STOCKHOLM)
 
+    # 5a hoppas över för Skicka nu (utskick.direkt): människan har valt tiden.
+    if utskick.direkt:
+        pass
     # 5a. Kontorstid, vardagar. Ett kallmejl 03:14 läses som maskinellt även
     # när texten är bra. Söndag är inte en arbetsdag för mottagaren heller.
-    if lokal_tid.weekday() >= 5:
+    elif lokal_tid.weekday() >= 5:
         veckodag = _VECKODAGAR[lokal_tid.weekday()]
         return GuardBeslut(
             KOLA_OM,
@@ -337,7 +343,7 @@ def _regel_5_volymtak(*, avsandare, utskick, historik, nu) -> GuardBeslut | None
             f"{veckodag.capitalize()} är helg. Utskick sker på vardagar "
             f"{TIDIGAST_TIMME}–{SENAST_TIMME} svensk tid.",
         )
-    if not (TIDIGAST_TIMME <= lokal_tid.hour < SENAST_TIMME):
+    elif not (TIDIGAST_TIMME <= lokal_tid.hour < SENAST_TIMME):
         return GuardBeslut(
             KOLA_OM,
             "5_volymtak",

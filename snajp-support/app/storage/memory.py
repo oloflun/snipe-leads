@@ -1926,6 +1926,9 @@ class MemoryStorage:
             "postnr": falt.get("postnr"),
             "webbniva": falt.get("webbniva"),
             "webbrevision": falt.get("webbrevision"),
+            "prospect_id": None,
+            "kallor": [],
+            "processad_at": None,
             "created_at": _now(),
         }
         self.lead_list_items.append(rad)
@@ -1947,6 +1950,17 @@ class MemoryStorage:
         for i in self.lead_list_items:
             if str(i["id"]) == str(item_id) and i["tenant_id"] == tenant_id:
                 i.update({k: v for k, v in falt.items() if k in LISTRAD_UPPDATERBARA})
+
+    async def satt_listprocessering(self, tenant_id: str, list_id: str, processering: dict[str, Any] | None) -> None:
+        for rad in self.lead_lists.get(tenant_id, []):
+            if rad["id"] == list_id:
+                rad["processering"] = json.loads(json.dumps(processering, default=str)) if processering else None
+
+    async def listkopplade_prospekt(self, tenant_id: str) -> set[str]:
+        return {
+            str(i["prospect_id"]) for i in self.lead_list_items
+            if i["tenant_id"] == tenant_id and i.get("prospect_id")
+        }
 
     async def markera_listrad_flyttad(self, tenant_id: str, item_id: str, *, signal_detalj: str) -> None:
         for i in self.lead_list_items:

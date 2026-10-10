@@ -27,18 +27,20 @@ def test_tolka_kraver_amne_och_brodtext():
     assert _tolka("inte json") is None
 
 
-async def _vanta_pa_utkast(storage, list_id: str, antal: int) -> list[dict]:
-    for _ in range(50):
-        rader = await storage.list_lead_list_items(DEFAULT_TENANT_ID, list_id)
-        if sum(1 for r in rader if r.get("utkast")) >= antal:
-            return rader
-        await asyncio.sleep(0.02)
-    raise AssertionError("Utkasten skrevs aldrig.")
-
-
 @pytest.mark.anyio
-async def test_skriv_listutkast_och_koa_med_vd_adress(monkeypatch):
+async def test_skapa_utkast_kor_iris_research_och_raderna_stannar(monkeypatch):
+    """Anton 2026-10-10: listans utkast görs exakt som Iris-leads (research och
+    utkast per bolag), raderna stannar i listan och deras bakgrundsprospekt
+    syns inte i Iris-tabellen. Förloppet står på listan. Raderna med ett
+    gammalt generellt utkast kan fortfarande köas med /koa."""
     monkeypatch.setattr(leads_api, "_require_live_llm", lambda: None)
+    koade: list[tuple[list[str], str]] = []
+
+    async def _lagg(_app, _tenant, prospekt, *, scope, **_k):
+        koade.append(([p["company_name"] for p in prospekt], scope))
+        return []
+
+    monkeypatch.setattr(leads_api, "_lagg_prospektjobb", _lagg)
     async with app.router.lifespan_context(app):
         storage = app.state.storage
         storage.agent_settings[(DEFAULT_TENANT_ID, "leads")] = {
@@ -61,18 +63,35 @@ async def test_skriv_listutkast_och_koa_med_vd_adress(monkeypatch):
             )
 
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-            svar = await client.post(f"/api/leads/listor/{lista['id']}/utkast", headers=DEMO)
+            svar = await client.post(f"/api/leads/listor/{lista['id']}/utkast", headers=DEMO, json={})
             assert svar.status_code == 202, svar.text
             assert svar.json()["count"] == 2
-            rader = await _vanta_pa_utkast(storage, lista["id"], 2)
-            for rad in rader:
-                assert rad["utkast"]["body"].startswith("Hej,")
-                assert rad["utkast"]["subject"]
+            assert koade == [(["Snickarn i Umeå AB", "Rörfirman Ek AB"], "research_and_draft")]
 
-            # Andra klicket skriver inget nytt: alla rader har redan ett utkast.
-            igen = await client.post(f"/api/leads/listor/{lista['id']}/utkast", headers=DEMO)
-            assert igen.json()["count"] == 0
+            rader = await storage.list_lead_list_items(DEFAULT_TENANT_ID, lista["id"])
+            assert len(rader) == 2 and all(r["prospect_id"] for r in rader), "raderna stannar och kopplas"
+            iris = (await client.get("/api/leads/prospects", headers=DEMO)).json()
+            synliga = {p["company_name"] for p in iris.get("prospects", iris if isinstance(iris, list) else [])}
+            assert not synliga & {"Snickarn i Umeå AB", "Rörfirman Ek AB"}, "listans leads syns inte i Iris"
+            lista_nu = (await client.get(f"/api/leads/listor/{lista['id']}", headers=DEMO)).json()["list"]
+            assert lista_nu["processering"]["typ"] == "utkast"
+            assert lista_nu["processering"]["totalt"] == 2
 
+            # Rader vars lead redan har ett utkast hoppas över (utkaststatus
+            # bär nyckeln `utkast_status`, inte `status`).
+            monkeypatch.setattr(
+                leads_api.utkaststatus, "per_prospekt",
+                lambda _lagen, ids, **_k: {str(i): {"utkast_status": "vantar"} for i in ids},
+            )
+            await storage.satt_listprocessering(DEFAULT_TENANT_ID, lista["id"], None)
+            igen = await client.post(f"/api/leads/listor/{lista['id']}/utkast", headers=DEMO, json={})
+            assert igen.status_code == 422, igen.text
+
+            await storage.spara_listutkast(
+                DEFAULT_TENANT_ID, str(rader[0]["id"]),
+                {"subject": "Fler kunder i Umeå", "body": "Hej,\n\nVi hjälper hantverksbolag i Norrland."},
+            )
+            rader = await storage.list_lead_list_items(DEFAULT_TENANT_ID, lista["id"])
             rad = rader[0]
             url = f"/api/leads/listor/{lista['id']}/items/{rad['id']}/koa"
             assert (await client.post(url, headers=DEMO, json={"email": "inte-en-adress"})).status_code == 422

@@ -2533,7 +2533,23 @@ class PostgresStorage:
                 tenant_id,
                 list_id,
             )
-        return _avkoda_jsonb(_row(record), "icp") if record else None
+        return _avkoda_jsonb(_row(record), "icp", "processering") if record else None
+
+    async def satt_listprocessering(self, tenant_id: str, list_id: str, processering: dict[str, Any] | None) -> None:
+        async with self._scoped(tenant_id) as conn:
+            await conn.execute(
+                "update lead_lists set processering = $3::jsonb where tenant_id = $1 and id = $2",
+                tenant_id, list_id,
+                json.dumps(processering, ensure_ascii=False, default=str) if processering is not None else None,
+            )
+
+    async def listkopplade_prospekt(self, tenant_id: str) -> set[str]:
+        async with self._scoped(tenant_id) as conn:
+            records = await conn.fetch(
+                "select distinct prospect_id from lead_list_items where tenant_id = $1 and prospect_id is not null",
+                tenant_id,
+            )
+        return {str(r["prospect_id"]) for r in records}
 
     async def add_lead_list_item(
         self, tenant_id: str, *, list_id: str, **falt: Any
@@ -2586,15 +2602,20 @@ class PostgresStorage:
                 list_id,
                 med_flyttade,
             )
-        return [_avkoda_jsonb(_avkoda_jsonb(_row(r), "utkast"), "webbrevision") for r in records]
+        return [_avkoda_jsonb(_row(r), "utkast", "webbrevision", "kallor") for r in records]
 
     async def uppdatera_listrad(self, tenant_id: str, item_id: str, falt: dict[str, Any]) -> None:
-        from .base import LISTRAD_UPPDATERBARA
+        from .base import LISTRAD_JSONB, LISTRAD_UPPDATERBARA
 
-        valda = {k: v for k, v in falt.items() if k in LISTRAD_UPPDATERBARA}
+        valda = {
+            k: (json.dumps(v, ensure_ascii=False, default=str) if k in LISTRAD_JSONB and v is not None else v)
+            for k, v in falt.items() if k in LISTRAD_UPPDATERBARA
+        }
         if not valda:
             return
-        satt = ", ".join(f"{k} = ${i}" for i, k in enumerate(valda, start=3))
+        satt = ", ".join(
+            f"{k} = ${i}" + ("::jsonb" if k in LISTRAD_JSONB else "") for i, k in enumerate(valda, start=3)
+        )
         async with self._scoped(tenant_id) as conn:
             await conn.execute(
                 f"update lead_list_items set {satt} where tenant_id = $1 and id = $2",

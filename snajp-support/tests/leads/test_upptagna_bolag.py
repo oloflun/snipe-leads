@@ -203,7 +203,7 @@ async def test_crm_import_sparar_kalla_crm_och_slar_ihop_dubbletter():
             assert fel.status_code == 422
 
 
-async def test_crm_lista_kan_inte_flyttas_till_iris_eller_kombineras(monkeypatch):
+async def test_crm_lista_kan_inte_fa_utkast_processas_eller_kombineras(monkeypatch):
     from app.api import leads as leads_api
     from app.api.schemas import KombineraListorRequest, TillIrisRequest
 
@@ -220,7 +220,10 @@ async def test_crm_lista_kan_inte_flyttas_till_iris_eller_kombineras(monkeypatch
     tenant = {"tenant_id": TENANT, "tenant_name": "Snajp"}
 
     with pytest.raises(HTTPException) as fel:
-        await leads_api.listan_till_iris(req, crm["id"], TillIrisRequest(scope="research"), tenant)
+        await leads_api.skriv_listutkast_for_listan(req, crm["id"], TillIrisRequest(), tenant)
+    assert fel.value.status_code == 409
+    with pytest.raises(HTTPException) as fel:
+        await leads_api.omprova_listan(req, crm["id"], TillIrisRequest(), tenant)
     assert fel.value.status_code == 409
     with pytest.raises(HTTPException) as fel:
         await leads_api.listrad_till_prospekt(req, crm["id"], item["id"], tenant)

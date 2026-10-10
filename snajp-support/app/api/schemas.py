@@ -2,6 +2,8 @@
 
 from typing import Literal
 
+from datetime import datetime
+
 from pydantic import BaseModel, Field, model_validator
 
 
@@ -167,6 +169,15 @@ class AutomationPerTypRequest(BaseModel):
     inkorg: AutomationTypRequest | None = None
 
 
+class AutopilotRequest(BaseModel):
+    """Iris autopilot (app/leads/autopilot.py): en körning per vardag."""
+
+    model_config = {"extra": "forbid"}
+
+    pa: bool | None = None
+    leads_per_dag: int | None = Field(default=None, ge=1, le=50)
+
+
 class AutomationRequest(BaseModel):
     """Automationsreglerna per lead-typ. Sammanslås fältvis per typ i
     PUT /api/leads/config — resten står kvar."""
@@ -175,6 +186,7 @@ class AutomationRequest(BaseModel):
 
     per_typ: AutomationPerTypRequest | None = None
     jev_bortval: bool | None = None
+    autopilot: AutopilotRequest | None = None
 
 
 class CrmSynkRequest(BaseModel):
@@ -431,6 +443,13 @@ class KombineraListorRequest(BaseModel):
     #: alla = varje rad; telefon = rader med telefon; mejl = rader med mejl;
     #: bada = rader med både telefon och mejl.
     kontaktfilter: Literal["alla", "telefon", "mejl", "bada"] = "alla"
+
+
+class SchemalaggRequest(BaseModel):
+    """Ny utskickstid för markerade godkända utkast (Anton 2026-10-10)."""
+
+    ids: list[str] = Field(min_length=1, max_length=500)
+    tid: datetime
 
 
 class TillIrisRequest(BaseModel):

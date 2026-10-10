@@ -57,7 +57,7 @@ async def _outbound_sent_count(storage: Storage, tenant_id: str, thread_id: str)
     )
 
 
-async def _kor_send_guard(storage, tenant_id: str, thread: dict, message: dict, *, now):
+async def _kor_send_guard(storage, tenant_id: str, thread: dict, message: dict, *, now, direkt: bool = False):
     """Samlar ihop fakta och låter `send_guard` döma.
 
     Uppdelningen är avsiktlig: den här funktionen gör I/O och ingen bedömning,
@@ -158,6 +158,7 @@ async def _kor_send_guard(storage, tenant_id: str, thread: dict, message: dict, 
             brodtext=message.get("body") or "",
             foretagsnyckel=nyckel,
             personlig_adress=_ar_personlig(thread.get("prospect_email")),
+            direkt=direkt,
         ),
         historik=historik,
         nu=now,
@@ -266,8 +267,12 @@ async def _process_due_item(
     *,
     now: datetime,
     godkant: dict | None = None,
+    direkt: bool = False,
 ) -> str:
     """Returnerar 'sent' | 'requeued' | 'blocked' | 'awaiting_review'.
+
+    `direkt` (Skicka nu ur kön, Anton 2026-10-10): sändfönstret (tidsgrinden
+    och regel 5a) gäller inte; språkgrinden och övriga spärrar gör det.
 
     `godkant` (2026-10-07): en människa har godkänt just det här utkastet i
     granskningskön. Då är autonominivån redan besvarad — det är människan
@@ -285,6 +290,18 @@ async def _process_due_item(
         await storage.get_pending_outreach_message(tenant_id, item["thread_id"]) if thread else None
     )
     decision = decide_send_action(now=now, thread=thread, message=message)
+    if direkt and decision.action == "requeue":
+        # Bara tidsgrinden ger requeue; språkgrinden prövas här i stället.
+        from .send_decision import LanguageGateError, SendDecision, check_send_gate
+
+        try:
+            check_send_gate(
+                language_state=thread.get("language_state", "sv"),
+                humanizer_variant=message.get("humanizer_variant"),
+            )
+            decision = SendDecision("send", "Skicka nu: en människa valde att skicka utanför sändfönstret")
+        except LanguageGateError as fel:
+            decision = SendDecision("block", str(fel))
 
     # Andra anropsplatsen för autonomiregeln. Grinden vid köningen räcker inte:
     # ett item kan ha köats innan kunden sänkte sin nivå, och det som ligger i
@@ -312,7 +329,7 @@ async def _process_due_item(
         #
         # En guard som körts vid köningen hade dömt på gårdagens sanning: en
         # mottagare kan ha avregistrerat sig medan utkastet låg i kön.
-        guard = await _kor_send_guard(storage, tenant_id, thread, message, now=now)
+        guard = await _kor_send_guard(storage, tenant_id, thread, message, now=now, direkt=direkt)
         # Regel 6 kräver att en människa granskar de tre första utskicken. Ett
         # godkänt utkast ÄR den granskningen; alla andra spärrar gäller.
         granskat = godkant and guard.regel == "6_granskningsko"
@@ -470,7 +487,8 @@ async def _avsandaridentitet(storage: Storage, tenant_id: str) -> dict:
 
 
 async def skicka_godkant(
-    storage: Storage, tenant_id: str, item_id: str, provider: SendProvider, *, now: datetime
+    storage: Storage, tenant_id: str, item_id: str, provider: SendProvider, *, now: datetime,
+    direkt: bool = False,
 ) -> tuple[str, str | None]:
     """Granskarens "Godkänn och skicka" (2026-10-07): (utfall, skäl).
 
@@ -499,7 +517,7 @@ async def skicka_godkant(
         godkant = {"approved_by": "human", "via": "granskningskön", "godkand_at": now.isoformat()}
         await storage.update_send_queue_status(tenant_id, item_id, status="queued", gate_checks=godkant)
         utfall = await _process_due_item(
-            storage, tenant_id, {**item, "status": "queued"}, provider, now=now, godkant=godkant
+            storage, tenant_id, {**item, "status": "queued"}, provider, now=now, godkant=godkant, direkt=direkt
         )
     efter = await storage.get_send_queue_item(tenant_id, item_id) or {}
     gc = efter.get("gate_checks") or {}

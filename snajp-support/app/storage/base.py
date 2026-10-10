@@ -95,7 +95,12 @@ BEDOMNINGSFALT = (
 #: Fälten Processa om får skriva på en listrad (app/leads/omprova.py).
 LISTRAD_UPPDATERBARA = (
     "website", "contact_name", "contact_role", "contact_email", "contact_phone", "contact_level", "signal_detalj",
+    # Migration 108 och 110: Processa om (leads/omprova.py) och kopplingen
+    # till radens prospekt.
+    "orgnr", "webbniva", "webbrevision", "kallor", "processad_at", "prospect_id",
 )
+#: Kolumnerna ovan som är jsonb och skrivs som JSON.
+LISTRAD_JSONB = ("webbrevision", "kallor")
 
 
 class Storage(Protocol):
@@ -921,6 +926,15 @@ class Storage(Protocol):
     async def uppdatera_listrad(self, tenant_id: str, item_id: str, falt: dict[str, Any]) -> None:
         """Processa om (2026-10-08): kontaktsökningens fynd skrivs på raden.
         Bara LISTRAD_UPPDATERBARA; övriga nycklar ignoreras."""
+        ...
+
+    async def satt_listprocessering(self, tenant_id: str, list_id: str, processering: dict[str, Any] | None) -> None:
+        """Förloppet för listans Processa om / Skapa utkast (migration 110)."""
+        ...
+
+    async def listkopplade_prospekt(self, tenant_id: str) -> set[str]:
+        """Prospekt som är en listrads bakgrundspost (migration 110). Iris-
+        tabellen visar dem inte: bolaget står i sin lista."""
         ...
 
     async def markera_listrad_flyttad(self, tenant_id: str, item_id: str, *, signal_detalj: str) -> None:
