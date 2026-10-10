@@ -75,6 +75,10 @@ _PROSPEKT_PROFILFALT = frozenset(
 
 
 async def _init_connection(conn: asyncpg.Connection) -> None:
+    # Frågornas antal och tid per anrop (app/matning.py, Server-Timing).
+    from ..matning import logga_fraga
+
+    conn.add_query_logger(logga_fraga)
     # pgvector skickas som text: '[0.1,0.2,...]'
     await conn.set_type_codec(
         "vector",

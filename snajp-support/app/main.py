@@ -335,6 +335,11 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Snajp-Support", version="0.1.0", lifespan=lifespan)
 
+# Frågor och databastid per anrop i Server-Timing (app/matning.py).
+from .matning import Matning  # noqa: E402
+
+app.add_middleware(Matning)
+
 # CORS är AV som default och behövs inte för vår egen frontend — Next-proxyn
 # anropar backenden server-side, så webbläsaren träffar aldrig den här
 # tjänsten direkt. Den finns för den dag en kund anropar API:t från sin egen
