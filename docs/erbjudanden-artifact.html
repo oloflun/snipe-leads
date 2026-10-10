@@ -17,6 +17,7 @@
   --band: oklch(0.20 0.018 252);
   --band-fg: oklch(0.965 0.008 88);
   --band-muted: oklch(0.75 0.01 88);
+  --band-accent: oklch(0.74 0.16 64);
   --display: "Fraunces", Georgia, "Times New Roman", serif;
   --body: "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   --mono: "JetBrains Mono", ui-monospace, Consolas, monospace;
@@ -26,7 +27,7 @@
     --paper: oklch(0.19 0.016 252); --paper2: oklch(0.23 0.016 252); --ink: oklch(0.94 0.008 88);
     --ink-muted: oklch(0.74 0.01 88); --rule: oklch(0.34 0.016 252); --ochre: oklch(0.78 0.15 66);
     --ochre-text: oklch(0.80 0.14 66); --mark: oklch(0.38 0.08 64); --mail: oklch(0.24 0.016 252);
-    --band: oklch(0.94 0.008 88); --band-fg: oklch(0.20 0.018 252); --band-muted: oklch(0.42 0.018 252);
+    --band: oklch(0.94 0.008 88); --band-fg: oklch(0.20 0.018 252); --band-muted: oklch(0.42 0.018 252); --band-accent: oklch(0.50 0.16 64);
     color-scheme: dark;
   }
 }
@@ -34,7 +35,7 @@
   --paper: oklch(0.19 0.016 252); --paper2: oklch(0.23 0.016 252); --ink: oklch(0.94 0.008 88);
   --ink-muted: oklch(0.74 0.01 88); --rule: oklch(0.34 0.016 252); --ochre: oklch(0.78 0.15 66);
   --ochre-text: oklch(0.80 0.14 66); --mark: oklch(0.38 0.08 64); --mail: oklch(0.24 0.016 252);
-  --band: oklch(0.94 0.008 88); --band-fg: oklch(0.20 0.018 252); --band-muted: oklch(0.42 0.018 252);
+  --band: oklch(0.94 0.008 88); --band-fg: oklch(0.20 0.018 252); --band-muted: oklch(0.42 0.018 252); --band-accent: oklch(0.50 0.16 64);
   color-scheme: dark;
 }
 * { box-sizing: border-box; }
@@ -80,7 +81,7 @@ mark.v { background: var(--mark); color: inherit; padding: 0 3px; border-radius:
 .step p { margin: 8px 0 0; color: var(--band-muted); font-size: 0.95rem; }
 .step p strong { color: var(--band-fg); font-weight: 500; }
 .statement { font-family: var(--display); font-size: clamp(1.5rem, 3vw, 2.2rem); line-height: 1.2; margin: 40px 0 0; max-width: 30ch; }
-.statement em { color: var(--ochre); font-style: italic; }
+.statement em { color: var(--band-accent); font-style: italic; }
 .math { font-family: var(--mono); font-size: 0.82rem; font-variant-numeric: tabular-nums; }
 .two { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); gap: 48px; margin-top: 72px; }
 .two ul { margin: 16px 0 0; padding: 0; list-style: none; }
@@ -98,6 +99,7 @@ footer { margin-top: 56px; color: var(--ink-muted); font-size: 0.86rem; }
   .mail { padding: 20px 18px; }
   .facts div { grid-template-columns: minmax(0, 1fr); gap: 2px; }
   .rank { font-size: 3.2rem; }
+  .tray { position: static; }
 }
 @media (prefers-reduced-motion: no-preference) { .pick, .tray button { transition: background 180ms cubic-bezier(0.16, 1, 0.3, 1), color 180ms; } }
 </style>
