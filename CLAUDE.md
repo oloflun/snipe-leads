@@ -33,6 +33,18 @@ CSV-export, listkopiering, utkast och prompt som bär den ska grindas på det:
 till main. Lägger du till ett ställe som visar eller skickar vidare
 bedömningen: grinda det i samma commit, annars är det en läcka.
 
+**Varje funktion har ett sätt att följa flödet (Antons regel 2026-10-10).**
+Allt som körs i bakgrunden eller tar mer än ett ögonblick (körningar,
+omsökningar, utkast i mängd, utskick) ska visa förlopp och utfall där
+användaren startade det, i den befintliga miljön och utan ny flik om det inte
+är absolut nödvändigt, och utfallet ska finnas kvar efter en omladdning. Ett
+meddelande om att något "pågår i bakgrunden" räcker inte. Är det tveksamt om
+förloppet ska synas för kunden eller bara för plattformsadmin: fråga Anton.
+
+**Varje nytt beslut skrivs i [`docs/BESLUT.md`](docs/BESLUT.md) med
+beslutsfattarens resonemang** (Antons regel 2026-10-10), så att skälet går att
+följa efteråt. Nyaste överst; ett ersatt beslut stryks inte.
+
 **Varje komponent med användarvänd text är tvåspråkig, utan undantag.**
 Svenska och engelska via `lib/i18n.tsx` (`useLocale().text({ sv, en })`, `t(nyckel)`
 eller en modulkonstant av `Localized`; adminytan via `lib/admin/sprak.ts`). Det
