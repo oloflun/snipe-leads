@@ -9,6 +9,25 @@ möjligt), vad det betyder i koden.
 
 ---
 
+## 2026-10-10 (Anton) — Org.nr stoppar inte utskick; utskick går från development
+
+**Beslut.** Tvåvägssynken gäller bara körningar och ärenden i databasen;
+funktioner och andra ändringar stannar i development tills de pushas. Syftet är
+att pålitligt kunna testa nya funktioner mot samma data. Org.nr-regeln får inte
+blockera utskick, och det måste gå att skicka utskick från development också.
+
+**I koden.** Regel 1 kräver bara företagsnamnet i sidfoten; org.nr och
+postadress tas med när kundregistret har dem (`leads_tools.lagstadgad_fot`,
+`utskicksfot.bygg_fot`). Varje godkänt utkast bär miljön där det godkändes
+(`gate_checks.godkand_i`) och skickas bara därifrån (`scheduler.skickas_har`),
+så att synken aldrig ger ett dubbelutskick. Äldre godkännanden utan miljö och
+autonoma utskick skickas av main. Uppföljningssvepet, inkorgsläsningen och
+autopiloten körs bara i main.
+
+*Att veta (agenten):* e-handelslagen kräver organisationsnummer i
+information från en näringsidkare. Ett utskick utan org.nr går nu ut; regeln
+kräver det inte längre.
+
 ## 2026-10-10 (Anton) — Tvåvägssynk mellan development och main
 
 **Beslut.** Slå på och testa utskicken även i main. Allt speglas utom
@@ -33,8 +52,8 @@ development varje rad som finns i båda och skiljer sig, och allt som bara finns
 i development kopieras till main. Det som bara finns i main raderas inte utan
 kopieras till development, eftersom det är kundmejl och ärenden som annars
 hade gått förlorade. En kopia av varje synkad tabell sparas före första synken.
-Development i tvåvägsläge skickar, följer upp, läser inkorgar och kör
-autopilot aldrig: main gör det och synken för tillbaka utfallet.
+Uppföljningar, inkorgsläsning och autopilot sker bara i main; utskick i den
+miljö där utkastet godkändes (se beslutet ovan).
 
 ## 2026-10-10 (Anton) — Listornas leads stannar i listan; Flytta till Iris tas bort
 

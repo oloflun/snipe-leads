@@ -67,7 +67,11 @@ def test_synken_synkar_aldrig_provkorningar():
         assert "'test'" in modul.SYNK[tabell], tabell
 
 
-def test_tvavags_development_skickar_aldrig():
+def test_varje_utskick_skickas_fran_en_miljo():
+    """Godkända utkast skickas av miljön där de godkändes (skickas_har), både
+    i sändaren för godkända och i den autonoma schemaläggaren. Development i
+    tvåvägsläge följer aldrig upp och läser aldrig inkorgar."""
     s = (BACKEND / "app" / "leads" / "scheduler.py").read_text(encoding="utf-8")
-    assert s.count("if tvavags(spegel):") >= 2  # godkända utskick och uppföljningssvepet
+    assert s.count("skickas_har(item, spegel)") >= 2
+    assert "if tvavags(spegel):" in s  # uppföljningssvepet
     assert "tvavags(" in (BACKEND / "app" / "email_pipeline" / "poller.py").read_text(encoding="utf-8")

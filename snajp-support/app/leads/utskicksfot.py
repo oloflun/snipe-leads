@@ -87,10 +87,12 @@ def bygg_fot(
     kontakt = (kontakt_epost or _FALLBACK_KONTAKT).strip()
     kontaktrad = f" Du når oss på {kontakt}." if kontakt else ""
 
+    # Org.nr och postadress när kundregistret har dem (Anton 2026-10-10:
+    # de får aldrig stoppa ett utskick).
     rader = [
         "--",
-        f"{foretagsnamn}, org.nr {orgnr}",
-        postadress,
+        f"{foretagsnamn}, org.nr {orgnr}" if orgnr.strip() else foretagsnamn,
+        *([postadress] if postadress.strip() else []),
         "",
         f"Du får det här mejlet därför att din adress är hämtad ur {kalla} och "
         f"vi bedömer att erbjudandet är relevant för din verksamhet. Ändamålet "
