@@ -70,6 +70,9 @@ async def svep(app_state: Any, *, nu: datetime | None = None) -> list[str]:
         return []
     nu = nu or datetime.now(timezone.utc)
     storage = app_state.storage
+    if await storage.spegel_info():
+        # Bara main kör autopiloten; en spegel får körningarna via synken.
+        return []
     startade: list[str] = []
     for tenant in await storage.list_tenants():
         tid = tenant["id"]

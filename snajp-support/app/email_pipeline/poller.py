@@ -310,8 +310,15 @@ async def run_poller(app_state) -> None:
     settings = get_settings()
     interval = max(settings.inbox_poll_seconds, 30)
     logger.info("Inkorgspolling aktiv: var %s sekund.", interval)
+    from ..leads.scheduler import tvavags
+
     while True:
         try:
+            # Development i tvåvägssynk läser aldrig inkorgarna: main gör det
+            # och synken för hit ärendena (se leads/scheduler.tvavags).
+            if tvavags(await app_state.storage.spegel_info()):
+                await asyncio.sleep(interval)
+                continue
             for summary in await sync_all_mailboxes(app_state.storage):
                 if summary.get("error"):
                     logger.warning("Polling %s: %s", summary["address"], summary["error"])

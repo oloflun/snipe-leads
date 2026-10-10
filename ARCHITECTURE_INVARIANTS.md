@@ -729,17 +729,21 @@ plans/2026-09-27-appytor-enhetlighet.md.
 Test: tests/invariants/test_inv_ui_001.py
 Införd: 2026-09-28 · Upphävs endast genom waiver
 
-### INV-DATA-003 — Enda skrivvägen från development till main är admin_flytt.importera
-`scripts/railway_seed_dev.py` speglar envägs main → development (målet
-hårdkodat, `mirror_meta`-markören, ingen `--target`). Det enda som går andra
-vägen är ett HMAC-signerat paket (`FLYTT_NYCKEL`) som `POST /api/admin/flytt/
-importera` tar emot utan masternyckel, vägrar i en spegel (409) och importerar
-idempotent med `importerad_fran` på raden. Ingen annan modul skriver det fältet.
-Varför: Antons beställning 2026-10-01: alla konton skapas i main, development
-ska vara en isolerad spegel för att testa kundproblem, och tester får aldrig
-dyka upp i kundmiljön — men EN admin-väg tillbaka ska finnas, och bara en.
+### INV-DATA-003 — Development och main skrivs bara av synken och admin_flytt
+Mellan miljöerna går data bara två vägar. `scripts/railway_synk.py` synkar
+körningar och supportärenden åt båda hållen (senast ändrad vinner, migration
+111) och rör ALDRIG provkörningar: varje synkad tabell har ett testvillkor i
+`SYNK`. Provkörningar når main bara som ett HMAC-signerat paket (`FLYTT_NYCKEL`)
+till `POST /api/admin/flytt/importera`, som vägrar i en spegel (409) och
+importerar idempotent med `importerad_fran` på raden; ingen annan modul skriver
+det fältet. Development i tvåvägsläge skickar, följer upp, läser inkorgar och
+kör autopilot aldrig (`leads/scheduler.tvavags`).
+Varför: Antons beställning 2026-10-01 gjorde development till en isolerad
+envägsspegel. Den 2026-10-10 ändrade han det (docs/BESLUT.md): allt utom
+provkörningar speglas åt båda hållen för att kunna testa pålitligt, och
+provkörningar får aldrig dyka upp i kundmiljön av sig själva.
 Test: snajp-support/tests/invariants/test_inv_data_003.py
-Införd: 2026-10-02 · Upphävs endast genom waiver
+Införd: 2026-10-02 · Ändrad: 2026-10-10 · Upphävs endast genom waiver
 
 ### INV-COPY-001 — Varje komponent med användarvänd text är tvåspråkig
 Ingen rad i appytorna, demon, produktsidorna, marknadsytan, inloggningen eller de

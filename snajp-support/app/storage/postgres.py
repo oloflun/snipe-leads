@@ -3896,7 +3896,15 @@ class PostgresStorage:
             finns = await conn.fetchval("select to_regclass('public.mirror_meta') is not null")
             if not finns:
                 return None
-            rad = await conn.fetchrow("select environment, seeded_at from public.mirror_meta limit 1")
+            # lage/synkad_at sätts av scripts/railway_synk.py (tvåvägssynken).
+            har_lage = await conn.fetchval(
+                "select exists (select 1 from information_schema.columns "
+                "where table_schema = 'public' and table_name = 'mirror_meta' and column_name = 'lage')"
+            )
+            rad = await conn.fetchrow(
+                "select environment, seeded_at" + (", lage, synkad_at" if har_lage else "")
+                + " from public.mirror_meta limit 1"
+            )
         return _row(rad) if rad else None
 
     async def logga_flytt(self, tenant_id: str, *, typ: str, ref_id: str, resultat: str) -> None:

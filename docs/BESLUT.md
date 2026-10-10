@@ -9,6 +9,33 @@ möjligt), vad det betyder i koden.
 
 ---
 
+## 2026-10-10 (Anton) — Tvåvägssynk mellan development och main
+
+**Beslut.** Slå på och testa utskicken även i main. Allt speglas utom
+specifika testkörningar, markerade som Provkörningar, som går att flytta över
+till main. Alla övriga körningar och supportärenden speglas åt båda hållen med
+det senaste tillägget som sanning. Vid första synken ska development vara
+sanningen.
+
+**Resonemang (Anton).** Det är en ändring från tidigare men en nödvändig sådan
+för att kunna testa pålitligt.
+
+**Fynd när beslutet genomfördes.** Den nattliga envägsspeglingen hade inte
+speglat något sedan 2026-10-04: development låg på migration 110 och main på
+102, skriptet avbröt, och GitHub visade grönt eftersom `tee` dolde felkoden.
+Miljöerna hade glidit isär i sex dygn. Main hade under tiden fått produktions-
+data som development saknade (15 kundmejl, 6 ärenden, 7 prospekt).
+
+**I koden.** `scripts/railway_synk.py` (var tionde minut, `.github/workflows/
+synk.yml`), migration 111 (`synk_andrad_at` och `synk_raderingar`).
+*Agentens tolkning av "development är sanningen":* vid första synken vinner
+development varje rad som finns i båda och skiljer sig, och allt som bara finns
+i development kopieras till main. Det som bara finns i main raderas inte utan
+kopieras till development, eftersom det är kundmejl och ärenden som annars
+hade gått förlorade. En kopia av varje synkad tabell sparas före första synken.
+Development i tvåvägsläge skickar, följer upp, läser inkorgar och kör
+autopilot aldrig: main gör det och synken för tillbaka utfallet.
+
 ## 2026-10-10 (Anton) — Listornas leads stannar i listan; Flytta till Iris tas bort
 
 **Beslut.** Alla leads från listor stannar i sina listor. Varje rad går att

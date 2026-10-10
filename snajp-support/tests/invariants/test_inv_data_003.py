@@ -1,5 +1,7 @@
-"""INV-DATA-003 — Enda skrivvägen från development till main är
-admin_flytt.importera; spegelskriptet pekar aldrig mot main.
+"""INV-DATA-003 — Development och main skrivs bara av synken
+(scripts/railway_synk.py, aldrig provkörningar) och admin_flytt.importera.
+Ändrad 2026-10-10 (Anton, docs/BESLUT.md): tvåvägssynk i stället för
+envägsspegeln.
 
 Antons beställning 2026-10-01: development är en envägsspegel som inte
 skriver tillbaka, och den enda vägen till main är admin-funktionen i Byt kund.
@@ -48,3 +50,24 @@ def test_bara_admin_flytt_skriver_importerad_fran():
         if "importerad_fran" in p.read_text(encoding="utf-8"):
             skrivare.append(p.name)
     assert skrivare == ["admin_flytt.py"], skrivare
+
+
+def test_synken_synkar_aldrig_provkorningar():
+    """Varje synkad tabell har ett testvillkor, och de som bär is_test eller
+    hänger under ett prospekt/en tråd/ett ärende filtrerar på det."""
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("railway_synk", ROOT / "scripts" / "railway_synk.py")
+    modul = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(modul)
+    for tabell in ("ss_tickets", "ss_emails", "lead_lists", "leads_job_ledger", "agent_runs"):
+        assert "is_test" in modul.SYNK[tabell], tabell
+    assert "'test'" in modul.SYNK["prospects"]
+    for tabell in ("outreach_threads", "outreach_messages", "send_queue", "prospect_sources"):
+        assert "'test'" in modul.SYNK[tabell], tabell
+
+
+def test_tvavags_development_skickar_aldrig():
+    s = (BACKEND / "app" / "leads" / "scheduler.py").read_text(encoding="utf-8")
+    assert s.count("if tvavags(spegel):") >= 2  # godkända utskick och uppföljningssvepet
+    assert "tvavags(" in (BACKEND / "app" / "email_pipeline" / "poller.py").read_text(encoding="utf-8")

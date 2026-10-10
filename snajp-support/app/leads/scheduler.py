@@ -536,6 +536,15 @@ def _efter(tidpunkt, seedad: str) -> bool:
     return bool(tidpunkt) and str(tidpunkt) > seedad
 
 
+def tvavags(spegel: dict | None) -> bool:
+    """Development i tvåvägssynk med main (scripts/railway_synk.py, Anton
+    2026-10-10): main skickar, följer upp, läser inkorgarna och kör
+    autopiloten, och synken för tillbaka utfallet. Development gör inget av
+    det, annars skickades varje mejl två gånger och varje inkommande mejl blev
+    två ärenden."""
+    return bool(spegel) and (spegel or {}).get("lage") == "tvavags"
+
+
 async def process_godkanda(storage: Storage, provider: SendProvider) -> list[dict]:
     """Skickar BARA utkast en människa har godkänt och som väntat på
     sändfönstret. Autonomt köade utkast rörs inte — den vägen är
@@ -555,6 +564,8 @@ async def process_godkanda(storage: Storage, provider: SendProvider) -> list[dic
         spegel = await storage.spegel_info()
     except Exception:  # noqa: BLE001 — en trasig markörläsning ska fela åt det försiktiga hållet
         logger.exception("Kunde inte läsa spegelmarkören — hoppar över godkända utskick.")
+        return []
+    if tvavags(spegel):
         return []
     seedad = str((spegel or {}).get("seeded_at") or "")
     results: list[dict] = []
@@ -668,6 +679,8 @@ async def sweep_follow_ups(storage: Storage) -> list[dict]:
         spegel = await storage.spegel_info()
     except Exception:  # noqa: BLE001
         logger.exception("Kunde inte läsa spegelmarkören — hoppar över uppföljningssvepet.")
+        return []
+    if tvavags(spegel):
         return []
     seedad = (spegel or {}).get("seeded_at")
     if spegel and not seedad:
