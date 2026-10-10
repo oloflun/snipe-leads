@@ -53,7 +53,9 @@ export const getPlatformAdmin = cache(async function getPlatformAdmin(): Promise
   if (!context) {
     return null;
   }
-  if (!(await isPlatformAdmin(context.user.id))) {
+  // Samma uppslag som isPlatformAdmin, läst i arbetsytans fråga (samma
+  // användare, samma RLS) i stället för i en egen transaktion.
+  if (!context.isPlatformAdmin) {
     return null;
   }
   return { userId: context.user.id, email: context.user.email };

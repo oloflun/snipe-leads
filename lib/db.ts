@@ -51,6 +51,8 @@ export function pool(): Pool {
   return globalThis.__snajpPool;
 }
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 /** En fråga utan användaridentitet. Använd bara där cross-tenant-läsning är avsikten. */
 export async function sql<T = Record<string, unknown>>(
   text: string,
@@ -75,8 +77,17 @@ export async function withUser<T>(
 ): Promise<T> {
   const client = await pool().connect();
   try {
-    await client.query("begin");
-    await client.query("select set_config('app.user_id', $1, true)", [userId]);
+    // BEGIN och set_config i EN rundtur när id:t är ett UUID (alltid, för
+    // en Auth.js-session): en parameter går inte i en flersatsfråga, så
+    // värdet skrivs in som literal — därför den strikta formkontrollen. Varje
+    // proxat API-anrop gör minst en sådan transaktion, och rundturerna var
+    // den största posten i webbens del av anropet (2026-10-10).
+    if (UUID.test(userId)) {
+      await client.query(`begin; select set_config('app.user_id', '${userId}', true)`);
+    } else {
+      await client.query("begin");
+      await client.query("select set_config('app.user_id', $1, true)", [userId]);
+    }
     const value = await fn(client);
     await client.query("commit");
     return value;

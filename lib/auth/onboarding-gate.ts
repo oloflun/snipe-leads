@@ -34,15 +34,16 @@ export async function requireOnboarded(): Promise<void> {
   // Plattformsadmin behöver inte gå igenom kund-onboardingen — deras startsida
   // är adminvyn, inte business-context-formuläret. De kan onboarda senare om de
   // vill använda leads/support i Snajps eget bolag.
-  if (await isPlatformAdmin(userId)) {
+  // Arbetsytans kontext (React-cachad per request) bär admin-flaggan och
+  // affärskontexten, lästa i samma request — alltså lika färska som egna
+  // frågor. Layouterna har nästan alltid hämtat den före grinden, så svaret
+  // kostar ingen rundtur. Saknas kontexten (ingen profil eller arbetsyta)
+  // frågas adminstatus direkt, och onboardingen räknas som inte klar — samma
+  // svar som hasCompletedOnboarding hade gett.
+  const context = await getWorkspaceContext();
+  if (context ? context.isPlatformAdmin : await isPlatformAdmin(userId)) {
     return;
   }
-  // Arbetsytans kontext (React-cachad per request) bär redan
-  // affärskontexten, läst i samma request — alltså lika färsk som en egen
-  // fråga. Layouterna har nästan alltid hämtat den före grinden, så svaret
-  // kostar ingen rundtur. Saknas kontexten (ingen profil eller arbetsyta) är
-  // svaret detsamma som hasCompletedOnboarding hade gett: inte klar.
-  const context = await getWorkspaceContext();
   if (!context?.businessContext) {
     redirect("/onboarding");
   }

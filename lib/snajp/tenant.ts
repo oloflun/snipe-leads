@@ -12,12 +12,45 @@ import { DEMO_TENANT_SLUG, aktivVy } from "@/lib/vy";
  * uppslagsbok över alla arbetsytors nycklar, och en bugg i en anropsplats hade
  * räckt för att läsa fel kunds.
  */
-async function tenantApiKeyForWorkspace(userId: string): Promise<string | undefined> {
-  const rows = await sqlAsUser<{ nyckel: string | null }>(
-    userId,
-    "select public.tenant_api_key_for_current_workspace() as nyckel"
-  );
-  return rows[0]?.nyckel ?? undefined;
+async function tenantApiKeyForWorkspace(userId: string, workspaceId: string): Promise<string | undefined> {
+  return medNyckelcache(`${userId}:${workspaceId}`, async () => {
+    const rows = await sqlAsUser<{ nyckel: string | null }>(
+      userId,
+      "select public.tenant_api_key_for_current_workspace() as nyckel"
+    );
+    return rows[0]?.nyckel ?? undefined;
+  });
+}
+
+/**
+ * Nyckeln i processens minne i en minut.
+ *
+ * Varje proxat API-anrop slog upp den i en egen transaktion — fyra rundturer
+ * till databasen för ett svar som ändras när en nyckel byts, alltså nästan
+ * aldrig (2026-10-10). Cachenyckeln bär användaren OCH arbetsytan (eller
+ * kunden i ett besök), och arbetsytan läses färskt ur sessionen varje
+ * anrop: den som flyttas till en annan arbetsyta träffar aldrig den gamla
+ * posten. Bara hittade nycklar sparas — ett "saknas" frågas om nästa gång.
+ */
+const NYCKEL_TTL_MS = 60_000;
+const nyckelcache = new Map<string, { nyckel: string; giltigTill: number }>();
+
+async function medNyckelcache(
+  id: string,
+  hamta: () => Promise<string | undefined>
+): Promise<string | undefined> {
+  const traff = nyckelcache.get(id);
+  if (traff && traff.giltigTill > Date.now()) {
+    return traff.nyckel;
+  }
+  const nyckel = await hamta();
+  if (nyckel) {
+    if (nyckelcache.size > 5000) nyckelcache.clear();
+    nyckelcache.set(id, { nyckel, giltigTill: Date.now() + NYCKEL_TTL_MS });
+  } else {
+    nyckelcache.delete(id);
+  }
+  return nyckel;
 }
 
 /**
@@ -173,13 +206,15 @@ export async function requireSnajpTenant(): Promise<SnajpTenant> {
 
     let apiKey = tenant?.perWorkspaceKey === false && tenant?.supportKeyEnv
       ? process.env[tenant.supportKeyEnv]
-      : ((
-          await sqlAsUser<{ nyckel: string | null }>(
-            user.id,
-            "select public.tenant_api_key_for_admin($1) as nyckel",
-            [lage.slug]
-          )
-        )[0]?.nyckel ?? (tenant?.supportKeyEnv ? process.env[tenant.supportKeyEnv] : undefined));
+      : ((await medNyckelcache(`${user.id}:kund:${lage.slug}`, async () =>
+          (
+            await sqlAsUser<{ nyckel: string | null }>(
+              user.id,
+              "select public.tenant_api_key_for_admin($1) as nyckel",
+              [lage.slug]
+            )
+          )[0]?.nyckel ?? undefined
+        )) ?? (tenant?.supportKeyEnv ? process.env[tenant.supportKeyEnv] : undefined));
 
     /**
      * Sista utvägen: utfärda en nyckel i stället för att svara 409.
@@ -297,7 +332,7 @@ export async function requireSnajpTenant(): Promise<SnajpTenant> {
   const apiKey =
     tenant && !tenant.perWorkspaceKey
       ? process.env[tenant.supportKeyEnv]
-      : await tenantApiKeyForWorkspace(user.id);
+      : await tenantApiKeyForWorkspace(user.id, workspace.id);
 
   if (!apiKey && !tenant) {
     throw new SnajpTenantError(
