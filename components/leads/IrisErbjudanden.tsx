@@ -17,9 +17,12 @@ import { cn } from "@/lib/utils";
  * Kunden väljer vilka erbjudanden ur katalogen (agent-core/prompts/
  * leads-erbjudanden.md) Iris ska A/B-testa i de kalla mejlen, med vikt och
  * med sina egna villkor. Villkoren är det enda mejlet får lova, och ett
- * erbjudande kan bara slås på när de är ifyllda. Resultatet per erbjudande
- * räknas ur trådarna (GET /leads/erbjudanden) och en arm kallas ledande först
- * när den håller statistiskt (app/leads/erbjudanden.py:sammanstall).
+ * erbjudande kan bara slås på när de är ifyllda. Har kunden produkter skrivs
+ * villkoren per produkt: ett mejl om en produkt får bara den produktens
+ * villkor (ett tomt fält betyder att erbjudandet inte används för produkten).
+ * Resultatet per erbjudande räknas ur trådarna (GET /leads/erbjudanden) och en
+ * arm kallas ledande först när den håller statistiskt
+ * (app/leads/erbjudanden.py:sammanstall).
  */
 
 type Arm = {
@@ -36,68 +39,50 @@ type Arm = {
 };
 type Svar = {
   katalog: { nyckel: string; namn: string }[];
+  produkter: string[];
   aktiva: { nyckel: string; vikt: number }[];
-  villkor: Record<string, string>;
+  villkor: Record<string, string | Record<string, string>>;
   resultat: { armar: Arm[]; ledare: string | null; min_skickade: number };
 };
-type Rad = { pa: boolean; vikt: string; villkor: string };
+/** Villkoren per produktnamn; nyckeln "" när kunden saknar produkter (en text för alla). */
+type Rad = { pa: boolean; vikt: string; villkor: Record<string, string> };
 
 const VILLKOR_MAX = 600;
+const ALLA = "";
 
 /** Namn och förklaring per nyckel. Okända nycklar visas med katalogens namn. */
 const ERBJUDANDEN: Record<string, { namn: Localized; om: Localized; exempel: Localized }> = {
-  riskfri_start: {
-    namn: { sv: "Riskfri start", en: "Risk-free start" },
-    om: { sv: "Tar bort risken med att prova något nytt.", en: "Removes the risk of trying something new." },
-    exempel: {
-      sv: "Till exempel: Första månaden utan kostnad. Ingen bindningstid.",
-      en: "For example: The first month free of charge. No lock-in period."
-    }
-  },
-  se_det_forst: {
-    namn: { sv: "Se det först", en: "See it first" },
+  gratis_prov: {
+    namn: { sv: "Testa gratis", en: "Try it free" },
     om: {
-      sv: "Mottagaren får ett litet, konkret resultat innan något är bestämt.",
-      en: "The recipient gets a small, concrete result before anything is decided."
+      sv: "Mottagaren får ett färdigt resultat innan något är bestämt.",
+      en: "The recipient gets a finished result before anything is decided."
     },
     exempel: {
-      sv: "Till exempel: Tio bolag som passar er, med färdiga första mejl, utan kostnad.",
-      en: "For example: Ten companies that fit you, with ready first emails, free of charge."
+      sv: "Till exempel: Fem kvalificerade leads med färdiga första mejl, utan kostnad. Svara ja så skickar vi dem inom två dagar.",
+      en: "For example: Five qualified leads with ready first emails, free of charge. Reply yes and we send them within two days."
     }
   },
-  forsta_resultatet: {
-    namn: { sv: "Garanti på första resultatet", en: "Guarantee on the first result" },
+  garanti: {
+    namn: { sv: "Garanti", en: "Guarantee" },
     om: {
-      sv: "Ni tar risken för att första resultatet uteblir. Aldrig löften om affärer eller möten.",
-      en: "You carry the risk that the first result fails to appear. Never promises about deals or meetings."
+      sv: "Ni tar risken: nås inte resultatet får de mer tid utan kostnad.",
+      en: "You carry the risk: if the result is not reached, they get more time free of charge."
     },
     exempel: {
-      sv: "Till exempel: Har ni inte fått 20 utkast inom 14 dagar är första månaden gratis.",
-      en: "For example: If you have not received 20 drafts within 14 days, the first month is free."
+      sv: "Till exempel: Minst 10 nya kunddialoger inom 90 dagar, annars förlänger vi provperioden utan kostnad.",
+      en: "For example: At least 10 new customer conversations within 90 days, or we extend the trial free of charge."
     }
   },
-  gjort_at_er: {
-    namn: { sv: "Gjort åt er", en: "Done for you" },
-    om: { sv: "Ni sköter uppstarten, kunden svarar på några frågor.", en: "You handle the setup; the customer answers a few questions." },
-    exempel: {
-      sv: "Till exempel: Vi sätter upp det åt er. Ni behöver avsätta en halvtimme.",
-      en: "For example: We set it up for you. You need to set aside half an hour."
-    }
-  },
-  ratt_tid: {
-    namn: { sv: "Rätt tid", en: "The right time" },
+  pilot: {
+    namn: { sv: "Begränsad pilot", en: "Limited pilot" },
     om: {
-      sv: "Ett verkligt tillfälle i mottagarens kalender, aldrig påhittad brådska.",
-      en: "A real moment in the recipient's calendar, never invented urgency."
+      sv: "Ett fåtal platser och ett pris som inte erbjuds igen, med ett ärligt skäl.",
+      en: "A few places and a price that will not be offered again, with an honest reason."
     },
-    exempel: { sv: "Till exempel: Före bokslutet vid årsskiftet.", en: "For example: Before the year-end closing." }
-  },
-  tva_vagar: {
-    namn: { sv: "Två vägar in", en: "Two ways in" },
-    om: { sv: "Ett lätt första steg bredvid det fulla erbjudandet.", en: "An easy first step next to the full offer." },
     exempel: {
-      sv: "Till exempel: Bara utkasten, eller hela flödet skött av agenten.",
-      en: "For example: Just the drafts, or the whole flow handled by the agent."
+      sv: "Till exempel: 20 pilotplatser, 50 % rabatt första året och 25 % så länge de stannar.",
+      en: "For example: 20 pilot places, 50% off the first year and 25% for as long as they stay."
     }
   }
 };
@@ -109,8 +94,10 @@ const T = {
     en: "Iris spreads the offers that are switched on across companies by weight and measures what gets replies. The email only promises what the terms say. Changes apply to new drafts."
   },
   villkor: { sv: "Villkor, som mejlet får lova dem", en: "Terms, as the email may promise them" },
+  villkorFor: { sv: "Villkor för", en: "Terms for" },
+  tomtFalt: { sv: "Tomt = används inte för den produkten.", en: "Empty = not used for that product." },
   vikt: { sv: "Vikt (0–10)", en: "Weight (0–10)" },
-  kravVillkor: { sv: "Fyll i villkoren först.", en: "Fill in the terms first." },
+  kravVillkor: { sv: "Fyll i villkoren för minst en produkt först.", en: "Fill in the terms for at least one product first." },
   skickade: { sv: "Skickade", en: "Sent" },
   svar: { sv: "Svar", en: "Replies" },
   positiva: { sv: "Positiva", en: "Positive" },
@@ -133,13 +120,27 @@ function procent(andel: number | null): string {
   return andel === null ? "–" : `${Math.round(andel * 100)} %`;
 }
 
+/** Fälten per erbjudande: ett per produkt, eller ett för alla när produkter saknas. */
+function faltnycklar(svar: Svar): string[] {
+  return svar.produkter.length ? svar.produkter : [ALLA];
+}
+
 function radenAv(svar: Svar): Record<string, Rad> {
   const vikter = new Map(svar.aktiva.map((a) => [a.nyckel, a.vikt]));
   return Object.fromEntries(
-    svar.katalog.map(({ nyckel }) => [
-      nyckel,
-      { pa: (vikter.get(nyckel) ?? 0) > 0, vikt: String(vikter.get(nyckel) ?? 1), villkor: svar.villkor[nyckel] ?? "" }
-    ])
+    svar.katalog.map(({ nyckel }) => {
+      const sparat = svar.villkor[nyckel];
+      // En sparad text för alla produkter fyller varje produktfält; nästa
+      // sparning gör den till villkor per produkt.
+      const villkor = Object.fromEntries(
+        faltnycklar(svar).map((p) => {
+          if (typeof sparat === "string") return [p, sparat];
+          const traff = Object.entries(sparat ?? {}).find(([namn]) => namn.toLowerCase() === p.toLowerCase());
+          return [p, traff?.[1] ?? ""];
+        })
+      );
+      return [nyckel, { pa: (vikter.get(nyckel) ?? 0) > 0, vikt: String(vikter.get(nyckel) ?? 1), villkor }];
+    })
   );
 }
 
@@ -172,12 +173,25 @@ export function IrisErbjudanden() {
     setStatus("");
   }
 
+  function andraVillkor(nyckel: string, produkt: string, varde: string) {
+    setRader((forra) => ({
+      ...forra,
+      [nyckel]: { ...forra[nyckel], villkor: { ...forra[nyckel].villkor, [produkt]: varde } }
+    }));
+    setStatus("");
+  }
+
+  const faltId = (nyckel: string, produkt: string) =>
+    `erbjudande-villkor-${nyckel}-${produkt.replace(/[^A-Za-z0-9]+/g, "-") || "alla"}`;
+
   async function spara() {
     if (busy || !data) return;
-    const utanVillkor = data.katalog.find(({ nyckel }) => rader[nyckel]?.pa && !rader[nyckel].villkor.trim());
+    const utanVillkor = data.katalog.find(
+      ({ nyckel }) => rader[nyckel]?.pa && !Object.values(rader[nyckel].villkor).some((v) => v.trim())
+    );
     if (utanVillkor) {
       setFel(`${text(ERBJUDANDEN[utanVillkor.nyckel]?.namn ?? { sv: utanVillkor.namn, en: utanVillkor.namn })}: ${text(T.kravVillkor)}`);
-      document.getElementById(`erbjudande-villkor-${utanVillkor.nyckel}`)?.focus();
+      document.getElementById(faltId(utanVillkor.nyckel, faltnycklar(data)[0]))?.focus();
       return;
     }
     setBusy(true);
@@ -190,7 +204,12 @@ export function IrisErbjudanden() {
           aktiva: data.katalog
             .filter(({ nyckel }) => rader[nyckel]?.pa)
             .map(({ nyckel }) => ({ nyckel, vikt: Math.min(10, Math.max(0, Math.round(Number(rader[nyckel].vikt) || 0))) })),
-          villkor: Object.fromEntries(data.katalog.map(({ nyckel }) => [nyckel, rader[nyckel]?.villkor ?? ""]))
+          villkor: Object.fromEntries(
+            data.katalog.map(({ nyckel }) => {
+              const villkor = rader[nyckel]?.villkor ?? {};
+              return [nyckel, data.produkter.length ? villkor : (villkor[ALLA] ?? "")];
+            })
+          )
         })
       });
       setData(svar);
@@ -220,6 +239,7 @@ export function IrisErbjudanden() {
   }
 
   const armar = new Map(data.resultat.armar.map((a) => [a.nyckel, a]));
+  const perProdukt = data.produkter.length > 0;
 
   return (
     <section aria-labelledby="iris-erbjudanden-rubrik" className="grid gap-6">
@@ -246,21 +266,28 @@ export function IrisErbjudanden() {
                 onByt={(pa) => andra(nyckel, { pa })}
               />
               <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_8rem]">
-                <label className="grid gap-1">
-                  <span className={etikett}>{text(T.villkor)}</span>
-                  <textarea
-                    id={`erbjudande-villkor-${nyckel}`}
-                    value={rad.villkor}
-                    maxLength={VILLKOR_MAX}
-                    rows={2}
-                    placeholder={info ? text(info.exempel) : undefined}
-                    onChange={(e) => andra(nyckel, { villkor: e.target.value })}
-                    className={cn(falt, "resize-y")}
-                  />
-                  <span className={meta}>
-                    {rad.villkor.length}/{VILLKOR_MAX}
-                  </span>
-                </label>
+                <div className="grid gap-3">
+                  {perProdukt ? <p className={meta}>{text(T.tomtFalt)}</p> : null}
+                  {faltnycklar(data).map((produkt) => (
+                    <label key={produkt || "alla"} className="grid gap-1">
+                      <span className={etikett}>
+                        {produkt ? `${text(T.villkorFor)} ${produkt}` : text(T.villkor)}
+                      </span>
+                      <textarea
+                        id={faltId(nyckel, produkt)}
+                        value={rad.villkor[produkt] ?? ""}
+                        maxLength={VILLKOR_MAX}
+                        rows={2}
+                        placeholder={info ? text(info.exempel) : undefined}
+                        onChange={(e) => andraVillkor(nyckel, produkt, e.target.value)}
+                        className={cn(falt, "resize-y")}
+                      />
+                      <span className={meta}>
+                        {(rad.villkor[produkt] ?? "").length}/{VILLKOR_MAX}
+                      </span>
+                    </label>
+                  ))}
+                </div>
                 {rad.pa ? (
                   <label className="grid content-start gap-1">
                     <span className={etikett}>{text(T.vikt)}</span>
