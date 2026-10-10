@@ -20,3 +20,19 @@ def test_regel_5a_slapps_bara_for_skicka_nu():
     vanlig = sg._regel_5_volymtak(avsandare=None, utskick=_utskick(False), historik=historik, nu=LORDAG_23)
     assert vanlig is not None and vanlig.atgard == sg.KOLA_OM
     assert sg._regel_5_volymtak(avsandare=None, utskick=_utskick(True), historik=historik, nu=LORDAG_23) is None
+
+
+def test_miljon_dar_utkastet_godkandes_skickar_det():
+    """Anton 2026-10-10: utskick går att göra från development också. Varje
+    godkänt utkast skickas från EN miljö, den där det godkändes."""
+    from app.leads.scheduler import skickas_har
+
+    dev = {"environment": "development", "lage": "tvavags"}
+    i_dev = {"gate_checks": {"approved_by": "human", "godkand_i": "development"}}
+    i_main = {"gate_checks": {"approved_by": "human", "godkand_i": "main"}}
+    aldre = {"gate_checks": {"approved_by": "human"}}
+    autonom = {"gate_checks": {}}
+    assert skickas_har(i_dev, dev) and not skickas_har(i_dev, None)
+    assert skickas_har(i_main, None) and not skickas_har(i_main, dev)
+    assert skickas_har(aldre, None) and not skickas_har(aldre, dev)
+    assert skickas_har(autonom, None) and not skickas_har(autonom, dev)

@@ -736,8 +736,9 @@ körningar och supportärenden åt båda hållen (senast ändrad vinner, migrati
 `SYNK`. Provkörningar når main bara som ett HMAC-signerat paket (`FLYTT_NYCKEL`)
 till `POST /api/admin/flytt/importera`, som vägrar i en spegel (409) och
 importerar idempotent med `importerad_fran` på raden; ingen annan modul skriver
-det fältet. Development i tvåvägsläge skickar, följer upp, läser inkorgar och
-kör autopilot aldrig (`leads/scheduler.tvavags`).
+det fältet. Varje godkänt utkast skickas av EN miljö, den där det godkändes
+(`leads/scheduler.skickas_har`); autonoma utskick, uppföljningssvepet,
+inkorgsläsningen och autopiloten körs bara i main (`leads/scheduler.tvavags`).
 Varför: Antons beställning 2026-10-01 gjorde development till en isolerad
 envägsspegel. Den 2026-10-10 ändrade han det (docs/BESLUT.md): allt utom
 provkörningar speglas åt båda hållen för att kunna testa pålitligt, och

@@ -76,7 +76,9 @@ async def lagstadgad_fot(storage, tenant_id: str, prospect_email: str | None, br
     orgnr = str(tenant.get("orgnr") or "").strip()
     postadress = str(tenant.get("postal_address") or "").strip()
 
-    if not (bas_url and foretagsnamn and orgnr and postadress and prospect_email):
+    # Org.nr och postadress är inte krav (Anton 2026-10-10): foten tar med dem
+    # när kundregistret har dem.
+    if not (bas_url and foretagsnamn and prospect_email):
         return brodtext
 
     token = await storage.avregistreringstoken(tenant_id, email=prospect_email)

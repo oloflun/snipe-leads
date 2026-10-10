@@ -446,7 +446,22 @@ def godkannande(item: dict) -> dict | None:
             return None
     if gc.get("approved_by") != "human":
         return None
-    return {k: gc[k] for k in ("approved_by", "via", "godkand_at") if k in gc}
+    return {k: gc[k] for k in ("approved_by", "via", "godkand_at", "godkand_i") if k in gc}
+
+
+def miljo(spegel: dict | None) -> str:
+    """Den här miljöns namn: spegelns ('development') eller 'main'."""
+    return str((spegel or {}).get("environment") or "main")
+
+
+def skickas_har(item: dict, spegel: dict | None) -> bool:
+    """Skickas posten från den här miljön? (Anton 2026-10-10: utskick ska gå
+    att göra från development också.) Den miljö där en människa godkände
+    utkastet skickar det; den andra får statusen via synken. Utan
+    godkännande (autonoma utskick) och för godkännanden från före
+    2026-10-10, som saknar `godkand_i`, är det main."""
+    godkant = godkannande(item) or {}
+    return (godkant.get("godkand_i") or "main") == miljo(spegel)
 
 
 async def _avsandaridentitet(storage: Storage, tenant_id: str) -> dict:
@@ -514,7 +529,10 @@ async def skicka_godkant(
         ):
             return "blocked", "Utkastet finns inte längre. Välj Skapa utkast för att skriva ett nytt."
         await _fot_vid_godkannande(storage, tenant_id, item)
-        godkant = {"approved_by": "human", "via": "granskningskön", "godkand_at": now.isoformat()}
+        godkant = {
+            "approved_by": "human", "via": "granskningskön", "godkand_at": now.isoformat(),
+            "godkand_i": miljo(await storage.spegel_info()),
+        }
         await storage.update_send_queue_status(tenant_id, item_id, status="queued", gate_checks=godkant)
         utfall = await _process_due_item(
             storage, tenant_id, {**item, "status": "queued"}, provider, now=now, godkant=godkant, direkt=direkt
@@ -538,10 +556,10 @@ def _efter(tidpunkt, seedad: str) -> bool:
 
 def tvavags(spegel: dict | None) -> bool:
     """Development i tvåvägssynk med main (scripts/railway_synk.py, Anton
-    2026-10-10): main skickar, följer upp, läser inkorgarna och kör
-    autopiloten, och synken för tillbaka utfallet. Development gör inget av
-    det, annars skickades varje mejl två gånger och varje inkommande mejl blev
-    två ärenden."""
+    2026-10-10). Main följer upp, läser inkorgarna och kör autopiloten, och
+    synken för tillbaka utfallet; development gör det inte, annars blev varje
+    uppföljning och varje inkommande mejl två. Utskick av godkända utkast
+    sker i den miljö där utkastet godkändes (skickas_har)."""
     return bool(spegel) and (spegel or {}).get("lage") == "tvavags"
 
 
@@ -565,8 +583,6 @@ async def process_godkanda(storage: Storage, provider: SendProvider) -> list[dic
     except Exception:  # noqa: BLE001 — en trasig markörläsning ska fela åt det försiktiga hållet
         logger.exception("Kunde inte läsa spegelmarkören — hoppar över godkända utskick.")
         return []
-    if tvavags(spegel):
-        return []
     seedad = str((spegel or {}).get("seeded_at") or "")
     results: list[dict] = []
     for tenant in await storage.list_tenants():
@@ -574,7 +590,10 @@ async def process_godkanda(storage: Storage, provider: SendProvider) -> list[dic
             godkant = godkannande(item)
             if not godkant:
                 continue
-            if spegel and not (_efter(godkant.get("godkand_at"), seedad) or _efter(item.get("created_at"), seedad)):
+            if tvavags(spegel) or not spegel:
+                if not skickas_har(item, spegel):
+                    continue
+            elif not (_efter(godkant.get("godkand_at"), seedad) or _efter(item.get("created_at"), seedad)):
                 continue
             try:
                 outcome = await process_due_item(storage, tenant["id"], item, provider, now=now, godkant=godkant)
@@ -626,8 +645,13 @@ async def run_godkand_sandare(app_state) -> None:
 async def process_all_due(storage: Storage, provider: SendProvider) -> list[dict]:
     now = datetime.now(timezone.utc)
     results: list[dict] = []
+    spegel = await storage.spegel_info()
     for tenant in await storage.list_tenants():
         for item in await storage.list_due_send_queue(tenant["id"], now):
+            # Autonoma utskick sker bara i main; ett godkänt utkast skickas av
+            # miljön där det godkändes (skickas_har).
+            if not skickas_har(item, spegel):
+                continue
             try:
                 outcome = await process_due_item(
                     storage, tenant["id"], item, provider, now=now, godkant=godkannande(item)

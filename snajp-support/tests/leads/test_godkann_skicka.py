@@ -173,13 +173,16 @@ async def test_stoppat_for_saknad_fot_far_foten_och_gar_ut_nar_kunduppgifterna_f
     assert _post(storage, item_id)["status"] == "sent"
 
 
-async def test_stoppat_utkast_utan_underlag_stoppas_igen_med_samma_besked():
+async def test_saknat_orgnr_stoppar_inte_utskicket():
+    """Antons beslut 2026-10-10: org.nr och postadress får aldrig stoppa ett
+    utskick; foten byggs med det som finns."""
     storage, provider = MemoryStorage(), _FakeSendProvider()
     item_id, _, _ = _ny_kund(storage, scheduled_at=WITHIN_WINDOW_UTC, body="Hej, ingen fot.\n")
     storage.tenants[TENANT]["orgnr"] = ""
+    storage.tenants[TENANT]["postal_address"] = ""
     _post(storage, item_id)["status"] = "blocked"
     utfall, skal = await skicka_godkant(storage, TENANT, item_id, provider, now=WITHIN_WINDOW_UTC)
-    assert utfall == "blocked" and "organisationsnummer" in skal and provider.sent == []
+    assert "organisationsnummer" not in str(skal) and "postadress" not in str(skal), (utfall, skal)
 
 
 async def test_stoppat_utkast_skickas_inte_om_ett_nyare_vantar_i_traden():
