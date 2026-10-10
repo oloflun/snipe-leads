@@ -89,6 +89,7 @@ from .schemas import (
     KombineraListorRequest,
     LeadsListaRequest,
     SchemalaggRequest,
+    TillbakaTillIrisRequest,
     TillIrisRequest,
     LeadsRunOverrides,
     ProspectPatchRequest,
@@ -2023,6 +2024,48 @@ async def schemalagg_utskick(
         if item and item.get("status") == "queued":
             andrade += await storage.reschedule_pending_sends(tenant_id, str(item["thread_id"]), until=tid)
     return {"andrade": andrade, "skickas_tidigast": nasta_sandtid(tid, now=nu)}
+
+
+@router.post("/api/leads/queue/tillbaka-till-iris", status_code=202)
+async def tillbaka_till_iris(
+    request: Request, payload: TillbakaTillIrisRequest, tenant: dict = Depends(require_tenant)
+) -> dict:
+    """Markerade utkast ur sändlistan tillbaka till Iris, som skriver om dem
+    (Anton 2026-10-10). Utkasten avbryts som vid Avvisa, och bolagen går
+    genom samma kedja som "Skriv utkast" i en körning (research och utkast),
+    så skrivstilen, erbjudandet och grindarna gäller precis som första gången.
+    Ett redan skickat eller stoppat utkast rörs inte."""
+    _require_live_llm()
+    storage = request.app.state.storage
+    tenant_id = tenant["tenant_id"]
+    await _kraev_leads_budget(storage, tenant_id)
+    prospekt: dict[str, dict] = {}
+    for item_id in dict.fromkeys(payload.ids):
+        kraev_uuid(item_id, "utkastet")
+        item = await storage.get_send_queue_item(tenant_id, item_id)
+        if not item or item.get("status") not in ("awaiting_review", "queued"):
+            continue
+        trad = await storage.get_outreach_thread(tenant_id, str(item["thread_id"])) or {}
+        p = await storage.get_prospect(tenant_id, str(trad.get("prospect_id") or ""))
+        if p is None:
+            continue
+        await storage.update_send_queue_status(
+            tenant_id, item_id, status="cancelled", gate_checks={"rejected_by": "human", "via": "tillbaka till Iris"}
+        )
+        await storage.cancel_pending_sends(tenant_id, str(item["thread_id"]))
+        prospekt[str(p["id"])] = p
+    if not prospekt:
+        return {"count": 0, "jobs": []}
+    jobs = await _lagg_prospektjobb(
+        request.app.state,
+        tenant,
+        list(prospekt.values()),
+        scope="research_and_draft",
+        overrides=None,
+        is_test=any(bool(p.get("is_test")) for p in prospekt.values()),
+        limit=len(prospekt),
+    )
+    return {"count": len(jobs), "jobs": jobs}
 
 
 @router.post("/api/leads/queue/{item_id}/skicka-nu")

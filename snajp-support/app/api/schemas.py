@@ -481,6 +481,13 @@ class SchemalaggRequest(BaseModel):
     tid: datetime
 
 
+class TillbakaTillIrisRequest(BaseModel):
+    """Markerade utkast ur sändlistan tillbaka till Iris för att skrivas om
+    (Anton 2026-10-10)."""
+
+    ids: list[str] = Field(min_length=1, max_length=50)
+
+
 class TillIrisRequest(BaseModel):
     """Flytta listrader till Iris (Antons beställning 2026-10-02): raderna blir
     prospekt (dedup på bolagsnamn) och en riktig körning köas med research per
