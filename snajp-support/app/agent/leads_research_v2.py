@@ -90,7 +90,9 @@ _RESEARCH_V2_UPPGIFT = (
     "med ROLLER), trigger_events (lista), open_questions (lista), "
     "prospect_positioning, comparison_angles (lista), honest_caveats (lista), "
     "likely_objections (lista med {objection, response}), hardest_objection, "
-    "offer ({name, promise, proof, risk_reversal, cta}), weakest_lever, "
+    "offer ({name, promise, proof, risk_reversal, cta}), produkt (namnet på "
+    "den av kundens produkter erbjudandet bygger på, ordagrant, eller null), "
+    "weakest_lever, "
     "offer_confidence (0.0-1.0), uncertainties (lista), reveals_gap (bool), "
     "gap (eller null), icp_adjustment (eller null), kunskap_evidence (lista).\n\n"
     # Uppmätt 2026-09-29 (Alunix): modellens fria "qualified" fällde en
@@ -138,6 +140,22 @@ _PRODUKTVAL = (
     "ordagrant som det står i listan, den som bäst möter det du läst om bolaget. "
     "null om ingen passar. offer bygger på den produkten."
 )
+
+
+def _vald_produkt(fynd: dict[str, Any], produkter: list[dict[str, str]]) -> dict[str, str] | None:
+    """Produkten researchen valde: fältet produkt, annars erbjudandets namn.
+
+    Fältet saknades i uppgiftens "EXAKT dessa fält" till 2026-10-11, så
+    modellen lämnade det tomt och varje bolag fälldes på produktmatchningen
+    (100 av 100 i Snajps omkörning) fast offer.name bar produktens namn
+    ordagrant. Bara en exakt träff i listan räknas."""
+    offer = fynd.get("offer") if isinstance(fynd.get("offer"), dict) else {}
+    for kandidat in (fynd.get("produkt"), offer.get("name")):
+        namn = str(kandidat or "").strip().casefold()
+        traff = next((p for p in produkter if p["namn"].casefold() == namn), None) if namn else None
+        if traff:
+            return traff
+    return None
 
 
 def las_produkter(installningar: dict[str, Any] | None) -> list[dict[str, str]]:
@@ -360,11 +378,7 @@ async def _research_v2(
 
     # Kunden har en produktlista och researchen valde ingen av dem: då finns
     # inget att sälja till bolaget (produktmatchningen fäller).
-    produkt_vald = (
-        any(p["namn"].casefold() == str(fynd.get("produkt") or "").strip().casefold() for p in produkter)
-        if produkter
-        else None
-    )
+    produkt_vald = _vald_produkt(fynd, produkter) is not None if produkter else None
     bedomning = bedom(
         profil, fynd, korpus=f"{material}\n{webbfakta_text}", kandidat=prospect_row, webbrevision=webbrevision,
         har_underlag=har_underlag, produkt_vald=produkt_vald,
@@ -610,10 +624,7 @@ async def _research_v2(
             )
         )
     )
-    vald_produkt = next(
-        (p for p in produkter if p["namn"].casefold() == str(fynd.get("produkt") or "").strip().casefold()),
-        None,
-    )
+    vald_produkt = _vald_produkt(fynd, produkter)
 
     return {
         "lagesbeskrivning": bedomning.get("lagesbeskrivning"),
