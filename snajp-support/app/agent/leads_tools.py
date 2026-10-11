@@ -125,6 +125,24 @@ async def _queue_outreach_draft_impl(
     ]
 
     finalized_body = finalize_outreach_body(body)
+    # Hälsningsraden avgörs i kod (Sebbe 2026-10-11): personens förnamn när
+    # mottagaren är namngiven, annars bolagets namn — aldrig "kontaktpersoner"
+    # eller en text utan hälsning. Före korrekturen, så att den läser den
+    # slutliga formen. Se app/leads/halsning.py.
+    from ..leads.halsning import normalisera_utkast
+
+    trad = await outreach.storage.get_outreach_thread(outreach.tenant_id, outreach.thread_id) or {}
+    prospekt = (
+        await outreach.storage.get_prospect(outreach.tenant_id, str(trad["prospect_id"]))
+        if trad.get("prospect_id")
+        else None
+    ) or {}
+    finalized_body = normalisera_utkast(
+        finalized_body,
+        kontakt=prospekt.get("contact_name"),
+        bolag=prospekt.get("company_name"),
+        sprak=sprak,
+    )
     kvalitet = await sakra_utgaende_text(finalized_body, sprak=sprak, alltid_korrektur=True)
     finalized_body = kvalitet.text
     granskningsskal: str | None = None

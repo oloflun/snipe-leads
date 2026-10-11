@@ -148,7 +148,7 @@ Mallen anger delarna och ordningen. Den är **inte färdig text**: varje mening 
 ```
 Ämne: [deras arbete eller vinsten för dem], [företagsnamn]
 
-Hej [förnamn om kontaktpersonen är känd, annars bara "Hej,"]
+Hej [förnamn om kontakten är en namngiven PERSON, annars bolagets namn utan bolagsform ("Hej Hortlax Rör,"), i sista hand bara "Hej,"]
 
 [Ingången: deras typ av arbete och vad som skaver där, sagt om branschen ("För företag som ert inom …", "När man jobbar med …"). Finns en signal i källmaterialet (ny ägare, rekrytering, ny ort, ny tjänst) vävs den in här som deras situation, med bolagets egna ord.]
 

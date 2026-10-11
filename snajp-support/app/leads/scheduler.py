@@ -210,17 +210,29 @@ async def _fot_vid_godkannande(storage: Storage, tenant_id: str, item: dict) -> 
     kundregistret nu har underlaget. Foten är kodens text (utskicksfot.py),
     inte en ändring av det granskaren sagt ja till."""
     from ..agent.leads_tools import lagstadgad_fot
-    from .outreach_playbook import _intervallstreck, tilltala_med_ni
+    from .halsning import normalisera_utkast
     from .utskicksfot import har_fot
 
     thread = await storage.get_outreach_thread(tenant_id, item["thread_id"])
     message = await storage.get_pending_outreach_message(tenant_id, item["thread_id"]) if thread else None
     if not message:
         return
-    # Kodens textputs (tilltal, tankstreck) även på utkast skrivna innan den
-    # fanns (2026-10-09: "Hej Verkstad," i redan köade utkast). Rör bara
-    # hälsningen och tilltalet, aldrig innehållet granskaren sagt ja till.
-    ny = _intervallstreck(tilltala_med_ni(message["body"]))
+    # Kodens textputs (hälsningsraden, tilltalet, tankstrecken) även på utkast
+    # skrivna innan passet fanns (2026-10-09 "Hej Verkstad,"; 2026-10-11
+    # utkast utan hälsningsrad). Rör bara hälsningen och tilltalet, aldrig
+    # innehållet granskaren sagt ja till. Se app/leads/halsning.py.
+    prospekt = (
+        await storage.get_prospect(tenant_id, str(thread["prospect_id"]))
+        if thread.get("prospect_id")
+        else None
+    ) or {}
+    sprak_h = "en" if thread.get("language_state") == "en_confirmed" else "sv"
+    ny = normalisera_utkast(
+        message["body"],
+        kontakt=prospekt.get("contact_name"),
+        bolag=prospekt.get("company_name"),
+        sprak=sprak_h,
+    )
     # Signaturen även på utkast köade innan tenanten satte den (Sebbe
     # 2026-10-09: alla utkast och mejl ska bära den). Före foten, som alltid
     # är sist.

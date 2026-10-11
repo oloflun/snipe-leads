@@ -993,6 +993,9 @@ _PERSONNAMN = re.compile(r"\b([A-ZÅÄÖ][a-zåäöé]{2,})\s+([A-ZÅÄÖ][a-zå
 AVDELNINGSORD = frozenset(
     {
         "verkstad", "verkstaden", "kontor", "kontoret", "kundtjanst", "kundservice", "support", "service",
+        # "Kontaktpersoner Lahoud" nådde ett skickat mejl som "Hej Lahoud,"
+        # (development 2026-10-11) — ordet är en rubrik, aldrig ett namn.
+        "kontaktperson", "kontaktpersoner", "kontaktpersonen",
         "forsaljning", "salj", "saljavdelning", "ekonomi", "ekonomiavdelning", "faktura", "fakturor",
         "fakturering", "order", "ordrar", "butik", "butiken", "reception", "vaxel", "vaxeln",
         "administration", "admin", "bokning", "bokningar", "offert", "offerter", "jobb", "lager", "lagret",

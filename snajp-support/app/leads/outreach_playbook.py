@@ -356,7 +356,7 @@ _ANONYM_HALSNING = re.compile(r"^\s*(hej|hejsan|god dag|hallå)\s*[,!]?\s*$", re
 _NAMNGIVEN_HALSNING = re.compile(r"^\s*(hej|hejsan|hallå)\s+([A-ZÅÄÖÉ][\wåäöé-]*(?:\s+[A-ZÅÄÖÉ][\wåäöé-]*)?)\s*[,!]\s*$", re.IGNORECASE)
 
 
-def tilltala_med_ni(body: str) -> str:
+def tilltala_med_ni(body: str, *, bolag: str | None = None) -> str:
     """Ett mejl som börjar "Hej," utan namn går till bolaget, inte en person
     (Antons regel 14): det tilltalar då med "ni" rakt igenom. Utkasten
     blandade "Hej," med "Skulle du vilja" och "Vi kan visa dig" (development
@@ -375,7 +375,14 @@ def tilltala_med_ni(body: str) -> str:
 
         if all(ar_personled(o) for o in namn.group(2).split()):
             return body
-        rader[forsta] = f"{namn.group(1)},"
+        # "Hej Hortlax Rör," är ett tilltal av BOLAGET (halsning.sakra_halsning
+        # satte det): raden står kvar, men mejlet ska säga ni — samma fall som
+        # det anonyma "Hej,".
+        from .halsning import snyggt_bolagsnamn
+
+        kort = snyggt_bolagsnamn(bolag)
+        if not (kort and namn.group(2).strip().casefold() == kort.casefold()):
+            rader[forsta] = f"{namn.group(1)},"
     elif not _ANONYM_HALSNING.match(rader[forsta]):
         return body
 

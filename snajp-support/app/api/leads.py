@@ -66,7 +66,8 @@ from ..leads.icp import (
     validate_icp,
 )
 from ..leads.icp import is_empty as icp_ar_tomt
-from ..leads.signatur import HALSNING, bygg_signaturtext, dela_utkast, sla_ihop
+from ..leads.halsning import normalisera_utkast
+from ..leads.signatur import HALSNING, bygg_signaturtext, dela_utkast, med_signatur_fore_fot, sla_ihop
 from ..leads.signatur import normalisera as normalisera_signatur
 from ..leads.sni import SNI_NAMN, beskriv_kod
 from ..leads.onboarding_state import REQUIRED_KINDS, get_onboarding_state
@@ -1948,6 +1949,29 @@ async def list_review_queue(
     # (signatur + lagstadgad fot) är kodens text och visas, men redigeras
     # aldrig — se signatur.dela_utkast.
     for item in items:
+        # Utkast köade innan hälsningspasset och signaturen fanns rättas HÄR,
+        # i det lagrade utkastet (Sebbe 2026-10-11: alla befintliga utkast,
+        # inte bara nya): hälsningsraden (app/leads/halsning.py) och
+        # signaturen före foten. Idempotent — efter första läsningen ändras
+        # ingenting, och granskningstexten förblir utskickstexten.
+        sprak = "en" if item.get("language_state") == "en_confirmed" else "sv"
+        brodtext, svans = dela_utkast(item.get("body") or "", sig)
+        if not brodtext.strip():
+            # Inget utkast att rätta — en post utan text ska synas som en
+            # sådan, inte få en hälsningsrad och en signatur av fixen.
+            item["brodtext"], item["svans"] = brodtext, svans
+            continue
+        ny_brodtext = normalisera_utkast(
+            brodtext, kontakt=item.get("contact_name"), bolag=item.get("company_name"), sprak=sprak
+        )
+        ny = sla_ihop(ny_brodtext, svans, sig, halsning=HALSNING[sprak])
+        if sig:
+            ny = med_signatur_fore_fot(ny, sig, halsning=HALSNING[sprak])
+        if ny != (item.get("body") or "") and item.get("message_id"):
+            await storage.update_outreach_message_text(
+                tenant["tenant_id"], item["message_id"], subject=item.get("subject") or "", body=ny
+            )
+            item["body"] = ny
         item["brodtext"], item["svans"] = dela_utkast(item.get("body") or "", sig)
     svar: dict = {"items": items}
     if sig:
@@ -1992,6 +2016,12 @@ async def update_queue_item_text(
     trad = await storage.get_outreach_thread(tenant_id, item["thread_id"]) or {}
     sprak = "en" if trad.get("language_state") == "en_confirmed" else "sv"
     text = sla_ihop(text, svans, sig, halsning=HALSNING[sprak])
+    # Signaturen ska alltid med (Sebbe 2026-10-11) — också när det lagrade
+    # utkastet saknade den (köat innan signaturen fanns, eller signaturen
+    # bytt sedan dess): svansen bar då ingen signatur att sätta tillbaka,
+    # och en omskrivning via Förbättra/Personalisera sparades utan block.
+    if sig:
+        text = med_signatur_fore_fot(text, sig, halsning=HALSNING[sprak])
     await storage.update_outreach_message_text(tenant_id, meddelande["id"], subject=amne, body=text)
     return {"id": item_id, "subject": amne}
 

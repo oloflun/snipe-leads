@@ -3953,6 +3953,7 @@ class PostgresStorage:
             records = await conn.fetch(
                 """
                 select q.*, m.subject, m.body, m.id as message_id,
+                       t.language_state,
                        p.contact_email as prospect_email, p.company_name,
                        -- Kontexten AI-knapparna (Förbättra, Personalisera …)
                        -- skriver om utifrån: vem mejlet går till och läget hos bolaget.

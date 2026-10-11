@@ -2916,9 +2916,11 @@ class MemoryStorage:
             if item["status"] != "awaiting_review":
                 continue
             m = await self.get_pending_outreach_message(tenant_id, item["thread_id"]) or {}
-            p = prospekt.get((trader.get(item["thread_id"]) or {}).get("prospect_id"), {})
+            trad = trader.get(item["thread_id"]) or {}
+            p = prospekt.get(trad.get("prospect_id"), {})
             svar.append({
                 **item,
+                "language_state": trad.get("language_state"),
                 "subject": m.get("subject"),
                 "body": m.get("body"),
                 "message_id": m.get("id"),
