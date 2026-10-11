@@ -118,40 +118,36 @@ def _utan_ortsled(namn: str) -> str:
     return kvar or namn
 
 
-def halsningsrad(kontakt: str | None, bolag: str | None, sprak: str = "sv") -> str:
-    """Hälsningsraden ett utkast SKA ha: personens förnamn, annars bolagets
-    namn, annars bara hälsningen (Sebbe 2026-10-11)."""
-    namn = fornamn(kontakt) or snyggt_bolagsnamn(bolag)
-    hej = "Hi" if sprak == "en" else "Hej"
+def halsningsrad(kontakt: str | None, sprak: str = "sv") -> str:
+    """Hälsningsraden ett utkast SKA ha: personens förnamn om en namngiven
+    person finns, annars EXAKT "Hej," på egen rad (Sebbe 2026-10-12:
+    bolagsnamnet skrivs ALDRIG efter "Hej" — det avslöjar en mall direkt)."""
+    namn = fornamn(kontakt)
     if not namn:
         return "Hello," if sprak == "en" else "Hej,"
-    return f"{hej} {namn},"
+    return f"{'Hi' if sprak == 'en' else 'Hej'} {namn},"
 
 
 def _ar_halsningsrad(rad: str, sprak: str) -> re.Match[str] | None:
     if len(rad) > 80:
         return None
-    m = (_HALSNING_EN if sprak == "en" else _HALSNING_SV).match(rad)
-    # "Hej! Vi hjälper …" på en rad är en hälsning följd av text — bara en
-    # REN hälsningsrad (högst ett namn efter hälsningsordet) räknas.
-    if m and len(m.group(2).split()) > 4:
-        return None
-    return m
+    return (_HALSNING_EN if sprak == "en" else _HALSNING_SV).match(rad)
 
 
 def sakra_halsning(body: str, *, kontakt: str | None, bolag: str | None, sprak: str = "sv") -> str:
     """Ser till att utkastet börjar med en riktig hälsningsrad. Idempotent.
 
-    - Ingen hälsning alls → raden läggs till överst.
-    - "Hej," utan namn → personens förnamn eller bolagets namn sätts in.
-    - "Hej Verkstad," (ett namn som inte är en person) → ersätts likadant.
+    - Ingen hälsning alls → raden läggs till överst, med blankrad före texten.
+    - "Hej," utan namn → personens förnamn sätts in om en person finns.
+    - "Hej Verkstad," eller "Hej <Bolagsnamn>," → ersätts: bolagsnamn efter
+      "Hej" skrivs ALDRIG (Sebbe 2026-10-12) — `bolag` används bara för att
+      KÄNNA IGEN en sådan rad och byta den mot personens namn eller "Hej,".
     - "Hej Peter," där Peter är ett personnamn → lämnas (skiftläget rättas).
 
-    Tilltalsformen (du/ni) rörs inte här — det gör tilltala_med_ni, som körs
-    efter och känner igen bolagsnamnet via `bolag`-argumentet."""
+    Tilltalsformen (du/ni) rörs inte här — det gör tilltala_med_ni efteråt."""
     rader = body.split("\n")
     forsta = next((i for i, r in enumerate(rader) if r.strip()), None)
-    ratt = halsningsrad(kontakt, bolag, sprak)
+    ratt = halsningsrad(kontakt, sprak)
     if forsta is None:
         # En tom text lämnas tom: textkvalitetens tom_text-kontroll ska se
         # den, inte en hälsningsrad som ser ut som ett utkast.
@@ -168,6 +164,17 @@ def sakra_halsning(body: str, *, kontakt: str | None, bolag: str | None, sprak: 
     if namnet:
         if namnet.casefold() == "igen":
             return "\n".join(rader)
+        # Bolagsnamn efter "Hej" skrivs aldrig — kontrollen ligger FÖRE
+        # personkontrollen, för ett bolagsnamn kan se ut som en person
+        # ("Hej Briell Bygg,").
+        if _ar_bolagstilltal(namnet, bolag):
+            rader[forsta] = ratt
+            return "\n".join(rader)
+        # Mer än fyra ord efter hälsningsordet som INTE är bolagets namn är
+        # löptext ("Hej vi kan hjälpa er med …") — raden lämnas orörd hellre
+        # än att en mening skrivs över med en hälsningsrad.
+        if len(namnet.split()) > 4:
+            return body
         rensat = rensa_personnamn(namnet)
         if (
             rensat
@@ -180,11 +187,19 @@ def sakra_halsning(body: str, *, kontakt: str | None, bolag: str | None, sprak: 
             if rensat != namnet:
                 rader[forsta] = f"{m.group(1)} {rensat},"
             return "\n".join(rader)
-        bolagsnamn = snyggt_bolagsnamn(bolag)
-        if bolagsnamn and namnet.casefold() == bolagsnamn.casefold():
-            return "\n".join(rader)
     rader[forsta] = ratt
     return "\n".join(rader)
+
+
+def _ar_bolagstilltal(namnet: str, bolag: str | None) -> bool:
+    """Är hälsningens namn bolagets? Båda sidor jämförs även i kortform
+    (utan bolagsform och ortsled), så att "Hej Granec Maskin," känns igen mot
+    "Granec Maskin Aktiebolag" och "Hej X i Luleå," mot kortformen av X."""
+    bolagsformer = {str(bolag or "").casefold(), (snyggt_bolagsnamn(bolag) or "").casefold()} - {""}
+    if not bolagsformer:
+        return False
+    namnformer = {namnet.casefold(), (snyggt_bolagsnamn(namnet) or "").casefold()} - {""}
+    return bool(namnformer & bolagsformer)
 
 
 def normalisera_utkast(
@@ -199,31 +214,8 @@ def normalisera_utkast(
     from .outreach_playbook import _intervallstreck, tilltala_med_ni
 
     text = sakra_halsning(body, kontakt=kontakt, bolag=bolag, sprak=sprak)
-    rader = text.split("\n")
-    forsta = next((i for i, r in enumerate(rader) if r.strip()), None)
-    bolagsrad = halsningsrad(None, bolag, sprak)
-    if (
-        sprak != "en"
-        and forsta is not None
-        and bolagsnamn_i_halsning(rader[forsta], bolag)
-    ):
-        # Bolaget tilltalas: mejlet ska säga ni. tilltala_med_ni känner bara
-        # igen korta namn i hälsningen, så raden byts tillfälligt mot den
-        # anonyma formen och tillbaka — ni-logiken är densamma.
-        rader[forsta] = "Hej,"
-        text = tilltala_med_ni("\n".join(rader))
-        rader = text.split("\n")
-        rader[forsta] = bolagsrad
-        text = "\n".join(rader)
-    elif sprak != "en":
-        text = tilltala_med_ni(text, bolag=bolag)
+    if sprak != "en":
+        # "Hej," utan namn tilltalar bolaget: mejlet säger ni rakt igenom.
+        text = tilltala_med_ni(text)
     return _intervallstreck(text)
-
-
-def bolagsnamn_i_halsning(rad: str, bolag: str | None) -> bool:
-    kort = snyggt_bolagsnamn(bolag)
-    if not kort:
-        return False
-    m = _HALSNING_SV.match(rad) if len(rad) <= 80 else None
-    return bool(m and m.group(2).strip().casefold() == kort.casefold())
 

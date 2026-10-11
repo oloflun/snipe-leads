@@ -72,19 +72,36 @@ def test_utkast_utan_halsning_far_personens_fornamn():
     assert "vill du växa" in text
 
 
-def test_utkast_utan_halsning_far_bolagets_namn_och_ni():
+def test_utkast_utan_halsning_och_utan_person_far_bara_hej_och_ni():
+    """Bolagsnamnet skrivs ALDRIG efter "Hej" (Sebbe 2026-10-12): utan en
+    namngiven person är hälsningen exakt "Hej," och mejlet säger ni."""
     text = normalisera_utkast(
         "När man driver ett byggföretag vill du växa. Din tid är dyrbar.",
         kontakt="Verkstad Öppettider",
         bolag="HORTLAX RÖR AB",
     )
-    assert text.startswith("Hej Hortlax Rör,\n\n")
+    assert text.startswith("Hej,\n\n")
     assert "vill ni växa" in text and "Er tid" in text
+
+
+def test_bolagsnamn_efter_hej_ersatts_aven_nar_det_liknar_ett_personnamn():
+    """"Hej Briell Bygg," ser ut som ett personnamn för namnvettet — det är
+    bolagsjämförelsen som ska fälla det, i kort- och långform."""
+    for halsning in ("Hej Briell Bygg,", "Hej Briell Bygg AB,"):
+        text = normalisera_utkast(f"{halsning}\n\nVi hörs du.", kontakt=None, bolag="Briell Bygg AB")
+        assert text.startswith("Hej,\n\n"), halsning
+    # Äldre köad hälsning med ortsled känns också igen mot kortformen.
+    text = normalisera_utkast(
+        "Hej B Flemströms Gräv & Last i Luleå,\n\nVi hörs.",
+        kontakt=None,
+        bolag="B Flemströms Gräv & Last i Luleå AB",
+    )
+    assert text.startswith("Hej,\n\n")
 
 
 def test_ogiltig_halsning_ersatts_och_giltig_lamnas():
     assert normalisera_utkast("Hej Verkstad,\n\nVi hörs.", kontakt=None, bolag="Granec Maskin Aktiebolag").startswith(
-        "Hej Granec Maskin,"
+        "Hej,\n"
     )
     assert normalisera_utkast("Hej Elin!\n\nVi hörs.", kontakt="Elin Ek", bolag="X AB").startswith("Hej Elin!")
     assert normalisera_utkast("Hej igen,\n\nVi hörs.", kontakt=None, bolag="X AB").startswith("Hej igen,")
@@ -93,6 +110,7 @@ def test_ogiltig_halsning_ersatts_och_giltig_lamnas():
 
 def test_passet_ar_idempotent():
     forsta = normalisera_utkast("Vi hjälper dig.", kontakt=None, bolag="Svartöns Bygg AB")
+    assert forsta.startswith("Hej,\n\n")
     assert normalisera_utkast(forsta, kontakt=None, bolag="Svartöns Bygg AB") == forsta
 
 

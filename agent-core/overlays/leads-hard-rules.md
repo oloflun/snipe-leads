@@ -17,11 +17,12 @@ Dessa regler ÅSIDOSÄTTER skillens standardbeteende där de krockar.
   uppgiften eller utelämna den.
 - Hälsningsraden skrivs som en människa skriver den: "Hej <Förnamn>," ENDAST
   när kontakten är en namngiven person — ett förnamn, inte en roll, en
-  avdelning eller en ort. Finns ingen person: "Hej <Bolagsnamn>," utan
-  bolagsform ("Hej Hortlax Rör,"), i sista hand bara "Hej,". Skriv ALDRIG
+  avdelning eller en ort. Finns ingen person är hälsningsraden EXAKT "Hej,"
+  på en egen rad, följd av en blankrad före texten. Skriv ALDRIG bolagets
+  namn efter "Hej" — "Hej Hortlax Rör," avslöjar en mall direkt — och ALDRIG
   "kontaktperson", "kontaktpersoner", "till den det berör", "hej där" eller
-  någon annan opersonlig mottagare — ett mejl som inte vet vem det talar
-  till ska inte låtsas att det gör det.
+  någon annan opersonlig mottagare. Bolagets namn hör hemma i ämnesraden och
+  i brödtexten, inte i hälsningen.
 - DUBBELKOLLA innan du lämnar ifrån dig utkastet: läs hela texten en sista
   gång som om du vore mottagaren. Rätta varje stavfel, varje konstig
   formulering och varje ordval som avslöjar en maskin. Ett utkast med ett
