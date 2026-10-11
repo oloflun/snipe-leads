@@ -197,3 +197,50 @@ async def test_put_lagger_tillbaka_signaturen_aven_nar_utkastet_saknade_den():
         lagrat = storage.outreach_messages[DEFAULT_TENANT_ID][-1]["body"]
         assert "Sebastian Bergman" in lagrat
         assert lagrat.count("Sebastian Bergman") == 1
+
+
+@pytest.mark.anyio
+async def test_svepet_rattar_alla_osanda_utkast_men_aldrig_skickade():
+    """POST /api/admin/leads/normalisera-utkast (admin_utkastsvep): även
+    godkända utkast som väntar på sändfönstret rättas — och en skickad text
+    rörs aldrig."""
+    from app.leads.halsning import normalisera_tenantens_utkast
+
+    async with app.router.lifespan_context(app):
+        storage = app.state.storage
+        await _koa_gammalt_utkast(storage)  # awaiting_review
+        # Ett godkänt utkast i sändfönsterkön, i gammal form.
+        p2 = await storage.create_prospect(
+            DEFAULT_TENANT_ID, company_name="Briell Bygg AB", contact_email="info@briell.se"
+        )
+        t2 = await storage.ensure_outreach_thread(DEFAULT_TENANT_ID, prospect_id=p2["id"])
+        await storage.queue_outreach_message(
+            DEFAULT_TENANT_ID, thread_id=t2["id"], subject="Kundfrågor",
+            body="Hej Briell Bygg,\n\nNi hanterar byggprojekt.",
+            humanizer_variant="x", scheduled_at="2026-10-12T08:00:00+00:00", status="queued",
+        )
+        # Ett redan skickat mejl i gammal form — får inte röras.
+        p3 = await storage.create_prospect(
+            DEFAULT_TENANT_ID, company_name="Skickat AB", contact_email="info@skickat.se"
+        )
+        t3 = await storage.ensure_outreach_thread(DEFAULT_TENANT_ID, prospect_id=p3["id"])
+        skickat = await storage.queue_outreach_message(
+            DEFAULT_TENANT_ID, thread_id=t3["id"], subject="Gammalt",
+            body="Hej Skickat,\n\nRedan ute.",
+            humanizer_variant="x", scheduled_at="2026-10-01T08:00:00+00:00", status="queued",
+        )
+        await storage.mark_outreach_message_sent(
+            DEFAULT_TENANT_ID, skickat["message"]["id"], "2026-10-01T08:05:00+00:00"
+        )
+
+        resultat = await normalisera_tenantens_utkast(storage, DEFAULT_TENANT_ID)
+        assert resultat["rattade"] >= 2
+
+        texter = {m["thread_id"]: m["body"] for m in storage.outreach_messages[DEFAULT_TENANT_ID]}
+        assert texter[t2["id"]].startswith("Hej,\n\n")
+        assert "Sebastian Bergman" in texter[t2["id"]]
+        assert texter[t3["id"]].startswith("Hej Skickat,")  # orörd
+
+        # Idempotent: andra svepet rättar noll.
+        assert (await normalisera_tenantens_utkast(storage, DEFAULT_TENANT_ID))["rattade"] == 0
+

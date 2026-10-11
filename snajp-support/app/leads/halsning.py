@@ -219,3 +219,52 @@ def normalisera_utkast(
         text = tilltala_med_ni(text)
     return _intervallstreck(text)
 
+
+async def normalisera_tenantens_utkast(storage, tenant_id: str) -> dict[str, int]:
+    """Svepet: hälsningspasset + signaturen på tenantens ALLA osända utkast,
+    oavsett status (väntar på granskning, godkänt i sändfönsterkön, stoppat).
+
+    Köläsningens lata fix når bara awaiting_review, och bara när någon öppnar
+    just den kundens kö. Det här är samma rättning för resten (Sebbe
+    2026-10-12: alla befintliga utskick ska uppdateras), körbar via
+    POST /api/admin/leads/normalisera-utkast. Idempotent: andra svepet
+    rättar noll. Skickade mejl rörs aldrig — bara rader med osänd text."""
+    from .signatur import HALSNING, dela_utkast, med_signatur_fore_fot, sla_ihop
+    from .signatur import normalisera as normalisera_signatur
+
+    settings = await storage.get_agent_settings(tenant_id, agent_type="leads")
+    sig = normalisera_signatur(settings.get("signatur"))
+    lagen = await storage.utkast_lagen(tenant_id, med_text=True)
+    prospekter = {str(p["id"]): p for p in await storage.list_prospects(tenant_id, limit=2000)}
+    granskade = rattade = 0
+    for pid, lage in lagen.items():
+        # Bara trådar med en OSÄND text: med_text-läsningen tar det väntande
+        # meddelandet först, så body är utkastet — men utan osända rader vore
+        # body det senast skickade, och det skrivs aldrig om.
+        if not lage.get("message_id") or (lage.get("antal_osanda") or 0) <= 0:
+            continue
+        body = str(lage.get("body") or "")
+        if not body.strip():
+            continue
+        granskade += 1
+        trad = await storage.get_outreach_thread(tenant_id, lage["thread_id"]) or {}
+        sprak = "en" if trad.get("language_state") == "en_confirmed" else "sv"
+        p = prospekter.get(str(pid), {})
+        brodtext, svans = dela_utkast(body, sig)
+        ny = sla_ihop(
+            normalisera_utkast(
+                brodtext, kontakt=p.get("contact_name"), bolag=p.get("company_name"), sprak=sprak
+            ),
+            svans,
+            sig,
+            halsning=HALSNING[sprak],
+        )
+        if sig:
+            ny = med_signatur_fore_fot(ny, sig, halsning=HALSNING[sprak])
+        if ny != body:
+            await storage.update_outreach_message_text(
+                tenant_id, lage["message_id"], subject=lage.get("subject") or "", body=ny
+            )
+            rattade += 1
+    return {"granskade": granskade, "rattade": rattade}
+

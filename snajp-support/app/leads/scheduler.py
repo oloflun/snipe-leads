@@ -608,6 +608,11 @@ async def process_godkanda(storage: Storage, provider: SendProvider) -> list[dic
             elif not (_efter(godkant.get("godkand_at"), seedad) or _efter(item.get("created_at"), seedad)):
                 continue
             try:
+                # Samma textputs som klickvägen (skicka_godkant): ett utkast
+                # godkänt FÖRE en regeländring och skickat av fönstret EFTER
+                # den gick annars ut i gammal form — utan hälsningsrad eller
+                # signatur (Sebbe 2026-10-12). Idempotent.
+                await _fot_vid_godkannande(storage, tenant["id"], item)
                 outcome = await process_due_item(storage, tenant["id"], item, provider, now=now, godkant=godkant)
             except Exception:  # noqa: BLE001
                 logger.exception("Godkänt utkast %s misslyckades oväntat", item.get("id"))
