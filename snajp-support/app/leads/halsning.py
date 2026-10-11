@@ -79,14 +79,17 @@ def fornamn(namn: str | None) -> str | None:
 
 
 def snyggt_bolagsnamn(bolag: str | None) -> str | None:
-    """Bolagsnamnet som ett tilltal: utan bolagsform, och versalgrytor
-    ("HORTLAX RÖR AB") till läsbar form ("Hortlax Rör"). Ett namn i blandat
-    skiftläge lämnas som bolaget själv skriver det."""
+    """Bolagsnamnet som ett tilltal: utan bolagsform och utan avslutande
+    ortsled ("B Flemströms Gräv & Last i Luleå AB" → "B Flemströms Gräv &
+    Last" — Sebbe 2026-10-12), och versalgrytor ("HORTLAX RÖR AB") till
+    läsbar form ("Hortlax Rör"). Ett namn i blandat skiftläge lämnas som
+    bolaget själv skriver det."""
     namn = " ".join(str(bolag or "").split())
     forra = None
     while namn != forra:
         forra = namn
         namn = _BOLAGSFORM.sub("", namn).strip()
+        namn = _utan_ortsled(namn)
     if not namn:
         return None
     ord_ = namn.split()
@@ -95,6 +98,24 @@ def snyggt_bolagsnamn(bolag: str | None) -> str | None:
     if namn.isupper() and len(ord_) > 1:
         namn = " ".join(d if d == "&" else _versal(d) for d in ord_)
     return namn
+
+
+#: Ett avslutande " i <Ort>" i bolagsnamnet. Orten måste vara en kommun vi
+#: känner (profil.KOMMUNER, en eller två ord) — "ByggMix i Norr" och
+#: "Markskydd i Väst" är varumärken, inte ortsled, och lämnas.
+_ORTSLED = re.compile(r"\s+i\s+([A-ZÅÄÖ][\wåäöé-]*(?:\s+[A-ZÅÄÖ][\wåäöé-]*)?)$")
+
+
+def _utan_ortsled(namn: str) -> str:
+    m = _ORTSLED.search(namn)
+    if not m:
+        return namn
+    from .profil import KOMMUNER
+
+    if m.group(1).casefold() not in KOMMUNER:
+        return namn
+    kvar = namn[: m.start()].strip()
+    return kvar or namn
 
 
 def halsningsrad(kontakt: str | None, bolag: str | None, sprak: str = "sv") -> str:

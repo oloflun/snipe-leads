@@ -49,6 +49,17 @@ def test_snyggt_bolagsnamn_tar_bort_bolagsform_och_rattar_versaler():
     assert snyggt_bolagsnamn("FOPTEC AB") == "FOPTEC"
 
 
+def test_snyggt_bolagsnamn_tar_bort_ortsled_men_inte_varumarken():
+    """Kort form utan ortsled (Sebbe 2026-10-12): "Hej B Flemströms Gräv &
+    Last," — inte "… i Luleå,". Bara kommuner vi känner är ortsled;
+    väderstreck är varumärke."""
+    assert snyggt_bolagsnamn("B Flemströms Gräv & Last i Luleå AB") == "B Flemströms Gräv & Last"
+    assert snyggt_bolagsnamn("Nyströms Byggtjänst i Piteå AB") == "Nyströms Byggtjänst"
+    assert snyggt_bolagsnamn("Simmis i Göteborg AB") == "Simmis"
+    assert snyggt_bolagsnamn("ByggMix i Norr AB") == "ByggMix i Norr"
+    assert snyggt_bolagsnamn("Markskydd i Väst AB") == "Markskydd i Väst"
+
+
 # -- Hälsningsraden ------------------------------------------------------------
 
 
