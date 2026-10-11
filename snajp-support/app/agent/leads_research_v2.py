@@ -38,6 +38,7 @@ from ..agentcore.overlays import pack_version
 from ..agentcore.packs import RunLedger
 from ..config import get_settings
 from ..leads import erbjudanden
+from ..leads import stilkontroll as stil
 from ..leads.business_context import require_business_context
 from ..leads.grounding_gate import build_permitted_facts
 from ..leads.language_gate import last_humanizer_variant
@@ -137,8 +138,12 @@ _RESEARCH_V2_UPPGIFT = (
 #: Läggs till researchuppgiften när kunden har en produktlista.
 _PRODUKTVAL = (
     "\n\nPRODUKTVAL: fältet produkt är namnet på EN av kundens produkter, "
-    "ordagrant som det står i listan, den som bäst möter det du läst om bolaget. "
-    "null om ingen passar. offer bygger på den produkten."
+    "ordagrant som det står i listan: den vars nytta i listan svarar mot något "
+    "bolaget självt beskriver (vilka det säljer till, vilka ärenden det får, vad "
+    "det hanterar). Ett citat som visar det räcker som belägg för kp när "
+    "produktens nytta gäller just det. null BARA när källmaterialet visar att "
+    "bolaget inte kan använda någon av produkterna, aldrig för att ett citat "
+    "saknas. offer bygger på den produkten."
 )
 
 
@@ -148,11 +153,18 @@ def _vald_produkt(fynd: dict[str, Any], produkter: list[dict[str, str]]) -> dict
     Fältet saknades i uppgiftens "EXAKT dessa fält" till 2026-10-11, så
     modellen lämnade det tomt och varje bolag fälldes på produktmatchningen
     (100 av 100 i Snajps omkörning) fast offer.name bar produktens namn
-    ordagrant. Bara en exakt träff i listan räknas."""
+    ordagrant. En träff är listans namn eller dess kortform före kommat
+    ("Iris" för "Iris, leadsagenten"); 2026-10-12 fälldes bolag på att
+    modellen skrev kortformen."""
     offer = fynd.get("offer") if isinstance(fynd.get("offer"), dict) else {}
     for kandidat in (fynd.get("produkt"), offer.get("name")):
         namn = str(kandidat or "").strip().casefold()
-        traff = next((p for p in produkter if p["namn"].casefold() == namn), None) if namn else None
+        if not namn:
+            continue
+        traff = next(
+            (p for p in produkter if namn in (p["namn"].casefold(), p["namn"].split(",")[0].strip().casefold())),
+            None,
+        )
         if traff:
             return traff
     return None
@@ -745,6 +757,26 @@ def _utkastens_researchvy(research_summary: str) -> str:
     return json.dumps(vy, ensure_ascii=False) if vy else research_summary
 
 
+def _stilfynd(
+    draft: dict[str, Any], *, villkor: str | None, produkt: str | None, andra: list[str]
+) -> list[str]:
+    """Stilgrindens fynd på ett råutkast (före humanizern), som text till
+    omskrivningen: markörerna i app/leads/stilkontroll.py, erbjudandets
+    siffror och produkt, och samma ingång eller konstruktion som ett annat
+    utkast i körningen. Tom lista = inget att åtgärda."""
+    body = str(draft.get("body") or "")
+    if not body.strip():
+        return []
+    # Inte lang_mening och samma_uppmaning: villkoren dikterar erbjudandets
+    # mening och handlingen ("svara 'ja' så skickar vi de fem inom två
+    # arbetsdagar" i varje gratis_prov-mejl), så de fynden kan inte skrivas
+    # bort och ska bara flaggas vid köningen som förut.
+    fynd = stil.kontrollera(body).anmarkningar
+    fynd += stil.erbjudande_fynd(body, villkor=villkor, produkt=produkt)
+    fynd += stil.mot_andra(body, andra)
+    return [a.beskrivning for a in fynd if a.kod not in ("lang_mening", "samma_uppmaning")]
+
+
 async def run_outreach_draft_v2(
     storage,
     tenant_id: str,
@@ -784,6 +816,23 @@ async def run_outreach_draft_v2(
         storage, tenant_id, thread, erbjudanden.produkt_ur_research(research_summary)
     )
     erbjudandeblock = f"{erbjudande.block()}\n\n" if erbjudande else ""
+    # Körningens andra utkast (Anton 2026-10-12): modellen kan inte variera
+    # ingången mot mejl den aldrig sett. De som väntar på granskning läggs i
+    # ärendet som "redan använda", och stilgrinden nedan prövar detsamma i kod.
+    andra_utkast = [
+        str(r.get("body") or "")
+        for r in await storage.list_review_queue(tenant_id)
+        if r.get("thread_id") != thread_id
+    ]
+    anvanda_ingangar = [i for i in (stil.ingang(t) for t in andra_utkast[-12:]) if i]
+    ingangsblock = (
+        "## Ingångar som redan används i den här körningen\n"
+        "Bygg din ingång på ett annat sätt och kring ett annat moment än dessa:\n"
+        + "\n".join(f"- {i}" for i in anvanda_ingangar)
+        + "\n\n"
+        if anvanda_ingangar
+        else ""
+    )
 
     base = (
         f"## Uppdrag\nDu skriver ett kallt första mejl till {kortnamn(company_name)} åt {tenant_name}. "
@@ -822,6 +871,7 @@ async def run_outreach_draft_v2(
         f"## Brief\n{brief}\n\n"
         f"## Erbjudandet som styr vinkeln\n{offer_summary}\n\n"
         f"{erbjudandeblock}"
+        f"{ingangsblock}"
         f"## Språkläge\n{language_state}\n\n"
         f"{context_pack}"
         + (f"\n\n{soul_block}" if soul_block else "")
@@ -872,6 +922,37 @@ async def run_outreach_draft_v2(
             "meningar räcker. Har du för lite att gå på: skriv det kortaste "
             "ärliga mejl underlaget bär, och håll dig till det du faktiskt vet. "
             "Ett kort mejl går att granska; ett tomt går inte att skicka.",
+            case_context=base,
+            playbook_role=_OUTREACH_ROLE,
+            instruktioner=lager,
+            talamod_429=True,
+        )
+
+    # 1b. Stilgrinden FÖRE humanizern (Anton 2026-10-12). Hans genomgång av
+    # två utkastkedjor: första utkastet rabblade registerfakta ("Med fem
+    # platschefer …") eller öppnade som en mall ("För företag som ert, som …"),
+    # Personalisera tappade erbjudandet, Förbättra blev opersonligt, och först
+    # tredje omskrivningen landade. Fynden som går att känna igen i kod prövas
+    # här, och EN omskrivning med fynden utpekade sker innan humanizern, som
+    # förblir sist (INV-LANG-002). Kostar ett anrop bara när något fälls.
+    produktnamn = erbjudanden.produkt_ur_research(research_summary)
+    stilfynd = _stilfynd(draft, villkor=erbjudande.villkor if erbjudande else None,
+                         produkt=produktnamn, andra=andra_utkast)
+    if stilfynd:
+        draft = await run_step(
+            steps[0],
+            ledger,
+            trace,
+            task=_UTKAST_V2_UPPGIFT
+            + "\n\nDITT FÖRRA UTKAST FÄLLDES AV STILGRINDEN. Skriv om hela "
+            "mejlet enligt skrivstilen så att varje punkt nedan är åtgärdad: "
+            "ingången bygger på en egenskap ur bolagets egen beskrivning (vem "
+            "de arbetar för, vad de lägger vikt vid, hur de arbetar), aldrig "
+            "siffror eller en mallfras; erbjudandets villkor och produktens "
+            "namn står kvar ordagrant i sak; mejlet slutar med villkorens "
+            "handling.\n\n## Fynd att åtgärda\n"
+            + "\n".join(f"- {f}" for f in stilfynd)
+            + f"\n\n## Förra utkastet\nÄmne: {draft.get('subject', '')}\n\n{draft.get('body', '')}",
             case_context=base,
             playbook_role=_OUTREACH_ROLE,
             instruktioner=lager,

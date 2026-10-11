@@ -232,15 +232,16 @@ export function SkickatLista({
     }
   }
 
-  /** Tillbaka till Iris (Anton 2026-10-10): utkasten avbryts och Iris skriver
-   *  om dem med samma kedja som första gången (POST /leads/queue/tillbaka-till-iris). */
+  /** Tillbaka till Iris (Anton 2026-10-10): utkasten avbryts och leadsen står
+   *  som nya hos Iris (POST /leads/queue/tillbaka-till-iris). Inget skrivs om
+   *  automatiskt (Anton 2026-10-12): användaren väljer i Iris-listan. */
   async function tillbakaTillIris() {
     if (!valt.length || atgard) return;
     if (
       !window.confirm(
         text({
-          sv: `Skicka tillbaka ${valt.length} utkast till Iris? De skickas inte, och Iris skriver nya utkast till samma bolag.`,
-          en: `Send ${valt.length} drafts back to Iris? They will not be sent, and Iris writes new drafts to the same companies.`
+          sv: `Flytta tillbaka ${valt.length} utkast till Iris? De skickas inte. Inget skrivs om förrän du väljer det i Iris-listan.`,
+          en: `Move ${valt.length} drafts back to Iris? They will not be sent. Nothing is rewritten until you choose that in the Iris list.`
         })
       )
     ) {
@@ -256,8 +257,8 @@ export function SkickatLista({
       const antalOm = svar.count ?? 0;
       setBesked({
         text: text({
-          sv: `${antalOm} utkast är tillbaka hos Iris och skrivs om. De nya dyker upp i granskningen när de är klara.`,
-          en: `${antalOm} drafts are back with Iris and being rewritten. The new ones appear in review when they are ready.`
+          sv: `${antalOm} leads är tillbaka hos Iris. Markera dem i Iris-listan och välj Skapa utkast när du vill ha nya utkast.`,
+          en: `${antalOm} leads are back with Iris. Select them in the Iris list and choose Create draft when you want new drafts.`
         }),
         fel: false
       });

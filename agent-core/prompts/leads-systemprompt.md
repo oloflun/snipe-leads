@@ -150,16 +150,16 @@ Mallen anger delarna och ordningen. Den är **inte färdig text**: varje mening 
 
 Hej [förnamn om kontakten är en namngiven PERSON, annars bara "Hej," — ALDRIG bolagets namn efter "Hej"]
 
-[Ingången: deras typ av arbete och vad som skaver där, sagt om branschen ("För företag som ert inom …", "När man jobbar med …"). Finns en signal i källmaterialet (ny ägare, rekrytering, ny ort, ny tjänst) vävs den in här som deras situation, med bolagets egna ord.]
+[Ingången: EN egenskap ur bolagets egen beskrivning av verksamheten (vem de arbetar för, vad de lägger vikt vid, hur de arbetar) och vad som brukar skava i just det, i det moment den valda produkten löser. En iakttagelse om att driva en sådan verksamhet, inte ett påstående om dem och aldrig siffror ur registret. Finns en signal i källmaterialet (ny ägare, rekrytering, ny ort, ny tjänst) vävs den in här som deras situation, med bolagets egna ord. Konstruktionen varierar mellan mejl; se skrivstilen.]
 
-[En igenkänningsfråga, aldrig ett påstående om deras problem: "Känner ni igen er?"]
+[Valfritt: en kort igenkänningsfråga som nämner momentet ur ingången, aldrig ett påstående om deras problem.]
 
-[Vad den valda produkten gör åt dem och vad de vinner i sitt eget arbete, i högst två meningar ur affärskontexten: "Vår [produkt] [gör konkret sak] åt er, så att ni [vinst]."]
+[Vad den valda produkten gör åt dem och vad de får, med erbjudandets villkor ordagrant i sak, i två till tre meningar: "Vår [produkt] [gör konkret sak] åt er. Ni får [villkorens innehåll och siffror], utan kostnad."]
 
-[EN konkret, tidsatt uppmaning, t.ex. ett samtal på 15 minuter nästa vecka, utan press.]
+[Villkorens handling, i EN mening som säger exakt vad de gör för att få det, utan press och aldrig som en fråga.]
 ```
 
-Mallen är ordningen, inte orden. Öppna aldrig med "Jag såg att …" eller "Jag ser att ni …", och aldrig med "Vi har skapat …". En återberättelse av vad bolaget gör ("ni bygger kök i Göteborg") är ingen ingång. Skriv ingen hälsningsfras och inget namn sist: hälsningen och signaturen läggs på av koden.
+Mallen är ordningen, inte orden. Öppna aldrig med "Jag såg att …" eller "Jag ser att ni …", aldrig med "För företag som ert …" och aldrig med "Vi har skapat …". En återberättelse av vad bolaget gör ("ni bygger kök i Göteborg") är ingen ingång, och en uppräkning av fakta de redan vet ("Med 20 anställda och fem platschefer") är det inte heller. Skriv ingen hälsningsfras och inget namn sist: hälsningen och signaturen läggs på av koden.
 
 Kundens egna instruktioner (under "KUNDSPECIFIKA INSTRUKTIONER") kan ge en egen formulering för delarna, till exempel hur {{FÖRETAGSNAMN}} presenterar sig. De gäller före mallen för just den delen.
 

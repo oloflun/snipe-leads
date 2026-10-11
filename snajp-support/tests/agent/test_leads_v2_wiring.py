@@ -118,7 +118,14 @@ class _FakeLLM:
                 "sa:account-research": dict(_RESEARCH_SVAR),
                 "sa:draft-outreach": {
                     "subject": "Returfrågor",
-                    "body": "Hej! Jag såg att ni har fri retur i 30 dagar.",
+                    # Råutkastet är rent, så att stilgrinden före humanizern
+                    # (2026-10-12) inte fäller det; humanizerns svar nedan bär
+                    # fortfarande "Jag såg att" för köprovet.
+                    "body": (
+                        "Hej,\n\nNär man säljer med fri retur blir returfrågorna många.\n\n"
+                        "Vår agent svarar på dem åt er. Uppsägningstiden är 60 dagar.\n\n"
+                        "Svara ja så visar vi hur."
+                    ),
                     "personalization_score": 0.7,
                     "weak_lines": [],
                     "passes_review": True,

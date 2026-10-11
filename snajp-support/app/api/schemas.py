@@ -431,9 +431,9 @@ class ProcessaOmRequest(BaseModel):
     innan kontakt/utkast — 'Processa om' i registret.
     """
 
-    # 200 (2026-10-08): Skapa utkast och Skapa om i Iris-listan körs på alla
-    # markerade, och listan visar upp till 500 leads.
-    prospect_ids: list[str] = Field(..., min_length=1, max_length=200)
+    # Inget tak (Anton 2026-10-12): en liståtgärd gäller alla markerade,
+    # oavsett hur många. Budgetvakten och jobbkön sätter gränsen, inte schemat.
+    prospect_ids: list[str] = Field(..., min_length=1)
     scope: str = Field(default="research_and_draft", pattern=r"^(research|research_and_draft)$")
     is_test: bool = False
     #: Skapa om utkast: leadets väntande utkast ersätts. Köposterna ställs in
@@ -477,15 +477,17 @@ class KombineraListorRequest(BaseModel):
 class SchemalaggRequest(BaseModel):
     """Ny utskickstid för markerade godkända utkast (Anton 2026-10-10)."""
 
-    ids: list[str] = Field(min_length=1, max_length=500)
+    ids: list[str] = Field(min_length=1)
     tid: datetime
 
 
 class TillbakaTillIrisRequest(BaseModel):
-    """Markerade utkast ur sändlistan tillbaka till Iris för att skrivas om
-    (Anton 2026-10-10)."""
+    """Markerade utkast ur sändlistan tillbaka till Iris (Anton 2026-10-10).
+    Inget tak och ingen automatisk omskrivning (Anton 2026-10-12): utkasten
+    avbryts och leadsen står som nya hos Iris; vad som händer sedan väljer
+    användaren själv där."""
 
-    ids: list[str] = Field(min_length=1, max_length=50)
+    ids: list[str] = Field(min_length=1)
 
 
 class TillIrisRequest(BaseModel):

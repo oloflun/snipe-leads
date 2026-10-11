@@ -58,7 +58,36 @@ _MARKORER: tuple[tuple[str, re.Pattern[str], str], ...] = (
      "effektivisera/effektivitet/optimera"),
     ("i_dagens", re.compile(r"\bi\s+dagens\b", re.IGNORECASE), "\"i dagens …\""),
     ("utropstecken", re.compile(r"!"), "utropstecken"),
+    ("antagande_om_dem",
+     re.compile(r"\b(?:kan\s+jag\s+tänka\s+mig|vet\s+jag\s+att|är\s+jag\s+säker\s+på|jag\s+utgår\s+från|jag\s+gissar)\b",
+                re.IGNORECASE),
+     "ett antagande om mottagaren"),
 )
+#: Ingången som mall (Anton 2026-10-12): "För företag som ert, som …" stod i
+#: mejl efter mejl och läses som ett massutskick, oavsett vad som följer.
+_MALL_INGANG = re.compile(
+    r"^(?:för\s+(?:ett\s+)?(?:företag|bolag|verksamheter)\s+som\s+(?:ert|er|ditt|dig|din)\b|för\s+er\s+som\b)",
+    re.IGNORECASE,
+)
+#: Registerfakta i ingången: ett antal (siffra eller ord) följt av anställda,
+#: platschefer, kontor, år …, eller ett grundningsår. "Med 20-25 anställda och
+#: fem platschefer" är fakta mottagaren redan vet. En tid ("15–20 minuter"),
+#: ett klockslag eller ett telefonnummer är inte det.
+_REGISTERFAKTA = re.compile(
+    r"(?:\b(?:\d+|en|ett|två|tre|fyra|fem|sex|sju|åtta|nio|tio|tolv|femton|tjugo|trettio|fyrtio|femtio|hundra)"
+    r"\s*(?:[-–]\s*\d+)?\s+(?:anställda|medarbetare|platschefer|arbetsledare|montörer|kontor|fordon|bilar|"
+    r"maskiner|miljoner|mkr|msek|års?)\b"
+    r"|\b(?:sedan|grundat|grundades|grundade|startade|etablerade?|etablerat)\s+(?:år\s+)?(?:19|20)\d\d\b)",
+    re.IGNORECASE,
+)
+#: Siffror som ord, så att "fem" i mejlet täcker "5" i villkoren och tvärtom.
+_TALORD = {
+    "1": "en", "2": "två", "3": "tre", "4": "fyra", "5": "fem", "6": "sex", "7": "sju", "8": "åtta",
+    "9": "nio", "10": "tio", "12": "tolv", "15": "femton", "20": "tjugo", "25": "tjugofem",
+    "30": "trettio", "40": "fyrtio", "50": "femtio", "60": "sextio", "70": "sjuttio", "80": "åttio",
+    "90": "nittio", "100": "hundra",
+}
+_TAL = re.compile(r"\d+(?:[.,]\d+)?")
 _SUPERLATIV = re.compile(
     r"(?<![a-zåäö])(?:marknadsledande|branschledande|världsledande|revolutionerande|"
     r"banbrytande|unik|unika|unikt|överlägsen|oslagbar|bäst|bästa)(?![a-zåäö])",
@@ -124,6 +153,12 @@ def kontrollera(text: str) -> Kontrollresultat:
         lagg("superlativ", f"superlativ: \"{superlativ.group(0)}\"")
 
     meningar = _meningar(brod)
+    if meningar:
+        if _MALL_INGANG.match(meningar[0]):
+            lagg("mall_ingang", f"ingången är en mall: \"{meningar[0][:60]}\"")
+        fakta = _REGISTERFAKTA.search(meningar[0])
+        if fakta:
+            lagg("registerfakta_i_ingangen", f"registerfakta i ingången (mottagaren vet redan): \"{fakta.group(0)}\"")
     for forra, mening in zip(meningar, meningar[1:]):
         a, b = (re.match(r"[\wÅÄÖåäö]+", m) for m in (forra, mening))
         if a and b and a.group(0).casefold() == b.group(0).casefold():
@@ -147,12 +182,40 @@ def kontrollera(text: str) -> Kontrollresultat:
     return Kontrollresultat(text=text, anmarkningar=fynd)
 
 
+def konstruktion(text: str) -> str:
+    """Ingångens tre första ord: konstruktionen, inte orden efter."""
+    return " ".join(ingang(text).split()[:3])
+
+
+def erbjudande_fynd(text: str, *, villkor: str | None, produkt: str | None) -> list[Anmarkning]:
+    """Erbjudandet intakt (Anton 2026-10-12): kedjans omskrivningar tappade
+    "fem leads utan kostnad" och lämnade en vag fråga. Varje siffra i villkoren
+    (som siffra eller ord) och produktens namn ska stå kvar i brödtexten."""
+    brod = _brodtext(text or "").casefold()
+    fynd: list[Anmarkning] = []
+    saknade: list[str] = []
+    for tal in _TAL.findall(villkor or ""):
+        ord_ = _TALORD.get(tal, "")
+        if tal not in brod and not (ord_ and re.search(rf"\b{ord_}\b", brod)):
+            saknade.append(tal)
+    if saknade:
+        fynd.append(Anmarkning("erbjudande_siffror", f"Stil: villkorens siffror saknas i mejlet: {', '.join(saknade)}",
+                               allvarlig=True))
+    namn = (produkt or "").split(",")[0].strip().casefold()
+    if namn and namn not in brod:
+        fynd.append(Anmarkning("erbjudande_produkt", f"Stil: produkten \"{namn}\" nämns inte", allvarlig=True))
+    return fynd
+
+
 def mot_andra(text: str, andra: Sequence[str]) -> list[Anmarkning]:
     """Batchkontrollen för ETT mejl mot de andra i samma körning."""
     fynd = []
     egen_ingang, egen_uppmaning = ingang(text), uppmaning(text)
     if egen_ingang and any(ingang(t) == egen_ingang for t in andra):
         fynd.append(Anmarkning("samma_ingang", "Stil: samma ingång som ett annat mejl i körningen", allvarlig=True))
+    elif egen_ingang and any(konstruktion(t) == konstruktion(text) for t in andra if ingang(t)):
+        fynd.append(Anmarkning("samma_konstruktion", "Stil: ingången är byggd som ett annat mejl i körningen",
+                               allvarlig=True))
     if egen_uppmaning and any(uppmaning(t) == egen_uppmaning for t in andra):
         fynd.append(Anmarkning("samma_uppmaning", "Stil: samma uppmaning som ett annat mejl i körningen", allvarlig=True))
     return fynd

@@ -9,6 +9,49 @@ möjligt), vad det betyder i koden.
 
 ---
 
+## 2026-10-12 (Anton) — Första utkastet ska vara det personliga, säljande utkastet; Tillbaka till Iris skriver inte om
+
+**Beslut.** Utkastkedjan ska ge referenskvaliteten på första försöket för
+varje lead: en ingång som bygger på en förståelse av verksamheten, inte på
+uppräknade fakta som antal anställda och inte på samma mallfras för alla;
+erbjudandet intakt; varken för kortfattat eller opersonligt. "Flytta
+tillbaka" till Iris ska inte automatiskt skriva om leadsen, och alla tak på
+antal markerade rader i listorna tas bort.
+
+**Resonemang (Anton).** Två utkastkedjor följdes steg för steg (Fiskebäck
+Byggservice, Härlanda Fog & Byggservice). Det platta första utkastet rabblade
+registerfakta ("Med fem platschefer … är jag säker på att") eller öppnade med
+"För företag som ert, som …": samma uppbyggnad för alla, opersonligt och
+spammigt. Personalisera blev mer personligt men mindre säljande och tappade
+erbjudandet. Förbättra blev kortare och rakare med kärnerbjudandet kvar, men
+opersonligt. Först en andra Personalisera landade: det starka erbjudandet kvar
+och en rimlig personalisering byggd enbart på en förståelse för verksamheten.
+De ingångar som känns skrivna för varje bolag är byggda på något ur bolagets
+egna ord och är inte byggda likadant. Flytta tillbaka ska inte processa om
+alla; det är upp till användaren vad han vill göra, och ett tak på 50 (eller
+något annat tak) hör inte hemma i någon lista.
+
+**I koden.** Ingångens mallfraser är borta ur skrivstilen
+(`agent-core/prompts/leads-skrivstil.md`, omgång 4) och grundmallen
+(`leads-systemprompt.md` § 10.2); ingången bygger på en egenskap ur citaten,
+och körningens redan använda ingångar läggs i ärendet. Stilgrinden
+(`app/leads/stilkontroll.py`) fäller mallingång, siffror i ingången,
+antaganden om mottagaren, tappat erbjudande (villkorens siffror och
+produktens namn) och samma konstruktion som ett annat mejl, och
+`run_outreach_draft_v2` skriver om en gång före humanizern när något fälls.
+`POST /api/leads/queue/tillbaka-till-iris` avbryter bara utkasten; de
+request-scheman som bar `max_length` (tillbaka till Iris, schemalägg,
+processa om, flytt till main, massåtgärder) har inget tak, och
+granskningskön hämtar upp till 1000 poster. Produktnamnets kortform ("Iris")
+räknas som träff i produktmatchningen.
+
+*Att veta (agenten):* de 27 av 100 Snajp-leads som saknade utkast efter
+omkörningen 2026-10-11 föll i researchen som nivå C: 21 på produktmatchningen
+("ingen av kundens produkter passar" eller "behovet kunde inte beläggas med
+ett citat") och 6 på kriterierna om B2B- respektive B2C-kunder. Före
+omkörningen var de nivå B, bara för att produktgrinden då inte såg
+produktlistan.
+
 ## 2026-10-10 (Anton) — Org.nr stoppar inte utskick; utskick går från development
 
 **Beslut.** Tvåvägssynken gäller bara körningar och ärenden i databasen;

@@ -21,11 +21,14 @@ Mejlet ska läsas som ett erbjudande som är skrivet just för dem och som är f
 
 Tre korta stycken och 50–90 ord i brödtexten, i den här ordningen: ingången (en mening, högst två), erbjudandet (två till tre meningar) och handlingen (en mening). Igenkänningsfrågan nedan är valfri och står i så fall direkt efter ingången, aldrig sist.
 
-**1. Ingången: deras typ av arbete och vad som skaver.** Rama in en vanlig utmaning i deras bransch eller i den sortens arbete de gör, sagt om branschen och inte som ett påstående om just dem.
-- "För företag som ert inom [bransch] …"
-- "När man jobbar med [typ av jobb], som ni gör, blir [konkret moment] lätt det som äter kvällarna."
-- "I en verkstad med ett litet team är det ofta [konkret moment] som får vänta."
-Har researchen en verklig signal (ny ägare, nyanställning, ny ort, ny tjänst) väver du in den i ingången som deras situation, inte som "jag såg": "Efter ett ägarbyte är det ofta nu man ser över hur [moment] sköts."
+**1. Ingången: en egenskap ur deras egen beskrivning av verksamheten, och vad som skaver i just det.** Hämta EN konkret egenskap ur citaten: vem de arbetar för (beställare, fastighetsägare, privatpersoner och företag), vad de lägger vikt vid (nära relationer, helhetsåtaganden, snabba leveranser) eller hur de arbetar (egna montörer, projekt från ritning till nyckel). Säg sedan vad som brukar skava för den sortens verksamhet, i det moment agenten löser. Det är en iakttagelse om att driva en sådan verksamhet, inte ett påstående om dem och inte en siffra: aldrig antal anställda, platschefer, grundningsår, omsättning eller orten ensam. En ingång som räknar upp fakta mottagaren redan vet ("Med 20 anställda och fem platschefer vet jag att …") läses som ett register, inte som förståelse, och "är jag säker på", "kan jag tänka mig" och "vet jag att" är antaganden om dem.
+
+Konstruktionen varierar från mejl till mejl. Några former, som former och aldrig som ord:
+- verksamheten först: "Ett byggföretag som arbetar nära sina beställare har sällan tid över till att leta nästa projekt."
+- momentet först: "Att hinna hitta nästa företagskund vid sidan av pågående jobb är det som oftast får vänta när man säljer till både privatpersoner och företag."
+- en fråga om momentet: "Hur många av era kvällar går åt till kvittona från veckans jobb?"
+- situationen efter en signal: "Efter ett ägarbyte är det ofta nu man ser över hur [moment] sköts."
+Aldrig "För företag som ert …" eller "För ett företag som ert …": den formen stod i mejl efter mejl i oktober 2026 och läses som ett massutskick oavsett vad som följer. Och aldrig samma konstruktion som ett annat mejl i körningen: de ingångar som redan använts står i ärendet under "Ingångar som redan används", och en kodgrind jämför.
 
 **Igenkänningen (valfri).** En kort fråga som låter mottagaren känna igen sig själv, och som nämner det konkreta momentet från ingången: "Blir offerterna liggande hos er också?" "Är det kvällarna som går åt till kvittona?" Frågan ersätter varje påstående om deras problem. En allmän fråga som skulle passa i vilket mejl som helst ("Känner ni igen er?") låter som en mall.
 
@@ -33,13 +36,14 @@ Har researchen en verklig signal (ny ägare, nyanställning, ny ort, ny tjänst)
 
 **3. Handlingen.** En mening som säger exakt vad de gör för att få erbjudandet, så enkelt att det kostar mindre att svara ja än att låta bli: svara "ja", följ en länk, vidarebefordra något, eller svara så bokar vi. Den hänger ihop med erbjudandet ("Svara 'ja' så skickar jag de fem bolagen i veckan."). Ingen fråga, ingen press, och ingen länk som inte står i villkoren eller affärskontexten.
 
-Är erbjudandet tydligt i stycke 2 (något gratis, en garanti eller en begränsad plats) bär det mejlet. Erbjudandet sägs konkret med villkorens siffror, inte som "ett kort samtal för att se hur det skulle kunna fungera".
+Är erbjudandet tydligt i stycke 2 (något gratis, en garanti eller en begränsad plats) bär det mejlet. Erbjudandet sägs konkret med villkorens siffror, inte som "ett kort samtal för att se hur det skulle kunna fungera". Det överlever varje omskrivning: villkorens siffror och produktens namn står kvar oavsett hur ingången skrivs om, och en kodgrind kontrollerar det.
 
 ## Ordval
 
 | Skriv inte | Skriv hellre |
 |---|---|
-| Jag ser att ni … / Jag såg att ni … | För företag som ert … / När man jobbar med … |
+| Jag ser att ni … / Jag såg att ni … / För företag som ert … | en iakttagelse om deras sorts verksamhet, byggd på en egenskap ur deras egna ord (se Ingången) |
+| Med [antal] anställda / platschefer / sedan [år] … | vem de arbetar för, vad de lägger vikt vid, hur de arbetar |
 | Vi har skapat / utvecklat … | Vår [agent] [gör X] åt er … |
 | Snajps X är en AI-agent som automatiserar … | Vår X [plockar upp / svarar på / hittar] … åt er |
 | effektivisera, effektivitet, optimera | mer tid till [deras arbete], slippa [konkret moment] |
@@ -101,7 +105,7 @@ Vidarebefordra fem kvitton till [adressen i villkoren], så får ni tillbaka dem
 "Jag ser att ni har hjälpt maskinägare och entreprenörer med hjullastare och grävmaskiner sedan 2014. Många företag i er situation upplever att det tar mycket tid att hitta och kvalificera potentiella kunder manuellt. Snajps AI-agent Iris kan hitta och kvalificera potentiella kunder åt er."
 
 **Efter:**
-"För ett företag som säljer maskiner till entreprenörer kommer de bästa affärerna ofta från företag man aldrig hunnit kontakta.
+"De bästa affärerna för den som säljer maskiner till entreprenörer kommer ofta från företag man aldrig hunnit kontakta.
 
 Vår agent Iris hittar dem åt er. Ni får fem entreprenörer som passar er, med kontaktperson och ett färdigt första mejl till var och en, utan kostnad.
 
@@ -122,3 +126,7 @@ Varv 2 av samma prov: 42 av 54 mejl från säljare av tjänster (webbyrå, redov
 ### Omgång 3 – Anton 2026-10-10
 
 Exemplen var fortfarande för utdragna och informativa, utan ett tillräckligt erbjudande. Grundkänslan i varje mejl, oavsett erbjudande: attraktivt, perfekt just för dem, det löser deras problem och är för bra att ignorera. Mejlen ska vara kortare (tre stycken, 50–90 ord) och erbjudandet tydligt och konkret. De slutade alla med en öppen fråga som är lätt att tacka nej till; nu slutar de med en enkel handling med litet motstånd: följ länken och testa utan kostnad, svara 'ja' så skickar vi, eller svara så bokar vi ett möte. Kärnerbjudandena är tre: något gratis att testa (fem kvalificerade leads, fem färdiga kvitton, en demolänk för supporten), en garanti med konkreta siffror och förlängd provperiod om de inte nås, och en begränsad pilot med rabatt. Exempel: https://claude.ai/artifact/AvqAtFiVf7h3Rupe5E6Ryz.
+
+### Omgång 4 – Anton 2026-10-12
+
+Två utkastkedjor i development (Fiskebäck Byggservice, Härlanda Fog & Byggservice) följdes steg för steg. Första utkastet rabblade registerfakta som ingång ("Med fem platschefer och en etablerad verksamhet … är jag säker på att") eller öppnade som en mall ("För företag som ert, som säljer till andra företag, är det ofta en utmaning att hitta nya kunder"): samma konstruktion i mejl efter mejl, opersonligt och spammigt. Personalisera gjorde mejlet mer personligt men mindre säljande och tappade erbjudandet (ingen "fem leads utan kostnad", bara "skulle ni vilja se ett par exempel?"). Förbättra blev kortare och rakare med kärnerbjudandet kvar, men opersonligt. Först en andra Personalisera landade: det starka erbjudandet kvar, och en ingång som bygger på en förståelse av verksamheten ("med fokus på nära relationer med beställare och fastighetsägare", "med både privatpersoner och företag som kunder") utan att räkna upp självklara fakta som antal anställda. Det som skiljer de goda ingångarna från de dåliga är att de är byggda på en egenskap ur bolagets egna ord, och att de inte är byggda likadant. Beställningen: det första utkastet ska landa där för varje lead. Därför är ingångens mallfraser borta ur filen och grundmallen, ingången bygger på en egenskap ur citaten, konstruktionen varierar (de redan använda ingångarna i körningen står i ärendet), och en stilgrind i kod (`app/leads/stilkontroll.py`) fäller mallingång, siffror i ingången, antaganden om mottagaren, ett tappat erbjudande och samma konstruktion som ett annat mejl, med en omskrivning före humanizern.
