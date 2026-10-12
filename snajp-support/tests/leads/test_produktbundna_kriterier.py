@@ -3,7 +3,7 @@ måste-kriterier (B2B för Iris, B2C för Supportagenten, kvitton för
 Kvittohanteraren), och varje bolag skulle uppfylla alla tre. Ett kriterium
 bundet till en annan produkt än den researchen valde gäller inte leadet."""
 
-from app.leads.bedomning import MISS, OKAND, TRAFF, bedom, bunden_till_annan_produkt
+from app.leads.bedomning import MISS, OKAND, TRAFF, bedom, bunden_till_annan_produkt, produkt_ur_kriterierna
 
 PRODUKTER = ["Iris, leadsagenten", "Supportagenten", "Kvittohanteraren"]
 PROFIL = {
@@ -43,3 +43,11 @@ def test_bara_den_valda_produktens_kriterium_galler():
     assert any("Supportagenten" in d for d in utan["disqualifiers"])
     assert {r["nyckel"]: r["utfall"] for r in utan["score_breakdown"]}["k1"] == TRAFF
     assert MISS not in {r["utfall"] for r in utan["score_breakdown"] if r["nyckel"] == "k1"}
+
+
+def test_produkten_harleds_ur_ett_uppfyllt_bundet_kriterium():
+    fynd = {"postnummer": "421 32", "bedomningar": [JA_B2B, KP]}
+    assert produkt_ur_kriterierna(PROFIL, fynd, PRODUKTER, KORPUS) == "Iris, leadsagenten"
+    # Utan citat i korpusen räknas träffen inte, och en okänd gör det inte heller.
+    assert produkt_ur_kriterierna(PROFIL, fynd, PRODUKTER, "annan text") is None
+    assert produkt_ur_kriterierna(PROFIL, {"bedomningar": [{**JA_B2B, "utslag": "okänt"}]}, PRODUKTER, KORPUS) is None

@@ -386,11 +386,19 @@ async def _research_v2(
     # materialet + de mätta webbsignalerna. qualified/icp_fit/disqualifiers
     # skrivs tillbaka i fynd så att eskaleringen och utkastgrinden läser
     # samma sak som tidigare.
-    from ..leads.bedomning import bedom, verifierade_belagg
+    from ..leads.bedomning import bedom, produkt_ur_kriterierna, verifierade_belagg
 
     # Kunden har en produktlista och researchen valde ingen av dem: då finns
-    # inget att sälja till bolaget (produktmatchningen fäller).
+    # inget att sälja till bolaget (produktmatchningen fäller). Men ett
+    # produktbundet kriterium som bolaget uppfyller med citat ("säljer B2B
+    # för Iris") ÄR ett produktval, även när modellen lämnade fältet tomt
+    # (omkörningen 2026-10-12). Skrivs in i fynd så att utkastet ser det.
     vald = _vald_produkt(fynd, produkter) if produkter else None
+    if vald is None and produkter:
+        harledd = produkt_ur_kriterierna(profil, fynd, [p["namn"] for p in produkter], f"{material}\n{webbfakta_text}")
+        if harledd:
+            fynd["produkt"] = harledd
+            vald = _vald_produkt(fynd, produkter)
     produkt_vald = vald is not None if produkter else None
     bedomning = bedom(
         profil, fynd, korpus=f"{material}\n{webbfakta_text}", kandidat=prospect_row, webbrevision=webbrevision,

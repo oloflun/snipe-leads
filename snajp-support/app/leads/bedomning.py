@@ -244,17 +244,39 @@ def _kortnamn(produkt: str) -> str:
     return produkt.split(",")[0].split("(")[0].strip().casefold()
 
 
-def bunden_till_annan_produkt(k: dict[str, Any], produkt: str | None, produkter: Sequence[str]) -> str | None:
-    """Produkten ett kriterium är bundet till ("… för Supportagenten"), när
-    den är en annan än den researchen valde. None när kriteriet gäller alla
-    produkter, gäller den valda, eller när ingen produkt är vald."""
-    if not produkt or len(produkter) < 2:
-        return None
+def bunden_produkt(k: dict[str, Any], produkter: Sequence[str]) -> str | None:
+    """Produkten ett kriterium är bundet till ("… för Supportagenten"), eller
+    None när kriteriet gäller alla produkter."""
     text = str(k.get("text") or "").casefold()
-    vald = _kortnamn(produkt)
     for p in produkter:
         kort = _kortnamn(p)
-        if kort and kort != vald and re.search(rf"\bför\s+{re.escape(kort)}\b", text):
+        if kort and re.search(rf"\bför\s+{re.escape(kort)}\b", text):
+            return p
+    return None
+
+
+def bunden_till_annan_produkt(k: dict[str, Any], produkt: str | None, produkter: Sequence[str]) -> str | None:
+    """Kriteriets produkt när den är en annan än den researchen valde. None
+    när kriteriet gäller alla produkter, gäller den valda, eller när ingen
+    produkt är vald."""
+    if not produkt or len(produkter) < 2:
+        return None
+    bunden = bunden_produkt(k, produkter)
+    return bunden if bunden and _kortnamn(bunden) != _kortnamn(produkt) else None
+
+
+def produkt_ur_kriterierna(
+    profil: dict[str, Any], fynd: dict[str, Any], produkter: Sequence[str], korpus: str
+) -> str | None:
+    """Produkten vars bundna kriterium bolaget uppfyller med belagt citat, när
+    researchen inte valde någon produkt själv. Snajps omkörning 2026-10-12:
+    Fiskebäck fick "säljer till andra företag (B2B) för Iris" som träff med
+    citat, men produkt null, och föll på produktmatchningen."""
+    utslag = {str(b.get("kriterie_id")): b for b in fynd.get("bedomningar") or [] if isinstance(b, dict)}
+    for k in profil.get("kriterier") or []:
+        p = bunden_produkt(k, produkter)
+        b = utslag.get(str(k.get("id")), {})
+        if p and str(b.get("utslag") or "").casefold() == "ja" and verifierade_belagg(b.get("belagg"), korpus):
             return p
     return None
 
