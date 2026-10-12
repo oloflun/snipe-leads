@@ -76,6 +76,12 @@ def normalisera(val: Any) -> dict[str, str] | None:
     return ren
 
 
+def _persongrupp(sig: dict[str, str]) -> str:
+    """Signaturens första grupp (namn, titel, telefon, e-post): det som känner
+    igen en föråldrad signatur vars plats- eller bolagsrad ändrats."""
+    return "\n".join(sig[f] for f in _TEXTFALT if sig.get(f))
+
+
 def bygg_signaturtext(sig: dict[str, str]) -> str:
     """Textversionen — den som köas, granskas och skickas som textdel.
 
@@ -175,6 +181,11 @@ def dela_utkast(body: str, sig: dict[str, str] | None) -> tuple[str, str]:
     sigtext = bygg_signaturtext(sig) if sig else ""
     if sigtext and (i := text.find(sigtext)) >= 0:
         kandidater.append(i)
+    elif sig and (pg := _persongrupp(sig)) and (i := text.find(pg)) >= 0:
+        # En föråldrad signatur (samma person, annan bolagsrad eller ort):
+        # hör till svansen, så att sla_ihop kan byta den (Anton 2026-10-12:
+        # "Snajp AB" → "Snajp Sverige" i 77 köade utkast).
+        kandidater.append(i)
     if (i := text.find(_FOTSTART)) >= 0:
         kandidater.append(i + 1)
     if not kandidater:
@@ -194,6 +205,12 @@ def sla_ihop(
     if not svans:
         return brodtext
     sigtext = bygg_signaturtext(sig) if sig else ""
+    if sig and sigtext and not svans.startswith(sigtext):
+        pg = _persongrupp(sig)
+        if pg and svans.startswith(pg):
+            # Föråldrad signatur: byt ut den mot den aktuella, fram till foten.
+            j = svans.find(_FOTSTART)
+            svans = sigtext + (svans[j:] if j >= 0 else "")
     if sigtext and svans.startswith(sigtext):
         resten = svans[len(sigtext) :]
         return med_signatur(brodtext, sig, halsning=halsning).rstrip() + resten  # type: ignore[arg-type]

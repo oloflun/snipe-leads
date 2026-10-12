@@ -244,3 +244,25 @@ async def test_svepet_rattar_alla_osanda_utkast_men_aldrig_skickade():
         # Idempotent: andra svepet rättar noll.
         assert (await normalisera_tenantens_utkast(storage, DEFAULT_TENANT_ID))["rattade"] == 0
 
+
+
+def test_svepet_byter_en_foraldrad_signatur():
+    """Anton 2026-10-12: "Snajp AB" -> "Snajp Sverige" i signaturen ska nå
+    de redan köade utkasten. En signatur med samma person men annan
+    bolagsrad hör till svansen och byts mot den aktuella, före foten."""
+    from app.leads.signatur import dela_utkast, sla_ihop
+
+    gammal = {"namn": "Sebastian Bergman", "titel": "Snajp Support", "ort": "Umeå", "bolag": "Snajp AB"}
+    ny = {**gammal, "bolag": "Snajp Sverige"}
+    body = (
+        "Hej,\n\nBrödtext.\n\nVänliga hälsningar,\n"
+        "Sebastian Bergman\nSnajp Support\n\nUmeå\n\nSnajp AB\n\n--\nSnajp\nFoten."
+    )
+    brodtext, svans = dela_utkast(body, ny)
+    assert brodtext.endswith("Vänliga hälsningar,") and svans.startswith("Sebastian Bergman")
+    resultat = sla_ihop(brodtext, svans, ny, halsning="Vänliga hälsningar,")
+    assert "Snajp Sverige" in resultat and "Snajp AB" not in resultat
+    assert resultat.endswith("--\nSnajp\nFoten.")
+    # Idempotent: ett andra varv ändrar inget.
+    b2, s2 = dela_utkast(resultat, ny)
+    assert sla_ihop(b2, s2, ny, halsning="Vänliga hälsningar,") == resultat
