@@ -110,7 +110,9 @@ _SUPERLATIV = re.compile(
 )
 #: Kolon följt av en uppräkning i samma mening. Inte klockslag (10:30) och
 #: inte ett PS.
-_KOLONLISTA = re.compile(r"(?<!\d):(?!\d)[^.?!\n]*(?:,|\soch\s|\ssamt\s)")
+#: Kolonet följs av blanksteg: "brf:er och allmännyttan" är ingen uppräkning
+#: (facitutkastet Fiskebäck 2026-10-12).
+_KOLONLISTA = re.compile(r"(?<!\d):\s(?!\d)[^.?!\n]*(?:,|\soch\s|\ssamt\s)")
 
 
 def _brodtext(text: str) -> str:

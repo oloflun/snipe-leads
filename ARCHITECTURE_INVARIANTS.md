@@ -849,6 +849,22 @@ Redis är snabbvägen.
 Test: snajp-support/tests/invariants/test_inv_job_003.py
 Införd: 2026-10-01 · Upphävs endast genom waiver
 
+### INV-LEADS-UTKAST-001 — Iris första mejl håller facitet från 2026-10-12
+Tolv verkliga utkast ur Snajps granskningskö, godkända av Anton som perfekta
+("alla utkast är perfekta nu, lås in detta"), är facit i
+`snajp-support/tests/leads/fixtures/utkastfacit_2026-10-12.json`. Varje
+facitutkast passerar stilgrinden (`app/leads/stilkontroll.py`) utan andra
+fynd än de villkoren själva orsakar, har ingången skriven till mottagaren i
+andra person utan "man", erbjudandets siffror och produkt kvar, och en
+handling sist. Facitutkasten börjar olika. De fel Anton pekade ut (en allmän
+ingång med etikett som "som ni gör", registerfakta, antaganden om mottagaren,
+tappat erbjudande) fälls fortfarande. Varför: skrivstilen och grinden
+justerades fyra gånger på ett dygn innan utkasten satt; utan ett facit i
+kod glider nästa justering tillbaka utan att någon märker det.
+Referens: `docs/UTKASTKEDJAN-REFERENS.md`.
+Test: snajp-support/tests/leads/test_utkastfacit_2026_10_12.py
+Införd: 2026-10-12 · Upphävs endast genom waiver
+
 ## Roadmap
 
 Ids this plan will introduce, in the order `Genomförandeordning` builds them. Not yet enforced by CI.

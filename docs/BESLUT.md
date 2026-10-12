@@ -9,6 +9,22 @@ möjligt), vad det betyder i koden.
 
 ---
 
+## 2026-10-12 (Anton) — Utkasten är perfekta: kedjan låses som referens
+
+**Beslut.** "Alla utkast är perfekta nu, lås in detta och dokumentera exakta
+upplägget, strukturen och vad du ändrade för att komma hit, lägg det i
+projektmappen som referens för utkastsförbättring."
+
+**I koden.** Tolv verkliga utkast ur Snajps granskningskö är facit
+(`snajp-support/tests/leads/fixtures/utkastfacit_2026-10-12.json`), låsta av
+INV-LEADS-UTKAST-001 (`tests/leads/test_utkastfacit_2026_10_12.py`): varje
+facitutkast passerar stilgrinden, har ingången i andra person utan "man",
+erbjudandet kvar och en handling sist; facitutkasten börjar olika; de
+utpekade felen fälls fortfarande. Referensen med kedjan steg för steg,
+strukturen, fel/rätt-tabellen, ändringarna och arbetsgången för vidare
+förbättring: `docs/UTKASTKEDJAN-REFERENS.md`. Facitet ändras bara när Anton
+godkänt nya referenser.
+
 ## 2026-10-12 (Anton) — Första utkastet ska vara det personliga, säljande utkastet; Tillbaka till Iris skriver inte om
 
 **Beslut.** Utkastkedjan ska ge referenskvaliteten på första försöket för

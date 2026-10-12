@@ -1,0 +1,106 @@
+{
+ "om": "Referensutkast ur Snajps granskningskö 2026-10-12, godkända av Anton som perfekta. Hälsningsraden är normaliserad till 'Hej,' (sätts i kod), signatur och fot borttagna.",
+ "produkter": [
+  "Iris, leadsagenten",
+  "Supportagenten",
+  "Kvittohanteraren"
+ ],
+ "utkast": [
+  {
+   "bolag": "BizBitz Technologies AB",
+   "erbjudande": "gratis_prov",
+   "produkt": "Iris, leadsagenten",
+   "villkor": "Fem kvalificerade leads i er region, med kontaktperson och ett färdigt första mejl till vart och ett, helt utan kostnad och utan att det binder er till något. Handling: svara \"ja\" på mejlet, så skickar vi de fem inom två arbetsdagar.",
+   "amne": "Nya företagskunder till BizBitz Technologies",
+   "brodtext": "Hej,\n\nAtt utveckla system, verktyg och tjänster som stärker era kunders konkurrensfördelar är er kärnverksamhet, men att hitta nya företagsuppdrag kan ta tid från det arbetet.\n\nVår agent Iris hittar och kvalificerar nya företagskunder åt er. Ni får fem kvalificerade leads i er region, med kontaktperson och ett färdigt första mejl till vart och ett, helt utan kostnad och utan att det binder er till något.\n\nSvara \"ja\" på mejlet, så skickar vi de fem inom två arbetsdagar."
+  },
+  {
+   "bolag": "Eketräs Trafikskola AB",
+   "erbjudande": "gratis_prov",
+   "produkt": "Supportagenten",
+   "villkor": "Agentens svar på era fem vanligaste kundfrågor, utifrån era egna villkor, helt utan kostnad och utan att något behöver kopplas in. Handling: svara på mejlet med de fem frågorna och era villkor, så får ni tillbaka agentens svar inom en arbetsdag.",
+   "amne": "Eketräs Trafikskola: kundfrågor",
+   "brodtext": "Hej,\n\nAtt hjälpa elever att bli trygga förare är ert mål, men att svara på återkommande kundfrågor i receptionen tar tid från det arbetet.\n\nVår Supportagent kan avlasta er genom att svara på återkommande kundfrågor i chatt och mejl dygnet runt, utifrån er egen information. Ni får agentens svar på era fem vanligaste kundfrågor, utifrån era egna villkor, helt utan kostnad och utan att något behöver kopplas in.\n\nSvara på mejlet med de fem frågorna och era villkor, så får ni tillbaka agentens svar inom en arbetsdag."
+  },
+  {
+   "bolag": "Fiskebäck Byggservice AB",
+   "erbjudande": "gratis_prov",
+   "produkt": "Iris, leadsagenten",
+   "villkor": "Fem kvalificerade leads i er region, med kontaktperson och ett färdigt första mejl till vart och ett, helt utan kostnad och utan att det binder er till något. Handling: svara \"ja\" på mejlet, så skickar vi de fem inom två arbetsdagar.",
+   "amne": "Nya företagsuppdrag, Fiskebäck Byggservice",
+   "brodtext": "Hej,\n\nMed ert fokus på nära relationer med beställare och fastighetsägare, och ert arbete med totalentreprenad för fastighetsägare, brf:er och allmännyttan, hur hinner ni då hitta nya företagsuppdrag som matchar er verksamhet?\n\nVår Iris hittar och kvalificerar nya företagskunder åt er. Ni får fem kvalificerade leads i er region, med kontaktperson och ett färdigt första mejl till var och en, helt utan kostnad och utan att det binder er till något.\n\nSvara \"ja\" på mejlet, så skickar vi de fem inom två arbetsdagar."
+  },
+  {
+   "bolag": "HÄRLANDA FOG & BYGGSERVICE AB",
+   "erbjudande": "gratis_prov",
+   "produkt": "Iris, leadsagenten",
+   "villkor": "Fem kvalificerade leads i er region, med kontaktperson och ett färdigt första mejl till vart och ett, helt utan kostnad och utan att det binder er till något. Handling: svara \"ja\" på mejlet, så skickar vi de fem inom två arbetsdagar.",
+   "amne": "Nya företagsuppdrag till Härlanda Fog & Byggservice",
+   "brodtext": "Hej,\n\nMed er expertis inom brandtätning och mjukfogning för privatpersoner, fastighetsägare, bostadsrättsföreningar och företag i Västra Götalands län kan det vara en utmaning att hitta nya företagsuppdrag utan att det tar tid från det dagliga arbetet.\n\nVår agent Iris hittar nya företagskunder åt er. Ni får fem kvalificerade leads i er region, med kontaktperson och ett färdigt första mejl till var och en, helt utan kostnad och utan att det binder er till något.\n\nSvara \"ja\" på mejlet, så skickar vi de fem inom två arbetsdagar."
+  },
+  {
+   "bolag": "Preparatus AB",
+   "erbjudande": "garanti",
+   "produkt": "Iris, leadsagenten",
+   "villkor": "Vi lovar minst 10 nya kunddialoger, alltså svar från intresserade företag, inom 90 dagar. Blir det färre förlänger vi provperioden utan kostnad tills ni har fått dem, så länge ni har godkänt utkasten i granskningen. Handling: svara på mejlet, så bokar vi 20 minuter där vi visar vilka företag Iris redan hittar åt er.",
+   "amne": "Nya kunddialoger till Preparatus",
+   "brodtext": "Hej,\n\nMed ert fokus på att utveckla organisationer med ledning, ledarskap och agil HR, blir arbetet med att hitta nya företagskunder ofta något som får vänta.\n\nVår Iris lovar minst 10 nya kunddialoger, alltså svar från intresserade företag, inom 90 dagar. Blir det färre förlänger vi provperioden utan kostnad tills ni har fått dem, så länge ni har godkänt utkasten i granskningen.\n\nSvara på mejlet så bokar vi 20 minuter där vi visar vilka företag Iris redan hittar åt er."
+  },
+  {
+   "bolag": "Sorelle AB",
+   "erbjudande": "pilot",
+   "produkt": "Kvittohanteraren",
+   "villkor": "Vi tar in 20 företag i en pilot för Kvittohanteraren. Vi tar bara 20 eftersom vi sätter upp varje företag personligen. Pilotföretagen får 50 % rabatt första året om de vill fortsätta, och 25 % så länge de stannar. Handling: svara \"pilot\" på mejlet, så håller vi en plats åt er.",
+   "amne": "Sorelle: kvittohantering för er kaffeverksamhet",
+   "brodtext": "Hej,\n\nAtt hantera kvitton från försäljning av premiumkaffe och uthyrning av kaffebar tar tid från er kärnverksamhet.\n\nVi tar in 20 företag i en pilot för Kvittohanteraren. Ni får 50 % rabatt första året om ni vill fortsätta, och 25 % så länge ni stannar. Vi tar bara in 20 företag eftersom vi sätter upp varje företag personligen.\n\nSvara \"pilot\" på mejlet, så reserverar vi en plats åt er."
+  },
+  {
+   "bolag": "Stenstaden Mark och Entreprenad AB",
+   "erbjudande": "garanti",
+   "produkt": "Iris, leadsagenten",
+   "villkor": "Vi lovar minst 10 nya kunddialoger, alltså svar från intresserade företag, inom 90 dagar. Blir det färre förlänger vi provperioden utan kostnad tills ni har fått dem, så länge ni har godkänt utkasten i granskningen. Handling: svara på mejlet, så bokar vi 20 minuter där vi visar vilka företag Iris redan hittar åt er.",
+   "amne": "Nya kunddialoger till Stenstaden Mark och Entreprenad",
+   "brodtext": "Hej,\n\nEra projekt inom markarbeten, grundläggningar och enskilda avlopp för både företag och privatpersoner i Sundsvall genererar många förfrågningar som kan vara svåra att hinna med när ni är ute på jobb.\n\nVår agent Iris hittar och kvalificerar nya företagskunder åt er. Vi lovar minst 10 nya kunddialoger, alltså svar från intresserade företag, inom 90 dagar. Blir det färre förlänger vi provperioden utan kostnad tills ni har fått dem, så länge ni har godkänt utkasten i granskningen.\n\nSvara på mejlet, så bokar vi 20 minuter där vi visar vilka företag Iris redan hittar åt er."
+  },
+  {
+   "bolag": "Stöcke Svets Aktiebolag",
+   "erbjudande": "gratis_prov",
+   "produkt": "Kvittohanteraren",
+   "villkor": "Fem av era kvitton färdiga att ladda ned till bokföringen, med belopp, moms och konto, helt utan kostnad. Handling: svara på mejlet med fem kvitton bifogade, så får ni tillbaka dem färdiga inom en arbetsdag.",
+   "amne": "Kvitton och bokföring, Stöcke Svets",
+   "brodtext": "Hej,\n\nAtt samla in och hantera kvitton för bokföringen tar tid från ert kärnarbete, särskilt när ni driver företaget med fokus på svetsning, smide och industriservice.\n\nVår Kvittohanterare läser era kvitton och fakturor, föreslår kontering och exporterar dem till bokföringen. Svara på mejlet med fem bifogade kvitton, så får ni tillbaka dem färdiga inom en arbetsdag, helt utan kostnad."
+  },
+  {
+   "bolag": "Svensk Rivtjänst AB",
+   "erbjudande": "garanti",
+   "produkt": "Iris, leadsagenten",
+   "villkor": "Vi lovar minst 10 nya kunddialoger, alltså svar från intresserade företag, inom 90 dagar. Blir det färre förlänger vi provperioden utan kostnad tills ni har fått dem, så länge ni har godkänt utkasten i granskningen. Handling: svara på mejlet, så bokar vi 20 minuter där vi visar vilka företag Iris redan hittar åt er.",
+   "amne": "Nya kunddialoger för Svensk Rivtjänst",
+   "brodtext": "Hej,\n\nAtt som totalentreprenör inom rivning i västra Sverige, med fokus på att göra projekten smärtfria för kunden, hitta nya uppdrag som stämmer med er filosofi kan ta tid.\n\nVår Iris lovar minst 10 nya kunddialoger, alltså svar från intresserade företag, inom 90 dagar. Blir det färre förlänger vi provperioden utan kostnad tills ni har fått dem, så länge ni har godkänt utkasten i granskningen.\n\nSvara på mejlet, så bokar vi 20 minuter där vi visar vilka företag Iris redan hittar åt er."
+  },
+  {
+   "bolag": "Tingstad Måleri AB",
+   "erbjudande": "gratis_prov",
+   "produkt": "Iris, leadsagenten",
+   "villkor": "Fem kvalificerade leads i er region, med kontaktperson och ett färdigt första mejl till vart och ett, helt utan kostnad och utan att det binder er till något. Handling: svara \"ja\" på mejlet, så skickar vi de fem inom två arbetsdagar.",
+   "amne": "Nya uppdrag till Tingstad Måleri",
+   "brodtext": "Hej,\n\nEra uppdrag, som sträcker sig från villor till stora fastighets- och nybyggnadsprojekt, ofta åt kommuner och byggentreprenörer, gör att det är en utmaning att hinna hitta nya som matchar er verksamhet.\n\nVår agent Iris hittar dem åt er. Ni får fem kvalificerade leads i er region, med kontaktperson och ett färdigt första mejl till var och en, helt utan kostnad och utan att det binder er till något.\n\nSvara \"ja\" på mejlet, så skickar jag de fem inom två arbetsdagar."
+  },
+  {
+   "bolag": "WITEKK SVERIGE AB",
+   "erbjudande": "garanti",
+   "produkt": "Iris, leadsagenten",
+   "villkor": "Vi lovar minst 10 nya kunddialoger, alltså svar från intresserade företag, inom 90 dagar. Blir det färre förlänger vi provperioden utan kostnad tills ni har fått dem, så länge ni har godkänt utkasten i granskningen. Handling: svara på mejlet, så bokar vi 20 minuter där vi visar vilka företag Iris redan hittar åt er.",
+   "amne": "Nya företagsuppdrag till Witekk Sverige",
+   "brodtext": "Hej,\n\nAtt hitta nya företagsuppdrag, vid sidan av era värmepumpar och fastighetsautomation, tar ofta tid från er kärnverksamhet.\n\nVår agent Iris hittar dem åt er. Vi lovar minst tio nya kunddialoger, alltså svar från intresserade företag, inom 90 dagar. Om det blir färre förlänger vi provperioden utan kostnad tills ni har fått dem, förutsatt att ni har godkänt utkasten i granskningen.\n\nSvara på mejlet, så bokar vi 20 minuter där vi visar vilka företag Iris redan hittar åt er."
+  },
+  {
+   "bolag": "ÅW Hemprodukter AB",
+   "erbjudande": "pilot",
+   "produkt": "Supportagenten",
+   "villkor": "Vi tar in 20 företag i en pilot för Supportagenten. Vi tar bara 20 eftersom vi sätter upp varje företag personligen. Pilotföretagen får 50 % rabatt första året om de vill fortsätta, och 25 % så länge de stannar. Handling: svara \"pilot\" på mejlet, så håller vi en plats åt er.",
+   "amne": "Kundfrågor och ÅW Hemprodukter",
+   "brodtext": "Hej,\n\nVem hos er svarar på alla kundfrågor om köksdesign och installation, när ni följer kunden genom hela processen från måttagning till färdigt kök?\n\nVår Supportagent svarar på återkommande kundfrågor i chatt och mejl dygnet runt, utifrån er egen kunskapsbas. Vi tar bara in 20 företag i en pilot för Supportagenten, eftersom vi sätter upp varje företag personligen. Pilotföretagen får 50 % rabatt första året om de vill fortsätta, och 25 % så länge de stannar.\n\nSvara \"pilot\" på mejlet, så reserverar vi en plats åt er."
+  }
+ ]
+}

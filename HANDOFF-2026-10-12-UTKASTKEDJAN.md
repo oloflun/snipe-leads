@@ -219,3 +219,12 @@ Fyra faller fortfarande som nivå C efter fyra försök var: DS Flexhal,
 Nyströms Byggtjänst, Z Marktjänst (B2B för Iris ej styrkt med citat) och
 SafeTeam (B2C för Supportagenten ej styrkt). `LEADS_DAILY_TOKEN_BUDGET` i
 development står på 48 M.
+
+## Låst som referens (Anton: "alla utkast är perfekta nu")
+
+Facit: `snajp-support/tests/leads/fixtures/utkastfacit_2026-10-12.json` (tolv
+utkast ur kön), låst av INV-LEADS-UTKAST-001
+(`tests/leads/test_utkastfacit_2026_10_12.py`). Referensen med kedjan steg
+för steg, strukturen, fel/rätt, ändringarna och arbetsgången för vidare
+förbättring: `docs/UTKASTKEDJAN-REFERENS.md`. Läs den innan du rör
+skrivstilen, grundmallen eller stilgrinden.
