@@ -33,7 +33,7 @@ from railway_provision import env_read  # noqa: E402
 from app.leads import erbjudanden, stilkontroll as stil  # noqa: E402
 
 SQL = """
-select q.id queue_id, q.status, q.created_at, p.company_name, p.contact_name, p.contact_email,
+select q.id queue_id, q.status, q.created_at, p.id prospect_id, p.company_name, p.contact_name, p.contact_email,
        m.subject, m.body, o.name erbjudande
   from send_queue q
   join outreach_threads t on t.id = q.thread_id
@@ -92,7 +92,7 @@ def main() -> int:
         koder = [f.kod for f in fynd]
         raknare.update(koder)
         ut.append({
-            "queue_id": str(r["queue_id"]), "status": r["status"], "bolag": r["company_name"],
+            "queue_id": str(r["queue_id"]), "prospect_id": str(r["prospect_id"]), "status": r["status"], "bolag": r["company_name"],
             "kontakt": r["contact_name"], "erbjudande": r["erbjudande"], "produkt": produkt,
             "amne": r["subject"], "ingang": stil.ingang(body), "ord": sum(len(m.split()) for m in stil._meningar(stil._brodtext(body))),
             "fynd": [f.beskrivning for f in fynd], "koder": koder,

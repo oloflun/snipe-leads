@@ -3742,7 +3742,14 @@ async def processa_om(
     tenant_id = tenant["tenant_id"]
     await _kraev_leads_budget(storage, tenant_id)
     hittade: list[dict] = []
-    for pid in payload.prospect_ids:
+    for pid in dict.fromkeys(payload.prospect_ids):
+        # Ett felformat id är ett id som inte finns (deps.kraev_uuid): hoppas
+        # över i stället för att Postgres kastar och hela anropet blir 500
+        # (ett id med radslut i 2026-10-12:s omkörning).
+        try:
+            uuid.UUID(str(pid))
+        except (ValueError, AttributeError, TypeError):
+            continue
         rad = await storage.get_prospect(tenant_id, pid)
         if rad:
             hittade.append(rad)
