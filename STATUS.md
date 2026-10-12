@@ -9,8 +9,12 @@ en gång när något fälls. De 73 gamla godkända utkasten avbröts och 92 av 1
 granskningskön (inget skickat). Två fel rättades på vägen: profilen hade kompilerats om till tre
 produktbundna måste-kriterier (gäller nu bara den valda produkten), och produkten härleds ur ett uppfyllt
 kriterium. Tillbaka till Iris skriver inte om automatiskt; alla listtak borta. Pushat till development
-(`dc8e3d3`). **Kvar:** Anton granskar de 92; Ekospeceriet (gammalt godkänt, 08:00); åtta leads som faller på
-hårda kriterier; `LEADS_DAILY_TOKEN_BUDGET` i development står på 32 M tills Anton återställer.
+(`dc8e3d3`). Förmiddagen: Anton såg "som ni gör"/"som ert" kvar i nästan alla ingångar; grinden fäller nu
+etiketterna och allmänna ingångar, och kedjan skriver om ingången i andra person ur citaten i ett eget steg
+(`dda1531`). Alla 100 omkörda: 20 hade redan godkänts och skickats 08:34, 76 av 80 har nya utkast utan
+etiketter, 4 faller på hårda kriterier. **Kvar:** Anton granskar de 76; fyra leads (DS Flexhal, Nyströms
+Byggtjänst, Z Marktjänst, SafeTeam) faller på profilens hårda kriterier; `LEADS_DAILY_TOKEN_BUDGET` i
+development står på 48 M tills Anton återställer.
 Handoff: `HANDOFF-2026-10-12-UTKASTKEDJAN.md`. Logg: `session-logs/2026-10-12-session-log.md`.
 
 ## 2026-10-10 (2) — Claude — parallella körningar, hitta.se-kontakt, listverktyg, kö, autopilot

@@ -192,3 +192,30 @@ Kvittohanteraren som produkt i den nya researchen (referensen var Iris).
 > tillbaka" vilket antal som helst till Iris, nu är det ett tak på 50, ta bort alla
 > sådana tak för alla listor. Och se till att Flytta tillbaka automatiskt inte
 > processar om alla, det är upp till användaren vad han vill göra.
+
+## Tillägg förmiddagen 2026-10-12: ingången skriven till mottagaren
+
+Anton efter granskning: "som ni gör", "som ert" och "för företag som ert"
+stod kvar i nästan varje ingång. Grinden fångade bara "För företag som ert"
+i meningens början; modellen skrev en allmän "när man …"-mening och hängde
+på etiketten. Rättat i `dda1531`:
+
+- `stilkontroll.py`: `mall_ingang` fäller etiketterna var de än står i
+  ingången; nytt fynd `generell_ingang` för "man", "den som", "ett företag
+  som".
+- `run_outreach_draft_v2`: ett obligatoriskt personaliseringssteg
+  (`_INGANGSUPPGIFT`) skriver om enbart ingången i andra person med en detalj
+  ur citaten, före stilgrinden och humanizern. Kedjan är nu utkast →
+  personalisera ingången → (stilgrind + ev. omskrivning) → humanizer →
+  faktagrind.
+- Ingångsformerna och skrivstilen/grundmallen säger detsamma, med en tabell
+  fel/rätt ur verkliga ingångar.
+
+Utfall: alla 100 kördes om (omgång 6–8). 20 utkast hade en människa redan
+godkänt och skickat 08:34 i den gamla stilen; de hoppas över av Skapa om.
+76 av de 80 övriga har nya utkast i granskningskön, noll med etikett eller
+"man" i ingången (stilgrindens egen mätning, `scripts/granska_utkast.py`).
+Fyra faller fortfarande som nivå C efter fyra försök var: DS Flexhal,
+Nyströms Byggtjänst, Z Marktjänst (B2B för Iris ej styrkt med citat) och
+SafeTeam (B2C för Supportagenten ej styrkt). `LEADS_DAILY_TOKEN_BUDGET` i
+development står på 48 M.

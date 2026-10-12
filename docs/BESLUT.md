@@ -67,6 +67,23 @@ api i development höjdes 8 M → 32 M för natten och står kvar tills Anton
 återställer den. Uppföljning: garanti- och pilotmejlen bör namnge agenten i
 stycke 2 före löftet, och du/ni-blandning ska fällas av stilgrinden.
 
+*Tillägg samma förmiddag (Anton):* "som ni gör", "som ert" och "för företag
+som ert" stod kvar i nästan varje ingång; de ska anpassas på riktigt som i
+referenserna, direkt i kedjan, så som en extra runda Personalisera gjorde.
+**Resonemanget:** grinden fångade bara "För företag som ert" i meningens
+början, och modellen skrev en allmän "när man …"-mening om branschen och
+hängde på etiketten. De goda ingångarna är skrivna till mottagaren i andra
+person om det som står på deras sajt. **I koden (`dda1531`):** stilgrinden
+fäller etiketterna var de än står i ingången och allmänna ingångar ("man",
+"den som", "ett företag som"); kedjan har ett obligatoriskt
+personaliseringssteg som skriver om enbart ingången i andra person med en
+detalj ur citaten, före humanizern; ingångsformerna, skrivstilen och
+grundmallen säger detsamma. **Utfall:** alla 100 omkörda; 20 var redan
+godkända och skickade 08:34 i den gamla stilen; 76 av de 80 övriga har nya
+utkast utan etikett eller "man" i ingången; 4 faller på hårda kriterier (DS
+Flexhal, Nyströms Byggtjänst, Z Marktjänst, SafeTeam). Budgeten i
+development står på 48 M.
+
 ## 2026-10-10 (Anton) — Org.nr stoppar inte utskick; utskick går från development
 
 **Beslut.** Tvåvägssynken gäller bara körningar och ärenden i databasen;

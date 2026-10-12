@@ -87,3 +87,6 @@ status_updated: true
 goals_updated: yes
 next_session_focus: "Antons granskning av de 92 utkasten, beslut om de åtta som faller och om dygnsbudgeten"
 session-state -->
+
+## Tillägg förmiddagen
+Anton: "som ni gör"/"som ert" stod kvar i nästan alla ingångar. Grinden fäller nu etiketterna var de än står och allmänna ingångar ("man", "den som"); kedjan fick ett obligatoriskt personaliseringssteg för ingången (andra person, detalj ur citaten) före humanizern (`dda1531`). Alla 100 omkörda: 20 var redan skickade (godkända 08:34), 76 av 80 har nya utkast utan etiketter, 4 faller på profilens hårda kriterier (DS Flexhal, Nyströms Byggtjänst, Z Marktjänst, SafeTeam). Budgeten i development 48 M.
