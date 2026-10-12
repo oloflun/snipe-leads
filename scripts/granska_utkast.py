@@ -82,7 +82,7 @@ def main() -> int:
         body = texter[i]
         brod = body.casefold()
         # Produkten mejlet handlar om: den av kundens produkter som nämns.
-        produkt = next((p for p in produkter if p.split(",")[0].strip().casefold() in brod), None)
+        produkt = next((p for p in produkter if stil.produktstam(p) and stil.produktstam(p) in brod), None)
         villkor = erbjudanden.villkor_for(villkor_alla.get(r["erbjudande"] or ""), produkt) if r["erbjudande"] else ""
         # Brödtexten utan kodens signatur och fot: det är den kedjan prövade.
         fynd = stil.kontrollera(stil._brodtext(body)).anmarkningar

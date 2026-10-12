@@ -64,6 +64,8 @@ def main() -> int:
     ap.add_argument("--slug", required=True)
     ap.add_argument("--sedan", help="prospekt med research_and_draft-jobb sedan denna tidpunkt")
     ap.add_argument("--prospekt", nargs="*", default=[], help="prospekt-id:n i stället för --sedan")
+    ap.add_argument("--utan-utkast", action="store_true",
+                    help="bara prospekt som saknar ett osänt utkast skapat sedan --sedan")
     ap.add_argument("--apply", action="store_true")
     a = ap.parse_args()
     if not a.sedan and not a.prospekt:
@@ -81,12 +83,18 @@ def main() -> int:
     if a.prospekt:
         ids = list(dict.fromkeys(a.prospekt))
     else:
+        filter_ = (
+            """ and p.id not in (
+                     select t.prospect_id from outreach_threads t join send_queue s on s.thread_id = t.id
+                      where t.tenant_id = %s and s.created_at >= %s and s.status in ('awaiting_review', 'queued'))"""
+            if a.utan_utkast else ""
+        )
         cur.execute(
-            """select distinct l.prospect_id, p.company_name from leads_job_ledger l
+            f"""select distinct l.prospect_id, p.company_name from leads_job_ledger l
                  join prospects p on p.id = l.prospect_id
-                where l.tenant_id = %s and l.created_at >= %s and l.scope = 'research_and_draft'
+                where l.tenant_id = %s and l.created_at >= %s and l.scope = 'research_and_draft'{filter_}
                 order by p.company_name""",
-            (tenant_id, a.sedan),
+            (tenant_id, a.sedan, tenant_id, a.sedan) if a.utan_utkast else (tenant_id, a.sedan),
         )
         rader = cur.fetchall()
         ids = [str(r["prospect_id"]) for r in rader]

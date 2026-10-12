@@ -390,10 +390,14 @@ async def _research_v2(
 
     # Kunden har en produktlista och researchen valde ingen av dem: då finns
     # inget att sälja till bolaget (produktmatchningen fäller).
-    produkt_vald = _vald_produkt(fynd, produkter) is not None if produkter else None
+    vald = _vald_produkt(fynd, produkter) if produkter else None
+    produkt_vald = vald is not None if produkter else None
     bedomning = bedom(
         profil, fynd, korpus=f"{material}\n{webbfakta_text}", kandidat=prospect_row, webbrevision=webbrevision,
         har_underlag=har_underlag, produkt_vald=produkt_vald,
+        # Ett kriterium bundet till en annan produkt än den valda gäller inte
+        # det här leadet (bedom-docstringen, omkörningen 2026-10-12).
+        produkt=vald["namn"] if vald else None, produkter=[p["namn"] for p in produkter],
     )
     if webbrevision and not webbrevision.get("saknas"):
         bedomning["webbrevision"] = webbrevision

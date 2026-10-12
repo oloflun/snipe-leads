@@ -201,10 +201,21 @@ def erbjudande_fynd(text: str, *, villkor: str | None, produkt: str | None) -> l
     if saknade:
         fynd.append(Anmarkning("erbjudande_siffror", f"Stil: villkorens siffror saknas i mejlet: {', '.join(saknade)}",
                                allvarlig=True))
-    namn = (produkt or "").split(",")[0].strip().casefold()
+    namn = produktstam(produkt)
     if namn and namn not in brod:
         fynd.append(Anmarkning("erbjudande_produkt", f"Stil: produkten \"{namn}\" nämns inte", allvarlig=True))
     return fynd
+
+
+def produktstam(produkt: str | None) -> str:
+    """Produktens kortform utan bestämd form: "Kvittohanteraren" → "kvittohanterare",
+    "Supportagenten" → "supportagent", "Iris, leadsagenten" → "iris". Mejlet
+    skriver "Vår Kvittohanterare" (outreach_playbook._produktnamn)."""
+    namn = (produkt or "").split(",")[0].split("(")[0].strip().casefold()
+    for suffix in ("aren", "eren", "en", "n"):
+        if namn.endswith(suffix) and len(namn) > len(suffix) + 3:
+            return namn[: -len(suffix)] + ("are" if suffix in ("aren", "eren") else "")
+    return namn
 
 
 def mot_andra(text: str, andra: Sequence[str]) -> list[Anmarkning]:
