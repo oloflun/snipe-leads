@@ -184,8 +184,32 @@ async def samtalslista(
     request: Request, lista: Literal["aterkoppling", "ring"] = "aterkoppling", tenant: dict = Depends(require_tenant)
 ) -> dict:
     """Återkopplingen eller ringlistan, de som ska ringas i dag först."""
-    storage = request.app.state.storage
-    tenant_id = tenant["tenant_id"]
+    prospekter, alla_samtal, forsta = await _samtalsunderlag(request.app.state.storage, tenant["tenant_id"])
+    rader = samtal.samtalslista(
+        prospekter, alla_samtal, forsta, lista=lista, idag=datetime.now(timezone.utc).date()
+    )
+    return {"rader": rader, "ring_idag": sum(1 for r in rader if r["ring_idag"])}
+
+
+@router.get("/api/leads/samtal/antal")
+async def samtalsantal(request: Request, tenant: dict = Depends(require_tenant)) -> dict:
+    """Hur många som ska ringas i dag i båda listorna — Att göras siffra.
+
+    Att göra hämtade förut båda listorna hela, alltså tenantens prospekt två
+    gånger per sidvisning, för att räkna rader. Samma underlag, en läsning."""
+    prospekter, alla_samtal, forsta = await _samtalsunderlag(request.app.state.storage, tenant["tenant_id"])
+    idag = datetime.now(timezone.utc).date()
+    return {
+        lista: sum(
+            1
+            for r in samtal.samtalslista(prospekter, alla_samtal, forsta, lista=lista, idag=idag)
+            if r["ring_idag"]
+        )
+        for lista in ("aterkoppling", "ring")
+    }
+
+
+async def _samtalsunderlag(storage: Any, tenant_id: str) -> tuple[list, list, dict[str, Any]]:
     # ponytail: hela tenantens prospekt, samtal och utskick läses och filtreras
     # här; en SQL-vy när en kund har tusentals leads.
     prospekter, alla_samtal, skickade = await asyncio.gather(
@@ -197,10 +221,7 @@ async def samtalslista(
     for m in skickade:  # nyast först: den sista vi ser per prospekt är den första
         if m.get("prospect_id"):
             forsta[str(m["prospect_id"])] = m.get("sent_at")
-    rader = samtal.samtalslista(
-        prospekter, alla_samtal, forsta, lista=lista, idag=datetime.now(timezone.utc).date()
-    )
-    return {"rader": rader, "ring_idag": sum(1 for r in rader if r["ring_idag"])}
+    return prospekter, alla_samtal, forsta
 
 
 @router.post("/api/leads/prospects/{prospect_id}/anteckningar", status_code=201)

@@ -13,6 +13,7 @@ import hashlib
 import json
 import logging
 import os
+import time
 import uuid
 from contextlib import asynccontextmanager
 from datetime import date
@@ -75,6 +76,10 @@ _PROSPEKT_PROFILFALT = frozenset(
 
 
 async def _init_connection(conn: asyncpg.Connection) -> None:
+    # Frågornas antal och tid per anrop (app/matning.py, Server-Timing).
+    from ..matning import logga_fraga
+
+    conn.add_query_logger(logga_fraga)
     # pgvector skickas som text: '[0.1,0.2,...]'
     await conn.set_type_codec(
         "vector",
@@ -83,6 +88,25 @@ async def _init_connection(conn: asyncpg.Connection) -> None:
         schema="public",
         format="text",
     )
+
+
+async def _ingen_sessionsaterstallning(conn: asyncpg.Connection) -> None:
+    """Poolens återställning vid release — medvetet tom.
+
+    asyncpg:s standard kör `pg_advisory_unlock_all(); CLOSE ALL; UNLISTEN *;
+    RESET ALL` vid varje release: en extra rundtur per lagringsanrop, ~20 %
+    av frågorna i ett typiskt API-anrop (uppmätt 2026-10-10). Koden har inget
+    sessionstillstånd att städa: set_config och `set local` är
+    transaktionslokala, låsen är pg_advisory_xact_lock, och ingen LISTEN.
+    En transaktion som lämnats öppen rullas ändå tillbaka av asyncpg innan
+    den här anropas (Connection._reset).
+    """
+
+
+#: Giltiga API-nycklar i minnet: sha256 → (rad, giltig till). Se validate_api_key.
+_NYCKEL_TTL_S = 30.0
+#: last_used_at skrivs högst så här ofta per nyckel.
+_SENAST_ANVAND_S = 300.0
 
 
 def _row(record: asyncpg.Record | None) -> dict[str, Any] | None:
@@ -190,6 +214,7 @@ class PostgresStorage:
 
     def __init__(self, pool: asyncpg.Pool) -> None:
         self.pool = pool
+        self._nycklar: dict[str, tuple[dict[str, Any], float]] = {}
 
     @classmethod
     async def connect(cls, database_url: str) -> "PostgresStorage":
@@ -201,19 +226,35 @@ class PostgresStorage:
             min_size=1,
             max_size=int(os.environ.get("DB_POOL_MAX", "20")),
             init=_init_connection,
-            statement_cache_size=0,  # krävs bakom Supabase transaction pooler
+            reset=_ingen_sessionsaterstallning,
+            # Statement-cachen PÅ (asyncpg:s standard, 100 per anslutning).
+            # Den stod på 0 för Supabases transaction pooler, som inte finns
+            # kvar: utan cache förbereddes varje parametriserad fråga i en
+            # egen rundtur före körningen. Efter en migrering kan en cachad
+            # `select *` fallera en gång (InvalidCachedStatementError) —
+            # app/main.py tömmer då poolen och svarar 503 utan kropp, som
+            # webbens proxy gör om för GET.
         )
         return cls(pool)
 
     @asynccontextmanager
     async def _scoped(self, tenant_id: str):
         """Transaktion med app.tenant_id satt, så RLS-policyerna gäller."""
-        async with self.pool.acquire() as conn:
-            async with conn.transaction():
-                await conn.fetchval(
-                    "select set_config('app.tenant_id', $1, true)", tenant_id
-                )
-                yield conn
+        try:
+            async with self.pool.acquire() as conn:
+                async with conn.transaction():
+                    await conn.fetchval(
+                        "select set_config('app.tenant_id', $1, true)", tenant_id
+                    )
+                    yield conn
+        except (asyncpg.exceptions.InvalidCachedStatementError, asyncpg.exceptions.OutdatedSchemaCacheError):
+            # En migrering ändrade en tabell som en cachad fråga läser
+            # (statement-cachen, se connect). asyncpg gör om sådana frågor
+            # själv utanför transaktioner, men inte här. Alla anslutningar
+            # byts så att nästa försök — även bakgrundsjobbens — förbereder
+            # frågan på nytt; HTTP-anropet svarar 503 (app/main.py).
+            await self.pool.expire_connections()
+            raise
 
     # -- Tenants ------------------------------------------------------------
 
@@ -272,6 +313,9 @@ class PostgresStorage:
                 tenant_id,
                 active,
             )
+        # Avstängningen ska gälla direkt i den här processen, inte efter
+        # nyckelcachens 30 s (validate_api_key).
+        self._nycklar.clear()
         return _row(record)
 
     async def set_tenant_status(self, tenant_id: str, *, status: str) -> dict[str, Any] | None:
@@ -289,6 +333,9 @@ class PostgresStorage:
                 tenant_id,
                 status,
             )
+        # Avstängningen ska gälla direkt i den här processen, inte efter
+        # nyckelcachens 30 s (validate_api_key).
+        self._nycklar.clear()
         return _row(record)
 
     async def get_tenant_products(self, tenant_id: str) -> list[str] | None:
@@ -1282,6 +1329,7 @@ class PostgresStorage:
         humanizer_variant: str,
         scheduled_at,
         status: str = "queued",
+        gate_checks: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         async with self._scoped(tenant_id) as conn:
             message = await conn.fetchrow(
@@ -1300,15 +1348,90 @@ class PostgresStorage:
             queue_item = await conn.fetchrow(
                 """
                 insert into send_queue (tenant_id, thread_id, scheduled_at, status, gate_checks)
-                values ($1, $2, $3, $4, '{}'::jsonb)
+                values ($1, $2, $3, $4, $5::jsonb)
                 returning *
                 """,
                 tenant_id,
                 thread_id,
                 scheduled_at,
                 status,
+                json.dumps(gate_checks or {}, ensure_ascii=False),
             )
         return {"message": _row(message), "queue_item": _row(queue_item)}
+
+    async def tilldela_erbjudande(self, tenant_id: str, thread_id: str, *, nyckel: str) -> str:
+        async with self._scoped(tenant_id) as conn:
+            # offers saknar unique(tenant_id, name) (010) och en migration för
+            # det är inte värd det: två samtidiga utkast kan i värsta fall ge
+            # två rader med samma namn, och utfallet grupperas på namnet.
+            offer_id = await conn.fetchval(
+                """
+                with befintlig as (
+                  select id from offers where tenant_id = $1 and name = $2
+                  order by created_at limit 1
+                ), ny as (
+                  insert into offers (tenant_id, name)
+                  select $1, $2 where not exists (select 1 from befintlig)
+                  returning id
+                )
+                select id from befintlig union all select id from ny limit 1
+                """,
+                tenant_id,
+                nyckel,
+            )
+            await conn.execute(
+                "update outreach_threads set offer_id = $3 where tenant_id = $1 and id = $2",
+                tenant_id,
+                thread_id,
+                offer_id,
+            )
+        return str(offer_id)
+
+    async def erbjudande_utfall(self, tenant_id: str) -> list[dict[str, Any]]:
+        # Härledningen står i base.py. Statuslistan speglar memory.SVARSSTATUS.
+        async with self._scoped(tenant_id) as conn:
+            records = await conn.fetch(
+                """
+                with tradar as (
+                  select o.name as nyckel,
+                    exists (select 1 from outreach_messages m
+                            where m.tenant_id = t.tenant_id and m.thread_id = t.id
+                              and m.direction = 'outbound') as utkast,
+                    exists (select 1 from outreach_messages m
+                            where m.tenant_id = t.tenant_id and m.thread_id = t.id
+                              and m.direction = 'outbound' and m.sent_at is not null) as skickat,
+                    exists (select 1 from prospect_status_logg l
+                            where l.tenant_id = t.tenant_id and l.prospect_id = t.prospect_id
+                              and l.created_at >= t.created_at and l.kalla = 'kod'
+                              and l.till in ('replied', 'meeting', 'lost', 'suppressed')) as svar,
+                    exists (select 1 from prospect_status_logg l
+                            where l.tenant_id = t.tenant_id and l.prospect_id = t.prospect_id
+                              and l.created_at >= t.created_at and l.kalla = 'kod'
+                              and l.till = 'meeting') as positivt,
+                    (exists (select 1 from lead_samtal s
+                             where s.tenant_id = t.tenant_id and s.prospect_id = t.prospect_id
+                               and s.utfall = 'mote')
+                     or exists (select 1 from prospect_status_logg l
+                                where l.tenant_id = t.tenant_id and l.prospect_id = t.prospect_id
+                                  and l.created_at >= t.created_at
+                                  and (l.till = 'won' or (l.till = 'meeting' and l.kalla = 'manuell')))
+                    ) as mote
+                  from outreach_threads t
+                  join offers o on o.id = t.offer_id
+                  where t.tenant_id = $1
+                )
+                select nyckel,
+                       count(*) filter (where utkast) as utkast,
+                       count(*) filter (where skickat) as skickade,
+                       count(*) filter (where skickat and svar) as svar,
+                       count(*) filter (where skickat and positivt) as positiva,
+                       count(*) filter (where skickat and mote) as moten
+                from tradar
+                group by nyckel
+                """,
+                tenant_id,
+            )
+        return [_row(r) for r in records]
 
     async def find_outreach_thread(
         self, tenant_id: str, *, prospect_id: str
@@ -2533,7 +2656,23 @@ class PostgresStorage:
                 tenant_id,
                 list_id,
             )
-        return _avkoda_jsonb(_row(record), "icp") if record else None
+        return _avkoda_jsonb(_row(record), "icp", "processering") if record else None
+
+    async def satt_listprocessering(self, tenant_id: str, list_id: str, processering: dict[str, Any] | None) -> None:
+        async with self._scoped(tenant_id) as conn:
+            await conn.execute(
+                "update lead_lists set processering = $3::jsonb where tenant_id = $1 and id = $2",
+                tenant_id, list_id,
+                json.dumps(processering, ensure_ascii=False, default=str) if processering is not None else None,
+            )
+
+    async def listkopplade_prospekt(self, tenant_id: str) -> set[str]:
+        async with self._scoped(tenant_id) as conn:
+            records = await conn.fetch(
+                "select distinct prospect_id from lead_list_items where tenant_id = $1 and prospect_id is not null",
+                tenant_id,
+            )
+        return {str(r["prospect_id"]) for r in records}
 
     async def add_lead_list_item(
         self, tenant_id: str, *, list_id: str, **falt: Any
@@ -2586,15 +2725,20 @@ class PostgresStorage:
                 list_id,
                 med_flyttade,
             )
-        return [_avkoda_jsonb(_avkoda_jsonb(_row(r), "utkast"), "webbrevision") for r in records]
+        return [_avkoda_jsonb(_row(r), "utkast", "webbrevision", "kallor") for r in records]
 
     async def uppdatera_listrad(self, tenant_id: str, item_id: str, falt: dict[str, Any]) -> None:
-        from .base import LISTRAD_UPPDATERBARA
+        from .base import LISTRAD_JSONB, LISTRAD_UPPDATERBARA
 
-        valda = {k: v for k, v in falt.items() if k in LISTRAD_UPPDATERBARA}
+        valda = {
+            k: (json.dumps(v, ensure_ascii=False, default=str) if k in LISTRAD_JSONB and v is not None else v)
+            for k, v in falt.items() if k in LISTRAD_UPPDATERBARA
+        }
         if not valda:
             return
-        satt = ", ".join(f"{k} = ${i}" for i, k in enumerate(valda, start=3))
+        satt = ", ".join(
+            f"{k} = ${i}" + ("::jsonb" if k in LISTRAD_JSONB else "") for i, k in enumerate(valda, start=3)
+        )
         async with self._scoped(tenant_id) as conn:
             await conn.execute(
                 f"update lead_list_items set {satt} where tenant_id = $1 and id = $2",
@@ -3522,7 +3666,19 @@ class PostgresStorage:
 
     async def validate_api_key(self, raw_key: str) -> dict[str, Any] | None:
         # Körs INNAN tenant är känd — utan tenant-kontext (se api_key_lookup-policyn).
+        #
+        # Körs på VARJE anrop. Uppslaget plus `last_used_at`-skrivningen var
+        # tre av ett enkelt anrops åtta frågor, och skrivningen tog radlås på
+        # samma nyckelrad: Att görans sju parallella anrop köade på varandra
+        # (uppmätt 2026-10-10). En giltig nyckel hålls därför i minnet i
+        # _NYCKEL_TTL_S — en spärrad nyckel eller avstängd tenant slutar alltså
+        # gälla inom 30 s, inte direkt — och last_used_at skrivs högst var
+        # femte minut. Ogiltiga nycklar cachas aldrig.
         key_hash = hashlib.sha256(raw_key.encode()).hexdigest()
+        nu = time.monotonic()
+        traff = self._nycklar.get(key_hash)
+        if traff and traff[1] > nu:
+            return dict(traff[0])
         async with self.pool.acquire() as conn:
             record = await conn.fetchrow(
                 """
@@ -3533,10 +3689,15 @@ class PostgresStorage:
                 key_hash,
             )
             if record and record["tenant_active"]:
-                await conn.execute(
-                    "update ss_api_keys set last_used_at = now() where id = $1", record["id"]
-                )
-                return _row(record)
+                senast = record["last_used_at"]
+                if senast is None or (time.time() - senast.timestamp()) > _SENAST_ANVAND_S:
+                    await conn.execute(
+                        "update ss_api_keys set last_used_at = now() where id = $1", record["id"]
+                    )
+                rad = _row(record)
+                self._nycklar[key_hash] = (rad, nu + _NYCKEL_TTL_S)
+                return dict(rad)
+        self._nycklar.pop(key_hash, None)
         return None
 
     async def create_api_key(
@@ -3792,6 +3953,7 @@ class PostgresStorage:
             records = await conn.fetch(
                 """
                 select q.*, m.subject, m.body, m.id as message_id,
+                       t.language_state,
                        p.contact_email as prospect_email, p.company_name,
                        -- Kontexten AI-knapparna (Förbättra, Personalisera …)
                        -- skriver om utifrån: vem mejlet går till och läget hos bolaget.
@@ -3875,7 +4037,15 @@ class PostgresStorage:
             finns = await conn.fetchval("select to_regclass('public.mirror_meta') is not null")
             if not finns:
                 return None
-            rad = await conn.fetchrow("select environment, seeded_at from public.mirror_meta limit 1")
+            # lage/synkad_at sätts av scripts/railway_synk.py (tvåvägssynken).
+            har_lage = await conn.fetchval(
+                "select exists (select 1 from information_schema.columns "
+                "where table_schema = 'public' and table_name = 'mirror_meta' and column_name = 'lage')"
+            )
+            rad = await conn.fetchrow(
+                "select environment, seeded_at" + (", lage, synkad_at" if har_lage else "")
+                + " from public.mirror_meta limit 1"
+            )
         return _row(rad) if rad else None
 
     async def logga_flytt(self, tenant_id: str, *, typ: str, ref_id: str, resultat: str) -> None:

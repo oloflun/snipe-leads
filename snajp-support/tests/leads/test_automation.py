@@ -177,11 +177,14 @@ async def _till_iris(monkeypatch, storage, *, kalla: str, regler: dict | None):
     monkeypatch.setattr(leads_api, "_kraev_leads_budget", _ingen)
     app_state = SimpleNamespace(jobs=MemoryJobStore(), storage=storage, leadsstrom=None)
     req = SimpleNamespace(app=SimpleNamespace(state=app_state))
-    ut = await leads_api.listan_till_iris(
-        req, lista["id"], TillIrisRequest(), {"tenant_id": TENANT, "tenant_name": "Snajp"}
+    lista = await storage.get_lead_list(TENANT, lista["id"])
+    rad = (await storage.list_lead_list_items(TENANT, lista["id"]))[0]
+    p, _ = await leads_api._befordra_listrad(storage, TENANT, lista, rad)
+    _, scope = await leads_api._starta_listkorning(
+        app_state, {"tenant_id": TENANT, "tenant_name": "Snajp"}, lista, [p], scope=None, is_test=False
     )
     prospekt = await storage.list_prospects(TENANT)
-    return ut["scope"], scopes, prospekt[0]["origin"]
+    return scope, scopes, prospekt[0]["origin"]
 
 
 async def test_till_iris_scope_none_standard_ger_utkast(monkeypatch):

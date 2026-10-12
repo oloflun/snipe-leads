@@ -112,6 +112,9 @@ demoskript, inga ROI-kalkylatorer.
   infriad av produkten; proof är belägg som finns (inte påhittade
   kundcase); risk_reversal sänker tröskeln (t.ex. pilot, ingen bindning);
   cta är EN lågfriktionsfråga.
+- `produkt`: namnet på den av kundens produkter som `offer` bygger på,
+  ordagrant som i listan, eller null om kunden saknar produktlista eller
+  ingen passar.
 - `weakest_lever`: vilken av spakarna som är svagast och varför.
 
 ## Osäkerhet (mk:ab-testing-kärnan)

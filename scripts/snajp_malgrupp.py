@@ -13,6 +13,7 @@ produkter till olika segment. Här står vilka, i den form Iris läser dem:
   * settings.segment    — rangordnade målsegment; en körning utan filter söker i dem
   * settings.offentlig_sektor = false — bara privata bolag
   * kundinstruktionen för Iris — hur Snajp presenterar sig i utkastets mall
+  * erbjudandena         — tre aktiva, lika viktade, villkor per produkt (2026-10-10)
 
 Segmenten kommer ur Antons tabell 2026-10-06 (utbildning, e-handel, bygg,
 konsult och byrå) plus fyra förslag (markerade nedan). Max sex segment ryms i
@@ -65,10 +66,40 @@ SEGMENT = [
 MARKOR = "## Så presenterar sig Snajp i Iris utkast"
 IRIS_INSTRUKTION = f"""{MARKOR}
 
-- I mallens stycke om vilka vi är: "Vi på Snajp bygger AI-agenter för svenska företag. Iris hittar och kvalificerar nya potentiella kunder åt er och skriver färdiga utkast som ni själva godkänner innan något skickas. Vi har även en supportagent och en kvittohanterare om det är mer aktuellt hos er."
-- Avsluta med uppmaningen: "Passar det med en kort demo i veckan? Jag visar hur det skulle se ut för just [företagsnamn], så får du själv avgöra om det är något för er."
-- Erbjud den produkt researchen valt. Nämn de andra två bara i meningen ovan, aldrig som egna erbjudanden.
+- Erbjud den produkt researchen valt, och bara den. Nämn aldrig de andra agenterna.
+- Avsluta med erbjudandets handling enligt villkoren under "Erbjudandet i det här mejlet" (svara "ja", svara med något bifogat, svara så bokar vi), aldrig med en fråga.
 """
+
+#: Erbjudandena (A/B, app/leads/erbjudanden.py), Antons beslut 2026-10-10: alla
+#: tre aktiva och lika viktade, villkor per produkt. Siffrorna är preliminära
+#: uppskattningar tills vi har egna mätdata; det står med finstil i
+#: användarvillkoren (app/villkor), aldrig i mejlen. Ändras i Iris
+#: inställningar › Erbjudanden, eller här och kör om.
+#: Gratisprovet för Supportagenten och Kvittohanteraren går via svar på mejlet
+#: (frågor respektive kvitton bifogade) och hanteras för hand tills demolänken
+#: och en kvittoadress finns: ingen kunskapsbas eller inkorg behöver kopplas.
+IRIS, SUPPORT, KVITTO = (p["namn"] for p in PRODUKTER)
+_PILOT = (
+    "Vi tar in 20 företag i en pilot för {agent}. Vi tar bara 20 eftersom vi sätter upp varje företag "
+    "personligen. Pilotföretagen får 50 % rabatt första året om de vill fortsätta, och 25 % så länge de "
+    "stannar. Handling: svara \"pilot\" på mejlet, så håller vi en plats åt er."
+)
+ERBJUDANDEN = {
+    "aktiva": [{"nyckel": n, "vikt": 1} for n in ("gratis_prov", "garanti", "pilot")],
+    "villkor": {
+        "gratis_prov": {
+            IRIS: "Fem kvalificerade leads i er region, med kontaktperson och ett färdigt första mejl till vart och ett, helt utan kostnad och utan att det binder er till något. Handling: svara \"ja\" på mejlet, så skickar vi de fem inom två arbetsdagar.",
+            SUPPORT: "Agentens svar på era fem vanligaste kundfrågor, utifrån era egna villkor, helt utan kostnad och utan att något behöver kopplas in. Handling: svara på mejlet med de fem frågorna och era villkor, så får ni tillbaka agentens svar inom en arbetsdag.",
+            KVITTO: "Fem av era kvitton färdiga att ladda ned till bokföringen, med belopp, moms och konto, helt utan kostnad. Handling: svara på mejlet med fem kvitton bifogade, så får ni tillbaka dem färdiga inom en arbetsdag.",
+        },
+        "garanti": {
+            IRIS: "Vi lovar minst 10 nya kunddialoger, alltså svar från intresserade företag, inom 90 dagar. Blir det färre förlänger vi provperioden utan kostnad tills ni har fått dem, så länge ni har godkänt utkasten i granskningen. Handling: svara på mejlet, så bokar vi 20 minuter där vi visar vilka företag Iris redan hittar åt er.",
+            SUPPORT: "Vi lovar att ni lägger minst 50 % mindre tid på kundmejlen inom 60 dagar. Annars förlänger vi provperioden utan kostnad tills ni gör det. Handling: svara på mejlet, så bokar vi 20 minuter och sätter upp agenten på era vanligaste frågor.",
+            KVITTO: "Vi lovar att ni lägger minst 70 % mindre tid på kvittona inom 60 dagar. Annars förlänger vi provperioden utan kostnad tills ni gör det. Handling: svara på mejlet, så bokar vi 20 minuter och kopplar in er inkorg.",
+        },
+        "pilot": {agent: _PILOT.format(agent=agent) for agent in (IRIS, SUPPORT, KVITTO)},
+    },
+}
 
 
 def main() -> None:
@@ -90,13 +121,15 @@ def main() -> None:
         sys.exit(f"AVBRYTER: ingen kund med slug {args.kund!r} i {args.env}.")
     profil = admin.get(f"/api/admin/tenants/{kund['id']}/profil?agent_type=leads").get("profil") or {}
     instruktion = profil.get("instruktioner_md") or ""
-    ny_instruktion = instruktion if MARKOR in instruktion else f"{instruktion.rstrip()}\n\n{IRIS_INSTRUKTION}".strip() + "\n"
+    fore = instruktion.split(MARKOR)[0].rstrip()
+    ny_instruktion = f"{fore}\n\n{IRIS_INSTRUKTION}".strip() + "\n"
 
     print(f"Miljö: {args.env}  Kund: {kund.get('name')} ({args.kund})")
     print("Produkter:", json.dumps([p["namn"] for p in PRODUKTER], ensure_ascii=False))
     print("Segment:  ", json.dumps([s["bransch"] for s in SEGMENT], ensure_ascii=False))
     print("Offentlig sektor: nej")
-    print("Iris-instruktion:", "finns redan" if MARKOR in instruktion else f"läggs till ({len(IRIS_INSTRUKTION)} tecken)")
+    print("Iris-instruktion:", "oförändrad" if ny_instruktion == instruktion else "skrivs (ersätter Snajps tidigare block)")
+    print("Erbjudanden:", ", ".join(a["nyckel"] for a in ERBJUDANDEN["aktiva"]), "(lika vikt, villkor per produkt)")
     if not args.apply:
         print("\nTORRKÖRNING. Ingenting skrevs. Kör igen med --apply.")
         return
@@ -110,6 +143,9 @@ def main() -> None:
     )
     if not 200 <= status < 300:
         sys.exit(f"AVBRYTER: inställningarna skrevs inte ({status}) — {svar.get('detail', '')}")
+    status, svar = Api(bas, nyckel, skarpt=True).anrop("PUT", "/api/leads/erbjudanden", ERBJUDANDEN)
+    if not 200 <= status < 300:
+        sys.exit(f"AVBRYTER: erbjudandena skrevs inte ({status}) — {svar.get('detail', '')}")
     if ny_instruktion != instruktion:
         status, svar = admin.anrop(
             "PUT", f"/api/admin/tenants/{kund['id']}/profil",

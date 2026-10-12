@@ -32,8 +32,8 @@ from .deps import kraev_uuid, require_tenant
 
 router = APIRouter()
 
-#: Samma tak som Skapa utkast (ProcessaOmRequest): listan visar upp till 500
-#: leads, och en åtgärd körs på de markerade.
+#: Inget tak sedan 2026-10-12 (Anton): en liståtgärd gäller alla markerade. Kvar som
+#: dokumentation av den gamla gränsen; ingen schemaregel läser den längre.
 MAX_PER_ANROP = 500
 
 
@@ -50,12 +50,12 @@ def _giltiga(ids: list[str]) -> list[str]:
 
 
 class ArkiveraRequest(BaseModel):
-    ids: list[str] = Field(..., min_length=1, max_length=MAX_PER_ANROP)
+    ids: list[str] = Field(..., min_length=1)
     arkivera: bool = True
 
 
 class RaderaRequest(BaseModel):
-    ids: list[str] = Field(..., min_length=1, max_length=MAX_PER_ANROP)
+    ids: list[str] = Field(..., min_length=1)
 
 
 @router.post("/api/leads/prospects/arkivera")

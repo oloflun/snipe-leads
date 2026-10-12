@@ -62,17 +62,14 @@ async def test_processa_om_berikar_raderna_och_flyttar_inget(monkeypatch):
     async def inget_register(rad):
         return None
 
-    async def sok_alla(par, **_):
-        svar = []
-        for rad, _bolag in par:
-            alfa = rad["company_name"].startswith("Alfa")
-            k = {"company_name": rad["company_name"], "website": "https://alfabygg.se", "vd_namn": "Eva VD",
-                 "orgnr": "556000-0001" if alfa else "556000-0002"}
-            svar.append((k, {"contact_email": "info@alfabygg.se"} if alfa else {"contact_phone": "031-12 34 56"}))
-        return svar
+    async def sok(rad, _bolag, **_):
+        alfa = rad["company_name"].startswith("Alfa")
+        k = {"company_name": rad["company_name"], "website": "https://alfabygg.se", "vd_namn": "Eva VD",
+             "orgnr": "556000-0001" if alfa else "556000-0002", "kallor": ["katalog", "webbplats"]}
+        return k, ({"contact_email": "info@alfabygg.se"} if alfa else {"contact_phone": "031-12 34 56"})
 
     monkeypatch.setattr(omprova, "hamta_bolag", inget_register)
-    monkeypatch.setattr(omprova, "sok_alla", sok_alla)
+    monkeypatch.setattr(omprova, "sok", sok)
     monkeypatch.setattr(leads_api.sidhamtning, "starta", lambda *a, **k: None)
 
     s = MemoryStorage()
@@ -81,8 +78,13 @@ async def test_processa_om_berikar_raderna_och_flyttar_inget(monkeypatch):
         await s.add_lead_list_item(T, list_id=lista["id"], item_typ="bolag", company_name=namn, signal="listspar")
     app_state = type("S", (), {"storage": s})()
     rader = await s.list_lead_list_items(T, lista["id"])
-    assert await leads_api._omprova_bakgrund(app_state, T, rader) == {"iris": 1, "ring": 1}
+    forlopp = {"typ": "processa", "status": "pagar", "totalt": 2, "klara": 0}
+    utfall = await leads_api._omprova_bakgrund(app_state, T, lista["id"], rader, forlopp, webbyra=False)
+    assert utfall == {"mejl": 1, "telefon": 1}
+    p = (await s.get_lead_list(T, lista["id"]))["processering"]
+    assert (p["status"], p["klara"], p["utfall"]) == ("klar", 2, {"mejl": 1, "telefon": 1}), p
     alfa, beta = await s.list_lead_list_items(T, lista["id"])
+    assert alfa["kallor"] == ["katalog", "webbplats"] and alfa["processad_at"]
     assert (alfa["contact_email"], alfa["website"]) == ("info@alfabygg.se", "https://alfabygg.se")
     assert alfa["signal_detalj"].startswith("Mejladress hittad")
     assert (beta["contact_phone"], beta["contact_name"]) == ("031-12 34 56", "Eva VD")

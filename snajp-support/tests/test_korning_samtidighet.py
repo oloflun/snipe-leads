@@ -143,3 +143,43 @@ async def test_samtidiga_pafyllningar_koar_inte_dubbelt(monkeypatch):
 async def test_olika_korningar_delar_inte_las():
     assert leads_api._korningslas("batch-a") is leads_api._korningslas("batch-a")
     assert leads_api._korningslas("batch-a") is not leads_api._korningslas("batch-b")
+
+
+async def test_tva_korningar_tar_inte_samma_bolag(monkeypatch):
+    """Anton 2026-10-10: två större körningar parallellt, den ena stannade
+    efter fem rundor. Körning B:s sökning ska hoppa över bolag som körning A
+    redan håller i poolen, inte köa dem och kasta rundan som dubbletter."""
+    from app.leads import upptagna
+
+    async def _hitta(_icp, _antal, *, uteslut_namn, **_k):
+        sedda = upptagna.nycklar(uteslut_namn)
+        return [_bolag(n) for n in ("Ett AB", "Två AB", "Tre AB") if not upptagna.upptagen(sedda, n)]
+
+    monkeypatch.setattr(korningsmodul, "hitta_bolag", _hitta)
+    monkeypatch.setattr(korningsmodul, "forfiltrera", lambda *_a, **_k: None)
+    monkeypatch.setattr(korningsmodul, "har_malgrupp", lambda *_a: True)
+    storage = _VaxlandeStorage()
+    ko = _Kö()
+    app_state = SimpleNamespace(jobs=MemoryJobStore(), storage=storage, leadsstrom=ko)
+    await _ny_korning(storage, ["Ett AB", "Två AB"], mal=2, pagaende=1)  # A, mitt i
+    b = await _ny_korning(storage, [], mal=1)
+
+    await leads_api._fyll_pa(app_state, TENANT, b)
+    assert [p["company_name"] for p in (await _k(storage, b))["jobs"]] == ["Tre AB"]
+
+
+async def test_runda_med_bara_tagna_bolag_raknas_inte():
+    """Sökte två körningar samtidigt får den som slår in sist bara bolag den
+    andra redan har. Rundan räknas inte (högst tre gånger)."""
+    storage = _VaxlandeStorage()
+    app_state = SimpleNamespace(jobs=MemoryJobStore(), storage=storage, leadsstrom=_Kö())
+    await _ny_korning(storage, ["Ett AB", "Två AB"], mal=2, pagaende=1)
+    b = await _ny_korning(storage, [], mal=1)
+    tmp = {"rundor": 1, "kandidater": [_bolag("Ett AB"), _bolag("Två AB")],
+           "tratt": [], "listspar": [], "webbpool": {}, "utslag": []}
+    rond = {"tmp": tmp, "skrap": {}, "slut": False, "fel": None}
+
+    await leads_api._sla_in_sokrunda(app_state, TENANT, b, rond)
+    k = await _k(storage, b)
+    assert k["rundor"] == 0 and k["kandidater"] == [] and k["dubblettrundor"] == 1
+    assert {t["steg"] for t in k["tratt"]} == {"dubblett"}

@@ -111,12 +111,13 @@ async def test_skapa_om_ersatter_det_vantande_utkastet_och_hoppar_over_kontaktad
         assert gammalt["queue_item"]["status"] == "cancelled" and gammalt["message"]["kasserad_at"]
 
 
-async def test_skapa_utkast_tar_upp_till_200_leads():
+async def test_skapa_utkast_har_inget_tak():
+    """Anton 2026-10-12: inget tak på antal markerade i någon liståtgärd."""
     from app.api.schemas import ProcessaOmRequest
 
-    assert ProcessaOmRequest(prospect_ids=["x"] * 200).ersatt is False
+    assert ProcessaOmRequest(prospect_ids=["x"] * 1200).ersatt is False
     with pytest.raises(ValueError):
-        ProcessaOmRequest(prospect_ids=["x"] * 201)
+        ProcessaOmRequest(prospect_ids=[])
 
 
 async def test_arkivera_doljer_stoppar_utkastet_och_aterstall_tar_tillbaka():

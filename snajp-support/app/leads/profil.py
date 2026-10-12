@@ -265,9 +265,13 @@ def slå_ihop(profil: dict[str, Any], icp: object) -> dict[str, Any]:
             p[falt] = list(icp[icp_falt])
     # Geografin: ICP:ns fritextorter som kommuner vi känner, plus region-
     # nycklarnas kommuner. Uttryckligt val ersätter tolkningen helt.
-    uttryckliga = [
-        KOMMUNER[o.casefold()].namn for o in icp.get("geography") or [] if o.casefold() in KOMMUNER
+    # "Göteborg & Norrland (Umeå)" är två områden, inte ett: som ett enda
+    # fritextområde översattes det till Norrland, och varje bolag i Göteborg
+    # föll på orten (Snajps omkörning 2026-10-11).
+    geografi = [
+        d.strip() for o in icp.get("geography") or [] for d in re.split(r"&|,|/|\+|\boch\b", str(o)) if d.strip()
     ]
+    uttryckliga = [KOMMUNER[o.casefold()].namn for o in geografi if o.casefold() in KOMMUNER]
     for nyckel in icp.get("geo") or []:
         uttryckliga += [k.namn for k in REGIONER[nyckel].kommuner]
     if uttryckliga:
@@ -275,7 +279,7 @@ def slå_ihop(profil: dict[str, Any], icp: object) -> dict[str, Any]:
     # Län och landskap ("Västra Götaland") är inga kommuner vi kan filtrera på
     # i kod, men de är kundens uttryckliga område — de följer med som text
     # till sökningen och bedömningen i stället för att tyst försvinna.
-    p["omraden"] = [o for o in icp.get("geography") or [] if o.casefold() not in KOMMUNER]
+    p["omraden"] = [o for o in geografi if o.casefold() not in KOMMUNER]
     storlek = icp.get("size") or {}
     if storlek.get("anstallda_min") is not None or storlek.get("anstallda_max") is not None:
         p["anstallda_min"] = storlek.get("anstallda_min")

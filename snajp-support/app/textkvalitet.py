@@ -129,6 +129,16 @@ _SKYDDAT = re.compile(
 
 _MARKDOWNRESTER = re.compile(r"(\*\*|__|```|^#{1,6}\s)", re.MULTILINE)
 
+#: Tilltal som ingen människa skriver i ett riktigt mejl (Sebbe 2026-10-11:
+#: "det får inte stå 'till kontaktpersoner' eller liknande"). Kontrolleras i
+#: textens första rader — ett mejl ska tilltala en person eller bolaget vid
+#: namn (app/leads/halsning.py), aldrig en roll eller "den det berör".
+_FEL_TILLTAL = re.compile(
+    r"\b(kontaktperson(?:er|en)?|till den det berör|to whom it may concern|"
+    r"dear sir|dear madam|bästa kund|kära kund|hej där)\b",
+    re.IGNORECASE,
+)
+
 
 @dataclass(frozen=True)
 class Anmarkning:
@@ -272,6 +282,21 @@ def kontrollera(text: str, *, sprak: str = "sv") -> Kontrollresultat:
             Anmarkning("markdownrester", "Markdownrester kvar i texten", allvarlig=True)
         )
 
+    # Tilltalet i mejlets inledning: de tre första icketomma raderna täcker
+    # hälsningen och första meningen; längre ned kan "kontaktperson" vara
+    # legitim sakprosa ("ange en kontaktperson i formuläret").
+    inledning = "\n".join([r for r in putsad.split("\n") if r.strip()][:3])
+    traff = _FEL_TILLTAL.search(inledning)
+    if traff:
+        resultat.anmarkningar.append(
+            Anmarkning(
+                "fel_tilltal",
+                f"Opersonligt tilltal i inledningen: {traff.group(0)!r} — skriv personens "
+                "förnamn eller bolagets namn",
+                allvarlig=True,
+            )
+        )
+
     if sprak == "sv":
         traffar = {m.group(0).lower() for m in _ENGELSKA_ORD.finditer(putsad.lower())}
         if len(traffar) >= 3:
@@ -320,7 +345,12 @@ def _verifiera_korrektur(original: str, korrigerad: str) -> bool:
 
 
 _KORREKTUR_PROMPT = """Du är korrekturläsare. Rätta ENBART språket i texten nedan:
-stavning, grammatik, särskrivningar, skiljetecken och meningsbyggnad.
+stavning, grammatik, särskrivningar, skiljetecken, meningsbyggnad och ordval.
+
+Med ordval menas ord som ingen människa skulle skriva i ett vanligt mejl:
+ett felböjt ord, ett ord som inte finns, en maskinöversatt fras eller ett
+stelt kanslispråksord där vardaglig svenska finns. Byt till det naturliga
+ordet med samma betydelse — aldrig till ett nytt budskap.
 
 En mening som är grammatiskt trasig eller hakar upp sig (en bisats som inte
 hänger ihop, ett ord som står två gånger, fel numerus som "era

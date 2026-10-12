@@ -15,7 +15,7 @@ milestone_blockers:
   - "Vantar pa kundens bekraftelse av garantiperioden"
   - "Migration 099 kord i development 2026-10-06; 101 (prompt_lager) och 102 (kundonskemal) ej korda nagonstans; 096-102 mot main vantar pa Antons ja"
   - "Nio ostyrkta Iris-leads i development ska raderas av Anton (scripts/radera_prospekt.py, agenten nekades); development-instruktionerna ska aterstallas (agenten nekades)"
-updated: 2026-10-09
+updated: 2026-10-12
 ---
 
 # Snipra / Snajp
@@ -427,6 +427,15 @@ inte uppdaterats till Railway-topologin.** Det gör de fem maskinella stegen
 mot den döda kedjan; en riktig onboarding just nu kräver manuella steg mot
 Railway tills skriptet är omskrivet. Se `TENANTS.md` för den nuvarande
 processen och flagga skriptet innan du litar på det.
+
+## Current status (2026-10-12)
+
+Utkastkedjan skriver referensutkastet på första försöket (Antons genomgång 2026-10-12): ingång ur bolagets
+egna ord utan registerfakta och mallfraser, erbjudandet intakt, handlingen sist, tilldelad ingångsform, och en
+stilgrind före humanizern (`app/leads/stilkontroll.py`). 92 av 100 Snajp-leads omkörda till granskningskön
+på development (`dc8e3d3`), inget skickat. Produktbundna profilkriterier gäller bara den valda produkten.
+Tillbaka till Iris skriver inte om; listtaken borta. `LEADS_DAILY_TOKEN_BUDGET` i development 32 M tills
+Anton återställer. Handoff: `HANDOFF-2026-10-12-UTKASTKEDJAN.md`.
 
 ## Current status (2026-10-08)
 

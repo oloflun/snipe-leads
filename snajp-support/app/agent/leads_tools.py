@@ -76,7 +76,9 @@ async def lagstadgad_fot(storage, tenant_id: str, prospect_email: str | None, br
     orgnr = str(tenant.get("orgnr") or "").strip()
     postadress = str(tenant.get("postal_address") or "").strip()
 
-    if not (bas_url and foretagsnamn and orgnr and postadress and prospect_email):
+    # Org.nr och postadress är inte krav (Anton 2026-10-10): foten tar med dem
+    # när kundregistret har dem.
+    if not (bas_url and foretagsnamn and prospect_email):
         return brodtext
 
     token = await storage.avregistreringstoken(tenant_id, email=prospect_email)
@@ -104,6 +106,7 @@ async def _queue_outreach_draft_impl(
     language_state: str,
     humanizer_variant: str,
     force_review: bool = False,
+    stilkontroll: bool = False,
 ) -> str:
     # Textkvalitetslagret (app/textkvalitet.py): sista efterkontrollen innan
     # texten kan nå en kund. Platshållare ("[förnamn]") kontrolleras på
@@ -122,15 +125,53 @@ async def _queue_outreach_draft_impl(
     ]
 
     finalized_body = finalize_outreach_body(body)
+    # Hälsningsraden avgörs i kod (Sebbe 2026-10-11): personens förnamn när
+    # mottagaren är namngiven, annars bolagets namn — aldrig "kontaktpersoner"
+    # eller en text utan hälsning. Före korrekturen, så att den läser den
+    # slutliga formen. Se app/leads/halsning.py.
+    from ..leads.halsning import normalisera_utkast
+
+    trad = await outreach.storage.get_outreach_thread(outreach.tenant_id, outreach.thread_id) or {}
+    prospekt = (
+        await outreach.storage.get_prospect(outreach.tenant_id, str(trad["prospect_id"]))
+        if trad.get("prospect_id")
+        else None
+    ) or {}
+    finalized_body = normalisera_utkast(
+        finalized_body,
+        kontakt=prospekt.get("contact_name"),
+        bolag=prospekt.get("company_name"),
+        sprak=sprak,
+    )
     kvalitet = await sakra_utgaende_text(finalized_body, sprak=sprak, alltid_korrektur=True)
     finalized_body = kvalitet.text
-    textkvalitet_granskning: str | None = None
+    granskningsskal: str | None = None
     if kvalitet.kraver_granskning or platshallare:
         force_review = True
         delar = [a.beskrivning for a in platshallare] + (
             [kvalitet.sammanfattning()] if kvalitet.kraver_granskning else []
         )
-        textkvalitet_granskning = "; ".join(delar)
+        granskningsskal = "; ".join(delar)
+
+    # Stilkontrollen (app/leads/stilkontroll.py) för kalla första mejl: AI-
+    # och robotmarkörer, och samma ingång eller uppmaning som ett annat utkast
+    # som väntar på granskning (körningens andra mejl). Fäller inget, men ett
+    # fynd tvingar granskning, och skälet står på köposten (`held`) så att
+    # granskaren ser det.
+    if stilkontroll:
+        from ..leads import stilkontroll as stil
+
+        andra = [
+            str(r.get("body") or "")
+            for r in await outreach.storage.list_review_queue(outreach.tenant_id)
+            if r.get("thread_id") != outreach.thread_id
+        ]
+        stilfynd = stil.kontrollera(finalized_body).anmarkningar + stil.mot_andra(finalized_body, andra)
+        if stilfynd:
+            force_review = True
+            granskningsskal = "; ".join(
+                [*([granskningsskal] if granskningsskal else []), *(a.beskrivning for a in stilfynd)]
+            )
 
     # Signaturen (kodens text, inte modellens) läggs på efter kvalitets-
     # kontrollen och före foten — vid köningen, så att granskningstexten är
@@ -208,6 +249,7 @@ async def _queue_outreach_draft_impl(
         humanizer_variant=humanizer_variant,
         scheduled_at=scheduled_at,
         status=queue_status,
+        gate_checks={"held": granskningsskal} if granskningsskal else None,
     )
     outreach.queued = True
     svar = {
@@ -216,8 +258,8 @@ async def _queue_outreach_draft_impl(
         "status": queue_status,
         "awaiting_review": queue_status == "awaiting_review",
     }
-    if textkvalitet_granskning:
-        svar["textkvalitet"] = textkvalitet_granskning
+    if granskningsskal:
+        svar["textkvalitet"] = granskningsskal
     return json.dumps(svar, ensure_ascii=False)
 
 

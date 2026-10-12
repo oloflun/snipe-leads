@@ -163,3 +163,21 @@ async def test_samtal_till_ringlistan_gor_bolaget_kontaktat():
             assert [r["contact_name"] for r in rader if r["prospect_id"] == p["id"]] == ["Eva VD"]
             await client.post(f"/api/leads/prospects/{p['id']}/samtal", headers=DEMO, json={"utfall": "ej_svar"})
         assert (await storage.get_prospect(TENANT, p["id"]))["status"] == "contacted"
+
+
+async def test_antalet_ar_samma_som_listornas_ring_idag():
+    """Att göra läser /samtal/antal i stället för båda listorna hela."""
+    async with app.router.lifespan_context(app):
+        storage = app.state.storage
+        await _kontaktad("Antal")
+        await storage.create_prospect(
+            TENANT, company_name="Ringantal", origin="ring", contact_name="Per VD",
+            profil={"contact_phone": "08-2", "contact_role": "VD", "anstallda": 3},
+        )
+        async with _client() as client:
+            antal = (await client.get("/api/leads/samtal/antal", headers=DEMO)).json()
+            for lista in ("aterkoppling", "ring"):
+                fullt = (await client.get(f"/api/leads/samtal?lista={lista}", headers=DEMO)).json()
+                assert antal[lista] == fullt["ring_idag"], lista
+            assert antal["ring"] >= 1
+

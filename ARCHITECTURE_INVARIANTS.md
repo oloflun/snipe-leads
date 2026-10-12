@@ -729,17 +729,22 @@ plans/2026-09-27-appytor-enhetlighet.md.
 Test: tests/invariants/test_inv_ui_001.py
 Införd: 2026-09-28 · Upphävs endast genom waiver
 
-### INV-DATA-003 — Enda skrivvägen från development till main är admin_flytt.importera
-`scripts/railway_seed_dev.py` speglar envägs main → development (målet
-hårdkodat, `mirror_meta`-markören, ingen `--target`). Det enda som går andra
-vägen är ett HMAC-signerat paket (`FLYTT_NYCKEL`) som `POST /api/admin/flytt/
-importera` tar emot utan masternyckel, vägrar i en spegel (409) och importerar
-idempotent med `importerad_fran` på raden. Ingen annan modul skriver det fältet.
-Varför: Antons beställning 2026-10-01: alla konton skapas i main, development
-ska vara en isolerad spegel för att testa kundproblem, och tester får aldrig
-dyka upp i kundmiljön — men EN admin-väg tillbaka ska finnas, och bara en.
+### INV-DATA-003 — Development och main skrivs bara av synken och admin_flytt
+Mellan miljöerna går data bara två vägar. `scripts/railway_synk.py` synkar
+körningar och supportärenden åt båda hållen (senast ändrad vinner, migration
+111) och rör ALDRIG provkörningar: varje synkad tabell har ett testvillkor i
+`SYNK`. Provkörningar når main bara som ett HMAC-signerat paket (`FLYTT_NYCKEL`)
+till `POST /api/admin/flytt/importera`, som vägrar i en spegel (409) och
+importerar idempotent med `importerad_fran` på raden; ingen annan modul skriver
+det fältet. Varje godkänt utkast skickas av EN miljö, den där det godkändes
+(`leads/scheduler.skickas_har`); autonoma utskick, uppföljningssvepet,
+inkorgsläsningen och autopiloten körs bara i main (`leads/scheduler.tvavags`).
+Varför: Antons beställning 2026-10-01 gjorde development till en isolerad
+envägsspegel. Den 2026-10-10 ändrade han det (docs/BESLUT.md): allt utom
+provkörningar speglas åt båda hållen för att kunna testa pålitligt, och
+provkörningar får aldrig dyka upp i kundmiljön av sig själva.
 Test: snajp-support/tests/invariants/test_inv_data_003.py
-Införd: 2026-10-02 · Upphävs endast genom waiver
+Införd: 2026-10-02 · Ändrad: 2026-10-10 · Upphävs endast genom waiver
 
 ### INV-COPY-001 — Varje komponent med användarvänd text är tvåspråkig
 Ingen rad i appytorna, demon, produktsidorna, marknadsytan, inloggningen eller de
@@ -843,6 +848,22 @@ INV-JOB-002, utvidgad från statusen till tillståndet: Postgres är sanningen,
 Redis är snabbvägen.
 Test: snajp-support/tests/invariants/test_inv_job_003.py
 Införd: 2026-10-01 · Upphävs endast genom waiver
+
+### INV-LEADS-UTKAST-001 — Iris första mejl håller facitet från 2026-10-12
+Tolv verkliga utkast ur Snajps granskningskö, godkända av Anton som perfekta
+("alla utkast är perfekta nu, lås in detta"), är facit i
+`snajp-support/tests/leads/fixtures/utkastfacit_2026-10-12.json`. Varje
+facitutkast passerar stilgrinden (`app/leads/stilkontroll.py`) utan andra
+fynd än de villkoren själva orsakar, har ingången skriven till mottagaren i
+andra person utan "man", erbjudandets siffror och produkt kvar, och en
+handling sist. Facitutkasten börjar olika. De fel Anton pekade ut (en allmän
+ingång med etikett som "som ni gör", registerfakta, antaganden om mottagaren,
+tappat erbjudande) fälls fortfarande. Varför: skrivstilen och grinden
+justerades fyra gånger på ett dygn innan utkasten satt; utan ett facit i
+kod glider nästa justering tillbaka utan att någon märker det.
+Referens: `docs/UTKASTKEDJAN-REFERENS.md`.
+Test: snajp-support/tests/leads/test_utkastfacit_2026_10_12.py
+Införd: 2026-10-12 · Upphävs endast genom waiver
 
 ## Roadmap
 

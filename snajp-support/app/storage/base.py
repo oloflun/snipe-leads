@@ -95,7 +95,12 @@ BEDOMNINGSFALT = (
 #: Fälten Processa om får skriva på en listrad (app/leads/omprova.py).
 LISTRAD_UPPDATERBARA = (
     "website", "contact_name", "contact_role", "contact_email", "contact_phone", "contact_level", "signal_detalj",
+    # Migration 108 och 110: Processa om (leads/omprova.py) och kopplingen
+    # till radens prospekt.
+    "orgnr", "webbniva", "webbrevision", "kallor", "processad_at", "prospect_id",
 )
+#: Kolumnerna ovan som är jsonb och skrivs som JSON.
+LISTRAD_JSONB = ("webbrevision", "kallor")
 
 
 class Storage(Protocol):
@@ -923,6 +928,15 @@ class Storage(Protocol):
         Bara LISTRAD_UPPDATERBARA; övriga nycklar ignoreras."""
         ...
 
+    async def satt_listprocessering(self, tenant_id: str, list_id: str, processering: dict[str, Any] | None) -> None:
+        """Förloppet för listans Processa om / Skapa utkast (migration 110)."""
+        ...
+
+    async def listkopplade_prospekt(self, tenant_id: str) -> set[str]:
+        """Prospekt som är en listrads bakgrundspost (migration 110). Iris-
+        tabellen visar dem inte: bolaget står i sin lista."""
+        ...
+
     async def markera_listrad_flyttad(self, tenant_id: str, item_id: str, *, signal_detalj: str) -> None:
         """Raden blev ett prospekt. Den raderas aldrig (Antons beslut
         2026-10-07) men döljs: `signal='flyttad'` och var den hamnade."""
@@ -1054,6 +1068,7 @@ class Storage(Protocol):
         humanizer_variant: str,
         scheduled_at: Any,
         status: str = "queued",
+        gate_checks: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Skapar meddelandet (sent_at=NULL) OCH send_queue-raden i samma
         operation — det finns ingen kodväg som skapar det ena utan det andra.
@@ -1061,7 +1076,30 @@ class Storage(Protocol):
         `status` avgörs av kundens autonominivå (app/leads/autonomy.py):
         'queued' släpps till schemaläggaren, 'awaiting_review' väntar på att
         en människa godkänner. Default är 'queued' för att inte ändra
-        beteendet för anropare som inte känner till nivån."""
+        beteendet för anropare som inte känner till nivån.
+
+        `gate_checks` blir köpostens första grindanteckning. Köningen lägger
+        `held` där när text- eller stilkontrollen tvingat granskning, så att
+        granskaren ser varför (utkaststatus.harled läser den)."""
+        ...
+
+    async def tilldela_erbjudande(self, tenant_id: str, thread_id: str, *, nyckel: str) -> str:
+        """Kopplar tråden till kundens erbjudande `nyckel` (app/leads/erbjudanden.py):
+        get-or-create en `offers`-rad per kund och nyckel (name = nyckeln) och
+        sätt `outreach_threads.offer_id`. Returnerar offer-id:t."""
+        ...
+
+    async def erbjudande_utfall(self, tenant_id: str) -> list[dict[str, Any]]:
+        """Utfallet per erbjudande, räknat på trådar med `offer_id`: en rad per
+        nyckel med `utkast` (trådar med ett utgående meddelande), `skickade`
+        (med ett skickat), och bland de skickade `svar`, `positiva` och `moten`.
+
+        Härledningen, eftersom svarsklassen inte sparas i en egen kolumn:
+        app/leads/svar.py är den enda kodvägen som sätter prospektets status
+        med källan 'kod' till replied/meeting/lost/suppressed (statusloggen,
+        migration 086), och 'meeting' med 'kod' är just klassen positivt. Ett
+        möte är ett samtalsutfall 'mote' (lead_samtal), en manuell flytt till
+        'meeting' eller status 'won'. Bara loggrader från trådens start räknas."""
         ...
 
     # -- Leads: proveniensregister (Fas B, INV-DATA-001, research-verktygets allowlist) --

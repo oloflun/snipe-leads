@@ -1,5 +1,31 @@
 # Snipra Status
 
+## 2026-10-12 — Claude — utkastkedjan skriver referensutkastet på första försöket; 92 av 100 Snajp-leads omkörda
+
+Antons genomgång av AI-knapparnas kedja (Fiskebäck, Härlanda) blev regler i kod: ingången bygger på en
+egenskap ur bolagets egna ord (aldrig antal anställda eller "För företag som ert …"), erbjudandet står
+kvar, handlingen sist, och varje mejl får en tilldelad ingångsform. En stilgrind före humanizern skriver om
+en gång när något fälls. De 73 gamla godkända utkasten avbröts och 92 av 100 leads har nya utkast i
+granskningskön (inget skickat). Två fel rättades på vägen: profilen hade kompilerats om till tre
+produktbundna måste-kriterier (gäller nu bara den valda produkten), och produkten härleds ur ett uppfyllt
+kriterium. Tillbaka till Iris skriver inte om automatiskt; alla listtak borta. Pushat till development
+(`dc8e3d3`). Förmiddagen: Anton såg "som ni gör"/"som ert" kvar i nästan alla ingångar; grinden fäller nu
+etiketterna och allmänna ingångar, och kedjan skriver om ingången i andra person ur citaten i ett eget steg
+(`dda1531`). Alla 100 omkörda: 20 hade redan godkänts och skickats 08:34, 76 av 80 har nya utkast utan
+etiketter, 4 faller på hårda kriterier. **Kvar:** Anton granskar de 76; fyra leads (DS Flexhal, Nyströms
+Byggtjänst, Z Marktjänst, SafeTeam) faller på profilens hårda kriterier; `LEADS_DAILY_TOKEN_BUDGET` i
+development står på 48 M tills Anton återställer.
+Handoff: `HANDOFF-2026-10-12-UTKASTKEDJAN.md`. Logg: `session-logs/2026-10-12-session-log.md`.
+
+## 2026-10-10 (2) — Claude — parallella körningar, hitta.se-kontakt, listverktyg, kö, autopilot
+
+Parallella körningar delar inte längre bolag; hitta.se slås upp på org.nr och ger kontakt till Norrtech,
+Örnbergs och Devoted Intelligence; listorna har detaljvy, utkast och Processa om med förlopp (migration 110,
+torrkörd, inte körd); kön kan skicka nu eller omplanera; autopiloten (10 leads/vardag, av tills
+`LEADS_AUTOPILOT=1`) är byggd. 3161 tester gröna. **Ocommittat.** **Kvar:** Anton frigör disk (C: gick till 0),
+svarar på commit/migration/push, hitta.se-nummer utan VD, sändfönster för Skicka nu och autopilot i main;
+visuell granskning. Handoff: `HANDOFF-2026-10-10-PARALLELL-KATALOG-AUTOPILOT.md`.
+
 ## 2026-10-09 — Claude — körningar på 30–50 leads, skicka alla, provmejl, snabbare flikbyten (handoff)
 
 Tre sessioner under dagen, 35 commits på development (`5e189b7` … `d9028d6`), allt driftsatt.

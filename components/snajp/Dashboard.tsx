@@ -456,6 +456,11 @@ export function Dashboard({
   const [inkorgKopplad, setInkorgKopplad] = useState<boolean | null>(null);
 
   useEffect(() => {
+    // Kölägena (Att göra) visar varken synk- eller kopplingsknappen, och varje
+    // villkor som läser inkorgKopplad kortsluts av arKo. Att göra monterar tre
+    // köer: tre onödiga anrop, och brevlådelistan var sidans långsammaste
+    // (~0,4 s, uppmätt 2026-10-10).
+    if (arKo) return;
     let avbruten = false;
     void (async () => {
       try {
@@ -471,7 +476,7 @@ export function Dashboard({
     return () => {
       avbruten = true;
     };
-  }, [api]);
+  }, [api, arKo]);
 
   const openEmail = useCallback(
     async (id: string) => {

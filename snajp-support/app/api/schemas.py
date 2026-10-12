@@ -2,6 +2,8 @@
 
 from typing import Literal
 
+from datetime import datetime
+
 from pydantic import BaseModel, Field, model_validator
 
 
@@ -112,6 +114,35 @@ class LeadsConfigRequest(BaseModel):
     offentlig_sektor: bool | None = None
 
 
+class ErbjudandeArmRequest(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    nyckel: str = Field(max_length=40)
+    vikt: int = Field(default=1, ge=0, le=10)
+
+
+class ErbjudandenRequest(BaseModel):
+    """PUT /api/leads/erbjudanden (app/leads/erbjudanden.py). Båda fälten
+    valfria: ett utelämnat fält behåller det sparade. Nycklarna och kravet på
+    villkor för ett aktivt erbjudande prövas mot katalogen i routen."""
+
+    model_config = {"extra": "forbid"}
+
+    aktiva: list[ErbjudandeArmRequest] | None = Field(default=None, max_length=6)
+    #: Per erbjudande: en text för alla produkter, eller {produktnamn: text}.
+    villkor: dict[str, str | dict[str, str]] | None = None
+
+    @model_validator(mode="after")
+    def _villkorslangd(self) -> "ErbjudandenRequest":
+        from ..leads.erbjudanden import VILLKOR_MAX
+
+        for nyckel, varde in (self.villkor or {}).items():
+            texter = varde.values() if isinstance(varde, dict) else [varde]
+            if any(len(text) > VILLKOR_MAX for text in texter):
+                raise ValueError(f"Villkoren för {nyckel} är längre än {VILLKOR_MAX} tecken.")
+        return self
+
+
 class SignaturRequest(BaseModel):
     """Mejlsignaturen i Iris utgående leads-mejl (app/leads/signatur.py).
 
@@ -167,6 +198,15 @@ class AutomationPerTypRequest(BaseModel):
     inkorg: AutomationTypRequest | None = None
 
 
+class AutopilotRequest(BaseModel):
+    """Iris autopilot (app/leads/autopilot.py): en körning per vardag."""
+
+    model_config = {"extra": "forbid"}
+
+    pa: bool | None = None
+    leads_per_dag: int | None = Field(default=None, ge=1, le=50)
+
+
 class AutomationRequest(BaseModel):
     """Automationsreglerna per lead-typ. Sammanslås fältvis per typ i
     PUT /api/leads/config — resten står kvar."""
@@ -175,6 +215,7 @@ class AutomationRequest(BaseModel):
 
     per_typ: AutomationPerTypRequest | None = None
     jev_bortval: bool | None = None
+    autopilot: AutopilotRequest | None = None
 
 
 class CrmSynkRequest(BaseModel):
@@ -390,9 +431,9 @@ class ProcessaOmRequest(BaseModel):
     innan kontakt/utkast — 'Processa om' i registret.
     """
 
-    # 200 (2026-10-08): Skapa utkast och Skapa om i Iris-listan körs på alla
-    # markerade, och listan visar upp till 500 leads.
-    prospect_ids: list[str] = Field(..., min_length=1, max_length=200)
+    # Inget tak (Anton 2026-10-12): en liståtgärd gäller alla markerade,
+    # oavsett hur många. Budgetvakten och jobbkön sätter gränsen, inte schemat.
+    prospect_ids: list[str] = Field(..., min_length=1)
     scope: str = Field(default="research_and_draft", pattern=r"^(research|research_and_draft)$")
     is_test: bool = False
     #: Skapa om utkast: leadets väntande utkast ersätts. Köposterna ställs in
@@ -431,6 +472,22 @@ class KombineraListorRequest(BaseModel):
     #: alla = varje rad; telefon = rader med telefon; mejl = rader med mejl;
     #: bada = rader med både telefon och mejl.
     kontaktfilter: Literal["alla", "telefon", "mejl", "bada"] = "alla"
+
+
+class SchemalaggRequest(BaseModel):
+    """Ny utskickstid för markerade godkända utkast (Anton 2026-10-10)."""
+
+    ids: list[str] = Field(min_length=1)
+    tid: datetime
+
+
+class TillbakaTillIrisRequest(BaseModel):
+    """Markerade utkast ur sändlistan tillbaka till Iris (Anton 2026-10-10).
+    Inget tak och ingen automatisk omskrivning (Anton 2026-10-12): utkasten
+    avbryts och leadsen står som nya hos Iris; vad som händer sedan väljer
+    användaren själv där."""
+
+    ids: list[str] = Field(min_length=1)
 
 
 class TillIrisRequest(BaseModel):

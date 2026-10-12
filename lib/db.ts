@@ -33,7 +33,12 @@ export function pool(): Pool {
   if (!globalThis.__snajpPool) {
     globalThis.__snajpPool = new Pool({
       connectionString: connectionString(),
-      max: 5,
+      // 10 och inte 5: varje proxat API-anrop tar 2–3 transaktioner
+      // (arbetsytan, admingrinden, tenantnyckeln), och Att göra skickar nio
+      // samtidigt. Med fem platser köade de i omgångar om ~100 ms
+      // (uppmätt 2026-10-10). api:ts pool är 20 (DB_POOL_MAX); Postgres-
+      // standardtaket 100 rymmer båda med marginal.
+      max: 10,
       idleTimeoutMillis: 30_000,
       // Railway-Postgres kör med självsignerat certifikat i sitt privata nät.
       // rejectUnauthorized: false är rätt här och bara här: trafiken lämnar
@@ -45,6 +50,8 @@ export function pool(): Pool {
   }
   return globalThis.__snajpPool;
 }
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** En fråga utan användaridentitet. Använd bara där cross-tenant-läsning är avsikten. */
 export async function sql<T = Record<string, unknown>>(
@@ -70,8 +77,17 @@ export async function withUser<T>(
 ): Promise<T> {
   const client = await pool().connect();
   try {
-    await client.query("begin");
-    await client.query("select set_config('app.user_id', $1, true)", [userId]);
+    // BEGIN och set_config i EN rundtur när id:t är ett UUID (alltid, för
+    // en Auth.js-session): en parameter går inte i en flersatsfråga, så
+    // värdet skrivs in som literal — därför den strikta formkontrollen. Varje
+    // proxat API-anrop gör minst en sådan transaktion, och rundturerna var
+    // den största posten i webbens del av anropet (2026-10-10).
+    if (UUID.test(userId)) {
+      await client.query(`begin; select set_config('app.user_id', '${userId}', true)`);
+    } else {
+      await client.query("begin");
+      await client.query("select set_config('app.user_id', $1, true)", [userId]);
+    }
     const value = await fn(client);
     await client.query("commit");
     return value;

@@ -55,7 +55,7 @@ NASTA_SPEGLING = "04:00 svensk sommartid (02:00 UTC)"
 class FlyttRequest(BaseModel):
     slug: str = Field(..., min_length=1, max_length=120)
     typ: Literal["mejl", "korning", "prospekt"]
-    ids: list[str] = Field(..., min_length=1, max_length=50)
+    ids: list[str] = Field(..., min_length=1)
 
 
 # -- Signering ---------------------------------------------------------------

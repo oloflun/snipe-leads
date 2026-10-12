@@ -86,29 +86,59 @@ def planera(
     return spar, skal, k
 
 
+#: Källorna Processa om kan pröva för en rad (sparas i lead_list_items.kallor,
+#: migration 110). Anton 2026-10-10: omprövningen ska "endast svepa källor som
+#: den förra agenten inte använde", så att så många källor som möjligt täcks.
+KALLOR = ("register", "katalog", "webbplats", "webbuppslag")
+
+
 async def sok(
     rad: dict[str, Any], bolag: dict[str, Any] | None, *, betald: bool
 ) -> tuple[dict[str, Any], dict[str, Any] | None]:
-    """Kandidaten med webbplats och kontaktsökningens svar."""
-    from . import discovery
+    """Kandidaten med webbplats och kontaktsökningens svar. `kandidat["kallor"]`
+    är radens källor efter omprövningen (de tidigare plus de nya).
+
+    * register: registrets bolagssida (anroparen läser den, `bolag`),
+    * katalog: hitta.se på org.nr (leads/katalog.py), en gång per rad,
+    * webbplats: kontaktsökningen på sajten; alltid när en sajt finns (sidorna
+      är cachade och gratis att läsa om),
+    * webbuppslag: grounded Gemini-uppslaget av webbplatsen (betald), en gång
+      per rad och bara när inget annat gav en sajt.
+
+    En parkerad eller trasig sajt ur registret avslutar inte sökningen: de
+    andra vägarna till webbplatsen prövas (Anton 2026-10-10)."""
+    from . import discovery, katalog
     from .platshallare import ar_platshallare
     from .sources import merinfo
 
+    tidigare = {str(x) for x in rad.get("kallor") or []}
+    nya: set[str] = {"register"} if bolag else set()
     kandidat = kandidat_ur_rad(rad, bolag)
-    webb = await merinfo._webbplats(kandidat, betald=betald)
+    if "katalog" not in tidigare:
+        kandidat = await katalog.berika(kandidat)
+        nya.add("katalog")
+    uppslag = betald and "webbuppslag" not in tidigare
+    webb = await merinfo._webbplats(kandidat, betald=uppslag)
     skal = await ar_platshallare(webb) if webb else None
+    if skal and skal != AVVECKLAT:
+        alt = await merinfo._webbplats({**kandidat, "website": None}, betald=uppslag)
+        if alt and discovery.normalisera_webbplats(alt) != discovery.normalisera_webbplats(webb)                 and not await ar_platshallare(alt):
+            webb, skal = alt, None
+    if uppslag:
+        nya.add("webbuppslag")
     if skal:
         # Platshållaren är skälet (för webbpoolen det akuta), inte bara ett hinder.
         kandidat["webbrevision"] = {**(kandidat.get("webbrevision") or {}), "platshallare": skal}
         kandidat["avvecklas"] = skal == AVVECKLAT
         webb = None
     kandidat = {**kandidat, "website": webb}
-    kontakt = (
-        await discovery.hamta_person_kontakt(
+    kontakt = None
+    if webb:
+        nya.add("webbplats")
+        kontakt = await discovery.hamta_person_kontakt(
             webb, kandidat.get("vd_namn"), bolagsadress_racker=True, bolagsnamn=kandidat["company_name"]
         )
-        if webb else None
-    )
+    kandidat["kallor"] = sorted(tidigare | nya)
     return kandidat, kontakt
 
 

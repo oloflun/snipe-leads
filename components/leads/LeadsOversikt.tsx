@@ -330,7 +330,7 @@ export function LeadsOversikt({
         {listorOppna ? (
           <div id="leads-listor-innehall" className="mt-4">
             {harListaddon || arDemo ? (
-              <LeadslistorView demo={demo} crmOppen={crmOppen} />
+              <LeadslistorView demo={demo} crmOppen={crmOppen} onValjLead={onValjLead} />
             ) : (
               <div className="grid gap-8">
                 <SaljlistaUtforska />

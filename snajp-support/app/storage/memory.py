@@ -115,6 +115,11 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+#: Statusarna app/leads/svar.py sätter (källa 'kod') när ett svar kommit in;
+#: autosvar ändrar ingen status. Samma lista som i PostgresStorage.erbjudande_utfall.
+SVARSSTATUS = ("replied", "meeting", "lost", "suppressed")
+
+
 def _iso(d: date | None) -> str | None:
     return d.isoformat() if d is not None else None
 
@@ -185,6 +190,8 @@ class MemoryStorage:
         # direkt i tester — ingen API-yta skriver hit än (samma status som
         # send_queue/outreach_* ovan).
         self.ab_results: list[dict[str, Any]] = []
+        #: Kundens erbjudanden (offers, migration 010), en rad per kund och nyckel.
+        self.offers: list[dict[str, Any]] = []
         self.prospects: dict[str, list[dict[str, Any]]] = {}
         self.prospect_sources: dict[str, list[dict[str, Any]]] = {}
         self.agent_runs: dict[str, list[dict[str, Any]]] = {}
@@ -940,6 +947,7 @@ class MemoryStorage:
         humanizer_variant: str,
         scheduled_at,
         status: str = "queued",
+        gate_checks: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         message = {
             "id": str(uuid.uuid4()),
@@ -959,7 +967,7 @@ class MemoryStorage:
             "thread_id": thread_id,
             "scheduled_at": scheduled_at,
             "status": status,
-            "gate_checks": {},
+            "gate_checks": dict(gate_checks or {}),
             "created_at": _now(),
         }
         self.outreach_messages.setdefault(tenant_id, []).append(message)
@@ -994,6 +1002,48 @@ class MemoryStorage:
         }
         trådar[thread["id"]] = thread
         return thread
+
+    async def tilldela_erbjudande(self, tenant_id: str, thread_id: str, *, nyckel: str) -> str:
+        thread = self.outreach_threads.get(tenant_id, {}).get(thread_id)
+        if thread is None:
+            raise ValueError(f"Tråden {thread_id} finns inte hos tenanten.")
+        offer = next(
+            (o for o in self.offers if o["tenant_id"] == tenant_id and o["name"] == nyckel), None
+        )
+        if offer is None:
+            offer = {"id": str(uuid.uuid4()), "tenant_id": tenant_id, "name": nyckel, "created_at": _now()}
+            self.offers.append(offer)
+        thread["offer_id"] = offer["id"]
+        return offer["id"]
+
+    async def erbjudande_utfall(self, tenant_id: str) -> list[dict[str, Any]]:
+        namn = {o["id"]: o["name"] for o in self.offers if o["tenant_id"] == tenant_id}
+        meddelanden = self.outreach_messages.get(tenant_id, [])
+        logg = [r for r in self.prospect_status_logg if r["tenant_id"] == tenant_id]
+        moten = {
+            r["prospect_id"] for r in self.lead_samtal if r["tenant_id"] == tenant_id and r["utfall"] == "mote"
+        }
+        rader: dict[str, dict[str, int]] = {}
+        for thread in self.outreach_threads.get(tenant_id, {}).values():
+            nyckel = namn.get(thread.get("offer_id"))
+            if nyckel is None:
+                continue
+            rad = rader.setdefault(nyckel, dict.fromkeys(("utkast", "skickade", "svar", "positiva", "moten"), 0))
+            ut = [m for m in meddelanden if m["thread_id"] == thread["id"] and m["direction"] == "outbound"]
+            rad["utkast"] += bool(ut)
+            if not any(m.get("sent_at") for m in ut):
+                continue
+            rad["skickade"] += 1
+            egna = [
+                r for r in logg
+                if r["prospect_id"] == thread["prospect_id"] and str(r["created_at"]) >= str(thread["created_at"])
+            ]
+            rad["svar"] += any(r["kalla"] == "kod" and r["till"] in SVARSSTATUS for r in egna)
+            rad["positiva"] += any(r["kalla"] == "kod" and r["till"] == "meeting" for r in egna)
+            rad["moten"] += thread["prospect_id"] in moten or any(
+                r["till"] == "won" or (r["till"] == "meeting" and r["kalla"] == "manuell") for r in egna
+            )
+        return [{"nyckel": k, **v} for k, v in rader.items()]
 
     async def record_inbound_reply(
         self, tenant_id: str, *, thread_id: str, body: str
@@ -1926,6 +1976,9 @@ class MemoryStorage:
             "postnr": falt.get("postnr"),
             "webbniva": falt.get("webbniva"),
             "webbrevision": falt.get("webbrevision"),
+            "prospect_id": None,
+            "kallor": [],
+            "processad_at": None,
             "created_at": _now(),
         }
         self.lead_list_items.append(rad)
@@ -1947,6 +2000,17 @@ class MemoryStorage:
         for i in self.lead_list_items:
             if str(i["id"]) == str(item_id) and i["tenant_id"] == tenant_id:
                 i.update({k: v for k, v in falt.items() if k in LISTRAD_UPPDATERBARA})
+
+    async def satt_listprocessering(self, tenant_id: str, list_id: str, processering: dict[str, Any] | None) -> None:
+        for rad in self.lead_lists.get(tenant_id, []):
+            if rad["id"] == list_id:
+                rad["processering"] = json.loads(json.dumps(processering, default=str)) if processering else None
+
+    async def listkopplade_prospekt(self, tenant_id: str) -> set[str]:
+        return {
+            str(i["prospect_id"]) for i in self.lead_list_items
+            if i["tenant_id"] == tenant_id and i.get("prospect_id")
+        }
 
     async def markera_listrad_flyttad(self, tenant_id: str, item_id: str, *, signal_detalj: str) -> None:
         for i in self.lead_list_items:
@@ -2852,9 +2916,11 @@ class MemoryStorage:
             if item["status"] != "awaiting_review":
                 continue
             m = await self.get_pending_outreach_message(tenant_id, item["thread_id"]) or {}
-            p = prospekt.get((trader.get(item["thread_id"]) or {}).get("prospect_id"), {})
+            trad = trader.get(item["thread_id"]) or {}
+            p = prospekt.get(trad.get("prospect_id"), {})
             svar.append({
                 **item,
+                "language_state": trad.get("language_state"),
                 "subject": m.get("subject"),
                 "body": m.get("body"),
                 "message_id": m.get("id"),

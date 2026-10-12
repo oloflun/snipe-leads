@@ -260,7 +260,13 @@ export async function proxyWithApiKey(
             parsed.error = parsed.detail;
           }
         }
-        return NextResponse.json(parsed, { status: response.status });
+        // api:ts mätning (frågor och databastid, app/matning.py) följer med
+        // till webbläsarens nätverkspanel.
+        const timing = response.headers.get("server-timing");
+        return NextResponse.json(parsed, {
+          status: response.status,
+          headers: timing ? { "Server-Timing": timing } : undefined
+        });
       } catch {
         if (arGatewayStatus && farGorasOm && attempt < forsok - 1) {
           lastCause = new Error(`uppströms ${response.status} med icke-JSON-kropp`);

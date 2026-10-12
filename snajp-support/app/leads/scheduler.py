@@ -57,7 +57,7 @@ async def _outbound_sent_count(storage: Storage, tenant_id: str, thread_id: str)
     )
 
 
-async def _kor_send_guard(storage, tenant_id: str, thread: dict, message: dict, *, now):
+async def _kor_send_guard(storage, tenant_id: str, thread: dict, message: dict, *, now, direkt: bool = False):
     """Samlar ihop fakta och låter `send_guard` döma.
 
     Uppdelningen är avsiktlig: den här funktionen gör I/O och ingen bedömning,
@@ -158,6 +158,7 @@ async def _kor_send_guard(storage, tenant_id: str, thread: dict, message: dict, 
             brodtext=message.get("body") or "",
             foretagsnyckel=nyckel,
             personlig_adress=_ar_personlig(thread.get("prospect_email")),
+            direkt=direkt,
         ),
         historik=historik,
         nu=now,
@@ -209,17 +210,29 @@ async def _fot_vid_godkannande(storage: Storage, tenant_id: str, item: dict) -> 
     kundregistret nu har underlaget. Foten är kodens text (utskicksfot.py),
     inte en ändring av det granskaren sagt ja till."""
     from ..agent.leads_tools import lagstadgad_fot
-    from .outreach_playbook import _intervallstreck, tilltala_med_ni
+    from .halsning import normalisera_utkast
     from .utskicksfot import har_fot
 
     thread = await storage.get_outreach_thread(tenant_id, item["thread_id"])
     message = await storage.get_pending_outreach_message(tenant_id, item["thread_id"]) if thread else None
     if not message:
         return
-    # Kodens textputs (tilltal, tankstreck) även på utkast skrivna innan den
-    # fanns (2026-10-09: "Hej Verkstad," i redan köade utkast). Rör bara
-    # hälsningen och tilltalet, aldrig innehållet granskaren sagt ja till.
-    ny = _intervallstreck(tilltala_med_ni(message["body"]))
+    # Kodens textputs (hälsningsraden, tilltalet, tankstrecken) även på utkast
+    # skrivna innan passet fanns (2026-10-09 "Hej Verkstad,"; 2026-10-11
+    # utkast utan hälsningsrad). Rör bara hälsningen och tilltalet, aldrig
+    # innehållet granskaren sagt ja till. Se app/leads/halsning.py.
+    prospekt = (
+        await storage.get_prospect(tenant_id, str(thread["prospect_id"]))
+        if thread.get("prospect_id")
+        else None
+    ) or {}
+    sprak_h = "en" if thread.get("language_state") == "en_confirmed" else "sv"
+    ny = normalisera_utkast(
+        message["body"],
+        kontakt=prospekt.get("contact_name"),
+        bolag=prospekt.get("company_name"),
+        sprak=sprak_h,
+    )
     # Signaturen även på utkast köade innan tenanten satte den (Sebbe
     # 2026-10-09: alla utkast och mejl ska bära den). Före foten, som alltid
     # är sist.
@@ -266,8 +279,12 @@ async def _process_due_item(
     *,
     now: datetime,
     godkant: dict | None = None,
+    direkt: bool = False,
 ) -> str:
     """Returnerar 'sent' | 'requeued' | 'blocked' | 'awaiting_review'.
+
+    `direkt` (Skicka nu ur kön, Anton 2026-10-10): sändfönstret (tidsgrinden
+    och regel 5a) gäller inte; språkgrinden och övriga spärrar gör det.
 
     `godkant` (2026-10-07): en människa har godkänt just det här utkastet i
     granskningskön. Då är autonominivån redan besvarad — det är människan
@@ -285,6 +302,18 @@ async def _process_due_item(
         await storage.get_pending_outreach_message(tenant_id, item["thread_id"]) if thread else None
     )
     decision = decide_send_action(now=now, thread=thread, message=message)
+    if direkt and decision.action == "requeue":
+        # Bara tidsgrinden ger requeue; språkgrinden prövas här i stället.
+        from .send_decision import LanguageGateError, SendDecision, check_send_gate
+
+        try:
+            check_send_gate(
+                language_state=thread.get("language_state", "sv"),
+                humanizer_variant=message.get("humanizer_variant"),
+            )
+            decision = SendDecision("send", "Skicka nu: en människa valde att skicka utanför sändfönstret")
+        except LanguageGateError as fel:
+            decision = SendDecision("block", str(fel))
 
     # Andra anropsplatsen för autonomiregeln. Grinden vid köningen räcker inte:
     # ett item kan ha köats innan kunden sänkte sin nivå, och det som ligger i
@@ -312,7 +341,7 @@ async def _process_due_item(
         #
         # En guard som körts vid köningen hade dömt på gårdagens sanning: en
         # mottagare kan ha avregistrerat sig medan utkastet låg i kön.
-        guard = await _kor_send_guard(storage, tenant_id, thread, message, now=now)
+        guard = await _kor_send_guard(storage, tenant_id, thread, message, now=now, direkt=direkt)
         # Regel 6 kräver att en människa granskar de tre första utskicken. Ett
         # godkänt utkast ÄR den granskningen; alla andra spärrar gäller.
         granskat = godkant and guard.regel == "6_granskningsko"
@@ -429,7 +458,22 @@ def godkannande(item: dict) -> dict | None:
             return None
     if gc.get("approved_by") != "human":
         return None
-    return {k: gc[k] for k in ("approved_by", "via", "godkand_at") if k in gc}
+    return {k: gc[k] for k in ("approved_by", "via", "godkand_at", "godkand_i") if k in gc}
+
+
+def miljo(spegel: dict | None) -> str:
+    """Den här miljöns namn: spegelns ('development') eller 'main'."""
+    return str((spegel or {}).get("environment") or "main")
+
+
+def skickas_har(item: dict, spegel: dict | None) -> bool:
+    """Skickas posten från den här miljön? (Anton 2026-10-10: utskick ska gå
+    att göra från development också.) Den miljö där en människa godkände
+    utkastet skickar det; den andra får statusen via synken. Utan
+    godkännande (autonoma utskick) och för godkännanden från före
+    2026-10-10, som saknar `godkand_i`, är det main."""
+    godkant = godkannande(item) or {}
+    return (godkant.get("godkand_i") or "main") == miljo(spegel)
 
 
 async def _avsandaridentitet(storage: Storage, tenant_id: str) -> dict:
@@ -470,7 +514,8 @@ async def _avsandaridentitet(storage: Storage, tenant_id: str) -> dict:
 
 
 async def skicka_godkant(
-    storage: Storage, tenant_id: str, item_id: str, provider: SendProvider, *, now: datetime
+    storage: Storage, tenant_id: str, item_id: str, provider: SendProvider, *, now: datetime,
+    direkt: bool = False,
 ) -> tuple[str, str | None]:
     """Granskarens "Godkänn och skicka" (2026-10-07): (utfall, skäl).
 
@@ -496,10 +541,13 @@ async def skicka_godkant(
         ):
             return "blocked", "Utkastet finns inte längre. Välj Skapa utkast för att skriva ett nytt."
         await _fot_vid_godkannande(storage, tenant_id, item)
-        godkant = {"approved_by": "human", "via": "granskningskön", "godkand_at": now.isoformat()}
+        godkant = {
+            "approved_by": "human", "via": "granskningskön", "godkand_at": now.isoformat(),
+            "godkand_i": miljo(await storage.spegel_info()),
+        }
         await storage.update_send_queue_status(tenant_id, item_id, status="queued", gate_checks=godkant)
         utfall = await _process_due_item(
-            storage, tenant_id, {**item, "status": "queued"}, provider, now=now, godkant=godkant
+            storage, tenant_id, {**item, "status": "queued"}, provider, now=now, godkant=godkant, direkt=direkt
         )
     efter = await storage.get_send_queue_item(tenant_id, item_id) or {}
     gc = efter.get("gate_checks") or {}
@@ -516,6 +564,15 @@ def _efter(tidpunkt, seedad: str) -> bool:
     if hasattr(tidpunkt, "isoformat"):
         tidpunkt = tidpunkt.isoformat()
     return bool(tidpunkt) and str(tidpunkt) > seedad
+
+
+def tvavags(spegel: dict | None) -> bool:
+    """Development i tvåvägssynk med main (scripts/railway_synk.py, Anton
+    2026-10-10). Main följer upp, läser inkorgarna och kör autopiloten, och
+    synken för tillbaka utfallet; development gör det inte, annars blev varje
+    uppföljning och varje inkommande mejl två. Utskick av godkända utkast
+    sker i den miljö där utkastet godkändes (skickas_har)."""
+    return bool(spegel) and (spegel or {}).get("lage") == "tvavags"
 
 
 async def process_godkanda(storage: Storage, provider: SendProvider) -> list[dict]:
@@ -545,9 +602,17 @@ async def process_godkanda(storage: Storage, provider: SendProvider) -> list[dic
             godkant = godkannande(item)
             if not godkant:
                 continue
-            if spegel and not (_efter(godkant.get("godkand_at"), seedad) or _efter(item.get("created_at"), seedad)):
+            if tvavags(spegel) or not spegel:
+                if not skickas_har(item, spegel):
+                    continue
+            elif not (_efter(godkant.get("godkand_at"), seedad) or _efter(item.get("created_at"), seedad)):
                 continue
             try:
+                # Samma textputs som klickvägen (skicka_godkant): ett utkast
+                # godkänt FÖRE en regeländring och skickat av fönstret EFTER
+                # den gick annars ut i gammal form — utan hälsningsrad eller
+                # signatur (Sebbe 2026-10-12). Idempotent.
+                await _fot_vid_godkannande(storage, tenant["id"], item)
                 outcome = await process_due_item(storage, tenant["id"], item, provider, now=now, godkant=godkant)
             except Exception:  # noqa: BLE001
                 logger.exception("Godkänt utkast %s misslyckades oväntat", item.get("id"))
@@ -597,8 +662,13 @@ async def run_godkand_sandare(app_state) -> None:
 async def process_all_due(storage: Storage, provider: SendProvider) -> list[dict]:
     now = datetime.now(timezone.utc)
     results: list[dict] = []
+    spegel = await storage.spegel_info()
     for tenant in await storage.list_tenants():
         for item in await storage.list_due_send_queue(tenant["id"], now):
+            # Autonoma utskick sker bara i main; ett godkänt utkast skickas av
+            # miljön där det godkändes (skickas_har).
+            if not skickas_har(item, spegel):
+                continue
             try:
                 outcome = await process_due_item(
                     storage, tenant["id"], item, provider, now=now, godkant=godkannande(item)
@@ -650,6 +720,8 @@ async def sweep_follow_ups(storage: Storage) -> list[dict]:
         spegel = await storage.spegel_info()
     except Exception:  # noqa: BLE001
         logger.exception("Kunde inte läsa spegelmarkören — hoppar över uppföljningssvepet.")
+        return []
+    if tvavags(spegel):
         return []
     seedad = (spegel or {}).get("seeded_at")
     if spegel and not seedad:

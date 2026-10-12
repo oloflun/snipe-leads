@@ -23,6 +23,7 @@ skriver den ur utslagen.
 from __future__ import annotations
 
 import re
+from collections.abc import Sequence
 from typing import Any
 
 from .geo import _prefix_ur_postnr, malomradets_serier
@@ -239,6 +240,47 @@ def _produktmatch_rad(profil: dict[str, Any], b: dict[str, Any], korpus: str,
     return _rad(PRODUKTMATCH, etikett, 3, MISS, motivering, hart=True, belagg=belagg)
 
 
+def _kortnamn(produkt: str) -> str:
+    return produkt.split(",")[0].split("(")[0].strip().casefold()
+
+
+def bunden_produkt(k: dict[str, Any], produkter: Sequence[str]) -> str | None:
+    """Produkten ett kriterium är bundet till ("… för Supportagenten"), eller
+    None när kriteriet gäller alla produkter."""
+    text = str(k.get("text") or "").casefold()
+    for p in produkter:
+        kort = _kortnamn(p)
+        if kort and re.search(rf"\bför\s+{re.escape(kort)}\b", text):
+            return p
+    return None
+
+
+def bunden_till_annan_produkt(k: dict[str, Any], produkt: str | None, produkter: Sequence[str]) -> str | None:
+    """Kriteriets produkt när den är en annan än den researchen valde. None
+    när kriteriet gäller alla produkter, gäller den valda, eller när ingen
+    produkt är vald."""
+    if not produkt or len(produkter) < 2:
+        return None
+    bunden = bunden_produkt(k, produkter)
+    return bunden if bunden and _kortnamn(bunden) != _kortnamn(produkt) else None
+
+
+def produkt_ur_kriterierna(
+    profil: dict[str, Any], fynd: dict[str, Any], produkter: Sequence[str], korpus: str
+) -> str | None:
+    """Produkten vars bundna kriterium bolaget uppfyller med belagt citat, när
+    researchen inte valde någon produkt själv. Snajps omkörning 2026-10-12:
+    Fiskebäck fick "säljer till andra företag (B2B) för Iris" som träff med
+    citat, men produkt null, och föll på produktmatchningen."""
+    utslag = {str(b.get("kriterie_id")): b for b in fynd.get("bedomningar") or [] if isinstance(b, dict)}
+    for k in profil.get("kriterier") or []:
+        p = bunden_produkt(k, produkter)
+        b = utslag.get(str(k.get("id")), {})
+        if p and str(b.get("utslag") or "").casefold() == "ja" and verifierade_belagg(b.get("belagg"), korpus):
+            return p
+    return None
+
+
 def bedom(
     profil: dict[str, Any],
     fynd: dict[str, Any],
@@ -248,8 +290,17 @@ def bedom(
     webbrevision: dict[str, Any] | None = None,
     har_underlag: bool = True,
     produkt_vald: bool | None = None,
+    produkt: str | None = None,
+    produkter: Sequence[str] = (),
 ) -> dict[str, Any]:
     """Modellens utslag + hårda fakta → nivå, poäng, rader och motivering.
+
+    `produkt`/`produkter`: den produkt researchen valde och kundens produkt-
+    lista. Ett kriterium bundet till en annan produkt ("… för Supportagenten")
+    gäller inte det här leadet (Snajps omkörning 2026-10-12: profilen
+    kompilerades till tre produktbundna måste-kriterier, och ett byggbolag
+    skulle då både sälja B2B för Iris, ha privatkunder för Supportagenten
+    och samla kvitton för Kvittohanteraren).
 
     `korpus` = skrapat material + mätta webbsignaler; beläggen verifieras mot
     den. Returnerar fälten som sparas på prospektraden plus de bakåt-
@@ -288,6 +339,11 @@ def bedom(
 
     for k in profil.get("kriterier") or []:
         b = utslag_per_id.get(k["id"], {})
+        annan = bunden_till_annan_produkt(k, produkt, produkter)
+        if annan:
+            rader.append(_rad(k["id"], k["text"], 0, OKAND,
+                              f"Gäller {annan}, inte {produkt} som mejlet handlar om.", hart=False))
+            continue
         kod = (
             webbutslag(k["text"], webbrevision, utan_webbplats=bool(profil.get("utan_webbplats")))
             if k.get("belagg") == "webbsignal" else None

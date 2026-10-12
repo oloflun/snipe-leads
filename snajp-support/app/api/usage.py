@@ -11,6 +11,8 @@ Tokens, inte kronor: prislappen per miljon tokens bor i frontend
 andra kopia av en siffra som ändras med leverantörens prislista.
 """
 
+import asyncio
+
 from fastapi import APIRouter, Depends, Query, Request
 
 from ..budget import budget_for
@@ -28,15 +30,20 @@ async def usage(
     storage = request.app.state.storage
     tenant_id = tenant["tenant_id"]
 
-    rad = await storage.get_tenant(tenant_id)
+    # Tre oberoende läsningar, parallellt.
+    rad, dagar, forbrukat = await asyncio.gather(
+        storage.get_tenant(tenant_id),
+        storage.daily_support_usage(tenant_id, days=days),
+        storage.sum_support_tokens(tenant_id, hours=24),
+    )
     slug = (rad or {}).get("slug") or ""
 
     return {
-        "dagar": await storage.daily_support_usage(tenant_id, days=days),
+        "dagar": dagar,
         "budget": {
             # 0 = inget tak satt. Frontenden visar då ingen budgetrad alls
             # i stället för "0 av 0".
             "tak": budget_for(slug),
-            "forbrukat_24h": await storage.sum_support_tokens(tenant_id, hours=24),
+            "forbrukat_24h": forbrukat,
         },
     }

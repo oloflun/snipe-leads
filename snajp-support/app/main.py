@@ -20,6 +20,7 @@ from .api import (
     admin_flytt,
     admin_konvertera,
     admin_ombedom,
+    admin_utkastsvep,
     admin_kunddata,
     admin_listor,
     admin_profil,
@@ -82,6 +83,10 @@ async def lifespan(app: FastAPI):
     if master_fel:
         logger.critical("Startvägran: %s", master_fel)
         raise RuntimeError(master_fel)
+
+    from .loopvakt import starta as starta_loopvakt
+
+    starta_loopvakt(settings.loopvakt_ms)
 
     storage = None
     if settings.database_url:
@@ -331,6 +336,11 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Snajp-Support", version="0.1.0", lifespan=lifespan)
 
+# Frågor och databastid per anrop i Server-Timing (app/matning.py).
+from .matning import Matning  # noqa: E402
+
+app.add_middleware(Matning)
+
 # CORS är AV som default och behövs inte för vår egen frontend — Next-proxyn
 # anropar backenden server-side, så webbläsaren träffar aldrig den här
 # tjänsten direkt. Den finns för den dag en kund anropar API:t från sin egen
@@ -382,6 +392,8 @@ app.include_router(admin_konvertera.router)
 # Ombedömning av sparade Iris-leads efter regelskärpningen 2026-10-06; se
 # docstringen i api/admin_ombedom.py.
 app.include_router(admin_ombedom.router)
+# Utkastsvepet (skrivande, master-grindat) — se docstringen i admin_utkastsvep.py.
+app.include_router(admin_utkastsvep.router)
 # Kopiera eller flytta en leadslista till en annan kund; se api/admin_listor.py.
 app.include_router(admin_listor.router)
 app.include_router(analytics.router)
@@ -397,6 +409,30 @@ app.include_router(kvitton.router)
 # Ohanterade fel hamnar i platform_events i stället för att rulla förbi i
 # Renders stdout och försvinna vid nästa spin-down (migration 026).
 install_exception_handler(app)
+
+
+def _cachefel() -> tuple[type[BaseException], ...]:
+    try:
+        from asyncpg.exceptions import InvalidCachedStatementError, OutdatedSchemaCacheError
+    except ImportError:  # asyncpg saknas (minneslagringen i testsviten)
+        return ()
+    return (InvalidCachedStatementError, OutdatedSchemaCacheError)
+
+
+async def _inaktuell_cachad_fraga(request, error):  # noqa: ANN001, ANN202
+    """En migrering ändrade en tabell som en cachad fråga läser (statement-
+    cachen, storage/postgres.py). Transaktionen hann inte köra något. Poolens
+    anslutningar byts ut — nästa anrop förbereder frågan på nytt — och svaret
+    är 503 utan kropp, som webbens proxy gör om för GET."""
+    logger.warning("Inaktuell cachad fråga efter schemaändring (%s); poolen byts ut.", type(error).__name__)
+    pool = getattr(request.app.state.storage, "pool", None)
+    if pool is not None:
+        await pool.expire_connections()
+    return Response(status_code=503)
+
+
+for _fel in _cachefel():
+    app.add_exception_handler(_fel, _inaktuell_cachad_fraga)
 
 
 @app.get("/health")
