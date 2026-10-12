@@ -364,3 +364,8 @@ rebase. Ändringar behöver samordnas, inte bara pushas.
   vald produkt när kunden har en produktlista). Sparade leads bedöms om med
   `scripts/ombedom_leads.py`. Punkt 10 (main i fas) väntar på migrationerna
   096–099 och Antons merge av PR #31.
+- 2026-10-12 — claude — delmål 2 skärpt i utkastet: det första Iris-utkastet
+  ska vara det personliga, säljande utkastet (ingång ur bolagets egna ord utan
+  registerfakta och mallfraser, erbjudandet intakt, handlingen sist, varierad
+  form). Tillbaka till Iris skriver inte om automatiskt. 92 av 100 Snajp-leads
+  omkörda. Handoff: `HANDOFF-2026-10-12-UTKASTKEDJAN.md`.

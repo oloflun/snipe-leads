@@ -1,5 +1,18 @@
 # Snipra Status
 
+## 2026-10-12 — Claude — utkastkedjan skriver referensutkastet på första försöket; 92 av 100 Snajp-leads omkörda
+
+Antons genomgång av AI-knapparnas kedja (Fiskebäck, Härlanda) blev regler i kod: ingången bygger på en
+egenskap ur bolagets egna ord (aldrig antal anställda eller "För företag som ert …"), erbjudandet står
+kvar, handlingen sist, och varje mejl får en tilldelad ingångsform. En stilgrind före humanizern skriver om
+en gång när något fälls. De 73 gamla godkända utkasten avbröts och 92 av 100 leads har nya utkast i
+granskningskön (inget skickat). Två fel rättades på vägen: profilen hade kompilerats om till tre
+produktbundna måste-kriterier (gäller nu bara den valda produkten), och produkten härleds ur ett uppfyllt
+kriterium. Tillbaka till Iris skriver inte om automatiskt; alla listtak borta. Pushat till development
+(`dc8e3d3`). **Kvar:** Anton granskar de 92; Ekospeceriet (gammalt godkänt, 08:00); åtta leads som faller på
+hårda kriterier; `LEADS_DAILY_TOKEN_BUDGET` i development står på 32 M tills Anton återställer.
+Handoff: `HANDOFF-2026-10-12-UTKASTKEDJAN.md`. Logg: `session-logs/2026-10-12-session-log.md`.
+
 ## 2026-10-10 (2) — Claude — parallella körningar, hitta.se-kontakt, listverktyg, kö, autopilot
 
 Parallella körningar delar inte längre bolag; hitta.se slås upp på org.nr och ger kontakt till Norrtech,
