@@ -9,6 +9,7 @@ from app.leads.signatur import (
     bygg_html,
     bygg_signaturtext,
     dela_utkast,
+    med_aktuell_signatur,
     med_signatur,
     normalisera,
     sla_ihop,
@@ -242,6 +243,50 @@ def test_sla_ihop_efter_omskrivning_behaller_signatur_och_fot():
     assert ihop.startswith("Hej igen, kort fråga.\n\nVänliga hälsningar,\nSebastian Bergman\n")
     assert ihop.endswith(FOT)
     assert "<img" in bygg_html(ihop, sig)
+
+
+def test_med_aktuell_signatur_byter_foraldrad_och_ar_idempotent():
+    """Sebbe 2026-10-12: utkast köade med "Snajp AB" gick ut med gamla
+    blocket som rå text. Sändvägen byter det mot den aktuella signaturen,
+    foten står kvar, och ett andra pass ändrar ingenting."""
+    gammal = normalisera(SIG)
+    ny_sig = normalisera({**SIG, "bolag": "Snajp Sverige"})
+    body = med_signatur("Hej!\n\nVänliga hälsningar,", gammal) + "\n\n" + FOT
+    ny = med_aktuell_signatur(body, ny_sig, halsning="Vänliga hälsningar,")
+    assert "Snajp Sverige" in ny
+    assert "Snajp AB" not in ny
+    assert ny.endswith(FOT)
+    assert med_aktuell_signatur(ny, ny_sig, halsning="Vänliga hälsningar,") == ny
+    # Utan signatur eller utan body: oförändrat, aldrig ett undantag.
+    assert med_aktuell_signatur(body, None) == body
+    assert med_aktuell_signatur("", ny_sig, halsning="Vänliga hälsningar,")
+
+
+def test_bygg_html_byter_foraldrat_block_mot_den_aktuella_signaturen():
+    """Mottagaren ska aldrig se gamla blocket som rå text med loggan ensam
+    längst ner (skärmbilderna 2026-10-12): står ett föråldrat block i texten
+    renderas den aktuella signaturen i dess ställe, med loggan mellan
+    kontaktraderna och orten och foten i grått efteråt."""
+    gammal = normalisera(SIG)
+    ny_sig = normalisera({**SIG, "bolag": "Snajp Sverige"})
+    body = med_signatur("Hej!\n\nVänliga hälsningar,", gammal) + "\n\n" + FOT
+    html = bygg_html(body, ny_sig)
+    assert "Snajp Sverige" in html
+    assert "Snajp AB" not in html
+    assert "font-weight:bold" in html and "Sebastian Bergman" in html
+    # Loggan sitter i signaturblocket, inte ensam sist: bild före ort,
+    # kontaktraderna före bilden.
+    assert html.index("snajpsupport@gmail.com") < html.index("<img") < html.index("Umeå")
+    # Foten står kvar efter blocket, i den grå fotstilen.
+    assert html.index("<img") < html.index("556000-0000")
+    assert "color:#6b6b6b" in html
+
+
+def test_bygg_html_foraldrat_block_utan_fot_klipps_vid_textslutet():
+    gammal = normalisera(SIG)
+    ny_sig = normalisera({**SIG, "bolag": "Snajp Sverige"})
+    html = bygg_html(med_signatur("Hej!", gammal), ny_sig)
+    assert "Snajp Sverige" in html and "Snajp AB" not in html
 
 
 def test_arbetsytans_namn_efter_halsningen_ger_inte_dubbel_avslutning():

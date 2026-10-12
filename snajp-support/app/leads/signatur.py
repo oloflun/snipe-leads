@@ -217,6 +217,24 @@ def sla_ihop(
     return f"{brodtext}\n\n{svans}"
 
 
+def med_aktuell_signatur(body: str, sig: dict[str, str] | None, *, halsning: str | None = None) -> str:
+    """Texten med den AKTUELLA signaturen: en föråldrad byts (samma byte som
+    sla_ihop gör — Anton 2026-10-12, "Snajp AB" → "Snajp Sverige"), en saknad
+    läggs på före foten. Idempotent, och utan signatur returneras texten
+    oförändrad.
+
+    Sändvägen (_fot_vid_godkannande) och provmejlet gick förut via
+    med_signatur_fore_fot ensam, som känner igen blocket på namn- och
+    titelraden och lät ett föråldrat block stå kvar — då hittade bygg_html
+    inte blocket och mottagaren fick signaturen som rå text med loggan ensam
+    längst ner (Sebbe 2026-10-12, skärmbilderna)."""
+    if not sig:
+        return body or ""
+    brodtext, svans = dela_utkast(body or "", sig)
+    ny = sla_ihop(brodtext, svans, sig, halsning=halsning)
+    return med_signatur_fore_fot(ny, sig, halsning=halsning)
+
+
 def med_signatur_fore_fot(body: str, sig: dict[str, str], *, halsning: str | None = None) -> str:
     """Signaturen på ett redan skrivet utkast, före en eventuell lagstadgad fot.
 
@@ -295,13 +313,24 @@ def bygg_html(brodtext: str, sig: dict[str, str]) -> str:
 
     Textblocket som `med_signatur` la dit byts mot HTML-signaturen (med
     logotyp); texten före och efter (brödtext respektive lagstadgad fot)
-    escapas och radbryts, ingenting annat. Finns blocket inte i texten — ett
-    äldre köat utkast, en signatur ändrad efter köningen — renderas texten
-    som den är och bara loggan läggs till, före en eventuell fot (Sebbe
-    2026-10-09: loggan ska med i varje mejl). Ingen text som inte granskats.
+    escapas och radbryts, ingenting annat. Står ett FÖRÅLDRAT block i texten
+    (samma person, annan bolags- eller platsrad — signaturen ändrad efter
+    köningen) renderas den aktuella signaturen i dess ställe: samma byte som
+    `sla_ihop` gör i texten (Anton 2026-10-12), så att mottagaren aldrig ser
+    signaturen som rå text med loggan ensam längst ner (Sebbe 2026-10-12,
+    skärmbilderna). Finns inte heller persongruppen renderas texten som den
+    är och bara loggan läggs till, före en eventuell fot (Sebbe 2026-10-09:
+    loggan ska med i varje mejl). Ingen annan text som inte granskats.
     """
     text = bygg_signaturtext(sig)
     index = brodtext.find(text) if text else -1
+    slut = index + len(text) if index >= 0 else -1
+    if index < 0 and (pg := _persongrupp(sig)) and (i := brodtext.find(pg)) >= 0:
+        # Föråldrat block: från persongruppen fram till foten (eller texten
+        # slut) ERSÄTTS av den aktuella signaturen i HTML-delen.
+        index = i
+        j = brodtext.find(_FOTSTART, i)
+        slut = j if j >= 0 else len(brodtext)
     if index < 0 and sig.get("logotyp_url"):
         # Blocket finns inte ordagrant (signaturen ändrades efter köningen,
         # eller texten skrevs före den). Loggan ska ändå med i varje mejl
@@ -321,7 +350,7 @@ def bygg_html(brodtext: str, sig: dict[str, str]) -> str:
         kropp = _radbryt_till_html(brodtext)
     else:
         fore = brodtext[:index].rstrip()
-        efter = brodtext[index + len(text) :].strip("\n")
+        efter = brodtext[slut:].strip("\n")
         kropp = _radbryt_till_html(fore) + _signatur_html(sig)
         if efter.strip():
             kropp += (

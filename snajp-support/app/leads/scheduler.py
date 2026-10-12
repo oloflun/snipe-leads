@@ -34,7 +34,7 @@ from .send_guard import (
     foretagsnyckel,
 )
 from .send_provider import SendProvider, get_send_provider
-from .signatur import HALSNING, med_signatur_fore_fot
+from .signatur import HALSNING, med_aktuell_signatur
 from .signatur import bygg_html as bygg_signatur_html
 from .signatur import normalisera as normalisera_signatur
 
@@ -234,14 +234,16 @@ async def _fot_vid_godkannande(storage: Storage, tenant_id: str, item: dict) -> 
         sprak=sprak_h,
     )
     # Signaturen även på utkast köade innan tenanten satte den (Sebbe
-    # 2026-10-09: alla utkast och mejl ska bära den). Före foten, som alltid
-    # är sist.
+    # 2026-10-09: alla utkast och mejl ska bära den), och en FÖRÅLDRAD
+    # signatur byts mot den aktuella (Sebbe 2026-10-12: mejlet gick annars
+    # ut med gamla blocket som rå text och loggan ensam längst ner). Före
+    # foten, som alltid är sist.
     sig = normalisera_signatur(
         (await storage.get_agent_settings(tenant_id, agent_type="leads")).get("signatur")
     )
     if sig:
         sprak = "en" if thread.get("language_state") == "en_confirmed" else "sv"
-        ny = med_signatur_fore_fot(ny, sig, halsning=HALSNING[sprak])
+        ny = med_aktuell_signatur(ny, sig, halsning=HALSNING[sprak])
     if not har_fot(ny):
         ny = await lagstadgad_fot(storage, tenant_id, thread.get("prospect_email"), ny)
     if ny != message["body"]:

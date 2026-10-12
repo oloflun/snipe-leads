@@ -147,3 +147,39 @@ async def test_godkannandet_lagger_pa_signaturen_som_saknas():
 
     meddelande = next(m for m in storage.outreach_messages[TENANT] if m["id"] == message_id)
     assert "Sebastian Bergman\nGrundare" in meddelande["body"]
+
+
+@pytest.mark.anyio
+async def test_godkannandet_byter_en_foraldrad_signatur():
+    """Utkastet köades med "Snajp AB"; signaturen säger numera "Snajp
+    Sverige". Sändvägen byter blocket så att texten OCH HTML-delen bär den
+    aktuella signaturen (Sebbe 2026-10-12, skärmbilderna)."""
+    gammal = {k: v for k, v in SIGNATUR.items() if k != "aktiv"} | {"bolag": "Snajp AB"}
+    body = f"Hej!\n\nEn idé.\n\nVänliga hälsningar,\n{bygg_signaturtext(gammal)}\n\n{FOT}"
+    storage = MemoryStorage()
+    _, message_id = _seed(storage, body=body)
+    storage.agent_settings[(TENANT, "leads")] = {"signatur": {**SIGNATUR, "bolag": "Snajp Sverige"}}
+
+    await _fot_vid_godkannande(storage, TENANT, storage.send_queue[TENANT][-1])
+
+    meddelande = next(m for m in storage.outreach_messages[TENANT] if m["id"] == message_id)
+    assert "Snajp Sverige" in meddelande["body"]
+    assert "Snajp AB" not in meddelande["body"]
+    assert meddelande["body"].endswith(FOT)
+
+
+@pytest.mark.anyio
+async def test_provet_byter_en_foraldrad_signatur_i_text_och_html():
+    gammal = {k: v for k, v in SIGNATUR.items() if k != "aktiv"} | {"bolag": "Snajp AB"}
+    body = f"Hej!\n\nEn idé.\n\nVänliga hälsningar,\n{bygg_signaturtext(gammal)}\n\n{FOT}"
+    storage = MemoryStorage()
+    item_id, _ = _seed(storage, body=body)
+    storage.agent_settings[(TENANT, "leads")] = {"signatur": {**SIGNATUR, "bolag": "Snajp Sverige"}}
+    provider = _Levererande()
+
+    await skicka_provmejl(storage, TENANT, provider, till="kund@example.se", queue_item_id=item_id)
+
+    [mejl] = provider.skickat
+    assert "Snajp Sverige" in mejl["body"] and "Snajp AB" not in mejl["body"]
+    assert "Snajp Sverige" in mejl["html"] and "Snajp AB" not in mejl["html"]
+    assert "font-weight:bold" in mejl["html"] and "logga.png" in mejl["html"]

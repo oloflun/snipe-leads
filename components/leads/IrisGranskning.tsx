@@ -65,6 +65,16 @@ export type Signatur = {
   logotyp_url?: string;
 };
 
+/** Signaturens första grupp (namn, titel, telefon, e-post) — det som känner
+ *  igen ett FÖRÅLDRAT block i ett äldre mejl (samma person, annan bolags-
+ *  eller platsrad). Speglar backendens `signatur._persongrupp`. */
+function persongrupp(signatur: Signatur | null): string {
+  if (!signatur) return "";
+  return [signatur.namn, signatur.titel, signatur.telefon, signatur.epost]
+    .filter((rad): rad is string => Boolean(rad))
+    .join("\n");
+}
+
 /**
  * Det som står efter brödtexten i det skickade mejlet, renderat som
  * mottagaren ser det: signaturen i samma ordning som HTML-delen
@@ -72,11 +82,27 @@ export type Signatur = {
  * kontaktraderna och orten, och den lagstadgade foten i liten grå text.
  * Står direkt under textrutan, som fortsättningen på mejlet — förut låg
  * signaturen som råtext i rutan och kunde skrivas om bort av AI-knapparna.
+ * Ett FÖRÅLDRAT block (samma person, äldre bolagsrad) renderas som den
+ * aktuella signaturen — samma byte som backenden gör vid utskicket
+ * (signatur.med_aktuell_signatur), så vyn visar det mottagaren får.
  */
 export function MejlSvans({ signatur, svans }: Readonly<{ signatur: Signatur | null; svans: string }>) {
   const { text } = useLocale();
-  const sig = signatur && svans.startsWith(signatur.text) ? signatur : null;
-  const fot = (sig ? svans.slice(sig.text.length) : svans).trim();
+  const exakt = Boolean(signatur && svans.startsWith(signatur.text));
+  const pg = persongrupp(signatur);
+  const foraldrad = !exakt && Boolean(pg) && svans.startsWith(pg);
+  const sig = exakt || foraldrad ? signatur : null;
+  let fot: string;
+  if (exakt && signatur) {
+    fot = svans.slice(signatur.text.length).trim();
+  } else if (foraldrad) {
+    // Det gamla blocket löper fram till foten; det ersätts av den aktuella
+    // signaturen ovan och visas inte som text.
+    const i = svans.indexOf("\n--\n");
+    fot = i >= 0 ? svans.slice(i + 1).trim() : "";
+  } else {
+    fot = svans.trim();
+  }
   // Loggan följer med i varje mejl även när blocket inte står ordagrant
   // (signatur.bygg_html, Sebbe 2026-10-09): visas här på samma plats.
   const baraLogga = !sig && signatur?.logotyp_url ? signatur : null;
@@ -134,11 +160,18 @@ export function MejlSvans({ signatur, svans }: Readonly<{ signatur: Signatur | n
 
 /** Mejlet delat som `signatur.dela_utkast` delar det: brödtexten, och
  *  svansen (signaturblocket och/eller den lagstadgade foten) från där den
- *  första av dem börjar. */
+ *  första av dem börjar. Ett FÖRÅLDRAT block (persongruppen utan den exakta
+ *  texten) hör också till svansen — annars låg gamla signaturen kvar som
+ *  brödtext i äldre mejl, med loggan ensam under (Sebbe 2026-10-12). */
 export function delaMejl(body: string, signatur: Signatur | null): [string, string] {
   const start: number[] = [];
   const sigIndex = signatur?.text ? body.indexOf(signatur.text) : -1;
   if (sigIndex >= 0) start.push(sigIndex);
+  else {
+    const pg = persongrupp(signatur);
+    const pgIndex = pg ? body.indexOf(pg) : -1;
+    if (pgIndex >= 0) start.push(pgIndex);
+  }
   const fotIndex = body.indexOf("\n--\n");
   if (fotIndex >= 0) start.push(fotIndex + 1);
   if (start.length === 0) return [body.trimEnd(), ""];

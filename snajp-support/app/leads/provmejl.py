@@ -36,7 +36,7 @@ import logging
 
 from ..storage.base import Storage
 from .send_provider import SendProvider
-from .signatur import HALSNING, bygg_html, med_signatur_fore_fot
+from .signatur import HALSNING, bygg_html, med_aktuell_signatur
 from .signatur import normalisera as normalisera_signatur
 from .utskicksfot import har_fot
 
@@ -144,11 +144,12 @@ async def skicka_provmejl(
         (await storage.get_agent_settings(tenant_id, agent_type="leads")).get("signatur")
     )
     if sig and not message.get("sent_at"):
-        # Ett utkast köat före signaturen får den vid godkännandet
+        # Ett utkast köat före signaturen får den vid godkännandet, och en
+        # föråldrad signatur byts mot den aktuella
         # (scheduler._fot_vid_godkannande); provet visar texten så som den då
         # skickas. Ett redan skickat mejl visas som det gick ut.
         sprak = "en" if (thread or {}).get("language_state") == "en_confirmed" else "sv"
-        body = med_signatur_fore_fot(body, sig, halsning=HALSNING[sprak])
+        body = med_aktuell_signatur(body, sig, halsning=HALSNING[sprak])
 
     params = inspect.signature(provider.send).parameters
     har_kwargs = any(p.kind == inspect.Parameter.VAR_KEYWORD for p in params.values())
