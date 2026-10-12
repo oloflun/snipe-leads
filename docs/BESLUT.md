@@ -52,6 +52,21 @@ ett citat") och 6 på kriterierna om B2B- respektive B2C-kunder. Före
 omkörningen var de nivå B, bara för att produktgrinden då inte såg
 produktlistan.
 
+*Utfallet 2026-10-12 (agenten):* omkörningen genom den nya kedjan gav 92 av
+100 nya utkast i granskningskön (de 73 gamla godkända avbröts, inget skickat).
+Två fel på vägen rättades i samma natt: profilen kompilerades om till tre
+produktbundna måste-kriterier (ett bundet kriterium gäller nu bara den valda
+produkten), och ett uppfyllt bundet kriterium härleder produkten när modellen
+lämnar fältet tomt. Åtta faller fortfarande som nivå C efter tre försök: DS
+Flexhal, Nyströms Byggtjänst, Solega, Z Marktjänst (B2B för Iris ej styrkt
+med citat), Fiive, SafeTeam (B2C för Supportagenten ej styrkt), Simmis (behov
+utan citat) och STINAB (modellen uteslöt bolaget som offentlig sektor fast
+det bygger åt offentlig sektor). Anton avgör: lämna, Processa om, eller mjuka
+upp profilens produktbundna kriterier till bör. `LEADS_DAILY_TOKEN_BUDGET` på
+api i development höjdes 8 M → 32 M för natten och står kvar tills Anton
+återställer den. Uppföljning: garanti- och pilotmejlen bör namnge agenten i
+stycke 2 före löftet, och du/ni-blandning ska fällas av stilgrinden.
+
 ## 2026-10-10 (Anton) — Org.nr stoppar inte utskick; utskick går från development
 
 **Beslut.** Tvåvägssynken gäller bara körningar och ärenden i databasen;
