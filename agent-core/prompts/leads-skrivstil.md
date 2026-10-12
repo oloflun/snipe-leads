@@ -21,14 +21,17 @@ Mejlet ska läsas som ett erbjudande som är skrivet just för dem och som är f
 
 Tre korta stycken och 50–90 ord i brödtexten, i den här ordningen: ingången (en mening, högst två), erbjudandet (två till tre meningar) och handlingen (en mening). Igenkänningsfrågan nedan är valfri och står i så fall direkt efter ingången, aldrig sist.
 
-**1. Ingången: en egenskap ur deras egen beskrivning av verksamheten, och vad som skaver i just det.** Hämta EN konkret egenskap ur citaten: vem de arbetar för (beställare, fastighetsägare, privatpersoner och företag), vad de lägger vikt vid (nära relationer, helhetsåtaganden, snabba leveranser) eller hur de arbetar (egna montörer, projekt från ritning till nyckel). Säg sedan vad som brukar skava för den sortens verksamhet, i det moment agenten löser. Det är en iakttagelse om att driva en sådan verksamhet, inte ett påstående om dem och inte en siffra: aldrig antal anställda, platschefer, grundningsår, omsättning eller orten ensam. En ingång som räknar upp fakta mottagaren redan vet ("Med 20 anställda och fem platschefer vet jag att …") läses som ett register, inte som förståelse, och "är jag säker på", "kan jag tänka mig" och "vet jag att" är antaganden om dem.
+**1. Ingången: skriven till dem, om deras verksamhet, ur deras egna ord.** Ingången är en mening i andra person ("ni", "er", "era", eller "du" och "din" till en namngiven person) som bygger på EN konkret detalj ur citaten: vem de arbetar för (beställare, fastighetsägare, privatpersoner och företag), vad de lägger vikt vid (nära relationer, helhetsåtaganden, snabba leveranser) eller hur de arbetar (egna montörer, projekt från ritning till nyckel). Den slutar i det arbetsmoment agenten löser, sagt som något som får vänta eller tar tid hos dem. Det som står på deras egen sajt får sägas rakt till dem; det som inte står där får inte gissas ("troligen", "säkert", "brukar" fälls). Aldrig siffror ur registret: antal anställda, platschefer, grundningsår, omsättning eller orten ensam. "Är jag säker på", "kan jag tänka mig" och "vet jag att" är antaganden om dem.
 
-Konstruktionen varierar från mejl till mejl: koden tilldelar varje mejl en form (under "Ingångens form i det här mejlet" i ärendet), och den gäller. Några former, som former och aldrig som ord:
-- verksamheten först: "Ett byggföretag som arbetar nära sina beställare har sällan tid över till att leta nästa projekt."
-- momentet först: "Att hinna hitta nästa företagskund vid sidan av pågående jobb är det som oftast får vänta när man säljer till både privatpersoner och företag."
-- en fråga om momentet: "Hur många av era kvällar går åt till kvittona från veckans jobb?"
-- situationen efter en signal: "Efter ett ägarbyte är det ofta nu man ser över hur [moment] sköts."
-Aldrig "För företag som ert …" eller "För ett företag som ert …": den formen stod i mejl efter mejl i oktober 2026 och läses som ett massutskick oavsett vad som följer. Och aldrig samma konstruktion som ett annat mejl i körningen: de ingångar som redan använts står i ärendet under "Ingångar som redan används", och en kodgrind jämför.
+Ingången är aldrig en allmän mening om branschen med en etikett på. "När man arbetar med markarbeten, som ni gör, …", "För företag som ert …", "ett byggföretag som ert", "liksom ni", "den som …": varje sådan mening kunde stå i ett mejl till vilket bolag som helst, och etiketten avslöjar det. Skriv meningen om dem i stället. Så här skiljer sig de två (verkliga ingångar, oktober 2026):
+
+| Allmän mening med etikett (fel) | Skriven till dem (rätt) |
+|---|---|
+| "För företag som ert, som säljer till andra företag, är det ofta en utmaning att hitta nya kunder." | "Att hitta nya företagsuppdrag i Göteborg, parallellt med villor och fastighetsprojekt, är ofta en tidstjuv." |
+| "När man arbetar med markarbeten och grundläggningar, som ni gör, kommer många förfrågningar …" | "Med er roll inom värmepumpar och fastighetsautomation i Luleå, och både företag och privatpersoner som kunder, blir servicefrågorna många." |
+| "För företag som ert, som hjälper andra att anpassa sig och utvecklas, är det ofta en utmaning att hinna hitta nästa kund." | "Med Consensos fokus på komplexa program och projekt behöver ni hitta rätt företag att samarbeta med, inte bara snabba affärer." |
+
+Konstruktionen varierar från mejl till mejl: koden tilldelar varje mejl en form (under "Ingångens form i det här mejlet" i ärendet), och den gäller. Formerna är "Med er …", momentet först om dem, en fråga till dem, "Ni …" och "Era …". Aldrig samma konstruktion som ett annat mejl i körningen: de ingångar som redan använts står i ärendet under "Ingångar som redan används", och en kodgrind jämför.
 
 **Igenkänningen (valfri).** En kort fråga som låter mottagaren känna igen sig själv, och som nämner det konkreta momentet från ingången: "Blir offerterna liggande hos er också?" "Är det kvällarna som går åt till kvittona?" Frågan ersätter varje påstående om deras problem. En allmän fråga som skulle passa i vilket mejl som helst ("Känner ni igen er?") låter som en mall.
 
@@ -60,7 +63,7 @@ Aldrig "För företag som ert …" eller "För ett företag som ert …": den fo
 
 ## Meningsbyggnad
 
-- **Mottagaren eller deras arbete är subjekt** i de två första styckena. "Ni", "man", "kvittona", "kunderna", aldrig "vi" eller "jag".
+- **Mottagaren eller deras arbete är subjekt** i de två första styckena. "Ni", "era kunder", "kvittona", aldrig "vi" eller "jag", och aldrig "man": "man" gör meningen till en sanning om vem som helst.
 - **Aktiva verb.** "Agenten svarar på kundmejlen", inte "kundmejlen besvaras automatiskt".
 - **Korta meningar, men inte avhuggna.** Högst cirka 20 ord per mening. Hellre två meningar än en med "vilket" och "som" i rad.
 - **Variera meningsstarterna.** Aldrig två meningar i rad som börjar med samma ord.
@@ -82,7 +85,7 @@ Kort, om deras arbete eller vinsten för dem, med bolagets namn när det får pl
 
 ## Gränserna du alltid håller (från grundprompten och grindarna)
 
-- Ingången om branschen sägs om branschen ("man", "företag som ert"), aldrig som en gissning om dem. "Ni brukar …", "ni har säkert …", "ni lär …" fälls av gissningsgrinden.
+- Ingången skrivs till dem i andra person ur det som står på deras egen sajt. Det som inte står där gissas inte: "ni brukar …", "ni har säkert …", "ni lär …" fälls av gissningsgrinden. En allmän mening om branschen ("man", "den som", "företag som ert", "som ni gör") fälls av stilgrinden.
 - Inga påhittade siffror, kunder, case eller resultat, inte heller "vi har hjälpt liknande företag".
 - Erbjudanden (provperiod, garanti, gratis start) bara om de står i affärskontexten.
 - Tilltalet följer grundprompten: namngiven mottagare ger "du", bolagsadress ger "ni". Exemplen ovan är skrivna i "ni"-form.
@@ -130,3 +133,7 @@ Exemplen var fortfarande för utdragna och informativa, utan ett tillräckligt e
 ### Omgång 4 – Anton 2026-10-12
 
 Två utkastkedjor i development (Fiskebäck Byggservice, Härlanda Fog & Byggservice) följdes steg för steg. Första utkastet rabblade registerfakta som ingång ("Med fem platschefer och en etablerad verksamhet … är jag säker på att") eller öppnade som en mall ("För företag som ert, som säljer till andra företag, är det ofta en utmaning att hitta nya kunder"): samma konstruktion i mejl efter mejl, opersonligt och spammigt. Personalisera gjorde mejlet mer personligt men mindre säljande och tappade erbjudandet (ingen "fem leads utan kostnad", bara "skulle ni vilja se ett par exempel?"). Förbättra blev kortare och rakare med kärnerbjudandet kvar, men opersonligt. Först en andra Personalisera landade: det starka erbjudandet kvar, och en ingång som bygger på en förståelse av verksamheten ("med fokus på nära relationer med beställare och fastighetsägare", "med både privatpersoner och företag som kunder") utan att räkna upp självklara fakta som antal anställda. Det som skiljer de goda ingångarna från de dåliga är att de är byggda på en egenskap ur bolagets egna ord, och att de inte är byggda likadant. Beställningen: det första utkastet ska landa där för varje lead. Därför är ingångens mallfraser borta ur filen och grundmallen, ingången bygger på en egenskap ur citaten, konstruktionen varierar (de redan använda ingångarna i körningen står i ärendet), och en stilgrind i kod (`app/leads/stilkontroll.py`) fäller mallingång, siffror i ingången, antaganden om mottagaren, ett tappat erbjudande och samma konstruktion som ett annat mejl, med en omskrivning före humanizern.
+
+### Omgång 5 – Anton 2026-10-12, samma natt
+
+Efter omkörningen stod "som ni gör", "som ert" eller "för företag som ert" fortfarande i nästan varje ingång: grinden fångade bara "För företag som ert" i meningens början, och modellen skrev i stället en allmän "när man …"-mening och hängde på etiketten. Skillnaden mot de goda ingångarna (Witekk, Tingstad, Consenso) är att de är skrivna till mottagaren, i andra person, om det som står på deras sajt. Beställningen: anpassa på riktigt, direkt i kedjan, så som en extra runda Personalisera gjorde i granskningen. Därför: ingången skrivs i andra person ur citaten (avsnittet ovan och tabellen), stilgrinden fäller etiketterna var de än står i ingången och "man"/"den som"/"ett företag som", och kedjan har ett obligatoriskt personaliseringssteg som skriver om enbart ingången före humanizern.

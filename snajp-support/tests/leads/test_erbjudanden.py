@@ -269,7 +269,7 @@ def test_faktagrinden_slapper_villkorens_siffror_men_faller_andra():
 
 BRA = (
     "Hej Anna,\n\n"
-    "När man driver en redovisningsbyrå med få anställda är det ofta mejlen från kunderna som tar kvällarna. "
+    "Med få anställda på er redovisningsbyrå är det ofta mejlen från kunderna som tar kvällarna. "
     "Känner du igen dig?\n\n"
     "Vår Supportagent svarar på de vanliga frågorna åt er, så att du hinner med bokslutsarbetet. "
     "Testa den på era egna frågor, det tar 15–20 minuter.\n\n"

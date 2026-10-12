@@ -203,6 +203,27 @@ _UTKAST_V2_UPPGIFT = (
     "INTE av någon längdregel här."
 )
 
+#: Personaliseringssteget för ingången (Anton 2026-10-12): skriver om ENBART
+#: första stycket. Samma svarsform som utkastet, så run_step-kontraktet håller.
+_INGANGSUPPGIFT = (
+    "Skriv om ENBART ingången (första stycket) i utkastet nedan, så att den är "
+    "skriven till mottagaren om just deras verksamhet, och låt resten av mejlet "
+    "stå ordagrant kvar. Regler för den nya ingången: (1) andra person rakt "
+    "igenom, \"ni\"/\"er\"/\"era\" (eller \"du\"/\"din\" om hälsningen bär ett "
+    "förnamn), aldrig \"man\", \"den som\", \"ett företag som\" eller en etikett "
+    "som \"som ni gör\", \"som ert\", \"liksom ni\"; (2) en konkret detalj ur "
+    "citaten i researchen om vad de gör, för vem eller hur (deras egna ord, "
+    "inga siffror ur registret), så att meningen inte kunde stå i ett mejl till "
+    "något annat bolag; (3) slutar i det arbetsmoment den valda produkten löser, "
+    "sagt som något som får vänta eller tar tid hos dem, aldrig som en gissning "
+    "om deras problem (inga \"troligen\", \"säkert\", \"brukar\"); (4) en mening, "
+    "högst två, högst 30 ord; (5) ämnesraden bär bolagets namn och vinsten för "
+    "dem. Returnera JSON: subject, body (hela mejlet med den nya ingången, ren "
+    "text), personalization_score (0.0-1.0), weak_lines (tom lista), "
+    "passes_review (true), violations (tom lista), draft_reasoning (EN mening: "
+    "vilken detalj ur citaten ingången bygger på)."
+)
+
 
 async def run_research_step_v2(*args: Any, **kwargs: Any) -> dict[str, Any]:
     """Fas B för ETT prospekt i ETT LLM-anrop — se _research_v2.
@@ -774,17 +795,23 @@ def _utkastens_researchvy(research_summary: str) -> str:
 #: "När man …" och resten på "Att …": tio parallella jobb ser inte varandras
 #: utkast, så variationen måste komma ur koden, som erbjudandearmarna
 #: (erbjudanden.tilldela). Formerna beskrivs, aldrig med orden.
+#: Alla former är skrivna TILL mottagaren (ni/er, eller du/din till en namngiven
+#: person) om just deras verksamhet, med en konkret detalj ur citaten. Aldrig
+#: "man", "den som", "ett företag som" eller etiketten "som ni gör" (Anton
+#: 2026-10-12, andra gången: nästan alla ingångar var en allmän mening med en
+#: etikett på).
 _INGANGSFORMER: tuple[str, ...] = (
-    "Verksamheten är subjekt: en mening som börjar med den sortens företag de är "
-    "(\"Ett byggföretag som …\", \"En webbyrå med …\") och slutar i vad som sällan hinns med.",
-    "Momentet först: en mening som börjar med det konkreta arbetsmoment agenten löser "
-    "(\"Att hinna …\", \"Att hitta …\", \"Att svara på …\") och knyter det till hur de arbetar.",
-    "En fråga om momentet: ingången är en kort fråga som nämner deras sorts arbete och "
-    "momentet (\"Hur många kvällar går åt till …?\", \"Vem hinner … när …?\").",
-    "Den som-formen: \"Den som [arbetar så som de gör] …\" följt av vad som skaver i momentet.",
-    "Situationen: en mening som börjar i deras kundkrets eller arbetssätt ur citaten "
-    "(\"Med både privatpersoner och företag som kunder …\", \"Med egna montörer …\") "
-    "och landar i momentet. Aldrig siffror.",
+    "Med-formen: börja i deras egen beskrivning, i andra person (\"Med er inriktning på …\", "
+    "\"Med era … som kunder\") och sluta i det moment som får vänta hos er.",
+    "Momentet först, om dem: börja med arbetsmomentet agenten löser och knyt det till DERAS "
+    "konkreta arbete ur citaten (\"Att hinna hitta nästa företagsuppdrag i Göteborg, vid sidan av "
+    "era villor och fastighetsprojekt, …\").",
+    "En fråga till dem: en kort fråga i andra person som nämner deras arbete ur citaten och "
+    "momentet (\"Hur hinner ni med … när …?\", \"Vem på … tar … ?\").",
+    "Ni-formen: börja med vad de gör enligt sajten, i andra person (\"Ni levererar …\", "
+    "\"Ni bygger … åt …\") och säg vad som brukar bli liggande i just det.",
+    "Era-formen: börja i deras kunder eller projekt ur citaten (\"Era beställare inom …\", "
+    "\"Era projekt från … till …\") och landa i momentet. Aldrig siffror.",
 )
 
 
@@ -928,6 +955,9 @@ async def run_outreach_draft_v2(
         f"## Språkläge\n{language_state}\n\n"
         # Utan stilen platta humanizern tillbaka ingången och uppmaningen.
         f"## Skrivstil (behåll mejlets struktur och uppmaning enligt den)\n{leads_systemprompt.skrivstil()}"
+        "\n\n## Ingången\nIngången är skriven till mottagaren i andra person om just deras verksamhet. "
+        "Gör den inte allmän: inget \"man\", \"den som\", \"ett företag som\" och ingen etikett "
+        "som \"som ni gör\" eller \"som ert\". Behåll detaljen ur deras egen beskrivning."
         # Utan blocket stryker eller skriver humanizern om erbjudandet och villkoren.
         + (f"\n\n{erbjudande.block()}" if erbjudande else "")
     )
@@ -977,6 +1007,30 @@ async def run_outreach_draft_v2(
     # här, och EN omskrivning med fynden utpekade sker innan humanizern, som
     # förblir sist (INV-LANG-002). Kostar ett anrop bara när något fälls.
     produktnamn = erbjudanden.produkt_ur_research(research_summary)
+
+    # 1a. Personalisera ingången, ALLTID (Anton 2026-10-12, andra gången):
+    # nästan varje ingång var en allmän mening om branschen med en etikett
+    # på ("när man …, som ni gör"), fast resten var anpassad. En extra runda
+    # Personalisera i granskningen rättade det, så den rundan ligger nu i
+    # kedjan: ett kort anrop som skriver om ENBART första stycket, i andra
+    # person, med en detalj ur citaten. Resten av mejlet rörs inte.
+    if str(draft.get("body") or "").strip():
+        personaliserad = await run_step(
+            steps[0],
+            ledger,
+            trace,
+            task=_INGANGSUPPGIFT
+            + f"\n\n## Ingångens form i det här mejlet\n{_ingangsform(thread.get('prospect_id'))}"
+            + f"\n\n## Utkastet\nÄmne: {draft.get('subject', '')}\n\n{draft.get('body', '')}",
+            case_context=base,
+            playbook_role=_OUTREACH_ROLE,
+            instruktioner=lager,
+            talamod_429=True,
+        )
+        if str(personaliserad.get("body") or "").strip():
+            draft = {**draft, "subject": personaliserad.get("subject") or draft.get("subject"),
+                     "body": personaliserad["body"]}
+
     stilfynd = _stilfynd(draft, villkor=erbjudande.villkor if erbjudande else None,
                          produkt=produktnamn, andra=andra_utkast)
     if stilfynd:

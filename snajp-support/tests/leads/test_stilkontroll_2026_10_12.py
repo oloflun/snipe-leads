@@ -1,15 +1,19 @@
-"""Antons genomgång 2026-10-12 av två utkastkedjor (Fiskebäck, Härlanda):
-ingången får inte vara en mall, inte rabbla registerfakta och inte anta
-något om mottagaren; erbjudandet överlever omskrivningen; två mejl i samma
-körning byggs inte likadant. Referensutkastet (andra Personalisera) passerar."""
+"""Antons genomgång 2026-10-12 av utkastkedjan (Fiskebäck, Härlanda), i två
+omgångar: ingången får inte vara en allmän mening med en etikett på ("som ni
+gör", "för företag som ert"), inte "man"/"den som", inte rabbla registerfakta
+och inte anta något om mottagaren; erbjudandet överlever omskrivningen; två
+mejl i samma körning byggs inte likadant. Referensutkastet passerar."""
 
 from app.agent.leads_research_v2 import _stilfynd, _vald_produkt
 from app.leads import stilkontroll as stil
 
+INGANG = (
+    "Med både privatpersoner och företag som kunder för er brandtätning och mjukfogning "
+    "är nästa företagskund ofta det som får vänta."
+)
 REFERENS = (
     "Hej Christian,\n\n"
-    "När man driver ett företag som ert, med både privatpersoner och företag som kunder, "
-    "kan det vara en utmaning att hinna hitta nya affärsmöjligheter.\n\n"
+    f"{INGANG}\n\n"
     "Vår agent Iris hittar kvalificerade kunder åt er. Ni får fem företag i er region som passar er, "
     "med kontaktperson och ett färdigt första mejl till var och en, helt utan kostnad.\n\n"
     "Svara \"ja\" på mejlet så skickar vi de fem inom två arbetsdagar."
@@ -21,29 +25,49 @@ VILLKOR = (
 PRODUKT = "Iris, leadsagenten"
 
 
+def _med_ingang(ingang: str) -> str:
+    return REFERENS.replace(INGANG, ingang)
+
+
 def _koder(text: str) -> set[str]:
     return {a.kod for a in stil.kontrollera(text).anmarkningar}
 
 
-def test_referensutkastet_passerar():
+def test_referensutkasten_passerar():
     assert _koder(REFERENS) == set()
     assert stil.erbjudande_fynd(REFERENS, villkor=VILLKOR, produkt=PRODUKT) == []
+    # Antons tre goda ingångar ur kön 2026-10-12.
+    for ingang in (
+        "Att hitta nya företagsuppdrag i Göteborg, parallellt med villor och fastighetsprojekt, är ofta en tidstjuv.",
+        "Med Consensos fokus på komplexa program och projekt behöver ni hitta rätt företag att samarbeta med.",
+        "Med er roll inom värmepumpar och fastighetsautomation i Luleå blir servicefrågorna många.",
+    ):
+        assert _koder(_med_ingang(ingang)) == set(), ingang
 
 
-def test_mallingangen_falls():
-    text = REFERENS.replace(
-        "När man driver ett företag som ert, med både privatpersoner och företag som kunder, kan det vara",
-        "För företag som ert, som säljer till andra företag, är det ofta",
-    )
-    assert "mall_ingang" in _koder(text)
+def test_allman_mening_med_etikett_falls():
+    for ingang in (
+        "För företag som ert, som säljer till andra företag, är det ofta en utmaning att hitta nya kunder.",
+        "När man arbetar med markarbeten och grundläggningar, som ni gör, kommer många förfrågningar.",
+        "När ett byggföretag, som ert, hjälper både företag och privatpersoner blir tiden knapp.",
+        "Att hitta nya kunder är ofta en utmaning för den som, liksom ni, utför rivning i västra Sverige.",
+        "Ni vänder er till privatpersoner, som ni gör, och det tar tid.",
+    ):
+        assert "mall_ingang" in _koder(_med_ingang(ingang)), ingang
+
+
+def test_allman_ingang_utan_etikett_falls():
+    for ingang in (
+        "När man driver ett byggföretag med både privatpersoner och företag som kunder får nästa kund vänta.",
+        "Den som utför markarbeten åt både företag och privatpersoner hinner sällan leta nästa kund.",
+        "Ett byggföretag som arbetar nära sina beställare har sällan tid över.",
+    ):
+        assert "generell_ingang" in _koder(_med_ingang(ingang)), ingang
 
 
 def test_registerfakta_och_antaganden_i_ingangen_falls():
-    text = REFERENS.replace(
-        "När man driver ett företag som ert, med både privatpersoner och företag som kunder, kan det vara en utmaning",
-        "Med 20-25 anställda och fem platschefer vet jag att det är en utmaning",
-    )
-    assert {"registerfakta_i_ingangen", "antagande_om_dem"} <= _koder(text)
+    koder = _koder(_med_ingang("Med 20-25 anställda och fem platschefer vet jag att nästa kund får vänta."))
+    assert {"registerfakta_i_ingangen", "antagande_om_dem"} <= koder
     # En tid eller ett telefonnummer i ingången är inga registerfakta.
     assert "registerfakta_i_ingangen" not in _koder("Boka 15–20 minuter nästa vecka, ring 070-123 45 67.")
 
@@ -59,12 +83,11 @@ def test_tappat_erbjudande_falls():
 
 
 def test_samma_konstruktion_i_korningen_falls():
-    annat = REFERENS.replace("både privatpersoner och företag som kunder", "nära relationer till beställare")
+    annat = _med_ingang("Med både privatpersoner och företag som kunder för er VVS blir nästa kund det som får vänta.")
     assert [a.kod for a in stil.mot_andra(annat, [REFERENS])] == ["samma_konstruktion", "samma_uppmaning"]
-    olikt = REFERENS.replace(
-        "När man driver ett företag som ert, med både privatpersoner och företag som kunder, kan det vara",
-        "Att hinna hitta nästa företagskund vid sidan av villorna är ofta",
-    ).replace("så skickar vi de fem inom två arbetsdagar", "så kommer de fem inom två arbetsdagar")
+    olikt = _med_ingang("Att hinna hitta nästa företagskund vid sidan av era villor är ofta det som får vänta.").replace(
+        "så skickar vi de fem inom två arbetsdagar", "så kommer de fem inom två arbetsdagar"
+    )
     assert stil.mot_andra(olikt, [REFERENS]) == []
 
 

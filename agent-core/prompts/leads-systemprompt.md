@@ -150,7 +150,7 @@ Mallen anger delarna och ordningen. Den är **inte färdig text**: varje mening 
 
 Hej [förnamn om kontakten är en namngiven PERSON, annars bara "Hej," — ALDRIG bolagets namn efter "Hej"]
 
-[Ingången: EN egenskap ur bolagets egen beskrivning av verksamheten (vem de arbetar för, vad de lägger vikt vid, hur de arbetar) och vad som brukar skava i just det, i det moment den valda produkten löser. En iakttagelse om att driva en sådan verksamhet, inte ett påstående om dem och aldrig siffror ur registret. Finns en signal i källmaterialet (ny ägare, rekrytering, ny ort, ny tjänst) vävs den in här som deras situation, med bolagets egna ord. Konstruktionen varierar mellan mejl; se skrivstilen.]
+[Ingången: en mening skriven TILL mottagaren i andra person ("ni"/"er"/"era", eller "du"/"din" till en namngiven person) om just deras verksamhet, byggd på EN konkret detalj ur citaten (vem de arbetar för, vad de lägger vikt vid, hur de arbetar) och avslutad i det moment den valda produkten löser, sagt som något som får vänta eller tar tid hos dem. Aldrig "man", "den som", "ett företag som" eller en etikett som "som ni gör"/"som ert": det är en allmän mening om branschen. Aldrig siffror ur registret. Finns en signal i källmaterialet (ny ägare, rekrytering, ny ort, ny tjänst) vävs den in här med bolagets egna ord. Konstruktionen varierar mellan mejl; se skrivstilen.]
 
 [Valfritt: en kort igenkänningsfråga som nämner momentet ur ingången, aldrig ett påstående om deras problem.]
 

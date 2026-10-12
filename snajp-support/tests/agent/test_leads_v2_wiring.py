@@ -122,7 +122,7 @@ class _FakeLLM:
                     # (2026-10-12) inte fäller det; humanizerns svar nedan bär
                     # fortfarande "Jag såg att" för köprovet.
                     "body": (
-                        "Hej,\n\nNär man säljer med fri retur blir returfrågorna många.\n\n"
+                        "Hej,\n\nMed fri retur på allt ni säljer blir returfrågorna många.\n\n"
                         "Vår agent svarar på dem åt er. Uppsägningstiden är 60 dagar.\n\n"
                         "Svara ja så visar vi hur."
                     ),
@@ -382,8 +382,9 @@ async def test_outreach_v2_ar_tva_anrop_och_koar():
             is_test=True,
         )
 
-    assert llm.calls == ["sa:draft-outreach", "snajp:humanizer-svenska"], (
-        "V2-utkastet ska vara EXAKT två anrop när grundningen passerar"
+    # Utkast + personaliseringen av ingången (alltid, 2026-10-12) + humanizern.
+    assert llm.calls == ["sa:draft-outreach", "sa:draft-outreach", "snajp:humanizer-svenska"], (
+        "V2-utkastet ska vara EXAKT tre anrop när stilgrinden och grundningen passerar"
     )
     assert result["queued"] is True
     assert result["escalated"] is False
@@ -496,7 +497,8 @@ async def test_outreach_v2_tom_body_ger_ett_omforsok():
 
     assert llm.calls == [
         "sa:draft-outreach",
-        "sa:draft-outreach",
+        "sa:draft-outreach",  # omförsöket vid tom body
+        "sa:draft-outreach",  # personaliseringen av ingången
         "snajp:humanizer-svenska",
     ]
     assert result["queued"] is True
@@ -668,7 +670,7 @@ async def test_utan_valbart_erbjudande_ar_prompten_oforandrad():
     import re
 
     def _utan_form(meddelanden: list[str]) -> list[str]:
-        return [re.sub(r"## Ingångens form i det här mejlet\n[^\n]*\n[^\n]*\n\n", "", m) for m in meddelanden]
+        return [re.sub(r"## Ingångens form i det här mejlet\n[^\n]*\n(?:Formen är tilldelad[^\n]*\n\n)?", "", m) for m in meddelanden]
 
     assert _utan_form(llm.user_messages) == _utan_form(llm_forut.user_messages)
     assert "Ingångens form i det här mejlet" in llm.user_messages[0]
@@ -687,7 +689,7 @@ async def test_faktagrinden_slapper_villkorens_siffra_bara_med_erbjudandet():
     llm = _FakeLLM(overrides=mejl)
     result = await _utkast_v2(med, await _prepare_outreach(med), llm)
     assert result["grounding"]["fired"] is False
-    assert llm.calls == ["sa:draft-outreach", "snajp:humanizer-svenska"]
+    assert llm.calls == ["sa:draft-outreach", "sa:draft-outreach", "snajp:humanizer-svenska"]
 
     utan = MemoryStorage()
     llm2 = _FakeLLM(overrides=mejl)

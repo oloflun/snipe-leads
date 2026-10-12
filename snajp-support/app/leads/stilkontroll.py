@@ -63,10 +63,25 @@ _MARKORER: tuple[tuple[str, re.Pattern[str], str], ...] = (
                 re.IGNORECASE),
      "ett antagande om mottagaren"),
 )
-#: Ingången som mall (Anton 2026-10-12): "För företag som ert, som …" stod i
-#: mejl efter mejl och läses som ett massutskick, oavsett vad som följer.
+#: Ingången som mall (Anton 2026-10-12, två gånger): en allmän mening om
+#: branschen med en etikett på ("För företag som ert …", "… som ni gör",
+#: "liksom ni", "ett byggföretag som ert") läses som ett massutskick, oavsett
+#: hur specifik resten är. De goda ingångarna (Witekk, Tingstad, Consenso) är
+#: skrivna TILL mottagaren om deras verksamhet: "Med er roll inom …", "Att
+#: hitta nya företagsuppdrag i Göteborg, parallellt med villor …".
 _MALL_INGANG = re.compile(
-    r"^(?:för\s+(?:ett\s+)?(?:företag|bolag|verksamheter)\s+som\s+(?:ert|er|ditt|dig|din)\b|för\s+er\s+som\b)",
+    r"(?:\bför\s+(?:ett\s+|en\s+)?\w*(?:företag|bolag|byrå|firma|verksamhet)\w*\s+som\s+(?:ert|er|ditt|din|dig)\b"
+    r"|\b(?:lik)?som\s+(?:ni|du)(?:\s+(?:gör|är|har|jobbar|arbetar))?\s*[,.]"
+    r"|\bsom\s+(?:ert|er)\b"
+    r"|\bi\s+er\s+(?:situation|bransch)\b"
+    r"|\bför\s+er\s+som\b)",
+    re.IGNORECASE,
+)
+#: En allmän ingång: "man", "den som" och "ett företag som" gör meningen till
+#: en sanning om vem som helst. Ingången skrivs i andra person om just dem.
+_GENERELL_INGANG = re.compile(
+    r"(?:\bman\b|\bden\s+som\b|\bde\s+som\b|\b(?:ett|en)\s+\w*(?:företag|bolag|byrå|firma|verksamhet)\s+som\b"
+    r"|\bföretag\s+i\s+er\b|\bmånga\s+\w*(?:företag|bolag)\b)",
     re.IGNORECASE,
 )
 #: Registerfakta i ingången: ett antal (siffra eller ord) följt av anställda,
@@ -154,8 +169,12 @@ def kontrollera(text: str) -> Kontrollresultat:
 
     meningar = _meningar(brod)
     if meningar:
-        if _MALL_INGANG.match(meningar[0]):
-            lagg("mall_ingang", f"ingången är en mall: \"{meningar[0][:60]}\"")
+        mall = _MALL_INGANG.search(meningar[0])
+        if mall:
+            lagg("mall_ingang", f"ingången är en allmän mening med en etikett på (\"{mall.group(0).strip()}\")")
+        generell = _GENERELL_INGANG.search(meningar[0])
+        if generell and not mall:
+            lagg("generell_ingang", f"ingången är allmän (\"{generell.group(0).strip()}\"), inte skriven till dem")
         fakta = _REGISTERFAKTA.search(meningar[0])
         if fakta:
             lagg("registerfakta_i_ingangen", f"registerfakta i ingången (mottagaren vet redan): \"{fakta.group(0)}\"")
