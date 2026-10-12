@@ -663,7 +663,15 @@ async def test_utan_valbart_erbjudande_ar_prompten_oforandrad():
     thread_id = await _prepare_outreach(utan_villkor)
     await _utkast_v2(utan_villkor, thread_id, llm)
 
-    assert llm.user_messages == llm_forut.user_messages
+    # Ingångens form tilldelas per prospekt (2026-10-12) och skiljer två
+    # trådar åt; allt annat i prompten ska vara detsamma.
+    import re
+
+    def _utan_form(meddelanden: list[str]) -> list[str]:
+        return [re.sub(r"## Ingångens form i det här mejlet\n[^\n]*\n[^\n]*\n\n", "", m) for m in meddelanden]
+
+    assert _utan_form(llm.user_messages) == _utan_form(llm_forut.user_messages)
+    assert "Ingångens form i det här mejlet" in llm.user_messages[0]
     assert "Erbjudandet i det här mejlet" not in llm.user_messages[0]
     assert (await utan_villkor.get_outreach_thread(TENANT, thread_id))["offer_id"] is None
     assert utan_villkor.offers == []
