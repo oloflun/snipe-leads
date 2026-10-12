@@ -769,6 +769,31 @@ def _utkastens_researchvy(research_summary: str) -> str:
     return json.dumps(vy, ensure_ascii=False) if vy else research_summary
 
 
+#: Ingångens form, tilldelad per mejl (Anton 2026-10-12: "inte inleda på samma
+#: sätt för alla"). Omgång 2 av Snajps omkörning gav 45 av 62 ingångar på
+#: "När man …" och resten på "Att …": tio parallella jobb ser inte varandras
+#: utkast, så variationen måste komma ur koden, som erbjudandearmarna
+#: (erbjudanden.tilldela). Formerna beskrivs, aldrig med orden.
+_INGANGSFORMER: tuple[str, ...] = (
+    "Verksamheten är subjekt: en mening som börjar med den sortens företag de är "
+    "(\"Ett byggföretag som …\", \"En webbyrå med …\") och slutar i vad som sällan hinns med.",
+    "Momentet först: en mening som börjar med det konkreta arbetsmoment agenten löser "
+    "(\"Att hinna …\", \"Att hitta …\", \"Att svara på …\") och knyter det till hur de arbetar.",
+    "En fråga om momentet: ingången är en kort fråga som nämner deras sorts arbete och "
+    "momentet (\"Hur många kvällar går åt till …?\", \"Vem hinner … när …?\").",
+    "Den som-formen: \"Den som [arbetar så som de gör] …\" följt av vad som skaver i momentet.",
+    "Situationen: en mening som börjar i deras kundkrets eller arbetssätt ur citaten "
+    "(\"Med både privatpersoner och företag som kunder …\", \"Med egna montörer …\") "
+    "och landar i momentet. Aldrig siffror.",
+)
+
+
+def _ingangsform(prospect_id: str | None) -> str:
+    """Formen för just det här mejlet, deterministisk per prospekt."""
+    digest = hashlib.sha256(str(prospect_id or "").encode("utf-8")).digest()
+    return _INGANGSFORMER[digest[0] % len(_INGANGSFORMER)]
+
+
 def _stilfynd(
     draft: dict[str, Any], *, villkor: str | None, produkt: str | None, andra: list[str]
 ) -> list[str]:
@@ -838,6 +863,10 @@ async def run_outreach_draft_v2(
     ]
     anvanda_ingangar = [i for i in (stil.ingang(t) for t in andra_utkast[-12:]) if i]
     ingangsblock = (
+        f"## Ingångens form i det här mejlet\n{_ingangsform(thread.get('prospect_id'))}\n"
+        "Formen är tilldelad just det här mejlet så att körningens mejl inte börjar likadant; "
+        "innehållet hämtas ur bolagets egna ord.\n\n"
+    ) + (
         "## Ingångar som redan används i den här körningen\n"
         "Bygg din ingång på ett annat sätt och kring ett annat moment än dessa:\n"
         + "\n".join(f"- {i}" for i in anvanda_ingangar)

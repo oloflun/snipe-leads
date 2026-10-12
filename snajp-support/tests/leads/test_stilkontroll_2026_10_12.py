@@ -82,3 +82,11 @@ def test_produktens_kortform_raknas():
     produkter = [{"namn": "Iris, leadsagenten", "nytta": "x"}, {"namn": "Supportagenten", "nytta": "y"}]
     assert _vald_produkt({"produkt": "Iris"}, produkter)["namn"] == "Iris, leadsagenten"
     assert _vald_produkt({"produkt": "Iris leadsagent"}, produkter) is None
+
+
+def test_ingangsformen_roterar_per_prospekt():
+    from app.agent.leads_research_v2 import _INGANGSFORMER, _ingangsform
+
+    former = {_ingangsform(f"prospekt-{i}") for i in range(40)}
+    assert former == set(_INGANGSFORMER), "fem former ska alla förekomma över en körning"
+    assert _ingangsform("samma") == _ingangsform("samma")

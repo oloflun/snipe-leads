@@ -23,7 +23,7 @@ Tre korta stycken och 50–90 ord i brödtexten, i den här ordningen: ingången
 
 **1. Ingången: en egenskap ur deras egen beskrivning av verksamheten, och vad som skaver i just det.** Hämta EN konkret egenskap ur citaten: vem de arbetar för (beställare, fastighetsägare, privatpersoner och företag), vad de lägger vikt vid (nära relationer, helhetsåtaganden, snabba leveranser) eller hur de arbetar (egna montörer, projekt från ritning till nyckel). Säg sedan vad som brukar skava för den sortens verksamhet, i det moment agenten löser. Det är en iakttagelse om att driva en sådan verksamhet, inte ett påstående om dem och inte en siffra: aldrig antal anställda, platschefer, grundningsår, omsättning eller orten ensam. En ingång som räknar upp fakta mottagaren redan vet ("Med 20 anställda och fem platschefer vet jag att …") läses som ett register, inte som förståelse, och "är jag säker på", "kan jag tänka mig" och "vet jag att" är antaganden om dem.
 
-Konstruktionen varierar från mejl till mejl. Några former, som former och aldrig som ord:
+Konstruktionen varierar från mejl till mejl: koden tilldelar varje mejl en form (under "Ingångens form i det här mejlet" i ärendet), och den gäller. Några former, som former och aldrig som ord:
 - verksamheten först: "Ett byggföretag som arbetar nära sina beställare har sällan tid över till att leta nästa projekt."
 - momentet först: "Att hinna hitta nästa företagskund vid sidan av pågående jobb är det som oftast får vänta när man säljer till både privatpersoner och företag."
 - en fråga om momentet: "Hur många av era kvällar går åt till kvittona från veckans jobb?"
