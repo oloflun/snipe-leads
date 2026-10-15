@@ -89,7 +89,9 @@ def fornamn(namn: str | None, epost: str | None = None) -> str | None:
             return d
     # Utan stöd i adressen måste ordet se ut som ett förnamn: kontaktsökningen
     # gav "Scandinavia" (ur bolagsnamnet) och "Polarhandlare Inget" (2026-10-15).
-    return led[0] if _liknar_fornamn(led[0]) else None
+    # Ett led som inte kan vara ett namn ("Hising Arbetsledare") gör hela
+    # namnet osäkert: efternamnet stod först och rollen efter.
+    return led[0] if all(_liknar_fornamn(d) for d in led) else None
 
 
 #: Ord som står med versal intill en adress men aldrig är ett förnamn.

@@ -103,6 +103,7 @@ _TRELEDSLISTA = re.compile(r"[\wåäöÅÄÖ-]+(?:\s+[\wåäöÅÄÖ-]+)?,\s+[\w
 #: 2026-10-12: "Hej Monica" och "era kunder", sedan "du lägger" och "vi bokar
 #: … åt er". Pronomenen som TILLTALAR, inte ägandeformen "er egen information".
 _DU = re.compile(r"\b(?:du|dig)\b", re.IGNORECASE)
+_NAMNGIVEN = re.compile(r"^\s*(?:hej|hejsan|hallå)\s+[A-ZÅÄÖ][\wåäöé-]+\s*[,!]", re.IGNORECASE)
 _NI = re.compile(r"\bni\b|\båt\s+er\b|\bhos\s+er\b|\btill\s+er\b|\bert\b|\bera\b", re.IGNORECASE)
 #: Mallord som omkörningen 2026-10-15 gav i fem av elva ingångar efter att
 #: skrivstilen talat om bolagets "löfte": "… är ert löfte, men att svara på
@@ -229,6 +230,10 @@ def kontrollera(text: str) -> Kontrollresultat:
     du, ni = _DU.search(tilltal), _NI.search(tilltal)
     if du and ni:
         lagg("du_och_ni", f"blandar du och ni om samma mottagare (\"{du.group(0)}\" och \"{ni.group(0)}\")")
+    elif _NAMNGIVEN.match(text) and re.search(r"\bni\b", tilltal, re.IGNORECASE) and not du:
+        # "Hej Per," och sedan "ni" rakt igenom (2026-10-15): till en
+        # namngiven mottagare skrivs mejlet i du-form.
+        lagg("ni_till_person", "hälsar med förnamn men skriver \"ni\"; till en namngiven mottagare används \"du\"")
     for forra, mening in zip(meningar, meningar[1:]):
         a, b = (re.match(r"[\wÅÄÖåäö]+", m) for m in (forra, mening))
         if a and b and a.group(0).casefold() == b.group(0).casefold():

@@ -11,8 +11,10 @@ INGANG = (
     "Med både privatpersoner och företag som kunder för er brandtätning och mjukfogning "
     "är nästa företagskund ofta det som får vänta."
 )
+# "Hej," i stället för "Hej Christian,": texten är i ni-form, och en namngiven
+# mottagare får "du" sedan 2026-10-15 (ni_till_person).
 REFERENS = (
-    "Hej Christian,\n\n"
+    "Hej,\n\n"
     f"{INGANG}\n\n"
     "Vår agent Iris hittar kvalificerade kunder åt er. Ni får fem företag i er region som passar er, "
     "med kontaktperson och ett färdigt första mejl till var och en, helt utan kostnad.\n\n"
