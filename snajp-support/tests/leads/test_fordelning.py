@@ -48,8 +48,9 @@ def _kandidat(**andring) -> dict:
     [
         # Mejl på sajten → Iris.
         (_kandidat(), {"contact_email": "info@alfabygg.se"}, ("iris", None)),
-        # Ingen sajt men registrets bolags-e-post → Iris (regel 13).
-        (_kandidat(website=None, _epost="kontor@alfabygg.se"), None, ("iris", None)),
+        # Ingen sajt men registrets bolags-e-post: sedan 2026-10-15 inget
+        # Iris-lead (regel 10, researchen behöver sajten) utan listspåret.
+        (_kandidat(website=None, _epost="kontor@alfabygg.se"), None, ("ej_kvalificerad", "Utan webbplats")),
         # Bara telefon, VD namngiven, aktiebolag → ringlistan (regel 15).
         (_kandidat(), {"contact_phone": "031-12 34 56"}, ("ring", None)),
         (_kandidat(website=None, _telefon="031-12 34 56"), None, ("ring", None)),

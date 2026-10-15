@@ -44,6 +44,13 @@ taket (`sidhamtning._KREDIT_SLUT_TILL`): 350 misslyckade anrop stoppade
 Göteborgskörningen. Fixturen är avidentifierad (inga personnamn, nummer eller
 adresser).
 
+Första körningen med allabolag (2026-10-15 22:00) avbröts efter några minuter:
+bolag utan webbplats blev Iris-leads på registrets bolags-e-post (regel 13) och
+föll i researchen på "Inget källmaterial" (9 av 11), och registrets hemsida var
+ibland kedjans (giganten.se, elon.se, mio.se). Därför kräver Iris nu en
+webbplats (regel 10; bolaget går annars till listspåret som "Utan webbplats"),
+och en hemsida vars domän inte bär bolagets namn måste ha namnet på startsidan.
+
 ## 2026-10-15 (Anton) — Utkasten tillbaka till Christoffer-nivån; inga bolagsnamn i ämnesraden
 
 **Beslut.** "Det första utkastet med Christoffer var det bästa (även om

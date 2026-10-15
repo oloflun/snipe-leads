@@ -1096,7 +1096,12 @@ def fordela(k: dict[str, Any], kontakt: dict[str, Any] | None) -> tuple[str, str
     kontakt = kontakt or {}
     if kontakt.get("tak") and not kontakt.get("contact_email"):
         return "prova_om", "Stoppad av sidtaket"
-    if kontakt.get("contact_email") or registrets_epost(k):
+    # Iris kräver en webbplats (regel 10): researchen och ingången bygger på
+    # bolagets egna sidor. Registrets bolags-e-post ensam gav Iris-leads utan
+    # sajt sedan allabolag blev registret, och 9 av 11 föll i researchen på
+    # "Inget källmaterial" (körningen 2026-10-15). Adressen räcker fortfarande
+    # som KONTAKT när sajten finns (regel 13).
+    if k.get("website") and (kontakt.get("contact_email") or registrets_epost(k)):
         return "iris", None
     if kontakt.get("contact_phone"):
         return "ring", None
@@ -1108,6 +1113,8 @@ def fordela(k: dict[str, Any], kontakt: dict[str, Any] | None) -> tuple[str, str
         return "prova_om", "Sajt utan hittad kontakt"
     if k.get("_telefon"):
         return "ej_kvalificerad", "Ingen namngiven VD"
+    if registrets_epost(k):
+        return "ej_kvalificerad", "Utan webbplats"
     return "ej_kvalificerad", "Inget kontaktsätt"
 
 
@@ -1210,6 +1217,16 @@ async def _komplettera_iris(
         webb = await _webbplats(k)
         if puls:
             await puls()
+        if webb and not discovery.webbplats_matchar_namn(k["company_name"], webb):
+            # Registrets hemsida kan vara kedjans eller koncernens (2026-10-15:
+            # Thorneus Radio & TV -> giganten.se, Vitvaruspecialisten -> elon.se,
+            # Mariedals Möbler -> mio.se). Bär varken domänen eller startsidan
+            # bolagets namn är det inte bolagets sajt.
+            from ..existens import styrk
+            from ..webbsignal import mat_webbplats
+
+            if styrk({"company_name": k["company_name"], "website": webb}, await mat_webbplats(webb)):
+                webb = None
         parkerad = await ar_platshallare(webb) if webb else None
         if parkerad == AVVECKLAT:
             # Ett avvecklat bolag är inget lead i något spår (Anton 2026-10-08).
