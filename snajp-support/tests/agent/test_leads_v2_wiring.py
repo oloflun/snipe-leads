@@ -121,6 +121,9 @@ class _FakeLLM:
                     # Råutkastet är rent, så att stilgrinden före humanizern
                     # (2026-10-12) inte fäller det; humanizerns svar nedan bär
                     # fortfarande "Jag såg att" för köprovet.
+                    # Sedan 2026-10-15 är även humanizerns svar rent: grinden
+                    # körs efter humanizern och skriver annars om (två varv).
+                    # Köprovet sätter "Jag såg att" själv.
                     "body": (
                         "Hej,\n\nMed fri retur på allt ni säljer blir returfrågorna många.\n\n"
                         "Vår agent svarar på dem åt er. Uppsägningstiden är 60 dagar.\n\n"
@@ -134,7 +137,10 @@ class _FakeLLM:
                 },
                 "snajp:humanizer-svenska": {
                     "final_subject": "Returfrågor",
-                    "final_body": "Hej! Jag såg att ni erbjuder fri retur i 30 dagar.",
+                    "final_body": (
+                        "Hej,\n\nMed fri retur på allt ni säljer blir returfrågorna många.\n\n"
+                        "Vår agent svarar på dem åt er.\n\nSvara ja så visar vi hur."
+                    ),
                 },
             }.get(skill, {})
         )
@@ -682,7 +688,7 @@ async def test_utan_valbart_erbjudande_ar_prompten_oforandrad():
 async def test_faktagrinden_slapper_villkorens_siffra_bara_med_erbjudandet():
     mejl = {"snajp:humanizer-svenska": {
         "final_subject": "Returfrågor",
-        "final_body": "Hej,\n\nVår agent svarar på returfrågorna åt er. Uppsägningstiden är 60 dagar.\n\nPassar torsdag?",
+        "final_body": "Hej,\n\nVår agent svarar på returfrågorna åt er. Uppsägningstiden är 60 dagar.\n\nSvara ja så bokar vi torsdag.",
     }}
     med = MemoryStorage()
     await _med_erbjudande(med, {"gratis_prov": _VILLKOR})
@@ -728,8 +734,14 @@ async def test_villkoret_folger_produkten_researchen_valde():
 async def test_stilfynd_tvingar_granskning_med_skalet_pa_koposten():
     storage = MemoryStorage()
     thread_id = await _prepare_outreach(storage)
-    # Standardsvaret: "Hej! Jag såg att ni erbjuder fri retur i 30 dagar."
-    result = await _utkast_v2(storage, thread_id, _FakeLLM())
+    llm = _FakeLLM(overrides={"snajp:humanizer-svenska": {
+        "final_subject": "Returfrågor", "final_body": "Hej! Jag såg att ni erbjuder fri retur i 30 dagar."}})
+    result = await _utkast_v2(storage, thread_id, llm)
+    # Grinden efter humanizern (2026-10-15): två omskrivningsvarv, sedan köas
+    # utkastet med skälet när fyndet ändå står kvar.
+    assert llm.calls == ["sa:draft-outreach", "sa:draft-outreach", "snajp:humanizer-svenska",
+                         "sa:draft-outreach", "snajp:humanizer-svenska",
+                         "sa:draft-outreach", "snajp:humanizer-svenska"]
     assert result["queued"] is True
     post = storage.send_queue[TENANT][-1]
     assert post["status"] == "awaiting_review"

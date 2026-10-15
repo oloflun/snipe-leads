@@ -208,12 +208,10 @@ _UTKAST_V2_UPPGIFT = (
 _INGANGSUPPGIFT = (
     "Skriv om ENBART ingången (första stycket) i utkastet nedan, så att den är "
     "skriven till mottagaren om just deras verksamhet, och låt resten av mejlet "
-    "stå ordagrant kvar. Förebilden är Antons bästa utkast (2026-10-15), en fråga "
-    "som ställer det bolaget lovar sina kunder mot momentet: \"Hur hinner du med att ge "
-    "personlig rådgivning och service genom hela processen, från köp till "
-    "underhåll, när kundfrågorna om båtar, motorer och trailers blir många?\" "
-    "Det som bär den är konkretionen: deras exakta ord om vad de lovar, och exakt "
-    "vad kunderna frågar om. Låna aldrig dess ord, och benämn aldrig löftet: inga "
+    "stå ordagrant kvar. Förebilden är Antons bästa utkast (2026-10-15): det tog "
+    "bolagets egna ord om vad de lovar sina kunder och ställde dem mot exakt vad "
+    "kunderna frågar om, i en mening som bara kunde skrivas till just dem. Det som "
+    "bär den är konkretionen, inte meningsbyggnaden. Benämn aldrig löftet: inga "
     "\"ert löfte\", \"står ni för\", \"tar tid från det arbetet\" eller "
     "\"kärnverksamhet\". Regler för den nya ingången: (1) andra person rakt "
     "igenom, \"ni\"/\"er\"/\"era\" (eller \"du\"/\"din\" om hälsningen bär ett "
@@ -856,7 +854,9 @@ def _stilfynd(
     # Ämnesraden (Anton 2026-10-15): inget bolagsnamn, ingen produkt, inte
     # samma början som ett annat mejl i körningen.
     fynd += stil.amne_fynd(str(draft.get("subject") or ""), bolag=bolag, produkt=produkt, andra=andra_amnen or [])
-    return [a.beskrivning for a in fynd if a.kod not in ("lang_mening", "samma_uppmaning")]
+    # for_langt: pilotens och garantins villkor ger ofta över 90 ord; att skriva
+    # om för det kostar varv utan att kunna lyckas (facit tillåter det också).
+    return [a.beskrivning for a in fynd if a.kod not in ("lang_mening", "samma_uppmaning", "for_langt")]
 
 
 async def run_outreach_draft_v2(
@@ -1049,10 +1049,10 @@ async def run_outreach_draft_v2(
             draft = {**draft, "subject": personaliserad.get("subject") or draft.get("subject"),
                      "body": personaliserad["body"]}
 
-    stilfynd = _stilfynd(draft, villkor=erbjudande.villkor if erbjudande else None,
-                         produkt=produktnamn, andra=andra_utkast, bolag=company_name, andra_amnen=andra_amnen)
-    if stilfynd:
-        draft = await run_step(
+    villkor = erbjudande.villkor if erbjudande else None
+
+    async def skriv_om(utkast: dict[str, Any], fynd: list[str]) -> dict[str, Any]:
+        return await run_step(
             steps[0],
             ledger,
             trace,
@@ -1065,33 +1065,54 @@ async def run_outreach_draft_v2(
             "bolagets namn och utan produkten; produkten namnges före löftet; "
             "erbjudandets villkor och produktens namn står kvar ordagrant i "
             "sak; mejlet slutar med villkorens handling.\n\n## Fynd att åtgärda\n"
-            + "\n".join(f"- {f}" for f in stilfynd)
-            + f"\n\n## Förra utkastet\nÄmne: {draft.get('subject', '')}\n\n{draft.get('body', '')}",
+            + "\n".join(f"- {f}" for f in fynd)
+            + f"\n\n## Förra utkastet\nÄmne: {utkast.get('subject', '')}\n\n{utkast.get('body', '')}",
             case_context=base,
             playbook_role=_OUTREACH_ROLE,
             instruktioner=lager,
             talamod_429=True,
         )
 
-    # 2. snajp:humanizer-svenska — ALLTID sist (INV-LANG-002), minimal bas.
-    humanized = await run_step(
-        steps[1],
-        ledger,
-        trace,
-        task=(
-            "Gör texten till naturlig svenska enligt skillen. Behåll all sakinformation, "
-            "lägg inte till nya påståenden. Korrekturläs till sist: felfri stavning, "
-            "grammatik och skiljetecken, konsekvent tilltal — mänskligt är aldrig slarvigt. "
-            "Returnera JSON: final_subject (svenska), final_body (svenska, ren text)."
-        ),
-        case_context=(
-            f"{humanizer_base}\n\n## Text att humanisera\n"
-            f"Ämne: {draft.get('subject', '')}\n\n{draft.get('body', '')}"
-        ),
-        playbook_role=_OUTREACH_ROLE,
-        instruktioner=lager,
-        talamod_429=True,
-    )
+    async def humanisera(utkast: dict[str, Any]) -> dict[str, Any]:
+        # 2. snajp:humanizer-svenska — ALLTID sist (INV-LANG-002), minimal bas.
+        return await run_step(
+            steps[1],
+            ledger,
+            trace,
+            task=(
+                "Gör texten till naturlig svenska enligt skillen. Behåll all sakinformation, "
+                "lägg inte till nya påståenden. Korrekturläs till sist: felfri stavning, "
+                "grammatik och skiljetecken, konsekvent tilltal — mänskligt är aldrig slarvigt. "
+                "Returnera JSON: final_subject (svenska), final_body (svenska, ren text)."
+            ),
+            case_context=(
+                f"{humanizer_base}\n\n## Text att humanisera\n"
+                f"Ämne: {utkast.get('subject', '')}\n\n{utkast.get('body', '')}"
+            ),
+            playbook_role=_OUTREACH_ROLE,
+            instruktioner=lager,
+            talamod_429=True,
+        )
+
+    stilfynd = _stilfynd(draft, villkor=villkor, produkt=produktnamn, andra=andra_utkast,
+                         bolag=company_name, andra_amnen=andra_amnen)
+    if stilfynd:
+        draft = await skriv_om(draft, stilfynd)
+    humanized = await humanisera(draft)
+    # Grinden igen EFTER humanizern (Anton 2026-10-15): omkörningen samma kväll
+    # köade utkast med "ert löfte … tar tid från det arbetet" och tankstreck,
+    # för att grinden bara gav en omskrivning före humanizern och humanizern
+    # kunde föra tillbaka det. Kvarstår ett fynd skrivs mejlet om och
+    # humaniseras igen, högst två varv; humanizern är fortfarande sist.
+    for _varv in range(2):
+        slutligt = {"subject": humanized.get("final_subject") or draft.get("subject"),
+                    "body": humanized.get("final_body") or draft.get("body")}
+        kvar = _stilfynd(slutligt, villkor=villkor, produkt=produktnamn, andra=andra_utkast,
+                         bolag=company_name, andra_amnen=andra_amnen)
+        if not kvar:
+            break
+        draft = await skriv_om(slutligt, kvar)
+        humanized = await humanisera(draft)
 
     subject = strip_markdown(humanized.get("final_subject") or draft.get("subject") or "").strip()
     body = sign_off(strip_markdown(humanized.get("final_body") or draft.get("body") or ""), tenant_name)
