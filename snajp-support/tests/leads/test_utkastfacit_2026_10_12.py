@@ -67,7 +67,7 @@ def test_facitutkasten_borjar_olika():
         fynd = {a.kod for a in stil.mot_andra(t, [*texter[:i], *texter[i + 1 :]])}
         assert "samma_ingang" not in fynd, UTKAST[i]["bolag"]
     former = {" ".join(stil.ingang(t).split()[:2]) for t in texter}
-    assert len(former) >= 5, former
+    assert len(former) == len(texter), former
 
 
 @pytest.mark.parametrize(
@@ -93,7 +93,7 @@ def test_de_ersatta_falls_nu(u):
     koder = _koder(u["brodtext"]) | {
         a.kod for a in stil.erbjudande_fynd(u["brodtext"], villkor=u["villkor"], produkt=u["produkt"])
     }
-    assert koder & {"slentrian_ingang", "uppraknad_ingang", "agent_efter_loftet"}, u["bolag"]
+    assert koder & {"slentrian_ingang", "uppraknad_ingang", "agent_efter_loftet", "mallord_i_ingangen"}, u["bolag"]
 
 
 @pytest.mark.parametrize(

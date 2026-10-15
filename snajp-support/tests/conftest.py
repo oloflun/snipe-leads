@@ -61,6 +61,9 @@ def _force_simulation_mode(monkeypatch):
         "LEADS_WEBBSIGNAL",
         # Registerkällan (merinfo via ScrapeGraphAI, 2026-10-01): sjunde gången.
         "LEADS_MERINFO",
+        # Registrets hämtare (allabolag eller merinfo, 2026-10-15). Tom =
+        # följer LEADS_MERINFO; ett test som vill pröva allabolag sätter den.
+        "LEADS_REGISTER",
         # Gratis-först-hämtningen (app/leads/sidhamtning.py, 2026-10-05) gör
         # en riktig httpx-förfrågan före ScrapeGraph. Tom = ScrapeGraph först
         # som förut, med direkthämtningen som reserv. Åttonde gången.
@@ -83,6 +86,17 @@ def _force_simulation_mode(monkeypatch):
     get_settings.cache_clear()
     yield
     get_settings.cache_clear()
+
+
+@pytest.fixture(autouse=True)
+def _scrapegraph_kredit_noll():
+    """Kreditpausen i sidhamtning (2026-10-15) gäller hela processen: ett test
+    som simulerar "Insufficient credits" får inte pausa nästa tests anrop."""
+    from app.leads import sidhamtning
+
+    sidhamtning._KREDIT_SLUT_TILL[0] = 0.0
+    yield
+    sidhamtning._KREDIT_SLUT_TILL[0] = 0.0
 
 
 @pytest.fixture(autouse=True)

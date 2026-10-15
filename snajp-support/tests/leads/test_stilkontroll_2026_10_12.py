@@ -88,7 +88,8 @@ def test_tappat_erbjudande_falls():
 def test_samma_konstruktion_i_korningen_falls():
     annat = _med_ingang("Med både privatpersoner och företag som kunder för er VVS blir nästa kund det som får vänta.")
     assert [a.kod for a in stil.mot_andra(annat, [REFERENS])] == ["samma_konstruktion", "samma_uppmaning"]
-    olikt = _med_ingang("Att hinna hitta nästa företagskund vid sidan av era villor är ofta det som får vänta.").replace(
+    # Ingen gemensam fras om fyra ord heller (samma_fras, 2026-10-15).
+    olikt = _med_ingang("Att hinna hitta nästa företagskund vid sidan av era villor kräver tid ni sällan har.").replace(
         "så skickar vi de fem inom två arbetsdagar", "så kommer de fem inom två arbetsdagar"
     )
     assert stil.mot_andra(olikt, [REFERENS]) == []

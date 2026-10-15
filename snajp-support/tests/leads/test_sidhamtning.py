@@ -111,6 +111,8 @@ async def test_tjanstefel_cachas_inte_och_gammalt_tjanstefel_ignoreras(betalda, 
         return None, "Skrapning misslyckades: page not found."
 
     monkeypatch.setattr(sidhamtning, "_scrapegraph", saknas)
+    # Kreditfelet ovan pausade betalda anrop (2026-10-15); påfylld kredit.
+    sidhamtning._KREDIT_SLUT_TILL[0] = 0.0
     borta = "https://www.merinfo.se/foretag/finns-inte"
     await sidhamtning.hamta(borta, fas="bolag", direkt=False)
     assert (await storage.get_sidcache(TENANT, borta))["fel"]
@@ -194,3 +196,25 @@ async def test_429_pausar_alla_hamtningar_gemensamt(monkeypatch):
     assert md == "# sida" and fel is None
     assert sovit == [5.0, 10.0], sovit
     assert sidhamtning._RAD_429[0] == 0, "en lyckad hämtning nollställer serien"
+
+
+async def test_slut_kredit_pausar_betalda_anrop_utan_att_rakna(monkeypatch):
+    """2026-10-15: 350 anrop föll på "Insufficient credits" och räknades ändå
+    mot taket. Efter första kreditfelet går inga betalda anrop ut och inget räknas."""
+    from app.leads import sidhamtning
+
+    anrop = []
+
+    async def _sg(url, *, js=False):
+        anrop.append(url)
+        return None, "Skrapning misslyckades: Insufficient credits - purchase more."
+
+    monkeypatch.setattr(sidhamtning, "_scrapegraph", _sg)
+    monkeypatch.setenv("SCRAPEGRAPHAI_API_KEY", "test")
+    from app.config import get_settings
+
+    get_settings.cache_clear()
+    kontext = sidhamtning.starta(None, "t", tak=10)
+    for i in range(3):
+        await sidhamtning.hamta(f"https://www.merinfo.se/{i}", fas="bolag", direkt=False)
+    assert len(anrop) == 1 and kontext.totalt == 1 and kontext.tjanstefel == 3

@@ -45,6 +45,22 @@ till en viss person, och styrelseledamöter kontaktas inte.
   namn kommer från merinfo, uppgiften från bolagets egen webbplats. Merinfos
   personsidor används inte: de är privatpersonsidor (bostad, familj) och
   numren ligger bakom betalvägg (kontrollerat 2026-10-04).
+
+## Hämtningen går via allabolag sedan 2026-10-15
+
+ScrapeGraph-kontot har en kredit kvar (gratisplanen slut, verifierat
+2026-10-15), och merinfo blockerar direkthämtning. Varje list- och
+bolagssida föll på "Insufficient credits", och körningarna slutade på 4 och
+8 leads av 50. Antons beställning: leverera beställt antal. allabolags
+sökresultatsida går att hämta direkt och bär allt urvalet läser
+(sources/allabolag.py), så den har tagit över HÄMTNINGEN. Urvalet här
+(kontrollera, Jev, _komplettera, fordela, listspåret, upptagna) är
+oförändrat och läser samma dict-form från båda.
+
+`LEADS_REGISTER` väljer: `allabolag` eller `merinfo`. Osatt (eller tom) =
+allabolag när registret är på (`LEADS_MERINFO=scrapegraph`), annars merinfo.
+Med allabolag behövs ingen bolagssida per bolag, listsidorna är gratis och
+körningens kredittak stoppar inte registret.
 """
 from __future__ import annotations
 
@@ -75,8 +91,26 @@ FORSORTERA = 3
 
 
 
+def register() -> str:
+    """Varifrån registrets sidor hämtas: "allabolag" eller "merinfo".
+    `LEADS_REGISTER` avgör; osatt blir det allabolag när registret är på,
+    eftersom ScrapeGraph-krediten tog slut 2026-10-15 (modulens docstring)."""
+    val = os.environ.get("LEADS_REGISTER", "").strip().lower()
+    if val in ("allabolag", "merinfo"):
+        return val
+    return "allabolag" if os.environ.get("LEADS_MERINFO", "").strip().lower() == "scrapegraph" else "merinfo"
+
+
 def aktiv() -> bool:
-    return os.environ.get("LEADS_MERINFO", "").strip().lower() == "scrapegraph"
+    """Registret är på: merinfo via ScrapeGraph, eller allabolag uttryckligen."""
+    return (
+        os.environ.get("LEADS_MERINFO", "").strip().lower() == "scrapegraph"
+        or os.environ.get("LEADS_REGISTER", "").strip().lower() == "allabolag"
+    )
+
+
+def _fran_allabolag(b: dict[str, Any]) -> bool:
+    return "allabolag.se" in str(b.get("url") or "")
 
 
 # -- Hämtning ---------------------------------------------------------------
@@ -583,8 +617,9 @@ def till_kandidat(b: dict[str, Any], icp: dict[str, Any], profil: dict[str, Any]
         "anstallda": b.get("anstallda"),
         "omsattning": b.get("omsattning"),
         "sni": b.get("sni"),
-        # INV-DATA-001: varifrån uppgiften kom — bolagssidan.
-        "source_name": "merinfo",
+        # INV-DATA-001: varifrån uppgiften kom — bolagssidan, eller
+        # allabolags sökträff (sources/allabolag.py, 2026-10-15).
+        "source_name": "allabolag" if _fran_allabolag(b) else "merinfo",
         "source_url": b.get("url"),
         "signal": "bransch" if b.get("sni_namn") else None,
         "signal_detalj": b.get("sni_namn"),
@@ -622,15 +657,25 @@ async def sok(
     klarade filtret och steget efter — ett ärligt nej, ingen utfyllnad.
 
     `bred=True` (sista skyddsnätet i discovery.hitta_bolag): sök i de breda
-    B2B-branscherna i kundens område oavsett branschord."""
+    B2B-branscherna i kundens område oavsett branschord.
+
+    Hämtningen går via allabolag när `register()` säger det (2026-10-15):
+    sökorden är kundens egna ord, varje kommun och län en egen sökning,
+    listraden är redan hela bolaget och inget räknas mot kredittaket."""
+    from . import allabolag
+
     p = profil or {}
+    via_allabolag = register() == "allabolag"
     branschord = list(dict.fromkeys([*(icp.get("industries") or []), *(p.get("branscher") or [])]))
-    branscher = valj_branscher(branschord)
-    if not branscher and p.get("malgrupp"):
-        branscher = valj_branscher([p["malgrupp"]])
+    if via_allabolag:
+        branscher = allabolag.valj_termer(branschord, malgrupp=p.get("malgrupp"))
+    else:
+        branscher = valj_branscher(branschord)
+        if not branscher and p.get("malgrupp"):
+            branscher = valj_branscher([p["malgrupp"]])
     if bred or (not branscher and ar_generisk_bransch(branschord)):
         logger.info("merinfo: bred B2B-sökning (branschord=%s, bred=%s).", branschord, bred)
-        branscher = list(BRED_B2B)
+        branscher = list(allabolag.BRED_B2B if via_allabolag else BRED_B2B)
     # Regionnycklarna (icp.geo, app/leads/geo.py) är redan kommuner i
     # profilen; utan profil (listjobb som inte kunde läsa den) expanderas de
     # här, annars blev "goteborg" bara staden i stället för området.
@@ -642,11 +687,17 @@ async def sok(
         *(p.get("kommuner") or []),
         *(p.get("omraden") or []),
     ]
-    platser = valj_platser(list(dict.fromkeys(geo)))
+    geo = list(dict.fromkeys(geo))
+    platser = allabolag.valj_filter(geo) if via_allabolag else valj_platser(geo)
     if not branscher or platser is None:
         logger.info("merinfo: målgruppen gick inte att översätta (branscher=%s, platser=%s).", branscher, platser)
         return None
-    sokningar = [(b, pl) for b in branscher for pl in platser][:10]
+    # allabolag: listsidorna är gratis och ingen bolagssida köps, så en
+    # körning på 50 leads får bläddra hundratals bolag (Antons beställning
+    # 2026-10-15: leverera beställt antal). merinfo behåller sina tak.
+    max_listsidor = allabolag.MAX_LISTSIDOR if via_allabolag else MAX_LISTSIDOR
+    max_bolag = allabolag.MAX_BOLAG if via_allabolag else MAX_BOLAGSSIDOR
+    sokningar = [(b, pl) for b in branscher for pl in platser][: allabolag.MAX_SOKNINGAR if via_allabolag else 10]
     from .. import jev, sidhamtning
     from ..forfilter import ar_enskild_firma
 
@@ -659,36 +710,51 @@ async def sok(
     aktiva = list(sokningar)
     sida = 1
     gav_rader = False
+    hamtfel = 0
+
+    async def listsida(s: tuple[str, str | None]) -> list[dict[str, Any]]:
+        nonlocal hamtfel
+        if via_allabolag:
+            bolag = await allabolag.sok_sida(s[0], s[1], sida)
+            if bolag is None:
+                hamtfel += 1
+            return bolag or []
+        md = await hamta(listsida_url(s[0], s[1], sida), fas="lista")
+        return tolka_lista(md) if md else []
 
     async def fyll_rader(behov: int) -> None:
         """Listsidor tills `behov` rader väntar eller listorna är slut. Varje
-        listsida är ett betalt anrop: loopen bryts så fort det räcker, i
-        stället för att bläddra alla sökningar en sida djupare i onödan."""
+        listsida är ett betalt anrop hos merinfo: loopen bryts så fort det
+        räcker, i stället för att bläddra alla sökningar en sida djupare i
+        onödan."""
         nonlocal sida, gav_rader
-        while aktiva and len(rader) < behov and sida <= MAX_LISTSIDOR:
+        while aktiva and len(rader) < behov and sida <= max_listsidor:
             for s in list(aktiva):
                 if len(rader) >= behov:
                     return
-                md = await hamta(listsida_url(s[0], s[1], sida), fas="lista")
+                listrader = await listsida(s)
                 if puls:
                     await puls()
-                listrader = tolka_lista(md) if md else []
                 if not listrader:
                     aktiva.remove(s)
                     continue
                 gav_rader = True
                 for r in listrader:
-                    if upptagna.upptagen(sedda, r["company_name"], r.get("orgnr")):
+                    if not r.get("company_name") or upptagna.upptagen(sedda, r["company_name"], r.get("orgnr")):
                         continue
                     sedda.add(upptagna.nyckel(r["company_name"]))
                     # Förfilter utan hämtning: en enskild firma fälls ändå av
                     # kontrollera(), och orgnr står redan på listraden.
-                    if ar_enskild_firma(r.get("orgnr")):
+                    # allabolag visar ingen enskild firmas orgnr, bara formen.
+                    if ar_enskild_firma(r.get("orgnr")) or "enskild" in str(r.get("bolagsform") or "").casefold():
                         continue
                     rader.append(r)
             sida += 1
 
     async def granska(r: dict[str, Any]) -> dict[str, Any] | None:
+        if via_allabolag:
+            # Sökträffen ÄR bolaget (allabolag.tolka_traff): ingen bolagssida.
+            return r
         md = await hamta(r["url"], fas="bolag")
         if puls:
             await puls()
@@ -739,7 +805,9 @@ async def sok(
     # filter kördes först efteråt.
     ut: list[dict[str, Any]] = []
     granskade_n = godkanda_n = 0
-    forsortera = lage == "iris" and sidhamtning._direkt_forst()
+    # Försorteringen finns för att inte KÖPA bolagssidor för bolag utan sajt;
+    # med allabolag köps ingen bolagssida.
+    forsortera = lage == "iris" and sidhamtning._direkt_forst() and not via_allabolag
     from ..discovery import gissa_webbplats_via_head
 
     head_sem = asyncio.Semaphore(12)
@@ -753,9 +821,9 @@ async def sok(
             except Exception:  # noqa: BLE001 — en gissning är bara en ordning
                 r["_gissad"] = None
 
-    while len(ut) < antal and granskade_n < MAX_BOLAGSSIDOR:
+    while len(ut) < antal and granskade_n < max_bolag:
         behov = antal - len(ut)
-        omgang = min(behov * 2, MAX_BOLAGSSIDOR - granskade_n)
+        omgang = min(behov * 2, max_bolag - granskade_n)
         await fyll_rader(omgang * FORSORTERA if forsortera else omgang)
         if not rader:
             break
@@ -772,7 +840,9 @@ async def sok(
         godkanda_n += len(rankade)
         ut += await _komplettera(rankade, behov, lage=lage, puls=puls, listspar=listspar)
         kontext = sidhamtning.aktuell()
-        if kontext and kontext.slut:
+        if kontext and kontext.slut and not via_allabolag:
+            # allabolags sidor kostar inget, så taket för betalda register-
+            # och researchsidor stoppar inte registret (2026-10-15).
             logger.info("merinfo: kredittaket (%d anrop) nått.", kontext.tak)
             break
         if kontext and lage == "iris" and kontext.webb_slut:
@@ -786,6 +856,13 @@ async def sok(
         # inte "kunde inte tolka". Före 2026-10-06 gav även det None, och
         # körningen föll tillbaka på den öppna Gemini-sökningen, som hittade
         # på bolag.
+        if via_allabolag:
+            if hamtfel:
+                from ..discovery import DiscoveryError
+
+                raise DiscoveryError("Registret gick inte att läsa: allabolags sökresultat kunde inte hämtas.")
+            logger.info("allabolag: inga träffar för %s.", sokningar)
+            return None
         kontext = sidhamtning.aktuell()
         if kontext and kontext.slut:
             logger.info("merinfo: kredittaket (%d anrop) nått före första listraden.", kontext.tak)
@@ -799,8 +876,8 @@ async def sok(
         logger.info("merinfo: inga listrader för %s.", sokningar)
         return None
     logger.info(
-        "merinfo (%s): %d sökningar, %d bolagssidor granskade, %d efter filter och Jev → %d levereras.",
-        lage, len(sokningar), granskade_n, godkanda_n, len(ut),
+        "register %s (%s): %d sökningar, %d bolag granskade, %d efter filter och Jev → %d levereras.",
+        register(), lage, len(sokningar), granskade_n, godkanda_n, len(ut),
     )
     return ut
 
@@ -944,6 +1021,11 @@ def ensam_vd_telefon(b: dict[str, Any]) -> str | None:
     är aldrig kontakt och tolkas inte in i `personer`)."""
     vd = vd_namn(b)
     if not vd or not b.get("telefon"):
+        return None
+    if _fran_allabolag(b):
+        # allabolags sökträff visar EN person, inte bolagets alla roller:
+        # att VD är ensam går inte att se, och då gäller inte undantaget
+        # (2026-10-15). Regel 15 (ringlistan) läser vd_namn, inte det här.
         return None
     if not isinstance(b.get("anstallda"), int) or b["anstallda"] > 1:
         return None

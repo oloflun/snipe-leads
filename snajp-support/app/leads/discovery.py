@@ -1043,6 +1043,15 @@ def person_kontakt_i_text(text: str, website: str) -> dict[str, Any] | None:
             if not (ar_personled(namn_traff.group(1)) and ar_personled(namn_traff.group(2))):
                 continue
             namn = f"{namn_traff.group(1)} {namn_traff.group(2)}"
+            if _asci(namn_traff.group(1)) not in lokal and lokal.startswith(_asci(namn_traff.group(2))):
+                # Ordet före förnamnet var en ort eller rubrik ("Delsbo Magnus
+                # Ek" vid magnus@akesmotor.se blev kontakten "Delsbo Magnus"
+                # och utkastet "Hej Delsbo,", Anton 2026-10-15). Förnamnet är
+                # det adressen bär; efternamnet är ordet efter, om det finns.
+                nasta = re.match(r"\s+([A-ZÅÄÖ][a-zåäöé\-]{1,})\b", narhet[namn_traff.end():])
+                namn = namn_traff.group(2) + (
+                    f" {nasta.group(1)}" if nasta and ar_personled(nasta.group(1)) else ""
+                )
             # Rollen står intill SITT namn ("Eva Ek, VD — eva@…"), inte hos
             # grannen på raden under: fönstret är snålt med flit, annars
             # ärvde "Per Palm, Försäljningschef" grannens "VD" (testet).

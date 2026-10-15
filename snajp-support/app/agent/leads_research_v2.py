@@ -209,10 +209,13 @@ _INGANGSUPPGIFT = (
     "Skriv om ENBART ingången (första stycket) i utkastet nedan, så att den är "
     "skriven till mottagaren om just deras verksamhet, och låt resten av mejlet "
     "stå ordagrant kvar. Förebilden är Antons bästa utkast (2026-10-15), en fråga "
-    "som ställer bolagets eget löfte mot momentet: \"Hur hinner du med att ge "
+    "som ställer det bolaget lovar sina kunder mot momentet: \"Hur hinner du med att ge "
     "personlig rådgivning och service genom hela processen, från köp till "
     "underhåll, när kundfrågorna om båtar, motorer och trailers blir många?\" "
-    "Låna aldrig dess ord. Regler för den nya ingången: (1) andra person rakt "
+    "Det som bär den är konkretionen: deras exakta ord om vad de lovar, och exakt "
+    "vad kunderna frågar om. Låna aldrig dess ord, och benämn aldrig löftet: inga "
+    "\"ert löfte\", \"står ni för\", \"tar tid från det arbetet\" eller "
+    "\"kärnverksamhet\". Regler för den nya ingången: (1) andra person rakt "
     "igenom, \"ni\"/\"er\"/\"era\" (eller \"du\"/\"din\" om hälsningen bär ett "
     "förnamn), aldrig \"man\", \"den som\", \"ett företag som\" eller en etikett "
     "som \"som ni gör\", \"som ert\", \"liksom ni\", och aldrig en "
@@ -807,15 +810,17 @@ def _utkastens_researchvy(research_summary: str) -> str:
 #: företag som" eller etiketten "som ni gör" (Anton 2026-10-12), och sedan
 #: 2026-10-15 inga former som börjar "Med er …", "Ni …" eller "Era …": de
 #: blev själva de nya mallorden, och ingången en uppräkning av sortimentet.
+#: Formerna bär inga exempelfraser: omkörningen samma dag kopierade dem
+#: ordagrant ("Nästa uppdrag ska hittas medan ni …", "Kunderna som … räknar med").
 _INGANGSFORMER: tuple[str, ...] = (
-    "Frågan: en kort fråga i andra person som ställer deras löfte mot momentet "
-    "(\"Hur hinner ni …, när …?\", \"Vem hos er … när ni …?\").",
-    "Löftet som subjekt: börja med det de lovar eller strävar efter, med deras ord, och vänd i "
-    "momentet (\"Att … är ert mål, men …\", \"[Löftet] står ni för, och det är svårt att hålla när …\").",
-    "Momentet först: börja i arbetsmomentet hos dem och låt deras löfte vara det som står på spel "
-    "(\"Kundfrågorna om … kommer samtidigt som ni ska …\", \"Nästa uppdrag ska hittas medan ni …\").",
-    "Kunden först: börja i deras kunder och det kunderna har blivit lovade, och landa i momentet "
-    "(\"Kunderna som … räknar med …, och …\"). Aldrig \"Era kunder\" eller \"Med era kunder\" som öppning.",
+    "En fråga till dem som ställer det de lovar kunderna mot momentet. Frågeordet och "
+    "meningsbyggnaden väljer du själv.",
+    "Ett påstående om det de lovar kunderna, med deras egna ord som subjekt, som vänder i "
+    "momentet i samma mening.",
+    "Momentet först, konkret i deras vardag (vad kunderna frågar om, vad som ska hittas eller "
+    "bokföras enligt sajten), och sist det som står på spel för dem.",
+    "Deras kunders perspektiv: vad deras kunder får eller förväntar sig enligt sajten, och vad "
+    "som händer med det när momentet växer.",
 )
 
 

@@ -40,7 +40,16 @@ from .geo import _prefix_ur_postnr
 from .webbsignal import mat_webbplats
 
 MAX_RUNDOR = 3
-TAK_FAKTOR = 4
+#: Undersökta bolag per beställt lead innan körningen ger upp. Var 4 till
+#: 2026-10-15: en körning på 50 fick då granska högst 200, och med elva
+#: sökrundor om åtta kandidater såg den aldrig fler än 88 bolag. Anton samma
+#: dag: "vi slutar inte förrän vi levererat det beställda antalet PROCESSADE
+#: leads". Taket finns kvar som skydd mot en skenande körning, inte som mål.
+TAK_FAKTOR = 12
+#: Sökrundor i rad utan en enda ny kandidat innan körningen räknar
+#: målgruppen som uttömd. Det är det verkliga slutet; max_rundor är bara
+#: skyddsnätet ovanför.
+TOMMA_RUNDOR = 4
 #: Kandidater per sökrunda. Små rundor med flit (2026-10-09): en runda
 #: levererar ingenting förrän den är klar, och med 25 per runda granskade
 #: den första rundan i en körning på 40 bolagssidor och kontaktsökte i 13
@@ -52,11 +61,13 @@ MAX_PER_RUNDA = 8
 
 
 def max_rundor(mal: int) -> int:
-    """Sökrundor för en beställning: tre för små, annars så många att
-    MAX_PER_RUNDA räcker till beställningen med marginal (40 → 9, 50 → 11).
-    Varje runda söker nästa geo-ring; kredittaket (korningstak) gäller
-    hela körningen oavsett antalet rundor."""
-    return max(MAX_RUNDOR, -(-int(mal) // (MAX_PER_RUNDA - 2)) + 2)
+    """Skyddsnätet för antalet sökrundor: så många att TAK_FAKTOR undersökta
+    per beställt lead ryms (50 → 75). Före 2026-10-15 var det 11 för 50, och
+    körningarna slutade under beställt antal fast registret hade tusentals
+    bolag kvar. Körningen slutar i stället när TOMMA_RUNDOR rundor i rad inte
+    gett en enda ny kandidat (_fyll_pa_last). Kredittaket (korningstak) gäller
+    fortfarande de betalda hämtningarna."""
+    return max(MAX_RUNDOR, -(-int(mal) * TAK_FAKTOR // MAX_PER_RUNDA))
 
 
 def korningstak(mal: int) -> int:

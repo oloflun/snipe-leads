@@ -7,22 +7,6 @@
  ],
  "utkast": [
   {
-   "bolag": "Eketräs Trafikskola AB",
-   "erbjudande": "gratis_prov",
-   "produkt": "Supportagenten",
-   "villkor": "Agentens svar på era fem vanligaste kundfrågor, utifrån era egna villkor, helt utan kostnad och utan att något behöver kopplas in. Handling: svara på mejlet med de fem frågorna och era villkor, så får ni tillbaka agentens svar inom en arbetsdag.",
-   "amne": null,
-   "brodtext": "Hej,\n\nAtt hjälpa elever att bli trygga förare är ert mål, men att svara på återkommande kundfrågor i receptionen tar tid från det arbetet.\n\nVår Supportagent kan avlasta er genom att svara på återkommande kundfrågor i chatt och mejl dygnet runt, utifrån er egen information. Ni får agentens svar på era fem vanligaste kundfrågor, utifrån era egna villkor, helt utan kostnad och utan att något behöver kopplas in.\n\nSvara på mejlet med de fem frågorna och era villkor, så får ni tillbaka agentens svar inom en arbetsdag."
-  },
-  {
-   "bolag": "Stöcke Svets Aktiebolag",
-   "erbjudande": "gratis_prov",
-   "produkt": "Kvittohanteraren",
-   "villkor": "Fem av era kvitton färdiga att ladda ned till bokföringen, med belopp, moms och konto, helt utan kostnad. Handling: svara på mejlet med fem kvitton bifogade, så får ni tillbaka dem färdiga inom en arbetsdag.",
-   "amne": null,
-   "brodtext": "Hej,\n\nAtt samla in och hantera kvitton för bokföringen tar tid från ert kärnarbete, särskilt när ni driver företaget med fokus på svetsning, smide och industriservice.\n\nVår Kvittohanterare läser era kvitton och fakturor, föreslår kontering och exporterar dem till bokföringen. Svara på mejlet med fem bifogade kvitton, så får ni tillbaka dem färdiga inom en arbetsdag, helt utan kostnad."
-  },
-  {
    "bolag": "Svensk Rivtjänst AB",
    "erbjudande": "garanti",
    "produkt": "Iris, leadsagenten",
@@ -37,14 +21,6 @@
    "villkor": "Fem kvalificerade leads i er region, med kontaktperson och ett färdigt första mejl till vart och ett, helt utan kostnad och utan att det binder er till något. Handling: svara \"ja\" på mejlet, så skickar vi de fem inom två arbetsdagar.",
    "amne": null,
    "brodtext": "Hej,\n\nEra uppdrag, som sträcker sig från villor till stora fastighets- och nybyggnadsprojekt, ofta åt kommuner och byggentreprenörer, gör att det är en utmaning att hinna hitta nya som matchar er verksamhet.\n\nVår agent Iris hittar dem åt er. Ni får fem kvalificerade leads i er region, med kontaktperson och ett färdigt första mejl till var och en, helt utan kostnad och utan att det binder er till något.\n\nSvara \"ja\" på mejlet, så skickar jag de fem inom två arbetsdagar."
-  },
-  {
-   "bolag": "WITEKK SVERIGE AB",
-   "erbjudande": "garanti",
-   "produkt": "Iris, leadsagenten",
-   "villkor": "Vi lovar minst 10 nya kunddialoger, alltså svar från intresserade företag, inom 90 dagar. Blir det färre förlänger vi provperioden utan kostnad tills ni har fått dem, så länge ni har godkänt utkasten i granskningen. Handling: svara på mejlet, så bokar vi 20 minuter där vi visar vilka företag Iris redan hittar åt er.",
-   "amne": null,
-   "brodtext": "Hej,\n\nAtt hitta nya företagsuppdrag, vid sidan av era värmepumpar och fastighetsautomation, tar ofta tid från er kärnverksamhet.\n\nVår agent Iris hittar dem åt er. Vi lovar minst tio nya kunddialoger, alltså svar från intresserade företag, inom 90 dagar. Om det blir färre förlänger vi provperioden utan kostnad tills ni har fått dem, förutsatt att ni har godkänt utkasten i granskningen.\n\nSvara på mejlet, så bokar vi 20 minuter där vi visar vilka företag Iris redan hittar åt er."
   },
   {
    "bolag": "ÅW Hemprodukter AB",
@@ -105,6 +81,27 @@
    "brodtext": "Hej,\n\nAtt hantera kvitton från försäljning av premiumkaffe och uthyrning av kaffebar tar tid från er kärnverksamhet.\n\nVi tar in 20 företag i en pilot för Kvittohanteraren. Ni får 50 % rabatt första året om ni vill fortsätta, och 25 % så länge ni stannar. Vi tar bara in 20 företag eftersom vi sätter upp varje företag personligen.\n\nSvara \"pilot\" på mejlet, så reserverar vi en plats åt er.",
    "villkor": "Vi tar in 20 företag i en pilot för Kvittohanteraren. Vi tar bara 20 eftersom vi sätter upp varje företag personligen. Pilotföretagen får 50 % rabatt första året om de vill fortsätta, och 25 % så länge de stannar. Handling: svara \"pilot\" på mejlet, så håller vi en plats åt er.",
    "produkt": "Kvittohanteraren"
+  },
+  {
+   "bolag": "Eketräs Trafikskola AB",
+   "skal": "mallordet 'tar tid från det arbetet' (fem av elva ingångar i omkörningen 2026-10-15)",
+   "brodtext": "Hej,\n\nAtt hjälpa elever att bli trygga förare är ert mål, men att svara på återkommande kundfrågor i receptionen tar tid från det arbetet.\n\nVår Supportagent kan avlasta er genom att svara på återkommande kundfrågor i chatt och mejl dygnet runt, utifrån er egen information. Ni får agentens svar på era fem vanligaste kundfrågor, utifrån era egna villkor, helt utan kostnad och utan att något behöver kopplas in.\n\nSvara på mejlet med de fem frågorna och era villkor, så får ni tillbaka agentens svar inom en arbetsdag.",
+   "villkor": "Agentens svar på era fem vanligaste kundfrågor, utifrån era egna villkor, helt utan kostnad och utan att något behöver kopplas in. Handling: svara på mejlet med de fem frågorna och era villkor, så får ni tillbaka agentens svar inom en arbetsdag.",
+   "produkt": "Supportagenten"
+  },
+  {
+   "bolag": "Stöcke Svets Aktiebolag",
+   "skal": "mallordet 'tar tid från ert kärnarbete'",
+   "brodtext": "Hej,\n\nAtt samla in och hantera kvitton för bokföringen tar tid från ert kärnarbete, särskilt när ni driver företaget med fokus på svetsning, smide och industriservice.\n\nVår Kvittohanterare läser era kvitton och fakturor, föreslår kontering och exporterar dem till bokföringen. Svara på mejlet med fem bifogade kvitton, så får ni tillbaka dem färdiga inom en arbetsdag, helt utan kostnad.",
+   "villkor": "Fem av era kvitton färdiga att ladda ned till bokföringen, med belopp, moms och konto, helt utan kostnad. Handling: svara på mejlet med fem kvitton bifogade, så får ni tillbaka dem färdiga inom en arbetsdag.",
+   "produkt": "Kvittohanteraren"
+  },
+  {
+   "bolag": "WITEKK SVERIGE AB",
+   "skal": "mallordet 'tar ofta tid från er kärnverksamhet'",
+   "brodtext": "Hej,\n\nAtt hitta nya företagsuppdrag, vid sidan av era värmepumpar och fastighetsautomation, tar ofta tid från er kärnverksamhet.\n\nVår agent Iris hittar dem åt er. Vi lovar minst tio nya kunddialoger, alltså svar från intresserade företag, inom 90 dagar. Om det blir färre förlänger vi provperioden utan kostnad tills ni har fått dem, förutsatt att ni har godkänt utkasten i granskningen.\n\nSvara på mejlet, så bokar vi 20 minuter där vi visar vilka företag Iris redan hittar åt er.",
+   "villkor": "Vi lovar minst 10 nya kunddialoger, alltså svar från intresserade företag, inom 90 dagar. Blir det färre förlänger vi provperioden utan kostnad tills ni har fått dem, så länge ni har godkänt utkasten i granskningen. Handling: svara på mejlet, så bokar vi 20 minuter där vi visar vilka företag Iris redan hittar åt er.",
+   "produkt": "Iris, leadsagenten"
   }
  ]
 }

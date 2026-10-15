@@ -2353,7 +2353,7 @@ async def _skapa_prospekt_ur_kandidat(storage, tenant_id: str, bolag: dict, orig
     # webbplats. Utan den här raden fick researchen inget att läsa och skrev
     # "ingen information kunde hittas" i lägesbeskrivningen (provkörningen på
     # Alunix 2026-10-04: fem av fem leads).
-    if bolag.get("source_name") == "merinfo" and bolag.get("source_url"):
+    if bolag.get("source_name") in ("merinfo", "allabolag") and bolag.get("source_url"):
         try:
             await storage.create_prospect_source(
                 tenant_id,
@@ -2637,6 +2637,50 @@ async def _andra_korningars_bolag(storage, tenant_id: str, batch_id: str) -> set
     return ut
 
 
+#: Så länge ett bortval ur en avslutad körning står sig. Därefter blandas
+#: bolaget in igen och prövas mot ny information (Anton 2026-10-15: bortvalda
+#: "ska sorteras bort … och periodiskt blandas in i listorna och försöka
+#: processas efter ny information").
+BORTVAL_DAGAR = 30
+
+
+def _bortval_som_star_sig(post: dict) -> bool:
+    """Ett bortval som gäller bolaget, inte den här körningens filter: Jev,
+    existensgrinden, researchen och förfiltrets storlek/bransch. "Utanför
+    målområdet" gällde bara den körningens geografi (en Göteborgskörning
+    fällde Mölndalsbolag som en Göteborg + Mölndal-körning ska pröva)."""
+    steg = str(post.get("steg") or "")
+    if steg in ("jev", "existens", "research"):
+        return True
+    return steg == "förfilter" and not str(post.get("skal") or "").startswith("Utanför målområdet")
+
+
+async def _nyligen_bortvalda(storage, tenant_id: str, batch_id: str) -> set[str]:
+    """Bolag som en AVSLUTAD körning hos kunden valt bort de senaste
+    BORTVAL_DAGAR dagarna. Förut prövade varje ny körning samma bolag igen
+    (samma Jev-fråga, samma sidor) eftersom bara pågående körningar och
+    sparade prospekt räknades som upptagna. Nycklar som upptagna.nyckel."""
+    ut: set[str] = set()
+    try:
+        rader = await storage.list_leads_korningar(tenant_id, limit=100)
+    except Exception:  # noqa: BLE001 — utan läsningen prövas de bara igen
+        logger.exception("Kunde inte läsa tidigare körningars bortval för %s.", tenant_id)
+        return ut
+    grans = datetime.now(timezone.utc) - timedelta(days=BORTVAL_DAGAR)
+    for rad in rader:
+        k = rad.get("korning") or {}
+        skapad = rad.get("created_at")
+        if isinstance(skapad, str):
+            try:
+                skapad = datetime.fromisoformat(skapad.replace("Z", "+00:00"))
+            except ValueError:
+                skapad = None
+        if rad.get("job_id") == batch_id or not k.get("klar") or (isinstance(skapad, datetime) and skapad < grans):
+            continue
+        ut |= upptagna.nycklar(str(t.get("namn") or "") for t in k.get("tratt") or [] if _bortval_som_star_sig(t))
+    return ut
+
+
 async def _markera_korning_fallen(app_state, tenant_id: str, batch_id: str, fel: BaseException) -> None:
     """En motor som kastar lämnar annars raden i 'processing' utan felorsak:
     exakt det spårlösa slutet 080 finns för att ta bort. Kastar aldrig."""
@@ -2820,6 +2864,9 @@ async def _sla_in_sokrunda(app_state, tenant: dict, batch_id: str, rond: dict) -
             k["dubblettrundor"] = int(k.get("dubblettrundor") or 0) + 1
             tmp["rundor"] = int(k.get("rundor") or 0)
     k["rundor"] = max(int(k.get("rundor") or 0), int(tmp["rundor"]))
+    # Rundor i rad utan en ny kandidat (korning.TOMMA_RUNDOR): det verkliga
+    # slutet på målgruppen, i stället för ett fast antal rundor.
+    k["tomma_rundor"] = 0 if tmp["kandidater"] else int(k.get("tomma_rundor") or 0) + 1
     k["kandidater"] = list(k.get("kandidater") or []) + tmp["kandidater"]
     k["tratt"] = list(k.get("tratt") or []) + tmp["tratt"]
     k.setdefault("listspar", []).extend(tmp["listspar"])
@@ -2882,7 +2929,10 @@ async def _fyll_pa_last(app_state, tenant: dict, batch_id: str) -> dict | None:
             if _soker(k):
                 vantar_pa_sokning = True
                 break
-            if k["rundor"] >= iris_korning.max_rundor(k["mal"]):
+            if (
+                k["rundor"] >= iris_korning.max_rundor(k["mal"])
+                or int(k.get("tomma_rundor") or 0) >= iris_korning.TOMMA_RUNDOR
+            ):
                 # "Slut på kandidater" förutsätter att sidorna gick att hämta.
                 # Föll hämtningarna hos tjänsten (kredit, kvot, 429) och inget
                 # levererades är det sökningen som föll — kunden ska se rött,
@@ -2905,7 +2955,7 @@ async def _fyll_pa_last(app_state, tenant: dict, batch_id: str) -> dict | None:
                 str(t.get("namn") or "") for t in k["tratt"]
             } | {str(r.get("company_name") or "") for r in k.get("listspar") or []} | (
                 await _andra_korningars_bolag(storage, tenant_id, batch_id)
-            )
+            ) | await _nyligen_bortvalda(storage, tenant_id, batch_id)
             # Kredittaket gäller hela körningen (plan 2026-10-05): varje runda
             # får det som återstår, och summan står i liggaren (Körningar).
             # Taket skalar med beställningen (Sebbe 2026-10-07: Iris måste
@@ -4060,6 +4110,7 @@ _LAGLIG_GRUND_LISTKALLA = (
 #: aldrig till en mer specifik typ än belägget bär.
 _LISTKALLA_TILL_SOURCE_TYPE = {
     "merinfo": "business_register",
+    "allabolag": "business_register",
     "jobtech": "job_signal",
     "nyheter": "public_news",
     "rss": "public_news",
@@ -4682,7 +4733,7 @@ async def _run_list_job(app_state, payload: dict) -> None:
         pool = {
             r["doman"]: r
             for traff in rader
-            if traff.get("source_name") == "merinfo" and (r := webbpool.bolagsrad(traff, "lista"))
+            if traff.get("source_name") in ("merinfo", "allabolag") and (r := webbpool.bolagsrad(traff, "lista"))
         }
         if pool and webbpool.aktiv():
             asyncio.create_task(webbpool.efter_korning(storage, {"webbpool": pool}, tenant_id))

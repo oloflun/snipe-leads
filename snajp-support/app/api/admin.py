@@ -187,7 +187,7 @@ async def tenant_leads_underlag(request: Request, tenant_id: str, limit: int = 2
                 "niva": p.get("niva"),
                 "score_total": p.get("score_total"),
                 "kallor": kallor,
-                "register": any("merinfo.se" in k for k in kallor),
+                "register": any("merinfo.se" in k or "allabolag.se" in k for k in kallor),
                 "hamtat_tecken": len((cache or {}).get("innehall") or ""),
                 "hamtfel": (cache or {}).get("fel"),
                 "created_at": p.get("created_at"),

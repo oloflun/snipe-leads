@@ -40,7 +40,8 @@ from typing import Any
 from .discovery import _slugga_bolagsnamn, webbplats_matchar_namn
 
 #: Källor vars rader är registerutdrag och därför inte behöver styrkas.
-REGISTERKALLOR = frozenset({"merinfo"})
+#: allabolag hämtar registret sedan 2026-10-15 (sources/allabolag.py).
+REGISTERKALLOR = frozenset({"merinfo", "allabolag"})
 
 #: Servern finns men släpper inte in en vanlig hämtning.
 _BLOCKERAD = frozenset({401, 403, 429})

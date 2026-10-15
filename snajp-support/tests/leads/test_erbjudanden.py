@@ -273,7 +273,7 @@ BRA = (
     "Känner du igen dig?\n\n"
     # "åt dig", inte "åt er": du och ni om samma person fälls sedan 2026-10-15.
     "Vår Supportagent svarar på de vanliga frågorna åt dig, så att du hinner med bokslutsarbetet. "
-    "Testa den på era egna frågor, det tar 15–20 minuter.\n\n"
+    "Testa den på dina egna frågor, det tar 15–20 minuter.\n\n"
     "Följ länken så kommer du igång: snajp.se/demo"
 )
 

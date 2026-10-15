@@ -156,6 +156,17 @@ async def orgnr_i_registret(namn: str | None, ort: str | None) -> str | None:
 
     if not namn or not merinfo.aktiv():
         return None
+    if merinfo.register() == "allabolag":
+        # Samma namnsökning hos allabolag, gratis och direkt: merinfo går via
+        # ScrapeGraph, vars kredit tog slut 2026-10-15 (sources/allabolag.py).
+        from .sources import allabolag
+
+        try:
+            traffar = await allabolag.orgnr_traffar(namn.strip())
+            return valj_traff(traffar, namn, ort) if traffar else None
+        except Exception:  # noqa: BLE001
+            logger.exception("Registeruppslaget av org.nr föll för %s", namn)
+            return None
     try:
         url = f"{merinfo.BAS}/search?d=c&q={quote(namn.strip())}"
         md, _fel, _via = await sidhamtning.hamta(url, fas="bolag", direkt=False, js=True)

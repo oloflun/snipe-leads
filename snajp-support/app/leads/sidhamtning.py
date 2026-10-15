@@ -81,6 +81,14 @@ MIN_INTERVALL_S = 1.0
 _PAUS_TILL = [0.0]
 _RAD_429 = [0]
 MAX_FORSOK = 7
+#: Slut på kredit hos ScrapeGraph (2026-10-15: 1 av 1 500 kvar). Varje
+#: betald hämtning föll då på "Insufficient credits" men räknades ändå mot
+#: körningens kredittak: Göteborgskörningen brände 350 anrop på ingenting och
+#: stoppades av taket. Efter första kreditfelet går inga betalda anrop ut på
+#: tio minuter (hela processen), och inget räknas.
+_KREDIT_SLUT = re.compile(r"insufficient\s+credits|out\s+of\s+credits|no\s+credits", re.IGNORECASE)
+_KREDIT_SLUT_TILL = [0.0]
+KREDITPAUS_S = 600
 
 
 def _rate_limit(fel: object) -> bool:
@@ -275,9 +283,17 @@ async def hamta(
             taket = kontext.webb_tak if fas == "webb" else kontext.tak
             fel = "; ".join(filter(None, [fel, f"kredittaket för körningen ({taket} anrop) är nått"]))
             return None, fel, "tak"
-        if kontext and get_settings().scrapegraphai_api_key:
-            kontext.anrop[fas] = kontext.anrop.get(fas, 0) + 1
-        md, sg_fel = await _scrapegraph(url, js=js) if js else await _scrapegraph(url)
+        if time.monotonic() < _KREDIT_SLUT_TILL[0]:
+            # Krediten är slut (se _KREDIT_SLUT_TILL): inget anrop, inget som
+            # räknas mot taket, bara tjänstefelet och reservvägen nedan.
+            md, sg_fel = None, "ScrapeGraphAI: krediten är slut (pausad efter Insufficient credits)."
+        else:
+            if kontext and get_settings().scrapegraphai_api_key:
+                kontext.anrop[fas] = kontext.anrop.get(fas, 0) + 1
+            md, sg_fel = await _scrapegraph(url, js=js) if js else await _scrapegraph(url)
+            if _KREDIT_SLUT.search(str(sg_fel or "")):
+                _KREDIT_SLUT_TILL[0] = time.monotonic() + KREDITPAUS_S
+                logger.warning("ScrapeGraph: krediten är slut, betalda hämtningar pausas %d s.", KREDITPAUS_S)
         if md:
             text, fel, via = md, None, "scrapegraphai"
         else:

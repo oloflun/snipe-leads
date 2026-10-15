@@ -9,6 +9,41 @@ möjligt), vad det betyder i koden.
 
 ---
 
+## 2026-10-15 (Claude, på Antons beställning) — Registret hämtas från allabolag; körningen ger inte upp under beställt antal
+
+**Beslut.** Iris-körningar och listor ska leverera beställt antal. Registrets
+sidor hämtas därför från allabolag.se, direkt och utan ScrapeGraph; urvalet
+(kontroll, Jev, kontaktsökning, fördelning, listspår) är detsamma.
+
+**Resonemang.** ScrapeGraph-kontot har en kredit kvar (gratisplanen slut,
+verifierat 2026-10-15) och merinfo blockerar direkthämtning, så varje list- och
+bolagssida föll och körningarna slutade på 4 och 8 leads av 50. allabolags
+sökresultatsida går att hämta direkt och bär allt urvalet läser. Samma
+affärsbeslut som för merinfo gäller: hövlig hämtning tills ett API-avtal finns
+(prisförfrågan till allabolag).
+
+**I koden.** `sources/allabolag.py` (sökning, geofilter, tolkning, cache),
+vald i `merinfo.sok` med `LEADS_REGISTER` (osatt = allabolag när
+`LEADS_MERINFO=scrapegraph`). Taken höjda för allabolag (600 bolag, 40 sidor per
+sökning), kredittaket stoppar inte registret. Registret är fortfarande ett
+filter: sökträffens kontaktperson blir aldrig en kontakt, och
+ensam-VD-undantaget (regel 7) gäller inte allabolag-rader eftersom en sökträff
+bara visar en person.
+
+Antons beställning samma dag: "vi slutar inte förrän vi levererat det beställda
+antalet PROCESSADE leads … var noga med att inte generera dubletter eller att
+alla agenter söker igenom samma företag … de ska sorteras bort som bortvalda
+och periodiskt blandas in". Därför också: körningen granskar upp till 12 bolag
+per beställt lead (var 4) och har så många sökrundor att de ryms (50 → 75, var
+11, vilket gav högst 88 bolag); den slutar när fyra rundor i rad inte gett en
+ny kandidat. Bortval ur avslutade körningar (Jev, existens, research,
+storlek/bransch, inte "utanför målområdet") står sig i 30 dagar och blandas
+sedan in igen (`api/leads.py:_nyligen_bortvalda`). Efter första "Insufficient
+credits" pausas betalda ScrapeGraph-anrop i tio minuter och räknas inte mot
+taket (`sidhamtning._KREDIT_SLUT_TILL`): 350 misslyckade anrop stoppade
+Göteborgskörningen. Fixturen är avidentifierad (inga personnamn, nummer eller
+adresser).
+
 ## 2026-10-15 (Anton) — Utkasten tillbaka till Christoffer-nivån; inga bolagsnamn i ämnesraden
 
 **Beslut.** "Det första utkastet med Christoffer var det bästa (även om

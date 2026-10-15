@@ -103,7 +103,18 @@ _TRELEDSLISTA = re.compile(r"[\wåäöÅÄÖ-]+(?:\s+[\wåäöÅÄÖ-]+)?,\s+[\w
 #: 2026-10-12: "Hej Monica" och "era kunder", sedan "du lägger" och "vi bokar
 #: … åt er". Pronomenen som TILLTALAR, inte ägandeformen "er egen information".
 _DU = re.compile(r"\b(?:du|dig)\b", re.IGNORECASE)
-_NI = re.compile(r"\bni\b|\båt\s+er\b|\bhos\s+er\b|\btill\s+er\b", re.IGNORECASE)
+_NI = re.compile(r"\bni\b|\båt\s+er\b|\bhos\s+er\b|\btill\s+er\b|\bert\b|\bera\b", re.IGNORECASE)
+#: Mallord som omkörningen 2026-10-15 gav i fem av elva ingångar efter att
+#: skrivstilen talat om bolagets "löfte": "… är ert löfte, men att svara på
+#: återkommande kundfrågor tar tid från det arbetet". Löftet ska synas i deras
+#: egna ord, inte benämnas; och "tar tid från det arbetet/kärnverksamheten"
+#: kunde stå i vilket mejl som helst.
+_MALLORD = re.compile(
+    r"\b(?:ert|ditt|deras)\s+löfte\b|\blöfte\s+till\b|\bstår\s+(?:ni|du)\s+för\b|\bnågot\s+(?:ni|du)\s+står\s+för\b"
+    r"|\btar\s+tid\s+från\s+(?:det\s+arbetet|det\s+(?:ni|du)\s+gör\s+bäst|er\s+kärn\w*|ert\s+kärn\w*)"
+    r"|\bkärnverksamhet\w*|\bkärnuppdrag\w*|\båterkommande\s+(?:kund)?frågor\s+tar\s+tid\b",
+    re.IGNORECASE,
+)
 #: Registerfakta i ingången: ett antal (siffra eller ord) följt av anställda,
 #: platschefer, kontor, år …, eller ett grundningsår. "Med 20-25 anställda och
 #: fem platschefer" är fakta mottagaren redan vet. En tid ("15–20 minuter"),
@@ -208,6 +219,9 @@ def kontrollera(text: str) -> Kontrollresultat:
         if utbud or (lista and lista.start() < len(meningar[0]) / 2):
             traff = (utbud or lista).group(0)
             lagg("uppraknad_ingang", f"ingången räknar upp vad de säljer (\"{traff}\") i stället för vad de lovar sina kunder")
+        mallord = _MALLORD.search(" ".join(meningar[:2]))
+        if mallord:
+            lagg("mallord_i_ingangen", f"ingången bär ett mallord (\"{mallord.group(0)}\"); säg det med deras egna, konkreta ord")
         kopia = kopierat_exempel(meningar[0])
         if kopia:
             lagg("kopierat_exempel", f"ingången lånar ord ur skrivstilens exempel (\"{kopia}\")")
@@ -373,6 +387,16 @@ def produktstam(produkt: str | None) -> str:
     return namn
 
 
+def _gemensam_fras(a: str, b: str, n: int = 4) -> str | None:
+    """Första ordföljden om n ord som två ingångar delar, eller None."""
+    oa, ob = _ord(a), _ord(b)
+    foljder = {tuple(ob[i : i + n]) for i in range(len(ob) - n + 1)}
+    for i in range(len(oa) - n + 1):
+        if tuple(oa[i : i + n]) in foljder:
+            return " ".join(oa[i : i + n])
+    return None
+
+
 def mot_andra(text: str, andra: Sequence[str]) -> list[Anmarkning]:
     """Batchkontrollen för ETT mejl mot de andra i samma körning."""
     fynd = []
@@ -382,6 +406,14 @@ def mot_andra(text: str, andra: Sequence[str]) -> list[Anmarkning]:
     elif egen_ingang and any(konstruktion(t) == konstruktion(text) for t in andra if ingang(t)):
         fynd.append(Anmarkning("samma_konstruktion", "Stil: ingången är byggd som ett annat mejl i körningen",
                                allvarlig=True))
+    elif egen_ingang:
+        # Samma fras i ingången som ett annat mejl, var den än står
+        # (2026-10-15: "tar tid från det arbetet" sist i fem ingångar som
+        # började olika).
+        fras = next((f for t in andra if (f := _gemensam_fras(egen_ingang, ingang(t)))), None)
+        if fras:
+            fynd.append(Anmarkning("samma_fras", f"Stil: ingången delar frasen \"{fras}\" med ett annat mejl i körningen",
+                                   allvarlig=True))
     if egen_uppmaning and any(uppmaning(t) == egen_uppmaning for t in andra):
         fynd.append(Anmarkning("samma_uppmaning", "Stil: samma uppmaning som ett annat mejl i körningen", allvarlig=True))
     return fynd
