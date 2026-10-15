@@ -2866,7 +2866,12 @@ async def _sla_in_sokrunda(app_state, tenant: dict, batch_id: str, rond: dict) -
     k["rundor"] = max(int(k.get("rundor") or 0), int(tmp["rundor"]))
     # Rundor i rad utan en ny kandidat (korning.TOMMA_RUNDOR): det verkliga
     # slutet på målgruppen, i stället för ett fast antal rundor.
-    k["tomma_rundor"] = 0 if tmp["kandidater"] else int(k.get("tomma_rundor") or 0) + 1
+    # En runda där en parallell körning tog alla bolag säger inget om
+    # målgruppen och räknas inte som tom (fyra körningar samtidigt 2026-10-15).
+    if tmp["kandidater"]:
+        k["tomma_rundor"] = 0
+    elif not tagna:
+        k["tomma_rundor"] = int(k.get("tomma_rundor") or 0) + 1
     k["kandidater"] = list(k.get("kandidater") or []) + tmp["kandidater"]
     k["tratt"] = list(k.get("tratt") or []) + tmp["tratt"]
     k.setdefault("listspar", []).extend(tmp["listspar"])

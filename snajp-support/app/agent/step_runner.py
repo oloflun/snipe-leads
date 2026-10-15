@@ -32,7 +32,7 @@ from ..agentcore.overlays import load_overlay
 from ..agentcore.packs import PlaybookStep, RunLedger, check_output_contract, check_preconditions
 from ..config import get_settings
 from ..kvotfel import ar_kreditslut
-from .llm import _uses_vertex, gemini_tank_kwargs, get_llm_client, vertex_regioner
+from .llm import TANKANDE_AV, _uses_vertex, gemini_tank_kwargs, get_llm_client, vertex_regioner
 
 #: Bakgrundsjobbens samtidiga LLM-anrop (talamod_429), per process och
 #: händelseloop (2026-10-09). Med tio parallella researchjobb slog Vertex
@@ -468,6 +468,11 @@ async def run_step(
     effective_model = settings.model
     if step.model_setting:
         effective_model = getattr(settings, step.model_setting, "") or settings.model
+    # Pro-modellerna kan inte stänga av tänkandet: tankebudget 0 ger 400.
+    # Utkastet körs på gemini-2.5-pro sedan 2026-10-15 (Antons krav på nivån
+    # i varje mejl), så där tänker modellen lite i stället för inte alls.
+    if settings.llm_provider == "gemini" and "pro" in effective_model.lower() and extra == TANKANDE_AV:
+        extra = {"reasoning_effort": "low"}
 
     for attempt in (1, 2):
         # talamod_429 (2026-09-06, uppmätt i development): ett 429 från

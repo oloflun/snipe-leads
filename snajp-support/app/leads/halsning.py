@@ -87,7 +87,25 @@ def fornamn(namn: str | None, epost: str | None = None) -> str | None:
     for d in led:
         if len(_asci(d)) >= 3 and lokal.startswith(_asci(d)):
             return d
-    return led[0]
+    # Utan stöd i adressen måste ordet se ut som ett förnamn: kontaktsökningen
+    # gav "Scandinavia" (ur bolagsnamnet) och "Polarhandlare Inget" (2026-10-15).
+    return led[0] if _liknar_fornamn(led[0]) else None
+
+
+#: Ord som står med versal intill en adress men aldrig är ett förnamn.
+_INTE_FORNAMN = frozenset({
+    "scandinavia", "skandinavien", "sverige", "sweden", "swedish", "nordic", "norden", "europe",
+    "norr", "norra", "söder", "södra", "väst", "västra", "öst", "östra", "inget", "ingen", "alla",
+    "butik", "butiken", "kundtjänst", "support", "service", "försäljning", "info", "kontakt",
+})
+#: Ändelser för substantiv och yrken ("Polarhandlare", "Försäljning",
+#: "Verksamhet") som inga vanliga svenska förnamn har.
+_INTE_NAMNANDELSE = ("are", "ning", "het", "else", "tion", "ande", "ende", "skap", "eri", "itet")
+
+
+def _liknar_fornamn(ord_: str) -> bool:
+    o = ord_.casefold()
+    return len(o) >= 2 and o not in _INTE_FORNAMN and not o.endswith(_INTE_NAMNANDELSE)
 
 
 def snyggt_bolagsnamn(bolag: str | None) -> str | None:
