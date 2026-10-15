@@ -40,9 +40,12 @@ def test_referensutkasten_passerar():
     for ingang in (
         "Att hitta nya företagsuppdrag i Göteborg, parallellt med villor och fastighetsprojekt, är ofta en tidstjuv.",
         "Med Consensos fokus på komplexa program och projekt behöver ni hitta rätt företag att samarbeta med.",
-        "Med er roll inom värmepumpar och fastighetsautomation i Luleå blir servicefrågorna många.",
     ):
         assert _koder(_med_ingang(ingang)) == set(), ingang
+    # Anton 2026-10-15: "Med er/ert/era …" blev det nya mallordet och fälls nu.
+    assert "slentrian_ingang" in _koder(
+        _med_ingang("Med er roll inom värmepumpar och fastighetsautomation i Luleå blir servicefrågorna många.")
+    )
 
 
 def test_allman_mening_med_etikett_falls():

@@ -9,7 +9,37 @@ möjligt), vad det betyder i koden.
 
 ---
 
+## 2026-10-15 (Anton) — Utkasten tillbaka till Christoffer-nivån; inga bolagsnamn i ämnesraden
+
+**Beslut.** "Det första utkastet med Christoffer var det bästa (även om
+ämnesraden var ren smörja) och det är den nivån och anpassningen jag förväntar
+mig." Ämnesraden nämner INTE bolagets namn. Hälsningen får inte bära fel namn
+("jag tror inte han som har Åkes Motor heter Delsbo"). Kvaliteten ska ligga på
+den nivån hela tiden och bli bättre.
+
+**Resonemang (Anton).** "Nu har du bytt ut 'för företag som ert' eller 'som ni
+gör' till 'med er/ert/era', 'när ni', till en generisk upprabbling av deras
+verksamhet, samt pinsamma ämnesrader." Båtladan-utkastet ("Hur hinner du med
+att ge personlig rådgivning och service genom hela processen, från köp till
+underhåll, när kundfrågorna om båtar, motorer och trailers blir många?") tar
+det bolaget lovar sina kunder och ställer det mot momentet agenten löser; de
+andra räknade upp sortimentet.
+
+**I koden.** Ingången bygger på bolagets löfte (skrivstilen omgång 6,
+grundmallen, personaliseringssteget, fyra nya ingångsformer utan "Med er",
+"Ni" och "Era"). Stilgrinden fäller `slentrian_ingang`, `uppraknad_ingang`,
+`kopierat_exempel` (fyra särskiljande ord i rad ur skrivstilens exempel),
+`du_och_ni`, `agent_efter_loftet` och i ämnesraden `namn_i_amnet`,
+`produkt_i_amnet`, `samma_amne`, `langt_amne`; fynden ger en omskrivning före
+humanizern. `tilltal.amne_utan_namn` lyfter ut namnet som sista nät.
+Förnamnet väljs mot mejladressen (`halsning.fornamn`: "Delsbo Magnus" med
+magnus@ blir Magnus). Facit reviderat: Båtladan in, sex ut till `ersatta`
+(Med er-öppning, uppräkning, eller agenten nämnd först efter löftet), och
+ämnesraderna borttagna ur facit eftersom alla bar namnet.
+
 ## 2026-10-12 (Anton) — Utkasten är perfekta: kedjan låses som referens
+
+*Delvis ersatt 2026-10-15: facit reviderat och ämnesraden utan bolagsnamn (se ovan).*
 
 **Beslut.** "Alla utkast är perfekta nu, lås in detta och dokumentera exakta
 upplägget, strukturen och vad du ändrade för att komma hit, lägg det i

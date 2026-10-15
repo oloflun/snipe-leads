@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Sequence
+from functools import lru_cache
 
 from ..textkvalitet import Anmarkning, Kontrollresultat
 from .grounding_gate import _maska_idiom
@@ -84,6 +85,25 @@ _GENERELL_INGANG = re.compile(
     r"|\bföretag\s+i\s+er\b|\bmånga\s+\w*(?:företag|bolag)\b)",
     re.IGNORECASE,
 )
+#: Slentrianöppningen (Anton 2026-10-15): efter att "För företag som ert" och
+#: "som ni gör" fälldes blev "Med er/ert/era …", "När ni …" och "Ni som …" de
+#: nya mallorden, i mejl efter mejl. Ingången börjar i deras löfte eller i en
+#: fråga till dem, aldrig i en av de här öppningarna.
+_SLENTRIAN = re.compile(r"^(?:med\s+(?:er|ert|era|din|ditt|dina)|när\s+(?:ni|du)|(?:ni|du)\s+som)\b", re.IGNORECASE)
+#: Uppräkningen av deras utbud (Anton 2026-10-15: "en generisk upprabbling av
+#: deras verksamhet"): "Med ert breda utbud av fordon, utrustning och service
+#: för snöskotrar …", "Med er verksamhet som säljer båtar, motorer och
+#: trailers …". En lista om tre led eller fler i ingångens första halva är en
+#: återberättelse av sajten, inte en mening till dem; samma lista sist, i
+#: momentet ("när kundfrågorna om båtar, motorer och trailers blir många",
+#: Båtladan, Antons bästa utkast), är en detalj i spänningen och står kvar.
+_UTBUD = re.compile(r"\b(?:bred(?:a|t)?\s+utbud|utbud\s+av|allt\s+från)\b", re.IGNORECASE)
+_TRELEDSLISTA = re.compile(r"[\wåäöÅÄÖ-]+(?:\s+[\wåäöÅÄÖ-]+)?,\s+[\wåäöÅÄÖ-]+(?:\s+[\wåäöÅÄÖ-]+)?,?\s+(?:och|samt|eller)\s+[\wåäöÅÄÖ-]+")
+#: Du och ni om samma mottagare (skrivreglerna: "blanda aldrig"). Båthuset
+#: 2026-10-12: "Hej Monica" och "era kunder", sedan "du lägger" och "vi bokar
+#: … åt er". Pronomenen som TILLTALAR, inte ägandeformen "er egen information".
+_DU = re.compile(r"\b(?:du|dig)\b", re.IGNORECASE)
+_NI = re.compile(r"\bni\b|\båt\s+er\b|\bhos\s+er\b|\btill\s+er\b", re.IGNORECASE)
 #: Registerfakta i ingången: ett antal (siffra eller ord) följt av anställda,
 #: platschefer, kontor, år …, eller ett grundningsår. "Med 20-25 anställda och
 #: fem platschefer" är fakta mottagaren redan vet. En tid ("15–20 minuter"),
@@ -180,6 +200,21 @@ def kontrollera(text: str) -> Kontrollresultat:
         fakta = _REGISTERFAKTA.search(meningar[0])
         if fakta:
             lagg("registerfakta_i_ingangen", f"registerfakta i ingången (mottagaren vet redan): \"{fakta.group(0)}\"")
+        slentrian = _SLENTRIAN.search(meningar[0])
+        if slentrian:
+            lagg("slentrian_ingang", f"ingången börjar med en slentrianöppning (\"{slentrian.group(0)} …\"); börja i deras löfte eller med en fråga till dem")
+        utbud = _UTBUD.search(meningar[0])
+        lista = _TRELEDSLISTA.search(meningar[0])
+        if utbud or (lista and lista.start() < len(meningar[0]) / 2):
+            traff = (utbud or lista).group(0)
+            lagg("uppraknad_ingang", f"ingången räknar upp vad de säljer (\"{traff}\") i stället för vad de lovar sina kunder")
+        kopia = kopierat_exempel(meningar[0])
+        if kopia:
+            lagg("kopierat_exempel", f"ingången lånar ord ur skrivstilens exempel (\"{kopia}\")")
+    tilltal = "\n".join(meningar)
+    du, ni = _DU.search(tilltal), _NI.search(tilltal)
+    if du and ni:
+        lagg("du_och_ni", f"blandar du och ni om samma mottagare (\"{du.group(0)}\" och \"{ni.group(0)}\")")
     for forra, mening in zip(meningar, meningar[1:]):
         a, b = (re.match(r"[\wÅÄÖåäö]+", m) for m in (forra, mening))
         if a and b and a.group(0).casefold() == b.group(0).casefold():
@@ -201,6 +236,94 @@ def kontrollera(text: str) -> Kontrollresultat:
             lagg("kolonlista", f"kolonuppräkning i löptext: \"{mening[:60]}…\"")
             break
     return Kontrollresultat(text=text, anmarkningar=fynd)
+
+
+#: Fyra ord i rad ur skrivstilens exempel räcker för att en ingång ska vara
+#: lånad (Anton 2026-10-15): Lycka Service fick "Att hitta nya
+#: företagsuppdrag …" och Törnqvist "… inte bara snabba affärer" ordagrant ur
+#: tabellen fel/rätt. Regel 7 sa det redan; nu prövas den.
+_LANAD_ORDFOLJD = 4
+
+
+def _ord(text: str) -> list[str]:
+    return re.findall(r"[a-zåäöé0-9]+", text.casefold())
+
+
+@lru_cache(maxsize=1)
+def _exempelfoljder() -> frozenset[tuple[str, ...]]:
+    """Ordföljderna i skrivstilens citerade exempel (allt inom citattecken
+    med minst sex ord). Läses ur filen, så att ett nytt exempel täcks direkt."""
+    from ..agent.leads_systemprompt import skrivstil
+
+    foljder: set[tuple[str, ...]] = set()
+    for citat in re.findall(r"\"([^\"\n]{30,})\"", skrivstil()):
+        ord_ = _ord(citat)
+        if len(ord_) >= 6:
+            foljder.update(tuple(ord_[i : i + _LANAD_ORDFOLJD]) for i in range(len(ord_) - _LANAD_ORDFOLJD + 1))
+    return frozenset(foljder)
+
+
+#: Ord som står i nästan varje mejl i den här domänen och därför inte gör en
+#: ordföljd lånad ("både privatpersoner och företag" är deras egna ord lika ofta).
+_VANLIGA_ORD = frozenset({
+    "företag", "företagen", "kunder", "kunderna", "privatpersoner", "verksamhet", "verksamheten",
+    "uppdrag", "uppdragen", "arbetet", "kundfrågor", "frågor", "frågorna",
+})
+
+
+def _sarskiljande(foljd: tuple[str, ...]) -> bool:
+    """Minst två ord i följden bär innehåll (sex bokstäver eller fler, inte
+    domänens vardagsord): "inte bara snabba affärer" ja, "en utmaning att
+    hitta" och "något som får vänta" nej."""
+    return sum(1 for o in foljd if len(o) >= 6 and o not in _VANLIGA_ORD) >= 2
+
+
+def kopierat_exempel(mening: str) -> str | None:
+    """Första särskiljande ordföljden i meningen som står ordagrant i ett
+    exempel, eller None."""
+    ord_ = _ord(mening)
+    foljder = _exempelfoljder()
+    for i in range(len(ord_) - _LANAD_ORDFOLJD + 1):
+        foljd = tuple(ord_[i : i + _LANAD_ORDFOLJD])
+        if foljd in foljder and _sarskiljande(foljd):
+            return " ".join(foljd)
+    return None
+
+
+def amne_fynd(subject: str, *, bolag: str | None, produkt: str | None, andra: Sequence[str] = ()) -> list[Anmarkning]:
+    """Ämnesraden (Anton 2026-10-15: "pinsamma ämnesrader, nämn INTE företagens
+    namn i ämnesraden"). "Åkes Motor och era kundfrågor", "Pilot för Iris,
+    Törnqvist Etc." och "Kundfrågor för …" i nästan varje mejl. Ämnesraden bär
+    inget bolagsnamn, ingen produkt och börjar inte som ett annat mejls."""
+    from .tilltal import kortnamn
+
+    amne = " ".join(str(subject or "").split())
+    fynd: list[Anmarkning] = []
+    if not amne:
+        return fynd
+    kort = kortnamn(bolag).casefold() if bolag else ""
+    if kort and (kort in amne.casefold() or _forsta_namnled(kort) in _ord(amne)):
+        fynd.append(Anmarkning("namn_i_amnet", f"Stil: bolagets namn står i ämnesraden: \"{amne}\"", allvarlig=True))
+    stam = produktstam(produkt)
+    if stam and stam in amne.casefold():
+        fynd.append(Anmarkning("produkt_i_amnet", f"Stil: produkten står i ämnesraden: \"{amne}\"", allvarlig=True))
+    borjan = " ".join(_ord(amne)[:2])
+    if borjan and any(" ".join(_ord(a)[:2]) == borjan for a in andra if a):
+        fynd.append(Anmarkning("samma_amne", f"Stil: ämnesraden börjar som ett annat mejls: \"{amne}\"", allvarlig=True))
+    if len(_ord(amne)) > 8:
+        fynd.append(Anmarkning("langt_amne", f"Stil: ämnesraden är över åtta ord: \"{amne}\"", allvarlig=True))
+    return fynd
+
+
+def _forsta_namnled(kort: str) -> str:
+    """Bolagsnamnets första led när det är särskiljande ("båtladan",
+    "yngvessons"), annars tomt: "bygg", "nya" och korta led säger inget."""
+    led = _ord(kort)
+    forsta = led[0] if led else ""
+    return forsta if len(forsta) >= 6 and forsta not in _VANLIGA_LED else "\0"
+
+
+_VANLIGA_LED = frozenset({"svensk", "svenska", "sverige", "nordic", "norrlands", "byggservice", "service"})
 
 
 def konstruktion(text: str) -> str:
@@ -225,6 +348,17 @@ def erbjudande_fynd(text: str, *, villkor: str | None, produkt: str | None) -> l
     namn = produktstam(produkt)
     if namn and namn not in brod:
         fynd.append(Anmarkning("erbjudande_produkt", f"Stil: produkten \"{namn}\" nämns inte", allvarlig=True))
+    elif namn:
+        # Agenten före löftet (Båthuset 2026-10-12: "Vi lovar att du lägger
+        # minst 50 % mindre tid …" och Supportagenten först i sista meningen):
+        # mottagaren ska veta VAD som lovas innan siffrorna kommer.
+        ingang_slut = brod.find("\n\n", brod.find(ingang(text)[:20]) if ingang(text) else 0)
+        siffror = [m.start() for t in _TAL.findall(villkor or "") for m in re.finditer(rf"\b{re.escape(t)}\b", brod)
+                   if m.start() > ingang_slut]
+        if siffror and brod.find(namn, max(ingang_slut, 0)) > min(siffror):
+            fynd.append(Anmarkning("agent_efter_loftet",
+                                   f"Stil: \"{namn}\" namnges först efter löftet; säg vad agenten gör innan siffrorna",
+                                   allvarlig=True))
     return fynd
 
 

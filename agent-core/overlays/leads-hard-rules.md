@@ -21,8 +21,8 @@ Dessa regler ÅSIDOSÄTTER skillens standardbeteende där de krockar.
   på en egen rad, följd av en blankrad före texten. Skriv ALDRIG bolagets
   namn efter "Hej" — "Hej Hortlax Rör," avslöjar en mall direkt — och ALDRIG
   "kontaktperson", "kontaktpersoner", "till den det berör", "hej där" eller
-  någon annan opersonlig mottagare. Bolagets namn hör hemma i ämnesraden och
-  i brödtexten, inte i hälsningen.
+  någon annan opersonlig mottagare. Bolagets namn hör hemma i brödtexten,
+  aldrig i hälsningen och aldrig i ämnesraden (Anton 2026-10-15).
 - DUBBELKOLLA innan du lämnar ifrån dig utkastet: läs hela texten en sista
   gång som om du vore mottagaren. Rätta varje stavfel, varje konstig
   formulering och varje ordval som avslöjar en maskin. Ett utkast med ett
@@ -61,7 +61,8 @@ människas blick:
   vanligaste kundfrågor handlar troligen om leverans" till ett bolag vars
   sajt researchen just skrapat: gissningen raderade researchens hela värde.
 - **Ämnesraden bär något SOM ÄR DERAS.** Ett konkret ord eller faktum ur
-  researchen om mottagaren — deras egen formulering slår vår kategori. Ett
+  researchen om mottagaren — deras egen formulering slår vår kategori. Inte
+  deras namn: det står redan i deras inkorg och gör raden till en mall. Ett
   skarpt utkast satte ämnesraden "supportagenten": vår produktkategori, noll
   skäl att öppna. Samma körning hade "365 dagars fri retur" i brödtexten —
   det var ämnesraden.

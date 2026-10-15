@@ -18,8 +18,13 @@ Tre korta stycken efter hälsningen, 50–110 ord, i den här ordningen.
 | **Erbjudandet** (2–3 meningar) | "Vår [agent] [gör X] åt er." följt av **villkorens innehåll och siffror ordagrant i sak**: vad de får, utan kostnad / garantin / pilotpriset. Inget utöver villkoren. | "Vår agent Iris hittar dem åt er. Ni får fem kvalificerade leads i er region, med kontaktperson och ett färdigt första mejl till var och en, helt utan kostnad och utan att det binder er till något." |
 | **Handlingen** (1 mening) | **Villkorens handling**, så enkel att det kostar mindre att svara ja än att låta bli. Aldrig en fråga. | "Svara "ja" på mejlet, så skickar vi de fem inom två arbetsdagar." |
 
-Ämnesraden bär bolagets namn och vinsten för dem ("Nya uppdrag till Tingstad
-Måleri", "Kvitton och bokföring, Stöcke Svets"). Hälsningen, signaturen och
+Ämnesraden är två till fem ord om deras löfte eller momentet, **utan bolagets
+namn och utan vår produkt** (Anton 2026-10-15; före dess bar den namnet).
+**Nivån sedan 2026-10-15 är Båtladan** ("Hur hinner du med att ge personlig
+rådgivning och service genom hela processen, från köp till underhåll, när
+kundfrågorna om båtar, motorer och trailers blir många?"): ingången tar det
+bolaget lovar sina kunder och ställer det mot momentet, aldrig en uppräkning av
+sortimentet och aldrig "Med er/ert/era …", "När ni …" eller "Ni som …". Hälsningen, signaturen och
 den lagstadgade foten läggs på i kod (`app/leads/halsning.py`,
 `app/leads/signatur.py`, `app/leads/utskicksfot.py`); modellen skriver dem
 aldrig.
@@ -83,6 +88,7 @@ landade. Beställningen: det första utkastet ska landa där.
 | `dda1531` | **Ingången skrivs till mottagaren.** Grinden fäller etiketter var de än står ("som ni gör", "som ert", "liksom ni") och allmänna ingångar ("man", "den som", "ett företag som"); obligatoriskt personaliseringssteg för ingången; formerna i andra person; tabellen fel/rätt. | Anton: "som ni gör"/"som ert" stod kvar i nästan alla; modellen skrev en allmän mening och hängde på etiketten. |
 | `c5946e4` | Utkastsvepet byter en föråldrad signatur ("Snajp AB" → "Snajp Sverige"). | Signaturen ska vara "Snajp Sverige". |
 | denna | Facit i fixtur, INV-LEADS-UTKAST-001, kolon i "brf:er" är ingen uppräkning. | Låsa in. |
+| 2026-10-15 | Ingången bygger på deras löfte; stilgrinden fäller slentrianöppning, uppräkning, lånade exempelord, du och ni, agenten efter löftet, och namn, produkt eller samma början i ämnesraden; namnet lyfts ur ämnet i kod; förnamnet väljs mot adressen; facit reviderat (Båtladan in, sex ut). | Anton: "med er/ert/era, när ni, … en generisk upprabbling", "pinsamma ämnesrader", "Hej Delsbo". |
 
 Uppmätt efter sista omgången: 76 av 80 omkörbara leads med nya utkast, noll
 ingångar med etikett eller "man", ingångarnas form fördelad över "Med er …",

@@ -22,19 +22,26 @@ _HALSNING = re.compile(
 )
 
 
-def fornamn(namn: str | None) -> str:
+def fornamn(namn: str | None, epost: str | None = None) -> str:
+    """Förnamnet, valt mot adressen när den finns (halsning.fornamn:
+    "Delsbo Magnus" med magnus@ är Magnus, Anton 2026-10-15)."""
+    from .halsning import fornamn as personens_fornamn
+
+    ratt = personens_fornamn(namn, epost)
+    if ratt:
+        return ratt
     delar = str(namn or "").strip().split()
     return delar[0] if delar else ""
 
 
-def ratta_tilltal(body: str, mottagare: str | None) -> str:
+def ratta_tilltal(body: str, mottagare: str | None, epost: str | None = None) -> str:
     """Första hälsningsraden får mottagarens förnamn, eller inget namn alls."""
     text = body or ""
     traff = _HALSNING.search(text[:400])
     if not traff:
         return text
     namn = (traff.group("namn") or "").strip()
-    ratt = fornamn(mottagare)
+    ratt = fornamn(mottagare, epost)
     if namn and ratt and namn.casefold() == ratt.casefold():
         return text
     ny = f"{traff.group('ord')} {ratt}," if ratt else f"{traff.group('ord')},"
@@ -162,7 +169,44 @@ def ett_bolagsnamn(subject: str, body: str, namn: str | None) -> tuple[str, str]
     return subject, ny
 
 
+#: Ord som blir hängande när namnet lyfts ur ämnesraden ("Kundfrågor för X",
+#: "X och era kundfrågor", "Pilot för Iris, X").
+_HANGANDE = r"(?:för|till|hos|med|på|i|åt|och|från|om|vid)"
+
+
+def amne_utan_namn(subject: str | None, namn: str | None) -> str:
+    """Ämnesraden utan bolagets namn (Anton 2026-10-15: "nämn INTE företagens
+    namn i ämnesraden"). Sista nätet efter stilgrinden och humanizern: namnet
+    (kortnamnet, med eller utan bolagsform) lyfts ut, och prepositioner och
+    skiljetecken som då blir hängande i kanterna stryks. Lämnar ämnet orört
+    om namnet inte står där."""
+    amne = " ".join(str(subject or "").split())
+    kort = kortnamn(namn)
+    if not amne or not kort:
+        return amne
+    monster = re.compile(
+        rf"(?:\bab\s+)?{re.escape(kort)}(?:[\s,]+{_BOLAGSFORM}(?![\wåäö]))*(?:[:'’]s\b)?",
+        re.IGNORECASE,
+    )
+    if not monster.search(amne):
+        return amne
+    ny = " ".join(monster.sub(" ", amne).split())
+    forra = None
+    while ny != forra:
+        forra = ny
+        ny = re.sub(rf"^(?:[,:;–-]+\s*|{_HANGANDE}\s+)", "", ny, flags=re.IGNORECASE).strip()
+        ny = re.sub(rf"(?:\s*[,:;–-]+|\s+{_HANGANDE})$", "", ny, flags=re.IGNORECASE).strip()
+    ny = re.sub(r"\s+([,:;])", r"\1", ny)
+    return ny[:1].upper() + ny[1:] if ny else ""
+
+
 def demo() -> None:
+    assert amne_utan_namn("Åkes Motor och era kundfrågor", "Åkes Motor Aktiebolag") == "Era kundfrågor"
+    assert amne_utan_namn("Pilot för Iris, Törnqvist Etc.", "Törnqvist Etc. AB") == "Pilot för Iris"
+    assert amne_utan_namn("Kundfrågor för Powersport parts & marine Scandinavia",
+                          "Powersport parts & marine Scandinavia AB") == "Kundfrågor"
+    assert amne_utan_namn("frågorna efter köpet", "Båtladan i Gästrikland AB") == "frågorna efter köpet"
+    print("ämne utan namn: ok")
     assert kortnamn("Roy Johnsson Linnéstaden Bygg & Service Aktiebolag") == (
         "Roy Johnsson Linnéstaden Bygg & Service"
     )
@@ -232,6 +276,7 @@ def demo() -> None:
     assert ratta_tilltal("Hej Jonas,\nText", "Jonas Ek") == "Hej Jonas,\nText"
     assert ratta_tilltal("Hej,\nText", "Jonas Ek") == "Hej Jonas,\nText"
     assert ratta_tilltal("Jag såg att ni växer.", "Jonas") == "Jag såg att ni växer."
+    assert ratta_tilltal("Hej Delsbo,\nText", "Delsbo Magnus", "magnus@akesmotor.se") == "Hej Magnus,\nText"
     print("tilltal: ok")
 
 

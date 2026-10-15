@@ -1962,7 +1962,8 @@ async def list_review_queue(
             item["brodtext"], item["svans"] = brodtext, svans
             continue
         ny_brodtext = normalisera_utkast(
-            brodtext, kontakt=item.get("contact_name"), bolag=item.get("company_name"), sprak=sprak
+            brodtext, kontakt=item.get("contact_name"), bolag=item.get("company_name"), sprak=sprak,
+            epost=item.get("prospect_email"),
         )
         ny = sla_ihop(ny_brodtext, svans, sig, halsning=HALSNING[sprak])
         if sig:

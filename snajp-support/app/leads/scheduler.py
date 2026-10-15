@@ -232,6 +232,7 @@ async def _fot_vid_godkannande(storage: Storage, tenant_id: str, item: dict) -> 
         kontakt=prospekt.get("contact_name"),
         bolag=prospekt.get("company_name"),
         sprak=sprak_h,
+        epost=prospekt.get("contact_email"),
     )
     # Signaturen även på utkast köade innan tenanten satte den (Sebbe
     # 2026-10-09: alla utkast och mejl ska bära den), och en FÖRÅLDRAD

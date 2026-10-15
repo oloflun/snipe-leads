@@ -7,6 +7,12 @@ stilgrinden eller skrivreglerna som skulle underkänna ett facitutkast, och
 varje uppmjukning som skulle släppa igenom de fel Anton pekade ut: en allmän
 ingång med etikett ("som ni gör"), registerfakta, antaganden, tappat
 erbjudande. Ändras facit ska det vara för att Anton godkänt nya referenser.
+
+Reviderat 2026-10-15 (Anton): Båtladan ("Hej Christoffer, Hur hinner du med att
+ge personlig rådgivning …") är det bästa utkastet och nivån som gäller. Fem
+facitutkast som började "Med er/ert/era …" eller räknade upp vad bolaget säljer
+ligger nu under "ersatta" och ska fällas av grinden. Ämnesraderna är borttagna
+ur facit: alla bar bolagets namn, som Anton förbjöd samma dag.
 """
 
 import json
@@ -20,10 +26,13 @@ FACIT = json.loads(
     (Path(__file__).parent / "fixtures" / "utkastfacit_2026-10-12.json").read_text(encoding="utf-8")
 )
 UTKAST = FACIT["utkast"]
+ERSATTA = FACIT["ersatta"]
 #: Fynd som bara flaggar för granskning och som villkoren själva orsakar
 #: (villkorens mening är ofta över 25 ord; handlingen är densamma i varje
 #: gratisprov-mejl). Allt annat ska vara noll på ett facitutkast.
-TILLATNA = {"lang_mening", "samma_uppmaning", "for_langt"}
+TILLATNA = {"lang_mening", "samma_uppmaning", "for_langt", "kopierat_exempel"}
+# kopierat_exempel: facitutkasten ÄR skrivstilens exempel (Båtladan, Eketräs,
+# ÅW står i tabellen fel/rätt), så de lånar ord ur sig själva.
 
 
 def _koder(text: str) -> set[str]:
@@ -75,3 +84,32 @@ def test_de_utpekade_felen_falls_fortfarande(ingang):
     stycken = facit.split("\n\n")
     stycken[1] = ingang
     assert _koder("\n\n".join(stycken)) & {"mall_ingang", "generell_ingang", "registerfakta_i_ingangen", "antagande_om_dem"}
+
+
+@pytest.mark.parametrize("u", ERSATTA, ids=[u["bolag"] for u in ERSATTA])
+def test_de_ersatta_falls_nu(u):
+    """Antons granskning 2026-10-15: slentrianöppningen, uppräkningen och
+    agenten som namnges först efter löftet fälls."""
+    koder = _koder(u["brodtext"]) | {
+        a.kod for a in stil.erbjudande_fynd(u["brodtext"], villkor=u["villkor"], produkt=u["produkt"])
+    }
+    assert koder & {"slentrian_ingang", "uppraknad_ingang", "agent_efter_loftet"}, u["bolag"]
+
+
+@pytest.mark.parametrize(
+    "amne,bolag,produkt",
+    [
+        ("Åkes Motor och era kundfrågor", "Åkes Motor Aktiebolag", "Supportagenten"),
+        ("Pilot för Iris, Törnqvist Etc.", "Törnqvist Etc. AB", "Iris, leadsagenten"),
+        ("Båtladan i Gästrikland och livet på sjön", "Båtladan i Gästrikland AB", "Supportagenten"),
+        ("Era kundfrågor, Sven-Åke Lindblads", "Sven-Åke Lindblads Aktiebolag", "Supportagenten"),
+        ("Supportagenten för Yngvessons Maskin", "Yngvessons Maskin Aktiebolag", "Supportagenten"),
+    ],
+)
+def test_amnesraderna_anton_pekade_ut_falls(amne, bolag, produkt):
+    assert {a.kod for a in stil.amne_fynd(amne, bolag=bolag, produkt=produkt)} & {"namn_i_amnet", "produkt_i_amnet"}
+
+
+def test_bra_amnesrad_passerar():
+    assert stil.amne_fynd("Personlig service när frågorna blir många", bolag="Båtladan i Gästrikland AB",
+                          produkt="Supportagenten") == []

@@ -142,6 +142,7 @@ async def _queue_outreach_draft_impl(
         kontakt=prospekt.get("contact_name"),
         bolag=prospekt.get("company_name"),
         sprak=sprak,
+        epost=prospekt.get("contact_email"),
     )
     kvalitet = await sakra_utgaende_text(finalized_body, sprak=sprak, alltid_korrektur=True)
     finalized_body = kvalitet.text

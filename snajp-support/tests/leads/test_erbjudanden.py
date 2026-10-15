@@ -271,7 +271,8 @@ BRA = (
     "Hej Anna,\n\n"
     "Med få anställda på er redovisningsbyrå är det ofta mejlen från kunderna som tar kvällarna. "
     "Känner du igen dig?\n\n"
-    "Vår Supportagent svarar på de vanliga frågorna åt er, så att du hinner med bokslutsarbetet. "
+    # "åt dig", inte "åt er": du och ni om samma person fälls sedan 2026-10-15.
+    "Vår Supportagent svarar på de vanliga frågorna åt dig, så att du hinner med bokslutsarbetet. "
     "Testa den på era egna frågor, det tar 15–20 minuter.\n\n"
     "Följ länken så kommer du igång: snajp.se/demo"
 )
@@ -316,7 +317,7 @@ def test_markorerna_fangas(text, kod):
         "Boka 15–20 minuter nästa vecka.",
         "Ring 070-123 45 67 om det passar.",
         # En igenkänningsfråga tidigt är tillåten; bara avslutningen får inte vara en fråga.
-        "Blir offerterna liggande hos er också? Svara ja så skickar jag fem leads.",
+        "Hinner ni svara på offertförfrågningarna samma vecka? Svara ja så skickar jag fem leads.",
         "Mötet börjar 10:30 på torsdag.",
         "Ni får mer tid till det ni gör bäst.",
         "PS: Provperioden är 30 dagar, utan bindningstid.",

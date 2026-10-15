@@ -73,9 +73,21 @@ def rensa_personnamn(namn: str | None) -> str | None:
     return " ".join(_versal(d) for d in led)
 
 
-def fornamn(namn: str | None) -> str | None:
+def fornamn(namn: str | None, epost: str | None = None) -> str | None:
+    """Förnamnet. Bär adressens lokaldel ett av namnets led är det förnamnet,
+    oavsett ordning: kontakten "Delsbo Magnus" (orten före namnet på sajten)
+    med magnus@akesmotor.se gav "Hej Delsbo," (Anton 2026-10-15)."""
     rensat = rensa_personnamn(namn)
-    return rensat.split()[0] if rensat else None
+    if not rensat:
+        return None
+    led = rensat.split()
+    from .discovery import _asci
+
+    lokal = _asci(str(epost or "").split("@")[0]) if "@" in str(epost or "") else ""
+    for d in led:
+        if len(_asci(d)) >= 3 and lokal.startswith(_asci(d)):
+            return d
+    return led[0]
 
 
 def snyggt_bolagsnamn(bolag: str | None) -> str | None:
@@ -118,11 +130,11 @@ def _utan_ortsled(namn: str) -> str:
     return kvar or namn
 
 
-def halsningsrad(kontakt: str | None, sprak: str = "sv") -> str:
+def halsningsrad(kontakt: str | None, sprak: str = "sv", epost: str | None = None) -> str:
     """Hälsningsraden ett utkast SKA ha: personens förnamn om en namngiven
     person finns, annars EXAKT "Hej," på egen rad (Sebbe 2026-10-12:
     bolagsnamnet skrivs ALDRIG efter "Hej" — det avslöjar en mall direkt)."""
-    namn = fornamn(kontakt)
+    namn = fornamn(kontakt, epost)
     if not namn:
         return "Hello," if sprak == "en" else "Hej,"
     return f"{'Hi' if sprak == 'en' else 'Hej'} {namn},"
@@ -134,7 +146,9 @@ def _ar_halsningsrad(rad: str, sprak: str) -> re.Match[str] | None:
     return (_HALSNING_EN if sprak == "en" else _HALSNING_SV).match(rad)
 
 
-def sakra_halsning(body: str, *, kontakt: str | None, bolag: str | None, sprak: str = "sv") -> str:
+def sakra_halsning(
+    body: str, *, kontakt: str | None, bolag: str | None, sprak: str = "sv", epost: str | None = None
+) -> str:
     """Ser till att utkastet börjar med en riktig hälsningsrad. Idempotent.
 
     - Ingen hälsning alls → raden läggs till överst, med blankrad före texten.
@@ -147,7 +161,7 @@ def sakra_halsning(body: str, *, kontakt: str | None, bolag: str | None, sprak: 
     Tilltalsformen (du/ni) rörs inte här — det gör tilltala_med_ni efteråt."""
     rader = body.split("\n")
     forsta = next((i for i, r in enumerate(rader) if r.strip()), None)
-    ratt = halsningsrad(kontakt, sprak)
+    ratt = halsningsrad(kontakt, sprak, epost)
     if forsta is None:
         # En tom text lämnas tom: textkvalitetens tom_text-kontroll ska se
         # den, inte en hälsningsrad som ser ut som ett utkast.
@@ -176,8 +190,12 @@ def sakra_halsning(body: str, *, kontakt: str | None, bolag: str | None, sprak: 
         if len(namnet.split()) > 4:
             return body
         rensat = rensa_personnamn(namnet)
+        # Känd mottagare: hälsningen bär mottagarens förnamn, inget annat namn
+        # ("Hej Delsbo," till Magnus, Anton 2026-10-15).
+        kant = fornamn(kontakt, epost)
         if (
             rensat
+            and (not kant or rensat.casefold() == kant.casefold())
             and rensat.casefold() == namnet.casefold()
             and namnet[0].isupper()
             and not any(d.casefold() in _EJ_TILLTAL for d in namnet.split())
@@ -203,7 +221,7 @@ def _ar_bolagstilltal(namnet: str, bolag: str | None) -> bool:
 
 
 def normalisera_utkast(
-    body: str, *, kontakt: str | None, bolag: str | None, sprak: str = "sv"
+    body: str, *, kontakt: str | None, bolag: str | None, sprak: str = "sv", epost: str | None = None
 ) -> str:
     """Hela hälsningspasset för ett utkast: rätt hälsningsrad + rätt tilltal.
 
@@ -213,7 +231,7 @@ def normalisera_utkast(
     skickas. Idempotent."""
     from .outreach_playbook import _intervallstreck, tilltala_med_ni
 
-    text = sakra_halsning(body, kontakt=kontakt, bolag=bolag, sprak=sprak)
+    text = sakra_halsning(body, kontakt=kontakt, bolag=bolag, sprak=sprak, epost=epost)
     if sprak != "en":
         # "Hej," utan namn tilltalar bolaget: mejlet säger ni rakt igenom.
         text = tilltala_med_ni(text)
@@ -253,7 +271,8 @@ async def normalisera_tenantens_utkast(storage, tenant_id: str) -> dict[str, int
         brodtext, svans = dela_utkast(body, sig)
         ny = sla_ihop(
             normalisera_utkast(
-                brodtext, kontakt=p.get("contact_name"), bolag=p.get("company_name"), sprak=sprak
+                brodtext, kontakt=p.get("contact_name"), bolag=p.get("company_name"), sprak=sprak,
+                epost=p.get("contact_email"),
             ),
             svans,
             sig,
