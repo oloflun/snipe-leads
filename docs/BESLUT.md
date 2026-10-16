@@ -9,6 +9,24 @@ möjligt), vad det betyder i koden.
 
 ---
 
+## 2026-10-16 (Claude, på Antons beställning) — Utkasten skrivs med gemini-2.5-pro
+
+**Beslut.** Utkast- och humanizerstegen i Iris kedja körs på `gemini-2.5-pro`
+i Vertex `europe-west1` i development (`LEADS_DRAFT_MODEL`,
+`LEADS_HUMANIZER_MODEL`). Research, Jev och övriga steg kör kvar på
+`gemini-2.5-flash`.
+
+**Resonemang.** Antons krav 2026-10-15: utkasten ska ligga på Christoffer-nivån
+"HELA tiden". Med flash föll ingångarna tillbaka i nya mallord ("är ert löfte,
+men … tar tid från det arbetet") även efter grindens två omskrivningsvarv; med
+pro blev ingångarna konkreta och skrivna till bolaget. Kostnaden är ungefär
+fyra gånger flash per utkaststeg och 5–8 minuter per utkast.
+
+**Inte gjort, Antons beslut:** de nyare modellerna (`gemini-3.1-pro-preview`,
+`gemini-3.8-flash`) finns bara på Vertex globala endpoint, inte i
+`europe-west1`. Att flytta behandlingen ut ur EU-regionen är en
+dataskyddsfråga och görs inte utan Anton. Main har inte fått modellbytet.
+
 ## 2026-10-15 (Claude, på Antons beställning) — Registret hämtas från allabolag; körningen ger inte upp under beställt antal
 
 **Beslut.** Iris-körningar och listor ska leverera beställt antal. Registrets

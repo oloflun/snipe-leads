@@ -56,11 +56,19 @@ bär Iris grundprompt (`agent-core/prompts/leads-systemprompt.md`), skrivstilen
 | 1a | **Personalisera ingången** (samma steg, `_INGANGSUPPGIFT`), **alltid** | Ärendet + utkastet. Skriv om **enbart** första stycket: andra person, en detalj ur citaten, slutar i momentet, inga etiketter, högst 30 ord; resten ordagrant kvar. | Nytt subject/body. Det är den extra Personalisera-rundan som hjälpte i granskningen, inbyggd. |
 | 1b | **Stilgrinden** (`app/leads/stilkontroll.py`, kod) | Råutkastet, villkoren, produkten, körningens andra utkast. | Fynd: mallingång, generell ingång, registerfakta, antaganden, "jag ser att", "vi har skapat", effektivisera, utropstecken, tankstreck, superlativ, slutar med fråga, över 90 ord, kolonlista, tappat erbjudande (villkorens siffror, produktens stam), samma ingång eller konstruktion som ett annat mejl. Fälls något: **en** omskrivning av hela utkastet med fynden utpekade (`lang_mening` och `samma_uppmaning` undantagna, villkoren dikterar dem). |
 | 2 | **Humanizern** (`snajp:humanizer-svenska`, temperatur 0,7), **alltid sist** (INV-LANG-002) | Minimal bas: uppdrag, språkläge, skrivstil, erbjudandeblock, och en rad om att ingången är i andra person och inte får bli allmän. | final_subject, final_body. |
+| 2b | **Grinden igen efter humanizern** (sedan 2026-10-15) | Det humaniserade utkastet. | Samma fynd som 1b plus ämnesraden. Kvarstår något: omskrivning och ny humanisering, högst två varv. Humanizern är fortfarande sist. |
 | 3 | **Kodens efterarbete** | `sign_off`, `ratta_tilltal` (hälsningen avgörs i kod), `ett_bolagsnamn` (namnet en gång, kortnamn). | — |
 | 4 | **Faktagrinden** (`_run_grounding_cycle`, INV-GROUND-001) | Tillåtna fakta: kontextpaket, researchcitat, erbjudandet + villkoren, brief. | Ostött påstående eller gissningsord → reparation + deltahumanisering, en runda; annars stoppas utkastet före kön. |
 | 5 | **Köningen** (`leads_tools._queue_outreach_draft_impl`) | Platshållare, textkvalitet, hälsningsnormalisering, stilkontrollen igen (flaggar bara, skälet på köposten), signatur, fot, språkgrind. | `awaiting_review`. Inget skickas utan en människas godkännande. |
 
 Researchen före kedjan (`_research_v2`) ger citaten, mottagaren, lägesbeskrivningen och den valda produkten. Produkten väljs av modellen ur kundens produktlista; lämnar den fältet tomt härleds produkten ur ett uppfyllt produktbundet kriterium (`bedomning.produkt_ur_kriterierna`), och ett kriterium bundet till en annan produkt än den valda gäller inte leadet.
+
+**Modellen (sedan 2026-10-15/16):** utkast- och humanizerstegen kör
+`gemini-2.5-pro` i Vertex `europe-west1` (`LEADS_DRAFT_MODEL`,
+`LEADS_HUMANIZER_MODEL` på api i development), med lite tänkande
+(`reasoning_effort="low"`; pro tål inte tankebudget 0). Flash föll tillbaka i
+mallorden även efter två grindvarv; pro skrev ingångar på den nivå Anton bad
+om. Ett utkast tar 5–8 minuter med pro.
 
 ## 3. Prompterna, exakt var reglerna står
 
