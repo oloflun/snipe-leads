@@ -918,6 +918,25 @@ async def run_outreach_draft_v2(
         else ""
     )
 
+    # Tilltalet avgörs i kod, före modellen (2026-10-16): koden satte förut in
+    # förnamnet i hälsningen EFTER att modellen skrivit "Hej," och ni-form, så
+    # att "Hej Per," följdes av "ni" rakt igenom (ni_till_person i 10 av 60).
+    try:
+        _mottagare = ((json.loads(research_summary or "{}") or {}).get("mottagare") or {}).get("namn")
+    except (TypeError, ValueError, AttributeError):
+        _mottagare = None
+    from ..leads.tilltal import fornamn as _fornamn
+
+    _namn = _fornamn(_mottagare, prospect_email) if _mottagare else ""
+    tilltalsblock = (
+        f"## Tilltal i det här mejlet\nMottagaren är {_namn}. Hälsa \"Hej {_namn},\" och skriv i du-form "
+        "rakt igenom (du, dig, din, ditt, dina), även villkoren och handlingen. Aldrig ni, er eller era till "
+        "henne eller honom; bolaget kan kallas vid namn eller \"företaget\".\n\n"
+        if _namn
+        else "## Tilltal i det här mejlet\nIngen namngiven mottagare. Hälsa \"Hej,\" och skriv i ni-form "
+        "rakt igenom.\n\n"
+    )
+
     base = (
         f"## Uppdrag\nDu skriver ett kallt första mejl till {kortnamn(company_name)} åt {tenant_name}. "
         f"Kalla bolaget \"{kortnamn(company_name)}\", utan bolagsform (AB, Aktiebolag), "
@@ -956,6 +975,7 @@ async def run_outreach_draft_v2(
         f"## Erbjudandet som styr vinkeln\n{offer_summary}\n\n"
         f"{erbjudandeblock}"
         f"{ingangsblock}"
+        f"{tilltalsblock}"
         f"## Språkläge\n{language_state}\n\n"
         f"{context_pack}"
         + (f"\n\n{soul_block}" if soul_block else "")
@@ -968,6 +988,7 @@ async def run_outreach_draft_v2(
     # overlayen (systemposition).
     humanizer_base = (
         f"## Uppdrag\nDu humaniserar ett kallt mejl till {company_name} åt {tenant_name}.\n\n"
+        f"{tilltalsblock}"
         f"## Språkläge\n{language_state}\n\n"
         # Utan stilen platta humanizern tillbaka ingången och uppmaningen.
         f"## Skrivstil (behåll mejlets struktur och uppmaning enligt den)\n{leads_systemprompt.skrivstil()}"

@@ -3719,6 +3719,14 @@ async def _run_batch_prospect(
         # kan hålla i minuter) slutför återtaget bokföringen ur posten i
         # stället för att lämna körningen väntande på ett barn som aldrig
         # rapporterar (1fdbcf8e, 2026-10-06: 2 av 3 leads, stod still).
+        if scope == "research_and_draft" and utfall.get("leverbar") and not (result.get("draft") or {}).get("queued"):
+            # Levererat = komplett underlag OCH ett utkast i kön (Anton
+            # 2026-10-15: "vi slutar inte förrän vi levererat det beställda
+            # antalet PROCESSADE leads MED komplett underlag och utkast").
+            # Förut räknades ett lead när researchen passerat, och 11 av 200
+            # stod utan utkast i körningarna samma natt; körningen letar nu
+            # vidare i stället.
+            utfall.update(leverbar=False, skal=str(result.get("draft_note") or "Utkastet blev inte av.")[:240])
         result["_korningsutfall"] = {**utfall, "skrap": skrap.som_dict()}
         await app_state.jobs.complete(job_id, result)
         slutstatus = "completed"
