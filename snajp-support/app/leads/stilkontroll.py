@@ -113,7 +113,12 @@ _NI = re.compile(r"\bni\b|\båt\s+er\b|\bhos\s+er\b|\btill\s+er\b|\bert\b|\bera\
 _MALLORD = re.compile(
     r"\b(?:ert|ditt|deras)\s+löfte\b|\blöfte\s+till\b|\bstår\s+(?:ni|du)\s+för\b|\bnågot\s+(?:ni|du)\s+står\s+för\b"
     r"|\btar\s+tid\s+från\s+(?:det\s+arbetet|det\s+(?:ni|du)\s+gör\s+bäst|er\s+kärn\w*|ert\s+kärn\w*)"
-    r"|\bkärnverksamhet\w*|\bkärnuppdrag\w*|\båterkommande\s+(?:kund)?frågor\s+tar\s+tid\b",
+    r"|\bkärnverksamhet\w*|\bkärnuppdrag\w*|\båterkommande\s+(?:kund)?frågor\s+tar\s+tid\b"
+    # Körningarna 2026-10-15/16 (189 utkast): ", inte på att hitta/jaga/leta
+    # nästa …", "det är svårt att", "tar tid från att" och "kräver fullt
+    # fokus" stod i fem till nio ingångar var.
+    r"|\binte\s+(?:på|till|med)\s+att\s+(?:hitta|jaga|leta)\b|\bdet\s+är\s+svårt\s+att\b|\bär\s+det\s+svårt\s+att\b"
+    r"|\btar\s+tid\s+från\s+att\b|\bkräver\s+(?:fullt|ditt|ert)\s+fokus\b",
     re.IGNORECASE,
 )
 #: Registerfakta i ingången: ett antal (siffra eller ord) följt av anställda,
