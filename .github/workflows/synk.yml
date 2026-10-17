@@ -1,12 +1,11 @@
-# Tvåvägssynk av körningar och supportärenden, development ⇄ main (Anton
-# 2026-10-10, docs/BESLUT.md). Ersätter den nattliga envägsspegeln main →
-# development (spegla-dev, railway_seed_dev.py), som tömde development varje
-# natt och sedan 2026-10-04 avbröt på schemaskillnaden medan jobbet stod grönt
-# (tee dolde felkoden; därför pipefail nedan).
+# Synk av körningar och supportärenden mellan development och main (Anton
+# 2026-10-17, docs/BESLUT.md). Första synken (för hand, --apply --forsta) för
+# över allt från development; därefter speglar den main → development var
+# tionde minut, och körningar gjorda i development flyttas med Byt kund →
+# Flytta till main. Provkörningar synkas aldrig. pipefail nedan: 2026-10-04
+# avbröt jobbet medan det stod grönt (tee dolde felkoden).
 #
-# Skriptet vägrar tills första synken gjorts för hand (--apply --forsta), och
-# vägrar när schemaversionerna skiljer sig. Provkörningar synkas aldrig; de
-# flyttas till main med Byt kund → Flytta till main.
+# Skriptet vägrar tills första synken gjorts och när schemaversionerna skiljer sig.
 #
 # Fönsterlöst per definition: körs på GitHubs runner, inte på en lokal maskin.
 name: synk
