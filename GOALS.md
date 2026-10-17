@@ -1,7 +1,7 @@
 ---
 type: goals
 project_slug: snipe-leads
-updated: 2026-10-06
+updated: 2026-10-17
 updated_by: claude
 ---
 
@@ -369,3 +369,4 @@ rebase. Ändringar behöver samordnas, inte bara pushas.
   registerfakta och mallfraser, erbjudandet intakt, handlingen sist, varierad
   form). Tillbaka till Iris skriver inte om automatiskt. 92 av 100 Snajp-leads
   omkörda. Handoff: `HANDOFF-2026-10-12-UTKASTKEDJAN.md`.
+- 2026-10-17: main uppdaterad till samma kod och data som development (release #31, första synken); main är sanningen.

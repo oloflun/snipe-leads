@@ -1,5 +1,14 @@
 # Snipra Status
 
+## 2026-10-17 (2) — Claude — release till main, första synken, main är sanningen
+
+Migration 103–111 körda mot main, PR #31 mergad av Anton (`5c41630`, med Sebbes sex commits). Första synken
+förde alla körningar från development till main utom provkörningar; main är nu sanningen och speglas till
+development var tionde minut, körningar i development flyttas med Flytta till main. Development skickar inget
+längre (väntar på Antons ja); de 189 köade utkasten skickas av main måndag 08:00. Development-databasen
+kraschade av full disk; volymerna är nu 5000 MB. **Kvar:** Antons ja till utskicksregeln, följa schemalagd synk,
+radera `synk_kopia_*` efter Antons ja. Handoff: `HANDOFF-2026-10-17-RELEASE-OCH-SYNK.md`.
+
 ## 2026-10-15 – 10-17 — Anton (med Claude) — utkasten på Christoffer-nivån med gemini-2.5-pro, allabolag som register, 200 leads i kön
 
 Antons granskning 10-15 ("med er/ert/era", uppräknad verksamhet, bolagsnamn i ämnesraden, "Hej Delsbo,")
