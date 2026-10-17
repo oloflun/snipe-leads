@@ -13,7 +13,7 @@
 
 **Parter**
 
-1. **[Snajp AB]**, org.nr [xxxxxx-xxxx], [adress] ("Snajp")
+1. **Snajp** (enskild firma), org.nr [xxxxxx-xxxx], [adress] ("Snajp")
 2. **[Kund AB]**, org.nr [xxxxxx-xxxx], [adress] ("Kunden")
 
 ## 1. Pilotperiod och pris
