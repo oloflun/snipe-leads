@@ -15,7 +15,7 @@ T0 = datetime(2026, 10, 17, 12, tzinfo=timezone.utc)
 
 
 def _r(k, h, andrad):
-    return {"andrad": andrad, "hash": h, "rad": {"id": k, "h": h}}
+    return {"andrad": andrad, "hash": h, "pmid": None}
 
 
 def test_main_vinner_och_forsta_synken_ger_development():
@@ -23,9 +23,9 @@ def test_main_vinner_och_forsta_synken_ger_development():
     dev = {"a": _r("a", "1", T0), "b": _r("b", "1", T0 + timedelta(hours=1))}
     main = {"a": _r("a", "2", T0 + timedelta(hours=1)), "b": _r("b", "2", T0)}
     plan = synk.planera(dev, main, {}, forsta=False)
-    assert sorted(r["id"] for r in plan["till_dev"]) == ["a", "b"] and not plan["till_main"]
+    assert sorted(plan["till_dev"]) == ["a", "b"] and not plan["till_main"]
     forsta = synk.planera(dev, main, {}, forsta=True)
-    assert sorted(r["id"] for r in forsta["till_main"]) == ["a", "b"] and not forsta["till_dev"]
+    assert sorted(forsta["till_main"]) == ["a", "b"] and not forsta["till_dev"]
 
 
 def test_development_korningar_stannar_tills_de_flyttas():
@@ -35,7 +35,7 @@ def test_development_korningar_stannar_tills_de_flyttas():
     plan = synk.planera(dev, main, raderad_i_main, forsta=False)
     assert not plan["till_main"] and not plan["radera_main"]  # main skrivs aldrig efter första synken
     assert plan["radera_dev"] == ["gammal"]  # main raderade den
-    assert [r["id"] for r in plan["till_dev"]] == ["bara_main"]
+    assert plan["till_dev"] == ["bara_main"]
     # Första synken raderar aldrig och för över allt från development.
     forsta = synk.planera(dev, main, raderad_i_main, forsta=True)
-    assert not forsta["radera_dev"] and sorted(r["id"] for r in forsta["till_main"]) == ["gammal", "ny"]
+    assert not forsta["radera_dev"] and sorted(forsta["till_main"]) == ["gammal", "ny"]

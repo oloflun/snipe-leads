@@ -50,7 +50,6 @@ unikt villkor rapporteras och hoppas över, resten går igenom.
 from __future__ import annotations
 
 import argparse
-import json
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -122,8 +121,10 @@ def nyckeluttryck(kolumner: list[str]) -> str:
 
 
 def rader(cur, tabell: str, kolumner: list[str], tenants: list[str]) -> dict[str, dict]:
-    """Nyckel → {andrad, hash, rad} för de rader som får synkas. Saknas
-    synk_andrad_at (migration 111 inte körd, bara i torrkörning) blir tiden null."""
+    """Nyckel → {andrad, hash, pmid} för de rader som får synkas. Själva raden
+    hämtas först när den skrivs (skriv): alla körningar med spår på en gång
+    tog slut på minnet 2026-10-17. Saknas synk_andrad_at (migration 111 inte
+    körd, bara i torrkörning) blir tiden null."""
     cur.execute("select to_regclass('public.' || %s) is not null", (tabell,))
     if not cur.fetchone()[0]:
         return {}  # bara i torrkörning: skrivning kräver samma schema (kontrollera)
@@ -134,12 +135,12 @@ def rader(cur, tabell: str, kolumner: list[str], tenants: list[str]) -> dict[str
     andrad = "x.synk_andrad_at" if cur.fetchone()[0] else "null::timestamptz"
     cur.execute(
         f"""select {nyckeluttryck(kolumner)}, {andrad},
-                   md5((to_jsonb(x) - 'synk_andrad_at')::text), to_jsonb(x)
+                   md5((to_jsonb(x) - 'synk_andrad_at')::text), to_jsonb(x)->>'provider_message_id'
               from public.{tabell} x
              where x.tenant_id = any(%s::uuid[]) and not coalesce(({SYNK[tabell]}), false)""",
         (tenants,),
     )
-    return {k: {"andrad": a, "hash": h, "rad": r} for k, a, h, r in cur.fetchall()}
+    return {k: {"andrad": a, "hash": h, "pmid": pm} for k, a, h, pm in cur.fetchall()}
 
 
 def raderingar(cur, tabell: str) -> dict[str, datetime]:
@@ -153,44 +154,57 @@ def raderingar(cur, tabell: str) -> dict[str, datetime]:
 def planera(
     dev: dict[str, dict], main: dict[str, dict], rad_main: dict[str, datetime], *, forsta: bool,
 ) -> dict[str, list]:
-    """Ren funktion: vad som ska skrivas och raderas i varje miljö. Main
-    skrivs bara av första synken; därefter är main sanningen."""
+    """Ren funktion: nycklarna som ska skrivas och raderas i varje miljö.
+    Main skrivs bara av första synken; därefter är main sanningen."""
     plan: dict[str, list] = {"till_main": [], "till_dev": [], "radera_main": [], "radera_dev": []}
     for k in dev.keys() | main.keys():
         d, m = dev.get(k), main.get(k)
         if d and m:
             if d["hash"] != m["hash"]:
-                plan["till_main" if forsta else "till_dev"].append((d if forsta else m)["rad"])
+                plan["till_main" if forsta else "till_dev"].append(k)
         elif d:
             if forsta:
-                plan["till_main"].append(d["rad"])
+                plan["till_main"].append(k)
             elif k in rad_main:
                 plan["radera_dev"].append(k)
             # annars: en körning gjord i development, flyttas med Flytta till main
         else:
-            plan["till_dev"].append(m["rad"])
+            plan["till_dev"].append(k)
     return plan
 
 
-def skriv(cur, tabell: str, kolumner: list[str], nya: list[dict], radera: list[str]) -> list[str]:
-    """Raderar och skriver i replica-läge, en savepoint per rad. Returnerar felen."""
+def skriv(kalla, cur, tabell: str, kolumner: list[str], nycklar: list[str], radera: list[str]) -> list[str]:
+    """Raderar och skriver i replica-läge, en savepoint per rad; raderna hämtas
+    ur källan hundra åt gången. Returnerar felen."""
     fel: list[str] = []
-    villkor = f"{nyckeluttryck(kolumner)} = %s"
+    nyckel = nyckeluttryck(kolumner)
+    # Genererade kolumner (prospects.foretagsnyckel) räknas fram av målet och
+    # får inte skrivas; 855 prospekt föll på det 2026-10-17.
+    cur.execute(
+        "select string_agg(quote_ident(attname), ', ' order by attnum) from pg_attribute "
+        "where attrelid = ('public.' || %s)::regclass and attnum > 0 and not attisdropped and attgenerated = ''",
+        (tabell,),
+    )
+    kol = cur.fetchone()[0]
     for k in radera:
-        cur.execute(f"delete from public.{tabell} x where {villkor}", (k,))
-    for rad in nya:
-        k = "|".join(str(rad.get(c)) for c in kolumner)
-        cur.execute("savepoint rad")
-        try:
-            cur.execute(f"delete from public.{tabell} x where {villkor}", (k,))
-            cur.execute(
-                f"insert into public.{tabell} select * from jsonb_populate_record(null::public.{tabell}, %s::jsonb)",
-                (json.dumps(rad, default=str),),
-            )
-            cur.execute("release savepoint rad")
-        except psycopg2.Error as e:
-            cur.execute("rollback to savepoint rad")
-            fel.append(f"{tabell} {k}: {str(e).splitlines()[0]}")
+        cur.execute(f"delete from public.{tabell} x where {nyckel} = %s", (k,))
+    for i in range(0, len(nycklar), 100):
+        kalla.execute(
+            f"select {nyckel}, to_jsonb(x)::text from public.{tabell} x where {nyckel} = any(%s)",
+            (nycklar[i:i + 100],),
+        )
+        for k, rad in kalla.fetchall():
+            cur.execute("savepoint rad")
+            try:
+                cur.execute(f"delete from public.{tabell} x where {nyckel} = %s", (k,))
+                cur.execute(
+                    f"insert into public.{tabell} ({kol}) select {kol} from jsonb_populate_record(null::public.{tabell}, %s::jsonb)",
+                    (rad,),
+                )
+                cur.execute("release savepoint rad")
+            except psycopg2.Error as e:
+                cur.execute("rollback to savepoint rad")
+                fel.append(f"{tabell} {k}: {str(e).splitlines()[0]}")
     return fel
 
 
@@ -270,8 +284,7 @@ def main() -> int:
         d, m = rader(dc, t, kol, gemensamma), rader(mc, t, kol, gemensamma)
         plan = planera(d, m, raderingar(mc, t), forsta=forsta)
         if t == "ss_emails":
-            plan["till_dev"] = [r for r in plan["till_dev"]
-                                if not (r.get("provider_message_id") in mejl_dev and r["id"] not in d)]
+            plan["till_dev"] = [k for k in plan["till_dev"] if not (m[k]["pmid"] in mejl_dev and k not in d)]
         planer[t] = (kol, plan)
         if any(plan.values()):
             print(f"{t:26} {len(plan['till_main']):>7} {len(plan['till_dev']):>7} "
@@ -291,8 +304,9 @@ def main() -> int:
     for c in (dc, mc):
         c.execute("set session_replication_role = replica")
     for t, (kol, plan) in planer.items():
-        fel += skriv(mc, t, kol, plan["till_main"], plan["radera_main"])
-        fel += skriv(dc, t, kol, plan["till_dev"], plan["radera_dev"])
+        fel += skriv(dc, mc, t, kol, plan["till_main"], plan["radera_main"])
+        fel += skriv(mc, dc, t, kol, plan["till_dev"], plan["radera_dev"])
+        print(f"skrivet: {t}", flush=True)
     if forsta:
         # Köade utkast godkända i development skickas av main från och med nu
         # (lika i båda miljöerna, så raderna förblir synkade).
