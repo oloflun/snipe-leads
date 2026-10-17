@@ -1,5 +1,26 @@
 # Snipra Status
 
+## 2026-10-15 – 10-17 — Anton (med Claude) — utkasten på Christoffer-nivån med gemini-2.5-pro, allabolag som register, 200 leads i kön
+
+Antons granskning 10-15 ("med er/ert/era", uppräknad verksamhet, bolagsnamn i ämnesraden, "Hej Delsbo,")
+blev regler: ingången tar bolagets eget löfte och ställer det mot momentet produkten löser (Båtladan/
+Christoffer är förebilden), ämnesraden bär aldrig bolagsnamn eller produkt, och stilgrinden körs nu även
+efter humanizern (högst två varv) och fäller mallorden ur 189 utkast. Utkast- och humanizerstegen kör
+`gemini-2.5-pro` i `europe-west1` i development (`LEADS_DRAFT_MODEL`/`LEADS_HUMANIZER_MODEL`, ~4× flash,
+5–8 min per utkast); main har inte fått bytet. Tilltalet avgörs i kod före modellen: styrkt förnamn ger
+du-form rakt igenom, osäkra namn ger "Hej," och ni-form. Registret hämtas från allabolag.se direkt
+(`sources/allabolag.py`, `LEADS_REGISTER`) eftersom ScrapeGraph-krediten är slut och merinfo blockerar;
+körningen granskar upp till 12 bolag per lead, slutar först efter fyra tomma rundor och räknar ett lead som
+levererat först när utkastet står i kön. Iris kräver webbplats, och kedjans hemsida (giganten.se, elon.se)
+räknas inte som bolagets. Bortval står sig 30 dagar. Nattens körningar gav 200 kompletta leads (100
+Norrland, 100 Göteborg/Mölndal), alla nivå A med utkast i Snajps granskningskö; 0 ämnesrader med
+bolagsnamn, 22 med kvarvarande stilfynd. Nivån låst 10-17 i `docs/UTKASTKEDJAN-REFERENS-2026-10-16.md`
+(INV-LEADS-UTKAST-002, sju facitutkast) — läs den först för varje fråga om utkast. Release-PR #31
+(development → main) öppen. **Kvar:** "Skapa om bara utkast" utan ny research (23 av 104 föll till nivå C
+när de skrevs om); fler ingångsvarianter för Iris egna mejl; Antons beslut om koncernbolag med få anställda
+(Kappahl, Continental Däck) och om Gemini 3 på global endpoint (dataskydd); prisförfrågan till allabolag.
+Beslut: `docs/BESLUT.md` (10-15, 10-16, 10-17).
+
 ## 2026-10-12 — Claude — utkastkedjan skriver referensutkastet på första försöket; 92 av 100 Snajp-leads omkörda
 
 Antons genomgång av AI-knapparnas kedja (Fiskebäck, Härlanda) blev regler i kod: ingången bygger på en
