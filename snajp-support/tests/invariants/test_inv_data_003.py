@@ -52,11 +52,19 @@ def test_bara_admin_flytt_skriver_importerad_fran():
     assert skrivare == ["admin_flytt.py"], skrivare
 
 
-def test_synken_synkar_aldrig_provkorningar():
+def test_synken_synkar_aldrig_provkorningar(monkeypatch):
     """Varje synkad tabell har ett testvillkor, och de som bär is_test eller
     hänger under ett prospekt/en tråd/ett ärende filtrerar på det."""
     import importlib.util
+    import sys
+    import types
 
+    # CI:s backendmiljö har asyncpg, inte psycopg2; testet läser bara SYNK.
+    if "psycopg2" not in sys.modules:
+        pg = types.ModuleType("psycopg2")
+        pg.extras = types.ModuleType("psycopg2.extras")
+        monkeypatch.setitem(sys.modules, "psycopg2", pg)
+        monkeypatch.setitem(sys.modules, "psycopg2.extras", pg.extras)
     spec = importlib.util.spec_from_file_location("railway_synk", ROOT / "scripts" / "railway_synk.py")
     modul = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(modul)
