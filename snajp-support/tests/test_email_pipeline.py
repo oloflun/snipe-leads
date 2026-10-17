@@ -242,3 +242,40 @@ async def test_inbox_is_tenant_isolated():
                 f"/api/inbox/{inbox_a[0]['id']}/takeover", headers=key_b
             )
             assert takeover.status_code == 404
+
+
+@pytest.mark.anyio
+async def test_faktagrinden_stoppar_autosvar_med_ostodd_uppgift():
+    """2026-10-06: mejlvägen saknade chattens faktagrind. Ett utkast med en
+    uppgift som inte står i underlaget (här ett påhittat telefonnummer) får
+    aldrig skickas automatiskt — det går till granskningskön."""
+    from unittest.mock import patch
+
+    async def fake_triage(storage, tenant_id, email, image_urls, profil="", foretagsnamn=""):
+        artiklar = [{"title": "Frakt", "content": "Standardfrakt tar 2-4 vardagar.", "similarity": 0.9}]
+        return (
+            {
+                "category": "leverans", "category_label": "Leverans", "priority": "normal",
+                "sentiment": 0.6, "confidence": 0.99, "escalate": False,
+                "escalation_reason": None, "reasoning": "test",
+                "draft_body": "Standardfrakt tar 2-4 vardagar. Ring oss på 08-123 45 67.",
+                "model": "test", "beslut": "SVARA",
+            },
+            artiklar,
+        )
+
+    async with app.router.lifespan_context(app):
+        async with _client() as client:
+            await client.put("/api/rules", headers=DEMO, json={"category": "leverans", "mode": "auto"})
+            with patch("app.email_pipeline.processor._triage_email", new=fake_triage):
+                skapad = await client.post(
+                    "/api/inbox/ingest",
+                    headers=DEMO,
+                    json={"from": "lena@example.com", "subject": "Frakt", "body": "Hur lång är frakten?"},
+                )
+            assert skapad.status_code == 201
+            mejl = (await client.get(f"/api/inbox/{skapad.json()['email_id']}", headers=DEMO)).json()
+            assert mejl["status"] != "auto_sent"
+            assert mejl["draft"]["auto"] is False
+            handelser = [d["event"] for d in mejl["decisions"]]
+            assert "faktagrind" in handelser

@@ -35,7 +35,7 @@ import { useLocale } from "@/lib/i18n";
  * kring midnatt, och det är exakt den sortens hydreringskrock den här
  * kodbasen redan betalat för en gång.
  */
-function trialStatus(
+export function trialStatus(
   kund: BerikadTenant,
   locale: Parameters<typeof datum>[1],
   text: (t: { sv: string; en: string }) => string
@@ -43,12 +43,7 @@ function trialStatus(
   if (kund.avtal_signerat || !kund.trial_slut) {
     return <span className="text-ink-subtle">—</span>;
   }
-  const idag = new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Stockholm" }).format(
-    new Date()
-  );
-  const dagar = Math.round(
-    (Date.parse(kund.trial_slut.slice(0, 10)) - Date.parse(idag)) / 86_400_000
-  );
+  const dagar = trialDagar(kund.trial_slut);
   if (dagar < 0) {
     return (
       <span className="text-ink-subtle">
@@ -70,6 +65,12 @@ function trialStatus(
   return <span className={snartSlut ? "text-danger" : undefined}>{etikett}</span>;
 }
 
+/** Dagar kvar av provperioden, räknat i Europe/Stockholm (se trialStatus). Negativt = slut. */
+export function trialDagar(trialSlut: string): number {
+  const idag = new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Stockholm" }).format(new Date());
+  return Math.round((Date.parse(trialSlut.slice(0, 10)) - Date.parse(idag)) / 86_400_000);
+}
+
 export function Kundtabell({ kunder }: Readonly<{ kunder: BerikadTenant[] }>) {
   const { locale, text } = useLocale();
 
@@ -84,7 +85,9 @@ export function Kundtabell({ kunder }: Readonly<{ kunder: BerikadTenant[] }>) {
 
   return (
     <>
-      <div className="mt-10 overflow-x-auto">
+      {/* relative: sr-only-rubriken i sista kolumnen (absolute) förankras
+          annars mot sidan och drog ut den till 1045 px på mobil. */}
+      <div className="thin-scrollbar relative overflow-x-auto">
         <table className="w-full min-w-[980px] border-collapse text-[0.875rem]">
           <thead>
             <tr className="border-b border-ink/15 text-left">

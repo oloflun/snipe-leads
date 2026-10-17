@@ -3,9 +3,19 @@
 import Link from "next/link";
 import { Radgivare } from "@/components/admin/Radgivare";
 import { Radmarke } from "@/components/admin/Radmarke";
-import { Badge, Cell, Nyckeltal, Sektion, Sidhuvud, Tabell, Tomt, meta, radLank, tabellRad } from "@/components/ui";
+import {
+  Andelsring,
+  KpiKort,
+  Munkdiagram,
+  Panelrubrik,
+  Rangstaplar,
+  type Andel,
+  type Kpi,
+  type Rang
+} from "@/components/dashboard/OversiktPaneler";
+import { Badge, Cell, Sidhuvud, Tabell, Tomt, meta, radLank, tabellRad, panelKort } from "@/components/ui";
 import type { BerikadTenant } from "@/lib/admin/exempeldata";
-import { a, antal } from "@/lib/admin/sprak";
+import { ADMIN, a, antal, datum } from "@/lib/admin/sprak";
 import { arTestyta } from "@/lib/admin/statistik";
 import { useLocale, type Locale } from "@/lib/i18n";
 import { formateraPris } from "@/lib/pricing";
@@ -93,6 +103,18 @@ const HALSOTON: Record<Halsa, "neutral" | "good" | "warn" | "danger"> = {
   okand: "neutral",
   test: "neutral"
 };
+
+/** Munkens färger per hälsoläge: grönt bra, ochre och rött det som kräver något. */
+const HALSOFARG: Record<Halsa, string> = {
+  bra: "oklch(var(--moss))",
+  ok: "oklch(var(--chart-ochre))",
+  dalig: "oklch(var(--danger))",
+  tyst: "oklch(var(--chart-ramp-3))",
+  okand: "oklch(var(--ink-subtle))",
+  test: "oklch(var(--chart-ramp-1))"
+};
+
+const PAKETFARG = ["oklch(var(--chart-ramp-6))", "oklch(var(--chart-ramp-4))", "oklch(var(--chart-ramp-2))", "oklch(var(--moss))", "oklch(var(--chart-ochre))"];
 
 /** Etiketten för ett hälsoläge. `test` står inline: sprak.ts ägs av en annan
  *  yta, och ett enda ord motiverar inte en nyckel där. */
@@ -242,6 +264,87 @@ export function Portfoljvy({
     </Tabell>
   );
 
+  // Diagramraden: hälsan, intäkten per paket och marginalen. Samma rader och
+  // samma ekonomi som tabellen, så att diagrammen inte kan säga emot den.
+  const halsodelar: Andel[] = (Object.keys(HALSOFARG) as Halsa[]).map((h) => ({
+    id: h,
+    etikett: { sv: halsoetikett(h, "sv"), en: halsoetikett(h, "en") },
+    antal: p.fordelning[h],
+    farg: HALSOFARG[h]
+  }));
+  const perPaket = new Map<string, number>();
+  for (const { ekonomi } of rader) {
+    if (ekonomi.intakt > 0 && ekonomi.paketNamn) {
+      perPaket.set(ekonomi.paketNamn, (perPaket.get(ekonomi.paketNamn) ?? 0) + ekonomi.intakt);
+    }
+  }
+  const paketdelar: Andel[] = [...perPaket.entries()]
+    .sort((x, y) => y[1] - x[1])
+    .map(([namn, summa], i) => ({ id: namn, etikett: { sv: namn, en: namn }, antal: summa, farg: PAKETFARG[i % PAKETFARG.length] }));
+
+  // Topplistorna räknar bara kunder: testarbetsytan konkurrerar inte om
+  // platserna med dem som betalar.
+  const kunder = rader.filter(({ ekonomi }) => ekonomi.halsa !== "test");
+  const kostsamma: Rang[] = kunder.map(({ rad, ekonomi }) => ({
+    id: rad.id,
+    namn: rad.name,
+    varde: ekonomi.kostnad,
+    visning: formateraPris(Math.round(ekonomi.kostnad)),
+    under:
+      ekonomi.marginal === null
+        ? text({ sv: "ingen intäkt att räkna marginal på", en: "no revenue to measure margin against" })
+        : text({ sv: `marginal ${Math.round(ekonomi.marginal * 100)} %`, en: `margin ${Math.round(ekonomi.marginal * 100)} %` }),
+    href: `/admin/kunder/${rad.id}`
+  }));
+  const aktivast: Rang[] = kunder.map(({ rad }) => ({
+    id: rad.id,
+    namn: rad.name,
+    varde: (rad.runs ?? 0) + (rad.tickets ?? 0),
+    visning: antal((rad.runs ?? 0) + (rad.tickets ?? 0), locale),
+    under: text({
+      sv: `${antal(rad.runs ?? 0, "sv")} körningar · ${antal(rad.tickets ?? 0, "sv")} ärenden · senast ${datum(rad.last_activity, "sv")}`,
+      en: `${antal(rad.runs ?? 0, "en")} runs · ${antal(rad.tickets ?? 0, "en")} cases · last ${datum(rad.last_activity, "en")}`
+    }),
+    href: `/admin/kunder/${rad.id}`
+  }));
+
+  const kpier: Kpi[] = [
+    {
+      id: "mrr",
+      etikett: ADMIN.manadsintakt,
+      varde: null,
+      visning: formateraPris(p.mrr),
+      detalj: {
+        sv: `${p.antalBetalande} av ${p.antalKunder} kunder betalar`,
+        en: `${p.antalBetalande} of ${p.antalKunder} customers pay`
+      }
+    },
+    {
+      // Modellen och "listpris" i detaljen: "en uppskattning" utan att säga av
+      // vad är ett förbehåll man inte kan kontrollera.
+      id: "kostnad",
+      etikett: { sv: "Uppskattad tokenkostnad", en: "Estimated token cost" },
+      varde: null,
+      visning: formateraPris(Math.round(p.kostnad)),
+      detalj: { sv: `Listpris, ${TOKENKOSTNAD_MODELL}`, en: `List price, ${TOKENKOSTNAD_MODELL}` }
+    },
+    {
+      id: "marginal",
+      etikett: { sv: "Marginal efter tokenkostnad", en: "Margin after token cost" },
+      varde: null,
+      visning: p.marginal === null ? "–" : `${Math.round(p.marginal * 100)} %`,
+      detalj: p.marginal === null ? ADMIN.ingenIntakt : { sv: "av månadsintäkten blir kvar", en: "of the monthly revenue remains" }
+    },
+    {
+      id: "kraver",
+      etikett: ADMIN.kraverAtgard,
+      varde: kraver.length,
+      larm: kraver.length > 0,
+      href: "#kraver-atgard",
+      detalj: { sv: `av ${p.antalKunder} kunder`, en: `of ${p.antalKunder} customers` }
+    }
+  ];
+
   return (
     <div>
       {/* "Översikt" och inte "Kunder": fliken heter Översikt, och NÄSTA flik
@@ -249,80 +352,148 @@ export function Portfoljvy({
           rubricerades "Kunder" läste som samma vy renderad två gånger. */}
       <Sidhuvud title={a("oversiktRubrik", locale)} />
 
-      {/* Nyckeltalen först (Antons beställning 2026-10-03: "viktiga mätvärden
-          gömda längre ned"). Tidigare stod de efter hela kundtabellen. */}
-      <div className="mt-6">
+      {/* Översikternas layout (Sebbe 2026-10-07): nyckeltalen som kort, en
+          diagramrad, kunderna som kräver en åtgärd i ett eget kort och två
+          kolumner för var kostnaden och aktiviteten finns. Nyckeltalen står
+          först (Antons beställning 2026-10-03: "viktiga mätvärden gömda
+          längre ned"). */}
+      <div className="mt-6 flex min-w-0 flex-col gap-6">
         {rader.length === 0 ? (
           <Tomt>{a("ingaRegistrerade", locale)}</Tomt>
         ) : (
           <>
-            <Nyckeltal
-              poster={[
-                {
-                  etikett: a("manadsintakt", locale),
-                  varde: formateraPris(p.mrr),
-                  notis: text({
-                    sv: `${p.antalBetalande} av ${p.antalKunder} kunder betalar`,
-                    en: `${p.antalBetalande} of ${p.antalKunder} customers pay`
-                  })
-                },
-                {
-                  // Modellen och "listpris" i notisen: "en uppskattning" utan
-                  // att säga av vad är ett förbehåll man inte kan kontrollera.
-                  etikett: text({ sv: "Uppskattad tokenkostnad", en: "Estimated token cost" }),
-                  varde: formateraPris(Math.round(p.kostnad)),
-                  notis: text({
-                    sv: `Listpris, ${TOKENKOSTNAD_MODELL}`,
-                    en: `List price, ${TOKENKOSTNAD_MODELL}`
-                  })
-                },
-                {
-                  etikett: text({ sv: "Marginal efter tokenkostnad", en: "Margin after token cost" }),
-                  varde: p.marginal === null ? "–" : `${Math.round(p.marginal * 100)} %`,
-                  notis: p.marginal === null ? a("ingenIntakt", locale) : undefined
-                },
-                {
-                  etikett: a("kraverAtgard", locale),
-                  varde: String(kraver.length),
-                  notis: text({
-                    sv: `av ${p.antalKunder} kunder`,
-                    en: `of ${p.antalKunder} customers`
-                  })
-                }
-              ]}
-            />
-            {/* Exempelraderna räknas med i talen ovan, och det ska synas
-                innan någon läser månadsintäkten som ett utfall. */}
-            {exempelrader > 0 ? (
-              <p className="mt-3 max-w-[70ch] text-[0.8125rem] text-ink-subtle">
-                {exempelrader === 1
-                  ? text({
-                      sv: "Nyckeltalen räknar med exempeldata från en kund.",
-                      en: "The key figures include example data from one customer."
-                    })
-                  : text({
-                      sv: `Nyckeltalen räknar med exempeldata från ${exempelrader} kunder.`,
-                      en: `The key figures include example data from ${exempelrader} customers.`
-                    })}
-              </p>
-            ) : null}
+            <div>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                {kpier.map((k) => (
+                  <KpiKort key={k.id} kpi={k} perioden={{ sv: "", en: "" }} />
+                ))}
+              </div>
+              {/* Exempelraderna räknas med i talen ovan, och det ska synas
+                  innan någon läser månadsintäkten som ett utfall. */}
+              {exempelrader > 0 ? (
+                <p className="mt-3 max-w-[70ch] text-[0.8125rem] text-ink-subtle">
+                  {exempelrader === 1
+                    ? text({
+                        sv: "Nyckeltalen räknar med exempeldata från en kund.",
+                        en: "The key figures include example data from one customer."
+                      })
+                    : text({
+                        sv: `Nyckeltalen räknar med exempeldata från ${exempelrader} kunder.`,
+                        en: `The key figures include example data from ${exempelrader} customers.`
+                      })}
+                </p>
+              ) : null}
+            </div>
+
+            <div className="grid min-w-0 gap-4 lg:grid-cols-3">
+              <section aria-labelledby="oversikt-halsa" className={cn(panelKort, "min-w-0")}>
+                <Panelrubrik id="oversikt-halsa" titel={{ sv: "Kundernas hälsa", en: "Customer health" }} />
+                <Munkdiagram
+                  delar={halsodelar}
+                  etikett={{ sv: "Status per kund", en: "Status per customer" }}
+                  mitt={{ sv: "kunder", en: "customers" }}
+                />
+              </section>
+              <section aria-labelledby="oversikt-paket" className={cn(panelKort, "min-w-0")}>
+                <Panelrubrik id="oversikt-paket" titel={{ sv: "Intäkt per paket", en: "Revenue per plan" }} />
+                <Munkdiagram
+                  delar={paketdelar}
+                  etikett={{ sv: "Kronor per månad", en: "SEK per month" }}
+                  mitt={{ sv: "tkr/mån", en: "kSEK/mo" }}
+                  mittVarde={antal(Math.round(p.mrr / 1000), locale)}
+                />
+              </section>
+              <section aria-labelledby="oversikt-marginal" className={cn(panelKort, "min-w-0")}>
+                <Panelrubrik id="oversikt-marginal" titel={{ sv: "Marginal efter tokenkostnad", en: "Margin after token cost" }} />
+                <div className="flex flex-wrap items-center gap-x-6 gap-y-4">
+                  <Andelsring
+                    andel={p.marginal}
+                    etikett={text({ sv: "Marginal efter tokenkostnad", en: "Margin after token cost" })}
+                  />
+                  <dl className="min-w-[11rem] flex-1 space-y-2 text-[0.8125rem]">
+                    <div className="flex items-baseline justify-between gap-3">
+                      <dt className="text-ink-muted">{a("manadsintakt", locale)}</dt>
+                      <dd className="num font-medium tabular-nums text-ink">{formateraPris(p.mrr)}</dd>
+                    </div>
+                    <div className="flex items-baseline justify-between gap-3">
+                      <dt className="text-ink-muted">{text({ sv: "Uppskattad tokenkostnad", en: "Estimated token cost" })}</dt>
+                      <dd className="num font-medium tabular-nums text-ink">− {formateraPris(Math.round(p.kostnad))}</dd>
+                    </div>
+                    <div className="flex items-baseline justify-between gap-3 border-t border-ink/10 pt-2">
+                      <dt className="font-medium text-ink">{text({ sv: "Kvar efter kostnad", en: "Left after cost" })}</dt>
+                      <dd className="num font-semibold tabular-nums text-ink">{formateraPris(Math.round(p.mrr - p.kostnad))}</dd>
+                    </div>
+                  </dl>
+                </div>
+                <p className={cn(meta, "mt-4")}>
+                  {text({
+                    sv: `Listpris, ${TOKENKOSTNAD_MODELL}. En uppskattning, inte en faktura.`,
+                    en: `List price, ${TOKENKOSTNAD_MODELL}. An estimate, not an invoice.`
+                  })}
+                </p>
+              </section>
+            </div>
 
             {/* Bara kunder med en anledning. Hela kundtabellen bor i Kunder;
                 "Övriga kunder" här var samma tabell en gång till. */}
-            <Sektion
-              title={a("kraverAtgard", locale)}
-              action={
-                <Link href="/admin/kunder" className={radLank}>
-                  {text({ sv: "Alla kunder", en: "All customers" })}
-                </Link>
-              }
+            <section
+              id="kraver-atgard"
+              aria-labelledby="oversikt-kraver"
+              className={cn(
+                panelKort,
+                "min-w-0 scroll-mt-24",
+                kraver.length > 0 && "shadow-[inset_0_2px_0_0_oklch(var(--ochre))]"
+              )}
             >
+              <Panelrubrik
+                id="oversikt-kraver"
+                titel={ADMIN.kraverAtgard}
+                antal={kraver.length}
+                under={{
+                  sv: "Låg marginal eller ingen aktivitet, sämst först. Namnet leder till kundens profil.",
+                  en: "Low margin or no activity, worst first. The name leads to the customer's profile."
+                }}
+                action={
+                  <Link href="/admin/kunder" className={radLank}>
+                    {text({ sv: "Alla kunder", en: "All customers" })}
+                  </Link>
+                }
+              />
               {kraver.length > 0 ? (
                 kundtabell(kraver)
               ) : (
                 <Tomt>{text({ sv: "Ingen kund kräver åtgärd.", en: "No customer needs attention." })}</Tomt>
               )}
-            </Sektion>
+            </section>
+
+            <div className="grid min-w-0 gap-4 xl:grid-cols-2">
+              <section aria-labelledby="oversikt-kostnad" className={cn(panelKort, "min-w-0")}>
+                <Panelrubrik
+                  id="oversikt-kostnad"
+                  titel={{ sv: "Störst tokenkostnad", en: "Highest token cost" }}
+                  under={{ sv: "Uppskattad kostnad per kund, med marginalen under.", en: "Estimated cost per customer, with the margin below." }}
+                />
+                <Rangstaplar
+                  rader={kostsamma.sort((x, y) => y.varde - x.varde).slice(0, 6)}
+                  tom={{ sv: "Ingen kund har någon tokenkostnad än.", en: "No customer has any token cost yet." }}
+                  farg="oklch(var(--chart-ochre))"
+                />
+              </section>
+              <section aria-labelledby="oversikt-aktivitet" className={cn(panelKort, "min-w-0")}>
+                <Panelrubrik
+                  id="oversikt-aktivitet"
+                  titel={{ sv: "Mest aktivitet", en: "Most activity" }}
+                  under={{
+                    sv: "Körningar och ärenden per kund. Testkörningar räknas inte.",
+                    en: "Runs and cases per customer. Test runs are not counted."
+                  }}
+                />
+                <Rangstaplar
+                  rader={aktivast.sort((x, y) => y.varde - x.varde).slice(0, 6)}
+                  tom={{ sv: "Ingen kund har någon aktivitet än.", en: "No customer has any activity yet." }}
+                />
+              </section>
+            </div>
           </>
         )}
 

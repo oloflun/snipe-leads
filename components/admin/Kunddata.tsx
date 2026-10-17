@@ -232,11 +232,21 @@ export function Kunddata({ data }: Readonly<{ data: Data }>) {
     setSparar(true);
     setKvitto(null);
     setFel(null);
+    // Ett kastat fel (servern nåddes inte, eller en flik öppnad före en
+    // deploy vars serveråtgärd inte längre finns) försvann förut tyst:
+    // 2026-10-09 trodde Sebbe två gånger att org.nr var sparat, och inget
+    // anrop hade nått backenden. Felet visas nu vid knappen, inte bara
+    // överst på sidan där det hamnade utanför bilden.
     void (async () => {
-      const svar = await sparaKunddata(tenantId, andrade);
-      if (svar.success) setKvitto(ADMIN.sparatPunkt);
-      else setFel(svar.error ? ordagrant(svar.error) : ADMIN.kundeInteSpara);
-      setSparar(false);
+      try {
+        const svar = await sparaKunddata(tenantId, andrade);
+        if (svar.success) setKvitto(ADMIN.sparatPunkt);
+        else setFel(svar.error ? ordagrant(svar.error) : ADMIN.kundeInteSpara);
+      } catch {
+        setFel(ADMIN.sparandetNaddeInteFram);
+      } finally {
+        setSparar(false);
+      }
     })();
   }
 
@@ -248,10 +258,15 @@ export function Kunddata({ data }: Readonly<{ data: Data }>) {
     setLaggerTill(true);
     setFel(null);
     void (async () => {
-      const svar = await skapaKontakt(tenantId, ny);
-      if (svar.success) setNy(TOM_KONTAKT);
-      else setFel(svar.error ? ordagrant(svar.error) : ADMIN.kundeInteLaggaTillKontakt);
-      setLaggerTill(false);
+      try {
+        const svar = await skapaKontakt(tenantId, ny);
+        if (svar.success) setNy(TOM_KONTAKT);
+        else setFel(svar.error ? ordagrant(svar.error) : ADMIN.kundeInteLaggaTillKontakt);
+      } catch {
+        setFel(ADMIN.sparandetNaddeInteFram);
+      } finally {
+        setLaggerTill(false);
+      }
     })();
   }
 
@@ -331,6 +346,11 @@ export function Kunddata({ data }: Readonly<{ data: Data }>) {
             {kvitto ? text(kvitto) : ""}
           </span>
         </div>
+        {fel ? (
+          <p role="alert" className="mt-3 max-w-[70ch] break-words text-[0.875rem] text-danger">
+            {text(fel)}
+          </p>
+        ) : null}
       </Sektion>
     </div>
   );

@@ -42,8 +42,9 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
-from ..agentcore.instruktioner import las_instruktioner
-from ..agentcore.strukturera import strukturera as strukturera_text
+from ..agentcore.baka_in import baka_in
+from ..agentcore.instruktioner import MAX_TECKEN, MAX_TECKEN_GRUNDPROMPT, las_instruktioner
+from ..agentcore.overlays import load_global_instructions as load_global_instructions_fil
 from ..leads.soul import SOUL_KIND
 from .deps import kraev_uuid, require_master_key
 from .schemas import (
@@ -55,29 +56,69 @@ from .schemas import (
 
 router = APIRouter(prefix="/api/admin", dependencies=[Depends(require_master_key)])
 
+#: 'alla' = det gemensamma lagret (agent-core/AGENTS.md); 'support' och 'leads'
+#: = agentens grundprompt (agent-core/prompts/). Migration 099.
+AGENTTYPER = ("alla", "support", "leads")
 
-async def _dokument_ur(payload: InstruktionRequest | TenantProfilRequest) -> tuple[str, str, str]:
+
+async def _dokument_ur(
+    payload: InstruktionRequest | TenantProfilRequest, *, bas: str, tak: int
+) -> tuple[str, str, str]:
     """(dokument, kalla, anmarkning). Tre vägar, i prioritetsordning:
 
-      1. Ett redigerat dokument skickades med  -> ta det ordagrant, 'manuell'.
-      2. strukturera=True                      -> modellen får forma råtexten.
-      3. annars                                -> råtexten sparas som den är.
+      1. Ett färdigt dokument skickades med (granskad förhandsvisning eller
+         handredigering)                       -> ta det ordagrant.
+      2. strukturera=True                      -> feedbacken BAKAS IN i `bas`.
+      3. annars                                -> texten sparas som den är.
 
-    Väg 1 måste komma först. Den som redigerat modellens utkast för hand och
-    får det omstrukturerat igen tappar sina ändringar — och lär sig att inte
-    redigera.
+    Väg 2 ersatte före 2026-10-06 hela dokumentet med modellens omformning av
+    feedbacken ensam (strukturera.py). En inklistrad mall blev då fem rader
+    och sanningsreglerna försvann. Nu läggs feedbacken in i det dokument som
+    redan gäller (agentcore/baka_in.py), och allt den inte gäller står kvar.
     """
     if isinstance(payload, InstruktionRequest):
-        rav, redigerad = payload.ravtext, payload.strukturerad_md
+        rav = payload.feedback if payload.feedback is not None else payload.ravtext
+        redigerad = payload.strukturerad_md
     else:
         rav, redigerad = (payload.instruktioner_rav or ""), payload.instruktioner_md
 
     if redigerad is not None and redigerad.strip():
-        return redigerad.strip(), "manuell", ""
+        return redigerad.strip()[:tak], ("bakad" if rav.strip() else "manuell"), ""
     if not payload.strukturera:
-        return rav.strip(), "manuell", ""
-    resultat = await strukturera_text(rav)
-    return resultat.dokument, resultat.kalla, resultat.anmarkning
+        return rav.strip()[:tak], "manuell", ""
+    bakning = await baka_in(bas, rav, tak=tak)
+    return bakning.dokument[:tak], bakning.kalla, bakning.anmarkning
+
+
+def _fil_text(agent: str) -> str:
+    """Den incheckade texten som gäller när ingen version är sparad."""
+    if agent == "support":
+        from ..agent.support_systemprompt import _mall
+
+        return _mall()
+    if agent == "leads":
+        from ..agent.leads_systemprompt import fil_mall
+
+        return fil_mall()
+    return load_global_instructions_fil()
+
+
+def _tak(agent: str) -> int:
+    return MAX_TECKEN if agent == "alla" else MAX_TECKEN_GRUNDPROMPT
+
+
+async def _basdokument(storage, agent: str) -> tuple[str, dict | None]:
+    """(dokumentet som gäller nu, den aktiva raden eller None)."""
+    rad = await storage.get_global_instructions(agent)
+    if rad and (rad.get("strukturerad_md") or "").strip():
+        return rad["strukturerad_md"], rad
+    return _fil_text(agent), rad
+
+
+def _agent(agent: str) -> str:
+    if agent not in AGENTTYPER:
+        raise HTTPException(status_code=422, detail=f"Okänd agent: {agent}. Giltiga: {', '.join(AGENTTYPER)}.")
+    return agent
 
 
 # -- Globala agentinstruktioner ------------------------------------------
@@ -88,56 +129,68 @@ async def _dokument_ur(payload: InstruktionRequest | TenantProfilRequest) -> tup
 
 
 @router.get("/instruktioner")
-async def hamta_instruktioner(request: Request) -> dict:
+async def hamta_instruktioner(request: Request, agent: str = "alla") -> dict:
+    """Instruktionerna för `agent` ('alla' = det gemensamma lagret, 'support'
+    och 'leads' = agentens grundprompt), som agenten läser dem just nu."""
+    agent = _agent(agent)
     storage = request.app.state.storage
-    aktiv = await storage.get_global_instructions()
+    aktiv = await storage.get_global_instructions(agent)
     # `aktiv_text` är vad agenten FAKTISKT skulle läsa just nu, fil-fallbacken
     # inräknad. Utan den svarar vyn på "vad står i tabellen" när frågan är
     # "vad läser agenten", och de två är olika så länge fallbacken finns.
+    aktiv_text, _ = await _basdokument(storage, agent)
     lager = await las_instruktioner(storage)
     return {
         "instruktioner": {
+            "agent": agent,
             "ravtext": (aktiv or {}).get("ravtext", ""),
+            "feedback": (aktiv or {}).get("feedback", ""),
             "strukturerad_md": (aktiv or {}).get("strukturerad_md", ""),
             "kalla": (aktiv or {}).get("kalla", ""),
             "uppdaterad": (aktiv or {}).get("created_at"),
-            "aktiv_text": lager.global_md,
-            "fran_fil": lager.global_fran_fil,
-            "hash": lager.hash[:12],
-            "historik": await storage.list_global_instructions(limit=20),
+            "aktiv_text": aktiv_text,
+            "fran_fil": not (aktiv and (aktiv.get("strukturerad_md") or "").strip()),
+            "hash": lager.hash[:12] if agent == "alla" else "",
+            "tak": _tak(agent),
+            "historik": await storage.list_global_instructions(limit=20, agent_type=agent, med_text=True),
         }
     }
 
 
 @router.post("/instruktioner/forhandsgranska")
 async def forhandsgranska_instruktioner(request: Request, payload: InstruktionRequest) -> dict:
-    """Strukturera UTAN att spara.
+    """Baka in feedbacken UTAN att spara, och visa varje ändring med skäl.
 
     Egen endpoint och inte en flagga på PUT: den som vill se vad modellen gör
-    av sina anteckningar ska kunna göra det utan att den aktiva instruktionen
-    byts mitt under en pågående körning.
+    av sin feedback ska kunna göra det utan att den aktiva instruktionen byts
+    mitt under en pågående körning. Det dokument som visas här är det som
+    sparas, om admin godkänner det (PUT med strukturerad_md).
     """
-    resultat = await strukturera_text(payload.ravtext)
-    return {
-        "dokument": resultat.dokument,
-        "kalla": resultat.kalla,
-        "anmarkning": resultat.anmarkning,
-    }
+    agent = _agent(payload.agent)
+    bas, _ = await _basdokument(request.app.state.storage, agent)
+    feedback = payload.feedback if payload.feedback is not None else payload.ravtext
+    return (await baka_in(bas, feedback, tak=_tak(agent))).som_dict()
 
 
 @router.put("/instruktioner")
 async def spara_instruktioner(request: Request, payload: InstruktionRequest) -> dict:
     storage = request.app.state.storage
-    dokument, kalla, anmarkning = await _dokument_ur(payload)
+    agent = _agent(payload.agent)
+    bas, _ = await _basdokument(storage, agent)
+    dokument, kalla, anmarkning = await _dokument_ur(payload, bas=bas, tak=_tak(agent))
 
     rad = await storage.save_global_instructions(
-        ravtext=payload.ravtext, strukturerad_md=dokument, kalla=kalla
+        ravtext=payload.ravtext,
+        strukturerad_md=dokument,
+        kalla=kalla,
+        agent_type=agent,
+        feedback=(payload.feedback or "").strip(),
     )
     await storage.log_platform_event(
         level="info",
         source="admin.instruktioner",
-        message="Globala agentinstruktioner uppdaterade.",
-        detail={"kalla": kalla, "tecken": len(dokument)},
+        message=f"Agentinstruktioner uppdaterade ({agent}).",
+        detail={"agent": agent, "kalla": kalla, "tecken": len(dokument), "fore": len(bas)},
     )
     # Fas R2 (INV-CACHE-001): globala instruktioner gäller för ALLA tenants
     # på en gång (se app/agentcore/instruktioner.py) — bumpa den GLOBALA
@@ -149,11 +202,44 @@ async def spara_instruktioner(request: Request, payload: InstruktionRequest) -> 
     return {
         "instruktioner": {
             "id": rad["id"],
+            "agent": agent,
             "kalla": kalla,
             "strukturerad_md": dokument,
             "anmarkning": anmarkning,
         }
     }
+
+
+@router.post("/instruktioner/{instruktion_id}/aterstall")
+async def aterstall_instruktioner(request: Request, instruktion_id: str) -> dict:
+    """Gör en tidigare version aktiv igen, som en ny rad (kalla='aterstalld').
+
+    En ny rad i stället för att flytta `aktiv`: historiken ska visa att en
+    återställning skett och när, och en körning som läste den mellanliggande
+    versionen ska fortfarande gå att spåra (INV-AUDIT-001)."""
+    kraev_uuid(instruktion_id, "Versionen")
+    storage = request.app.state.storage
+    gammal = await storage.get_global_instruction(instruktion_id)
+    if not gammal:
+        raise HTTPException(status_code=404, detail="Versionen finns inte.")
+    agent = gammal.get("agent_type") or "alla"
+    rad = await storage.save_global_instructions(
+        ravtext=gammal.get("ravtext") or "",
+        strukturerad_md=gammal.get("strukturerad_md") or "",
+        kalla="aterstalld",
+        agent_type=agent,
+        feedback=f"Återställd version från {gammal.get('created_at')}",
+    )
+    await storage.log_platform_event(
+        level="info",
+        source="admin.instruktioner",
+        message=f"Agentinstruktioner återställda ({agent}).",
+        detail={"agent": agent, "fran": instruktion_id},
+    )
+    from ..cache import versioner
+
+    await versioner.bumpa_config_global()
+    return {"instruktioner": {"id": rad["id"], "agent": agent, "kalla": "aterstalld"}}
 
 
 # -- Kundprofilen: allt som styr EN kunds agent, på ett ställe -------------
@@ -232,7 +318,12 @@ async def spara_profil(request: Request, tenant_id: str, payload: TenantProfilRe
     anmarkning = ""
 
     if payload.instruktioner_rav is not None or payload.instruktioner_md is not None:
-        dokument, _kalla, anmarkning = await _dokument_ur(payload)
+        # Kundens instruktion bakas in i den som redan gäller, samma väg som
+        # det globala lagret: en ny anteckning ska inte radera de gamla.
+        befintlig = (await storage.get_agent_config(tenant_id, agent_type=payload.agent_type)).get(
+            "instructions_md"
+        ) or ""
+        dokument, _kalla, anmarkning = await _dokument_ur(payload, bas=befintlig, tak=MAX_TECKEN)
         await storage.set_agent_instructions(
             tenant_id,
             agent_type=payload.agent_type,
@@ -371,3 +462,45 @@ async def satt_tenant_status(
         detail={"status": payload.status, "orsak": payload.orsak or ""},
     )
     return {"tenant": tenant}
+
+
+@router.post("/kb/badda-in")
+async def badda_in_kb(request: Request, apply: bool = False, tenant_id: str | None = None) -> dict:
+    """Bäddar in kunskapsartiklar som saknar vektor, för alla kunder eller en.
+
+    Artiklarna som sparades medan inbäddningarna var trasiga (2026-09-12 till
+    2026-10-06) söks bara med fulltext, och hybridsökningens vektorgren är tom
+    för dem. `apply=False` räknar bara. Högst 50 artiklar per kund och anrop:
+    kör om tills `kvar` är 0. Artikeltexten skrivs aldrig om, bara vektorn."""
+    from ..agent.embeddings import embed_text
+    from ..cache import versioner
+
+    storage = request.app.state.storage
+    if tenant_id:
+        kraev_uuid(tenant_id, "Kunden")
+        tenants = [{"id": tenant_id}]
+    else:
+        tenants = await storage.list_tenants()
+    per_kund = []
+    for t in tenants:
+        tid = str(t["id"])
+        utan = await storage.kb_utan_vektor(tid)
+        inbaddade = 0
+        if apply:
+            for a in utan:
+                vektor = await embed_text(f"{a['title']}\n{a['content']}")
+                if vektor is None:
+                    break  # inbäddningarna svarar inte: samma fel för resten
+                await storage.satt_kb_vektor(tid, a["id"], vektor)
+                inbaddade += 1
+            if inbaddade:
+                await versioner.bumpa_kb(tid)
+        if utan:
+            kvar = len(await storage.kb_utan_vektor(tid)) if inbaddade else len(utan) - inbaddade
+            per_kund.append({"tenant_id": tid, "utan_vektor": len(utan), "inbaddade": inbaddade, "kvar": kvar})
+    if apply:
+        await storage.log_platform_event(
+            level="info", source="admin.kb", message="Kunskapsartiklar inbäddade på nytt.",
+            detail={"kunder": per_kund},
+        )
+    return {"apply": apply, "kunder": per_kund, "kvar": sum(k["kvar"] for k in per_kund)}

@@ -1,5 +1,174 @@
 # Snipra Status
 
+## 2026-10-15 – 10-17 — Anton (med Claude) — utkasten på Christoffer-nivån med gemini-2.5-pro, allabolag som register, 200 leads i kön
+
+Antons granskning 10-15 ("med er/ert/era", uppräknad verksamhet, bolagsnamn i ämnesraden, "Hej Delsbo,")
+blev regler: ingången tar bolagets eget löfte och ställer det mot momentet produkten löser (Båtladan/
+Christoffer är förebilden), ämnesraden bär aldrig bolagsnamn eller produkt, och stilgrinden körs nu även
+efter humanizern (högst två varv) och fäller mallorden ur 189 utkast. Utkast- och humanizerstegen kör
+`gemini-2.5-pro` i `europe-west1` i development (`LEADS_DRAFT_MODEL`/`LEADS_HUMANIZER_MODEL`, ~4× flash,
+5–8 min per utkast); main har inte fått bytet. Tilltalet avgörs i kod före modellen: styrkt förnamn ger
+du-form rakt igenom, osäkra namn ger "Hej," och ni-form. Registret hämtas från allabolag.se direkt
+(`sources/allabolag.py`, `LEADS_REGISTER`) eftersom ScrapeGraph-krediten är slut och merinfo blockerar;
+körningen granskar upp till 12 bolag per lead, slutar först efter fyra tomma rundor och räknar ett lead som
+levererat först när utkastet står i kön. Iris kräver webbplats, och kedjans hemsida (giganten.se, elon.se)
+räknas inte som bolagets. Bortval står sig 30 dagar. Nattens körningar gav 200 kompletta leads (100
+Norrland, 100 Göteborg/Mölndal), alla nivå A med utkast i Snajps granskningskö; 0 ämnesrader med
+bolagsnamn, 22 med kvarvarande stilfynd. Nivån låst 10-17 i `docs/UTKASTKEDJAN-REFERENS-2026-10-16.md`
+(INV-LEADS-UTKAST-002, sju facitutkast) — läs den först för varje fråga om utkast. Release-PR #31
+(development → main) öppen. **Kvar:** "Skapa om bara utkast" utan ny research (23 av 104 föll till nivå C
+när de skrevs om); fler ingångsvarianter för Iris egna mejl; Antons beslut om koncernbolag med få anställda
+(Kappahl, Continental Däck) och om Gemini 3 på global endpoint (dataskydd); prisförfrågan till allabolag.
+Beslut: `docs/BESLUT.md` (10-15, 10-16, 10-17).
+
+## 2026-10-12 — Claude — utkastkedjan skriver referensutkastet på första försöket; 92 av 100 Snajp-leads omkörda
+
+Antons genomgång av AI-knapparnas kedja (Fiskebäck, Härlanda) blev regler i kod: ingången bygger på en
+egenskap ur bolagets egna ord (aldrig antal anställda eller "För företag som ert …"), erbjudandet står
+kvar, handlingen sist, och varje mejl får en tilldelad ingångsform. En stilgrind före humanizern skriver om
+en gång när något fälls. De 73 gamla godkända utkasten avbröts och 92 av 100 leads har nya utkast i
+granskningskön (inget skickat). Två fel rättades på vägen: profilen hade kompilerats om till tre
+produktbundna måste-kriterier (gäller nu bara den valda produkten), och produkten härleds ur ett uppfyllt
+kriterium. Tillbaka till Iris skriver inte om automatiskt; alla listtak borta. Pushat till development
+(`dc8e3d3`). Förmiddagen: Anton såg "som ni gör"/"som ert" kvar i nästan alla ingångar; grinden fäller nu
+etiketterna och allmänna ingångar, och kedjan skriver om ingången i andra person ur citaten i ett eget steg
+(`dda1531`). Alla 100 omkörda: 20 hade redan godkänts och skickats 08:34, 76 av 80 har nya utkast utan
+etiketter, 4 faller på hårda kriterier. **Kvar:** Anton granskar de 76; fyra leads (DS Flexhal, Nyströms
+Byggtjänst, Z Marktjänst, SafeTeam) faller på profilens hårda kriterier; `LEADS_DAILY_TOKEN_BUDGET` i
+development står på 48 M tills Anton återställer.
+Handoff: `HANDOFF-2026-10-12-UTKASTKEDJAN.md`. Logg: `session-logs/2026-10-12-session-log.md`.
+
+## 2026-10-10 (2) — Claude — parallella körningar, hitta.se-kontakt, listverktyg, kö, autopilot
+
+Parallella körningar delar inte längre bolag; hitta.se slås upp på org.nr och ger kontakt till Norrtech,
+Örnbergs och Devoted Intelligence; listorna har detaljvy, utkast och Processa om med förlopp (migration 110,
+torrkörd, inte körd); kön kan skicka nu eller omplanera; autopiloten (10 leads/vardag, av tills
+`LEADS_AUTOPILOT=1`) är byggd. 3161 tester gröna. **Ocommittat.** **Kvar:** Anton frigör disk (C: gick till 0),
+svarar på commit/migration/push, hitta.se-nummer utan VD, sändfönster för Skicka nu och autopilot i main;
+visuell granskning. Handoff: `HANDOFF-2026-10-10-PARALLELL-KATALOG-AUTOPILOT.md`.
+
+## 2026-10-09 — Claude — körningar på 30–50 leads, skicka alla, provmejl, snabbare flikbyten (handoff)
+
+Tre sessioner under dagen, 35 commits på development (`5e189b7` … `d9028d6`), allt driftsatt.
+Markera alla → skicka fungerar även för stoppade utkast. Org.nr hämtas vid körningen från sajten
+och merinfo (ny merinfo-användning som Anton bör godkänna). Körningar på 30–50 leads når målet:
+10 av 10 på 7:08 i stället för 15:44. Utkasten håller bättre kvalitet, provmejl skickar med
+signatur och logga, och flikbyten tar 0,15–0,6 s. **Kritiskt:** 73 godkända utkast köade till
+måndag 08:00; Snajps org.nr och adress saknas i Kunder & Data, annars stoppas alla av regel 1.
+Handoff: `HANDOFF-2026-10-09-SKALA-UTSKICK-SNABBHET.md`. Logg: `session-logs/2026-10-09-session-log.md`.
+
+## 2026-10-08 (2) — Claude — Iris live, rangpoäng, sökning som hittar, Leads-översikten genom fyra kritiker
+
+Iris-leads visas live: bolag under research står i Research pågår (härlett ur jobbliggaren) och landar i
+Ny, "Alla" sorteras på en rangpoäng som skiljer leadsen åt (46–78 i stället för 100 på alla). Körningar med
+generell målgrupp ("B2B", felstavade orter) hittar bolag igen (bred registersökning, ortstolkning,
+`inga_traffar`). Leads-översikten: listan och utkasten först, diagrammen på Aktivitet under Iris, utkast som
+läses och godkänns/avvisas per lead, markera alla och en bekräftelse på sidan för varje massåtgärd. Impeccable
+26 → 24 → 24 → 26. Pushat till development (`ee82a15`). **Kvar:** kritik 5; prova bekräftelserna inloggat;
+Antons release till main och därefter `flytta_redo_till_ny.py` + `omrakna_rangpoang.py` mot main.
+Logg: `session-logs/2026-10-08-session-log-2.md`.
+
+## 2026-10-08 — Claude — CRM-flödet: Översikt, utkast som stämmer, massåtgärder, kontaktsökning, Samtal
+
+Antons beställning 2026-10-07 är byggd och pushad till development (`ed31791`, migration 107 körd där).
+Översikt visar det som var Aktivitet, adminens heter Admin-översikt. Utkast att godkänna/Skickade stod på 0
+för att 26 godkända utkast väntade på sändfönstret och inget mejl gått ut på 28 dygn — nu visar varje lead
+utkastets riktiga status och nyckeltalen räknas ur samma källa som Skickat. Iris-listan har massåtgärder
+(skapa, skapa om, skicka, arkivera, ta bort, flytta till main) och visar bara leads före utskick; skickade
+bor i Inkorg › Skickat och flyttar mellan filtren när prospektet svarar. Uppföljningar skrivs som utkast
+till granskning. Kontaktsökningen hittar adresser den missade (w-domäner, VD-telefon som avbröt, Om
+oss-länkar, skyddade adresser, gissade kontaktsidor, eget sidtak) och fördelar till Iris, ringlista, ej
+kvalificerade eller prövas om (regel 12–17). Leads › Samtal har återkopplingen och ringlistan med utfall
+som verkställs. Listor går att ta bort och (admin) kopiera/flytta till annan kund. Därtill (natten): ett bolag på ett ställe (dubblettgrind i create_prospect), Processa om på listor,
+ta bort/kopiera listor mellan kunder, webbplatsbedömningen hemlig (regel). Pushat `e816bd8` ihop med
+webbpoolen (andra sessionen), migration 107 + 108 körda i development. **Kvar:** Processa om på de
+gamla listorna; skarp körning N=5; Antons release till main. Handoff: `HANDOFF-2026-10-08-CRM-FLODE.md`.
+
+## 2026-10-06 (4) — Claude — bara leads som uppfyller kraven, insyn, kundens yta, dubblettspärr
+
+Iris visar bara leads som uppfyller kraven (varje nej eller ostyrkt måste-krav ger nivå C, och nivå C når
+aldrig listan) och nyaste överst. Planens fas 7 (Admin › Kund › Underlag och flöde), fas 8 (kundens
+produkter, segment och egna önskemål per agent), fas 9 (KB-omindexering, kalibrering mot kundens utslag)
+och skillmätningen (variant (c) kvar; tilltal och mallfält rättade i grinden) är byggda och pushade till
+development, liksom en sista dubblettkontroll mellan Iris och listorna. Migration 099 körd i development.
+**Klart 2026-10-06 (logg -5):** nio bolag raderade, instruktionerna återställda till filen, 101/102 körda i development. **Kvar för Anton:**
+ja till 096–102 mot main, beslut om
+gallringsperiod för spårets fulltext. Handoff: `HANDOFF-2026-10-06-KVALITET-INSYN-KUNDYTA.md`. Logg:
+`session-logs/2026-10-06-session-log-4.md`.
+
+## 2026-10-06 (3) — Claude/Sebbe — varje Iris-lead måste kunna köpa kundens produkt
+
+Iris bedömer nu varje bolag på produktmatchningen `kp`: bara ett belagt behov
+av det kunden säljer blir ett lead, och har kunden en produktlista måste Iris
+välja en av produkterna (`aa02fc2`, ovanpå Antons `30cd4de` som redan gav
+nyaste överst och dolda bortvalda). Sparade leads kan bedömas om med
+`scripts/ombedom_leads.py` (`63b9cf1`, `038541d`); körd i development: 51
+leads, kvar synliga Snajp 3 och Alunix 0, 21 föll utan bedömning för att
+ScrapeGraph-krediten är slut. **Kvar:** Antons migrationer 096–099 mot main
+(torrkörda) och merge av PR #31; påfylld ScrapeGraph, sedan
+`ombedom_leads.py --env development --utan-underlag --apply`. Logg:
+`session-logs/2026-10-06-session-log-3.md`.
+
+## 2026-10-06 — Claude — Iris: inga påhittade bolag, bara privata bolag, utkast till VD, instruktioner per agent
+
+Antons fynd från provkörningen 2026-10-05 är rättade i kod på `development`
+(sju commits, **opushade**): existensgrind och inget utkast utan hämtat
+underlag (INV-LEADS-EXIST-001), bara privata bolag och målgrupp krävs, utkast
+bara till VD med verifierade citat och vald produkt, påhittade kundexempel
+fälls, Iris egen grundprompt, instruktioner per agent där feedback bakas in
+(migration 099, **ej körd**), produkter och segment per kund, inbäddningar via
+Vertex. **Development kör fortfarande på mallens fem rader som globala
+instruktioner.** Kvar för Anton: push, migration 099 i båda miljöerna,
+återställning av instruktionerna. Adminvyn ej visuellt kontrollerad (minne).
+Handoff: `HANDOFF-2026-10-06-IRIS-SANNING-INSTRUKTIONER.md`. Logg:
+`session-logs/2026-10-06-session-log.md`.
+
+## 2026-10-05 (kväll) — Claude — körningar går att pausa/avbryta och överlever deploy
+
+Paus/återuppta/avbryt i Körningar; städaren, hjärtslaget, idempotent rapport och väckning gör körningar deploysäkra; flera körningar kan startas. development = `266aeca`, ingår i #31. Handoff: `HANDOFF-2026-10-05-IRIS-KOSTNAD-YTOR.md` § 6. Logg: `session-logs/2026-10-05-session-log-2.md`.
+## 2026-10-06 — Claude — Iris och listorna delar aldrig bolag, CRM-kundlistor kan laddas upp
+
+Listbygget uteslöt ingenting, så samma bolag kunde bli både Iris-lead och
+listrad. Nu bildar Iris-prospekt, rader i varje lista och kundens CRM-kunder en
+gemensam uteslutningsmängd (`snajp-support/app/leads/upptagna.py`, orgnr eller
+namn utan bolagsform) som Iris-sökningen, listbygget och listspåret läser.
+Kunder och Snajp-admin (i kundens vy) laddar upp sin befintliga CRM-kundlista i
+Leads › Listor, med länk från översiktens Pipeline; den sparas som
+`kalla='crm'` (migration 098) och prospekteras aldrig. Commit `b57316f` på
+development, 098 körd där, backend 2668 gröna. **Kvar: Antons ja till
+migrationerna 096–098 mot main (torrkörda, exakt de tre), sedan hans merge av
+PR #31; prov av uppladdningen med syntetisk CSV; Sebbes besked om listorna bara
+ska ta Iris-underkända bolag.** Plan: `plans/2026-10-06-listor-crm-separation.md`.
+Logg: `session-logs/2026-10-06-session-log.md`.
+
+## 2026-10-05 — Claude — Iris billigare och skarpare, inkorgen sorterar rätt, Leads/Att göra/Översikt omgjorda, flytt till main lagad
+
+Antons sju problem från provet 2026-10-04 är lösta och driftsatta på development
+(`357f637`): utskick sorteras bort före Jev med Kundtjänst › Dolda; ScrapeGraph-
+anropen begränsade (cache per kund, gratis först, kredittak; N=5 ≤ 20 i test);
+webbkriterierna avgörs i kod ur PageSpeed + bildbedömning, kalibrerad skarpt mot
+Antons facit; bolag utan sajt går till listspåret; Leads har underflikarna
+Leads/Inkorg/Utkast/Listor/Körningar och en tabell i full bredd; Att göra är en
+kö; Översikten är en dashboard. Flytta till main lagad (spegelmarkören dold av
+radnivåsäkerhet, bedömningen föll bort). Migration 092–095 körda mot båda
+miljöerna. **Kvar: Antons merge av PR #31, ScrapeGraph-påfyllning, PageSpeed-
+nyckel, Firecrawl-konto (fas 7).** Handoff: `HANDOFF-2026-10-05-IRIS-KOSTNAD-YTOR.md`.
+Logg: `session-logs/2026-10-05-session-log.md`.
+
+## 2026-10-04 — Claude — Snajp Suite + design klara, Jev i alla inkorgar, Antons leadsregler, release-PR #30 bedömd
+
+Snajp Suite fas 1–3 och designpasset är byggda (meny Översikt/Att göra/Leads/
+Kundtjänst/Aktivitet, adminen som Översikt/Kunder/Logg). Provsortera i
+inkorgen, Jev i drift för alla inkorgar bakom egen brytare `INKORG_JEV=auto`
+(development driftsatt, main verkar efter mergen) och utan adresser i anropet.
+Antons leadsregler (registret är filter, Jev först, bara VD med styrkt kontakt,
+Iris via webbplatsen) står i CLAUDE.md/AGENTS.md och i koden; provet på Alunix
+gav 1 Iris-lead och 0 listrader — reglerna fungerar, volymen är låg. Sebbes
+arbete granskat: en krock (Skickat-kopian) rättad. **Före Antons merge av PR #30:
+migration 090/091 mot main (hans ord) och en Ej relaterat-vy i inkorgen (annars
+kan kundärenden försvinna tyst).** ScrapeGraph-krediten är slut. Handoff:
+`HANDOFF-2026-10-04-SUITE-JEV-MERINFO.md`. Logg: `session-logs/2026-10-04-session-log.md`.
+
 ## 2026-10-02 (session 4) — Claude — driftsatt: development live, main migrerad till 087, adminytan i main lagad
 
 Anton körde push, `LEADS_MERINFO=scrapegraph` och migrationerna 082–086

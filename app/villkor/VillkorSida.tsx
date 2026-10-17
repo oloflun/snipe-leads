@@ -43,6 +43,12 @@ const T = {
     sv: "Utgående mejl från leadsagenten skickas i Kundens namn. Snajp kontrollerar i kod att varje utskick bär Kundens fullständiga företagsnamn, organisationsnummer, postadress och en fungerande avregistreringslänk, och blockerar utskick som saknar något av det. Kunden ansvarar för att de uppgifter vi identifierar Kunden med är korrekta.",
     en: "Outbound emails from the leads agent are sent in the Customer's name. Snajp checks in code that every email carries the Customer's full company name, company registration number, postal address and a working unsubscribe link, and blocks any email that lacks one of these. The Customer is responsible for the details we identify the Customer by being correct."
   },
+  // Preliminär lydelse 2026-10-08 (Antons godkännande), ej juridiskt granskad:
+  // webbpoolen, app/leads/webbpool.py och INV-SEC-008.
+  bolagsdata: {
+    sv: "Offentliga uppgifter om bolag (namn, organisationsnummer, webbplats, ort, län och bransch) och Snajps egen bedömning av ett bolags publika webbplats är inte Kundens data. Snajp får använda dem för egna ändamål, även i tjänster till andra kunder. Det gäller aldrig personuppgifter, Kundens utkast, anteckningar eller status, och aldrig uppgiften om att just Kunden har bearbetat ett visst bolag.",
+    en: "Public information about companies (name, company registration number, website, town, county and industry) and Snajp's own assessment of a company's public website is not Customer data. Snajp may use it for its own purposes, including in services to other customers. This never covers personal data, the Customer's drafts, notes or status, nor the fact that the Customer in particular has worked with a given company."
+  },
   pub: { sv: "Personuppgiftsbehandling", en: "Processing of personal data" },
   pubText: {
     sv: "I den mån Snajp behandlar personuppgifter för Kundens räkning gäller det separata personuppgiftsbiträdesavtalet, som är en integrerad del av detta avtal. Där framgår också vilka underleverantörer som anlitas. Snajps behandling som personuppgiftsansvarig beskrivs i",
@@ -60,6 +66,12 @@ const T = {
     en: ", but payment terms, indexation and what applies in case of non-payment are not governed here. Write to us at"
   },
   innanAvtal: { sv: "innan avtal tecknas.", en: "before entering into a contract." },
+  // Antons beslut 2026-10-10: garantiernas och pilotens siffror i utskicken är
+  // uppskattningar tills vi har egna mätdata, och det står här, inte i mejlen.
+  erbjudandenFinstilt: {
+    sv: "Erbjudanden i våra utskick: siffrorna i garantierna (till exempel tid som sparas eller antal nya kunddialoger) är Snajps egna uppskattningar och inte uppmätta resultat. Därför är garantin utformad som en förlängd provperiod utan kostnad om resultatet inte nås, förutsatt att Kunden använt tjänsten som avsett. Pilotrabatter gäller de företag som antagits till piloten och så länge villkoren i pilotavtalet uppfylls.",
+    en: "Offers in our outreach: the figures in our guarantees (for example time saved or number of new customer conversations) are Snajp's own estimates, not measured results. That is why the guarantee takes the form of a free extension of the trial period if the result is not reached, provided the Customer has used the service as intended. Pilot discounts apply to companies admitted to the pilot and for as long as the terms of the pilot agreement are met."
+  },
   ansvarsbegransning: { sv: "Ansvarsbegränsning", en: "Limitation of liability" },
   ansvarsbegransningText: {
     sv: "Det här avsnittet är inte fastställt. Klausulen avgör vad ett fel kostar, och vi skriver den inte själva — den ska formuleras av jurist. Tills dess finns ingen avtalad ansvarsbegränsning. Skriv till oss på",
@@ -111,6 +123,7 @@ export function VillkorSida() {
         <strong>{text(T.autonomiRubrik)}</strong> {text(T.autonomi)}
       </p>
       <p>{text(T.utskick)}</p>
+      <p>{text(T.bolagsdata)}</p>
 
       <h2>{text(T.pub)}</h2>
       <p>
@@ -121,6 +134,9 @@ export function VillkorSida() {
       <p>
         {text(T.pris1)} <Link href="/#priser">{text(T.prislistan)}</Link>
         {text(T.pris2)} {mejl} {text(T.innanAvtal)}
+      </p>
+      <p>
+        <small>{text(T.erbjudandenFinstilt)}</small>
       </p>
 
       <h2>{text(T.ansvarsbegransning)}</h2>

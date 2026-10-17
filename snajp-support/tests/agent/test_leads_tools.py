@@ -154,3 +154,41 @@ async def test_queue_outreach_draft_flaggad_text_tvingar_granskning():
     queued = storage.send_queue[TENANT][0]
     assert queued["status"] == "awaiting_review"
     assert "textkvalitet" in result
+
+
+async def _koa(ctx, text: str) -> str:
+    return await _queue_outreach_draft_impl(
+        ctx, subject="Ämne", body=f"Hej! {text}", language_state="sv",
+        humanizer_variant="snajp:humanizer-svenska",
+    )
+
+
+@pytest.mark.anyio
+async def test_ett_nytt_utkast_ersatter_ett_ogranskat_i_samma_trad():
+    """Två jobb för samma lead gav två väntande utkast i en tråd
+    (development 2026-10-08). Det nya ersätter det ogranskade."""
+    storage = MemoryStorage()
+    ctx = OutreachContext(storage=storage, tenant_id=TENANT, thread_id="thread-1", prospect_email="p@example.se")
+    await _koa(ctx, "Första.")
+    await _koa(ctx, "Andra.")
+    poster = storage.send_queue[TENANT]
+    assert [p["status"] for p in poster] == ["cancelled", "awaiting_review"]
+    pending = await storage.get_pending_outreach_message(TENANT, "thread-1")
+    assert "Andra." in pending["body"]
+
+
+@pytest.mark.anyio
+async def test_ett_godkant_utkast_ersatts_aldrig_av_ett_nytt():
+    """Sändaren tar trådens senaste osända text: ett nytt utkast efter ett
+    godkännande hade gått ut i stället för det granskaren sa ja till."""
+    storage = MemoryStorage()
+    ctx = OutreachContext(storage=storage, tenant_id=TENANT, thread_id="thread-1", prospect_email="p@example.se")
+    await _koa(ctx, "Godkänd text.")
+    post = storage.send_queue[TENANT][0]
+    post["status"] = "queued"
+    post["gate_checks"] = {"approved_by": "human"}
+    svar = await _koa(ctx, "Ny text.")
+    assert '"queued": false' in svar
+    assert len(storage.send_queue[TENANT]) == 1 and post["status"] == "queued"
+    pending = await storage.get_pending_outreach_message(TENANT, "thread-1")
+    assert "Godkänd text." in pending["body"]

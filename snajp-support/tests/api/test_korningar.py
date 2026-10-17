@@ -53,3 +53,32 @@ async def test_korningslistan_och_en_korning():
             assert (await client.get("/api/leads/korningar/k-9", headers=DEMO)).status_code == 404
             assert (await client.get("/api/leads/korningar/finns-inte", headers=DEMO)).status_code == 404
             assert (await client.get("/api/leads/korningar")).status_code in (401, 403)
+
+
+@pytest.mark.anyio
+async def test_motorns_arbetsminne_och_webbpoolen_lamnar_aldrig_api_t():
+    """`webbpool` bär länfördelningen till webbyråerna — hemlig för alla utom
+    plattformsadmin och webbyråkunderna (CLAUDE.md, 2026-10-08). Den, listspåret
+    och utslagen är motorns arbetsminne; ingen vy läser dem, och de var 80 % av
+    körningslistans 640 KB (uppmätt 2026-10-10)."""
+    async with app.router.lifespan_context(app):
+        await app.state.storage.set_leads_job_status(
+            DEFAULT_TENANT_ID, job_id="k-wp", status="processing", scope="batch",
+            korning={
+                "mal": 2, "levererade": 0, "undersokta": 0, "pagaende": 0, "klar": False,
+                "tratt": [], "jobs": [], "kandidater": [{"company_name": "A"}],
+                "webbpool": {"a.se": {"doman": "a.se", "lan": "hallands-lan"}},
+                "listspar": [{"company_name": "B", "contact_phone": "070"}],
+                "utslag": [{"namn": "C", "utslag": "miss"}],
+                "rapporterade": ["x"],
+            },
+        )
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            lista = (await client.get("/api/leads/korningar", headers=DEMO)).json()["korningar"]
+            en = (await client.get("/api/leads/korningar/k-wp", headers=DEMO)).json()
+
+    rad = next(r for r in lista if r["job_id"] == "k-wp")
+    for korning in (rad["korning"], en["korning"]):
+        for falt in ("kandidater", "webbpool", "listspar", "utslag", "rapporterade"):
+            assert falt not in korning, falt
+        assert korning["mal"] == 2 and korning["tratt"] == [] and korning["jobs"] == []

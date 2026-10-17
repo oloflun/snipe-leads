@@ -45,6 +45,22 @@ def _decode_header(value: str | None) -> str:
     return "".join(parts)
 
 
+#: Headers som bara automatiska utskick sätter (RFC 3834, RFC 2369, de facto
+#: Precedence). Ett mejl med någon av dem skickades av en maskin till en lista.
+_LISTHEADERS = ("List-Unsubscribe", "List-Id", "List-Post", "X-Auto-Response-Suppress")
+
+
+def ar_automatutskick(message: email.message.Message) -> bool:
+    """Nyhetsbrev, notiser och autosvar enligt headers — billigast och säkrast
+    möjliga signal, före varje modell. Ett mänskligt svar bär ingen av dem."""
+    if any(message.get(h) for h in _LISTHEADERS):
+        return True
+    auto = str(message.get("Auto-Submitted") or "").strip().lower()
+    if auto and auto != "no":
+        return True
+    return str(message.get("Precedence") or "").strip().lower() in ("bulk", "list", "junk")
+
+
 def _extract_body_text(message: email.message.Message) -> str:
     if message.is_multipart():
         for part in message.walk():
@@ -178,6 +194,7 @@ def _fetch_sync(
                     received_at=received,
                     attachments=_extract_attachments(message),
                     imap_uid=msg_uid.decode(),
+                    automatutskick=ar_automatutskick(message),
                 )
             )
     finally:

@@ -12,6 +12,7 @@ Varje steg loggas i ss_decision_log med motivering.
 """
 
 import logging
+import re
 from typing import Any
 
 from ..avtalsgrind import avtal_saknas
@@ -108,7 +109,7 @@ _ESCALATION_BODY = (
     "Tack för ditt meddelande. Jag förstår att det här är viktigt, och den här typen "
     "av ärende hanteras alltid av en av våra medarbetare. Ärendet har fått hög "
     "prioritet och all information är vidarebefordrad — du får svar från vår "
-    "kundtjänst så snart som möjligt, senast inom en vardag."
+    "kundtjänst så snart som möjligt."
 )
 
 _NO_MATCH_BODY = (
@@ -134,12 +135,111 @@ def _sim_confidence(category: str, articles: list[dict[str, Any]]) -> float:
     return 0.9 if articles else 0.55
 
 
+#: En fråga i mejlets brödtext: en mening som slutar på "?", eller en
+#: numrerad/punktad rad. Korta fragment ("ok?") är inte sökbara frågor.
+_FRAGA = re.compile(r"[^.!?\n]*\?")
+_LISTRAD = re.compile(r"(?m)^\s*(?:\d{1,2}[.)]|[-•*])\s+(.+)$")
+
+
+def _fragor_i(text: str, tak: int = 5) -> list[str]:
+    """Mejlets frågor, var för sig, i den ordning de står."""
+    kandidater = [m.group(1) for m in _LISTRAD.finditer(text or "")]
+    kandidater += [m.group(0) for m in _FRAGA.finditer(text or "")]
+    ut: list[str] = []
+    for k in kandidater:
+        k = " ".join(k.split()).strip(" -•*")
+        if len(k) >= 12 and k.casefold() not in {u.casefold() for u in ut}:
+            ut.append(k)
+    return ut[:tak]
+
+
+def _nyckel(artikel: dict[str, Any]) -> str:
+    return str(artikel.get("id") or artikel.get("title") or "")
+
+
+async def _bred_sokning(
+    storage: Storage, tenant_id: str, artiklar: list[dict[str, Any]], fragor: list[str]
+) -> list[dict[str, Any]]:
+    """`artiklar` plus de bästa NYA träffarna för varje fråga, i frågornas
+    ordning: högst två per fråga och högst KB_TAK + 2 totalt. Varje fråga får
+    alltså sin egen plats i underlaget — förut fyllde hela mejlet och
+    ämnesraden platserna innan frågorna ens söktes (dev-testet 2026-10-06:
+    Gmail-frågan kom aldrig fram). Fulltext utan embedding: varje embedding
+    är ett API-anrop, och sökningen på hela mejlet har redan den semantiska
+    vägen."""
+    from ..agent.support_agent import KB_TAK
+
+    tak = KB_TAK + 2
+    per_fraga: list[list[dict[str, Any]]] = []
+    for fraga in fragor:
+        fraga = (fraga or "").strip()
+        if not fraga:
+            continue
+        try:
+            per_fraga.append(await storage.search_kb(tenant_id, fraga, embedding=None))
+        except Exception:  # noqa: BLE001 — en extra sökning får aldrig fälla mejlet
+            logger.exception("Bredare KB-sökning misslyckades (tenant %s).", tenant_id)
+
+    # Ordningen avgör vad som viker när taket nås — och omkörningen vid miss
+    # ersätter listans SISTA artiklar. Därför: hela mejlets bästa träff,
+    # sedan varje frågas bästa, sedan varje frågas andra, och hela mejlets
+    # övriga sist. Dev-testet 2026-10-06 tappade Gmail-frågans artikel just
+    # för att frågornas träffar låg sist och ersattes.
+    ut: list[dict[str, Any]] = []
+    sedda: set[str] = set()
+
+    def _lagg_till(artikel: dict[str, Any]) -> None:
+        if _nyckel(artikel) not in sedda:
+            sedda.add(_nyckel(artikel))
+            ut.append(artikel)
+
+    for artikel in artiklar[:1]:
+        _lagg_till(artikel)
+    for _ in range(2):  # första varvet: varje frågas bästa; andra: näst bästa
+        for traffar in per_fraga:
+            nya = [a for a in traffar if _nyckel(a) not in sedda]
+            if nya:
+                _lagg_till(nya[0])
+    for artikel in artiklar[1:]:
+        _lagg_till(artikel)
+    return ut[:tak]
+
+
+async def _faktakontroll(
+    storage: Storage,
+    tenant_id: str,
+    utkast: str,
+    *,
+    articles: list[dict[str, Any]],
+    email: dict[str, Any],
+    profil: str,
+    avsandare: str,
+):
+    """support_faktagrind på mejlutkastet, på kundens valda nivå. Underlaget
+    är kunskapsbasens träffar, kundens eget mejl och avsändarprofilen
+    (bolagsuppgifterna hör hemma i ett kostnadsförslag)."""
+    from ..agent import support_faktagrind, support_regler
+
+    try:
+        niva = support_regler.normalisera(
+            await storage.get_agent_settings(tenant_id, agent_type="support")
+        )["faktakontroll"]
+    except Exception:  # noqa: BLE001 — standardnivån hellre än ingen kontroll
+        niva = "forsiktig"
+    kallor = [f"{a.get('title') or ''}\n{a.get('content') or ''}" for a in articles]
+    kallor += [email.get("subject") or "", email.get("body_text") or "", profil or ""]
+    return support_faktagrind.kontrollera(
+        utkast, niva=niva, kallor=kallor, tenant_namn=avsandare
+    )
+
+
 async def _triage_email(
     storage: Storage,
     tenant_id: str,
     email: dict[str, Any],
     image_urls: list[str],
     foretagsprofil: str = "",
+    foretagsnamn: str = "",
 ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     """Returnerar (triage-resultat med confidence/reasoning/draft_body, KB-träffar)."""
     settings = get_settings()
@@ -183,14 +283,62 @@ async def _triage_email(
 
     embedding = await embed_text(query)
     articles = await storage.search_kb(tenant_id, query, embedding=embedding)
-    result = await triage_email_llm(
-        sender=email["from_email"],
-        subject=email["subject"],
-        body=email["body_text"],
-        kb_articles=articles,
-        image_urls=image_urls,
-        foretagsprofil=foretagsprofil,
+    # Bredare sökning (2026-10-06, samma princip som chatten): i ett mejl med
+    # flera frågor dränks varje frågas ord av de andras, och sökningen gav tre
+    # träffar för hela mejlet. Dev-testet: "Hur kopplar vi in vår Gmail?"
+    # stod som fråga 2 av 3 och artikeln om arbetsytan kom aldrig med.
+    # Ämnesraden och varje fråga söks för sig, med fulltext — inga LLM-anrop.
+    articles = await _bred_sokning(
+        # Frågorna FÖRE ämnesraden: de bär det kunden faktiskt frågar om.
+        storage, tenant_id, articles, [*_fragor_i(email["body_text"]), email.get("subject") or ""]
     )
+    from ..agentcore.instruktioner import las_agent_mall
+
+    grundprompt_mall = await las_agent_mall(storage, "support") or None
+    from ..leads.onskemal import load as load_onskemal
+
+    onskemal = await load_onskemal(storage, tenant_id, "support")
+
+    async def _skriv(underlag: list[dict[str, Any]]) -> dict[str, Any]:
+        return await triage_email_llm(
+            sender=email["from_email"],
+            subject=email["subject"],
+            body=email["body_text"],
+            kb_articles=underlag,
+            image_urls=image_urls,
+            foretagsprofil=foretagsprofil,
+            foretagsnamn=foretagsnamn,
+            grundprompt_mall=grundprompt_mall,
+            onskemal=onskemal,
+        )
+
+    result = await _skriv(articles)
+    # "Researcha om så måste": frågorna modellen själv markerat som obesvarade
+    # söks för sig. Hittas artiklar som inte redan låg i underlaget skrivs
+    # utkastet om EN gång — ett extra anrop, bara på en miss, och billigare
+    # än att kunden får "det vet jag inte" på något kunskapsbasen bär.
+    obesvarade = result.get("obesvarade") or []
+    if obesvarade and not result.get("escalate"):
+        # De nya träffarna LÄGGS TILL (två platser utöver taket) i stället för
+        # att konkurrera om platserna: underlaget är ofta redan fullt, och det
+        # är just de obesvarade frågornas artiklar som saknas i det.
+        from ..agent.support_agent import KB_TAK
+
+        kanda = {_nyckel(a) for a in articles}
+        nya = [
+            a for a in await _bred_sokning(storage, tenant_id, [], obesvarade)
+            if _nyckel(a) not in kanda
+        ]
+        if nya:
+            # De nya träffarna läggs FÖRST och listan kapas bakifrån: där
+            # ligger hela mejlets allmänna träffar (se _bred_sokning), inte
+            # någon frågas egen artikel.
+            articles = [*nya[:2], *articles][: KB_TAK + 2]
+            result = await _skriv(articles)
+            result["reasoning"] = (
+                f"{result.get('reasoning') or ''} (Utkastet skrevs om efter en bredare "
+                f"sökning på: {'; '.join(obesvarade)[:200]}.)"
+            ).strip()
     result["draft_body"] = result.pop("draft_reply", None)
     result.setdefault("reasoning", "LLM-klassificering.")
     result["model"] = get_settings().model
@@ -388,7 +536,9 @@ async def process_email(
             or _STANDARD_AVSANDARE
         )
 
-        triage, articles = await _triage_email(storage, tenant_id, email, image_urls, profil)
+        triage, articles = await _triage_email(
+            storage, tenant_id, email, image_urls, profil, foretagsnamn=avsandare
+        )
         kb_sources = [
             {"title": a["title"], "similarity": a["similarity"]} for a in articles
         ]
@@ -468,6 +618,15 @@ async def process_email(
             body = _ESCALATION_BODY if must_escalate and articles else (
                 _NO_MATCH_BODY if not articles else _ESCALATION_BODY
             )
+            # Grundprompten (2026-10-05): vid DELVIS/ESKALERA skriver modellen
+            # själv svaret enligt mall 6/7 — delsvaret på det kunskapsbasen
+            # bär, och ärligt om resten. Det är bättre än den fasta texten,
+            # som dessutom inte kan svara på något alls. Den fasta texten
+            # gäller fortfarande utan KB-träffar (ingen källa = inget delsvar)
+            # och när modellen inte gav något utkast. Utkastet går ALLTID till
+            # granskning här, aldrig ut automatiskt.
+            if articles and triage.get("beslut") in ("DELVIS", "ESKALERA") and triage.get("draft_body"):
+                body = triage["draft_body"]
             content = _wrap_reply(body, email["from_name"], avsandare)
             await storage.update_ticket(
                 tenant_id, ticket["id"], status="escalated", priority="high",
@@ -495,12 +654,32 @@ async def process_email(
         kvalitet = await sakra_utgaende_text(content)
         content = kvalitet.text
 
+        # Faktagrinden, samma som chatten (2026-10-06). Mejlvägen hade ingen:
+        # dev-testet fick "inkluderar meddelanden från Facebook Messenger" i
+        # ett utkast fast ingen artikel nämner Messenger. Ett utkast som inte
+        # håller mot underlaget på kundens nivå skickas ALDRIG automatiskt —
+        # det går till granskningskön, och det ostödda står i beslutsloggen.
+        faktadom = await _faktakontroll(
+            storage, tenant_id, triage.get("draft_body") or "",
+            articles=articles, email=email, profil=profil, avsandare=avsandare,
+        )
+        if not faktadom.ok:
+            await storage.log_decision(
+                tenant_id, email_id=email_id, event="faktagrind",
+                detail={
+                    "note": "Utkastet innehåller uppgifter som inte står i underlaget — "
+                    "kräver granskning, skickas aldrig automatiskt.",
+                    "ostodda": list(faktadom.ostodda)[:10],
+                },
+            )
+
         # 4: autosvar — bara om regeln säger auto OCH säkerhetsvillkoren håller.
         auto_ok = (
             rule == "auto"
             and confidence >= settings.auto_send_min_confidence
             and (sentiment is None or sentiment >= 0.4)
             and not kvalitet.kraver_granskning
+            and faktadom.ok
         )
         if auto_ok:
             # Sändningen sker FÖRE varje statusskrivning, samma kontrakt som

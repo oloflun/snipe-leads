@@ -15,6 +15,8 @@ humanizern får inte återinföra formatering.
 
 from __future__ import annotations
 
+import re
+
 from ..agent.tools import strip_markdown
 from ..agentcore.packs import Playbook, PlaybookStep, RunLedger, check_preconditions
 
@@ -85,6 +87,36 @@ OUTREACH_V1 = Playbook(
 # utan invariantändring. Grundningscykeln (villkorad, max 1 runda) och
 # tomtext-omförsöket behålls exakt — se run_outreach_draft_v2 i
 # app/agent/leads_research_v2.py.
+#: sa:draft-outreach är skriven för amerikansk säljprospektering med verktyg
+#: kopplade. Fyra ställen gav fel effekt i ett svenskt kallmejl skrivet ur
+#: färdig research. Varje rad: (exakt text ur skillen, ersättning, skäl).
+_UTKAST_RADANDRINGAR: tuple[tuple[str, str, str], ...] = (
+    (
+        "[Desire: Brief proof point - similar company result]",
+        "[Desire: the chosen product's concrete benefit for them. Proof only if a named case is in the material.]",
+        "Bad om ett liknande bolags resultat; utan sådant i underlaget blev det "
+        "ett påhittat case (provkörningen 2026-10-05).",
+    ),
+    (
+        "as usage grows. We helped [Similar Company] cut their AI\nserving costs 40% while improving latency.",
+        "as usage grows.",
+        "Exemplets påhittade case med siffra drar modellen mot samma form.",
+    ),
+    (
+        "**Use research-prospect skill internally:**\n```\n1. Web search for company + person\n"
+        "2. If Enrichment connected: Get verified contact info, background\n"
+        "3. If CRM connected: Check for prior relationship\n```",
+        "**The research is already done.** The research section of the case is the only source "
+        "about the recipient. Do not search or assume anything beyond it.",
+        "Steget har ingen sökning eller CRM; instruktionen fick modellen att fylla luckor själv.",
+    ),
+    (
+        "- Case study from a similar company\n",
+        "",
+        "Stilguidens exempellista erbjöd ett case från ett liknande bolag.",
+    ),
+)
+
 OUTREACH_V2 = Playbook(
     name="leads/outreach-v2",
     steps=(
@@ -137,14 +169,23 @@ OUTREACH_V2 = Playbook(
                 "Check, What to Avoid) — resten är metodik för kampanjer och "
                 "uppföljningssekvenser som steget inte utför."
             ),
+            # 2026-10-06: kallmejlsmallen "Cold Outreach (No Prior Relationship)"
+            # är borttagen ur skopan. Den bar raden "[Brief proof: We helped
+            # [Similar Company] achieve [Result]]" och gav ett påhittat case
+            # i ett skarpt utkast (provkörningen 2026-10-05). Strukturen kommer
+            # i stället ur grundmallen i Iris grundprompt, och två mallar i
+            # samma prompt konkurrerar om formen.
             scope=(
                 "§ Execution Flow",
-                "§ Cold Outreach (No Prior Relationship)",
                 "§ Email Style Guidelines",
                 "§ What NOT to Do",
                 "§ Example",
                 "§ Outreach Draft: David Tibbitts @ Notion",
             ),
+            # Textändringar i de sektioner som står kvar (PlaybookStep.
+            # radandringar): samma mönster på fyra ställen, ändrat rad för rad
+            # i stället för att hela arbetsflödet och exemplet stryks.
+            radandringar=_UTKAST_RADANDRINGAR,
             extra_skills=(
                 (
                     "mk:cold-email",
@@ -279,4 +320,75 @@ def finalize_outreach_body(draft: str) -> str:
     bold, or other markdown', SKILL.md rad 291). Humanizern får inte
     återinföra formatering; det här är kodgrinden som garanterar det
     oavsett vad modellen faktiskt skrev, samma princip som hela Del C."""
-    return strip_markdown(draft)
+    return _intervallstreck(tilltala_med_ni(strip_markdown(draft)))
+
+
+#: "15-20 minuter" → "15–20 minuter": tankstreck i intervall, bara före en
+#: enhet, så att telefonnummer (070-360 …) och org.nr aldrig rörs.
+_INTERVALL = re.compile(
+    r"\b(\d{1,3})-(\d{1,3})(?=\s*(?:minuter|min|timmar|tim|dagar|veckor|månader|procent|%|kr|kronor|år|personer|anställda)\b)"
+)
+
+
+def _intervallstreck(text: str) -> str:
+    return _produktnamn(_INTERVALL.sub(r"\1–\2", text))
+
+
+#: Snajps produkter som de heter i erbjudandet. Genitiv följs av obestämd
+#: form ("Snajps Kvittohanterare", inte "Snajps Kvittohanteraren"), och
+#: namnet skrivs med versal (granskningen 2026-10-09).
+_PRODUKTER = {"kvittohanterare": "Kvittohanterare", "supportagent": "Supportagent"}
+_GENITIV_BESTAMD = re.compile(
+    r"\b(Snajps|[Vv]år|[Vv]åra)\s+(kvittohanterare|supportagent)(n|en)\b", re.IGNORECASE
+)
+_PRODUKT_GEMEN = re.compile(r"\b(kvittohanterare|supportagent)(n|en)?\b")
+
+
+def _produktnamn(text: str) -> str:
+    text = _GENITIV_BESTAMD.sub(lambda m: f"{m.group(1)} {_PRODUKTER[m.group(2).casefold()]}", text)
+    return _PRODUKT_GEMEN.sub(lambda m: _PRODUKTER[m.group(1)] + (m.group(2) or ""), text)
+
+
+#: du-formerna och deras ni-motsvarighet. "Hör av dig" → "Hör av er".
+_DU_TILL_NI = {"du": "ni", "dig": "er", "din": "er", "ditt": "ert", "dina": "era"}
+_DU_ORD = re.compile(r"\b(du|dig|din|ditt|dina)\b", re.IGNORECASE)
+_ANONYM_HALSNING = re.compile(r"^\s*(hej|hejsan|god dag|hallå)\s*[,!]?\s*$", re.IGNORECASE)
+_NAMNGIVEN_HALSNING = re.compile(r"^\s*(hej|hejsan|hallå)\s+([A-ZÅÄÖÉ][\wåäöé-]*(?:\s+[A-ZÅÄÖÉ][\wåäöé-]*)?)\s*[,!]\s*$", re.IGNORECASE)
+
+
+def tilltala_med_ni(body: str) -> str:
+    """Ett mejl som börjar "Hej," utan namn går till bolaget, inte en person
+    (Antons regel 14): det tilltalar då med "ni" rakt igenom. Utkasten
+    blandade "Hej," med "Skulle du vilja" och "Vi kan visa dig" (development
+    2026-10-09). Bara brödtexten före signaturen ändras; ett mejl med namn i
+    hälsningen ("Hej Peter,") rörs inte."""
+    rader = body.split("\n")
+    forsta = next((i for i, r in enumerate(rader) if r.strip()), None)
+    if forsta is None:
+        return body
+    # "Hej Verkstad," och "Hej Luleå," (development 2026-10-09): ett namn
+    # som är en avdelning eller en ort är inget tilltal. Hälsningen blir
+    # "Hej," och mejlet tilltalar bolaget, med ni.
+    namn = _NAMNGIVEN_HALSNING.match(rader[forsta])
+    if namn:
+        from .discovery import ar_personled
+
+        if all(ar_personled(o) for o in namn.group(2).split()):
+            return body
+        rader[forsta] = f"{namn.group(1)},"
+    elif not _ANONYM_HALSNING.match(rader[forsta]):
+        return body
+
+    def byt(m: re.Match[str]) -> str:
+        ord_ = m.group(1)
+        ny = _DU_TILL_NI[ord_.casefold()]
+        return ny.capitalize() if ord_[0].isupper() else ny
+
+    ut = []
+    for i, rad in enumerate(rader):
+        # Hälsningsfrasen och allt efter den (signaturen) lämnas orört.
+        if i > forsta and re.match(r"^\s*(med\s+)?(vänliga|bästa)\s+hälsningar", rad, re.IGNORECASE):
+            ut.extend(rader[i:])
+            break
+        ut.append(_DU_ORD.sub(byt, rad) if i > forsta else rad)
+    return "\n".join(ut)

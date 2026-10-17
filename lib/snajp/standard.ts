@@ -102,11 +102,13 @@ const AVVAKTAR = "(läses in från webbplatsen)";
 export const SMAFORETAG: [number, number] = [1, 49];
 
 /**
- * Beslutsfattarrollerna i ett litet svenskt B2B-bolag. Samma exempel som
- * `ICP_ETIKETTER.roles` visar i formuläret, alltså inget kunden möts av för
- * första gången här.
+ * Kontaktrollen i ett litet svenskt B2B-bolag: bara VD (Antons leadsregel 3,
+ * 2026-10-04). Listan bar förut även "Inköpschef" och "Platschef". De nådde
+ * sökprompten som "beslutsfattare att nå" i varje körning utan branschfilter,
+ * drog sökningen mot byggbolag (platschef är en byggtitel) och gav ett utkast
+ * ställt till en inköpschef (provkörningen 2026-10-05).
  */
-export const STANDARDROLLER = ["VD", "Inköpschef", "Platschef"];
+export const STANDARDROLLER = ["VD"];
 
 function rent(varde: string | null | undefined): string {
   const text = (varde ?? "").trim();

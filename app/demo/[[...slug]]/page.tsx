@@ -3,10 +3,9 @@ import { PageShell } from "@/components/AppShell";
 import { DashboardProvider } from "@/components/dashboard/DashboardContext";
 import { StartView } from "@/components/dashboard/StartView";
 import { CrmDemo } from "@/components/crm/CrmDemo";
-import { KvittoDemo } from "@/components/kvitton/KvittoDemo";
 import { DemoSupportYta } from "@/components/snajp/DemoSupportYta";
 import { AttGora } from "@/components/leads/AttGora";
-import { IrisBolag } from "@/components/leads/IrisBolag";
+import { IrisBolag } from "@/components/leads/LeadsSida";
 import { IrisInstallningar } from "@/components/leads/IrisInstallningar";
 import { SupportRegler } from "@/components/settings/SupportRegler";
 import {
@@ -41,8 +40,9 @@ import { notFoundOnTenant } from "@/lib/tenants/server";
  * INGENTING här får sträcka sig efter en session eller databasen.
  *
  *  * `resolveDashboardState()` anropas INTE — state är en konstant nedan.
- *  * `IrisBolag`/`AttGora`/`IrisInstallningar` läser demo-fixturer
- *    (`lib/demo/oversikt.ts`, `lib/demo/iris-exempel.ts`) i stället för
+ *  * `IrisBolag`/`AttGora`/`Aktivitet`/`IrisInstallningar` läser demo-fixturer
+ *    (`lib/demo/oversikt.ts`, `lib/demo/iris-exempel.ts`,
+ *    `lib/demo/aktivitet.ts`) i stället för
  *    `/api/snajp-support/*` när `demo` är satt — se respektive komponent.
  *  * Vyerna under `WorkspaceViews` är klientkomponenter som läser
  *    `lib/mock-data`. Kontrollera det innan du lägger till en ny sektion här.
@@ -67,7 +67,9 @@ const DEMO_STATE = {
   arLasare: false,
   initialScope: "both" as const,
   isDemo: false,
-  products: ["leads", "support", "bookkeeping"] as const,
+  // Utan "bookkeeping": Kvittohanteraren är vilande (lib/routes.ts:
+  // VILANDE_PRODUKTER) och syns varken i demons Att göra eller översikt.
+  products: ["leads", "support"] as const,
   addons: [],
   workspaceName: "Demo AB",
   userEmail: null,
@@ -77,13 +79,16 @@ const DEMO_STATE = {
 };
 
 export default async function Page({
-  params
-}: Readonly<{ params: Promise<{ slug?: string[] }> }>) {
+  params,
+  searchParams
+}: Readonly<{ params: Promise<{ slug?: string[] }>; searchParams: Promise<{ drift?: string }> }>) {
   await notFoundOnTenant();
   const { slug = [] } = await params;
+  // ?drift=1 visar supportöversiktens driftruta (Snajp-admins vy) i demon.
+  const { drift } = await searchParams;
   const [sektion, undersektion] = slug;
 
-  const innehall = renderSektion(sektion, undersektion);
+  const innehall = renderSektion(sektion, undersektion, drift === "1");
   if (innehall === null) {
     notFound();
   }
@@ -103,7 +108,8 @@ export default async function Page({
 /** null = okänd sektion, alltså 404. */
 function renderSektion(
   sektion: string | undefined,
-  undersektion?: string
+  undersektion?: string,
+  visaDrift = false
 ): React.ReactNode | null {
   switch (sektion) {
     case undefined:
@@ -118,6 +124,9 @@ function renderSektion(
           <AttGora demo />
         </PageShell>
       );
+    case "aktivitet":
+      // Aktivitet är översikten sedan 2026-10-07.
+      redirect("/demo");
     case "installningar":
       return undersektion ? null : (
         <PageShell title={{ sv: "Inställningar", en: "Settings" }}>
@@ -164,19 +173,13 @@ function renderSektion(
     case "assistant":
       return <AssistantView />;
     case "bokforing":
-      // Gamla adressen — Kvittohanteraren ersatte bokföringsdemon 2026-09-16.
-      redirect("/demo/kvitton");
-    // eslint-disable-next-line no-fallthrough -- redirect kastar, nås aldrig
     case "kvitton":
-      // Egen demokomponent och inte `KvittoVy`. Den vyn anropar backenden,
-      // och regeln för den här routen är att INGENTING här får sträcka sig
-      // efter en session eller databasen — se filens docstring. KvittoDemo
-      // renderar handräknade konstanter och spelar upp dem.
-      return (
-        <PageShell title={{ sv: "Kvitton", en: "Receipts" }}>
-          <KvittoDemo />
-        </PageShell>
-      );
+      // Kvittohanteraren står på is sedan 2026-10-17 (lib/routes.ts:
+      // VILANDE_PRODUKTER): posten syns mörklagd i railen och adressen leder
+      // till demons översikt. Demokomponenten (KvittoDemoYta) finns kvar och
+      // kopplas in här igen när produkten släpps.
+      redirect("/demo");
+    // eslint-disable-next-line no-fallthrough -- redirect kastar, nås aldrig
     case "regler":
       return <ReglerDemo />;
     case "support":
@@ -187,7 +190,7 @@ function renderSektion(
       // inkorgen, samma flikmönster som arbetsytans SupportWorkspaceTabs.
       return (
         <PageShell title={{ sv: "Kundtjänst", en: "Customer service" }}>
-          <DemoSupportYta />
+          <DemoSupportYta visaDrift={visaDrift} />
         </PageShell>
       );
     default:

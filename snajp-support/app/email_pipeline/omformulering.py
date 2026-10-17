@@ -144,6 +144,8 @@ async def omformulera_utkast(
     lage: str,
     content: str,
     email: dict[str, Any] | None,
+    foretagsnamn: str = "",
+    grundprompt_mall: str | None = None,
 ) -> str:
     """Det omskrivna utkastet. Kastar ValueError på okänt läge.
 
@@ -169,10 +171,21 @@ async def omformulera_utkast(
         body=maskera_personnummer((email or {}).get("body_text") or "(saknas)"),
         draft=maskera_personnummer(content),
     )
+    # Grundprompten (2026-10-05) som systemmeddelande: även en omskrivning är
+    # kundarbete, och dess regler om källor och löften gäller fullt ut.
+    from ..agent.support_systemprompt import rendera
+
+    grundprompt = rendera(
+        foretagsnamn=foretagsnamn, kanal="email", avsandare=foretagsnamn, lage="omformulering",
+        mall=grundprompt_mall,
+    )
     response = await get_llm_client().chat.completions.create(
         model=settings.model,
         temperature=0.4,
-        messages=[{"role": "user", "content": prompt}],
+        messages=[
+            {"role": "system", "content": grundprompt},
+            {"role": "user", "content": prompt},
+        ],
         **tankande_kwargs(),
     )
     nytt = (response.choices[0].message.content or "").strip()

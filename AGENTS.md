@@ -17,6 +17,34 @@ If `.agent-context/current/routes.json` is missing, fall back to the markdown pa
 
 ## Projektregler — kod
 
+**Vid varje sessionsstart: hämta senaste arbetsgrenen från GitHub innan något
+annat** (Antons regel 2026-10-07). `git fetch origin`, sedan
+`git merge --ff-only origin/<gren>`; har grenarna divergerat
+`git merge origin/<gren>`. Aldrig rebase, reset eller stash av någon annans
+ocommittade filer, och vid konflikt: stanna och rapportera. Läs koden från den
+hämtade grenen: Sebbe pushar flera gånger per dag, och en plan byggd på en
+inaktuell gren gör om arbete som redan finns. Projektets SessionStart-hook
+(`.claude/settings.json`) hämtar och säger hur många commits grenen ligger efter.
+
+**Webbplatsbedömningen är hemlig (Antons beslut 2026-10-08).** Webbrevisionen
+och allt som härleds ur den (`webbrevision`, `webbniva`, betyg, brister,
+platshållarskäl, webbpoolens listor och `lan`-fördelningen) syns BARA för
+plattformsadmin och kunderna Umeå Webdesign och Alunix. Varje API-svar, UI,
+CSV-export, listkopiering, utkast och prompt som bär den ska grindas på det:
+övriga kunder får aldrig se fälten, inte heller via en kopierad lista
+(`app/api/admin_listor.py:LISTRADSFALT` saknar dem med flit) eller en flytt
+till main. Lägger du till ett ställe som visar eller skickar vidare
+bedömningen: grinda det i samma commit, annars är det en läcka.
+
+**Varje funktion har ett sätt att följa flödet (Antons regel 2026-10-10).**
+Allt som körs i bakgrunden eller tar mer än ett ögonblick ska visa förlopp och
+utfall där användaren startade det, i den befintliga miljön och utan ny flik om
+det inte är absolut nödvändigt, och utfallet ska finnas kvar efter en
+omladdning. Är det tveksamt om det ska synas för kunden: fråga Anton.
+
+**Varje nytt beslut skrivs i `docs/BESLUT.md` med beslutsfattarens
+resonemang** (Antons regel 2026-10-10).
+
 **Varje komponent med användarvänd text är tvåspråkig, utan undantag.**
 Svenska och engelska via `lib/i18n.tsx` (`useLocale().text({ sv, en })`, `t(nyckel)`
 eller en modulkonstant av `Localized`; adminytan via `lib/admin/sprak.ts`). Det
@@ -50,6 +78,101 @@ engelska versionen visat sig vara svensk på de flesta sidor.
    i en lista.
 6. **Inga privatpersonsidor.** Registrets personsidor (bostad, ålder,
    familj) är inte B2B-källor och används inte.
+
+**Tillägg 2026-10-05 (Anton):**
+
+7. **Ensam VD är undantaget från regel 1.** När VD är den enda personen i
+   bolaget (högst en anställd, ingen annan med roll; suppleant och revisor
+   räknas inte) får registrets telefonnummer användas: det är då VD:s.
+   Bara i listor, aldrig som Iris-kontakt. Kod: `merinfo.ensam_vd_telefon`.
+8. **Bolag som inte blir Iris-leads kastas inte.** Utan webbplats, med
+   parkerad domän eller utan VD-kontakt på sajten hamnar bolaget i
+   körningens lista "Utan webbplats" (listspåret), för utkast med ett mer
+   generellt erbjudande senare. Ingen dyr research körs på dem.
+9. **Webbkriterier avgörs i kod.** Betyget från webbrevisionen (PageSpeed
+   plus bildbedömning, `app/leads/webbrevision.py`) översätts till träff,
+   miss eller gränsfall i `bedomning.webbutslag`, inte av modellens fria
+   utslag. Merinfos råsida når aldrig researchprompten, bara bolagsfakta
+   utan personer och nummer (`merinfo.bolagsfakta_text`).
+
+**Ändring 2026-10-07 (Sebbe) — ersätter regel 3 och 4 för Iris-leads:**
+
+10. **Det enda kontaktkravet för ett Iris-lead är en kontaktmejl till
+    bolaget** som utkastet kan nå fram till. Ingen VD krävs, ingen
+    namngiven person krävs. En namngiven persons styrkta adress föredras;
+    annars duger bolagets egen adress (info@, kontakt@) på bolagets domän.
+    Aldrig en privat adress, en främmande domän eller en HR-, ekonomi- eller
+    robotadress (`discovery.mottagare`, `_EJ_SALJADRESS`). En telefon ensam
+    räcker inte. Bolaget måste fortfarande ha en webbplats (adressen hämtas
+    därifrån); utan webbplats går det till listspåret som förut.
+11. **Ger registret färre bolag än beställt fyller den gamla sökkedjan på**
+    (grounded sökning + existensgrinden), så att körningar hittar leads som
+    innan merinfo-filtret. Listornas VD-krav (regel 5, 7) är oförändrat.
+    Anton ska informeras om ändringen.
+
+**Ändring 2026-10-07 (Anton) — fördelningen efter kontaktsökningen. Går före
+regel 1, 4, 5, 7, 8 och 10 där de krockar:**
+
+12. **Ett bolag med webbplats har alltid ett kontaktsätt.** Kontaktsökningen
+    läser startsidan och kontakt- och Om oss-sidorna (länkade eller gissade)
+    och avkodar skyddade adresser. Hittas ändå inget är jobbet inte grundligt
+    gjort: bolaget lämnas fritt, prövas igen nästa körning och räknas i
+    körningsrapporten. Ett bolag med webbplats hamnar aldrig bland ej
+    kvalificerade.
+13. **Mejladress → Iris.** En adress som bolaget självt publicerar på sin
+    webbplats är bolagets kontaktadress, även på gmail/telia eller en annan
+    domän. Registrets bolags-e-post (bolagsnivå, inte en person) räcker också.
+    HR-, ekonomi-, jobb- och robotadresser utesluts som förut.
+14. **Tilltal.** Personlig adress → personens namn. Bolagets adress och en Om
+    oss-sida med högst två personer där en tydligt är ägare eller VD → den
+    personens namn. Annars en inledning utan namn.
+15. **Bara telefon → ringlistan.** Utan mejladress men med telefon går bolaget
+    till ringlistan. Sajtens eget publicerade nummer räcker alltid (regel 12
+    går före); registrets bolagsnummer kräver att VD är namngiven i
+    registret, och numret antas då vara VD:s.
+    Antal anställda visas alltid, så att säljaren vet att numret kan gå till
+    någon annan. Enskilda firmor går inte till ringlistan (NIX-spärren gäller
+    dem).
+16. **Ej kvalificerade** är bolag utan webbplats och utan både mejl och telefon,
+    utan namngiven VD, eller enskilda firmor.
+17. **Återkoppling.** Varje kontaktat Iris-lead med telefon står i
+    återkopplingslistan, äldst kontakt först, med utfallen Ej svar, Återkom
+    (datum), Ej intresserad, Kontakta inte och Möte bokat. Systemet bevakar:
+    ej svar kommer tillbaka efter två arbetsdagar, återkom på datumet, ett
+    mejlsvar tar bort leadet ur listan och avslutande utfall stoppar alla
+    utskick. Uppföljningsmejl är alltid utkast som en människa godkänner.
+
+Kod för 12–17: `sources/merinfo.py:fordela` (fördelningen),
+`discovery.py:hamta_person_kontakt`/`kontakt_ur_sidor` (kontaktsökningen),
+`platshallare.py:kontaktrader_ur_html` (skyddade adresser, JSON-LD),
+`app/leads/samtal.py` (ringlista och återkoppling, Leads › Samtal) och
+`scripts/omklassa_listspar.py` (äldre listspårsrader genom samma sökning).
+
+**Ändring 2026-10-08 (Anton) — webbplatsbedömningen och webbpoolen:**
+
+18. **Fyra webbnivåer, inget gränsfall.** Bildbedömningen ger akut (1–2),
+    dålig (3–5), bra (6–8) eller mycket bra (9–10), avgjort i kod
+    (`app/leads/webbrevision.py:webbniva`). Akut avgörs utan bild för parkerad
+    domän, felsida (404 hos Netlify/Wix), fillistning, "under konstruktion" och
+    en sajt som inte svarar ens på www-varianten. En katalogsida (thingsreview,
+    hitta, eniro …) som enda webbnärvaro är bolagets sida och aldrig bättre än
+    dålig. Startsidan bedöms, aldrig en undersida. Kalibrerad mot Antons facit
+    (`tests/leads/fixtures/webbfacit_2026-10-08.json`,
+    `scripts/kalibrera_webbrevision.py`, grind 85 %).
+19. **Avvecklade bolag kastas** i alla spår ("under avveckling", "bedriver
+    inte längre", konkurs; `platshallare.AVVECKLAT`).
+20. **Webbpoolen.** Varje körning och listbygge hos varje kund bildbedöms efter
+    körningen, och bolag med akut eller dålig sajt fördelas tyst efter län:
+    Alunix (Västra Götaland, Halland) och Umeå Webbdesign (Norrland) får en
+    veckolista, mycket bra blir Alunix inspirationslista, bra fördelas aldrig.
+    Bara bolagsnivå lämnar källkunden (INV-SEC-008): inga kontakter, inget
+    kundinnehåll, aldrig vilken kund som hittade bolaget. Webbyråkunder och
+    enskilda firmor är aldrig källa. Utan sajt, parkerad eller trasig är just
+    de akuta leadsen för webbyråerna; regel 8 gäller fortfarande källkundens
+    egen körning. Kod: `app/leads/webbpool.py`, flaggor `WEBBPOOL_*`.
+21. **Skärmbilden.** ScrapeGraph i JS-läge med samtyckescookies (2 krediter),
+    stealth bara som andra försök när rutan ändå skymmer (7 krediter).
+    PageSpeed bara på mobil, för siffrorna.
 
 Koden: `snajp-support/app/leads/sources/merinfo.py` (filtret, `lage="iris"`
 och `lage="lista"`), `app/leads/discovery.py:hamta_vd_kontakt` (VD-kontrollen).

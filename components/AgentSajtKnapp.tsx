@@ -1,10 +1,8 @@
-import { ArrowUpRight } from "lucide-react";
-import { btnPrimary } from "@/components/ui";
-import { cn } from "@/lib/utils";
-import { AGENTSAJTER, type AgentSajt, externUrlFor } from "@/lib/agentsajt";
+import { AgentSajtLank } from "@/components/AgentSajtLank";
+import { type AgentSajt, externUrlFor } from "@/lib/agentsajt";
 
 /**
- * "Kör Agent"-bannern — vägen från arbetsytans flik till agentens egen sajt.
+ * "Kör agent"-knappen — vägen från arbetsytans flik till agentens egen sajt.
  *
  * Samma mönster för alla tre agenterna (bokföring, leads, support): en
  * KNAPP i vyn, aldrig en redirect på menyklicket (Sebbes ord 2026-09-15).
@@ -16,17 +14,13 @@ import { AGENTSAJTER, type AgentSajt, externUrlFor } from "@/lib/agentsajt";
  */
 export function AgentSajtKnapp({ agent }: Readonly<{ agent: AgentSajt }>) {
   if (!externUrlFor(agent)) return null;
-  const text = AGENTSAJTER[agent];
 
+  // Bara knappen sedan 2026-10-07 (Sebbe): rubriken "Supportagenten har fått
+  // en egen arbetsyta" togs bort, och utan text bredvid behövs ingen banner
+  // med linjer runt.
   return (
-    <div className="mb-12 flex flex-wrap items-center justify-between gap-x-8 gap-y-4 border-y border-ink/15 py-5">
-      <div className="min-w-0 max-w-[62ch]">
-        <p className="text-[0.9375rem] font-semibold text-ink">{text.rubrik}</p>
-      </div>
-      <a href={`/api/agentsajt/${agent}/sso`} className={cn(btnPrimary, "shrink-0")}>
-        {text.knapp}
-        <ArrowUpRight className="h-4 w-4" aria-hidden />
-      </a>
+    <div className="mb-8 flex justify-end">
+      <AgentSajtLank agent={agent} />
     </div>
   );
 }

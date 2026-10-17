@@ -49,6 +49,21 @@ export function AgentLast({ product }: Readonly<{ product: ProductKey }>) {
   const { locale, text } = useLocale();
   const agent = AGENT_FOR_PRODUKT[product];
   const paket = PAKET.find((p) => p.id === agent.paketId);
+  if (!paket && product === "bookkeeping") {
+    // Kvittohanteraren är ett vilande tillägg till Support sedan 2026-10-17
+    // och har inget paket att sälja. Bara plattformsadmin når hit (kunden
+    // stoppas i WorkspaceSection), så vyn säger var tillägget slås på.
+    return (
+      <PageShell title={{ sv: "Kvittohanteraren", en: "Receipt agent" }}>
+        <p className="max-w-[62ch] text-[1.0625rem] leading-[1.7] text-ink-muted">
+          {text({
+            sv: "Kvittohanteraren är ett tillägg till Support och är inte påslaget för den här kunden. Slå på det under Paket i adminytan.",
+            en: "The receipt agent is a Support add-on and is not enabled for this customer. Turn it on under Packages in the admin area."
+          })}
+        </p>
+      </PageShell>
+    );
+  }
   if (!paket) return null;
 
   return (

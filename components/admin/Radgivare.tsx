@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Sektion, btnPrimary, etikett } from "@/components/ui";
+import { Panelrubrik } from "@/components/dashboard/OversiktPaneler";
+import { btnPrimary, etikett, panelKort } from "@/components/ui";
 import type { Rad } from "@/lib/admin/radgivare";
 import { useLocale } from "@/lib/i18n";
 import { exempelfragor, fragaRadgivaren } from "@/lib/admin/radgivare";
@@ -45,10 +46,11 @@ export function Radgivare({ rader }: Readonly<{ rader: Rad[] }>) {
   const forslag = turer.length === 0 ? exempelfragor(locale) : (turer.at(-1)?.foljdfragor ?? []);
 
   return (
-    <Sektion title={text({ sv: "Fråga om siffrorna", en: "Ask about the figures" })}>
-      {/* Kortet står kvar: samtalet är ett eget objekt, och bubblornas
-          pappersyta behöver en platta att ligga på. */}
-      <div className="rounded-card border border-ink/15 bg-paper2/50 p-6 md:p-7">
+    // Ett kort som Översiktens övriga paneler (2026-10-07). Samtalets platta
+    // står kvar inne i kortet: bubblornas pappersyta behöver något att ligga på.
+    <section aria-labelledby="radgivare-rubrik" className={panelKort}>
+      <Panelrubrik id="radgivare-rubrik" titel={{ sv: "Fråga om siffrorna", en: "Ask about the figures" }} />
+      <div className="rounded-input bg-paper2/60 p-4 md:p-5">
         {turer.length > 0 ? (
           <div className="flex flex-col gap-4">
             {turer.map((tur, i) => (
@@ -107,6 +109,6 @@ export function Radgivare({ rader }: Readonly<{ rader: Rad[] }>) {
           </button>
         </form>
       </div>
-    </Sektion>
+    </section>
   );
 }

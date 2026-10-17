@@ -80,9 +80,16 @@ def test_flera_regioner_ar_en_union():
     assert not matchar_region(["umea", "goteborg"], postnr="211 20")
 
 
-def test_goteborgsserien_slutar_vid_426():
-    assert matchar_region(["goteborg"], postnr="426 71")
-    assert not matchar_region(["goteborg"], postnr="427 00")
+def test_goteborgsserien_tar_billdal_och_askim():
+    """Billdal 427 och Askim 436 är Göteborgs kommun (2026-10-09: Askim
+    fälldes som utanför målområdet). Kållered 428 är Mölndal, inom regionen."""
+    from app.leads.geo import REGIONER
+
+    goteborg = next(k for k in REGIONER["goteborg"].kommuner if k.namn == "Göteborg")
+    assert goteborg.innehaller_prefix(426) and goteborg.innehaller_prefix(427) and goteborg.innehaller_prefix(436)
+    assert not goteborg.innehaller_prefix(428)
+    assert matchar_region(["goteborg"], postnr="428 30")  # Kållered, Mölndal
+    assert not matchar_region(["goteborg"], postnr="451 55")  # Uddevalla
 
 
 def test_beskrivningen_raknar_upp_kommunerna():

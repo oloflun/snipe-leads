@@ -25,6 +25,10 @@ import { cn } from "@/lib/utils";
  * Upsales eller egen fil) och kunden kan ändra varje fälts kolumn innan
  * `POST /leads/import`. Listan får källan `import`; "Flytta till Iris" på
  * listan gör dedupen mot befintliga bolag.
+ *
+ * `kalla="crm"` (migration 098): kundens BEFINTLIGA kunder. Samma flöde, men
+ * listan blir en uteslutningsmängd: Iris och listbygget hoppar över varje bolag
+ * i den, och den kan inte flyttas till Iris.
  */
 
 const MAX_RADER = 2000;
@@ -47,7 +51,8 @@ const T = {
     en: `At most ${MAX_RADER} rows per import. Split the file.`
   },
   kolumn: { sv: "Kolumn", en: "Column" },
-  demo: { sv: "Importen sparas inte i demon.", en: "The import is not saved in the demo." }
+  demo: { sv: "Importen sparas inte i demon.", en: "The import is not saved in the demo." },
+  crmTitel: { sv: "Befintliga kunder (CRM)", en: "Existing customers (CRM)" }
 } satisfies Record<string, Localized>;
 
 const FALT_ETIKETT: Record<ImportFalt, Localized> = {
@@ -67,7 +72,12 @@ export type ImporteradLista = { id: string; titel: string; [nyckel: string]: unk
 
 const faltKlass = "focus-ring min-h-11 w-full rounded-input border border-ink/15 bg-paper px-3 text-[16px] text-ink";
 
-export function ImportCsv({ onKlar, demo = false }: Readonly<{ onKlar: (lista: ImporteradLista) => void; demo?: boolean }>) {
+export function ImportCsv({
+  onKlar,
+  demo = false,
+  kalla = "import"
+}: Readonly<{ onKlar: (lista: ImporteradLista) => void; demo?: boolean; kalla?: "import" | "crm" }>) {
+  const crm = kalla === "crm";
   const { text } = useLocale();
   const [fil, setFil] = useState<Fil | null>(null);
   const [mall, setMall] = useState<Mall>("egen");
@@ -94,7 +104,7 @@ export function ImportCsv({ onKlar, demo = false }: Readonly<{ onKlar: (lista: I
       setMall(gissning.mall);
       setKarta(gissning.karta);
       setEfternamn(gissning.efternamn);
-      setTitel(f.name.replace(/\.csv$/i, ""));
+      setTitel(crm ? text(T.crmTitel) : f.name.replace(/\.csv$/i, ""));
     } catch {
       setFil(null);
       setFel(text(T.lasFel));
@@ -128,13 +138,20 @@ export function ImportCsv({ onKlar, demo = false }: Readonly<{ onKlar: (lista: I
     try {
       const svar = await leadsAnrop<{ list: ImporteradLista; antal: number; hoppade_over: number }>("/leads/import", {
         method: "POST",
-        body: JSON.stringify({ titel: titel.trim() || fil.namn, rader })
+        body: JSON.stringify({ titel: titel.trim() || fil.namn, rader, kalla })
       });
       const hoppade = (svar.hoppade_over ?? 0) + lokaltOverhoppade;
-      setKvitto({
-        sv: `${svar.antal} rader importerade till ${svar.list.titel}. ${hoppade} hoppades över.`,
-        en: `${svar.antal} rows imported to ${svar.list.titel}. ${hoppade} skipped.`
-      });
+      setKvitto(
+        crm
+          ? {
+              sv: `${svar.antal} kunder sparade i ${svar.list.titel}. Iris och listorna hoppar över dem från och med nu. ${hoppade} rader var dubbletter eller saknade bolagsnamn.`,
+              en: `${svar.antal} customers saved to ${svar.list.titel}. Iris and the lists skip them from now on. ${hoppade} rows were duplicates or had no company name.`
+            }
+          : {
+              sv: `${svar.antal} rader importerade till ${svar.list.titel}. ${hoppade} hoppades över.`,
+              en: `${svar.antal} rows imported to ${svar.list.titel}. ${hoppade} skipped.`
+            }
+      );
       setFil(null);
       onKlar(svar.list);
     } catch (orsak) {
@@ -248,7 +265,9 @@ export function ImportCsv({ onKlar, demo = false }: Readonly<{ onKlar: (lista: I
           >
             {importerar
               ? text(T.importerar)
-              : text({ sv: `Importera ${rader.length} rader`, en: `Import ${rader.length} rows` })}
+              : crm
+                ? text({ sv: `Ladda upp ${rader.length} kunder`, en: `Upload ${rader.length} customers` })
+                : text({ sv: `Importera ${rader.length} rader`, en: `Import ${rader.length} rows` })}
           </button>
         </>
       ) : null}

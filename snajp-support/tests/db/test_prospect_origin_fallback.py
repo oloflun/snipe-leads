@@ -40,6 +40,14 @@ class _FalskConn:
     async def fetchval(self, *args, **kwargs):
         return None
 
+    # Dubblettgrinden i create_prospect (2026-10-08): låset och "finns bolaget
+    # redan" — en tom kund här.
+    async def execute(self, *args, **kwargs):
+        return None
+
+    async def fetch(self, *args, **kwargs):
+        return []
+
     async def fetchrow(self, query: str, *args):
         self.queries.append(" ".join(query.split()))
         if "origin" in query:

@@ -506,6 +506,7 @@ async def _avsluta(storage, tenant_id, trace, lager, body, utfall, started) -> d
         input_text=body,
         output_text=str(utfall.get("draft_body") or utfall.get("klass") or ""),
         step_log=trace.as_log(),
+        prompt_lager=trace.lagertexter(),
         tokens_in=trace.total_tokens_in,
         tokens_out=trace.total_tokens_out,
         latency_ms=int((time.monotonic() - started) * 1000),

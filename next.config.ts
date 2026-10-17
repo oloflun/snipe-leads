@@ -20,6 +20,20 @@ const workspaceSlugs = [
 ];
 
 const nextConfig: NextConfig = {
+  experimental: {
+    /**
+     * Klientens routercache för dynamiska sidor: en flik man nyss lämnat
+     * öppnas igen ur minnet i stället för med en ny serverrendering. Standard
+     * är 0 s, alltså en rundtur per flikbyte även fram och tillbaka.
+     *
+     * 30 s är säkert här: vyernas data hämtas av klientkomponenterna vid
+     * mount (de monteras om även från cachen), och en server action som sätter
+     * en cookie eller kör revalidatePath tömmer cachen — vybytet i "Byt kund"
+     * (lib/actions/vy.ts) sätter cookien.
+     */
+    staleTimes: { dynamic: 30 }
+  },
+
   async headers() {
     return [
       {

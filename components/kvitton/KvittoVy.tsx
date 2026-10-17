@@ -1,8 +1,11 @@
 "use client";
 
 import { Info, LifeBuoy } from "lucide-react";
+import { useState } from "react";
 import { PageShell } from "@/components/AppShell";
 import { KvittoChatt } from "@/components/kvitton/KvittoChatt";
+import { KvittoFlikar, type KvittoFlik } from "@/components/kvitton/KvittoFlikar";
+import { KvittoOversikt } from "@/components/kvitton/KvittoOversikt";
 import { KvittoSammanfattning, KvittoYta } from "@/components/kvitton/KvittoYta";
 import { KONTAKT_MEJL } from "@/components/marketing/copy";
 import { useLocale } from "@/lib/i18n";
@@ -15,22 +18,35 @@ import { useLocale } from "@/lib/i18n";
  * den följer med genom kvittolistan.
  *
  * Grinden sitter INTE här utan i WorkspaceSection, på servern.
+ *
+ * Sedan 2026-10-07 två flikar, som Leads och Kundtjänst: Översikten
+ * (KvittoOversikt, nyckeltal och diagram) först, arbetsytan ovan under
+ * "Kvitton".
  */
 export function KvittoVy() {
   const { text } = useLocale();
+  const [flik, setFlik] = useState<KvittoFlik>("oversikt");
   return (
     <PageShell title={{ sv: "Kvitton", en: "Receipts" }}>
-      <div className="grid grid-cols-12 gap-x-0 gap-y-12 lg:gap-x-10">
-        <div className="col-span-12 lg:col-span-7">
-          <KvittoYta />
-        </div>
+      <KvittoFlikar vald={flik} onValj={setFlik} />
 
-        <aside className="col-span-12 lg:col-span-5">
-          <div className="space-y-6 lg:sticky lg:top-24">
-            <KvittoSammanfattning />
-            <KvittoChatt />
+      <div className="mt-6">
+        {flik === "oversikt" ? (
+          <KvittoOversikt onOppnaKvitton={() => setFlik("kvitton")} />
+        ) : (
+          <div className="grid grid-cols-12 gap-x-0 gap-y-12 lg:gap-x-10">
+            <div className="col-span-12 lg:col-span-7">
+              <KvittoYta />
+            </div>
+
+            <aside className="col-span-12 lg:col-span-5">
+              <div className="space-y-6 lg:sticky lg:top-24">
+                <KvittoSammanfattning />
+                <KvittoChatt />
+              </div>
+            </aside>
           </div>
-        </aside>
+        )}
       </div>
 
       {/* Förbehållet, hopfällt — en rad stängd, hela texten ett klick bort.

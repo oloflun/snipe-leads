@@ -1,22 +1,13 @@
-import type { Metadata } from "next";
-import { ProductPage } from "@/components/marketing/ProductPage";
-import { notFoundOnTenant } from "@/lib/tenants/server";
+import { redirect } from "next/navigation";
 
 /**
- * Kvittohanterarens marknadssida. Samma skal som /leads och /support.
- *
- * Produkten läser kundens inkorg (read-only), plockar ut kvitton och
- * sammanställer — den bokför ingenting, och beskrivningen säger det.
- * Interna produktnyckeln är fortfarande "bookkeeping" (databasens värde).
+ * Kvittohanterarens marknadssida finns inte längre (Sebbe 2026-10-17).
+ * Kvittohanteraren är ett tillägg till Support som står på is och inte säljs
+ * (lib/routes.ts: VILANDE_PRODUKTER, lib/pricing.ts: KVITTO_TILLAGG), så
+ * länkar och bokmärken hit landar på Supports sida. Sidans innehåll
+ * (copy.ts, UspSection, ProduktBilder, KvittoDemo) står kvar för en
+ * kommande lansering.
  */
-export const metadata: Metadata = {
-  title: "Snajp Kvittohanteraren — kvittona i mejlen, utplockade åt dig",
-  description:
-    "Kvittohanteraren läser din inkorg med read-only-åtkomst, identifierar kvitton och utlägg, läser av belopp, moms, datum och kategori och sammanställer perioden. Dubbletter räknas aldrig två gånger.",
-  alternates: { canonical: "/kvitton" }
-};
-
-export default async function Page() {
-  await notFoundOnTenant();
-  return <ProductPage initial="bookkeeping" />;
+export default function Page() {
+  redirect("/support");
 }

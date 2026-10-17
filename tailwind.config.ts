@@ -15,6 +15,8 @@ const config: Config = {
         ochre: "oklch(var(--ochre) / <alpha-value>)",
         steel: "oklch(var(--mineral) / <alpha-value>)",
         moss: "oklch(var(--moss) / <alpha-value>)",
+        "chart-blue": "oklch(var(--chart-blue) / <alpha-value>)",
+        "chart-ochre": "oklch(var(--chart-ochre) / <alpha-value>)",
         copper: "oklch(var(--ochre) / <alpha-value>)",
         frost: "oklch(var(--paper2) / <alpha-value>)",
         danger: "oklch(var(--danger) / <alpha-value>)",

@@ -10,12 +10,23 @@ Dessa regler ÅSIDOSÄTTER skillens standardbeteende där de krockar.
   trådens faktiska tillstånd, inte ett antagande — härled det aldrig ur
   bolagsnamn, webbplats eller en gissning om mottagaren.
 - Felfritt språk är ett absolut krav: korrekt stavning, grammatik,
-  skiljetecken och meningsbyggnad. Inga påhittade ord, inga särskrivningar,
-  inga anglicismer där ett svenskt ord finns, ingen engelska insprängd i en
-  svensk text. Konsekvent tilltal (du eller ni) rakt igenom mejlet. Lämna
-  ALDRIG kvar en platshållare i hakparentes — skriv ut uppgiften eller
-  utelämna den. Läs igenom texten en sista gång innan du svarar och rätta
-  varje språkfel.
+  skiljetecken, ordval och meningsbyggnad. Inga påhittade ord, inga
+  särskrivningar, inga anglicismer där ett svenskt ord finns, ingen engelska
+  insprängd i en svensk text. Konsekvent tilltal (du eller ni) rakt igenom
+  mejlet. Lämna ALDRIG kvar en platshållare i hakparentes — skriv ut
+  uppgiften eller utelämna den.
+- Hälsningsraden skrivs som en människa skriver den: "Hej <Förnamn>," ENDAST
+  när kontakten är en namngiven person — ett förnamn, inte en roll, en
+  avdelning eller en ort. Finns ingen person är hälsningsraden EXAKT "Hej,"
+  på en egen rad, följd av en blankrad före texten. Skriv ALDRIG bolagets
+  namn efter "Hej" — "Hej Hortlax Rör," avslöjar en mall direkt — och ALDRIG
+  "kontaktperson", "kontaktpersoner", "till den det berör", "hej där" eller
+  någon annan opersonlig mottagare. Bolagets namn hör hemma i brödtexten,
+  aldrig i hälsningen och aldrig i ämnesraden (Anton 2026-10-15).
+- DUBBELKOLLA innan du lämnar ifrån dig utkastet: läs hela texten en sista
+  gång som om du vore mottagaren. Rätta varje stavfel, varje konstig
+  formulering och varje ordval som avslöjar en maskin. Ett utkast med ett
+  enda språkfel är inte klart.
 
 ## Tonläge — fyra uttryckliga förbud (DEL 2.4)
 
@@ -50,7 +61,8 @@ människas blick:
   vanligaste kundfrågor handlar troligen om leverans" till ett bolag vars
   sajt researchen just skrapat: gissningen raderade researchens hela värde.
 - **Ämnesraden bär något SOM ÄR DERAS.** Ett konkret ord eller faktum ur
-  researchen om mottagaren — deras egen formulering slår vår kategori. Ett
+  researchen om mottagaren — deras egen formulering slår vår kategori. Inte
+  deras namn: det står redan i deras inkorg och gör raden till en mall. Ett
   skarpt utkast satte ämnesraden "supportagenten": vår produktkategori, noll
   skäl att öppna. Samma körning hade "365 dagars fri retur" i brödtexten —
   det var ämnesraden.

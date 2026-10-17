@@ -469,3 +469,36 @@ async def test_riktigt_prospekt_pa_samma_trad_skickas():
 
     assert outcome == "sent"
     assert len(provider.sent) == 1
+
+
+@pytest.mark.anyio
+async def test_iris_lead_utan_bedomning_mot_kallmaterial_kan_inte_mejlas():
+    """Provkörningen 2026-10-05: tre påhittade bolag hade origin='iris' och ett
+    färdigt utkast, och ingenting hindrade ett godkännande från att bli ett
+    utskick. Ett bolag Iris hittat får bara kontaktas när det bedömts mot
+    hämtat källmaterial och klarat bedömningen (nivå A eller B)."""
+    storage = MemoryStorage()
+    provider = _FakeSendProvider()
+
+    item_id, thread_id, _ = _seed(storage, scheduled_at=WITHIN_WINDOW_UTC)
+    obedomt = await storage.create_prospect(TENANT, company_name="Detaljhandel Design AB", origin="iris")
+    storage.outreach_threads[TENANT][thread_id]["prospect_id"] = obedomt["id"]
+
+    outcome = await process_due_item(
+        storage, TENANT, {"id": item_id, "thread_id": thread_id}, provider, now=WITHIN_WINDOW_UTC
+    )
+    assert outcome == "blocked"
+    assert provider.sent == []
+    queue_item = next(i for i in storage.send_queue[TENANT] if i["id"] == item_id)
+    assert "ej_styrkt" in str(queue_item["gate_checks"])
+
+    # Motprovet: samma lead med en godkänd bedömning stoppas inte av den här spärren.
+    await storage.spara_bedomning(TENANT, obedomt["id"], bedomning={"niva": "B", "score_total": 70})
+    storage.send_queue[TENANT] = [i for i in storage.send_queue[TENANT] if i["id"] != item_id]
+    item2, thread2, _ = _seed(storage, scheduled_at=WITHIN_WINDOW_UTC)
+    storage.outreach_threads[TENANT][thread2]["prospect_id"] = obedomt["id"]
+    await process_due_item(
+        storage, TENANT, {"id": item2, "thread_id": thread2}, provider, now=WITHIN_WINDOW_UTC
+    )
+    queue_item2 = next(i for i in storage.send_queue[TENANT] if i["id"] == item2)
+    assert "ej_styrkt" not in str(queue_item2["gate_checks"])

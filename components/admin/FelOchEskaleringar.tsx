@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 
-import { Nyckeltal, Rad, Radlista, Sektion, Tomt, meta, rubrikPanel } from "@/components/ui";
+import { Panelrubrik } from "@/components/dashboard/OversiktPaneler";
+import { Rad, Radlista, Tomt, etikett, meta, rubrikPanel, panelKort } from "@/components/ui";
 import { kallnamn, tolkaHandelse } from "@/lib/admin/handelsetext";
 import { a, tidpunkt } from "@/lib/admin/sprak";
 import type { EventRow, TenantRow } from "@/lib/data/admin";
@@ -76,48 +77,56 @@ export function FelOchEskaleringar({
   // samma fel syns i tabellen själv. Raderna har samma anatomi som i
   // Händelselista.tsx: rubrik, antal i klartext till höger, källa först i
   // metaraden (namnet när vi känner källan, annars koden i mono).
+  // Kortform sedan 2026-10-07 (Kunder i översikternas layout): samma tre tal
+  // och samma topplista, i en panel bredvid provperioderna.
+  const tal: { id: string; etikett: string; varde: string; notis?: string; varning?: boolean }[] = [
+    {
+      id: "fel",
+      etikett: text({ sv: `Fel, ${FONSTER_DAGAR} dagar`, en: `Errors, ${FONSTER_DAGAR} days` }),
+      varde: `${minst}${fel.length}`,
+      varning: fel.length > 0
+    },
+    {
+      id: "varningar",
+      etikett: text({ sv: `Varningar, ${FONSTER_DAGAR} dagar`, en: `Warnings, ${FONSTER_DAGAR} days` }),
+      varde: `${minst}${varningar.length}`
+    },
+    {
+      id: "eskalerade",
+      etikett: a("eskaleradeArenden", locale),
+      varde: String(eskalerade),
+      notis: a("allaKunderTotalt", locale)
+    }
+  ];
+
   return (
-    <Sektion
-      title={a("felOchEskaleringar", locale)}
-      action={
-        <Link
-          href="/admin/handelser"
-          className="focus-ring text-[0.9375rem] underline underline-offset-4 hover:text-ochre"
-        >
-          {text({ sv: "Alla händelser", en: "All events" })}
-        </Link>
-      }
-    >
-      <Nyckeltal
-        poster={[
-          {
-            etikett: text({
-              sv: `Fel, ${FONSTER_DAGAR} dagar`,
-              en: `Errors, ${FONSTER_DAGAR} days`
-            }),
-            varde: (
-              <span className={fel.length > 0 ? "text-warning" : undefined}>
-                {`${minst}${fel.length}`}
-              </span>
-            )
-          },
-          {
-            etikett: text({
-              sv: `Varningar, ${FONSTER_DAGAR} dagar`,
-              en: `Warnings, ${FONSTER_DAGAR} days`
-            }),
-            varde: `${minst}${varningar.length}`
-          },
-          {
-            etikett: a("eskaleradeArenden", locale),
-            varde: eskalerade,
-            notis: a("allaKunderTotalt", locale)
-          }
-        ]}
+    <section aria-labelledby="kunder-fel" className={cn(panelKort, "min-w-0")}>
+      <Panelrubrik
+        id="kunder-fel"
+        titel={{ sv: a("felOchEskaleringar", "sv"), en: a("felOchEskaleringar", "en") }}
+        action={
+          <Link
+            href="/admin/handelser"
+            className="focus-ring text-[0.8125rem] font-medium text-ink-muted underline underline-offset-4 hover:text-ochre"
+          >
+            {text({ sv: "Alla händelser", en: "All events" })}
+          </Link>
+        }
       />
+      <dl className="grid grid-cols-3 gap-3 border-b border-ink/10 pb-4">
+        {tal.map((t) => (
+          <div key={t.id} className="min-w-0">
+            <dt className={cn(etikett, "line-clamp-2")}>{t.etikett}</dt>
+            <dd className={cn("num mt-1 text-[1.5rem] font-semibold leading-none tabular-nums", t.varning ? "text-warning" : "text-ink")}>
+              {t.varde}
+            </dd>
+            {t.notis ? <dd className={cn(meta, "mt-1")}>{t.notis}</dd> : null}
+          </div>
+        ))}
+      </dl>
 
       {toppfel.length === 0 ? (
-        <div className="mt-6">
+        <div className="mt-4">
           <Tomt>
             {text({
               sv: `Inga fel de senaste ${FONSTER_DAGAR} dagarna.`,
@@ -126,7 +135,7 @@ export function FelOchEskaleringar({
           </Tomt>
         </div>
       ) : (
-        <Radlista className="mt-6">
+        <Radlista className="mt-2">
           {toppfel.map(({ antal: forekomster, senaste }) => {
             const tolkning = tolkaHandelse(senaste.message);
             const kalla = kallnamn(senaste.source);
@@ -169,6 +178,6 @@ export function FelOchEskaleringar({
           })}
         </Radlista>
       )}
-    </Sektion>
+    </section>
   );
 }

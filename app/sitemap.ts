@@ -45,7 +45,6 @@ const SIDOR: { vag: string; prioritet: number; frekvens: MetadataRoute.Sitemap[n
   { vag: "/", prioritet: 1.0, frekvens: "weekly" },
   { vag: "/leads", prioritet: 0.9, frekvens: "weekly" },
   { vag: "/support", prioritet: 0.9, frekvens: "weekly" },
-  { vag: "/bokforing", prioritet: 0.9, frekvens: "weekly" },
   // Bokningen är den sida vi faktiskt vill att folk landar på.
   { vag: "/boka-demo", prioritet: 0.8, frekvens: "monthly" },
   // FAQ:n svarar på det folk söker efter, och varje fråga har ett eget ankare.

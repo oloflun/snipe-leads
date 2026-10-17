@@ -2,7 +2,7 @@
 
 import { Fragment, useRef } from "react";
 import type { ProductKey } from "@/lib/routes";
-import { productKeys } from "@/lib/routes";
+import { saljbaraProdukter as productKeys } from "@/lib/routes";
 import { useLocale } from "@/lib/i18n";
 import { productCopy, shared } from "@/components/marketing/copy";
 import { cn } from "@/lib/utils";

@@ -12,7 +12,7 @@ import type { EmailStudioData } from "@/lib/data/emails";
 import { demoOversiktSvar } from "@/lib/demo/oversikt";
 import { felmeddelande, readJsonBody } from "@/lib/http/json";
 import { sv, useLocale, type Locale, type Localized } from "@/lib/i18n";
-import { lasOffertForUtkast } from "@/lib/actions/affarskontext";
+import { offertForUtkast } from "@/lib/leads/offert";
 import { ICP_ETIKETTER } from "@/lib/leads/icpLabels";
 import { kriterier } from "@/lib/prospekt";
 import { cn } from "@/lib/utils";
@@ -58,6 +58,8 @@ type Prospekt = {
   score_total: number | null;
   icp_fit: number | null;
   qualified: boolean | null;
+  /** Kodens nivå (bedomning.py): A/B är godkända leads, C bortvalda. */
+  niva?: string | null;
   disqualifiers: string[] | null;
   // Avsiktligt otypad: fältet HAR nått hit som en sträng. Se lib/prospekt.ts.
   score_breakdown: unknown;
@@ -134,7 +136,13 @@ const T = {
   orgnrSaknas: { sv: "org.nr saknas", en: "no org. no." },
   kallor: { sv: "Källor", en: "Sources" },
   status: { sv: "Status", en: "Status" },
-  saRaknades: { sv: "Så räknades poängen", en: "How the score was calculated" },
+  saRaknades: { sv: "Så bedömdes bolaget", en: "How the company was assessed" },
+  // Rangpoängen (snajp-support/app/leads/rangpoang.py, Sebbe 2026-10-07):
+  // kriterierna nedan är grinden, poängen rangordnar de godkända.
+  poangetsGrund: {
+    sv: "Kriterierna avgör om bolaget blir ett lead. Poängen rangordnar godkända leads efter hur väl bolaget passar målgruppen, styrkta citat från bolagets sajt, kontaktens kvalitet och tecken på att tidpunkten är rätt.",
+    en: "The criteria decide whether the company becomes a lead. The score ranks approved leads by how well the company fits the target group, verified quotes from its website, the quality of the contact and signs that the timing is right."
+  },
   vikt: { sv: "vikt", en: "weight" },
   ingenMotivering: { sv: "Ingen poängmotivering sparad.", en: "No score reasoning saved." },
   kontakt: { sv: "Kontakt", en: "Contact" },
@@ -277,7 +285,7 @@ function byggEmailStudioData(
  * sträng till outreach/draft — se rapportens avsnitt om saknat UI-data.
  */
 async function hamtaOffertsammanfattning(): Promise<string> {
-  return lasOffertForUtkast();
+  return offertForUtkast();
 }
 
 async function pollaLeadsJobb(jobId: string, locale: Locale): Promise<{
@@ -731,6 +739,9 @@ export function Bolagssida({ id, demo = false }: Readonly<{ id: string; demo?: b
 
         <section className="col-span-12 md:col-span-7">
           <h2 className="kicker text-mineral">{text(T.saRaknades)}</h2>
+          {p.niva === "A" || p.niva === "B" ? (
+            <p className="mt-2 max-w-[65ch] text-[14px] leading-6 text-ink-subtle">{text(T.poangetsGrund)}</p>
+          ) : null}
           {kriterier(p.score_breakdown).length ? (
             <ul className="mt-5 divide-y divide-ink/15 border-y border-ink/15">
               {kriterier(p.score_breakdown).map((k, i) => (

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getPlatformAdmin } from "@/lib/auth/admin";
 import { proxyWithApiKey } from "@/app/api/snajp-support/_lib";
+import { komprimera } from "@/lib/http/komprimera";
 
 /**
  * Adminproxyn. Två oberoende grindar, och båda behövs.
@@ -46,7 +47,7 @@ async function forward(request: NextRequest, path: string[], method: "GET") {
   }
 
   const backendPath = `/api/admin/${path.map(encodeURIComponent).join("/")}${request.nextUrl.search}`;
-  return proxyWithApiKey(backendPath, { method }, masterKey);
+  return komprimera(request, await proxyWithApiKey(backendPath, { method }, masterKey));
 }
 
 export async function GET(request: NextRequest, { params }: Params) {

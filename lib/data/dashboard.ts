@@ -1,12 +1,13 @@
 import { getPlatformAdmin } from "@/lib/auth/admin";
 import { getWorkspaceContext } from "@/lib/workspace";
 import { hasDatabase, sqlAsUser } from "@/lib/db";
-import { SCOPE_COOKIE, isProductKey, productKeys, type ProductKey, type Scope } from "@/lib/routes";
+import { SCOPE_COOKIE, arVilande, isProductKey, productKeys, type ProductKey, type Scope } from "@/lib/routes";
 import { isAddonKey, type AddonKey } from "@/lib/addons";
 import { hamtaTillagg } from "@/lib/actions/tillagg";
 import { listTenants, unwrap } from "@/lib/data/admin";
 import { DEMO_ARBETSYTA, aktivVy, type Vy } from "@/lib/vy";
 import { cookies } from "next/headers";
+import { cache } from "react";
 
 /**
  * What the dashboard needs to know before it renders anything.
@@ -94,7 +95,8 @@ const ALL_PRODUCTS: ProductKey[] = [...productKeys];
  * both products, which is what /dashboard has always shown without auth.
  */
 const ANONYMOUS: DashboardState = {
-  products: ALL_PRODUCTS,
+  // Utan inloggning är man aldrig admin: vilande agenter syns inte här heller.
+  products: ALL_PRODUCTS.filter((p) => !arVilande(p)),
   addons: [],
   workspaceName: null,
   userEmail: null,
@@ -143,18 +145,30 @@ async function scopeFranCookie(products: readonly ProductKey[]): Promise<Scope> 
  * Varje fel ger `[]`: ett kundbesök ska rendera även när backenden sover
  * eller 063 saknas, och tilläggsväljaren i /admin säger vad som är fel.
  */
-async function tillaggForKundbesok(slug: string): Promise<AddonKey[]> {
+async function tillaggForKundbesok(
+  slug: string
+): Promise<{ addons: AddonKey[]; namn: string | null; products: string[] | null }> {
   try {
     const { data } = unwrap(await listTenants());
     const tenant = data?.find((rad) => rad.slug === slug);
-    if (!tenant) return [];
-    return (await hamtaTillagg(tenant.id)).addons ?? [];
+    if (!tenant) return { addons: [], namn: null, products: null };
+    return {
+      addons: (await hamtaTillagg(tenant.id)).addons ?? [],
+      namn: tenant.name ?? null,
+      products: tenant.products ?? null
+    };
   } catch {
-    return [];
+    return { addons: [], namn: null, products: null };
   }
 }
 
-export async function resolveDashboardState(): Promise<DashboardState> {
+/**
+ * Avdupliceras per request med React `cache`, av samma skäl som
+ * `getWorkspaceContext`: layouten OCH `WorkspaceSection` frågar båda, och i
+ * kundbesöket kostade varje fråga en adminlistning mot backenden. Två
+ * identiska svar per sidbyte är inte fel, bara betalda två gånger.
+ */
+export const resolveDashboardState = cache(async function resolveDashboardState(): Promise<DashboardState> {
   if (!hasDatabase()) {
     return ANONYMOUS;
   }
@@ -186,7 +200,7 @@ export async function resolveDashboardState(): Promise<DashboardState> {
    * är värre än ett tekniskt.
    */
   if (lage.vy === "kund") {
-    const [rader, addons] = await Promise.all([
+    const [rader, kund] = await Promise.all([
       sqlAsUser<{ name: string | null; products: string[] | null }>(
         context.user.id,
         "select name, products from public.workspaces where slug = $1",
@@ -194,21 +208,28 @@ export async function resolveDashboardState(): Promise<DashboardState> {
       ).catch(() => []),
       tillaggForKundbesok(lage.slug)
     ]);
+    const { addons } = kund;
+    // Arbetsytans rad är ofta osynlig för adminens RLS-roll (kundens rad, inte
+    // adminens). Då föll besöket tillbaka på ALLA produkter: adminen såg
+    // Kvitton och Kundtjänst hos en kund som bara har Leads, och sidorna
+    // svarade med felrutor när backendens produktgrind sa 404. Admin-API:ets
+    // kundlista bär samma `workspaces.products` och namnet.
+    const namn = rader[0]?.name ?? kund.namn;
 
     return {
-      products: (rader[0]?.products ?? ALL_PRODUCTS).filter(isProductKey),
+      products: (rader[0]?.products ?? kund.products ?? ALL_PRODUCTS).filter(isProductKey),
       // Kundens RIKTIGA tillägg. Här stod `[]`, så en admin som slog på
       // Leadslistor åt en kund och sedan öppnade kundens arbetsyta för att
       // kontrollera såg ingen Leadslistor-vy — och drog slutsatsen att
       // påslaget inte fungerade.
       addons,
-      workspaceName: rader[0]?.name ?? lage.slug,
+      workspaceName: namn ?? lage.slug,
       userEmail: null,
       signedIn: true,
       isDemo: false,
       isPlatformAdmin: true,
       vy,
-      impersonation: { slug: lage.slug, namn: rader[0]?.name ?? lage.slug },
+      impersonation: { slug: lage.slug, namn: namn ?? lage.slug },
       arLasare: false,
       initialScope: await scopeFranCookie(ALL_PRODUCTS)
     };
@@ -238,20 +259,27 @@ export async function resolveDashboardState(): Promise<DashboardState> {
     };
   }
 
+  // Vilande agenter (lib/routes.ts: VILANDE_PRODUKTER) försvinner ur kundens
+  // produkter HÄR, en gång, så att varje entitlement-grind nedströms (menyn,
+  // WorkspaceSection, Att göra, kvittoproxyn) säger samma sak. Admin behåller
+  // dem — både i sin egen arbetsyta och i kundbesöket ovan.
+  const arAdmin = Boolean(await getPlatformAdmin());
+  const synliga = arAdmin ? products : products.filter((p) => !arVilande(p));
+
   return {
-    products,
+    products: synliga,
     addons: (context.workspace.addons ?? []).filter(isAddonKey),
     workspaceName: context.workspace.name,
     userEmail: context.user.email,
     signedIn: true,
     isDemo: context.workspace.is_demo,
-    isPlatformAdmin: Boolean(await getPlatformAdmin()),
+    isPlatformAdmin: arAdmin,
     vy,
     impersonation: null,
     arLasare: (context.profile.role ?? "") === "viewer",
-    initialScope: await scopeFranCookie(products)
+    initialScope: await scopeFranCookie(synliga)
   };
-}
+});
 
 /**
  * `workspaceHasData` och `variant` är BORTA, och det var inte en förenkling.

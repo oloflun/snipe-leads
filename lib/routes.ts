@@ -33,6 +33,31 @@ export function isProductKey(value: string): value is ProductKey {
   return (productKeys as readonly string[]).includes(value);
 }
 
+/**
+ * Agenter som står på is: de säljs inte och kunderna når dem inte, men
+ * plattformsadmin använder dem som vanligt (Sebbe 2026-10-17: Kvittoagenten
+ * ska inte vara i fokus för Snajp att sälja, se docs/BESLUT.md).
+ *
+ * Kunden ser posten i menyn, mörklagd och utan länk (AppShell ritar den som
+ * `vilande`), och produkten filtreras ur kundens `products` i
+ * `resolveDashboardState` — så varje yta som grindar på entitlement (Att göra,
+ * översikten, kvittoproxyn) tystnar på samma ställe. En kund som har paketet
+ * i databasen behåller det där; det är visningen som pausas, inte avtalet.
+ * Töm listan för att släppa produkten igen.
+ */
+export const VILANDE_PRODUKTER: readonly ProductKey[] = ["bookkeeping"];
+
+export function arVilande(product: ProductKey | "shared"): boolean {
+  return product !== "shared" && VILANDE_PRODUKTER.includes(product);
+}
+
+/**
+ * Produkterna marknadssidorna säljer: allt utom de vilande. Produktväxeln,
+ * hjältebildens demopaneler och demolänkarna läser den här listan, inte
+ * `productKeys`, så att en vilande agent försvinner ur säljytan på ett ställe.
+ */
+export const saljbaraProdukter: readonly ProductKey[] = productKeys.filter((p) => !arVilande(p));
+
 export type AppRoute = {
   href: string;
   labelKey: CopyKey;
@@ -121,9 +146,6 @@ export const appRoutes: AppRoute[] = [
   // (migration 047), och en nyckel i databasen byter man inte namn på för att
   // produkten gjorde det. Grindas på entitlement som leads och support.
   { href: "/dashboard/kvitton", labelKey: "nav.kvitton", product: "bookkeeping" },
-  // Alla agenters körningar på ett ställe: Iris jobbliggare (migration 080)
-  // och kundtjänstens journal. Innehållet följer vilka agenter arbetsytan har.
-  { href: "/dashboard/aktivitet", labelKey: "nav.aktivitet", product: "shared" },
   { href: "/settings", labelKey: "nav.settings", product: "shared" }
 ];
 
@@ -141,6 +163,9 @@ export function routesForProducts(
       // visar FÄRRE poster, inte fler. Motsatt default hade gjort varje ny
       // anropsplats till en potentiell läcka.
       (!route.adminOnly || isAdmin) &&
+      // Vilande agenter (VILANDE_PRODUKTER) når bara plattformsadmin. Kunden
+      // ser dem mörklagda i AppShell, aldrig som en navigerbar post.
+      (!arVilande(route.product) || isAdmin) &&
       (route.product === "shared" || products.includes(route.product))
   );
 }
@@ -450,7 +475,9 @@ export function productForSettingsSection(section: SettingsSectionKey): ProductK
  * Public marketing surfaces. `/leads` and `/support` render the same shell with a
  * different product selected, so both are linkable and crawlable.
  */
-export const publicProductRoutes = ["/", "/leads", "/support", "/kvitton"] as const;
+// /kvitton leder till /support sedan 2026-10-17: Kvittohanteraren är ett
+// vilande tillägg till Support och har ingen egen säljsida.
+export const publicProductRoutes = ["/", "/leads", "/support"] as const;
 
 // Auth route guards (pure, no server dependencies — safe for middleware).
 // /leads, /support och /bokforing är INTE listade: de är publika produktsidor,

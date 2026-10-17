@@ -18,7 +18,8 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from .geo import _prefix_ur_postnr
+from .geo import _prefix_ur_postnr, malomradets_serier
+from .offentlig import offentlig_eller_skola
 from .profil import KOMMUNER
 
 #: Enskild firma: marknadsföringslagen 19 § kräver förhandssamtycke för
@@ -42,6 +43,13 @@ def forfiltrera(profil: dict[str, Any], kandidat: dict[str, Any], *, exclude_dom
     if ar_enskild_firma(kandidat.get("orgnr")):
         return "Enskild firma — e-post kräver förhandssamtycke (marknadsföringslagen 19 §)."
 
+    # Bara privata bolag, om kunden inte själv pekat ut offentlig sektor
+    # eller skolor som målgrupp (Antons regel 2026-10-06, leads/offentlig.py).
+    if not profil.get("offentlig_sektor"):
+        offentligt = offentlig_eller_skola(kandidat)
+        if offentligt:
+            return offentligt
+
     antal = kandidat.get("anstallda")
     if isinstance(antal, int) and not isinstance(antal, bool):
         lo, hi = profil.get("anstallda_min"), profil.get("anstallda_max")
@@ -51,12 +59,20 @@ def forfiltrera(profil: dict[str, Any], kandidat: dict[str, Any], *, exclude_dom
             return f"För litet: {antal} anställda enligt källan (minst {lo})."
 
     kommuner = [KOMMUNER[k.casefold()] for k in profil.get("kommuner") or [] if k.casefold() in KOMMUNER]
-    if kommuner:
+    # Bara när HELA kundens område är kommuner med kända postnummer kan
+    # postnumret fälla. Områden vi inte kan översätta (Luleå, "Resten av
+    # Norrland") ligger i profil["omraden"]; utan den här vakten fälldes 22
+    # bolag i Skellefteå, Luleå och Sundsvall som "utanför målområdet" i en
+    # körning där just de orterna var valda (development 2026-10-08, 40
+    # beställda, 6 levererade). Okänt fäller aldrig.
+    omraden = [o for o in profil.get("omraden") or [] if o]
+    serier = malomradets_serier(kommuner, omraden) if (kommuner or omraden) else None
+    if serier:
         prefix = _prefix_ur_postnr(kandidat.get("postnr"))
         ort = str(kandidat.get("ort") or "").strip().casefold()
-        if prefix is not None and not any(k.innehaller_prefix(prefix) for k in kommuner):
+        if prefix is not None and not any(lag <= prefix <= hog for lag, hog in serier):
             return f"Utanför målområdet: postnummer {kandidat.get('postnr')}."
-        if prefix is None and ort in KOMMUNER and ort not in {k.namn.casefold() for k in kommuner}:
+        if prefix is None and not omraden and ort in KOMMUNER and ort not in {k.namn.casefold() for k in kommuner}:
             return f"Utanför målområdet: {kandidat.get('ort')}."
 
     text = f"{kandidat.get('company_name') or ''} {kandidat.get('website') or ''} {kandidat.get('signal_detalj') or ''}"
@@ -80,6 +96,8 @@ def demo() -> None:
     assert forfiltrera(profil, {"company_name": "X", "orgnr": "990402-1392"})
     assert forfiltrera(profil, {"company_name": "X", "orgnr": "556824-9022", "postnr": "421 32", "anstallda": 4}) is None
     assert forfiltrera(profil, {"company_name": "Okänd AB"}) is None
+    assert forfiltrera(profil, {"company_name": "Yrkeshögskolan Umeå Kommun"})
+    assert forfiltrera({**profil, "offentlig_sektor": True}, {"company_name": "Umeå Folkhögskola"}) is None
     print("forfilter: ok")
 
 

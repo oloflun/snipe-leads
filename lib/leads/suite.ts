@@ -1,6 +1,7 @@
 import { arEjAktiverad } from "@/components/EjAktiverad";
 import { readJsonBody } from "@/lib/http/json";
-import type { Locale } from "@/lib/i18n";
+import type { Locale, Localized } from "@/lib/i18n";
+import type { Utkastfalt } from "@/lib/leads/utkast";
 
 /**
  * Leads Suite (Fas 10, plan del F): typerna och anropet som tabellen,
@@ -23,7 +24,15 @@ export type SuiteProspekt = {
   created_at?: string | null;
   /** Senaste statusbyte ur loggen, annars created_at (GET /leads/prospects). */
   senaste_handelse_at?: string | null;
-};
+  website?: string | null;
+  ort?: string | null;
+  motivering?: string | null;
+  disqualifiers?: string[] | null;
+  /** Webbrevisionen (migration 094): bildbedömningens betyg och synliga brister. */
+  webbrevision?: { modernitet?: number | null; brister?: string[] | null } | null;
+  /** Arkiverad (migration 107): dold i Iris-listan, nåbar under Arkiverade. */
+  arkiverad_at?: string | null;
+} & Utkastfalt;
 
 export type Uppgift = {
   id: string;
@@ -40,12 +49,44 @@ export type VyFilter = { status?: string; niva?: string; typ?: string; sok?: str
 export type Vy = { id: string; namn: string; filter: VyFilter; created_at?: string | null };
 
 export type Handelse = {
-  typ: "skapad" | "status" | "mejl_ut" | "mejl_in" | "anteckning" | "uppgift";
+  typ: "skapad" | "status" | "mejl_ut" | "mejl_in" | "anteckning" | "uppgift" | "samtal";
   nar: string;
   rubrik: string;
   text: string | null;
   id: string | null;
   klar: boolean | null;
+};
+
+/** Samtalens utfall (snajp-support/app/leads/samtal.py, migration 107). */
+export type Utfall = "ej_svar" | "aterkom" | "ej_intresserad" | "kontakta_inte" | "mote";
+
+export const UTFALL_ETIKETT: Record<Utfall, Localized> = {
+  ej_svar: { sv: "Ej svar", en: "No answer" },
+  aterkom: { sv: "Återkom", en: "Call back" },
+  ej_intresserad: { sv: "Ej intresserad", en: "Not interested" },
+  kontakta_inte: { sv: "Kontakta inte", en: "Do not contact" },
+  mote: { sv: "Möte bokat", en: "Meeting booked" }
+};
+
+/** En rad i återkopplingen eller ringlistan (GET /leads/samtal). */
+export type Samtalsrad = {
+  prospect_id: string;
+  company_name: string | null;
+  ort: string | null;
+  website: string | null;
+  contact_name: string | null;
+  contact_role: string | null;
+  contact_phone: string | null;
+  contact_email: string | null;
+  anstallda: number | null;
+  status: string | null;
+  kontaktad: string | null;
+  antal_samtal: number;
+  senaste_utfall: Utfall | null;
+  senaste_samtal: string | null;
+  aterkom_datum: string | null;
+  nasta: string | null;
+  ring_idag: boolean;
 };
 
 /** Ett fel från backenden: meddelandet ur `detail` när det finns, och läget
@@ -65,6 +106,14 @@ function detaljtext(kropp: unknown): string | null {
   if (!kropp || typeof kropp !== "object") return null;
   const k = kropp as { detail?: unknown; error?: unknown };
   if (typeof k.detail === "string") return k.detail;
+  // {message, saknas: [...]} (t.ex. /befordra): beskedet och vad som saknas,
+  // i stället för "HTTP 422".
+  if (k.detail && typeof k.detail === "object" && !Array.isArray(k.detail)) {
+    const d = k.detail as { message?: unknown; saknas?: unknown };
+    const saknas = Array.isArray(d.saknas) ? d.saknas.map(String) : [];
+    const text = [typeof d.message === "string" ? d.message : null, ...saknas].filter(Boolean).join(" ");
+    if (text) return text;
+  }
   if (Array.isArray(k.detail)) {
     return k.detail
       .map((d) => (d && typeof d === "object" && "msg" in d ? String((d as { msg: unknown }).msg) : String(d)))

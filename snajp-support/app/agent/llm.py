@@ -84,11 +84,17 @@ def _vertex_token(settings: Settings) -> str:
         return creds.token
 
 
-def _vertex_base_url(settings: Settings) -> str:
+def vertex_regioner(settings: Settings) -> list[str]:
+    """Huvudregionen följd av reservregionerna (bara EU, se config)."""
+    reserv = [r.strip() for r in (settings.vertex_reservregioner or "").split(",") if r.strip()]
+    return list(dict.fromkeys([settings.google_cloud_region, *reserv]))
+
+
+def _vertex_base_url(settings: Settings, region: str | None = None) -> str:
     """OpenAI-kompatibla Vertex AI-endpointen."""
     info = json.loads(settings.google_service_account_json)
     project = info["project_id"]
-    region = settings.google_cloud_region
+    region = region or settings.google_cloud_region
     return (
         f"https://{region}-aiplatform.googleapis.com/v1beta1/"
         f"projects/{project}/locations/{region}/endpoints/openapi/"
@@ -283,15 +289,37 @@ def _refresh_vertex_clients() -> None:
                 client.api_key = token
 
 
-def get_llm_client() -> AsyncOpenAI:
+#: Vertex-klienter för reservregionerna (get_llm_client(region=...)).
+_regionklienter: dict[str, AsyncOpenAI] = {}
+
+
+def get_llm_client(region: str | None = None) -> AsyncOpenAI:
     """Chat-klienten för aktuell provider (openai/deepseek/gemini).
 
     Vertex AI: tokenen refreshas vid varje anrop. Klienten skapas en gång
     och api_key uppdateras — SDK:n läser den per request.
+
+    `region` (Vertex): en klient mot en annan EU-region, för bakgrundsjobbens
+    byte vid 429 (step_runner). Huvudregionen ger den vanliga klienten.
     """
     global _llm_client
     krav_tillaten_provider()
     settings = get_settings()
+
+    if region and _uses_vertex(settings) and region != settings.google_cloud_region:
+        with _clients_lock:
+            klient = _regionklienter.get(region)
+            if klient is None:
+                klient = AsyncOpenAI(
+                    api_key=_vertex_token(settings),
+                    base_url=_vertex_base_url(settings, region),
+                    max_retries=1,
+                )
+                _med_vertex_modellnamn(klient)
+                _regionklienter[region] = klient
+            else:
+                klient.api_key = _vertex_token(settings)
+            return klient
 
     with _clients_lock:
         if _llm_client is not None:

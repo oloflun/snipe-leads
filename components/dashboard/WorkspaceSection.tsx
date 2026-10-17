@@ -13,11 +13,10 @@ import {
   ContactsView,
   InboxView
 } from "@/components/WorkspaceViews";
-import { IrisBolag } from "@/components/leads/IrisBolag";
+import { IrisBolag } from "@/components/leads/LeadsSida";
 import { AttGora } from "@/components/leads/AttGora";
-import { Aktivitet } from "@/components/dashboard/Aktivitet";
 import { resolveDashboardState } from "@/lib/data/dashboard";
-import type { ProductKey } from "@/lib/routes";
+import { arVilande, type ProductKey } from "@/lib/routes";
 
 /**
  * Arbetsytans sektioner — EN dispatcher, två ytor.
@@ -91,15 +90,9 @@ export async function WorkspaceSection({
     redirect(`${base}/kvitton`);
   }
 
-  // Aktivitet är delad: innehållet följer vilka agenter arbetsytan har (se
-  // components/dashboard/Aktivitet.tsx), så inloggningen bär grinden.
+  // Aktivitet är översikten sedan 2026-10-07 (StartView). Bokmärken landar där.
   if (section === "aktivitet") {
-    if (id) notFound();
-    return (
-      <PageShell title={{ sv: "Aktivitet", en: "Activity" }}>
-        <Aktivitet />
-      </PageShell>
-    );
+    redirect(base === "/admin" ? "/admin/arbetsyta" : base);
   }
 
   // Att göra är delad på samma sätt: kön visar bara agenter arbetsytan har.
@@ -126,7 +119,14 @@ export async function WorkspaceSection({
 
   // Entitlement is enforced here, on the server. Hiding a nav item is a courtesy;
   // this is the actual gate.
-  const { products, workspaceName } = await resolveDashboardState();
+  const { products, workspaceName, isPlatformAdmin } = await resolveDashboardState();
+  // Vilande agent (lib/routes.ts: VILANDE_PRODUKTER, Kvitton sedan
+  // 2026-10-17): kunden ser posten mörklagd utan länk, och den som skriver
+  // adressen själv landar på översikten — ingen data och ingen upsell-vy,
+  // eftersom produkten inte säljs just nu. Plattformsadmin passerar.
+  if (arVilande(product) && !isPlatformAdmin) {
+    redirect(base);
+  }
   if (!products.includes(product)) {
     // De tre agentytorna: menyn visar dem MÖRKLAGDA (AppShell), och klicket
     // ska landa i agentens erbjudande — inte i en 404. Grinden är densamma:
@@ -164,10 +164,10 @@ export async function WorkspaceSection({
       // landa på sin nya plats, inte i en 404.
       const ny: Record<string, string> = {
         "": `${base}/leads`,
-        pipeline: `${base}/leads?vy=pipeline`,
-        korningar: `${base}/aktivitet`,
-        inkorg: `${base}/att-gora`,
-        granskning: `${base}/att-gora`,
+        pipeline: `${base}/leads`,
+        korningar: `${base}/leads?vy=korningar`,
+        inkorg: `${base}/leads?vy=inkorg`,
+        granskning: `${base}/leads?vy=utkast`,
         installningar: leadsInstallningar
       };
       const mal = ny[id ?? ""];

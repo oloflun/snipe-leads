@@ -29,6 +29,7 @@ RATTADE_AV_068 = {
 RATTADE_SENARE = {
     "20261003130000_085_flyttko.sql",  # rättad av 088_flyttko_nullif
     "20261003140000_086_leads_suite.sql",  # rättad av 089_leads_suite_nullif
+    "20261005100000_093_leads_sidcache.sql",  # rättad av 097_leads_sidcache_nullif
 }
 
 # '{1,2}: citattecknen är dubblade inuti en format()-sträng i en DO-loop (086 skrev
@@ -65,6 +66,12 @@ def test_089_ratter_leads_suite():
     for tabell in ("lead_anteckningar", "lead_uppgifter", "prospect_status_logg", "lead_vyer"):
         assert f"'{tabell}'" in text, tabell
     assert "nullif(current_setting(''app.tenant_id'', true)" in text
+
+
+def test_097_ratter_sidcachen():
+    text = (MIGRATIONS / "20261006100000_097_leads_sidcache_nullif.sql").read_text(encoding="utf-8")
+    assert "on public.leads_sidcache" in text
+    assert "nullif(current_setting('app.tenant_id', true), '')" in text
 
 
 def test_068_ratter_alla_elva():

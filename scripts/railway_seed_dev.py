@@ -59,6 +59,16 @@ create table if not exists public.mirror_meta (
   source_fingerprint text,
   constraint mirror_meta_singleton check (id)
 );
+-- Appen måste kunna LÄSA markören (migration 095): utan policy ser snajp_app
+-- noll rader och development slutar se sig själv som en spegel.
+do $$
+begin
+  if exists (select 1 from pg_roles where rolname = 'snajp_app') then
+    drop policy if exists app_las_markor on public.mirror_meta;
+    create policy app_las_markor on public.mirror_meta for select to snajp_app using (true);
+    grant select on table public.mirror_meta to snajp_app;
+  end if;
+end $$;
 """
 
 

@@ -6,7 +6,7 @@ import { useArbetsvag } from "@/components/AppShell";
 import { Rad, Radlista, Tomt, btnPrimary, btnSecondary, etikett, meta, rubrikPanel } from "@/components/ui";
 import { felmeddelande } from "@/lib/http/json";
 import { useLocale, type Localized } from "@/lib/i18n";
-import { datumFormat, leadsAnrop, type Handelse } from "@/lib/leads/suite";
+import { UTFALL_ETIKETT, datumFormat, leadsAnrop, type Handelse, type Utfall } from "@/lib/leads/suite";
 import { STATUS_ETIKETT } from "@/lib/prospekt";
 import { cn } from "@/lib/utils";
 
@@ -44,7 +44,8 @@ const TYP_ETIKETT: Record<Handelse["typ"], Localized> = {
   mejl_ut: { sv: "Mejl ut", en: "Email out" },
   mejl_in: { sv: "Mejl in", en: "Email in" },
   anteckning: { sv: "Anteckning", en: "Note" },
-  uppgift: { sv: "Uppgift", en: "Task" }
+  uppgift: { sv: "Uppgift", en: "Task" },
+  samtal: { sv: "Samtal", en: "Call" }
 };
 
 const faltKlass = "focus-ring min-h-11 w-full rounded-input border border-ink/15 bg-paper px-3 text-[16px] text-ink";
@@ -102,6 +103,8 @@ export function Tidslinje({ prospectId, demo = false }: Readonly<{ prospectId: s
   }
 
   function rubrik(h: Handelse): string {
+    // Samtalets rubrik är utfallets nyckel (app/api/leads_suite.py).
+    if (h.typ === "samtal") return h.rubrik in UTFALL_ETIKETT ? text(UTFALL_ETIKETT[h.rubrik as Utfall]) : h.rubrik;
     if (h.typ !== "status") return h.rubrik;
     // Backenden skickar råa statusnycklar, "fran → till".
     return h.rubrik

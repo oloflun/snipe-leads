@@ -1,4 +1,4 @@
-import { PAKET, PRODUKTER_FOR_PAKET, type Paket } from "@/lib/pricing";
+import { PAKET, PRODUKTER_FOR_PAKET, utanKvittotillagg, type Paket } from "@/lib/pricing";
 
 /**
  * Baklängesuppslaget products → paket. Bor i en EGEN modul utan "use client":
@@ -8,10 +8,15 @@ import { PAKET, PRODUKTER_FOR_PAKET, type Paket } from "@/lib/pricing";
  * en klientreferens, inte en funktion.
  */
 
-/** Exakt paketmatchning mot products-kolumnen. Null = inget känt paket. */
+/**
+ * Exakt paketmatchning mot products-kolumnen. Null = inget känt paket.
+ * Kvittohanteraren är ett tillägg (lib/pricing.ts: KVITTO_TILLAGG) och räknas
+ * bort före matchningen: leads + support + bookkeeping är Duo med tillägget.
+ */
 export function paketForProdukter(products: string[] | null | undefined): Paket | null {
-  if (!products || products.length === 0) return null;
-  const mangd = [...products].sort().join(",");
+  const paketprodukter = utanKvittotillagg(products ?? []);
+  if (paketprodukter.length === 0) return null;
+  const mangd = [...paketprodukter].sort().join(",");
   const id = (Object.keys(PRODUKTER_FOR_PAKET) as Paket["id"][]).find(
     (kandidat) => [...PRODUKTER_FOR_PAKET[kandidat]].sort().join(",") === mangd
   );

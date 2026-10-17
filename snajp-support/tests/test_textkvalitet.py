@@ -166,6 +166,40 @@ async def test_sakra_utgaende_text_flaggad_text_utan_llm_kraver_granskning():
     assert r.kraver_granskning
 
 
+@pytest.mark.anyio
+async def test_alltid_korrektur_rattar_ren_text(monkeypatch):
+    """Leadsutkasten korrekturläses alltid (2026-10-09)."""
+    import app.textkvalitet as tk
+
+    async def korrektur(text, *, anmarkningar=None):
+        return text.replace("ni, som ni drivit sedan 2006, har", "ni har drivit företaget sedan 2006 och har"), True
+
+    monkeypatch.setattr(tk, "korrekturlas_llm", korrektur)
+    text = "Hej,\n\nJag såg att ni, som ni drivit sedan 2006, har lång erfarenhet."
+    r = await sakra_utgaende_text(text, alltid_korrektur=True)
+    assert "ni har drivit företaget sedan 2006" in r.text
+    assert any(a.kod == "llm_korrektur" for a in r.anmarkningar)
+    assert not r.kraver_granskning
+    # Utan flaggan rörs en ren text inte.
+    assert (await sakra_utgaende_text(text)).text == text
+
+
+@pytest.mark.anyio
+async def test_fallen_korrektur_lamnar_ren_text_orord(monkeypatch):
+    import app.textkvalitet as tk
+
+    async def korrektur(text, *, anmarkningar=None):
+        return text, False
+
+    monkeypatch.setattr(tk, "korrekturlas_llm", korrektur)
+    r = await sakra_utgaende_text("Hej! Vi hörs snart.", alltid_korrektur=True)
+    assert r.text == "Hej! Vi hörs snart." and not r.kraver_granskning
+
+
+def test_scannar_stavas_skannar():
+    assert "skannar" in kontrollera("Den scannar er e-post.").text
+
+
 # ------------------------------------------------------------- statiskt
 
 

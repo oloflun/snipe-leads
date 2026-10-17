@@ -92,14 +92,47 @@ def bara_utlagg(rader: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return [r for r in rader if r.get("riktning") != "intakt"]
 
 
+def bara_intakter(rader: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Kundfakturorna — företagets egna fakturor till kunder (sedan 2026-10-07)."""
+    return [r for r in rader if r.get("riktning") == "intakt"]
+
+
+def sammanstall_intakter(rader: list[dict[str, Any]]) -> dict[str, Any]:
+    """Intäkternas summor, med samma regel som utläggen: bara "klar" räknas.
+
+    Momsen här är UTGÅENDE moms (den företaget ska betala in), inte ingående.
+    `obetalt` är klara kundfakturor som ännu inte betalats — kundfordringarna.
+    """
+    intakter = bara_intakter(rader)
+    klara = [r for r in intakter if r.get("status") == STATUS_KLAR and r.get("brutto") is not None]
+    totalt = sum((r["brutto"] for r in klara), Decimal("0"))
+    moms = sum(
+        (moms_fran_brutto(r["brutto"], r["momssats"]) for r in klara if r.get("momssats") is not None),
+        Decimal("0"),
+    )
+    obetalda = [r for r in klara if r.get("betalstatus") == "obetald"]
+    return {
+        "antal": len(intakter),
+        "antal_klara": len(klara),
+        "antal_granska": len(intakter) - len(klara),
+        "totalt": _kr(totalt),
+        "moms": _kr(moms),
+        "antal_obetalda": len(obetalda),
+        "obetalt": _kr(sum((r["brutto"] for r in obetalda), Decimal("0"))),
+        "_totalt": totalt,
+        "_moms": moms,
+    }
+
+
 def sammanstall(rader: list[dict[str, Any]]) -> dict[str, Any]:
     """Summorna över en lista kvitton (bk_underlag-rader).
 
     Bara rader med status "klar" räknas in i beloppen — ett flaggat kvitto
     står i granskningsräkningen i stället för att bidra med ett osäkert tal.
     Samma regel som `berakna_period` följer. Intäkter räknas aldrig, se
-    `bara_utlagg`.
+    `bara_utlagg` — de står för sig under "intakter".
     """
+    intakter = sammanstall_intakter(rader)
     rader = bara_utlagg(rader)
     klara = [r for r in rader if r.get("status") == STATUS_KLAR]
     granska = [r for r in rader if r.get("status") != STATUS_KLAR]
@@ -158,7 +191,9 @@ def sammanstall(rader: list[dict[str, Any]]) -> dict[str, Any]:
             if storsta
             else None
         ),
+        "intakter": {k: v for k, v in intakter.items() if not k.startswith("_")},
         # Kvar som Decimals för textbygget nedan — API-lagret tar bort fältet.
+        "_intakter": intakter,
         "_totalt": totalt,
         "_moms": moms,
         "_kategorier": kategorier,
@@ -168,6 +203,18 @@ def sammanstall(rader: list[dict[str, Any]]) -> dict[str, Any]:
 def summeringstext(samman: dict[str, Any], fran: str, till: str) -> str:
     """Meningarna bredvid resultatrutan. Byggda av kod — se modulens docstring."""
     antal = samman["antal"]
+    intakter = samman.get("_intakter") or {}
+    intaktstext = ""
+    if intakter.get("antal_klara"):
+        n = intakter["antal_klara"]
+        intaktstext = (
+            f"{n} kundfaktur{'or' if n != 1 else 'a'} på totalt {_kr_text(intakter['_totalt'])} "
+            f"räknas som intäkter, med {_kr_text(intakter['_moms'])} i utgående moms."
+        )
+        if intakter.get("antal_obetalda"):
+            intaktstext += f" {intakter['antal_obetalda']} av dem är ännu inte betalda."
+    if antal == 0 and intaktstext:
+        return f"Inga kvitton hittades för perioden {fran} till {till}. {intaktstext}"
     if antal == 0:
         return (
             f"Inga kvitton hittades för perioden {fran} till {till}. "
@@ -209,6 +256,8 @@ def summeringstext(samman: dict[str, Any], fran: str, till: str) -> str:
             "De räknas inte in i summorna förrän du godkänt dem."
         )
 
+    if intaktstext:
+        delar.append(intaktstext)
     return " ".join(delar)
 
 

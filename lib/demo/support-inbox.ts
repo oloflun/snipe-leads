@@ -354,8 +354,11 @@ export function createDemoSupportApi() {
     const q = params.get("q")?.toLowerCase().trim();
     const status = params.get("status");
     const category = params.get("category");
+    // Demoinkorgen är bara kundärenden: Leads och Dolda står tomma.
+    const klass = params.get("klass");
 
     return mejl.filter((m) => {
+      if (klass && klass !== "support") return false;
       if (status && m.status !== status) return false;
       if (category && m.classification?.category !== category) return false;
       if (q) {

@@ -72,7 +72,7 @@ const PLATTFORM: Array<{
   Icon: LucideIcon;
   ocksa?: string[];
 }> = [
-  { href: "/admin", label: { sv: "Översikt", en: "Overview" }, Icon: LayoutDashboard },
+  { href: "/admin", label: { sv: "Admin-översikt", en: "Admin overview" }, Icon: LayoutDashboard },
   {
     href: "/admin/kunder",
     label: { sv: "Kunder", en: "Customers" },
@@ -142,15 +142,9 @@ export function AdminShell({
       // så samma /dashboard/*-route bär samma ikon på båda ytorna.
       origHref: route.href,
       href: tillAdminvag(route.href),
-      // "Min arbetsyta" och inte t("nav.dashboard") ("Översikt"): plattforms-
-      // gruppen har redan en post som heter Översikt, och två poster med
-      // samma namn i samma rail är inte en etikett utan en gissningslek.
-      // Localized och inte en svensk sträng — resten av railen byter språk
-      // med EN/SV-knappen, och en post som inte gör det ser ut som en bugg.
-      label:
-        route.href === "/dashboard"
-          ? text({ sv: "Min arbetsyta", en: "My workspace" })
-          : t(route.labelKey)
+      // Arbetsytans startsida heter Översikt; plattformens heter
+      // Admin-översikt (Antons beställning 2026-10-07), så namnen krockar inte.
+      label: t(route.labelKey)
     }));
 
   const aktiv = aktivHref(pathname, [

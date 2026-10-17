@@ -22,7 +22,7 @@ import { ADMIN, a, ordagrant } from "@/lib/admin/sprak";
 import type { TenantRow } from "@/lib/data/admin";
 import { useLocale, type Locale, type Localized } from "@/lib/i18n";
 import { paketForProdukter } from "@/lib/paket";
-import { PAKET, formateraPris, type Paket } from "@/lib/pricing";
+import { KVITTO_TILLAGG, PAKET, PRODUKTER_FOR_PAKET, formateraPris, type Paket } from "@/lib/pricing";
 import { cn } from "@/lib/utils";
 
 /**
@@ -125,7 +125,12 @@ function KundRad({
         </Cell>
         <Cell>
           {paket ? (
-            paket.namn
+            <>
+              {paket.namn}
+              {rad.products?.includes(KVITTO_TILLAGG.produkt) ? (
+                <span className={cn(meta, "ml-2")}>{text({ sv: "+ Kvitto", en: "+ Receipts" })}</span>
+              ) : null}
+            </>
           ) : rad.products && rad.products.length > 0 ? (
             <span className={meta}>
               {a("egetUrval", locale)} {rad.products.join(", ")}
@@ -167,7 +172,13 @@ function KundRad({
       {oppen ? (
         <tr>
           <td colSpan={6} className="bg-paper2/40 px-5 pb-10 pt-2">
-            <Paketval tenantId={rad.id} namn={rad.name} nuvarande={paket} harArbetsyta={rad.products != null} />
+            <Paketval
+              tenantId={rad.id}
+              namn={rad.name}
+              nuvarande={paket}
+              harArbetsyta={rad.products != null}
+              harKvitto={Boolean(rad.products?.includes(KVITTO_TILLAGG.produkt))}
+            />
             <TillaggPanel tenantId={rad.id} />
             <Kontolage tenantId={rad.id} namn={rad.name} status={status} />
           </td>
@@ -181,32 +192,55 @@ function Paketval({
   tenantId,
   namn,
   nuvarande,
-  harArbetsyta
-}: Readonly<{ tenantId: string; namn: string; nuvarande: Paket | null; harArbetsyta: boolean }>) {
+  harArbetsyta,
+  harKvitto
+}: Readonly<{
+  tenantId: string;
+  namn: string;
+  nuvarande: Paket | null;
+  harArbetsyta: boolean;
+  harKvitto: boolean;
+}>) {
   const [aktuellt, setAktuellt] = useState<Paket | null>(nuvarande);
   const [valt, setValt] = useState<Paket["id"] | null>(null);
+  // Kvittohanteraren som tillägg till Support (lib/pricing.ts: KVITTO_TILLAGG).
+  const [aktuelltKvitto, setAktuelltKvitto] = useState(harKvitto);
+  const [kvittoVal, setKvittoVal] = useState(harKvitto);
   const [fel, setFel] = useState<Localized | null>(null);
   const [kvitto, setKvitto] = useState<Localized | null>(null);
   const [pending, start] = useTransition();
   const { locale, text } = useLocale();
 
-  const kandidat = valt ? PAKET.find((p) => p.id === valt) : undefined;
+  // Paketet som gäller efter sparandet: det valda, annars det nuvarande.
+  const kandidat = (valt ? PAKET.find((p) => p.id === valt) : undefined) ?? aktuellt ?? undefined;
+  const kandidatHarSupport = Boolean(
+    kandidat && (PRODUKTER_FOR_PAKET[kandidat.id] as string[]).includes(KVITTO_TILLAGG.kraver)
+  );
+  // Tillägget följer bara med ett paket som har Support.
+  const kvittoEfter = kvittoVal && kandidatHarSupport;
+  const andrat = Boolean(kandidat) && (kandidat?.id !== aktuellt?.id || kvittoEfter !== aktuelltKvitto);
 
   const skriv = () => {
     if (!kandidat) return;
     start(async () => {
       setFel(null);
       setKvitto(null);
-      const svar = await bytPaket(tenantId, kandidat.id);
+      const svar = await bytPaket(tenantId, kandidat.id, kvittoEfter);
       if (!svar.success) {
         setFel(svar.error ? ordagrant(svar.error) : ADMIN.paketetKundeInteBytas);
         return;
       }
       setAktuellt(paketForProdukter(svar.products) ?? kandidat);
+      const medKvitto = Boolean(svar.products?.includes(KVITTO_TILLAGG.produkt));
+      setAktuelltKvitto(medKvitto);
+      setKvittoVal(medKvitto);
       setValt(null);
+      const tillagg = medKvitto
+        ? { sv: " med Kvittohanteraren", en: " with the receipt agent" }
+        : { sv: "", en: "" };
       setKvitto({
-        sv: `${namn} har nu ${kandidat.namn}. Kundens meny och vyer följer direkt.`,
-        en: `${namn} now has ${kandidat.namn}. The customer's menu and views follow immediately.`
+        sv: `${namn} har nu ${kandidat.namn}${tillagg.sv}. Kundens meny och vyer följer direkt.`,
+        en: `${namn} now has ${kandidat.namn}${tillagg.en}. The customer's menu and views follow immediately.`
       });
     });
   };
@@ -249,7 +283,40 @@ function Paketval({
             })}
           </div>
 
-          {kandidat && kandidat.id !== aktuellt?.id ? (
+          {/* Kvittohanteraren är ett tillägg till Support sedan 2026-10-17, inte
+              ett paket. Vilande: kunden ser den mörklagd även när den är på,
+              så det här är adminens reglage inför en kommande lansering. */}
+          <label
+            className={cn(
+              "mt-4 flex max-w-[70ch] items-start gap-3 text-[0.9375rem]",
+              !kandidatHarSupport && "opacity-60"
+            )}
+          >
+            <input
+              type="checkbox"
+              className="focus-ring mt-1 h-4 w-4 shrink-0 accent-ink"
+              checked={kvittoEfter}
+              disabled={!kandidatHarSupport || pending}
+              onChange={(e) => {
+                setKvittoVal(e.target.checked);
+                setFel(null);
+                setKvitto(null);
+              }}
+            />
+            <span>
+              <span className="font-medium">{text(KVITTO_TILLAGG.namn)}</span>
+              <span className={cn(meta, "block")}>
+                {kandidatHarSupport
+                  ? text({
+                      sv: "Står på is och syns mörklagd för kunden även när den är påslagen. Bara admin använder den.",
+                      en: "On hold and shown dimmed to the customer even when enabled. Only admins use it."
+                    })
+                  : text({ sv: "Kräver ett paket med Support.", en: "Requires a package with Support." })}
+              </span>
+            </span>
+          </label>
+
+          {kandidat && andrat ? (
             <div className="mt-5 flex flex-wrap items-center gap-3">
               <button
                 type="button"
@@ -257,12 +324,19 @@ function Paketval({
                 onClick={skriv}
                 className={`${btnBase} bg-ink text-paper hover:bg-ink2`}
               >
-                {pending ? a("byterPaket", locale) : `${a("bytTill", locale)} ${kandidat.namn}`}
+                {pending
+                  ? a("byterPaket", locale)
+                  : kandidat.id !== aktuellt?.id
+                    ? `${a("bytTill", locale)} ${kandidat.namn}`
+                    : text({ sv: "Spara tillägget", en: "Save the add-on" })}
               </button>
               <button
                 type="button"
                 disabled={pending}
-                onClick={() => setValt(null)}
+                onClick={() => {
+                  setValt(null);
+                  setKvittoVal(aktuelltKvitto);
+                }}
                 className={btnSecondary}
               >
                 {a("avbryt", locale)}

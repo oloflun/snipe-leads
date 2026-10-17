@@ -24,6 +24,22 @@ import random
 
 _TEXTER: dict[str, dict[str, tuple[str, ...]]] = {
     "sv": {
+        # Krisraden (grundprompten 6.3) läggs på i kod när kunden verkar vara
+        # i kris och svaret saknar hänvisningen. 112 och Mind Självmordslinjen
+        # 90101 är allmänna svenska nummer, inte uppgifter om kundföretaget.
+        "kris": (
+            "Är du i akut fara, ring 112. Behöver du prata med någon nu kan du "
+            "ringa Mind Självmordslinjen på 90101.",
+        ),
+        # Driftregeln (2026-10-06): en kunskapslucka ERBJUDER en kollega.
+        # Läggs på i kod när utkastet glömt erbjudandet; ett "ja" blir
+        # överlämningen via erbjod_manniska.
+        "erbjudande": (
+            "Vill du att en kollega tittar på det jag inte hade svar på? Svara ja, "
+            "så tar en kollega över i den här chatten.",
+            "Ska jag be en kollega titta på det jag inte kunde svara på? Svara ja, "
+            "så kopplar jag in en kollega i samma chatt.",
+        ),
         "kvittens": (
             "Det är tillagt i ärendet, så kollegan ser det direkt när ärendet tas "
             "över. Svaret kommer här i chatten.",
@@ -63,6 +79,16 @@ _TEXTER: dict[str, dict[str, tuple[str, ...]]] = {
         ),
     },
     "en": {
+        "kris": (
+            "If you are in immediate danger, please call 112. If you need someone "
+            "to talk to right now, you can call Mind's suicide helpline on 90101.",
+        ),
+        "erbjudande": (
+            "Would you like a colleague to look into what I couldn't answer? Just "
+            "reply yes and I'll bring a colleague into this chat.",
+            "Shall I ask a colleague to look into the part I couldn't answer? Reply "
+            "yes and a colleague can join this chat.",
+        ),
         "kvittens": (
             "That's added to your case, so my colleague sees it as soon as they "
             "take over. The reply will come here in the chat.",

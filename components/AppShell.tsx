@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  Activity,
   ArrowLeftRight,
   FileText,
   LayoutDashboard,
@@ -30,7 +29,7 @@ import { ImpersonationBanner } from "@/components/ImpersonationBanner";
 import { LasrollBanner } from "@/components/LasrollBanner";
 import { VyVaxel } from "@/components/VyVaxel";
 import { useLocale, type Localized } from "@/lib/i18n";
-import { appRoutes, produktForInstallningsvag, routesForProducts, tillAdminvag } from "@/lib/routes";
+import { appRoutes, arVilande, produktForInstallningsvag, routesForProducts, tillAdminvag } from "@/lib/routes";
 import type { Scope } from "@/lib/routes";
 import { cn } from "@/lib/utils";
 import { rubrikSida } from "@/components/ui";
@@ -103,7 +102,6 @@ export const RUTT_IKONER: Record<string, LucideIcon> = {
   "/dashboard": LayoutDashboard,
   "/dashboard/att-gora": ListTodo,
   "/dashboard/leads": Target,
-  "/dashboard/aktivitet": Activity,
   "/dashboard/support": MessagesSquare,
   "/dashboard/companies": Users,
   "/dashboard/contacts": Users,
@@ -133,7 +131,13 @@ function iAdminlage(pathname: string): boolean {
 }
 
 function demoAnpassa(href: string, pathname: string): string {
-  return iDemolage(pathname) ? (DEMO_VAGAR[href] ?? href) : href;
+  if (!iDemolage(pathname)) return href;
+  // Sökvägen mappas, frågan följer med: `/dashboard/leads?vy=listor` ska bli
+  // `/demo/leads?vy=listor`, inte falla igenom kartan och lämna demon.
+  const i = href.search(/[?#]/);
+  const vag = i === -1 ? href : href.slice(0, i);
+  const resten = i === -1 ? "" : href.slice(i);
+  return (DEMO_VAGAR[vag] ?? vag) + resten;
 }
 
 /**
@@ -193,8 +197,19 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
     (route) =>
       route.product !== "shared" &&
       !route.preview &&
-      !products.includes(route.product)
+      !products.includes(route.product) &&
+      !arVilande(route.product)
   );
+
+  /**
+   * Agenterna som står på is (lib/routes.ts: VILANDE_PRODUKTER). Kunden ser
+   * namnet i menyn, mörkare än de mörklagda och utan länk; ingen upsell-vy,
+   * eftersom produkten inte säljs just nu. Plattformsadmin når dem som vanligt
+   * (via AdminShell, men också här om en admin skulle stå i kundskalet).
+   */
+  const vilandeRoutes = isPlatformAdmin
+    ? []
+    : appRoutes.filter((route) => !route.preview && arVilande(route.product));
 
   // Narrowing the scope while standing on a section it excludes would strand the
   // user on a page they can no longer navigate back to.
@@ -280,7 +295,10 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
           // barn — CRM-listan har t.ex. sökvägen /demo/crm, alltså inte under
           // /demo/iris/, och ett prefix-test hade missat den.
           active: pathname === href || Boolean(children?.some((c) => c.active)),
-          children
+          children,
+          // Vilande agent (Kvitton sedan 2026-10-17): namnet syns, inget klick.
+          vilande: item.vilande,
+          vilandeTitel: item.vilande ? text({ sv: "Kommer snart", en: "Coming soon" }) : undefined
         };
       })
     : [
@@ -311,7 +329,20 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
           Icon: RUTT_IKONER[route.href] ?? LayoutDashboard,
           active: pathname === route.href || pathname.startsWith(`${route.href}/`),
           dimmad: true,
-          dimmadTitel: "Ingår inte i ert paket ännu — klicka och läs mer"
+          dimmadTitel: text({
+            sv: "Ingår inte i ert paket ännu — klicka och läs mer",
+            en: "Not in your plan yet — click to read more"
+          })
+        })),
+        // De vilande agenterna — namnet syns, men posten går inte att öppna.
+        ...vilandeRoutes.map((route) => ({
+          grundHref: route.href,
+          href: route.href,
+          label: t(route.labelKey),
+          Icon: RUTT_IKONER[route.href] ?? LayoutDashboard,
+          active: false,
+          vilande: true,
+          vilandeTitel: text({ sv: "Kommer snart", en: "Coming soon" })
         }))
       ]
         // Menyn ska stå i appRoutes ordning oavsett vilka poster som är

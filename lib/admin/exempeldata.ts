@@ -193,7 +193,7 @@ function isoDagarSedan(dagar: number, nu: Date): string {
 }
 
 /**
- * Hur många veckor bakåt kurvan i Kundstatistik täcker. Måste vara samma tal
+ * Hur många veckor bakåt kurvan i Kunder (KunderOversikt) täcker. Måste vara samma tal
  * som `beraknaKundstatistik(..., antalVeckor)` — spreds exempelraderna över
  * ett bredare fönster än grafen ritar hamnar de äldsta utanför bilden och
  * kurvan ser gles ut igen, fast av motsatt skäl.

@@ -30,12 +30,27 @@ inga siffror som ser ut att komma ur en körning.
 from __future__ import annotations
 
 import base64
+import html as htmlmod
+import re
 from dataclasses import dataclass
 from typing import Protocol
 
 import httpx
 
 from ..config import get_settings
+
+
+@dataclass(frozen=True)
+class Bilaga:
+    """En bifogad fil som kan vara ett underlag (PDF eller bild).
+
+    Bytesen lever bara under skanningen — de sparas aldrig, samma regel som
+    för uppladdade filer (`bookkeeping/underlag.py`).
+    """
+
+    filnamn: str
+    mimetyp: str
+    data: bytes
 
 
 @dataclass(frozen=True)
@@ -49,15 +64,55 @@ class Mejl:
     #: ÅÅÅÅ-MM-DD — mottagningsdagen, fallback när kvittot saknar eget datum.
     datum: str
     text: str
+    #: PDF- och bildbilagor (kvittohanterarens prompt läser dem, 2026-10-06).
+    bilagor: tuple[Bilaga, ...] = ()
+    mottagare: str = ""
 
 
 class Mejlkonto(Protocol):
-    """En läsbar inkorg. `leverantor` och `adress` visas i gränssnittet."""
+    """En läsbar inkorg. `leverantor` och `adress` visas i gränssnittet.
+
+    `sok_mejl` är researchverktygets väg in i inkorgen: kvittohanteraren
+    letar där efter underlaget när ett mejl bara bär en länk eller en
+    påminnelse. Läsning, precis som `hamta_mejl`.
+    """
 
     leverantor: str
     adress: str
 
     async def hamta_mejl(self, *, max_antal: int = 50) -> list[Mejl]: ...
+
+    async def sok_mejl(self, fraga: str, *, max_antal: int = 5) -> list[Mejl]: ...
+
+
+#: Bilagor per mejl som läses. Ett mejl med fler är nästan aldrig ett kvitto.
+MAX_BILAGOR = 5
+
+
+def _las_bar_bilaga(filnamn: str, mimetyp: str, storlek: int) -> bool:
+    from ..bookkeeping.underlag import LASBARA_MIMETYPER, MAX_BYTES
+
+    return bool(filnamn) and mimetyp.lower() in LASBARA_MIMETYPER and 0 < storlek <= MAX_BYTES
+
+
+_HTML_BORT = re.compile(r"(?is)<(script|style|head)[^>]*>.*?</\1>")
+_HTML_RADBRYT = re.compile(r"(?i)<br\s*/?>|</(p|div|tr|li|h[1-6]|table)>")
+_HTML_CELL = re.compile(r"(?i)</t[dh]>")
+_HTML_TAGG = re.compile(r"<[^>]+>")
+_BLANKA = re.compile(r"[ \t ]+")
+_TOMRADER = re.compile(r"\n\s*\n+")
+
+
+def html_till_text(html: str) -> str:
+    """HTML-brödtext till läsbar text. Kvittomejl från webbutiker är nästan
+    alltid HTML, och taggarna var både brus och gömställe för dold text."""
+    text = _HTML_BORT.sub(" ", html or "")
+    text = _HTML_RADBRYT.sub("\n", text)
+    text = _HTML_CELL.sub("  ", text)
+    text = _HTML_TAGG.sub(" ", text)
+    text = htmlmod.unescape(text)
+    text = _BLANKA.sub(" ", text)
+    return _TOMRADER.sub("\n", text).strip()
 
 
 class MejlkontofelError(RuntimeError):
@@ -271,6 +326,19 @@ class MockMejlkonto:
     async def hamta_mejl(self, *, max_antal: int = 50) -> list[Mejl]:
         return list(FEJKMEJL[:max_antal])
 
+    async def sok_mejl(self, fraga: str, *, max_antal: int = 5) -> list[Mejl]:
+        ord_ = [o for o in (fraga or "").lower().split() if o]
+        if not ord_:
+            return []
+        return [
+            m
+            for m in FEJKMEJL
+            if all(
+                o in f"{m.amne}\n{m.avsandare}\n{m.avsandaradress}\n{m.text}".lower()
+                for o in ord_
+            )
+        ][:max_antal]
+
 
 # -- Gmail (Google API, read-only) ------------------------------------------
 
@@ -308,7 +376,7 @@ def _gmail_text(payload: dict) -> str:
                 return träff
         return ""
 
-    return leta(payload, "text/plain") or leta(payload, "text/html")
+    return leta(payload, "text/plain") or html_till_text(leta(payload, "text/html"))
 
 
 def _gmail_datum(internal_date: object) -> str:
@@ -329,12 +397,20 @@ class GmailKonto:
         self.adress = adress
 
     async def hamta_mejl(self, *, max_antal: int = 50) -> list[Mejl]:
+        return await self._lista("in:inbox", max_antal)
+
+    async def sok_mejl(self, fraga: str, *, max_antal: int = 5) -> list[Mejl]:
+        if not (fraga or "").strip():
+            return []
+        return await self._lista(f"in:inbox {fraga.strip()}", max_antal)
+
+    async def _lista(self, q: str, max_antal: int) -> list[Mejl]:
         async with httpx.AsyncClient(timeout=30) as client:
             token = await _gmail_access_token(client)
             huvud = {"Authorization": f"Bearer {token}"}
             lista = await client.get(
                 "https://gmail.googleapis.com/gmail/v1/users/me/messages",
-                params={"maxResults": max_antal, "q": "in:inbox"},
+                params={"maxResults": max_antal, "q": q},
                 headers=huvud,
             )
             if lista.status_code != 200:
@@ -351,10 +427,8 @@ class GmailKonto:
                 if detalj.status_code != 200:
                     continue
                 kropp = detalj.json()
-                headers = {
-                    h["name"].lower(): h["value"]
-                    for h in kropp.get("payload", {}).get("headers", [])
-                }
+                payload = kropp.get("payload", {})
+                headers = {h["name"].lower(): h["value"] for h in payload.get("headers", [])}
                 fran = headers.get("from", "")
                 namn, _, adress = fran.rpartition("<")
                 mejl.append(
@@ -367,10 +441,44 @@ class GmailKonto:
                         # senare är RFC 2822 ("Tue, 02 Sep 2026 …") och gav
                         # "Tue, 02 Se" som datum.
                         datum=_gmail_datum(kropp.get("internalDate")),
-                        text=_gmail_text(kropp.get("payload", {})),
+                        text=_gmail_text(payload),
+                        bilagor=await _gmail_bilagor(client, huvud, str(kropp.get("id")), payload),
+                        mottagare=headers.get("to", ""),
                     )
                 )
             return mejl
+
+
+async def _gmail_bilagor(
+    client: httpx.AsyncClient, huvud: dict, mejl_id: str, payload: dict
+) -> tuple[Bilaga, ...]:
+    """PDF- och bildbilagorna ur Gmails MIME-träd. Stora bilagor ligger
+    bakom ett attachmentId och hämtas med ett eget anrop."""
+    funna: list[tuple[str, str, dict]] = []
+
+    def leta(del_: dict) -> None:
+        namn = del_.get("filename") or ""
+        kropp = del_.get("body", {}) or {}
+        mimetyp = str(del_.get("mimeType") or "")
+        if namn and _las_bar_bilaga(namn, mimetyp, int(kropp.get("size") or 0)):
+            funna.append((namn, mimetyp.lower(), kropp))
+        for barn in del_.get("parts", []) or []:
+            leta(barn)
+
+    leta(payload)
+    bilagor: list[Bilaga] = []
+    for namn, mimetyp, kropp in funna[:MAX_BILAGOR]:
+        data = kropp.get("data")
+        if not data and kropp.get("attachmentId"):
+            svar = await client.get(
+                f"https://gmail.googleapis.com/gmail/v1/users/me/messages/{mejl_id}"
+                f"/attachments/{kropp['attachmentId']}",
+                headers=huvud,
+            )
+            data = svar.json().get("data") if svar.status_code == 200 else None
+        if data:
+            bilagor.append(Bilaga(namn, mimetyp, base64.urlsafe_b64decode(data + "==")))
+    return tuple(bilagor)
 
 
 # -- Outlook/Hotmail (Microsoft Graph, read-only) ---------------------------
@@ -385,6 +493,16 @@ class GraphKonto:
         self.adress = adress
 
     async def hamta_mejl(self, *, max_antal: int = 50) -> list[Mejl]:
+        return await self._lista({"$top": max_antal, "$orderby": "receivedDateTime desc"})
+
+    async def sok_mejl(self, fraga: str, *, max_antal: int = 5) -> list[Mejl]:
+        if not (fraga or "").strip():
+            return []
+        # $search går inte att kombinera med $orderby i Graph.
+        rensad = fraga.strip().replace('"', " ")
+        return await self._lista({"$top": max_antal, "$search": f'"{rensad}"'})
+
+    async def _lista(self, params: dict) -> list[Mejl]:
         settings = get_settings()
         async with httpx.AsyncClient(timeout=30) as client:
             svar = await client.post(
@@ -407,17 +525,17 @@ class GraphKonto:
             # skickade kundfakturor i Skickat hade lästs in som utlägg.
             # ImmutableId: annars byter ett mejl id när det flyttas, och
             # fingeravtrycket hade släppt igenom det som ett nytt kvitto.
+            huvud = {
+                "Authorization": f"Bearer {token}",
+                "Prefer": 'IdType="ImmutableId"',
+            }
             lista = await client.get(
                 "https://graph.microsoft.com/v1.0/me/mailFolders/inbox/messages",
                 params={
-                    "$top": max_antal,
-                    "$select": "id,subject,from,receivedDateTime,body",
-                    "$orderby": "receivedDateTime desc",
+                    **params,
+                    "$select": "id,subject,from,toRecipients,receivedDateTime,body,hasAttachments",
                 },
-                headers={
-                    "Authorization": f"Bearer {token}",
-                    "Prefer": 'IdType="ImmutableId"',
-                },
+                headers=huvud,
             )
             if lista.status_code != 200:
                 raise MejlkontofelError(
@@ -426,6 +544,17 @@ class GraphKonto:
             mejl: list[Mejl] = []
             for post in lista.json().get("value", []) or []:
                 fran = (post.get("from") or {}).get("emailAddress") or {}
+                body = post.get("body") or {}
+                text = str(body.get("content") or "")
+                if str(body.get("contentType") or "").lower() == "html":
+                    text = html_till_text(text)
+                till = ", ".join(
+                    str((r.get("emailAddress") or {}).get("address") or "")
+                    for r in post.get("toRecipients") or []
+                )
+                bilagor: tuple[Bilaga, ...] = ()
+                if post.get("hasAttachments"):
+                    bilagor = await _graph_bilagor(client, huvud, str(post.get("id")))
                 mejl.append(
                     Mejl(
                         id=str(post.get("id")),
@@ -433,10 +562,36 @@ class GraphKonto:
                         avsandaradress=str(fran.get("address") or ""),
                         amne=str(post.get("subject") or ""),
                         datum=str(post.get("receivedDateTime") or "")[:10],
-                        text=str((post.get("body") or {}).get("content") or ""),
+                        text=text,
+                        bilagor=bilagor,
+                        mottagare=till,
                     )
                 )
             return mejl
+
+
+async def _graph_bilagor(
+    client: httpx.AsyncClient, huvud: dict, mejl_id: str
+) -> tuple[Bilaga, ...]:
+    svar = await client.get(
+        f"https://graph.microsoft.com/v1.0/me/messages/{mejl_id}/attachments",
+        headers=huvud,
+    )
+    if svar.status_code != 200:
+        return ()
+    bilagor: list[Bilaga] = []
+    for post in svar.json().get("value", []) or []:
+        if post.get("@odata.type") != "#microsoft.graph.fileAttachment":
+            continue
+        namn = str(post.get("name") or "")
+        mimetyp = str(post.get("contentType") or "").lower()
+        if not _las_bar_bilaga(namn, mimetyp, int(post.get("size") or 0)):
+            continue
+        if post.get("contentBytes"):
+            bilagor.append(Bilaga(namn, mimetyp, base64.b64decode(post["contentBytes"])))
+        if len(bilagor) >= MAX_BILAGOR:
+            break
+    return tuple(bilagor)
 
 
 # -- Valet ------------------------------------------------------------------

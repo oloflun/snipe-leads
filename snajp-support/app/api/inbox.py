@@ -487,6 +487,18 @@ async def list_inbox(
     }
 
 
+async def _lamna_supportkedjan(storage, tid: str, rad: dict) -> None:
+    """Ett mejl som omklassas bort från support tar med sig sitt ärende och
+    sitt utkast: annars står ärendet kvar som eskalerat (FelOchEskaleringar
+    räknar ss_tickets) och utkastet väntar på godkännande för evigt."""
+    utkast = rad.get("draft") or {}
+    if utkast.get("status") == "pending":
+        await storage.update_draft(tid, utkast["id"], status="rejected")
+        await storage.add_review(tid, draft_id=utkast["id"], action="reject", edited_content=None)
+    if rad.get("ticket_id"):
+        await storage.update_ticket(tid, rad["ticket_id"], status="closed")
+
+
 @router.post("/api/inbox/sortera")
 async def sortera(request: Request, payload: SorteraRequest, tenant: dict = Depends(require_tenant)) -> dict:
     """Provsortera (Anton 2026-10-04: "testa i realtid innan vi automatiserar").
@@ -502,8 +514,14 @@ async def sortera(request: Request, payload: SorteraRequest, tenant: dict = Depe
     tid = tenant["tenant_id"]
     lage = jev_lage()
     syften = {str(m.get("id")): str(m.get("syfte") or "support") for m in await storage.list_mailboxes(tid)}
+    ids = list(dict.fromkeys(payload.email_ids))
+    if payload.status:
+        # Bulkläget kör bara kodreglerna: Jev på 200 mejl i ett anrop är
+        # minuter, och utskicken som ska bort fångas av reglerna.
+        lage = "off"
+        ids += [e["id"] for e in await storage.list_emails(tid, status=payload.status, limit=200, is_test=None)]
     forslag = []
-    for email_id in dict.fromkeys(payload.email_ids):
+    for email_id in dict.fromkeys(ids):
         kraev_uuid(email_id, "mejlet")
         rad = await storage.get_email(tid, email_id)
         if not rad:
@@ -519,6 +537,7 @@ async def sortera(request: Request, payload: SorteraRequest, tenant: dict = Depe
             andring = {"klass": utfall["klass"], "klass_kalla": utfall["kalla"]}
             if utfall["klass"] != "support":
                 andring["status"] = utfall["klass"]
+                await _lamna_supportkedjan(storage, tid, rad)
             await storage.update_email(tid, email_id, **andring)
             await storage.log_decision(
                 tid, email_id=email_id, event="klassning",
@@ -549,6 +568,8 @@ async def klassa_om(
     rad = await storage.get_email(tenant["tenant_id"], email_id)
     if not rad:
         raise HTTPException(status_code=404, detail="Mejlet finns inte.")
+    if payload.klass != "support":
+        await _lamna_supportkedjan(storage, tenant["tenant_id"], rad)
     ny_status = {"lead": "lead", "ej_relaterat": "ej_relaterat", "support": "new"}[payload.klass]
     uppdaterad = await storage.update_email(
         tenant["tenant_id"], email_id, klass=payload.klass, klass_kalla="manuell", status=ny_status

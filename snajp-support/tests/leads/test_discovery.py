@@ -158,24 +158,47 @@ def test_rena_traffar_ignorerar_ett_kontaktformular_pa_annan_doman():
 
 
 @pytest.mark.anyio
-async def test_hitta_bolag_kraver_kontakt_och_anvander_den_sokta_rollen(monkeypatch):
-    """Prompten ska göra kontaktuppgift obligatorisk och nämna ICP:ts roll —
-    inte lämna den som frivillig, vilket var hela boven i produktionsklagomålet."""
+async def test_sokningen_fragar_efter_bolag_inte_efter_kontakt_ort_eller_storlek(monkeypatch):
+    """Prompten krävde förut en kontaktuppgift för varje bolag ("OBLIGATORISKT")
+    och bad om ort och antal anställda. Under det trycket hittade modellen på
+    tre bolag med gissade adresser (provkörningen 2026-10-05). Nu frågar
+    sökningen bara efter bolaget; resten hämtas ur bolagets egna sidor. Kundens
+    kontaktroller hör inte hemma i en bolagssökning: "Platschef" drog den mot
+    byggbolag."""
     sedd_prompt: dict[str, str] = {}
 
     async def _spion(prompt: str) -> str:
         sedd_prompt["prompt"] = prompt
-        return "[]"
+        return (
+            '[{"company_name": "Prestigo", "website": "https://prestigo.se", '
+            '"contact_email": "info@prestigo.se", "ort": "Göteborg", "anstallda": 15}]'
+        )
 
     monkeypatch.setattr(discovery, "_gemini_med_sokning", _spion)
 
-    await discovery.hitta_bolag({"roles": ["Marknadschef"]}, 3)
+    [rad] = await discovery.hitta_bolag({"roles": ["VD", "Platschef"], "industries": ["Redovisning"]}, 3)
 
     prompt = sedd_prompt["prompt"]
-    assert "OBLIGATORISKT" in prompt
-    assert "Marknadschef" in prompt
-    assert "contact_level" in prompt
-    assert "hitta inte pa personer" in prompt.lower()
+    assert "OBLIGATORISKT" not in prompt and "contact_" not in prompt
+    assert "Platschef" not in prompt and "Redovisning" in prompt
+    assert "fyll aldrig ut listan" in prompt.lower()
+    assert "tom lista [] ar ett korrekt svar" in prompt
+    assert "Bara PRIVATA bolag" in prompt
+    # Sökträffen märks, så att dess påståenden inte följer med till prospektet.
+    assert rad["kalla"] == "gemini"
+
+
+@pytest.mark.anyio
+async def test_sokningen_slapper_in_offentlig_sektor_bara_nar_kunden_valt_det(monkeypatch):
+    sedd: list[str] = []
+
+    async def _spion(prompt: str) -> str:
+        sedd.append(prompt)
+        return "[]"
+
+    monkeypatch.setattr(discovery, "_gemini_med_sokning", _spion)
+    await discovery.hitta_bolag({"industries": ["Utbildning"]}, 2, profil={"offentlig_sektor": True})
+    assert "Bara PRIVATA bolag" not in sedd[0]
 
 
 class _FakeSettings:

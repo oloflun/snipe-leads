@@ -139,13 +139,12 @@ def test_listvyns_anrop_traffar_routes_som_finns():
 
 # -- Översikten ------------------------------------------------------------
 #
-# Startsidan räknar sina siffror ur sju endpoints. Samma sorts strängar i båda
-# ändar som ovan, med en skillnad som gör dem värre: en 404 här ger inte ett
-# felmeddelande utan ett em-streck i en ruta. Vyn är byggd för att TÅLA en död
-# endpoint (se modulens docstring i Oversikt.tsx), så en omdöpt route ser ut
-# som att kunden inte har någon data.
+# Startsidan (Översikt = Aktivitet sedan 2026-10-07) räknar sina siffror ur
+# tre endpoints. Samma sorts strängar i båda ändar som ovan, med en skillnad
+# som gör dem värre: en 404 här ger inte ett felmeddelande utan ett tomt kort,
+# så en omdöpt route ser ut som att kunden inte har någon data.
 
-OVERSIKT = ROOT / "components" / "dashboard" / "Oversikt.tsx"
+OVERSIKT = ROOT / "components" / "dashboard" / "Aktivitet.tsx"
 REGLER = ROOT / "components" / "settings" / "SupportRegler.tsx"
 
 #: `hamta<...>("/leads/queue")` och `api<...>("/rules", …)`. Typargumentet är
@@ -163,18 +162,7 @@ def test_oversikten_anropar_de_vagar_talen_bygger_pa():
     # mäta något.
     vagar = _vagar_i(OVERSIKT)
 
-    # Snajp Suite (2026-10-03): körningarna läses ur jobbliggaren
-    # (/leads/korningar) i stället för agent_runs (/leads/runs), och
-    # autonomiläget (/leads/config) visas inte längre på översikten.
-    for vag in (
-        "/leads/prospects",
-        "/leads/korningar",
-        "/leads/queue",
-        "/leads/onboarding/status",
-        "/inbox",
-        "/rules",
-        "/kb",
-    ):
+    for vag in ("/leads/korningar", "/usage", "/chattar"):
         assert vag in vagar, f"Översikten hämtar inte längre {vag} — vilket tal försvann?"
 
 

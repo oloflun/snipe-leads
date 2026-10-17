@@ -25,7 +25,7 @@ import {
 import { EjAktiverad, arEjAktiverad } from "@/components/EjAktiverad";
 import { demoOversiktSvar } from "@/lib/demo/oversikt";
 import { felmeddelande, readJsonBody } from "@/lib/http/json";
-import { lasOffertForUtkast } from "@/lib/actions/affarskontext";
+import { offertForUtkast } from "@/lib/leads/offert";
 import { cn } from "@/lib/utils";
 import { sv, useLocale, type Localized } from "@/lib/i18n";
 
@@ -182,7 +182,7 @@ function flyttaKnappText(riktning: Riktning, antal: number): Localized {
 async function hamtaOffertsammanfattning(): Promise<string> {
   // Samma källa som Inställningar → Affärskontext, inte context-docs som
   // kan vara tomma eller 503 medan formuläret är ifyllt.
-  return lasOffertForUtkast();
+  return offertForUtkast();
 }
 
 type LeadsJobbSvar = {

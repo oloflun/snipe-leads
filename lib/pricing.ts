@@ -24,7 +24,7 @@ import type { Localized } from "@/lib/i18n";
 export const PRISER_AR_PRELIMINARA = false;
 
 export type Paket = {
-  id: "support" | "leads" | "duo" | "trio" | "bookkeeping";
+  id: "support" | "leads" | "duo";
   namn: string;
   /**
    * `null` betyder att priset inte är satt ännu, och det är ETT tillstånd, inte
@@ -45,18 +45,6 @@ export type Paket = {
   populärast?: boolean;
   /** Renderas som en rad under priset. `{belopp}` byts mot besparingen. */
   notisMall?: Localized;
-  /**
-   * Kampanjtext, renderad litet till HÖGER om priset i kortet.
-   *
-   * Skild från `notisMall`: den raden räknas fram ur paketpriserna och är
-   * alltid sann så länge de stämmer. Det här är ett erbjudande med ett eget
-   * belopp och ett slutdatum någon annan bestämmer — det ska gå att ta bort
-   * genom att radera ett fält, inte genom att redigera en mening.
-   *
-   * `{belopp}` byts mot kampanjpriset vid rendering, av samma skäl som resten
-   * av filen inte innehåller förformaterade prissträngar.
-   */
-  kampanj?: Localized;
 };
 
 export const VALUTA = "SEK";
@@ -119,62 +107,6 @@ export const PAKET: Paket[] = [
       sv: "Sparar {belopp}/mån jämfört med att köpa dem var för sig.",
       en: "Saves {belopp}/month compared to buying them separately."
     }
-  },
-  {
-    /**
-     * Trio. 9 990 kr/mån, beslutat 2026-08-25.
-     *
-     * Duo står kvar oförändrat bredvid. Det är inte dubbelarbete: Duo är
-     * "båda agenterna med delad kunddata", och bokföringen delar ingen
-     * kunddata med dem — den läser kvitton, inte prospekt eller ärenden. Att
-     * bygga om Duo till att innehålla tre agenter hade höjt priset på ett
-     * paket kunder redan köpt. Trio är ett eget paket ovanpå, inte en
-     * omdefinition av det gamla.
-     */
-    id: "trio",
-    namn: "Snajp Trio",
-    prisPerManad: 9990,
-    beskrivning: {
-      sv: "Alla tre agenterna: leads, kundtjänst och kvittohantering.",
-      en: "All three agents: leads, support and receipts."
-    },
-    ingar: [
-      { sv: "Alla tre agenterna", en: "All three agents" },
-      { sv: "Gemensam dashboard", en: "One shared dashboard" },
-      { sv: "Delad kunddata mellan leads och kundtjänst", en: "Shared customer data between leads and support" },
-      { sv: "Kvittohantering med SIE4-export", en: "Receipt handling with SIE4 export" }
-    ],
-    notisMall: {
-      sv: "Sparar {belopp}/mån jämfört med att köpa dem var för sig.",
-      en: "Saves {belopp}/month compared to buying them separately."
-    }
-  },
-  {
-    /**
-     * Bokföringen. 2 690 kr/mån, beslutat 2026-08-25 (tidigare 1 990).
-     *
-     * Fristående paket, och fortfarande inte en del av Duo — se resonemanget
-     * i Trio ovan. Den som vill ha alla tre köper Trio; den som bara vill ha
-     * bokföringen köper det här.
-     */
-    id: "bookkeeping",
-    namn: "Snajp Kvitton",
-    prisPerManad: 2690,
-    beskrivning: {
-      sv: "Kvittohanteraren som läser inkorgen och sammanställer kvittona.",
-      en: "The receipt agent that reads your inbox and totals the receipts."
-    },
-    kampanj: {
-      sv: "Lägg till Kvittohanteraren som extra agent — nu för endast {belopp}.",
-      en: "Discount on an extra agent for bookkeeping, now only {belopp}."
-    },
-    ingar: [
-      { sv: "Kvitton ur mejlen: Gmail, Outlook och Hotmail (endast läsbehörighet)", en: "Receipts from mail: Gmail, Outlook and Hotmail (read-only)" },
-      { sv: "Belopp, moms, datum och kategori avlästa per kvitto", en: "Amount, VAT, date and category read per receipt" },
-      { sv: "Sammanställning per kategori med dubblettkontroll", en: "Per-category totals with duplicate control" },
-      { sv: "SIE4-export till ert bokföringsprogram", en: "SIE4 export to your accounting software" },
-      { sv: "Kvittoassistent i chatten", en: "Receipt assistant in chat" }
-    ]
   }
 ];
 
@@ -186,13 +118,38 @@ export const PAKET: Paket[] = [
  * får bara exportera async-funktioner, och onboardingen behöver samma karta.
  * Två kartor över samma sanning glider isär — det är hela filens tes.
  */
-export const PRODUKTER_FOR_PAKET: Record<Paket["id"], ("leads" | "support" | "bookkeeping")[]> = {
+export const PRODUKTER_FOR_PAKET: Record<Paket["id"], ("leads" | "support")[]> = {
   leads: ["leads"],
   support: ["support"],
-  bookkeeping: ["bookkeeping"],
-  duo: ["leads", "support"],
-  trio: ["leads", "support", "bookkeeping"]
+  duo: ["leads", "support"]
 };
+
+/**
+ * Kvittohanteraren är ett TILLÄGG till Support, inte ett eget paket (Sebbe
+ * 2026-10-17). Trio och det fristående paketet "Snajp Kvitton" är borttagna:
+ * Duo är paketet vi säljer.
+ *
+ * Tillägget står på is (lib/routes.ts: VILANDE_PRODUKTER) och säljs inte än —
+ * det syns därför inte i prislistan, onboardingen eller kundens planvy, bara i
+ * adminens paketflik där plattformsadmin slår på det för en kund som har
+ * Support. Entitlementen är fortfarande produkten "bookkeeping" i
+ * `workspaces.products`, så en kund som hade Trio (leads + support +
+ * bookkeeping) läses som Duo med tillägget, utan migration.
+ *
+ * Priset är inte satt för tillägget. Det fristående paketet kostade 2 690
+ * kr/mån och Trio 9 990; sätt beloppet här när tillägget ska säljas.
+ */
+export const KVITTO_TILLAGG = {
+  produkt: "bookkeeping",
+  kraver: "support",
+  namn: { sv: "Kvittohanteraren (tillägg till Support)", en: "Receipt agent (Support add-on)" },
+  prisPerManad: null as number | null
+} as const;
+
+/** Produkterna utan tillägget — det som avgör vilket paket kunden har. */
+export function utanKvittotillagg(produkter: readonly string[]): string[] {
+  return produkter.filter((p) => p !== KVITTO_TILLAGG.produkt);
+}
 
 export function arPaketId(varde: string): varde is Paket["id"] {
   return varde in PRODUKTER_FOR_PAKET;
@@ -234,16 +191,12 @@ export const PRIS_SAKNAS: Localized = { sv: "Pris på förfrågan", en: "Price o
  */
 export const BINDNINGSTID_MANADER = 0;
 
-/** Kampanjpris för en extra bokföringsagent. Renderas i bokföringskortet. */
-export const EXTRA_BOKFORINGSAGENT_PRIS = 999;
-
 /**
  * Vilka enskilda paket ett kombinationspaket ersätter. Enda stället som vet
  * det, så att besparingen inte kan räknas på fel uppsättning.
  */
 const INGAENDE_PAKET: Partial<Record<Paket["id"], readonly Paket["id"][]>> = {
-  duo: ["support", "leads"],
-  trio: ["support", "leads", "bookkeeping"]
+  duo: ["support", "leads"]
 };
 
 /**

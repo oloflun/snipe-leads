@@ -110,6 +110,14 @@ export type RunRow = {
   step_log?: StepLogEntry[] | string | null;
   input?: string | null;
   output?: string | null;
+  prospect_id?: string | null;
+  /** Systemlagrens text per hash (prompt_lager), bara på GET /runs/{id}. */
+  lagertexter?: Record<string, string>;
+  /**
+   * Bara i sammandraget (`?sammandrag=true`), som saknar step_log: om
+   * körningen var Kvittohanterarens chatt. Räknas i databasen.
+   */
+  bokforingschatt?: boolean;
 };
 
 export type StepLogEntry = {
@@ -129,7 +137,98 @@ export type StepLogEntry = {
   user_message?: string | null;
   raw_output?: string | null;
   reasoning_content?: string | null;
+  /** 2 = lagren per hash (Fas 7). Saknas eller 1 = de gamla kapade fälten. */
+  spar?: number;
+  lager?: LagerPost[];
+  skilldelar?: SkillDel[];
+  temperature?: number | null;
+  model?: string;
+  roll?: string;
+  /** Kodgrind eller anrop utanför stegmotorn: nyckeln "step" i stället för "skill". */
+  step?: string;
+  [nyckel: string]: unknown;
 };
+
+/** Ett lager i prompten (step_runner.Segment.som_post). */
+export type LagerPost = {
+  etikett: string;
+  kalla: string;
+  position: "system" | "user";
+  tecken: number;
+  hash: string;
+  vem?: string;
+  redigera?: string | null;
+  /** Användarlagrens text följer med; systemlagrens slås upp i `texter`. */
+  text?: string;
+};
+
+/** En fil eller sektion skill-lagret läste (PlaybookStep.lasta_delar). */
+export type SkillDel = {
+  skill: string;
+  del?: string;
+  fil?: string;
+  tecken?: number;
+  sha256?: string;
+  manifest?: string;
+  orord?: boolean;
+  fel?: string;
+};
+
+export type InsynSteg = {
+  typ: "steg";
+  id: string;
+  bana: string;
+  agent_type: string;
+  playbook: string;
+  skill: string;
+  laddning: "hel" | "skopa";
+  skopa: string[];
+  motivering: string | null;
+  extra_skills: { skill: string; skopa: string[] }[];
+  radandringar: { gammal: string; ny: string; skal: string }[];
+  overlays: string[];
+  kraver: string[];
+  villkor: string | null;
+  villkor_text: { sv: string; en: string } | null;
+  modell: string;
+  modell_falt: string | null;
+  temperatur: number;
+  thinking: string;
+  lager: LagerPost[];
+  skilldelar: SkillDel[];
+  anvandare: { run_id: string; created_at: string; kapat: boolean; lager: LagerPost[] } | null;
+};
+
+export type InsynGrind = { typ: "grind"; id: string; grind: string; kod: string };
+
+export type InsynBana = { id: string; villkor?: string; noder: (InsynSteg | InsynGrind)[] };
+
+export type MatrisRad = {
+  id: string;
+  position: "system" | "user";
+  kalla: string;
+  vem: string;
+  tecken: number;
+  celler: Record<string, { position: "system" | "user"; tecken: number; hash: string }>;
+  dott: boolean;
+  okant: boolean;
+  saknas_i: string[];
+};
+
+export type Insyn = {
+  agent: "leads" | "support";
+  kedja: string;
+  kanal: string | null;
+  banor: InsynBana[];
+  texter: Record<string, string>;
+  matris: { kolumner: { id: string; skill: string; bana: string }[]; rader: MatrisRad[] };
+};
+
+export const getInsyn = (tenantId: string, agent: "leads" | "support") =>
+  adminFetch<Insyn | null>(
+    `/tenants/${encodeURIComponent(tenantId)}/insyn?agent=${agent}`,
+    null
+  );
 
 export type EventRow = {
   id: string;

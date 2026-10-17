@@ -11,12 +11,12 @@ from __future__ import annotations
 
 import asyncio
 from datetime import date, datetime, timezone
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel, Field
 
-from ..leads import crm_synk
+from ..leads import crm_synk, samtal, upptagna
 from .deps import kraev_uuid, require_tenant
 
 router = APIRouter()
@@ -44,6 +44,14 @@ class UppgiftPatchRequest(BaseModel):
     klar: bool
 
 
+class SamtalRequest(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    utfall: samtal.Utfall
+    aterkom_datum: date | None = None
+    anteckning: str | None = Field(default=None, max_length=4000)
+
+
 class VyRequest(BaseModel):
     model_config = {"extra": "forbid"}
 
@@ -69,6 +77,10 @@ class Importrad(BaseModel):
 class ImportRequest(BaseModel):
     titel: str = Field(..., min_length=1, max_length=200)
     rader: list[Importrad] = Field(..., min_length=1, max_length=2000)
+    #: 'import' = leads från ett annat CRM, att bearbeta. 'crm' = kundens
+    #: BEFINTLIGA kunder (migration 098): utesluts av Iris och listbygget och
+    #: prospekteras aldrig.
+    kalla: Literal["import", "crm"] = "import"
 
 
 async def _kraev_prospekt(storage, tenant_id: str, prospect_id: str) -> dict:
@@ -128,6 +140,11 @@ async def tidslinje(request: Request, prospect_id: str, tenant: dict = Depends(r
                 )
             )
 
+    for rad in await storage.list_lead_samtal(tenant_id, prospect_id=prospect_id):
+        # Rubriken bär utfallets nyckel; UI:t översätter, som för statusen.
+        handelser.append(
+            _handelse("samtal", rad["created_at"], rad["utfall"], text=rad.get("anteckning"), id=rad["id"])
+        )
     for rad in await storage.list_lead_notes(tenant_id, prospect_id):
         handelser.append(_handelse("anteckning", rad["created_at"], "", text=rad["text"], id=rad["id"]))
     for rad in await storage.list_lead_tasks(tenant_id, prospect_id=prospect_id):
@@ -142,6 +159,69 @@ async def tidslinje(request: Request, prospect_id: str, tenant: dict = Depends(r
     # lades till sist i listan (och därmed hände sist) först.
     handelser = sorted(reversed(handelser), key=lambda h: _tidpunkt(h["nar"]), reverse=True)
     return {"handelser": handelser}
+
+
+@router.post("/api/leads/prospects/{prospect_id}/samtal", status_code=201)
+async def nytt_samtal(
+    request: Request, prospect_id: str, payload: SamtalRequest, tenant: dict = Depends(require_tenant)
+) -> dict:
+    """Ringd: sparar utfallet och verkställer det (app/leads/samtal.py)."""
+    storage = request.app.state.storage
+    prospect = await _kraev_prospekt(storage, tenant["tenant_id"], prospect_id)
+    if payload.utfall == "aterkom" and payload.aterkom_datum is None:
+        raise HTTPException(status_code=422, detail="Återkom kräver ett datum.")
+    rad = await samtal.registrera(
+        storage, tenant["tenant_id"], prospect,
+        utfall=payload.utfall,
+        aterkom_datum=payload.aterkom_datum if payload.utfall == "aterkom" else None,
+        anteckning=(payload.anteckning or "").strip() or None,
+    )
+    return {"samtal": rad}
+
+
+@router.get("/api/leads/samtal")
+async def samtalslista(
+    request: Request, lista: Literal["aterkoppling", "ring"] = "aterkoppling", tenant: dict = Depends(require_tenant)
+) -> dict:
+    """Återkopplingen eller ringlistan, de som ska ringas i dag först."""
+    prospekter, alla_samtal, forsta = await _samtalsunderlag(request.app.state.storage, tenant["tenant_id"])
+    rader = samtal.samtalslista(
+        prospekter, alla_samtal, forsta, lista=lista, idag=datetime.now(timezone.utc).date()
+    )
+    return {"rader": rader, "ring_idag": sum(1 for r in rader if r["ring_idag"])}
+
+
+@router.get("/api/leads/samtal/antal")
+async def samtalsantal(request: Request, tenant: dict = Depends(require_tenant)) -> dict:
+    """Hur många som ska ringas i dag i båda listorna — Att göras siffra.
+
+    Att göra hämtade förut båda listorna hela, alltså tenantens prospekt två
+    gånger per sidvisning, för att räkna rader. Samma underlag, en läsning."""
+    prospekter, alla_samtal, forsta = await _samtalsunderlag(request.app.state.storage, tenant["tenant_id"])
+    idag = datetime.now(timezone.utc).date()
+    return {
+        lista: sum(
+            1
+            for r in samtal.samtalslista(prospekter, alla_samtal, forsta, lista=lista, idag=idag)
+            if r["ring_idag"]
+        )
+        for lista in ("aterkoppling", "ring")
+    }
+
+
+async def _samtalsunderlag(storage: Any, tenant_id: str) -> tuple[list, list, dict[str, Any]]:
+    # ponytail: hela tenantens prospekt, samtal och utskick läses och filtreras
+    # här; en SQL-vy när en kund har tusentals leads.
+    prospekter, alla_samtal, skickade = await asyncio.gather(
+        storage.list_prospects(tenant_id, limit=2000),
+        storage.list_lead_samtal(tenant_id),
+        storage.list_skickade(tenant_id, limit=500),
+    )
+    forsta: dict[str, Any] = {}
+    for m in skickade:  # nyast först: den sista vi ser per prospekt är den första
+        if m.get("prospect_id"):
+            forsta[str(m["prospect_id"])] = m.get("sent_at")
+    return prospekter, alla_samtal, forsta
 
 
 @router.post("/api/leads/prospects/{prospect_id}/anteckningar", status_code=201)
@@ -231,7 +311,11 @@ _IMPORTFALT = ("company_name", "orgnr", "contact_name", "contact_role", "contact
 async def importera(request: Request, payload: ImportRequest, tenant: dict = Depends(require_tenant)) -> dict:
     """CSV-import från ett annat CRM → en leadslista med `kalla='import'`.
     Ingen dedup mot registret här: Flytta till Iris (`till-iris`) gör den, på
-    samma sätt som för varje annan lista."""
+    samma sätt som för varje annan lista.
+
+    `kalla='crm'`: kundens befintliga kundbas. Den sparas som en egen lista
+    som Iris och listbygget utesluter (app/leads/upptagna.py), dubbletter i
+    filen slås ihop, och den kan inte flyttas till Iris."""
     storage = request.app.state.storage
     tenant_id = tenant["tenant_id"]
     rader: list[dict[str, Any]] = []
@@ -239,6 +323,18 @@ async def importera(request: Request, payload: ImportRequest, tenant: dict = Dep
         falt = {f: (str(getattr(rad, f) or "").strip() or None) for f in _IMPORTFALT}
         if falt["company_name"]:
             rader.append(falt)
+    if payload.kalla == "crm":
+        # Samma kund två gånger i exporten (två kontaktpersoner, två rader)
+        # blir en rad: listan är en uteslutningsmängd, inte en kontaktbok.
+        sedda: set[str] = set()
+        unika: list[dict[str, Any]] = []
+        for falt in rader:
+            nycklar = upptagna.bolagsnycklar([falt])
+            if nycklar & sedda:
+                continue
+            sedda |= nycklar
+            unika.append(falt)
+        rader = unika
     hoppade_over = len(payload.rader) - len(rader)
     if not rader:
         raise HTTPException(status_code=422, detail="Ingen rad hade ett bolagsnamn.")
@@ -250,7 +346,7 @@ async def importera(request: Request, payload: ImportRequest, tenant: dict = Dep
         # ponytail: antal är check-begränsat 1–200 (migration 060), samma tak
         # som kombinerade listor; item_count bär det riktiga antalet.
         antal=min(len(rader), 200),
-        kalla="import",
+        kalla=payload.kalla,
     )
     for falt in rader:
         await storage.add_lead_list_item(tenant_id, list_id=lista["id"], **falt)

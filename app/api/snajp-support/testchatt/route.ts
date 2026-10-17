@@ -27,5 +27,15 @@ export const maxDuration = 60;
  */
 export async function POST(request: NextRequest) {
   const body = await request.text();
-  return proxyAsTenant("/api/chat", { method: "POST", body: body || undefined });
+  // Arbetsytans siffror (2026-10-05): den HÄR routen är autentiserad
+  // (tenant ur sessionen), så flaggan sätts server-side. Den publika
+  // chat-routen strippar samma fält — en slutkund ska aldrig kunna fråga
+  // ut företagets interna nyckeltal.
+  let payload = body;
+  try {
+    payload = JSON.stringify({ ...JSON.parse(body), arbetsyta: true });
+  } catch {
+    // Ogiltig JSON får backenden avvisa med sitt eget felmeddelande.
+  }
+  return proxyAsTenant("/api/chat", { method: "POST", body: payload || undefined });
 }

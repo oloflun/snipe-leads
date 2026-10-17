@@ -20,7 +20,7 @@
  *
  * Regeln är därför: ingen renderingsplats skriver ut ett värde utan att först
  * köra det genom `utanPlatshallare`. Det som saknas UTELÄMNAS. En sida som
- * bara säger "Snajp AB" är ofullständig; en som säger "[Gatuadress]" är
+ * bara säger "Snajp" är ofullständig; en som säger "[Gatuadress]" är
  * felaktig, och bara det ena går att missta för att vara sant.
  *
  * ## Kontaktadressen
@@ -34,8 +34,8 @@
  */
 
 export const BOLAG = {
-  /** Registrerat namn, inte varumärket. Varumärket är "Snajp". */
-  namn: "Snajp AB",
+  /** Registrerat firmanamn (enskild firma). Samma som varumärket. */
+  namn: "Snajp",
   orgnr: "[XXXXXX-XXXX]",
   postadress: "[Gatuadress, postnummer, ort]",
   /** Sätts när integritetspolicyn granskats av jurist och publicerats skarpt. */
@@ -79,9 +79,9 @@ export function dataskyddKontakt(reservadress: string): string {
 }
 
 /**
- * Bolagsidentifikationen som en färdig rad: "Snajp AB · org.nr … · adress".
+ * Bolagsidentifikationen som en färdig rad: "Snajp · org.nr … · adress".
  *
- * Bygger raden av det som FINNS. Med bara namnet ifyllt blir det "Snajp AB",
+ * Bygger raden av det som FINNS. Med bara namnet ifyllt blir det "Snajp",
  * utan efterhängande avdelare — vilket är precis vad som gick fel när raden
  * skrevs som en mall med hål i.
  */

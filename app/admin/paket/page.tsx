@@ -1,9 +1,11 @@
-import { AdminNyckeltal, AdminText } from "@/components/admin/AdminText";
+import { AdminText } from "@/components/admin/AdminText";
+import { PaketOversikt } from "@/components/admin/PaketOversikt";
+import { Panelrubrik } from "@/components/dashboard/OversiktPaneler";
+import { ADMIN } from "@/lib/admin/sprak";
+import { cn } from "@/lib/utils";
 import { PaketHantering } from "@/components/admin/PaketHantering";
-import { Tomt } from "@/components/ui";
+import { Tomt, panelKort } from "@/components/ui";
 import { listTenants, unwrap } from "@/lib/data/admin";
-import { paketForProdukter } from "@/lib/paket";
-import { formateraPris } from "@/lib/pricing";
 import { AdminVyhuvud } from "@/components/admin/AdminVyhuvud";
 
 export const dynamic = "force-dynamic";
@@ -26,20 +28,6 @@ export default async function Page() {
   const { data, error } = unwrap(await listTenants());
   const kunder = (data ?? []).filter((rad) => !rad.slug?.startsWith("testkund-"));
 
-  const aktiva = kunder.filter((rad) => (rad.status ?? (rad.active === false ? "avstangd" : "aktiv")) === "aktiv");
-  const pausade = kunder.filter((rad) => rad.status === "pausad");
-  const avstangda = kunder.filter(
-    (rad) => (rad.status ?? (rad.active === false ? "avstangd" : "aktiv")) === "avstangd"
-  );
-
-  // Månadsintäkten ur paketpriserna, bara för AKTIVA kunder med ett exakt
-  // paket. Ett eget urval utan paketpris räknas inte med, hellre en siffra
-  // som är för låg och sann än en som gissar.
-  const manadsintakt = aktiva.reduce((summa, rad) => {
-    const paket = paketForProdukter(rad.products);
-    return summa + (paket?.prisPerManad ?? 0);
-  }, 0);
-
   return (
     <div>
       <AdminVyhuvud grupp="kunder" />
@@ -50,22 +38,10 @@ export default async function Page() {
         </p>
       ) : (
         <>
-          <div className="mt-8">
-            <AdminNyckeltal
-              poster={[
-                { n: "aktivaKunder", varde: aktiva.length },
-                { n: "pausade", varde: pausade.length },
-                { n: "avslutade", varde: avstangda.length },
-                {
-                  n: "paketvardePerManad",
-                  varde: formateraPris(manadsintakt),
-                  notis: "aktivaMedExaktPaket"
-                }
-              ]}
-            />
-          </div>
+          <PaketOversikt kunder={kunder} />
 
-          <div className="mt-10">
+          <section aria-labelledby="paket-tabell" className={cn(panelKort, "mt-6 min-w-0")}>
+            <Panelrubrik id="paket-tabell" titel={ADMIN.kundernasPaket} antal={kunder.length} />
             {kunder.length === 0 ? (
               <Tomt>
                 <AdminText n="ingaKunderPaket" />
@@ -73,7 +49,7 @@ export default async function Page() {
             ) : (
               <PaketHantering tenants={kunder} />
             )}
-          </div>
+          </section>
         </>
       )}
     </div>

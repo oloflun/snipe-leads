@@ -17,6 +17,7 @@ import { Kontakter } from "@/components/leads/Kontakter";
 import { Svar } from "@/components/leads/Svar";
 import { IrisInstallningar } from "@/components/leads/IrisInstallningar";
 import { Affarskontext } from "@/components/settings/Affarskontext";
+import { AgentOnskemal } from "@/components/settings/AgentOnskemal";
 import { KunskapsbasPanel } from "@/components/settings/Kunskapsbas";
 import { SupportEskalering } from "@/components/settings/SupportEskalering";
 import { SupportRegler } from "@/components/settings/SupportRegler";
@@ -331,6 +332,9 @@ export function SettingsView({
             <>
               <SupportRegler />
               <SupportEskalering />
+              <div className="mt-12 border-t border-ink/15 pt-8">
+                <AgentOnskemal agent="support" />
+              </div>
             </>
           ) : null}
           {section === "leads" ? <IrisInstallningar /> : null}

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { AdminRadlista, AdminText } from "@/components/admin/AdminText";
+import { Lagerstapel } from "@/components/admin/insyn/Lagerstapel";
 import { Badge, Rad, Sidhuvud, Tomt, etikett, meta, rubrikPanel } from "@/components/ui";
 import { getRun, unwrap, type StepLogEntry } from "@/lib/data/admin";
 import { cn } from "@/lib/utils";
@@ -14,10 +15,12 @@ export const maxDuration = 60;
  * Spårvyn. Den enda platsen i produkten med genuint hög täthet, och den enda
  * som svarar på "varför skrev den så här?".
  *
- * Systemprompt, användarmeddelande, råsvar och reasoning ligger i fällbara
- * sektioner. Fälten är kapade till 8 000 tecken vardera redan vid skrivningen
- * (step_runner.TRACE_FIELD_MAX_CHARS); utfällda direkt hade en enda körning
- * ändå varit femtio skärmar text, och det man letar efter är oftast ETT steg.
+ * Sedan Fas 7 (2026-10-07) visar ett steg sin lagerstapel: systemlagren i
+ * verklig ordning med texten ur prompt_lager, och hela användarmeddelandet,
+ * klippt vid sina rubriker. Ingenting är kapat. Äldre körningar har fyra
+ * fällbara råfält, kapade till 8 000 tecken vid skrivningen; de visas som
+ * förut med en rad som säger det. Kodgrindarnas utslag och anropen utanför
+ * stegmotorn (nyckeln "step") står som egna poster mellan stegen.
  *
  * Rubriken är "Körning" och inte agent_type: koden är en maskin-id och står i
  * mono i metaraden under. Ingen tillbakalänk överst; railens Körningar leder dit.
@@ -37,7 +40,11 @@ function Field({ label, value }: Readonly<{ label: string; value?: string | null
   );
 }
 
-function Step({ step, index }: Readonly<{ step: StepLogEntry; index: number }>) {
+function Step({
+  step,
+  index,
+  lagertexter
+}: Readonly<{ step: StepLogEntry; index: number; lagertexter: Record<string, string> }>) {
   return (
     <Rad className="min-w-0">
       <div className="flex min-w-0 flex-wrap items-baseline justify-between gap-x-6 gap-y-2">
@@ -89,10 +96,48 @@ function Step({ step, index }: Readonly<{ step: StepLogEntry; index: number }>) 
         </p>
       ) : null}
 
-      <Field label="systemprompt" value={step.system_prompt} />
-      <Field label="anvandarmeddelande" value={step.user_message} />
+      {/* Spår av version 2 (Fas 7): prompten lager för lager, hela texten.
+          Äldre spår har de fyra kapade fälten och visas som förut, med en
+          rad som säger att de är kapade. */}
+      {step.spar === 2 && step.lager?.length ? (
+        <div className="mt-4">
+          <Lagerstapel
+            lager={step.lager}
+            texter={lagertexter}
+            anvandartext={step.user_message}
+            skilldelar={step.skilldelar}
+          />
+        </div>
+      ) : (
+        <>
+          {step.system_prompt || step.user_message ? (
+            <p className={cn(meta, "mt-3 max-w-[70ch]")}>
+              <AdminText n="sparKapat" />
+            </p>
+          ) : null}
+          <Field label="systemprompt" value={step.system_prompt} />
+          <Field label="anvandarmeddelande" value={step.user_message} />
+        </>
+      )}
       <Field label="rasvar" value={step.raw_output} />
       <Field label="reasoning" value={step.reasoning_content} />
+    </Rad>
+  );
+}
+
+/** Kodgrind eller anrop utanför stegmotorn (nyckeln "step"): namnet och datan. */
+function Post({ post }: Readonly<{ post: StepLogEntry }>) {
+  const { step: namn, ...data } = post;
+  const grind = String(namn ?? "").startsWith("grind:");
+  return (
+    <Rad className="min-w-0">
+      <h2 className={cn(rubrikPanel, "min-w-0 break-words")}>
+        <AdminText n={grind ? "stegGrind" : "stegAnrop"} />
+        <span className="ml-3 font-mono text-[0.8125rem] font-normal text-ink-muted">{String(namn)}</span>
+      </h2>
+      <pre className="mt-2 max-h-[24rem] overflow-auto whitespace-pre-wrap break-words font-mono text-[0.8125rem] leading-6 text-ink-muted">
+        {JSON.stringify(data, null, 2)}
+      </pre>
     </Rad>
   );
 }
@@ -140,7 +185,11 @@ export default async function Page({ params }: Readonly<{ params: Promise<{ id: 
       ) : (
         <AdminRadlista aria="stegLista" className="mt-8">
           {steps.map((step, index) => (
-            <Step key={`${step.skill}-${index}`} step={step} index={index} />
+            step.skill ? (
+              <Step key={`${step.skill}-${index}`} step={step} index={index} lagertexter={run.lagertexter ?? {}} />
+            ) : (
+              <Post key={`${String(step.step)}-${index}`} post={step} />
+            )
           ))}
         </AdminRadlista>
       )}

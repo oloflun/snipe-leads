@@ -45,12 +45,15 @@ from ..agentcore.instruktioner import Instruktionslager, las_instruktioner
 from ..agentcore.overlays import pack_version
 from ..agentcore.packs import PlaybookStep, RunLedger
 from ..config import get_settings
+from ..leads import erbjudanden
 from ..leads.business_context import require_business_context
 from ..leads.discovery import (
     LAGLIG_GRUND_EGEN_WEBB,
     ar_privat_epost,
     ar_arbetsmejl,
+    ar_saljadress,
     extrahera_kontaktlankar,
+    mottagare,
     normalisera_webbplats,
     plocka_arbetsmejl,
 )
@@ -68,6 +71,7 @@ from ..leads.text_delta import (
     parse_humanized_segments,
     splice,
 )
+from . import leads_systemprompt
 from .leads_context import OnboardingContext, OutreachContext, ResearchContext
 from .leads_tools import (
     ONBOARDING_TOOLS,
@@ -75,7 +79,7 @@ from .leads_tools import (
     _request_human_handoff_impl,
 )
 from .llm import get_agent_model
-from .research_tools import _scrape_registered_source_impl
+from .research_tools import _scrape_registered_source_impl, ar_registersida
 from .step_runner import RunTrace, run_step
 from .tools import strip_markdown
 
@@ -340,8 +344,9 @@ def _verifierad_epost(kandidat: str | None, material: str, webb: str | None) -> 
 
 
 def _saknar_arbetsmejl(prospect: dict[str, Any], webb: str | None) -> bool:
-    nu = prospect.get("contact_email")
-    return not ar_arbetsmejl(nu, webb=webb)
+    """Ingen adress som ett utkast får gå till (discovery.mottagare): tom,
+    privat utanför regel 13, eller en HR-/ekonomi-/robotadress."""
+    return not mottagare({**prospect, "website": webb})
 
 
 async def _uppgradera_kontakt(
@@ -385,16 +390,26 @@ async def _uppgradera_kontakt(
     falt: dict[str, Any] = {}
 
     # Namngiven uppgradering — samma rangordning som tidigare. Kräver namn,
-    # och får inte degradera named_role_match.
-    if namn and _kontaktniva_rank("named_other") > _kontaktniva_rank(prospect.get("contact_level")):
+    # och får inte degradera named_role_match. Har kontaktsökningen redan
+    # gett leadet en adress som duger står dess tilltal kvar (Antons regel
+    # 14, 2026-10-07): modellens namn skriver inte över hälsningen.
+    if (
+        namn
+        and _kontaktniva_rank("named_other") > _kontaktniva_rank(prospect.get("contact_level"))
+        and _saknar_arbetsmejl(prospect, webb)
+    ):
         falt["contact_name"] = namn
         falt["contact_role"] = roll
         falt["contact_level"] = "named_other"
 
     # Arbetsmejl: byt ut privat/tom, fyll i från fynd eller skrap. En redan
     # verifierad arbetsadress lämnas ifred (även när vi sätter ett namn).
+    # Bolagets adress (info@) duger även när leadet bär ett namn (Sebbes
+    # beslut 2026-10-07, regel 10/13): grinden som krävde personens namn i
+    # adressen var en rest av den ersatta regel 10a. HR-, ekonomi- och
+    # robotadresser fästs aldrig (provkörningen 2026-10-05: rekrytering@).
     if _saknar_arbetsmejl(prospect, webb):
-        vald = fynd_epost or scrape_epost
+        vald = next((e for e in (fynd_epost, scrape_epost) if e and ar_saljadress(e)), None)
         if vald:
             falt["contact_email"] = vald
             if "contact_level" not in falt:
@@ -504,6 +519,10 @@ def _gissa_hemsida(urls: list[str], webbplats: str | None) -> str | None:
             normaliserad = None
         if normaliserad in urls:
             return normaliserad
+    # Ett bolagsregister är aldrig bolagets startsida. Utan spärren blev
+    # merinfo-URL:en "hemsida" för bolag utan egen sajt, och tre merinfo-
+    # undersidor skrapades som "kontaktsidor" (plan 2026-10-05, fas 2).
+    urls = [u for u in urls if not ar_registersida(u)]
     if not urls:
         return None
     return min(urls, key=lambda u: (len(urlparse(u).path.strip("/")), u))
@@ -542,7 +561,11 @@ async def _gather_registered_sources(
         tenant_id=tenant_id,
         prospect_id=prospect_id,
     )
-    urls = sorted(await storage.list_prospect_source_urls(tenant_id, prospect_id))
+    # Bolagsregister (merinfo) skrapas inte som källmaterial här: råsidan bär
+    # personer och telefonnummer, och registret är ett filter, inte en
+    # kontaktkälla. V2 lägger till registrets bolagsfakta utan dem
+    # (merinfo.bolagsfakta_text, plan 2026-10-05).
+    urls = sorted(u for u in await storage.list_prospect_source_urls(tenant_id, prospect_id) if not ar_registersida(u))
 
     scraped: dict[str, str] = {}
     errors: list[str] = []
@@ -657,7 +680,7 @@ async def run_research_step(
     )
     sources_block = material or "(inget källmaterial kunde hämtas — se scrape_errors)"
 
-    soul_block = await load_soul(storage, tenant_id)
+    soul_block = await load_soul(storage, tenant_id, agent="leads")
     lager = await las_instruktioner(
         storage, tenant_id, agent_type="leads", tenant_namn=tenant_name
     )
@@ -748,6 +771,18 @@ async def run_research_step(
     prospecting = skarp_kvalificering(
         prospecting, icp, company_name=str(prospect_row.get("company_name") or "")
     )
+    # Inget källmaterial = inget belägg för att kunden kan sälja något till
+    # bolaget. Samma regel som V2 (bedomning.py), 2026-10-06.
+    if not material.strip():
+        prospecting = {
+            **prospecting,
+            "qualified": False,
+            "icp_fit": 0.0,
+            "disqualifiers": [
+                *(prospecting.get("disqualifiers") or []),
+                "Inget källmaterial gick att hämta, så det finns inget belägg för ett behov av produkten.",
+            ],
+        }
 
     # GRINDEN (2026-09-02, kundkrav: nischning + kontaktperson). Två villkor,
     # båda kod-härledda — `qualified` är visserligen modellens bedömning, men
@@ -929,6 +964,7 @@ async def run_research_step(
         input_text=brief,
         output_text=final_output,
         step_log=trace.as_log(),
+        prompt_lager=trace.lagertexter(),
         tokens_in=trace.total_tokens_in,
         tokens_out=trace.total_tokens_out,
         latency_ms=latency_ms,
@@ -1044,7 +1080,7 @@ async def run_outreach_draft(
 
     thread = await storage.get_outreach_thread(tenant_id, thread_id) or {}
     language_state = thread.get("language_state") or "sv"
-    soul_block = await load_soul(storage, tenant_id)
+    soul_block = await load_soul(storage, tenant_id, agent="leads")
     lager = await las_instruktioner(
         storage, tenant_id, agent_type="leads", tenant_namn=tenant_name
     )
@@ -1056,11 +1092,18 @@ async def run_outreach_draft(
     # ställe i stället för duplicerad mellan den här strängen och
     # outreach_playbook._HEADER. Bara VÄRDET på språkläget hör hemma här:
     # det är kördata, inte en regel.
+    # Kundens erbjudande (A/B, app/leads/erbjudanden.py) ligger i basen och når
+    # därmed alla fyra stegen, humanizern med. None = prompten som förut.
+    erbjudande = await erbjudanden.for_trad(
+        storage, tenant_id, thread, erbjudanden.produkt_ur_research(research_summary)
+    )
     base = (
         f"## Uppdrag\nDu skriver ett kallt första mejl till {company_name} åt {tenant_name}.\n\n"
+        f"## Skrivstil (gäller före skillernas mallar för formuleringen)\n{leads_systemprompt.skrivstil()}\n\n"
         f"## Brief\n{brief}\n\n"
         f"## Erbjudandet som styr vinkeln\n{offer_summary}\n\n"
-        f"## Språkläge\n{language_state}\n\n"
+        + (f"{erbjudande.block()}\n\n" if erbjudande else "")
+        + f"## Språkläge\n{language_state}\n\n"
         f"{context_pack}"
         + (f"\n\n{soul_block}" if soul_block else "")
         + (f"\n\n## Research om {company_name}\n{research_summary}" if research_summary else "")
@@ -1150,6 +1193,7 @@ async def run_outreach_draft(
         tenant_id=tenant_id,
         thread_id=thread_id,
         prospect_email=prospect_email,
+        is_test=is_test,
     )
     escalated_steps = [s.skill for s in trace.steps if s.escalated]
     queue_result: dict[str, Any] = {}
@@ -1177,7 +1221,8 @@ async def run_outreach_draft(
             facts=build_permitted_facts(
                 context_pack=context_pack,
                 research_evidence=research_evidence,
-                offer_summary=offer_summary,
+                # Villkorens siffror är kundens egna och får stå i mejlet.
+                offer_summary=f"{offer_summary}\n{erbjudande.villkor}" if erbjudande else offer_summary,
                 brief=brief,
                 tenant_name=tenant_name,
                 company_name=company_name,
@@ -1210,6 +1255,7 @@ async def run_outreach_draft(
                     # delta-humanisering är det inte längre OUTREACH_V1:s
                     # fjärde steg som rörde texten sist (INV-LANG-002).
                     humanizer_variant=last_humanizer_variant(trace.skills_used),
+                    stilkontroll=True,
                 )
             )
 
@@ -1223,6 +1269,7 @@ async def run_outreach_draft(
         input_text=brief,
         output_text=f"{subject}\n\n{final_body}",
         step_log=trace.as_log(),
+        prompt_lager=trace.lagertexter(),
         tokens_in=trace.total_tokens_in,
         tokens_out=trace.total_tokens_out,
         latency_ms=latency_ms,

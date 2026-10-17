@@ -64,7 +64,7 @@ const PUBLIKA = ["/", "/leads", "/support", "/login", "/duo-demo", "/auth/reset"
 // otestade sedan de tillkom.
 //
 // Lägger du till en sektion i settingsSections: lägg till den här samtidigt.
-const ARBETSYTA = ["/dashboard", "/dashboard/leads", "/dashboard/leads/kontroll",
+const ARBETSYTA = ["/dashboard", "/dashboard/att-gora", "/dashboard/leads", "/dashboard/leads/kontroll",
   "/dashboard/leads/listor",
   "/dashboard/emails", "/dashboard/support", "/dashboard/kvitton",
   "/settings", "/settings/affarskontext", "/settings/kunskapsbas", "/settings/soul",
@@ -73,7 +73,7 @@ const ARBETSYTA = ["/dashboard", "/dashboard/leads", "/dashboard/leads/kontroll"
   "/settings/team", "/settings/billing", "/settings/addons"];
 
 const ADMINYTA = ["/admin", "/admin/kunder", "/admin/korningar", "/admin/testkorningar",
-  "/admin/handelser", "/admin/bokforingsanvandning", "/admin/arbetsyta", "/admin/leads", "/admin/leads/kontroll",
+  "/admin/handelser", "/admin/bokforingsanvandning", "/admin/arbetsyta", "/admin/att-gora", "/admin/leads", "/admin/leads/kontroll",
   "/admin/leads/listor",
   "/admin/emails", "/admin/support", "/admin/companies", "/admin/contacts",
   "/admin/inbox", "/admin/analytics", "/admin/assistant", "/admin/kvitton"];

@@ -100,21 +100,21 @@ def test_ett_korrekt_utskick_slapps_igenom():
 # -- Regel 1: avsändaridentifikation ----------------------------------------
 
 
-@pytest.mark.parametrize(
-    "bortplockat,forvantat_ord",
-    [
-        ("Livrustning AB", "företagsnamn"),
-        ("556824-9022", "organisationsnummer"),
-        ("Rudsjövägen 112, 131 47 Nacka", "postadress"),
-    ],
-)
-def test_regel_1_kraver_alla_tre_identitetsuppgifterna(bortplockat, forvantat_ord):
-    """Marknadsföringslagen kräver identifierbar avsändare, e-handelslagen
-    org.nr. Kravet gäller hyreskunden, inte Snajp."""
-    beslut = kor(utskick=utskick(brodtext=FULLSTANDIG_TEXT.replace(bortplockat, "")))
+def test_regel_1_kraver_foretagsnamnet():
+    """Marknadsföringslagen kräver identifierbar avsändare. Kravet gäller
+    hyreskunden, inte Snajp."""
+    beslut = kor(utskick=utskick(brodtext=FULLSTANDIG_TEXT.replace("Livrustning AB", "")))
     assert beslut.atgard == BLOCKERA
     assert beslut.regel == "1_avsandaridentifikation"
-    assert forvantat_ord in beslut.skal
+    assert "företagsnamn" in beslut.skal
+
+
+@pytest.mark.parametrize("bortplockat", ["556824-9022", "Rudsjövägen 112, 131 47 Nacka"])
+def test_regel_1_stoppar_aldrig_pa_orgnr_eller_adress(bortplockat):
+    """Antons beslut 2026-10-10: org.nr och postadress tas med när de finns
+    men får aldrig stoppa ett utskick."""
+    beslut = kor(utskick=utskick(brodtext=FULLSTANDIG_TEXT.replace(bortplockat, "")))
+    assert beslut.regel != "1_avsandaridentifikation"
 
 
 def test_regel_1_faller_inte_pa_formatering():

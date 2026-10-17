@@ -32,11 +32,13 @@ EXPECTED_ORDER_NORMAL = [
 
 # Med kunskapslucka (eller säkerhetskritiskt ärende) körs kunskapssteget,
 # på sin deklarerade plats före humaniseraren.
+# 2026-10-05: KB-lucka med tydlig fråga är ÄRLIGT-läget — bedömningssteget
+# (kedjans dyraste anrop) hoppas över: svaret erbjuder redan en kollega och
+# kundens "ja" avgör. Luckan blir fortfarande ett artikelförslag.
 EXPECTED_ORDER_KB_GAP = [
     "cs:ticket-triage",
     "cs:customer-research",
     "cs:draft-response",
-    "cs:customer-escalation",
     "cs:kb-article",
     "snajp:humanizer-svenska",
 ]
@@ -590,7 +592,10 @@ async def test_uppsagningsrisk_eskalerar_fortfarande_pa_ett_tunt_bibliotek():
 
 
 @pytest.mark.anyio
-async def test_modellens_egen_eskalering_vager_fortfarande():
+async def test_eskaleringssteget_kors_inte_pa_en_ofarlig_kunskapslucka():
+    """Driftregeln 2026-10-06: en kunskapslucka avgörs av utkastets beslut och
+    kundens svar på erbjudandet, inte av bedömningssteget. I dev röstade
+    steget över på "Vilka har grundat Snajp?" efter en felbedömd research."""
     storage = MemoryStorage()
     await _tunn_kb(storage)
     llm = _FakeLLM(
@@ -604,8 +609,27 @@ async def test_modellens_egen_eskalering_vager_fortfarande():
     )
     result = await _run(storage, llm, message="Fungerar den med min telefon?")
 
+    assert "cs:customer-escalation" not in llm.calls
+    assert result["escalated"] is False
+
+
+@pytest.mark.anyio
+async def test_modellens_motivering_anvands_i_ett_sakerhetskritiskt_arende():
+    storage = MemoryStorage()
+    await _tunn_kb(storage)
+    llm = _FakeLLM(
+        overrides={
+            "cs:ticket-triage": {"escalate": True},
+            "cs:customer-escalation": {
+                "should_escalate": True,
+                "reason": "Kräver manuell prövning.",
+            },
+        }
+    )
+    result = await _run(storage, llm, message="Fungerar den med min telefon?")
+
     assert result["escalated"] is True
-    assert result["escalation_reason"] == "Kräver manuell prövning."
+    assert result["escalation_reason"].startswith("Kräver manuell prövning.")
 
 
 @pytest.mark.anyio
