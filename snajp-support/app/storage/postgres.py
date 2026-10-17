@@ -2518,6 +2518,19 @@ class PostgresStorage:
             )
         return {str(r["prospect_id"]) for r in records}
 
+    async def utkastjobb_lage(self, tenant_id: str) -> dict[str, dict[str, Any]]:
+        async with self._scoped(tenant_id) as conn:
+            records = await conn.fetch(
+                """
+                select distinct on (prospect_id) prospect_id, status, error
+                  from leads_job_ledger
+                 where tenant_id = $1 and prospect_id is not null and scope = 'utkast'
+                 order by prospect_id, created_at desc
+                """,
+                tenant_id,
+            )
+        return {str(r["prospect_id"]): {"status": r["status"], "error": r["error"]} for r in records}
+
     async def list_leads_korningar(self, tenant_id: str, *, limit: int = 20) -> list[dict[str, Any]]:
         async with self._scoped(tenant_id) as conn:
             records = await conn.fetch(

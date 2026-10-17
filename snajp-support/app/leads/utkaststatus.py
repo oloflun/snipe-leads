@@ -135,3 +135,18 @@ def per_prospekt(lagen: dict[str, dict[str, Any]], prospect_ids, *, now: datetim
     """`harled` för varje prospekt-id; ett lead utan tråd blir `saknas`."""
     nu = now or datetime.now(timezone.utc)
     return {str(pid): harled(lagen.get(str(pid)), now=nu) for pid in prospect_ids}
+
+
+def med_utkastjobb(ut: dict[str, Any], jobb: dict[str, Any] | None) -> dict[str, Any]:
+    """Lägger Skapa om utkast-jobbets läge (`storage.utkastjobb_lage`) ovanpå
+    härledningen: `skrivs` medan jobbet står i kö eller körs, och jobbets skäl
+    när det slutade utan ett nytt utkast (det gamla är då redan kasserat, så
+    leadet står som saknas eller avvisat). Skälet står i liggaren och syns
+    därför också efter en omladdning."""
+    if not jobb:
+        return ut
+    if jobb.get("status") in ("queued", "processing"):
+        return {**ut, "utkast_status": "skrivs"}
+    if jobb.get("error") and ut.get("utkast_status") in ("saknas", "avvisat") and not ut.get("utkast_skal"):
+        return {**ut, "utkast_skal": jobb["error"]}
+    return ut

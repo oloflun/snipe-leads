@@ -1806,6 +1806,14 @@ class MemoryStorage:
             and r["scope"] in ("research", "research_and_draft")
         }
 
+    async def utkastjobb_lage(self, tenant_id: str) -> dict[str, dict[str, Any]]:
+        ut: dict[str, dict[str, Any]] = {}
+        # Insättningsordning = skapandeordning: det senare jobbet skriver över.
+        for r in self.leads_job_ledger.values():
+            if r["tenant_id"] == tenant_id and r.get("prospect_id") and r["scope"] == "utkast":
+                ut[str(r["prospect_id"])] = {"status": r["status"], "error": r.get("error")}
+        return ut
+
     async def list_leads_korningar(self, tenant_id: str, *, limit: int = 20) -> list[dict[str, Any]]:
         rader = [
             r for r in self.leads_job_ledger.values()

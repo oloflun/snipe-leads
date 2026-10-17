@@ -29,7 +29,7 @@ from ..jobs.stadare import (
     stada_tenant,
 )
 from ..kvotfel import ar_kreditslut, kundtext_for, larma_kreditslut
-from ..leads import existens, sidhamtning, upptagna
+from ..leads import existens, sidhamtning, sparad_research, upptagna
 from ..leads.webbsignal import mat_webbplats
 from ..leads.autonomy import LEVELS as AUTONOMY_LEVELS
 from ..leads.autonomy import describe as describe_autonomy
@@ -557,16 +557,24 @@ async def list_prospects(
             logger.exception("Kunde inte läsa pågående research för %s.", tenant_id)
             return set()
 
-    # Sex oberoende läsningar PARALLELLT, var och en på sin anslutning. I följd
+    # Sju oberoende läsningar PARALLELLT, var och en på sin anslutning. I följd
     # var de 33 frågor och ~95 ms databastid per hämtning av Leads-fliken
     # (Server-Timing, 2026-10-10); nu är väntan den längsta, inte summan.
-    prospects, kopplade, lagen, statuslogg, i_research, far_se_webb = await asyncio.gather(
+    async def _utkastjobb() -> dict:
+        try:
+            return await storage.utkastjobb_lage(tenant_id)
+        except Exception:  # noqa: BLE001 — en visningsdetalj får inte fälla listan
+            logger.exception("Kunde inte läsa utkastjobben för %s.", tenant_id)
+            return {}
+
+    prospects, kopplade, lagen, statuslogg, i_research, far_se_webb, utkastjobb = await asyncio.gather(
         storage.list_prospects(tenant_id, limit=max(1, min(limit, 1000))),
         storage.listkopplade_prospekt(tenant_id),
         storage.utkast_lagen(tenant_id),
         storage.list_status_logg(tenant_id),
         _i_research(),
         webbpool.far_se(storage, tenant_id),
+        _utkastjobb(),
     )
     # Exempelbolag syns bara hos demotenanten. Kvarlämnade rader från den
     # gamla default-checkboxen ska inte dyka upp som "fynd" hos en kund.
@@ -613,7 +621,7 @@ async def list_prospects(
         "prospects": [
             {
                 **med_rollflagga(p),
-                **utkast[str(p["id"])],
+                **utkaststatus.med_utkastjobb(utkast[str(p["id"])], utkastjobb.get(str(p["id"]))),
                 "senaste_handelse_at": senast.get(str(p["id"])) or p.get("created_at"),
                 **(
                     {"status": "researching"}
@@ -3469,6 +3477,7 @@ async def _run_batch_prospect(
     # per job_id, och ett återtaget barn som redan står completed väcker bara
     # körningen (se hantera_leads_jobb).
     slutstatus: str | None = None
+    utkast_fel: str | None = None
     await app_state.jobs.start(job_id)
     await storage.set_leads_job_status(
         tenant["tenant_id"], job_id=job_id, status="processing", scope=scope, prospect_id=prospect_id
@@ -3489,16 +3498,31 @@ async def _run_batch_prospect(
         # grinden mot den sparade ICP:n medan modellen läste formulärets.
         installningar = await storage.get_agent_settings(tenant["tenant_id"], agent_type="leads")
         korningens_icp = normalize_icp(_med_overrides(installningar.get("icp"), overrides) or {})
-        result = await run_research_step(
-            storage,
-            tenant["tenant_id"],
-            prospect_id=prospect_id,
-            tenant_name=tenant["tenant_name"],
-            context_pack=context_pack,
-            brief="",
-            is_test=is_test,
-            icp=korningens_icp,
+        # Skapa om bara utkastet (scope 'utkast', 2026-10-17): underlaget ur
+        # leadets sparade research, ingen ny research och ingen ny bedömning
+        # (app/leads/sparad_research.py). Ett bolag som aldrig researchats har
+        # inget att skriva ur och får den vanliga kedjan; det har ingen
+        # bedömning som kan gå förlorad.
+        skriv = scope in ("research_and_draft", "utkast")
+        sparad = (
+            await sparad_research.las(storage, tenant["tenant_id"], prospect_id)
+            if scope == "utkast"
+            else None
         )
+        bara_utkast = sparad is not None
+        if sparad is not None:
+            result = dict(sparad)
+        else:
+            result = await run_research_step(
+                storage,
+                tenant["tenant_id"],
+                prospect_id=prospect_id,
+                tenant_name=tenant["tenant_name"],
+                context_pack=context_pack,
+                brief="",
+                is_test=is_test,
+                icp=korningens_icp,
+            )
         result["onboarding_missing"] = list(missing)
         result["prospect_id"] = prospect_id
 
@@ -3509,20 +3533,21 @@ async def _run_batch_prospect(
         _skal = _leverbarhet(_rad, result, _regler)
         if _skal:
             utfall["skal"] = _skal
+        if _skal and not bara_utkast:
             # Ett bolag som inte är leverbart är inget lead: nivå C döljer det
             # för kunden (list_prospects), oavsett om skälet är kriterierna,
-            # tröskeln eller kontakten.
+            # tröskeln eller kontakten. Ett rent utkastjobb bedömer inte om.
             await storage.spara_bedomning(
                 tenant["tenant_id"], prospect_id,
                 bedomning={"niva": "C", "qualified": False, "disqualifiers": [_skal]},
             )
-        else:
+        elif not _skal:
             utfall.update(leverbar=True, skal=None)
             # Org.nr till varje leverbart lead (Sebbe 2026-10-09: "all info
             # från bolagen som behövs hämtas vid körning"). Bolag ur den gamla
             # sökkedjan saknade det, och utan org.nr kunde ett lead från en
             # provkörning inte flyttas över och skickas.
-            if not _rad.get("orgnr"):
+            if not _rad.get("orgnr") and not bara_utkast:
                 await _komplettera_orgnr(storage, tenant["tenant_id"], _rad)
 
         # Kundens eskaleringsregel (leads/eskalering.py). Här och inte i
@@ -3539,7 +3564,7 @@ async def _run_batch_prospect(
         ):
             result["stopped_early"] = "under_troskel"
 
-        if scope == "research_and_draft" and result.get("stopped_early"):
+        if skriv and result.get("stopped_early"):
             # Grinden föll — bolaget kvalificerar inte, ligger under kundens
             # tröskel, eller saknar kontaktväg. Ett utkast är 4–7 LLM-anrop
             # till, för ett mejl som inte ska skickas automatiskt.
@@ -3560,7 +3585,7 @@ async def _run_batch_prospect(
                     "Hoppar över utkastet: ingen kontaktperson eller kontaktväg "
                     "hittades. Komplettera kontakten i registret och kör Processa om."
                 )
-        elif scope == "research_and_draft" and _skal:
+        elif skriv and _skal:
             # Utkast skrivs bara för ett LEVERBART lead (_leverbarhet): en
             # kontaktmejl till bolaget (Sebbe 2026-10-07) och en
             # lägesbeskrivning. Kontrollen räknade förut bara in körningens
@@ -3568,7 +3593,7 @@ async def _run_batch_prospect(
             # kontaktperson med roll" fick ändå status Redo och ett utkast
             # till en funktionsadress (provkörningen 2026-10-05).
             result["draft_note"] = f"Research klar. Inget utkast: {_skal[:1].lower()}{_skal[1:].rstrip('.')}."
-        elif scope == "research_and_draft":
+        elif skriv:
             prospect = await storage.get_prospect(tenant["tenant_id"], prospect_id) or {}
             email = prospect.get("contact_email")
             # Kontaktnivån (fallback-trappan, app/leads/discovery.py) följer
@@ -3728,6 +3753,10 @@ async def _run_batch_prospect(
             # vidare i stället.
             utfall.update(leverbar=False, skal=str(result.get("draft_note") or "Utkastet blev inte av.")[:240])
         result["_korningsutfall"] = {**utfall, "skrap": skrap.som_dict()}
+        if scope == "utkast" and not (result.get("draft") or {}).get("queued"):
+            # Skälet står kvar i liggaren och visas på raden efter en omladdning
+            # (storage.utkastjobb_lage).
+            utkast_fel = str(result.get("draft_note") or _FEL_UTKAST)[:500]
         await app_state.jobs.complete(job_id, result)
         slutstatus = "completed"
     except Exception as error:  # noqa: BLE001 — ett trasigt prospekt fäller inte batchen
@@ -3780,10 +3809,15 @@ async def _run_batch_prospect(
                 skrap=skrap.som_dict(),
             )
         await storage.set_leads_job_status(
-            tenant["tenant_id"], job_id=job_id, status=slutstatus, scope=scope, prospect_id=prospect_id
+            tenant["tenant_id"], job_id=job_id, status=slutstatus, scope=scope, prospect_id=prospect_id,
+            error=utkast_fel,
         )
         if batch_id:
             await _vacka_korning(app_state, tenant, batch_id)
+
+
+def _fas(scope: str) -> str:
+    return "skriver" if scope == "utkast" else "research"
 
 
 @router.post("/api/leads/prospects/processa-om", status_code=202)
@@ -3798,6 +3832,11 @@ async def processa_om(
     `ersatt` (Skapa om utkast, 2026-10-08): leadets väntande utkast ställs in
     och kasseras innan jobbet köas. Ett lead som redan fått ett mejl hoppas
     över — ett nytt första mejl i ett pågående samtal är fel mejl.
+
+    `scope="utkast"` (2026-10-17): bara utkastet skrivs om, ur leadets
+    sparade research. Researchen körs inte om, så bedömningen står kvar: när
+    Snajps utkast skrevs om med full research 2026-10-16 föll 23 av 104 leads
+    till nivå C. Ersätter alltid det väntande utkastet.
     """
     from ..leads.scheduler import avbryt_utskick_for_prospekt
 
@@ -3823,24 +3862,27 @@ async def processa_om(
     # ett nytt urval som överlappade det förra, gav samma lead två jobb och två
     # utkast i samma tråd (development 2026-10-08, anropen 15:39:58 och 15:40:25).
     pagar = await storage.list_prospekt_i_research(tenant_id)
+    # Ett utkast som redan skrivs räknas också: två jobb hade gett två utkast.
+    pagar |= {pid for pid, j in (await storage.utkastjobb_lage(tenant_id)).items()
+              if j.get("status") in ("queued", "processing")}
     pagar_redan = [str(p["id"]) for p in hittade if str(p["id"]) in pagar]
     hittade = [p for p in hittade if str(p["id"]) not in pagar]
     if not hittade:
         return {
-            "jobs": [], "scope": payload.scope, "count": 0, "fase": "research",
+            "jobs": [], "scope": payload.scope, "count": 0, "fase": _fas(payload.scope),
             "hoppade_over": [], "pagar_redan": pagar_redan,
         }
     hoppade: list[str] = []
-    if payload.ersatt:
+    # Ett rent utkastjobb ersätter alltid leadets väntande utkast.
+    if payload.ersatt or payload.scope == "utkast":
         lagen = await storage.utkast_lagen(tenant_id)
         hoppade = [str(p["id"]) for p in hittade if (lagen.get(str(p["id"])) or {}).get("antal_skickade")]
         hittade = [p for p in hittade if str(p["id"]) not in hoppade]
-        # ponytail: skapa om kör hela research_and_draft (sidorna ur cachen); egen utkast-scope om kostnaden märks.
         for p in hittade:
             await avbryt_utskick_for_prospekt(storage, tenant_id, str(p["id"]))
         if not hittade:
             return {
-                "jobs": [], "scope": payload.scope, "count": 0, "fase": "research",
+                "jobs": [], "scope": payload.scope, "count": 0, "fase": _fas(payload.scope),
                 "hoppade_over": hoppade, "pagar_redan": pagar_redan,
             }
     jobs = await _lagg_prospektjobb(
@@ -3856,7 +3898,7 @@ async def processa_om(
         "jobs": jobs,
         "scope": payload.scope,
         "count": len(jobs),
-        "fase": "research",
+        "fase": _fas(payload.scope),
         "hoppade_over": hoppade,
         "pagar_redan": pagar_redan,
     }

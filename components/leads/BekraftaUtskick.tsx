@@ -43,8 +43,8 @@ const TEXT: Record<Bekraftelsetyp, { rubrik: (n: number) => Localized; knapp: (n
     rubrik: (n) => ({ sv: `Utkasten skrivs om för ${n} ${n === 1 ? "lead" : "leads"}:`, en: `The drafts are rewritten for ${n} ${n === 1 ? "lead" : "leads"}:` }),
     knapp: (n) => ({ sv: `Skriv om ${n} utkast`, en: `Rewrite ${n} drafts` }),
     forklaring: {
-      sv: "Väntande och godkända utkast ersätts och skickas aldrig.",
-      en: "Waiting and approved drafts are replaced and never sent."
+      sv: "Väntande och godkända utkast ersätts och skickas aldrig. De nya skrivs ur den research som redan finns, så bedömningen av bolagen ändras inte.",
+      en: "Waiting and approved drafts are replaced and never sent. The new ones are written from the existing research, so the companies' assessment does not change."
     }
   }
 };

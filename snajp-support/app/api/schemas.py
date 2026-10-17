@@ -434,7 +434,10 @@ class ProcessaOmRequest(BaseModel):
     # Inget tak (Anton 2026-10-12): en liståtgärd gäller alla markerade,
     # oavsett hur många. Budgetvakten och jobbkön sätter gränsen, inte schemat.
     prospect_ids: list[str] = Field(..., min_length=1)
-    scope: str = Field(default="research_and_draft", pattern=r"^(research|research_and_draft)$")
+    #: 'utkast' (2026-10-17): bara ett nytt utkast, skrivet ur leadets sparade
+    #: research (app/leads/sparad_research.py). Ingen sidhämtning, ingen ny
+    #: bedömning; leadets väntande utkast ersätts som med `ersatt`.
+    scope: str = Field(default="research_and_draft", pattern=r"^(research|research_and_draft|utkast)$")
     is_test: bool = False
     #: Skapa om utkast: leadets väntande utkast ersätts. Köposterna ställs in
     #: och de osända utkasten kasseras FÖRE omskrivningen, så att det gamla

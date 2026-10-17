@@ -606,37 +606,6 @@ async def _research_v2(
             "Kontaktsidan hittades men innehöll ingen verifierbar kontaktperson eller adress."
         )
 
-    latency_ms = int((time.monotonic() - started) * 1000)
-    # Kodgrindarnas utslag som egna poster i spåret (Fas 7). Nyckeln "step",
-    # inte "skill": de är kod, inga LLM-steg. Insynens kedja läser dem för att
-    # peka ut var kedjan stannade — "Källmaterial: 0 tecken" på researchnoden
-    # är precis den rad som saknades när de påhittade bolagen gick igenom.
-    grindar = [
-        {"step": "grind:kallmaterial", "tecken": len(material), "utslag": "slappt" if har_underlag else "falld",
-         "kallor": [s.get("url") if isinstance(s, dict) else s for s in scraped_sources][:20]},
-        {"step": "grind:bedomning", "qualified": bool(bedomning["qualified"]), "niva": bedomning.get("niva"),
-         "score_total": bedomning.get("score_total"), "disqualifiers": bedomning.get("disqualifiers"),
-         "rader": bedomning.get("score_breakdown")},
-        {"step": "grind:kontakt", "kontaktniva": slutlig_kontaktniva, "saknas": kontakt_saknas,
-         "skal": contact_missing_reason},
-    ]
-    await storage.log_agent_run(
-        tenant_id,
-        agent_type="leads_research",
-        pack_version=pack_version(RESEARCH_V2.name, lager.hash),
-        skills_used=trace.skills_used,
-        input_text=brief,
-        output_text=final_output,
-        step_log=[*trace.as_log(), *(sidoanrop or []), *grindar],
-        prompt_lager=trace.lagertexter(),
-        tokens_in=trace.total_tokens_in,
-        tokens_out=trace.total_tokens_out,
-        latency_ms=latency_ms,
-        is_test=is_test,
-        model=f"{settings.llm_provider}:{settings.model}",
-        prospect_id=prospect_id,
-    )
-
     # Samma belägg-urval som V1: citat + pains + triggers — ALDRIG hela
     # skrapet (se resonemanget i leads_agent.run_research_step).
     research_evidence = [
@@ -678,6 +647,65 @@ async def _research_v2(
         )
     )
     vald_produkt = _vald_produkt(fynd, produkter)
+
+    latency_ms = int((time.monotonic() - started) * 1000)
+    # Kodgrindarnas utslag som egna poster i spåret (Fas 7). Nyckeln "step",
+    # inte "skill": de är kod, inga LLM-steg. Insynens kedja läser dem för att
+    # peka ut var kedjan stannade — "Källmaterial: 0 tecken" på researchnoden
+    # är precis den rad som saknades när de påhittade bolagen gick igenom.
+    grindar = [
+        {"step": "grind:kallmaterial", "tecken": len(material), "utslag": "slappt" if har_underlag else "falld",
+         "kallor": [s.get("url") if isinstance(s, dict) else s for s in scraped_sources][:20]},
+        {"step": "grind:bedomning", "qualified": bool(bedomning["qualified"]), "niva": bedomning.get("niva"),
+         "score_total": bedomning.get("score_total"), "disqualifiers": bedomning.get("disqualifiers"),
+         "rader": bedomning.get("score_breakdown")},
+        {"step": "grind:kontakt", "kontaktniva": slutlig_kontaktniva, "saknas": kontakt_saknas,
+         "skal": contact_missing_reason},
+    ]
+    # Utkastets underlag, så att Skapa om utkast kan skriva ett nytt mejl utan
+    # ny research och ny bedömning (app/leads/sparad_research.py).
+    from ..leads.sparad_research import underlagspost
+
+    grindar.append(
+        underlagspost(
+            {
+                "company_summary": fynd.get("company_summary"),
+                "qualified": kvalificerad,
+                "icp_fit": fynd.get("icp_fit"),
+                "likely_pains": fynd.get("likely_pains"),
+                "trigger_events": fynd.get("trigger_events"),
+                "motivering": bedomning["motivering"],
+                "vinklar": profil.get("vinklar") or [],
+                "uppfyllda_kriterier": [
+                    r["etikett"] for r in bedomning["score_breakdown"] if r["utfall"] == "träff"
+                ],
+                "webbsignaler": webbfakta.get("rader") or [],
+                "citat": citat,
+                "lagesbeskrivning": bedomning.get("lagesbeskrivning"),
+                "produkt": vald_produkt,
+                "offer_summary": offer_summary,
+                "research_evidence": research_evidence,
+                "disqualifiers": bedomning["disqualifiers"],
+            }
+        )
+    )
+    await storage.log_agent_run(
+        tenant_id,
+        agent_type="leads_research",
+        pack_version=pack_version(RESEARCH_V2.name, lager.hash),
+        skills_used=trace.skills_used,
+        input_text=brief,
+        output_text=final_output,
+        step_log=[*trace.as_log(), *(sidoanrop or []), *grindar],
+        prompt_lager=trace.lagertexter(),
+        tokens_in=trace.total_tokens_in,
+        tokens_out=trace.total_tokens_out,
+        latency_ms=latency_ms,
+        is_test=is_test,
+        model=f"{settings.llm_provider}:{settings.model}",
+        prospect_id=prospect_id,
+    )
+
 
     return {
         "lagesbeskrivning": bedomning.get("lagesbeskrivning"),

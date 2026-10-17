@@ -9,6 +9,30 @@ möjligt), vad det betyder i koden.
 
 ---
 
+## 2026-10-17 (Sebbe) — Skapa om utkast skriver bara utkastet, ur sparad research
+
+**Beslut.** "Bygg skapa om bara utkast utan ny research." Knapparna Skapa
+utkast och Skapa om utkast i Iris-listan skriver nu ett nytt mejl ur leadets
+sparade research i stället för att köra hela kedjan igen.
+
+**Resonemang.** Öppen punkt i utkastreferensen (avsnitt 8.5 och 9): när 104
+utkast skrevs om med Skapa om 2026-10-16 researchades bolagen om, och 23 föll
+till nivå C på en ny bedömning av ett bolag som redan var godkänt. En
+omskrivning av mejlet ska inte kunna ändra bedömningen, och den ska inte
+betala för sidhämtning och research en gång till.
+
+**I koden.** `scope="utkast"` på `POST /api/leads/prospects/processa-om`.
+Underlaget läses av `app/leads/sparad_research.py` ur bolagets senaste
+`leads_research`-körning: posten `underlag:utkast` som researchsteget skriver
+sedan i dag, annars (äldre körningar) ur stegets utdata med citaten
+verifierade mot källmaterialet i samma logg. Bedömningen läses ur
+prospektraden och skrivs aldrig om; ett bolag utan sparad research får hela
+kedjan som förut. Raden visar "Skriver utkast…" medan jobbet går, och skälet
+står kvar på raden om inget utkast blev av (liggarens `error`). Processa om i
+registret och kontaktjakten kör fortfarande full research.
+`scripts/omskriv_utkast.py` skriver bara utkasten som standard
+(`--med-research` för den gamla vägen). Ingen migration.
+
 ## 2026-10-17 (Anton) — Nivån från 2026-10-16 låses som referens
 
 **Beslut.** "Lås in detta på samma sätt som tidigare i projektdokumentationen,

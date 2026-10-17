@@ -111,6 +111,31 @@ async def test_skapa_om_ersatter_det_vantande_utkastet_och_hoppar_over_kontaktad
         assert gammalt["queue_item"]["status"] == "cancelled" and gammalt["message"]["kasserad_at"]
 
 
+async def test_skapa_om_bara_utkast_ersatter_utan_ersatt_flaggan(monkeypatch):
+    """scope 'utkast' (2026-10-17): det väntande utkastet ersätts alltid, och
+    jobbet köas med scope 'utkast' så att researchen inte körs om."""
+    async with app.router.lifespan_context(app):
+        storage = app.state.storage
+        lead = await _lead(storage, "Barautkast AB")
+        gammalt = await _utkast(storage, lead["id"], text="gammalt")
+        scopes: list[str] = []
+
+        async def fejk_lagg(app_state, tenant, prospects, **kw):
+            scopes.append(kw["scope"])
+            return [{"job_id": f"j-{p['id']}", "prospect_id": p["id"]} for p in prospects]
+
+        monkeypatch.setattr(leads_api, "_require_live_llm", lambda: None)
+        monkeypatch.setattr(leads_api, "_lagg_prospektjobb", fejk_lagg)
+        async with _klient() as klient:
+            svar = await klient.post(
+                "/api/leads/prospects/processa-om", headers=DEMO,
+                json={"prospect_ids": [lead["id"]], "scope": "utkast"},
+            )
+        assert svar.status_code == 202, svar.text
+        assert scopes == ["utkast"] and svar.json()["fase"] == "skriver"
+        assert gammalt["queue_item"]["status"] == "cancelled" and gammalt["message"]["kasserad_at"]
+
+
 async def test_skapa_utkast_har_inget_tak():
     """Anton 2026-10-12: inget tak på antal markerade i någon liståtgärd."""
     from app.api.schemas import ProcessaOmRequest

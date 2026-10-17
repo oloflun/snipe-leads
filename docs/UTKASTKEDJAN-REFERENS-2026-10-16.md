@@ -211,15 +211,16 @@ Noll `slentrian_ingang`, `uppraknad_ingang`, `mallord_i_ingangen`,
    så ska Anton godkänna ett nytt facit. Facit ändras aldrig tyst.
 4. Prova på fem leads (`scripts/omskriv_utkast.py --slug snajp --prospekt …
    --apply`) och läs dem själv.
-5. Skriv inte om ett stort antal utkast med "Skapa om": det researchar om, och
-   23 leads föll till nivå C när 104 skrevs om 2026-10-16. En "bara
-   utkast"-väg som återanvänder sparad research saknas fortfarande och är
-   nästa steg.
+5. "Skapa om utkast" skriver sedan 2026-10-17 bara utkastet, ur leadets
+   sparade research (`scope="utkast"`, `app/leads/sparad_research.py`), så
+   bedömningen står kvar. Före det researchade den om, och 23 leads föll till
+   nivå C när 104 skrevs om 2026-10-16. Processa om i registret kör
+   fortfarande full research och ska inte användas för att skriva om mejl.
 6. Dokumentera i `docs/BESLUT.md` och här (ny rad i avsnitt 4).
 
 ## 9. Öppet
 
-- **"Skapa om bara utkast"** utan ny research (se 8.5).
+- ~~**"Skapa om bara utkast"** utan ny research (se 8.5).~~ Byggd 2026-10-17.
 - **Iris-ingångarna** konvergerar mot "hitta nästa företagskund": ett Iris-mejl
   har bara ett moment. Grinden fäller frasen när den upprepas, men rörelsen
   behöver fler varianter ur bolagets egna affärer (nya orter, nya tjänster,

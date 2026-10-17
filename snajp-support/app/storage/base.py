@@ -811,6 +811,13 @@ class Storage(Protocol):
         fast i den — städaren failar jobbet och bolaget står som Ny igen."""
         ...
 
+    async def utkastjobb_lage(self, tenant_id: str) -> dict[str, dict[str, Any]]:
+        """Det senaste rena utkastjobbet (scope 'utkast', Skapa om utkast utan
+        ny research) per prospekt: {prospect_id: {status, error}}. Visar
+        "Skriver utkast" medan jobbet står i queued/processing, och skälet när
+        det slutade utan ett utkast i kön — också efter en omladdning."""
+        ...
+
     async def list_leads_korningar(self, tenant_id: str, *, limit: int = 20) -> list[dict[str, Any]]:
         """Tenantens körningar (liggarens batch- och listrader), nyast
         först: job_id, status, scope, is_test, created_at, updated_at,

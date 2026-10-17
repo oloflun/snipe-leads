@@ -6,9 +6,12 @@
 
 Varje prospekt som fått ett research_and_draft-jobb sedan --sedan (eller som
 anges med --prospekt id …) skickas till `POST /api/leads/prospects/processa-om`
-med `ersatt=true`: det väntande utkastet ställs in och kasseras, och
-research + utkast körs om genom samma kedja och samma grindar som en vanlig
-körning. Utkasten hamnar i granskningskön; inget skickas.
+med `scope=utkast`: det väntande utkastet ställs in och kasseras, och ett nytt
+skrivs ur leadets sparade research genom samma utkastkedja och grindar som en
+vanlig körning (app/leads/sparad_research.py). Bedömningen ändras inte.
+`--med-research` kör i stället research + utkast om (`research_and_draft`,
+`ersatt=true`), vilket kan fälla leads till nivå C. Utkasten hamnar i
+granskningskön; inget skickas.
 
 Kundens API-nyckel läses ur Railways `web`-tjänst (variabeln `SNAJP_KEY_<SLUG>`)
 med samma helpers som railway_tenant_keys.py. Nyckeln skrivs aldrig ut.
@@ -66,6 +69,8 @@ def main() -> int:
     ap.add_argument("--prospekt", nargs="*", default=[], help="prospekt-id:n i stället för --sedan")
     ap.add_argument("--utan-utkast", action="store_true",
                     help="bara prospekt som saknar ett osänt utkast skapat sedan --sedan")
+    ap.add_argument("--med-research", action="store_true",
+                    help="kör om researchen också (ny bedömning) i stället för bara utkastet")
     ap.add_argument("--apply", action="store_true")
     a = ap.parse_args()
     if not a.sedan and not a.prospekt:
@@ -110,7 +115,8 @@ def main() -> int:
     for i in range(0, len(ids), BATCH):
         del_ = ids[i : i + BATCH]
         svar = anrop(api, nyckel, "/api/leads/prospects/processa-om",
-                     {"prospect_ids": del_, "scope": "research_and_draft", "ersatt": True})
+                     {"prospect_ids": del_, "scope": "research_and_draft", "ersatt": True}
+                     if a.med_research else {"prospect_ids": del_, "scope": "utkast"})
         n = len(svar.get("jobs") or [])
         jobb += n
         print(f"  batch {i // BATCH + 1}: {n} jobb köade")

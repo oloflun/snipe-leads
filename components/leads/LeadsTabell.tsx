@@ -517,7 +517,9 @@ export function LeadsTabell({
   // från Research pågår till Ny. När det tystnar hämtas allt en sista gång.
   // Demon: bara den uppspelade körningen. Dess exempelrad som står i
   // research för alltid får inte hålla indikatorn tänd.
-  const live = demo ? demoKorning : korningPagar || (prospekt ?? []).some(iResearch);
+  const live = demo
+    ? demoKorning
+    : korningPagar || (prospekt ?? []).some((p) => iResearch(p) || p.utkast_status === "skrivs");
   const varLive = useRef(false);
   useEffect(() => {
     if (demo) return;
@@ -738,9 +740,11 @@ export function LeadsTabell({
   /**
    * Skapa utkast (bara markerade utan utkast) och Skapa om utkast (alla
    * markerade; väntande och godkända utkast ersätts). Båda går genom
-   * processa-om, samma kedja som en körning: faktagrinden, underlagsgolvet och
-   * mottagarregeln gäller. Leadsen står under Research pågår tills utkastet
-   * är skrivet, och listan går i livetakt under tiden.
+   * processa-om med scope "utkast" (2026-10-17): utkastet skrivs ur leadets
+   * sparade research, utan ny research och ny bedömning, så att inget lead
+   * faller till nivå C av en omskrivning. Faktagrinden, underlagsgolvet och
+   * mottagarregeln gäller som i en körning. Raden visar "Skriver utkast…"
+   * tills utkastet står i kön, och listan går i livetakt under tiden.
    */
   async function skapaUtkast(rader: SuiteProspekt[], ersatt: boolean, bekraftat = false) {
     const valt = ersatt ? rader : rader.filter((p) => UTAN_UTKAST.has(p.utkast_status ?? "saknas"));
@@ -765,7 +769,7 @@ export function LeadsTabell({
           method: "POST",
           body: JSON.stringify({
             prospect_ids: valt.slice(i, i + PROCESSA_TAK).map((p) => p.id),
-            scope: "research_and_draft",
+            scope: "utkast",
             ersatt
           })
         });
@@ -777,8 +781,8 @@ export function LeadsTabell({
       meddelaLeadsUppdaterade("tabell");
       return {
         text: text({
-          sv: `Utkast skrivs för ${koade} leads. De står under Research pågår tills de är klara.${hoppade.length ? ` ${hoppade.length} har redan fått mejl och hoppades över.` : ""}${pagar.length ? ` ${pagar.length} researchas redan och hoppades över.` : ""}`,
-          en: `Drafts are being written for ${koade} leads. They show as Researching until they are done.${hoppade.length ? ` ${hoppade.length} have already been emailed and were skipped.` : ""}${pagar.length ? ` ${pagar.length} are already being researched and were skipped.` : ""}`
+          sv: `Utkast skrivs för ${koade} leads ur den research som redan finns. De står som Skriver utkast tills de är klara.${hoppade.length ? ` ${hoppade.length} har redan fått mejl och hoppades över.` : ""}${pagar.length ? ` ${pagar.length} bearbetas redan och hoppades över.` : ""}`,
+          en: `Drafts are being written for ${koade} leads from their existing research. They show as Writing draft until they are done.${hoppade.length ? ` ${hoppade.length} have already been emailed and were skipped.` : ""}${pagar.length ? ` ${pagar.length} are already being processed and were skipped.` : ""}`
         }),
         fel: false
       };
@@ -1209,7 +1213,9 @@ export function LeadsTabell({
     return (
       <span className={cn("inline-flex flex-col gap-0.5 text-[0.875rem] leading-5", UTKAST_TON[p.utkast_status])}>
         <span>{etikett}</span>
-        {p.utkast_status === "stoppat" && p.utkast_skal ? (
+        {/* Stoppat bär spärrens skäl; saknas och avvisat skälet till att Skapa
+            om utkast inte gav något nytt utkast (utkastjobbets liggarrad). */}
+        {(p.utkast_status === "stoppat" || p.utkast_status === "saknas" || p.utkast_status === "avvisat") && p.utkast_skal ? (
           <span className={cn(meta, "line-clamp-2 max-w-[24ch]")} title={p.utkast_skal}>
             {p.utkast_skal}
           </span>

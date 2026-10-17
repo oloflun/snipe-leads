@@ -7,7 +7,9 @@ import type { Locale, Localized } from "@/lib/i18n";
  * GET /leads/prospects och svaret från GET /leads/prospects/{id}/utkast.
  */
 
-export type UtkastStatus = "saknas" | "vantar" | "godkant" | "koad" | "skickat" | "avvisat" | "stoppat";
+/** `skrivs`: Skapa om utkast skriver ett nytt ur den sparade researchen
+ *  (jobbet står i kö eller körs, app/leads/utkaststatus.py:med_utkastjobb). */
+export type UtkastStatus = "saknas" | "skrivs" | "vantar" | "godkant" | "koad" | "skickat" | "avvisat" | "stoppat";
 
 export type Utkastfalt = {
   utkast_status?: UtkastStatus | null;
@@ -24,6 +26,7 @@ export type Utkastfalt = {
 
 export const UTKAST_ETIKETT: Record<UtkastStatus, Localized> = {
   saknas: { sv: "Inget utkast", en: "No draft" },
+  skrivs: { sv: "Skriver utkast…", en: "Writing draft…" },
   vantar: { sv: "Väntar på ditt ja", en: "Waiting for your yes" },
   godkant: { sv: "Godkänt", en: "Approved" },
   koad: { sv: "Köat, ej granskat", en: "Queued, not reviewed" },
@@ -36,6 +39,7 @@ export const UTKAST_ETIKETT: Record<UtkastStatus, Localized> = {
  *  för det som väntar på kunden, moss för skickat, danger för stoppat. */
 export const UTKAST_TON: Record<UtkastStatus, string> = {
   saknas: "text-ink-subtle",
+  skrivs: "text-ink-muted",
   vantar: "text-warning",
   godkant: "text-ink-muted",
   koad: "text-warning",
