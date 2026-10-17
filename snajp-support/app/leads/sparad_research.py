@@ -23,6 +23,7 @@ körning returneras None, och anroparen får säga det i stället för att gissa
 from __future__ import annotations
 
 import json
+from decimal import Decimal
 from typing import Any
 
 #: Nyckeln på posten i step_log ("step" som kodgrindarna, inte "skill").
@@ -158,5 +159,10 @@ async def las(storage, tenant_id: str, prospect_id: str) -> dict[str, Any] | Non
     for falt in ("qualified", "icp_fit", "disqualifiers", "lagesbeskrivning"):
         if prospekt.get(falt) is not None:
             underlag[falt] = prospekt[falt]
+    # icp_fit är numeric i Postgres och kommer som Decimal: resultatet går till
+    # Redis som JSON, och en Decimal fällde varje jobb efter att utkastet redan
+    # köats (skarpa provet 2026-10-17, 5 av 5 "failed").
+    if isinstance(underlag.get("icp_fit"), Decimal):
+        underlag["icp_fit"] = float(underlag["icp_fit"])
     underlag["sparad_research"] = True
     return underlag

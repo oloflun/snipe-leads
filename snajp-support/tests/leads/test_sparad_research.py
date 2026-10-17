@@ -88,6 +88,20 @@ async def test_underlaget_las_ur_posten_och_bedomningen_ur_raden():
     assert u["qualified"] is True and u["lagesbeskrivning"] == "Båthandel med verkstad."
 
 
+async def test_underlaget_gar_att_serialisera_nar_raden_bar_decimal():
+    """Postgres ger icp_fit som Decimal; jobbresultatet sparas som JSON i
+    Redis. Skarpa provet 2026-10-17: 5 av 5 jobb föll efter att utkastet köats."""
+    from decimal import Decimal
+
+    storage = MemoryStorage()
+    p = await _lead(storage)
+    await storage.update_prospect(T, p["id"], icp_fit=Decimal("0.90"))
+    await _research_korning(storage, p["id"], med_post=True)
+    u = await sparad_research.las(storage, T, p["id"])
+    assert u["icp_fit"] == 0.9
+    json.dumps(u)
+
+
 async def test_aldre_korning_utan_post_ger_bara_verifierade_citat():
     storage = MemoryStorage()
     p = await _lead(storage)
