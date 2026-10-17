@@ -55,6 +55,12 @@ strängar och JSX-text som saknar sitt par, och en fil som översatts ska stryka
 testets skuldlista i samma commit. Antons beställning 2026-10-02 efter att den
 engelska versionen visat sig vara svensk på de flesta sidor.
 
+**Frågor om utkastens output (ingång, ämnesrad, hälsning, ton, kvalitet):
+läs [`docs/UTKASTKEDJAN-REFERENS-2026-10-16.md`](docs/UTKASTKEDJAN-REFERENS-2026-10-16.md)
+först** (Antons beställning 2026-10-17). Den beskriver nivån, exempel på
+outputen, vad som ändrats och varför, och hur man förbättrar utan att tappa
+nivån. Facit är låst av INV-LEADS-UTKAST-002; det ändras bara med Antons ja.
+
 **Allt arbete går till `development`, aldrig direkt till `main`.**
 
 **`development` deployar sig själv sedan 2026-08-27.** Railways deployment

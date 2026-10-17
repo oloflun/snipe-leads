@@ -1,5 +1,9 @@
 # Utkastkedjan: referens för Iris första mejl (låst 2026-10-12)
 
+> **Ersatt som gällande nivå 2026-10-16:** läs
+> [`UTKASTKEDJAN-REFERENS-2026-10-16.md`](UTKASTKEDJAN-REFERENS-2026-10-16.md)
+> först. Den här filen står kvar som historik över hur kedjan byggdes.
+
 > Antons ord 2026-10-12: "Alla utkast är perfekta nu, lås in detta." Det här
 > dokumentet är den exakta beskrivningen av kedjan, strukturen och vad som
 > ändrades för att komma hit. Facitet i kod är

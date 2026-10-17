@@ -181,6 +181,8 @@ def sakra_halsning(
     Tilltalsformen (du/ni) rörs inte här — det gör tilltala_med_ni efteråt."""
     rader = body.split("\n")
     forsta = next((i for i, r in enumerate(rader) if r.strip()), None)
+    if kontakt and _ar_bolagstilltal(fornamn(kontakt, epost) or "", bolag):
+        kontakt = None
     ratt = halsningsrad(kontakt, sprak, epost)
     if forsta is None:
         # En tom text lämnas tom: textkvalitetens tom_text-kontroll ska se
@@ -237,7 +239,10 @@ def _ar_bolagstilltal(namnet: str, bolag: str | None) -> bool:
     if not bolagsformer:
         return False
     namnformer = {namnet.casefold(), (snyggt_bolagsnamn(namnet) or "").casefold()} - {""}
-    return bool(namnformer & bolagsformer)
+    # Bolagsnamnets första ord ensamt är också bolaget: "Hej Brobergs," till
+    # Brobergs Tobakshandel (2026-10-16, kontaktfältet bar bara "Brobergs").
+    forsta = {f.split()[0] for f in bolagsformer if f.split() and len(f.split()) > 1}
+    return bool(namnformer & (bolagsformer | forsta))
 
 
 def normalisera_utkast(

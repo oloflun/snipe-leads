@@ -9,6 +9,20 @@ möjligt), vad det betyder i koden.
 
 ---
 
+## 2026-10-17 (Anton) — Nivån från 2026-10-16 låses som referens
+
+**Beslut.** "Lås in detta på samma sätt som tidigare i projektdokumentationen,
+i en separat fil med exempel på outputen och exakt vad som ändrades från den
+tidigare versionen och varför, se till att referera till det för nya frågor
+kring output och utkast."
+
+**I koden.** `docs/UTKASTKEDJAN-REFERENS-2026-10-16.md` är gällande referens
+(den från 2026-10-12 står kvar som historik och pekar dit). Sju verkliga utkast
+är facit i `tests/leads/fixtures/utkastfacit_2026-10-16.json`, låst av
+INV-LEADS-UTKAST-002. Projektets CLAUDE.md och skrivstilens huvud pekar på
+referensen för varje fråga om utkastens output. I samma ändring: "Hej
+Brobergs," (bolagets första ord som förnamn) ger nu "Hej,".
+
 ## 2026-10-16 (Claude, på Antons beställning) — Utkasten skrivs med gemini-2.5-pro
 
 **Beslut.** Utkast- och humanizerstegen i Iris kedja körs på `gemini-2.5-pro`

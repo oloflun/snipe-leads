@@ -1,0 +1,61 @@
+{
+ "om": "Referensutkast ur Snajps granskningskö efter körningarna 2026-10-15/16 (gemini-2.5-pro, grinden även efter humanizern). Valda för att de passerar hela stilgrinden och ämneskontrollen och visar nivån Anton bad om: bolagets eget löfte eller vardag ställt mot momentet produkten löser. Båtladan (Christoffer) är Antons utpekade förebild 2026-10-15; dess ämnesrad kallade han 'ren smörja' och den är därför inte med. Hälsningen är som i kön: förnamn bara där mottagaren är namngiven (då du-form rakt igenom); signatur och fot är borttagna.",
+ "utkast": [
+  {
+   "bolag": "Krohn Byggekonomen AB",
+   "erbjudande": "pilot",
+   "produkt": "Kvittohanteraren",
+   "villkor": "Vi tar in 20 företag i en pilot för Kvittohanteraren. Vi tar bara 20 eftersom vi sätter upp varje företag personligen. Pilotföretagen får 50 % rabatt första året om de vill fortsätta, och 25 % så länge de stannar. Handling: svara \"pilot\" på mejlet, så håller vi en plats åt er.",
+   "amne": "Byggekonomin och kvittona",
+   "brodtext": "Hej,\n\nNi hjälper era kunder att styra ekonomin i byggprojekt, inte jaga kvitton till den egna bokföringen.\n\nVår Kvittohanterare hämtar kvittona från er e-post och gör dem klara för bokföring. Just nu tar vi in 20 företag i en pilot och sätter upp varje företag personligen. Som pilotföretag får ni 50 % rabatt första året och 25 % så länge ni stannar.\n\nSvara \"pilot\" så reserverar vi en plats åt er."
+  },
+  {
+   "bolag": "Vindshem Bygg Aktiebolag",
+   "erbjudande": "pilot",
+   "produkt": "Iris, leadsagenten",
+   "villkor": "Vi tar in 20 företag i en pilot för Iris, leadsagenten. Vi tar bara 20 eftersom vi sätter upp varje företag personligen. Pilotföretagen får 50 % rabatt första året om de vill fortsätta, och 25 % så länge de stannar. Handling: svara \"pilot\" på mejlet, så håller vi en plats åt er.",
+   "amne": "Relationen med föreningen",
+   "brodtext": "Hej Daniel,\n\nAtt bygga en stark relation med en bostadsrättsförening tar tid. Samtidigt måste nästa outnyttjade yta att utveckla hittas.\n\nVår agent Iris hittar och kvalificerar nya bostadsrättsföreningar åt dig. Vi tar just nu in 20 företag i en pilot där vi sätter upp varje deltagare personligen. Som pilotföretag får du 50 % rabatt första året och 25 % så länge du stannar.\n\nSvara \"pilot\" på det här mejlet, så reserverar vi en plats åt dig."
+  },
+  {
+   "bolag": "Skellefteå El & Diesel Försäljning Aktiebolag",
+   "erbjudande": "gratis_prov",
+   "produkt": "Kvittohanteraren",
+   "villkor": "Fem av era kvitton färdiga att ladda ned till bokföringen, med belopp, moms och konto, helt utan kostnad. Handling: svara på mejlet med fem kvitton bifogade, så får ni tillbaka dem färdiga inom en arbetsdag.",
+   "amne": "Service på de flesta bilmärken",
+   "brodtext": "Hej Fredrik,\n\nDina kunder kommer till dig för service och delar till de flesta bilmärken. Det förtroendet bygger på att du är i verkstaden, inte på jakt efter kvitton till bokföringen.\n\nVår Kvittohanterare hämtar kvittona ur din e-post och gör dem klara att ladda ner. Du får prova den på fem av dina kvitton, med belopp, moms och konto, helt utan kostnad.\n\nSvara på mejlet med fem bifogade kvitton, så får du tillbaka dem färdiga inom en arbetsdag."
+  },
+  {
+   "bolag": "Ö-LOGISTIK AB",
+   "erbjudande": "garanti",
+   "produkt": "Iris, leadsagenten",
+   "villkor": "Vi lovar minst 10 nya kunddialoger, alltså svar från intresserade företag, inom 90 dagar. Blir det färre förlänger vi provperioden utan kostnad tills ni har fått dem, så länge ni har godkänt utkasten i granskningen. Handling: svara på mejlet, så bokar vi 20 minuter där vi visar vilka företag Iris redan hittar åt er.",
+   "amne": "Nya kunder utanför gruppen",
+   "brodtext": "Hej,\n\nNi sköter logistiken åt era systerbolag, men för att växa behöver ni även hitta kunder utanför den egna gruppen.\n\nVår agent Iris hittar nya företagskunder åt er. Vi lovar minst 10 nya kunddialoger inom 90 dagar, och blir det färre förlänger vi provperioden utan kostnad tills ni har fått dem.\n\nSvara på det här mejlet så bokar vi 20 minuter där vi visar vilka företag Iris redan har hittat som passar er."
+  },
+  {
+   "bolag": "Whitelip AB",
+   "erbjudande": "garanti",
+   "produkt": "Supportagenten",
+   "villkor": "Vi lovar att ni lägger minst 50 % mindre tid på kundmejlen inom 60 dagar. Annars förlänger vi provperioden utan kostnad tills ni gör det. Handling: svara på mejlet, så bokar vi 20 minuter och sätter upp agenten på era vanligaste frågor.",
+   "amne": "Snabba svar om snuset",
+   "brodtext": "Hej,\n\nEtt brett sortiment av vitt snus och nikotinpåsar är en sak. Att hinna med alla frågor om innehåll, styrka och leverans är en annan, särskilt när de kommer efter stängning.\n\nVår Supportagent svarar på de frågorna åt er, dygnet runt. Vi lovar att ni lägger minst 50 % mindre tid på kundmejl inom 60 dagar, annars förlänger vi provperioden utan kostnad tills ni når dit.\n\nSvara på det här mejlet, så bokar vi 20 minuter och sätter upp agenten för era vanligaste frågor."
+  },
+  {
+   "bolag": "Nudie Jeans Retail AB",
+   "erbjudande": "pilot",
+   "produkt": "Supportagenten",
+   "villkor": "Vi tar in 20 företag i en pilot för Supportagenten. Vi tar bara 20 eftersom vi sätter upp varje företag personligen. Pilotföretagen får 50 % rabatt första året om de vill fortsätta, och 25 % så länge de stannar. Handling: svara \"pilot\" på mejlet, så håller vi en plats åt er.",
+   "amne": "Frågorna om skötsel och reparationer",
+   "brodtext": "Hej,\n\nEtt par jeans som ska hålla en livstid väcker frågor om skötsel och reparationer, ofta långt efter att er kundtjänst har stängt för dagen.\n\nVår Supportagent svarar på de frågorna dygnet runt, direkt på er webbplats, och lämnar över till en människa när det behövs. Vi tar just nu in 20 företag i en pilot där vi sätter upp allt personligen. Som ett av dem får ni 50 % rabatt första året och 25 % därefter.\n\nSvara \"pilot\" på det här mejlet så håller vi en plats åt er."
+  },
+  {
+   "bolag": "Båtladan i Gästrikland AB",
+   "erbjudande": "pilot",
+   "produkt": "Supportagenten",
+   "villkor": "Vi tar in 20 företag i en pilot för Supportagenten. Vi tar bara 20 eftersom vi sätter upp varje företag personligen. Pilotföretagen får 50 % rabatt första året om de vill fortsätta, och 25 % så länge de stannar. Handling: svara \"pilot\" på mejlet, så håller vi en plats åt er.",
+   "brodtext": "Hej Christoffer,\n\nHur hinner du med att ge personlig rådgivning och service genom hela processen, från köp till underhåll, när kundfrågorna om båtar, motorer och trailers blir många?\n\nVår Supportagent kan svara på återkommande kundfrågor i chatt och mejl dygnet runt, utifrån er egen information. Den lämnar över till en människa när den inte säkert kan svara. Vi tar just nu in 20 företag i en pilot för Supportagenten, eftersom vi sätter upp varje företag personligen. Pilotföretagen får 50 % rabatt första året om de vill fortsätta, och 25 % så länge de stannar.\n\nSvara \"pilot\" på mejlet, så håller vi en plats åt dig.",
+   "amne": null
+  }
+ ]
+}

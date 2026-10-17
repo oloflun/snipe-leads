@@ -865,6 +865,22 @@ Referens: `docs/UTKASTKEDJAN-REFERENS.md`.
 Test: snajp-support/tests/leads/test_utkastfacit_2026_10_12.py
 Införd: 2026-10-12 · Upphävs endast genom waiver
 
+### INV-LEADS-UTKAST-002 — Iris första mejl håller nivån från 2026-10-16
+Sju verkliga utkast ur Snajps granskningskö efter Antons granskning 2026-10-15
+("Det första utkastet med Christoffer var det bästa … det är den nivån") är
+facit i `snajp-support/tests/leads/fixtures/utkastfacit_2026-10-16.json`.
+Varje facitutkast passerar hela stilgrinden, erbjudandekontrollen och
+ämneskontrollen; facitutkasten delar ingen konstruktion, fras eller
+ämnesrads början. Nattens fel fälls fortfarande: slentrianöppning ("Med er",
+"När ni"), uppräkning av sortimentet, mallorden ("ert löfte", "tar tid från det
+arbetet", "inte på att hitta"), bolagsnamn i ämnesraden, du och ni om samma
+person, och förnamn som inte är förnamn ("Delsbo", "Scandinavia", "Brobergs").
+Varför: utkasten gled från nivån till nya mallord två gånger på ett dygn; utan
+facit i kod glider nästa justering tillbaka utan att någon märker det.
+Referens: `docs/UTKASTKEDJAN-REFERENS-2026-10-16.md`.
+Test: snajp-support/tests/leads/test_utkastfacit_2026_10_16.py
+Införd: 2026-10-16 · Upphävs endast genom waiver
+
 ## Roadmap
 
 Ids this plan will introduce, in the order `Genomförandeordning` builds them. Not yet enforced by CI.
