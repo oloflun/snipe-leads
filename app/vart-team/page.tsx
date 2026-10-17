@@ -15,7 +15,7 @@ const VARDERINGAR = [
   {
     rubrik: "Vi bygger det vi själva använder",
     text:
-      "Alla tre agenterna körs i vår egen verksamhet. Spärrarna sitter där de sitter för att vi " +
+      "Agenterna körs i vår egen verksamhet. Spärrarna sitter där de sitter för att vi " +
       "själva stått med ett utkast som inte borde gå ut."
   },
   {
@@ -69,8 +69,8 @@ export default async function Page() {
             dokument, och någon måste ändå läsa varje ärende för att veta vilket som brådskar.
           </p>
           <p>
-            Vi bygger verktyget som gör förarbetet — hittar företagen, sorterar ärendena, läser av
-            kvittona — och lämnar beslutet till en människa. Målet är inte att ersätta den som
+            Vi bygger verktyget som gör förarbetet — hittar företagen och sorterar ärendena — och
+            lämnar beslutet till en människa. Målet är inte att ersätta den som
             säljer eller svarar, utan att ge tillbaka timmarna som gick åt till att leta.
           </p>
         </div>

@@ -147,10 +147,12 @@ def test_snajp_kb_bar_grundarna_och_arbetsytan():
     assert "kontakt@snajp.se" in allt
     # Arbetsytans navigering ska vara beskriven.
     assert any(a["title"] == "Hitta rätt på arbetsytan" for a in KB_ARTICLES)
-    # Produktnamnen ska spegla sajten (lib/pricing.ts): Kvittohanteraren
-    # bokför ingenting, och paketet heter Snajp Kvitton.
-    assert "Snajp Kvitton" in allt
-    assert "Snajp Bokföring" not in allt
+    # Paketen ska spegla sajten (lib/pricing.ts): Support, Leads och Duo.
+    # Kvittohanteraren är ett vilande tillägg sedan 2026-10-17 och säljs inte,
+    # så varken det gamla kvittopaketet eller Trio får nämnas.
+    assert "Snajp Duo" in allt
+    for borttaget in ("Snajp Kvitton", "Snajp Trio", "Snajp Bokföring", "Kvittohanteraren"):
+        assert borttaget not in allt, borttaget
 
 
 @pytest.mark.anyio

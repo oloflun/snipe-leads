@@ -51,6 +51,13 @@ export function arVilande(product: ProductKey | "shared"): boolean {
   return product !== "shared" && VILANDE_PRODUKTER.includes(product);
 }
 
+/**
+ * Produkterna marknadssidorna säljer: allt utom de vilande. Produktväxeln,
+ * hjältebildens demopaneler och demolänkarna läser den här listan, inte
+ * `productKeys`, så att en vilande agent försvinner ur säljytan på ett ställe.
+ */
+export const saljbaraProdukter: readonly ProductKey[] = productKeys.filter((p) => !arVilande(p));
+
 export type AppRoute = {
   href: string;
   labelKey: CopyKey;
@@ -468,7 +475,9 @@ export function productForSettingsSection(section: SettingsSectionKey): ProductK
  * Public marketing surfaces. `/leads` and `/support` render the same shell with a
  * different product selected, so both are linkable and crawlable.
  */
-export const publicProductRoutes = ["/", "/leads", "/support", "/kvitton"] as const;
+// /kvitton leder till /support sedan 2026-10-17: Kvittohanteraren är ett
+// vilande tillägg till Support och har ingen egen säljsida.
+export const publicProductRoutes = ["/", "/leads", "/support"] as const;
 
 // Auth route guards (pure, no server dependencies — safe for middleware).
 // /leads, /support och /bokforing är INTE listade: de är publika produktsidor,

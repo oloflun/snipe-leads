@@ -5,7 +5,7 @@ import Link from "next/link";
 import { Logo } from "@/components/Logo";
 import { useLocale } from "@/lib/i18n";
 import type { ProductKey } from "@/lib/routes";
-import { productKeys } from "@/lib/routes";
+import { saljbaraProdukter } from "@/lib/routes";
 import { KONTAKT_MEJL, mejlaOss, productCopy, shared } from "@/components/marketing/copy";
 import { imagery, photo, sectionCopy } from "@/components/marketing/copy-sections";
 import { AgentResultat } from "@/components/marketing/AgentResultat";
@@ -72,13 +72,11 @@ function Label({ children, tone = "ink" }: Readonly<{ children: React.ReactNode;
 export function LandingPhoto({
   initial,
   leadsDemo,
-  supportDemo,
-  bookkeepingDemo
+  supportDemo
 }: Readonly<{
   initial: ProductKey;
   leadsDemo: React.ReactNode;
   supportDemo: React.ReactNode;
-  bookkeepingDemo: React.ReactNode;
 }>) {
   const { text, locale, toggleLocale } = useLocale();
   const [product, setProduct] = useState<ProductKey>(initial);
@@ -240,8 +238,8 @@ export function LandingPhoto({
                     besökaren till agenten som gör det. Att bara kunna läsa om
                     en agent på en sida som har en fungerande demo är att gömma
                     det enda som övertygar.
-                    Bokföringen saknades här medan de andra två fanns, fast
-                    /demo/bokforing funnits sedan den blev en egen produkt. */}
+                    Kvittohanterarens länk togs bort 2026-10-17: den är ett
+                    vilande tillägg till Support och säljs inte (lib/routes.ts). */}
                 <div className="mt-5 flex flex-col gap-2 border-t border-paper/25 pt-4">
                   <Link
                     href="/demo/leads"
@@ -255,13 +253,6 @@ export function LandingPhoto({
                     className="focus-ring group inline-flex items-center gap-2 text-[0.9375rem] font-medium text-paper-muted transition-colors hover:text-paper"
                   >
                     {text(shared.demoSupport)}
-                    <span aria-hidden className="transition-transform group-hover:translate-x-0.5">→</span>
-                  </Link>
-                  <Link
-                    href="/demo/kvitton"
-                    className="focus-ring group inline-flex items-center gap-2 text-[0.9375rem] font-medium text-paper-muted transition-colors hover:text-paper"
-                  >
-                    {text(shared.demoBokforing)}
                     <span aria-hidden className="transition-transform group-hover:translate-x-0.5">→</span>
                   </Link>
                 </div>
@@ -339,18 +330,14 @@ export function LandingPhoto({
                     bokföringsdemon — fel produktnamn på en sida som säljer en
                     annan produkt. */}
                 <span className="text-[0.8125rem] font-medium tracking-[0.02em] text-ink-subtle">
-                  {product === "leads"
-                    ? "Email Studio"
-                    : product === "support"
-                      ? "Snajp Support"
-                      : "Snajp Kvitton"}
+                  {product === "leads" ? "Email Studio" : "Snajp Support"}
                 </span>
                 {/* Ingen statusuppgift här: supportchatten rapporterar sitt
                     eget läge, och backenden kan gå i simulering. Två sanningar
                     på samma panel är en för mycket. */}
               </div>
               <div className="p-4 sm:p-6 md:p-8">
-              {productKeys.map((key) => (
+              {saljbaraProdukter.map((key) => (
                 <div
                   key={key}
                   id={`product-panel-${key}`}
@@ -362,7 +349,10 @@ export function LandingPhoto({
                       lät bokföringsfliken rendera supportchatten — fel agent,
                       fel varumärkesetikett ("Nordlys Handel") och fel
                       förslagsfrågor på /bokforing. */}
-                  {key === "leads" ? leadsDemo : key === "support" ? supportDemo : bookkeepingDemo}
+                  {/* Bara säljbara produkter har en panel (lib/routes.ts:
+                      saljbaraProdukter). Kvittodemon (KvittoDemo) kopplas in här
+                      igen när tillägget släpps. */}
+                  {key === "leads" ? leadsDemo : supportDemo}
                 </div>
               ))}
               </div>

@@ -9,6 +9,29 @@ möjligt), vad det betyder i koden.
 
 ---
 
+## 2026-10-17 (Sebbe) — Duo i fokus, ingen Trio; Kvittohanteraren blir tillägg till Support
+
+**Beslut.** "Ta bort den från marknadssidorna och priserna också. Det ska vara
+en tilläggstjänst till supporten. Main fokus är att det ska finnas Snajp duo,
+inte trio."
+
+**Resonemang.** Följer beslutet nedan samma dag: Kvittohanteraren ska inte
+säljas än. När den kommer tillbaka är den ett tillägg till Support, inte ett
+eget paket, och paketet Snajp säljer är Duo.
+
+**I koden.** `lib/pricing.ts`: paketen är Support, Leads och Duo; Trio och
+"Snajp Kvitton" (2 690 kr) är borttagna, liksom kampanjen à 999 kr.
+`KVITTO_TILLAGG` beskriver tillägget (kräver Support, pris inte satt). Adminens
+paketflik har en kryssruta för tillägget; det skrivs som produkten
+`bookkeeping` bredvid paketets, så en kund som hade Trio läses som Duo +
+tillägget utan migration (intäktsberäkningen räknar dem som Duo tills
+tillägget har ett pris). Marknadssidorna: produktväxeln och demopanelerna
+visar bara Leads och Support (`saljbaraProdukter`), `/kvitton` och
+`/bokforing` leder till `/support`, demolänken, FAQ-frågan om kvitton och
+"alla tre agenterna" är borta, och Snajps supportchatt (`snajp_kb.py`) säger
+tre paket. Kvittosidans texter och demo står kvar i koden för en lansering.
+Användarvillkoren (`/villkor`) är inte ändrade.
+
 ## 2026-10-17 (Sebbe) — Kvittoagenten står på is: mörklagd för kunder, borta ur utkasten
 
 **Beslut.** "Kvittoagenten ska inte vara i fokus för Snajp att sälja. Den ska

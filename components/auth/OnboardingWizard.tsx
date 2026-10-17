@@ -235,7 +235,7 @@ const T = {
   fran: { sv: "från", en: "from" },
   krManad: { sv: "kr/mån", en: "SEK/month" },
   osakra: { sv: "Osäkra?", en: "Not sure?" },
-  utforska: { sv: "Utforska alla tre agenterna i demon", en: "Explore all three agents in the demo" },
+  utforska: { sv: "Utforska agenterna i demon", en: "Explore the agents in the demo" },
   nyFlik: {
     sv: "— den öppnas i en ny flik, det här flödet står kvar.",
     en: "It opens in a new tab, and this flow stays put."

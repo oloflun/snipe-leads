@@ -4,7 +4,6 @@ import { useLocale } from "@/lib/i18n";
 import type { Localized } from "@/lib/i18n";
 import {
   BINDNINGSTID_MANADER,
-  EXTRA_BOKFORINGSAGENT_PRIS,
   EXTRA_MEJL_PRIS,
   EXTRA_PROSPEKT_PRIS,
   PAKET,
@@ -174,14 +173,6 @@ export function PricingSection() {
                   texten föll ned under priset. `flex-1 basis-[7rem]` gav i sin
                   tur `flex: 0 1 0%` och en ruta på noll pixlar med texten
                   staplad på höjden. Den här varianten är trist och mätbar. */}
-              {paket.kampanj ? (
-                <p className="w-36 shrink-0 text-right text-[0.6875rem] leading-[1.4] text-moss">
-                  {text(paket.kampanj).replace(
-                    "{belopp}",
-                    formateraPris(EXTRA_BOKFORINGSAGENT_PRIS)
-                  )}
-                </p>
-              ) : null}
               </div>
 
               {paket.notisMall ? (

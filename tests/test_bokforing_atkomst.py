@@ -244,37 +244,24 @@ def test_proxyn_ar_binarsaker():
 # -- 4. Den publika ytan finns nu -----------------------------------------
 
 
-def test_marknadssidan_och_paketet_finns():
-    """Inverterat mot den gamla versionen, som krävde att de INTE fanns.
+def test_kvittohanteraren_ar_ett_vilande_tillagg_utan_saljsida():
+    """Inverterat igen 2026-10-17 (Sebbe): Kvittohanteraren säljs inte. Den är
+    ett tillägg till Support som står på is, Trio och det fristående paketet
+    är borttagna och Duo är paketet vi säljer.
 
-    Beslutet ändrades 2026-08-23: bokföringen säljs. Testet står kvar i
-    inverterad form så att beslutet går att bryta AVSIKTLIGT och inte genom att
-    någon råkar ta bort sidan.
+    Fram till i dag vaktade testet det motsatta (marknadssidan och paketet à
+    2 690 kr/mån, beslutat 2026-08-25). Det står kvar i den här formen så att
+    beslutet går att bryta AVSIKTLIGT när tillägget ska säljas, inte genom att
+    någon råkar lägga tillbaka sidan eller paketet.
     """
-    assert (ROT / "app" / "kvitton" / "page.tsx").exists(), "Marknadssidan saknas."
-    # Gamla adressen ska skicka vidare, inte försvinna — bokmärken finns.
-    gammal = (ROT / "app" / "bokforing" / "page.tsx").read_text(encoding="utf-8")
-    assert 'redirect("/kvitton")' in gammal, "/bokforing skickar inte vidare till /kvitton."
+    for sida in ("kvitton", "bokforing"):
+        kod = (ROT / "app" / sida / "page.tsx").read_text(encoding="utf-8")
+        assert 'redirect("/support")' in kod, f"/{sida} skickar inte vidare till /support."
     pricing = (ROT / "lib" / "pricing.ts").read_text(encoding="utf-8")
-    assert '"bookkeeping"' in pricing, "Bokföringen saknas i prissättningen."
-
-
-def test_paketet_har_det_beslutade_priset():
-    """2 690 kr/mån, beslutat 2026-08-25 (tidigare 1 990, 2026-08-24).
-
-    Testet finns för att priset ska gå att ändra AVSIKTLIGT. En prislapp som
-    tyst byts är en prislapp en kund upptäcker på fakturan.
-
-    `prisPerManad` är fortfarande `number | null` i typen, och det ska den vara:
-    null är ett giltigt tillstånd för en produkt vars pris inte satts, och
-    nästa produkt börjar där. Se PRIS_SAKNAS i lib/pricing.ts.
-    """
-    pricing = (ROT / "lib" / "pricing.ts").read_text(encoding="utf-8")
-    block = pricing.split('id: "bookkeeping"')[1].split("}")[0]
-    assert "prisPerManad: 2690" in block, (
-        "Bokföringspaketets pris är inte 2690. Ändras det ska både raden här och "
-        "beslutsdatumet i pricing.ts uppdateras."
-    )
+    paketlista = pricing.split("export const PAKET: Paket[] = [")[1].split("\n];")[0]
+    assert 'id: "bookkeeping"' not in paketlista and 'id: "trio"' not in paketlista
+    assert 'id: "support" | "leads" | "duo";' in pricing
+    assert 'produkt: "bookkeeping"' in pricing and 'kraver: "support"' in pricing  # KVITTO_TILLAGG
 
 
 def test_typen_tillater_fortfarande_ett_osatt_pris():

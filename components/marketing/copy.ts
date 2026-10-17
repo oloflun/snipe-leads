@@ -121,10 +121,10 @@ export const shared = {
   },
   vilkaText1: {
     sv: "Snajp är byggt i Göteborg och Umeå av ett litet team. Vi säljer till svensk B2B, " +
-      "och vi använder alla tre agenterna i vår egen verksamhet — det är därför spärrarna finns " +
+      "och vi använder agenterna i vår egen verksamhet — det är därför spärrarna finns " +
       "där de finns: vi har själva stått med ett utkast som inte borde gå ut.",
     en: "Snajp is built in Gothenburg and Umeå by a small team. We sell to Swedish B2B, and we " +
-      "run all three agents in our own business — that is why the safeguards sit where they do: we " +
+      "run the agents in our own business — that is why the safeguards sit where they do: we " +
       "have stood with a draft that should not go out."
   },
   vilkaText2: {

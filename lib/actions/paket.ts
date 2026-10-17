@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 
 import { getPlatformAdmin } from "@/lib/auth/admin";
 import { sqlAsUser } from "@/lib/db";
-import { PRODUKTER_FOR_PAKET, arPaketId } from "@/lib/pricing";
+import { KVITTO_TILLAGG, PRODUKTER_FOR_PAKET, arPaketId } from "@/lib/pricing";
 
 /**
  * Paketbytet per kund — plattformsadminens skrivyta (fliken Paket).
@@ -60,7 +60,16 @@ function felText(error: unknown): string {
   return text || "Paketet kunde inte bytas.";
 }
 
-export async function bytPaket(tenantId: string, paketId: string): Promise<Paketbyte> {
+/**
+ * `kvittotillagg`: Kvittohanteraren som tillägg till Support (lib/pricing.ts:
+ * KVITTO_TILLAGG, Sebbe 2026-10-17). Skrivs som produkten "bookkeeping"
+ * bredvid paketets produkter, och bara om paketet innehåller Support.
+ */
+export async function bytPaket(
+  tenantId: string,
+  paketId: string,
+  kvittotillagg = false
+): Promise<Paketbyte> {
   const admin = await getPlatformAdmin();
   if (!admin) {
     return { success: false, error: "Bara plattformsadmin kan byta paket." };
@@ -71,7 +80,11 @@ export async function bytPaket(tenantId: string, paketId: string): Promise<Paket
   if (!arPaketId(paketId)) {
     return { success: false, error: `Okänt paket: ${paketId}.` };
   }
-  const produkter = PRODUKTER_FOR_PAKET[paketId];
+  const paketprodukter: string[] = PRODUKTER_FOR_PAKET[paketId];
+  if (kvittotillagg && !paketprodukter.includes(KVITTO_TILLAGG.kraver)) {
+    return { success: false, error: "Kvittohanteraren är ett tillägg till Support. Välj ett paket med Support först." };
+  }
+  const produkter = kvittotillagg ? [...paketprodukter, KVITTO_TILLAGG.produkt] : paketprodukter;
 
   let rader: { admin_set_workspace_products: string[] }[];
   try {

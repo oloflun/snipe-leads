@@ -36,7 +36,9 @@ test("varje paket i prislistan har en produktmappning", () => {
   }
 });
 
-test("trio är alla tre, duo är leads+support — paketen ÄR entitlementen", () => {
-  assert.deepEqual([...PRODUKTER_FOR_PAKET.trio].sort(), ["bookkeeping", "leads", "support"]);
+test("duo är leads+support och inget paket ger kvittohanteraren — den är ett tillägg (2026-10-17)", () => {
   assert.deepEqual([...PRODUKTER_FOR_PAKET.duo].sort(), ["leads", "support"]);
+  for (const paket of PAKET) {
+    assert.ok(!(PRODUKTER_FOR_PAKET[paket.id] as string[]).includes("bookkeeping"), `${paket.id} ger bookkeeping`);
+  }
 });

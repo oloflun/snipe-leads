@@ -1,10 +1,10 @@
 import { redirect } from "next/navigation";
 
 /**
- * Gamla produktadressen. Bokföringsagenten byggdes om till Kvittohanteraren
- * 2026-09-16 och marknadssidan bor på /kvitton — länkar och bokmärken hit
- * ska landa där, inte i en 404.
+ * Gamla produktadressen. Bokföringsagenten blev Kvittohanteraren 2026-09-16,
+ * och den är sedan 2026-10-17 ett vilande tillägg till Support utan egen
+ * säljsida — länkar och bokmärken hit landar på Supports sida (se /kvitton).
  */
 export default function Page() {
-  redirect("/kvitton");
+  redirect("/support");
 }

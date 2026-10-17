@@ -20,6 +20,8 @@ värre än en som lämnar över till en människa — se TENANTS.md.
 #: dem så att en omdöpt artikel inte lämnar en föråldrad dubblett i basen.
 FORLEGADE_RUBRIKER: tuple[str, ...] = (
     "Hur man kommer igång, och hur lång tid det tar",
+    # Kvittohanteraren säljs inte sedan 2026-10-17 (vilande tillägg till Support).
+    "Sparas kvittona som laddas upp till bokföringsagenten?",
 )
 
 KB_ARTICLES: list[dict] = [
@@ -28,13 +30,10 @@ KB_ARTICLES: list[dict] = [
         "title": "Om Snajp",
         "category": "ovrigt",
         "content": (
-            "Snajp bygger AI-agenter för svenska B2B-bolag. Vi levererar tre agenter: en "
+            "Snajp bygger AI-agenter för svenska B2B-bolag. Vi levererar två agenter: en "
             "kundservice-agent som svarar på inkommande ärenden utifrån kundens egen "
-            "kunskapsbas, Iris — leads-agenten som hittar företag med konkreta signaler "
-            "och skriver utkast till mejl — och Kvittohanteraren, som läser kvitton ur "
-            "mejlen och sammanställer dem. Kvittohanteraren bokför ingenting själv; den "
-            "läser av, sammanställer och exporterar som SIE4 till kundens eget "
-            "bokföringsprogram. Verksamheten drivs från Göteborg och Umeå och arbetar "
+            "kunskapsbas, och Iris — leads-agenten som hittar företag med konkreta signaler "
+            "och skriver utkast till mejl. Verksamheten drivs från Göteborg och Umeå och arbetar "
             "med bolag i hela landet. Vi bygger inte om kundens hemsida — kunden "
             "behåller sin egen sajt, och det vi levererar är agenterna."
         ),
@@ -82,8 +81,6 @@ KB_ARTICLES: list[dict] = [
             "• Kundtjänst — Inkorgen (mejl med svarsutkast att godkänna, knapparna "
             "Förbättra, Kortare och Mer personlig skriver om utkastet) och "
             "Kundchatten.\n"
-            "• Kvitton — Kvittohanteraren: koppla inkorgen och tryck \"Skanna "
-            "inkorgen\", ställ frågor till kvittoassistenten i chatten.\n"
             "• Inställningar — här kopplas mejlinkorgen, till exempel en Gmail-"
             "inkorg, med ett app-lösenord från mejlleverantören (för Gmail skapas "
             "det i Google-kontots säkerhetsinställningar). Här fylls också "
@@ -127,21 +124,15 @@ KB_ARTICLES: list[dict] = [
         "title": "Priser och paket",
         "category": "betalning",
         "content": (
-            "Vi har fem paket, priser per månad exklusive moms:\n"
+            "Vi har tre paket, priser per månad exklusive moms:\n"
             "• Snajp Support — 3 990 kr/mån. Kundservice-agenten som svarar utifrån er "
             "egen kunskapsbas.\n"
             "• Snajp Leads — 4 490 kr/mån. Leads-agenten som hittar och skriver till rätt "
             "företag.\n"
-            "• Snajp Kvitton — 2 690 kr/mån. Kvittohanteraren som läser kvitton ur "
-            "mejlen (endast läsbehörighet) och exporterar som SIE4. Den bokför "
-            "ingenting själv.\n"
             "• Snajp Duo — 6 990 kr/mån. Leads- och kundservice-agenten i samma dashboard, "
             "med delad kunddata.\n"
-            "• Snajp Trio — 9 990 kr/mån. Alla tre agenterna: leads, kundtjänst och "
-            "kvitton.\n"
             "Duo kostar 1 490 kr mindre per månad än att köpa Support och Leads var för "
-            "sig (3 990 + 4 490 = 8 480 kr). Trio kostar 1 180 kr mindre än alla tre var "
-            "för sig (3 990 + 4 490 + 2 690 = 11 170 kr)."
+            "sig (3 990 + 4 490 = 8 480 kr)."
         ),
     },
     {
@@ -167,10 +158,6 @@ KB_ARTICLES: list[dict] = [
             "3 kr.\n\n"
             "Snajp Support har obegränsade chattar — där finns alltså inget volymtak att "
             "räkna på.\n\n"
-            "Snajp Kvitton säljs med en kampanj: en extra kvittoagent kostar 999 kr. "
-            "Frågar kunden hur länge kampanjen gäller, eller vad en extra agent innebär i "
-            "praktiken: det är inte fastställt i vårt underlag. Lämna över till en "
-            "människa.\n\n"
             "Frågar kunden hur överskjutande volym faktureras eller när i månaden den "
             "räknas av: det är inte fastställt i vårt underlag. Lämna över till en "
             "människa."
@@ -241,9 +228,9 @@ KB_ARTICLES: list[dict] = [
         # artikeln på "Hur kommer vi igång om vi vill testa?" när den bara
         # sa "prova" (batteritestet 2026-10-05).
         "content": (
-            "Vill ni testa Snajp finns två vägar. Alla tre agenterna går att testa "
+            "Vill ni testa Snajp finns två vägar. Båda agenterna går att testa "
             "direkt i webbläsaren utan konto, med exempeldata — på produktsidorna "
-            "för leads, support och kvitton. Nästa steg är en demo på 15–20 "
+            "för leads och support. Nästa steg är en demo på 15–20 "
             "minuter, bokas på /boka-demo: vi går igenom kundens egna ärenden "
             "eller kunder live, kunden ser vad agenten föreslår, och vi säger "
             "rakt ut om vi tror att det passar. Inga förpliktelser.\n\n"
@@ -293,17 +280,6 @@ KB_ARTICLES: list[dict] = [
             "Agenten svarar inte i sociala medier — inte på Facebook, Instagram, "
             "LinkedIn, Messenger eller WhatsApp — och inte i några andra kanaler än "
             "mejlinkorgen och chatten på hemsidan."
-        ),
-    },
-    {
-        "title": "Sparas kvittona som laddas upp till bokföringsagenten?",
-        "category": "teknisk_support",
-        "content": (
-            "Nej. Filen finns i minnet under själva avläsningen och kastas sedan. Kvar "
-            "blir de avlästa fälten och ett kontrollsummevärde som gör att samma "
-            "kvitto känns igen om det laddas upp två gånger. Originalet ska arkiveras "
-            "i kundens eget system — bokföringslagen lägger det ansvaret på den som "
-            "för bokföringen."
         ),
     },
     {

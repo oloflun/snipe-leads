@@ -53,19 +53,17 @@ export const FAQ: FaqPost[] = [
     svar: [
       {
         sv:
-          "Tre agenter i en arbetsyta. Iris, leadsagenten, söker upp företag som liknar era befintliga " +
+          "Två agenter i en arbetsyta. Iris, leadsagenten, söker upp företag som liknar era befintliga " +
           "kunder och skriver ett förslag till mejl. Supportagenten läser kundtjänstinkorgen, " +
-          "sorterar ärendena och föreslår svar ur er egen kunskapsbas. Kvittohanteraren läser " +
-          "kvittona i er inkorg och sammanställer belopp, moms och kategorier.",
+          "sorterar ärendena och föreslår svar ur er egen kunskapsbas.",
         en:
-          "Three agents in one workspace. Iris, the leads agent, finds companies that resemble your " +
+          "Two agents in one workspace. Iris, the leads agent, finds companies that resemble your " +
           "existing customers and drafts an email. The support agent reads your service inbox, " +
-          "sorts the cases and proposes replies from your own knowledge base. The receipt agent " +
-          "reads the receipts in your inbox and totals amounts, VAT and categories."
+          "sorts the cases and proposes replies from your own knowledge base."
       },
       {
         sv:
-          "Gemensamt för alla tre: de föreslår, en människa godkänner. Det finns ingen kodväg " +
+          "Gemensamt för båda: de föreslår, en människa godkänner. Det finns ingen kodväg " +
           "där en agent skickar ett mejl eller lämnar in något till en myndighet på egen hand.",
         en:
           "What they share: they propose, a person approves. There is no code path where an " +
@@ -83,13 +81,9 @@ export const FAQ: FaqPost[] = [
     svar: [
       {
         sv:
-          "Nej. Utkast är standardläget, och sändknappen är er. Kvittohanteraren har dessutom " +
-          "en spärr som stoppar svar där ett belopp inte går att härleda till ett underlag: hellre " +
-          "”jag vet inte” än en siffra som ser rimlig ut.",
+          "Nej. Utkast är standardläget, och sändknappen är er.",
         en:
-          "No. Draft is the default state, and the send button is yours. The receipt agent " +
-          "also has a gate that rejects answers where a figure cannot be traced to a document: " +
-          "better ”I don't know” than a number that merely looks plausible."
+          "No. Draft is the default state, and the send button is yours."
       }
     ]
   },
@@ -178,29 +172,6 @@ export const FAQ: FaqPost[] = [
       href: "/integritetspolicy"
     }
   },
-  {
-    id: "kvitton-sparas",
-    kategori: "data",
-    fraga: {
-      sv: "Sparar ni kvittona vi laddar upp?",
-      en: "Do you store the receipts we upload?"
-    },
-    svar: [
-      {
-        sv:
-          "Nej. Filen finns i minnet under själva avläsningen och kastas sedan. Kvar blir de " +
-          "avlästa fälten och ett kontrollsummevärde som gör att samma kvitto går att känna igen " +
-          "om det laddas upp två gånger. Originalet ska arkiveras i ert eget system, eftersom " +
-          "bokföringslagen lägger det ansvaret på den som för bokföringen.",
-        en:
-          "No. The file exists in memory during the reading itself and is then discarded. What " +
-          "remains are the extracted fields and a checksum that lets us recognise the same " +
-          "receipt if it is uploaded twice. The original should be archived in your own system, " +
-          "since Swedish bookkeeping law places that duty on whoever keeps the books."
-      }
-    ]
-  },
-
   // -- Pris och avtal ------------------------------------------------------
   {
     id: "kostar",
@@ -233,13 +204,12 @@ export const FAQ: FaqPost[] = [
         // utlovad provperiod som inte finns är ett avtalsbrott vid första
         // kunden som åberopar den.
         sv:
-          "Alla tre agenterna går att prova direkt i webbläsaren utan konto, med exempeldata. " +
-          "Vill ni köra mot er egen inkorg eller era egna kvitton sätter vi upp det tillsammans " +
-          "under demon.",
+          "Båda agenterna går att prova direkt i webbläsaren utan konto, med exempeldata. " +
+          "Vill ni köra mot er egen inkorg sätter vi upp det tillsammans under demon.",
         en:
-          "All three agents can be tried straight in the browser without an account, using " +
-          "sample data. If you want to run against your own inbox or your own receipts we set " +
-          "that up together during the demo."
+          "Both agents can be tried straight in the browser without an account, using " +
+          "sample data. If you want to run against your own inbox we set that up together " +
+          "during the demo."
       }
     ],
     lank: { etikett: { sv: "Boka en demo", en: "Book a demo" }, href: "/boka-demo" }
