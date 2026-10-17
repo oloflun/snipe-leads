@@ -1,7 +1,7 @@
 import { getPlatformAdmin } from "@/lib/auth/admin";
 import { getWorkspaceContext } from "@/lib/workspace";
 import { hasDatabase, sqlAsUser } from "@/lib/db";
-import { SCOPE_COOKIE, isProductKey, productKeys, type ProductKey, type Scope } from "@/lib/routes";
+import { SCOPE_COOKIE, arVilande, isProductKey, productKeys, type ProductKey, type Scope } from "@/lib/routes";
 import { isAddonKey, type AddonKey } from "@/lib/addons";
 import { hamtaTillagg } from "@/lib/actions/tillagg";
 import { listTenants, unwrap } from "@/lib/data/admin";
@@ -95,7 +95,8 @@ const ALL_PRODUCTS: ProductKey[] = [...productKeys];
  * both products, which is what /dashboard has always shown without auth.
  */
 const ANONYMOUS: DashboardState = {
-  products: ALL_PRODUCTS,
+  // Utan inloggning är man aldrig admin: vilande agenter syns inte här heller.
+  products: ALL_PRODUCTS.filter((p) => !arVilande(p)),
   addons: [],
   workspaceName: null,
   userEmail: null,
@@ -258,18 +259,25 @@ export const resolveDashboardState = cache(async function resolveDashboardState(
     };
   }
 
+  // Vilande agenter (lib/routes.ts: VILANDE_PRODUKTER) försvinner ur kundens
+  // produkter HÄR, en gång, så att varje entitlement-grind nedströms (menyn,
+  // WorkspaceSection, Att göra, kvittoproxyn) säger samma sak. Admin behåller
+  // dem — både i sin egen arbetsyta och i kundbesöket ovan.
+  const arAdmin = Boolean(await getPlatformAdmin());
+  const synliga = arAdmin ? products : products.filter((p) => !arVilande(p));
+
   return {
-    products,
+    products: synliga,
     addons: (context.workspace.addons ?? []).filter(isAddonKey),
     workspaceName: context.workspace.name,
     userEmail: context.user.email,
     signedIn: true,
     isDemo: context.workspace.is_demo,
-    isPlatformAdmin: Boolean(await getPlatformAdmin()),
+    isPlatformAdmin: arAdmin,
     vy,
     impersonation: null,
     arLasare: (context.profile.role ?? "") === "viewer",
-    initialScope: await scopeFranCookie(products)
+    initialScope: await scopeFranCookie(synliga)
   };
 });
 

@@ -48,6 +48,17 @@ export type RailNavItem = {
   /** Tooltip/title när posten är mörklagd — säger varför den ser ut så. */
   dimmadTitel?: string;
   /**
+   * Vilande agent (lib/routes.ts: VILANDE_PRODUKTER): mörkare än `dimmad`
+   * och ingen länk alls. Namnet ska gå att läsa ("Kvitton") men posten går
+   * inte att klicka, fokusera eller öppna, eftersom produkten står på is och
+   * inte säljs (Sebbe 2026-10-17). Renderas som ett `<span>` med
+   * `aria-disabled`, inte som en länk med blockerat klick: en länk som inte
+   * leder någonstans är en trasig länk för skärmläsaren.
+   */
+  vilande?: boolean;
+  /** Tooltip/title för den vilande posten. */
+  vilandeTitel?: string;
+  /**
    * Undersidor till posten, t.ex. Iris tre flikar. Renderas som en indragen
    * lista under posten NÄR `active` är sant — anroparen avgör det, med samma
    * pathname-prefix-logik som toppnivåns `active` redan använder (exakt match
@@ -85,7 +96,9 @@ export function RailRad({
   onClick,
   compact = false,
   dimmad = false,
-  dimmadTitel
+  dimmadTitel,
+  vilande = false,
+  vilandeTitel
 }: Readonly<{
   href: string;
   etikett: string;
@@ -95,7 +108,28 @@ export function RailRad({
   compact?: boolean;
   dimmad?: boolean;
   dimmadTitel?: string;
+  vilande?: boolean;
+  vilandeTitel?: string;
 }>) {
+  if (vilande) {
+    return (
+      <span
+        aria-disabled="true"
+        title={vilandeTitel ?? etikett}
+        className={cn(
+          "relative flex h-11 shrink-0 cursor-not-allowed select-none items-center gap-3 rounded-input px-3 text-[0.9375rem]",
+          "justify-center lg:justify-start",
+          // Mörkare än `dimmad` med flit: posten är inte nåbar. Den ska kunna
+          // läsas men inte se klickbar ut, och ingen hover lyfter den.
+          "text-paper/40"
+        )}
+      >
+        {Ikon ? <Ikon className="h-[18px] w-[18px] shrink-0 opacity-60" aria-hidden /> : null}
+        <span className="hidden truncate lg:inline">{etikett}</span>
+      </span>
+    );
+  }
+
   return (
     <Link
       href={href}
@@ -224,6 +258,8 @@ export function Rail({
                   onClick={item.onClick}
                   dimmad={item.dimmad}
                   dimmadTitel={item.dimmadTitel}
+                  vilande={item.vilande}
+                  vilandeTitel={item.vilandeTitel}
                 />
               )
             )}

@@ -33,6 +33,24 @@ export function isProductKey(value: string): value is ProductKey {
   return (productKeys as readonly string[]).includes(value);
 }
 
+/**
+ * Agenter som står på is: de säljs inte och kunderna når dem inte, men
+ * plattformsadmin använder dem som vanligt (Sebbe 2026-10-17: Kvittoagenten
+ * ska inte vara i fokus för Snajp att sälja, se docs/BESLUT.md).
+ *
+ * Kunden ser posten i menyn, mörklagd och utan länk (AppShell ritar den som
+ * `vilande`), och produkten filtreras ur kundens `products` i
+ * `resolveDashboardState` — så varje yta som grindar på entitlement (Att göra,
+ * översikten, kvittoproxyn) tystnar på samma ställe. En kund som har paketet
+ * i databasen behåller det där; det är visningen som pausas, inte avtalet.
+ * Töm listan för att släppa produkten igen.
+ */
+export const VILANDE_PRODUKTER: readonly ProductKey[] = ["bookkeeping"];
+
+export function arVilande(product: ProductKey | "shared"): boolean {
+  return product !== "shared" && VILANDE_PRODUKTER.includes(product);
+}
+
 export type AppRoute = {
   href: string;
   labelKey: CopyKey;
@@ -138,6 +156,9 @@ export function routesForProducts(
       // visar FÄRRE poster, inte fler. Motsatt default hade gjort varje ny
       // anropsplats till en potentiell läcka.
       (!route.adminOnly || isAdmin) &&
+      // Vilande agenter (VILANDE_PRODUKTER) når bara plattformsadmin. Kunden
+      // ser dem mörklagda i AppShell, aldrig som en navigerbar post.
+      (!arVilande(route.product) || isAdmin) &&
       (route.product === "shared" || products.includes(route.product))
   );
 }

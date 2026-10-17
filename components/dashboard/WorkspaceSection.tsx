@@ -16,7 +16,7 @@ import {
 import { IrisBolag } from "@/components/leads/LeadsSida";
 import { AttGora } from "@/components/leads/AttGora";
 import { resolveDashboardState } from "@/lib/data/dashboard";
-import type { ProductKey } from "@/lib/routes";
+import { arVilande, type ProductKey } from "@/lib/routes";
 
 /**
  * Arbetsytans sektioner — EN dispatcher, två ytor.
@@ -119,7 +119,14 @@ export async function WorkspaceSection({
 
   // Entitlement is enforced here, on the server. Hiding a nav item is a courtesy;
   // this is the actual gate.
-  const { products, workspaceName } = await resolveDashboardState();
+  const { products, workspaceName, isPlatformAdmin } = await resolveDashboardState();
+  // Vilande agent (lib/routes.ts: VILANDE_PRODUKTER, Kvitton sedan
+  // 2026-10-17): kunden ser posten mörklagd utan länk, och den som skriver
+  // adressen själv landar på översikten — ingen data och ingen upsell-vy,
+  // eftersom produkten inte säljs just nu. Plattformsadmin passerar.
+  if (arVilande(product) && !isPlatformAdmin) {
+    redirect(base);
+  }
   if (!products.includes(product)) {
     // De tre agentytorna: menyn visar dem MÖRKLAGDA (AppShell), och klicket
     // ska landa i agentens erbjudande — inte i en 404. Grinden är densamma:

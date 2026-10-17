@@ -3,7 +3,6 @@ import { PageShell } from "@/components/AppShell";
 import { DashboardProvider } from "@/components/dashboard/DashboardContext";
 import { StartView } from "@/components/dashboard/StartView";
 import { CrmDemo } from "@/components/crm/CrmDemo";
-import { KvittoDemoYta } from "@/components/kvitton/KvittoDemoYta";
 import { DemoSupportYta } from "@/components/snajp/DemoSupportYta";
 import { AttGora } from "@/components/leads/AttGora";
 import { IrisBolag } from "@/components/leads/LeadsSida";
@@ -68,7 +67,9 @@ const DEMO_STATE = {
   arLasare: false,
   initialScope: "both" as const,
   isDemo: false,
-  products: ["leads", "support", "bookkeeping"] as const,
+  // Utan "bookkeeping": Kvittohanteraren är vilande (lib/routes.ts:
+  // VILANDE_PRODUKTER) och syns varken i demons Att göra eller översikt.
+  products: ["leads", "support"] as const,
   addons: [],
   workspaceName: "Demo AB",
   userEmail: null,
@@ -172,20 +173,13 @@ function renderSektion(
     case "assistant":
       return <AssistantView />;
     case "bokforing":
-      // Gamla adressen — Kvittohanteraren ersatte bokföringsdemon 2026-09-16.
-      redirect("/demo/kvitton");
-    // eslint-disable-next-line no-fallthrough -- redirect kastar, nås aldrig
     case "kvitton":
-      // Egen demokomponent och inte `KvittoVy`. Den vyn anropar backenden,
-      // och regeln för den här routen är att INGENTING här får sträcka sig
-      // efter en session eller databasen — se filens docstring. KvittoDemo
-      // renderar handräknade konstanter och spelar upp dem; Översikten
-      // (KvittoDemoYta) räknar på lib/demo/kvitto-oversikt.ts.
-      return (
-        <PageShell title={{ sv: "Kvitton", en: "Receipts" }}>
-          <KvittoDemoYta visaDrift={visaDrift} />
-        </PageShell>
-      );
+      // Kvittohanteraren står på is sedan 2026-10-17 (lib/routes.ts:
+      // VILANDE_PRODUKTER): posten syns mörklagd i railen och adressen leder
+      // till demons översikt. Demokomponenten (KvittoDemoYta) finns kvar och
+      // kopplas in här igen när produkten släpps.
+      redirect("/demo");
+    // eslint-disable-next-line no-fallthrough -- redirect kastar, nås aldrig
     case "regler":
       return <ReglerDemo />;
     case "support":

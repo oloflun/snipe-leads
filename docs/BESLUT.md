@@ -9,6 +9,36 @@ möjligt), vad det betyder i koden.
 
 ---
 
+## 2026-10-17 (Sebbe) — Kvittoagenten står på is: mörklagd för kunder, borta ur utkasten
+
+**Beslut.** "Kvittoagenten ska inte vara i fokus för Snajp att sälja. Den ska
+vara mörk till vänster i menyn på arbetsytan och som kund ska man inte kunna
+klicka in på den. Den ska inte heller finnas med i utkasten. Vi i admin ska
+absolut kunna använda den." Utkast som bara handlar om kvittoagenten tas bort;
+utkast som också nämner en annan agent behålls, kvittotexten redigeras bort
+och utkastet skickas.
+
+**Resonemang.** Snajp ska inte sälja Kvittohanteraren än, utan hålla den på
+is ett tag till. Kunden ska ändå kunna se att den finns ("man ska ändå kunna
+se att det står Kvitto"), men inte öppna den.
+
+**I koden.** `VILANDE_PRODUKTER = ["bookkeeping"]` i `lib/routes.ts`.
+Kundens `products` filtreras i `resolveDashboardState` (admin behåller dem),
+så menyn, `WorkspaceSection`, Att göra och kvittoproxyn säger samma sak.
+Railen ritar posten som ett mörklagt `<span>` utan länk ("Kommer snart"),
+och en kund som skriver adressen landar på översikten. Demon gör likadant.
+Plattformsadmin når Kvitton som förut via adminytan. Kunder som har paketet i
+databasen (Umeå Webbdesign och Alunix i main) behåller det där: det är
+visningen som pausas, inte avtalet. Snajps Iris i development: Kvittohanteraren
+borttagen ur produkterna, erbjudandevillkoren, segmenten och affärskontexten
+(`scripts/snajp_malgrupp.py`), och Iris-instruktionen säger att kvitton och
+bokföring aldrig nämns. 12 osända utkast som bara sålde Kvittohanteraren
+avvisades (sju godkända som väntade på sändfönstret, fem i granskningen), och
+uppföljningen till Investbygg fick ordet "kvittoredovisning" borttaget och
+godkändes. Main hade inga kvittoutkast. Släpps igen genom att tömma listan och
+lägga tillbaka produkten i `snajp_malgrupp.py`. Marknadssidorna, priserna och
+supportchattens kunskapsbas säljer den fortfarande; de är inte ändrade.
+
 ## 2026-10-17 (Sebbe) — Skapa om utkast skriver bara utkastet, ur sparad research
 
 **Beslut.** "Bygg skapa om bara utkast utan ny research." Knapparna Skapa

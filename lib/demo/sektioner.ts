@@ -32,14 +32,21 @@ import type { Localized } from "@/lib/i18n";
 
 export type DemoNavChild = { slug: string; label: Localized };
 
-export type DemoNavItem = { slug: string; label: Localized; children?: DemoNavChild[] };
+export type DemoNavItem = {
+  slug: string;
+  label: Localized;
+  children?: DemoNavChild[];
+  /** Agenten står på is (lib/routes.ts: VILANDE_PRODUKTER): syns mörklagd, går inte att öppna. */
+  vilande?: boolean;
+};
 
 export const DEMO_NAV: DemoNavItem[] = [
   { slug: "", label: { sv: "Översikt", en: "Overview" } },
   { slug: "att-gora", label: { sv: "Att göra", en: "To do" } },
   { slug: "leads", label: { sv: "Leads", en: "Leads" } },
   { slug: "support", label: { sv: "Kundtjänst", en: "Customer service" } },
-  { slug: "kvitton", label: { sv: "Kvitton", en: "Receipts" } },
+  // Kvittohanteraren säljs inte just nu (Sebbe 2026-10-17): namnet står kvar, mörklagt.
+  { slug: "kvitton", label: { sv: "Kvitton", en: "Receipts" }, vilande: true },
   { slug: "installningar", label: { sv: "Inställningar", en: "Settings" } }
 ];
 
