@@ -13,7 +13,7 @@ import { useDashboard } from "@/components/dashboard/DashboardContext";
 import { AgentMenu } from "@/components/snajp/AgentMenu";
 import { signOut } from "@/lib/actions/auth";
 import { useLocale } from "@/lib/i18n";
-import { routesForProducts, tillAdminvag } from "@/lib/routes";
+import { arVilande, routesForProducts, tillAdminvag } from "@/lib/routes";
 import { cn } from "@/lib/utils";
 
 /**
@@ -142,6 +142,7 @@ export function AdminShell({
       // så samma /dashboard/*-route bär samma ikon på båda ytorna.
       origHref: route.href,
       href: tillAdminvag(route.href),
+      vilande: arVilande(route.product),
       // Arbetsytans startsida heter Översikt; plattformens heter
       // Admin-översikt (Antons beställning 2026-10-07), så namnen krockar inte.
       label: t(route.labelKey)
@@ -170,7 +171,17 @@ export function AdminShell({
       label: flik.label,
       Icon: RUTT_IKONER[flik.origHref] ?? LayoutDashboard,
       active: aktiv === flik.href,
-      onClick: () => aterstallLage(availableScopes, setScope)
+      onClick: () => aterstallLage(availableScopes, setScope),
+      // Vilande agent (Kvitton sedan 2026-10-17): mörklagd som i kundens
+      // meny, men admin kan öppna den (Sebbe 2026-10-18).
+      vilande: flik.vilande,
+      vilandeLank: flik.vilande,
+      vilandeTitel: flik.vilande
+        ? text({
+            sv: "Vilande: mörklagd och låst för kunder, öppen för admin",
+            en: "On hold: dimmed and locked for customers, open to admins"
+          })
+        : undefined
     }))
   };
 
