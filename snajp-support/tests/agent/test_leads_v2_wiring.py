@@ -747,3 +747,37 @@ async def test_stilfynd_tvingar_granskning_med_skalet_pa_koposten():
     assert post["status"] == "awaiting_review"
     assert "Stil:" in post["gate_checks"]["held"]
     assert "Jag såg att" in post["gate_checks"]["held"]
+
+
+class _SekvensLLM(_FakeLLM):
+    """Humanizern svarar med en ny version per anrop (sista upprepas)."""
+
+    def __init__(self, humaniseringar: list[str]):
+        super().__init__()
+        self._kvar = list(humaniseringar)
+
+    async def create(self, **kwargs):
+        if "styrs av skillen snajp:humanizer-svenska," in kwargs["messages"][0]["content"]:
+            body = self._kvar.pop(0) if len(self._kvar) > 1 else self._kvar[0]
+            self.overrides["snajp:humanizer-svenska"] = {"final_subject": "Returfrågor", "final_body": body}
+        return await super().create(**kwargs)
+
+
+async def test_den_renaste_humaniserade_versionen_koas_inte_den_sista():
+    """Skarpa provet 2026-10-17: 60 av 96 köade utkast med kvarvarande fynd
+    hade en tidigare version med färre fynd. Moogios första version var ren
+    från mallord; omskrivningen förde in "tar tid från att" och den sista
+    humaniseringen prövades aldrig. Varje version prövas, den med minst fynd köas."""
+    storage = MemoryStorage()
+    thread_id = await _prepare_outreach(storage)
+    battre = ("Hej,\n\nMed fri retur på allt ni säljer blir returfrågorna många. Jag såg att ni har öppet.\n\n"
+              "Vår agent svarar på dem åt er.\n\nSvara ja så visar vi hur.")
+    samre = ("Hej,\n\nJag såg att ni erbjuder fri retur, och det tar tid från att svara på kunderna.\n\n"
+             "Vår agent svarar på dem åt er.\n\nSvara ja så visar vi hur.")
+    llm = _SekvensLLM([battre, samre, samre])
+    result = await _utkast_v2(storage, thread_id, llm)
+    assert llm.calls.count("snajp:humanizer-svenska") == 3
+    assert result["queued"] is True
+    meddelande = storage.outreach_messages[TENANT][-1]
+    assert "tar tid från att" not in meddelande["body"]
+    assert "returfrågorna många" in meddelande["body"]
