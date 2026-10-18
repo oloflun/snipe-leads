@@ -9,6 +9,33 @@ möjligt), vad det betyder i koden.
 
 ---
 
+## 2026-10-18 (Sebbe) — Körningar på upp till 200 leads, rullbar leadslista och levande lägesrad
+
+**Beslut.** "Ändra så att man kan söka upp till 200 leads … håller lika bra
+kvalitet och att företagen man filtrerar, alla 200 ska vara bra företag …
+relativt snabb att hitta alla leads." Vid 50+ leads visas körningens leads i
+en låda som går att rulla och dra ut i höjdled, med samma snabbklick per lead
+till utkastet som förut. I körningsvyn byter "Researchar" till nya
+formuleringar ("Hittar dina nästa kunder…", "Gräver i registren", …) var
+tionde sekund, med en diskret intoning.
+
+**Resonemang (Sebbe).** Taket 50 var för lågt för volymkörningar. Kvaliteten
+ska inte sänkas med volymen: samma grindar (förfilter, existens, Jev,
+bedömning, utkastgrindarna) per bolag som vid 50. Sidan ska inte bli
+kilometerlång vid 200 leads, och väntetiden ska kännas levande, inte stå
+stilla på ett ord.
+
+**I koden.** `LeadsBatchRequest.limit` le=50 → 200 (`app/api/schemas.py`),
+formulärets max/hint (`components/leads/LeadsRunForm.tsx`). Kredittaket
+`korning.korningstak` höjt 600 → 2400 så 12 hämtningar/lead gäller även vid
+200 — annars hade en 200-körning svalt vid 3/lead; motorns övriga tak
+(`TAK_FAKTOR`, `max_rundor`, `TOMMA_RUNDOR`) skalar redan med målet, och
+kvalitetsgrindarna är oförändrade per bolag. Rullbara lådan vid 50+ rader:
+`KorningensUtkast.tsx` (RULLBAR_FRAN) och `IrisKorningar.tsx:rullbarLista`
+(även tratten). Lägesraden: `RoterandeStatus` + fraslistorna i
+`IrisKorningar.tsx`, intoningen `@keyframes statusbyte` i `app/globals.css`
+(släcks av prefers-reduced-motion).
+
 ## 2026-10-17 (Anton) — Main blir sanningen efter första synken; körningar i development flyttas aktivt
 
 **Beslut.** Alla körningar från development följer med till main, utom de som

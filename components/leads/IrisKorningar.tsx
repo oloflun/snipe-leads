@@ -88,8 +88,6 @@ const T = {
   bolagUndersokta: { sv: "Bolag undersökta", en: "Companies researched" },
   bortvalda: { sv: "Bortvalda", en: "Dropped" },
   justNu: { sv: "Just nu", en: "Right now" },
-  researchar: { sv: "Researchar", en: "Researching" },
-  letar: { sv: "Letar", en: "Searching" },
   tak: { sv: "tak", en: "cap" },
   underResearch: { sv: "bolag under research", en: "companies in research" },
   sokrunda: { sv: "sökrunda", en: "search round" },
@@ -128,6 +126,50 @@ const T = {
   stannade: { sv: "Stannade utan leads", en: "Stalled without leads" },
   underMalet: { sv: "Klar, under målet", en: "Done, under target" }
 } satisfies Record<string, Localized>;
+
+/** Lägesfraserna i "Just nu" (Sebbe 2026-10-18): börjar i det sakliga
+ *  ("Researchar"/"Letar") och byter var tionde sekund till en fras som
+ *  berättar vad körningen faktiskt gör, i rundgång. Bytet tonas in via
+ *  .animate-statusbyte (globals.css). */
+const RESEARCH_FRASER: Localized[] = [
+  { sv: "Researchar", en: "Researching" },
+  { sv: "Hittar dina nästa kunder…", en: "Finding your next customers…" },
+  { sv: "Gräver i registren", en: "Digging through the registers" },
+  { sv: "Läser bolagens sajter", en: "Reading the companies' sites" },
+  { sv: "Väger bolagen mot din målgrupp", en: "Weighing companies against your target group" },
+  { sv: "Letar rätt kontaktväg", en: "Finding the right way in" },
+  { sv: "Sållar fram guldkornen", en: "Sifting out the gold" }
+];
+
+const LETAR_FRASER: Localized[] = [
+  { sv: "Letar", en: "Searching" },
+  { sv: "Gräver i registren", en: "Digging through the registers" },
+  { sv: "Hittar dina nästa kunder…", en: "Finding your next customers…" },
+  { sv: "Ringar in nästa område", en: "Circling the next area" }
+];
+
+const FRAS_MS = 10_000;
+
+/** Roterar genom fraserna var tionde sekund. `key={i}` startar om
+ *  intoningen vid varje byte; långa fraser sätts i panelens mindre grad så
+ *  att nyckeltalsrutan inte spricker. */
+function RoterandeStatus({ fraser }: Readonly<{ fraser: Localized[] }>) {
+  const { text } = useLocale();
+  const [i, setI] = useState(0);
+  useEffect(() => {
+    const timer = window.setInterval(() => setI((v) => (v + 1) % fraser.length), FRAS_MS);
+    return () => window.clearInterval(timer);
+  }, [fraser.length]);
+  const fras = text(fraser[i % fraser.length]);
+  return (
+    <span
+      key={i}
+      className={cn("animate-statusbyte block", fras.length > 14 && "text-[1.25rem] leading-[1.2] tracking-normal")}
+    >
+      {fras}
+    </span>
+  );
+}
 
 export const KORNINGSSTATUS: Record<KorningsRad["status"], Localized> = {
   queued: { sv: "Köad", en: "Queued" },
@@ -497,8 +539,8 @@ function Pagaende({
                 : k.styrning === "avbruten"
                   ? text(T.avbryter)
                   : k.pagaende
-                    ? text(T.researchar)
-                    : text(T.letar),
+                    ? <RoterandeStatus fraser={RESEARCH_FRASER} />
+                    : <RoterandeStatus fraser={LETAR_FRASER} />,
             notis: k.pagaende ? `${k.pagaende} ${text(T.underResearch)}` : `${text(T.sokrunda)} ${(k.rundor ?? 0) + 1}`
           }
         ]}
@@ -591,6 +633,15 @@ function StyrKnapp({
   );
 }
 
+/** Vid 50+ rader läggs listan i en rullbar låda som går att dra ut i
+ *  höjdled, i stället för att göra sidan kilometerlång (Sebbe 2026-10-18,
+ *  samma gräns som KorningensUtkast). */
+function rullbarLista(antal: number): string {
+  return antal >= 50
+    ? "max-h-[26rem] min-h-[14rem] resize-y overflow-y-auto overscroll-contain rounded-input border border-ink/15 px-3"
+    : "border-y border-ink/15";
+}
+
 /**
  * En rad som fälls ut till sin detalj: undersökta bolag med länk, tratten rad
  * för rad, och felorsaken. Tangentbordet når en RIKTIG knapp i radhuvudet
@@ -663,7 +714,7 @@ function RadMedDetalj({
                 <>
                 <h3 className="text-[1.0625rem] font-semibold">{text(T.undersoktaBolag)}</h3>
                 {k?.jobs?.length ? (
-                  <ul className="mt-3 divide-y divide-ink/12 border-y border-ink/15">
+                  <ul className={cn("mt-3 divide-y divide-ink/12", rullbarLista(k.jobs.length))}>
                     {k.jobs.map((j) => (
                       <li key={j.job_id} className="flex items-center justify-between gap-3 py-2.5">
                         <span className="min-w-0 truncate">{j.company_name ?? j.prospect_id ?? j.job_id}</span>
@@ -698,7 +749,7 @@ function RadMedDetalj({
                   {text(T.bortvalda)} <span className={cn(meta, "font-normal")}>{(k?.tratt ?? []).length}</span>
                 </h3>
                 {k?.tratt?.length ? (
-                  <ul className="mt-3 divide-y divide-ink/12 border-y border-ink/15">
+                  <ul className={cn("mt-3 divide-y divide-ink/12", rullbarLista(k.tratt.length))}>
                     {k.tratt.map((t, i) => (
                       <li key={`${t.namn}-${i}`} className="py-2.5">
                         <div className="flex items-baseline justify-between gap-3">
