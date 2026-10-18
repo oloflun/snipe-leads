@@ -151,8 +151,10 @@ const LETAR_FRASER: Localized[] = [
 const FRAS_MS = 10_000;
 
 /** Roterar genom fraserna var tionde sekund. `key={i}` startar om
- *  intoningen vid varje byte; långa fraser sätts i panelens mindre grad så
- *  att nyckeltalsrutan inte spricker. */
+ *  intoningen vid varje byte. Långa fraser sätts i panelens mindre grad så
+ *  att nyckeltalsrutan inte spricker — och på smal skärm gäller den mindre
+ *  graden alla fraser: i 2 rem bröts redan "Researchar" mitt i ordet i den
+ *  smala kolumnen (mobilens overflow-wrap, HANDOFF 2026-10-05 punkt 3). */
 function RoterandeStatus({ fraser }: Readonly<{ fraser: Localized[] }>) {
   const { text } = useLocale();
   const [i, setI] = useState(0);
@@ -164,7 +166,10 @@ function RoterandeStatus({ fraser }: Readonly<{ fraser: Localized[] }>) {
   return (
     <span
       key={i}
-      className={cn("animate-statusbyte block", fras.length > 14 && "text-[1.25rem] leading-[1.2] tracking-normal")}
+      className={cn(
+        "animate-statusbyte block max-sm:text-[1.25rem] max-sm:leading-[1.2]",
+        fras.length > 14 && "text-[1.25rem] leading-[1.2] tracking-normal"
+      )}
     >
       {fras}
     </span>
