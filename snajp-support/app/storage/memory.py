@@ -1381,7 +1381,7 @@ class MemoryStorage:
                     "contact_level",
                     "contact_form_url",
                     "contact_phone",
-                    "importerad_fran",
+                    "lan",
                 )
                 and värde is not None
             },

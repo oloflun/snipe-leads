@@ -299,3 +299,22 @@ async def test_paketet_tal_decimal_och_datum(client):
     paket["poster"][0]["prospekt"][0]["skapad"] = datetime.now(timezone.utc).isoformat()
     assert admin_flytt._kanonisk(paket)  # kastar inte
     assert admin_flytt.signera(paket, get_settings().flytt_nyckel)
+
+
+def test_prospektets_faltlista_ar_riktiga_kolumner():
+    """Postgres-insertens allowlist får bara ha kolumner som någon migration
+    skapar. `importerad_fran` stod där utan kolumn (085: "ingen ny kolumn"),
+    och varje flytt av ett lead föll i main med en UndefinedColumnError som
+    minneslagret aldrig visade (2026-10-18)."""
+    import re
+    from pathlib import Path
+
+    from app.storage.postgres import _PROSPEKT_PROFILFALT
+
+    sql = "\n".join(
+        p.read_text(encoding="utf-8")
+        for p in (Path(__file__).resolve().parents[3] / "supabase" / "migrations").glob("*.sql")
+    )
+    sql = re.sub(r"--[^\n]*", "", sql)  # kommentarer räknas inte
+    for falt in _PROSPEKT_PROFILFALT:
+        assert re.search(rf"\b{falt}\s+(text|int|integer|numeric|bigint|jsonb|uuid|smallint|boolean)", sql), falt

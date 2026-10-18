@@ -20,9 +20,10 @@ sparas till den riktiga miljön. Det får vara den enda vägen.
 - **Idempotent.** Mejl dedupliceras på provider_message_id (save_email
   returnerar None vid dublett), prospekt på bolagsnamn, körningar på job_id.
   Att flytta samma sak två gånger ger kvittot "redan flyttad".
-- **Spårbart.** Varje importerad rad bär `importerad_fran='development'` i
-  beslutsloggen (mejl) respektive profilen (prospekt), och development
-  loggar varje flytt i `dev_flytt_ko` (migration 085).
+- **Spårbart.** Varje importerat mejl bär `importerad_fran='development'` i
+  beslutsloggen, listor i plattformshändelsen, och development loggar varje
+  flytt i `dev_flytt_ko` (migration 085, alla typer sedan 112). Prospekt har
+  ingen kolumn för det (085: "ingen ny kolumn"); fältet filtreras bort.
 
 ## Listor, och att det flyttade blir skarpt (Sebbe 2026-10-18)
 
