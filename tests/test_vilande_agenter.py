@@ -47,6 +47,17 @@ def test_railen_ritar_vilande_utan_lank():
     assert "vilande: true" in shell
 
 
+def test_adminmenyn_visar_vilande_morklagd_men_klickbar():
+    """Sebbe 2026-10-18: Kvitton ska vara mörklagd även i adminens meny
+    (gruppen Arbetsyta), men admin ska fortfarande kunna öppna den."""
+    rail = _las("components/shell/Rail.tsx")
+    gren = rail[rail.index("if (vilande && vilandeLank) {") : rail.index("if (vilande) {")]
+    assert "<Link" in gren and "text-paper/40" in gren
+    admin = _las("components/admin/AdminShell.tsx")
+    assert "vilande: arVilande(route.product)" in admin
+    assert "vilandeLank: flik.vilande" in admin
+
+
 def test_serverspärren_skickar_kunden_till_oversikten():
     kod = _las("components/dashboard/WorkspaceSection.tsx")
     assert re.search(r"if \(arVilande\(product\) && !isPlatformAdmin\) \{\s*redirect\(base\);", kod)

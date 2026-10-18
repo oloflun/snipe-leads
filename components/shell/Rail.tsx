@@ -59,6 +59,12 @@ export type RailNavItem = {
   /** Tooltip/title för den vilande posten. */
   vilandeTitel?: string;
   /**
+   * Vilande men klickbar: adminmenyn (Sebbe 2026-10-18). Posten ser likadan
+   * ut som hos kunden, mörklagd, men plattformsadmin kan öppna den. Utan
+   * flaggan är den vilande posten ett `<span>` utan länk (kundens meny).
+   */
+  vilandeLank?: boolean;
+  /**
    * Undersidor till posten, t.ex. Iris tre flikar. Renderas som en indragen
    * lista under posten NÄR `active` är sant — anroparen avgör det, med samma
    * pathname-prefix-logik som toppnivåns `active` redan använder (exakt match
@@ -98,7 +104,8 @@ export function RailRad({
   dimmad = false,
   dimmadTitel,
   vilande = false,
-  vilandeTitel
+  vilandeTitel,
+  vilandeLank = false
 }: Readonly<{
   href: string;
   etikett: string;
@@ -110,7 +117,38 @@ export function RailRad({
   dimmadTitel?: string;
   vilande?: boolean;
   vilandeTitel?: string;
+  vilandeLank?: boolean;
 }>) {
+  if (vilande && vilandeLank) {
+    // Adminens väg in: samma mörka ton som kundens låsta post, men en länk.
+    // Aktiv markeras bara med ochre-strecket och en svag bakgrund, så att
+    // posten förblir mörk även när admin står på sidan.
+    return (
+      <Link
+        href={href}
+        onClick={onClick}
+        aria-current={aktiv ? "page" : undefined}
+        title={vilandeTitel ?? etikett}
+        className={cn(
+          "focus-ring relative flex h-11 shrink-0 items-center gap-3 rounded-input px-3 text-[0.9375rem] transition-colors",
+          "justify-center lg:justify-start",
+          "text-paper/40 hover:bg-paper/5 hover:text-paper-subtle",
+          aktiv && "bg-paper/5"
+        )}
+      >
+        <span
+          aria-hidden
+          className={cn(
+            "absolute bottom-2 left-0 top-2 w-[2px] rounded-full bg-ochre/60 transition-opacity",
+            aktiv ? "opacity-100" : "opacity-0"
+          )}
+        />
+        {Ikon ? <Ikon className="h-[18px] w-[18px] shrink-0 opacity-60" aria-hidden /> : null}
+        <span className="hidden truncate lg:inline">{etikett}</span>
+      </Link>
+    );
+  }
+
   if (vilande) {
     return (
       <span
@@ -260,6 +298,7 @@ export function Rail({
                   dimmadTitel={item.dimmadTitel}
                   vilande={item.vilande}
                   vilandeTitel={item.vilandeTitel}
+                  vilandeLank={item.vilandeLank}
                 />
               )
             )}
