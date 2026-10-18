@@ -228,3 +228,53 @@ async def test_grundlost_pastaende_i_uppfoljningen_koas_inte():
         if q["thread_id"] == thread_id and q["status"] in ("queued", "awaiting_review")
     ]
     assert koade == [], "Ingenting får ligga i kön efter en fälld grindning."
+
+
+@pytest.mark.anyio
+async def test_trad_som_salde_vilande_produkt_foljs_inte_upp():
+    """Sebbe 2026-10-17: Kvittohanteraren säljs inte. Main köade ändå nya
+    kvittouppföljningar, eftersom svepet följer upp tråden och modellen läser
+    det tidigare mejlet. Tråden hoppas över före modellanropen."""
+    storage = MemoryStorage()
+    prospect = await storage.create_prospect(
+        TENANT, company_name="Jojos Bygg AB", contact_email="info@jojosbygg.se"
+    )
+    thread = await storage.ensure_outreach_thread(TENANT, prospect_id=prospect["id"])
+    resultat = await storage.queue_outreach_message(
+        TENANT,
+        thread_id=thread["id"],
+        body="Vår Kvittohanterare hämtar kvittona ur er e-post.",
+        subject="Kvittona från byggena",
+        humanizer_variant="snajp:humanizer-svenska",
+        scheduled_at=NU - timedelta(days=6),
+    )
+    await storage.mark_outreach_message_sent(
+        TENANT, resultat["message"]["id"], (NU - timedelta(days=6)).isoformat()
+    )
+    await storage.update_send_queue_status(
+        TENANT, resultat["queue_item"]["id"], status="sent", gate_checks={}
+    )
+
+    anrop = []
+    stegsvar = _stegsvar()
+
+    async def _raknande(*args, **kwargs):
+        anrop.append(1)
+        return await stegsvar(*args, **kwargs)
+
+    with patch("app.leads.follow_up_generator.run_step", new=_raknande):
+        rader = await generate_due_follow_ups(
+            storage, TENANT, now=NU, tenant_name="Snajp", context_pack="## Kontextpaket"
+        )
+
+    assert rader == [{"thread_id": thread["id"], "sekvens": 1, "queued": False, "hoppad": "vilande_produkt"}]
+    assert anrop == []
+    assert not [q for q in storage.send_queue[TENANT] if q["status"] == "awaiting_review"]
+
+
+def test_vilande_traffar_produktnamnet_inte_amnet():
+    from app.leads.vilande import namner_vilande_produkt
+
+    assert namner_vilande_produkt("Vår Kvittohanterare hämtar dem.")
+    assert namner_vilande_produkt("om Kvittohanteraren")
+    assert not namner_vilande_produkt("Vi hjälper er med kvitton och bokföring.")

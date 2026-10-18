@@ -96,6 +96,12 @@ godkändes. Main hade inga kvittoutkast. Släpps igen genom att tömma listan oc
 lägga tillbaka produkten i `snajp_malgrupp.py`. Marknadssidorna, priserna och
 supportchattens kunskapsbas säljer den fortfarande; de är inte ändrade.
 
+Tillägg 2026-10-18: uppföljningssvepet i main skrev ändå nya
+kvittouppföljningar (fyra på två dygn), eftersom det följer upp tråden och
+modellen läser det tidigare mejlet. En tråd vars utgående mejl nämner en
+vilande produkt följs inte längre upp (`app/leads/vilande.py`, kontrollen i
+`follow_up_generator._en_uppfoljning` före modellanropen).
+
 ## 2026-10-17 (Sebbe) — Utkastkedjan köar den renaste versionen, inte den sista
 
 **Beslut.** "Ja, kolla varför mallorden överlever grinden." Utredningen gav
