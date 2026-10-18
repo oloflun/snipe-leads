@@ -1,5 +1,12 @@
 # Snipra Status
 
+## 2026-10-18 — Claude — startsidan: dygnsljus, rörelse, isärtagen översikt (ocommittat)
+
+Startsidan har lokalt fått Dygnets dygnsljus, GSAP/Lenis-övergångar, en isärtagen översikt med
+förklaringar, Varför Snajp-texten under Byggt i Göteborg och Source Serif 4. Verifierat i Chromium
+(0 dolda element, p95 17 ms). **Kvar:** Antons dom på localhost:3005, godkänd copy i sprängskissen,
+commit med hans ja. Handoff: `HANDOFF-2026-10-18-LANDNINGSSIDAN-RORELSE.md`.
+
 ## 2026-10-17 (2) — Claude — release till main, första synken, main är sanningen
 
 Migration 103–111 körda mot main, PR #31 mergad av Anton (`5c41630`, med Sebbes sex commits). Första synken
