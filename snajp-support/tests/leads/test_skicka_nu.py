@@ -36,3 +36,16 @@ def test_miljon_dar_utkastet_godkandes_skickar_det():
     assert skickas_har(i_main, None) and not skickas_har(i_main, dev)
     assert skickas_har(aldre, None) and not skickas_har(aldre, dev)
     assert skickas_har(autonom, None) and not skickas_har(autonom, dev)
+
+
+def test_spegel_fran_main_skickar_ingenting():
+    """Anton 2026-10-17: main är sanningen och speglas till development.
+    Development skickar inget, inte ens det som godkändes där."""
+    from app.leads.scheduler import skickas_har, tvavags
+
+    spegel = {"environment": "development", "lage": "envags"}
+    i_dev = {"gate_checks": {"approved_by": "human", "godkand_i": "development"}}
+    i_main = {"gate_checks": {"approved_by": "human", "godkand_i": "main"}}
+    assert not skickas_har(i_dev, spegel) and not skickas_har(i_main, spegel)
+    assert skickas_har(i_main, None)  # main skickar
+    assert tvavags(spegel)  # development följer inte upp och läser inga inkorgar
