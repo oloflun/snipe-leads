@@ -57,6 +57,7 @@ from .follow_up import LEVERS
 from .gissnings_gate import check_gissningar
 from .grounding_gate import build_permitted_facts, check_grounding
 from .language_gate import last_humanizer_variant
+from .vilande import namner_vilande_produkt
 from .research_playbook import THINKING
 
 logger = logging.getLogger("snajp-support.follow-up-generator")
@@ -258,6 +259,15 @@ async def _en_uppfoljning(
     prospect_email = thread.get("prospect_email") or thread.get("contact_email") or ""
 
     meddelanden = await storage.list_outreach_messages(tenant_id, thread_id)
+    # En tråd som sålde en vilande produkt (Kvittohanteraren sedan 2026-10-17,
+    # app/leads/vilande.py) följs inte upp: uppföljningen hade sålt samma
+    # produkt igen. Före modellanropen, så att svepet inte betalar för den.
+    if any(
+        m.get("direction") == "outbound"
+        and namner_vilande_produkt(f"{m.get('subject') or ''}\n{m.get('body') or ''}")
+        for m in meddelanden
+    ):
+        return {"thread_id": thread_id, "sekvens": sekvens, "queued": False, "hoppad": "vilande_produkt"}
     historik = "\n\n".join(
         f"{'Prospektet' if m['direction'] == 'inbound' else 'Vi'}: {(m.get('body') or '').strip()}"
         for m in meddelanden[-4:]

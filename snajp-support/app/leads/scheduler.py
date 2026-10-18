@@ -470,13 +470,23 @@ def miljo(spegel: dict | None) -> str:
 
 
 def skickas_har(item: dict, spegel: dict | None) -> bool:
-    """Skickas posten från den här miljön? (Anton 2026-10-10: utskick ska gå
-    att göra från development också.) Den miljö där en människa godkände
-    utkastet skickar det; den andra får statusen via synken. Utan
-    godkännande (autonoma utskick) och för godkännanden från före
-    2026-10-10, som saknar `godkand_i`, är det main."""
+    """Skickas posten från den här miljön? Den miljö där en människa godkände
+    utkastet skickar det. Utan godkännande (autonoma utskick) och för
+    godkännanden från före 2026-10-10, som saknar `godkand_i`, är det main.
+
+    Sedan 2026-10-17 (Anton) är main sanningen och speglas till development
+    (`lage = 'envags'`): development skickar då ingenting, för en spegelrad
+    den skickade hade fått tillbaka main:s status vid nästa synk och kunnat
+    gå ut igen. Körningar gjorda i development flyttas till main först."""
+    if utskick_bara_i_main(spegel):
+        return False
     godkant = godkannande(item) or {}
     return (godkant.get("godkand_i") or "main") == miljo(spegel)
+
+
+def utskick_bara_i_main(spegel: dict | None) -> bool:
+    """Development speglas från main (railway_synk.py efter första synken)."""
+    return bool(spegel) and (spegel or {}).get("lage") == "envags"
 
 
 async def _avsandaridentitet(storage: Storage, tenant_id: str) -> dict:
@@ -534,6 +544,11 @@ async def skicka_godkant(
             return "saknas", None
         if item.get("status") not in _GODKANNBARA:
             return "redan_hanterad", None
+        if utskick_bara_i_main(await storage.spegel_info()):
+            return "blocked", (
+                "Utskick görs i main. Flytta körningen till main med Byt kund → Flytta till main "
+                "och godkänn utkastet där."
+            )
         # Ett stoppat utkast skickas bara om det är trådens enda: finns ett
         # nyare väntande utkast är det det som gäller (sändaren tar trådens
         # senaste osända text).
@@ -570,12 +585,12 @@ def _efter(tidpunkt, seedad: str) -> bool:
 
 
 def tvavags(spegel: dict | None) -> bool:
-    """Development i tvåvägssynk med main (scripts/railway_synk.py, Anton
-    2026-10-10). Main följer upp, läser inkorgarna och kör autopiloten, och
-    synken för tillbaka utfallet; development gör det inte, annars blev varje
-    uppföljning och varje inkommande mejl två. Utskick av godkända utkast
-    sker i den miljö där utkastet godkändes (skickas_har)."""
-    return bool(spegel) and (spegel or {}).get("lage") == "tvavags"
+    """Development synkas med main (scripts/railway_synk.py: tvåvägs
+    2026-10-10, main → development sedan 2026-10-17). Main följer upp, läser
+    inkorgarna och kör autopiloten, och synken för över utfallet; development
+    gör det inte, annars blev varje uppföljning och varje inkommande mejl två.
+    Utskicken: skickas_har."""
+    return bool(spegel) and (spegel or {}).get("lage") in ("tvavags", "envags")
 
 
 async def process_godkanda(storage: Storage, provider: SendProvider) -> list[dict]:

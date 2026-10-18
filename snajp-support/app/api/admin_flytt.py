@@ -20,9 +20,22 @@ sparas till den riktiga miljön. Det får vara den enda vägen.
 - **Idempotent.** Mejl dedupliceras på provider_message_id (save_email
   returnerar None vid dublett), prospekt på bolagsnamn, körningar på job_id.
   Att flytta samma sak två gånger ger kvittot "redan flyttad".
-- **Spårbart.** Varje importerad rad bär `importerad_fran='development'` i
-  beslutsloggen (mejl) respektive profilen (prospekt), och development
-  loggar varje flytt i `dev_flytt_ko` (migration 085).
+- **Spårbart.** Varje importerat mejl bär `importerad_fran='development'` i
+  beslutsloggen, listor i plattformshändelsen, och development loggar varje
+  flytt i `dev_flytt_ko` (migration 085, alla typer sedan 112). Prospekt har
+  ingen kolumn för det (085: "ingen ny kolumn"); fältet filtreras bort.
+
+## Listor, och att det flyttade blir skarpt (Sebbe 2026-10-18)
+
+Leadslistor flyttas med alla rader (`typ='lista'`). Allt en admin gör när den
+"testar som" en kund märks som test (prospekt med origin 'test', listor med
+is_test), och synken för aldrig över test (scripts/railway_synk.py). Flytten
+är adminens uttryckliga val att spara något till den riktiga miljön, så det
+som flyttas blir skarpt i main: origin 'test'/'example' blir 'import' och en
+lista importeras med is_test = false. Annars hade det landat i main osynligt
+på kundens riktiga profil, vilket var precis felet som fick Alunix listor att
+saknas. Dedup för listor är titeln hos kunden; raderna filtreras mot bolag
+kunden redan har (app/leads/upptagna.py), som när en lista kopieras.
 """
 
 from __future__ import annotations
@@ -35,9 +48,11 @@ from typing import Any, Literal
 
 import httpx
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
+from fastapi.encoders import jsonable_encoder
 from pydantic import BaseModel, Field
 
 from ..config import get_settings
+from ..leads import upptagna
 from ..storage.base import BEDOMNINGSFALT
 from .deps import require_master_key
 
@@ -54,7 +69,7 @@ NASTA_SPEGLING = "04:00 svensk sommartid (02:00 UTC)"
 
 class FlyttRequest(BaseModel):
     slug: str = Field(..., min_length=1, max_length=120)
-    typ: Literal["mejl", "korning", "prospekt"]
+    typ: Literal["mejl", "korning", "prospekt", "lista"]
     ids: list[str] = Field(..., min_length=1)
 
 
@@ -103,6 +118,24 @@ _PROSPEKTFALT = (
 )
 
 
+#: Listradens fält i en flytt. Samma kund i båda miljöerna, så
+#: webbplatsbedömningen (lan, webbniva, webbrevision) följer med; den lämnar
+#: aldrig kunden (jämför admin_listor.LISTRADSFALT, som saknar dem med flit).
+_LISTRADSFALT = (
+    "item_typ", "company_name", "website", "ort", "contact_name", "contact_role",
+    "contact_email", "contact_level", "contact_phone", "orgnr", "source_name",
+    "source_url", "signal", "signal_detalj", "lan", "postnr", "webbniva", "webbrevision",
+)
+_LISTFALT = ("titel", "icp", "antal", "kalla", "kontaktfilter", "status", "is_test")
+
+
+def _skarp_origin(origin: Any) -> str:
+    """Origin i main efter en flytt: testmärkningen tas bort, se docstringen."""
+    if origin in ("manual", "import", "inkorg", "lista", "iris"):
+        return str(origin)
+    return "import"
+
+
 async def _bygg_paket(storage, tenant: dict[str, Any], typ: str, ids: list[str]) -> dict[str, Any]:
     tenant_id = str(tenant["id"])
     poster: list[dict[str, Any]] = []
@@ -125,6 +158,17 @@ async def _bygg_paket(storage, tenant: dict[str, Any], typ: str, ids: list[str])
             if not p:
                 raise HTTPException(status_code=404, detail=f"Leadet {pid} finns inte.")
             poster.append({"ref_id": pid, "prospekt": [{f: p.get(f) for f in _PROSPEKTFALT}]})
+    elif typ == "lista":
+        for lid in ids:
+            lista = await storage.get_lead_list(tenant_id, lid)
+            if not lista:
+                raise HTTPException(status_code=404, detail=f"Listan {lid} finns inte.")
+            rader = await storage.list_lead_list_items(tenant_id, lid)
+            poster.append({
+                "ref_id": lid,
+                "lista": {f: lista.get(f) for f in _LISTFALT},
+                "rader": [{f: r.get(f) for f in _LISTRADSFALT} for r in rader],
+            })
     else:
         for bid in ids:
             korning = await storage.get_leads_korning(tenant_id, bid)
@@ -141,14 +185,18 @@ async def _bygg_paket(storage, tenant: dict[str, Any], typ: str, ids: list[str])
                 "korning": {f: korning.get(f) for f in ("job_id", "status", "scope", "is_test", "error", "korning")},
                 "prospekt": prospekt,
             })
-    return {
+    # jsonable_encoder: Decimal (omsättning, poäng), datetime och UUID ur
+    # databasraderna blir JSON-värden. Utan den föll signeringen (_kanonisk)
+    # med "Object of type Decimal is not JSON serializable" och flytten
+    # svarade 500 (Alunix bolag 2026-10-18). Samma form som /paket returnerar.
+    return jsonable_encoder({
         "version": 1,
         "fran": get_settings().aktiv_miljo() or "development",
         "tenant_id": tenant_id,
         "tenant_slug": str(tenant.get("slug") or ""),
         "typ": typ,
         "poster": poster,
-    }
+    })
 
 
 # -- Avsändarsidan (development, masternyckel) ---------------------------------
@@ -176,6 +224,7 @@ async def flytt_kandidater(request: Request, slug: str) -> dict:
     tenant_id = str(tenant["id"])
     mejl = await storage.list_emails(tenant_id, limit=30, is_test=None, inkludera_larm=True)
     korningar = await storage.list_leads_korningar(tenant_id, limit=10)
+    listor = await storage.list_lead_lists(tenant_id, limit=30)
     return {
         "tenant_id": tenant_id,
         "mejl": [
@@ -190,6 +239,14 @@ async def flytt_kandidater(request: Request, slug: str) -> dict:
                 "levererade": (k.get("korning") or {}).get("levererade"),
             }
             for k in korningar
+        ],
+        "listor": [
+            {
+                "id": str(lista["id"]), "titel": lista.get("titel"), "status": lista.get("status"),
+                "kalla": lista.get("kalla"), "is_test": lista.get("is_test"),
+                "rader": lista.get("item_count"), "created_at": lista.get("created_at"),
+            }
+            for lista in listor
         ],
         "flyttade": await storage.list_flytt(tenant_id, limit=50),
     }
@@ -264,7 +321,7 @@ async def flytt_importera(
         paket = json.loads(kropp)
     except ValueError as fel:
         raise HTTPException(status_code=422, detail="Paketet är inte giltig JSON.") from fel
-    if paket.get("version") != 1 or paket.get("typ") not in ("mejl", "korning", "prospekt"):
+    if paket.get("version") != 1 or paket.get("typ") not in ("mejl", "korning", "prospekt", "lista"):
         raise HTTPException(status_code=422, detail="Okänt paketformat.")
     tenant_id = str(paket.get("tenant_id") or "")
     if not tenant_id or not await storage.get_tenant(tenant_id):
@@ -277,6 +334,8 @@ async def flytt_importera(
                 rader.append(await _importera_mejl(storage, tenant_id, post, fran))
             elif paket["typ"] == "prospekt":
                 rader.append(await _importera_prospekt(storage, tenant_id, post, fran))
+            elif paket["typ"] == "lista":
+                rader.append(await _importera_lista(storage, tenant_id, post, fran))
             else:
                 rader.append(await _importera_korning(storage, tenant_id, post, fran))
         except Exception as fel:  # noqa: BLE001 — en rad som faller stoppar inte resten
@@ -338,7 +397,7 @@ async def _importera_prospekt(storage, tenant_id: str, post: dict[str, Any], fra
     skapad = await storage.create_prospect(
         tenant_id, company_name=namn, contact_name=p.get("contact_name"),
         contact_email=p.get("contact_email"),
-        origin=str(p.get("origin") or "import") if p.get("origin") in ("manual", "example", "import", "test", "inkorg", "lista", "iris") else "import",
+        origin=_skarp_origin(p.get("origin")),
         profil=profil,
     )
     # Bedömningen följer med, som i körningsflytten nedan: create_prospect tar
@@ -365,7 +424,7 @@ async def _importera_korning(storage, tenant_id: str, post: dict[str, Any], fran
         skapad = await storage.create_prospect(
             tenant_id, company_name=namn, contact_name=p.get("contact_name"),
             contact_email=p.get("contact_email"),
-            origin=str(p.get("origin") or "import") if p.get("origin") in ("manual", "example", "import", "test", "inkorg", "lista", "iris") else "import",
+            origin=_skarp_origin(p.get("origin")),
             profil=profil,
         )
         # Bedömningen följer med (2026-10-05): create_prospect tar bara
@@ -380,3 +439,52 @@ async def _importera_korning(storage, tenant_id: str, post: dict[str, Any], fran
         korning={**(k.get("korning") or {}), "importerad_fran": fran}, error=k.get("error"), is_test=bool(k.get("is_test")),
     )
     return {"ref_id": post["ref_id"], "resultat": "importerad", "prospekt": nya}
+
+
+async def _importera_lista(storage, tenant_id: str, post: dict[str, Any], fran: str) -> dict[str, Any]:
+    """En leadslista med sina rader. Importeras skarp (is_test = false), se
+    modulens docstring. Finns en lista med samma titel hos kunden är den flyttad."""
+    lista = post.get("lista") or {}
+    titel = str(lista.get("titel") or "").strip()
+    if not titel:
+        return {"ref_id": post.get("ref_id"), "resultat": "fel", "fel": "Listan saknar titel."}
+    befintliga = {str(x.get("titel") or "").strip().casefold() for x in await storage.list_lead_lists(tenant_id, limit=500)}
+    if titel.casefold() in befintliga:
+        return {"ref_id": post.get("ref_id"), "resultat": "redan_flyttad"}
+    sedda = await upptagna.hamta(storage, tenant_id)
+    rader: list[dict[str, Any]] = []
+    upptagna_bort = 0
+    for rad in post.get("rader") or []:
+        if upptagna.upptagen(sedda, rad.get("company_name"), rad.get("orgnr")):
+            upptagna_bort += 1
+            continue
+        sedda |= upptagna.bolagsnycklar([rad])
+        rader.append(rad)
+    icp = lista.get("icp") if isinstance(lista.get("icp"), dict) else {}
+    ny = await storage.create_lead_list(
+        tenant_id,
+        titel=titel,
+        icp=icp,
+        antal=max(1, min(int(lista.get("antal") or len(rader) or 1), 500)),
+        is_test=False,
+        kalla=str(lista.get("kalla") or "sok"),
+        # Källistorna är developments id:n och finns inte i main.
+        kallistor=None,
+        kontaktfilter=lista.get("kontaktfilter"),
+    )
+    for rad in rader:
+        await storage.add_lead_list_item(
+            tenant_id, list_id=ny["id"], **{f: rad.get(f) for f in _LISTRADSFALT if rad.get(f) is not None}
+        )
+    await storage.set_lead_list_status(tenant_id, ny["id"], status=str(lista.get("status") or "klar"))
+    await storage.log_platform_event(
+        level="info",
+        source="admin.flytt",
+        message=f"Lista flyttad från {fran}: {titel} ({len(rader)} rader, {upptagna_bort} redan upptagna).",
+        tenant_id=tenant_id,
+        detail={"fran_lista": post.get("ref_id"), "ny_lista": ny["id"], "importerad_fran": fran},
+    )
+    return {
+        "ref_id": post.get("ref_id"), "resultat": "importerad", "id": ny["id"],
+        "rader": len(rader), "upptagna": upptagna_bort,
+    }

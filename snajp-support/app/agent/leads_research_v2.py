@@ -1153,18 +1153,32 @@ async def run_outreach_draft_v2(
     # för att grinden bara gav en omskrivning före humanizern och humanizern
     # kunde föra tillbaka det. Kvarstår ett fynd skrivs mejlet om och
     # humaniseras igen, högst två varv; humanizern är fortfarande sist.
+    # Varje humaniserad version prövas, och den med minst fynd köas (vid lika
+    # den senaste). Förut köades alltid den sista, och den prövades aldrig:
+    # 60 av 96 köade utkast med kvarvarande fynd hos Snajp (2026-10-15–17)
+    # hade en tidigare version med färre, och omskrivningen förde ibland in
+    # ett nytt mallord ("tar tid från att" hos Moogio, skarpa provet 10-17).
+    def _version(h: dict[str, Any], d: dict[str, Any]) -> dict[str, Any]:
+        return {"subject": h.get("final_subject") or d.get("subject"),
+                "body": h.get("final_body") or d.get("body")}
+
+    slutligt = _version(humanized, draft)
+    kvar = _stilfynd(slutligt, villkor=villkor, produkt=produktnamn, andra=andra_utkast,
+                     bolag=company_name, andra_amnen=andra_amnen)
+    basta, basta_fynd = slutligt, kvar
     for _varv in range(2):
-        slutligt = {"subject": humanized.get("final_subject") or draft.get("subject"),
-                    "body": humanized.get("final_body") or draft.get("body")}
-        kvar = _stilfynd(slutligt, villkor=villkor, produkt=produktnamn, andra=andra_utkast,
-                         bolag=company_name, andra_amnen=andra_amnen)
         if not kvar:
             break
         draft = await skriv_om(slutligt, kvar)
         humanized = await humanisera(draft)
+        slutligt = _version(humanized, draft)
+        kvar = _stilfynd(slutligt, villkor=villkor, produkt=produktnamn, andra=andra_utkast,
+                         bolag=company_name, andra_amnen=andra_amnen)
+        if len(kvar) <= len(basta_fynd):
+            basta, basta_fynd = slutligt, kvar
 
-    subject = strip_markdown(humanized.get("final_subject") or draft.get("subject") or "").strip()
-    body = sign_off(strip_markdown(humanized.get("final_body") or draft.get("body") or ""), tenant_name)
+    subject = strip_markdown(basta.get("subject") or "").strip()
+    body = sign_off(strip_markdown(basta.get("body") or ""), tenant_name)
     # Hälsningen avgörs i kod (leads/tilltal.py): mätningen 2026-10-06 fann ett
     # påhittat förnamn och mallens platshållare i hälsningen.
 

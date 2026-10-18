@@ -1,27 +1,35 @@
 #!/usr/bin/env python3
-"""Tvåvägssynk av körningar och supportärenden mellan development och main.
+"""Synk av körningar och supportärenden mellan development och main.
 
     python scripts/railway_synk.py                    # torrkörning: vad som skulle ändras
-    python scripts/railway_synk.py --apply            # synka (kräver att första synken gjorts)
-    python scripts/railway_synk.py --apply --forsta   # första synken: development vinner
+    python scripts/railway_synk.py --apply            # synka main → development (kräver första synken)
+    python scripts/railway_synk.py --apply --forsta   # första synken: allt åt båda hållen, development vinner
 
-Antons beslut 2026-10-10 (docs/BESLUT.md): alla körningar och supportärenden
-speglas åt båda hållen med det senast ändrade som sanning, utom provkörningar
-(is_test, prospekt med origin 'test'/'example' och allt under dem), som stannar
-i development och flyttas till main med Flytta till main (admin_flytt). Det
-ersätter den nattliga envägsspegeln main → development (railway_seed_dev.py),
-som tömde development varje natt.
+Antons beslut 2026-10-17 (docs/BESLUT.md), som ersätter tvåvägssynken från
+2026-10-10: första synken för över alla körningar från development till main.
+Därefter är main sanningen och speglas till development; körningar gjorda i
+development flyttas aktivt till main med Flytta till main (admin_flytt).
+Provkörningar (is_test, prospekt med origin 'test'/'example' och allt under
+dem) synkas aldrig.
 
 ## Regler per rad (tabellerna i SYNK, nyckeln är primärnyckeln)
 
 * Finns i båda och är lika: inget.
-* Finns i båda och skiljer sig: den med senast `synk_andrad_at` vinner
-  (migration 111). Vid första synken (`--forsta`) vinner development.
-* Finns bara på ena sidan: raderingsloggen (`synk_raderingar`, migration 111)
-  på den andra sidan avgör. Raderades raden där efter att den senast ändrades
-  här, raderas den här också; annars kopieras den dit.
+* Finns i båda och skiljer sig: main vinner (första synken: development).
+* Finns bara i main: kopieras till development.
+* Finns bara i development: står kvar tills den flyttas, utom när main har
+  raderat den (main:s `synk_raderingar`, migration 111), då raderas den.
+  Första synken kopierar den till main.
 * Provkörningar och rader hos en kund som bara finns i en av miljöerna rörs
   aldrig.
+
+## Utskicken
+
+Development skickar inget i det här läget (`mirror_meta.lage = 'envags'`,
+`scheduler.skickas_har`): en spegelrad som development skickade hade fått
+tillbaka main:s status vid nästa synk och kunnat gå ut igen. Första synken
+skriver därför om `godkand_i` från development till main på de köade
+utkasten, så att main skickar dem.
 * Ett inkommande mejl som bara finns i main men vars provider_message_id redan
   finns i development (båda miljöerna läste samma brevlåda före synken)
   kopieras inte: development har redan mejlet.
@@ -42,7 +50,6 @@ unikt villkor rapporteras och hoppas över, resten går igenom.
 from __future__ import annotations
 
 import argparse
-import json
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -114,8 +121,10 @@ def nyckeluttryck(kolumner: list[str]) -> str:
 
 
 def rader(cur, tabell: str, kolumner: list[str], tenants: list[str]) -> dict[str, dict]:
-    """Nyckel → {andrad, hash, rad} för de rader som får synkas. Saknas
-    synk_andrad_at (migration 111 inte körd, bara i torrkörning) blir tiden null."""
+    """Nyckel → {andrad, hash, pmid} för de rader som får synkas. Själva raden
+    hämtas först när den skrivs (skriv): alla körningar med spår på en gång
+    tog slut på minnet 2026-10-17. Saknas synk_andrad_at (migration 111 inte
+    körd, bara i torrkörning) blir tiden null."""
     cur.execute("select to_regclass('public.' || %s) is not null", (tabell,))
     if not cur.fetchone()[0]:
         return {}  # bara i torrkörning: skrivning kräver samma schema (kontrollera)
@@ -126,12 +135,12 @@ def rader(cur, tabell: str, kolumner: list[str], tenants: list[str]) -> dict[str
     andrad = "x.synk_andrad_at" if cur.fetchone()[0] else "null::timestamptz"
     cur.execute(
         f"""select {nyckeluttryck(kolumner)}, {andrad},
-                   md5((to_jsonb(x) - 'synk_andrad_at')::text), to_jsonb(x)
+                   md5((to_jsonb(x) - 'synk_andrad_at')::text), to_jsonb(x)->>'provider_message_id'
               from public.{tabell} x
              where x.tenant_id = any(%s::uuid[]) and not coalesce(({SYNK[tabell]}), false)""",
         (tenants,),
     )
-    return {k: {"andrad": a, "hash": h, "rad": r} for k, a, h, r in cur.fetchall()}
+    return {k: {"andrad": a, "hash": h, "pmid": pm} for k, a, h, pm in cur.fetchall()}
 
 
 def raderingar(cur, tabell: str) -> dict[str, datetime]:
@@ -143,56 +152,59 @@ def raderingar(cur, tabell: str) -> dict[str, datetime]:
 
 
 def planera(
-    dev: dict[str, dict], main: dict[str, dict], rad_dev: dict[str, datetime], rad_main: dict[str, datetime],
-    *, forsta: bool,
+    dev: dict[str, dict], main: dict[str, dict], rad_main: dict[str, datetime], *, forsta: bool,
 ) -> dict[str, list]:
-    """Ren funktion: vad som ska skrivas och raderas i varje miljö."""
+    """Ren funktion: nycklarna som ska skrivas och raderas i varje miljö.
+    Main skrivs bara av första synken; därefter är main sanningen."""
     plan: dict[str, list] = {"till_main": [], "till_dev": [], "radera_main": [], "radera_dev": []}
     for k in dev.keys() | main.keys():
         d, m = dev.get(k), main.get(k)
         if d and m:
-            if d["hash"] == m["hash"]:
-                continue
-            if forsta or (d["andrad"] or datetime.min.replace(tzinfo=timezone.utc)) >= (
-                m["andrad"] or datetime.min.replace(tzinfo=timezone.utc)
-            ):
-                plan["till_main"].append(d["rad"])
-            else:
-                plan["till_dev"].append(m["rad"])
+            if d["hash"] != m["hash"]:
+                plan["till_main" if forsta else "till_dev"].append(k)
         elif d:
-            raderad = rad_main.get(k)
-            if raderad and not forsta and (d["andrad"] is None or raderad > d["andrad"]):
+            if forsta:
+                plan["till_main"].append(k)
+            elif k in rad_main:
                 plan["radera_dev"].append(k)
-            else:
-                plan["till_main"].append(d["rad"])
+            # annars: en körning gjord i development, flyttas med Flytta till main
         else:
-            raderad = rad_dev.get(k)
-            if raderad and not forsta and (m["andrad"] is None or raderad > m["andrad"]):
-                plan["radera_main"].append(k)
-            else:
-                plan["till_dev"].append(m["rad"])
+            plan["till_dev"].append(k)
     return plan
 
 
-def skriv(cur, tabell: str, kolumner: list[str], nya: list[dict], radera: list[str]) -> list[str]:
-    """Raderar och skriver i replica-läge, en savepoint per rad. Returnerar felen."""
+def skriv(kalla, cur, tabell: str, kolumner: list[str], nycklar: list[str], radera: list[str]) -> list[str]:
+    """Raderar och skriver i replica-läge, en savepoint per rad; raderna hämtas
+    ur källan hundra åt gången. Returnerar felen."""
     fel: list[str] = []
-    villkor = f"{nyckeluttryck(kolumner)} = %s"
+    nyckel = nyckeluttryck(kolumner)
+    # Genererade kolumner (prospects.foretagsnyckel) räknas fram av målet och
+    # får inte skrivas; 855 prospekt föll på det 2026-10-17.
+    cur.execute(
+        "select string_agg(quote_ident(attname), ', ' order by attnum) from pg_attribute "
+        "where attrelid = ('public.' || %s)::regclass and attnum > 0 and not attisdropped and attgenerated = ''",
+        (tabell,),
+    )
+    kol = cur.fetchone()[0]
     for k in radera:
-        cur.execute(f"delete from public.{tabell} x where {villkor}", (k,))
-    for rad in nya:
-        k = "|".join(str(rad.get(c)) for c in kolumner)
-        cur.execute("savepoint rad")
-        try:
-            cur.execute(f"delete from public.{tabell} x where {villkor}", (k,))
-            cur.execute(
-                f"insert into public.{tabell} select * from jsonb_populate_record(null::public.{tabell}, %s::jsonb)",
-                (json.dumps(rad, default=str),),
-            )
-            cur.execute("release savepoint rad")
-        except psycopg2.Error as e:
-            cur.execute("rollback to savepoint rad")
-            fel.append(f"{tabell} {k}: {str(e).splitlines()[0]}")
+        cur.execute(f"delete from public.{tabell} x where {nyckel} = %s", (k,))
+    for i in range(0, len(nycklar), 100):
+        kalla.execute(
+            f"select {nyckel}, to_jsonb(x)::text from public.{tabell} x where {nyckel} = any(%s)",
+            (nycklar[i:i + 100],),
+        )
+        for k, rad in kalla.fetchall():
+            cur.execute("savepoint rad")
+            try:
+                cur.execute(f"delete from public.{tabell} x where {nyckel} = %s", (k,))
+                cur.execute(
+                    f"insert into public.{tabell} ({kol}) select {kol} from jsonb_populate_record(null::public.{tabell}, %s::jsonb)",
+                    (rad,),
+                )
+                cur.execute("release savepoint rad")
+            except psycopg2.Error as e:
+                cur.execute("rollback to savepoint rad")
+                fel.append(f"{tabell} {k}: {str(e).splitlines()[0]}")
     return fel
 
 
@@ -249,10 +261,13 @@ def main() -> int:
     dc.execute("select to_jsonb(m) from public.mirror_meta m")
     meta = dc.fetchone()[0]
     lage, synkad = meta.get("lage"), meta.get("synkad_at")
-    if args.apply and lage != "tvavags" and not args.forsta:
+    if args.apply and lage != "envags" and not args.forsta:
         sys.exit("AVBRYT: första synken är inte gjord. Kör den för hand med --apply --forsta.")
-    forsta = args.forsta or lage != "tvavags"
-    print(f"läge: {'första synken (development vinner)' if forsta else 'tvåvägs'}; senast synkad: {synkad or 'aldrig'}")
+    if args.apply and args.forsta and lage == "envags":
+        sys.exit("AVBRYT: första synken är redan gjord; main är sanningen. Kör utan --forsta.")
+    forsta = args.forsta or lage != "envags"
+    print(f"läge: {'första synken (development vinner)' if forsta else 'main → development'}; "
+          f"senast synkad: {synkad or 'aldrig'}")
 
     dc.execute("select id::text from public.ss_tenants")
     mc.execute("select id::text from public.ss_tenants")
@@ -267,10 +282,9 @@ def main() -> int:
     for t in SYNK:
         kol = pk(dc, t)
         d, m = rader(dc, t, kol, gemensamma), rader(mc, t, kol, gemensamma)
-        plan = planera(d, m, raderingar(dc, t), raderingar(mc, t), forsta=forsta)
+        plan = planera(d, m, raderingar(mc, t), forsta=forsta)
         if t == "ss_emails":
-            plan["till_dev"] = [r for r in plan["till_dev"]
-                                if not (r.get("provider_message_id") in mejl_dev and r["id"] not in d)]
+            plan["till_dev"] = [k for k in plan["till_dev"] if not (m[k]["pmid"] in mejl_dev and k not in d)]
         planer[t] = (kol, plan)
         if any(plan.values()):
             print(f"{t:26} {len(plan['till_main']):>7} {len(plan['till_dev']):>7} "
@@ -290,11 +304,24 @@ def main() -> int:
     for c in (dc, mc):
         c.execute("set session_replication_role = replica")
     for t, (kol, plan) in planer.items():
-        fel += skriv(mc, t, kol, plan["till_main"], plan["radera_main"])
-        fel += skriv(dc, t, kol, plan["till_dev"], plan["radera_dev"])
+        fel += skriv(dc, mc, t, kol, plan["till_main"], plan["radera_main"])
+        fel += skriv(mc, dc, t, kol, plan["till_dev"], plan["radera_dev"])
+        print(f"skrivet: {t}", flush=True)
+    if forsta:
+        # Köade utkast godkända i development skickas av main från och med nu
+        # (lika i båda miljöerna, så raderna förblir synkade).
+        for c in (dc, mc):
+            c.execute(
+                f"""update public.send_queue x
+                       set gate_checks = jsonb_set(x.gate_checks, '{{godkand_i}}', '"main"')
+                     where x.gate_checks->>'godkand_i' = 'development'
+                       and x.tenant_id = any(%s::uuid[]) and not coalesce(({SYNK['send_queue']}), false)""",
+                (gemensamma,),
+            )
+            print(f"godkand_i → main på {c.rowcount} köade utkast i {'development' if c is dc else 'main'}")
     for c in (dc, mc):
         c.execute("set session_replication_role = origin")
-    dc.execute("update public.mirror_meta set lage = 'tvavags', synkad_at = now()")
+    dc.execute("update public.mirror_meta set lage = 'envags', synkad_at = now()")
     mn.commit()
     dev.commit()
     for f in fel:

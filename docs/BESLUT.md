@@ -9,6 +9,40 @@ möjligt), vad det betyder i koden.
 
 ---
 
+## 2026-10-17 (Anton) — Main blir sanningen efter första synken; körningar i development flyttas aktivt
+
+**Beslut.** Alla körningar från development följer med till main, utom de som
+är märkta som testkörningar. "Datan måste speglas sömlöst. När vi fått över
+alla körningar från development blir main sanningen och synkar till
+development, och körningar gjorda i development behöver flyttas aktivt enligt
+tidigare principer." Ersätter tvåvägssynken (2026-10-10, nedan).
+
+**Resonemang (Anton).** Se citatet. Development går tillbaka till att vara en
+spegel av produktionen, med den skillnaden att körningarna som gjorts där
+fram till releasen följer med en gång.
+
+**I koden.** `scripts/railway_synk.py`: `--apply --forsta` för över allt
+åt båda hållen med development som vinnare (som förut) och sätter
+`mirror_meta.lage = 'envags'`. Därefter skriver synken bara till development:
+main vinner varje skillnad, raderingar i main slår igenom, och rader som bara
+finns i development står kvar tills de flyttas med Byt kund → Flytta till main
+(`admin_flytt`). Provkörningar synkas aldrig.
+
+*Agentens tolkning, att pröva (Anton):* development skickar inga utskick i det
+här läget (`scheduler.skickas_har`, `utskick_bara_i_main`). En spegelrad som
+development skickade hade fått tillbaka main:s status vid nästa synk och kunnat
+gå ut en gång till. "Godkänn och skicka" i development svarar att utskicket görs
+i main efter en flytt. Det ersätter "det måste gå att skicka utskick från
+development också" (2026-10-10). Första synken skriver om `godkand_i` från
+development till main på de köade utkasten (193 st., godkända 2026-10-12–16),
+så att main skickar dem när sändfönstret öppnar måndag 08:00. Provmejl
+påverkas inte.
+
+*Att veta (agenten):* första försöket fyllde development-databasens volym
+(500 MB, skapad på provplanen) när synken kopierade tabellerna, och Postgres
+kraschade. Volymerna i båda miljöerna är nu 5 000 MB (Hobby-planens tak), utan
+kostnad utöver använt utrymme.
+
 ## 2026-10-17 (Sebbe) — Duo i fokus, ingen Trio; Kvittohanteraren blir tillägg till Support
 
 **Beslut.** "Ta bort den från marknadssidorna och priserna också. Det ska vara
@@ -61,6 +95,31 @@ uppföljningen till Investbygg fick ordet "kvittoredovisning" borttaget och
 godkändes. Main hade inga kvittoutkast. Släpps igen genom att tömma listan och
 lägga tillbaka produkten i `snajp_malgrupp.py`. Marknadssidorna, priserna och
 supportchattens kunskapsbas säljer den fortfarande; de är inte ändrade.
+
+Tillägg 2026-10-18: uppföljningssvepet i main skrev ändå nya
+kvittouppföljningar (fyra på två dygn), eftersom det följer upp tråden och
+modellen läser det tidigare mejlet. En tråd vars utgående mejl nämner en
+vilande produkt följs inte längre upp (`app/leads/vilande.py`, kontrollen i
+`follow_up_generator._en_uppfoljning` före modellanropen).
+
+## 2026-10-17 (Sebbe) — Utkastkedjan köar den renaste versionen, inte den sista
+
+**Beslut.** "Ja, kolla varför mallorden överlever grinden." Utredningen gav
+rotorsaken, och fixen är att varje humaniserad version prövas av stilgrinden
+och att den med minst fynd köas.
+
+**Resonemang.** Skarpa provet på fem Snajp-leads köade "kräver fullt fokus"
+(Nordic Express) och "tar tid från att" (Moogio). Stegloggen visade att båda
+gått alla omskrivningsvarv och att frasen kom in i en omskrivning eller i den
+sista humaniseringen, som aldrig prövades. Över 250 körningar: 194 gick alla
+varv, 96 köades med kvarvarande fynd, och 60 av dem hade en tidigare version
+med färre. En omskrivning kan alltså göra mejlet sämre, och kedjan behöll
+ändå den sämre.
+
+**I koden.** `run_outreach_draft_v2`: urvalet bland de humaniserade
+versionerna. Kvar: omskrivningen själv skriver in nya mallord (45 av 250 har
+fynd även med urvalet), och det är en promptfråga för nästa runda enligt
+referensens avsnitt 8.
 
 ## 2026-10-17 (Sebbe) — Skapa om utkast skriver bara utkastet, ur sparad research
 
@@ -301,6 +360,8 @@ information från en näringsidkare. Ett utskick utan org.nr går nu ut; regeln
 kräver det inte längre.
 
 ## 2026-10-10 (Anton) — Tvåvägssynk mellan development och main
+
+*Ersatt 2026-10-17: main är sanningen efter första synken (se ovan).*
 
 **Beslut.** Slå på och testa utskicken även i main. Allt speglas utom
 specifika testkörningar, markerade som Provkörningar, som går att flytta över
