@@ -222,3 +222,80 @@ async def test_enskilt_lead_behaller_bedomningen(client):
     ny = await storage.get_prospect(DEFAULT_TENANT_ID, ut.json()["rader"][0]["id"])
     assert (ny["niva"], ny["score_total"], ny["motivering"]) == ("A", 88, "Nyöppnad butik.")
     assert ny["webbrevision"] == {"modernitet": 2}
+
+
+async def test_lista_flyttas_skarp_med_raderna(client):
+    """Sebbe 2026-10-18: Alunix listor saknades i main, eftersom allt som görs
+    när admin testar som kund märks som test och synken aldrig för över test.
+    typ='lista' flyttar listan med raderna och gör den skarp i main."""
+    storage = app.state.storage
+    lista = await storage.create_lead_list(
+        DEFAULT_TENANT_ID, titel="Webb Göteborg", icp={"ort": "Göteborg"}, antal=2, is_test=True, kalla="kombinerad",
+    )
+    await storage.add_lead_list_item(
+        DEFAULT_TENANT_ID, list_id=lista["id"], company_name="Listbolaget AB", website="listbolaget.se",
+        webbniva="akut", webbrevision={"modernitet": 2}, lan="Västra Götaland",
+    )
+    await storage.add_lead_list_item(DEFAULT_TENANT_ID, list_id=lista["id"], company_name="Andra Listbolaget AB")
+    await storage.set_lead_list_status(DEFAULT_TENANT_ID, lista["id"], status="klar")
+
+    kandidater = client.get(f"/api/admin/flytt/kandidater?slug={_slug(client)}", headers=_master(client)).json()
+    assert any(rad["id"] == lista["id"] for rad in kandidater["listor"])
+
+    paket = client.post("/api/admin/flytt/paket", headers=_master(client),
+                        json={"slug": _slug(client), "typ": "lista", "ids": [lista["id"]]}).json()["paket"]
+    assert len(paket["poster"][0]["rader"]) == 2
+    # Samma lager: titeln finns redan → redan_flyttad.
+    kropp = json.dumps(paket, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    ut = client.post("/api/admin/flytt/importera", content=kropp, headers={
+        "Content-Type": "application/json", admin_flytt.SIGNATURHUVUD: admin_flytt.signera(paket, get_settings().flytt_nyckel)})
+    assert ut.json()["rader"][0]["resultat"] == "redan_flyttad"
+
+    # Ny titel och nya bolag (källans bolag är upptagna hos samma kund).
+    paket["poster"][0]["lista"]["titel"] = "Webb Göteborg (main)"
+    for i, rad in enumerate(paket["poster"][0]["rader"]):
+        rad["company_name"] = f"Mainbolag {i} AB"
+    kropp = json.dumps(paket, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    ut = client.post("/api/admin/flytt/importera", content=kropp, headers={
+        "Content-Type": "application/json", admin_flytt.SIGNATURHUVUD: admin_flytt.signera(paket, get_settings().flytt_nyckel)})
+    rad = ut.json()["rader"][0]
+    assert rad["resultat"] == "importerad" and rad["rader"] == 2, ut.text
+    ny = await storage.get_lead_list(DEFAULT_TENANT_ID, rad["id"])
+    assert ny["is_test"] is False and ny["status"] == "klar" and ny["kalla"] == "kombinerad"
+    raderna = await storage.list_lead_list_items(DEFAULT_TENANT_ID, rad["id"])
+    forsta = next(r for r in raderna if r["company_name"] == "Mainbolag 0 AB")
+    # Samma kund: webbplatsbedömningen följer med.
+    assert forsta["webbniva"] == "akut" and forsta["webbrevision"] == {"modernitet": 2}
+
+
+async def test_testbolag_blir_skarpt_i_main(client):
+    """Ett prospekt med origin 'test' (skapat när admin testar som kund) ska
+    inte landa osynligt i main: flytten är valet att spara det på riktigt."""
+    storage = app.state.storage
+    p = await storage.create_prospect(DEFAULT_TENANT_ID, company_name="Provbolaget AB", origin="test")
+    paket = client.post("/api/admin/flytt/paket", headers=_master(client),
+                        json={"slug": _slug(client), "typ": "prospekt", "ids": [p["id"]]}).json()["paket"]
+    paket["poster"][0]["prospekt"][0]["company_name"] = "Provbolaget Main AB"
+    kropp = json.dumps(paket, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    ut = client.post("/api/admin/flytt/importera", content=kropp, headers={
+        "Content-Type": "application/json", admin_flytt.SIGNATURHUVUD: admin_flytt.signera(paket, get_settings().flytt_nyckel)})
+    ny = await storage.get_prospect(DEFAULT_TENANT_ID, ut.json()["rader"][0]["id"])
+    assert ny["origin"] == "import"
+
+
+async def test_paketet_tal_decimal_och_datum(client):
+    """Flytten föll med 500 för Alunix bolag 2026-10-18: ett Decimal-fält ur
+    databasen (omsättning) gick inte att serialisera i signeringen."""
+    from datetime import datetime, timezone
+    from decimal import Decimal
+
+    storage = app.state.storage
+    p = await storage.create_prospect(
+        DEFAULT_TENANT_ID, company_name="Decimalbolaget AB", origin="test",
+        profil={"omsattning": Decimal("12500.50"), "anstallda": Decimal("7")},
+    )
+    tenant = next(t for t in await storage.list_tenants() if str(t["id"]) == DEFAULT_TENANT_ID)
+    paket = await admin_flytt._bygg_paket(storage, tenant, "prospekt", [p["id"]])
+    paket["poster"][0]["prospekt"][0]["skapad"] = datetime.now(timezone.utc).isoformat()
+    assert admin_flytt._kanonisk(paket)  # kastar inte
+    assert admin_flytt.signera(paket, get_settings().flytt_nyckel)
