@@ -71,8 +71,11 @@ Sedan tre beställningar till, alla godkända ("Allt är jättebra nu"). Allt ä
   hooken), kraftgolvet i `design/SKILL.md`, `scroll/devices.md`, vision § 5, `DESIGN.md` här.
 - **Pushat och uppdaterat:** valvet (`27b8965`, var 1041 före och 12 efter GitHub; sammanslaget
   utan konflikt), super-intelligence `design-system-v2` (`d2932db`), anti-slop-design
-  `design-rework-v3` (`d5b3065`, ny gren på GitHub). Plugin anti-slop-design 1.2.0 → 1.2.2,
-  super-intelligence till `d2932db`; kräver omstart av Claude Code.
+  `design-rework-v3` (`f1b81dd`, ny gren på GitHub, ~4,2 GB i fyra bitar under 2 GB: allt
+  ocommittat i sju grupperade commits plus den andra sessionens hookfix
+  `fix/unarmed-stop-advisory-dedup` mergad, tests/hooks 10 passed). Plugin anti-slop-design
+  1.2.0 → 1.2.3, super-intelligence till `d2932db` på användar- och projektnivå; kräver
+  omstart av Claude Code. Logg: `~/.agents/logs/anti-slop-design-push-2026-10-20.log`.
 
 **Nytt i avsnitt 3, återstår:**
 - anti-slop-design `main` på GitHub ligger 45 commits efter `design-rework-v3` (ren
@@ -80,7 +83,10 @@ Sedan tre beställningar till, alla godkända ("Allt är jättebra nu"). Allt ä
 - Valvets `VaultAutoSync` hoppar över varje pull: 87 ändrade spårade filer utanför manifestet
   (`~/.agents/logs/vault-auto-sync.jsonl`). Det är därför valvet låg 1041 commits före. Någon
   måste besluta om de 87 filerna.
-- Ocommittat i anti-slop-design, inte mitt: `.claude/launch.json`, `scroll_verify_out/00.png`,
-  `.agent-chorus/*`.
+- Två nästlade git-repon i anti-slop-design står utanför pushen: `deploy/alunix-v3g` (eget
+  repo med remote `oloflun/alunix-v3g`, kopplat till Vercel-länken för alunix-site) och
+  `.claude/worktrees/agent-ad7cf06e8c2d70e4e` (gammal subagent-worktree, spårad som gitlänk).
+  Anton beslutar submodule eller `.gitignore`. `tests/hooks/test_reference_floor.py` faller på
+  basen ("E must allow") oberoende av fixen.
 - Den publika spegeln (`export-to-public.mjs`) är inte exporterad.
 - Animations- och tillgänglighetsgranskningen av startsidan är fortfarande inte körda.
