@@ -42,6 +42,21 @@ None this session.
 ## Current State After This Session
 Startsidans ändringar ligger på `development` (`4a4e5b6`) och väntar på Antons dom. Disken blockerar allt visuellt arbete tills Anton frigör utrymme.
 
+## Tillägg 2026-10-20 (sessionen fortsatte efter avslutet)
+Anton godkände avsnittet ovan och beställde tre varv till, alla godkända och pushade
+(`6c478d1`, `57914a6`, `79d93cb`, `b2cb55b`): hjälterubriken skrivs fram med betoning på ett ord,
+bara 7:an i färg, fotona står hela, dashboard-sektionen borttagen, Om oss per produkt, rutorna
+större på desktop, nyckeltalen räknas fram först helt i bild. Därefter sparades alla moment som
+åtta skills i `~/.agents/skills/` med domarna som F-031–F-039 i designkatalogens FEEDBACK.md och
+routingregler i designsystemet. Valvet, super-intelligence och anti-slop-design pushades;
+pluginen anti-slop-design 1.2.2 och super-intelligence `d2932db` installerades (omstart krävs).
+Detaljer: `HANDOFF-2026-10-19-STARTSIDAN.md` § 6.
+
+Beslut: domar sparas som skill + F-post + routingregel samma session (minne
+`antons-domar-som-skills`). Öppet: anti-slop-design `main` 45 commits efter grenen;
+VaultAutoSync hoppar över pull på grund av 87 ändrade spårade filer; publika spegeln inte
+exporterad; animations- och a11y-granskningen av startsidan inte körda.
+
 <!-- session-state
 date: 2026-10-19
 type: design
@@ -61,5 +76,5 @@ handoffs_pending: []
 priority_changes: false
 status_updated: false
 goals_updated: "skipped -- startsidans polering, malbilden orord"
-next_session_focus: "Antons dom pa startsidan pa development; sedan /demo-motiveringarna och sprakpassen nar disken ar frigjord"
+next_session_focus: "Antons ja till anti-slop-design main-push och de 87 valvfilerna; animations- och a11y-granskning av startsidan; /demo-motiveringarna"
 session-state -->

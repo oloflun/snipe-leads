@@ -42,3 +42,45 @@ Antons beställning (ordagrant i avsnitt 5). Commits `125cc38` och `4a4e5b6`.
 
 - "Testa göra skuggan i heron svagare, eller skippa den helt. Gör även animeringarna för rutorna jämnare och mjukare, och gör studsseffekten/tillbakafjädringen tydligare. Skapa även effekten att texten skrivs live, för alla omgenereringar/knappval också, ta även bort alla tekniska referenser, endast korta motiveringar."
 - "Pusha ändringarna så jag inspektera"
+
+## 6. Tillägg 2026-10-20 (kvällen 2026-10-19 och natten): Antons dom och tre varv till
+
+**Antons dom på avsnitt 2:** "Det börjar se väldigt bra ut, ändringarna kom in precis som jag ville."
+Sedan tre beställningar till, alla godkända ("Allt är jättebra nu"). Allt är pushat till
+`development`: `6c478d1`, `57914a6`, `79d93cb` (kod) och `b2cb55b` (DESIGN.md).
+
+- **Hjälten:** bara 7:an i färg på /support; rubriken bytt till "Era kundärenden hanterade,
+  24/7" och "Möt Iris, din säljare som aldrig *sover*"; rubriken skrivs fram med paus före det
+  betonade ordet (`HeroText` i `LiveText.tsx`). Accenten är `text-ochre`, den mörkare
+  `text-warning` försvann mot solnedgången. En reduced-motion-spärr jag först lagt in togs bort
+  (F-011).
+- **Fotona står hela:** ingen clip-avtäckning på plattor och band, bara parallaxen.
+- **Dashboard-sektionen borttagen** (`DashboardIsar.tsx`, rörelse och CSS): "skiljer sig från de
+  konstruerade rutorna". `public/produkt/oversikt*.webp` ligger kvar oanvända.
+- **Om oss på /support** utan prospektering: `varforSupport` i `copy.ts`.
+- **Rutorna större på desktop:** `.case-zoom` 1,12 från 1280 px, 1,25 från 1536 px.
+- **Nyckeltalen räknas fram** (`RaknaUpp` i `AgentResultat.tsx`). Första versionen
+  (threshold 0,6, 1,6 s) var klar innan raden syntes; godkänd version startar först helt i bild
+  ovanför nedersta femtedelen, 2,6 s, kvadratisk. Min kontroll hade godkänt den första: jag
+  hoppade till raden i stället för att komma nedifrån.
+- **Skills:** åtta skills i `~/.agents/skills/` bär varje beställning, vad som föll, ändringen
+  och det godkända läget: `spring-arrival`, `live-text-reveal`, `count-up-in-view`,
+  `hero-on-photo`, `photo-stands-whole`, `showcase-surfaces`, `showcase-copy-scope`,
+  `motion-verification-preview`. Designsystemet pekar på dem: FEEDBACK.md F-031–F-039
+  (`anti-slop-design/design-catalogue`), routingregler i `component-routing.md` (röktestade mot
+  hooken), kraftgolvet i `design/SKILL.md`, `scroll/devices.md`, vision § 5, `DESIGN.md` här.
+- **Pushat och uppdaterat:** valvet (`27b8965`, var 1041 före och 12 efter GitHub; sammanslaget
+  utan konflikt), super-intelligence `design-system-v2` (`d2932db`), anti-slop-design
+  `design-rework-v3` (`d5b3065`, ny gren på GitHub). Plugin anti-slop-design 1.2.0 → 1.2.2,
+  super-intelligence till `d2932db`; kräver omstart av Claude Code.
+
+**Nytt i avsnitt 3, återstår:**
+- anti-slop-design `main` på GitHub ligger 45 commits efter `design-rework-v3` (ren
+  fast-forward). Pushas bara med Antons ja.
+- Valvets `VaultAutoSync` hoppar över varje pull: 87 ändrade spårade filer utanför manifestet
+  (`~/.agents/logs/vault-auto-sync.jsonl`). Det är därför valvet låg 1041 commits före. Någon
+  måste besluta om de 87 filerna.
+- Ocommittat i anti-slop-design, inte mitt: `.claude/launch.json`, `scroll_verify_out/00.png`,
+  `.agent-chorus/*`.
+- Den publika spegeln (`export-to-public.mjs`) är inte exporterad.
+- Animations- och tillgänglighetsgranskningen av startsidan är fortfarande inte körda.
