@@ -9,6 +9,16 @@ möjligt), vad det betyder i koden.
 
 ---
 
+## 2026-10-19 (Anton) — Nyckeltalen räknas fram när man kommer dit
+
+**Beslut.** "Kan du göra så att dessa siffror 'genereras' i realtid när man
+kommer dit?" (resultatvyns nyckeltal på /leads och /support).
+
+**I koden.** `RaknaUpp` i `components/marketing/AgentResultat.tsx` räknar
+varje tal från noll till sitt värde på 1,6 s när raden syns, ett tal i taget
+med 0,16 s mellan. Enheten och decimalerna följer med ("71 %", "4,6"), och
+hela värdet håller bredden så att etiketterna står still.
+
 ## 2026-10-19 (Anton) — Hjälten skrivs fram, bilderna står hela, översikten bort
 
 **Beslut.** "Hela herotexten för support är i färg, gör så att enbart 7:an är

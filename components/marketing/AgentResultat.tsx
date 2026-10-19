@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
 import { AlertTriangle, ArrowUpRight, CheckCircle2 } from "lucide-react";
 import { useLocale } from "@/lib/i18n";
 import type { Localized } from "@/lib/i18n";
@@ -48,15 +49,64 @@ function Accent({ text: value }: Readonly<{ text: string }>) {
   );
 }
 
+/**
+ * Ett tal som räknas upp från noll när det kommer in i bild, som om det
+ * räknades fram just då (Anton 2026-10-19). Talet och enheten läses ur
+ * strängen ("62 %", "26 s", "4,6"); ett värde som inte börjar med en siffra
+ * står som det är. Hela värdet ligger osynligt under och håller bredden, så
+ * att etiketten inte hoppar när siffrorna blir fler. Skärmläsaren får värdet
+ * direkt. Utan JS står talet färdigt.
+ */
+function RaknaUpp({ varde, ordning }: Readonly<{ varde: string; ordning: number }>) {
+  const ref = useRef<HTMLSpanElement | null>(null);
+  const [visat, setVisat] = useState(varde);
+
+  useEffect(() => {
+    // ponytail: inga tusentalsavgränsare; StatRads tal har inga
+    const m = /^(\d+)(?:,(\d+))?(.*)$/.exec(varde);
+    const el = ref.current;
+    if (!m || !el) return;
+    const decimaler = m[2]?.length ?? 0;
+    const mal = Number(`${m[1]}.${m[2] ?? 0}`);
+    const visa = (v: number) => setVisat(v.toFixed(decimaler).replace(".", ",") + m[3]);
+    visa(0);
+    let id = 0;
+    const obs = new IntersectionObserver(([e]) => {
+      if (!e?.isIntersecting) return;
+      obs.disconnect();
+      const start = performance.now() + 250 + ordning * 160;
+      const tick = (nu: number) => {
+        const t = Math.min(1, Math.max(0, (nu - start) / 1600));
+        visa(mal * (1 - (1 - t) ** 3));
+        if (t < 1) id = requestAnimationFrame(tick);
+      };
+      id = requestAnimationFrame(tick);
+    }, { threshold: 0.6 });
+    obs.observe(el);
+    return () => {
+      obs.disconnect();
+      cancelAnimationFrame(id);
+    };
+  }, [varde, ordning]);
+
+  return (
+    <span ref={ref} className="relative inline-block">
+      <span className="sr-only">{varde}</span>
+      <span aria-hidden="true" className="invisible">{varde}</span>
+      <span aria-hidden="true" className="absolute inset-0">{visat}</span>
+    </span>
+  );
+}
+
 /** Nyckeltalsraden: stora tabulära tal i Fraunces, ochre — DESIGN.md:s "ochre at display scale". */
 function StatRad({ stats }: Readonly<{ stats: Stat[] }>) {
   const { text } = useLocale();
   return (
     <dl className="grid grid-cols-2 gap-x-6 gap-y-6 border-y border-ink/15 py-6 sm:grid-cols-4">
-      {stats.map((stat) => (
+      {stats.map((stat, i) => (
         <div key={stat.etikett.sv} className="min-w-0">
           <dd className="numeral text-[clamp(1.75rem,3.2vw,2.75rem)] font-semibold text-warning">
-            {stat.varde}
+            <RaknaUpp varde={stat.varde} ordning={i} />
           </dd>
           <dt className="mt-2 text-[0.8125rem] leading-snug text-ink-muted">{text(stat.etikett)}</dt>
         </div>
