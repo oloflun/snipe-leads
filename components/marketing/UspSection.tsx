@@ -129,7 +129,8 @@ export function UspSection({ product }: Readonly<{ product: ProductKey }>) {
           den här sektionen är den första som står i soluppgången under
           hjälten. Linjen ritas av rörelsen (data-mo="rule"), inte av border. */}
       <i aria-hidden="true" data-mo="rule" className="mo-rule" />
-      <div className="mx-auto max-w-[1480px] px-6 py-20 md:px-10 md:py-28">
+      {/* Kort botten: produktytorna direkt nedanför visar punkterna (ProduktBilder). */}
+      <div className="mx-auto max-w-[1480px] px-6 pb-12 pt-20 md:px-10 md:pb-16 md:pt-28">
         {/* key per produkt och språk: rubriken radspaltas av SplitText
             (useLandingMotion), och React får inte diffa inuti ett element
             vars barn flyttats, utan byter hela noden. */}

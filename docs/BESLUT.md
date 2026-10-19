@@ -9,6 +9,35 @@ möjligt), vad det betyder i koden.
 
 ---
 
+## 2026-10-19 (Anton) — Startsidan: ytor glider in på en fjäder, två upprepande sektioner bort
+
+**Beslut.** "Jag vill att själva rutorna rör sig in mjukt på skärmen och att
+enbart den beskrivande texten revealas istället, en ruta i taget, inte båda
+samtidigt … mjuk och glida in stoppa och studsa tillbaka lite, men väldigt
+subtilt, tänk apple." Samma för den stora översikten. "Ta bort sektionen
+längre ned med i princip samma punkter, samma sak med den andra sektionen om
+Snajp, låt byggt i Göteborg-sektionen vara kvar." Rubriken "Ni ser
+resultaten, inte maskineriet." blir "Förvärmda leads, levererade till er."
+Hjältens ingress ljusas upp, och mellanrummet mellan löftet och första rutan
+stängs.
+
+**Resonemang (Anton).** Rutorna var "laggiga och vibrerar vid scroll, särskilt
+om man scrollar fram och tillbaka", och en tonad avtäckning läste inte som att
+något kom in på skärmen. "Tre steg" upprepade löftets punkter direkt under
+hjälten, och "Vilka är vi" upprepade "Byggt i Göteborg". Ingressen var
+"knappt läsbar mot herobilden".
+
+**I koden.** Vibrationen hade en mätbar orsak: `.rise` lade en CSS-transition
+på samma `transform` som GSAP skrubbade varje bildruta. Den skrubbade driften
+och klippningen är borta; i stället `caseEntry` (`useLandingMotion.ts`,
+markup `data-case`/`data-case-box`/`data-case-text`) med Apples fjäder som
+GSAP-ease (`gsap.js: spring(0.75, 0.75)`), som spelar en gång och köar ytorna.
+Sprängskissens linjer räknas ur perspektivet i stället för fyra
+`getBoundingClientRect` per bildruta, och `anticipatePin` är borttagen.
+"Tre steg" och "Vilka är vi" är borttagna ur `LandingPhoto.tsx` och copyn
+(`steps`, `stepsHeading`, `vilka*`); länken "Läs mer om oss" flyttade till
+Byggt i Göteborg. Regeln står i `DESIGN.md` § Ankomstfjädern.
+
 ## 2026-10-18 (Sebbe) — Körningar på upp till 200 leads, rullbar leadslista och levande lägesrad
 
 **Beslut.** "Ändra så att man kan söka upp till 200 leads … håller lika bra

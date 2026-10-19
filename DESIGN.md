@@ -248,6 +248,27 @@ was confirmed to **fail** against the broken version, 12 per page, before it was
 
 Reduced motion is handled globally and needs no per-component fallback.
 
+### Ankomstfjädern: hur en yta kommer in (Anton 2026-10-19)
+
+Produktytor, showcase-rutor och översikten **tonas aldrig och klipps aldrig fram**. De glider in
+från sin sida, passerar målet en aning och fjädrar tillbaka, och först när ytan landat avtäcks
+den beskrivande texten rad för rad. En yta i taget: nästa väntar tills den förra landat.
+
+```js
+import { spring } from "@/gsap.js";   // Apples fjäder (skillen apple-design § 4)
+spring(0.75, 0.75)                     // dämpning 0.75 ≈ 2,8 % förbi målet, respons 0.75 s, ~1,1 s till vila
+```
+
+- Markup: `data-case` (utlösare och kö-enhet), `data-case-box` + `data-from="left|right|up"`
+  (det som rör sig), `data-case-text` (avtäcks efter landningen). Motorn: `useLandingMotion.ts`,
+  `caseEntry`.
+- Spelar en gång och skrubbas aldrig. Ett skrubbat transform på en yta, eller en CSS-transition
+  på samma `transform` som GSAP skriver, får ytan att darra när man skrollar fram och tillbaka
+  (det var felet 2026-10-18).
+- Ytan blir aldrig osynlig: utan JS står den bara förskjuten tills säkringen spelar den.
+- Studsen hör till själva inglidningen, som bär fart. Menyer, popovers och sådant som bara
+  dyker upp får dämpning 1.0 (ingen studs), enligt apple-design.
+
 ## Honest-proof rule
 
 Binding, and the reason several usual modules are unavailable.

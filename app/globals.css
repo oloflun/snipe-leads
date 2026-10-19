@@ -878,6 +878,26 @@ html.lenis {
    synas helt och sedan döljas när rörelsemodulen laddat, och en klass på
    <html> gav en hydreringsvarning. */
 
+/* Hjältens ingress står på fotot där horisonten är som ljusast (mobil). Helt
+   papper, en tät skugga i bläck för bokstavskanterna och en mjuk oval
+   mörkning bakom blocket som tonar ut åt alla håll, så att den läses som
+   skymning i fotot och inte som en platta. Skuggan ensam gav 2,4:1 mot
+   horisontens ljusaste partier, eftersom den inte når mellan raderna. */
+.landing .hero-lede {
+  position: relative;
+  isolation: isolate;
+  text-shadow: 0 1px 2px oklch(var(--ink) / 0.6), 0 0 12px oklch(var(--ink) / 0.5);
+}
+
+.landing .hero-lede::before {
+  content: "";
+  position: absolute;
+  inset: -2.5rem -3rem;
+  z-index: -1;
+  pointer-events: none;
+  background: radial-gradient(closest-side, oklch(var(--ink) / 0.7), oklch(var(--ink) / 0.62) 70%, oklch(var(--ink) / 0) 100%);
+}
+
 /* Uttalandets ord fylls av sin egen position i vyn: dämpat papper -> papper. */
 .landing .st-w {
   color: color-mix(in oklch, oklch(var(--paper)) calc(var(--fill) * 100%), oklch(var(--paper-subtle)));

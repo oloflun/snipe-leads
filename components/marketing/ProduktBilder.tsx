@@ -174,17 +174,15 @@ function WidgetYta({ locale }: Readonly<{ locale: Locale }>) {
             <span className="kicker text-mineral">Powered by Snajp</span>
             <X className="h-3.5 w-3.5 text-ink-subtle" />
           </div>
-          {/* data-sc: ytans delar kommer i berättelsens ordning när figuren
-              avtäcks (useLandingMotion, shot). Bara element, aldrig text. */}
           <div className="space-y-2.5 px-3.5 py-3.5 text-[0.75rem] leading-[1.5]">
-            <div data-sc="q" className="ml-auto w-fit max-w-[85%] rounded-[12px] rounded-br-[4px] bg-ink px-3 py-2 text-paper">
+            <div className="ml-auto w-fit max-w-[85%] rounded-[12px] rounded-br-[4px] bg-ink px-3 py-2 text-paper">
               {CHATT_FRAGA}
             </div>
-            <div data-sc="a" className="w-fit max-w-[90%] rounded-[12px] rounded-bl-[4px] border border-ink/10 bg-paper2/70 px-3 py-2 text-ink">
+            <div className="w-fit max-w-[90%] rounded-[12px] rounded-bl-[4px] border border-ink/10 bg-paper2/70 px-3 py-2 text-ink">
               {CHATT_SVAR}
             </div>
           </div>
-          <div data-sc="in" className="flex items-center gap-2 border-t border-ink/10 px-3.5 py-2.5">
+          <div className="flex items-center gap-2 border-t border-ink/10 px-3.5 py-2.5">
             <span className="flex-1 text-[0.75rem] text-ink-subtle">
               <T text={UI.skriv} locale={locale} />
             </span>
@@ -195,7 +193,7 @@ function WidgetYta({ locale }: Readonly<{ locale: Locale }>) {
         </div>
 
         {/* Inbjudan + knappen — stängda läget, Skatteverkets mönster. */}
-        <div data-sc="cta" className="flex items-end gap-2.5">
+        <div className="flex items-end gap-2.5">
           <div className="rounded-[12px] border border-ink/10 bg-paper px-3 py-2 text-[0.75rem] shadow-[0_6px_20px_oklch(var(--ink)/0.10)]">
             <span className="block font-semibold text-ink">
               <T text={UI.fraga} locale={locale} />
@@ -221,7 +219,7 @@ function InkorgYta({ locale }: Readonly<{ locale: Locale }>) {
       {/* Ärendelistan */}
       <div className="hidden border-r border-ink/10 p-4 sm:block">
         <div className="divide-y divide-ink/10 border-y border-ink/12 text-[0.75rem]">
-          <div data-sc="row" className="bg-paper2/60 py-2.5 pl-2 pr-1">
+          <div className="bg-paper2/60 py-2.5 pl-2 pr-1">
             <span className="flex items-baseline justify-between gap-2">
               <span className="truncate font-medium text-ink">{ARENDE_HLR}</span>
               <Badge ton="warn">
@@ -232,7 +230,7 @@ function InkorgYta({ locale }: Readonly<{ locale: Locale }>) {
               Maria Ek · <T text={UI.offertforfragan} locale={locale} />
             </span>
           </div>
-          <div data-sc="row" className="py-2.5 pl-2 pr-1">
+          <div className="py-2.5 pl-2 pr-1">
             <span className="flex items-baseline justify-between gap-2">
               <span className="truncate font-medium text-ink">{ARENDE_ORDER}</span>
               <Badge ton="good">
@@ -243,7 +241,7 @@ function InkorgYta({ locale }: Readonly<{ locale: Locale }>) {
               Johan Berg · <T text={UI.orderstatus} locale={locale} />
             </span>
           </div>
-          <div data-sc="row" className="py-2.5 pl-2 pr-1">
+          <div className="py-2.5 pl-2 pr-1">
             <span className="flex items-baseline justify-between gap-2">
               <span className="truncate font-medium text-ink">{ARENDE_OCR}</span>
               <Badge>
@@ -259,22 +257,22 @@ function InkorgYta({ locale }: Readonly<{ locale: Locale }>) {
 
       {/* Det öppna ärendet med agentens utkast */}
       <div className="p-4 sm:p-5">
-        <p data-sc="hdr" className="text-[0.875rem] font-semibold text-ink">{ARENDE_HLR}</p>
-        <p data-sc="meta" className="mt-0.5 text-[0.6875rem] text-ink-subtle">
+        <p className="text-[0.875rem] font-semibold text-ink">{ARENDE_HLR}</p>
+        <p className="mt-0.5 text-[0.6875rem] text-ink-subtle">
           <T text={UI.fran} locale={locale} /> Maria Ek &lt;maria.ek@exempel.se&gt;
         </p>
-        <p data-sc="quote" className="mt-2 border-l border-ink/15 pl-3 text-[0.75rem] leading-[1.55] text-ink-muted">
+        <p className="mt-2 border-l border-ink/15 pl-3 text-[0.75rem] leading-[1.55] text-ink-muted">
           {MARIA_MEJL}
         </p>
 
-        <p data-sc="label" className="mt-4 font-display text-[0.9375rem] text-ink">
+        <p className="mt-4 font-display text-[0.9375rem] text-ink">
           <T text={UI.agentensUtkast} locale={locale} />
         </p>
-        <div data-sc="draft" className="mt-1.5 rounded-input border border-ink/12 bg-paper px-3 py-2.5 text-[0.75rem] leading-[1.55] text-ink">
+        <div className="mt-1.5 rounded-input border border-ink/12 bg-paper px-3 py-2.5 text-[0.75rem] leading-[1.55] text-ink">
           {MARIA_UTKAST}
         </div>
 
-        <div data-sc="acts" className="mt-3 flex flex-wrap items-center gap-1.5">
+        <div className="mt-3 flex flex-wrap items-center gap-1.5">
           <Knapp variant="primar">
             <Check className="h-3 w-3" />
             <T text={UI.godkannSkicka} locale={locale} />
@@ -313,15 +311,15 @@ function IrisListYta({ locale }: Readonly<{ locale: Locale }>) {
   ];
   return (
     <div aria-hidden className="flex min-h-[420px] flex-col bg-paper p-4 text-left sm:p-5">
-      <p data-sc="hdr" className="text-[0.875rem] font-semibold text-ink">
+      <p className="text-[0.875rem] font-semibold text-ink">
         <T text={UI.nyaLeads} locale={locale} />
       </p>
-      <p data-sc="meta" className="mt-0.5 text-[0.6875rem] text-ink-subtle">
+      <p className="mt-0.5 text-[0.6875rem] text-ink-subtle">
         <T text={UI.irisLaste} locale={locale} />
       </p>
       <div className="mt-3 divide-y divide-ink/10 border-y border-ink/12">
         {rader.map((rad) => (
-          <div key={rad.bolag} data-sc="row" className="flex items-center gap-3 py-3">
+          <div key={rad.bolag} className="flex items-center gap-3 py-3">
             <span className="numeral w-12 text-[1.75rem]">{rad.poang}</span>
             <span className="min-w-0">
               <span className="block truncate text-[0.8125rem] font-medium text-ink">
@@ -332,7 +330,7 @@ function IrisListYta({ locale }: Readonly<{ locale: Locale }>) {
           </div>
         ))}
       </div>
-      <p data-sc="note" className="mt-auto pt-3 text-[0.6875rem] text-ink-subtle">
+      <p className="mt-auto pt-3 text-[0.6875rem] text-ink-subtle">
         <T text={UI.poang} locale={locale} />
       </p>
     </div>
@@ -342,18 +340,18 @@ function IrisListYta({ locale }: Readonly<{ locale: Locale }>) {
 function IrisUtkastYta({ locale }: Readonly<{ locale: Locale }>) {
   return (
     <div aria-hidden className="flex min-h-[420px] flex-col bg-paper p-4 text-left sm:p-5">
-      <p data-sc="hdr" className="text-[0.875rem] font-semibold text-ink">
+      <p className="text-[0.875rem] font-semibold text-ink">
         <T text={UI.utkastTill} locale={locale} /> Byggnads AB Norr
       </p>
-      <p data-sc="meta" className="mt-0.5 text-[0.6875rem] text-ink-subtle">
+      <p className="mt-0.5 text-[0.6875rem] text-ink-subtle">
         <T text={UI.till} locale={locale} /> {JOHAN_MOTTAGARE} · <T text={UI.amne} locale={locale} />{" "}
         {JOHAN_AMNE} · <T text={UI.bifogas} locale={locale} />
       </p>
       {/* "draft" avtäcks uppifrån av rörelsen: mejlet skriver sig självt. */}
-      <div data-sc="draft" className="mt-3 rounded-input border border-ink/12 bg-paper px-3 py-2.5 text-[0.75rem] leading-[1.55] text-ink">
+      <div className="mt-3 rounded-input border border-ink/12 bg-paper px-3 py-2.5 text-[0.75rem] leading-[1.55] text-ink">
         {JOHAN_MEJL}
       </div>
-      <div data-sc="acts" className="mt-3 flex flex-wrap items-center gap-1.5">
+      <div className="mt-3 flex flex-wrap items-center gap-1.5">
         <Knapp variant="primar">
           <Check className="h-3 w-3" />
           <T text={UI.godkannOchSkicka} locale={locale} />
@@ -365,7 +363,7 @@ function IrisUtkastYta({ locale }: Readonly<{ locale: Locale }>) {
           <T text={UI.hoppaOver} locale={locale} />
         </Knapp>
       </div>
-      <p data-sc="note" className="mt-auto border-t border-ink/10 pt-2.5 text-[0.6875rem] leading-[1.5] text-ink-subtle">
+      <p className="mt-auto border-t border-ink/10 pt-2.5 text-[0.6875rem] leading-[1.5] text-ink-subtle">
         <T text={UI.kalla} locale={locale} />
       </p>
     </div>
@@ -533,26 +531,34 @@ export function ProduktBilder({
 }: Readonly<{ product: ProductKey; locale: Locale }>) {
   const [vanster, hoger] = FALT[product];
   return (
+    // Toppen nära löftet ovanför: punkterna där slutar i samma tanke som ytorna här
+    // visar, och 240 px luft mellan dem lästes som att sidan tog slut (Anton 2026-10-19).
     <section data-mo="produktbilder" className="border-b border-ink/12">
-      <div className="mx-auto max-w-[1480px] px-6 py-24 md:px-10 md:py-32">
-        <div className="grid grid-cols-1 gap-y-12 lg:grid-cols-2 lg:gap-x-12">
+      <div className="mx-auto max-w-[1480px] px-6 pb-24 pt-4 md:px-10 md:pb-32 md:pt-6">
+        <div className="grid grid-cols-1 gap-y-14 lg:grid-cols-2 lg:gap-x-12">
           {[vanster, hoger].map((falt, i) => {
             const Bild = falt.bild;
-            // data-drift: figuren glider mjukt mot sidan medan den passerar
-            // (useLandingMotion); den andra lite senare än den första.
+            // data-case: rutan glider in från sin sida och fjädrar tillbaka, och
+            // bildtexten avtäcks först när den landat; en ruta i taget
+            // (useLandingMotion, caseEntry). key per språk på bildtexten: dess
+            // rader spaltas av SplitText, och React ska byta noderna, inte diffa i dem.
             return (
-              <figure key={falt.rubrik.sv} data-drift={i + 1} className={cn("rise", i === 1 && "rise-1")}>
+              <figure key={falt.rubrik.sv} data-case>
                 {/* data-hole: ytan lyfts ur dygnsljuset (LandingPhoto) så att
-                    produktens egna färger står kvar; data-mo="shot": avtäcks
-                    nedifrån av rörelsen. */}
-                <div data-mo="shot" data-hole className="overflow-hidden rounded-panel border border-ink/12 bg-paper">
+                    produktens egna färger står kvar. */}
+                <div
+                  data-case-box
+                  data-from={i === 0 ? "left" : "right"}
+                  data-hole
+                  className="overflow-hidden rounded-panel border border-ink/12 bg-paper"
+                >
                   <Bild locale={locale} />
                 </div>
-                <figcaption data-mo="up" className="mt-5">
-                  <p className="font-display text-[1.375rem] font-semibold leading-tight tracking-[-0.015em] text-ink">
+                <figcaption key={locale} className="mt-5">
+                  <p data-case-text className="font-display text-[1.375rem] font-semibold leading-tight tracking-[-0.015em] text-ink">
                     <T text={falt.rubrik} locale={locale} />
                   </p>
-                  <p className="mt-2 max-w-[52ch] text-[0.9375rem] leading-[1.6] text-ink-muted">
+                  <p data-case-text className="mt-2 max-w-[52ch] text-[0.9375rem] leading-[1.6] text-ink-muted">
                     <T text={falt.not} locale={locale} />
                   </p>
                 </figcaption>

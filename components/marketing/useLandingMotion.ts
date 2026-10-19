@@ -132,7 +132,7 @@ export function useLandingMotion({ root, lenis: lenisRef }: DomRefs, product: st
     let teardown: (() => void) | undefined;
 
     (async () => {
-      const [{ gsap, ScrollTrigger, SplitText }, { default: lenis }] = await Promise.all([
+      const [{ gsap, ScrollTrigger, SplitText, spring }, { default: lenis }] = await Promise.all([
         import("@/gsap.js"),
         import("@/smooth-scroll.js")
       ]);
@@ -141,7 +141,7 @@ export function useLandingMotion({ root, lenis: lenisRef }: DomRefs, product: st
       lenisRef.current = lenis;
       const firstRun = first.current;
       first.current = false;
-      teardown = setup({ gsap, ScrollTrigger, SplitText } as Gsap, rootEl, firstRun && !doorPlayed);
+      teardown = setup({ gsap, ScrollTrigger, SplitText, spring } as Gsap, rootEl, firstRun && !doorPlayed);
       if (firstRun) doorPlayed = true;
     })().catch((e: unknown) => {
       // Importen föll (nätet, en gammal webbläsare): sidan står synlig utan
@@ -162,8 +162,17 @@ export function useLandingMotion({ root, lenis: lenisRef }: DomRefs, product: st
 // SplitText kollapsar allt \s till vanliga mellanslag innan den mäter.) Orden är orörda (F-028).
 const ORDSKILJE = { delimiter: / (?![–—] )/, replaceWith: " " };
 
+// Rutornas ankomst (caseEntry). Dämpning 0.75 passerar målet med knappt 3 % och fjädrar
+// tillbaka, respons 0.75 s ger en lugn glidning för en stor yta (apple-design § 4: studs
+// bara där rörelsen bär fart, här själva inglidningen). Texten börjar när rutan nått målet
+// första gången (~0.55 s), nästa ruta när den förra har landat.
+const CASE_GAP = 0.7;
+const TEXT_AFTER = 0.45;
+let queueEnd = 0;
+
 function setup(G: Gsap, rootEl: HTMLElement, fullDoor: boolean): () => void {
-  const { gsap, ScrollTrigger, SplitText } = G;
+  const { gsap, ScrollTrigger, SplitText, spring } = G;
+  const ARRIVAL = spring(0.75, 0.75);
   const $ = <T extends HTMLElement = HTMLElement>(s: string, r: ParentNode = rootEl) => r.querySelector<T>(s);
   const $$ = <T extends HTMLElement = HTMLElement>(s: string, r: ParentNode = rootEl) => [...r.querySelectorAll<T>(s)];
   const timers: number[] = [];
@@ -341,14 +350,18 @@ function setup(G: Gsap, rootEl: HTMLElement, fullDoor: boolean): () => void {
       arm(el, () => gsap.set(el, { opacity: 0, y: 18 }),
         () => gsap.to(el, { opacity: 1, y: 0, duration: 0.9, ease: "power3.out", delay }));
     }
-    function headingLines(el: HTMLElement) {
+    function splitLines(el: HTMLElement) {
       SplitText.create(el, {
         aria: /^H[1-6]$/.test(el.tagName) ? "auto" : "none",
         type: "lines", mask: "lines", linesClass: "ln", autoSplit: true, wordDelimiter: ORDSKILJE,
         // varje omspaltning: dolda rader bara om elementet ännu inte visats; ett visat element står i vila
         onSplit(self) { if (!revealed(el)) gsap.set(self.lines, { yPercent: 120 }); }
       });
-      arm(el, () => {}, () => gsap.to($$(".ln", el), { yPercent: 0, duration: 0.9, ease: "power4.out", stagger: 0.07 }));
+    }
+    const showLines = (el: HTMLElement) => gsap.to($$(".ln", el), { yPercent: 0, duration: 0.9, ease: "power4.out", stagger: 0.07 });
+    function headingLines(el: HTMLElement) {
+      splitLines(el);
+      arm(el, () => {}, () => showLines(el));
     }
     function words(el: HTMLElement) {
       SplitText.create(el, {
@@ -359,22 +372,41 @@ function setup(G: Gsap, rootEl: HTMLElement, fullDoor: boolean): () => void {
         }
       });
     }
-    // En produktyta: avtäcks nedifrån och landar med en liten skalning; sedan kommer livet
-    // inne i ytan (ProduktBilder, data-sc) i berättelsens ordning, och utkasten skriver sig
-    // själva uppifrån. Bara element, aldrig textnoder: React äger texten.
-    function shot(el: HTMLElement) {
-      const delar = $$("[data-sc]", el);
-      arm(el, () => {
-        gsap.set(el, { clipPath: "inset(0% 0% 100% 0%)", y: 28, scale: 0.975 });
-        delar.forEach((d) => gsap.set(d, d.dataset.sc === "draft" ? { clipPath: "inset(0% 0% 100% 0%)" } : { opacity: 0, y: 10 }));
-      }, () => {
-        const tl = gsap.timeline();
-        tl.to(el, { clipPath: "inset(0% 0% 0% 0%)", y: 0, scale: 1, duration: 1.2, ease: "power3.out" }, 0);
-        delar.forEach((d, i) => {
-          if (d.dataset.sc === "draft") tl.to(d, { clipPath: "inset(0% 0% 0% 0%)", duration: 1.4, ease: "power2.out" }, i ? "<0.22" : 0.5);
-          else tl.to(d, { opacity: 1, y: 0, duration: 0.6, ease: "power3.out" }, i ? "<0.11" : 0.5);
+    // ------------------------------------------------ rutornas ankomst (data-case)
+    // Antons beställning 2026-10-19: rutan tonas inte och klipps inte fram. Den glider in,
+    // passerar målet en aning och fjädrar tillbaka (Apples fjäder, gsap.js: spring), och
+    // först när den landat avtäcks den beskrivande texten rad för rad. En ruta i taget:
+    // kön låter nästa ruta vänta tills den förra har landat. Ankomsten spelar en gång och
+    // skrubbas aldrig, så att skrolla fram och tillbaka inte kan få rutan att darra.
+    //   data-case        behållaren (utlösare och kö-enhet)
+    //   data-case-box    det som rör sig, annars behållaren själv; data-from="left|right|up"
+    //   data-case-text   avtäcks efter landningen
+    // Rutan blir aldrig osynlig: utan JS, eller om utlösaren aldrig nås, står den bara förskjuten
+    // tills säkringen spelar den.
+    const wide = matchMedia("(min-width: 1024px)").matches;
+    function caseEntry(el: HTMLElement) {
+      const box = $("[data-case-box]", el) ?? el;
+      const from = box.dataset.from ?? "up";
+      let texts = $$("[data-case-text]", el);
+      // Staplat (mobil) står text som kommer före rutan i läsordningen ovanför den: den får
+      // sin egen avtäckning i stället för att vänta på en ruta som ännu är under skärmkanten.
+      if (!wide) {
+        texts.filter((t) => t.compareDocumentPosition(box) & Node.DOCUMENT_POSITION_FOLLOWING).forEach(headingLines);
+        texts = texts.filter((t) => !(t.compareDocumentPosition(box) & Node.DOCUMENT_POSITION_FOLLOWING));
+      }
+      texts.forEach(splitLines);
+      const offset = () => from === "up" ? { x: 0, y: 120 } : { x: (from === "left" ? -1 : 1) * Math.min(180, innerWidth * 0.14), y: 0 };
+      arm(el, () => gsap.set(box, offset()), () => {
+        const now = gsap.ticker.time;
+        const start = Math.max(now, queueEnd);
+        queueEnd = start + CASE_GAP;
+        const tl = gsap.timeline({ delay: start - now });
+        tl.to(box, { x: 0, y: 0, ease: ARRIVAL.ease, duration: ARRIVAL.duration, force3D: true, clearProps: "transform" }, 0);
+        texts.forEach((t, i) => {
+          t.dataset.rv = "1";
+          tl.add(showLines(t), TEXT_AFTER + i * 0.12);
         });
-      }, "top 85%");
+      }, wide ? "top 85%" : "top 90%");
     }
     function plate(el: HTMLElement) {
       const dir = el.dataset.dir === "left" ? "inset(0% 100% 0% 0%)" : "inset(100% 0% 0% 0%)";
@@ -401,14 +433,7 @@ function setup(G: Gsap, rootEl: HTMLElement, fullDoor: boolean): () => void {
       gsap.fromTo(el, { scaleX: 0 }, { scaleX: 1, ease: "none",
         scrollTrigger: { trigger: el, start: "top 94%", end: "top 62%", scrub: true } });
     }
-    // showcase-rutorna glider mjukt mot sidan medan de passerar: den andra lite senare än den första
-    function drift(el: HTMLElement) {
-      const n = Number(el.dataset.drift) || 1;
-      gsap.fromTo(el, { y: 24 + 22 * n }, { y: -(16 + 14 * n), ease: "none",
-        scrollTrigger: { trigger: el, start: "top bottom", end: "bottom top", scrub: true } });
-    }
-
-    const units = $$("[data-mo=\"lines\"], [data-mo=\"up\"], [data-mo=\"row\"], [data-mo=\"shot\"], [data-mo=\"plate\"], [data-mo=\"band\"], [data-mo=\"words\"], [data-mo=\"rule\"]");
+    const units = $$("[data-mo=\"lines\"], [data-mo=\"up\"], [data-mo=\"row\"], [data-mo=\"plate\"], [data-mo=\"band\"], [data-mo=\"words\"], [data-mo=\"rule\"]");
     const isUnit = new Set(units);
     for (const el of units) {
       // en enhet inuti en annan bärs av sin förälder (bandets ord är undantaget: bandet klipps, orden fylls)
@@ -420,7 +445,6 @@ function setup(G: Gsap, rootEl: HTMLElement, fullDoor: boolean): () => void {
       switch (el.dataset.mo) {
         case "lines": headingLines(el); break;
         case "words": words(el); break;
-        case "shot": shot(el); break;
         case "plate": plate(el); break;
         case "band": band(el); break;
         case "rule": rule(el); break;
@@ -432,7 +456,7 @@ function setup(G: Gsap, rootEl: HTMLElement, fullDoor: boolean): () => void {
         default: fadeUp(el);
       }
     }
-    $$("[data-drift]").forEach(drift);
+    $$("[data-case]").forEach(caseEntry);
 
     // ----------------------------------------- den isärtagna översikten
     const stage = $("[data-isar]");
@@ -472,13 +496,38 @@ function setup(G: Gsap, rootEl: HTMLElement, fullDoor: boolean): () => void {
             zd: [[0, 0], [0.27, 0], [0.53, 140 * u], [0.78, 140 * u], [0.945, 0]] as Keys,
             yk: [[0, 0], [0.21, 0], [0.47, -7], [0.78, -7], [0.955, 0]] as Keys,
             yd: [[0, 0], [0.27, 0], [0.53, 5], [0.78, 5], [0.945, 0]] as Keys,
-            on: [0, 1, 2].map((i) => [[0, 0], [0.42 + i * 0.06, 0], [0.5 + i * 0.06, 1], [0.76, 1], [0.82, 0]] as Keys)
+            on: [0, 1, 2].map((i) => [[0, 0], [0.42 + i * 0.06, 0], [0.5 + i * 0.06, 1], [0.76, 1], [0.82, 0]] as Keys),
+            // förklaringarna tänds med sin linje men släcks inte med den: efter akten ska texten
+            // stå läsbar, inte dämpad som avstängd (Anton 2026-10-19, "poleras ytterligare")
+            pt: [0, 1, 2].map((i) => [[0, 0], [0.42 + i * 0.06, 0], [0.5 + i * 0.06, 1]] as Keys)
           };
           const proxy = { p: 0 };
           let last = -1;
+          // Linjernas geometri, mätt en gång per refresh med offset* (som bortser från transforms,
+          // alltså också från ankomstens förskjutning) i stället för getBoundingClientRect per
+          // bildruta: läsningarna efter stilskrivningarna tvingade fram en ny layout varje
+          // bildruta, och det var det som hackade. Delarnas läge räknas ur perspektivet.
+          type Geo = { sx: number; sy: number; w: number; h: number; pts: { x: number; y: number }[]; boxes: number[][] };
+          let geo: Geo | null = null;
+          const offIn = (el: HTMLElement) => {
+            let x = 0;
+            let y = 0;
+            for (let n: HTMLElement | null = el; n && n !== pinEl; n = n.offsetParent as HTMLElement | null) { x += n.offsetLeft; y += n.offsetTop; }
+            return { x, y };
+          };
+          const css = (el: HTMLElement, v: string) => parseFloat(el.style.getPropertyValue(v));
+          function measure(): Geo {
+            const s = offIn(baseEl.parentElement as HTMLElement);
+            return {
+              sx: s.x, sy: s.y, w: baseEl.offsetWidth, h: baseEl.offsetHeight,
+              pts: pts.map((pt) => { const o = offIn(pt); return { x: o.x - 14, y: o.y + Math.min(pt.offsetHeight, 24) / 2 }; }),
+              boxes: marks.map((mk) => ["--cx", "--cy", "--cw", "--ch"].map((v) => css(mk, v)))
+            };
+          }
+          const PERSPECTIVE = 1600; // .isar__stage
           function renderStage() {
             const p = proxy.p;
-            if (p === last && !(desk && p > 0.4 && p < 0.84)) return; // linjerna följer delarna medan de står isär
+            if (p === last) return;
             last = p;
             const dim = at(K.dim, p);
             baseEl.style.opacity = (1 - 0.7 * dim).toFixed(3);
@@ -487,33 +536,39 @@ function setup(G: Gsap, rootEl: HTMLElement, fullDoor: boolean): () => void {
             kpiEl.style.transform = `translate3d(0, ${at(K.yk, p).toFixed(3)}%, ${at(K.zk, p).toFixed(2)}px)`;
             pagarEl.style.transform = `translateZ(${at(K.zp, p).toFixed(2)}px)`;
             diagramEl.style.transform = `translate3d(0, ${at(K.yd, p).toFixed(3)}%, ${at(K.zd, p).toFixed(2)}px)`;
-            pts.forEach((pt, i) => pt.style.setProperty("--on", at(K.on[i], p).toFixed(3)));
+            pts.forEach((pt, i) => pt.style.setProperty("--on", at(K.pt[i], p).toFixed(3)));
             if (!desk || !svg) return;
-            const sr = svg.getBoundingClientRect();
-            marks.forEach((mk, i) => {
+            const g = (geo ??= measure());
+            const zs = [at(K.zk, p), at(K.zp, p), at(K.zd, p)];
+            const ys = [at(K.yk, p), 0, at(K.yd, p)];
+            marks.forEach((_, i) => {
               const on = at(K.on[i], p);
               const ln = lines[i];
               const dot = dots[i];
-              if (!ln || !dot) return;
+              const pt = g.pts[i];
+              if (!ln || !dot || !pt) return;
               ln.style.strokeDashoffset = (1 - on).toFixed(4);
               dot.style.opacity = on > 0.02 ? Math.min(1, on * 3).toFixed(3) : "0";
-              const a = mk.getBoundingClientRect();
-              const b = pts[i]?.getBoundingClientRect();
-              if (!b) return;
+              if (on <= 0) return;
               // från förklaringens vänsterkant (texten står till höger om bilden) till den lyfta delens
-              // högerkant, i delens höjdmitt: ingen linje korsar den mörka rälen
-              const x1 = b.left - 14 - sr.left;
-              const y1 = b.top + Math.min(b.height, 24) / 2 - sr.top;
-              const x2 = a.right + 10 - sr.left;
-              const y2 = a.top + a.height / 2 - sr.top;
-              ln.setAttribute("x1", x1.toFixed(1)); ln.setAttribute("y1", y1.toFixed(1));
+              // högerkant, i delens höjdmitt: ingen linje korsar den mörka rälen. translateZ skalar
+              // delen kring scenens mitt med perspektiv / (perspektiv - z).
+              const [cx, cy, cw, ch] = g.boxes[i];
+              const k = PERSPECTIVE / (PERSPECTIVE - zs[i]);
+              const right = (cx + cw) * g.w;
+              const mid = (cy + ch / 2 + (ys[i] / 100) * ch) * g.h;
+              const x2 = g.sx + g.w / 2 + (right - g.w / 2) * k + 10;
+              const y2 = g.sy + g.h / 2 + (mid - g.h / 2) * k;
+              ln.setAttribute("x1", pt.x.toFixed(1)); ln.setAttribute("y1", pt.y.toFixed(1));
               ln.setAttribute("x2", x2.toFixed(1)); ln.setAttribute("y2", y2.toFixed(1));
               dot.setAttribute("cx", x2.toFixed(1)); dot.setAttribute("cy", y2.toFixed(1));
             });
           }
           const onToggle = (self: { isActive: boolean }) => { const w = self.isActive ? "transform, opacity" : "auto"; moving.forEach((m) => { m.style.willChange = w; }); };
           const tl = gsap.timeline({ scrollTrigger: desk
-            ? { trigger: pinEl, start: "top 10%", end: () => "+=" + Math.round(innerHeight * 1.9), pin: true, pinSpacer: spacerEl, anticipatePin: 1, scrub: true, invalidateOnRefresh: true, onToggle, onRefresh: () => { last = -1; } }
+            // ingen anticipatePin: den förflyttar pinnen en bildruta i förväg för vanlig skroll,
+            // och mot Lenis mjukade skroll blev det ett ryck i sidled vid pinnens start
+            ? { trigger: pinEl, start: "top 10%", end: () => "+=" + Math.round(innerHeight * 1.9), pin: true, pinSpacer: spacerEl, scrub: true, invalidateOnRefresh: true, onToggle, onRefresh: () => { last = -1; geo = null; } }
             : { trigger: stage, start: "top 78%", end: "bottom 30%", scrub: true, invalidateOnRefresh: true, onToggle } });
           tl.fromTo(proxy, { p: 0 }, { p: 1, ease: "none", duration: 1 }).set({}, {}, 1);
           gsap.ticker.add(renderStage);
@@ -548,6 +603,10 @@ function setup(G: Gsap, rootEl: HTMLElement, fullDoor: boolean): () => void {
 
     computeKeys();
     render();
+    // Sidordning före refresh: avslöjandena skapas före översiktens pin, även de som ligger
+    // nedanför den, och refresh i skapandeordning räknade deras start utan pinnens höjd
+    // (fasadbandet var helt framme en hel pinnlängd för tidigt, uppmätt 2026-10-19).
+    ScrollTrigger.sort();
     ScrollTrigger.refresh();
   }, rootEl);
 

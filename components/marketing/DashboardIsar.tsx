@@ -88,7 +88,8 @@ export function DashboardIsar() {
   return (
     <section aria-labelledby="isar-rubrik" className="relative overflow-hidden">
       <i aria-hidden="true" data-mo="rule" className="mo-rule" />
-      <div className="mx-auto max-w-[1480px] px-6 py-24 md:px-10 md:py-28">
+      {/* Kort botten: pinnens spacer lämnar redan luft efter akten. */}
+      <div className="mx-auto max-w-[1480px] px-6 pb-10 pt-24 md:px-10 md:pb-12 md:pt-28">
         {/* Pinnas på desktop av rörelsen, med det yttre elementet som
             färdigt pin-spacer så att ScrollTrigger aldrig flyttar noder React
             äger; på mobil skrubbas bilden i sin egen färd. */}
@@ -97,18 +98,21 @@ export function DashboardIsar() {
               vänster i översikten, och linjer dragna från vänster försvann mot
               den mörka rälen. I DOM:en kommer texten först, för läsordningen och
               för mobilen, där den står ovanför bilden. */}
-          <div data-isar-pin className="isar relative grid grid-cols-12 gap-y-10 lg:items-center lg:gap-x-10">
+          {/* data-case: översikten glider in från vänster och fjädrar tillbaka,
+              och rubriken och ingressen avtäcks när den landat (useLandingMotion,
+              caseEntry), innan pinnen och sprängskissen tar över. */}
+          <div data-isar-pin data-case className="isar relative grid grid-cols-12 gap-y-10 lg:items-center lg:gap-x-10">
             <div className="col-span-12 lg:col-span-4 lg:col-start-9 lg:row-start-1">
-              {/* key per språk: rubriken radspaltas av SplitText. */}
+              {/* key per språk: rubriken och ingressen radspaltas av SplitText. */}
               <h2
                 id="isar-rubrik"
-                key={locale}
-                data-mo="lines"
+                key={`h-${locale}`}
+                data-case-text
                 className="max-w-[14ch] font-display text-[clamp(1.875rem,3.4vw,2.75rem)] font-semibold leading-[1.06] tracking-[-0.028em]"
               >
                 <Accent text={text(COPY.rubrik)} />
               </h2>
-              <p data-mo="up" className="mt-4 max-w-[40ch] text-[1.0625rem] leading-[1.65] text-ink-muted">
+              <p key={`p-${locale}`} data-case-text className="mt-4 max-w-[40ch] text-[1.0625rem] leading-[1.65] text-ink-muted">
                 {text(COPY.lede)}
               </p>
               {/* Förklaringarna tänds av rörelsen (--on) i takt med att delen
@@ -130,7 +134,7 @@ export function DashboardIsar() {
 
             {/* Sju kolumner, inte åtta: de lyfta delarna växer utanför bilden och
                 gick annars ihop med textspalten; den tomma kolumnen bär linjerna. */}
-            <div className="col-span-12 lg:col-span-7 lg:col-start-1 lg:row-start-1">
+            <div data-case-box data-from="left" className="col-span-12 lg:col-span-7 lg:col-start-1 lg:row-start-1">
               {/* data-hole: ytan och delarna lyfts ur dygnsljuset. */}
               <figure data-isar data-hole className="isar__stage">
                 {/* eslint-disable-next-line @next/next/no-img-element */}

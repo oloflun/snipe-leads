@@ -222,7 +222,10 @@ export function LandingPhoto({
 
             <div className="mt-10 grid grid-cols-12 gap-y-8 lg:gap-x-10">
               <div className="col-span-12 lg:col-span-5">
-                <p data-mo="hero-lede" className="max-w-[46ch] text-[1.0625rem] leading-[1.65] text-paper-muted">
+                {/* Helt papper och en mjuk skugga, inte paper-muted: på mobil
+                    hamnar ingressen över den ljusa horisonten i fotot och var
+                    knappt läsbar (Anton 2026-10-19). */}
+                <p data-mo="hero-lede" className="hero-lede max-w-[46ch] text-[1.0625rem] leading-[1.65] text-paper">
                   {text(copy.lede)}
                 </p>
                 <div data-mo="hero-acts" className="mt-8 flex flex-wrap items-center gap-3">
@@ -378,7 +381,7 @@ export function LandingPhoto({
               </h2>
               <p data-mo="up" className="mt-4 text-[1.0625rem] leading-[1.65] text-ink-muted">{text(copy.demoLede)}</p>
             </div>
-            <div data-mo="shot" data-hole className="mt-10 overflow-hidden rounded-panel border border-ink/12 bg-paper">
+            <div data-case data-from="up" data-hole className="mt-10 overflow-hidden rounded-panel border border-ink/12 bg-paper">
               <div className="flex items-center justify-between gap-4 border-b border-ink/10 bg-paper2/60 px-5 py-3.5">
                 {/* Etiketten per produkt, inte "allt som inte är leads är
                     support": den grenen visade "Snajp Support" ovanför
@@ -470,37 +473,22 @@ export function LandingPhoto({
                   {text(stycke)}
                 </p>
               ))}
+              {/* Länken till teamsidan flyttade hit när "Vilka är vi" togs bort:
+                  utan den nås /vart-team bara via den hopfällda menyn. */}
+              <Link
+                href="/vart-team"
+                data-mo="up"
+                className="focus-ring mt-7 inline-block text-[0.9375rem] font-medium underline underline-offset-4 hover:text-ochre"
+              >
+                {text(shared.vilkaLank)}
+              </Link>
             </div>
           </div>
         </section>
 
-        {/* STEPS. */}
-        <section className="relative">
-          <i aria-hidden="true" data-mo="rule" className="mo-rule" />
-          <div className="mx-auto max-w-[1480px] px-6 py-24 md:px-10 md:py-28">
-            <h2
-              key={nyckel}
-              data-mo="lines"
-              className="max-w-[20ch] font-display text-[clamp(1.875rem,3.6vw,2.875rem)] font-semibold leading-[1.06] tracking-[-0.028em]"
-            >
-              <Display text={text(copy.stepsHeading)} />
-            </h2>
-            {/* Utan de gula ordningstalen. De satt i egen kolumn framför
-                varje steg, så rutnätet [auto_1fr] föll bort med dem — annars
-                hade rubriken blivit kvar i högerkolumnen med ett tomt spår
-                bredvid sig. */}
-            <div className="mt-12 grid grid-cols-1 gap-x-12 md:grid-cols-3">
-              {copy.steps.map((step) => (
-                <div key={step.title.sv} data-mo="row" className="hrule py-8 md:py-10">
-                  <h3 className="font-display text-[1.3125rem] font-semibold leading-tight tracking-[-0.015em]">
-                    {text(step.title)}
-                  </h3>
-                  <p className="mt-2.5 text-[0.9375rem] leading-[1.6] text-ink-muted">{text(step.body)}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
+        {/* "Tre steg" och "Vilka är vi" togs bort 2026-10-19 (Anton): stegen
+            upprepade löftets punkter under hjälten, och Vilka är vi upprepade
+            Byggt i Göteborg, som står kvar och bär länken till teamsidan. */}
 
         {/* DIVIDER. A facade of identical windows under a heavy scrim: the flat
             run of text sections needed one more break, and the image rhymes with
@@ -520,55 +508,6 @@ export function LandingPhoto({
                 "linear-gradient(to bottom, oklch(var(--ink) / 0.90), oklch(var(--ink) / 0.80)), radial-gradient(120% 100% at 50% 100%, oklch(var(--ochre) / 0.22) 0%, transparent 70%)"
             }}
           />
-        </section>
-
-        {/* VILKA ÄR VI. Ligger före invändningarna med flit: vem man köper av
-            är den fråga som avgör om man ens läser svaren på resten. Svensk B2B
-            är ett litet rum, och en leverantör utan ansikte är en leverantör
-            man skjuter upp beslutet om. */}
-        <section id="vilka-ar-vi" className="relative scroll-mt-24">
-          <i aria-hidden="true" data-mo="rule" className="mo-rule" />
-          <div className="mx-auto max-w-[1480px] px-6 py-24 md:px-10 md:py-32">
-            <div className="grid grid-cols-12 gap-y-10 lg:gap-x-14">
-              <div className="col-span-12 lg:col-span-4">
-                <Label>{text(shared.vilkaRubrik)}</Label>
-                <h2
-                  key={nyckel}
-                  data-mo="lines"
-                  className="mt-5 max-w-[18ch] font-display text-[clamp(1.875rem,3.6vw,2.875rem)] font-semibold leading-[1.06] tracking-[-0.028em]"
-                >
-                  <Display text={text(shared.vilkaRubrikStor)} />
-                </h2>
-              </div>
-              <div className="col-span-12 lg:col-span-7 lg:col-start-6">
-                <p data-mo="row" className="max-w-[62ch] text-[1.0625rem] leading-[1.7] text-ink-muted">
-                  {text(shared.vilkaText1)}
-                </p>
-                <p data-mo="row" className="mt-6 max-w-[62ch] text-[1.0625rem] leading-[1.7] text-ink-muted">
-                  {text(shared.vilkaText2)}
-                </p>
-                {/* Två vägar vidare, inte en utbytt. Avsnittet reser frågan
-                    "vilka är ni" och slutade tidigare med "skriv till oss" —
-                    ett svar på en fråga ingen ställde. Teamsidan svarar på den
-                    som faktiskt ställdes. Mejlvägen står kvar för den som
-                    hellre frågar än läser. */}
-                <div data-mo="row" className="mt-8 flex flex-wrap items-center gap-x-6 gap-y-3">
-                  <a
-                    href={mejlaOss()}
-                    className="focus-ring inline-flex min-h-12 items-center rounded-input border border-ink/20 px-6 text-[0.9375rem] font-semibold transition-colors hover:border-ink"
-                  >
-                    {text(shared.secondaryCta)}
-                  </a>
-                  <Link
-                    href="/vart-team"
-                    className="focus-ring text-[0.9375rem] font-medium underline underline-offset-4 hover:text-ochre"
-                  >
-                    {text(shared.vilkaLank)}
-                  </Link>
-                </div>
-              </div>
-            </div>
-          </div>
         </section>
 
         {/* OBJECTIONS. Real questions, answered plainly. */}

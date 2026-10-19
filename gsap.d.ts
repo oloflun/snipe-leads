@@ -3,3 +3,6 @@
 import "gsap";
 
 export * from "gsap/all";
+
+/** Apples fjäder som GSAP-ease: dämpning (< 1 studsar) och respons i sekunder. */
+export function spring(damping: number, response: number): { ease: (t: number) => number; duration: number };

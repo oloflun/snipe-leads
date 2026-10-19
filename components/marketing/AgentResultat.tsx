@@ -246,8 +246,8 @@ export function AgentResultat({ product }: Readonly<{ product: ProductKey }>) {
   const perProdukt: Record<ProductKey, SektionsCopy> = {
     leads: {
       rubrik: {
-        sv: "Ni ser *resultaten*, inte maskineriet.",
-        en: "You see the *results*, not the machinery."
+        sv: "*Förvärmda* leads, levererade till er.",
+        en: "*Pre-warmed* leads, delivered to you."
       },
       brod: {
         sv: "Arbetsytan visar vad utskicken gav: vilka som öppnade, vilka som svarade och vilka som vill ses. Ett varmt svar dyker upp som ett färdigt kort med hela tråden, redo för en människa att ta över.",
@@ -324,7 +324,8 @@ export function AgentResultat({ product }: Readonly<{ product: ProductKey }>) {
             </div>
           </div>
           <div className="col-span-12 lg:col-span-6 lg:col-start-7">
-            <div data-mo="shot">{copy.panel}</div>
+            {/* Glider in från höger och fjädrar tillbaka (useLandingMotion, caseEntry). */}
+            <div data-case data-from="right">{copy.panel}</div>
             {/* Honest-proof: siffrorna ovan är illustration, och det står. */}
             <p className="mt-4 text-[0.8125rem] font-medium text-ink-subtle">
               {text({
