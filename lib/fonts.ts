@@ -1,4 +1,4 @@
-import { Fraunces, Geist, JetBrains_Mono } from "next/font/google";
+import { Fraunces, Geist, JetBrains_Mono, Source_Serif_4 } from "next/font/google";
 
 /**
  * Loaded through next/font rather than a <link> to fonts.googleapis.com: the link
@@ -32,4 +32,20 @@ export const jetbrainsMono = JetBrains_Mono({
   display: "swap"
 });
 
-export const fontVariables = `${geist.variable} ${fraunces.variable} ${jetbrainsMono.variable}`;
+/**
+ * Marknadssidornas serif sedan 2026-10-18 (Anton: "en fetare serif, men inte
+ * Fraunces"). Variabel vikt 200–900 och optisk storlek 8–60, äkta kursiv.
+ * Lägre kontrast än Fraunces, så den bär vikt över hjältefotot utan att
+ * hårlinjerna glittrar. Når sidan via klassen `serif-fet` (globals.css), som
+ * pekar om `--font-fraunces`/`--font-serif` i det underträdet; appytorna
+ * behåller Fraunces.
+ */
+export const sourceSerif = Source_Serif_4({
+  subsets: ["latin"],
+  style: ["normal", "italic"],
+  axes: ["opsz"],
+  variable: "--font-source-serif",
+  display: "swap"
+});
+
+export const fontVariables = `${geist.variable} ${fraunces.variable} ${jetbrainsMono.variable} ${sourceSerif.variable}`;

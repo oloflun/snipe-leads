@@ -2,13 +2,15 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import type Lenis from "lenis";
 import { Logo } from "@/components/Logo";
 import { useLocale } from "@/lib/i18n";
 import type { ProductKey } from "@/lib/routes";
 import { saljbaraProdukter } from "@/lib/routes";
-import { KONTAKT_MEJL, mejlaOss, productCopy, shared } from "@/components/marketing/copy";
+import { KONTAKT_MEJL, mejlaOss, productCopy, shared, varforSnajp } from "@/components/marketing/copy";
 import { imagery, photo, sectionCopy } from "@/components/marketing/copy-sections";
 import { AgentResultat } from "@/components/marketing/AgentResultat";
+import { DashboardIsar } from "@/components/marketing/DashboardIsar";
 import { ProduktBilder } from "@/components/marketing/ProduktBilder";
 import { PricingSection } from "@/components/marketing/PricingSection";
 import { UspSection } from "@/components/marketing/UspSection";
@@ -16,7 +18,7 @@ import { LaddaNerAppen } from "@/components/marketing/LaddaNerAppen";
 import { ProductSwitch } from "@/components/marketing/ProductSwitch";
 import { Sidfot } from "@/components/marketing/Sidfot";
 import { SidMeny } from "@/components/marketing/SidMeny";
-import { useReveal } from "@/components/marketing/useReveal";
+import { useLandingMotion } from "@/components/marketing/useLandingMotion";
 import { cn } from "@/lib/utils";
 
 /**
@@ -30,6 +32,15 @@ import { cn } from "@/lib/utils";
  *
  * Photographs are verified-existing Unsplash IDs, each one looked at before it
  * was chosen. See copy-sections.ts.
+ *
+ * 2026-10-18 (Anton): samma sida, men med Dygnets dygnsljus som mark
+ * (soluppgång under hjälten, varmvitt längst ned), GSAP + Lenis-övergångar
+ * mellan alla sektioner, en isärtagen översikt efter resultatvyn, "Varför
+ * Snajp finns" under "Byggt i Göteborg" och Source Serif 4 som serif. Allt
+ * rörligt bor i useLandingMotion.ts; markupen bär bara data-mo-markörer.
+ * Rubriker som SplitText radspaltar har `key` per produkt och språk, så att
+ * React byter noden i stället för att diffa inuti ett element vars barn
+ * flyttats.
  */
 
 const pathForProduct: Record<ProductKey, string> = {
@@ -81,8 +92,10 @@ export function LandingPhoto({
   const { text, locale, toggleLocale } = useLocale();
   const [product, setProduct] = useState<ProductKey>(initial);
   const demoRef = useRef<HTMLDivElement | null>(null);
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const lenisRef = useRef<Lenis | null>(null);
 
-  useReveal();
+  useLandingMotion({ root: rootRef, lenis: lenisRef }, product, locale);
 
   useEffect(() => {
     const next = pathForProduct[product];
@@ -90,14 +103,38 @@ export function LandingPhoto({
   }, [product]);
 
   const scrollToDemo = useCallback(() => {
-    demoRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    const el = demoRef.current;
+    if (!el) return;
+    // Lenis äger skrollen när den finns; scrollIntoView hade slagits med den.
+    if (lenisRef.current) lenisRef.current.scrollTo(el, { offset: -64 });
+    else el.scrollIntoView({ behavior: "smooth", block: "start" });
   }, []);
 
   const copy = productCopy[product];
   const sec = sectionCopy[product];
+  const nyckel = `${product}-${locale}`;
 
   return (
-    <div className="min-h-screen bg-paper text-ink">
+    <div ref={rootRef} className="landing serif-fet min-h-screen text-ink">
+      {/* Dörren före första målningen: körs av webbläsaren medan HTML:en
+          tolkas, alltså innan hjälten nedanför målas. Ett <style> i <head>
+          (som React inte äger: en klass på <html> gav hydreringsvarning)
+          döljer hjältens delar tills rörelsen tagit över med samma värden
+          inline och tar bort det (useLandingMotion), eller tills timern
+          tar bort det efter 3 s om modulen aldrig laddar. React kör aldrig
+          om ett inline-skript på klienten, så vid en klientnavigering hit
+          spelas dörren inte om. */}
+      <script
+        dangerouslySetInnerHTML={{
+          __html:
+            "(function(){var s=document.createElement('style');s.id='door-armed';s.textContent='.landing [data-mo=hero-h1],.landing [data-mo=hero-lede],.landing [data-mo=hero-acts],.landing [data-mo=hero-side],.landing [data-mo=header]{opacity:0}.landing [data-mo=hero-img]{transform:scale(1.06)}.landing [data-mo=hero-scrim]{opacity:.4}';document.head.appendChild(s);setTimeout(function(){s.remove()},3000)})();"
+        }}
+      />
+      {/* Dygnsljuset: marken och ljuslagret skrivs bara av ljusmotorn i useLandingMotion. */}
+      <div data-mo="ground" className="ground" aria-hidden="true" />
+      <div data-mo="light" className="light" aria-hidden="true">
+        <div className="light__panes"><i /><i /><i /><i /></div>
+      </div>
       <a
         href="#demo"
         className="focus-ring sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-input focus:bg-ink focus:px-4 focus:py-2 focus:text-paper"
@@ -106,7 +143,7 @@ export function LandingPhoto({
       </a>
 
       {/* Header sits over the photograph, so it carries no ground of its own. */}
-      <header className="absolute inset-x-0 top-0 z-30">
+      <header data-mo="header" className="absolute inset-x-0 top-0 z-30">
         {/* `items-start`, inte `items-center`. Märket är nu flera gånger högre
             än kontrollerna, och centrerat hade raden hamnat mitt på logotypen i
             stället för i överkant — se utkastet: båda börjar på samma höjd och
@@ -151,9 +188,11 @@ export function LandingPhoto({
 
       <main id="main">
         {/* HERO. The photograph is the design. Type sits on it directly. */}
-        <section className="relative min-h-[92vh] overflow-hidden">
+        {/* data-hole: hjälten lyfts ur dygnsljuset och står som den är. */}
+        <section data-mo="hero" data-hole className="relative min-h-[92vh] overflow-hidden">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
+            data-mo="hero-img"
             src={photo(imagery.hero.src)}
             alt={text(imagery.hero.alt)}
             className="absolute inset-0 h-full w-full bg-ink object-cover object-center"
@@ -161,6 +200,7 @@ export function LandingPhoto({
           />
           {/* Two scrims: one for the header, one carrying the headline block. */}
           <div
+            data-mo="hero-scrim"
             className="absolute inset-0"
             aria-hidden="true"
             style={{
@@ -171,17 +211,21 @@ export function LandingPhoto({
 
           <div className="relative mx-auto flex min-h-[92vh] max-w-[1480px] flex-col justify-end px-6 pb-14 pt-32 md:px-10 md:pb-20">
             <div className="max-w-[min(100%,980px)]">
-              <p className="font-display text-[clamp(2.25rem,5.9vw,5.75rem)] font-semibold leading-[0.99] tracking-[-0.035em] text-paper">
+              <p
+                key={nyckel}
+                data-mo="hero-h1"
+                className="font-display text-[clamp(2.25rem,5.9vw,5.75rem)] font-semibold leading-[0.99] tracking-[-0.035em] text-paper"
+              >
                 <Display text={text(copy.headline)} />
               </p>
             </div>
 
             <div className="mt-10 grid grid-cols-12 gap-y-8 lg:gap-x-10">
               <div className="col-span-12 lg:col-span-5">
-                <p className="max-w-[46ch] text-[1.0625rem] leading-[1.65] text-paper-muted">
+                <p data-mo="hero-lede" className="max-w-[46ch] text-[1.0625rem] leading-[1.65] text-paper-muted">
                   {text(copy.lede)}
                 </p>
-                <div className="mt-8 flex flex-wrap items-center gap-3">
+                <div data-mo="hero-acts" className="mt-8 flex flex-wrap items-center gap-3">
                   <button
                     type="button"
                     onClick={scrollToDemo}
@@ -212,7 +256,7 @@ export function LandingPhoto({
                   Beroendet är värt att känna till: byter sidhuvudets etiketter
                   längd — till exempel i engelsk lokalisering — flyttar mittlinjen
                   och siffran här stämmer inte längre. */}
-              <div className="col-span-12 self-end lg:col-span-3 lg:col-start-10 lg:ml-auto lg:w-[219px]">
+              <div data-mo="hero-side" className="col-span-12 self-end lg:col-span-3 lg:col-start-10 lg:ml-auto lg:w-[219px]">
                 {/* 1.1875rem och inte 1.5rem. Tre produkter på EN rad mäter
                     257px vid 24px, och kolumnen är 219 — den gamla graden
                     tvingade fram en radbrytning som lade "Bokföring" under
@@ -285,9 +329,12 @@ export function LandingPhoto({
 
         {/* STATEMENT. One line, a photograph almost fully darkened behind it.
             The page needs a moment that is not information. */}
-        <section className="relative overflow-hidden">
+        {/* data-mo="band": bandet skrubbas fram ur marken, fotot glider sakta
+            bakom orden, och orden fylls av sin egen position i vyn. */}
+        <section data-mo="band" className="relative overflow-hidden">
           <div
-            className="parallax absolute inset-0 bg-ink"
+            data-parallax
+            className="parallax absolute -inset-y-[8%] inset-x-0 bg-ink"
             aria-hidden="true"
             style={{ backgroundImage: `url(${photo(imagery.street.src)})` }}
           />
@@ -308,7 +355,11 @@ export function LandingPhoto({
             <p className="text-[0.8125rem] font-medium tracking-[0.14em] text-warning">
               {text(sec.statementLabel).toUpperCase()}
             </p>
-            <p className="rise mx-auto mt-8 max-w-[20ch] font-display text-[clamp(2rem,5.2vw,4.5rem)] font-semibold leading-[1.12] tracking-[-0.005em] text-paper">
+            <p
+              key={nyckel}
+              data-mo="words"
+              className="mx-auto mt-8 max-w-[20ch] font-display text-[clamp(2rem,5.2vw,4.5rem)] font-semibold leading-[1.12] tracking-[-0.005em] text-paper"
+            >
               {text(sec.statement)}
             </p>
           </div>
@@ -318,12 +369,16 @@ export function LandingPhoto({
         <section id="demo" ref={demoRef} className="scroll-mt-16 bg-paper2/45">
           <div className="mx-auto max-w-[1480px] px-6 py-24 md:px-10 md:py-28">
             <div className="max-w-[50ch]">
-              <h2 className="font-display text-[clamp(1.875rem,3.6vw,2.875rem)] font-semibold leading-[1.06] tracking-[-0.028em]">
+              <h2
+                key={nyckel}
+                data-mo="lines"
+                className="font-display text-[clamp(1.875rem,3.6vw,2.875rem)] font-semibold leading-[1.06] tracking-[-0.028em]"
+              >
                 <Display text={text(copy.demoHeading)} />
               </h2>
-              <p className="mt-4 text-[1.0625rem] leading-[1.65] text-ink-muted">{text(copy.demoLede)}</p>
+              <p data-mo="up" className="mt-4 text-[1.0625rem] leading-[1.65] text-ink-muted">{text(copy.demoLede)}</p>
             </div>
-            <div className="mt-10 overflow-hidden rounded-panel border border-ink/12 bg-paper">
+            <div data-mo="shot" data-hole className="mt-10 overflow-hidden rounded-panel border border-ink/12 bg-paper">
               <div className="flex items-center justify-between gap-4 border-b border-ink/10 bg-paper2/60 px-5 py-3.5">
                 {/* Etiketten per produkt, inte "allt som inte är leads är
                     support": den grenen visade "Snajp Support" ovanför
@@ -374,35 +429,60 @@ export function LandingPhoto({
             components/marketing/AgentResultat.tsx för förebilderna. */}
         <AgentResultat product={product} />
 
+        {/* ÖVERSIKTEN, ISÄRTAGEN. Produktens egen översikt som en frontal
+            sprängskiss, styrd av skrollen. Se DashboardIsar.tsx. */}
+        <DashboardIsar />
+
         {/* PLACE. Photograph and copy share the row; the image is content here,
             not decoration, so it carries a real alt. */}
-        <section>
+        <section data-mo="place">
           <div className="mx-auto grid max-w-[1480px] grid-cols-12 items-center gap-y-10 px-6 py-24 md:px-10 md:py-32 lg:gap-x-14">
-            <figure className="col-span-12 lg:col-span-7 lg:-ml-6 xl:-ml-10">
+            {/* Avtäcks från vänster, fotot glider sakta i sin ram. */}
+            <figure data-mo="plate" data-dir="left" className="col-span-12 overflow-hidden rounded-panel bg-paper2 lg:col-span-7 lg:-ml-6 lg:rounded-l-none xl:-ml-10">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
+                data-parallax
                 src={photo(imagery.street.src)}
                 alt={text(imagery.street.alt)}
                 loading="lazy"
-                className="h-[380px] w-full rounded-panel bg-paper2 object-cover md:h-[600px] lg:rounded-l-none"
+                className="h-[380px] w-full object-cover md:h-[600px]"
               />
             </figure>
             <div className="col-span-12 lg:col-span-4 lg:col-start-9">
               <Label>{text(sec.placeLabel)}</Label>
-              <h2 className="rise mt-5 max-w-[15ch] font-display text-[clamp(2rem,4.2vw,3.25rem)] font-semibold leading-[1.04] tracking-[-0.03em]">
+              {/* 16ch, inte 15: SplitText mäter accentens ord och punkten
+                  efter som egna block, och vid 15ch föll punkten i
+                  "effektivisera arbetet." ensam på en fjärde rad. */}
+              <h2
+                key={nyckel}
+                data-mo="lines"
+                className="mt-5 max-w-[16ch] font-display text-[clamp(2rem,4.2vw,3.25rem)] font-semibold leading-[1.04] tracking-[-0.03em]"
+              >
                 <Display text={text(sec.placeHeading)} />
               </h2>
-              <p className="mt-6 max-w-[44ch] text-[1.0625rem] leading-[1.7] text-ink-muted">
+              <p data-mo="up" className="mt-6 max-w-[44ch] text-[1.0625rem] leading-[1.7] text-ink-muted">
                 {text(sec.placeBody)}
               </p>
+              {/* "Varför Snajp finns" från /vart-team, styckena utan rubriken
+                  (Anton 2026-10-18). Samma källa som teamsidan: copy.ts. */}
+              {varforSnajp.map((stycke) => (
+                <p key={stycke.sv.slice(0, 24)} data-mo="up" className="mt-5 max-w-[44ch] text-[1rem] leading-[1.7] text-ink-muted">
+                  {text(stycke)}
+                </p>
+              ))}
             </div>
           </div>
         </section>
 
         {/* STEPS. */}
-        <section className="border-t border-ink/15">
+        <section className="relative">
+          <i aria-hidden="true" data-mo="rule" className="mo-rule" />
           <div className="mx-auto max-w-[1480px] px-6 py-24 md:px-10 md:py-28">
-            <h2 className="rise max-w-[20ch] font-display text-[clamp(1.875rem,3.6vw,2.875rem)] font-semibold leading-[1.06] tracking-[-0.028em]">
+            <h2
+              key={nyckel}
+              data-mo="lines"
+              className="max-w-[20ch] font-display text-[clamp(1.875rem,3.6vw,2.875rem)] font-semibold leading-[1.06] tracking-[-0.028em]"
+            >
               <Display text={text(copy.stepsHeading)} />
             </h2>
             {/* Utan de gula ordningstalen. De satt i egen kolumn framför
@@ -411,7 +491,7 @@ export function LandingPhoto({
                 bredvid sig. */}
             <div className="mt-12 grid grid-cols-1 gap-x-12 md:grid-cols-3">
               {copy.steps.map((step) => (
-                <div key={step.title.sv} className="rise hrule py-8 md:py-10">
+                <div key={step.title.sv} data-mo="row" className="hrule py-8 md:py-10">
                   <h3 className="font-display text-[1.3125rem] font-semibold leading-tight tracking-[-0.015em]">
                     {text(step.title)}
                   </h3>
@@ -425,9 +505,10 @@ export function LandingPhoto({
         {/* DIVIDER. A facade of identical windows under a heavy scrim: the flat
             run of text sections needed one more break, and the image rhymes with
             "the same email to a hundred companies". */}
-        <section className="relative h-[220px] overflow-hidden md:h-[300px]">
+        <section data-mo="band" className="relative h-[220px] overflow-hidden md:h-[300px]">
           <div
-            className="parallax absolute inset-0 bg-seal"
+            data-parallax
+            className="parallax absolute -inset-y-[10%] inset-x-0 bg-seal"
             aria-hidden="true"
             style={{ backgroundImage: `url(${photo(imagery.grid.src)})` }}
           />
@@ -445,20 +526,25 @@ export function LandingPhoto({
             är den fråga som avgör om man ens läser svaren på resten. Svensk B2B
             är ett litet rum, och en leverantör utan ansikte är en leverantör
             man skjuter upp beslutet om. */}
-        <section id="vilka-ar-vi" className="scroll-mt-24 border-t border-ink/12">
+        <section id="vilka-ar-vi" className="relative scroll-mt-24">
+          <i aria-hidden="true" data-mo="rule" className="mo-rule" />
           <div className="mx-auto max-w-[1480px] px-6 py-24 md:px-10 md:py-32">
             <div className="grid grid-cols-12 gap-y-10 lg:gap-x-14">
               <div className="col-span-12 lg:col-span-4">
                 <Label>{text(shared.vilkaRubrik)}</Label>
-                <h2 className="rise mt-5 max-w-[18ch] font-display text-[clamp(1.875rem,3.6vw,2.875rem)] font-semibold leading-[1.06] tracking-[-0.028em]">
+                <h2
+                  key={nyckel}
+                  data-mo="lines"
+                  className="mt-5 max-w-[18ch] font-display text-[clamp(1.875rem,3.6vw,2.875rem)] font-semibold leading-[1.06] tracking-[-0.028em]"
+                >
                   <Display text={text(shared.vilkaRubrikStor)} />
                 </h2>
               </div>
               <div className="col-span-12 lg:col-span-7 lg:col-start-6">
-                <p className="rise max-w-[62ch] text-[1.0625rem] leading-[1.7] text-ink-muted">
+                <p data-mo="row" className="max-w-[62ch] text-[1.0625rem] leading-[1.7] text-ink-muted">
                   {text(shared.vilkaText1)}
                 </p>
-                <p className="rise mt-6 max-w-[62ch] text-[1.0625rem] leading-[1.7] text-ink-muted">
+                <p data-mo="row" className="mt-6 max-w-[62ch] text-[1.0625rem] leading-[1.7] text-ink-muted">
                   {text(shared.vilkaText2)}
                 </p>
                 {/* Två vägar vidare, inte en utbytt. Avsnittet reser frågan
@@ -466,7 +552,7 @@ export function LandingPhoto({
                     ett svar på en fråga ingen ställde. Teamsidan svarar på den
                     som faktiskt ställdes. Mejlvägen står kvar för den som
                     hellre frågar än läser. */}
-                <div className="mt-8 flex flex-wrap items-center gap-x-6 gap-y-3">
+                <div data-mo="row" className="mt-8 flex flex-wrap items-center gap-x-6 gap-y-3">
                   <a
                     href={mejlaOss()}
                     className="focus-ring inline-flex min-h-12 items-center rounded-input border border-ink/20 px-6 text-[0.9375rem] font-semibold transition-colors hover:border-ink"
@@ -486,17 +572,22 @@ export function LandingPhoto({
         </section>
 
         {/* OBJECTIONS. Real questions, answered plainly. */}
-        <section id="fragor" className="scroll-mt-24 border-t border-ink/12 bg-paper2/40">
+        <section id="fragor" className="relative scroll-mt-24 bg-paper2/40">
+          <i aria-hidden="true" data-mo="rule" className="mo-rule" />
           <div className="mx-auto max-w-[1480px] px-6 py-24 md:px-10 md:py-32">
             <div className="grid grid-cols-12 gap-y-12 lg:gap-x-14">
               <div className="col-span-12 lg:col-span-4">
-                <h2 className="rise max-w-[14ch] font-display text-[clamp(1.875rem,3.6vw,2.875rem)] font-semibold leading-[1.06] tracking-[-0.028em]">
+                <h2
+                  key={nyckel}
+                  data-mo="lines"
+                  className="max-w-[14ch] font-display text-[clamp(1.875rem,3.6vw,2.875rem)] font-semibold leading-[1.06] tracking-[-0.028em]"
+                >
                   <Display text={text(sec.objectionsHeading)} />
                 </h2>
               </div>
               <dl className="col-span-12 lg:col-span-7 lg:col-start-6">
                 {sec.objections.map((item) => (
-                  <div key={item.q.sv} className="rise hrule py-7 first:border-t-0 first:pt-0">
+                  <div key={item.q.sv} data-mo="row" className="hrule py-7 first:border-t-0 first:pt-0">
                     <dt className="font-display text-[1.25rem] font-semibold leading-snug tracking-[-0.015em]">
                       {text(item.q)}
                     </dt>
@@ -512,6 +603,7 @@ export function LandingPhoto({
                     inte hör hemma mitt i argumentet. */}
                 <Link
                   href="/faq"
+                  data-mo="up"
                   className="focus-ring mt-8 inline-block text-[0.9375rem] font-medium underline underline-offset-4 hover:text-ochre"
                 >
                   {text(shared.fragorLank)}
@@ -522,14 +614,18 @@ export function LandingPhoto({
         </section>
 
         {/* LIMITS on ink, then the close. */}
-        <section className="bg-ink text-paper">
+        <section data-mo="band" className="bg-ink text-paper">
           <div className="mx-auto max-w-[1480px] px-6 py-24 md:px-10 md:py-28">
-            <h2 className="max-w-[22ch] font-display text-[clamp(1.875rem,3.6vw,2.875rem)] font-semibold leading-[1.06] tracking-[-0.028em]">
+            <h2
+              key={nyckel}
+              data-mo="lines"
+              className="max-w-[22ch] font-display text-[clamp(1.875rem,3.6vw,2.875rem)] font-semibold leading-[1.06] tracking-[-0.028em]"
+            >
               {text(copy.limitsHeading)}
             </h2>
             <ul className="mt-10 grid grid-cols-1 gap-x-14 md:grid-cols-2">
               {copy.limits.map((limit) => (
-                <li key={limit.sv} className="flex items-start gap-5 border-t border-paper/15 py-5">
+                <li key={limit.sv} data-mo="row" className="flex items-start gap-5 border-t border-paper/15 py-5">
                   {/* Punkt, inte siffra. Numreringen läste som en rangordning
                       av spärrar som gäller lika mycket allihop. Punkten är vit
                       medan texten behåller sin dämpade ton. */}
@@ -545,9 +641,10 @@ export function LandingPhoto({
             alltså före avslutningssektionen och inte efter den. */}
         <PricingSection />
 
-        <section className="relative overflow-hidden">
+        <section data-mo="plate" className="relative overflow-hidden">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
+            data-parallax
             src={photo(imagery.desk.src)}
             alt={text(imagery.desk.alt)}
             loading="lazy"
@@ -560,14 +657,19 @@ export function LandingPhoto({
           />
           <div className="relative mx-auto min-h-[520px] max-w-[1480px] px-6 py-28 md:min-h-[600px] md:px-10 md:py-36">
             <div className="max-w-[30ch]">
-              <h2 className="font-display text-[clamp(2.25rem,5vw,3.75rem)] font-semibold leading-[1.02] tracking-[-0.03em]">
+              <h2
+                key={nyckel}
+                data-mo="lines"
+                className="font-display text-[clamp(2.25rem,5vw,3.75rem)] font-semibold leading-[1.02] tracking-[-0.03em]"
+              >
                 <Display text={text(shared.closingHeading)} />
               </h2>
-              <p className="mt-6 max-w-[46ch] text-[1.0625rem] leading-[1.7] text-ink-muted">
+              <p data-mo="row" className="mt-6 max-w-[46ch] text-[1.0625rem] leading-[1.7] text-ink-muted">
                 {text(shared.closingBody)}
               </p>
               <a
                 href={mejlaOss()}
+                data-mo="row"
                 className="focus-ring mt-9 inline-flex min-h-12 items-center rounded-input bg-ink px-7 text-[1rem] font-semibold text-paper transition-colors hover:bg-ink2"
               >
                 {text(shared.closingCta)}
@@ -582,15 +684,16 @@ export function LandingPhoto({
           når oss, och vad som gäller kunddata. Den sista är inte en
           artighetsrad: den är den vanligaste invändningen i svensk B2B, och ett
           svar på tre förkortningar duger inte som svar. */}
-      <footer className="border-t border-ink/12">
+      <footer className="relative">
+        <i aria-hidden="true" data-mo="rule" className="mo-rule" />
         <div className="mx-auto max-w-[1480px] px-6 py-12 md:px-10 md:py-16">
           <div className="grid grid-cols-12 gap-y-10 lg:gap-x-12">
-            <div className="col-span-12 lg:col-span-4">
+            <div data-mo="row" className="col-span-12 lg:col-span-4">
               <Logo />
               <p className="mt-4 text-[0.875rem] text-ink-subtle">{text(shared.footerPlats)}</p>
             </div>
 
-            <div id="kontakt" className="col-span-12 scroll-mt-24 sm:col-span-5 lg:col-span-3">
+            <div id="kontakt" data-mo="row" className="col-span-12 scroll-mt-24 sm:col-span-5 lg:col-span-3">
               <Label>{text(shared.footerKontakt)}</Label>
               <a
                 href={mejlaOss()}
@@ -600,7 +703,7 @@ export function LandingPhoto({
               </a>
             </div>
 
-            <div id="dataskydd" className="col-span-12 scroll-mt-24 sm:col-span-7 lg:col-span-5">
+            <div id="dataskydd" data-mo="row" className="col-span-12 scroll-mt-24 sm:col-span-7 lg:col-span-5">
               {/* Etiketten "Dataskydd" är borttagen; rubriken under säger redan
                   vad stycket handlar om. Ankaret #dataskydd finns kvar, menyn
                   pekar på det. */}

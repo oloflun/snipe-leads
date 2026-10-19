@@ -41,6 +41,36 @@ export function mejlaOss(amne?: string): string {
     : `mailto:${KONTAKT_MEJL}`;
 }
 
+/**
+ * "Varför Snajp finns", styckena (inte rubriken) från /vart-team. Står sedan
+ * 2026-10-18 även på startsidan under "Byggt i Göteborg" (Antons beställning),
+ * så texten bor här en gång och läses av båda sidorna.
+ */
+export const varforSnajp: Localized[] = [
+  {
+    sv:
+      "B2B-prospektering är tidskrävande och blir opersonlig precis när den skalas. Antingen " +
+      "skriver någon femton genomtänkta mejl i veckan, eller så skickas trehundra som alla " +
+      "läser likadant. Samma sak i kundtjänsten: svaren finns redan skrivna, men i fel " +
+      "dokument, och någon måste ändå läsa varje ärende för att veta vilket som brådskar.",
+    en:
+      "B2B prospecting takes time and turns impersonal exactly when it scales. Either someone " +
+      "writes fifteen considered emails a week, or three hundred go out that all read the same. " +
+      "The same thing in customer service: the answers are already written, but in the wrong " +
+      "document, and someone still has to read every case to know which one is urgent."
+  },
+  {
+    sv:
+      "Vi bygger verktyget som gör förarbetet — hittar företagen och sorterar ärendena — och " +
+      "lämnar beslutet till en människa. Målet är inte att ersätta den som " +
+      "säljer eller svarar, utan att ge tillbaka timmarna som gick åt till att leta.",
+    en:
+      "We build the tool that does the groundwork, finding the companies and sorting the cases, " +
+      "and leaves the decision to a person. The aim is not to replace whoever sells or replies, " +
+      "but to give back the hours that went into searching."
+  }
+];
+
 export type ProductCopy = {
   word: Localized;
   headline: Localized;

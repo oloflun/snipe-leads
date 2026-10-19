@@ -704,3 +704,250 @@ body {
     animation: none;
   }
 }
+
+/* -- Startsidan: dygnsljus, Source Serif 4 och GSAP-rörelsen -----------------
+ *
+ * Allt nedan gäller bara under `.landing` (LandingPhoto) och `.serif-fet`.
+ * Rörelsens startlägen sätts av JS (useLandingMotion), aldrig här: utan JS är
+ * allt synligt. Marken (--ground) och ljuslagret skrivs av EN ägare,
+ * ljusmotorn i useLandingMotion.
+ */
+
+/* Marknadssidornas serif (Anton 2026-10-18: fetare, inte Fraunces). Både
+   --font-fraunces (Tailwinds font-display) och --font-serif (.font-display,
+   .numeral) pekas om: --font-serif är redan substituerad på :root, så att
+   bara skriva om --font-fraunces hade inte nått den. Fraunces axlar (opsz
+   144, SOFT) ersätts av font-optical-sizing: Source Serif 4 har opsz 8–60. */
+.serif-fet {
+  --font-fraunces: var(--font-source-serif);
+  --font-serif: var(--font-source-serif), ui-serif, Georgia, serif;
+}
+
+.serif-fet .font-display,
+.serif-fet .display,
+.serif-fet .numeral,
+.serif-fet .italic-disp,
+.serif-fet .disp-accent {
+  font-variation-settings: normal;
+  font-optical-sizing: auto;
+}
+
+/* Lenis (smooth-scroll.js). Samma rader som lenis/dist/lenis.css, plus
+   scroll-behavior: auto: html har `smooth` ovan, och Lenis sätter scrollTop
+   varje bildruta, så webbläsarens egen mjukning hade animerat varje steg. */
+html.lenis,
+html.lenis body {
+  height: auto;
+}
+
+html.lenis {
+  scroll-behavior: auto;
+}
+
+.lenis:not(.lenis-autoToggle).lenis-stopped {
+  overflow: clip;
+}
+
+.lenis [data-lenis-prevent],
+.lenis [data-lenis-prevent-wheel],
+.lenis [data-lenis-prevent-touch] {
+  overscroll-behavior: contain;
+}
+
+.lenis.lenis-smooth iframe {
+  pointer-events: none;
+}
+
+@property --fill {
+  syntax: "<number>";
+  inherits: false;
+  initial-value: 1;
+}
+
+/* Marken är ett eget fast lager bakom allt (z-index -1 i sidans egen
+   staplingskontext): ljusmotorn byter dess färg varje bildruta, och på ett
+   enda element kostar det ingenting. En variabel på roten hade räknat om
+   stilen för hela sidan per bildruta, vilket hackade i sprängskissen. */
+.landing {
+  position: relative;
+  isolation: isolate;
+}
+
+.landing .ground {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  /* Soluppgången, tills ljusmotorn tar över. */
+  background: oklch(0.955 0.03 65);
+}
+
+/* Ljuslagret: skugga i multiply med fyra upplysta rutor som glider med
+   dygnet. Det ligger UNDER innehållet (z-index -1, efter marken i DOM:en) och
+   färgar därför bara marken: foton, produktytor och mörka band är ogenomskinliga
+   och täcker det av sig själva, så inga hål behöver klippas. Första versionen
+   låg över allt med ett clip-path-hål per produktyta och en oskärpa som
+   räknades om varje bildruta; motion-probe mätte 480 ms per bildruta i
+   sprängskissen. Rutorna har fast storlek och skalas med transform, och
+   oskärpan byts bara i steg om 3 px, så kompositorn gör hela arbetet. */
+/* Ingen mix-blend-mode: multiply på ett fast helskärmslager kostade 31 %
+   tappade bildrutor i riktig Chromium med GPU (uppmätt 2026-10-18, 0,8 % utan).
+   Vanlig alfakomposition ger samma bild: lagret bär skuggans färg med
+   opacitet, och rutorna målas i markens egen färg (--pane, skriven av
+   ljusmotorn), så att marken står orörd inne i dem. */
+.landing .light {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  overflow: hidden;
+  contain: strict;
+  background: oklch(0.87 0.04 58);
+  opacity: 0;
+}
+
+.landing .light__panes {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 1000px;
+  height: 1000px;
+  display: grid;
+  grid-template: 1fr 1fr / 1fr 1fr;
+  gap: 50px;
+  transform-origin: 50% 50%;
+  will-change: transform, filter;
+}
+
+.landing .light__panes i {
+  background: var(--pane, oklch(0.955 0.03 65));
+}
+
+/* Sektionens övre linje, ritad från vänster av rörelsen (scaleX). Utan JS
+   står den hel. */
+.mo-rule {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 1px;
+  background: oklch(var(--ink) / 0.14);
+  transform-origin: left;
+}
+
+/* SplitText-radmasker: plats för underhäng och för Å Ä Ö över versalhöjden. */
+.landing .ln-mask {
+  padding: 0.1em 0 0.18em;
+  margin: -0.1em 0 -0.18em;
+}
+
+/* En spaltad rad bryts aldrig om: SplitText har redan mätt raden, och
+   text-wrap: pretty på body lade annars en ensam punkt på egen rad efter
+   den kursiva accenten ("effektivisera arbetet" / "."). */
+.landing .ln {
+  white-space: nowrap;
+}
+
+/* Dörren före första målningen bor i ett inline-skript i LandingPhoto (ett
+   <style id="door-armed"> i <head>), inte här: SSR-innehållet får inte först
+   synas helt och sedan döljas när rörelsemodulen laddat, och en klass på
+   <html> gav en hydreringsvarning. */
+
+/* Uttalandets ord fylls av sin egen position i vyn: dämpat papper -> papper. */
+.landing .st-w {
+  color: color-mix(in oklch, oklch(var(--paper)) calc(var(--fill) * 100%), oklch(var(--paper-subtle)));
+}
+
+/* Den isärtagna översikten: fyra delar beskurna ur samma skärmdump, lyfta
+   rakt mot betraktaren (translateZ, ingen lutning) medan en förblurrad
+   tvilling av grundbilden tonas in. Förklaringarna tänds med --on, linjerna
+   ritas med stroke-dashoffset (pathLength 1). */
+@property --on {
+  syntax: "<number>";
+  inherits: false;
+  initial-value: 1;
+}
+
+.isar__stage {
+  position: relative;
+  aspect-ratio: 2880 / 1920;
+  perspective: 1600px;
+  transform-style: preserve-3d;
+  margin: 0;
+}
+
+.isar__base,
+.isar__blur {
+  display: block;
+  width: 100%;
+  height: 100%;
+  outline: 1px solid oklch(var(--ink) / 0.12);
+  outline-offset: -1px;
+}
+
+.isar__blur {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  filter: blur(5px);
+  pointer-events: none;
+}
+
+/* Förklaringarna dämpas bara där linjerna finns (desktop); på mobil står de
+   ovanför bilden som en vanlig lista och får inte läsa som avstängd text. */
+@media (min-width: 1024px) {
+  .isar__pt {
+    opacity: calc(0.28 + 0.72 * var(--on));
+    transform: translateX(calc((1 - var(--on)) * 6px));
+  }
+}
+
+.isar__lines {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+  display: none;
+}
+
+@media (min-width: 1024px) {
+  .isar__lines {
+    display: block;
+  }
+}
+
+.isar__line {
+  stroke: oklch(var(--ink) / 0.7);
+  stroke-width: 1;
+  fill: none;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+}
+
+.isar__dot {
+  fill: oklch(var(--ochre));
+  opacity: 0;
+}
+
+.isar__part {
+  position: absolute;
+  left: calc(var(--cx) * 100%);
+  top: calc(var(--cy) * 100%);
+  width: calc(var(--cw) * 100%);
+  height: calc(var(--ch) * 100%);
+  overflow: hidden;
+  outline: 1px solid oklch(var(--ink) / 0.14);
+  outline-offset: -1px;
+  background: oklch(var(--paper));
+}
+
+.isar__part img {
+  position: absolute;
+  left: calc(var(--cx) / var(--cw) * -100%);
+  top: calc(var(--cy) / var(--ch) * -100%);
+  width: calc(100% / var(--cw));
+  height: calc(100% / var(--ch));
+  max-width: none;
+}

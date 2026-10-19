@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { InnehallsSida, SidAvslut, SidRubrik } from "@/components/marketing/InnehallsSida";
-import { KONTAKT_MEJL } from "@/components/marketing/copy";
+import { KONTAKT_MEJL, varforSnajp } from "@/components/marketing/copy";
 import { initialer, TEAM, teametArIfyllt } from "@/lib/team";
 import { notFoundOnTenant } from "@/lib/tenants/server";
 
@@ -61,18 +61,12 @@ export default async function Page() {
         <h2 className="font-display text-[1.75rem] font-semibold leading-snug tracking-[-0.025em]">
           Varför Snajp finns
         </h2>
+        {/* Samma stycken står på startsidan under "Byggt i Göteborg"; texten
+            bor i copy.ts så att de två inte glider isär. */}
         <div className="mt-5 max-w-[62ch] space-y-5 text-[1.0625rem] leading-[1.7] text-ink-muted">
-          <p>
-            B2B-prospektering är tidskrävande och blir opersonlig precis när den skalas. Antingen
-            skriver någon femton genomtänkta mejl i veckan, eller så skickas trehundra som alla
-            läser likadant. Samma sak i kundtjänsten: svaren finns redan skrivna, men i fel
-            dokument, och någon måste ändå läsa varje ärende för att veta vilket som brådskar.
-          </p>
-          <p>
-            Vi bygger verktyget som gör förarbetet — hittar företagen och sorterar ärendena — och
-            lämnar beslutet till en människa. Målet är inte att ersätta den som
-            säljer eller svarar, utan att ge tillbaka timmarna som gick åt till att leta.
-          </p>
+          {varforSnajp.map((stycke) => (
+            <p key={stycke.sv.slice(0, 24)}>{stycke.sv}</p>
+          ))}
         </div>
       </section>
 
@@ -86,7 +80,7 @@ export default async function Page() {
         <ul className="mt-8 grid max-w-[760px] gap-x-10 gap-y-12 sm:grid-cols-2">
           {TEAM.map((medlem) => (
             <li key={medlem.id}>
-              {/* Bilden renderas bara när det FINNS en. Ett <img> mot en
+              {/* Bilden renderas bara när det FINNS en. En bildtagg mot en
                   saknad fil ger webbläsarens trasiga ikon, vilket är den
                   sämsta möjliga bilden på en sida om förtroende. */}
               {medlem.foto ? (

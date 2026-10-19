@@ -9,6 +9,90 @@ möjligt), vad det betyder i koden.
 
 ---
 
+## 2026-10-18 (Anton) — Startsidan: Dygnets dygnsljus, mjuka övergångar, isärtagen översikt, fetare serif
+
+**Beslut.** Startsidan behålls som den är (hjälten, bilderna, alla sektioner,
+uppdelningen Leads/Support, de konstruerade produktytorna) och får ovanpå det:
+Dygnets dynamiska dygnsbakgrund som börjar i soluppgång under hjälten och blir
+varmvit längst ned, vackra övergångar och effekter mellan alla sektioner, en
+enstaka dynamisk bild av dashboarden där elementen delas upp som i
+Isärtagning men utan lutning, texten (inte rubriken) från "Varför Snajp finns"
+på /vart-team under "Byggt i Göteborg", och ett fetare serif-typsnitt som inte
+är Fraunces. "Gör allt detta mjukt."
+
+**Resonemang (Anton).** Av de fem koncepten på boarden kom nummer 1 (Dygnet)
+närmast estetiskt; i stället för fem nya koncept ska den riktiga sidan ta över
+Dygnets ljus och ambitionsnivån i rörelsen, med befintligt innehåll.
+
+**I koden.** `components/marketing/useLandingMotion.ts` (GSAP 3.15 + Lenis via
+repots `gsap.js`/`smooth-scroll.js`, dynamiskt importerade eftersom de rör
+`window` vid import): dörren, ljusmotorn (mark `--ground` + fyra ljusrutor i
+multiply, hål för hjälten och produktytorna), radmaskade rubriker, klippta
+avtäckningar, parallax, ord som fylls av skrollen, ritade sektionslinjer och
+den pinnade sprängskissen. `components/marketing/DashboardIsar.tsx`: översikten
+(demo, exempeldata) i fyra delar ur samma skärmdump. `LandingPhoto.tsx` bär
+`data-mo`-markörer och `key` per produkt+språk på rubriker som SplitText
+spaltar.
+
+*Agentens val, att pröva (Anton):* serifen är **Source Serif 4** (variabel vikt
+200–900, optisk storlek, äkta kursiv): lägre kontrast än Fraunces och
+Newsreader, så den bär vikt över hjältefotot. Den är scopad till
+marknadssidan via klassen `serif-fet`; appytorna behåller Fraunces tills Anton
+säger annat. Inga nya foton lades till: beställningen tillät det men krävde det
+inte, och sprängskissen använder produktens egen yta. Lenis lever kvar i
+sessionen efter att man lämnat startsidan (en skrollägare, som husets regel
+säger); inre skrollytor i demon behöver `data-lenis-prevent` om de visar sig
+fastna. Den gamla `.rise`-avslöjningen (useReveal) används inte längre på
+startsidan; klasserna står kvar och är verkningslösa där.
+
+**Rättningar samma dag efter Antons första titt** ("dashboarden vibrerar och
+hackar och hoppar åt sidan", "bakgrunden helt borta", "lägg till text",
+"animationer för showcase-rutorna"): dygnet sträcks över hela sidan och når
+varmvitt först vid priset (det nådde vitt redan vid demon); marken ritas på
+ett eget fast lager i stället för en variabel på roten (en variabel räknade
+om stilen för hela sidan varje bildruta); sprängskissens kamera drar sig inte
+längre tillbaka (skalan .94 flyttade översikten 35 px i sidled och lästes som
+ett hopp), ljusets hål har decimaler (hela pixlar gav kanter som hoppade) och
+delarna är egna hål. Sektionen fick en rubrik och en ingress: **ny copy, inte
+godkänd av Anton än** ("Hela dagen på *en skärm*." / "Översikten visar vad
+agenterna gjort: körningar, levererade leads, det som väntar på en människa
+och vad det kostat. Varje del uppdateras medan Iris arbetar."). Showcase-
+rutorna (ProduktBilder) fick liv: delarna kommer i berättelsens ordning när
+figuren avtäcks och utkasten skriver sig själva uppifrån; bara element
+animeras, aldrig textnoder, eftersom React äger texten.
+
+**Andra varvet samma dag** ("det ser fortfarande för jävligt ut": rubriker
+och showcase-delar osynliga, dashboarden hackar, ingen tydlighet):
+
+- *Avslöjandena är idempotenta.* Första versionen byggde varje avslöjande som
+  en `gsap.from` med engångs-ScrollTrigger, skapad om i SplitTexts `onSplit`;
+  varje omspaltning (fontbyte, storleksändring, dev-serverns hot reload) dolde
+  redan visade element igen utan att en ny trigger spelade dem. Nu döljs ett
+  element högst en gång och visas av `play()`, som stämplar `data-rv="1"` och
+  är en no-op andra gången; ScrollTrigger, en IntersectionObserver och en
+  timer kan alla kalla den. Verifierat i riktig Chromium 1920 med hjulet hela
+  vägen ned: 0 dolda element.
+- *Hackandet var mätt, inte gissat.* Bildrutetider i riktig Chromium med GPU:
+  allt på 31 % tappade bildrutor (p95 50 ms); utan multiply-blandningen
+  0,8 % (p95 17 ms). Dygnet-konceptet självt låg på stadiga 30 fps med samma
+  teknik. Ljuslagret ligger nu under innehållet (ogenomskinliga ytor täcker
+  det, inga hål), komponeras med vanlig alfa (rutorna målas i markens färg i
+  stället för multiply), rutorna skalas med transform i stället för att byta
+  bredd, och oskärpan byts i steg om 3 px. Resultat: p95 17 ms, 0,9–2 %
+  över 33 ms, allt på. Lenis vaktar dessutom mot en andra instans vid hot
+  reload (`smooth-scroll.js`).
+- *Sprängskissen fick avsikt.* Texten står inne i det pinnade blocket till
+  höger om bilden (rälen sitter till vänster: linjer från vänster försvann mot
+  den), tre förklaringar tänds i tur med en ritad linje och en prick vid sin
+  del, grundbilden byts mot en förblurrad tvilling (oskärpa rastrerad en gång),
+  och kameran drar sig inte tillbaka. Förklaringarnas ord är produktens egna
+  paneltitlar; rubrik, ingress och förklaringar är ny copy att godkänna.
+- *Showcase-rutorna rör sig.* Figurerna glider mjukt mot sidan medan de
+  passerar (den andra lite senare än den första), avtäcks nedifrån med en
+  liten skalning, och delarna inne i ytan kommer i berättelsens ordning.
+
+---
+
 ## 2026-10-17 (Anton) — Main blir sanningen efter första synken; körningar i development flyttas aktivt
 
 **Beslut.** Alla körningar från development följer med till main, utom de som

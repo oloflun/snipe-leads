@@ -67,7 +67,7 @@ function StatRad({ stats }: Readonly<{ stats: Stat[] }>) {
 
 function Panel({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <div className="overflow-hidden rounded-panel border border-ink/12 bg-paper">
+    <div data-hole className="overflow-hidden rounded-panel border border-ink/12 bg-paper">
       {children}
     </div>
   );
@@ -241,7 +241,7 @@ type SektionsCopy = {
 };
 
 export function AgentResultat({ product }: Readonly<{ product: ProductKey }>) {
-  const { text } = useLocale();
+  const { text, locale } = useLocale();
 
   const perProdukt: Record<ProductKey, SektionsCopy> = {
     leads: {
@@ -300,25 +300,31 @@ export function AgentResultat({ product }: Readonly<{ product: ProductKey }>) {
   const copy = perProdukt[product];
 
   return (
-    <section aria-labelledby="agentresultat-rubrik" className="border-t border-ink/12">
+    <section aria-labelledby="agentresultat-rubrik" className="relative">
+      <i aria-hidden="true" data-mo="rule" className="mo-rule" />
       <div className="mx-auto max-w-[1480px] px-6 py-24 md:px-10 md:py-32">
         <div className="grid grid-cols-12 gap-y-12 lg:gap-x-14">
           <div className="col-span-12 lg:col-span-5">
+            {/* key per produkt och språk: rubriken radspaltas av SplitText
+                (useLandingMotion), och React får inte diffa inuti ett element
+                vars barn flyttats, utan byter hela noden. */}
             <h2
               id="agentresultat-rubrik"
-              className="rise max-w-[16ch] font-display text-[clamp(2rem,4.2vw,3.25rem)] font-semibold leading-[1.04] tracking-[-0.03em]"
+              key={`${product}-${locale}`}
+              data-mo="lines"
+              className="max-w-[16ch] font-display text-[clamp(2rem,4.2vw,3.25rem)] font-semibold leading-[1.04] tracking-[-0.03em]"
             >
               <Accent text={text(copy.rubrik)} />
             </h2>
-            <p className="rise rise-1 mt-6 max-w-[48ch] text-[1.0625rem] leading-[1.7] text-ink-muted">
+            <p data-mo="up" className="mt-6 max-w-[48ch] text-[1.0625rem] leading-[1.7] text-ink-muted">
               {text(copy.brod)}
             </p>
-            <div className="rise rise-2 mt-10">
+            <div data-mo="up" className="mt-10">
               <StatRad stats={copy.stats} />
             </div>
           </div>
           <div className="col-span-12 lg:col-span-6 lg:col-start-7">
-            <div className="rise rise-1">{copy.panel}</div>
+            <div data-mo="shot">{copy.panel}</div>
             {/* Honest-proof: siffrorna ovan är illustration, och det står. */}
             <p className="mt-4 text-[0.8125rem] font-medium text-ink-subtle">
               {text({
