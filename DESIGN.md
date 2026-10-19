@@ -256,7 +256,7 @@ den beskrivande texten rad för rad. En yta i taget: nästa väntar tills den f�
 
 ```js
 import { spring } from "@/gsap.js";   // Apples fjäder (skillen apple-design § 4)
-spring(0.75, 0.75)                     // dämpning 0.75 ≈ 2,8 % förbi målet, respons 0.75 s, ~1,1 s till vila
+spring(0.66, 0.95)                     // dämpning 0.66 ≈ 6 % förbi målet (~11 px), respons 0.95 s, ~1,6 s till vila
 ```
 
 - Markup: `data-case` (utlösare och kö-enhet), `data-case-box` + `data-from="left|right|up"`
@@ -266,6 +266,9 @@ spring(0.75, 0.75)                     // dämpning 0.75 ≈ 2,8 % förbi målet
   på samma `transform` som GSAP skriver, får ytan att darra när man skrollar fram och tillbaka
   (det var felet 2026-10-18).
 - Ytan blir aldrig osynlig: utan JS står den bara förskjuten tills säkringen spelar den.
+- Text som en agent skriver (utkast i en showcase-ruta, demons omskrivningar) skrivs fram live
+  med en markör (`LiveText`, `lib/skrivs.ts`), aldrig tonad. Motiveringar är en kort mening på
+  vanliga ord, utan metodnamn, filer eller fackord (`utanReferenser` spärrar modellsvar).
 - Studsen hör till själva inglidningen, som bär fart. Menyer, popovers och sådant som bara
   dyker upp får dämpning 1.0 (ingen studs), enligt apple-design.
 

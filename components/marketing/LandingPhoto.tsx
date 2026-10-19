@@ -208,6 +208,9 @@ export function LandingPhoto({
                 "linear-gradient(to bottom, oklch(var(--ink) / 0.55) 0%, oklch(var(--ink) / 0.18) 28%, oklch(var(--ink) / 0.30) 55%, oklch(var(--ink) / 0.82) 100%)"
             }}
           />
+          {/* Mobil: ingressen hamnar över den ljusa horisonten. Ett mjukt
+              mörkare band i fotot, inte en skugga bakom texten. */}
+          <div aria-hidden="true" className="hero-band absolute inset-0 lg:hidden" />
 
           <div className="relative mx-auto flex min-h-[92vh] max-w-[1480px] flex-col justify-end px-6 pb-14 pt-32 md:px-10 md:pb-20">
             <div className="max-w-[min(100%,980px)]">

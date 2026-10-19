@@ -9,6 +9,7 @@ import {
   Sparkles,
   X
 } from "lucide-react";
+import { LiveText } from "@/components/marketing/LiveText";
 import type { Locale, Localized } from "@/lib/i18n";
 import type { ProductKey } from "@/lib/routes";
 import { cn } from "@/lib/utils";
@@ -269,7 +270,7 @@ function InkorgYta({ locale }: Readonly<{ locale: Locale }>) {
           <T text={UI.agentensUtkast} locale={locale} />
         </p>
         <div className="mt-1.5 rounded-input border border-ink/12 bg-paper px-3 py-2.5 text-[0.75rem] leading-[1.55] text-ink">
-          {MARIA_UTKAST}
+          <LiveText text={MARIA_UTKAST} />
         </div>
 
         <div className="mt-3 flex flex-wrap items-center gap-1.5">
@@ -347,9 +348,9 @@ function IrisUtkastYta({ locale }: Readonly<{ locale: Locale }>) {
         <T text={UI.till} locale={locale} /> {JOHAN_MOTTAGARE} · <T text={UI.amne} locale={locale} />{" "}
         {JOHAN_AMNE} · <T text={UI.bifogas} locale={locale} />
       </p>
-      {/* "draft" avtäcks uppifrån av rörelsen: mejlet skriver sig självt. */}
+      {/* Mejlet skriver sig självt: texten skrivs fram när rutan har landat. */}
       <div className="mt-3 rounded-input border border-ink/12 bg-paper px-3 py-2.5 text-[0.75rem] leading-[1.55] text-ink">
-        {JOHAN_MEJL}
+        <LiveText text={JOHAN_MEJL} />
       </div>
       <div className="mt-3 flex flex-wrap items-center gap-1.5">
         <Knapp variant="primar">

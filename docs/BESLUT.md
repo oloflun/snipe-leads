@@ -9,6 +9,28 @@ möjligt), vad det betyder i koden.
 
 ---
 
+## 2026-10-19 (Anton) — Live-skrivning, tydligare studs, inga tekniska referenser i demon
+
+**Beslut.** "Testa göra skuggan i heron svagare, eller skippa den helt. Gör
+även animeringarna för rutorna jämnare och mjukare, och gör
+studsseffekten/tillbakafjädringen tydligare. Skapa även effekten att texten
+skrivs live, för alla omgenereringar/knappval också, ta även bort alla
+tekniska referenser, endast korta motiveringar."
+
+**Resonemang (Anton).** Skuggan bakom ingressen syntes som en skugga. Studsen
+var för subtil för att märkas. Demons svar ska kännas som att agenten skriver,
+och motiveringarna ska läsas av en kund, inte av en utvecklare.
+
+**I koden.** Den ovala mörkningen är borta; på mobil bär ett mjukt mörkare
+band i fotot läsbarheten (5,3:1). Fjädern 0.75/0.75 → 0.66/0.95 (studs ~11 px,
+mjukare glidning). `LiveText` skriver fram showcase-utkasten när rutan landat;
+demons omskrivningar skrivs fram i rutan och panelen visar bara en kort
+motivering (marknadssidan; arbetsytan oförändrad). Startsidans exempelmejl
+fick egna svar (`lib/data/emails.ts`), förut svarade varje knapp att demot
+bara fanns för andra bolag. Prompten ber inte längre modellen hänvisa till
+principer och filer, och `utanReferenser` stryker meningar som ändå gör det.
+Kvar: de sex /demo-bolagens motiveringar nämner "CTA" och har pilscheman.
+
 ## 2026-10-19 (Anton) — Startsidan: ytor glider in på en fjäder, två upprepande sektioner bort
 
 **Beslut.** "Jag vill att själva rutorna rör sig in mjukt på skärmen och att

@@ -162,17 +162,18 @@ export function useLandingMotion({ root, lenis: lenisRef }: DomRefs, product: st
 // SplitText kollapsar allt \s till vanliga mellanslag innan den mäter.) Orden är orörda (F-028).
 const ORDSKILJE = { delimiter: / (?![–—] )/, replaceWith: " " };
 
-// Rutornas ankomst (caseEntry). Dämpning 0.75 passerar målet med knappt 3 % och fjädrar
-// tillbaka, respons 0.75 s ger en lugn glidning för en stor yta (apple-design § 4: studs
-// bara där rörelsen bär fart, här själva inglidningen). Texten börjar när rutan nått målet
-// första gången (~0.55 s), nästa ruta när den förra har landat.
-const CASE_GAP = 0.7;
-const TEXT_AFTER = 0.45;
+// Rutornas ankomst (caseEntry). Dämpning 0.66 passerar målet med drygt 6 % (cirka 11 px)
+// och fjädrar tydligt tillbaka, respons 0.95 s ger en mjukare, längre glidning (Anton
+// 2026-10-19: "jämnare och mjukare, studsen tydligare"; var 0.75/0.75). Studs bara där
+// rörelsen bär fart, här själva inglidningen (apple-design § 4). Texten börjar när rutan
+// passerat målet, nästa ruta när den förra har landat.
+const CASE_GAP = 0.85;
+const TEXT_AFTER = 0.6;
 let queueEnd = 0;
 
 function setup(G: Gsap, rootEl: HTMLElement, fullDoor: boolean): () => void {
   const { gsap, ScrollTrigger, SplitText, spring } = G;
-  const ARRIVAL = spring(0.75, 0.75);
+  const ARRIVAL = spring(0.66, 0.95);
   const $ = <T extends HTMLElement = HTMLElement>(s: string, r: ParentNode = rootEl) => r.querySelector<T>(s);
   const $$ = <T extends HTMLElement = HTMLElement>(s: string, r: ParentNode = rootEl) => [...r.querySelectorAll<T>(s)];
   const timers: number[] = [];
@@ -396,12 +397,18 @@ function setup(G: Gsap, rootEl: HTMLElement, fullDoor: boolean): () => void {
       }
       texts.forEach(splitLines);
       const offset = () => from === "up" ? { x: 0, y: 120 } : { x: (from === "left" ? -1 : 1) * Math.min(180, innerWidth * 0.14), y: 0 };
-      arm(el, () => gsap.set(box, offset()), () => {
+      // will-change redan i viloläget: lagret finns när glidningen börjar, så första bildrutan
+      // målas inte om mitt i rörelsen. LiveText lyssnar på case:armed / case:landed.
+      arm(el, () => {
+        gsap.set(box, { ...offset(), willChange: "transform" });
+        el.dispatchEvent(new Event("case:armed"));
+      }, () => {
         const now = gsap.ticker.time;
         const start = Math.max(now, queueEnd);
         queueEnd = start + CASE_GAP;
         const tl = gsap.timeline({ delay: start - now });
-        tl.to(box, { x: 0, y: 0, ease: ARRIVAL.ease, duration: ARRIVAL.duration, force3D: true, clearProps: "transform" }, 0);
+        tl.to(box, { x: 0, y: 0, ease: ARRIVAL.ease, duration: ARRIVAL.duration, force3D: true, clearProps: "transform,willChange" }, 0);
+        tl.call(() => { el.dispatchEvent(new Event("case:landed")); }, [], TEXT_AFTER);
         texts.forEach((t, i) => {
           t.dataset.rv = "1";
           tl.add(showLines(t), TEXT_AFTER + i * 0.12);

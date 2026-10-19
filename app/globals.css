@@ -878,24 +878,27 @@ html.lenis {
    synas helt och sedan döljas när rörelsemodulen laddat, och en klass på
    <html> gav en hydreringsvarning. */
 
-/* Hjältens ingress står på fotot där horisonten är som ljusast (mobil). Helt
-   papper, en tät skugga i bläck för bokstavskanterna och en mjuk oval
-   mörkning bakom blocket som tonar ut åt alla håll, så att den läses som
-   skymning i fotot och inte som en platta. Skuggan ensam gav 2,4:1 mot
-   horisontens ljusaste partier, eftersom den inte når mellan raderna. */
+/* Hjältens ingress: helt papper och bara en tunn kantskugga. Den ovala
+   mörkningen bakom stycket syntes som en skugga och togs bort (Anton
+   2026-10-19); läsbarheten på mobil bärs i stället av fotots egen ton, ett
+   mörkare mittband i hjältens scrim (LandingPhoto, .hero-band). */
 .landing .hero-lede {
-  position: relative;
-  isolation: isolate;
-  text-shadow: 0 1px 2px oklch(var(--ink) / 0.6), 0 0 12px oklch(var(--ink) / 0.5);
+  text-shadow: 0 1px 2px oklch(var(--ink) / 0.45);
 }
 
-.landing .hero-lede::before {
-  content: "";
-  position: absolute;
-  inset: -2.5rem -3rem;
-  z-index: -1;
-  pointer-events: none;
-  background: radial-gradient(closest-side, oklch(var(--ink) / 0.7), oklch(var(--ink) / 0.62) 70%, oklch(var(--ink) / 0) 100%);
+.landing .hero-band {
+  background: linear-gradient(to bottom, oklch(var(--ink) / 0) 16%, oklch(var(--ink) / 0.48) 32%, oklch(var(--ink) / 0.48) 58%, oklch(var(--ink) / 0) 76%);
+}
+
+/* Markören medan en text skrivs fram (LiveText). Noll bredd: raderna bryts
+   likadant med och utan den. */
+.live-caret {
+  display: inline-block;
+  width: 0;
+  height: 1.1em;
+  margin-right: -1px;
+  vertical-align: text-bottom;
+  border-left: 1.5px solid oklch(var(--ink) / 0.75);
 }
 
 /* Uttalandets ord fylls av sin egen position i vyn: dämpat papper -> papper. */

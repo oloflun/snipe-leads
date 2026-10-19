@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState, useTransition, type ReactNode } from "react";
+import { useEffect, useRef, useState, useTransition, type ReactNode } from "react";
+import { skrivFram } from "@/lib/skrivs";
 import type { EmailStudioAction } from "@/lib/agent/email-studio-prompt";
 import type { EmailStudioData } from "@/lib/data/emails";
 import { btnPrimary } from "@/components/ui";
@@ -83,6 +84,32 @@ const SIMULERINGSORSAKER: Record<string, Localized> = {
   }
 };
 
+/** Åtgärder som skriver om mejlet direkt i rutan; resten visas bredvid. */
+const DIREKTA: EmailStudioAction[] = ["shorter", "rewrite", "improve", "personalize", "translate"];
+
+/** En text i resultatpanelen som skrivs fram live (marknadssidan). Resten står osynlig så att panelen inte växer under tiden. */
+function Skrivs({ text: full, className, fordrojning = 0 }: Readonly<{ text: string; className?: string; fordrojning?: number }>) {
+  const [n, setN] = useState(0);
+  useEffect(() => {
+    setN(0);
+    let stop = () => {};
+    const t = window.setTimeout(() => {
+      stop = skrivFram(full, (visad) => setN(visad.length));
+    }, fordrojning);
+    return () => {
+      window.clearTimeout(t);
+      stop();
+    };
+  }, [full, fordrojning]);
+  return (
+    <p className={className}>
+      {full.slice(0, n)}
+      {n < full.length ? <span className="live-caret" /> : null}
+      <span className="invisible">{full.slice(n)}</span>
+    </p>
+  );
+}
+
 function simuleringsorsak(orsak: string | undefined): Localized {
   // En okänd orsak (nyare server, äldre klient) får den försiktigaste
   // meningen — aldrig "logga in" och aldrig ett påstående om nycklar.
@@ -147,8 +174,13 @@ export function EmailStudioEditor({
   /** Ämne och text efter varje ändring, egen eller AI:ns (granskningskön sparar dem före godkännandet). */
   onAndring?: (subject: string, body: string) => void;
 }>) {
-  const { text } = useLocale();
+  const { text, locale } = useLocale();
   const [subject, setSubject] = useState(data.email.subject);
+  // Marknadssidan (compact): ett direkt omskrivet mejl skrivs fram live i rutan
+  // (Anton 2026-10-19). Knapparna väntar tills texten står klar.
+  const [skriver, setSkriver] = useState(false);
+  const stoppaSkrivning = useRef<() => void>(() => {});
+  useEffect(() => () => stoppaSkrivning.current(), []);
   const [body, setBody] = useState(data.email.body);
   useEffect(() => {
     onAndring?.(subject, body);
@@ -176,6 +208,7 @@ export function EmailStudioEditor({
             draft: body,
             subject,
             context: { ...refineContext, harSignatur: Boolean(efterText) },
+            locale,
             userId: "current-user"
           })
         });
@@ -215,9 +248,19 @@ export function EmailStudioEditor({
         // slut — "din text är orörd" hade varit osant. Resultatet visas ändå,
         // och "Använd ny version" finns kvar för den som vill ha det.
         const forskrivet = rich.simulated && rich.simulated_reason !== "anonym";
-        const directApply =
-          !forskrivet && ["shorter", "rewrite", "improve", "personalize", "translate"].includes(action);
-        if (directApply) {
+        const directApply = !forskrivet && DIREKTA.includes(action);
+        if (directApply && compact) {
+          stoppaSkrivning.current();
+          setSkriver(true);
+          const nyttAmne = rich.subject_suggestions[0];
+          const stoppaAmne = nyttAmne ? skrivFram(nyttAmne, setSubject) : () => {};
+          const stoppaText = skrivFram(rich.new_version, setBody, () => setSkriver(false));
+          stoppaSkrivning.current = () => {
+            stoppaAmne();
+            stoppaText();
+            setSkriver(false);
+          };
+        } else if (directApply) {
           if (rich.subject_suggestions[0]) setSubject(rich.subject_suggestions[0]);
           setBody(rich.new_version);
         }
@@ -292,6 +335,7 @@ export function EmailStudioEditor({
           maxLength={8000}
           value={body}
           onChange={(event) => setBody(event.target.value)}
+          readOnly={skriver}
           className={cn(
             "focus-ring mt-2 w-full resize-y rounded-card border border-ink/12 bg-paper p-5 text-[1rem] leading-7 text-ink outline-none transition-colors focus:border-ink/30",
             compact ? "min-h-[210px]" : "min-h-[320px]",
@@ -309,7 +353,7 @@ export function EmailStudioEditor({
               <button
                 key={item.action}
                 type="button"
-                disabled={isPending}
+                disabled={isPending || skriver}
                 onClick={() => runAction(item.action)}
                 className={cn(
                   // States are mutually exclusive rather than layered: `cn` is a plain
@@ -344,7 +388,33 @@ export function EmailStudioEditor({
           ) : null}
         </div>
 
-        {lastResult && !isPending ? (
+        {/* Marknadssidan: bara en kort motivering, som skrivs fram live. Den nya
+            texten visas här bara när den inte redan skrivits in i rutan
+            (varianter, uppföljning), och då med en knapp för att använda den. */}
+        {lastResult && !isPending && compact ? (
+          <div className="mt-5 rounded-card bg-paper p-5">
+            {!DIREKTA.includes(lastResult.action as EmailStudioAction) && lastResult.action !== "analyze" ? (
+              <>
+                <Skrivs text={lastResult.new_version} className="whitespace-pre-wrap text-[0.9375rem] leading-7 text-ink" />
+                <button type="button" onClick={applyResult} className={cn(btnPrimary, "mt-4")}>
+                  {text(ui.apply)}
+                </button>
+              </>
+            ) : null}
+            {lastResult.explanation ? (
+              <Skrivs
+                text={lastResult.explanation}
+                fordrojning={DIREKTA.includes(lastResult.action as EmailStudioAction) ? 400 : 0}
+                className={cn(
+                  "text-[0.9375rem] leading-7 text-ink-muted",
+                  !DIREKTA.includes(lastResult.action as EmailStudioAction) && lastResult.action !== "analyze" && "mt-5"
+                )}
+              />
+            ) : null}
+          </div>
+        ) : null}
+
+        {lastResult && !isPending && !compact ? (
           <div className="reveal mt-5 rounded-card bg-paper p-5">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <p className="text-[0.8125rem] font-semibold text-warning">{text(ui.updated)}</p>

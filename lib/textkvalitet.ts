@@ -53,6 +53,21 @@ export const FELSTAVNINGAR: Record<string, string> = {
 
 const SKYDDAT = /(https?:\/\/\S+|www\.\S+|[\w.+-]+@[\w-]+\.[\w.-]+|\b\d{6}-\d{4}\b)/g;
 
+/**
+ * Email Studios motivering läses av kunden och ska vara kort och på vanliga
+ * ord (Anton 2026-10-19). Prompten ber om det; det här är spärren om modellen
+ * ändå hänvisar till sina egna regler: en mening som nämner en fil, en skill
+ * eller ett metodnamn stryks hel.
+ */
+const TEKNISK_REFERENS = /\b[\w-]+\/[\w./-]+\.md\b|\bSKILL\b|\bskills?\b|marketingskills|cold-email|ab-testing|copywriting|copy-editing|ruthlessly/i;
+export function utanReferenser(text: string | undefined): string {
+  return (text ?? "")
+    .split(/(?<=[.!?])\s+/)
+    .filter((mening) => !TEKNISK_REFERENS.test(mening))
+    .join(" ")
+    .trim();
+}
+
 /** Deterministisk, riskfri putsning av en kundsynlig text. */
 export function putsaText(text: string): string {
   if (!text) return text;
