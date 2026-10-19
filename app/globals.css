@@ -901,101 +901,32 @@ html.lenis {
   border-left: 1.5px solid oklch(var(--ink) / 0.75);
 }
 
+/* Showcase-ytorna på desktop: samma ruta, större innehåll som fyller den
+   (Anton 2026-10-19). zoom och inte transform: layouten räknas om i den nya
+   storleken, så inget sticker ut ur rutan. Minsta höjden delas med zoomen så
+   att rutan står kvar i samma höjd. Mobilen och smala desktopfönster rörs inte:
+   där är kolumnen för smal för inkorgens två spalter. */
+@media (min-width: 1280px) {
+  .landing .case-zoom { zoom: 1.12; }
+  .landing .case-zoom > * { min-height: 375px; }
+}
+
+@media (min-width: 1536px) {
+  .landing .case-zoom { zoom: 1.25; }
+  .landing .case-zoom > * { min-height: 336px; }
+}
+
+/* Hjälterubrikens markör: i textens egen färg och tjock nog för displaystorleken. */
+.hero-caret {
+  border-left: 0.06em solid currentColor;
+  animation: hero-caret 1s steps(1) infinite;
+}
+
+@keyframes hero-caret {
+  50% { opacity: 0; }
+}
+
 /* Uttalandets ord fylls av sin egen position i vyn: dämpat papper -> papper. */
 .landing .st-w {
   color: color-mix(in oklch, oklch(var(--paper)) calc(var(--fill) * 100%), oklch(var(--paper-subtle)));
-}
-
-/* Den isärtagna översikten: fyra delar beskurna ur samma skärmdump, lyfta
-   rakt mot betraktaren (translateZ, ingen lutning) medan en förblurrad
-   tvilling av grundbilden tonas in. Förklaringarna tänds med --on, linjerna
-   ritas med stroke-dashoffset (pathLength 1). */
-@property --on {
-  syntax: "<number>";
-  inherits: false;
-  initial-value: 1;
-}
-
-.isar__stage {
-  position: relative;
-  aspect-ratio: 2880 / 1920;
-  perspective: 1600px;
-  transform-style: preserve-3d;
-  margin: 0;
-}
-
-.isar__base,
-.isar__blur {
-  display: block;
-  width: 100%;
-  height: 100%;
-  outline: 1px solid oklch(var(--ink) / 0.12);
-  outline-offset: -1px;
-}
-
-.isar__blur {
-  position: absolute;
-  inset: 0;
-  opacity: 0;
-  filter: blur(5px);
-  pointer-events: none;
-}
-
-/* Förklaringarna dämpas bara där linjerna finns (desktop); på mobil står de
-   ovanför bilden som en vanlig lista och får inte läsa som avstängd text. */
-@media (min-width: 1024px) {
-  .isar__pt {
-    opacity: calc(0.28 + 0.72 * var(--on));
-    transform: translateX(calc((1 - var(--on)) * 6px));
-  }
-}
-
-.isar__lines {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  overflow: visible;
-  pointer-events: none;
-  display: none;
-}
-
-@media (min-width: 1024px) {
-  .isar__lines {
-    display: block;
-  }
-}
-
-.isar__line {
-  stroke: oklch(var(--ink) / 0.7);
-  stroke-width: 1;
-  fill: none;
-  stroke-dasharray: 1;
-  stroke-dashoffset: 1;
-}
-
-.isar__dot {
-  fill: oklch(var(--ochre));
-  opacity: 0;
-}
-
-.isar__part {
-  position: absolute;
-  left: calc(var(--cx) * 100%);
-  top: calc(var(--cy) * 100%);
-  width: calc(var(--cw) * 100%);
-  height: calc(var(--ch) * 100%);
-  overflow: hidden;
-  outline: 1px solid oklch(var(--ink) / 0.14);
-  outline-offset: -1px;
-  background: oklch(var(--paper));
-}
-
-.isar__part img {
-  position: absolute;
-  left: calc(var(--cx) / var(--cw) * -100%);
-  top: calc(var(--cy) / var(--ch) * -100%);
-  width: calc(100% / var(--cw));
-  height: calc(100% / var(--ch));
-  max-width: none;
 }

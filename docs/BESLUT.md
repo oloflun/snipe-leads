@@ -9,6 +9,28 @@ möjligt), vad det betyder i koden.
 
 ---
 
+## 2026-10-19 (Anton) — Hjälten skrivs fram, bilderna står hela, översikten bort
+
+**Beslut.** "Hela herotexten för support är i färg, gör så att enbart 7:an är
+det. Gör även så att bilderna laddas hela, nu ser det ut som att de renderas,
+som att sidan laddas långsamt. Ta även bort hela dashboard-sektionen, den
+tillför inte något i nuläget och skiljer sig från de konstruerade rutorna. Se
+även till att texten för Om oss-sektionen på supportsidan inte innehåller massa
+leads-referenser. Gör även så att hero-texten skrivs ut på samma sätt som
+rutan, fast långsammare och mer effektfullt, med betoning på sover, samma med
+Support, men byt det till: Era kundärenden hanterade, 24/7." Och: "Gör även
+texten i rutorna större i desktop och låt den fylla upp dem mer."
+
+**I koden.** `HeroText` (`components/marketing/LiveText.tsx`) skriver fram
+rubriken när dörren öppnas (`hero:type` från `useLandingMotion`). Paus efter
+kommatecken och före det betonade ordet, som sedan skrivs i halv fart. Betoningen
+ligger på "sover" och på 7:an, i den ljusare ockran (`text-ochre`), eftersom
+`text-warning` försvann mot solnedgången. Fotona avtäcks inte längre med
+clip-path, bara parallaxen är kvar. `DashboardIsar` är borttagen med sin
+rörelse och CSS. `varforSupport` (copy.ts) ersätter `varforSnajp` på
+supportsidan. Rutornas innehåll zoomas 1,12 från 1280 px och 1,25 från 1536 px
+(`.case-zoom`), och minsta höjden delas med zoomen så att rutan behåller sin höjd.
+
 ## 2026-10-19 (Anton) — Live-skrivning, tydligare studs, inga tekniska referenser i demon
 
 **Beslut.** "Testa göra skuggan i heron svagare, eller skippa den helt. Gör

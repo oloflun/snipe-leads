@@ -71,6 +71,33 @@ export const varforSnajp: Localized[] = [
   }
 ];
 
+/**
+ * Samma stycken på supportsidan, utan prospekteringen: där läser besökaren om
+ * kundtjänsten och inget annat (Anton 2026-10-19).
+ */
+export const varforSupport: Localized[] = [
+  {
+    sv:
+      "I en kundtjänst kommer samma frågor tillbaka varje dag: var paketet är, hur en retur " +
+      "går till, vad garantin täcker. Svaren finns oftast redan skrivna, men i fel dokument, " +
+      "och någon måste ändå läsa varje ärende för att veta vilket som brådskar.",
+    en:
+      "In customer service the same questions come back every day: where the parcel is, how a " +
+      "return works, what the warranty covers. The answers are usually already written, but in " +
+      "the wrong document, and someone still has to read every case to know which one is urgent."
+  },
+  {
+    sv:
+      "Vi bygger verktyget som gör förarbetet. Det sorterar ärendena, skriver ett förslag till " +
+      "svar och lämnar beslutet till en människa. Målet är inte att ersätta den som svarar, " +
+      "utan att ge tillbaka timmarna som gick åt till att leta.",
+    en:
+      "We build the tool that does the groundwork. It sorts the cases, drafts a reply and leaves " +
+      "the decision to a person. The aim is not to replace whoever replies, but to give back the " +
+      "hours that went into searching."
+  }
+];
+
 export type ProductCopy = {
   word: Localized;
   headline: Localized;
@@ -172,8 +199,8 @@ export const shared = {
 export const leadsCopy: ProductCopy = {
   word: { sv: "Leads", en: "Leads" },
   headline: {
-    sv: "Möt *Iris*, din säljare som aldrig sover.",
-    en: "Meet *Iris*, your sales rep that never sleeps."
+    sv: "Möt Iris, din säljare som aldrig *sover*.",
+    en: "Meet Iris, your sales rep that never *sleeps*."
   },
   lede: {
     sv: "Iris är Snajps leadsagent. Hon letar prospekt utifrån er produkt, gör en behovsanalys med källor som går att kontrollera och skriver mejlet medan tajmingen fortfarande gäller. Ni läser igenom och godkänner innan något går ut.",
@@ -216,8 +243,8 @@ export const leadsCopy: ProductCopy = {
 export const supportCopy: ProductCopy = {
   word: { sv: "Support", en: "Support" },
   headline: {
-    sv: "*Support 24/7*",
-    en: "*Support 24/7*"
+    sv: "Era kundärenden hanterade, 24/*7*",
+    en: "Your customer cases handled, 24/*7*"
   },
   lede: {
     sv: "Vi räknar med att ta bort 50–70 % av det repetitiva jobbet i er kundtjänstinkorg. Mejl sorteras automatiskt i rätt fack och får färdiga, korrekta svar — ni behåller alltid kontrollen.",

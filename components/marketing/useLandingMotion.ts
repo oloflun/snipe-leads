@@ -211,43 +211,31 @@ function setup(G: Gsap, rootEl: HTMLElement, fullDoor: boolean): () => void {
           if (h1.dataset.door) return;
           doorShown = true;
           gsap.set(h1, { autoAlpha: 1 });
+          h1.dispatchEvent(new Event("hero:type"));
           gsap.set(late, { opacity: 1, y: 0 });
           if (heroImg) gsap.set(heroImg, { scale: 1 });
           if (heroScrim) gsap.set(heroScrim, { opacity: 1 });
           door.on = 1;
         }, DOOR_FAILSAFE_MS)
       );
-      // ctx.add: spaltningen sker efter att fonterna laddat, alltså utanför
-      // kontextens synkrona körning, och ska ändå återställas med den.
+      // Rubriken skrivs fram (HeroText i LiveText.tsx) i stället för att radspaltas
+      // (Anton 2026-10-19). Fonterna väntas in så att de osynliga tecknen redan
+      // står i rätt bredd när skrivningen börjar.
       document.fonts.ready.then(() => ctx.add(() => {
         if (h1.dataset.door) return;
-        SplitText.create(h1, {
-          type: "lines",
-          mask: "lines",
-          linesClass: "ln",
-          autoSplit: true,
-          wordDelimiter: ORDSKILJE,
-          onSplit(self) {
-            if (h1.dataset.door) return;
-            h1.dataset.door = "1";
-            if (doorShown) {
-              gsap.to(door, { on: 1, duration: 1.2 });
-              return;
-            }
-            gsap.set(self.lines, { yPercent: 120 });
-            gsap.set(h1, { autoAlpha: 1 });
-            if (!fullDoor) {
-              gsap.to(self.lines, { yPercent: 0, duration: 0.8, ease: "power4.out", stagger: 0.07 });
-              return;
-            }
-            const tl = gsap.timeline({ defaults: { ease: "power3.out" } });
-            if (heroImg) tl.to(heroImg, { scale: 1, duration: 2.2, ease: "power2.out" }, 0);
-            if (heroScrim) tl.to(heroScrim, { opacity: 1, duration: 1.4, ease: "power2.inOut" }, 0);
-            tl.to(self.lines, { yPercent: 0, duration: 1.1, ease: "power4.out", stagger: 0.09 }, 0.25)
-              .to(late, { opacity: 1, y: 0, duration: 0.8, stagger: 0.1 }, 0.7)
-              .to(door, { on: 1, duration: 1.6, ease: "power2.inOut" }, 1.0);
-          }
-        });
+        h1.dataset.door = "1";
+        gsap.set(h1, { autoAlpha: 1 });
+        h1.dispatchEvent(new Event("hero:type"));
+        if (doorShown) {
+          gsap.to(door, { on: 1, duration: 1.2 });
+          return;
+        }
+        if (!fullDoor) return;
+        const tl = gsap.timeline({ defaults: { ease: "power3.out" } });
+        if (heroImg) tl.to(heroImg, { scale: 1, duration: 2.2, ease: "power2.out" }, 0);
+        if (heroScrim) tl.to(heroScrim, { opacity: 1, duration: 1.4, ease: "power2.inOut" }, 0);
+        tl.to(late, { opacity: 1, y: 0, duration: 0.8, stagger: 0.1 }, 1.2)
+          .to(door, { on: 1, duration: 1.6, ease: "power2.inOut" }, 1.0);
       }));
       // hjältens foto glider långsammare än sidan när man lämnar den
       if (hero && heroImg) {
@@ -416,9 +404,8 @@ function setup(G: Gsap, rootEl: HTMLElement, fullDoor: boolean): () => void {
       }, wide ? "top 85%" : "top 90%");
     }
     function plate(el: HTMLElement) {
-      const dir = el.dataset.dir === "left" ? "inset(0% 100% 0% 0%)" : "inset(100% 0% 0% 0%)";
-      arm(el, () => gsap.set(el, { clipPath: dir }),
-        () => gsap.to(el, { clipPath: "inset(0% 0% 0% 0%)", duration: 1.2, ease: "power3.out" }), "top 90%");
+      // Fotot står helt från början, ingen avtäckning: en klippning som drogs
+      // undan såg ut som en bild som laddade långsamt (Anton 2026-10-19).
       const img = el.querySelector<HTMLElement>("[data-parallax]");
       if (img) {
         gsap.set(img, { scale: 1.12 });
@@ -427,9 +414,7 @@ function setup(G: Gsap, rootEl: HTMLElement, fullDoor: boolean): () => void {
       }
     }
     function band(el: HTMLElement) {
-      // det mörka bandet täcks av marken tills det skrubbas fram: ett materiellt sektionsbyte
-      gsap.fromTo(el, { clipPath: "inset(0% 0% 100% 0%)" }, { clipPath: "inset(0% 0% 0% 0%)", ease: "none",
-        scrollTrigger: { trigger: el, start: "top 95%", end: "top 40%", scrub: true } });
+      // bandet står helt, bara fotot glider (klippningen togs bort 2026-10-19, se plate)
       const img = el.querySelector<HTMLElement>("[data-parallax]");
       if (img) {
         gsap.fromTo(img, { yPercent: -8 }, { yPercent: 8, ease: "none",
@@ -464,132 +449,6 @@ function setup(G: Gsap, rootEl: HTMLElement, fullDoor: boolean): () => void {
       }
     }
     $$("[data-case]").forEach(caseEntry);
-
-    // ----------------------------------------- den isärtagna översikten
-    const stage = $("[data-isar]");
-    const pinEl = $("[data-isar-pin]");
-    const spacerEl = $("[data-isar-spacer]");
-    if (stage && pinEl && spacerEl) {
-      const base = $("[data-isar-base]", stage);
-      const blur = $("[data-isar-blur]", stage);
-      const part = (n: string) => $(`[data-isar-part="${n}"]`, stage);
-      const rail = part("rail");
-      const kpi = part("kpi");
-      const pagar = part("pagar");
-      const diagram = part("diagram");
-      const parts = [rail, kpi, pagar, diagram].filter(Boolean) as HTMLElement[];
-      const svg = $<HTMLElement>("[data-isar-lines]", pinEl);
-      const lines = svg ? [...svg.querySelectorAll<SVGLineElement>("line")] : [];
-      const dots = svg ? [...svg.querySelectorAll<SVGCircleElement>("circle")] : [];
-      const pts = $$("[data-isar-pt]", pinEl);
-      const marks = [kpi, pagar, diagram].filter(Boolean) as HTMLElement[]; // en förklaring per lyft del, i ordning
-      if (base && blur && parts.length === 4) {
-        // konstanter för stängningarna nedan: TS tappar annars att de inte är null
-        const baseEl = base;
-        const blurEl = blur;
-        const [railEl, kpiEl, pagarEl, diagramEl] = parts;
-        const mm = gsap.matchMedia();
-        mm.add({ desk: "(min-width: 1024px)", mob: "(max-width: 1023px)" }, (c) => {
-          const desk = !!c.conditions?.desk;
-          const u = desk ? 1 : 0.6; // lyftet i skärmens skala
-          const moving = [baseEl, blurEl, ...parts];
-          // pin 1.9 vh på desktop. hel .00-.18 · isär .18-.46 · linjerna ritas .42-.62 · hålls till .76 ·
-          // linjerna släpps .76-.82 · ihop .80-.97. Samma p ger samma bild åt båda hållen (scrub).
-          const K = {
-            dim: [[0, 0], [0.18, 0], [0.46, 1], [0.76, 1], [0.97, 0]] as Keys,
-            zr: [[0, 0], [0.18, 0], [0.44, 50 * u], [0.78, 50 * u], [0.96, 0]] as Keys,
-            zk: [[0, 0], [0.21, 0], [0.47, 110 * u], [0.78, 110 * u], [0.955, 0]] as Keys,
-            zp: [[0, 0], [0.24, 0], [0.5, 70 * u], [0.78, 70 * u], [0.95, 0]] as Keys,
-            zd: [[0, 0], [0.27, 0], [0.53, 140 * u], [0.78, 140 * u], [0.945, 0]] as Keys,
-            yk: [[0, 0], [0.21, 0], [0.47, -7], [0.78, -7], [0.955, 0]] as Keys,
-            yd: [[0, 0], [0.27, 0], [0.53, 5], [0.78, 5], [0.945, 0]] as Keys,
-            on: [0, 1, 2].map((i) => [[0, 0], [0.42 + i * 0.06, 0], [0.5 + i * 0.06, 1], [0.76, 1], [0.82, 0]] as Keys),
-            // förklaringarna tänds med sin linje men släcks inte med den: efter akten ska texten
-            // stå läsbar, inte dämpad som avstängd (Anton 2026-10-19, "poleras ytterligare")
-            pt: [0, 1, 2].map((i) => [[0, 0], [0.42 + i * 0.06, 0], [0.5 + i * 0.06, 1]] as Keys)
-          };
-          const proxy = { p: 0 };
-          let last = -1;
-          // Linjernas geometri, mätt en gång per refresh med offset* (som bortser från transforms,
-          // alltså också från ankomstens förskjutning) i stället för getBoundingClientRect per
-          // bildruta: läsningarna efter stilskrivningarna tvingade fram en ny layout varje
-          // bildruta, och det var det som hackade. Delarnas läge räknas ur perspektivet.
-          type Geo = { sx: number; sy: number; w: number; h: number; pts: { x: number; y: number }[]; boxes: number[][] };
-          let geo: Geo | null = null;
-          const offIn = (el: HTMLElement) => {
-            let x = 0;
-            let y = 0;
-            for (let n: HTMLElement | null = el; n && n !== pinEl; n = n.offsetParent as HTMLElement | null) { x += n.offsetLeft; y += n.offsetTop; }
-            return { x, y };
-          };
-          const css = (el: HTMLElement, v: string) => parseFloat(el.style.getPropertyValue(v));
-          function measure(): Geo {
-            const s = offIn(baseEl.parentElement as HTMLElement);
-            return {
-              sx: s.x, sy: s.y, w: baseEl.offsetWidth, h: baseEl.offsetHeight,
-              pts: pts.map((pt) => { const o = offIn(pt); return { x: o.x - 14, y: o.y + Math.min(pt.offsetHeight, 24) / 2 }; }),
-              boxes: marks.map((mk) => ["--cx", "--cy", "--cw", "--ch"].map((v) => css(mk, v)))
-            };
-          }
-          const PERSPECTIVE = 1600; // .isar__stage
-          function renderStage() {
-            const p = proxy.p;
-            if (p === last) return;
-            last = p;
-            const dim = at(K.dim, p);
-            baseEl.style.opacity = (1 - 0.7 * dim).toFixed(3);
-            blurEl.style.opacity = (0.55 * dim).toFixed(3);
-            railEl.style.transform = `translateZ(${at(K.zr, p).toFixed(2)}px)`;
-            kpiEl.style.transform = `translate3d(0, ${at(K.yk, p).toFixed(3)}%, ${at(K.zk, p).toFixed(2)}px)`;
-            pagarEl.style.transform = `translateZ(${at(K.zp, p).toFixed(2)}px)`;
-            diagramEl.style.transform = `translate3d(0, ${at(K.yd, p).toFixed(3)}%, ${at(K.zd, p).toFixed(2)}px)`;
-            pts.forEach((pt, i) => pt.style.setProperty("--on", at(K.pt[i], p).toFixed(3)));
-            if (!desk || !svg) return;
-            const g = (geo ??= measure());
-            const zs = [at(K.zk, p), at(K.zp, p), at(K.zd, p)];
-            const ys = [at(K.yk, p), 0, at(K.yd, p)];
-            marks.forEach((_, i) => {
-              const on = at(K.on[i], p);
-              const ln = lines[i];
-              const dot = dots[i];
-              const pt = g.pts[i];
-              if (!ln || !dot || !pt) return;
-              ln.style.strokeDashoffset = (1 - on).toFixed(4);
-              dot.style.opacity = on > 0.02 ? Math.min(1, on * 3).toFixed(3) : "0";
-              if (on <= 0) return;
-              // från förklaringens vänsterkant (texten står till höger om bilden) till den lyfta delens
-              // högerkant, i delens höjdmitt: ingen linje korsar den mörka rälen. translateZ skalar
-              // delen kring scenens mitt med perspektiv / (perspektiv - z).
-              const [cx, cy, cw, ch] = g.boxes[i];
-              const k = PERSPECTIVE / (PERSPECTIVE - zs[i]);
-              const right = (cx + cw) * g.w;
-              const mid = (cy + ch / 2 + (ys[i] / 100) * ch) * g.h;
-              const x2 = g.sx + g.w / 2 + (right - g.w / 2) * k + 10;
-              const y2 = g.sy + g.h / 2 + (mid - g.h / 2) * k;
-              ln.setAttribute("x1", pt.x.toFixed(1)); ln.setAttribute("y1", pt.y.toFixed(1));
-              ln.setAttribute("x2", x2.toFixed(1)); ln.setAttribute("y2", y2.toFixed(1));
-              dot.setAttribute("cx", x2.toFixed(1)); dot.setAttribute("cy", y2.toFixed(1));
-            });
-          }
-          const onToggle = (self: { isActive: boolean }) => { const w = self.isActive ? "transform, opacity" : "auto"; moving.forEach((m) => { m.style.willChange = w; }); };
-          const tl = gsap.timeline({ scrollTrigger: desk
-            // ingen anticipatePin: den förflyttar pinnen en bildruta i förväg för vanlig skroll,
-            // och mot Lenis mjukade skroll blev det ett ryck i sidled vid pinnens start
-            ? { trigger: pinEl, start: "top 10%", end: () => "+=" + Math.round(innerHeight * 1.9), pin: true, pinSpacer: spacerEl, scrub: true, invalidateOnRefresh: true, onToggle, onRefresh: () => { last = -1; geo = null; } }
-            : { trigger: stage, start: "top 78%", end: "bottom 30%", scrub: true, invalidateOnRefresh: true, onToggle } });
-          tl.fromTo(proxy, { p: 0 }, { p: 1, ease: "none", duration: 1 }).set({}, {}, 1);
-          gsap.ticker.add(renderStage);
-          renderStage();
-          return () => {
-            gsap.ticker.remove(renderStage);
-            moving.forEach((m) => m.removeAttribute("style"));
-            pts.forEach((pt) => pt.style.removeProperty("--on"));
-            lines.forEach((l) => { l.style.strokeDashoffset = "1"; });
-            dots.forEach((d) => { d.style.opacity = "0"; });
-          };
-        });
-      }
-    }
 
     // tangentbord: ett fokuserat element visas alltid, även före sitt avslöjande
     const onFocus = (e: FocusEvent) => {

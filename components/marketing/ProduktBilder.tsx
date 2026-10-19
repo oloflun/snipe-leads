@@ -553,7 +553,9 @@ export function ProduktBilder({
                   data-hole
                   className="overflow-hidden rounded-panel border border-ink/12 bg-paper"
                 >
-                  <Bild locale={locale} />
+                  <div className="case-zoom">
+                    <Bild locale={locale} />
+                  </div>
                 </div>
                 <figcaption key={locale} className="mt-5">
                   <p data-case-text className="font-display text-[1.375rem] font-semibold leading-tight tracking-[-0.015em] text-ink">

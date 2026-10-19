@@ -7,10 +7,10 @@ import { Logo } from "@/components/Logo";
 import { useLocale } from "@/lib/i18n";
 import type { ProductKey } from "@/lib/routes";
 import { saljbaraProdukter } from "@/lib/routes";
-import { KONTAKT_MEJL, mejlaOss, productCopy, shared, varforSnajp } from "@/components/marketing/copy";
+import { KONTAKT_MEJL, mejlaOss, productCopy, shared, varforSnajp, varforSupport } from "@/components/marketing/copy";
 import { imagery, photo, sectionCopy } from "@/components/marketing/copy-sections";
 import { AgentResultat } from "@/components/marketing/AgentResultat";
-import { DashboardIsar } from "@/components/marketing/DashboardIsar";
+import { HeroText } from "@/components/marketing/LiveText";
 import { ProduktBilder } from "@/components/marketing/ProduktBilder";
 import { PricingSection } from "@/components/marketing/PricingSection";
 import { UspSection } from "@/components/marketing/UspSection";
@@ -219,7 +219,7 @@ export function LandingPhoto({
                 data-mo="hero-h1"
                 className="font-display text-[clamp(2.25rem,5.9vw,5.75rem)] font-semibold leading-[0.99] tracking-[-0.035em] text-paper"
               >
-                <Display text={text(copy.headline)} />
+                <HeroText text={text(copy.headline)} />
               </p>
             </div>
 
@@ -435,10 +435,6 @@ export function LandingPhoto({
             components/marketing/AgentResultat.tsx för förebilderna. */}
         <AgentResultat product={product} />
 
-        {/* ÖVERSIKTEN, ISÄRTAGEN. Produktens egen översikt som en frontal
-            sprängskiss, styrd av skrollen. Se DashboardIsar.tsx. */}
-        <DashboardIsar />
-
         {/* PLACE. Photograph and copy share the row; the image is content here,
             not decoration, so it carries a real alt. */}
         <section data-mo="place">
@@ -471,7 +467,7 @@ export function LandingPhoto({
               </p>
               {/* "Varför Snajp finns" från /vart-team, styckena utan rubriken
                   (Anton 2026-10-18). Samma källa som teamsidan: copy.ts. */}
-              {varforSnajp.map((stycke) => (
+              {(product === "support" ? varforSupport : varforSnajp).map((stycke) => (
                 <p key={stycke.sv.slice(0, 24)} data-mo="up" className="mt-5 max-w-[44ch] text-[1rem] leading-[1.7] text-ink-muted">
                   {text(stycke)}
                 </p>
