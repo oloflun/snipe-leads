@@ -64,6 +64,11 @@ const STATUS: Record<Status, { etikett: Localized; ton: string }> = {
 const POLL_MS = 5000;
 const POLL_TAK = 60;
 
+/** Vid så här många leads läggs listan i en rullbar låda (Sebbe 2026-10-18:
+ *  körningar på upp till 200 leads ska inte göra sidan kilometerlång). Lådan
+ *  går att dra ut i höjdled (resize-y) och varje rad fälls ut som vanligt. */
+const RULLBAR_FRAN = 50;
+
 export function KorningensUtkast({ jobId }: Readonly<{ jobId: string }>) {
   const { text } = useLocale();
   const [svar, setSvar] = useState<Svar | null>(null);
@@ -349,7 +354,14 @@ export function KorningensUtkast({ jobId }: Readonly<{ jobId: string }>) {
       ) : svar && svar.leads.length === 0 ? (
         <p className={cn(meta, "mt-3")}>{text({ sv: "Inga leads i körningen.", en: "No leads in this run." })}</p>
       ) : svar ? (
-        <ul className="mt-3 divide-y divide-ink/12 border-y border-ink/15">
+        <ul
+          className={cn(
+            "mt-3 divide-y divide-ink/12",
+            svar.leads.length >= RULLBAR_FRAN
+              ? "max-h-[26rem] min-h-[14rem] resize-y overflow-y-auto overscroll-contain rounded-input border border-ink/15 px-3"
+              : "border-y border-ink/15"
+          )}
+        >
           {svar.leads.map((l) => {
             const harUtkast = Boolean(l.subject || l.body);
             const oppnad = harUtkast && oppen === l.prospect_id;

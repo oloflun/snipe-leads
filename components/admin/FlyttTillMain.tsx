@@ -26,6 +26,12 @@ const T = {
   senastSpeglad: { sv: "senast speglad", en: "last mirrored" },
   mejl: { sv: "Supportmejl", en: "Support email" },
   korningar: { sv: "Leadskörningar", en: "Lead runs" },
+  listor: { sv: "Leadslistor", en: "Lead lists" },
+  listorForklaring: {
+    sv: "Flyttade listor blir skarpa i main, också de som skapades i testläge.",
+    en: "Moved lists become live in main, including those created in test mode."
+  },
+  rader: { sv: "rader", en: "rows" },
   inga: { sv: "Inget att flytta.", en: "Nothing to move." },
   flyttar: { sv: "Flyttar…", en: "Moving…" },
   flyttade: { sv: "Flyttade", en: "Moved" },
@@ -48,6 +54,7 @@ export function FlyttTillMain({ slug }: Readonly<{ slug: string }>) {
   const [fel, setFel] = useState<string | null>(null);
   const [valdaMejl, setValdaMejl] = useState<Set<string>>(new Set());
   const [valdaKorningar, setValdaKorningar] = useState<Set<string>>(new Set());
+  const [valdaListor, setValdaListor] = useState<Set<string>>(new Set());
   const [flyttar, setFlyttar] = useState(false);
   const [kvitto, setKvitto] = useState<{ ref_id: string; resultat: string; fel?: string }[] | null>(null);
 
@@ -88,7 +95,7 @@ export function FlyttTillMain({ slug }: Readonly<{ slug: string }>) {
     setter(nasta);
   };
 
-  async function flytta(typ: "mejl" | "korning", ids: string[]) {
+  async function flytta(typ: "mejl" | "korning" | "lista", ids: string[]) {
     setFlyttar(true);
     setFel(null);
     const svar = await flyttaTillMain(slug, typ, ids);
@@ -100,7 +107,10 @@ export function FlyttTillMain({ slug }: Readonly<{ slug: string }>) {
     setKvitto(svar.rader ?? []);
     setValdaMejl(new Set());
     setValdaKorningar(new Set());
+    setValdaListor(new Set());
   }
+
+  const listor = kandidater.listor ?? [];
 
   const konfigurerad = status.mal_konfigurerat && status.nyckel_konfigurerad;
 
@@ -160,6 +170,32 @@ export function FlyttTillMain({ slug }: Readonly<{ slug: string }>) {
       {valdaKorningar.size ? (
         <button type="button" onClick={() => void flytta("korning", [...valdaKorningar])} disabled={flyttar || !konfigurerad} className={cn(btnPrimary, "mt-2 w-full disabled:opacity-60")}>
           {flyttar ? text(T.flyttar) : text({ sv: `Flytta ${valdaKorningar.size} körningar till main`, en: `Move ${valdaKorningar.size} runs to main` })}
+        </button>
+      ) : null}
+
+      <p className="mt-3 px-1 text-[12px] font-medium text-ink-muted">{text(T.listor)}</p>
+      <p className="px-1 text-[12px] text-ink-subtle">{text(T.listorForklaring)}</p>
+      {listor.length === 0 ? (
+        <p className="px-1 text-[12px] text-ink-subtle">{text(T.inga)}</p>
+      ) : (
+        <ul className="mt-1 max-h-40 overflow-y-auto">
+          {listor.map((l) => (
+            <li key={l.id}>
+              <label className="flex min-h-9 cursor-pointer items-center gap-2 rounded-input px-1 text-[12px] hover:bg-paper2">
+                <input type="checkbox" checked={valdaListor.has(l.id)} onChange={() => vaxla(valdaListor, setValdaListor, l.id)} className="h-4 w-4 accent-ink" />
+                <span className="min-w-0 truncate">{l.titel ?? l.id}</span>
+                <span className="ml-auto shrink-0 text-ink-subtle">
+                  {l.is_test ? `${text(T.test)} · ` : ""}
+                  {l.rader ?? 0} {text(T.rader)}
+                </span>
+              </label>
+            </li>
+          ))}
+        </ul>
+      )}
+      {valdaListor.size ? (
+        <button type="button" onClick={() => void flytta("lista", [...valdaListor])} disabled={flyttar || !konfigurerad} className={cn(btnPrimary, "mt-2 w-full disabled:opacity-60")}>
+          {flyttar ? text(T.flyttar) : text({ sv: `Flytta ${valdaListor.size} listor till main`, en: `Move ${valdaListor.size} lists to main` })}
         </button>
       ) : null}
 

@@ -345,10 +345,12 @@ class LeadsBatchRequest(BaseModel):
     #: utkast. Byggd för leads-panelen ("Sök Leads"), där hela poängen är att
     #: få en lista på en minut till kostnaden av ett enda anrop.
     scope: str = Field(default="research", pattern=r"^(sok|research|research_and_draft)$")
-    # Taket på 50 är ekonomiskt, inte tekniskt: varje prospekt är upp till nio
-    # LLM-anrop i research (tre om grinden efter ICP-kvalificeringen fäller),
-    # så en batch på 50 kan vara 450 — över tenant-timtaket.
-    limit: int = Field(default=10, ge=1, le=50)
+    # Taket är ekonomiskt, inte tekniskt: varje prospekt är upp till nio
+    # LLM-anrop i research (tre om grinden efter ICP-kvalificeringen fäller).
+    # Höjt 50 → 200 (Sebbe 2026-10-18); budgetgrinden (app/leads/budget.py)
+    # och körningens kredittak (korning.korningstak) skalar med beställningen
+    # och är det som faktiskt bromsar en skenande körning.
+    limit: int = Field(default=10, ge=1, le=200)
 
     #: Överskrivningar för just den här körningen. Se LeadsRunOverrides.
     overrides: LeadsRunOverrides | None = None

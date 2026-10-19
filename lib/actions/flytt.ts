@@ -20,6 +20,8 @@ export type FlyttKandidater = {
   tenant_id: string;
   mejl: { id: string; subject: string; from_email: string; status: string; klass: string | null; received_at: string | null; is_test: boolean }[];
   korningar: { job_id: string; status: string; scope: string; created_at: string | null; is_test: boolean; mal: number | null; levererade: number | null }[];
+  /** Leadslistor (2026-10-18). Importeras skarpa i main, se admin_flytt.py. */
+  listor?: { id: string; titel: string | null; status: string | null; kalla: string | null; is_test: boolean | null; rader: number | null; created_at: string | null }[];
   flyttade: { typ: string; ref_id: string; resultat: string; flyttad_at: string | null }[];
 };
 
@@ -57,7 +59,7 @@ export async function hamtaFlyttbart(slug: string): Promise<{ status: FlyttStatu
 
 export async function flyttaTillMain(
   slug: string,
-  typ: "mejl" | "korning" | "prospekt",
+  typ: "mejl" | "korning" | "prospekt" | "lista",
   ids: string[]
 ): Promise<{ rader?: { ref_id: string; resultat: string; fel?: string }[]; error?: string }> {
   if (aktivMiljo() !== "development") return { error: "Flytt till main går bara från development." };

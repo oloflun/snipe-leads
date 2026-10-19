@@ -69,8 +69,10 @@ _PROSPEKT_PROFILFALT = frozenset(
         "contact_phone",
         # Migration 108: länet (webbpoolens fördelning).
         "lan",
-        # Migration 085: varifrån ett prospekt importerades (admin_flytt).
-        "importerad_fran",
+        # importerad_fran är INTE en kolumn (085: "ingen ny kolumn"). Den stod
+        # här och fällde varje insert från Flytta till main med en
+        # UndefinedColumnError, rapporterad som "migration 039 är inte körd"
+        # (2026-10-18). Spårningen är flyttloggen och plattformshändelsen.
     }
 )
 

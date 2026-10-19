@@ -618,11 +618,11 @@ export function LeadsRunForm({
           att kunden såg det (2026-09-29). */}
       {!demo ? (
         <div className="mt-6 grid max-w-[760px] gap-5 sm:grid-cols-2">
-          <Rad etikett="Antal leads" hint="1–50">
+          <Rad etikett="Antal leads" hint="1–200">
             <input
               type="number"
               min={1}
-              max={50}
+              max={200}
               value={limit}
               onChange={(e) => setLimit(e.target.value)}
               className={fältklass}

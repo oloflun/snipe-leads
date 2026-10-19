@@ -690,6 +690,30 @@ body {
   }
 }
 
+/* Körningsvyns roterande lägesrad (components/leads/IrisKorningar.tsx):
+ * frasen byts var tionde sekund och den nya tonar in ur en lätt oskärpa,
+ * med samma lyft som editorial-reveal. Bara opacity/transform/filter —
+ * diskret, och reduced motion-regeln ovan släcker den som allt annat. */
+@keyframes statusbyte {
+  from {
+    opacity: 0;
+    transform: translateY(7px);
+    filter: blur(6px);
+  }
+  55% {
+    filter: blur(0);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+    filter: blur(0);
+  }
+}
+
+.animate-statusbyte {
+  animation: statusbyte 650ms var(--ease-out) both;
+}
+
 .animate-mejl-in {
   animation: mejl-in var(--dur-mid) var(--ease-out) both;
 }
@@ -700,7 +724,8 @@ body {
 
 @media (prefers-reduced-motion: reduce) {
   .animate-mejl-in,
-  .animate-belopp {
+  .animate-belopp,
+  .animate-statusbyte {
     animation: none;
   }
 }

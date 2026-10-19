@@ -316,7 +316,20 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
             // Läget sätts vid klicket, inte i en effekt på den nya sidan: en
             // effekt hade hunnit rendera målsidan i det gamla läget först, och
             // bytet hade synts som ett hopp.
-            onClick: () => aterstallLage(availableScopes, setScope)
+            onClick: () => aterstallLage(availableScopes, setScope),
+            // En vilande agent når hit bara för plattformsadmin (kundbesök,
+            // "Du testar som"): mörklagd som kunden ser den, men klickbar
+            // (Sebbe 2026-10-18, samma som adminmenyn i AdminShell).
+            ...(arVilande(route.product)
+              ? {
+                  vilande: true,
+                  vilandeLank: true,
+                  vilandeTitel: text({
+                    sv: "Vilande: mörklagd och låst för kunder, öppen för admin",
+                    en: "On hold: dimmed and locked for customers, open to admins"
+                  })
+                }
+              : {})
           };
         }),
         // De mörklagda agenterna — syns, men nedtonade (se morkaRoutes ovan).
