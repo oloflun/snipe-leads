@@ -101,11 +101,15 @@ function Skrivs({ text: full, className, fordrojning = 0 }: Readonly<{ text: str
       stop();
     };
   }, [full, fordrojning]);
+  // Skärmläsaren får hela texten direkt; det som skrivs fram är bara för ögat.
   return (
     <p className={className}>
-      {full.slice(0, n)}
-      {n < full.length ? <span className="live-caret" /> : null}
-      <span className="invisible">{full.slice(n)}</span>
+      <span className="sr-only">{full}</span>
+      <span aria-hidden="true">
+        {full.slice(0, n)}
+        {n < full.length ? <span className="live-caret" /> : null}
+        <span className="invisible">{full.slice(n)}</span>
+      </span>
     </p>
   );
 }
