@@ -71,17 +71,21 @@ function RaknaUpp({ varde, ordning }: Readonly<{ varde: string; ordning: number 
     const visa = (v: number) => setVisat(v.toFixed(decimaler).replace(".", ",") + m[3]);
     visa(0);
     let id = 0;
+    // Start först när talet står helt i bild och en bit upp från nederkanten,
+    // inte när det skymtar längst ned: där hann det räknas klart medan raden
+    // ännu tonades in (Anton 2026-10-19). Ett andetag innan, så att inintoningen
+    // hunnit klart, och en mjuk kurva över 2,6 s, så att det inte går för fort.
     const obs = new IntersectionObserver(([e]) => {
       if (!e?.isIntersecting) return;
       obs.disconnect();
-      const start = performance.now() + 250 + ordning * 160;
+      const start = performance.now() + 450 + ordning * 280;
       const tick = (nu: number) => {
-        const t = Math.min(1, Math.max(0, (nu - start) / 1600));
-        visa(mal * (1 - (1 - t) ** 3));
+        const t = Math.min(1, Math.max(0, (nu - start) / 2600));
+        visa(mal * (1 - (1 - t) ** 2));
         if (t < 1) id = requestAnimationFrame(tick);
       };
       id = requestAnimationFrame(tick);
-    }, { threshold: 0.6 });
+    }, { threshold: 1, rootMargin: "0px 0px -20% 0px" });
     obs.observe(el);
     return () => {
       obs.disconnect();

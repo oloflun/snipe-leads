@@ -14,9 +14,13 @@ möjligt), vad det betyder i koden.
 **Beslut.** "Kan du göra så att dessa siffror 'genereras' i realtid när man
 kommer dit?" (resultatvyns nyckeltal på /leads och /support).
 
+Rättat samma kväll: "De är helt fulladdade vid scroll ... det måste ske
+naturligt vid scroll och när de är helt i bild, det får inte gå för snabbt."
+
 **I koden.** `RaknaUpp` i `components/marketing/AgentResultat.tsx` räknar
-varje tal från noll till sitt värde på 1,6 s när raden syns, ett tal i taget
-med 0,16 s mellan. Enheten och decimalerna följer med ("71 %", "4,6"), och
+varje tal från noll till sitt värde på 2,6 s, ett tal i taget med 0,28 s
+mellan. Starten kommer först när talet står helt i bild ovanför skärmens
+nedersta femtedel, plus 0,45 s så att raden hunnit tonas in. Enheten och decimalerna följer med ("71 %", "4,6"), och
 hela värdet håller bredden så att etiketterna står still.
 
 ## 2026-10-19 (Anton) — Hjälten skrivs fram, bilderna står hela, översikten bort
