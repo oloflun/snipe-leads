@@ -9,17 +9,17 @@ möjligt), vad det betyder i koden.
 
 ---
 
-## 2026-10-21 (Anton) — Development-budgeten sänkt till ~1000 leads per dygn
+## 2026-10-21 (Anton) — Leadsbudgeten sänkt till ~1000 leads per dygn, båda miljöerna
 
-**Beslut.** "Sänk den just nu … sikta på runt 1000." Gäller development.
+**Beslut.** "Sänk den just nu … sikta på runt 1000." Först development, sedan main.
 
 **Resonemanget.** 1,5 miljarder (beslutet 2026-10-20) var räknat på 500
 körningar, men utan Pro räcker ett lägre tak. Ett levererat lead på flash drar
 ~150 k tokens (research + utkast, uppmätt i main 2026-10-20). 1 000 leads ≈
 150 M tokens ≈ 60 USD per dygn om taket nås.
 
-**I miljön.** `LEADS_DAILY_TOKEN_BUDGET=150000000` på api i development
-(var 1 500 000 000). Main oförändrad på 1 500 000 000.
+**I miljön.** `LEADS_DAILY_TOKEN_BUDGET=150000000` på api i development och
+main (båda var 1 500 000 000). Anton: "Gör samma beslut där."
 
 ## 2026-10-21 (Anton) — Utkasten på flash i båda miljöerna; development skriver aldrig till main
 
