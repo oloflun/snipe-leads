@@ -14,6 +14,7 @@ import { felmeddelande } from "@/lib/http/json";
 import { useLocale, type Localized } from "@/lib/i18n";
 import {
   LeadsFel,
+  allaProspekt,
   datumFormat,
   kontaktvagAv,
   leadsAnrop,
@@ -415,7 +416,7 @@ export function LeadsTabell({
     }
     try {
       const [p, u, v] = await Promise.allSettled([
-        leadsAnrop<{ prospects?: SuiteProspekt[] }>("/leads/prospects"),
+        allaProspekt<SuiteProspekt>(leadsAnrop).then((prospects) => ({ prospects })),
         leadsAnrop<{ uppgifter?: Uppgift[] }>("/leads/uppgifter?oppna=1"),
         leadsAnrop<{ vyer?: Vy[] }>("/leads/vyer")
       ]);
@@ -505,8 +506,7 @@ export function LeadsTabell({
   const hamtaLeads = useCallback(async () => {
     if (demo) return;
     try {
-      const svar = await leadsAnrop<{ prospects?: SuiteProspekt[] }>("/leads/prospects");
-      setProspekt(svar.prospects ?? []);
+      setProspekt(await allaProspekt<SuiteProspekt>(leadsAnrop));
     } catch {
       // Nästa varv försöker igen; ett tillfälligt fel är ingen nyhet.
     }
@@ -558,8 +558,7 @@ export function LeadsTabell({
       }
       sattFel(null);
       try {
-        const svar = await leadsAnrop<{ prospects?: SuiteProspekt[] }>(`/leads/prospects?${vilka}=1`);
-        satt([...(svar.prospects ?? [])].sort(nyast));
+        satt([...(await allaProspekt<SuiteProspekt>(leadsAnrop, `${vilka}=1`))].sort(nyast));
       } catch (orsak) {
         sattFel(felmeddelande(orsak));
         satt((nu) => nu ?? []);

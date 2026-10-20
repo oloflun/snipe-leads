@@ -9,6 +9,33 @@ möjligt), vad det betyder i koden.
 
 ---
 
+## 2026-10-21 (Anton) — Utkasten på flash i båda miljöerna; development skriver aldrig till main
+
+**Beslut.** "Byt till flash även i development, ändra inte kedjan i övrigt."
+Och: "gör så att inget skrivs från development längre, fyll bara på från main
+och synka endast körningar från development via Flytta till main-funktionen."
+Samt: alla leads ska synas i listan.
+
+**Resonemanget.** Pro-bytet 2026-10-16 (nedan) stod för 1 116 av 1 419 kr på
+Vertex 6–20 oktober, 10–15 gånger flash per lead, och var aldrig prövat mot
+flash på den färdiga kedjan. Mätt med dagens stilgrind på utkast skrivna efter
+2026-10-18: flash 16 % med fynd (56 utkast), pro 14 % (180). Ingen belagd
+skillnad som motiverar priset. Kedjan i övrigt (grindar, humanizer, tilltal)
+står kvar.
+
+**I koden och miljön.**
+- `LEADS_DRAFT_MODEL` och `LEADS_HUMANIZER_MODEL` borttagna på api i
+  development; main hade dem aldrig. Stegen ärver `MODEL=gemini-2.5-flash`.
+  Ersätter beslutet 2026-10-16 om gemini-2.5-pro.
+- `scripts/railway_synk.py` öppnar main skrivskyddat utanför första synken:
+  synken kan mekaniskt bara skriva till development.
+- `scripts/flytta_korningar_till_main.py` tar bara körningar (batch, lista),
+  inte delstegen per lead. Kontrollerat 2026-10-21: main har alla körningar,
+  alla utkast och inga dubbletter (1 331 leads hos snajp).
+- `GET /api/leads/prospects` bläddrar (`offset`, `fler`, `nasta`) och
+  klienterna hämtar alla sidor (`allaProspekt`); Skickas snart slår upp
+  prospekten med id. Förut syntes bara de 500 respektive 1 000 nyaste.
+
 ## 2026-10-20 (Anton) — Leadsbudgeten räcker till 500 körningar per dygn
 
 **Beslut.** "Höj även tokenbudgeten för att klara motsvarande 500 körningar

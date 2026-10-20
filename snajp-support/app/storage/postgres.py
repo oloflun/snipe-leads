@@ -1992,12 +1992,15 @@ class PostgresStorage:
             )
         return [_avkoda_prospekt(_row(r)) for r in records]
 
-    async def list_prospects(self, tenant_id: str, *, limit: int = 500) -> list[dict[str, Any]]:
+    async def list_prospects(self, tenant_id: str, *, limit: int = 500, offset: int = 0) -> list[dict[str, Any]]:
         async with self._scoped(tenant_id) as conn:
+            # id som andra nyckel: lika created_at (en flytt skapar hundratals
+            # samma sekund) får en fast ordning, annars glider sidorna.
             records = await conn.fetch(
-                "select * from prospects where tenant_id = $1 order by created_at desc limit $2",
+                "select * from prospects where tenant_id = $1 order by created_at desc, id limit $2 offset $3",
                 tenant_id,
                 limit,
+                offset,
             )
         return [_avkoda_prospekt(_row(r)) for r in records]
 

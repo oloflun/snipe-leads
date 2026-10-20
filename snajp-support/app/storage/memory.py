@@ -1402,10 +1402,10 @@ class MemoryStorage:
         valda = {str(i) for i in prospect_ids}
         return [p for p in self.prospects.get(tenant_id, []) if str(p["id"]) in valda]
 
-    async def list_prospects(self, tenant_id: str, *, limit: int = 500) -> list[dict[str, Any]]:
+    async def list_prospects(self, tenant_id: str, *, limit: int = 500, offset: int = 0) -> list[dict[str, Any]]:
         return sorted(
             self.prospects.get(tenant_id, []), key=lambda p: p["created_at"], reverse=True
-        )[:limit]
+        )[offset : offset + limit]
 
     async def arkivera_prospekt(
         self, tenant_id: str, prospect_ids: list[str], *, arkivera: bool

@@ -25,6 +25,7 @@ import {
 import { EjAktiverad, arEjAktiverad } from "@/components/EjAktiverad";
 import { demoOversiktSvar } from "@/lib/demo/oversikt";
 import { felmeddelande, readJsonBody } from "@/lib/http/json";
+import { allaProspekt, leadsAnrop } from "@/lib/leads/suite";
 import { offertForUtkast } from "@/lib/leads/offert";
 import { cn } from "@/lib/utils";
 import { sv, useLocale, type Localized } from "@/lib/i18n";
@@ -259,7 +260,7 @@ export function Bolagsregister({ demo = false }: Readonly<{ demo?: boolean }>) {
     }
 
     try {
-      const response = await fetch("/api/snajp-support/leads/prospects", { cache: "no-store" });
+      const response = await fetch("/api/snajp-support/leads/prospects?limit=1000", { cache: "no-store" });
       // response.ok före tolkningen: en sovande backend svarar med HTML, och
       // `.json()` på den ger kunden webbläsarens råa felmeddelande.
       if (response.status === 409) {
@@ -287,12 +288,14 @@ export function Bolagsregister({ demo = false }: Readonly<{ demo?: boolean }>) {
         });
         return;
       }
-      const kropp = await readJsonBody<{ prospects?: Prospekt[]; offline?: boolean }>(response);
+      const kropp = await readJsonBody<{ prospects?: Prospekt[]; offline?: boolean; fler?: boolean; nasta?: number }>(response);
       if (!kropp || kropp.offline) {
         setLage({ fas: "fel", meddelande: { sv: "Backenden svarade utan innehåll.", en: "The backend replied without content." } });
         return;
       }
-      setLage({ fas: "klar", prospekt: kropp.prospects ?? [] });
+      // Resten av sidorna (allaProspekt): första sidan bar felhanteringen ovan.
+      const resten = kropp.fler && kropp.nasta ? await allaProspekt<Prospekt>(leadsAnrop, "", kropp.nasta) : [];
+      setLage({ fas: "klar", prospekt: [...(kropp.prospects ?? []), ...resten] });
     } catch (error) {
       setLage({
         fas: "fel",

@@ -278,7 +278,7 @@ async def normalisera_tenantens_utkast(storage, tenant_id: str) -> dict[str, int
     settings = await storage.get_agent_settings(tenant_id, agent_type="leads")
     sig = normalisera_signatur(settings.get("signatur"))
     lagen = await storage.utkast_lagen(tenant_id, med_text=True)
-    prospekter = {str(p["id"]): p for p in await storage.list_prospects(tenant_id, limit=2000)}
+    prospekter = {str(p["id"]): p for p in await storage.list_prospects(tenant_id, limit=20_000)}
     granskade = rattade = 0
     for pid, lage in lagen.items():
         # Bara trådar med en OSÄND text: med_text-läsningen tar det väntande

@@ -213,7 +213,7 @@ async def _samtalsunderlag(storage: Any, tenant_id: str) -> tuple[list, list, di
     # ponytail: hela tenantens prospekt, samtal och utskick läses och filtreras
     # här; en SQL-vy när en kund har tusentals leads.
     prospekter, alla_samtal, skickade = await asyncio.gather(
-        storage.list_prospects(tenant_id, limit=2000),
+        storage.list_prospects(tenant_id, limit=20_000),
         storage.list_lead_samtal(tenant_id),
         storage.list_skickade(tenant_id, limit=500),
     )

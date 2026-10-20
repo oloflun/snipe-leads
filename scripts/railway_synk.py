@@ -266,6 +266,12 @@ def main() -> int:
     if args.apply and args.forsta and lage == "envags":
         sys.exit("AVBRYT: första synken är redan gjord; main är sanningen. Kör utan --forsta.")
     forsta = args.forsta or lage != "envags"
+    if not forsta:
+        # Main är sanningen (Anton 2026-10-21): utanför första synken öppnas
+        # main skrivskyddat, så att synken mekaniskt inte kan skriva dit.
+        # Körningar från development når main bara via Flytta till main.
+        mn.rollback()
+        mn.set_session(readonly=True)
     print(f"läge: {'första synken (development vinner)' if forsta else 'main → development'}; "
           f"senast synkad: {synkad or 'aldrig'}")
 
