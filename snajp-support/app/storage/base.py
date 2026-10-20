@@ -499,7 +499,7 @@ class Storage(Protocol):
     # -- Leads: send_queue-schemaläggaren (Del J, Fas C-E) -------------------
 
     async def list_due_send_queue(self, tenant_id: str, now: Any) -> list[dict[str, Any]]:
-        """status='queued' och scheduled_at <= now."""
+        """status='queued' och scheduled_at <= now, äldst först."""
         ...
 
     async def update_send_queue_status(

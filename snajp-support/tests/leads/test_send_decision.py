@@ -38,6 +38,17 @@ def test_uses_thread_reply_window_when_prospect_has_replied():
     assert decision.action == "send"  # inom 19:00-fönstret, >60 min sedan svaret
 
 
+def test_tradsvar_med_iso_strang_fran_postgres():
+    """Postgres-lagret (_row) gör last_inbound_at till en ISO-STRÄNG. Före
+    2026-10-20 föll tidsgrinden på TypeError och varje svar i en tråd där
+    prospektet svarat stod kvar i kön för evigt (Brainy Energy i main)."""
+    thread = _thread(last_inbound_at="2026-08-12T15:30:00+00:00")  # 17:30 svensk tid
+    decision = decide_send_action(
+        now=datetime(2026, 8, 12, 18, 30, tzinfo=STOCKHOLM), thread=thread, message=_message()
+    )
+    assert decision.action == "send"
+
+
 def test_blocks_on_language_variant_mismatch_instead_of_requeuing_forever():
     thread = _thread(language_state="en_confirmed")
     message = _message(humanizer_variant="snajp:humanizer-svenska")  # fel variant för en_confirmed

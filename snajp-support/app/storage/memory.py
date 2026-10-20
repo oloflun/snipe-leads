@@ -799,11 +799,14 @@ class MemoryStorage:
         return max(docs, key=lambda d: d["version"])
 
     async def list_due_send_queue(self, tenant_id: str, now) -> list[dict[str, Any]]:
-        return [
-            item
-            for item in self.send_queue.get(tenant_id, [])
-            if item["status"] == "queued" and item["scheduled_at"] <= now
-        ]
+        return sorted(
+            (
+                item
+                for item in self.send_queue.get(tenant_id, [])
+                if item["status"] == "queued" and item["scheduled_at"] <= now
+            ),
+            key=lambda item: item["scheduled_at"],
+        )
 
     async def update_send_queue_status(
         self, tenant_id: str, item_id: str, *, status: str, gate_checks: dict[str, Any]

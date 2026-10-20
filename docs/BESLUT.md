@@ -9,6 +9,24 @@ möjligt), vad det betyder i koden.
 
 ---
 
+## 2026-10-20 (Anton) — Leadsbudgeten räcker till 500 körningar per dygn
+
+**Beslut.** "Höj även tokenbudgeten för att klara motsvarande 500 körningar
+per dag."
+
+**Resonemanget.** En körning med 200 leads i main stoppades av dygnsbudgeten
+(4,5 M av 2 M tokens). Taket var satt för att fånga en skenande kostnad
+(INV-JOB-002), inte för att begränsa vanligt arbete. Uppmätt i
+development-spegeln 2026-10-20: 58 körningar de senaste 14 dygnen drog
+165 M tokens, alltså ~2,85 M per körning (~100–150 k per lead, 96 % input).
+500 × ~3 M ≈ 1,5 miljarder tokens. På gemini-2.5-flash är det i värsta fall
+omkring 600 USD per kund och dygn om hela taket används.
+
+**I koden.** Ingen kodändring: `LEADS_DAILY_TOKEN_BUDGET=1500000000` på
+`api` i Railway, både main (var 2 000 000) och development (var 120 000 000,
+spegeln räknar också main:s körningar). Kodens standard (2 M) gäller
+fortfarande en miljö utan variabeln.
+
 ## 2026-10-20 (Sebbe) — Alla körningar till main, utkasten följer med flytten, sändspärrarna lösta
 
 **Beslut.** "Gör migration med alla körningar från development till main, inga

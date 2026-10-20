@@ -1125,7 +1125,11 @@ class PostgresStorage:
     async def list_due_send_queue(self, tenant_id: str, now) -> list[dict[str, Any]]:
         async with self._scoped(tenant_id) as conn:
             records = await conn.fetch(
-                "select * from send_queue where tenant_id = $1 and status = 'queued' and scheduled_at <= $2",
+                # Äldst först: under ett dagstak (uppvärmningen, regel 5c) tog
+                # en osorterad fråga godtyckliga poster, och samma utkast kunde
+                # förbigås i dagar (main: köade 2026-10-08, ej skickade 10-20).
+                "select * from send_queue where tenant_id = $1 and status = 'queued' and scheduled_at <= $2"
+                " order by scheduled_at, created_at",
                 tenant_id,
                 now,
             )
