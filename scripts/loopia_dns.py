@@ -42,9 +42,11 @@ Går INTE att peka på Railway, och det är inte en begränsning i skriptet:
   * Railways plan tillåter dessutom bara EN egen domän per tjänst, och den är
     använd av www.
 
-Lösningen är Loopias egen webbvidarebefordran, `snajp.se` -> `https://www.snajp.se`.
-Den ligger i kundzonen och exponeras inte i LoopiaAPI, så den punkten står kvar
-som ett manuellt steg. Skriptet säger till om apex ser ut att peka fel.
+Lösningen (2026-10-20) är ett eget Vercel-projekt, `snajp-apex`, som bara
+skickar vidare: apex-A-posten pekar på Vercel (76.76.21.21) och Vercel svarar
+308 till samma sökväg på www. Loopias webbvidarebefordran hade krävt kundzonen;
+Vercel-vägen går helt via API och CLI. Se DEPLOY.md § Apex. Skriptet säger till
+om apex fortfarande står på Loopias parkering.
 
 Leakage-spärr: lösenordet läses ur .env.deploy och skrivs aldrig ut.
 """
@@ -132,9 +134,9 @@ def kontrollera(doman: str, mal: str) -> int:
        mot det löser olika beroende på vilken post resolvern råkar välja — ett
        fel som syns sporadiskt, inte direkt.
 
-    4. Apex ({doman}) lämnas som den är. Lägg i stället en webbvidarebefordran
-       {doman} → https://www.{doman}. Apex går inte att peka på Railway; se
-       filens docstring om varför.
+    4. Apex ({doman}) går inte att peka på Railway (se filens docstring). Den
+       pekas på Vercel-projektet som skickar vidare till www: A-post 76.76.21.21
+       på @, se DEPLOY.md § Apex.
 
   Kör det här kommandot igen efteråt, så säger det till när posten slagit
   igenom. Vill du kunna göra det härifrån i framtiden: skapa en API-användare
@@ -215,8 +217,10 @@ def apexrad(api, anv, los, doman: str) -> None:
         print(
             f"\n  APEX: {doman} pekar på Loopias parkering.\n"
             "  Den går inte att peka på Railway — en CNAME får inte ligga på apex,\n"
-            "  och Loopia har ingen ALIAS/ANAME. Lägg en webbvidarebefordran\n"
-            f"  {doman} -> https://www.{doman} i kundzonen. Den finns inte i API:t."
+            "  och Loopia har ingen ALIAS/ANAME. Peka den på Vercel-projektet\n"
+            f"  {doman.split('.')[0]}-apex (A 76.76.21.21), som skickar 308 till www:\n"
+            f"  python ~/.agents/skills/loopia-vercel-domain/scripts/loopia_dns.py {doman} --apex-a 76.76.21.21 --apply\n"
+            "  Se DEPLOY.md § Apex."
         )
 
 

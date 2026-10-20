@@ -485,10 +485,24 @@ Och det är inte en begränsning i skriptet:
   använd av `www`. Apex avvisades med *"You have reached the limit for custom
   domains per service on your plan."*
 
-Lös det med Loopias egen **webbvidarebefordran**, `snajp.se` →
-`https://www.snajp.se`. Den funktionen finns inte i LoopiaAPI, så den punkten
-förblir manuell. Skriptet upptäcker att apex pekar på Loopias parkering
-(194.9.94.85/86) och påminner om det.
+**Löst 2026-10-20 utan handgrepp, via Vercel.** Loopias webbvidarebefordran
+finns inte i LoopiaAPI, så i stället bär ett eget litet Vercel-projekt apex:
+
+* Vercel-projektet `snajp-apex` (team `olofluns-projects`) innehåller bara en
+  `vercel.json` med `redirects` som skickar `/` och `/:path*` permanent (308)
+  till samma sökväg på `https://www.snajp.se`, plus en `index.html` med en
+  länk som reserv. Appen ligger kvar på Railway; Vercel svarar bara på apex.
+  Domänen är kopplad med `vercel domains add snajp.se snajp-apex`.
+* Apex `A`-posten hos Loopia är `76.76.21.21` (Vercel), satt med
+  `python ~/.agents/skills/loopia-vercel-domain/scripts/loopia_dns.py snajp.se
+  --apex-a 76.76.21.21 --apply` (bara `@`-A-posterna byts; MX, NS, SPF och
+  `www` rörs inte). Vercel utfärdade certifikatet själv när båda Loopias
+  namnservrar svarade.
+* Regeln `/:path*` ensam träffade inte roten: `https://snajp.se/` serverade
+  `index.html` med 200. Därför står `/` som egen regel först.
+
+`scripts/loopia_dns.py` säger till om apex står på Loopias parkering
+(194.9.94.85/86) och pekar hit.
 
 Verifiera kopplingen från Railways sida när DNS spridit sig:
 
