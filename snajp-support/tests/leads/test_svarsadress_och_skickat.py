@@ -129,3 +129,26 @@ async def test_godkant_som_vantar_pa_sandfonstret_star_overst_i_skickat():
             rader = (await client.get("/api/leads/skickat", headers=DEMO)).json()["skickat"]
             egna = [r for r in rader if r["company_name"] == "Kvällsgodkänt AB"]
             assert len(egna) == 1 and egna[0]["schemalagt"] is False and egna[0]["sent_at"]
+
+
+async def test_schemalagt_syns_aven_bakom_tusen_nyare_prospekt():
+    """Skickas snart slog bara upp de 1000 nyaste prospekten (main 2026-10-20:
+    en flytt på 492 leads gömde 85 av 234 godkända mejl). Ett schemalagt
+    utskick ska synas oavsett hur många leads som kommit in efter det."""
+    async with app.router.lifespan_context(app):
+        storage = app.state.storage
+        gammal = await storage.create_prospect(DEFAULT_TENANT_ID, company_name="Äldst AB", contact_email="info@aldst.se")
+        trad = await storage.ensure_outreach_thread(DEFAULT_TENANT_ID, prospect_id=gammal["id"])
+        koat = await storage.queue_outreach_message(
+            DEFAULT_TENANT_ID, thread_id=trad["id"], subject="Ämne", body="Hej!\n\nText.",
+            humanizer_variant="x", scheduled_at=WITHIN_WINDOW_UTC, status="queued",
+        )
+        post = next(q for q in storage.send_queue[DEFAULT_TENANT_ID] if q["id"] == koat["queue_item"]["id"])
+        post["gate_checks"] = {"approved_by": "human"}
+        for i in range(1000):
+            await storage.create_prospect(DEFAULT_TENANT_ID, company_name=f"Nyare {i} AB")
+        # Äldst på riktigt, inte bara först inlagd (samma mikrosekund ger lika tider).
+        next(p for p in storage.prospects[DEFAULT_TENANT_ID] if p["id"] == gammal["id"])["created_at"] = "2020-01-01T00:00:00+00:00"
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            rader = (await client.get("/api/leads/skickat", headers=DEMO)).json()["skickat"]
+        assert any(r["company_name"] == "Äldst AB" and r["schemalagt"] for r in rader)

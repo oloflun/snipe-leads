@@ -1493,7 +1493,9 @@ async def _schemalagda_utskick(storage, tenant_id: str) -> list[dict]:
     }
     if not godkanda:
         return []
-    prospekt = {str(p["id"]): p for p in await storage.list_prospects(tenant_id, limit=1000)}
+    # Med id, inte de 1000 nyaste: en flytt på 492 leads gömde 85 av 234
+    # godkända mejl i main 2026-10-20 (de gick ut ändå, men syntes inte).
+    prospekt = {str(p["id"]): p for p in await storage.get_prospects(tenant_id, list(godkanda))}
     rader = []
     for pid, (lage, harlett) in godkanda.items():
         p = prospekt.get(pid)

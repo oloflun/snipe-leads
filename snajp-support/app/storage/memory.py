@@ -1398,6 +1398,10 @@ class MemoryStorage:
             (p for p in self.prospects.get(tenant_id, []) if p["id"] == prospect_id), None
         )
 
+    async def get_prospects(self, tenant_id: str, prospect_ids: list[str]) -> list[dict[str, Any]]:
+        valda = {str(i) for i in prospect_ids}
+        return [p for p in self.prospects.get(tenant_id, []) if str(p["id"]) in valda]
+
     async def list_prospects(self, tenant_id: str, *, limit: int = 500) -> list[dict[str, Any]]:
         return sorted(
             self.prospects.get(tenant_id, []), key=lambda p: p["created_at"], reverse=True

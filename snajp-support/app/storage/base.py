@@ -1127,6 +1127,10 @@ class Storage(Protocol):
 
     async def get_prospect(self, tenant_id: str, prospect_id: str) -> dict[str, Any] | None: ...
 
+    async def get_prospects(self, tenant_id: str, prospect_ids: list[str]) -> list[dict[str, Any]]:
+        """Exakt de här prospekten, oavsett ålder (list_prospects tar bara de nyaste)."""
+        ...
+
     async def list_prospects(self, tenant_id: str, *, limit: int = 500) -> list[dict[str, Any]]: ...
 
     async def arkivera_prospekt(

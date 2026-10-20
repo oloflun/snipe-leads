@@ -1983,6 +1983,15 @@ class PostgresStorage:
             )
         return _avkoda_prospekt(_row(record))
 
+    async def get_prospects(self, tenant_id: str, prospect_ids: list[str]) -> list[dict[str, Any]]:
+        async with self._scoped(tenant_id) as conn:
+            records = await conn.fetch(
+                "select * from prospects where tenant_id = $1 and id = any($2::uuid[])",
+                tenant_id,
+                list(prospect_ids),
+            )
+        return [_avkoda_prospekt(_row(r)) for r in records]
+
     async def list_prospects(self, tenant_id: str, *, limit: int = 500) -> list[dict[str, Any]]:
         async with self._scoped(tenant_id) as conn:
             records = await conn.fetch(
