@@ -502,3 +502,20 @@ async def test_iris_lead_utan_bedomning_mot_kallmaterial_kan_inte_mejlas():
     )
     queue_item2 = next(i for i in storage.send_queue[TENANT] if i["id"] == item2)
     assert "ej_styrkt" not in str(queue_item2["gate_checks"])
+
+
+def test_alder_i_dagar_parsar_iso_strangen_fran_postgres():
+    """Postgres-lagret (_row) gör created_at till en ISO-STRÄNG. Före
+    2026-10-20 blev subtraktionen TypeError och åldern 0 — tenanten var evigt
+    'ny', uppvärmningstaket (regel 5c, 20/dag) släppte aldrig, och main
+    skickade exakt 20 mejl om dagen med 200 godkända i kö."""
+    from app.leads.scheduler import _alder_i_dagar
+
+    nu = datetime(2026, 10, 20, 8, 0, tzinfo=timezone.utc)
+    assert _alder_i_dagar("2026-08-16T00:59:33.812548+00:00", nu) == 65
+    assert _alder_i_dagar(datetime(2026, 8, 16, tzinfo=timezone.utc), nu) == 65
+    # Fail-closed som förut: oläsbart eller saknat datum är en NY tenant.
+    assert _alder_i_dagar("inte-ett-datum", nu) == 0
+    assert _alder_i_dagar(None, nu) == 0
+    # Naiv tidsstämpel mot medveten "nu" går inte att jämföra → ny tenant.
+    assert _alder_i_dagar("2026-08-16T00:59:33", nu) == 0

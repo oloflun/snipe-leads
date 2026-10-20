@@ -134,7 +134,7 @@ async def test_korning_importeras_med_prospekt(client):
     ut = client.post("/api/admin/flytt/importera", content=kropp,
                      headers={"Content-Type": "application/json", admin_flytt.SIGNATURHUVUD: sig})
     assert ut.status_code == 200, ut.text
-    assert ut.json()["rader"][0] == {"ref_id": "batch-flytt-2", "resultat": "importerad", "prospekt": 0}
+    assert ut.json()["rader"][0] == {"ref_id": "batch-flytt-2", "resultat": "importerad", "prospekt": 0, "utkast": 0}
     rad = await storage.get_leads_korning(DEFAULT_TENANT_ID, "batch-flytt-2")
     assert rad and rad["korning"]["importerad_fran"] == "development"
 
@@ -170,6 +170,67 @@ async def test_bedomningen_foljer_med_till_main(client):
     ny = next(x for x in await storage.list_prospects(DEFAULT_TENANT_ID, limit=500) if x["company_name"] == "Bedömda Bolaget Main AB")
     assert (ny["niva"], ny["score_total"], ny["motivering"]) == ("A", 91, "Gammal sajt i målområdet.")
     assert ny["webbrevision"] == {"modernitet": 3} and ny["score_breakdown"]
+
+
+async def test_utkastet_foljer_med_korningen(client):
+    """Sebbe 2026-10-20 (handoffen 2026-10-17, punkt 4): körningsflytten bar
+    prospekt och körning men inte utkasten — mejlen blev kvar i development.
+    Nu bär varje prospekt sitt väntande utkast med köpostens status, och en
+    omflytt av en redan flyttad körning KOMPLETTERAR det som saknas."""
+    from datetime import datetime, timezone
+
+    storage = app.state.storage
+    p = await storage.create_prospect(
+        DEFAULT_TENANT_ID, company_name="Utkastbolaget AB", contact_email="info@utkastbolaget.se", origin="iris",
+    )
+    trad = await storage.ensure_outreach_thread(DEFAULT_TENANT_ID, prospect_id=p["id"])
+    await storage.queue_outreach_message(
+        DEFAULT_TENANT_ID, thread_id=trad["id"], body="Hej,\n\nEtt utkast.", subject="En fråga",
+        humanizer_variant="snajp:humanizer-svenska", scheduled_at=datetime.now(timezone.utc),
+        status="awaiting_review",
+        gate_checks={"approved_by": "human", "godkand_i": "development", "godkand_at": "2026-10-19T10:00:00+00:00"},
+    )
+    k = {"mal": 1, "levererade": 1, "undersokta": 1, "pagaende": 0, "klar": True,
+         "jobs": [{"job_id": "j-u1", "prospect_id": p["id"]}], "tratt": []}
+    await storage.set_leads_job_status(DEFAULT_TENANT_ID, job_id="batch-utkast", status="completed", scope="batch", korning=k, is_test=True)
+
+    paket = client.post("/api/admin/flytt/paket", headers=_master(client),
+                        json={"slug": _slug(client), "typ": "korning", "ids": ["batch-utkast"]}).json()["paket"]
+    utkast = paket["poster"][0]["prospekt"][0]["utkast"]
+    assert utkast["subject"] == "En fråga" and utkast["ko_status"] == "awaiting_review"
+
+    # Mottagaren: nytt job_id och nytt bolagsnamn → prospekt OCH utkast skapas,
+    # och godkännandet skrivs om till main (det är main som skickar).
+    paket["poster"][0]["korning"]["job_id"] = paket["poster"][0]["ref_id"] = "batch-utkast-2"
+    paket["poster"][0]["prospekt"][0]["company_name"] = "Utkastbolaget Main AB"
+    kropp = json.dumps(paket, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    ut = client.post("/api/admin/flytt/importera", content=kropp, headers={
+        "Content-Type": "application/json", admin_flytt.SIGNATURHUVUD: admin_flytt.signera(paket, get_settings().flytt_nyckel)})
+    assert ut.status_code == 200, ut.text
+    assert ut.json()["rader"][0] == {"ref_id": "batch-utkast-2", "resultat": "importerad", "prospekt": 1, "utkast": 1}
+    ny = next(x for x in await storage.list_prospects(DEFAULT_TENANT_ID, limit=500) if x["company_name"] == "Utkastbolaget Main AB")
+    ny_trad = await storage.find_outreach_thread(DEFAULT_TENANT_ID, prospect_id=ny["id"])
+    m = await storage.get_pending_outreach_message(DEFAULT_TENANT_ID, ny_trad["id"])
+    assert m and m["subject"] == "En fråga"
+    lage = (await storage.utkast_lagen(DEFAULT_TENANT_ID, prospect_id=ny["id"]))[ny["id"]]
+    assert lage["ko_status"] == "awaiting_review"
+    gc = lage["gate_checks"]
+    assert gc["godkand_i"] == "main" and gc["importerad_fran"] == "development"
+
+    # Omflytt av SAMMA paket: körningen och bolaget finns, utkastet finns → redan flyttad.
+    ut = client.post("/api/admin/flytt/importera", content=kropp, headers={
+        "Content-Type": "application/json", admin_flytt.SIGNATURHUVUD: admin_flytt.signera(paket, get_settings().flytt_nyckel)})
+    assert ut.json()["rader"][0]["resultat"] == "redan_flyttad"
+
+    # Självläkningen: tråden tappar sitt väntande utkast (kasseras) → en ny
+    # flytt av samma körning kompletterar med utkastet i stället för att
+    # stanna vid job_id-dubbletten.
+    await storage.cancel_pending_sends(DEFAULT_TENANT_ID, ny_trad["id"])
+    ut = client.post("/api/admin/flytt/importera", content=kropp, headers={
+        "Content-Type": "application/json", admin_flytt.SIGNATURHUVUD: admin_flytt.signera(paket, get_settings().flytt_nyckel)})
+    rad = ut.json()["rader"][0]
+    assert rad["resultat"] == "kompletterad" and rad["utkast"] == 1, ut.text
+    assert await storage.get_pending_outreach_message(DEFAULT_TENANT_ID, ny_trad["id"])
 
 
 async def test_prospekt_flyttas_enskilt(client):

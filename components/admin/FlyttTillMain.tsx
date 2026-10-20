@@ -26,6 +26,10 @@ const T = {
   senastSpeglad: { sv: "senast speglad", en: "last mirrored" },
   mejl: { sv: "Supportmejl", en: "Support email" },
   korningar: { sv: "Leadskörningar", en: "Lead runs" },
+  korningarForklaring: {
+    sv: "Prospekt och väntande utkast följer med körningen.",
+    en: "Prospects and pending drafts move with the run."
+  },
   listor: { sv: "Leadslistor", en: "Lead lists" },
   listorForklaring: {
     sv: "Flyttade listor blir skarpa i main, också de som skapades i testläge.",
@@ -42,11 +46,17 @@ const T = {
   },
   importerad: { sv: "flyttad", en: "moved" },
   redan: { sv: "redan flyttad", en: "already moved" },
+  kompletterad: { sv: "kompletterad (det som saknades följde med)", en: "backfilled (missing parts moved)" },
   fel: { sv: "fel", en: "error" },
   test: { sv: "test", en: "test" }
 } satisfies Record<string, Localized>;
 
-const RESULTAT: Record<string, Localized> = { importerad: T.importerad, redan_flyttad: T.redan, fel: T.fel };
+const RESULTAT: Record<string, Localized> = {
+  importerad: T.importerad,
+  redan_flyttad: T.redan,
+  kompletterad: T.kompletterad,
+  fel: T.fel
+};
 
 export function FlyttTillMain({ slug }: Readonly<{ slug: string }>) {
   const { locale, text } = useLocale();
@@ -150,6 +160,7 @@ export function FlyttTillMain({ slug }: Readonly<{ slug: string }>) {
       ) : null}
 
       <p className="mt-3 px-1 text-[12px] font-medium text-ink-muted">{text(T.korningar)}</p>
+      <p className="px-1 text-[12px] text-ink-subtle">{text(T.korningarForklaring)}</p>
       {kandidater.korningar.length === 0 ? (
         <p className="px-1 text-[12px] text-ink-subtle">{text(T.inga)}</p>
       ) : (

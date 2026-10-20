@@ -9,6 +9,46 @@ möjligt), vad det betyder i koden.
 
 ---
 
+## 2026-10-20 (Sebbe) — Alla körningar till main, utkasten följer med flytten, sändspärrarna lösta
+
+**Beslut.** "Gör migration med alla körningar från development till main, inga
+dubbletter får finnas, inga mail får tas bort. Alla nya körningar ska köras
+från main. De körningar som görs från development ska gå att flytta till main
+genom knappen." Och: "Lös 'sändspärr'."
+
+**Resonemanget.** Första synken (2026-10-17) gjorde main till sanningen, men
+körningar gjorda i development efteråt låg kvar där (494 stycken 2026-10-20),
+och körningsflytten bar inte trådar, utkast eller köposter (handoffen
+2026-10-17, punkt 4) — mejlen hade blivit kvar. Samtidigt stod 201 godkända
+utkast i kö i main utan att gå ut: tenantens ålder lästes som en ISO-sträng
+och blev 0, så uppvärmningstaket (20/dag) släppte aldrig, och 92 poster var
+spärrade på skäl som redan var åtgärdbara (policy_url saknades i
+kundregistret; org.nr-kravet mjukades upp redan 2026-10-10).
+
+**I koden.**
+- `admin_flytt`: varje prospekt i en körnings- eller prospektflytt bär sitt
+  väntande utkast (`_utkast_for`/`_importera_utkast`); ett godkännande gjort i
+  development skrivs om till `godkand_i='main'` (main skickar). En omflytt av
+  en redan flyttad körning kompletterar det som saknas ("kompletterad") i
+  stället för att stanna vid job_id-dubbletten, så bulkflytten går att köra
+  om. Dedup-taket höjt från 500 till 5000 prospekt (snajp hade 873 — allt
+  däröver hade blivit dubbletter). Kandidatlistan visar 200 körningar, inte 10.
+- `scripts/flytta_korningar_till_main.py`: bulkflytt av alla dev-only
+  körningar genom flyttvägen (INV-DATA-003), aldrig SQL.
+- `scheduler._alder_i_dagar` parsar ISO-strängar: uppvärmningstaket gäller
+  tenantens riktiga ålder, inte evigt "0 dagar".
+- `utskicksfot.byt_fot` + `leads_tools.lagstadgad_fot`: en föråldrad fot
+  (byggd innan kundregistret fylldes) byts mot den aktuella vid godkännande
+  och i sändaren, i stället för att stå kvar och blockera regel 2 för evigt.
+- `scripts/los_sandsparr.py`: godkänner om spärrade poster med åtgärdbara
+  skäl via samma API som knappen "Godkänn och skicka" — spärrarna körs om i
+  sändögonblicket, så inget går ut som inte passerar alla sex.
+
+**Observera.** När åldersfixen når main släpper 20/dag-taket helt för tenants
+äldre än 14 dagar: de ~200 köade utkasten går då ut samma dag inom
+sändfönstret (08–17 vardagar). Det är regelverkets avsedda beteende efter
+uppvärmningen, men värt att veta innan releasen mergas.
+
 ## 2026-10-19 (Anton) — Nyckeltalen räknas fram när man kommer dit
 
 **Beslut.** "Kan du göra så att dessa siffror 'genereras' i realtid när man

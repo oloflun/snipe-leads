@@ -136,3 +136,25 @@ def med_fot(brodtext: str, *, fot: str) -> str:
     if har_fot(brodtext):
         return brodtext
     return f"{brodtext.rstrip()}\n\n{fot}"
+
+
+#: Fotens blockstart — samma markör som signatur._FOTSTART. Raden "--" skrivs
+#: bara av bygg_fot; signaturen har ingen egen avdelare.
+_FOTSTART = "\n--\n"
+
+
+def byt_fot(brodtext: str, *, fot: str) -> str:
+    """Texten med den AKTUELLA foten: en befintlig byts ut, en saknad läggs på.
+
+    Samma princip som signatur.med_aktuell_signatur: foten är kodens text, och
+    en fot byggd när kundregistret var ofyllt (utan policyrad eller org.nr) ska
+    bytas när registret fyllts i — inte stå kvar och blockera utskicket i
+    regel 2 för evigt (65 köposter i main 2026-10-20). Ett befintligt block
+    känns igen på "--"-raden följd av en avregistreringslänk; utan länken rörs
+    texten inte (en "--"-rad i brödtexten är inte en fot).
+    """
+    text = (brodtext or "").rstrip()
+    i = text.rfind(_FOTSTART)
+    if i >= 0 and _HAR_LANK.search(text[i:]):
+        text = text[:i].rstrip()
+    return f"{text}\n\n{fot}"

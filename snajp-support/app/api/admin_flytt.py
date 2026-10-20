@@ -18,8 +18,19 @@ sparas till den riktiga miljön. Det får vara den enda vägen.
   avsändaren är en annan miljös api med en annan nyckel. HMAC:en är
   behörigheten, och den utan nyckel kan inte producera en.
 - **Idempotent.** Mejl dedupliceras på provider_message_id (save_email
-  returnerar None vid dublett), prospekt på bolagsnamn, körningar på job_id.
-  Att flytta samma sak två gånger ger kvittot "redan flyttad".
+  returnerar None vid dublett), prospekt på bolagsnamn, körningar på job_id
+  och utkast på att tråden redan bär ett väntande utkast. Att flytta samma
+  sak två gånger ger kvittot "redan flyttad" — men en omflytt KOMPLETTERAR
+  det som saknas (prospekt eller utkast som en äldre flytt inte bar), med
+  kvittot "kompletterad", i stället för att stanna vid job_id-dubbletten.
+- **Utkasten följer med** (Sebbe 2026-10-20, handoffen 2026-10-17 punkt 4):
+  varje prospekt i en körnings- eller prospektflytt bär sitt väntande utkast
+  (osänt, ej kasserat) med köpostens status, tid och gate_checks. Ett
+  godkännande gjort i development skrivs om till `godkand_i='main'` — main
+  är den miljö som skickar (scheduler.skickas_har), samma omskrivning som
+  första synken gjorde. Trådens language_state följer inte med: 'sv' är
+  utgångsläget och en_confirmed kräver ett inkommet engelskt svar, vilket
+  inte kan finnas i development sedan utskicken flyttade till main.
 - **Spårbart.** Varje importerat mejl bär `importerad_fran='development'` i
   beslutsloggen, listor i plattformshändelsen, och development loggar varje
   flytt i `dev_flytt_ko` (migration 085, alla typer sedan 112). Prospekt har
@@ -44,6 +55,7 @@ import hashlib
 import hmac
 import json
 import logging
+from datetime import datetime, timezone
 from typing import Any, Literal
 
 import httpx
@@ -136,6 +148,36 @@ def _skarp_origin(origin: Any) -> str:
     return "import"
 
 
+#: Dedupen läser kundens ALLA prospekt. 500 (list_prospects default) var för
+#: lågt redan 2026-10-20 (snajp hade 873 i main): varje bolag utanför de 500
+#: senaste hade blivit en dublett vid nästa flytt.
+_DEDUP_TAK = 5000
+
+
+async def _utkast_for(storage, tenant_id: str, prospect_id: str) -> dict[str, Any] | None:
+    """Prospektets väntande utkast (osänt, ej kasserat) med trådens senaste
+    köpost — det som annars blev kvar i development när körningen flyttades
+    (handoffen 2026-10-17, punkt 4: "utkasten måste skapas om i main")."""
+    trad = await storage.find_outreach_thread(tenant_id, prospect_id=prospect_id)
+    if not trad:
+        return None
+    m = await storage.get_pending_outreach_message(tenant_id, str(trad["id"]))
+    if not m or not str(m.get("body") or "").strip():
+        return None
+    lagen = (await storage.utkast_lagen(tenant_id, prospect_id=prospect_id)).get(str(prospect_id)) or {}
+    gate = lagen.get("gate_checks")
+    if isinstance(gate, str):
+        gate = json.loads(gate or "{}")
+    return {
+        "subject": m.get("subject"),
+        "body": m.get("body"),
+        "humanizer_variant": m.get("humanizer_variant"),
+        "ko_status": lagen.get("ko_status"),
+        "scheduled_at": lagen.get("scheduled_at"),
+        "gate_checks": gate,
+    }
+
+
 async def _bygg_paket(storage, tenant: dict[str, Any], typ: str, ids: list[str]) -> dict[str, Any]:
     tenant_id = str(tenant["id"])
     poster: list[dict[str, Any]] = []
@@ -157,7 +199,11 @@ async def _bygg_paket(storage, tenant: dict[str, Any], typ: str, ids: list[str])
             p = await storage.get_prospect(tenant_id, pid)
             if not p:
                 raise HTTPException(status_code=404, detail=f"Leadet {pid} finns inte.")
-            poster.append({"ref_id": pid, "prospekt": [{f: p.get(f) for f in _PROSPEKTFALT}]})
+            poster.append({
+                "ref_id": pid,
+                "prospekt": [{f: p.get(f) for f in _PROSPEKTFALT}],
+                "utkast": await _utkast_for(storage, tenant_id, pid),
+            })
     elif typ == "lista":
         for lid in ids:
             lista = await storage.get_lead_list(tenant_id, lid)
@@ -179,7 +225,10 @@ async def _bygg_paket(storage, tenant: dict[str, Any], typ: str, ids: list[str])
                 pid = j.get("prospect_id")
                 p = await storage.get_prospect(tenant_id, pid) if pid else None
                 if p:
-                    prospekt.append({f: p.get(f) for f in _PROSPEKTFALT})
+                    prospekt.append({
+                        **{f: p.get(f) for f in _PROSPEKTFALT},
+                        "utkast": await _utkast_for(storage, tenant_id, str(pid)),
+                    })
             poster.append({
                 "ref_id": str(korning["job_id"]),
                 "korning": {f: korning.get(f) for f in ("job_id", "status", "scope", "is_test", "error", "korning")},
@@ -223,7 +272,9 @@ async def flytt_kandidater(request: Request, slug: str) -> dict:
     tenant = await _tenant_for_slug(storage, slug)
     tenant_id = str(tenant["id"])
     mejl = await storage.list_emails(tenant_id, limit=30, is_test=None, inkludera_larm=True)
-    korningar = await storage.list_leads_korningar(tenant_id, limit=10)
+    # 200 och inte 10 (Sebbe 2026-10-20): alla körningar gjorda i development
+    # ska gå att flytta genom knappen, inte bara de tio senaste.
+    korningar = await storage.list_leads_korningar(tenant_id, limit=200)
     listor = await storage.list_lead_lists(tenant_id, limit=30)
     return {
         "tenant_id": tenant_id,
@@ -295,7 +346,7 @@ async def flytt_skicka(request: Request, payload: FlyttRequest) -> dict:
     for rad in utfall.get("rader") or []:
         await storage.logga_flytt(
             tenant_id, typ=payload.typ, ref_id=str(rad.get("ref_id")),
-            resultat="ok" if rad.get("resultat") in ("importerad", "redan_flyttad") else "fel",
+            resultat="ok" if rad.get("resultat") in ("importerad", "redan_flyttad", "kompletterad") else "fel",
         )
     return utfall
 
@@ -378,15 +429,70 @@ async def _importera_mejl(storage, tenant_id: str, post: dict[str, Any], fran: s
     return {"ref_id": post["ref_id"], "resultat": "importerad", "id": rad["id"]}
 
 
+#: Köstatusar en utkastflytt bevarar. Allt annat (sent, cancelled — ska inte
+#: kunna förekomma: ett kasserat utkast exporteras aldrig) blir granskning.
+_UTKASTSTATUSAR = ("queued", "awaiting_review", "blocked")
+
+
+async def _importera_utkast(storage, tenant_id: str, prospect_id: str, utkast: Any, fran: str) -> bool:
+    """Prospektets väntande utkast med sin köpost, in i mottagarens tråd.
+
+    Dedup: en tråd som redan bär ett väntande (osänt, ej kasserat) utkast får
+    inget till — sändaren tar trådens senaste osända text, och två väntande
+    utkast var precis felet 2026-10-08. Returnerar True när utkastet skapades.
+    """
+    if not isinstance(utkast, dict) or not str(utkast.get("body") or "").strip():
+        return False
+    trad = await storage.ensure_outreach_thread(tenant_id, prospect_id=prospect_id)
+    if await storage.get_pending_outreach_message(tenant_id, str(trad["id"])):
+        return False
+    gate = utkast.get("gate_checks")
+    if isinstance(gate, str):
+        gate = json.loads(gate or "{}")
+    gate = dict(gate or {})
+    # Main skickar (scheduler.skickas_har): godkännandet gäller, men posten
+    # ägs nu av main — samma omskrivning som första synken 2026-10-17.
+    if gate.get("godkand_i") == "development":
+        gate["godkand_i"] = "main"
+    gate["importerad_fran"] = fran
+    status = str(utkast.get("ko_status") or "")
+    if status not in _UTKASTSTATUSAR:
+        status = "awaiting_review"
+    scheduled = None
+    if utkast.get("scheduled_at"):
+        try:
+            scheduled = datetime.fromisoformat(str(utkast["scheduled_at"]))
+        except ValueError:
+            scheduled = None
+    await storage.queue_outreach_message(
+        tenant_id,
+        thread_id=str(trad["id"]),
+        body=str(utkast.get("body") or ""),
+        subject=str(utkast.get("subject") or ""),
+        humanizer_variant=str(utkast.get("humanizer_variant") or ""),
+        scheduled_at=scheduled or datetime.now(timezone.utc),
+        status=status,
+        gate_checks=gate,
+    )
+    return True
+
+
 async def _importera_prospekt(storage, tenant_id: str, post: dict[str, Any], fran: str) -> dict[str, Any]:
     """Ett markerat lead ur leadsvyn. Samma dedupnyckel som körningsimporten:
-    bolagsnamnet — finns bolaget redan hos kunden i main är det flyttat."""
+    bolagsnamnet — finns bolaget redan hos kunden i main är det flyttat, men
+    ett utkast som saknas kompletteras (en äldre flytt bar inte utkasten)."""
     p = (post.get("prospekt") or [{}])[0]
     namn = str(p.get("company_name") or "").strip()
     if not namn:
         return {"ref_id": post.get("ref_id"), "resultat": "fel", "fel": "Leadet saknar bolagsnamn."}
-    befintliga = {str(x.get("company_name") or "").casefold() for x in await storage.list_prospects(tenant_id, limit=500)}
-    if namn.casefold() in befintliga:
+    befintliga = {
+        str(x.get("company_name") or "").casefold(): x
+        for x in await storage.list_prospects(tenant_id, limit=_DEDUP_TAK)
+    }
+    fanns = befintliga.get(namn.casefold())
+    if fanns is not None:
+        if await _importera_utkast(storage, tenant_id, str(fanns["id"]), post.get("utkast"), fran):
+            return {"ref_id": post.get("ref_id"), "resultat": "kompletterad", "id": fanns["id"], "utkast": 1}
         return {"ref_id": post.get("ref_id"), "resultat": "redan_flyttad"}
     profil = {
         f: p[f]
@@ -405,40 +511,64 @@ async def _importera_prospekt(storage, tenant_id: str, post: dict[str, Any], fra
     bedomning = {f: p[f] for f in BEDOMNINGSFALT if p.get(f) is not None}
     if bedomning:
         await storage.spara_bedomning(tenant_id, skapad["id"], bedomning=bedomning)
+    await _importera_utkast(storage, tenant_id, str(skapad["id"]), post.get("utkast"), fran)
     return {"ref_id": post.get("ref_id"), "resultat": "importerad", "id": skapad["id"]}
 
 
 async def _importera_korning(storage, tenant_id: str, post: dict[str, Any], fran: str) -> dict[str, Any]:
+    """En körning med sina prospekt och deras väntande utkast.
+
+    En körning som redan finns (job_id) stannar inte vid "redan flyttad":
+    prospekten och utkasten gås igenom ändå, och det en äldre flytt inte bar
+    (utkast fanns inte i paketet före 2026-10-20) kompletteras. Därför går
+    bulkflytten (scripts/flytta_korningar_till_main.py) att köra om säkert.
+    """
     k = post.get("korning") or {}
     job_id = str(k.get("job_id") or post["ref_id"])
-    if await storage.get_leads_korning(tenant_id, job_id):
-        return {"ref_id": post["ref_id"], "resultat": "redan_flyttad"}
-    befintliga = {str(p.get("company_name") or "").casefold(): p for p in await storage.list_prospects(tenant_id, limit=500)}
+    fanns = await storage.get_leads_korning(tenant_id, job_id) is not None
+    befintliga = {
+        str(p.get("company_name") or "").casefold(): p
+        for p in await storage.list_prospects(tenant_id, limit=_DEDUP_TAK)
+    }
     nya = 0
+    nya_utkast = 0
     for p in post.get("prospekt") or []:
         namn = str(p.get("company_name") or "").strip()
-        if not namn or namn.casefold() in befintliga:
+        if not namn:
             continue
-        profil = {f: p[f] for f in _PROSPEKTFALT if f not in ("company_name", "contact_name", "contact_email", "origin") and p.get(f) is not None}
-        profil["importerad_fran"] = fran
-        skapad = await storage.create_prospect(
-            tenant_id, company_name=namn, contact_name=p.get("contact_name"),
-            contact_email=p.get("contact_email"),
-            origin=_skarp_origin(p.get("origin")),
-            profil=profil,
+        rad = befintliga.get(namn.casefold())
+        if rad is None:
+            profil = {f: p[f] for f in _PROSPEKTFALT if f not in ("company_name", "contact_name", "contact_email", "origin") and p.get(f) is not None}
+            profil["importerad_fran"] = fran
+            rad = await storage.create_prospect(
+                tenant_id, company_name=namn, contact_name=p.get("contact_name"),
+                contact_email=p.get("contact_email"),
+                origin=_skarp_origin(p.get("origin")),
+                profil=profil,
+            )
+            # Bedömningen följer med (2026-10-05): create_prospect tar bara
+            # grundfälten, så nivå, poäng, motivering, kriterier, lägesbeskrivning
+            # och webbrevisionen föll bort och leadet landade i main obedömt.
+            bedomning = {f: p[f] for f in BEDOMNINGSFALT if p.get(f) is not None}
+            if bedomning:
+                await storage.spara_bedomning(tenant_id, rad["id"], bedomning=bedomning)
+            befintliga[namn.casefold()] = rad
+            nya += 1
+        if await _importera_utkast(storage, tenant_id, str(rad["id"]), p.get("utkast"), fran):
+            nya_utkast += 1
+    if fanns and not nya and not nya_utkast:
+        return {"ref_id": post["ref_id"], "resultat": "redan_flyttad"}
+    if not fanns:
+        await storage.set_leads_job_status(
+            tenant_id, job_id=job_id, status=str(k.get("status") or "completed"), scope=str(k.get("scope") or "batch"),
+            korning={**(k.get("korning") or {}), "importerad_fran": fran}, error=k.get("error"), is_test=bool(k.get("is_test")),
         )
-        # Bedömningen följer med (2026-10-05): create_prospect tar bara
-        # grundfälten, så nivå, poäng, motivering, kriterier, lägesbeskrivning
-        # och webbrevisionen föll bort och leadet landade i main obedömt.
-        bedomning = {f: p[f] for f in BEDOMNINGSFALT if p.get(f) is not None}
-        if bedomning:
-            await storage.spara_bedomning(tenant_id, skapad["id"], bedomning=bedomning)
-        nya += 1
-    await storage.set_leads_job_status(
-        tenant_id, job_id=job_id, status=str(k.get("status") or "completed"), scope=str(k.get("scope") or "batch"),
-        korning={**(k.get("korning") or {}), "importerad_fran": fran}, error=k.get("error"), is_test=bool(k.get("is_test")),
-    )
-    return {"ref_id": post["ref_id"], "resultat": "importerad", "prospekt": nya}
+    return {
+        "ref_id": post["ref_id"],
+        "resultat": "kompletterad" if fanns else "importerad",
+        "prospekt": nya,
+        "utkast": nya_utkast,
+    }
 
 
 async def _importera_lista(storage, tenant_id: str, post: dict[str, Any], fran: str) -> dict[str, Any]:
