@@ -499,7 +499,7 @@ class Storage(Protocol):
     # -- Leads: send_queue-schemaläggaren (Del J, Fas C-E) -------------------
 
     async def list_due_send_queue(self, tenant_id: str, now: Any) -> list[dict[str, Any]]:
-        """status='queued' och scheduled_at <= now."""
+        """status='queued' och scheduled_at <= now, äldst först."""
         ...
 
     async def update_send_queue_status(
@@ -1127,7 +1127,11 @@ class Storage(Protocol):
 
     async def get_prospect(self, tenant_id: str, prospect_id: str) -> dict[str, Any] | None: ...
 
-    async def list_prospects(self, tenant_id: str, *, limit: int = 500) -> list[dict[str, Any]]: ...
+    async def get_prospects(self, tenant_id: str, prospect_ids: list[str]) -> list[dict[str, Any]]:
+        """Exakt de här prospekten, oavsett ålder (list_prospects tar bara de nyaste)."""
+        ...
+
+    async def list_prospects(self, tenant_id: str, *, limit: int = 500, offset: int = 0) -> list[dict[str, Any]]: ...
 
     async def arkivera_prospekt(
         self, tenant_id: str, prospect_ids: list[str], *, arkivera: bool

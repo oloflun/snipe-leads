@@ -799,11 +799,14 @@ class MemoryStorage:
         return max(docs, key=lambda d: d["version"])
 
     async def list_due_send_queue(self, tenant_id: str, now) -> list[dict[str, Any]]:
-        return [
-            item
-            for item in self.send_queue.get(tenant_id, [])
-            if item["status"] == "queued" and item["scheduled_at"] <= now
-        ]
+        return sorted(
+            (
+                item
+                for item in self.send_queue.get(tenant_id, [])
+                if item["status"] == "queued" and item["scheduled_at"] <= now
+            ),
+            key=lambda item: item["scheduled_at"],
+        )
 
     async def update_send_queue_status(
         self, tenant_id: str, item_id: str, *, status: str, gate_checks: dict[str, Any]
@@ -1395,10 +1398,14 @@ class MemoryStorage:
             (p for p in self.prospects.get(tenant_id, []) if p["id"] == prospect_id), None
         )
 
-    async def list_prospects(self, tenant_id: str, *, limit: int = 500) -> list[dict[str, Any]]:
+    async def get_prospects(self, tenant_id: str, prospect_ids: list[str]) -> list[dict[str, Any]]:
+        valda = {str(i) for i in prospect_ids}
+        return [p for p in self.prospects.get(tenant_id, []) if str(p["id"]) in valda]
+
+    async def list_prospects(self, tenant_id: str, *, limit: int = 500, offset: int = 0) -> list[dict[str, Any]]:
         return sorted(
             self.prospects.get(tenant_id, []), key=lambda p: p["created_at"], reverse=True
-        )[:limit]
+        )[offset : offset + limit]
 
     async def arkivera_prospekt(
         self, tenant_id: str, prospect_ids: list[str], *, arkivera: bool

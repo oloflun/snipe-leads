@@ -1125,7 +1125,11 @@ class PostgresStorage:
     async def list_due_send_queue(self, tenant_id: str, now) -> list[dict[str, Any]]:
         async with self._scoped(tenant_id) as conn:
             records = await conn.fetch(
-                "select * from send_queue where tenant_id = $1 and status = 'queued' and scheduled_at <= $2",
+                # Äldst först: under ett dagstak (uppvärmningen, regel 5c) tog
+                # en osorterad fråga godtyckliga poster, och samma utkast kunde
+                # förbigås i dagar (main: köade 2026-10-08, ej skickade 10-20).
+                "select * from send_queue where tenant_id = $1 and status = 'queued' and scheduled_at <= $2"
+                " order by scheduled_at, created_at",
                 tenant_id,
                 now,
             )
@@ -1979,12 +1983,24 @@ class PostgresStorage:
             )
         return _avkoda_prospekt(_row(record))
 
-    async def list_prospects(self, tenant_id: str, *, limit: int = 500) -> list[dict[str, Any]]:
+    async def get_prospects(self, tenant_id: str, prospect_ids: list[str]) -> list[dict[str, Any]]:
         async with self._scoped(tenant_id) as conn:
             records = await conn.fetch(
-                "select * from prospects where tenant_id = $1 order by created_at desc limit $2",
+                "select * from prospects where tenant_id = $1 and id = any($2::uuid[])",
+                tenant_id,
+                list(prospect_ids),
+            )
+        return [_avkoda_prospekt(_row(r)) for r in records]
+
+    async def list_prospects(self, tenant_id: str, *, limit: int = 500, offset: int = 0) -> list[dict[str, Any]]:
+        async with self._scoped(tenant_id) as conn:
+            # id som andra nyckel: lika created_at (en flytt skapar hundratals
+            # samma sekund) får en fast ordning, annars glider sidorna.
+            records = await conn.fetch(
+                "select * from prospects where tenant_id = $1 order by created_at desc, id limit $2 offset $3",
                 tenant_id,
                 limit,
+                offset,
             )
         return [_avkoda_prospekt(_row(r)) for r in records]
 

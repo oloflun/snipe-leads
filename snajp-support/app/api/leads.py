@@ -541,9 +541,15 @@ async def create_example_prospects(
 
 @router.get("/api/leads/prospects")
 async def list_prospects(
-    request: Request, limit: int = 500, tenant: dict = Depends(require_tenant)
+    request: Request, limit: int = 500, offset: int = 0, tenant: dict = Depends(require_tenant)
 ) -> dict:
+    """En sida leads, nyaste först. Sidan räknas på databasraderna (filtren
+    nedan gör den kortare): `fler` säger om det finns en sida till och `nasta`
+    var den börjar. Klienten hämtar tills `fler` är falskt (lib/leads/suite.ts:
+    allaProspekt) — förut visades bara de 500 nyaste (main 2026-10-21: 1331)."""
     storage = request.app.state.storage
+    sida = max(1, min(limit, 1000))
+    offset = max(0, offset)
     tenant_id = tenant["tenant_id"]
     from ..leads import webbpool
 
@@ -568,7 +574,7 @@ async def list_prospects(
             return {}
 
     prospects, kopplade, lagen, statuslogg, i_research, far_se_webb, utkastjobb = await asyncio.gather(
-        storage.list_prospects(tenant_id, limit=max(1, min(limit, 1000))),
+        storage.list_prospects(tenant_id, limit=sida, offset=offset),
         storage.listkopplade_prospekt(tenant_id),
         storage.utkast_lagen(tenant_id),
         storage.list_status_logg(tenant_id),
@@ -576,6 +582,7 @@ async def list_prospects(
         webbpool.far_se(storage, tenant_id),
         _utkastjobb(),
     )
+    fler, nasta = len(prospects) == sida, offset + len(prospects)
     # Exempelbolag syns bara hos demotenanten. Kvarlämnade rader från den
     # gamla default-checkboxen ska inte dyka upp som "fynd" hos en kund.
     if tenant["tenant_id"] != DEFAULT_TENANT_ID:
@@ -630,7 +637,9 @@ async def list_prospects(
                 ),
             }
             for p in prospects
-        ]
+        ],
+        "fler": fler,
+        "nasta": nasta,
     }
 
 
@@ -1493,7 +1502,9 @@ async def _schemalagda_utskick(storage, tenant_id: str) -> list[dict]:
     }
     if not godkanda:
         return []
-    prospekt = {str(p["id"]): p for p in await storage.list_prospects(tenant_id, limit=1000)}
+    # Med id, inte de 1000 nyaste: en flytt på 492 leads gömde 85 av 234
+    # godkända mejl i main 2026-10-20 (de gick ut ändå, men syntes inte).
+    prospekt = {str(p["id"]): p for p in await storage.get_prospects(tenant_id, list(godkanda))}
     rader = []
     for pid, (lage, harlett) in godkanda.items():
         p = prospekt.get(pid)

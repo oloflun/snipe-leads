@@ -95,6 +95,9 @@ def kandidater(store: dict, slug_filter: str | None) -> dict[str, list[str]]:
         """select l.job_id::text, t.slug, l.created_at
              from public.leads_job_ledger l join public.ss_tenants t on t.id = l.tenant_id
             where not coalesce(l.is_test, false)
+              -- Bara körningarna: delstegen (research_and_draft per lead)
+              -- följer med sin körning, och deras prospekt finns redan i main.
+              and l.scope in ('batch', 'lista')
             order by l.created_at"""
     )
     ut: dict[str, list[str]] = defaultdict(list)

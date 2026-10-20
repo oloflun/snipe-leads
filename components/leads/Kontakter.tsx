@@ -8,6 +8,7 @@ import { Cell, EmptyState, SkeletonRows, Tabell, tabellRad } from "@/components/
 import { EjAktiverad, arEjAktiverad } from "@/components/EjAktiverad";
 import { demoOversiktSvar } from "@/lib/demo/oversikt";
 import { readJsonBody } from "@/lib/http/json";
+import { allaProspekt, leadsAnrop } from "@/lib/leads/suite";
 import { useLocale, type Localized } from "@/lib/i18n";
 
 /**
@@ -74,7 +75,7 @@ export function Kontakter({ demo = false }: Readonly<{ demo?: boolean }>) {
     }
 
     try {
-      const response = await fetch("/api/snajp-support/leads/prospects", { cache: "no-store" });
+      const response = await fetch("/api/snajp-support/leads/prospects?limit=1000", { cache: "no-store" });
       if (response.status === 409) {
         // Kroppen måste läsas ÄVEN vid felstatus här: koden bor i den, och
         // 409 betyder två olika saker (se arEjAktiverad).
@@ -97,12 +98,14 @@ export function Kontakter({ demo = false }: Readonly<{ demo?: boolean }>) {
         });
         return;
       }
-      const kropp = await readJsonBody<{ prospects?: Prospekt[]; offline?: boolean }>(response);
+      const kropp = await readJsonBody<{ prospects?: Prospekt[]; offline?: boolean; fler?: boolean; nasta?: number }>(response);
       if (!kropp || kropp.offline) {
         setLage({ fas: "fel", meddelande: { sv: "Backenden svarade utan innehåll.", en: "The backend replied without content." } });
         return;
       }
-      setLage({ fas: "klar", prospekt: kropp.prospects ?? [] });
+      // Resten av sidorna (allaProspekt): första sidan bar felhanteringen ovan.
+      const resten = kropp.fler && kropp.nasta ? await allaProspekt<Prospekt>(leadsAnrop, "", kropp.nasta) : [];
+      setLage({ fas: "klar", prospekt: [...(kropp.prospects ?? []), ...resten] });
     } catch (error) {
       setLage({
         fas: "fel",

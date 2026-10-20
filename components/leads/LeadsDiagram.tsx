@@ -6,7 +6,7 @@ import { meta } from "@/components/ui";
 import { demoOversiktSvar } from "@/lib/demo/oversikt";
 import { readJsonBody } from "@/lib/http/json";
 import { useLocale, type Localized } from "@/lib/i18n";
-import { kontaktvagAv, type SuiteProspekt } from "@/lib/leads/suite";
+import { allaProspekt, kontaktvagAv, type SuiteProspekt } from "@/lib/leads/suite";
 import { STATUS_ETIKETT } from "@/lib/prospekt";
 import { cn } from "@/lib/utils";
 
@@ -76,7 +76,7 @@ export function useLeadsdata(demo: boolean) {
 
   const ladda = useCallback(async () => {
     const [p, w] = await Promise.all([
-      hamta<{ prospects?: SuiteProspekt[] }>("/leads/prospects?limit=500"),
+      allaProspekt<SuiteProspekt>((vag) => hamta<{ prospects?: SuiteProspekt[]; fler?: boolean; nasta?: number }>(vag)).then((prospects) => ({ prospects })),
       hamta<{ weeks?: Vecka[] }>("/analytics/weekly?weeks=24")
     ]);
     setProspekt(p ? (p.prospects ?? []) : []);

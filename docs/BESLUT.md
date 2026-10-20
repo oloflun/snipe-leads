@@ -9,6 +9,63 @@ möjligt), vad det betyder i koden.
 
 ---
 
+## 2026-10-21 (Anton) — Leadsbudgeten sänkt till ~1000 leads per dygn, båda miljöerna
+
+**Beslut.** "Sänk den just nu … sikta på runt 1000." Först development, sedan main.
+
+**Resonemanget.** 1,5 miljarder (beslutet 2026-10-20) var räknat på 500
+körningar, men utan Pro räcker ett lägre tak. Ett levererat lead på flash drar
+~150 k tokens (research + utkast, uppmätt i main 2026-10-20). 1 000 leads ≈
+150 M tokens ≈ 60 USD per dygn om taket nås.
+
+**I miljön.** `LEADS_DAILY_TOKEN_BUDGET=150000000` på api i development och
+main (båda var 1 500 000 000). Anton: "Gör samma beslut där."
+
+## 2026-10-21 (Anton) — Utkasten på flash i båda miljöerna; development skriver aldrig till main
+
+**Beslut.** "Byt till flash även i development, ändra inte kedjan i övrigt."
+Och: "gör så att inget skrivs från development längre, fyll bara på från main
+och synka endast körningar från development via Flytta till main-funktionen."
+Samt: alla leads ska synas i listan.
+
+**Resonemanget.** Pro-bytet 2026-10-16 (nedan) stod för 1 116 av 1 419 kr på
+Vertex 6–20 oktober, 10–15 gånger flash per lead, och var aldrig prövat mot
+flash på den färdiga kedjan. Mätt med dagens stilgrind på utkast skrivna efter
+2026-10-18: flash 16 % med fynd (56 utkast), pro 14 % (180). Ingen belagd
+skillnad som motiverar priset. Kedjan i övrigt (grindar, humanizer, tilltal)
+står kvar.
+
+**I koden och miljön.**
+- `LEADS_DRAFT_MODEL` och `LEADS_HUMANIZER_MODEL` borttagna på api i
+  development; main hade dem aldrig. Stegen ärver `MODEL=gemini-2.5-flash`.
+  Ersätter beslutet 2026-10-16 om gemini-2.5-pro.
+- `scripts/railway_synk.py` öppnar main skrivskyddat utanför första synken:
+  synken kan mekaniskt bara skriva till development.
+- `scripts/flytta_korningar_till_main.py` tar bara körningar (batch, lista),
+  inte delstegen per lead. Kontrollerat 2026-10-21: main har alla körningar,
+  alla utkast och inga dubbletter (1 331 leads hos snajp).
+- `GET /api/leads/prospects` bläddrar (`offset`, `fler`, `nasta`) och
+  klienterna hämtar alla sidor (`allaProspekt`); Skickas snart slår upp
+  prospekten med id. Förut syntes bara de 500 respektive 1 000 nyaste.
+
+## 2026-10-20 (Anton) — Leadsbudgeten räcker till 500 körningar per dygn
+
+**Beslut.** "Höj även tokenbudgeten för att klara motsvarande 500 körningar
+per dag."
+
+**Resonemanget.** En körning med 200 leads i main stoppades av dygnsbudgeten
+(4,5 M av 2 M tokens). Taket var satt för att fånga en skenande kostnad
+(INV-JOB-002), inte för att begränsa vanligt arbete. Uppmätt i
+development-spegeln 2026-10-20: 58 körningar de senaste 14 dygnen drog
+165 M tokens, alltså ~2,85 M per körning (~100–150 k per lead, 96 % input).
+500 × ~3 M ≈ 1,5 miljarder tokens. På gemini-2.5-flash är det i värsta fall
+omkring 600 USD per kund och dygn om hela taket används.
+
+**I koden.** Ingen kodändring: `LEADS_DAILY_TOKEN_BUDGET=1500000000` på
+`api` i Railway, både main (var 2 000 000) och development (var 120 000 000,
+spegeln räknar också main:s körningar). Kodens standard (2 M) gäller
+fortfarande en miljö utan variabeln.
+
 ## 2026-10-20 (Sebbe) — Alla körningar till main, utkasten följer med flytten, sändspärrarna lösta
 
 **Beslut.** "Gör migration med alla körningar från development till main, inga

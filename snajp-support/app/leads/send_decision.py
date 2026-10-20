@@ -31,6 +31,10 @@ def decide_send_action(
         return SendDecision("block", "tråd eller köat meddelande saknas — inget att skicka")
 
     last_inbound_at = thread.get("last_inbound_at")
+    if isinstance(last_inbound_at, str):
+        # Postgres-lagret (_row) gör timestamptz till ISO-sträng; utan
+        # parsningen föll varje trådsvar på TypeError (main 2026-10-20).
+        last_inbound_at = datetime.fromisoformat(last_inbound_at)
     if last_inbound_at is not None:
         timing = check_thread_reply_gate(now, prospect_last_inbound_at=last_inbound_at)
     else:

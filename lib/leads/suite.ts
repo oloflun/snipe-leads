@@ -140,6 +140,25 @@ export async function leadsAnrop<T>(vag: string, init?: RequestInit): Promise<T>
   return kropp as T;
 }
 
+/** Alla leads, sida för sida (Anton 2026-10-21): GET /leads/prospects ger en
+ *  sida om högst 1000 databasrader, och filtren i API:t gör den kortare. Förut
+ *  hämtades bara första sidan, och main:s 1331 leads syntes som 500. `fler`
+ *  och `nasta` styr bläddringen; `start` fortsätter efter en redan hämtad sida. */
+export async function allaProspekt<T>(
+  hamtaSida: (vag: string) => Promise<{ prospects?: T[]; fler?: boolean; nasta?: number } | null>,
+  fraga = "",
+  start = 0
+): Promise<T[]> {
+  const alla: T[] = [];
+  let offset = start;
+  for (;;) {
+    const sida = await hamtaSida(`/leads/prospects?limit=1000&offset=${offset}${fraga ? `&${fraga}` : ""}`);
+    alla.push(...(sida?.prospects ?? []));
+    if (!sida?.fler || typeof sida.nasta !== "number" || sida.nasta <= offset) return alla;
+    offset = sida.nasta;
+  }
+}
+
 export function datumFormat(locale: Locale): string {
   return locale === "en" ? "en-GB" : "sv-SE";
 }
