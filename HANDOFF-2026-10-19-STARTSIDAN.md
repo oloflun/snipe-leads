@@ -77,6 +77,8 @@ Sedan tre beställningar till, alla godkända ("Allt är jättebra nu"). Allt ä
   1.2.0 → 1.2.3, super-intelligence till `d2932db` på användar- och projektnivå; kräver
   omstart av Claude Code. Logg: `~/.agents/logs/anti-slop-design-push-2026-10-20.log`.
 
+**PR till main:** https://github.com/oloflun/snipe-leads/pull/33 (development → main, 18 commits inkl. Sebbes leadsändringar 970a700, 55a8f67). CI: 10 gröna, "agent-core laddas i den byggda imagen" faller, kräver code owner-review.
+
 **Nytt i avsnitt 3, återstår:**
 - anti-slop-design `main` på GitHub ligger 45 commits efter `design-rework-v3` (ren
   fast-forward). Pushas bara med Antons ja.
