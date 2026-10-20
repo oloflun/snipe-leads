@@ -9,6 +9,206 @@ möjligt), vad det betyder i koden.
 
 ---
 
+## 2026-10-19 (Anton) — Nyckeltalen räknas fram när man kommer dit
+
+**Beslut.** "Kan du göra så att dessa siffror 'genereras' i realtid när man
+kommer dit?" (resultatvyns nyckeltal på /leads och /support).
+
+Rättat samma kväll: "De är helt fulladdade vid scroll ... det måste ske
+naturligt vid scroll och när de är helt i bild, det får inte gå för snabbt."
+
+**I koden.** `RaknaUpp` i `components/marketing/AgentResultat.tsx` räknar
+varje tal från noll till sitt värde på 2,6 s, ett tal i taget med 0,28 s
+mellan. Starten kommer först när talet står helt i bild ovanför skärmens
+nedersta femtedel, plus 0,45 s så att raden hunnit tonas in. Enheten och decimalerna följer med ("71 %", "4,6"), och
+hela värdet håller bredden så att etiketterna står still.
+
+## 2026-10-19 (Anton) — Hjälten skrivs fram, bilderna står hela, översikten bort
+
+**Beslut.** "Hela herotexten för support är i färg, gör så att enbart 7:an är
+det. Gör även så att bilderna laddas hela, nu ser det ut som att de renderas,
+som att sidan laddas långsamt. Ta även bort hela dashboard-sektionen, den
+tillför inte något i nuläget och skiljer sig från de konstruerade rutorna. Se
+även till att texten för Om oss-sektionen på supportsidan inte innehåller massa
+leads-referenser. Gör även så att hero-texten skrivs ut på samma sätt som
+rutan, fast långsammare och mer effektfullt, med betoning på sover, samma med
+Support, men byt det till: Era kundärenden hanterade, 24/7." Och: "Gör även
+texten i rutorna större i desktop och låt den fylla upp dem mer."
+
+**I koden.** `HeroText` (`components/marketing/LiveText.tsx`) skriver fram
+rubriken när dörren öppnas (`hero:type` från `useLandingMotion`). Paus efter
+kommatecken och före det betonade ordet, som sedan skrivs i halv fart. Betoningen
+ligger på "sover" och på 7:an, i den ljusare ockran (`text-ochre`), eftersom
+`text-warning` försvann mot solnedgången. Fotona avtäcks inte längre med
+clip-path, bara parallaxen är kvar. `DashboardIsar` är borttagen med sin
+rörelse och CSS. `varforSupport` (copy.ts) ersätter `varforSnajp` på
+supportsidan. Rutornas innehåll zoomas 1,12 från 1280 px och 1,25 från 1536 px
+(`.case-zoom`), och minsta höjden delas med zoomen så att rutan behåller sin höjd.
+
+## 2026-10-19 (Anton) — Live-skrivning, tydligare studs, inga tekniska referenser i demon
+
+**Beslut.** "Testa göra skuggan i heron svagare, eller skippa den helt. Gör
+även animeringarna för rutorna jämnare och mjukare, och gör
+studsseffekten/tillbakafjädringen tydligare. Skapa även effekten att texten
+skrivs live, för alla omgenereringar/knappval också, ta även bort alla
+tekniska referenser, endast korta motiveringar."
+
+**Resonemang (Anton).** Skuggan bakom ingressen syntes som en skugga. Studsen
+var för subtil för att märkas. Demons svar ska kännas som att agenten skriver,
+och motiveringarna ska läsas av en kund, inte av en utvecklare.
+
+**I koden.** Den ovala mörkningen är borta; på mobil bär ett mjukt mörkare
+band i fotot läsbarheten (5,3:1). Fjädern 0.75/0.75 → 0.66/0.95 (studs ~11 px,
+mjukare glidning). `LiveText` skriver fram showcase-utkasten när rutan landat;
+demons omskrivningar skrivs fram i rutan och panelen visar bara en kort
+motivering (marknadssidan; arbetsytan oförändrad). Startsidans exempelmejl
+fick egna svar (`lib/data/emails.ts`), förut svarade varje knapp att demot
+bara fanns för andra bolag. Prompten ber inte längre modellen hänvisa till
+principer och filer, och `utanReferenser` stryker meningar som ändå gör det.
+Kvar: de sex /demo-bolagens motiveringar nämner "CTA" och har pilscheman.
+
+## 2026-10-19 (Anton) — Startsidan: ytor glider in på en fjäder, två upprepande sektioner bort
+
+**Beslut.** "Jag vill att själva rutorna rör sig in mjukt på skärmen och att
+enbart den beskrivande texten revealas istället, en ruta i taget, inte båda
+samtidigt … mjuk och glida in stoppa och studsa tillbaka lite, men väldigt
+subtilt, tänk apple." Samma för den stora översikten. "Ta bort sektionen
+längre ned med i princip samma punkter, samma sak med den andra sektionen om
+Snajp, låt byggt i Göteborg-sektionen vara kvar." Rubriken "Ni ser
+resultaten, inte maskineriet." blir "Förvärmda leads, levererade till er."
+Hjältens ingress ljusas upp, och mellanrummet mellan löftet och första rutan
+stängs.
+
+**Resonemang (Anton).** Rutorna var "laggiga och vibrerar vid scroll, särskilt
+om man scrollar fram och tillbaka", och en tonad avtäckning läste inte som att
+något kom in på skärmen. "Tre steg" upprepade löftets punkter direkt under
+hjälten, och "Vilka är vi" upprepade "Byggt i Göteborg". Ingressen var
+"knappt läsbar mot herobilden".
+
+**I koden.** Vibrationen hade en mätbar orsak: `.rise` lade en CSS-transition
+på samma `transform` som GSAP skrubbade varje bildruta. Den skrubbade driften
+och klippningen är borta; i stället `caseEntry` (`useLandingMotion.ts`,
+markup `data-case`/`data-case-box`/`data-case-text`) med Apples fjäder som
+GSAP-ease (`gsap.js: spring(0.75, 0.75)`), som spelar en gång och köar ytorna.
+Sprängskissens linjer räknas ur perspektivet i stället för fyra
+`getBoundingClientRect` per bildruta, och `anticipatePin` är borttagen.
+"Tre steg" och "Vilka är vi" är borttagna ur `LandingPhoto.tsx` och copyn
+(`steps`, `stepsHeading`, `vilka*`); länken "Läs mer om oss" flyttade till
+Byggt i Göteborg. Regeln står i `DESIGN.md` § Ankomstfjädern.
+
+## 2026-10-18 (Sebbe) — Körningar på upp till 200 leads, rullbar leadslista och levande lägesrad
+
+**Beslut.** "Ändra så att man kan söka upp till 200 leads … håller lika bra
+kvalitet och att företagen man filtrerar, alla 200 ska vara bra företag …
+relativt snabb att hitta alla leads." Vid 50+ leads visas körningens leads i
+en låda som går att rulla och dra ut i höjdled, med samma snabbklick per lead
+till utkastet som förut. I körningsvyn byter "Researchar" till nya
+formuleringar ("Hittar dina nästa kunder…", "Gräver i registren", …) var
+tionde sekund, med en diskret intoning.
+
+**Resonemang (Sebbe).** Taket 50 var för lågt för volymkörningar. Kvaliteten
+ska inte sänkas med volymen: samma grindar (förfilter, existens, Jev,
+bedömning, utkastgrindarna) per bolag som vid 50. Sidan ska inte bli
+kilometerlång vid 200 leads, och väntetiden ska kännas levande, inte stå
+stilla på ett ord.
+
+**I koden.** `LeadsBatchRequest.limit` le=50 → 200 (`app/api/schemas.py`),
+formulärets max/hint (`components/leads/LeadsRunForm.tsx`). Kredittaket
+`korning.korningstak` höjt 600 → 2400 så 12 hämtningar/lead gäller även vid
+200 — annars hade en 200-körning svalt vid 3/lead; motorns övriga tak
+(`TAK_FAKTOR`, `max_rundor`, `TOMMA_RUNDOR`) skalar redan med målet, och
+kvalitetsgrindarna är oförändrade per bolag. Rullbara lådan vid 50+ rader:
+`KorningensUtkast.tsx` (RULLBAR_FRAN) och `IrisKorningar.tsx:rullbarLista`
+(även tratten). Lägesraden: `RoterandeStatus` + fraslistorna i
+`IrisKorningar.tsx`, intoningen `@keyframes statusbyte` i `app/globals.css`
+(släcks av prefers-reduced-motion).
+
+---
+
+## 2026-10-18 (Anton) — Startsidan: Dygnets dygnsljus, mjuka övergångar, isärtagen översikt, fetare serif
+
+**Beslut.** Startsidan behålls som den är (hjälten, bilderna, alla sektioner,
+uppdelningen Leads/Support, de konstruerade produktytorna) och får ovanpå det:
+Dygnets dynamiska dygnsbakgrund som börjar i soluppgång under hjälten och blir
+varmvit längst ned, vackra övergångar och effekter mellan alla sektioner, en
+enstaka dynamisk bild av dashboarden där elementen delas upp som i
+Isärtagning men utan lutning, texten (inte rubriken) från "Varför Snajp finns"
+på /vart-team under "Byggt i Göteborg", och ett fetare serif-typsnitt som inte
+är Fraunces. "Gör allt detta mjukt."
+
+**Resonemang (Anton).** Av de fem koncepten på boarden kom nummer 1 (Dygnet)
+närmast estetiskt; i stället för fem nya koncept ska den riktiga sidan ta över
+Dygnets ljus och ambitionsnivån i rörelsen, med befintligt innehåll.
+
+**I koden.** `components/marketing/useLandingMotion.ts` (GSAP 3.15 + Lenis via
+repots `gsap.js`/`smooth-scroll.js`, dynamiskt importerade eftersom de rör
+`window` vid import): dörren, ljusmotorn (mark `--ground` + fyra ljusrutor i
+multiply, hål för hjälten och produktytorna), radmaskade rubriker, klippta
+avtäckningar, parallax, ord som fylls av skrollen, ritade sektionslinjer och
+den pinnade sprängskissen. `components/marketing/DashboardIsar.tsx`: översikten
+(demo, exempeldata) i fyra delar ur samma skärmdump. `LandingPhoto.tsx` bär
+`data-mo`-markörer och `key` per produkt+språk på rubriker som SplitText
+spaltar.
+
+*Agentens val, att pröva (Anton):* serifen är **Source Serif 4** (variabel vikt
+200–900, optisk storlek, äkta kursiv): lägre kontrast än Fraunces och
+Newsreader, så den bär vikt över hjältefotot. Den är scopad till
+marknadssidan via klassen `serif-fet`; appytorna behåller Fraunces tills Anton
+säger annat. Inga nya foton lades till: beställningen tillät det men krävde det
+inte, och sprängskissen använder produktens egen yta. Lenis lever kvar i
+sessionen efter att man lämnat startsidan (en skrollägare, som husets regel
+säger); inre skrollytor i demon behöver `data-lenis-prevent` om de visar sig
+fastna. Den gamla `.rise`-avslöjningen (useReveal) används inte längre på
+startsidan; klasserna står kvar och är verkningslösa där.
+
+**Rättningar samma dag efter Antons första titt** ("dashboarden vibrerar och
+hackar och hoppar åt sidan", "bakgrunden helt borta", "lägg till text",
+"animationer för showcase-rutorna"): dygnet sträcks över hela sidan och når
+varmvitt först vid priset (det nådde vitt redan vid demon); marken ritas på
+ett eget fast lager i stället för en variabel på roten (en variabel räknade
+om stilen för hela sidan varje bildruta); sprängskissens kamera drar sig inte
+längre tillbaka (skalan .94 flyttade översikten 35 px i sidled och lästes som
+ett hopp), ljusets hål har decimaler (hela pixlar gav kanter som hoppade) och
+delarna är egna hål. Sektionen fick en rubrik och en ingress: **ny copy, inte
+godkänd av Anton än** ("Hela dagen på *en skärm*." / "Översikten visar vad
+agenterna gjort: körningar, levererade leads, det som väntar på en människa
+och vad det kostat. Varje del uppdateras medan Iris arbetar."). Showcase-
+rutorna (ProduktBilder) fick liv: delarna kommer i berättelsens ordning när
+figuren avtäcks och utkasten skriver sig själva uppifrån; bara element
+animeras, aldrig textnoder, eftersom React äger texten.
+
+**Andra varvet samma dag** ("det ser fortfarande för jävligt ut": rubriker
+och showcase-delar osynliga, dashboarden hackar, ingen tydlighet):
+
+- *Avslöjandena är idempotenta.* Första versionen byggde varje avslöjande som
+  en `gsap.from` med engångs-ScrollTrigger, skapad om i SplitTexts `onSplit`;
+  varje omspaltning (fontbyte, storleksändring, dev-serverns hot reload) dolde
+  redan visade element igen utan att en ny trigger spelade dem. Nu döljs ett
+  element högst en gång och visas av `play()`, som stämplar `data-rv="1"` och
+  är en no-op andra gången; ScrollTrigger, en IntersectionObserver och en
+  timer kan alla kalla den. Verifierat i riktig Chromium 1920 med hjulet hela
+  vägen ned: 0 dolda element.
+- *Hackandet var mätt, inte gissat.* Bildrutetider i riktig Chromium med GPU:
+  allt på 31 % tappade bildrutor (p95 50 ms); utan multiply-blandningen
+  0,8 % (p95 17 ms). Dygnet-konceptet självt låg på stadiga 30 fps med samma
+  teknik. Ljuslagret ligger nu under innehållet (ogenomskinliga ytor täcker
+  det, inga hål), komponeras med vanlig alfa (rutorna målas i markens färg i
+  stället för multiply), rutorna skalas med transform i stället för att byta
+  bredd, och oskärpan byts i steg om 3 px. Resultat: p95 17 ms, 0,9–2 %
+  över 33 ms, allt på. Lenis vaktar dessutom mot en andra instans vid hot
+  reload (`smooth-scroll.js`).
+- *Sprängskissen fick avsikt.* Texten står inne i det pinnade blocket till
+  höger om bilden (rälen sitter till vänster: linjer från vänster försvann mot
+  den), tre förklaringar tänds i tur med en ritad linje och en prick vid sin
+  del, grundbilden byts mot en förblurrad tvilling (oskärpa rastrerad en gång),
+  och kameran drar sig inte tillbaka. Förklaringarnas ord är produktens egna
+  paneltitlar; rubrik, ingress och förklaringar är ny copy att godkänna.
+- *Showcase-rutorna rör sig.* Figurerna glider mjukt mot sidan medan de
+  passerar (den andra lite senare än den första), avtäcks nedifrån med en
+  liten skalning, och delarna inne i ytan kommer i berättelsens ordning.
+
+---
+
 ## 2026-10-17 (Anton) — Main blir sanningen efter första synken; körningar i development flyttas aktivt
 
 **Beslut.** Alla körningar från development följer med till main, utom de som

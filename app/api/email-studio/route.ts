@@ -6,7 +6,8 @@ import { valjModell, type Modellval } from '@/lib/llm/modellval';
 import { hamtaVertexToken } from '@/lib/llm/vertex';
 import { kanForsokasOm, klassaModellfel, statuskod, type Modellfelklass } from '@/lib/llm/kvotfel';
 import { DIREKT_OMSKRIVNING, exempelresultat, finnExempelbolag } from '@/lib/demo/iris-exempel';
-import { putsaText } from '@/lib/textkvalitet';
+import { publiktExempelsvar } from '@/lib/data/emails';
+import { putsaText, utanReferenser } from '@/lib/textkvalitet';
 
 /**
  * Routen väntar på ett LLM-anrop och var den ENDA under app/api som saknade
@@ -300,7 +301,9 @@ Använd alltid principerna: "The email should read like it came from someone who
 
 **Output-format (EXAKT detta — ingen avvikelse):**
 Svara med ETT giltigt JSON-objekt och ingenting annat — ingen inledande text, ingen kodstängsel:
-{"new_version":"<den nya mejltexten>","explanation":"<kort, referera specifik princip, t.ex. 'Ruthlessly short enligt cold-email/SKILL.md'>","subject_suggestions":["<2-3 korta, interna, peer-liknande ämnesrader>"],"original_version":null,"confidence_tips":"<valfritt: förväntad reply-rate, compliance-not eller nästa steg>"}
+{"new_version":"<den nya mejltexten>","explanation":"<en eller två korta meningar på vanlig svenska: vad som ändrades och varför>","subject_suggestions":["<2-3 korta, interna, peer-liknande ämnesrader>"],"original_version":null,"confidence_tips":"<valfritt: ett kort nästa steg på vanlig svenska>"}
+
+explanation och confidence_tips läses av kunden. Nämn aldrig principer, metoder, ramverk, filer, skills, verktyg eller fackord som CTA; säg det med vanliga ord ("en fråga som är lätt att svara ja på").
 
 **SPRÅKKRAV (absoluta, gäller varje åtgärd):**
 - Korrekt, naturlig och professionell svenska: rätt stavning, grammatik,
@@ -344,7 +347,7 @@ BRA (analys med precisa drag): "7/10. Signalen bär mejlet, men stycke två säl
  */
 const ACTION_INSTRUCTIONS: Record<string, string> = {
   shorter:
-    "Gör mejlet kortare och mer slagkraftigt — ruthlessly short enligt cold-email. Behåll kärnsignal och CTA. " +
+    "Gör mejlet kortare och mer slagkraftigt, så kort det går. Behåll kärnsignal och CTA. " +
     "Välj den väg som passar texten: stryk hela stycken snarare än ord, slå ihop observation och värde till en mening, eller ersätt förklaringen med en fråga.",
   rewrite:
     "Skriv om mejlet med ny vinkel eller bättre struktur. Samma fakta. Välj ett mönster som skiljer sig från originalets: " +
@@ -357,12 +360,12 @@ const ACTION_INSTRUCTIONS: Record<string, string> = {
   translate:
     "Översätt troget till det andra språket (sv <-> en) utan att tappa ton eller signal. Idiomatisk målspråkstext, ingen ord-för-ord-översättning.",
   ab_variants:
-    "Generera 2–3 varianter med tydligt olika vinklar (t.ex. pain, opportunity, social proof, ren nyfikenhet) enligt ab-testing. " +
+    "Generera 2–3 varianter med tydligt olika vinklar (t.ex. pain, opportunity, social proof, ren nyfikenhet). " +
     "Märk varje variant (Variant A/B/C) och låt dem skilja sig i mer än ordval — olika öppning, olika CTA.",
   followup:
     "Skapa en uppföljning som adderar nytt värde — aldrig 'jag ville bara följa upp'. Nytt underlag, en insikt, ett konkret exempel eller en ny vinkel på samma signal.",
   analyze:
-    "Ge betyg (1–10) och konkreta, precisa förbättringar bundna till marketingskills-principer. Lägg analysen i explanation och behåll originaltexten i new_version.",
+    "Ge betyg (1–10) och två eller tre konkreta, precisa förbättringar, kort och på vanlig svenska. Lägg analysen i explanation och behåll originaltexten i new_version.",
   longer:
     "Utöka mejlet med relevant kontext och ett tydligt nästa steg — utan att tappa den korta, jämbördiga tonen.",
   expand:
@@ -495,14 +498,27 @@ export async function POST(request: NextRequest) {
    */
   if (session.publikDemo) {
     const bolag = finnExempelbolag(context);
+    // Startsidans exempelmejl har egna svar (lib/data/emails.ts), på besökarens språk.
+    const publikt = bolag ? undefined : publiktExempelsvar(context, kandAction, locale);
+    if (publikt) {
+      return NextResponse.json({
+        success: true,
+        data: {
+          original_version: DIREKT_OMSKRIVNING.has(kandAction as any) ? emailContent || null : null,
+          ...publikt,
+          action: kandAction,
+          simulated: true,
+          simulated_reason: "anonym"
+        }
+      });
+    }
     if (!bolag) {
       return NextResponse.json({
         success: true,
         data: {
           original_version: emailContent || null,
           new_version: emailContent,
-          explanation:
-            "Demot har bara färdiga svar till de sex exempelbolagen på /demo. Öppna ett av dem för att prova Email Studio.",
+          explanation: "Logga in för att skriva om egna mejl.",
           subject_suggestions: [],
           action: kandAction,
           simulated: true,
@@ -638,6 +654,8 @@ export async function POST(request: NextRequest) {
   // eller siffror. Resultatet landar hos en människa i editorn, så ingen
   // hård grind behövs här — men språkskräp ska inte ens nå rutan.
   rich.new_version = putsaText(rich.new_version);
+  rich.explanation = utanReferenser(rich.explanation) || "Texten är omarbetad.";
+  rich.confidence_tips = utanReferenser(rich.confidence_tips) || undefined;
   if (Array.isArray(rich.subject_suggestions)) {
     rich.subject_suggestions = rich.subject_suggestions.map((s: string) => putsaText(s));
   }

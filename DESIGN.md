@@ -248,6 +248,54 @@ was confirmed to **fail** against the broken version, 12 per page, before it was
 
 Reduced motion is handled globally and needs no per-component fallback.
 
+### Ankomstfjädern: hur en yta kommer in (Anton 2026-10-19)
+
+Produktytor, showcase-rutor och översikten **tonas aldrig och klipps aldrig fram**. De glider in
+från sin sida, passerar målet en aning och fjädrar tillbaka, och först när ytan landat avtäcks
+den beskrivande texten rad för rad. En yta i taget: nästa väntar tills den förra landat.
+
+```js
+import { spring } from "@/gsap.js";   // Apples fjäder (skillen apple-design § 4)
+spring(0.66, 0.95)                     // dämpning 0.66 ≈ 6 % förbi målet (~11 px), respons 0.95 s, ~1,6 s till vila
+```
+
+- Markup: `data-case` (utlösare och kö-enhet), `data-case-box` + `data-from="left|right|up"`
+  (det som rör sig), `data-case-text` (avtäcks efter landningen). Motorn: `useLandingMotion.ts`,
+  `caseEntry`.
+- Spelar en gång och skrubbas aldrig. Ett skrubbat transform på en yta, eller en CSS-transition
+  på samma `transform` som GSAP skriver, får ytan att darra när man skrollar fram och tillbaka
+  (det var felet 2026-10-18).
+- Ytan blir aldrig osynlig: utan JS står den bara förskjuten tills säkringen spelar den.
+- Text som en agent skriver (utkast i en showcase-ruta, demons omskrivningar) skrivs fram live
+  med en markör (`LiveText`, `lib/skrivs.ts`), aldrig tonad. Motiveringar är en kort mening på
+  vanliga ord, utan metodnamn, filer eller fackord (`utanReferenser` spärrar modellsvar).
+- Studsen hör till själva inglidningen, som bär fart. Menyer, popovers och sådant som bara
+  dyker upp får dämpning 1.0 (ingen studs), enligt apple-design.
+
+### Hjälten, talen och fotona (Anton 2026-10-19, kväll)
+
+- **Hjälterubriken skrivs fram** (`HeroText` i `LiveText.tsx`): 58 ms per tecken, +260 ms
+  efter kommatecken, +650 ms före det betonade ordet som skrivs 140 ms per tecken. Start på
+  `hero:type` från dörren när fonterna laddat, reserv efter 4 s. Ett betonat ord, sist i
+  meningen, i `text-ochre` (den mörkare `text-warning` försvann mot solnedgången). Rubriken
+  radspaltas inte längre.
+- **Nyckeltalen räknas fram** (`RaknaUpp` i `AgentResultat.tsx`) först när hela talet står
+  ovanför skärmens nedersta femtedel (`threshold: 1`, `rootMargin` −20 % i botten), 450 ms
+  efteråt så att raden hunnit tonas in, 2,6 s per tal med kvadratisk utbromsning, 280 ms mellan
+  talen. Bredden reserveras med det färdiga värdet. Första versionen (threshold 0,6, 1,6 s,
+  kubisk) var klar innan raden syntes: "det får inte gå för snabbt".
+- **Fotona står hela.** Ingen `clip-path` på plattor och band, bara parallaxen. En avtäckning
+  över ett foto läses som en bild som laddar långsamt.
+- **Showcase-ytorna fyller rutan på desktop** (`.case-zoom`: zoom 1,12 från 1280 px, 1,25
+  från 1536 px, `min-height` delad med zoomen). Den isärtagna översikten (skärmdump) är
+  borttagen: ett annat material än de konstruerade rutorna.
+
+Skills som bär beställningarna, det som föll och de godkända värdena (`~/.agents/skills/`):
+`spring-arrival`, `live-text-reveal`, `count-up-in-view`, `hero-on-photo`,
+`photo-stands-whole`, `showcase-surfaces`, `showcase-copy-scope` och
+`motion-verification-preview`. Domarna: `anti-slop-design/design-catalogue/FEEDBACK.md`
+F-030–F-039.
+
 ## Honest-proof rule
 
 Binding, and the reason several usual modules are unavailable.

@@ -123,23 +123,33 @@ export function UspSection({ product }: Readonly<{ product: ProductKey }>) {
     <section
       id="loftet"
       aria-labelledby="loftet-rubrik"
-      className="border-t border-ink/15 bg-paper"
+      className="relative"
     >
-      <div className="mx-auto max-w-[1480px] px-6 py-20 md:px-10 md:py-28">
+      {/* Ingen egen grund: dygnsljuset (LandingPhoto) äger sidans mark, och
+          den här sektionen är den första som står i soluppgången under
+          hjälten. Linjen ritas av rörelsen (data-mo="rule"), inte av border. */}
+      <i aria-hidden="true" data-mo="rule" className="mo-rule" />
+      {/* Kort botten: produktytorna direkt nedanför visar punkterna (ProduktBilder). */}
+      <div className="mx-auto max-w-[1480px] px-6 pb-12 pt-20 md:px-10 md:pb-16 md:pt-28">
+        {/* key per produkt och språk: rubriken radspaltas av SplitText
+            (useLandingMotion), och React får inte diffa inuti ett element
+            vars barn flyttats, utan byter hela noden. */}
         <h2
           id="loftet-rubrik"
+          key={`${product}-${locale}`}
+          data-mo="lines"
           className="max-w-[22ch] font-display text-[clamp(2rem,4.6vw,3.5rem)] font-semibold leading-[1.03] tracking-[-0.03em]"
         >
           {text(copy.rubrik)}
         </h2>
 
-        <p className="mt-6 max-w-[58ch] text-[1.125rem] leading-[1.65] text-ink-muted">
+        <p data-mo="up" className="mt-6 max-w-[58ch] text-[1.125rem] leading-[1.65] text-ink-muted">
           {text(copy.lede)}
         </p>
 
         <div className="mt-14 grid gap-8 md:grid-cols-3 md:gap-10">
           {punkter.map(([rubrik, brod]) => (
-            <div key={rubrik} className="border-t border-ink/15 pt-5">
+            <div key={rubrik} data-mo="row" className="border-t border-ink/15 pt-5">
               {/* Inget "01" här. Numreringen var gul, satt över varje rubrik
                   och läste som en ordningsföljd punkterna inte har. */}
               <h3 className="text-[1.0625rem] font-semibold tracking-[-0.01em]">{rubrik}</h3>

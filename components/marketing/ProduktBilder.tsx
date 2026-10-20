@@ -9,6 +9,7 @@ import {
   Sparkles,
   X
 } from "lucide-react";
+import { LiveText } from "@/components/marketing/LiveText";
 import type { Locale, Localized } from "@/lib/i18n";
 import type { ProductKey } from "@/lib/routes";
 import { cn } from "@/lib/utils";
@@ -269,7 +270,7 @@ function InkorgYta({ locale }: Readonly<{ locale: Locale }>) {
           <T text={UI.agentensUtkast} locale={locale} />
         </p>
         <div className="mt-1.5 rounded-input border border-ink/12 bg-paper px-3 py-2.5 text-[0.75rem] leading-[1.55] text-ink">
-          {MARIA_UTKAST}
+          <LiveText text={MARIA_UTKAST} />
         </div>
 
         <div className="mt-3 flex flex-wrap items-center gap-1.5">
@@ -347,8 +348,9 @@ function IrisUtkastYta({ locale }: Readonly<{ locale: Locale }>) {
         <T text={UI.till} locale={locale} /> {JOHAN_MOTTAGARE} · <T text={UI.amne} locale={locale} />{" "}
         {JOHAN_AMNE} · <T text={UI.bifogas} locale={locale} />
       </p>
+      {/* Mejlet skriver sig självt: texten skrivs fram när rutan har landat. */}
       <div className="mt-3 rounded-input border border-ink/12 bg-paper px-3 py-2.5 text-[0.75rem] leading-[1.55] text-ink">
-        {JOHAN_MEJL}
+        <LiveText text={JOHAN_MEJL} />
       </div>
       <div className="mt-3 flex flex-wrap items-center gap-1.5">
         <Knapp variant="primar">
@@ -519,7 +521,7 @@ const FALT: Record<ProductKey, [Falt, Falt]> = {
   ]
 };
 
-const EXEMPELRAD: Localized = {
+export const EXEMPELRAD: Localized = {
   sv: "Ytorna ovan är produktens egna, återgivna med exempeldata.",
   en: "The surfaces above are the product's own, shown with example data."
 };
@@ -530,21 +532,36 @@ export function ProduktBilder({
 }: Readonly<{ product: ProductKey; locale: Locale }>) {
   const [vanster, hoger] = FALT[product];
   return (
-    <section className="border-b border-ink/12">
-      <div className="mx-auto max-w-[1480px] px-6 py-24 md:px-10 md:py-32">
-        <div className="grid grid-cols-1 gap-y-12 lg:grid-cols-2 lg:gap-x-12">
+    // Toppen nära löftet ovanför: punkterna där slutar i samma tanke som ytorna här
+    // visar, och 240 px luft mellan dem lästes som att sidan tog slut (Anton 2026-10-19).
+    <section data-mo="produktbilder" className="border-b border-ink/12">
+      <div className="mx-auto max-w-[1480px] px-6 pb-24 pt-4 md:px-10 md:pb-32 md:pt-6">
+        <div className="grid grid-cols-1 gap-y-14 lg:grid-cols-2 lg:gap-x-12">
           {[vanster, hoger].map((falt, i) => {
             const Bild = falt.bild;
+            // data-case: rutan glider in från sin sida och fjädrar tillbaka, och
+            // bildtexten avtäcks först när den landat; en ruta i taget
+            // (useLandingMotion, caseEntry). key per språk på bildtexten: dess
+            // rader spaltas av SplitText, och React ska byta noderna, inte diffa i dem.
             return (
-              <figure key={falt.rubrik.sv} className={cn("rise", i === 1 && "rise-1")}>
-                <div className="overflow-hidden rounded-panel border border-ink/12 bg-paper">
-                  <Bild locale={locale} />
+              <figure key={falt.rubrik.sv} data-case>
+                {/* data-hole: ytan lyfts ur dygnsljuset (LandingPhoto) så att
+                    produktens egna färger står kvar. */}
+                <div
+                  data-case-box
+                  data-from={i === 0 ? "left" : "right"}
+                  data-hole
+                  className="overflow-hidden rounded-panel border border-ink/12 bg-paper"
+                >
+                  <div className="case-zoom">
+                    <Bild locale={locale} />
+                  </div>
                 </div>
-                <figcaption className="mt-5">
-                  <p className="font-display text-[1.375rem] font-semibold leading-tight tracking-[-0.015em] text-ink">
+                <figcaption key={locale} className="mt-5">
+                  <p data-case-text className="font-display text-[1.375rem] font-semibold leading-tight tracking-[-0.015em] text-ink">
                     <T text={falt.rubrik} locale={locale} />
                   </p>
-                  <p className="mt-2 max-w-[52ch] text-[0.9375rem] leading-[1.6] text-ink-muted">
+                  <p data-case-text className="mt-2 max-w-[52ch] text-[0.9375rem] leading-[1.6] text-ink-muted">
                     <T text={falt.not} locale={locale} />
                   </p>
                 </figcaption>

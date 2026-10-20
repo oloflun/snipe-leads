@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
 import { AlertTriangle, ArrowUpRight, CheckCircle2 } from "lucide-react";
 import { useLocale } from "@/lib/i18n";
 import type { Localized } from "@/lib/i18n";
@@ -48,15 +49,68 @@ function Accent({ text: value }: Readonly<{ text: string }>) {
   );
 }
 
+/**
+ * Ett tal som räknas upp från noll när det kommer in i bild, som om det
+ * räknades fram just då (Anton 2026-10-19). Talet och enheten läses ur
+ * strängen ("62 %", "26 s", "4,6"); ett värde som inte börjar med en siffra
+ * står som det är. Hela värdet ligger osynligt under och håller bredden, så
+ * att etiketten inte hoppar när siffrorna blir fler. Skärmläsaren får värdet
+ * direkt. Utan JS står talet färdigt.
+ */
+function RaknaUpp({ varde, ordning }: Readonly<{ varde: string; ordning: number }>) {
+  const ref = useRef<HTMLSpanElement | null>(null);
+  const [visat, setVisat] = useState(varde);
+
+  useEffect(() => {
+    // ponytail: inga tusentalsavgränsare; StatRads tal har inga
+    const m = /^(\d+)(?:,(\d+))?(.*)$/.exec(varde);
+    const el = ref.current;
+    if (!m || !el) return;
+    const decimaler = m[2]?.length ?? 0;
+    const mal = Number(`${m[1]}.${m[2] ?? 0}`);
+    const visa = (v: number) => setVisat(v.toFixed(decimaler).replace(".", ",") + m[3]);
+    visa(0);
+    let id = 0;
+    // Start först när talet står helt i bild och en bit upp från nederkanten,
+    // inte när det skymtar längst ned: där hann det räknas klart medan raden
+    // ännu tonades in (Anton 2026-10-19). Ett andetag innan, så att inintoningen
+    // hunnit klart, och en mjuk kurva över 2,6 s, så att det inte går för fort.
+    const obs = new IntersectionObserver(([e]) => {
+      if (!e?.isIntersecting) return;
+      obs.disconnect();
+      const start = performance.now() + 450 + ordning * 280;
+      const tick = (nu: number) => {
+        const t = Math.min(1, Math.max(0, (nu - start) / 2600));
+        visa(mal * (1 - (1 - t) ** 2));
+        if (t < 1) id = requestAnimationFrame(tick);
+      };
+      id = requestAnimationFrame(tick);
+    }, { threshold: 1, rootMargin: "0px 0px -20% 0px" });
+    obs.observe(el);
+    return () => {
+      obs.disconnect();
+      cancelAnimationFrame(id);
+    };
+  }, [varde, ordning]);
+
+  return (
+    <span ref={ref} className="relative inline-block">
+      <span className="sr-only">{varde}</span>
+      <span aria-hidden="true" className="invisible">{varde}</span>
+      <span aria-hidden="true" className="absolute inset-0">{visat}</span>
+    </span>
+  );
+}
+
 /** Nyckeltalsraden: stora tabulära tal i Fraunces, ochre — DESIGN.md:s "ochre at display scale". */
 function StatRad({ stats }: Readonly<{ stats: Stat[] }>) {
   const { text } = useLocale();
   return (
     <dl className="grid grid-cols-2 gap-x-6 gap-y-6 border-y border-ink/15 py-6 sm:grid-cols-4">
-      {stats.map((stat) => (
+      {stats.map((stat, i) => (
         <div key={stat.etikett.sv} className="min-w-0">
           <dd className="numeral text-[clamp(1.75rem,3.2vw,2.75rem)] font-semibold text-warning">
-            {stat.varde}
+            <RaknaUpp varde={stat.varde} ordning={i} />
           </dd>
           <dt className="mt-2 text-[0.8125rem] leading-snug text-ink-muted">{text(stat.etikett)}</dt>
         </div>
@@ -67,7 +121,7 @@ function StatRad({ stats }: Readonly<{ stats: Stat[] }>) {
 
 function Panel({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <div className="overflow-hidden rounded-panel border border-ink/12 bg-paper">
+    <div data-hole className="overflow-hidden rounded-panel border border-ink/12 bg-paper">
       {children}
     </div>
   );
@@ -241,13 +295,13 @@ type SektionsCopy = {
 };
 
 export function AgentResultat({ product }: Readonly<{ product: ProductKey }>) {
-  const { text } = useLocale();
+  const { text, locale } = useLocale();
 
   const perProdukt: Record<ProductKey, SektionsCopy> = {
     leads: {
       rubrik: {
-        sv: "Ni ser *resultaten*, inte maskineriet.",
-        en: "You see the *results*, not the machinery."
+        sv: "*Förvärmda* leads, levererade till er.",
+        en: "*Pre-warmed* leads, delivered to you."
       },
       brod: {
         sv: "Arbetsytan visar vad utskicken gav: vilka som öppnade, vilka som svarade och vilka som vill ses. Ett varmt svar dyker upp som ett färdigt kort med hela tråden, redo för en människa att ta över.",
@@ -300,25 +354,32 @@ export function AgentResultat({ product }: Readonly<{ product: ProductKey }>) {
   const copy = perProdukt[product];
 
   return (
-    <section aria-labelledby="agentresultat-rubrik" className="border-t border-ink/12">
+    <section aria-labelledby="agentresultat-rubrik" className="relative">
+      <i aria-hidden="true" data-mo="rule" className="mo-rule" />
       <div className="mx-auto max-w-[1480px] px-6 py-24 md:px-10 md:py-32">
         <div className="grid grid-cols-12 gap-y-12 lg:gap-x-14">
           <div className="col-span-12 lg:col-span-5">
+            {/* key per produkt och språk: rubriken radspaltas av SplitText
+                (useLandingMotion), och React får inte diffa inuti ett element
+                vars barn flyttats, utan byter hela noden. */}
             <h2
               id="agentresultat-rubrik"
-              className="rise max-w-[16ch] font-display text-[clamp(2rem,4.2vw,3.25rem)] font-semibold leading-[1.04] tracking-[-0.03em]"
+              key={`${product}-${locale}`}
+              data-mo="lines"
+              className="max-w-[16ch] font-display text-[clamp(2rem,4.2vw,3.25rem)] font-semibold leading-[1.04] tracking-[-0.03em]"
             >
               <Accent text={text(copy.rubrik)} />
             </h2>
-            <p className="rise rise-1 mt-6 max-w-[48ch] text-[1.0625rem] leading-[1.7] text-ink-muted">
+            <p data-mo="up" className="mt-6 max-w-[48ch] text-[1.0625rem] leading-[1.7] text-ink-muted">
               {text(copy.brod)}
             </p>
-            <div className="rise rise-2 mt-10">
+            <div data-mo="up" className="mt-10">
               <StatRad stats={copy.stats} />
             </div>
           </div>
           <div className="col-span-12 lg:col-span-6 lg:col-start-7">
-            <div className="rise rise-1">{copy.panel}</div>
+            {/* Glider in från höger och fjädrar tillbaka (useLandingMotion, caseEntry). */}
+            <div data-case data-from="right">{copy.panel}</div>
             {/* Honest-proof: siffrorna ovan är illustration, och det står. */}
             <p className="mt-4 text-[0.8125rem] font-medium text-ink-subtle">
               {text({

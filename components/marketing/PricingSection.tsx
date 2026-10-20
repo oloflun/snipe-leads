@@ -99,16 +99,20 @@ export function PricingSection() {
   const { text } = useLocale();
 
   return (
-    <section id="priser" className="border-t border-ink/12 bg-paper" aria-labelledby="priser-rubrik">
+    <section id="priser" className="relative" aria-labelledby="priser-rubrik">
+      {/* Ingen egen grund: på startsidan äger dygnsljuset marken (varmvit här
+          nere), och på /kvitton är sidan redan paper. Linjen ritas av rörelsen. */}
+      <i aria-hidden="true" data-mo="rule" className="mo-rule" />
       <div className="mx-auto max-w-[1480px] px-6 py-24 md:px-10 md:py-32">
-        <p className="kicker text-mineral">{text(copy.kicker)}</p>
+        <p data-mo="up" className="kicker text-mineral">{text(copy.kicker)}</p>
         <h2
           id="priser-rubrik"
+          data-mo="lines"
           className="mt-4 max-w-[24ch] font-display text-[clamp(2rem,4.2vw,3.25rem)] font-semibold leading-[1.04] tracking-[-0.03em]"
         >
           {text(copy.rubrik)}
         </h2>
-        <p className="mt-5 max-w-[54ch] text-[1.0625rem] leading-[1.7] text-ink-muted">
+        <p data-mo="up" className="mt-5 max-w-[54ch] text-[1.0625rem] leading-[1.7] text-ink-muted">
           {text(copy.lede)}
         </p>
 
@@ -116,6 +120,7 @@ export function PricingSection() {
           {PAKET.map((paket) => (
             <article
               key={paket.id}
+              data-mo="row"
               className={cn(
                 "flex flex-col rounded-input border p-7",
                 paket.populärast
@@ -204,7 +209,7 @@ export function PricingSection() {
         {/* Rörliga priser och engångsavgift. Egen rad, inte i korten: de gäller
             samtliga paket, och en kopia per kort är lika många ställen att
             glömma uppdatera. */}
-        <dl className="mt-8 grid gap-px overflow-hidden rounded-input border border-ink/12 bg-ink/12 sm:grid-cols-2 lg:grid-cols-4">
+        <dl data-mo="up" className="mt-8 grid gap-px overflow-hidden rounded-input border border-ink/12 bg-ink/12 sm:grid-cols-2 lg:grid-cols-4">
           {[
             { term: `${text(PRIS_PREFIX)} ${formateraPris(UPPSTARTSAVGIFT)}`, desc: text(copy.uppstart) },
             { term: `${text(PRIS_PREFIX)} ${formateraPris(EXTRA_PROSPEKT_PRIS)}`, desc: text(copy.extraProspekt) },
@@ -226,7 +231,7 @@ export function PricingSection() {
           </p>
         ) : null}
 
-        <div className="mt-12 flex flex-col gap-5 rounded-input border border-ink/12 bg-paper2 px-7 py-8 sm:flex-row sm:items-center sm:justify-between">
+        <div data-mo="up" className="mt-12 flex flex-col gap-5 rounded-input border border-ink/12 bg-paper2 px-7 py-8 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <p className="font-display text-[1.25rem] font-semibold tracking-[-0.02em]">
               {text(copy.ctaRubrik)}

@@ -41,6 +41,63 @@ export function mejlaOss(amne?: string): string {
     : `mailto:${KONTAKT_MEJL}`;
 }
 
+/**
+ * "Varför Snajp finns", styckena (inte rubriken) från /vart-team. Står sedan
+ * 2026-10-18 även på startsidan under "Byggt i Göteborg" (Antons beställning),
+ * så texten bor här en gång och läses av båda sidorna.
+ */
+export const varforSnajp: Localized[] = [
+  {
+    sv:
+      "B2B-prospektering är tidskrävande och blir opersonlig precis när den skalas. Antingen " +
+      "skriver någon femton genomtänkta mejl i veckan, eller så skickas trehundra som alla " +
+      "läser likadant. Samma sak i kundtjänsten: svaren finns redan skrivna, men i fel " +
+      "dokument, och någon måste ändå läsa varje ärende för att veta vilket som brådskar.",
+    en:
+      "B2B prospecting takes time and turns impersonal exactly when it scales. Either someone " +
+      "writes fifteen considered emails a week, or three hundred go out that all read the same. " +
+      "The same thing in customer service: the answers are already written, but in the wrong " +
+      "document, and someone still has to read every case to know which one is urgent."
+  },
+  {
+    sv:
+      "Vi bygger verktyget som gör förarbetet — hittar företagen och sorterar ärendena — och " +
+      "lämnar beslutet till en människa. Målet är inte att ersätta den som " +
+      "säljer eller svarar, utan att ge tillbaka timmarna som gick åt till att leta.",
+    en:
+      "We build the tool that does the groundwork, finding the companies and sorting the cases, " +
+      "and leaves the decision to a person. The aim is not to replace whoever sells or replies, " +
+      "but to give back the hours that went into searching."
+  }
+];
+
+/**
+ * Samma stycken på supportsidan, utan prospekteringen: där läser besökaren om
+ * kundtjänsten och inget annat (Anton 2026-10-19).
+ */
+export const varforSupport: Localized[] = [
+  {
+    sv:
+      "I en kundtjänst kommer samma frågor tillbaka varje dag: var paketet är, hur en retur " +
+      "går till, vad garantin täcker. Svaren finns oftast redan skrivna, men i fel dokument, " +
+      "och någon måste ändå läsa varje ärende för att veta vilket som brådskar.",
+    en:
+      "In customer service the same questions come back every day: where the parcel is, how a " +
+      "return works, what the warranty covers. The answers are usually already written, but in " +
+      "the wrong document, and someone still has to read every case to know which one is urgent."
+  },
+  {
+    sv:
+      "Vi bygger verktyget som gör förarbetet. Det sorterar ärendena, skriver ett förslag till " +
+      "svar och lämnar beslutet till en människa. Målet är inte att ersätta den som svarar, " +
+      "utan att ge tillbaka timmarna som gick åt till att leta.",
+    en:
+      "We build the tool that does the groundwork. It sorts the cases, drafts a reply and leaves " +
+      "the decision to a person. The aim is not to replace whoever replies, but to give back the " +
+      "hours that went into searching."
+  }
+];
+
 export type ProductCopy = {
   word: Localized;
   headline: Localized;
@@ -50,8 +107,6 @@ export type ProductCopy = {
   demoLede: Localized;
   /** Tom sträng betyder att ingen finstilt rad renderas under demon. */
   exampleNote: Localized;
-  steps: { title: Localized; body: Localized }[];
-  stepsHeading: Localized;
   limitsHeading: Localized;
   limits: Localized[];
 };
@@ -111,30 +166,6 @@ export const shared = {
   //: samma sak som att inte nås.
   vilkaLank: { sv: "Läs mer om oss", en: "More about us" },
   fragorLank: { sv: "Fler frågor och svar", en: "More questions and answers" },
-  //: Avsnittet "Vilka är vi". Skrivet för den som undrar vem de skulle köpa av
-  //: — inte som en grundarberättelse. Svensk B2B väger vem som står bakom, och
-  //: den frågan besvaras inte av en produktbeskrivning.
-  vilkaRubrik: { sv: "Vilka är vi", en: "Who we are" },
-  vilkaRubrikStor: {
-    sv: "Ett nystartat svenskt bolag som utvecklar ett effektivare verktyg för ditt företag.",
-    en: "A new Swedish company building a tool that makes your company more efficient."
-  },
-  vilkaText1: {
-    sv: "Snajp är byggt i Göteborg och Umeå av ett litet team. Vi säljer till svensk B2B, " +
-      "och vi använder agenterna i vår egen verksamhet — det är därför spärrarna finns " +
-      "där de finns: vi har själva stått med ett utkast som inte borde gå ut.",
-    en: "Snajp is built in Gothenburg and Umeå by a small team. We sell to Swedish B2B, and we " +
-      "run the agents in our own business — that is why the safeguards sit where they do: we " +
-      "have stood with a draft that should not go out."
-  },
-  vilkaText2: {
-    sv: "Vi tar hellre ett nej i tid än ett ja som inte håller. Därför säger agenterna " +
-      "ifrån när de saknar underlag i stället för att gissa, och därför säljer vi hellre " +
-      "rätt paket än det dyraste.",
-    en: "We would rather have an early no than a yes that does not hold. That is why the agent " +
-      "says so when it lacks grounding instead of guessing, and why we would rather sell the " +
-      "right plan than the most expensive one."
-  },
   footerPlats: { sv: "Göteborg och Umeå · Sverige", en: "Gothenburg and Umeå · Sweden" },
   gdprRubrik: { sv: "Kunddata hanteras skilt, aldrig publikt", en: "Customer data is kept separate, never public" },
   //: Texten säger numera OCKSÅ att mejltexten skickas till en AI-leverantör.
@@ -168,8 +199,8 @@ export const shared = {
 export const leadsCopy: ProductCopy = {
   word: { sv: "Leads", en: "Leads" },
   headline: {
-    sv: "Möt *Iris*, din säljare som aldrig sover.",
-    en: "Meet *Iris*, your sales rep that never sleeps."
+    sv: "Möt Iris, din säljare som aldrig *sover*.",
+    en: "Meet Iris, your sales rep that never *sleeps*."
   },
   lede: {
     sv: "Iris är Snajps leadsagent. Hon letar prospekt utifrån er produkt, gör en behovsanalys med källor som går att kontrollera och skriver mejlet medan tajmingen fortfarande gäller. Ni läser igenom och godkänner innan något går ut.",
@@ -185,33 +216,6 @@ export const leadsCopy: ProductCopy = {
     en: "Change, improve or rewrite the example email below by pressing the buttons."
   },
   exampleNote: { sv: "", en: "" },
-  stepsHeading: {
-    sv: "Tre steg, och du äger *vartenda* ett.",
-    en: "Three steps, and *every one* is yours."
-  },
-  steps: [
-    {
-      title: { sv: "Hittar nya leads", en: "Finds new leads" },
-      body: {
-        sv: "Ett bolag som just investerat i en ny lokal. Ett bolag som behöver höja effektiviteten. Iris letar nya kunder baserat på er produkt.",
-        en: "A company that just invested in new premises. A company that needs to raise its efficiency. Iris finds new customers based on your product."
-      }
-    },
-    {
-      title: { sv: "Formulerar ett personligt mail", en: "Writes a personal email" },
-      body: {
-        sv: "Skriver en offert eller ett erbjudande som går in i mailet, och som du ändrar på enkelt genom ett knapptryck.",
-        en: "It writes a quote or an offer straight into the email, and you change it easily with a single click."
-      }
-    },
-    {
-      title: { sv: "Du godkänner", en: "You approve" },
-      body: {
-        sv: "Du behåller alltid kontrollen innan något skickas. Ett klick på Godkänn och skicka.",
-        en: "You stay in control before anything is sent. One click on Approve and send."
-      }
-    }
-  ],
   limitsHeading: {
     sv: "Byggd för att vara tryggt att använda",
     en: "Built to be safe to use"
@@ -239,8 +243,8 @@ export const leadsCopy: ProductCopy = {
 export const supportCopy: ProductCopy = {
   word: { sv: "Support", en: "Support" },
   headline: {
-    sv: "*Support 24/7*",
-    en: "*Support 24/7*"
+    sv: "Era kundärenden hanterade, 24/*7*",
+    en: "Your customer cases handled, 24/*7*"
   },
   lede: {
     sv: "Vi räknar med att ta bort 50–70 % av det repetitiva jobbet i er kundtjänstinkorg. Mejl sorteras automatiskt i rätt fack och får färdiga, korrekta svar — ni behåller alltid kontrollen.",
@@ -259,33 +263,6 @@ export const supportCopy: ProductCopy = {
     sv: "Kunskapsbasen och inkorgen i demon är exempeldata.",
     en: "The knowledge base and inbox in this demo are example data."
   },
-  stepsHeading: {
-    sv: "Från inkommande mejl till *färdigt* svar.",
-    en: "From incoming email to a *finished* reply."
-  },
-  steps: [
-    {
-      title: { sv: "Läser och sorterar", en: "Reads and sorts" },
-      body: {
-        sv: "Teknik, leverans, betalning, retur, konto. Varje ärende får ett fack, en prioritet och ett konfidensvärde, så morgonens genomgång är redan gjord.",
-        en: "Technical, delivery, payment, returns, account. Every case gets a queue, a priority and a confidence score, so the morning triage is already done."
-      }
-    },
-    {
-      title: { sv: "Svarar ur underlaget", en: "Answers from the material" },
-      body: {
-        sv: "Svaret hämtas ur er kunskapsbas. Skickar kunden en skärmdump på felmeddelandet eller en bild på det trasiga godset läses den av och styr ärendet rätt.",
-        en: "The reply comes from your knowledge base. If the customer sends a screenshot of the error or a photo of the damaged goods, it is read and routes the case correctly."
-      }
-    },
-    {
-      title: { sv: "Lämnar över i tid", en: "Hands over in time" },
-      body: {
-        sv: "Återbetalning, juridik, GDPR och en riktigt arg kund går till en människa, med hela ärendehistoriken bifogad. Ingen börjar om från noll.",
-        en: "Refunds, legal matters, GDPR and a genuinely angry customer go to a human, with the full case history attached. Nobody starts from scratch."
-      }
-    }
-  ],
   limitsHeading: {
     sv: "Byggd för att vara tryggt att använda",
     en: "Built to be safe to use"
@@ -343,33 +320,6 @@ export const bokforingCopy: ProductCopy = {
     en: "Below, an example inbox rolls in and the agent picks out the amounts while you watch. You can also ask the receipt assistant about the numbers."
   },
   exampleNote: { sv: "", en: "" },
-  stepsHeading: {
-    sv: "Tre steg, och systemet räknar *varenda* siffra.",
-    en: "Three steps, and the system does *every* calculation."
-  },
-  steps: [
-    {
-      title: { sv: "Hittar kvittona i mejlen", en: "Finds the receipts in the mail" },
-      body: {
-        sv: "Agenten läser inkorgen med read-only-åtkomst och skiljer kvitton och utlägg från allt annat. Nyhetsbrev och mötesmejl lämnas orörda.",
-        en: "The agent reads the inbox with read-only access and separates receipts and expenses from everything else. Newsletters and meeting mail are left untouched."
-      }
-    },
-    {
-      title: { sv: "Läser av fälten", en: "Reads the fields" },
-      body: {
-        sv: "Belopp, moms, datum, butik och kategori. Saknas ett fält gissar vi aldrig fram det, kvittot flaggas för granskning i stället. Samma kvitto räknas aldrig två gånger.",
-        en: "Amount, VAT, date, merchant and category. If a field is missing we never invent it, the receipt is flagged for review instead. The same receipt is never counted twice."
-      }
-    },
-    {
-      title: { sv: "Sammanställer, du godkänner", en: "Totals it, you approve" },
-      body: {
-        sv: "Perioden summeras per kategori, med en sammanfattning i klartext. Flaggade kvitton räknas inte förrän du godkänt dem, aldrig en siffra som bara verkar stämma.",
-        en: "The period is totalled per category, with a plain-language summary. Flagged receipts do not count until you approve them, never a number that merely seems right."
-      }
-    }
-  ],
   limitsHeading: {
     sv: "Vad den inte gör",
     en: "What it does not do"

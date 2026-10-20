@@ -74,9 +74,12 @@ def korningstak(mal: int) -> int:
     """Betalda sidhämtningar för hela körningen. 30 per beställt lead med
     golvet 60 (små beställningar) och taket 160 räckte inte: i en målgrupp
     där de flesta registerbolag saknar webbplats tog 101 registersidor slut
-    på 8 granskade. Nu 12 per lead över golvet, tak 600 (50 leads)."""
+    på 8 granskade. Nu 12 per lead över golvet; taket var 600 (50 leads)
+    och höjdes till 2400 när beställningstaket höjdes till 200 (Sebbe
+    2026-10-18) — annars fick en körning på 200 bara 3 hämtningar per lead
+    och svalt under målet med samma kvalitetsgrindar som strypte den."""
     mal = int(mal)
-    return min(600, max(60, 30 * mal if mal <= 5 else max(150, 12 * mal)))
+    return min(2400, max(60, 30 * mal if mal <= 5 else max(150, 12 * mal)))
 
 
 def ny_korning(*, mal: int, scope: str, overrides: dict | None, is_test: bool) -> dict[str, Any]:
