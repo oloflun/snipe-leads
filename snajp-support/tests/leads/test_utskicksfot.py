@@ -18,7 +18,7 @@ from app.leads.send_guard import (
     Utskick,
     check_send_guard,
 )
-from app.leads.utskicksfot import avregistreringslank, bygg_fot, har_fot, med_fot, ny_token
+from app.leads.utskicksfot import avregistreringslank, bygg_fot, byt_fot, har_fot, med_fot, ny_token
 
 AVSANDARE = Avsandare(
     foretagsnamn="Livrustning Sverige AB",
@@ -85,6 +85,36 @@ def test_foten_ar_idempotent():
     assert med_fot(en_gang, fot=FOT) == en_gang
     assert har_fot(en_gang)
     assert not har_fot("Hej.")
+
+
+def test_byt_fot_byter_en_foraldrad_fot():
+    """En fot byggd när kundregistret var ofyllt (utan policyrad) ska bytas
+    när registret fyllts — med_fot lät den stå kvar, och regel 2 blockerade
+    65 köposter i main för evigt (2026-10-20)."""
+    gammal = bygg_fot(
+        foretagsnamn=AVSANDARE.foretagsnamn,
+        orgnr="",
+        postadress="",
+        lank=avregistreringslank("https://snajp.se", "a" * 32),
+    )
+    utkast = med_fot("Hej,\n\nEtt kort erbjudande.", fot=gammal)
+    assert "integritetspolicy" not in utkast
+
+    ny = byt_fot(utkast, fot=FOT)
+    assert "https://livrustning.example/integritetspolicy" in ny
+    assert ny.count("\n--\n") == 1  # EN fot, inte två
+    assert ny.startswith("Hej,\n\nEtt kort erbjudande.")
+    # Idempotent: samma underlag ger samma text.
+    assert byt_fot(ny, fot=FOT) == ny
+
+
+def test_byt_fot_ror_inte_en_naken_streckrad():
+    """En "--"-rad i brödtexten utan avregistreringslänk är inte en fot och
+    får inte klippas bort."""
+    text = "Hej,\n\nFörst.\n\n--\nEtt citat utan länk."
+    ny = byt_fot(text, fot=FOT)
+    assert ny.startswith(text)
+    assert har_fot(ny)
 
 
 def test_token_ar_ogenomskinlig_och_unik():

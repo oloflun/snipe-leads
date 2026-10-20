@@ -22,7 +22,7 @@ from ..leads.language_gate import LanguageGateError, check_send_gate
 from ..leads.outreach_playbook import finalize_outreach_body
 from ..leads.signatur import HALSNING, med_signatur, normalisera as normalisera_signatur
 from ..leads.timing_gate import check_cold_outreach_gate
-from ..leads.utskicksfot import avregistreringslank, bygg_fot, med_fot
+from ..leads.utskicksfot import avregistreringslank, bygg_fot, byt_fot
 from ..notifications.prioriterat_mejl import skicka_prioriterat
 from .leads_context import OnboardingContext, OutreachContext
 
@@ -67,7 +67,13 @@ async def lagstadgad_fot(storage, tenant_id: str, prospect_email: str | None, br
     """Foten för en brödtext, eller texten oförändrad när underlaget saknas
     (se _med_lagstadgad_fot). Också Godkänn och skicka går hit
     (scheduler.skicka_godkant): ett utkast skrivet innan kundregistret var
-    ifyllt får sin fot när det godkänns, i stället för att stoppas av regel 1."""
+    ifyllt får sin fot när det godkänns, i stället för att stoppas av regel 1.
+
+    byt_fot och inte med_fot (2026-10-20): en fot byggd NÄR registret var
+    ofyllt saknar policyrad och org.nr, och med_fot lät den stå kvar — 65
+    köposter i main var blockerade av regel 2 fast policy_url var åtgärdbar.
+    Blocket byts mot den aktuella foten; avregistreringstoken är idempotent
+    per (tenant, adress) så länken i tidigare mejl fortsätter gälla."""
     from ..config import get_settings  # lokalt: undviker cirkulär import vid modulladdning
 
     bas_url = get_settings().publik_bas_url
@@ -82,7 +88,7 @@ async def lagstadgad_fot(storage, tenant_id: str, prospect_email: str | None, br
         return brodtext
 
     token = await storage.avregistreringstoken(tenant_id, email=prospect_email)
-    return med_fot(
+    return byt_fot(
         brodtext,
         fot=bygg_fot(
             foretagsnamn=foretagsnamn,

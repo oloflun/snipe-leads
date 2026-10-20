@@ -171,9 +171,20 @@ def _alder_i_dagar(created_at, now) -> int:
     Okänt skapandedatum behandlas som NY, inte som gammal. Fail-closed: en
     tenant vi inte vet åldern på ska få det försiktigare taket, inte det
     generösare.
+
+    Postgres-lagret (_row) gör datetime till ISO-sträng, så `created_at` är i
+    drift en STRÄNG. Utan parsningen föll subtraktionen på TypeError och varje
+    tenant var evigt "0 dagar gammal": uppvärmningstaket (20/dag) släppte
+    aldrig, och main skickade exakt 20 mejl om dagen med 200 godkända i kö
+    (uppmätt 2026-10-20, tenant skapad 2026-08-16).
     """
     if not created_at:
         return 0
+    if isinstance(created_at, str):
+        try:
+            created_at = datetime.fromisoformat(created_at)
+        except ValueError:
+            return 0
     try:
         return max((now - created_at).days, 0)
     except TypeError:
@@ -211,7 +222,6 @@ async def _fot_vid_godkannande(storage: Storage, tenant_id: str, item: dict) -> 
     inte en ändring av det granskaren sagt ja till."""
     from ..agent.leads_tools import lagstadgad_fot
     from .halsning import normalisera_utkast
-    from .utskicksfot import har_fot
 
     thread = await storage.get_outreach_thread(tenant_id, item["thread_id"])
     message = await storage.get_pending_outreach_message(tenant_id, item["thread_id"]) if thread else None
@@ -245,8 +255,10 @@ async def _fot_vid_godkannande(storage: Storage, tenant_id: str, item: dict) -> 
     if sig:
         sprak = "en" if thread.get("language_state") == "en_confirmed" else "sv"
         ny = med_aktuell_signatur(ny, sig, halsning=HALSNING[sprak])
-    if not har_fot(ny):
-        ny = await lagstadgad_fot(storage, tenant_id, thread.get("prospect_email"), ny)
+    # Alltid, inte bara när foten saknas: lagstadgad_fot byter en föråldrad
+    # fot (byggd innan kundregistret fylldes, utan policyrad) mot den
+    # aktuella. Idempotent — samma underlag ger samma text.
+    ny = await lagstadgad_fot(storage, tenant_id, thread.get("prospect_email"), ny)
     if ny != message["body"]:
         await storage.update_outreach_message_text(
             tenant_id, message["id"], subject=message.get("subject") or "", body=ny
