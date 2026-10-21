@@ -9,7 +9,90 @@ möjligt), vad det betyder i koden.
 
 ---
 
-## 2026-10-21 (Anton) — Leadsbudgeten sänkt till ~1000 leads per dygn, båda miljöerna
+## 2026-10-21 (Anton) — Uteslutna bolag ALDRIG i sökprompten; registret på i main nu
+
+**Beslut.** "Problemet är INTE AI Studio eftersom vi kör med Vertex … Det är
+något annat som blockerar, ta reda på orsaken och gör vad som krävs för att
+lösa det, det får inte finnas såna här problem längre."
+
+**Rotorsaken, uppmätt i mains egen anropslogg (agent_runs, leads_underlag).**
+Main kör Vertex (servicekontot, europe-west1, gemini-2.5-flash), och
+sökanropet lyckades i alla fyra rundorna i de tre fallna körningarna (11:45,
+11:48, 12:28). Men prompten bar "Uteslut dessa namn:" med de 150 första
+upptagna bolagen i bokstavsordning, och modellen skrev om dem till minustermer
+i Googlefrågan: 13 080 tecken ("-24seven vending sweden -2complete …"), noll
+källor, tomt svar. Listan växer med varje sparat lead och varje lista, så
+felet kom när tenantens upptagna bolag passerade taket. Sebbes AI Studio-spår
+(404/402) gäller inte main: där används AI Studio-nyckeln inte av sökningen.
+Omprövat mot mains Vertex samma dag: med listan frågor på 3 300 tecken och
+0 källor, utan listan frågor på 74 tecken och 9 källor.
+
+**I koden.** `discovery.hitta_bolag` skriver inga namn i prompten;
+uteslutningen sker bara i `_rena_traffar` efter svaret (den gjorde det redan).
+`_uteslut_i_prompt`, `PROMPT_UTESLUT_TAK` och `upptagna.bara_namn` är borta.
+
+**I miljön.** `LEADS_REGISTER=allabolag` på api i main, så att registret
+(gratis, inga ScrapeGraph-krediter) är huvudkällan redan innan Sebbes
+standardbyte når main. Uppmätt lokalt med mains Vertex: 12 Göteborgsbolag på
+89 s. Den öppna sökningen ensam är svag även utan namnlistan (modellen vägrar
+lista bolag när den inte kan se storlek och kundtyp i träffarna) och är bara
+utfyllnad.
+
+## 2026-10-21 (Claude, på Sebbes beställning) — Registret på som standard; fallna sökrundor heter "sökningen föll"
+
+**Beslut.** "LÖS DETTA … det får ej bli sånna här problem." Tre Iris-körningar
+à 70 leads i main 2026-10-21 (11:45, 11:48, 12:28) stannade på 0 undersökta
+med rådet "kontrollera stavningen på orterna" — fast kunden inte fyllt i
+något filter alls.
+
+**Rotorsaken, uppmätt.** Main hade varken `LEADS_MERINFO` eller
+`LEADS_REGISTER`, så registret (allabolag) var av och varje sökrunda hängde
+på den öppna Gemini-sökningen. Dess AI Studio-väg är dubbelt död:
+`gemini-2.5-flash` är borttagen (404 "no longer available … use
+models/gemini-3.8-flash") och krediten är slut (402) — uppmätt 2026-10-21 med
+både main- och dev-nyckeln. Varje runda föll med DiscoveryError, men
+`rond["fel"]` blev bara `stopp` vid max_rundor (105 för 70 leads), som de
+fyra tomma rundorna aldrig når: körningen slutade som `inga_traffar` och
+skyllde på kundens ortnamn.
+
+**Tre lager i koden.**
+1. `merinfo.aktiv()`: HELT osatt (ingen av flaggorna) betyder nu allabolag
+   PÅ. Antons beslut 2026-10-15 ("Registret hämtas från allabolag") gäller
+   körningarna som sådana, inte en miljö, och hämtningen är gratis och hövlig.
+   En TOM sträng är fortfarande uttryckligt AV (testsvitens hermetik och
+   drift-avstängning). `LEADS_MERINFO=scrapegraph`-vägarna är oförändrade.
+2. `_sla_in_sokrunda` räknar fallna rundor (`k["sokfel"]`), och slutorsaken
+   blir `sokningen_foll` när sökningen föll och inget levererades — kunden
+   ser ett tjänstefel i rött, aldrig ett råd om stavning
+   (`korning.avsluta`/`sammanfatta` följer med).
+3. `discovery._sokmodell`: AI Studio-vägen byter borttagna `gemini-2.5-*`
+   mot `gemini-3.8-flash` (Googles anvisade ersättare). Vertex-grenen rörs
+   inte — europe-west1 har kvar 2.5 och saknar 3.8 (EU-beslutet 2026-10-16).
+
+**Kvar utanför koden.** AI Studio-nycklarnas kredit är slut (402) — i miljöer
+med Vertex-servicekontot används de inte av sökningen. Railway-tokenen i
+`.env.deploy` svarar "Not Authorized" sedan 2026-10-21, så mains variabler
+gick inte att läsa eller sätta härifrån; registret-på-som-standard tar bort
+behovet av ett env-handgrepp i main.
+
+## 2026-10-21 (Sebbe) — Mjuk volymupptrappning efter uppvärmningen (regel 5d)
+
+**Beslut.** "Bygg den mjukare upptrappningen." Bakgrund: när åldersfixen
+(2026-10-20) tog bort det eviga 20/dag-taket fanns inget tak alls efter
+uppvärmningens 14 dagar — de ~230 köade godkända utkasten gick ut på en
+förmiddag (223 skickade 2026-10-21) från en domän som dittills skickat 20 om
+dagen. Mottagarfilter läser volymkurvan, inte innehållet.
+
+**I koden.** `send_guard` regel 5d: efter uppvärmningen är dagens tak
+`UPPTRAPPNING_FAKTOR` (2) gånger största dagsvolymen de senaste
+`UPPTRAPPNING_FONSTER_DAGAR` (7) dagarna, aldrig under uppvärmningsgolvet
+(20). Volymen får alltså dubblas per dag: 20 → 40 → 80 → 160 … Innevarande
+dag räknas INTE i underlaget (`storage.storsta_dagsvolym`) — annars höjer
+varje skickat mejl taket och det binder aldrig. Sju dagars fönster så att en
+helg inte nollställer kurvan; efter en veckas tystnad börjar den om från 20,
+vilket är rätt kurva efter ett uppehåll. Taket gäller även Skicka nu: regeln
+skyddar domänens rykte mot volymen, inte mot klockslaget. Stoppet är KÖA OM —
+resten av kön skickas kommande dagar, med besked i köposten.
 
 **Beslut.** "Sänk den just nu … sikta på runt 1000." Först development, sedan main.
 

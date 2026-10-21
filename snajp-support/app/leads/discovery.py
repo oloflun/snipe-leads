@@ -465,9 +465,24 @@ def _icp_som_text(icp: dict[str, Any]) -> str:
     return "\n".join(rader) or "(ingen malgrupp ifylld)"
 
 
+def _sokmodell(settings) -> str:
+    """Modellen för den grounded sökningen, per väg.
+
+    Vertex (servicekontot): kundens modell som den är — europe-west1 har kvar
+    gemini-2.5 och saknar 3.8 (BESLUT 2026-10-16, EU-regionen är ett
+    dataskyddsbeslut). AI Studio (?key=): gemini-2.5-serien är BORTTAGEN —
+    404 "no longer available ... use models/gemini-3.8-flash" på varje
+    anrop, uppmätt 2026-10-21 med både main- och dev-nyckeln. En hårdkodad
+    2.5:a på den vägen är alltså ett garanterat fel, inte ett modellval."""
+    modell = settings.model if "gemini" in (settings.model or "").lower() else "gemini-2.5-flash"
+    if not settings.google_service_account_json and modell.startswith("gemini-2.5"):
+        return "gemini-3.8-flash"
+    return modell
+
+
 async def _gemini_med_sokning(prompt: str) -> str:
     settings = get_settings()
-    modell = settings.model if "gemini" in (settings.model or "").lower() else "gemini-2.5-flash"
+    modell = _sokmodell(settings)
 
     # Vertex AI: bearer-token + annan endpoint; AI Studio: ?key= query-param.
     if settings.google_service_account_json:
@@ -1642,17 +1657,6 @@ def _med_signaler(register: list[dict[str, Any]], signaler: list[dict[str, Any]]
     return med + utan
 
 
-#: Så många uteslutna namn som skrivs in i sökprompten. En uppladdad
-#: CRM-lista kan bära tusentals; resten fälls av _rena_traffar efteråt.
-PROMPT_UTESLUT_TAK = 150
-
-
-def _uteslut_i_prompt(uteslut: set[str]) -> str:
-    namn = upptagna.bara_namn(uteslut)[:PROMPT_UTESLUT_TAK]
-    # Prompten går genom str.format: klamrar i ett bolagsnamn får inte tolkas.
-    return (", ".join(namn) or "(inga)").replace("{", "{{").replace("}", "}}")
-
-
 async def hitta_bolag(
     icp: dict[str, Any],
     antal: int,
@@ -1676,10 +1680,13 @@ async def hitta_bolag(
     """
     if antal <= 0:
         return []
+    # Uteslutningen sker i koden (_rena_traffar), ALDRIG i sökprompten. Main
+    # 2026-10-21: "Uteslut dessa namn: <150 bolag>" blev minustermer i
+    # Googlefrågan (13 080 tecken, "-24seven vending sweden -2complete …"),
+    # varje runda fick noll källor och tre körningar à 70 leads slutade på 0
+    # undersökta. Uppmätt mot Vertex samma dag: frågor på 3 300 tecken och 0
+    # källor med listan, frågor på 74 tecken och 9 källor utan.
     uteslut = upptagna.nycklar(uteslut_namn or ())
-    # Prompten får namnen som de skrevs, inte jämförelsenycklarna: "Nordkap
-    # Moduler AB" säger modellen mer än "nordkap moduler".
-    prompt_namn = {n.casefold() for n in (uteslut_namn or ()) if n}
 
     # Registerkällan först (merinfo via ScrapeGraphAI, TILLFÄLLIG tills ett
     # API-avtal finns, se sources/merinfo.py). Bara när LEADS_MERINFO är
@@ -1718,7 +1725,6 @@ async def hitta_bolag(
             if len(fran_register) >= antal:
                 return fran_register
             uteslut = uteslut | {upptagna.nyckel(t["company_name"]) for t in fran_register}
-            prompt_namn |= {t["company_name"].casefold() for t in fran_register}
             antal -= len(fran_register)
 
     from .platshallare import utan_platshallare
@@ -1737,7 +1743,6 @@ async def hitta_bolag(
     if len(fran_kallor) >= antal:
         return fran_register + fran_kallor[:antal]
     uteslut = uteslut | {upptagna.nyckel(t["company_name"]) for t in fran_kallor}
-    prompt_namn |= {t["company_name"].casefold() for t in fran_kallor}
     antal_kvar = antal - len(fran_kallor)
     # Reserverna ryms i SAMMA sökanrop — taket på ett grounded anrop per
     # körning står kvar.
@@ -1775,7 +1780,6 @@ async def hitta_bolag(
         "anstallda: de hamtas fran bolagets sajt i nasta steg.\n\n"
         f"Malgrupp:\n{_icp_som_text({**icp, 'roles': []})}\n"
         f"{_profil_som_soktext(profil, ring)}"
-        f"Uteslut dessa namn: {_uteslut_i_prompt(prompt_namn)}\n"
     ).format(antal=antal_begart)
     try:
         text = await _gemini_med_sokning(prompt)

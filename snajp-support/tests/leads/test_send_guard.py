@@ -61,6 +61,9 @@ def historik(**overrides) -> TenantHistorik:
         "skickade_totalt": 50,
         "skickade_idag": 0,
         "tenant_alder_dagar": 365,
+        # Hög nog att upptrappningstaket (5d) inte binder i tester som mäter
+        # något annat; 5d:s egna tester sätter den själva.
+        "storsta_dagsvolym": 500,
         "senaste_kontakt_med_foretaget": None,
         "suppressions": frozenset(),
         "tidigare_kontaktade": frozenset(),
@@ -252,8 +255,38 @@ def test_regel_5_dagstaket_under_uppvarmningen():
 
 
 def test_regel_5_dagstaket_slutar_galla_efter_uppvarmningen():
-    """Taket är en uppvärmningskurva, inte ett permanent tak."""
+    """Efter uppvärmningen gäller upptrappningstaket (5d), inte 20-taket: en
+    etablerad dagsvolym binder inte."""
     assert kor(historik=historik(tenant_alder_dagar=90, skickade_idag=50)).atgard == SKICKA
+
+
+def test_regel_5d_upptrappningen_dubblar_fran_storsta_dagsvolymen():
+    """Sebbe 2026-10-21: när 20-taket släppte hade hela kön (234 godkända)
+    gått ut på en dag från en domän som dittills skickat 20 om dagen. Taket
+    efter uppvärmningen är dubbla största dagsvolymen senaste sju dagarna."""
+    h = historik(tenant_alder_dagar=90, storsta_dagsvolym=20, skickade_idag=40)
+    beslut = kor(historik=h)
+    assert beslut.atgard == KOLA_OM and beslut.regel == "5_volymtak"
+    assert "40 av 40" in beslut.skal
+    # Under taket skickas det.
+    assert kor(historik=historik(tenant_alder_dagar=90, storsta_dagsvolym=20, skickade_idag=39)).atgard == SKICKA
+
+
+def test_regel_5d_golvet_ar_uppvarmningstaket():
+    """Efter en veckas tystnad är största dagsvolymen 0 — kurvan börjar om
+    från uppvärmningens golv (20), inte från noll."""
+    h = historik(tenant_alder_dagar=90, storsta_dagsvolym=0, skickade_idag=UPPVARMNING_TAK_PER_DAG - 1)
+    assert kor(historik=h).atgard == SKICKA
+    h = historik(tenant_alder_dagar=90, storsta_dagsvolym=0, skickade_idag=UPPVARMNING_TAK_PER_DAG)
+    assert kor(historik=h).atgard == KOLA_OM
+
+
+def test_regel_5d_galler_aven_skicka_nu():
+    """Skicka nu släpper bara kontorstiden (5a). Volymtaket skyddar domänens
+    rykte mot volymen, inte mot klockslaget, och gäller därför direkt också."""
+    h = historik(tenant_alder_dagar=90, storsta_dagsvolym=20, skickade_idag=40)
+    beslut = kor(historik=h, utskick=utskick(direkt=True))
+    assert beslut.atgard == KOLA_OM and beslut.regel == "5_volymtak"
 
 
 def test_regel_5_karens_per_foretag():

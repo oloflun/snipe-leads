@@ -242,6 +242,37 @@ async def test_atertag_fortsatter_ur_liggaren_utan_jobbstore(monkeypatch):
     assert rad["korning"]["slut_orsak"] == "inga_traffar"
 
 
+async def test_fallna_sokrundor_heter_sokningen_foll(monkeypatch):
+    """Main 2026-10-21: tre körningar à 70 leads vars varje sökrunda föll
+    (AI Studio-vägen död: gemini-2.5-flash 404, krediten 402) slutade som
+    `inga_traffar` — "kontrollera stavningen på orterna" — eftersom
+    `rond["fel"]` bara blev `stopp` vid max_rundor (105), som de fyra tomma
+    rundorna aldrig når. Fallna rundor räknas nu (k["sokfel"]) och slutet
+    heter `sokningen_foll`: kunden ska se ett tjänstefel, inte ett råd om
+    sina ortnamn."""
+    from app.leads.discovery import DiscoveryError
+
+    _installera(monkeypatch, [], bra=set())
+
+    async def _faller(*_a, **_k):
+        raise DiscoveryError("Sokningen avvisades (404).")
+
+    monkeypatch.setattr(korningsmodul, "hitta_bolag", _faller)
+    storage = MemoryStorage()
+    app_state = SimpleNamespace(jobs=MemoryJobStore(), storage=storage, leadsstrom=None)
+    job_id = await app_state.jobs.create(tenant_id=TENANT["tenant_id"], status="queued")
+    await storage.set_leads_job_status(TENANT["tenant_id"], job_id=job_id, status="queued", scope="batch", is_test=True)
+
+    # mal=8: tomma-rundor-slutet (4) nås långt före max_rundor (12) — exakt
+    # luckan där felet gömde sig.
+    await leads_api._run_batch(app_state, _payload(job_id, 8))
+
+    klar = await _vanta_klar(storage, job_id)
+    assert klar["korning"]["slut_orsak"] == "sokningen_foll", klar["korning"]
+    assert klar["korning"]["sokfel"] >= 1
+    assert "stavningen" not in (klar["korning"]["sammanfattning"] or "")
+
+
 async def test_kandidatpoolen_lamnar_aldrig_apiet():
     """Kandidaterna (namn, roll, telefon ur registret) är motorns arbetsminne."""
     rad = {"job_id": "x", "korning": {"mal": 1, "kandidater": [{"company_name": "Alfa AB"}], "jobs": []}}

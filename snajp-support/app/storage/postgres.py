@@ -1242,6 +1242,29 @@ class PostgresStorage:
                 since,
             )
 
+    async def storsta_dagsvolym(self, tenant_id: str, *, dagar: int = 7) -> int:
+        # Innevarande svensk dag räknas INTE: taket är 2 × den här volymen,
+        # och med dagens skickade inräknade jagar det sin egen svans (varje
+        # skickat mejl höjer taket) och binder aldrig.
+        async with self._scoped(tenant_id) as conn:
+            return await conn.fetchval(
+                """
+                select coalesce(max(antal), 0) from (
+                    select count(*) as antal
+                      from outreach_messages
+                     where tenant_id = $1
+                       and direction = 'outbound'
+                       and sent_at is not null
+                       and sent_at >= now() - make_interval(days => $2)
+                       and (sent_at at time zone 'Europe/Stockholm')::date
+                           < (now() at time zone 'Europe/Stockholm')::date
+                     group by (sent_at at time zone 'Europe/Stockholm')::date
+                ) per_dag
+                """,
+                tenant_id,
+                dagar,
+            )
+
     async def last_contact_with_company(
         self, tenant_id: str, foretagsnyckel: str, *, utom_trad: str | None = None
     ):

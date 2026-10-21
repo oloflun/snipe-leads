@@ -1,5 +1,13 @@
 # Snipra Status
 
+## 2026-10-21 — Claude — utskicksrättningar, alla leads i listan, leadsbudgeten
+
+Trådsvar som kraschade på en ISO-sträng är rättade, kön skickar äldst först, Skickas snart visar alla godkända
+mejl och listan visar alla leads (förut 500 av 1 331 i main). Synken öppnar main skrivskyddat. Allt ligger i
+PR #35 mot main; inga migrationer behövs. Leadsbudgeten är 150 M tokens/dygn (~1 000 leads) i båda miljöerna.
+**Kvar:** Antons merge av PR #35, omkörning av CI-kontrollen agent-core. Handoff:
+`HANDOFF-2026-10-21-UTSKICK-OCH-BUDGET.md`.
+
 ## 2026-10-18 — Claude — startsidan: dygnsljus, rörelse, isärtagen översikt (ocommittat)
 
 Startsidan har lokalt fått Dygnets dygnsljus, GSAP/Lenis-övergångar, en isärtagen översikt med
