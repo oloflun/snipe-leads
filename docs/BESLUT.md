@@ -9,6 +9,43 @@ möjligt), vad det betyder i koden.
 
 ---
 
+## 2026-10-21 (Claude, på Sebbes beställning) — Registret på som standard; fallna sökrundor heter "sökningen föll"
+
+**Beslut.** "LÖS DETTA … det får ej bli sånna här problem." Tre Iris-körningar
+à 70 leads i main 2026-10-21 (11:45, 11:48, 12:28) stannade på 0 undersökta
+med rådet "kontrollera stavningen på orterna" — fast kunden inte fyllt i
+något filter alls.
+
+**Rotorsaken, uppmätt.** Main hade varken `LEADS_MERINFO` eller
+`LEADS_REGISTER`, så registret (allabolag) var av och varje sökrunda hängde
+på den öppna Gemini-sökningen. Dess AI Studio-väg är dubbelt död:
+`gemini-2.5-flash` är borttagen (404 "no longer available … use
+models/gemini-3.8-flash") och krediten är slut (402) — uppmätt 2026-10-21 med
+både main- och dev-nyckeln. Varje runda föll med DiscoveryError, men
+`rond["fel"]` blev bara `stopp` vid max_rundor (105 för 70 leads), som de
+fyra tomma rundorna aldrig når: körningen slutade som `inga_traffar` och
+skyllde på kundens ortnamn.
+
+**Tre lager i koden.**
+1. `merinfo.aktiv()`: HELT osatt (ingen av flaggorna) betyder nu allabolag
+   PÅ. Antons beslut 2026-10-15 ("Registret hämtas från allabolag") gäller
+   körningarna som sådana, inte en miljö, och hämtningen är gratis och hövlig.
+   En TOM sträng är fortfarande uttryckligt AV (testsvitens hermetik och
+   drift-avstängning). `LEADS_MERINFO=scrapegraph`-vägarna är oförändrade.
+2. `_sla_in_sokrunda` räknar fallna rundor (`k["sokfel"]`), och slutorsaken
+   blir `sokningen_foll` när sökningen föll och inget levererades — kunden
+   ser ett tjänstefel i rött, aldrig ett råd om stavning
+   (`korning.avsluta`/`sammanfatta` följer med).
+3. `discovery._sokmodell`: AI Studio-vägen byter borttagna `gemini-2.5-*`
+   mot `gemini-3.8-flash` (Googles anvisade ersättare). Vertex-grenen rörs
+   inte — europe-west1 har kvar 2.5 och saknar 3.8 (EU-beslutet 2026-10-16).
+
+**Kvar utanför koden.** AI Studio-nycklarnas kredit är slut (402) — i miljöer
+med Vertex-servicekontot används de inte av sökningen. Railway-tokenen i
+`.env.deploy` svarar "Not Authorized" sedan 2026-10-21, så mains variabler
+gick inte att läsa eller sätta härifrån; registret-på-som-standard tar bort
+behovet av ett env-handgrepp i main.
+
 ## 2026-10-21 (Sebbe) — Mjuk volymupptrappning efter uppvärmningen (regel 5d)
 
 **Beslut.** "Bygg den mjukare upptrappningen." Bakgrund: när åldersfixen

@@ -70,3 +70,19 @@ async def test_sokningens_innehall_bar_rollen_user(monkeypatch, vertex):
     if vertex:
         assert "aiplatform.googleapis.com" in fangat["url"]
         assert "/publishers/google/models/gemini-2.5-flash:generateContent" in fangat["url"]
+
+
+@pytest.mark.anyio
+async def test_ai_studio_far_aldrig_en_borttagen_modell(monkeypatch):
+    """AI Studio drog tillbaka gemini-2.5-serien (404 "no longer available
+    ... use models/gemini-3.8-flash", uppmätt 2026-10-21 med både main- och
+    dev-nyckeln): varje grounded sökning på den vägen föll, och körningarna
+    i main slutade som "inga träffar". Vertex-grenen behåller kundens modell
+    — europe-west1 har kvar 2.5 och saknar 3.8 (BESLUT 2026-10-16)."""
+    fangat = _fanga(monkeypatch, vertex=False)
+    await discovery._gemini_med_sokning("hitta bolag")
+    assert "/models/gemini-3.8-flash:generateContent" in fangat["url"]
+
+    fangat = _fanga(monkeypatch, vertex=True)
+    await discovery._gemini_med_sokning("hitta bolag")
+    assert "/models/gemini-2.5-flash:generateContent" in fangat["url"]

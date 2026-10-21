@@ -93,20 +93,34 @@ FORSORTERA = 3
 
 def register() -> str:
     """Varifrån registrets sidor hämtas: "allabolag" eller "merinfo".
-    `LEADS_REGISTER` avgör; osatt blir det allabolag när registret är på,
-    eftersom ScrapeGraph-krediten tog slut 2026-10-15 (modulens docstring)."""
+    `LEADS_REGISTER` avgör; osatt blir det allabolag — både när registret är
+    på via ScrapeGraph och när ingen flagga alls är satt (se aktiv())."""
     val = os.environ.get("LEADS_REGISTER", "").strip().lower()
     if val in ("allabolag", "merinfo"):
         return val
-    return "allabolag" if os.environ.get("LEADS_MERINFO", "").strip().lower() == "scrapegraph" else "merinfo"
+    if os.environ.get("LEADS_MERINFO", "").strip().lower() == "scrapegraph":
+        return "allabolag"
+    return "allabolag" if os.environ.get("LEADS_REGISTER") is None else "merinfo"
 
 
 def aktiv() -> bool:
-    """Registret är på: merinfo via ScrapeGraph, eller allabolag uttryckligen."""
-    return (
-        os.environ.get("LEADS_MERINFO", "").strip().lower() == "scrapegraph"
-        or os.environ.get("LEADS_REGISTER", "").strip().lower() == "allabolag"
-    )
+    """Registret är på: merinfo via ScrapeGraph, allabolag uttryckligen —
+    eller HELT OSATT, som sedan 2026-10-21 betyder allabolag på.
+
+    Main hade varken LEADS_MERINFO eller LEADS_REGISTER, så registret var av
+    och varje körning hängde på den öppna Gemini-sökningen — vars AI
+    Studio-väg var dubbelt död (gemini-2.5-flash borttagen, 404; krediten
+    slut, 402). Tre körningar på 70 leads 2026-10-21 slutade därför på
+    "inga träffar". allabolag-hämtningen är gratis och Antons beslut
+    2026-10-15 ("Registret hämtas från allabolag") gäller körningar som
+    sådana, inte en miljö. En TOM sträng är fortfarande uttryckligt AV —
+    det är testsvitens hermetik (tests/conftest.py) och drift-avstängningen."""
+    if os.environ.get("LEADS_MERINFO", "").strip().lower() == "scrapegraph":
+        return True
+    reg = os.environ.get("LEADS_REGISTER")
+    if reg is None:
+        return True
+    return reg.strip().lower() == "allabolag"
 
 
 def _fran_allabolag(b: dict[str, Any]) -> bool:

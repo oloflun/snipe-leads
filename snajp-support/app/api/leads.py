@@ -2901,6 +2901,12 @@ async def _sla_in_sokrunda(app_state, tenant: dict, batch_id: str, rond: dict) -
     k["skrap"] = sidhamtning.summera(k.get("skrap"), rond["skrap"])
     k.pop("soker_sedan", None)
     k.pop("soker_process", None)
+    if rond["fel"]:
+        # Räknas för slutorsaken: fyra "tomma" rundor som i själva verket
+        # var fyra fallna sökningar ska heta "sökningen föll", inte "inga
+        # träffar — kontrollera stavningen" (main 2026-10-21: tre körningar
+        # à 70 leads skyllde på kundens ortnamn när Gemini-vägen var död).
+        k["sokfel"] = int(k.get("sokfel") or 0) + 1
     if rond["fel"] and k["rundor"] >= iris_korning.max_rundor(k["mal"]):
         k["stopp"] = "sokningen_foll"
     elif rond["slut"] and not tmp["kandidater"]:
@@ -2957,12 +2963,19 @@ async def _fyll_pa_last(app_state, tenant: dict, batch_id: str) -> dict | None:
                 k["rundor"] >= iris_korning.max_rundor(k["mal"])
                 or int(k.get("tomma_rundor") or 0) >= iris_korning.TOMMA_RUNDOR
             ):
-                # "Slut på kandidater" förutsätter att sidorna gick att hämta.
-                # Föll hämtningarna hos tjänsten (kredit, kvot, 429) och inget
-                # levererades är det sökningen som föll — kunden ska se rött,
-                # inte ett grönt "Klar" med noll leads (Sebbe 2026-10-06).
+                # "Slut på kandidater" förutsätter att sökningen gick att
+                # genomföra. Föll hämtningarna hos tjänsten (kredit, kvot,
+                # 429) eller själva sökrundorna (DiscoveryError, k["sokfel"])
+                # och inget levererades är det sökningen som föll — kunden
+                # ska se rött, inte ett råd om att stava orterna rätt
+                # (Sebbe 2026-10-06 och 2026-10-21).
                 tjanstefel = int((k.get("skrap") or {}).get("tjanstefel") or 0)
-                orsak = "sokningen_foll" if tjanstefel and k["levererade"] == 0 else "slut_pa_kandidater"
+                sokfel = int(k.get("sokfel") or 0)
+                orsak = (
+                    "sokningen_foll"
+                    if (tjanstefel or sokfel) and k["levererade"] == 0
+                    else "slut_pa_kandidater"
+                )
                 break
             if not iris_korning.har_malgrupp(profil, sok_icp):
                 # Ingenting att sikta på: varken bransch, segment, kriterium
@@ -3062,10 +3075,16 @@ async def _fyll_pa_last(app_state, tenant: dict, batch_id: str) -> dict | None:
             iris_korning.avsluta(k, "avbruten")
         else:
             if not orsak and k["levererade"] < k["mal"]:
-                # Samma sanningsregel som i loopen: tjänstefel utan leverans
-                # är "sökningen föll", inte "slut på kandidater".
+                # Samma sanningsregel som i loopen: tjänstefel eller fallna
+                # sökrundor utan leverans är "sökningen föll", inte "slut på
+                # kandidater".
                 tjanstefel = int((k.get("skrap") or {}).get("tjanstefel") or 0)
-                orsak = "sokningen_foll" if tjanstefel and k["levererade"] == 0 else "slut_pa_kandidater"
+                sokfel = int(k.get("sokfel") or 0)
+                orsak = (
+                    "sokningen_foll"
+                    if (tjanstefel or sokfel) and k["levererade"] == 0
+                    else "slut_pa_kandidater"
+                )
             iris_korning.avsluta(k, "klar" if k["levererade"] >= k["mal"] else (orsak or "slut_pa_kandidater"))
         # Före sammanfattningen: den läser fördelningen listspåret sparade.
         await _spara_listspar(storage, tenant_id, k)
