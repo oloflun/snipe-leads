@@ -48,6 +48,17 @@ KOLA_OM = "köa_om"
 UPPVARMNING_DAGAR = 14
 UPPVARMNING_TAK_PER_DAG = 20
 
+#: Upptrappningen efter uppvärmningen (Sebbe 2026-10-21): dagens tak är den
+#: största dagsvolymen de senaste sju dagarna gånger den här faktorn, aldrig
+#: under uppvärmningstaket. Volymen får alltså dubblas per dag — den kurva
+#: mottagarfilter accepterar — i stället för att släppas fri dagen taket
+#: försvinner: 234 godkända utkast i kö hade annars gått ut på en dag från en
+#: domän som dittills skickat 20. Sju dagars fönster, så att en helg inte
+#: nollställer kurvan; efter en veckas tystnad börjar den om från golvet,
+#: vilket också är rätt kurva efter ett uppehåll.
+UPPTRAPPNING_FAKTOR = 2
+UPPTRAPPNING_FONSTER_DAGAR = 7
+
 #: Ett företag kontaktas högst en gång per kvartal. Det är inte en artighet:
 #: upprepade kallmejl till samma bolag är den enskilt vanligaste orsaken till
 #: att en avsändardomän blir spärrad, och den kunden är då förlorad för alla
@@ -94,6 +105,13 @@ class TenantHistorik:
     skickade_totalt: int
     skickade_idag: int
     tenant_alder_dagar: int
+    #: Största antal skickade på EN dag de senaste sju dagarna
+    #: (UPPTRAPPNING_FONSTER_DAGAR), svensk kalenderdag, innevarande dag
+    #: ORÄKNAD — med dagens skickade inräknade hade taket jagat sin egen
+    #: svans och aldrig bundit. Underlaget för upptrappningstaket i regel 5d.
+    #: Inget default, som resten av fälten: ett glömt fält ska bli ett
+    #: TypeError, inte en tyst tom historik.
+    storsta_dagsvolym: int
     senaste_kontakt_med_foretaget: datetime | None
     #: Adresser som avregistrerat sig. Gäller HELA tenanten, inte kampanjen.
     suppressions: frozenset[str]
@@ -370,6 +388,24 @@ def _regel_5_volymtak(*, avsandare, utskick, historik, nu) -> GuardBeslut | None
                 f"{UPPVARMNING_TAK_PER_DAG}). Avsändardomänen är {historik.tenant_alder_dagar} "
                 f"dagar gammal och värms upp i {UPPVARMNING_DAGAR} dagar.",
             )
+        return None
+
+    # 5d. Mjuk upptrappning efter uppvärmningen (Sebbe 2026-10-21): volymen
+    # får dubblas per dag från den största dagsvolymen senaste sju dagarna,
+    # aldrig under uppvärmningens golv. Ett tak som bara försvinner dag 15
+    # hade släppt ut hela kön på en gång — se UPPTRAPPNING_FAKTOR. Gäller
+    # också Skicka nu (direkt), precis som 5b och 5c: domänens rykte skyddas
+    # mot volymen, inte mot klockslaget.
+    tak = max(UPPVARMNING_TAK_PER_DAG, UPPTRAPPNING_FAKTOR * historik.storsta_dagsvolym)
+    if historik.skickade_idag >= tak:
+        return GuardBeslut(
+            KOLA_OM,
+            "5_volymtak",
+            f"Dagens tak är nått ({historik.skickade_idag} av {tak}). Volymen "
+            f"trappas upp: taket är {UPPTRAPPNING_FAKTOR} gånger största dagsvolymen de "
+            f"senaste {UPPTRAPPNING_FONSTER_DAGAR} dagarna, lägst {UPPVARMNING_TAK_PER_DAG}. "
+            "Resten av kön skickas kommande dagar.",
+        )
 
     return None
 

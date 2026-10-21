@@ -139,6 +139,18 @@ def test_registervalet(monkeypatch):
     assert m.register() == "allabolag" and m.aktiv()
 
 
+def test_registret_ar_pa_som_standard_nar_ingen_flagga_ar_satt(monkeypatch):
+    """Main 2026-10-21: varken LEADS_MERINFO eller LEADS_REGISTER var satt,
+    registret var av och körningarna hängde på en död Gemini-väg. Helt osatt
+    betyder nu allabolag PÅ; en TOM sträng är fortfarande uttryckligt av
+    (testsvitens hermetik i tests/conftest.py bygger på det)."""
+    monkeypatch.delenv("LEADS_MERINFO", raising=False)
+    monkeypatch.delenv("LEADS_REGISTER", raising=False)
+    assert m.aktiv() and m.register() == "allabolag"
+    monkeypatch.setenv("LEADS_REGISTER", "")
+    assert not m.aktiv(), "tom sträng = uttryckligt av"
+
+
 # -- Hämtningen och cachen -------------------------------------------------------------
 
 

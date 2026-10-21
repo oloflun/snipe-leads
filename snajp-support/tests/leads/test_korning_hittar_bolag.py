@@ -100,6 +100,25 @@ def test_noll_bolag_heter_inga_traffar_och_sager_varfor():
     assert "inga bolag" in iris_korning.sammanfatta(k)
 
 
+def test_fallna_sokrundor_heter_aldrig_inga_traffar():
+    """Main 2026-10-21: fyra sökrundor föll (död Gemini-väg) och körningen
+    sa "kontrollera stavningen på orterna". En körning med sokfel har inte
+    prövat målgruppen och får inte skylla på kundens filter."""
+    k = iris_korning.ny_korning(mal=70, scope="research_and_draft", overrides=None, is_test=False)
+    k["sokfel"] = 4
+    iris_korning.avsluta(k, "slut_pa_kandidater")
+    assert k["slut_orsak"] == "slut_pa_kandidater", "aldrig inga_traffar när rundorna föll"
+
+
+def test_sokningen_foll_sager_tjanstefel_inte_stavning():
+    k = iris_korning.ny_korning(mal=70, scope="research_and_draft", overrides=None, is_test=False)
+    k["sokfel"] = 4
+    iris_korning.avsluta(k, "sokningen_foll")
+    text = iris_korning.sammanfatta(k)
+    assert "gick inte att genomföra" in text
+    assert "stavningen" not in text
+
+
 def test_provade_bolag_ar_fortfarande_slut_pa_kandidater():
     k = iris_korning.ny_korning(mal=3, scope="research_and_draft", overrides=None, is_test=False)
     k["tratt"].append({"namn": "A", "steg": "förfilter", "skal": "Ingen webbplats"})

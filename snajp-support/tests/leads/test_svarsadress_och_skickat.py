@@ -134,14 +134,25 @@ async def test_godkant_som_vantar_pa_sandfonstret_star_overst_i_skickat():
 async def test_schemalagt_syns_aven_bakom_tusen_nyare_prospekt():
     """Skickas snart slog bara upp de 1000 nyaste prospekten (main 2026-10-20:
     en flytt på 492 leads gömde 85 av 234 godkända mejl). Ett schemalagt
-    utskick ska synas oavsett hur många leads som kommit in efter det."""
+    utskick ska synas oavsett hur många leads som kommit in efter det.
+
+    Sändtiden ligger i FRAMTIDEN med flit: appens lifespan startar
+    run_godkand_sandare, och med WITHIN_WINDOW_UTC (förfluten tid) hann dess
+    uppstartstick processa posten — send_guard sa blocked — medan de tusen
+    prospekten skapades. Testet föll då på kapplöpning, inte på uppslaget
+    (rött i CI för c413250 och 6f7b135, grönt däremellan). En icke förfallen
+    post rör sändaren aldrig (list_due_send_queue), och det är precis
+    "schemalagt, inte skickat än" som testet handlar om."""
+    from datetime import datetime, timedelta, timezone
+
+    om_en_vecka = datetime.now(timezone.utc) + timedelta(days=7)
     async with app.router.lifespan_context(app):
         storage = app.state.storage
         gammal = await storage.create_prospect(DEFAULT_TENANT_ID, company_name="Äldst AB", contact_email="info@aldst.se")
         trad = await storage.ensure_outreach_thread(DEFAULT_TENANT_ID, prospect_id=gammal["id"])
         koat = await storage.queue_outreach_message(
             DEFAULT_TENANT_ID, thread_id=trad["id"], subject="Ämne", body="Hej!\n\nText.",
-            humanizer_variant="x", scheduled_at=WITHIN_WINDOW_UTC, status="queued",
+            humanizer_variant="x", scheduled_at=om_en_vecka, status="queued",
         )
         post = next(q for q in storage.send_queue[DEFAULT_TENANT_ID] if q["id"] == koat["queue_item"]["id"])
         post["gate_checks"] = {"approved_by": "human"}

@@ -238,6 +238,9 @@ def avsluta(korning: dict[str, Any], orsak: str) -> None:
         and not korning["levererade"]
         and not korning["tratt"]
         and not korning.get("listspar")
+        # En körning vars sökrundor FÖLL (k["sokfel"], _sla_in_sokrunda) har
+        # inte prövat målgruppen: den ska aldrig be kunden stava om orterna.
+        and not korning.get("sokfel")
     ):
         orsak = "inga_traffar"
     korning["klar"] = True
@@ -287,6 +290,13 @@ def sammanfatta(korning: dict[str, Any]) -> str:
         return (
             "Sökningen hittade inga bolag i målgruppen. Kontrollera stavningen på orterna "
             "eller bredda bransch eller område och kör igen."
+        )
+    if korning.get("slut_orsak") == "sokningen_foll" and not korning["undersokta"]:
+        # Tjänstefel, inte målgruppsfel: rådet "kontrollera stavningen" hör
+        # inte hemma här, och "0 undersökta → 0 Iris-leads" säger inte varför.
+        return (
+            "Sökningen gick inte att genomföra: tjänsten bakom bolagssökningen svarade "
+            "med fel. Målgruppen behöver inte ändras — försök igen om en stund."
         )
     delar = [f"{korning['undersokta']} undersökta"]
     typer = Counter(_skalstyp(t.get("skal")) for t in korning["tratt"])

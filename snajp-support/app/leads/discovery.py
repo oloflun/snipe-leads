@@ -465,9 +465,24 @@ def _icp_som_text(icp: dict[str, Any]) -> str:
     return "\n".join(rader) or "(ingen malgrupp ifylld)"
 
 
+def _sokmodell(settings) -> str:
+    """Modellen för den grounded sökningen, per väg.
+
+    Vertex (servicekontot): kundens modell som den är — europe-west1 har kvar
+    gemini-2.5 och saknar 3.8 (BESLUT 2026-10-16, EU-regionen är ett
+    dataskyddsbeslut). AI Studio (?key=): gemini-2.5-serien är BORTTAGEN —
+    404 "no longer available ... use models/gemini-3.8-flash" på varje
+    anrop, uppmätt 2026-10-21 med både main- och dev-nyckeln. En hårdkodad
+    2.5:a på den vägen är alltså ett garanterat fel, inte ett modellval."""
+    modell = settings.model if "gemini" in (settings.model or "").lower() else "gemini-2.5-flash"
+    if not settings.google_service_account_json and modell.startswith("gemini-2.5"):
+        return "gemini-3.8-flash"
+    return modell
+
+
 async def _gemini_med_sokning(prompt: str) -> str:
     settings = get_settings()
-    modell = settings.model if "gemini" in (settings.model or "").lower() else "gemini-2.5-flash"
+    modell = _sokmodell(settings)
 
     # Vertex AI: bearer-token + annan endpoint; AI Studio: ?key= query-param.
     if settings.google_service_account_json:
