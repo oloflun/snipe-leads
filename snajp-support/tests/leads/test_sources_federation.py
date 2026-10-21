@@ -323,6 +323,7 @@ async def test_delvisa_kallor_fylls_upp_av_gemini(monkeypatch):
     gemini = AsyncMock(
         return_value=json.dumps(
             [
+                {"company_name": "Nordkap Moduler AB", "website": "https://nordkapmoduler.se"},
                 {
                     "company_name": "Baltic Pump Systems AB",
                     "website": "https://balticpump.se",
@@ -341,7 +342,9 @@ async def test_delvisa_kallor_fylls_upp_av_gemini(monkeypatch):
     # Det som fattas (1) plus reserver (2) för platshållarfiltret — i SAMMA
     # anrop; överskottet kapas (se discovery._reserver).
     assert "Hitta upp till 3 RIKTIGA" in prompt
-    assert "nordkap moduler ab" in prompt.lower(), "källträffen ska uteslutas ur sökningen"
+    # Källträffen utesluts i koden, aldrig i prompten (minustermer i
+    # Googlefrågan gav noll källor, main 2026-10-21) — och fälls ur svaret.
+    assert "nordkap" not in prompt.lower(), "inga uteslutna namn i sökprompten"
     assert [t["company_name"] for t in traffar] == [
         "Nordkap Moduler AB",
         "Baltic Pump Systems AB",

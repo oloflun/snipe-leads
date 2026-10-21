@@ -332,7 +332,8 @@ async def test_fa_registertraffar_fylls_pa_med_sokningen(monkeypatch):
 
     async def _gemini(prompt):
         prompter.append(prompt)
-        return '[{"company_name":"Beta Bygg AB","website":"https://betabygg.se"},' \
+        return '[{"company_name":"Alfa Bygg AB","website":"https://alfabygg.se"},' \
+               '{"company_name":"Beta Bygg AB","website":"https://betabygg.se"},' \
                '{"company_name":"Gamma Bygg AB","website":"https://gammabygg.se"}]'
 
     async def _utan(rader):
@@ -344,7 +345,9 @@ async def test_fa_registertraffar_fylls_pa_med_sokningen(monkeypatch):
     ut = await discovery.hitta_bolag({"industries": ["Bygg"]}, 2)
     assert [r["company_name"] for r in ut] == ["Alfa Bygg AB", "Beta Bygg AB"]
     assert ut[1]["kalla"] == "gemini" and "kalla" not in ut[0]
-    assert "Uteslut dessa namn: alfa bygg ab" in prompter[0], "registrets bolag ska uteslutas ur utfyllnaden"
+    # Registrets bolag utesluts i koden, aldrig i prompten: namnen blev
+    # minustermer i Googlefrågan och sökningen gav noll källor (main 2026-10-21).
+    assert "alfa bygg" not in prompter[0].casefold(), "inga uteslutna namn i sökprompten"
 
 
 def test_regionnyckel_expanderas_utan_profil(monkeypatch):

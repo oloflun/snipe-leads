@@ -84,11 +84,6 @@ def samma_bolag(rad: dict[str, Any], namn: str | None, orgnr: str | None = None)
     return bool(namn) and nyckel(rad.get("company_name")) == nyckel(namn)
 
 
-def bara_namn(sedda: Iterable[str]) -> list[str]:
-    """Namnposterna, för en prompt som ska få veta vad som redan är taget."""
-    return sorted(p for p in sedda if not p.startswith(_ORGNR))
-
-
 async def hamta(storage: Any, tenant_id: str) -> set[str]:
     """Alla bolag kunden redan har: Iris-prospekt, rader i varje leadslista
     (sökta, kombinerade, importerade) och CRM-kunder."""

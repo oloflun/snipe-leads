@@ -9,6 +9,35 @@ möjligt), vad det betyder i koden.
 
 ---
 
+## 2026-10-21 (Anton) — Uteslutna bolag ALDRIG i sökprompten; registret på i main nu
+
+**Beslut.** "Problemet är INTE AI Studio eftersom vi kör med Vertex … Det är
+något annat som blockerar, ta reda på orsaken och gör vad som krävs för att
+lösa det, det får inte finnas såna här problem längre."
+
+**Rotorsaken, uppmätt i mains egen anropslogg (agent_runs, leads_underlag).**
+Main kör Vertex (servicekontot, europe-west1, gemini-2.5-flash), och
+sökanropet lyckades i alla fyra rundorna i de tre fallna körningarna (11:45,
+11:48, 12:28). Men prompten bar "Uteslut dessa namn:" med de 150 första
+upptagna bolagen i bokstavsordning, och modellen skrev om dem till minustermer
+i Googlefrågan: 13 080 tecken ("-24seven vending sweden -2complete …"), noll
+källor, tomt svar. Listan växer med varje sparat lead och varje lista, så
+felet kom när tenantens upptagna bolag passerade taket. Sebbes AI Studio-spår
+(404/402) gäller inte main: där används AI Studio-nyckeln inte av sökningen.
+Omprövat mot mains Vertex samma dag: med listan frågor på 3 300 tecken och
+0 källor, utan listan frågor på 74 tecken och 9 källor.
+
+**I koden.** `discovery.hitta_bolag` skriver inga namn i prompten;
+uteslutningen sker bara i `_rena_traffar` efter svaret (den gjorde det redan).
+`_uteslut_i_prompt`, `PROMPT_UTESLUT_TAK` och `upptagna.bara_namn` är borta.
+
+**I miljön.** `LEADS_REGISTER=allabolag` på api i main, så att registret
+(gratis, inga ScrapeGraph-krediter) är huvudkällan redan innan Sebbes
+standardbyte når main. Uppmätt lokalt med mains Vertex: 12 Göteborgsbolag på
+89 s. Den öppna sökningen ensam är svag även utan namnlistan (modellen vägrar
+lista bolag när den inte kan se storlek och kundtyp i träffarna) och är bara
+utfyllnad.
+
 ## 2026-10-21 (Claude, på Sebbes beställning) — Registret på som standard; fallna sökrundor heter "sökningen föll"
 
 **Beslut.** "LÖS DETTA … det får ej bli sånna här problem." Tre Iris-körningar
