@@ -519,3 +519,30 @@ def test_alder_i_dagar_parsar_iso_strangen_fran_postgres():
     assert _alder_i_dagar(None, nu) == 0
     # Naiv tidsstämpel mot medveten "nu" går inte att jämföra → ny tenant.
     assert _alder_i_dagar("2026-08-16T00:59:33", nu) == 0
+
+
+@pytest.mark.anyio
+async def test_storsta_dagsvolym_raknar_per_svensk_dag_utan_idag():
+    """Underlaget för upptrappningstaket (regel 5d): största antal skickade på
+    EN tidigare dag i fönstret. Dagens egna skickade räknas inte (taket hade
+    annars jagat sin egen svans och aldrig bundit), och ett mejl utanför
+    fönstret räknas inte."""
+    storage = MemoryStorage()
+    nu = datetime.now(timezone.utc)
+    igar = nu - timedelta(days=1)
+    storage.outreach_messages[TENANT] = [
+        # Dagens: räknas inte.
+        {"id": "a", "thread_id": "t1", "direction": "outbound", "sent_at": nu},
+        # Gårdagens två: största dagsvolymen.
+        {"id": "b", "thread_id": "t2", "direction": "outbound", "sent_at": igar},
+        {"id": "c", "thread_id": "t3", "direction": "outbound", "sent_at": igar - timedelta(minutes=5)},
+        # En äldre dag med ett: inte störst.
+        {"id": "d", "thread_id": "t4", "direction": "outbound", "sent_at": nu - timedelta(days=3)},
+        # Utanför fönstret, inkommande och osänt: räknas aldrig.
+        {"id": "e", "thread_id": "t5", "direction": "outbound", "sent_at": nu - timedelta(days=30)},
+        {"id": "f", "thread_id": "t6", "direction": "inbound", "sent_at": igar},
+        {"id": "g", "thread_id": "t7", "direction": "outbound", "sent_at": None},
+    ]
+    assert await storage.storsta_dagsvolym(TENANT, dagar=7) == 2
+    assert await storage.storsta_dagsvolym(TENANT, dagar=60) == 2
+    assert await storage.storsta_dagsvolym("tom-tenant", dagar=7) == 0

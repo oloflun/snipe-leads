@@ -9,7 +9,24 @@ möjligt), vad det betyder i koden.
 
 ---
 
-## 2026-10-21 (Anton) — Leadsbudgeten sänkt till ~1000 leads per dygn, båda miljöerna
+## 2026-10-21 (Sebbe) — Mjuk volymupptrappning efter uppvärmningen (regel 5d)
+
+**Beslut.** "Bygg den mjukare upptrappningen." Bakgrund: när åldersfixen
+(2026-10-20) tog bort det eviga 20/dag-taket fanns inget tak alls efter
+uppvärmningens 14 dagar — de ~230 köade godkända utkasten gick ut på en
+förmiddag (223 skickade 2026-10-21) från en domän som dittills skickat 20 om
+dagen. Mottagarfilter läser volymkurvan, inte innehållet.
+
+**I koden.** `send_guard` regel 5d: efter uppvärmningen är dagens tak
+`UPPTRAPPNING_FAKTOR` (2) gånger största dagsvolymen de senaste
+`UPPTRAPPNING_FONSTER_DAGAR` (7) dagarna, aldrig under uppvärmningsgolvet
+(20). Volymen får alltså dubblas per dag: 20 → 40 → 80 → 160 … Innevarande
+dag räknas INTE i underlaget (`storage.storsta_dagsvolym`) — annars höjer
+varje skickat mejl taket och det binder aldrig. Sju dagars fönster så att en
+helg inte nollställer kurvan; efter en veckas tystnad börjar den om från 20,
+vilket är rätt kurva efter ett uppehåll. Taket gäller även Skicka nu: regeln
+skyddar domänens rykte mot volymen, inte mot klockslaget. Stoppet är KÖA OM —
+resten av kön skickas kommande dagar, med besked i köposten.
 
 **Beslut.** "Sänk den just nu … sikta på runt 1000." Först development, sedan main.
 

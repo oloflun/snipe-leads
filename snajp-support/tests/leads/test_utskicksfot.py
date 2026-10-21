@@ -41,6 +41,7 @@ def _historik(**overrides) -> TenantHistorik:
         skickade_totalt=50,
         skickade_idag=0,
         tenant_alder_dagar=400,
+        storsta_dagsvolym=100,
         senaste_kontakt_med_foretaget=None,
         suppressions=frozenset(),
         tidigare_kontaktade=frozenset(),

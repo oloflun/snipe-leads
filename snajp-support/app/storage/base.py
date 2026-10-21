@@ -675,6 +675,17 @@ class Storage(Protocol):
         mejl lämnat huset."""
         ...
 
+    async def storsta_dagsvolym(self, tenant_id: str, *, dagar: int = 7) -> int:
+        """Största antal skickade utgående på EN svensk kalenderdag de senaste
+        `dagar` dagarna, INNEVARANDE dag oräknad. Underlaget för
+        upptrappningstaket (send_guard regel 5d): dagens tak är den här
+        volymen gånger UPPTRAPPNING_FAKTOR. Dagens egna skickade räknas inte —
+        taket hade annars jagat sin egen svans (varje skickat mejl höjer
+        taket) och aldrig bundit. Svensk dag och inte UTC, eftersom
+        sändfönstret (08–17 svensk tid) definierar en sänddag. 0 när inget
+        skickats i fönstret."""
+        ...
+
     async def last_contact_with_company(
         self, tenant_id: str, foretagsnyckel: str, *, utom_trad: str | None = None
     ) -> Any | None:

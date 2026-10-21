@@ -26,6 +26,7 @@ from .send_guard import GRANSKA as SG_GRANSKA
 from .send_guard import KOLA_OM as SG_KOLA_OM
 from .send_guard import SKICKA as SG_SKICKA
 from .send_guard import (
+    UPPTRAPPNING_FONSTER_DAGAR,
     Avsandare,
     GuardBeslut,
     TenantHistorik,
@@ -131,6 +132,11 @@ async def _kor_send_guard(storage, tenant_id: str, thread: dict, message: dict, 
         skickade_totalt=await storage.count_sent_outreach(tenant_id),
         skickade_idag=await storage.count_sent_outreach(tenant_id, since=dygnets_start),
         tenant_alder_dagar=_alder_i_dagar(tenant.get("created_at"), now),
+        # Underlaget för upptrappningstaket (regel 5d): största dagsvolymen i
+        # upptrappningsfönstret. Sju dagar, samma som send_guard-konstanten.
+        storsta_dagsvolym=await storage.storsta_dagsvolym(
+            tenant_id, dagar=UPPTRAPPNING_FONSTER_DAGAR
+        ),
         # Leadets egen tråd räknas inte: 90-dagarsspärren gäller ett NYTT
         # kallmejl, inte uppföljningen eller svaret i samma samtal.
         senaste_kontakt_med_foretaget=await storage.last_contact_with_company(

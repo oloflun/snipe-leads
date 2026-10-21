@@ -889,6 +889,35 @@ class MemoryStorage:
             and (since is None or m["sent_at"] >= since)
         )
 
+    async def storsta_dagsvolym(self, tenant_id: str, *, dagar: int = 7) -> int:
+        from zoneinfo import ZoneInfo
+
+        stockholm = ZoneInfo("Europe/Stockholm")
+        nu = datetime.now(timezone.utc)
+        grans = nu - timedelta(days=dagar)
+        # Innevarande svensk dag räknas INTE, samma som Postgres-varianten:
+        # taket jagar annars sin egen svans och binder aldrig.
+        idag = nu.astimezone(stockholm).date()
+        per_dag: dict[date, int] = {}
+        for m in self.outreach_messages.get(tenant_id, []):
+            if m.get("direction") != "outbound" or not m.get("sent_at"):
+                continue
+            t = m["sent_at"]
+            if isinstance(t, str):
+                try:
+                    t = datetime.fromisoformat(t)
+                except ValueError:
+                    continue
+            if t.tzinfo is None:
+                t = t.replace(tzinfo=timezone.utc)
+            if t < grans:
+                continue
+            dag = t.astimezone(stockholm).date()
+            if dag >= idag:
+                continue
+            per_dag[dag] = per_dag.get(dag, 0) + 1
+        return max(per_dag.values(), default=0)
+
     async def last_contact_with_company(
         self, tenant_id: str, foretagsnyckel: str, *, utom_trad: str | None = None
     ):
