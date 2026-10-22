@@ -61,7 +61,7 @@ def _bolag(namn: str) -> dict:
 
 
 def _installera(monkeypatch, pool: list[dict], bra: set[str]) -> None:
-    async def _hitta(icp, antal, *, uteslut_namn=None, profil=None, ring=0, listspar=None, bortval=None):
+    async def _hitta(icp, antal, *, uteslut_namn=None, profil=None, ring=0, listspar=None, bortval=None, bred=False):
         uteslut = {n.casefold() for n in (uteslut_namn or set())}
         return [b for b in pool if b["company_name"].casefold() not in uteslut][:antal]
 

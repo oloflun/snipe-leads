@@ -49,7 +49,7 @@ def _bolag(namn: str) -> dict:
 def _installera(monkeypatch, pool: list[dict], bra: set[str]) -> list[int]:
     rundor: list[int] = []
 
-    async def _hitta(icp, antal, *, uteslut_namn=None, profil=None, ring=0, listspar=None, bortval=None):
+    async def _hitta(icp, antal, *, uteslut_namn=None, profil=None, ring=0, listspar=None, bortval=None, bred=False):
         rundor.append(ring)
         uteslut = {n.casefold() for n in (uteslut_namn or set())}
         kvar = [b for b in pool if b["company_name"].casefold() not in uteslut]
@@ -153,3 +153,25 @@ def test_leverbart_kraver_kontaktperson_kontaktvag_och_lagesbeskrivning():
     # Lägesbeskrivningen får komma från raden (sparad av researchen).
     assert leads_api._leverbarhet({**rad, "lagesbeskrivning": "Sparad."}, {**ok, "lagesbeskrivning": None}, regler) is None
     assert leads_api._leverbarhet(rad, {**ok, "qualified": False, "disqualifiers": ["För stort"]}, regler) == "För stort"
+
+
+async def test_kundens_branscher_slut_breddar_i_omradet_och_levererar(monkeypatch):
+    """Antons beställning 2026-10-23: leverera beställt antal. När kundens
+    egna branscher är genomsökta (en tom runda) söker körningen brett i samma
+    område i stället för att räkna mot slutet, och sammanfattningen säger det."""
+    egna = [_bolag("Bra Ett")]
+    breda = [_bolag(n) for n in ("Bra Två", "Bra Tre", "Bra Fyra")]
+    anrop: list[bool] = []
+
+    async def _hitta(icp, antal, *, uteslut_namn=None, bred=False, **_k):
+        anrop.append(bred)
+        uteslut = {n.casefold() for n in (uteslut_namn or set())}
+        return [b for b in (breda if bred else egna) if b["company_name"].casefold() not in uteslut][:antal]
+
+    _installera(monkeypatch, [], bra={"Bra Ett", "Bra Två", "Bra Tre", "Bra Fyra"})
+    monkeypatch.setattr(korningsmodul, "hitta_bolag", _hitta)
+    monkeypatch.setattr(leads_api.merinfo, "aktiv", lambda: True)
+    k = await _kor(3)
+    assert k["levererade"] == 3 and k["slut_orsak"] == "klar", k
+    assert k["bred"] and anrop[0] is False and True in anrop
+    assert "breddades" in k["sammanfattning"]

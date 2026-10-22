@@ -1666,8 +1666,13 @@ async def hitta_bolag(
     ring: int = 0,
     listspar: list[dict[str, Any]] | None = None,
     bortval: list[dict[str, Any]] | None = None,
+    bred: bool = False,
 ) -> list[dict[str, Any]]:
     """Returnerar upp till `antal` riktiga bolag. Tom lista = inga verifierbara traffar.
+
+    `bred=True` (korning.sokrunda, när kundens egna branscher är genomsökta i
+    området): bara den breda registersökningen i kundens område, med samma
+    filter, Jev och research som alltid.
 
     `listspar` (plan 2026-10-05): registerkällan lägger där de bolag som inte
     blir Iris-leads, med sitt spår (ringlistan, ej kvalificerade, prövas om;
@@ -1701,6 +1706,12 @@ async def hitta_bolag(
     # bolagets egen sajt i researchen, bryter utfyllnaden inget krav.
     # Existensgrinden (leads/existens.py) står kvar för varje sökträff.
     from .sources import merinfo
+
+    if bred and merinfo.aktiv():
+        breda = await merinfo.sok(
+            icp, antal, uteslut=uteslut, profil=profil, listspar=listspar, bred=True, bortval=bortval
+        )
+        return (breda or [])[:antal]
 
     fran_register: list[dict[str, Any]] = []
     registret_oanvant = False

@@ -55,9 +55,13 @@ logger = logging.getLogger("snajp-support.leads.sources.allabolag")
 BAS = "https://www.allabolag.se"
 SOKADRESS = f"{BAS}/bransch-s%C3%B6k"
 
-#: Sidor per (term, plats). allabolag bläddrar till 400 sidor à 25 bolag;
-#: 40 sidor är 1 000 bolag per sökning, långt mer än en körning granskar.
-MAX_LISTSIDOR = 40
+#: Sidor per (term, plats): allt allabolag bläddrar till (400 sidor à 25
+#: bolag). Var 40 till 2026-10-23: main-körningen på 200 i Göteborg hade två
+#: sökningar med träffar (detaljhandel 7 003, bygg 1 396) men nådde bara
+#: 2 007 bolag, och med ~5 % som blir Iris-kandidater räckte det aldrig till
+#: 200. Sidorna är gratis och cachas per kund; en runda som läser om de
+#: första sidorna läser dem ur cachen.
+MAX_LISTSIDOR = 400
 #: Bolag som granskas (filter + Jev) per körning. Merinfos tak (90) var
 #: satt efter betalda bolagssidor; här är listan gratis och bolagssidan
 #: behövs inte, så en körning på 50 leads får bläddra hundratals bolag.
