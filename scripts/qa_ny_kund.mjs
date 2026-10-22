@@ -78,15 +78,21 @@ try {
   rad(!(await ruta.isChecked()), "testarbetsytan är INTE ikryssad — det här är en riktig kund");
 
   await sida.getByLabel("Organisationsnummer").fill(ORGNR);
+  // Wizard i FEM steg sedan 2026-10: företaget bär även faktureringsadressen,
+  // fritexten heter "Särskilt fokus" och bor i målgruppssteget, och sista
+  // steget kräver villkorskryss — se OnboardingWizard.
   for (const [etikett, varde] of [
     ["Webbplats", `https://nykund-${STAMP}.example.se`],
     ["Vad ni säljer", PRODUKT],
-    ["Något extra att fokusera på (valfritt)", "Helst bolag med egen produktion."]
+    ["Faktureringsadress", `Nykundsgatan ${STAMP.slice(-2)}`],
+    ["Postnummer", "111 22"],
+    ["Ort", "Stockholm"]
   ]) {
+    // Ingen exact-matchning: Falt-etiketten omsluter även hinttexten, så det
+    // tillgängliga namnet är "Ort Postorten." — substring räcker och är unik.
     await sida.getByLabel(etikett).fill(varde);
   }
   await sida.waitForTimeout(400);
-  // Wizard i fyra steg sedan 2026-09-20 — se OnboardingWizard.
   await sida.getByRole("button", { name: /Fortsätt/ }).click();
   await sida.getByRole("radio", { name: "Industri & tillverkning" }).click();
   await sida.getByRole("button", { name: /Fortsätt/ }).click();
@@ -95,6 +101,12 @@ try {
   const kontaktMejlFalt = sida.getByLabel(/^E-post/);
   if (!(await kontaktMejlFalt.inputValue())) await kontaktMejlFalt.fill(EPOST);
   await sida.getByRole("button", { name: /Fortsätt/ }).click();
+  // Målgruppen: bransch- och ortsfilter lämnas tomma med flit (påstående 3
+  // nedan), bara fritexten fylls i.
+  await sida.getByLabel("Särskilt fokus").fill("Helst bolag med egen produktion.");
+  await sida.getByRole("button", { name: /Fortsätt/ }).click();
+  // Paketet (duo förvalt) + villkorsgodkännandet, som startar okryssat.
+  await sida.locator('label:has-text("Jag godkänner") input[type="checkbox"]').check();
   await sida.getByRole("button", { name: /Öppna arbetsytan/ }).click();
   await sida.waitForURL((u) => !u.pathname.startsWith("/onboarding"), { timeout: 60_000 }).catch(() => {});
   await sida.waitForLoadState("networkidle").catch(() => {});
