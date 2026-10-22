@@ -140,6 +140,20 @@ def _kommunnamn() -> dict[str, str]:
     return {k["slug"]: k["namn"] for l in taxonomi()["lan"] for k in l["kommuner"]}
 
 
+def ar_ortnamn(term: str) -> bool:
+    """Är ordet exakt en kommun, ett län, en landsdel eller ett känt
+    vardagsnamn ("Gbg")? Ingen felstavningsgissning: ett branschord som
+    liknar en ort ska förbli en bransch."""
+    from .merinfo import LANDSDELAR, ORTALIAS, _geoindex, _norm
+
+    hel = _norm(str(term or "")).strip()
+    if not hel:
+        return False
+    n = ORTALIAS.get(hel.removesuffix(" lan").strip(), hel.removesuffix(" lan").strip())
+    lan_index, kommun_index = _geoindex()
+    return n in LANDSDELAR or n in kommun_index or n in lan_index or hel in lan_index
+
+
 #: Skiljetecken mellan områden i samma fält ("Göteborg & Umeå", "Borås, Alingsås").
 _OMRADESDELARE = re.compile(r"\s*(?:&|\+|/|;|,|\boch\b|\band\b)\s*", re.IGNORECASE)
 _PARENTES = re.compile(r"(?P<yttre>[^()]*?)\s*\((?P<inre>[^()]+)\)\s*")
