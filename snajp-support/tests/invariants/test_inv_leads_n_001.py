@@ -49,7 +49,7 @@ def _bolag(namn: str) -> dict:
 def _installera(monkeypatch, pool: list[dict], bra: set[str]) -> list[int]:
     rundor: list[int] = []
 
-    async def _hitta(icp, antal, *, uteslut_namn=None, profil=None, ring=0, listspar=None):
+    async def _hitta(icp, antal, *, uteslut_namn=None, profil=None, ring=0, listspar=None, bortval=None):
         rundor.append(ring)
         uteslut = {n.casefold() for n in (uteslut_namn or set())}
         kvar = [b for b in pool if b["company_name"].casefold() not in uteslut]

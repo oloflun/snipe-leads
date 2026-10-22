@@ -124,3 +124,20 @@ def test_provade_bolag_ar_fortfarande_slut_pa_kandidater():
     k["tratt"].append({"namn": "A", "steg": "förfilter", "skal": "Ingen webbplats"})
     iris_korning.avsluta(k, "slut_pa_kandidater")
     assert k["slut_orsak"] == "slut_pa_kandidater"
+
+
+@pytest.mark.anyio
+async def test_registrets_bortval_star_i_tratten(monkeypatch):
+    """Main 2026-10-22: filtrets och Jevs bortval i registret syntes inte i
+    tratten, så nästa runda (uteslutningen byggs ur tratten) bedömde dem igen
+    och körningen på 200 tog slut på 18."""
+
+    async def _hitta(icp, antal, *, bortval=None, **_k):
+        bortval.append({"company_name": "Stora Bygg AB", "orgnr": "556000-0001", "skal": "Storlek 1–49: 120 anställda"})
+        bortval.append({"company_name": "Fel Nisch AB", "orgnr": None, "skal": "Säljer inte till företag", "jev": True})
+        return []
+
+    monkeypatch.setattr(iris_korning, "hitta_bolag", _hitta)
+    k = iris_korning.ny_korning(mal=5, scope="research", overrides=None, is_test=True)
+    await iris_korning.sokrunda({}, {}, k, uteslut=set())
+    assert {(t["namn"], t["steg"]) for t in k["tratt"]} == {("Stora Bygg AB", "register"), ("Fel Nisch AB", "jev")}

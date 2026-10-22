@@ -139,7 +139,16 @@ async def sokrunda(
     ring = korning["rundor"]
     korning["rundor"] += 1
     listspar: list[dict[str, Any]] = []
-    fynd = await hitta_bolag(icp, antal, uteslut_namn=uteslut, profil=profil, ring=ring, listspar=listspar)
+    bortval: list[dict[str, Any]] = []
+    fynd = await hitta_bolag(
+        icp, antal, uteslut_namn=uteslut, profil=profil, ring=ring, listspar=listspar, bortval=bortval
+    )
+    # Registrets bortval (filtret och Jev i sources/merinfo.sok) står i
+    # tratten, så att nästa runda inte bedömer dem igen: annars började varje
+    # runda om på samma fällda bolag och körningen tog slut långt under målet.
+    for rad in bortval:
+        korning["tratt"].append({"namn": rad["company_name"], "steg": "jev" if rad.get("jev") else "register",
+                                 "skal": rad["skal"]})
     # Bara de ej kvalificerade är bortval i tratten. Ringlistan och de som
     # prövas om räknas för sig i sammanfattningen (fordelning nedan).
     for rad in listspar:

@@ -1665,6 +1665,7 @@ async def hitta_bolag(
     profil: dict[str, Any] | None = None,
     ring: int = 0,
     listspar: list[dict[str, Any]] | None = None,
+    bortval: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
     """Returnerar upp till `antal` riktiga bolag. Tom lista = inga verifierbara traffar.
 
@@ -1705,7 +1706,9 @@ async def hitta_bolag(
     registret_oanvant = False
     if merinfo.aktiv():
         try:
-            registret = await merinfo.sok(icp, antal, uteslut=uteslut, profil=profil, listspar=listspar)
+            registret = await merinfo.sok(
+                icp, antal, uteslut=uteslut, profil=profil, listspar=listspar, bortval=bortval
+            )
         except DiscoveryError:
             # Registret gick inte att läsa (429, kredit, tjänsten nere). Förut
             # föll hela sökrundan, tre rundor i rad, och körningen slutade med
@@ -1811,7 +1814,9 @@ async def hitta_bolag(
         # gånger, med 0 undersökta. Registret söks nu brett i kundens område
         # och Jev klassar mot kriterierna — samma grindar som alltid.
         try:
-            breda = await merinfo.sok(icp, antal_kvar, uteslut=uteslut, profil=profil, listspar=listspar, bred=True)
+            breda = await merinfo.sok(
+                icp, antal_kvar, uteslut=uteslut, profil=profil, listspar=listspar, bred=True, bortval=bortval
+            )
         except DiscoveryError:
             logger.warning("Den breda registersökningen gick inte att läsa.")
             breda = None
