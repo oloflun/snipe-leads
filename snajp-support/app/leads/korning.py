@@ -48,7 +48,11 @@ MAX_RUNDOR = 3
 TAK_FAKTOR = 12
 #: Sökrundor i rad utan en enda ny kandidat innan körningen räknar
 #: målgruppen som uttömd. Det är det verkliga slutet; max_rundor är bara
-#: skyddsnätet ovanför.
+#: skyddsnätet ovanför. Den första tomma rundan i kundens egna branscher
+#: breddar i stället sökningen till de breda B2B-branscherna i samma område
+#: (korning["bred"], api/leads.py:_sla_in_sokrunda), och räkningen börjar om:
+#: Antons beställning 2026-10-23, leverera beställt antal vad som än krävs.
+#: Området breddas aldrig; bedömningen fäller ändå bolag utanför det.
 TOMMA_RUNDOR = 4
 #: Kandidater per sökrunda. Små rundor med flit (2026-10-09): en runda
 #: levererar ingenting förrän den är klar, och med 25 per runda granskade
@@ -139,7 +143,17 @@ async def sokrunda(
     ring = korning["rundor"]
     korning["rundor"] += 1
     listspar: list[dict[str, Any]] = []
-    fynd = await hitta_bolag(icp, antal, uteslut_namn=uteslut, profil=profil, ring=ring, listspar=listspar)
+    bortval: list[dict[str, Any]] = []
+    fynd = await hitta_bolag(
+        icp, antal, uteslut_namn=uteslut, profil=profil, ring=ring, listspar=listspar, bortval=bortval,
+        bred=bool(korning.get("bred")),
+    )
+    # Registrets bortval (filtret och Jev i sources/merinfo.sok) står i
+    # tratten, så att nästa runda inte bedömer dem igen: annars började varje
+    # runda om på samma fällda bolag och körningen tog slut långt under målet.
+    for rad in bortval:
+        korning["tratt"].append({"namn": rad["company_name"], "steg": "jev" if rad.get("jev") else "register",
+                                 "skal": rad["skal"]})
     # Bara de ej kvalificerade är bortval i tratten. Ringlistan och de som
     # prövas om räknas för sig i sammanfattningen (fordelning nedan).
     for rad in listspar:
@@ -311,6 +325,8 @@ def sammanfatta(korning: dict[str, Any]) -> str:
     text += "."
     if korning["levererade"] < korning["mal"] and korning.get("flaskhals"):
         text += f" Det som strypte mest: {korning['flaskhals'].lower()}."
+    if korning.get("bred"):
+        text += " Bolagen i kundens branscher tog slut i området, så sökningen breddades till fler branscher där."
     skrap = korning.get("skrap") or {}
     betalda = sum(
         int(v) for k, v in skrap.items() if k not in ("cache", "tjanstefel") and isinstance(v, (int, float))

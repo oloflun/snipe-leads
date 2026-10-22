@@ -75,3 +75,21 @@ def test_storleken_gar_fortfarande_att_overskriva():
     sammanslagen = _med_overrides(SPARAT, {"anstallda_min": 50, "anstallda_max": 500})
     assert sammanslagen["company_size"] == {"min": 50, "max": 500}
     assert "50" in render_icp(sammanslagen)
+
+
+def test_ort_i_branschfaltet_blir_omrade():
+    """Main 2026-10-22: "Umeå" som bransch blev sökordet "Umeå" i kundens
+    Göteborg, och en körning på 100 leads undersökte 3 bolag."""
+    ut = _med_overrides(SPARAT, {"industries": ["Umeå"]})
+    assert ut["industries"] == ["Bygg"]
+    assert ut["geography"] == ["Umeå"]
+
+    ut = _med_overrides(SPARAT, {"industries": ["Livsmedel", "Gbg"], "geography": ["Luleå"]})
+    assert ut["industries"] == ["Livsmedel"]
+    assert ut["geography"] == ["Luleå", "Gbg"]
+
+
+def test_branschord_som_liknar_en_ort_forblir_bransch():
+    ut = _med_overrides(SPARAT, {"industries": ["Bygg", "Redovisning", "E-handel"]})
+    assert ut["industries"] == ["Bygg", "Redovisning", "E-handel"]
+    assert ut["geography"] == ["Skåne"]

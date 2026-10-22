@@ -9,6 +9,35 @@ möjligt), vad det betyder i koden.
 
 ---
 
+## 2026-10-23 (Anton) — Körningar ska leverera beställt antal: hela registret, sedan brett i området
+
+**Beslut.** "Läs senaste committen från Sebbe och gör vad som krävs för att
+körningarna ska leverera beställt antal, vad som än krävs."
+
+**Uppmätt.** Main 2026-10-22, körning f0961755 (200, Göteborg): 18 levererade,
+43 researchade, 11 rundor varav 4 tomma, `slut_pa_kandidater`. Sebbes commit
+7496a97 tar bort ena orsaken (registrets fällda bolag prövades om varje runda).
+Den andra var taket: kundens målgrupp gav fyra sökningar, varav två med träffar
+(detaljhandel 7 003, bygg 1 396 i Göteborgs kommun), men `MAX_LISTSIDOR = 40`
+lät körningen se högst 2 007 bolag. Ungefär 5 % av registrets bolag blir
+Iris-kandidater (resten saknar webbplats eller kontakt och går till
+listspåret, regel 8 och 15) och ~40 % av kandidaterna klarar researchen, så
+200 var omöjligt per konstruktion.
+
+**I koden.**
+- `allabolag.MAX_LISTSIDOR` 40 → 400, allt allabolag bläddrar till (8 400
+  bolag för samma målgrupp). Sidorna är gratis och cachas per kund.
+- Första tomma rundan (utan sökfel) i kundens egna branscher sätter
+  `korning["bred"]`: rundorna därefter söker de breda B2B-branscherna i SAMMA
+  område (`merinfo.sok(bred=True)`, Konsulter/Byggmästare/Grossister/
+  Producenter, ~20 000 bolag i Göteborg), med samma filter, Jev och research.
+  Räkningen av tomma rundor börjar om, och sammanfattningen säger att
+  sökningen breddades.
+- Området breddas aldrig: bedömningen fäller bolag utanför målområdet ändå,
+  och kunden har bett om just det området.
+
+---
+
 ## 2026-10-21 (Anton) — Uteslutna bolag ALDRIG i sökprompten; registret på i main nu
 
 **Beslut.** "Problemet är INTE AI Studio eftersom vi kör med Vertex … Det är

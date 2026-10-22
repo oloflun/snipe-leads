@@ -99,6 +99,14 @@ def test_registret_ar_ett_filter_inte_en_kontaktkalla(sida):
         (["Luelå"], ["municipality=Luleå"]),
         (["Gbg"], ["municipality=Göteborg"]),
         (["Atlantis"], None),
+        # Flera områden i ett fält (main 2026-10-22: hela strängen gav None).
+        (["Göteborg & Norrland (Umeå)"], ["municipality=Göteborg", "municipality=Umeå"]),
+        (["Borås, Alingsås och Mölndal"], ["municipality=Borås", "municipality=Alingsås", "municipality=Mölndal"]),
+        (["Helsingborg/Lund"], ["municipality=Helsingborg", "municipality=Lund"]),
+        # Parentesen preciserar; är den ingen ort gäller det yttre.
+        (["Norrland (Umeå)"], ["municipality=Umeå"]),
+        (["Norrland (Atlantis)"], ["county=Norrbotten", "county=Västerbotten", "county=Jämtland",
+                                   "county=Västernorrland", "county=Gävleborg"]),
     ],
 )
 def test_geofiltret(termer, vantat):
@@ -268,6 +276,30 @@ async def test_upptagna_bolag_hoppas_over_pa_orgnr(monkeypatch, sida):
     icp = {"industries": ["redovisning"], "geography": ["Mölndal"]}
     ut = await m.sok(icp, 30, uteslut={"orgnr:5564777083"})
     assert ut and "Account i Mölndal AB" not in {k["company_name"] for k in ut}
+
+
+@pytest.mark.anyio
+async def test_fallda_registerbolag_blir_bortval_och_provas_inte_igen(monkeypatch, sida):
+    """Main 2026-10-22: filtrets och Jevs bortval slängdes tyst, så varje
+    sökrunda bedömde samma fällda bolag från sida 1 och körningen på 200
+    slutade på 18. Bortvalen följer nu med ut, och nästa runda hoppar över dem."""
+    _installera_allabolag(monkeypatch, sida)
+
+    async def _komplettera(rankade, antal, **_):
+        return rankade[:antal]
+
+    monkeypatch.setattr(m, "_komplettera", _komplettera)
+    # Storleken 1–2 fäller de flesta bolagen på sidan i kontrollen.
+    icp = {"industries": ["redovisning"], "geography": ["Mölndal"], "size": {"anstallda_min": 1, "anstallda_max": 2}}
+    bortval: list[dict] = []
+    forsta = await m.sok(icp, 30, uteslut=set(), bortval=bortval)
+    assert bortval and all(r["skal"] for r in bortval)
+    fallda = {r["company_name"] for r in bortval}
+    assert not fallda & {k["company_name"] for k in forsta or []}
+
+    andra_bortval: list[dict] = []
+    await m.sok(icp, 30, uteslut=fallda, bortval=andra_bortval)
+    assert not fallda & {r["company_name"] for r in andra_bortval}, "ett fällt bolag bedöms inte igen"
 
 
 @pytest.mark.anyio

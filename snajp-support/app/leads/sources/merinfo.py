@@ -660,6 +660,7 @@ async def sok(
     lage: str = "iris",
     listspar: list[dict[str, Any]] | None = None,
     bred: bool = False,
+    bortval: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]] | None:
     """Antons arbetsflöde: bransch → län/kommun → listsidor → bolagssidor →
     filter på bolagsfakta → Jev mot kundens kriterier (första filtret) →
@@ -672,6 +673,11 @@ async def sok(
 
     `bred=True` (sista skyddsnätet i discovery.hitta_bolag): sök i de breda
     B2B-branscherna i kundens område oavsett branschord.
+
+    `bortval`: registerbolag som filtret eller Jev fällde, med skäl. Körningen
+    lägger dem i tratten så att nästa sökrunda inte prövar dem igen (main
+    2026-10-22: utan dem bedömde varje runda samma fällda bolag från sida 1,
+    nådde taket på granskade och slutade på 18 av 200).
 
     Hämtningen går via allabolag när `register()` säger det (2026-10-15):
     sökorden är kundens egna ord, varje kommun och län en egen sökning,
@@ -791,7 +797,10 @@ async def sok(
         sem = asyncio.Semaphore(SAMTIDIGA)
 
         async def bedom(b: dict[str, Any]) -> tuple[float, dict[str, Any]] | None:
-            if kontrollera(b, icp, profil) is not None:
+            skal = kontrollera(b, icp, profil)
+            if skal is not None:
+                if bortval is not None:
+                    bortval.append({"company_name": b.get("company_name"), "orgnr": b.get("orgnr"), "skal": skal})
                 return None
             k = till_kandidat(b, icp, profil)
             poang = _kodpoang(b, icp, profil)
@@ -803,6 +812,12 @@ async def sok(
                 if triage:
                     k["jev_triage"] = triage
                     if triage.get("beslut") == "fall":
+                        if bortval is not None:
+                            bortval.append({
+                                "company_name": b.get("company_name"), "orgnr": b.get("orgnr"),
+                                "skal": "; ".join(triage.get("fall_skal") or []) or "Jev: utanför kundens kriterier",
+                                "jev": True,
+                            })
                         return None
                     if isinstance(triage.get("fit"), (int, float)):
                         poang += 10 * triage["fit"]

@@ -30,6 +30,7 @@ from ..jobs.stadare import (
 )
 from ..kvotfel import ar_kreditslut, kundtext_for, larma_kreditslut
 from ..leads import existens, sidhamtning, sparad_research, upptagna
+from ..leads.sources import merinfo
 from ..leads.webbsignal import mat_webbplats
 from ..leads.autonomy import LEVELS as AUTONOMY_LEVELS
 from ..leads.autonomy import describe as describe_autonomy
@@ -2838,7 +2839,7 @@ async def _kor_sokrunda(app_state, tenant: dict, batch_id: str, u: dict) -> dict
     som helst."""
     storage = app_state.storage
     tmp: dict = {
-        "mal": u["mal"], "levererade": u["levererade"], "rundor": u["rundor"],
+        "mal": u["mal"], "levererade": u["levererade"], "rundor": u["rundor"], "bred": u.get("bred"),
         "kandidater": [], "tratt": [], "listspar": [], "webbpool": {}, "utslag": [],
     }
     skrap = sidhamtning.starta(storage, tenant["tenant_id"], tak=u["tak"], webb_tak=u["webb_tak"])
@@ -2888,6 +2889,12 @@ async def _sla_in_sokrunda(app_state, tenant: dict, batch_id: str, rond: dict) -
     # En runda där en parallell körning tog alla bolag säger inget om
     # målgruppen och räknas inte som tom (fyra körningar samtidigt 2026-10-15).
     if tmp["kandidater"]:
+        k["tomma_rundor"] = 0
+    elif not tagna and not rond["fel"] and not k.get("bred") and merinfo.aktiv():
+        # Kundens egna branscher är genomsökta i området: nästa runda söker
+        # brett i samma område i stället för att räkna mot slutet
+        # (korning.TOMMA_RUNDOR, Antons beställning 2026-10-23).
+        k["bred"] = True
         k["tomma_rundor"] = 0
     elif not tagna:
         k["tomma_rundor"] = int(k.get("tomma_rundor") or 0) + 1
@@ -3025,6 +3032,7 @@ async def _fyll_pa_last(app_state, tenant: dict, batch_id: str) -> dict | None:
                 "mal": k["mal"],
                 "levererade": k["levererade"],
                 "rundor": k["rundor"],
+                "bred": bool(k.get("bred")),
                 "is_test": bool(k.get("is_test")),
             }
         try:

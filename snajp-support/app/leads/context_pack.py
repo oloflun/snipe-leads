@@ -87,6 +87,21 @@ def _med_overrides(icp: dict | None, overrides: dict | None) -> dict | None:
     # Lokal import av samma skäl som render_icp nedan: icp.py importerar
     # härifrån, och en toppnivåimport ger en cirkel.
     from .icp import LIST_FIELDS
+    from .sources.allabolag import ar_ortnamn
+
+    # En ort i branschfältet är ett område, inte en bransch. Main 2026-10-22:
+    # "Umeå" som bransch blev sökordet "Umeå" hos allabolag, i kundens
+    # Göteborg, och en körning på 100 leads undersökte 3 bolag.
+    branscher = overrides.get("industries")
+    if branscher:
+        orter = [b for b in branscher if ar_ortnamn(b)]
+        if orter:
+            kvar = [b for b in branscher if b not in orter]
+            overrides = {
+                **overrides,
+                "industries": kvar or None,
+                "geography": list(dict.fromkeys([*(overrides.get("geography") or []), *orter])),
+            }
 
     sammanslagen = dict(icp or {})
 
