@@ -140,6 +140,11 @@ def _kommunnamn() -> dict[str, str]:
     return {k["slug"]: k["namn"] for l in taxonomi()["lan"] for k in l["kommuner"]}
 
 
+#: Skiljetecken mellan områden i samma fält ("Göteborg & Umeå", "Borås, Alingsås").
+_OMRADESDELARE = re.compile(r"\s*(?:&|\+|/|;|,|\boch\b|\band\b)\s*", re.IGNORECASE)
+_PARENTES = re.compile(r"(?P<yttre>[^()]*?)\s*\((?P<inre>[^()]+)\)\s*")
+
+
 def valj_filter(termer: list[str], *, regioner: list[str] | tuple[str, ...] = ()) -> list[str | None] | None:
     """Kundens område → allabolags geofilter, ett per sökning:
     "county=Västerbotten", "municipality=Mölndal", eller None (hela landet).
@@ -166,7 +171,8 @@ def valj_filter(termer: list[str], *, regioner: list[str] | tuple[str, ...] = ()
     kommunnamn = _kommunnamn()
     lan: list[str] = []
     kommuner: list[tuple[str, str]] = []
-    for term in termer:
+
+    def tolka(term: str) -> bool:
         hel = _norm(term).strip()
         n = ORTALIAS.get(hel.removesuffix(" lan").strip(), hel.removesuffix(" lan").strip())
         if n not in LANDSDELAR and n not in kommun_index and n not in lan_index and not hel.endswith(" lan"):
@@ -175,7 +181,7 @@ def valj_filter(termer: list[str], *, regioner: list[str] | tuple[str, ...] = ()
                 logger.info("allabolag: området %r tolkas som %r.", term, gissning)
                 n = gissning
         if n in LANDSDELAR:
-            lan += list(LANDSDELAR[n])
+            lan.extend(LANDSDELAR[n])
         elif hel.endswith(" lan") and (n in lan_index or hel in lan_index):
             lan.append(lan_index.get(hel) or lan_index[n])
         elif n in kommun_index:
@@ -183,7 +189,25 @@ def valj_filter(termer: list[str], *, regioner: list[str] | tuple[str, ...] = ()
         elif n in lan_index:
             lan.append(lan_index[n])
         else:
-            logger.info("allabolag: området %r känns inte igen.", term)
+            return False
+        return True
+
+    # Kundens fritext bär ofta flera områden i ett fält: main 2026-10-22,
+    # "Göteborg & Norrland (Umeå)" gav None och hela registret föll bort, så
+    # körningen hängde på den öppna sökningen. Varje del tolkas för sig, och
+    # en parentes preciserar: "Norrland (Umeå)" är Umeå, med Norrland som
+    # reserv om parentesen inte är en ort.
+    for term in termer:
+        for del_ in _OMRADESDELARE.split(term):
+            del_ = del_.strip()
+            if not del_:
+                continue
+            m = _PARENTES.fullmatch(del_)
+            if m:
+                if not (tolka(m.group("inre")) or tolka(m.group("yttre"))):
+                    logger.info("allabolag: området %r känns inte igen.", del_)
+            elif not tolka(del_):
+                logger.info("allabolag: området %r känns inte igen.", del_)
     ut = [f"county={LAN[l]}" for l in dict.fromkeys(lan) if l in LAN]
     ut += [
         f"municipality={kommunnamn[k]}"

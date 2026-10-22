@@ -99,6 +99,14 @@ def test_registret_ar_ett_filter_inte_en_kontaktkalla(sida):
         (["Luelå"], ["municipality=Luleå"]),
         (["Gbg"], ["municipality=Göteborg"]),
         (["Atlantis"], None),
+        # Flera områden i ett fält (main 2026-10-22: hela strängen gav None).
+        (["Göteborg & Norrland (Umeå)"], ["municipality=Göteborg", "municipality=Umeå"]),
+        (["Borås, Alingsås och Mölndal"], ["municipality=Borås", "municipality=Alingsås", "municipality=Mölndal"]),
+        (["Helsingborg/Lund"], ["municipality=Helsingborg", "municipality=Lund"]),
+        # Parentesen preciserar; är den ingen ort gäller det yttre.
+        (["Norrland (Umeå)"], ["municipality=Umeå"]),
+        (["Norrland (Atlantis)"], ["county=Norrbotten", "county=Västerbotten", "county=Jämtland",
+                                   "county=Västernorrland", "county=Gävleborg"]),
     ],
 )
 def test_geofiltret(termer, vantat):
