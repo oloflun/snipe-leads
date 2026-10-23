@@ -918,6 +918,35 @@ class MemoryStorage:
             per_dag[dag] = per_dag.get(dag, 0) + 1
         return max(per_dag.values(), default=0)
 
+    async def leveransutfall(self, tenant_id: str, *, dagar: int = 14) -> dict[str, int]:
+        grans = datetime.now(timezone.utc) - timedelta(days=dagar)
+        ut = {"skickade": 0, "studsade": 0, "klagomal": 0}
+        for m in self.outreach_messages.get(tenant_id, []):
+            t = m.get("sent_at")
+            if m.get("direction") != "outbound" or not t:
+                continue
+            if isinstance(t, str):
+                t = datetime.fromisoformat(t)
+            if t.tzinfo is None:
+                t = t.replace(tzinfo=timezone.utc)
+            if t < grans:
+                continue
+            ut["skickade"] += 1
+            if m.get("leverans") == "studs":
+                ut["studsade"] += 1
+            elif m.get("leverans") == "klagomal":
+                ut["klagomal"] += 1
+        return ut
+
+    async def markera_leverans(self, tenant_id: str, message_id: str, *, utfall: str, at) -> dict[str, Any] | None:
+        for m in self.outreach_messages.get(tenant_id, []):
+            if m["id"] == message_id and m.get("direction") == "outbound":
+                # Ett klagomål väger tyngre än en studs och skrivs aldrig över.
+                if m.get("leverans") != "klagomal":
+                    m["leverans"], m["leverans_at"] = utfall, at
+                return m
+        return None
+
     async def last_contact_with_company(
         self, tenant_id: str, foretagsnyckel: str, *, utom_trad: str | None = None
     ):

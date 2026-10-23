@@ -9,6 +9,46 @@ möjligt), vad det betyder i koden.
 
 ---
 
+## 2026-10-24 (Sebbe) — Leveransen: ren text först, flack volym, stopp vid studs och klagomål, kort fot till info@
+
+**Beslut.** "Börja med leveransdelen: ren text i första mejlet, flack
+volymkurva med stopp vid studs/klagomål, kort fot till funktionsadresser."
+
+**Resonemang.** ~600 kallmejl gav 9 svar: 2 mänskliga (båda nej) och resten
+autosvar. Ett mejl som fastnar i skräpfiltret ger inget autosvar, så de få
+autosvaren tyder på att många mejl aldrig nådde inkorgen. Dubblingen från
+2026-10-21 (20 → 40 → 80 → 160) släppte ut större delen på några dagar från
+`snajp.se`, som nästan inte hade fått några svar. Varje första mejl bar
+logotyp och HTML, och en GDPR-fot lika lång som själva mejlet. Inget i
+systemet visste hur många mejl som studsat eller markerats som skräppost.
+Hela diagnosen: `docs/UTSKICK-SVARSFREKVENS-DIAGNOS-2026-10-24.md`.
+
+**I koden.**
+- `send_guard` regel 5d: taket är största dagsvolymen senaste sju dagarna
+  + 5, lägst 20, högst `TAK_PER_DAG` = 50. Ersätter dubblingen från 2026-10-21.
+- Regel 5e (ny): leveransstopp. Med fler än 0,1 % klagomål eller fler än 3 %
+  studsar (minst 20 skickade) de senaste 14 dagarna står tenantens utskick
+  still (köa om, även Skicka nu) tills händelserna är äldre än fönstret.
+  Skälet syns på köposten.
+- Resends webhook `POST /api/webhooks/resend/emails` (email.bounced,
+  email.complained) skriver `outreach_messages.leverans` (migration 113) och
+  lägger adressen i suppressions. Tillfälliga studsar räknas inte. Utskicken
+  bär taggarna `tenant` och `meddelande` så att händelsen hittar rätt.
+- Det första mejlet i en tråd går utan HTML och logotyp, och provmejlet följer
+  samma regel. Uppföljningarna bär logotypen som förut.
+- Kort fot till funktionsadresser: avsändare, org.nr, adress och
+  avregistrering, utan art. 14-stycken. Regel 2 kräver policylänken bara vid
+  en personlig adress, liksom regel 4. Personliga adresser får hela foten som
+  förut.
+
+**Kvar att göra (inte kod).** Registrera webhooken hos Resend för båda
+miljöerna och sätt `RESEND_WEBHOOK_SECRET` på api. Utan den svarar webhooken
+401 och stoppet ser inga händelser. Kör migration 113 i varje miljö. En
+separat utskicksdomän och åtgärderna för erbjudandet (Antons beslut) ingår
+inte här.
+
+---
+
 ## 2026-10-23 (Anton) — Körningar ska leverera beställt antal: hela registret, sedan brett i området
 
 **Beslut.** "Läs senaste committen från Sebbe och gör vad som krävs för att

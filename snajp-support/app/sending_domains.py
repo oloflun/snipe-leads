@@ -80,3 +80,56 @@ def verify_webhook(raw: bytes, headers: dict[str,str]) -> bool:
       expected=base64.b64encode(hmac.new(key,msg,hashlib.sha256).digest()).decode()
       return any(hmac.compare_digest(expected,x.split(",",1)[-1]) for x in headers['svix-signature'].split())
     except KeyError:return False
+
+
+#: Resends händelser för ett skickat mejl som leveransstoppet räknar
+#: (send_guard regel 5e, Sebbe 2026-10-24).
+_LEVERANSHANDELSER = {"email.bounced": "studs", "email.complained": "klagomal"}
+
+
+def _taggar(data: dict) -> dict[str, str]:
+    """Resend skickar taggarna som objekt; listformen (som i sändanropet)
+    tas också emot."""
+    tags = data.get("tags") or {}
+    if isinstance(tags, list):
+        return {str(t.get("name")): str(t.get("value")) for t in tags if isinstance(t, dict)}
+    return {str(k): str(v) for k, v in tags.items()} if isinstance(tags, dict) else {}
+
+
+async def apply_email_event(storage, payload: dict) -> bool:
+    """Studs eller klagomål på ett leadsutskick: utfallet på meddelandet och
+    adressen i tenantens suppressions, så att den aldrig kontaktas igen.
+
+    Taggarna (tenant, meddelande) sätts av scheduler._process_due_item; utan
+    dem är händelsen inte ett leadsutskick och ignoreras. En tillfällig studs
+    (full brevlåda) räknas inte: adressen finns, och nästa mejl kan gå fram."""
+    import uuid
+    from datetime import datetime, timezone
+
+    utfall = _LEVERANSHANDELSER.get(str(payload.get("type") or ""))
+    data = payload.get("data") or {}
+    if not utfall:
+        return False
+    if utfall == "studs" and str((data.get("bounce") or {}).get("type") or "").lower() == "transient":
+        return False
+    taggar = _taggar(data)
+    tenant_id, meddelande = taggar.get("tenant", ""), taggar.get("meddelande", "")
+    try:
+        uuid.UUID(meddelande)
+    except ValueError:
+        return False
+    if not tenant_id:
+        return False
+    try:
+        rad = await storage.markera_leverans(
+            tenant_id, meddelande, utfall=utfall, at=datetime.now(timezone.utc)
+        )
+    except Exception:  # noqa: BLE001 — en främmande tagg (ogiltigt tenant-id) ska inte ge 500 och omförsök
+        return False
+    if not rad:
+        return False
+    mottagare = data.get("to") or []
+    for adress in [mottagare] if isinstance(mottagare, str) else mottagare:
+        if adress and "@" in str(adress):
+            await storage.add_suppression(tenant_id, email=str(adress), reason=utfall)
+    return True

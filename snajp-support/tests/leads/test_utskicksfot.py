@@ -12,8 +12,10 @@ from datetime import datetime, timezone
 import pytest
 
 from app.leads.send_guard import (
+    BLOCKERA,
     SKICKA,
     Avsandare,
+    Leveransutfall,
     TenantHistorik,
     Utskick,
     check_send_guard,
@@ -42,6 +44,7 @@ def _historik(**overrides) -> TenantHistorik:
         skickade_idag=0,
         tenant_alder_dagar=400,
         storsta_dagsvolym=100,
+        leverans=Leveransutfall(skickade=0, studsade=0, klagomal=0),
         senaste_kontakt_med_foretaget=None,
         suppressions=frozenset(),
         tidigare_kontaktade=frozenset(),
@@ -127,6 +130,26 @@ def test_lanken_bar_ordet_guarden_letar_efter():
     """Regel 2 letar efter avregistrera/unsubscribe/optout i en http-länk. En
     kortare sökväg (/u/<token>) hade blockerat varje utskick."""
     assert "avregistrera" in avregistreringslank("https://snajp.se", "x" * 32)
+
+
+def test_kort_fot_till_funktionsadress():
+    """Sebbe 2026-10-24: till info@ och kontakt@ bara avsändare och
+    avregistrering, inga GDPR-stycken (art. 14 gäller personuppgifter). Den
+    korta foten klarar spärrarna; till en personlig adress gör den det inte."""
+    kort = bygg_fot(
+        foretagsnamn=AVSANDARE.foretagsnamn,
+        orgnr=AVSANDARE.orgnr,
+        postadress=AVSANDARE.postadress,
+        lank=avregistreringslank("https://snajp.se", "a" * 32),
+        policy_url="https://livrustning.example/integritetspolicy",
+        personlig=False,
+    )
+    assert "personuppgiftsansvarig" not in kort and "hämtad" not in kort
+    assert AVSANDARE.orgnr in kort and "avregistrera" in kort
+    assert len(kort) < len(FOT) / 2
+    text = "Hej,\n\nEtt kort och relevant erbjudande.\n\n" + kort
+    assert _dom(text, personlig=False).atgard == SKICKA
+    assert _dom(text, personlig=True).atgard == BLOCKERA
 
 
 def test_fot_utan_orgnr_och_adress_har_namn_och_lank():

@@ -1265,6 +1265,41 @@ class PostgresStorage:
                 dagar,
             )
 
+    async def leveransutfall(self, tenant_id: str, *, dagar: int = 14) -> dict[str, int]:
+        async with self._scoped(tenant_id) as conn:
+            rad = await conn.fetchrow(
+                """
+                select count(*) as skickade,
+                       count(*) filter (where leverans = 'studs') as studsade,
+                       count(*) filter (where leverans = 'klagomal') as klagomal
+                  from outreach_messages
+                 where tenant_id = $1
+                   and direction = 'outbound'
+                   and sent_at is not null
+                   and sent_at >= now() - make_interval(days => $2)
+                """,
+                tenant_id,
+                dagar,
+            )
+        return {k: int(rad[k] or 0) for k in ("skickade", "studsade", "klagomal")}
+
+    async def markera_leverans(self, tenant_id: str, message_id: str, *, utfall: str, at):
+        async with self._scoped(tenant_id) as conn:
+            rad = await conn.fetchrow(
+                """
+                update outreach_messages
+                   set leverans = case when leverans = 'klagomal' then leverans else $3 end,
+                       leverans_at = case when leverans = 'klagomal' then leverans_at else $4 end
+                 where tenant_id = $1 and id = $2::uuid and direction = 'outbound'
+                returning id, thread_id, leverans
+                """,
+                tenant_id,
+                message_id,
+                utfall,
+                at,
+            )
+        return _row(rad) if rad else None
+
     async def last_contact_with_company(
         self, tenant_id: str, foretagsnyckel: str, *, utom_trad: str | None = None
     ):

@@ -75,6 +75,7 @@ async def lagstadgad_fot(storage, tenant_id: str, prospect_email: str | None, br
     Blocket byts mot den aktuella foten; avregistreringstoken är idempotent
     per (tenant, adress) så länken i tidigare mejl fortsätter gälla."""
     from ..config import get_settings  # lokalt: undviker cirkulär import vid modulladdning
+    from ..leads.sources.base import Prospect
 
     bas_url = get_settings().publik_bas_url
     tenant = await storage.get_tenant(tenant_id) or {}
@@ -100,6 +101,8 @@ async def lagstadgad_fot(storage, tenant_id: str, prospect_email: str | None, br
             # policyrad och send_guard regel 2 blockerar med besked — samma
             # fail-closed-mönster som resten av underlaget.
             policy_url=str(tenant.get("policy_url") or "").strip(),
+            # Samma bedömning som send_guard regel 4 får i scheduler.
+            personlig=Prospect(company_name="", contact_email=prospect_email).epost_ar_personlig,
         ),
     )
 

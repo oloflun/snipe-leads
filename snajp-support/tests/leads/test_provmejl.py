@@ -2,6 +2,7 @@
 till kundens EGEN adress — och ingenting i kön, tråden eller leadet ändras."""
 
 import uuid
+from datetime import datetime, timezone
 
 import pytest
 
@@ -66,7 +67,8 @@ async def test_provet_gar_till_kundens_adress_med_signatur_och_rubbar_inget():
     [mejl] = provider.skickat
     assert mejl["to"] == "kund@example.se"
     assert bygg_signaturtext({k: v for k, v in SIGNATUR.items() if k != "aktiv"}) in mejl["body"]
-    assert "logga.png" in (mejl["html"] or "")
+    # Första mejlet i tråden går som ren text, utan logotyp (2026-10-24).
+    assert mejl["html"] is None
     assert mejl["headers"] == PROVHEADRAR
     # Kön, meddelandet och texten är orörda.
     assert storage.send_queue[TENANT][-1]["status"] == "queued"
@@ -174,6 +176,13 @@ async def test_provet_byter_en_foraldrad_signatur_i_text_och_html():
     body = f"Hej!\n\nEn idé.\n\nVänliga hälsningar,\n{bygg_signaturtext(gammal)}\n\n{FOT}"
     storage = MemoryStorage()
     item_id, _ = _seed(storage, body=body)
+    # En uppföljning: tråden har redan ett skickat mejl, så HTML-delen med
+    # logotypen följer med (det första går som ren text).
+    thread_id = storage.send_queue[TENANT][-1]["thread_id"]
+    storage.outreach_messages[TENANT].insert(0, {
+        "id": str(uuid.uuid4()), "thread_id": thread_id, "direction": "outbound",
+        "sent_at": datetime(2026, 10, 1, tzinfo=timezone.utc), "body": "Första.", "subject": "Hej",
+    })
     storage.agent_settings[(TENANT, "leads")] = {"signatur": {**SIGNATUR, "bolag": "Snajp Sverige"}}
     provider = _Levererande()
 
