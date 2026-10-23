@@ -58,6 +58,14 @@ _MARKORER: tuple[tuple[str, re.Pattern[str], str], ...] = (
     ("effektivisera", re.compile(r"\b(?:effektivisera\w*|effektivitet\w*|optimera\w*)", re.IGNORECASE),
      "effektivisera/effektivitet/optimera"),
     ("i_dagens", re.compile(r"\bi\s+dagens\b", re.IGNORECASE), "\"i dagens …\""),
+    # Säljklyschorna (Sebbe 2026-10-24, skrivstilens omgång 7): orden i varje
+    # säljmejl, som gör ett mejl till reklam på en halv sekund. Inte "dygnet
+    # runt": det är en egenskap hos Supportagenten och står i facit.
+    ("klyscha", re.compile(
+        r"\b(?:skräddarsy\w*|sömlös\w*|smidig\w*|frigör\w*|spara\w*\s+tid\s+och\s+pengar|nästa\s+nivå"
+        r"|värdefull\s+tid|innovativ\w*|kraftfull\w*|verkligen|perfekt\w*|missa\s+inte|ta\s+del\s+av"
+        r"|en\s+möjlighet\s+att|hjälpa?\s+er\s+(?:att\s+)?växa|det\s+som\s+spelar\s+roll)\b",
+        re.IGNORECASE), "säljklyscha"),
     ("utropstecken", re.compile(r"!"), "utropstecken"),
     ("antagande_om_dem",
      re.compile(r"\b(?:kan\s+jag\s+tänka\s+mig|vet\s+jag\s+att|är\s+jag\s+säker\s+på|jag\s+utgår\s+från|jag\s+gissar)\b",

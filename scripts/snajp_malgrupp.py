@@ -45,7 +45,8 @@ from seed_demo import Api, deploy_env  # noqa: E402
 PRODUKTER = [
     {
         "namn": "Iris, leadsagenten",
-        "nytta": "hittar och kvalificerar nya företagskunder och skriver färdiga utkast som ni själva godkänner innan något skickas",
+        # Sebbe 2026-10-24: leadsen anpassas efter exakt det kunden söker.
+        "nytta": "hittar nya företagskunder anpassade efter exakt det ni söker (bransch, ort och storlek), läser varje bolags webbplats och skriver ett färdigt första mejl till vart och ett, som ni själva godkänner innan något skickas",
     },
     {
         "namn": "Supportagenten",
@@ -68,6 +69,7 @@ IRIS_INSTRUKTION = f"""{MARKOR}
 
 - Erbjud den produkt researchen valt, och bara den. Nämn aldrig de andra agenterna.
 - Nämn aldrig kvitton, bokföring eller Kvittohanteraren: den säljs inte just nu.
+- När produkten är Iris är mejlet självt beviset. Säg det i en kort mening efter erbjudandet, med de här fakta och inga andra: Iris hittade bolaget, läste deras webbplats och skrev mejlet, och en människa hos Snajp läste det innan det skickades.
 - Avsluta med erbjudandets handling enligt villkoren under "Erbjudandet i det här mejlet" (svara "ja", svara med något bifogat, svara så bokar vi), aldrig med en fråga.
 """
 

@@ -9,6 +9,39 @@ möjligt), vad det betyder i koden.
 
 ---
 
+## 2026-10-24 (Sebbe) — Utskickens text: äkta, konkret, trovärdig (skrivstilens omgång 7)
+
+**Beslut.** "Förbättra utskicken, texten. De ska sälja in vår produkt bra,
+konkret, kort och tydligt. Vi måste få mer svar och bli trovärdiga och
+attraktiva … De får inte bli halvdana, halvbra. De ska vara riktigt bra."
+Och om Iris: den hittar företagsleads "anpassad efter det kunden söker".
+
+**Resonemang.** Facit-ingångarna återberättade bolagets egen säljtext, som
+mottagaren känner igen som sin hemsida omskriven. Erbjudandena var
+abstrakta ("nya kunddialoger"), och inget i mejlet gav ett skäl att tro på
+en okänd avsändare.
+
+**I koden och prompterna.**
+- `leads-skrivstil.md` omgång 7: kärnan (äkta, konkret, tryggt att svara);
+  ingången väljer en händelse ur `trigger_events` först, sedan en konkret sak
+  på sajten och sist löftet, och bär alltid ett konkret substantiv;
+  trovärdighet bara ur underlaget; klyschlistan; konkreta ämnesrader.
+- Grundprompten § 10.1–10.2 följer skrivstilen (50–90 ord, villkorens
+  handling). Tidigare stod det 70–130 ord och "demo eller samtal".
+- `_INGANGSUPPGIFT` och omskrivningen i `leads_research_v2.py` har samma
+  ordning för underlaget.
+- Stilgrinden: nytt fynd `klyscha`. Facit 2026-10-16 passerar oförändrat.
+- `scripts/snajp_malgrupp.py`: Iris nytta säger att leadsen anpassas efter
+  bransch, ort och storlek. Iris-mejlen får beviset att mejlet självt är
+  skrivet av Iris och läst av en människa före utskick.
+
+**Inte ändrat (Antons beslut).** Erbjudandena och deras villkor (pilotens
+"20 företag", de lika vikterna) och regeln att mejlet aldrig slutar med en
+fråga. "Upp till 250 leads" står inte i mejlen: en körning tar högst 200
+och kunskapsbasen säger 150 prospekt per månad.
+
+---
+
 ## 2026-10-24 (Sebbe) — Leveransen: ren text först, flack volym, stopp vid studs och klagomål, kort fot till info@
 
 **Beslut.** "Börja med leveransdelen: ren text i första mejlet, flack
