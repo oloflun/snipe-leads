@@ -890,6 +890,7 @@ def _stilfynd(
     # Ämnesraden (Anton 2026-10-15): inget bolagsnamn, ingen produkt, inte
     # samma början som ett annat mejl i körningen.
     fynd += stil.amne_fynd(str(draft.get("subject") or ""), bolag=bolag, produkt=produkt, andra=andra_amnen or [])
+    fynd += stil.abstrakt_amne(str(draft.get("subject") or ""))
     # for_langt: pilotens och garantins villkor ger ofta över 90 ord; att skriva
     # om för det kostar varv utan att kunna lyckas (facit tillåter det också).
     return [a.beskrivning for a in fynd if a.kod not in ("lang_mening", "samma_uppmaning", "for_langt")]

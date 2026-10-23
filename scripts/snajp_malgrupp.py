@@ -69,7 +69,7 @@ IRIS_INSTRUKTION = f"""{MARKOR}
 
 - Erbjud den produkt researchen valt, och bara den. Nämn aldrig de andra agenterna.
 - Nämn aldrig kvitton, bokföring eller Kvittohanteraren: den säljs inte just nu.
-- När produkten är Iris är mejlet självt beviset. Säg det i en kort mening efter erbjudandet, med de här fakta och inga andra: Iris hittade bolaget, läste deras webbplats och skrev mejlet, och en människa hos Snajp läste det innan det skickades.
+- Säg aldrig att Supportagenten hittade bolaget eller skrev mejlet. Det gör bara Iris, och då står det i Iris villkor.
 - Avsluta med erbjudandets handling enligt villkoren under "Erbjudandet i det här mejlet" (svara "ja", svara med något bifogat, svara så bokar vi), aldrig med en fråga.
 """
 
@@ -86,6 +86,21 @@ _PILOT = (
     "personligen. Pilotföretagen får 50 % rabatt första året om de vill fortsätta, och 25 % så länge de "
     "stannar. Handling: svara \"pilot\" på mejlet, så håller vi en plats åt er."
 )
+#: Beviset i varje Iris-mejl (Sebbe 2026-10-24): mejlet är självt ett prov på
+#: Iris. Står i villkoren och inte i instruktionen, så att det bara följer med
+#: Iris-erbjudandena: som instruktion skrev modellen samma mening i ett
+#: Supportagent-mejl ("Supportagenten hittade …"), vilket inte är sant.
+_IRIS_BEVIS = (
+    "Det här mejlet är skrivet av Iris, som hittade er och läste er webbplats, och vi läste det "
+    "innan det skickades."
+)
+
+
+def _med_bevis(villkor: str) -> str:
+    fore, _, handling = villkor.partition(" Handling:")
+    return f"{fore} {_IRIS_BEVIS} Handling:{handling}"
+
+
 ERBJUDANDEN = {
     "aktiva": [{"nyckel": n, "vikt": 1} for n in ("gratis_prov", "garanti", "pilot")],
     "villkor": {
@@ -100,6 +115,8 @@ ERBJUDANDEN = {
         "pilot": {agent: _PILOT.format(agent=agent) for agent in (IRIS, SUPPORT)},
     },
 }
+for _villkor in ERBJUDANDEN["villkor"].values():
+    _villkor[IRIS] = _med_bevis(_villkor[IRIS])
 
 
 def main() -> None:
