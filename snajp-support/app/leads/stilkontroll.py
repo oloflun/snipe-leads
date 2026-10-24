@@ -49,15 +49,30 @@ _MARKORER: tuple[tuple[str, re.Pattern[str], str], ...] = (
     # Ett tankstreck i intervall ("15–20 minuter") står utan blanksteg och
     # träffas inte; ett med blanksteg runt sig är ett tankstreck i löptext.
     ("tankstreck", re.compile(r"—|\s[–-]\s"), "tankstreck i brödtexten"),
-    ("jag_ser_att", re.compile(r"\bjag\s+(?:ser|såg|märkte|noterade|har\s+sett)\s+att\b", re.IGNORECASE),
-     "börjar i vår iakttagelse (\"Jag ser att …\")"),
+    ("jag_ser_att", re.compile(r"\b(?:jag|vi)\s+(?:ser|såg|märkte|noterade|har\s+sett)\s+att\b", re.IGNORECASE),
+     "börjar i vår iakttagelse (\"Jag ser att …\", \"Vi såg att …\")"),
+    # Provet 2026-10-24 med Iris-formen: "Iris har hittat fem
+    # bostadsrättsföreningar …". De tas fram först efter ett ja; att de redan
+    # är hittade är inte sant.
+    ("redan_hittat", re.compile(r"\b(?:iris|vi|agenten)\s+har\s+(?:redan\s+)?(?:hittat|tagit\s+fram)\b", re.IGNORECASE),
+     "påstår att leadsen redan är framtagna (de tas fram efter ett ja)"),
+    ("utfyllnad", re.compile(r"\bkan\s+hjälpa\s+(?:er|dig)\s+(?:att|med)\b", re.IGNORECASE),
+     "utfyllnad (\"kan hjälpa er att …\"); säg vad som händer"),
     ("vi_har_skapat", re.compile(r"\bvi\s+har\s+(?:skapat|utvecklat|byggt|tagit\s+fram)\b", re.IGNORECASE),
      "\"vi har skapat/utvecklat\""),
     ("ar_en_ai_agent", re.compile(r"\bär\s+en\s+(?:\w+\s+)?(?:AI-?\s?)?(?:agent|assistent)\s+som\b", re.IGNORECASE),
      "\"X är en AI-agent som …\""),
-    ("effektivisera", re.compile(r"\b(?:effektivisera\w*|effektivitet\w*|optimera\w*)", re.IGNORECASE),
+    ("effektivisera", re.compile(r"\b(?:effektiv\w*|optimera\w*)", re.IGNORECASE),
      "effektivisera/effektivitet/optimera"),
     ("i_dagens", re.compile(r"\bi\s+dagens\b", re.IGNORECASE), "\"i dagens …\""),
+    # Säljklyschorna (Sebbe 2026-10-24, skrivstilens omgång 7): orden i varje
+    # säljmejl, som gör ett mejl till reklam på en halv sekund. Inte "dygnet
+    # runt": det är en egenskap hos Supportagenten och står i facit.
+    ("klyscha", re.compile(
+        r"\b(?:skräddarsy\w*|sömlös\w*|smidig\w*|frigör\w*|spara\w*\s+tid\s+och\s+pengar|nästa\s+nivå"
+        r"|värdefull\s+tid|innovativ\w*|kraftfull\w*|verkligen|perfekt\w*|missa\s+inte|ta\s+del\s+av"
+        r"|en\s+möjlighet\s+att|hjälpa?\s+er\s+(?:att\s+)?växa|det\s+som\s+spelar\s+roll)\b",
+        re.IGNORECASE), "säljklyscha"),
     ("utropstecken", re.compile(r"!"), "utropstecken"),
     ("antagande_om_dem",
      re.compile(r"\b(?:kan\s+jag\s+tänka\s+mig|vet\s+jag\s+att|är\s+jag\s+säker\s+på|jag\s+utgår\s+från|jag\s+gissar)\b",
@@ -118,7 +133,13 @@ _MALLORD = re.compile(
     # nästa …", "det är svårt att", "tar tid från att" och "kräver fullt
     # fokus" stod i fem till nio ingångar var.
     r"|\binte\s+(?:på|till|med)\s+att\s+(?:hitta|jaga|leta)\b|\bdet\s+är\s+svårt\s+att\b|\bär\s+det\s+svårt\s+att\b"
-    r"|\btar\s+tid\s+från\s+att\b|\bkräver\s+(?:fullt|ditt|ert)\s+fokus\b",
+    r"|\btar\s+tid\s+från\s+att\b|\bkräver\s+(?:fullt|ditt|ert)\s+fokus\b"
+    # Provet 2026-10-24 (fem utkast efter omgång 7): "kräver att ni är på
+    # plats i varje projekt, inte att lägga tid på att hitta nästa" i två av
+    # fem, och "kan det vara svårt" i ett.
+    r"|\bkräver\s+att\s+(?:ni|du)\s+(?:kan\s+)?(?:vara|är)\s+på\s+plats\b"
+    r"|\binte\s+(?:att\s+)?(?:ni\s+|du\s+)?(?:lägga|lägger)\s+tid\s+på\b|\blägg\w*\s+tid\s+på\s+att\s+hitta\b"
+    r"|\bkan\s+(?:det\s+)?vara\s+svårt\b",
     re.IGNORECASE,
 )
 #: Registerfakta i ingången: ett antal (siffra eller ord) följt av anställda,
@@ -337,6 +358,26 @@ def amne_fynd(subject: str, *, bolag: str | None, produkt: str | None, andra: Se
     if len(_ord(amne)) > 8:
         fynd.append(Anmarkning("langt_amne", f"Stil: ämnesraden är över åtta ord: \"{amne}\"", allvarlig=True))
     return fynd
+
+
+def abstrakt_amne(subject: str) -> list[Anmarkning]:
+    """Provet 2026-10-24: "nya kunder", "nya företagskunder". En ämnesrad av
+    bara allmänna ord kunde stå på vilket mejl som helst. Egen funktion och
+    inte en del av amne_fynd: facit (INV-LEADS-UTKAST-002) prövar amne_fynd
+    på en ämnesrad efter att namnet strukits, och den ska stå sig."""
+    amne = " ".join(str(subject or "").split())
+    if amne and all(o in _ALLMANNA_AMNESORD for o in _ord(amne)):
+        return [Anmarkning("abstrakt_amne", f"Stil: ämnesraden säger inget om just dem: \"{amne}\"", allvarlig=True)]
+    return []
+
+
+#: Ord som inte gör en ämnesrad till deras (skrivstilens omgång 7). En
+#: ämnesrad av bara de här orden bär ingenting konkret ur ingången.
+_ALLMANNA_AMNESORD = frozenset({
+    "nya", "ny", "nytt", "fler", "mer", "kunder", "kund", "kunderna", "företagskunder", "företag", "kundfrågor",
+    "frågor", "frågorna", "leads", "affärer", "uppdrag", "uppdragen", "er", "era", "ert", "och", "för", "till",
+    "med", "om", "hitta", "tid", "tiden", "service", "support", "försäljning", "tillväxt",
+})
 
 
 def _forsta_namnled(kort: str) -> str:

@@ -69,6 +69,7 @@ def bygg_fot(
     kontakt_epost: str = "",
     policy_url: str = "",
     kalla: str = "offentliga företagsuppgifter",
+    personlig: bool = True,
 ) -> str:
     """Bottenraden. Fyra stycken, i den ordning en mottagare läser dem.
 
@@ -89,10 +90,21 @@ def bygg_fot(
 
     # Org.nr och postadress när kundregistret har dem (Anton 2026-10-10:
     # de får aldrig stoppa ett utskick).
-    rader = [
+    identitet = [
         "--",
         f"{foretagsnamn}, org.nr {orgnr}" if orgnr.strip() else foretagsnamn,
         *([postadress] if postadress.strip() else []),
+    ]
+    if not personlig:
+        # Kort fot till en funktionsadress (info@, kontakt@; Sebbe
+        # 2026-10-24). Art. 14 gäller bara personuppgifter (send_guard
+        # regel 4), och fyra meningar GDPR-text lika långa som mejlet fick
+        # varje utskick att se ut som ett massutskick. Avsändaren och
+        # avregistreringen står kvar: de krävs i alla mejl (regel 1 och 2).
+        return "\n".join([*identitet, "", f"Vill du inte få fler mejl från oss: {lank}"])
+
+    rader = [
+        *identitet,
         "",
         f"Du får det här mejlet därför att din adress är hämtad ur {kalla} och "
         f"vi bedömer att erbjudandet är relevant för din verksamhet. Ändamålet "

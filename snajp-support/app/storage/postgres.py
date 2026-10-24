@@ -1265,6 +1265,52 @@ class PostgresStorage:
                 dagar,
             )
 
+    async def leveransutfall(self, tenant_id: str, *, dagar: int = 14) -> dict[str, int]:
+        try:
+            async with self._scoped(tenant_id) as conn:
+                rad = await conn.fetchrow(
+                    """
+                    select count(*) as skickade,
+                           count(*) filter (where leverans = 'studs') as studsade,
+                           count(*) filter (where leverans = 'klagomal') as klagomal
+                      from outreach_messages
+                     where tenant_id = $1
+                       and direction = 'outbound'
+                       and sent_at is not null
+                       and sent_at >= now() - make_interval(days => $2)
+                    """,
+                    tenant_id,
+                    dagar,
+                )
+        except asyncpg.UndefinedColumnError:
+            # Migration 113 inte körd. Läsningen sker före varje utskick
+            # (send_guard regel 5e), och utan fallet hade en release som
+            # hann före migrationen stoppat alla utskick. Inga händelser kan
+            # heller ha skrivits utan kolumnen, så nollor är sanningen.
+            logger.warning("outreach_messages.leverans saknas: kör migration 113. Leveransstoppet är verkningslöst.")
+            return {"skickade": 0, "studsade": 0, "klagomal": 0}
+        return {k: int(rad[k] or 0) for k in ("skickade", "studsade", "klagomal")}
+
+    async def markera_leverans(self, tenant_id: str, message_id: str, *, utfall: str, at):
+        # Saknas kolumnen (migration 113 inte körd) kastar uppdateringen, och
+        # webhooken svarar fel så att Resend skickar händelsen igen senare
+        # (sending_domains.apply_email_event släpper igenom 42703).
+        async with self._scoped(tenant_id) as conn:
+            rad = await conn.fetchrow(
+                """
+                update outreach_messages
+                   set leverans = case when leverans = 'klagomal' then leverans else $3 end,
+                       leverans_at = case when leverans = 'klagomal' then leverans_at else $4 end
+                 where tenant_id = $1 and id = $2::uuid and direction = 'outbound'
+                returning id, thread_id, leverans
+                """,
+                tenant_id,
+                message_id,
+                utfall,
+                at,
+            )
+        return _row(rad) if rad else None
+
     async def last_contact_with_company(
         self, tenant_id: str, foretagsnyckel: str, *, utom_trad: str | None = None
     ):
