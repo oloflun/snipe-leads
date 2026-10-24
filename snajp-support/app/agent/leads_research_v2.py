@@ -858,6 +858,49 @@ _INGANGSFORMER: tuple[str, ...] = (
 )
 
 
+#: Iris-mejlen öppnar med erbjudandet (Sebbe 2026-10-24, förslag till Anton):
+#: ett Iris-mejl har bara ett moment ("hitta nästa kund"), och löftesingången
+#: blev samma konstlade mening i mejl efter mejl ("kräver att ni fokuserar på
+#: projekten, inte på att hitta nästa", två av fem i båda provvarven
+#: 2026-10-24, trots stilgrinden). Det starkaste ett Iris-mejl kan öppna med
+#: är det konkreta: vilka kunder Iris tar fram åt just dem, och var. Gäller
+#: bara när produkten är Iris, alltså när Snajp säljer Iris; kundernas egna
+#: produkter skrivs som förut.
+_IRIS_FORM = (
+    "## Mejlets form i det här mejlet (Iris: erbjudandet först)\n"
+    "Mejlet säljer Iris, och då öppnar det med erbjudandet, inte med en mening om bolagets "
+    "löfte och aldrig med att det tar tid att hitta kunder. Mottagaren ska i första meningen "
+    "se vilka kunder Iris tar fram åt just dem. Efter hälsningen, i den här ordningen:\n"
+    "1. Erbjudandet, i en mening: Iris tar fram villkorens antal av den kundtyp de säljer "
+    "till, i deras ort eller region, med villkorens innehåll (kontaktperson, färdigt första "
+    "mejl). Kundtypen hämtas ur deras sajt: vilka de bygger åt, säljer till eller arbetar "
+    "för, med deras ord. Står det inte där: företag som köper det de säljer, med deras egna "
+    "ord för tjänsten. Aldrig bara \"nya företagskunder\", \"kunder\" eller \"leads\" utan "
+    "kundtyp, och aldrig \"i er region\" när orten står i underlaget.\n"
+    "2. Varför just de, i en mening: det på deras sajt som visar vilka deras kunder är, med "
+    "deras ord. Inget smicker och ingen gissning.\n"
+    "3. Resten av villkoren (kostnad, bindning, garanti eller rabatt), och villkorens mening "
+    "om att mejlet är skrivet av Iris när den finns: den ska stå med.\n"
+    "4. Villkorens handling, sist och ensam i sitt stycke.\n"
+    "Högst 90 ord i brödtexten. Ämnesraden är kundtypen och orten i två till fem ord, utan "
+    "bolagets namn och utan Iris.\n\n"
+)
+
+#: Fynd som Iris-formen själv ger: varje Iris-mejl öppnar med produkten och
+#: erbjudandets ord, som handlingen i varje mejl med samma erbjudande
+#: (samma_uppmaning är undantagen av samma skäl). uppraknad_ingang: villkorens
+#: innehåll ("med kontaktperson och ett färdigt första mejl") står i första
+#: meningen och är en uppräkning av vad de får, inte av vad de säljer.
+_ERBJUDANDE_FORST_UNDANTAG = frozenset(
+    {"samma_ingang", "samma_konstruktion", "samma_fras", "kopierat_exempel", "agent_efter_loftet", "uppraknad_ingang"}
+)
+
+
+def erbjudande_forst(produkt: str | None) -> bool:
+    """Öppnar mejlet med erbjudandet? Bara när produkten är Iris."""
+    return stil.produktstam(produkt) == "iris"
+
+
 def _ingangsform(prospect_id: str | None) -> str:
     """Formen för just det här mejlet, deterministisk per prospekt."""
     digest = hashlib.sha256(str(prospect_id or "").encode("utf-8")).digest()
@@ -893,7 +936,10 @@ def _stilfynd(
     fynd += stil.abstrakt_amne(str(draft.get("subject") or ""))
     # for_langt: pilotens och garantins villkor ger ofta över 90 ord; att skriva
     # om för det kostar varv utan att kunna lyckas (facit tillåter det också).
-    return [a.beskrivning for a in fynd if a.kod not in ("lang_mening", "samma_uppmaning", "for_langt")]
+    undantag = {"lang_mening", "samma_uppmaning", "for_langt"}
+    if erbjudande_forst(produkt):
+        undantag |= _ERBJUDANDE_FORST_UNDANTAG
+    return [a.beskrivning for a in fynd if a.kod not in undantag]
 
 
 async def run_outreach_draft_v2(
@@ -942,7 +988,9 @@ async def run_outreach_draft_v2(
     andra_utkast = [str(r.get("body") or "") for r in koade]
     andra_amnen = [str(r.get("subject") or "") for r in koade]
     anvanda_ingangar = [i for i in (stil.ingang(t) for t in andra_utkast[-12:]) if i]
-    ingangsblock = (
+    produktnamn = erbjudanden.produkt_ur_research(research_summary)
+    iris_forst = erbjudande_forst(produktnamn)
+    ingangsblock = _IRIS_FORM if iris_forst else (
         f"## Ingångens form i det här mejlet\n{_ingangsform(thread.get('prospect_id'))}\n"
         "Formen är tilldelad just det här mejlet så att körningens mejl inte börjar likadant; "
         "innehållet hämtas ur bolagets egna ord.\n\n"
@@ -1029,10 +1077,16 @@ async def run_outreach_draft_v2(
         f"## Språkläge\n{language_state}\n\n"
         # Utan stilen platta humanizern tillbaka ingången och uppmaningen.
         f"## Skrivstil (behåll mejlets struktur och uppmaning enligt den)\n{leads_systemprompt.skrivstil()}"
-        "\n\n## Ingången\nIngången är skriven till mottagaren i andra person om just deras verksamhet. "
-        "Gör den inte allmän: inget \"man\", \"den som\", \"ett företag som\" och ingen etikett "
-        "som \"som ni gör\" eller \"som ert\". Behåll detaljen ur deras egen beskrivning."
-        "\n\n## Ämnesraden\nTvå till fem ord om deras löfte eller momentet. Skriv ALDRIG "
+        + (
+            # Iris-formen (2026-10-24): humanizern får inte flytta tillbaka
+            # löftet först eller stryka kundtypen och orten.
+            "\n\n" + _IRIS_FORM.strip() + "\nBehåll ordningen, kundtypen och orten exakt."
+            if iris_forst
+            else "\n\n## Ingången\nIngången är skriven till mottagaren i andra person om just deras verksamhet. "
+            "Gör den inte allmän: inget \"man\", \"den som\", \"ett företag som\" och ingen etikett "
+            "som \"som ni gör\" eller \"som ert\". Behåll detaljen ur deras egen beskrivning."
+        )
+        + "\n\n## Ämnesraden\nTvå till fem ord om det konkreta ur ingången. Skriv ALDRIG "
         "bolagets namn eller vår produkt i ämnesraden (Anton 2026-10-15)."
         # Utan blocket stryker eller skriver humanizern om erbjudandet och villkoren.
         + (f"\n\n{erbjudande.block()}" if erbjudande else "")
@@ -1082,15 +1136,15 @@ async def run_outreach_draft_v2(
     # tredje omskrivningen landade. Fynden som går att känna igen i kod prövas
     # här, och EN omskrivning med fynden utpekade sker innan humanizern, som
     # förblir sist (INV-LANG-002). Kostar ett anrop bara när något fälls.
-    produktnamn = erbjudanden.produkt_ur_research(research_summary)
-
     # 1a. Personalisera ingången, ALLTID (Anton 2026-10-12, andra gången):
     # nästan varje ingång var en allmän mening om branschen med en etikett
     # på ("när man …, som ni gör"), fast resten var anpassad. En extra runda
     # Personalisera i granskningen rättade det, så den rundan ligger nu i
     # kedjan: ett kort anrop som skriver om ENBART första stycket, i andra
     # person, med en detalj ur citaten. Resten av mejlet rörs inte.
-    if str(draft.get("body") or "").strip():
+    # Inte för Iris-formen (2026-10-24): där är första stycket erbjudandet,
+    # och steget hade skrivit tillbaka löftesingången.
+    if str(draft.get("body") or "").strip() and not iris_forst:
         personaliserad = await run_step(
             steps[0],
             ledger,
@@ -1117,9 +1171,16 @@ async def run_outreach_draft_v2(
             task=_UTKAST_V2_UPPGIFT
             + "\n\nDITT FÖRRA UTKAST FÄLLDES AV STILGRINDEN. Skriv om hela "
             "mejlet enligt skrivstilen så att varje punkt nedan är åtgärdad: "
-            "ingången bygger på något äkta hos dem (en händelse, en konkret sak "
-            "på sajten eller det de lovar sina kunder, med deras egna ord), "
-            "ställt mot momentet produkten löser, aldrig en uppräkning, "
+            + (
+                "mejlet följer formen under \"Mejlets form i det här mejlet\": "
+                "erbjudandet med kundtyp och ort först, sedan varför just de, "
+                "aldrig en mening om att det tar tid att hitta kunder; "
+                if iris_forst
+                else "ingången bygger på något äkta hos dem (en händelse, en konkret sak "
+                "på sajten eller det de lovar sina kunder, med deras egna ord), "
+                "ställt mot momentet produkten löser; "
+            )
+            + "aldrig en uppräkning, "
             "siffror, en säljklyscha eller en mallfras; ämnesraden är två till fem ord utan "
             "bolagets namn och utan produkten; produkten namnges före löftet; "
             "erbjudandets villkor och produktens namn står kvar ordagrant i "
@@ -1265,6 +1326,7 @@ async def run_outreach_draft_v2(
                     language_state=language_state,
                     humanizer_variant=last_humanizer_variant(trace.skills_used),
                     stilkontroll=True,
+                    stilundantag=_ERBJUDANDE_FORST_UNDANTAG if iris_forst else frozenset(),
                 )
             )
 

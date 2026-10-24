@@ -116,6 +116,7 @@ async def _queue_outreach_draft_impl(
     humanizer_variant: str,
     force_review: bool = False,
     stilkontroll: bool = False,
+    stilundantag: frozenset[str] = frozenset(),
 ) -> str:
     # Textkvalitetslagret (app/textkvalitet.py): sista efterkontrollen innan
     # texten kan nå en kund. Platshållare ("[förnamn]") kontrolleras på
@@ -177,6 +178,9 @@ async def _queue_outreach_draft_impl(
             if r.get("thread_id") != outreach.thread_id
         ]
         stilfynd = stil.kontrollera(finalized_body).anmarkningar + stil.mot_andra(finalized_body, andra)
+        # Fynd som mejlets form själv ger (Iris-formen: varje mejl öppnar med
+        # erbjudandet), se leads_research_v2._ERBJUDANDE_FORST_UNDANTAG.
+        stilfynd = [a for a in stilfynd if a.kod not in stilundantag]
         if stilfynd:
             force_review = True
             granskningsskal = "; ".join(

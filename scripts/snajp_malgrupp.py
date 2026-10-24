@@ -81,10 +81,13 @@ IRIS_INSTRUKTION = f"""{MARKOR}
 #: Gratisprovet för Supportagenten går via svar på mejlet (frågorna bifogade)
 #: och hanteras för hand tills demolänken finns: ingen kunskapsbas behöver kopplas.
 IRIS, SUPPORT = (p["namn"] for p in PRODUKTER)
+#: Utan "20 platser" sedan 2026-10-24 (Sebbe, förslag till Anton): samma
+#: knapphet stod i hundratals mejl, och den som fick två såg att den inte
+#: stämde. Skälet att sätta upp varje företag personligen är kvar.
 _PILOT = (
-    "Vi tar in 20 företag i en pilot för {agent}. Vi tar bara 20 eftersom vi sätter upp varje företag "
-    "personligen. Pilotföretagen får 50 % rabatt första året om de vill fortsätta, och 25 % så länge de "
-    "stannar. Handling: svara \"pilot\" på mejlet, så håller vi en plats åt er."
+    "I piloten för {agent} sätter vi upp varje företag personligen. Pilotföretagen får 50 % rabatt "
+    "första året om de vill fortsätta, och 25 % så länge de stannar. Handling: svara \"pilot\" på "
+    "mejlet, så sätter vi upp {agent} åt er."
 )
 #: Beviset i varje Iris-mejl (Sebbe 2026-10-24): mejlet är självt ett prov på
 #: Iris. Står i villkoren och inte i instruktionen, så att det bara följer med
