@@ -83,6 +83,18 @@ Fyra provvarv på fem leads vardera. Det fjärde med Iris-formen gav:
 - **Beviset skrivs ibland om:** en gång blev det "Iris … är byggd för att hitta
   nya kunder till företag som ditt", vilket är utfyllnad och en mallfras.
 
+Ett femte varv på samma fem leads, där alla hann skrivas om, gav:
+
+- **Rättat:** "Vi såg att" är borta, och inget mejl påstår att leadsen redan
+  är framtagna.
+- **Garantin driver igen:** "Iris kan hitta minst 10 nya byggprojekt …", alltså
+  samma fel två varv i rad.
+- **Kundtypen blir ibland deras egen bransch** ("byggentreprenörer").
+- **Fyra av fem över 90 ord** (92–108).
+- **Produktnamnet** "Iris, leadsagenten" står ordagrant två gånger i ett mejl.
+  Produkten heter så i Snajps inställningar, och skrivreglerna kräver exakt
+  namn. Att döpa produkten till bara "Iris" vore enklast.
+
 Grinden fäller nu "Iris har hittat" (de tas fram efter ett ja), "Vi såg att",
 "kan hjälpa er att", säljklyschor, "effektivt" och abstrakta ämnesrader.
 Formen säger att kundtypen är deras kunder, inte företag som liknar dem själva.
