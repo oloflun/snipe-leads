@@ -46,3 +46,13 @@ def test_andra_produkter_far_samma_konstruktion_som_forut():
     fynd = _stilfynd(_mejl("bostadsrättsföreningar", "Göteborg"), villkor=None, produkt="Supportagenten",
                      andra=andra, bolag="Walters Bygg AB")
     assert any("byggd som ett annat mejl" in f for f in fynd)
+
+
+def test_redan_hittat_och_vi_sag_att_falls():
+    """Provet 2026-10-24: "Iris har hittat fem bostadsrättsföreningar …" (de tas
+    fram efter ett ja) och "Vi såg att ni beskriver er som …"."""
+    for extra, kod in ((" Iris har hittat fem av dem.", "redan är framtagna"), (" Vi såg att ni bygger.", "iakttagelse"),
+                       (" Iris kan hjälpa er att växa.", "utfyllnad")):
+        fynd = _stilfynd(_mejl("fastighetsbolag", "Umeå", extra), villkor=VILLKOR, produkt=IRIS, andra=[],
+                         bolag="Walters Bygg AB")
+        assert any(kod in f for f in fynd), (extra, fynd)

@@ -49,8 +49,15 @@ _MARKORER: tuple[tuple[str, re.Pattern[str], str], ...] = (
     # Ett tankstreck i intervall ("15–20 minuter") står utan blanksteg och
     # träffas inte; ett med blanksteg runt sig är ett tankstreck i löptext.
     ("tankstreck", re.compile(r"—|\s[–-]\s"), "tankstreck i brödtexten"),
-    ("jag_ser_att", re.compile(r"\bjag\s+(?:ser|såg|märkte|noterade|har\s+sett)\s+att\b", re.IGNORECASE),
-     "börjar i vår iakttagelse (\"Jag ser att …\")"),
+    ("jag_ser_att", re.compile(r"\b(?:jag|vi)\s+(?:ser|såg|märkte|noterade|har\s+sett)\s+att\b", re.IGNORECASE),
+     "börjar i vår iakttagelse (\"Jag ser att …\", \"Vi såg att …\")"),
+    # Provet 2026-10-24 med Iris-formen: "Iris har hittat fem
+    # bostadsrättsföreningar …". De tas fram först efter ett ja; att de redan
+    # är hittade är inte sant.
+    ("redan_hittat", re.compile(r"\b(?:iris|vi|agenten)\s+har\s+(?:redan\s+)?(?:hittat|tagit\s+fram)\b", re.IGNORECASE),
+     "påstår att leadsen redan är framtagna (de tas fram efter ett ja)"),
+    ("utfyllnad", re.compile(r"\bkan\s+hjälpa\s+(?:er|dig)\s+(?:att|med)\b", re.IGNORECASE),
+     "utfyllnad (\"kan hjälpa er att …\"); säg vad som händer"),
     ("vi_har_skapat", re.compile(r"\bvi\s+har\s+(?:skapat|utvecklat|byggt|tagit\s+fram)\b", re.IGNORECASE),
      "\"vi har skapat/utvecklat\""),
     ("ar_en_ai_agent", re.compile(r"\bär\s+en\s+(?:\w+\s+)?(?:AI-?\s?)?(?:agent|assistent)\s+som\b", re.IGNORECASE),
