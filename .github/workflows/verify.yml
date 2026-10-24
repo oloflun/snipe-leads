@@ -104,6 +104,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Hämta basimagen från en spegel
+        # public.ecr.aws svarar 429 "Data limit exceeded" på GitHubs delade
+        # runners (2026-10-21 till 10-24: tre körningar i rad på PR #39). Samma
+        # officiella image hämtas från Googles spegel, med Docker Hub som
+        # reserv, och märks med namnet Dockerfilen använder. Bygget hittar den
+        # då lokalt och frågar aldrig ECR. Railways byggare berörs inte.
+        run: |
+          BAS=public.ecr.aws/docker/library/python:3.12-slim
+          for kalla in mirror.gcr.io/library/python:3.12-slim docker.io/library/python:3.12-slim; do
+            if docker pull "$kalla"; then docker tag "$kalla" "$BAS"; exit 0; fi
+          done
+          echo "Ingen spegel svarade; bygget hämtar från ECR som förut."
+
       - name: Bygg imagen från repo-roten
         # Byggkontexten ÄR repo-roten (punkten sist). agent-core/ ligger
         # utanför snajp-support/ och kan inte COPY:as annars.
