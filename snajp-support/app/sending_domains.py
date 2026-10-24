@@ -124,7 +124,11 @@ async def apply_email_event(storage, payload: dict) -> bool:
         rad = await storage.markera_leverans(
             tenant_id, meddelande, utfall=utfall, at=datetime.now(timezone.utc)
         )
-    except Exception:  # noqa: BLE001 — en främmande tagg (ogiltigt tenant-id) ska inte ge 500 och omförsök
+    except Exception as fel:  # noqa: BLE001 — en främmande tagg (ogiltigt tenant-id) ska inte ge 500 och omförsök
+        # Utom en saknad kolumn (migration 113 inte körd): då ska Resend få ett
+        # fel och skicka händelsen igen, annars går studsen förlorad.
+        if getattr(fel, "sqlstate", None) == "42703":
+            raise
         return False
     if not rad:
         return False

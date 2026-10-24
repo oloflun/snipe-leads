@@ -135,3 +135,43 @@ async def test_ett_klagomal_pausar_nasta_utskick():
 
     assert utfall != "sent" and not provider.sent
     assert "pausade" in (skal or "")
+
+
+class _KolumnSaknas(Exception):
+    sqlstate = "42703"
+
+
+async def test_saknad_kolumn_ger_fel_sa_att_resend_forsoker_igen():
+    """Migration 113 inte körd: webhooken ska fela (Resend skickar igen), inte
+    tyst svara att händelsen hanterats."""
+    storage = MemoryStorage()
+
+    async def kastar(*_a, **_k):
+        raise _KolumnSaknas()
+
+    storage.markera_leverans = kastar
+    with pytest.raises(_KolumnSaknas):
+        await apply_email_event(storage, _handelse("email.bounced", tenant=TENANT, meddelande=str(uuid.uuid4())))
+
+
+async def test_leveransutfall_utan_kolumn_ger_nollor(monkeypatch):
+    """Postgres utan migration 113: läsningen före varje utskick ska inte
+    stoppa utskicken."""
+    import asyncpg
+
+    from app.storage.postgres import PostgresStorage
+
+    class _Conn:
+        async def fetchrow(self, *_a, **_k):
+            raise asyncpg.UndefinedColumnError("column \"leverans\" does not exist")
+
+    class _Scope:
+        async def __aenter__(self):
+            return _Conn()
+
+        async def __aexit__(self, *_a):
+            return False
+
+    lagring = PostgresStorage.__new__(PostgresStorage)
+    monkeypatch.setattr(lagring, "_scoped", lambda _t: _Scope(), raising=False)
+    assert await lagring.leveransutfall("t") == {"skickade": 0, "studsade": 0, "klagomal": 0}
