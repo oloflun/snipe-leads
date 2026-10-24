@@ -15,7 +15,9 @@ def _utskick(direkt: bool) -> sg.Utskick:
 
 def test_regel_5a_slapps_bara_for_skicka_nu():
     historik = sg.TenantHistorik(skickade_totalt=10, skickade_idag=0, tenant_alder_dagar=60,
-                                 storsta_dagsvolym=10, senaste_kontakt_med_foretaget=None,
+                                 storsta_dagsvolym=10,
+                                 leverans=sg.Leveransutfall(skickade=0, studsade=0, klagomal=0),
+                                 senaste_kontakt_med_foretaget=None,
                                  suppressions=frozenset(), tidigare_kontaktade=frozenset(),
                                  egna_kunder=frozenset())
     vanlig = sg._regel_5_volymtak(avsandare=None, utskick=_utskick(False), historik=historik, nu=LORDAG_23)

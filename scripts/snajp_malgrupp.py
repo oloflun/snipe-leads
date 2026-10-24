@@ -45,7 +45,8 @@ from seed_demo import Api, deploy_env  # noqa: E402
 PRODUKTER = [
     {
         "namn": "Iris, leadsagenten",
-        "nytta": "hittar och kvalificerar nya företagskunder och skriver färdiga utkast som ni själva godkänner innan något skickas",
+        # Sebbe 2026-10-24: leadsen anpassas efter exakt det kunden söker.
+        "nytta": "hittar nya företagskunder anpassade efter exakt det ni söker (bransch, ort och storlek), läser varje bolags webbplats och skriver ett färdigt första mejl till vart och ett, som ni själva godkänner innan något skickas",
     },
     {
         "namn": "Supportagenten",
@@ -68,6 +69,7 @@ IRIS_INSTRUKTION = f"""{MARKOR}
 
 - Erbjud den produkt researchen valt, och bara den. Nämn aldrig de andra agenterna.
 - Nämn aldrig kvitton, bokföring eller Kvittohanteraren: den säljs inte just nu.
+- Säg aldrig att Supportagenten hittade bolaget eller skrev mejlet. Det gör bara Iris, och då står det i Iris villkor.
 - Avsluta med erbjudandets handling enligt villkoren under "Erbjudandet i det här mejlet" (svara "ja", svara med något bifogat, svara så bokar vi), aldrig med en fråga.
 """
 
@@ -79,11 +81,29 @@ IRIS_INSTRUKTION = f"""{MARKOR}
 #: Gratisprovet för Supportagenten går via svar på mejlet (frågorna bifogade)
 #: och hanteras för hand tills demolänken finns: ingen kunskapsbas behöver kopplas.
 IRIS, SUPPORT = (p["namn"] for p in PRODUKTER)
+#: Utan "20 platser" sedan 2026-10-24 (Sebbe, förslag till Anton): samma
+#: knapphet stod i hundratals mejl, och den som fick två såg att den inte
+#: stämde. Skälet att sätta upp varje företag personligen är kvar.
 _PILOT = (
-    "Vi tar in 20 företag i en pilot för {agent}. Vi tar bara 20 eftersom vi sätter upp varje företag "
-    "personligen. Pilotföretagen får 50 % rabatt första året om de vill fortsätta, och 25 % så länge de "
-    "stannar. Handling: svara \"pilot\" på mejlet, så håller vi en plats åt er."
+    "I piloten för {agent} sätter vi upp varje företag personligen. Pilotföretagen får 50 % rabatt "
+    "första året om de vill fortsätta, och 25 % så länge de stannar. Handling: svara \"pilot\" på "
+    "mejlet, så sätter vi upp {agent} åt er."
 )
+#: Beviset i varje Iris-mejl (Sebbe 2026-10-24): mejlet är självt ett prov på
+#: Iris. Står i villkoren och inte i instruktionen, så att det bara följer med
+#: Iris-erbjudandena: som instruktion skrev modellen samma mening i ett
+#: Supportagent-mejl ("Supportagenten hittade …"), vilket inte är sant.
+_IRIS_BEVIS = (
+    "Det här mejlet är skrivet av Iris, som hittade er och läste er webbplats, och vi läste det "
+    "innan det skickades."
+)
+
+
+def _med_bevis(villkor: str) -> str:
+    fore, _, handling = villkor.partition(" Handling:")
+    return f"{fore} {_IRIS_BEVIS} Handling:{handling}"
+
+
 ERBJUDANDEN = {
     "aktiva": [{"nyckel": n, "vikt": 1} for n in ("gratis_prov", "garanti", "pilot")],
     "villkor": {
@@ -98,6 +118,8 @@ ERBJUDANDEN = {
         "pilot": {agent: _PILOT.format(agent=agent) for agent in (IRIS, SUPPORT)},
     },
 }
+for _villkor in ERBJUDANDEN["villkor"].values():
+    _villkor[IRIS] = _med_bevis(_villkor[IRIS])
 
 
 def main() -> None:

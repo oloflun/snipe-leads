@@ -686,6 +686,20 @@ class Storage(Protocol):
         skickats i fönstret."""
         ...
 
+    async def leveransutfall(self, tenant_id: str, *, dagar: int = 14) -> dict[str, int]:
+        """`{skickade, studsade, klagomal}` bland utgående mejl skickade de
+        senaste `dagar` dagarna. Underlaget för leveransstoppet (send_guard
+        regel 5e); utfallen skrivs av Resends webhook (markera_leverans)."""
+        ...
+
+    async def markera_leverans(
+        self, tenant_id: str, message_id: str, *, utfall: str, at: Any
+    ) -> dict[str, Any] | None:
+        """Sätter `leverans` ('studs' eller 'klagomal') på ett skickat
+        meddelande. Ett klagomål skrivs aldrig över av en studs. Returnerar
+        meddelandet (med thread_id) eller None om det inte finns hos tenanten."""
+        ...
+
     async def last_contact_with_company(
         self, tenant_id: str, foretagsnyckel: str, *, utom_trad: str | None = None
     ) -> Any | None:

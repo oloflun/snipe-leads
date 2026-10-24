@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
-from ..sending_domains import apply_domain_event, create_domain, get_config, verify_domain, verify_webhook
+from ..sending_domains import apply_domain_event, apply_email_event, create_domain, get_config, verify_domain, verify_webhook
 from .deps import require_tenant
 router=APIRouter()
 class DomainCreate(BaseModel):
@@ -24,3 +24,11 @@ async def webhook(request:Request):
     raw=await request.body(); headers={k.lower():v for k,v in request.headers.items()}
     if not verify_webhook(raw,headers):raise HTTPException(401,'Ogiltig webhook-signatur.')
     return {'applied':await apply_domain_event(request.app.state.storage,await request.json())}
+@router.post('/api/webhooks/resend/emails')
+async def webhook_emails(request:Request):
+    """Studs och klagomål på leadsutskick (send_guard regel 5e). Registreras
+    hos Resend för email.bounced och email.complained, samma signering som
+    domänwebhooken."""
+    raw=await request.body(); headers={k.lower():v for k,v in request.headers.items()}
+    if not verify_webhook(raw,headers):raise HTTPException(401,'Ogiltig webhook-signatur.')
+    return {'applied':await apply_email_event(request.app.state.storage,await request.json())}

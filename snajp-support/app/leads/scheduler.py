@@ -26,9 +26,11 @@ from .send_guard import GRANSKA as SG_GRANSKA
 from .send_guard import KOLA_OM as SG_KOLA_OM
 from .send_guard import SKICKA as SG_SKICKA
 from .send_guard import (
+    LEVERANS_FONSTER_DAGAR,
     UPPTRAPPNING_FONSTER_DAGAR,
     Avsandare,
     GuardBeslut,
+    Leveransutfall,
     TenantHistorik,
     Utskick,
     check_send_guard,
@@ -136,6 +138,10 @@ async def _kor_send_guard(storage, tenant_id: str, thread: dict, message: dict, 
         # upptrappningsfönstret. Sju dagar, samma som send_guard-konstanten.
         storsta_dagsvolym=await storage.storsta_dagsvolym(
             tenant_id, dagar=UPPTRAPPNING_FONSTER_DAGAR
+        ),
+        # Studsar och klagomål ur Resends webhook (regel 5e).
+        leverans=Leveransutfall(
+            **await storage.leveransutfall(tenant_id, dagar=LEVERANS_FONSTER_DAGAR)
         ),
         # Leadets egen tråd räknas inte: 90-dagarsspärren gäller ett NYTT
         # kallmejl, inte uppföljningen eller svaret i samma samtal.
@@ -401,8 +407,20 @@ async def _process_due_item(
         sig = normalisera_signatur(
             (await storage.get_agent_settings(tenant_id, agent_type="leads")).get("signatur")
         )
-        if sig and ("html" in params or har_kwargs):
+        # Det första mejlet i en tråd går som ren text (Sebbe 2026-10-24): en
+        # bild och HTML i ett kallt mejl från en okänd avsändare är en
+        # reklamsignal som skickar det till skräpposten eller fliken
+        # Kampanjer. Logotypen följer med från första uppföljningen.
+        forsta = await _outbound_sent_count(storage, tenant_id, item["thread_id"]) == 0
+        if sig and not forsta and ("html" in params or har_kwargs):
             extra["html"] = bygg_signatur_html(message["body"], sig)
+        # Taggarna kommer tillbaka i Resends webhook och pekar ut meddelandet
+        # vars studs eller klagomål det gäller (api/sending_domains_api.py).
+        if "tags" in params or har_kwargs:
+            extra["tags"] = [
+                {"name": "tenant", "value": str(tenant_id)},
+                {"name": "meddelande", "value": str(message["id"])},
+            ]
         # Avsändare och svarsadress (Sebbe 2026-10-07: svaren ska synas i
         # Leads › Inkorg). Förut gick utskicket från plattformens adress utan
         # Reply-To, så prospektets svar hamnade där och aldrig i kundens

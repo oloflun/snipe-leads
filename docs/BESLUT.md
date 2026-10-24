@@ -9,6 +9,79 @@ möjligt), vad det betyder i koden.
 
 ---
 
+## 2026-10-24 (Sebbe) — Utskickens text: äkta, konkret, trovärdig (skrivstilens omgång 7)
+
+**Beslut.** "Förbättra utskicken, texten. De ska sälja in vår produkt bra,
+konkret, kort och tydligt. Vi måste få mer svar och bli trovärdiga och
+attraktiva … De får inte bli halvdana, halvbra. De ska vara riktigt bra."
+Och om Iris: den hittar företagsleads "anpassad efter det kunden söker".
+
+**Resonemang.** Facit-ingångarna återberättade bolagets egen säljtext, som
+mottagaren känner igen som sin hemsida omskriven. Erbjudandena var
+abstrakta ("nya kunddialoger"), och inget i mejlet gav ett skäl att tro på
+en okänd avsändare.
+
+**I koden och prompterna.**
+- `leads-skrivstil.md` omgång 7: kärnan (äkta, konkret, tryggt att svara);
+  ingången väljer en händelse ur `trigger_events` först, sedan en konkret sak
+  på sajten och sist löftet, och bär alltid ett konkret substantiv;
+  trovärdighet bara ur underlaget; klyschlistan; konkreta ämnesrader.
+- Grundprompten § 10.1–10.2 följer skrivstilen (50–90 ord, villkorens
+  handling). Tidigare stod det 70–130 ord och "demo eller samtal".
+- `_INGANGSUPPGIFT` och omskrivningen i `leads_research_v2.py` har samma
+  ordning för underlaget.
+- Stilgrinden: nytt fynd `klyscha`. Facit 2026-10-16 passerar oförändrat.
+- `scripts/snajp_malgrupp.py`: Iris nytta säger att leadsen anpassas efter
+  bransch, ort och storlek. Iris-mejlen får beviset att mejlet självt är
+  skrivet av Iris och läst av en människa före utskick.
+
+**Inte ändrat (Antons beslut).** Erbjudandena och deras villkor (pilotens
+"20 företag", de lika vikterna) och regeln att mejlet aldrig slutar med en
+fråga. "Upp till 250 leads" står inte i mejlen: en körning tar högst 200
+och kunskapsbasen säger 150 prospekt per månad.
+
+---
+
+## 2026-10-24 (Sebbe) — Leveransen: ren text först, flack volym, stopp vid studs och klagomål, kort fot till info@
+
+**Beslut.** "Börja med leveransdelen: ren text i första mejlet, flack
+volymkurva med stopp vid studs/klagomål, kort fot till funktionsadresser."
+
+**Resonemang.** ~600 kallmejl gav 9 svar: 2 mänskliga (båda nej) och resten
+autosvar. Ett mejl som fastnar i skräpfiltret ger inget autosvar, så de få
+autosvaren tyder på att många mejl aldrig nådde inkorgen. Dubblingen från
+2026-10-21 (20 → 40 → 80 → 160) släppte ut större delen på några dagar från
+`snajp.se`, som nästan inte hade fått några svar. Varje första mejl bar
+logotyp och HTML, och en GDPR-fot lika lång som själva mejlet. Inget i
+systemet visste hur många mejl som studsat eller markerats som skräppost.
+Hela diagnosen: `docs/UTSKICK-SVARSFREKVENS-DIAGNOS-2026-10-24.md`.
+
+**I koden.**
+- `send_guard` regel 5d: taket är största dagsvolymen senaste sju dagarna
+  + 5, lägst 20, högst `TAK_PER_DAG` = 50. Ersätter dubblingen från 2026-10-21.
+- Regel 5e (ny): leveransstopp. Med fler än 0,1 % klagomål eller fler än 3 %
+  studsar (minst 20 skickade) de senaste 14 dagarna står tenantens utskick
+  still (köa om, även Skicka nu) tills händelserna är äldre än fönstret.
+  Skälet syns på köposten.
+- Resends webhook `POST /api/webhooks/resend/emails` (email.bounced,
+  email.complained) skriver `outreach_messages.leverans` (migration 113) och
+  lägger adressen i suppressions. Tillfälliga studsar räknas inte. Utskicken
+  bär taggarna `tenant` och `meddelande` så att händelsen hittar rätt.
+- Det första mejlet i en tråd går utan HTML och logotyp, och provmejlet följer
+  samma regel. Uppföljningarna bär logotypen som förut.
+- Kort fot till funktionsadresser: avsändare, org.nr, adress och
+  avregistrering, utan art. 14-stycken. Regel 2 kräver policylänken bara vid
+  en personlig adress, liksom regel 4. Personliga adresser får hela foten som
+  förut.
+
+**Kvar att göra (inte kod).** Registrera webhooken hos Resend för båda
+miljöerna och sätt `RESEND_WEBHOOK_SECRET` på api. Utan den svarar webhooken
+401 och stoppet ser inga händelser. Kör migration 113 i varje miljö. En
+separat utskicksdomän och åtgärderna för erbjudandet (Antons beslut) ingår
+inte här.
+
+---
+
 ## 2026-10-23 (Anton) — Körningar ska leverera beställt antal: hela registret, sedan brett i området
 
 **Beslut.** "Läs senaste committen från Sebbe och gör vad som krävs för att

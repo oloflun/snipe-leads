@@ -19,8 +19,11 @@ from app.leads.send_guard import (
     KOLA_OM,
     SKICKA,
     STOCKHOLM,
+    TAK_PER_DAG,
+    UPPTRAPPNING_STEG,
     UPPVARMNING_TAK_PER_DAG,
     Avsandare,
+    Leveransutfall,
     TenantHistorik,
     Utskick,
     check_send_guard,
@@ -64,6 +67,7 @@ def historik(**overrides) -> TenantHistorik:
         # Hög nog att upptrappningstaket (5d) inte binder i tester som mäter
         # något annat; 5d:s egna tester sätter den själva.
         "storsta_dagsvolym": 500,
+        "leverans": Leveransutfall(skickade=200, studsade=0, klagomal=0),
         "senaste_kontakt_med_foretaget": None,
         "suppressions": frozenset(),
         "tidigare_kontaktade": frozenset(),
@@ -162,10 +166,24 @@ def test_regel_2_kraver_policylank():
         "Hur vi behandlar personuppgifter: https://livrustning.example/integritetspolicy",
         "",
     )
-    beslut = kor(utskick=utskick(brodtext=text))
+    personlig = {"mottagare": "anna.svensson@prospekt.example", "personlig_adress": True}
+    beslut = kor(utskick=utskick(brodtext=text, **personlig))
     assert beslut.atgard == BLOCKERA
     assert beslut.regel == "2_avregistrering"
     assert "integritetspolicy" in beslut.skal
+
+
+def test_regel_2_policylanken_kravs_inte_till_en_funktionsadress():
+    """Sebbe 2026-10-24: policylänken bär art. 14.2 och krävs bara vid en
+    personlig adress, som art. 14 självt (regel 4). Till info@ går den korta
+    foten med avsändare och avregistrering."""
+    text = (
+        "Hej,\n\nEtt kort erbjudande.\n\n--\nLivrustning AB, org.nr 556824-9022\n\n"
+        "Vill du inte få fler mejl från oss: https://livrustning.example/avregistrera/abc"
+    )
+    assert kor(utskick=utskick(brodtext=text)).atgard == SKICKA
+    personlig = utskick(brodtext=text, mottagare="anna.svensson@prospekt.example", personlig_adress=True)
+    assert kor(utskick=personlig).atgard == BLOCKERA
 
 
 def test_regel_2_policylank_utan_policyord_i_urlen():
@@ -257,19 +275,27 @@ def test_regel_5_dagstaket_under_uppvarmningen():
 def test_regel_5_dagstaket_slutar_galla_efter_uppvarmningen():
     """Efter uppvärmningen gäller upptrappningstaket (5d), inte 20-taket: en
     etablerad dagsvolym binder inte."""
-    assert kor(historik=historik(tenant_alder_dagar=90, skickade_idag=50)).atgard == SKICKA
+    assert kor(historik=historik(tenant_alder_dagar=90, skickade_idag=30)).atgard == SKICKA
 
 
-def test_regel_5d_upptrappningen_dubblar_fran_storsta_dagsvolymen():
-    """Sebbe 2026-10-21: när 20-taket släppte hade hela kön (234 godkända)
-    gått ut på en dag från en domän som dittills skickat 20 om dagen. Taket
-    efter uppvärmningen är dubbla största dagsvolymen senaste sju dagarna."""
-    h = historik(tenant_alder_dagar=90, storsta_dagsvolym=20, skickade_idag=40)
-    beslut = kor(historik=h)
+def test_regel_5d_upptrappningen_ar_flack():
+    """Sebbe 2026-10-24: dubblingen (20 → 40 → 80 → 160) släppte ut ~600
+    kallmejl på några dagar. Taket är största dagsvolymen senaste sju dagarna
+    plus UPPTRAPPNING_STEG."""
+    tak = 20 + UPPTRAPPNING_STEG
+    beslut = kor(historik=historik(tenant_alder_dagar=90, storsta_dagsvolym=20, skickade_idag=tak))
     assert beslut.atgard == KOLA_OM and beslut.regel == "5_volymtak"
-    assert "40 av 40" in beslut.skal
+    assert f"{tak} av {tak}" in beslut.skal
     # Under taket skickas det.
-    assert kor(historik=historik(tenant_alder_dagar=90, storsta_dagsvolym=20, skickade_idag=39)).atgard == SKICKA
+    h = historik(tenant_alder_dagar=90, storsta_dagsvolym=20, skickade_idag=tak - 1)
+    assert kor(historik=h).atgard == SKICKA
+
+
+def test_regel_5d_har_ett_tak_per_dag():
+    """Hur mycket som än skickats förut går högst TAK_PER_DAG ut om dagen."""
+    h = historik(tenant_alder_dagar=90, storsta_dagsvolym=160, skickade_idag=TAK_PER_DAG)
+    beslut = kor(historik=h)
+    assert beslut.atgard == KOLA_OM and f"{TAK_PER_DAG} av {TAK_PER_DAG}" in beslut.skal
 
 
 def test_regel_5d_golvet_ar_uppvarmningstaket():
@@ -287,6 +313,36 @@ def test_regel_5d_galler_aven_skicka_nu():
     h = historik(tenant_alder_dagar=90, storsta_dagsvolym=20, skickade_idag=40)
     beslut = kor(historik=h, utskick=utskick(direkt=True))
     assert beslut.atgard == KOLA_OM and beslut.regel == "5_volymtak"
+
+
+# -- Regel 5e: leveransstopp ------------------------------------------------
+
+
+def test_regel_5e_ett_klagomal_pausar_utskicken():
+    """Ett klagomål på färre än tusen skickade är över 0,1 %. Gäller även
+    under uppvärmningen och för Skicka nu."""
+    for h, u in (
+        (historik(leverans=Leveransutfall(skickade=300, studsade=0, klagomal=1)), utskick()),
+        (historik(tenant_alder_dagar=3, skickade_idag=0,
+                  leverans=Leveransutfall(skickade=40, studsade=0, klagomal=1)), utskick()),
+        (historik(leverans=Leveransutfall(skickade=300, studsade=0, klagomal=1)), utskick(direkt=True)),
+    ):
+        beslut = kor(historik=h, utskick=u)
+        assert beslut.atgard == KOLA_OM and beslut.regel == "5_leveransstopp", beslut.skal
+        assert "skräppost" in beslut.skal
+
+
+def test_regel_5e_studs_over_tre_procent_pausar():
+    beslut = kor(historik=historik(leverans=Leveransutfall(skickade=100, studsade=4, klagomal=0)))
+    assert beslut.atgard == KOLA_OM and beslut.regel == "5_leveransstopp"
+    assert "4 av 100" in beslut.skal and "4,0 %" in beslut.skal
+    # Exakt på gränsen skickas det.
+    assert kor(historik=historik(leverans=Leveransutfall(skickade=100, studsade=3, klagomal=0))).atgard == SKICKA
+
+
+def test_regel_5e_studs_bedoms_forst_med_underlag():
+    """Två studsar av de tio första är inte en trend."""
+    assert kor(historik=historik(leverans=Leveransutfall(skickade=10, studsade=2, klagomal=0))).atgard == SKICKA
 
 
 def test_regel_5_karens_per_foretag():
