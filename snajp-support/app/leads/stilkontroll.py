@@ -123,14 +123,22 @@ _MALLORD = re.compile(
     # projekt", och inte i varje mejl (samma_grepp i mot_andra).
     r"|\bdet\s+är\s+svårt\s+att\b|\bär\s+det\s+svårt\s+att\b"
     r"|\b(?:ta|tar)\s+tid\s+från\s+att\b|\bkräver\s+(?:fullt|ditt|ert)\s+fokus\b"
-    r"|\bfokus\w*\s+på\s+(?:varje\s+(?:enskilt\s+)?projekt|projekt(?:et|en)?\b|arbetet|uppdrag(?:et|en)?\b|verksamheten|jobbet"
-    r"|det\s+(?:ni|du)\s+gör)",
+    r"|\b(?:fokus\w*|koncentrera\s+(?:er|dig))\s+på\s+(?:varje\s+(?:enskilt\s+)?(?:projekt|detalj)|projekt(?:et|en)?\b"
+    r"|arbetet|uppdrag(?:et|en)?\b|verksamheten|jobbet|det\s+(?:ni|du)\s+gör)"
+    r"|\bägna\s+(?:er|dig)\s+åt\s+(?:varje\s+(?:enskilt\s+)?projekt|projekt(?:et|en)?\b|arbetet|jobbet)",
     re.IGNORECASE,
 )
 #: Fokusgreppet ("… kräver att ni kan fokusera på måleriet, inte på att hitta
 #: nästa uppdrag"): rätt ibland, fel i varje mejl (Anton 2026-10-25; 5 av 12 i
-#: provkörningen samma natt).
-_FOKUSGREPP = re.compile(r"\bfokus\w*\s+på\b", re.IGNORECASE)
+#: provkörningen samma natt, och 4 av 11 i omkörningen med synonymer).
+_FOKUSGREPP = re.compile(
+    r"\b(?:fokus\w*\s+på|koncentrera\s+(?:er|dig)\s+på|ägna\s+(?:er|dig)\s+åt)\b", re.IGNORECASE
+)
+
+
+def fokusgrepp(text: str) -> bool:
+    """Bär ingångens två första meningar fokusgreppet?"""
+    return bool(_FOKUSGREPP.search(_ingangsstycke(text)))
 #: Fler än så här av de senaste ingångarna i körningen får inte redan bära greppet.
 FOKUSGREPP_TAK = 1
 #: Avslutet som order (Anton 2026-10-25: "en svag CTA som läses som botmejl

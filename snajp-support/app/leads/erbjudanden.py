@@ -62,20 +62,23 @@ _EGEN_NYCKEL = re.compile(r"^[a-z0-9_-]{1,40}$")
 FORMER: dict[str, tuple[str, str]] = {
     "rak": (
         "A, rakt på",
-        "Efter hälsningen, i den här ordningen: (1) ingången, en utmaning som deras sorts arbete för "
-        "med sig och som produkten löser, med något konkret ur deras verksamhet; (2) vad produkten gör "
-        "åt dem, i en mening; (3) erbjudandet med villkorens innehåll; (4) avslutet, villkorens handling "
-        "som en vardaglig inbjudan.",
+        "Efter hälsningen, i den här ordningen: (1) ingången, högst 25 ord: en utmaning som deras sorts "
+        "arbete för med sig och som produkten löser, med något konkret ur deras verksamhet; (2) vad "
+        "produkten gör åt dem, en mening om högst 15 ord; (3) erbjudandet med villkorens innehåll, en "
+        "mening; (4) avslutet, villkorens handling som en vardaglig inbjudan, högst 20 ord. Hela "
+        "brödtexten högst 90 ord.",
     ),
     "fraga": (
         "B, med en fråga",
-        "Efter hälsningen, i den här ordningen: (1) samma sorts ingång som i form A, i en mening; (2) en "
-        "kort fråga om vilket av två konkreta moment som tar mest tid för dem i dag. Båda momenten är "
+        "Hela brödtexten högst 100 ord. Efter hälsningen, i den här ordningen: (1) samma sorts ingång "
+        "som i form A, i en mening om högst 20 ord; (2) en fråga om högst 15 ord om vilket av två "
+        "konkreta moment som tar mest tid för dem i dag. Båda momenten är "
         "saker produkten gör enligt dess nytta, aldrig något den inte gör: för en leadsagent att hantera "
         "de förfrågningar som redan kommer in eller att hitta nya kunder, för en supportagent att gå "
-        "igenom kundmejlen eller att sitta i supportchattarna; (3) att produkten tar hand om båda delarna och anpassas efter "
-        "deras behov och verksamhet; (4) erbjudandet med villkorens innehåll; (5) avslutet, villkorens "
-        "handling som en vardaglig inbjudan. Frågan står aldrig sist.",
+        "igenom kundmejlen eller att sitta i supportchattarna; (3) att produkten tar hand om båda delarna "
+        "och anpassas efter deras behov och verksamhet, en mening om högst 15 ord; (4) erbjudandet med "
+        "villkorens innehåll, en mening; (5) avslutet, villkorens handling som en vardaglig inbjudan, "
+        "högst 20 ord. Frågan står aldrig sist.",
     ),
 }
 #: Skickade mejl per arm innan någon arm får kallas ledande.

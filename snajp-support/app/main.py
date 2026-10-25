@@ -7,6 +7,7 @@ degraderar tjänsten gracefully till in-memory + simuleringsläge.
 """
 
 import logging
+import os
 from contextlib import asynccontextmanager
 from functools import partial
 
@@ -446,6 +447,9 @@ async def health() -> dict:
         "model": settings.model,
         "storage": app.state.storage.name,
         "jobs": app.state.jobs.name,
+        # Vilken commit som körs (Railway sätter variabeln vid varje deploy):
+        # deploystatus utan Railway-token (2026-10-25, tokenen nekades).
+        "commit": os.environ.get("RAILWAY_GIT_COMMIT_SHA", "")[:7],
     }
 
 

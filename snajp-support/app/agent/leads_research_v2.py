@@ -879,6 +879,7 @@ def _stilfynd(
     andra: list[str],
     bolag: str | None = None,
     andra_amnen: list[str] | None = None,
+    fokus_ok: bool = True,
 ) -> list[str]:
     """Stilgrindens fynd på ett råutkast (före humanizern), som text till
     omskrivningen: markörerna i app/leads/stilkontroll.py, erbjudandets
@@ -899,7 +900,18 @@ def _stilfynd(
     fynd += stil.amne_fynd(str(draft.get("subject") or ""), bolag=bolag, produkt=produkt, andra=andra_amnen or [])
     # for_langt skrivs om sedan 2026-10-25: villkoren är korta nu, och
     # provkörningen gav 105–150 ord, längre än Antons exempel.
-    return [a.beskrivning for a in fynd if a.kod not in ("lang_mening", "samma_uppmaning")]
+    ut = [a.beskrivning for a in fynd if a.kod not in ("lang_mening", "samma_uppmaning")]
+    if not fokus_ok and stil.fokusgrepp(body):
+        ut.append("Stil: greppet \"fokusera på …\" ska inte användas i det här mejlet; bygg ingången på ett annat sätt")
+    return ut
+
+
+def _fokus_ok(prospect_id: str | None) -> bool:
+    """Får det här mejlet bära fokusgreppet? Ungefär vart fjärde, deterministiskt
+    per prospekt (Anton 2026-10-25: "ibland … så länge det inte är i varje
+    mail"). Per prospekt och inte mot körningens andra utkast: de skrivs
+    parallellt, 14 på 21 sekunder i omkörningen, och ser inte varandra."""
+    return hashlib.sha256(f"fokus:{prospect_id}".encode("utf-8")).digest()[0] % 4 == 0
 
 
 async def run_outreach_draft_v2(
@@ -941,6 +953,11 @@ async def run_outreach_draft_v2(
         storage, tenant_id, thread, erbjudanden.produkt_ur_research(research_summary)
     )
     erbjudandeblock = f"{erbjudande.block()}\n\n" if erbjudande else ""
+    # Med kundens erbjudande styr det och produktens nytta (första raden,
+    # api/leads.py), inte researchens eget erbjudandeförslag: omkörningen
+    # 2026-10-25 lät Iris "hitta nya tomter" därför att researchen föreslagit det.
+    if erbjudande:
+        offer_summary = offer_summary.split("\n", 1)[0]
     # Körningens andra utkast (Anton 2026-10-12): modellen kan inte variera
     # ingången mot mejl den aldrig sett. De som väntar på granskning läggs i
     # ärendet som "redan använda", och stilgrinden nedan prövar detsamma i kod.
@@ -949,6 +966,12 @@ async def run_outreach_draft_v2(
     andra_amnen = [str(r.get("subject") or "") for r in koade]
     anvanda_ingangar = [i for i in (stil.ingang(t) for t in andra_utkast[-12:]) if i]
     ingangsform = _ingangsform(thread.get("prospect_id"), fraga=not (erbjudande and erbjudande.form == "fraga"))
+    fokus_ok = _fokus_ok(thread.get("prospect_id"))
+    if not fokus_ok:
+        ingangsform += (
+            " Använd inte greppet att de behöver kunna fokusera på sitt arbete och inte på att hitta "
+            "nästa uppdrag: det används i andra mejl."
+        )
     ingangsblock = (
         f"## Ingångens form i det här mejlet\n{ingangsform}\n"
         "Formen är tilldelad just det här mejlet så att körningens mejl inte börjar likadant; "
@@ -1164,7 +1187,7 @@ async def run_outreach_draft_v2(
         )
 
     stilfynd = _stilfynd(draft, villkor=villkor, produkt=produktnamn, andra=andra_utkast,
-                         bolag=company_name, andra_amnen=andra_amnen)
+                         bolag=company_name, andra_amnen=andra_amnen, fokus_ok=fokus_ok)
     if stilfynd:
         draft = await skriv_om(draft, stilfynd)
     humanized = await humanisera(draft)
@@ -1184,7 +1207,7 @@ async def run_outreach_draft_v2(
 
     slutligt = _version(humanized, draft)
     kvar = _stilfynd(slutligt, villkor=villkor, produkt=produktnamn, andra=andra_utkast,
-                     bolag=company_name, andra_amnen=andra_amnen)
+                     bolag=company_name, andra_amnen=andra_amnen, fokus_ok=fokus_ok)
     basta, basta_fynd = slutligt, kvar
     for _varv in range(2):
         if not kvar:
@@ -1193,7 +1216,7 @@ async def run_outreach_draft_v2(
         humanized = await humanisera(draft)
         slutligt = _version(humanized, draft)
         kvar = _stilfynd(slutligt, villkor=villkor, produkt=produktnamn, andra=andra_utkast,
-                         bolag=company_name, andra_amnen=andra_amnen)
+                         bolag=company_name, andra_amnen=andra_amnen, fokus_ok=fokus_ok)
         if len(kvar) <= len(basta_fynd):
             basta, basta_fynd = slutligt, kvar
 

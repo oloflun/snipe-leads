@@ -59,6 +59,17 @@ def test_fokusgreppet_med_deras_hantverk_ibland():
     assert "samma_grepp" not in {a.kod for a in stil.mot_andra(mejl(hantverk), andra[:1])}
 
 
+def test_fokusgreppet_far_bara_vart_fjarde_mejl_och_synonymerna_rakas():
+    from app.agent.leads_research_v2 import _fokus_ok, _stilfynd
+
+    andel = sum(_fokus_ok(f"p-{i}") for i in range(400)) / 400
+    assert 0.18 < andel < 0.32
+    nej = next(f"p-{i}" for i in range(50) if not _fokus_ok(f"p-{i}"))
+    utkast = {"subject": "x", "body": "Hej,\n\nAtt kakla badrum kräver att ni kan ägna er åt plattsättningen.\n\nVår agent Iris hittar kunder åt er."}
+    assert any("fokusera" in f for f in _stilfynd(utkast, villkor=None, produkt=None, andra=[], fokus_ok=_fokus_ok(nej)))
+    assert "mallord_i_ingangen" in _koder("Att bygga kräver att ni kan ägna er åt varje projekt, inte åt nästa uppdrag.")
+
+
 def test_avslutet_som_order_falls_men_inbjudan_passerar():
     for avslut in (
         "Svara på det här mejlet, så bokar vi 20 minuter.",
