@@ -128,9 +128,19 @@ står kvar på kampanjens rad efter en omladdning.
 
 ## Bevakningslista
 
-Senast uppdaterad 2026-10-25. Allt nedan är kod i arbetskatalogen, inte
-committat och inte pushat. "Testad" betyder pytest, typkontroll och
-INV-COPY-001 lokalt. Inget har körts mot en riktig modell eller i development.
+Senast uppdaterad 2026-10-25 natt. Allt är pushat till development
+(`908f99c` … `b696db7`), migration 114 är körd där och Snajps villkor är
+skrivna. Tre provkörningar på körningen 2026-10-24 21:01 (Umeå bygg):
+
+| Varv | Utkast | Ord | Fokusgreppet | Påhittad förmåga |
+|---|---|---|---|---|
+| 1 (ny form) | 12 av 17 | 105–150 | 5 av 12 | Iris "föreslår nya tomter" |
+| 2 (fyra rättningar) | 11 av 14 | 101–148 | 4 av 11 | Iris "hittar nya tomter" |
+| 3 (vinkeln, greppet per prospekt, ordtak per del) | 14 av 14 | 83–123, 7 av 14 högst 100 | 1 av 14 | ingen i produktmeningen |
+
+Kvar efter varv 3: form B blir 98–123 ord, och två ingångar (Tegs, Livolo)
+handlar om något Iris inte löser (tomter, investerare), fast produktmeningen
+nu är rätt.
 
 | # | Punkt (Antons ord) | Läge | Återstår |
 |---|---|---|---|
