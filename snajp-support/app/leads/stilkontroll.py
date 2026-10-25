@@ -32,9 +32,9 @@ from .grounding_gate import _maska_idiom
 from .text_delta import split_sentences
 
 MAX_ORD = 25
-#: Skrivstilen: 60–110 ord i brödtexten (2026-10-25: piloten och avslutet står
-#: i varje mejl, och form B har en fråga till).
-MAX_ORD_MEJL = 110
+#: Skrivstilen: 60–100 ord i brödtexten. Piloten och avslutet står i varje
+#: mejl, men provkörningen 2026-10-25 gav 105–150 ord: för långt (Anton).
+MAX_ORD_MEJL = 100
 
 _HALSNING = re.compile(
     r"^\s*(?:med\s+vänlig(?:a)?\s+hälsning(?:ar)?|vänliga\s+hälsningar|bästa\s+hälsningar|"
@@ -115,13 +115,24 @@ _MALLORD = re.compile(
     r"\b(?:ert|ditt|deras)\s+löfte\b|\blöfte\s+till\b|\bstår\s+(?:ni|du)\s+för\b|\bnågot\s+(?:ni|du)\s+står\s+för\b"
     r"|\btar\s+tid\s+från\s+(?:det\s+arbetet|det\s+(?:ni|du)\s+gör\s+bäst|er\s+kärn\w*|ert\s+kärn\w*)"
     r"|\bkärnverksamhet\w*|\bkärnuppdrag\w*|\båterkommande\s+(?:kund)?frågor\s+tar\s+tid\b"
-    # Körningarna 2026-10-15/16 (189 utkast): ", inte på att hitta/jaga/leta
-    # nästa …", "det är svårt att", "tar tid från att" och "kräver fullt
-    # fokus" stod i fem till nio ingångar var.
-    r"|\binte\s+(?:på|till|med)\s+att\s+(?:hitta|jaga|leta)\b|\bdet\s+är\s+svårt\s+att\b|\bär\s+det\s+svårt\s+att\b"
-    r"|\btar\s+tid\s+från\s+att\b|\bkräver\s+(?:fullt|ditt|ert)\s+fokus\b",
+    # Körningarna 2026-10-15/16 (189 utkast): "det är svårt att", "tar tid från
+    # att" och "kräver fullt fokus" stod i fem till nio ingångar var.
+    # ", inte på att hitta nästa …" är tillåtet igen sedan 2026-10-25 (Anton:
+    # "helt okej om den förekommer ibland"), men bara med deras eget hantverk
+    # som det de fokuserar på ("på måleriet"), aldrig ett allmänt "varje
+    # projekt", och inte i varje mejl (samma_grepp i mot_andra).
+    r"|\bdet\s+är\s+svårt\s+att\b|\bär\s+det\s+svårt\s+att\b"
+    r"|\b(?:ta|tar)\s+tid\s+från\s+att\b|\bkräver\s+(?:fullt|ditt|ert)\s+fokus\b"
+    r"|\bfokus\w*\s+på\s+(?:varje\s+(?:enskilt\s+)?projekt|projekt(?:et|en)?\b|arbetet|uppdrag(?:et|en)?\b|verksamheten|jobbet"
+    r"|det\s+(?:ni|du)\s+gör)",
     re.IGNORECASE,
 )
+#: Fokusgreppet ("… kräver att ni kan fokusera på måleriet, inte på att hitta
+#: nästa uppdrag"): rätt ibland, fel i varje mejl (Anton 2026-10-25; 5 av 12 i
+#: provkörningen samma natt).
+_FOKUSGREPP = re.compile(r"\bfokus\w*\s+på\b", re.IGNORECASE)
+#: Fler än så här av de senaste ingångarna i körningen får inte redan bära greppet.
+FOKUSGREPP_TAK = 1
 #: Avslutet som order (Anton 2026-10-25: "en svag CTA som läses som botmejl
 #: och massutskick ... måste förbjudas helt"): sista meningen börjar med
 #: "Svara", eller mejlet ber om ett citerat kodord ("svara 'pilot'"). "… eller
@@ -451,7 +462,19 @@ def mot_andra(text: str, andra: Sequence[str]) -> list[Anmarkning]:
                                    allvarlig=True))
     if egen_uppmaning and any(uppmaning(t) == egen_uppmaning for t in andra):
         fynd.append(Anmarkning("samma_uppmaning", "Stil: samma uppmaning som ett annat mejl i körningen", allvarlig=True))
+    if _FOKUSGREPP.search(_ingangsstycke(text)) and (
+        sum(1 for t in andra[-12:] if _FOKUSGREPP.search(_ingangsstycke(t))) > FOKUSGREPP_TAK
+    ):
+        fynd.append(Anmarkning(
+            "samma_grepp", "Stil: \"fokusera på …\" står redan i flera ingångar i körningen; bygg ingången på ett annat sätt",
+            allvarlig=True,
+        ))
     return fynd
+
+
+def _ingangsstycke(text: str) -> str:
+    """Ingångens två första meningar: greppet står ofta i den andra."""
+    return " ".join(_meningar(_brodtext(text))[:2])
 
 
 def kontrollera_batch(texter: Sequence[str]) -> list[list[Anmarkning]]:

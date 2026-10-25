@@ -73,6 +73,19 @@ de bortvalda som leads utan utkast.
   kampanjmejl till kundens egna kunder, men avregistrerade, arkiverade och
   avböjda stoppas som förut.
 
+**Tillägg samma natt, efter provkörningen (12 utkast).** Anton: "'kräver att
+ni kan fokusera på varje projekt, inte på att söka upp nästa uppdrag' är
+faktiskt helt okej om den förekommer ibland (i olika formuleringar), så länge
+det inte är i varje mail, och även bygger på deras verksamhet och väver in
+något av det i meningen, som 'att ni fokuserar på måleriet'". Greppet står inte
+längre bland mallorden, men det de fokuserar på måste vara deras hantverk:
+"varje projekt", "arbetet" och "verksamheten" fälls (`mallord_i_ingangen`). Har
+redan två av körningens senaste ingångar greppet fälls det (`samma_grepp`).
+Därtill: mejlen var 105–150 ord, och nu är taket 100 ord och ett långt mejl
+skrivs om. Pilotvillkoret är kortat. Ingen förmåga får hittas på (Iris
+"föreslår nya tomter"). Frågan i form B har fasta moment för Iris och för
+Supportagenten.
+
 **Öppet för Anton.** Kampanjer till befintliga kunder är marknadsföring och
 inte kallkontakt. Det är lagligt B2B med avregistrering i varje mejl, men en
 lista med privatpersoners adresser kräver samtycke. Ingen kod skiljer ut dem

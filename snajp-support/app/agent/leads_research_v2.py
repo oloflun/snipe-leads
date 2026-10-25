@@ -214,7 +214,12 @@ _INGANGSUPPGIFT = (
     "med det de lägger vikt vid. Den ska kännas igen, aldrig läsas som kritik "
     "(Anton 2026-10-25): påstå aldrig att de brister, inte hinner, att frågor "
     "blir liggande eller att något försvinner för dem, och ställ aldrig deras "
-    "eget löfte mot ett misslyckande (\"ni lovar …, men …\"). Det som bär den är "
+    "eget löfte mot ett misslyckande (\"ni lovar …, men …\"). Greppet \"… kräver "
+    "att ni kan fokusera på X, inte på att hitta nästa uppdrag\" är tillåtet ibland, "
+    "men X är då deras eget hantverk med deras ord (måleriet, fasaderna, köken), "
+    "aldrig \"varje projekt\" eller \"arbetet\", och greppet används inte om det redan "
+    "står i ingångarna som används i körningen. Momentet är alltid något produkten "
+    "gör enligt dess nytta i produktlistan, aldrig en förmåga den saknar. Det som bär den är "
     "konkretionen, inte meningsbyggnaden. Benämn aldrig löftet: inga "
     "\"ert löfte\", \"står ni för\", \"tar tid från det arbetet\" eller "
     "\"kärnverksamhet\". Regler för den nya ingången: (1) andra person rakt "
@@ -892,9 +897,9 @@ def _stilfynd(
     # Ämnesraden (Anton 2026-10-15): inget bolagsnamn, ingen produkt, inte
     # samma början som ett annat mejl i körningen.
     fynd += stil.amne_fynd(str(draft.get("subject") or ""), bolag=bolag, produkt=produkt, andra=andra_amnen or [])
-    # for_langt: pilotens och garantins villkor ger ofta över 90 ord; att skriva
-    # om för det kostar varv utan att kunna lyckas (facit tillåter det också).
-    return [a.beskrivning for a in fynd if a.kod not in ("lang_mening", "samma_uppmaning", "for_langt")]
+    # for_langt skrivs om sedan 2026-10-25: villkoren är korta nu, och
+    # provkörningen gav 105–150 ord, längre än Antons exempel.
+    return [a.beskrivning for a in fynd if a.kod not in ("lang_mening", "samma_uppmaning")]
 
 
 async def run_outreach_draft_v2(

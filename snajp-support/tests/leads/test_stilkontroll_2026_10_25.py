@@ -42,6 +42,23 @@ def test_ingang_som_kritik_falls(ingang):
     assert "kritisk_ingang" in _koder(ingang)
 
 
+def test_fokusgreppet_med_deras_hantverk_ibland():
+    """Anton 2026-10-25: "kräver att ni kan fokusera på varje projekt, inte på
+    att söka upp nästa uppdrag" är okej ibland, men med deras hantverk ("att ni
+    fokuserar på måleriet") och inte i varje mejl."""
+    hantverk = "Att lägga om tak i Umeå kräver att ni kan fokusera på takläggningen, inte på att hitta nästa uppdrag."
+    allmant = "Att bygga i Umeå kräver att ni kan fokusera på varje projekt, inte på att söka upp nästa uppdrag."
+    assert "mallord_i_ingangen" not in _koder(hantverk)
+    assert "mallord_i_ingangen" in _koder(allmant)
+
+    def mejl(ingang: str) -> str:
+        return f"Hej,\n\n{ingang}\n\n{PRODUKT}\n\n{AVSLUT}"
+
+    andra = [mejl(f"Att måla fasader i {ort} kräver att ni kan fokusera på måleriet.") for ort in ("Luleå", "Piteå")]
+    assert "samma_grepp" in {a.kod for a in stil.mot_andra(mejl(hantverk), andra)}
+    assert "samma_grepp" not in {a.kod for a in stil.mot_andra(mejl(hantverk), andra[:1])}
+
+
 def test_avslutet_som_order_falls_men_inbjudan_passerar():
     for avslut in (
         "Svara på det här mejlet, så bokar vi 20 minuter.",

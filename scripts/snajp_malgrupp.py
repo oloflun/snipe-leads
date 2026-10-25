@@ -69,6 +69,9 @@ IRIS_INSTRUKTION = f"""{MARKOR}
 - Erbjud den produkt researchen valt, och bara den. Nämn aldrig de andra agenterna.
 - Nämn aldrig kvitton, bokföring eller Kvittohanteraren: den säljs inte just nu.
 - Avsluta med erbjudandets handling enligt villkoren under "Erbjudandet i det här mejlet", som en vardaglig inbjudan. Aldrig "Svara X så gör vi Y" och aldrig med en fråga.
+- Kalla Iris "vår agent Iris" första gången och sedan "Iris". Aldrig "Iris, leadsagenten", "leadsagenten Iris", "Vår Iris" eller "hon".
+- Iris hittar och kvalificerar nya företagskunder och skriver första mejlet till dem. Iris hittar aldrig tomter, investerare, leverantörer eller personal.
+- Frågan i form B: för Iris om det tar mest tid att hantera de förfrågningar som redan kommer in eller att hitta nya kunder; för Supportagenten om det tar mest tid att gå igenom kundmejlen eller att sitta i supportchattarna. Inga andra moment.
 """
 
 #: Erbjudandena (A/B, app/leads/erbjudanden.py), Antons beslut 2026-10-10: alla
@@ -81,11 +84,11 @@ IRIS_INSTRUKTION = f"""{MARKOR}
 IRIS, SUPPORT = (p["namn"] for p in PRODUKTER)
 #: Antons villkor 2026-10-25: piloten i varje mejl, inga fler detaljer, och
 #: avslutet en vardaglig inbjudan till demon eller en kostnadsfri genomgång.
+#: Kort (2026-10-25): piloten och avslutet tog 60 av 105–150 ord i provet.
 _PILOT = (
-    "Vi tar just nu in 20 företag i en pilot där ni använder {agent} kostnadsfritt i tre månader, med "
-    "alla funktioner. Är ni nöjda och vill stanna efter piloten får ni 50 % rabatt. Handling: vill ni "
-    "veta mer eller testa själva finns en demo på snajp.se/demo, eller så svarar ni på mejlet och vi "
-    "bokar en kostnadsfri genomgång."
+    "Just nu tar vi in 20 företag i en kostnadsfri pilot av {agent} i tre månader, med alla funktioner, "
+    "och den som vill stanna efteråt får 50 % rabatt. Handling: demon på snajp.se/demo, eller ett svar "
+    "på mejlet så bokar vi en kostnadsfri genomgång."
 )
 #: Kortnamnet i texten ("Iris", inte "Iris, leadsagenten"): Anton 2026-10-25 om
 #: mejlen som "berättar om 'leadsagenten' helt utan kontext".

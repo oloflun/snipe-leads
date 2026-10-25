@@ -371,11 +371,11 @@ def test_ofarliga_formuleringar_fangas_inte(text):
     assert stilkontroll.kontrollera(text).anmarkningar == []
 
 
-def test_hundratio_ord_ar_okej_men_inte_hundraelva():
-    # 110 sedan 2026-10-25: piloten och avslutet står i varje mejl.
-    nittio = "Hej,\n\n" + " ".join(["ord"] * 109) + " slut."
+def test_hundra_ord_ar_okej_men_inte_hundraett():
+    # 100 sedan 2026-10-25: piloten och avslutet står i varje mejl, kort.
+    nittio = "Hej,\n\n" + " ".join(["ord"] * 99) + " slut."
     assert "for_langt" not in {a.kod for a in stilkontroll.kontrollera(nittio).anmarkningar}
-    nittioett = "Hej,\n\n" + " ".join(["ord"] * 110) + " slut."
+    nittioett = "Hej,\n\n" + " ".join(["ord"] * 100) + " slut."
     assert "for_langt" in {a.kod for a in stilkontroll.kontrollera(nittioett).anmarkningar}
     # Signaturen och foten räknas inte.
     med_signatur = nittio + "\n\nVänliga hälsningar,\nAnna Andersson\nSnajp AB\n\n--\nSnajp AB, org.nr 556000-0000"

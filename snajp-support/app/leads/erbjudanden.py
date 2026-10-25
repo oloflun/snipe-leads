@@ -69,11 +69,11 @@ FORMER: dict[str, tuple[str, str]] = {
     ),
     "fraga": (
         "B, med en fråga",
-        "Efter hälsningen, i den här ordningen: (1) samma sorts ingång som i form A; (2) en kort fråga "
-        "om vilket av två konkreta moment som tar mest tid för dem i dag. Momenten hämtas ur produktens "
-        "nytta och sägs med ord ur deras verksamhet: för en leadsagent att hantera de förfrågningar som "
-        "redan kommer in eller att hitta nya kunder, för en supportagent att gå igenom kundmejlen eller "
-        "att sitta i supportchattarna; (3) att produkten tar hand om båda delarna och anpassas efter "
+        "Efter hälsningen, i den här ordningen: (1) samma sorts ingång som i form A, i en mening; (2) en "
+        "kort fråga om vilket av två konkreta moment som tar mest tid för dem i dag. Båda momenten är "
+        "saker produkten gör enligt dess nytta, aldrig något den inte gör: för en leadsagent att hantera "
+        "de förfrågningar som redan kommer in eller att hitta nya kunder, för en supportagent att gå "
+        "igenom kundmejlen eller att sitta i supportchattarna; (3) att produkten tar hand om båda delarna och anpassas efter "
         "deras behov och verksamhet; (4) erbjudandet med villkorens innehåll; (5) avslutet, villkorens "
         "handling som en vardaglig inbjudan. Frågan står aldrig sist.",
     ),
@@ -301,6 +301,12 @@ def block(nyckel: str, villkor: str, erbjudande: Erbjudande | None = None) -> st
         "- Översätt erbjudandet till mottagarens verksamhet: vad det betyder för just deras arbete "
         "och kunder. Villkorens innehåll, siffror och löften står kvar oförändrade i sak, och "
         "inget annat lovas.\n"
+        # Provkörningen 2026-10-25: Iris "föreslår nya tomter för byggen" och
+        # hittar "investerare och tomtägare". Anpassningen hittade på förmågor.
+        "- Produkten gör bara det som står i dess nytta i produktlistan och i villkoren. Hitta "
+        "aldrig på en förmåga för att passa deras verksamhet: en agent som hittar kunder hittar "
+        "inte tomter, investerare, leverantörer eller personal.\n"
+        "- Kort: 60–100 ord i brödtexten. Erbjudandet och avslutet i en mening var.\n"
         # Provkörningen 2026-10-10 (scripts/prova_erbjudanden.py): katalogens
         # exempel på uppmaningar gick ordagrant in i mejlen, samma fråga i
         # upp till elva av tolv, och villkor skrivna i ni-form blandade
