@@ -87,7 +87,9 @@ _PILOT = (
     "veta mer eller testa själva finns en demo på snajp.se/demo, eller så svarar ni på mejlet och vi "
     "bokar en kostnadsfri genomgång."
 )
-_PILOTER = {agent: _PILOT.format(agent=agent) for agent in (IRIS, SUPPORT)}
+#: Kortnamnet i texten ("Iris", inte "Iris, leadsagenten"): Anton 2026-10-25 om
+#: mejlen som "berättar om 'leadsagenten' helt utan kontext".
+_PILOTER = {agent: _PILOT.format(agent=agent.split(",")[0]) for agent in (IRIS, SUPPORT)}
 #: A/B (Anton 2026-10-25): samma pilot, två former, hälften var. Katalogens
 #: gratisprov och garanti står kvar avslagna och kan slås på i Leads › Erbjudanden.
 ERBJUDANDEN = {
