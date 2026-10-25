@@ -326,29 +326,13 @@ export function IrisErbjudanden() {
           const arm = armar.get(rad.nyckel);
           return (
             <li key={rad.nyckel} className="grid gap-3 py-5">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div className="min-w-0 flex-1">
-                  <Vaxel
-                    paslagen={rad.pa}
-                    etikett={visatNamn(rad)}
-                    beskrivning={info ? text(info.om) : text(FORMER[rad.form].namn)}
-                    upptagen={busy}
-                    onByt={(pa) => andra(rad.nyckel, { pa })}
-                  />
-                </div>
-                {rad.egen ? (
-                  <button
-                    type="button"
-                    onClick={() => taBort(rad.nyckel)}
-                    disabled={busy}
-                    aria-label={`${text(T.taBort)}: ${visatNamn(rad)}`}
-                    className={cn(btnSecondary, btnLiten)}
-                  >
-                    <Trash2 className="h-4 w-4" aria-hidden />
-                    {text(T.taBort)}
-                  </button>
-                ) : null}
-              </div>
+              <Vaxel
+                paslagen={rad.pa}
+                etikett={visatNamn(rad)}
+                beskrivning={info ? text(info.om) : text(FORMER[rad.form].namn)}
+                upptagen={busy}
+                onByt={(pa) => andra(rad.nyckel, { pa })}
+              />
               {rad.egen ? (
                 <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,16rem)]">
                   <label className="grid gap-1">
@@ -439,6 +423,20 @@ export function IrisErbjudanden() {
                 </p>
               ) : rad.pa ? (
                 <p className={meta}>{text(T.inget)}</p>
+              ) : null}
+              {/* Sist i raden, inte bredvid växeln: där trängde knappen ned
+                  reglaget under namnet (development 2026-10-25). */}
+              {rad.egen ? (
+                <button
+                  type="button"
+                  onClick={() => taBort(rad.nyckel)}
+                  disabled={busy}
+                  aria-label={`${text(T.taBort)}: ${visatNamn(rad)}`}
+                  className={cn(btnSecondary, btnLiten, "justify-self-start")}
+                >
+                  <Trash2 className="h-4 w-4" aria-hidden />
+                  {text(T.taBort)}
+                </button>
               ) : null}
             </li>
           );
