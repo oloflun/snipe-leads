@@ -18,7 +18,7 @@ igen (lib/routes.ts: VILANDE_PRODUKTER styr arbetsytan).
   * settings.segment    — rangordnade målsegment; en körning utan filter söker i dem
   * settings.offentlig_sektor = false — bara privata bolag
   * kundinstruktionen för Iris — hur Snajp presenterar sig i utkastets mall
-  * erbjudandena         — tre aktiva, lika viktade, villkor per produkt (2026-10-10)
+  * erbjudandena         — piloten i form A och B, lika viktade (Anton 2026-10-25)
 
 Segmenten kommer ur Antons tabell 2026-10-06 (utbildning, e-handel, bygg,
 konsult och byrå) plus fyra förslag (markerade nedan). Max sex segment ryms i
@@ -45,8 +45,7 @@ from seed_demo import Api, deploy_env  # noqa: E402
 PRODUKTER = [
     {
         "namn": "Iris, leadsagenten",
-        # Sebbe 2026-10-24: leadsen anpassas efter exakt det kunden söker.
-        "nytta": "hittar nya företagskunder anpassade efter exakt det ni söker (bransch, ort och storlek), läser varje bolags webbplats och skriver ett färdigt första mejl till vart och ett, som ni själva godkänner innan något skickas",
+        "nytta": "hittar och kvalificerar nya företagskunder och skriver färdiga utkast som ni själva godkänner innan något skickas",
     },
     {
         "namn": "Supportagenten",
@@ -69,8 +68,7 @@ IRIS_INSTRUKTION = f"""{MARKOR}
 
 - Erbjud den produkt researchen valt, och bara den. Nämn aldrig de andra agenterna.
 - Nämn aldrig kvitton, bokföring eller Kvittohanteraren: den säljs inte just nu.
-- Säg aldrig att Supportagenten hittade bolaget eller skrev mejlet. Det gör bara Iris, och då står det i Iris villkor.
-- Avsluta med erbjudandets handling enligt villkoren under "Erbjudandet i det här mejlet" (svara "ja", svara med något bifogat, svara så bokar vi), aldrig med en fråga.
+- Avsluta med erbjudandets handling enligt villkoren under "Erbjudandet i det här mejlet", som en vardaglig inbjudan. Aldrig "Svara X så gör vi Y" och aldrig med en fråga.
 """
 
 #: Erbjudandena (A/B, app/leads/erbjudanden.py), Antons beslut 2026-10-10: alla
@@ -81,45 +79,37 @@ IRIS_INSTRUKTION = f"""{MARKOR}
 #: Gratisprovet för Supportagenten går via svar på mejlet (frågorna bifogade)
 #: och hanteras för hand tills demolänken finns: ingen kunskapsbas behöver kopplas.
 IRIS, SUPPORT = (p["namn"] for p in PRODUKTER)
-#: Utan "20 platser" sedan 2026-10-24 (Sebbe, förslag till Anton): samma
-#: knapphet stod i hundratals mejl, och den som fick två såg att den inte
-#: stämde. Skälet att sätta upp varje företag personligen är kvar.
+#: Antons villkor 2026-10-25: piloten i varje mejl, inga fler detaljer, och
+#: avslutet en vardaglig inbjudan till demon eller en kostnadsfri genomgång.
 _PILOT = (
-    "I piloten för {agent} sätter vi upp varje företag personligen. Pilotföretagen får 50 % rabatt "
-    "första året om de vill fortsätta, och 25 % så länge de stannar. Handling: svara \"pilot\" på "
-    "mejlet, så sätter vi upp {agent} åt er."
+    "Vi tar just nu in 20 företag i en pilot där ni använder {agent} kostnadsfritt i tre månader, med "
+    "alla funktioner. Är ni nöjda och vill stanna efter piloten får ni 50 % rabatt. Handling: vill ni "
+    "veta mer eller testa själva finns en demo på snajp.se/demo, eller så svarar ni på mejlet och vi "
+    "bokar en kostnadsfri genomgång."
 )
-#: Beviset i varje Iris-mejl (Sebbe 2026-10-24): mejlet är självt ett prov på
-#: Iris. Står i villkoren och inte i instruktionen, så att det bara följer med
-#: Iris-erbjudandena: som instruktion skrev modellen samma mening i ett
-#: Supportagent-mejl ("Supportagenten hittade …"), vilket inte är sant.
-_IRIS_BEVIS = (
-    "Det här mejlet är skrivet av Iris, som hittade er och läste er webbplats, och vi läste det "
-    "innan det skickades."
-)
-
-
-def _med_bevis(villkor: str) -> str:
-    fore, _, handling = villkor.partition(" Handling:")
-    return f"{fore} {_IRIS_BEVIS} Handling:{handling}"
-
-
+_PILOTER = {agent: _PILOT.format(agent=agent) for agent in (IRIS, SUPPORT)}
+#: A/B (Anton 2026-10-25): samma pilot, två former, hälften var. Katalogens
+#: gratisprov och garanti står kvar avslagna och kan slås på i Leads › Erbjudanden.
 ERBJUDANDEN = {
-    "aktiva": [{"nyckel": n, "vikt": 1} for n in ("gratis_prov", "garanti", "pilot")],
+    "aktiva": [{"nyckel": "pilot_a", "vikt": 1}, {"nyckel": "pilot_b", "vikt": 1}],
+    "egna": {
+        "pilot_a": {"namn": "Piloten, form A", "form": "rak"},
+        "pilot_b": {"namn": "Piloten, form B (frågan)", "form": "fraga"},
+    },
     "villkor": {
+        "pilot_a": _PILOTER,
+        "pilot_b": _PILOTER,
+        "pilot": _PILOTER,
         "gratis_prov": {
-            IRIS: "Fem kvalificerade leads i er region, med kontaktperson och ett färdigt första mejl till vart och ett, helt utan kostnad och utan att det binder er till något. Handling: svara \"ja\" på mejlet, så skickar vi de fem inom två arbetsdagar.",
-            SUPPORT: "Agentens svar på era fem vanligaste kundfrågor, utifrån era egna villkor, helt utan kostnad och utan att något behöver kopplas in. Handling: svara på mejlet med de fem frågorna och era villkor, så får ni tillbaka agentens svar inom en arbetsdag.",
+            IRIS: "Fem kvalificerade leads i er region, med kontaktperson och ett färdigt första mejl till vart och ett, helt utan kostnad och utan att det binder er till något. Handling: vill ni ha dem svarar ni på mejlet, så skickar vi de fem inom två arbetsdagar.",
+            SUPPORT: "Agentens svar på era fem vanligaste kundfrågor, utifrån era egna villkor, helt utan kostnad och utan att något behöver kopplas in. Handling: skicka de fem frågorna och era villkor som svar på mejlet, så får ni tillbaka agentens svar inom en arbetsdag.",
         },
         "garanti": {
-            IRIS: "Vi lovar minst 10 nya kunddialoger, alltså svar från intresserade företag, inom 90 dagar. Blir det färre förlänger vi provperioden utan kostnad tills ni har fått dem, så länge ni har godkänt utkasten i granskningen. Handling: svara på mejlet, så bokar vi 20 minuter där vi visar vilka företag Iris redan hittar åt er.",
-            SUPPORT: "Vi lovar att ni lägger minst 50 % mindre tid på kundmejlen inom 60 dagar. Annars förlänger vi provperioden utan kostnad tills ni gör det. Handling: svara på mejlet, så bokar vi 20 minuter och sätter upp agenten på era vanligaste frågor.",
+            IRIS: "Vi lovar minst 10 nya kunddialoger, alltså svar från intresserade företag, inom 90 dagar. Blir det färre förlänger vi provperioden utan kostnad tills ni har fått dem, så länge ni har godkänt utkasten i granskningen. Handling: vill ni se hur det fungerar bokar vi gärna 20 minuter, det räcker med ett svar på mejlet.",
+            SUPPORT: "Vi lovar att ni lägger minst 50 % mindre tid på kundmejlen inom 60 dagar. Annars förlänger vi provperioden utan kostnad tills ni gör det. Handling: vill ni se hur det fungerar bokar vi gärna 20 minuter, det räcker med ett svar på mejlet.",
         },
-        "pilot": {agent: _PILOT.format(agent=agent) for agent in (IRIS, SUPPORT)},
     },
 }
-for _villkor in ERBJUDANDEN["villkor"].values():
-    _villkor[IRIS] = _med_bevis(_villkor[IRIS])
 
 
 def main() -> None:

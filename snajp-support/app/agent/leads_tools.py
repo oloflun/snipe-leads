@@ -116,7 +116,7 @@ async def _queue_outreach_draft_impl(
     humanizer_variant: str,
     force_review: bool = False,
     stilkontroll: bool = False,
-    stilundantag: frozenset[str] = frozenset(),
+    kampanj_id: str | None = None,
 ) -> str:
     # Textkvalitetslagret (app/textkvalitet.py): sista efterkontrollen innan
     # texten kan nå en kund. Platshållare ("[förnamn]") kontrolleras på
@@ -154,7 +154,9 @@ async def _queue_outreach_draft_impl(
         sprak=sprak,
         epost=prospekt.get("contact_email"),
     )
-    kvalitet = await sakra_utgaende_text(finalized_body, sprak=sprak, alltid_korrektur=True)
+    # En kampanj är samma människoskrivna text till hela listan: korrektur bara
+    # när något flaggats, inte ett modellanrop per mottagare.
+    kvalitet = await sakra_utgaende_text(finalized_body, sprak=sprak, alltid_korrektur=not kampanj_id)
     finalized_body = kvalitet.text
     granskningsskal: str | None = None
     if kvalitet.kraver_granskning or platshallare:
@@ -178,9 +180,6 @@ async def _queue_outreach_draft_impl(
             if r.get("thread_id") != outreach.thread_id
         ]
         stilfynd = stil.kontrollera(finalized_body).anmarkningar + stil.mot_andra(finalized_body, andra)
-        # Fynd som mejlets form själv ger (Iris-formen: varje mejl öppnar med
-        # erbjudandet), se leads_research_v2._ERBJUDANDE_FORST_UNDANTAG.
-        stilfynd = [a for a in stilfynd if a.kod not in stilundantag]
         if stilfynd:
             force_review = True
             granskningsskal = "; ".join(
@@ -264,6 +263,7 @@ async def _queue_outreach_draft_impl(
         scheduled_at=scheduled_at,
         status=queue_status,
         gate_checks={"held": granskningsskal} if granskningsskal else None,
+        **({"kampanj_id": kampanj_id} if kampanj_id else {}),
     )
     outreach.queued = True
     svar = {

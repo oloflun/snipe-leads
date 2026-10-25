@@ -37,6 +37,7 @@ from .api import (
     keys,
     kvitton,
     leads,
+    leads_kampanjer,
     leads_massatgard,
     leads_suite,
     rules,
@@ -374,6 +375,7 @@ app.include_router(leads.router)
 app.include_router(leads_suite.router)
 # Massåtgärder i Iris-listan och Ta bort lista; se api/leads_massatgard.py.
 app.include_router(leads_massatgard.router)
+app.include_router(leads_kampanjer.router)
 app.include_router(demo.router)
 app.include_router(inbox.router)
 app.include_router(drafts.router)

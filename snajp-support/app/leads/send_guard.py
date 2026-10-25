@@ -114,6 +114,10 @@ class Utskick:
     #: Skicka nu ur kön (Anton 2026-10-10): en människa har valt att mejlet
     #: går direkt. Bara kontorstiden (regel 5a) släpps; övriga spärrar gäller.
     direkt: bool = False
+    #: Ett kampanjutskick till kundens befintliga lista (migration 114, Anton
+    #: 2026-10-25), inget kallmejl: regel 3 släpper det till egna kunder och
+    #: redan kontaktade. Avregistreringen gäller alltid.
+    kampanj: bool = False
 
 
 @dataclass(frozen=True)
@@ -298,6 +302,11 @@ def _regel_3_suppression(*, avsandare, utskick, historik, nu) -> GuardBeslut | N
             f"{utskick.mottagare} har avregistrerat sig. Avregistreringen gäller "
             "hela tenanten och är permanent.",
         )
+
+    if utskick.kampanj:
+        # Kampanjen går till kundens egen lista: att adressen är kund eller
+        # redan kontaktad är skälet till utskicket, inte ett hinder.
+        return None
 
     if adress in {_normaliserad_adress(a) for a in historik.egna_kunder}:
         return GuardBeslut(

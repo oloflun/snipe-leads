@@ -99,7 +99,9 @@ export async function sakerstallKundtenant(
   /** `true` i uppstarten, där väntan på en kallstartande backend är poängen. */
   tolamodigt = false,
   /** Onboardingens målgruppssteg. Bara uppstarten har det. */
-  malgrupp?: Malgruppsfilter
+  malgrupp?: Malgruppsfilter,
+  /** Onboardingens erbjudanden, ett per stycke. Bara uppstarten har dem. */
+  erbjudanden?: string[]
 ): Promise<Kundtenant | null> {
   if (workspace.slug) {
     // Redan kopplad. Den här funktionen kopplar; den flyttar aldrig en
@@ -144,7 +146,7 @@ export async function sakerstallKundtenant(
     return null;
   }
 
-  await fyllStandardinstallningar(apiKey, workspace, businessContext, malgrupp);
+  await fyllStandardinstallningar(apiKey, workspace, businessContext, malgrupp, erbjudanden);
 
   return { slug: tenant.slug, apiKey };
 }
@@ -161,7 +163,8 @@ export async function fyllStandardinstallningar(
   apiKey: string,
   workspace: Workspace,
   businessContext: Kundunderlag | null,
-  malgrupp?: Malgruppsfilter
+  malgrupp?: Malgruppsfilter,
+  erbjudanden?: string[]
 ): Promise<void> {
   if (!businessContext) {
     // Inget underlag att härleda ur. Att skriva defaultarna ändå hade gett
@@ -177,10 +180,11 @@ export async function fyllStandardinstallningar(
     erbjudande: businessContext.offer,
     nastaSteg: businessContext.cta,
     namn: workspace.name,
-    malgruppsfilter: malgrupp
+    malgruppsfilter: malgrupp,
+    erbjudanden
   });
 
-  if (utfall.produktbeskrivning || utfall.rostdokument || utfall.icp) {
+  if (utfall.produktbeskrivning || utfall.rostdokument || utfall.icp || utfall.erbjudanden) {
     console.info(
       `[provisionering] standardinställningar för ${workspace.slug ?? workspace.id}:`,
       utfall

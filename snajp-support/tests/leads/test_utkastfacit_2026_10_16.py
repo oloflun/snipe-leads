@@ -27,7 +27,10 @@ UTKAST = FACIT["utkast"]
 #: Fynd som villkoren själva orsakar (lång villkorsmening, samma handling i
 #: varje mejl med samma erbjudande, över 90 ord med pilotens text), och
 #: Båtladans ord som själva står i skrivstilens exempel.
-TILLATNA = {"lang_mening", "samma_uppmaning", "for_langt", "kopierat_exempel"}
+#: svara_sa_avslut: facit slutar med "Svara 'pilot' …", som Anton förbjöd
+#: 2026-10-25 (docs/BESLUT.md). Facit gäller för allt annat tills ett nytt
+#: facit med den nya formen är godkänt.
+TILLATNA = {"lang_mening", "samma_uppmaning", "for_langt", "kopierat_exempel", "svara_sa_avslut"}
 
 
 def _koder(text: str) -> set[str]:

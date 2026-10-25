@@ -65,6 +65,11 @@ export type Underlag = {
    * gäller standardrollerna och småföretagsspannet som förut.
    */
   malgruppsfilter?: Malgruppsfilter;
+  /**
+   * Onboardingens erbjudanden (Anton 2026-10-25), ett per stycke kunden skrev.
+   * Blir kundens egna erbjudanden, aktiva i form A med lika vikt.
+   */
+  erbjudanden?: string[];
 };
 
 /**
@@ -86,7 +91,26 @@ export type Standardutfall = {
   produktbeskrivning: boolean;
   rostdokument: boolean;
   icp: boolean;
+  erbjudanden: boolean;
 };
+
+/**
+ * Onboardingens erbjudanden som erbjudandeinställningar
+ * (snajp-support/app/leads/erbjudanden.py): egna erbjudanden, form A, lika vikt.
+ * Namnet är textens första mening, så att kunden känner igen det i Leads ›
+ * Erbjudanden.
+ */
+export function erbjudandenUrOnboarding(texter: string[]) {
+  const rader = texter.map((t) => t.trim()).filter(Boolean).slice(0, 5);
+  const nyckel = (i: number) => `onboarding-${i + 1}`;
+  return {
+    aktiva: rader.map((_, i) => ({ nyckel: nyckel(i), vikt: 1 })),
+    villkor: Object.fromEntries(rader.map((t, i) => [nyckel(i), t.slice(0, 600)])),
+    egna: Object.fromEntries(
+      rader.map((t, i) => [nyckel(i), { namn: (t.split(/[.:\n]/)[0] ?? "").trim().slice(0, 60) || `Erbjudande ${i + 1}`, form: "rak" }])
+    )
+  };
+}
 
 /**
  * Platshållaren onboardingen skriver i fält den inte kan fylla. Den ska aldrig
@@ -242,7 +266,7 @@ export async function sattStandardinstallningar(
   apiKey: string,
   underlag: Underlag
 ): Promise<Standardutfall> {
-  const utfall: Standardutfall = { produktbeskrivning: false, rostdokument: false, icp: false };
+  const utfall: Standardutfall = { produktbeskrivning: false, rostdokument: false, icp: false, erbjudanden: false };
 
   if (rent(underlag.produkt)) {
     try {
@@ -303,6 +327,22 @@ export async function sattStandardinstallningar(
     }
   } catch (error) {
     console.error("[standard] ICP-defaultarna kunde inte skrivas:", error);
+  }
+
+  if (underlag.erbjudanden?.some((t) => t.trim())) {
+    try {
+      // Bara när kunden inte redan har erbjudanden: samma regel som fälten ovan.
+      const svar = await anrop<{ aktiva?: unknown[]; egna?: Record<string, unknown> }>(apiKey, "/api/leads/erbjudanden");
+      if (svar && !(svar.aktiva ?? []).length && !Object.keys(svar.egna ?? {}).length) {
+        await anrop(apiKey, "/api/leads/erbjudanden", {
+          method: "PUT",
+          body: JSON.stringify(erbjudandenUrOnboarding(underlag.erbjudanden))
+        });
+        utfall.erbjudanden = true;
+      }
+    } catch (error) {
+      console.error("[standard] erbjudandena kunde inte skrivas:", error);
+    }
   }
 
   // Iris-profilen kompileras direkt ur det som just skrevs, så att den är klar

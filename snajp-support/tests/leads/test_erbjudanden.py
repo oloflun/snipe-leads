@@ -36,7 +36,9 @@ def test_blocket_bar_gemensamt_avsnitt_och_villkoren_ordagrant():
     villkor = "Fem kvalificerade leads med färdiga första mejl, utan kostnad. Svara ja så skickar vi dem."
     block = erbjudanden.block("gratis_prov", villkor)
     assert block.startswith("## Erbjudandet i det här mejlet")
-    assert "stycke 2 och 3" in block and "aldrig med en fråga" in block
+    # Anton 2026-10-25: erbjudandet styr hela mejlet, och avslutet är aldrig en order.
+    assert "styr hela mejlet" in block and "aldrig med en fråga" in block and "Svara X så gör vi Y" in block
+    assert "### Mejlets form (A, rakt på)" in block
     assert "Gemensamt för alla erbjudanden" in block
     assert "### Testa gratis" in block
     assert block.endswith(f"### Villkor för erbjudandet\n{villkor}")
@@ -124,12 +126,48 @@ def test_valideringen_kraver_kanda_nycklar_och_villkor():
     with pytest.raises(ValueError, match="inte finns bland era produkter"):
         erbjudanden.validera([], {"pilot": {"Okänd agent": "20 platser."}}, ["Iris"])
     ok = erbjudanden.validera([{"nyckel": "pilot", "vikt": 4}], {"pilot": "20 platser, 50 % första året."})
-    assert ok == {"aktiva": [{"nyckel": "pilot", "vikt": 4}], "villkor": {"pilot": "20 platser, 50 % första året."}}
+    assert ok == {
+        "aktiva": [{"nyckel": "pilot", "vikt": 4}], "villkor": {"pilot": "20 platser, 50 % första året."}, "egna": {}
+    }
     # Villkor för minst en produkt räcker; tomma produktfält faller bort.
     per = erbjudanden.validera(
         [{"nyckel": "pilot", "vikt": 1}], {"pilot": {"iris": "10 platser.", "Supportagent": ""}}, ["Iris", "Supportagent"]
     )
     assert per["villkor"] == {"pilot": {"iris": "10 platser."}}
+
+
+def test_egna_erbjudanden_med_form_a_och_b():
+    """Anton 2026-10-25: kunden listar egna erbjudanden, och två med samma
+    villkor och olika form A/B-testar formen, hälften var."""
+    pilot = "20 företag, tre månader utan kostnad, sedan 50 %. Handling: demo på snajp.se/demo."
+    val = erbjudanden.validera(
+        [{"nyckel": "pilot_a", "vikt": 1}, {"nyckel": "pilot_b", "vikt": 1}],
+        {"pilot_a": pilot, "pilot_b": pilot},
+        egna={"pilot_a": {"namn": "Piloten A", "form": "rak"}, "pilot_b": {"namn": "Piloten B", "form": "fraga"}},
+    )
+    assert erbjudanden.valbara(val) == [("pilot_a", 1), ("pilot_b", 1)]
+    tilldelat = [erbjudanden.tilldela(TENANT, f"p-{i}", erbjudanden.valbara(val)) for i in range(400)]
+    assert 160 < tilldelat.count("pilot_b") < 240
+    b = erbjudanden.block("pilot_b", pilot, erbjudanden.armar(val)["pilot_b"])
+    assert "### Piloten B" in b and "### Mejlets form (B, med en fråga)" in b and b.endswith(pilot)
+    assert [a["nyckel"] for a in erbjudanden.sammanstall([], val)["armar"]][-2:] == ["pilot_a", "pilot_b"]
+    # Ett eget erbjudande utan namn, eller med katalogens nyckel, fälls.
+    with pytest.raises(ValueError, match="namn"):
+        erbjudanden.validera([], {}, egna={"x": {"namn": " ", "form": "rak"}})
+    with pytest.raises(ValueError, match="namn"):
+        erbjudanden.validera([], {}, egna={"pilot": {"namn": "Min pilot", "form": "rak"}})
+
+
+@pytest.mark.anyio
+async def test_for_trad_bar_formen():
+    storage = MemoryStorage()
+    await storage.set_agent_settings(TENANT, agent_type="leads", settings={"erbjudanden": {
+        "aktiva": [{"nyckel": "eget", "vikt": 1}], "villkor": {"eget": "Gratis analys."},
+        "egna": {"eget": {"namn": "Analysen", "form": "fraga"}},
+    }})
+    trad = await storage.ensure_outreach_thread(TENANT, prospect_id=(await storage.create_prospect(TENANT, company_name="X"))["id"])
+    valt = await erbjudanden.for_trad(storage, TENANT, trad)
+    assert valt.nyckel == "eget" and valt.form == "fraga" and "### Analysen" in valt.block()
 
 
 def test_produkten_lases_ur_researchen():
@@ -303,7 +341,10 @@ def test_ett_mejl_i_skrivstilen_ger_inga_fynd():
         ("Svara ja.\n\nVänliga hälsningar,\nSnajp", "halsningsfras"),
         ("Svara ja.\n\nMed vänlig hälsning", "halsningsfras"),
         ("Vår agent hittar kunderna. Har ni 15 minuter nästa vecka?", "slutar_med_fraga"),
-        ("Hej,\n\n" + "Vår agent hittar nya kunder åt er varje vecka. " * 11, "for_langt"),
+        ("Hej,\n\n" + "Vår agent hittar nya kunder åt er varje vecka. " * 13, "for_langt"),
+        # Anton 2026-10-25: avslutet som order eller med ett citerat kodord.
+        ("Vår agent hittar kunderna. Svara ja så skickar jag dem.", "svara_sa_avslut"),
+        ("Vår agent hittar kunderna. Svara \"pilot\" på mejlet, så håller vi en plats åt er.", "svara_sa_avslut"),
     ],
 )
 def test_markorerna_fangas(text, kod):
@@ -317,7 +358,9 @@ def test_markorerna_fangas(text, kod):
         "Boka 15–20 minuter nästa vecka.",
         "Ring 070-123 45 67 om det passar.",
         # En igenkänningsfråga tidigt är tillåten; bara avslutningen får inte vara en fråga.
-        "Hinner ni svara på offertförfrågningarna samma vecka? Svara ja så skickar jag fem leads.",
+        "Hinner ni svara på offertförfrågningarna samma vecka? Vill ni ha fem leads räcker ett svar på mejlet.",
+        # Antons avslut 2026-10-25: "svara på mejlet" mitt i en inbjudan är ingen order.
+        "Vill ni veta mer finns en demo på snajp.se/demo, eller så svarar ni på mejlet och vi bokar en genomgång.",
         "Mötet börjar 10:30 på torsdag.",
         "Ni får mer tid till det ni gör bäst.",
         "PS: Provperioden är 30 dagar, utan bindningstid.",
@@ -328,10 +371,11 @@ def test_ofarliga_formuleringar_fangas_inte(text):
     assert stilkontroll.kontrollera(text).anmarkningar == []
 
 
-def test_nittio_ord_ar_okej_men_inte_nittioett():
-    nittio = "Hej,\n\n" + " ".join(["ord"] * 89) + " slut."
+def test_hundratio_ord_ar_okej_men_inte_hundraelva():
+    # 110 sedan 2026-10-25: piloten och avslutet står i varje mejl.
+    nittio = "Hej,\n\n" + " ".join(["ord"] * 109) + " slut."
     assert "for_langt" not in {a.kod for a in stilkontroll.kontrollera(nittio).anmarkningar}
-    nittioett = "Hej,\n\n" + " ".join(["ord"] * 90) + " slut."
+    nittioett = "Hej,\n\n" + " ".join(["ord"] * 110) + " slut."
     assert "for_langt" in {a.kod for a in stilkontroll.kontrollera(nittioett).anmarkningar}
     # Signaturen och foten räknas inte.
     med_signatur = nittio + "\n\nVänliga hälsningar,\nAnna Andersson\nSnajp AB\n\n--\nSnajp AB, org.nr 556000-0000"

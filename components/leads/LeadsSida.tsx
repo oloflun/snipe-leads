@@ -5,7 +5,9 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { PageShell } from "@/components/AppShell";
 import { useDashboard } from "@/components/dashboard/DashboardContext";
+import { IrisErbjudanden } from "@/components/leads/IrisErbjudanden";
 import { IrisInkorg } from "@/components/leads/IrisInkorg";
+import { Kampanjer } from "@/components/leads/Kampanjer";
 import { IrisKorningar } from "@/components/leads/IrisKorningar";
 import { LeadDetail, exempelTillRad, type ExempelRad } from "@/components/leads/IrisBolag";
 import { LeadsOversikt } from "@/components/leads/LeadsOversikt";
@@ -32,14 +34,16 @@ import { cn } from "@/lib/utils";
  * får hela bredden, och lådan stängs med Esc, krysset eller ett klick utanför.
  */
 
-type Segment = "listor" | "inkorg" | "samtal" | "korningar";
+type Segment = "listor" | "inkorg" | "samtal" | "korningar" | "erbjudanden";
 
 const SEGMENT_ETIKETT: Record<Segment, Localized> = {
   listor: { sv: "Översikt", en: "Overview" },
   inkorg: { sv: "Inkorg", en: "Inbox" },
   // Ringlistan och återkopplingen (Antons beställning 2026-10-07).
   samtal: { sv: "Samtal", en: "Calls" },
-  korningar: { sv: "Körningar", en: "Runs" }
+  korningar: { sv: "Körningar", en: "Runs" },
+  // Erbjudandena, A/B-utfallet och kampanjerna (Anton 2026-10-25), för alla kunder.
+  erbjudanden: { sv: "Erbjudanden", en: "Offers" }
 };
 
 /** Gamla vyadresser landar i översikten (fd Leads/Utkast/Listor, Sebbes
@@ -99,7 +103,7 @@ export function IrisBolag({ demo = false }: Readonly<{ demo?: boolean }>) {
   const [exempelRader, setExempelRader] = useState<ExempelRad[]>([]);
   const [demoKorFas, setDemoKorFas] = useState<"vilar" | "kor">("vilar");
 
-  const segment: Segment[] = demo ? ["listor"] : ["listor", "inkorg", "samtal", "korningar"];
+  const segment: Segment[] = demo ? ["listor"] : ["listor", "inkorg", "samtal", "korningar", "erbjudanden"];
 
   const satt = useCallback(
     (andring: Record<string, string | null>) => {
@@ -269,6 +273,13 @@ export function IrisBolag({ demo = false }: Readonly<{ demo?: boolean }>) {
           <Samtalslista demo={demo} />
         ) : segmentVal === "korningar" ? (
           <IrisKorningar />
+        ) : segmentVal === "erbjudanden" && !demo ? (
+          <div className="grid gap-12">
+            <IrisErbjudanden />
+            <div className="border-t border-ink/15 pt-8">
+              <Kampanjer />
+            </div>
+          </div>
         ) : (
           <LeadsOversikt
             demo={demo}

@@ -1009,6 +1009,7 @@ class MemoryStorage:
         scheduled_at,
         status: str = "queued",
         gate_checks: dict[str, Any] | None = None,
+        kampanj_id: str | None = None,
     ) -> dict[str, Any]:
         message = {
             "id": str(uuid.uuid4()),
@@ -1021,6 +1022,7 @@ class MemoryStorage:
             "sent_at": None,
             "created_at": _now(),
             "kasserad_at": None,
+            "kampanj_id": kampanj_id,
         }
         queue_item = {
             "id": str(uuid.uuid4()),
@@ -1034,6 +1036,32 @@ class MemoryStorage:
         self.outreach_messages.setdefault(tenant_id, []).append(message)
         self.send_queue.setdefault(tenant_id, []).append(queue_item)
         return {"message": message, "queue_item": queue_item}
+
+    async def kampanjens_poster(self, tenant_id: str, kampanj_id: str) -> list[dict[str, Any]]:
+        meddelanden = self.outreach_messages.get(tenant_id, [])
+        ut = []
+        for m in meddelanden:
+            if m.get("kampanj_id") != kampanj_id:
+                continue
+            trad = self.outreach_threads.get(tenant_id, {}).get(m["thread_id"]) or {}
+            prospekt = next((p for p in self.prospects.get(tenant_id, []) if p["id"] == trad.get("prospect_id")), {})
+            post = next(
+                (q for q in reversed(self.send_queue.get(tenant_id, [])) if q["thread_id"] == m["thread_id"]), {}
+            )
+            ut.append({
+                "queue_item_id": post.get("id"),
+                "status": post.get("status"),
+                "prospect_id": trad.get("prospect_id"),
+                "company_name": prospekt.get("company_name"),
+                "email": trad.get("prospect_email") or prospekt.get("contact_email"),
+                "sent_at": m.get("sent_at"),
+                "svar": bool(m.get("sent_at")) and any(
+                    i["thread_id"] == m["thread_id"] and i.get("direction") == "inbound"
+                    and str(i.get("created_at")) > str(m["sent_at"])
+                    for i in meddelanden
+                ),
+            })
+        return ut
 
     async def find_outreach_thread(
         self, tenant_id: str, *, prospect_id: str

@@ -121,6 +121,13 @@ class ErbjudandeArmRequest(BaseModel):
     vikt: int = Field(default=1, ge=0, le=10)
 
 
+class EgetErbjudandeRequest(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    namn: str = Field(min_length=1, max_length=60)
+    form: Literal["rak", "fraga"] = "rak"
+
+
 class ErbjudandenRequest(BaseModel):
     """PUT /api/leads/erbjudanden (app/leads/erbjudanden.py). Båda fälten
     valfria: ett utelämnat fält behåller det sparade. Nycklarna och kravet på
@@ -128,9 +135,11 @@ class ErbjudandenRequest(BaseModel):
 
     model_config = {"extra": "forbid"}
 
-    aktiva: list[ErbjudandeArmRequest] | None = Field(default=None, max_length=6)
+    aktiva: list[ErbjudandeArmRequest] | None = Field(default=None, max_length=10)
     #: Per erbjudande: en text för alla produkter, eller {produktnamn: text}.
     villkor: dict[str, str | dict[str, str]] | None = None
+    #: Kundens egna erbjudanden (2026-10-25): {nyckel: {namn, form}}.
+    egna: dict[str, EgetErbjudandeRequest] | None = Field(default=None, max_length=10)
 
     @model_validator(mode="after")
     def _villkorslangd(self) -> "ErbjudandenRequest":

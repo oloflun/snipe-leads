@@ -22,6 +22,11 @@ export type OnboardingInput = {
    */
   fokus: string;
   /**
+   * Erbjudandena utskicken ska bygga på (Anton 2026-10-25), fri text med ett
+   * erbjudande per stycke. Valfritt.
+   */
+  erbjudanden?: string;
+  /**
    * Målgruppssteget — leads-agentens grundfilter, som råa fältvärden
    * (kommaseparerade listor, tal som text). Tolkas här, på serversidan, och
    * skrivs som ICP av lib/snajp/standard.ts — bara om ICP:n är tom, så en
@@ -198,6 +203,12 @@ export async function saveBusinessContext(input: OnboardingInput): Promise<Onboa
   }
 
   const fokus = input.fokus.trim();
+  // Ett erbjudande per stycke (tom rad emellan), högst fem, som i Leads › Erbjudanden.
+  const erbjudanden = (input.erbjudanden ?? "")
+    .split(/\n\s*\n/)
+    .map((stycke) => stycke.replace(/\s+/g, " ").trim().slice(0, 600))
+    .filter(Boolean)
+    .slice(0, 5);
 
   // Målgruppen tolkas här och inte i klienten — det är den här sidan som
   // skyddar. Ett spann där min > max hade fällts av backendens validate_icp
@@ -286,6 +297,9 @@ export async function saveBusinessContext(input: OnboardingInput): Promise<Onboa
       `Vår egen bransch: ${input.bransch}`,
       `Vad vi säljer: ${produkt}`,
       fokus ? `Särskilt fokus: ${fokus}` : null,
+      // Står här också: affärskontexten tappas aldrig, även om erbjudande-
+      // inställningarna inte hann skrivas (testarbetsytor får dem inte alls).
+      ...erbjudanden.map((e, i) => `Vårt erbjudande i utskicken${erbjudanden.length > 1 ? ` ${i + 1}` : ""}: ${e}`),
       // Kontaktpersonen står i texten OCKSÅ när CRM-skrivningen lyckas:
       // affärskontexten är det lager som aldrig tappas bort, och admin-
       // fliken Kunder & Data härleder redan andra fält härifrån.
@@ -466,7 +480,8 @@ export async function saveBusinessContext(input: OnboardingInput): Promise<Onboa
           // Tålmodigt: uppstarten får vänta ut en kallstartande backend. Det är
           // enda tillfället kunden faktiskt väntar på att bli upplagd.
           true,
-          malgrupp
+          malgrupp,
+          erbjudanden
         );
 
         // Kundregistret (Admin → Kunder → Data) fylls direkt vid onboarding —

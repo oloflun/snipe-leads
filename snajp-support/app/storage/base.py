@@ -1101,9 +1101,14 @@ class Storage(Protocol):
         scheduled_at: Any,
         status: str = "queued",
         gate_checks: dict[str, Any] | None = None,
+        kampanj_id: str | None = None,
     ) -> dict[str, Any]:
         """Skapar meddelandet (sent_at=NULL) OCH send_queue-raden i samma
         operation — det finns ingen kodväg som skapar det ena utan det andra.
+
+        `kampanj_id` (migration 114) märker ett kampanjutskick till en
+        befintlig lista: sändspärren släpper det till kundens egna kunder, och
+        utfallet räknas per kampanj (`kampanjens_poster`).
 
         `status` avgörs av kundens autonominivå (app/leads/autonomy.py):
         'queued' släpps till schemaläggaren, 'awaiting_review' väntar på att
@@ -1113,6 +1118,12 @@ class Storage(Protocol):
         `gate_checks` blir köpostens första grindanteckning. Köningen lägger
         `held` där när text- eller stilkontrollen tvingat granskning, så att
         granskaren ser varför (utkaststatus.harled läser den)."""
+        ...
+
+    async def kampanjens_poster(self, tenant_id: str, kampanj_id: str) -> list[dict[str, Any]]:
+        """Kampanjens utskick, ett per mottagare: queue_item_id, status (köpostens),
+        prospect_id, company_name, email, sent_at och svar (ett inkommande
+        meddelande i tråden efter utskicket)."""
         ...
 
     async def tilldela_erbjudande(self, tenant_id: str, thread_id: str, *, nyckel: str) -> str:

@@ -66,9 +66,11 @@ människas blick:
   skarpt utkast satte ämnesraden "supportagenten": vår produktkategori, noll
   skäl att öppna. Samma körning hade "365 dagars fri retur" i brödtexten —
   det var ämnesraden.
-- **EN uppmaning per mejl.** Ett utkast bad om både pilot och demo — två
-  dörrar är ett val, ett val är friktion, friktion är tystnad. Välj den
-  minsta uppmaningen och stryk den andra.
+- **EN inbjudan per mejl.** Ett utkast bad om både pilot och demo — två
+  olika saker är ett val, ett val är friktion, friktion är tystnad. Ett
+  erbjudande, en inbjudan. Ger villkoren två vägar till samma sak (titta på
+  demon, eller svara så bokar vi en genomgång) står båda i samma vardagliga
+  mening. Aldrig "Svara X så gör vi Y" (Anton 2026-10-25).
 - **En referens bär sitt "varför" i samma mening.** Nämner du en kund eller
   ett case (som finns i underlaget) ska samma mening säga vad det betyder
   för MOTTAGAREN — "i drift hos Livrustning" ensamt är ett namn utan

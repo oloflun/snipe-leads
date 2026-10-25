@@ -1405,6 +1405,7 @@ class PostgresStorage:
         scheduled_at,
         status: str = "queued",
         gate_checks: dict[str, Any] | None = None,
+        kampanj_id: str | None = None,
     ) -> dict[str, Any]:
         async with self._scoped(tenant_id) as conn:
             message = await conn.fetchrow(
@@ -1420,6 +1421,14 @@ class PostgresStorage:
                 subject,
                 humanizer_variant,
             )
+            if kampanj_id:
+                # Egen sats: köningen utan kampanj rör aldrig kolumnen och tål att
+                # migration 114 saknas. En kampanj utan den fälls här, högljutt.
+                message = await conn.fetchrow(
+                    "update outreach_messages set kampanj_id = $2 where id = $1 returning *",
+                    message["id"],
+                    kampanj_id,
+                )
             queue_item = await conn.fetchrow(
                 """
                 insert into send_queue (tenant_id, thread_id, scheduled_at, status, gate_checks)
@@ -1433,6 +1442,32 @@ class PostgresStorage:
                 json.dumps(gate_checks or {}, ensure_ascii=False),
             )
         return {"message": _row(message), "queue_item": _row(queue_item)}
+
+    async def kampanjens_poster(self, tenant_id: str, kampanj_id: str) -> list[dict[str, Any]]:
+        async with self._scoped(tenant_id) as conn:
+            records = await conn.fetch(
+                """
+                select q.id as queue_item_id, q.status, t.prospect_id, p.company_name,
+                       p.contact_email as email, m.sent_at,
+                       (m.sent_at is not null and exists (
+                          select 1 from outreach_messages i
+                           where i.thread_id = m.thread_id and i.direction = 'inbound'
+                             and i.created_at > m.sent_at)) as svar
+                  from outreach_messages m
+                  join outreach_threads t on t.id = m.thread_id
+                  left join prospects p on p.id = t.prospect_id
+                  left join lateral (
+                    select sq.id, sq.status from send_queue sq
+                     where sq.thread_id = m.thread_id and sq.created_at >= m.created_at
+                     order by sq.created_at limit 1
+                  ) q on true
+                 where m.tenant_id = $1 and m.kampanj_id = $2 and m.direction = 'outbound'
+                 order by p.company_name
+                """,
+                tenant_id,
+                kampanj_id,
+            )
+        return [_row(r) for r in records]
 
     async def tilldela_erbjudande(self, tenant_id: str, thread_id: str, *, nyckel: str) -> str:
         async with self._scoped(tenant_id) as conn:

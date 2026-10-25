@@ -9,7 +9,81 @@ möjligt), vad det betyder i koden.
 
 ---
 
+## 2026-10-25 (Anton) — Utkasten: mjukare ingång, inget "Svara X så …", piloten i varje mejl, A/B, egna erbjudanden och kampanjer
+
+**Beslut.** Sebbes utkaständringar 2026-10-24 återställs. De nya Iris-mejlen
+"kastar sig in direkt och berättar om 'leadsagenten' helt utan kontext,
+ihoptryckt med ett hophafsat erbjudande … väldigt hastigt och svårt att sätta
+sig in i och känns robotgenererat." Grunden är upplägget i produktion, med
+tre ändringar. (1) Ingången ska läsas som de tre första exemplen Anton gav och
+inte som de två sista: "det blir många gånger för offensivt och angripande mot
+kunden, det kan träffa en öm tå eller tas som kritik." (2) Avslutet "svara med
+x, så gör vi x" är "en svag CTA som läses som botmejl och massutskick och kan
+sänka hela mailet, det måste förbjudas helt." (3) Piloten presenteras i VARJE
+mejl: 20 företag, en kostnadsfri pilot på tre månader med alla funktioner, och
+därefter 50 % för den som är nöjd och vill stanna, "inga mer detaljer där".
+Den som vill veta mer går in på snajp.se/demo eller svarar på mejlet, så bokar
+vi en kostnadsfri genomgång. Tonen är vardaglig, som från en person till en
+annan. Form B testas mot A med lika stor andel: samma ingång, sedan frågan om
+vilket som tar mest tid (hantera inkomna leads eller hitta nya; kundmejl eller
+supportchattar). Erbjudandena ska styra hela utkastet, inte läggas till som ett
+stycke, och kunden ska kunna lägga till egna erbjudanden, se statistik och
+styra A/B/C under Leads, för alla kunder. Onboardingen ska ha en sektion för
+erbjudanden, och det ska gå att skicka en kampanj till befintliga kund- och
+leadslistor med lite anpassning ("Hej Namn," och sedan kampanjen).
+
+**Resonemang.** Kritik i första meningen skapar motvilja innan erbjudandet ens
+är läst. En order sist läses som massutskick. Ett tydligt erbjudande i varje
+mejl, sagt vardagligt, ger mottagaren ett skäl att svara.
+
+**Utkasten skrevs inte automatiskt (felet).** 27 av 57 researchade bolag fälldes
+2026-10-24 med "Ingen av kundens produkter passar bolaget", mot 0 av 53
+2026-10-22, fast researchens egen motivering sa att Snajp passar dem. Skälen
+var två. Iris produkttext hade skrivits om, och kontextpaketet sa "Du har
+INGA godkända erbjudanden … Erbjud därför ingenting" till varje research hos
+Snajp, fast erbjudandena finns i inställningarna. Körningens lista visade dessutom
+de bortvalda som leads utan utkast.
+
+**I koden och prompterna.**
+- Sebbes fyra commits (`16a121f`, `d604e51`, `2f61284`, `7508326`) är
+  återställda i sin utkastdel. Leveransändringarna står kvar.
+- `context_pack.py`: luckan om godkända erbjudanden försvinner när kunden har
+  aktiva erbjudanden. `_korningens_leads`: bortvalda bolag står bara under
+  Bortvalda.
+- Skrivstilen omgång 7 (Anton), grundprompten § 10, `leads-hard-rules.md` och
+  katalogens gemensamma regler: ingången är en utmaning i deras sorts arbete
+  och aldrig kritik, avslutet är en vardaglig inbjudan och 60–110 ord.
+- Stilgrinden: nya fynd `kritisk_ingang` och `svara_sa_avslut`. Facit
+  2026-10-12 och 2026-10-16 slutar med "Svara 'pilot' …" och undantar därför
+  `svara_sa_avslut`. Allt annat i facit gäller. Ett nytt facit tas fram ur
+  första körningen med den nya formen och godkänns av Anton.
+- `erbjudanden.py`: egna erbjudanden (`egna`) med form A (rak) eller B
+  (fråga). Blocket säger att erbjudandet styr hela mejlet och översätts till
+  mottagarens verksamhet. Snajp kör `pilot_a` och `pilot_b` med lika vikt
+  (`scripts/snajp_malgrupp.py`).
+- Leads › Erbjudanden (alla kunder med leads): erbjudandena, egna och
+  katalogens, med vikt och utfall per erbjudande, samt Kampanjer. Kortet i
+  Inställningar är ersatt med en länk dit.
+- Onboardingen: sektionen "Erbjudandet i utskicken" i målgruppssteget. Varje
+  stycke blir ett eget aktivt erbjudande och står också i affärskontexten.
+- Kampanjer (`app/api/leads_kampanjer.py`, migration 114 `kampanj_id`):
+  "Hej," med förnamnet satt i kod, och sedan texten, till en lista (även
+  CRM-kundlistan) eller en körnings leads. Utkasten går till granskning, och
+  "Godkänn och skicka" går genom alla sändspärrar. Spärren släpper ett
+  kampanjmejl till kundens egna kunder, men avregistrerade, arkiverade och
+  avböjda stoppas som förut.
+
+**Öppet för Anton.** Kampanjer till befintliga kunder är marknadsföring och
+inte kallkontakt. Det är lagligt B2B med avregistrering i varje mejl, men en
+lista med privatpersoners adresser kräver samtycke. Ingen kod skiljer ut dem
+utöver att enskilda firmor redan sållas bort i listspåren. Migration 114
+behöver köras i development och main.
+
+---
+
 ## 2026-10-24 (Sebbe) — Utskickens text: äkta, konkret, trovärdig (skrivstilens omgång 7)
+
+> **Ersatt 2026-10-25 (Anton):** utkastdelen är återställd, se posten ovan.
 
 **Beslut.** "Förbättra utskicken, texten. De ska sälja in vår produkt bra,
 konkret, kort och tydligt. Vi måste få mer svar och bli trovärdiga och

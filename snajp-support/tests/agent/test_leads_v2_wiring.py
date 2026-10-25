@@ -127,7 +127,7 @@ class _FakeLLM:
                     "body": (
                         "Hej,\n\nMed fri retur på allt ni säljer blir returfrågorna många.\n\n"
                         "Vår agent svarar på dem åt er. Uppsägningstiden är 60 dagar.\n\n"
-                        "Svara ja så visar vi hur."
+                        "Vill ni se hur räcker ett svar på mejlet."
                     ),
                     "personalization_score": 0.7,
                     "weak_lines": [],
@@ -139,7 +139,7 @@ class _FakeLLM:
                     "final_subject": "Returfrågor",
                     "final_body": (
                         "Hej,\n\nMed fri retur på allt ni säljer blir returfrågorna många.\n\n"
-                        "Vår agent svarar på dem åt er.\n\nSvara ja så visar vi hur."
+                        "Vår agent svarar på dem åt er.\n\nVill ni se hur räcker ett svar på mejlet."
                     ),
                 },
             }.get(skill, {})
@@ -688,7 +688,7 @@ async def test_utan_valbart_erbjudande_ar_prompten_oforandrad():
 async def test_faktagrinden_slapper_villkorens_siffra_bara_med_erbjudandet():
     mejl = {"snajp:humanizer-svenska": {
         "final_subject": "Returfrågor",
-        "final_body": "Hej,\n\nVår agent svarar på returfrågorna åt er. Uppsägningstiden är 60 dagar.\n\nSvara ja så bokar vi torsdag.",
+        "final_body": "Hej,\n\nVår agent svarar på returfrågorna åt er. Uppsägningstiden är 60 dagar.\n\nVill ni ses bokar vi gärna torsdag.",
     }}
     med = MemoryStorage()
     await _med_erbjudande(med, {"gratis_prov": _VILLKOR})
@@ -771,9 +771,9 @@ async def test_den_renaste_humaniserade_versionen_koas_inte_den_sista():
     storage = MemoryStorage()
     thread_id = await _prepare_outreach(storage)
     battre = ("Hej,\n\nMed fri retur på allt ni säljer blir returfrågorna många. Jag såg att ni har öppet.\n\n"
-              "Vår agent svarar på dem åt er.\n\nSvara ja så visar vi hur.")
+              "Vår agent svarar på dem åt er.\n\nVill ni se hur räcker ett svar på mejlet.")
     samre = ("Hej,\n\nJag såg att ni erbjuder fri retur, och det tar tid från att svara på kunderna.\n\n"
-             "Vår agent svarar på dem åt er.\n\nSvara ja så visar vi hur.")
+             "Vår agent svarar på dem åt er.\n\nVill ni se hur räcker ett svar på mejlet.")
     llm = _SekvensLLM([battre, samre, samre])
     result = await _utkast_v2(storage, thread_id, llm)
     assert llm.calls.count("snajp:humanizer-svenska") == 3
