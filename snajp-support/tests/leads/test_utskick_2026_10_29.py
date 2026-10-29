@@ -266,3 +266,81 @@ def test_halv_inbjudan_falls(avslut, falls):
     """Omskrivningen 2026-10-29: "Vill ni testa …, eller svara …" är en halv mening."""
     koder = {a.kod for a in stil.kontrollera(f"Hej,\n\n{PRODUKT}\n\n{avslut}").anmarkningar}
     assert ("halv_inbjudan" in koder) is falls
+
+
+# -- Produkten matchas mot kundens produkter i dag -----------------------------
+
+PRODUKTER = [
+    {"namn": "Iris, leadsagenten", "nytta": "effektiviserar prospekteringen"},
+    {"namn": "Supportagenten", "nytta": "effektiviserar kundhanteringen"},
+]
+
+
+@pytest.mark.parametrize(
+    ("namn", "text", "vantat"),
+    [
+        ("Iris, leadsagenten", "", "Iris, leadsagenten"),
+        ("iris", "", "Iris, leadsagenten"),
+        ("Supportagent", "", "Supportagenten"),
+        ("Leadsagent Iris", "", "Iris, leadsagenten"),
+        (None, "Supportagenten: svarar på kundmejlen", "Supportagenten"),
+        (None, "Ett erbjudande utan produktnamn", None),
+        ("Kvittohanteraren", "", None),
+    ],
+)
+def test_produkten_matchas_mot_dagens_produkter(namn, text, vantat):
+    """Omskrivningen 2026-10-29: 31 av 243 sparade research saknade produkten
+    eller bar ett äldre namn, och då valdes ingen pilot alls."""
+    traff = erbjudanden.produkt_nu(namn, text, PRODUKTER)
+    assert (traff or {}).get("namn") == vantat
+
+
+def test_en_enda_produkt_ar_alltid_den():
+    assert erbjudanden.produkt_nu(None, "", PRODUKTER[:1]) == PRODUKTER[0]
+    assert erbjudanden.produkt_nu("x", "", []) is None
+
+
+@pytest.mark.anyio
+async def test_piloten_valjs_aven_nar_researchen_saknar_produkten(monkeypatch):
+    from app.config import get_settings
+    from tests.agent.test_leads_v2_wiring import TENANT, _FakeLLM, _prepare_outreach
+
+    monkeypatch.setenv("LLM_PROVIDER", "deepseek")
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "test-key-not-a-real-credential-000000")
+    get_settings.cache_clear()
+    storage = MemoryStorage()
+    thread_id = await _prepare_outreach(storage)
+    await storage.set_agent_settings(
+        TENANT,
+        agent_type="leads",
+        settings={
+            "produkter": PRODUKTER,
+            "erbjudanden": {
+                "aktiva": [{"nyckel": "pilot", "vikt": 1}],
+                "villkor": {"pilot": {"Supportagenten": PILOT.replace("Iris", "Supportagenten")}},
+                "amnen": {"Supportagenten": SUPPORT},
+            },
+        },
+    )
+    llm = _FakeLLM()
+    with patch("app.agent.step_runner.get_llm_client", return_value=llm):
+        result = await run_outreach_draft_v2(
+            storage,
+            TENANT,
+            thread_id=thread_id,
+            prospect_email="kundservice@exempelbolaget.se",
+            tenant_name="Snajp",
+            company_name="Exempelbolaget",
+            # En äldre research: ingen vald produkt, och ett gammalt erbjudandeförslag.
+            offer_summary="Supportagenten: svarar på kundmejlen\nProva gratis i två månader.",
+            context_pack="## Kontextpaket\nICP: svensk e-handel.",
+            brief="",
+            research_summary=json.dumps({"vald_produkt": None}),
+            research_evidence=("Fri retur inom 30 dagar",),
+            is_test=True,
+        )
+    get_settings.cache_clear()
+    assert "### Villkor för erbjudandet" in llm.user_messages[0]
+    assert "Prova gratis i två månader" not in llm.user_messages[0]
+    assert "effektiviserar kundhanteringen" in llm.user_messages[0]
+    assert result["subject"] in {erbjudanden.till_ni(r) for r in SUPPORT}

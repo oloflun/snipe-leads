@@ -61,6 +61,11 @@ höga krav") sa inget om vad mottagaren vinner.
   "Vill ni testa Iris direkt i demon …, eller svara på mejlet så …" är en halv
   mening och fälls som `halv_inbjudan`; pilotvillkorets handling är omskriven så
   att den inte lockar fram den.
+- Produkten matchas mot kundens produkter i dag (`erbjudanden.produkt_nu`):
+  31 av 243 sparade research i omskrivningen saknade produkten eller bar ett
+  äldre namn, så inget erbjudande valdes och mejlet tog researchens gamla
+  förslag ("prova gratis i två månader"). Produktens nytta i utkastet kommer nu
+  också ur dagens inställningar, inte ur researchens tid.
 - Snajps inställningar: produkternas nytta börjar med effektiviseringen,
   Iris-instruktionen ber om en varm, kort inblick och förbjuder ingångar om
   vad kunderna förväntar sig, och pilotvillkoret säger "upp till 50 % rabatt

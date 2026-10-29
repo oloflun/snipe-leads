@@ -201,6 +201,48 @@ def produkt_ur_research(research_summary: str) -> str | None:
     return namn or None
 
 
+def produkt_nu(
+    namn: str | None, text: str, produkter: list[dict[str, str]]
+) -> dict[str, str] | None:
+    """Kundens produkt i dag ({namn, nytta}) för ett utkast, eller None.
+
+    Omskrivningen av Snajps kö 2026-10-29 ("Skapa om utkast" ur sparad
+    research): 31 av 243 leads hade en research där produkten saknades eller
+    hette något annat än i dag. Då valdes inget erbjudande, mejlet tog
+    researchens gamla erbjudandeförslag ("prova gratis i två månader") och
+    varken piloten eller ämnesraderna kom med. Ordningen: samma namn, samma
+    kortform före kommat, det ena namnet början på det andra, samma slag av
+    Snajps agenter; utan namn det första produktnamnet som står i `text`; och
+    har kunden bara en produkt är det den."""
+    from .stilkontroll import produktslag
+
+    if not produkter:
+        return None
+
+    def kort(s: str) -> str:
+        return s.split(",")[0].strip().casefold()
+
+    if namn and namn.strip():
+        n = namn.strip().casefold()
+        for prov in (
+            lambda p: p["namn"].casefold() == n,
+            lambda p: kort(p["namn"]) == kort(n),
+            lambda p: len(kort(n)) >= 4 and (p["namn"].casefold().startswith(kort(n)) or n.startswith(kort(p["namn"]))),
+            lambda p: produktslag(n) is not None and produktslag(p["namn"]) == produktslag(n),
+        ):
+            traff = next((p for p in produkter if prov(p)), None)
+            if traff:
+                return traff
+    lag = (text or "").casefold()
+    forst = sorted(
+        ((lag.find(kort(p["namn"])), p) for p in produkter if kort(p["namn"]) and kort(p["namn"]) in lag),
+        key=lambda t: t[0],
+    )
+    if forst:
+        return forst[0][1]
+    return produkter[0] if len(produkter) == 1 else None
+
+
 def normalisera(raw: Any) -> dict[str, Any]:
     """Kundens sparade val, tolerant läst: okända nycklar faller bort, vikten
     hålls inom 0–10 och villkoren strippas. Skrivvägen (`validera`) är strikt;

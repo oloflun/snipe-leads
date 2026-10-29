@@ -953,15 +953,25 @@ async def run_outreach_draft_v2(
     # Kundens erbjudande för just det här prospektet (A/B, app/leads/erbjudanden.py).
     # None = inget aktivt med villkor, och då är prompten exakt som förut.
     # Villkoren gäller produkten researchen valde (vald_produkt), aldrig en annan.
+    # Produkten matchas mot kundens produkter i dag (2026-10-29): en sparad
+    # research kan sakna produkten eller bära ett äldre namn, och då valdes
+    # inget erbjudande alls (31 av 243 i omskrivningen av Snajps kö).
+    vald_nu = erbjudanden.produkt_nu(
+        erbjudanden.produkt_ur_research(research_summary),
+        offer_summary,
+        las_produkter(await storage.get_agent_settings(tenant_id, agent_type="leads")),
+    )
     erbjudande = await erbjudanden.for_trad(
-        storage, tenant_id, thread, erbjudanden.produkt_ur_research(research_summary)
+        storage, tenant_id, thread,
+        vald_nu["namn"] if vald_nu else erbjudanden.produkt_ur_research(research_summary),
     )
     erbjudandeblock = f"{erbjudande.block()}\n\n" if erbjudande else ""
     # Med kundens erbjudande styr det och produktens nytta (första raden,
     # api/leads.py), inte researchens eget erbjudandeförslag: omkörningen
     # 2026-10-25 lät Iris "hitta nya tomter" därför att researchen föreslagit det.
+    # Nyttan kommer ur dagens inställningar, inte ur researchens tid.
     if erbjudande:
-        offer_summary = offer_summary.split("\n", 1)[0]
+        offer_summary = f"{vald_nu['namn']}: {vald_nu['nytta']}" if vald_nu else offer_summary.split("\n", 1)[0]
     # Kundens ämnesrader för produkten (Sebbe 2026-10-29): raden väljs i kod
     # sist, så modellens ämnesrad prövas inte av grinden.
     amne_i_kod = bool(erbjudande and erbjudande.amnen)
@@ -1121,7 +1131,7 @@ async def run_outreach_draft_v2(
     # tredje omskrivningen landade. Fynden som går att känna igen i kod prövas
     # här, och EN omskrivning med fynden utpekade sker innan humanizern, som
     # förblir sist (INV-LANG-002). Kostar ett anrop bara när något fälls.
-    produktnamn = erbjudanden.produkt_ur_research(research_summary)
+    produktnamn = vald_nu["namn"] if vald_nu else erbjudanden.produkt_ur_research(research_summary)
 
     # 1a. Personalisera ingången, ALLTID (Anton 2026-10-12, andra gången):
     # nästan varje ingång var en allmän mening om branschen med en etikett
