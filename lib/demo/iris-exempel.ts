@@ -605,7 +605,7 @@ const GRANSTRAND: ExempelBolag = {
         "Värt en kort fråga?\n\n" +
         "Vänliga hälsningar,\nAnna, Hjärtsäker AB",
       explanation:
-        "Två vinklar: A utgår från standarden i introduktionen, B ställer en rak fråga om hur det ser ut idag. Olika öppning och olika CTA-ton.",
+        "Två vinklar: A utgår från standarden i introduktionen, B ställer en rak fråga om hur det ser ut i dag. Olika öppning och olika CTA-ton.",
       subject_suggestions: ["Samma standard för alla tre (A)", "Ingår HLR redan? (B)"]
     },
     followup: {

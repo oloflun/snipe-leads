@@ -54,6 +54,10 @@ höga krav") sa inget om vad mottagaren vinner.
   eller kräver", "hur ska ni kunna/hinna", "samtidigt som ni har mycket" och
   "tar det tid från". `effektivisera` fälls inte längre när det gäller
   prospekteringen eller kundhanteringen.
+- Frågan i form B tar bara den valda produktens moment (`erbjudanden.formregler`):
+  omskrivningen samma dag gav ett supportmejl med frågan "… eller att hitta nya
+  kunder?" och löftet att Supportagenten "tar hand om båda delarna". Stilgrinden
+  fäller fel produkts moment (`fel_moment`) och skriver om mejlet.
 - Snajps inställningar: produkternas nytta börjar med effektiviseringen,
   Iris-instruktionen ber om en varm, kort inblick och förbjuder ingångar om
   vad kunderna förväntar sig, och pilotvillkoret säger "upp till 50 % rabatt
@@ -69,7 +73,7 @@ höga krav") sa inget om vad mottagaren vinner.
 
 **Facit.** INV-LEADS-UTKAST-002 är orört och passerar. Facits ämnesregel (två
 till fem ord om deras löfte, utan produkt) gäller fortfarande för kunder utan
-egen ämneslista; Snajps ämnesrader går dit Sebbe vill i stället. Facits
+egen ämneslista; Snajps ämnesrader följer Sebbes lista i stället. Facits
 Båtladan-ingång ("Hur hinner du med …") fälls inte av de nya mönstren.
 
 **Öppet för Anton.** (1) Snajps ämnesrader avviker från ämnesregeln i

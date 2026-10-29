@@ -76,14 +76,33 @@ FORMER: dict[str, tuple[str, str]] = {
         "Hela brödtexten högst 100 ord. Efter hälsningen, i den här ordningen: (1) samma sorts ingång "
         "som i form A, i en mening om högst 20 ord; (2) en fråga om högst 15 ord om vilket av två "
         "konkreta moment som tar mest tid för dem i dag. Båda momenten är "
-        "saker produkten gör enligt dess nytta, aldrig något den inte gör: för en leadsagent att hantera "
-        "de förfrågningar som redan kommer in eller att hitta nya kunder, för en supportagent att gå "
-        "igenom kundmejlen eller att sitta i supportchattarna; (3) att produkten tar hand om båda delarna "
+        "saker produkten gör enligt dess nytta, aldrig något den inte gör: " + "{moment}" + "; (3) att produkten tar hand om båda delarna "
         "och anpassas efter deras behov och verksamhet, en mening om högst 15 ord; (4) erbjudandet med "
         "villkorens innehåll, en mening; (5) avslutet, villkorens handling som en vardaglig inbjudan, "
         "högst 20 ord. Frågan står aldrig sist.",
     ),
 }
+#: Frågans två moment i form B. Utan känd produkt får modellen båda paren och
+#: väljer; med Snajps produkt väljs paret i kod (omskrivningen 2026-10-29: ett
+#: supportmejl frågade om att "hitta nya kunder" och lovade att Supportagenten
+#: tog hand om det).
+_MOMENT = {
+    "leads": "att hantera de förfrågningar som redan kommer in eller att hitta nya kunder, inga andra moment",
+    "support": "att gå igenom kundmejlen eller att sitta i supportchattarna, inga andra moment; aldrig att hitta nya kunder",
+    None: (
+        "för en leadsagent att hantera de förfrågningar som redan kommer in eller att hitta nya kunder, "
+        "för en supportagent att gå igenom kundmejlen eller att sitta i supportchattarna"
+    ),
+}
+
+
+def formregler(form: str, produkt: str | None = None) -> str:
+    """Formens regler, med frågans moment för `produkt` i form B."""
+    from .stilkontroll import produktslag
+
+    return FORMER[form][1].replace("{moment}", _MOMENT[produktslag(produkt)])
+
+
 #: Skickade mejl per arm innan någon arm får kallas ledande.
 MIN_SKICKADE = 30
 #: Signifikansnivån för tvåproportionstestet.
@@ -379,11 +398,11 @@ def tilldela(tenant_id: str, prospect_id: str, armar: list[tuple[str, int]]) -> 
     return None  # nås inte: punkt < total
 
 
-def block(nyckel: str, villkor: str, erbjudande: Erbjudande | None = None) -> str:
+def block(nyckel: str, villkor: str, erbjudande: Erbjudande | None = None, produkt: str | None = None) -> str:
     """Promptblocket för utkaststeget och humanizern. Kundens villkor står
     ordagrant under sin egen rubrik, som katalogens gemensamma regler pekar på."""
     erbjudande = erbjudande or katalog()[nyckel]
-    formnamn, formregler = FORMER[erbjudande.form]
+    formnamn = FORMER[erbjudande.form][0]
     return (
         "## Erbjudandet i det här mejlet\n"
         # Anton 2026-10-25: erbjudandet lades till som ett stycke, och vinkeln
@@ -411,7 +430,7 @@ def block(nyckel: str, villkor: str, erbjudande: Erbjudande | None = None) -> st
         "av formen \"Svara X så gör vi Y\" och aldrig med en fråga.\n\n"
         f"{gemensamt()}\n\n"
         f"### {erbjudande.namn}\n{erbjudande.regler or 'Kundens eget erbjudande: villkoren nedan är hela erbjudandet.'}\n\n"
-        f"### Mejlets form ({formnamn})\n{formregler}\n\n"
+        f"### Mejlets form ({formnamn})\n{formregler(erbjudande.form, produkt)}\n\n"
         f"### Villkor för erbjudandet\n{villkor.strip()}"
     )
 
@@ -423,13 +442,15 @@ class Valt:
     erbjudande: Erbjudande | None = None
     #: Kundens ämnesrader för produkten (tomt = modellens ämnesrad står kvar).
     amnen: tuple[str, ...] = ()
+    #: Produkten researchen valde: frågans moment i form B följer den.
+    produkt: str | None = None
 
     @property
     def form(self) -> str:
         return self.erbjudande.form if self.erbjudande else "rak"
 
     def block(self) -> str:
-        return block(self.nyckel, self.villkor, self.erbjudande)
+        return block(self.nyckel, self.villkor, self.erbjudande, self.produkt)
 
 
 async def for_trad(
@@ -460,6 +481,7 @@ async def for_trad(
         villkor=villkor_for(val["villkor"][nyckel], produkt),
         erbjudande=armar(val)[nyckel],
         amnen=tuple(amnen_for(val.get("amnen"), produkt)),
+        produkt=produkt,
     )
 
 

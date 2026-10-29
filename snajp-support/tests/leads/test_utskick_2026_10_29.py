@@ -216,3 +216,37 @@ async def test_inkorgen_har_det_senaste_svaret_overst():
         )
     rader = await storage.list_emails("t")
     assert [r["subject"] for r in rader] == ["Sv: 2026-10-29", "Sv: 2026-10-28", "Sv: 2026-10-27"]
+
+
+# -- Frågans moment i form B följer produkten ----------------------------------
+
+
+def test_fragan_i_form_b_bar_bara_den_valda_produktens_moment():
+    """Omskrivningen 2026-10-29: ett supportmejl frågade "… eller att hitta nya
+    kunder?" och lovade att Supportagenten tog hand om båda delarna."""
+    eget = erbjudanden.Erbjudande(nyckel="pilot_b", namn="Piloten B", regler="", form="fraga")
+    support = erbjudanden.block("pilot_b", PILOT, eget, "Supportagenten")
+    iris = erbjudanden.block("pilot_b", PILOT, eget, "Iris, leadsagenten")
+    okand = erbjudanden.block("pilot_b", PILOT, eget, "Takläggning")
+    assert "supportchattarna" in support and "att hitta nya kunder, inga" not in support
+    assert "hitta nya kunder" in iris and "supportchattarna" not in iris
+    assert "för en leadsagent" in okand and "för en supportagent" in okand
+    assert "{moment}" not in support + iris + okand
+
+
+@pytest.mark.parametrize(
+    ("produkt", "text", "falls"),
+    [
+        ("Supportagenten", "Hej,\n\nTar det mest tid att hantera förfrågningarna eller att hitta nya kunder?\n\n"
+         "Vår Supportagent tar hand om båda delarna.", True),
+        ("Supportagenten", "Hej,\n\nTar det mest tid att gå igenom kundmejlen eller att sitta i supportchattarna?\n\n"
+         "Vår Supportagent tar hand om båda delarna.", False),
+        ("Iris, leadsagenten", "Hej,\n\nTar det mest tid att sitta i supportchattarna eller att hitta nya kunder?\n\n"
+         "Vår agent Iris tar hand om båda delarna.", True),
+        ("Iris, leadsagenten", "Hej,\n\nTar det mest tid att hantera förfrågningarna eller att hitta nya kunder?\n\n"
+         "Vår agent Iris tar hand om båda delarna.", False),
+    ],
+)
+def test_fel_produkts_moment_falls(produkt, text, falls):
+    koder = {a.kod for a in stil.erbjudande_fynd(text, villkor=None, produkt=produkt)}
+    assert ("fel_moment" in koder) is falls

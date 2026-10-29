@@ -441,7 +441,32 @@ def erbjudande_fynd(text: str, *, villkor: str | None, produkt: str | None) -> l
             fynd.append(Anmarkning("agent_efter_loftet",
                                    f"Stil: \"{namn}\" namnges först efter löftet; säg vad agenten gör innan siffrorna",
                                    allvarlig=True))
+    # Fel produkts moment (omskrivningen 2026-10-29): ett supportmejl frågade
+    # "… eller att hitta nya kunder?" och lovade att Supportagenten "tar hand
+    # om båda delarna", en förmåga den inte har; och tvärtom för Iris.
+    slag = produktslag(produkt)
+    if slag == "support" and _LEADSMOMENT.search(brod):
+        fynd.append(Anmarkning("fel_moment", "Stil: supportmejlet talar om att hitta nya kunder; "
+                               "Supportagenten svarar på kundfrågor, den hittar inga kunder", allvarlig=True))
+    elif slag == "leads" and _SUPPORTMOMENT.search(brod):
+        fynd.append(Anmarkning("fel_moment", "Stil: Iris-mejlet talar om kundmejl eller supportchattar; "
+                               "Iris hittar nya företagskunder, den svarar inte på kundfrågor", allvarlig=True))
     return fynd
+
+
+_LEADSMOMENT = re.compile(r"\bhitta\s+(?:nya\s+)?(?:företags)?kunder\b")
+_SUPPORTMOMENT = re.compile(r"\bsupportchatt\w*|\bkundmejl\w*")
+
+
+def produktslag(produkt: str | None) -> str | None:
+    """"support" eller "leads" för Snajps två agenter, annars None (en annan
+    kunds produkt, där frågans moment inte går att avgöra i kod)."""
+    namn = (produkt or "").casefold()
+    if "support" in namn:
+        return "support"
+    if "iris" in namn or "lead" in namn:
+        return "leads"
+    return None
 
 
 def produktstam(produkt: str | None) -> str:

@@ -136,8 +136,8 @@ AMNEN = {
         # Frågor som väcker nyfikenhet
         "Hur lång tid tar det dig att hitta en ny kund?",
         "Vad kostar en timme av ditt säljteams researchtid?",
-        "Hur vet du vilka bolag du borde ringa idag?",
-        "Skulle du vilja ha dina nästa leads färdiga imorgon bitti?",
+        "Hur vet du vilka bolag du borde ringa i dag?",
+        "Skulle du vilja ha dina nästa leads färdiga i morgon bitti?",
     ],
     SUPPORT: [
         "Support 24/7 för dina kunder",
