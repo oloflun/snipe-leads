@@ -204,7 +204,10 @@ def main() -> None:
     print("Produkter:", json.dumps([p["namn"] for p in PRODUKTER], ensure_ascii=False))
     print("Segment:  ", json.dumps([s["bransch"] for s in SEGMENT], ensure_ascii=False))
     print("Offentlig sektor: nej")
-    print("Iris-instruktion:", "oförändrad" if ny_instruktion == instruktion else "skrivs (ersätter Snajps tidigare block)")
+    # Servern sparar texten utan avslutande radbrytning: jämför utan den, annars
+    # säger torrkörningen "skrivs" även direkt efter en --apply.
+    oforandrad = ny_instruktion.rstrip() == instruktion.rstrip()
+    print("Iris-instruktion:", "oförändrad" if oforandrad else "skrivs (ersätter Snajps tidigare block)")
     print("Erbjudanden:", ", ".join(a["nyckel"] for a in ERBJUDANDEN["aktiva"]), "(lika vikt, villkor per produkt)")
     print("Ämnesrader:", ", ".join(f"{p} {len(r)}" for p, r in AMNEN.items()))
     if not args.apply:
@@ -223,7 +226,7 @@ def main() -> None:
     status, svar = Api(bas, nyckel, skarpt=True).anrop("PUT", "/api/leads/erbjudanden", ERBJUDANDEN)
     if not 200 <= status < 300:
         sys.exit(f"AVBRYTER: erbjudandena skrevs inte ({status}) — {svar.get('detail', '')}")
-    if ny_instruktion != instruktion:
+    if not oforandrad:
         status, svar = admin.anrop(
             "PUT", f"/api/admin/tenants/{kund['id']}/profil",
             {"agent_type": "leads", "instruktioner_md": ny_instruktion},

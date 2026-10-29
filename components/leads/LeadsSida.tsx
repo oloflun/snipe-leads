@@ -227,7 +227,7 @@ export function IrisBolag({ demo = false }: Readonly<{ demo?: boolean }>) {
                           key={steg.sv}
                           className={cn(
                             "flex items-center gap-2",
-                            i < demoSteg ? "text-ink-subtle" : i === demoSteg ? "font-medium text-ink" : "text-ink-subtle/60"
+                            i < demoSteg ? "text-ink-muted" : i === demoSteg ? "font-medium text-ink" : "text-ink-subtle"
                           )}
                         >
                           <span aria-hidden className="num w-4 tabular-nums">{i < demoSteg ? "✓" : `${i + 1}`}</span>
