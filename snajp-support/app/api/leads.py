@@ -1721,8 +1721,9 @@ async def put_leads_erbjudanden(
     egna = (
         {k: e.model_dump() for k, e in payload.egna.items()} if payload.egna is not None else sparat["egna"]
     )
+    amnen = payload.amnen if payload.amnen is not None else sparat.get("amnen")
     try:
-        nytt = erbjudanden.validera(aktiva, villkor, [p["namn"] for p in las_produkter(current)], egna)
+        nytt = erbjudanden.validera(aktiva, villkor, [p["namn"] for p in las_produkter(current)], egna, amnen)
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from None
     saved = await storage.set_agent_settings(

@@ -56,7 +56,13 @@ _MARKORER: tuple[tuple[str, re.Pattern[str], str], ...] = (
      "\"vi har skapat/utvecklat\""),
     ("ar_en_ai_agent", re.compile(r"\bär\s+en\s+(?:\w+\s+)?(?:AI-?\s?)?(?:agent|assistent)\s+som\b", re.IGNORECASE),
      "\"X är en AI-agent som …\""),
-    ("effektivisera", re.compile(r"\b(?:effektivisera\w*|effektivitet\w*|optimera\w*)", re.IGNORECASE),
+    # Undantaget (Sebbe 2026-10-29): att agenten effektiviserar just
+    # prospekteringen eller kundhanteringen är budskapet i Snajps utskick, och
+    # säger vad den gör. "Effektivisera arbetet" säger ingenting och fälls.
+    ("effektivisera", re.compile(
+        r"\b(?:effektivisera\w*\b(?!\s+(?:(?:er|din|ditt|era|dina|deras)\s+)?"
+        r"(?:prospektering|kundhantering|support|kundtjänst|kundservice)\w*)|effektivitet\w*|optimera\w*)",
+        re.IGNORECASE),
      "effektivisera/effektivitet/optimera"),
     ("i_dagens", re.compile(r"\bi\s+dagens\b", re.IGNORECASE), "\"i dagens …\""),
     ("utropstecken", re.compile(r"!"), "utropstecken"),
@@ -154,7 +160,15 @@ _SVARA_KODORD = re.compile(r"\bsvara\s+(?:med\s+)?[\"”“'‘’][^\"”“'�
 _KRITISK_INGANG = re.compile(
     r"\b(?:ni|du)\s+lovar\b[^?]*\bmen\b"
     r"|\b(?:hinner|hinns|besvaras|blir)\s+(?:\w+\s+)?sällan\b|\bsällan\s+(?:hinner|hinns|besvaras)\b"
-    r"|\bförsvinner\b|\bblir\s+(?:liggande|lidande)\b|\bhalkar\s+efter\b",
+    r"|\bförsvinner\b|\bblir\s+(?:liggande|lidande)\b|\bhalkar\s+efter\b"
+    # Sebbe 2026-10-29: "Era kunder förväntar sig snabb och kunnig hjälp …"
+    # klankar ner på bolaget, och "Hur ska ni kunna hantera nya kunder
+    # samtidigt som ni har mycket jobb" är säljigt och påstår att de inte
+    # hinner. Mejlet visar i stället hur agenten gör arbetet enklare.
+    r"|\b(?:era|dina|deras)\s+kunder\s+(?:förväntar|kräver|väntar\s+sig)\b|\bkunderna\s+(?:förväntar|kräver)\b"
+    r"|\bhur\s+ska\s+(?:ni|du)\s+(?:kunna|hinna|klara)\b"
+    r"|\b(?:samtidigt\s+som|när)\s+(?:ni|du)\s+har\s+(?:mycket|fullt)\b"
+    r"|\btar\s+det\s+tid\s+från\b",
     re.IGNORECASE,
 )
 #: Registerfakta i ingången: ett antal (siffra eller ord) följt av anställda,

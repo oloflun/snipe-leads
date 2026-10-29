@@ -9,6 +9,78 @@ möjligt), vad det betyder i koden.
 
 ---
 
+## 2026-10-29 (Sebbe) — Utskicken: nyast först, effektiviseringen i fokus, ämnesrader ur en lista, "upp till 50 %" och en demo utan inloggning
+
+**Beslut.** "Alla de nyaste utskicken ska vara högst upp i listorna, så nyaste
+först i listan och sedan följs den röda tråden nedåt", likadant i inkorgen,
+och nya utskick ska ligga under Ny och Alla, aldrig någon annanstans. Utskicken
+ska vara "varma och informerande och ge mottagaren en intressant och kort
+inblick i hur vår agent fungerar och hur enkel den är att använda", med
+effektiviseringen tidigt: prospekteringen för Iris, kundhanteringen för
+Supportagenten. "Ändra inte mycket": mejlet till Andreas (form B) är rätt nivå.
+Ämnesraderna ska handla om effektiviseringen, ur Sebbes lista per produkt, där
+"Effektivisering av prospektering" och "Support 24/7 för dina kunder" är de
+starkaste. "Du får 50 % rabatt" blir "Du får upp till 50 % rabatt om du stannar
+efteråt". Demolänken ska ge ett inloggat demokonto där mottagaren testar Iris,
+ser demosiffror och kör snabba körningar på påhittade företag, utan riktiga
+körningar som kostar tokens.
+
+**Resonemang.** En ny körnings utkast syntes bara under Körningar, och det är
+slarv i det första kunden ser. Ingångar som "Era kunder förväntar sig snabb och
+kunnig hjälp" klankar ner på bolaget, och "Hur ska ni kunna hantera nya kunder
+samtidigt som ni har mycket jobb" är säljigt, pushande och "känns drygt och
+konstigt". Det som väcker intresse är att se att jobbet blir enklare, så det ska
+sägas tidigt. Modellens ämnesrader ("Fokus på varje affär", "Nya kunder med
+höga krav") sa inget om vad mottagaren vinner.
+
+**I koden och prompterna.**
+- Leads › Översikt sorterar nyast först (`LeadsTabell.sortera`: senaste
+  händelsen, alltså statusbytet när utkastet skrevs, annars när leadet lades
+  till; research pågår överst). Ersätter poängordningen från 2026-10-07.
+- Granskningskön (`list_review_queue`, Postgres och MemoryStorage) kommer
+  nyaste utkastet först. Förut kom de äldsta först och gränsen på 200 klippte
+  bort en ny körnings utkast. Kedjans "redan använda ingångar" tar nu de tolv
+  första i stället för de tolv sista.
+- Inkorgen var redan nyast först (`received_at desc`); ett test låser det.
+- Ämnesrader per produkt (`erbjudanden.amnen`, PUT `/api/leads/erbjudanden`):
+  koden väljer en per mejl efter att modellen skrivit det (`valj_amne`,
+  deterministiskt per prospekt, den första raden i ungefär vart tredje mejl),
+  i ni-form när mottagaren inte är namngiven. Utan lista står modellens
+  ämnesrad kvar, så andra kunder märker ingenting. Snajps listor står i
+  `scripts/snajp_malgrupp.py`.
+- `erbjudanden.behall_upp_till`: står villkorens siffra som "upp till 50 %"
+  sätter koden tillbaka "upp till" om mejlet tappat det.
+- Stilgrinden: `kritisk_ingang` fäller också "era/dina kunder förväntar sig
+  eller kräver", "hur ska ni kunna/hinna", "samtidigt som ni har mycket" och
+  "tar det tid från". `effektivisera` fälls inte längre när det gäller
+  prospekteringen eller kundhanteringen.
+- Snajps inställningar: produkternas nytta börjar med effektiviseringen,
+  Iris-instruktionen ber om en varm, kort inblick och förbjuder ingångar om
+  vad kunderna förväntar sig, och pilotvillkoret säger "upp till 50 % rabatt
+  om du stannar efteråt" och "testa direkt i demon".
+- Skrivstilen omgång 8.
+- Demon (`/demo`) visas som ett inloggat demokonto utan inloggningsknappar,
+  och "Kör Iris" går hur många gånger som helst. Varje körning visar sina steg
+  i några sekunder och lägger sedan tre nya exempelföretag med färdiga utkast
+  överst under Ny. Efter de sex handskrivna bolagen blir varje omgång tre
+  varianter med nytt namn, ny ort och ny kontakt (`exempelVariant`). Inget
+  anrop går till modellen; Email Studio svarar med de förskrivna svaren även
+  för varianterna.
+
+**Facit.** INV-LEADS-UTKAST-002 är orört och passerar. Facits ämnesregel (två
+till fem ord om deras löfte, utan produkt) gäller fortfarande för kunder utan
+egen ämneslista; Snajps ämnesrader går dit Sebbe vill i stället. Facits
+Båtladan-ingång ("Hur hinner du med …") fälls inte av de nya mönstren.
+
+**Öppet för Anton.** (1) Snajps ämnesrader avviker från ämnesregeln i
+facit 2026-10-16 genom att vara produktnära och ibland längre än fem ord.
+(2) Rabatten är nu "upp till 50 %" i stället för 50 %; den slutliga nivån per
+kund avgörs vid avtalet. (3) Några ämnesrader lovar sådant Iris bara gör delvis
+("Vi märker när ett bolag är redo att köpa", "varje morgon" kräver autopilot).
+(4) Inställningarna och koden ligger i development; main kräver en release.
+
+---
+
 ## 2026-10-25 (Anton) — Utkasten: mjukare ingång, inget "Svara X så …", piloten i varje mejl, A/B, egna erbjudanden och kampanjer
 
 **Beslut.** Sebbes utkaständringar 2026-10-24 återställs. De nya Iris-mejlen

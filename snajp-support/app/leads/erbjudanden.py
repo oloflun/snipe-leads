@@ -56,6 +56,9 @@ VILLKOR_MAX = 600
 VIKT_MAX = 10
 NAMN_MAX = 60
 _EGEN_NYCKEL = re.compile(r"^[a-z0-9_-]{1,40}$")
+#: Kundens ämnesrader per produkt (Sebbe 2026-10-29), i tecken och antal.
+AMNE_MAX = 90
+AMNEN_MAX = 40
 
 #: Mejlets form (Anton 2026-10-25): (namn, regler). Reglerna beskriver
 #: rörelsen, aldrig färdiga meningar, så att mejlen inte blir kopior.
@@ -207,7 +210,89 @@ def normalisera(raw: Any) -> dict[str, Any]:
         except (TypeError, ValueError):
             vikt = 1
         aktiva.append({"nyckel": rad["nyckel"], "vikt": min(max(vikt, 0), VIKT_MAX)})
-    return {"aktiva": aktiva, "villkor": villkor, "egna": egna}
+    amnen = _amnena(raw.get("amnen"))
+    return {"aktiva": aktiva, "villkor": villkor, "egna": egna, **({"amnen": amnen} if amnen else {})}
+
+
+# -- Ämnesraderna ------------------------------------------------------------
+#
+# Sebbe 2026-10-29: ämnesraderna ska handla om effektiviseringen, prospektering
+# för Iris och support för Supportagenten, ur kundens egen lista. Modellens
+# ämnesrader ("Fokus på varje affär", "Nya kunder med höga krav") sa inget om
+# vad mottagaren vinner. Listan står per produkt i kundens erbjudandeval
+# (`amnen`), och koden väljer raden efter att modellen skrivit mejlet: en regel
+# i en prompt är en riktning, ett val i kod en garanti. Utan lista för
+# produkten står modellens ämnesrad kvar, så andra kunder märker ingenting.
+
+
+def _amnena(raw: Any) -> dict[str, list[str]]:
+    """{produktnamn: [ämnesrad, …]}, strippat och utan dubbletter."""
+    if not isinstance(raw, dict):
+        return {}
+    ut: dict[str, list[str]] = {}
+    for produkt, rader in raw.items():
+        if not str(produkt).strip() or not isinstance(rader, list):
+            continue
+        unika = list(dict.fromkeys(" ".join(str(r).split())[:AMNE_MAX] for r in rader if str(r).strip()))
+        if unika:
+            ut[str(produkt).strip()] = unika[:AMNEN_MAX]
+    return ut
+
+
+def amnen_for(amnen: dict[str, list[str]] | None, produkt: str | None) -> list[str]:
+    """Ämnesraderna för `produkt` (namnet utan hänsyn till versaler), eller []."""
+    if not amnen or not produkt:
+        return []
+    nyckel = produkt.strip().casefold()
+    return next((r for p, r in amnen.items() if p.casefold() == nyckel), [])
+
+
+#: Du-form → ni-form. Listan skrivs i du-form; ett mejl utan namngiven
+#: mottagare skrivs i ni-form rakt igenom, ämnesraden medräknad.
+_TILL_NI = {"du": "ni", "dig": "er", "din": "er", "ditt": "ert", "dina": "era"}
+_DU_ORD = re.compile(r"\b(du|dig|din|ditt|dina)\b", re.IGNORECASE)
+
+
+def till_ni(amne: str) -> str:
+    def byt(m: re.Match[str]) -> str:
+        ord_ = _TILL_NI[m.group(1).lower()]
+        return ord_.capitalize() if m.group(1)[0].isupper() else ord_
+
+    return _DU_ORD.sub(byt, amne)
+
+
+def valj_amne(rader: list[str], nyckel: str, *, du: bool) -> str | None:
+    """Ämnesraden för ett mejl, deterministisk per `nyckel` (kund och prospekt),
+    så att ett omskrivet utkast behåller sin rad. Den första raden är kundens
+    starkaste och väger som halva resten, ungefär vart tredje mejl; övriga
+    lika. `du` False ger ni-form."""
+    if not rader:
+        return None
+    vikter = [max(1, round((len(rader) - 1) / 2))] + [1] * (len(rader) - 1)
+    punkt = int.from_bytes(hashlib.sha256(f"amne:{nyckel}".encode("utf-8")).digest()[:8], "big") % sum(vikter)
+    for rad, vikt in zip(rader, vikter):
+        if punkt < vikt:
+            return rad if du else till_ni(rad)
+        punkt -= vikt
+    return None  # nås inte: punkt < summan
+
+
+_UPP_TILL = re.compile(r"\bupp\s+till\s+(\d+)\s*%", re.IGNORECASE)
+
+
+def behall_upp_till(body: str, villkor: str) -> str:
+    """Står villkorens siffra som "upp till 50 %" sätts "upp till" tillbaka när
+    mejlet tappat det ("får 50 % rabatt"). Sebbe 2026-10-29: rabatten är upp
+    till 50 %, och ett mejl som lovar 50 % rakt av lovar mer än villkoren.
+    Siffror som redan står med "upp till" eller "högst" rörs inte."""
+    for tal in dict.fromkeys(_UPP_TILL.findall(villkor or "")):
+        body = re.sub(
+            rf"(?<!upp till )(?<!högst )(?<![\d,.])\b{tal}(\s*)(%|procent)",
+            lambda m: f"upp till {tal}{m.group(1)}{m.group(2)}",
+            body,
+            flags=re.IGNORECASE,
+        )
+    return body
 
 
 def armar(val: dict[str, Any] | None) -> dict[str, Erbjudande]:
@@ -225,11 +310,13 @@ def validera(
     villkor: dict[str, Villkor],
     produkter: list[str] | None = None,
     egna: dict[str, Any] | None = None,
+    amnen: dict[str, list[str]] | None = None,
 ) -> dict[str, Any]:
     """Skrivvägen: kastar ValueError med ett svenskt besked. Typer och
     gränser (vikt 0–10, villkorslängd) prövas redan av API-schemat.
     `produkter` är kundens produktnamn; villkor per produkt måste gälla en av dem.
-    `egna`: kundens egna erbjudanden, {nyckel: {namn, form}}."""
+    `egna`: kundens egna erbjudanden, {nyckel: {namn, form}}.
+    `amnen`: ämnesrader per produkt, {produktnamn: [rad, …]}."""
     giltiga = normalisera({"egna": egna})["egna"]
     kat = armar({"egna": giltiga})
     for nyckel, e in (egna or {}).items():
@@ -248,6 +335,9 @@ def validera(
                     f"Villkoren för {kat[nyckel].namn} gäller produkten \"{produkt}\", "
                     "som inte finns bland era produkter."
                 )
+    for produkt in amnen or {}:
+        if produkt.strip().casefold() not in kanda:
+            raise ValueError(f"Ämnesraderna gäller produkten \"{produkt}\", som inte finns bland era produkter.")
     nycklar = [a["nyckel"] for a in aktiva]
     if len(nycklar) != len(set(nycklar)):
         raise ValueError("Ett erbjudande står två gånger bland de aktiva.")
@@ -256,7 +346,7 @@ def validera(
             raise ValueError(
                 f"Fyll i villkoren för {kat[a['nyckel']].namn} innan erbjudandet slås på."
             )
-    return normalisera({"aktiva": aktiva, "villkor": villkor, "egna": egna})
+    return normalisera({"aktiva": aktiva, "villkor": villkor, "egna": egna, "amnen": amnen})
 
 
 def valbara(val: dict[str, Any], produkt: str | None = None) -> list[tuple[str, int]]:
@@ -331,6 +421,8 @@ class Valt:
     nyckel: str
     villkor: str
     erbjudande: Erbjudande | None = None
+    #: Kundens ämnesrader för produkten (tomt = modellens ämnesrad står kvar).
+    amnen: tuple[str, ...] = ()
 
     @property
     def form(self) -> str:
@@ -363,7 +455,12 @@ async def for_trad(
     except Exception:  # noqa: BLE001 — se docstringen
         logger.exception("Kunde inte spara erbjudandet för tråd %s; utkastet skrivs utan.", thread["id"])
         return None
-    return Valt(nyckel=nyckel, villkor=villkor_for(val["villkor"][nyckel], produkt), erbjudande=armar(val)[nyckel])
+    return Valt(
+        nyckel=nyckel,
+        villkor=villkor_for(val["villkor"][nyckel], produkt),
+        erbjudande=armar(val)[nyckel],
+        amnen=tuple(amnen_for(val.get("amnen"), produkt)),
+    )
 
 
 # -- Mätningen ------------------------------------------------------------

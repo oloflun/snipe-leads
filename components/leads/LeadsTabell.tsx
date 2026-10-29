@@ -249,30 +249,35 @@ function kvalitet(p: SuiteProspekt): number {
   return -1;
 }
 
+/** Leadets senaste händelse (statusbytet när utkastet skrevs), annars när
+ *  det lades till: det som gör ett lead "nytt" i listan. */
+function senast(p: SuiteProspekt): string {
+  return p.senaste_handelse_at ?? p.created_at ?? "";
+}
+
 function nyast(a: SuiteProspekt, b: SuiteProspekt): number {
-  return (b.created_at ?? "").localeCompare(a.created_at ?? "");
+  return senast(b).localeCompare(senast(a));
 }
 
 /**
- * De bästa leadsen överst (Sebbe 2026-10-07): poäng, sedan nivå (Stark före
- * Möjlig) vid lika poäng, sedan nyast. Poängen är rangpoängen
- * (snajp-support/app/leads/rangpoang.py) och mäter just hur bra leadet är;
- * med nivån först stod "Stark 58" över "Möjlig 78". Bolag under research har
- * inget betyg än och står överst, så att man ser dem bli klara och glida ner
- * till sin plats. Exemplen sorteras som allt annat (kritiken 2026-10-07: med
- * exemplen först läste demon 91, 79, research, 88).
+ * Nyaste överst (Sebbe 2026-10-29): "Alla de nyaste utskicken ska vara högst
+ * upp i listorna, så nyaste först, och sedan följs den röda tråden nedåt."
+ * En ny körnings leads låg förut insorterade efter poäng bland hundratals
+ * äldre och syntes i praktiken bara under Körningar. Bolag under research
+ * står överst, eftersom de är de allra nyaste. Vid samma tidpunkt går poängen
+ * och sedan nivån (Stark före Möjlig) före.
  *
- * Ersätter Antons "nyaste överst" (2026-10-06), vars skäl var att nya leads
- * hamnade mitt i listan: de nya har nu en egen flik, Ny.
+ * Ersätter poängordningen (Sebbe 2026-10-07), som i sin tur ersatte Antons
+ * "nyaste överst" (2026-10-06). Poängen syns fortfarande i varje rad.
  */
 function sortera(rader: SuiteProspekt[]): SuiteProspekt[] {
   const grupp = (p: SuiteProspekt) => (iResearch(p) ? 0 : 1);
   return [...rader].sort(
     (a, b) =>
       grupp(a) - grupp(b) ||
+      nyast(a, b) ||
       kvalitet(b) - kvalitet(a) ||
-      (NIVA_RANG[a.niva ?? ""] ?? 2) - (NIVA_RANG[b.niva ?? ""] ?? 2) ||
-      nyast(a, b)
+      (NIVA_RANG[a.niva ?? ""] ?? 2) - (NIVA_RANG[b.niva ?? ""] ?? 2)
   );
 }
 

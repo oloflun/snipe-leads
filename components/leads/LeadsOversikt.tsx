@@ -63,8 +63,8 @@ const T = {
   // Poängen förklaras där den visas (kritiken: poäng och nivå förklarades
   // ingenstans). Samma vikter som app/leads/rangpoang.py.
   irisLeadsText: {
-    sv: "De bästa överst. Poängen väger hur väl bolaget passar, styrkta citat från sajten, kontakten och om tidpunkten är rätt. Ny är bolag Iris just hittat, Redo de du granskat och vill kontakta.",
-    en: "Best first. The score weighs how well the company fits, verified quotes from its site, the contact and whether the timing is right. New is companies Iris just found, Ready the ones you have reviewed and want to contact."
+    sv: "Nyaste överst. Poängen väger hur väl bolaget passar, styrkta citat från sajten, kontakten och om tidpunkten är rätt. Ny är bolag Iris just hittat, Redo de du granskat och vill kontakta.",
+    en: "Newest first. The score weighs how well the company fits, verified quotes from its site, the contact and whether the timing is right. New is companies Iris just found, Ready the ones you have reviewed and want to contact."
   },
   listorRubrik: { sv: "Listor och säljlista", en: "Lists and sales list" },
   listorInnehall: {

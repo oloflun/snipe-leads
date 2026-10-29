@@ -4107,7 +4107,10 @@ class PostgresStorage:
                   order by om.created_at desc, om.id desc limit 1
                 ) m on true
                 where q.tenant_id = $1 and q.status = 'awaiting_review'
-                order by q.scheduled_at
+                -- Nyaste utkastet först (Sebbe 2026-10-29). Förut kom de äldsta
+                -- först och gränsen klippte bort de nya, så att en ny körnings
+                -- utkast bara syntes under Körningar.
+                order by coalesce(m.created_at, q.created_at) desc, q.id desc
                 limit $2
                 """,
                 tenant_id,

@@ -880,6 +880,7 @@ def _stilfynd(
     bolag: str | None = None,
     andra_amnen: list[str] | None = None,
     fokus_ok: bool = True,
+    amne_i_kod: bool = False,
 ) -> list[str]:
     """Stilgrindens fynd på ett råutkast (före humanizern), som text till
     omskrivningen: markörerna i app/leads/stilkontroll.py, erbjudandets
@@ -897,7 +898,10 @@ def _stilfynd(
     fynd += stil.mot_andra(body, andra)
     # Ämnesraden (Anton 2026-10-15): inget bolagsnamn, ingen produkt, inte
     # samma början som ett annat mejl i körningen.
-    fynd += stil.amne_fynd(str(draft.get("subject") or ""), bolag=bolag, produkt=produkt, andra=andra_amnen or [])
+    # Väljs ämnesraden ur kundens lista i kod (`amne_i_kod`) prövas modellens
+    # rad inte: den byts ändå, och en omskrivning för den vore ett slöseri.
+    if not amne_i_kod:
+        fynd += stil.amne_fynd(str(draft.get("subject") or ""), bolag=bolag, produkt=produkt, andra=andra_amnen or [])
     # for_langt skrivs om sedan 2026-10-25: villkoren är korta nu, och
     # provkörningen gav 105–150 ord, längre än Antons exempel.
     ut = [a.beskrivning for a in fynd if a.kod not in ("lang_mening", "samma_uppmaning")]
@@ -958,13 +962,16 @@ async def run_outreach_draft_v2(
     # 2026-10-25 lät Iris "hitta nya tomter" därför att researchen föreslagit det.
     if erbjudande:
         offer_summary = offer_summary.split("\n", 1)[0]
+    # Kundens ämnesrader för produkten (Sebbe 2026-10-29): raden väljs i kod
+    # sist, så modellens ämnesrad prövas inte av grinden.
+    amne_i_kod = bool(erbjudande and erbjudande.amnen)
     # Körningens andra utkast (Anton 2026-10-12): modellen kan inte variera
     # ingången mot mejl den aldrig sett. De som väntar på granskning läggs i
     # ärendet som "redan använda", och stilgrinden nedan prövar detsamma i kod.
     koade = [r for r in await storage.list_review_queue(tenant_id, limit=200) if r.get("thread_id") != thread_id]
     andra_utkast = [str(r.get("body") or "") for r in koade]
     andra_amnen = [str(r.get("subject") or "") for r in koade]
-    anvanda_ingangar = [i for i in (stil.ingang(t) for t in andra_utkast[-12:]) if i]
+    anvanda_ingangar = [i for i in (stil.ingang(t) for t in andra_utkast[:12]) if i]  # kön kommer nyast först
     ingangsform = _ingangsform(thread.get("prospect_id"), fraga=not (erbjudande and erbjudande.form == "fraga"))
     fokus_ok = _fokus_ok(thread.get("prospect_id"))
     if not fokus_ok:
@@ -1187,7 +1194,7 @@ async def run_outreach_draft_v2(
         )
 
     stilfynd = _stilfynd(draft, villkor=villkor, produkt=produktnamn, andra=andra_utkast,
-                         bolag=company_name, andra_amnen=andra_amnen, fokus_ok=fokus_ok)
+                         bolag=company_name, andra_amnen=andra_amnen, fokus_ok=fokus_ok, amne_i_kod=amne_i_kod)
     if stilfynd:
         draft = await skriv_om(draft, stilfynd)
     humanized = await humanisera(draft)
@@ -1207,7 +1214,7 @@ async def run_outreach_draft_v2(
 
     slutligt = _version(humanized, draft)
     kvar = _stilfynd(slutligt, villkor=villkor, produkt=produktnamn, andra=andra_utkast,
-                     bolag=company_name, andra_amnen=andra_amnen, fokus_ok=fokus_ok)
+                     bolag=company_name, andra_amnen=andra_amnen, fokus_ok=fokus_ok, amne_i_kod=amne_i_kod)
     basta, basta_fynd = slutligt, kvar
     for _varv in range(2):
         if not kvar:
@@ -1216,7 +1223,7 @@ async def run_outreach_draft_v2(
         humanized = await humanisera(draft)
         slutligt = _version(humanized, draft)
         kvar = _stilfynd(slutligt, villkor=villkor, produkt=produktnamn, andra=andra_utkast,
-                         bolag=company_name, andra_amnen=andra_amnen, fokus_ok=fokus_ok)
+                         bolag=company_name, andra_amnen=andra_amnen, fokus_ok=fokus_ok, amne_i_kod=amne_i_kod)
         if len(kvar) <= len(basta_fynd):
             basta, basta_fynd = slutligt, kvar
 
@@ -1277,6 +1284,13 @@ async def run_outreach_draft_v2(
         # Och namnet EN gång i hela mejlet (tilltal.ett_bolagsnamn), resten
         # ni/er; kortningen sker inuti.
         subject, body = ett_bolagsnamn(amne_utan_namn(subject, company_name), body, company_name)
+        if erbjudande:
+            # Sebbe 2026-10-29: ämnesraden ur kundens lista för produkten, i
+            # mejlets tilltal, och villkorens "upp till" står kvar i mejlet.
+            subject = erbjudanden.valj_amne(
+                list(erbjudande.amnen), f"{tenant_id}:{thread.get('prospect_id') or thread_id}", du=bool(_namn)
+            ) or subject
+            body = erbjudanden.behall_upp_till(body, erbjudande.villkor)
 
         if not grounding["ok"]:
             await _request_human_handoff_impl(

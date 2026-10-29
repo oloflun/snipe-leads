@@ -54,7 +54,7 @@ Konstruktionen varierar från mejl till mejl: koden tilldelar varje mejl en form
 | Med [antal] anställda / platschefer / sedan [år] … | vem de arbetar för, vad de lägger vikt vid, hur de arbetar |
 | Vi har skapat / utvecklat … | Vår [agent] [gör X] åt er … |
 | Snajps X är en AI-agent som automatiserar … | Vår X [plockar upp / svarar på / hittar] … åt er |
-| effektivisera, effektivitet, optimera | mer tid till [deras arbete], slippa [konkret moment] |
+| effektivisera, effektivitet, optimera (om arbetet i allmänhet) | mer tid till [deras arbete], slippa [konkret moment]. Undantaget: att agenten effektiviserar prospekteringen eller kundhanteringen får sägas en gång, när kundens instruktion ber om det (Sebbe 2026-10-29) |
 | administrativa uppgifter | kvittona, mejlen, offertförfrågningarna (det konkreta) |
 | frigöra tid | få mer tid till [konkret] |
 | potentiella kunder | nya kunder |
@@ -140,6 +140,10 @@ Efter omkörningen stod "som ni gör", "som ert" eller "för företag som ert" f
 ### Omgång 7 – Anton 2026-10-25
 
 Grundidén i utkasten i produktion var bra, men ingången blev för ofta offensiv: deras eget löfte ställt mot ett misslyckande ("ni lovar …, men frågorna hinner sällan besvaras", "men den tiden försvinner snabbt"). Det kan träffa en öm tå och tas som kritik redan i första meningen. De goda ingångarna beskrev i stället en balansgång i deras sorts arbete, eller något som kan göra det svårt att hinna med det de lägger vikt vid. Varje mejl slutade dessutom med "Svara X så gör vi Y", som läses som botmejl och massutskick och är förbjudet. Avslutet är en vardaglig inbjudan med villkorens väg vidare. Erbjudandet styr hela mejlet, och hos Snajp står piloten i varje mejl. Mejlen A/B-testas: form A rakt på, och form B med en kort fråga om vilket av två moment som tar mest tid för dem. Tonen är vardaglig, som ett mejl från en person till en annan. Sebbes omgång 7 från 2026-10-24 (erbjudandet först i Iris-mejlen, beviset om att Iris skrev mejlet) är återställd.
+
+### Omgång 8 – Sebbe 2026-10-29
+
+Strukturen från omgång 7 står kvar; mejlet till Andreas ("Att identifiera potentiella köpare och bistå i förhandlingar kräver att du kan fokusera på varje affär", sedan frågan om vad som tar mest tid, Iris och piloten) är rätt nivå. Tre saker skavde. Ingången klankade ibland ner på bolaget ("Era kunder förväntar sig snabb och kunnig hjälp …", "När mängden frågor växer tar det tid från …") eller lät säljig och pushande ("Hur ska ni kunna hantera nya kunder samtidigt som ni har mycket jobb"); stilgrinden fäller nu de mönstren som kritik. Mottagaren ska tidigt förstå att agenten gör jobbet enklare: att hitta nya kunder (prospekteringen) för Iris, kundhanteringen för Supportagenten, sagt varmt och kort med en inblick i hur enkelt det är. Att agenten effektiviserar just prospekteringen eller kundhanteringen får därför sägas en gång. Ämnesraderna ("Fokus på varje affär", "Nya kunder med höga krav") sa inget om vinsten; hos en kund med egna ämnesrader per produkt väljs raden i kod ur den listan (`erbjudanden.valj_amne`), annars gäller ämnesregeln ovan. Rabatten i Snajps pilot är "upp till 50 %", och koden sätter tillbaka "upp till" om mejlet tappar det.
 
 ### Omgång 6 – Anton 2026-10-15
 

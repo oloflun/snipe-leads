@@ -3025,6 +3025,7 @@ class MemoryStorage:
                 "subject": m.get("subject"),
                 "body": m.get("body"),
                 "message_id": m.get("id"),
+                "_utkast_at": str(m.get("created_at") or item.get("created_at") or ""),
                 "prospect_id": p.get("id"),
                 "prospect_email": p.get("contact_email"),
                 "company_name": p.get("company_name"),
@@ -3034,7 +3035,8 @@ class MemoryStorage:
                 "lagesbeskrivning": p.get("lagesbeskrivning"),
                 "signaler": p.get("signaler"),
             })
-        svar.sort(key=lambda r: str(r.get("scheduled_at") or ""))
+        # Nyaste utkastet först, som Postgres (Sebbe 2026-10-29).
+        svar.sort(key=lambda r: r.pop("_utkast_at"), reverse=True)
         return svar[:limit]
 
     # -- Rate limiting ------------------------------------------------------

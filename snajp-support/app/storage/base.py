@@ -1566,7 +1566,8 @@ class Storage(Protocol):
     ) -> dict[str, Any]: ...
 
     async def list_review_queue(self, tenant_id: str, *, limit: int = 100) -> list[dict[str, Any]]:
-        """Utkast som väntar på granskning (send_queue.status='awaiting_review')."""
+        """Utkast som väntar på granskning (send_queue.status='awaiting_review'),
+        nyaste utkastet först (Sebbe 2026-10-29), så att gränsen klipper de äldsta."""
         ...
 
     # -- Admin: cross-tenant-läsning (Fas 6, kräver master-nyckel) ----------

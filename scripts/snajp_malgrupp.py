@@ -45,11 +45,13 @@ from seed_demo import Api, deploy_env  # noqa: E402
 PRODUKTER = [
     {
         "namn": "Iris, leadsagenten",
-        "nytta": "hittar och kvalificerar nya företagskunder och skriver färdiga utkast som ni själva godkänner innan något skickas",
+        # Sebbe 2026-10-29: effektiviseringen först, så att mottagaren förstår
+        # tidigt att prospekteringen går fortare, och en inblick i hur enkelt.
+        "nytta": "effektiviserar prospekteringen: hittar och kvalificerar nya företagskunder efter er idealkund och skriver färdiga första mejl som ni själva godkänner innan något skickas, så att tiden går till samtal i stället för research",
     },
     {
         "namn": "Supportagenten",
-        "nytta": "svarar på återkommande kundfrågor i chatt och mejl dygnet runt, ur företagets egen kunskapsbas, och lämnar över till en människa när den inte säkert kan svara",
+        "nytta": "effektiviserar kundhanteringen: svarar direkt på återkommande kundfrågor i chatt och mejl dygnet runt, ur företagets egen kunskapsbas, och lämnar över till en människa när den inte säkert kan svara, så att teamet slipper svara på samma frågor om och om igen",
     },
 ]
 
@@ -72,6 +74,9 @@ IRIS_INSTRUKTION = f"""{MARKOR}
 - Kalla Iris "vår agent Iris" första gången och sedan "Iris". Aldrig "Iris, leadsagenten", "leadsagenten Iris", "Vår Iris" eller "hon".
 - Iris hittar och kvalificerar nya företagskunder och skriver första mejlet till dem. Iris hittar aldrig tomter, investerare, leverantörer eller personal.
 - Frågan i form B: för Iris om det tar mest tid att hantera de förfrågningar som redan kommer in eller att hitta nya kunder; för Supportagenten om det tar mest tid att gå igenom kundmejlen eller att sitta i supportchattarna. Inga andra moment.
+- Mejlet är varmt och informerande, aldrig säljigt eller pushande. Senast i meningen efter ingången ska mottagaren förstå att agenten effektiviserar deras arbete: för Iris att hitta nya kunder (prospekteringen), för Supportagenten kundhanteringen. Säg det med vad de slipper eller får tid till, och ge en kort inblick i hur enkelt det är (Iris: ni säger vilka kunder ni söker, och Iris tar fram bolagen och skriver första mejlet som ni godkänner; Supportagenten: den svarar utifrån er egen information). "Effektiviserar prospekteringen" eller "effektiviserar kundhanteringen" får stå en gång.
+- Ingången beskriver vad deras arbete går ut på, utan problem och utan krav på dem: aldrig vad deras kunder förväntar sig eller kräver, aldrig att frågorna växer eller tar tid från något, och aldrig en fråga om hur de ska hinna eller kunna klara något.
+- Rabatten är "upp till 50 %" för den som stannar efter piloten, aldrig "50 %" rakt av.
 """
 
 #: Erbjudandena (A/B, app/leads/erbjudanden.py), Antons beslut 2026-10-10: alla
@@ -85,14 +90,69 @@ IRIS, SUPPORT = (p["namn"] for p in PRODUKTER)
 #: Antons villkor 2026-10-25: piloten i varje mejl, inga fler detaljer, och
 #: avslutet en vardaglig inbjudan till demon eller en kostnadsfri genomgång.
 #: Kort (2026-10-25): piloten och avslutet tog 60 av 105–150 ord i provet.
+#: Sebbe 2026-10-29: "upp till 50 % rabatt om du stannar efteråt", och demon
+#: kräver ingen inloggning (app/demo): mottagaren testar direkt.
 _PILOT = (
-    "Just nu tar vi in 20 företag i en kostnadsfri pilot av {agent} i tre månader, med alla funktioner, "
-    "och den som vill stanna efteråt får 50 % rabatt. Handling: demon på snajp.se/demo, eller ett svar "
-    "på mejlet så bokar vi en kostnadsfri genomgång."
+    "Just nu tar vi in 20 företag i en kostnadsfri pilot av {agent} i tre månader, med alla funktioner. "
+    "Du får upp till 50 % rabatt om du stannar efteråt. Handling: testa {agent} direkt i demon på "
+    "snajp.se/demo, eller svara på mejlet så bokar vi en kostnadsfri genomgång."
 )
 #: Kortnamnet i texten ("Iris", inte "Iris, leadsagenten"): Anton 2026-10-25 om
 #: mejlen som "berättar om 'leadsagenten' helt utan kontext".
 _PILOTER = {agent: _PILOT.format(agent=agent.split(",")[0]) for agent in (IRIS, SUPPORT)}
+#: Ämnesraderna per produkt (Sebbe 2026-10-29), i du-form: koden väljer en
+#: per mejl och skriver om den till ni-form när mottagaren inte är namngiven
+#: (app/leads/erbjudanden.py:valj_amne). Den första i varje lista är den
+#: starkaste och står i ungefär vart tredje mejl.
+AMNEN = {
+    IRIS: [
+        "Effektivisering av prospektering",
+        # Tidsvinst i sökandet
+        "Sluta leta efter kunder, låt dem hittas åt dig",
+        "Från timmar av research till minuter",
+        "Din säljare ska sälja, inte googla bolag",
+        "Researchen är klar innan kaffet är slut",
+        "Mer tid till samtal, mindre tid i Excel",
+        "Den tråkiga delen av prospekteringen, automatiserad",
+        # Träffsäkerhet och idealkund
+        "Rätt företag, rätt tidpunkt, varje morgon",
+        "Bara bolag som matchar din idealkund",
+        "Slipp leadlistor som inte leder någonvart",
+        "Vilka bolag i din bransch växer just nu?",
+        "Nya företagskunder som redan passar din profil",
+        "Träffsäker prospektering, utan gissningar",
+        # Signaler och timing
+        "Vi märker när ett bolag är redo att köpa",
+        "Nyanställd säljchef hos din målgrupp? Du vet det först",
+        "Kontakta bolaget medan nyheten fortfarande är färsk",
+        "Prospektering som styrs av vad som händer, inte av magkänsla",
+        "Ett bolag rekryterar eller expanderar. Du får veta samma dag",
+        # Skalbarhet och pipeline
+        "En full säljpipeline utan extra researchtjänster",
+        "Fyll pipen utan att öka bemanningen",
+        "Hur hittar du dina nästa 50 kunder?",
+        "Så får ditt team jämnare flöde av nya leads",
+        "Samma säljteam, fler kvalificerade samtal",
+        # Frågor som väcker nyfikenhet
+        "Hur lång tid tar det dig att hitta en ny kund?",
+        "Vad kostar en timme av ditt säljteams researchtid?",
+        "Hur vet du vilka bolag du borde ringa idag?",
+        "Skulle du vilja ha dina nästa leads färdiga imorgon bitti?",
+    ],
+    SUPPORT: [
+        "Support 24/7 för dina kunder",
+        "Svar till dina kunder, även klockan 03:00",
+        "Halvera din supportkö utan att anställa",
+        "Kunder som får svar direkt blir kvar längre",
+        "Slipp upprepa samma svar 50 gånger om dagen",
+        "Vad händer med frågorna som kommer efter kl. 17?",
+        "En supportagent som kan din FAQ utantill",
+        "Kortare svarstider, nöjdare kunder",
+        "Så avlastar du supporten under säsongstopparna",
+        "Din support, alltid på. Utan extra bemanning",
+        "Färre tickets till teamet, snabbare svar till kunden",
+    ],
+}
 #: A/B (Anton 2026-10-25): samma pilot, två former, hälften var. Katalogens
 #: gratisprov och garanti står kvar avslagna och kan slås på i Leads › Erbjudanden.
 ERBJUDANDEN = {
@@ -101,6 +161,7 @@ ERBJUDANDEN = {
         "pilot_a": {"namn": "Piloten, form A", "form": "rak"},
         "pilot_b": {"namn": "Piloten, form B (frågan)", "form": "fraga"},
     },
+    "amnen": AMNEN,
     "villkor": {
         "pilot_a": _PILOTER,
         "pilot_b": _PILOTER,
@@ -145,6 +206,7 @@ def main() -> None:
     print("Offentlig sektor: nej")
     print("Iris-instruktion:", "oförändrad" if ny_instruktion == instruktion else "skrivs (ersätter Snajps tidigare block)")
     print("Erbjudanden:", ", ".join(a["nyckel"] for a in ERBJUDANDEN["aktiva"]), "(lika vikt, villkor per produkt)")
+    print("Ämnesrader:", ", ".join(f"{p} {len(r)}" for p, r in AMNEN.items()))
     if not args.apply:
         print("\nTORRKÖRNING. Ingenting skrevs. Kör igen med --apply.")
         return

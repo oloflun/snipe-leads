@@ -880,6 +880,88 @@ export const EXEMPEL_OMGANG_2: ExempelBolag[] = [GRANSTRAND, SJOHAGA, ALMNAS];
 /** Alla sex, för uppslagning oavsett vilken omgång som visas just nu. */
 export const EXEMPELBOLAG: ExempelBolag[] = [...EXEMPEL_OMGANG_1, ...EXEMPEL_OMGANG_2];
 
+// ---------------------------------------------------------------------------
+// Fler körningar i demon (Sebbe 2026-10-29): den som klickar på demolänken i
+// ett utskick ska kunna köra Iris så många gånger hen vill, snabbt och utan
+// riktiga körningar. Efter de sex handskrivna bolagen blir varje omgång tre
+// varianter av dem: samma utkast och svar, med nytt bolagsnamn, ort och
+// kontakt. Deterministiskt ur id:t, så att Email Studio-routen hittar samma
+// variant på servern (finnExempelbolag).
+// ---------------------------------------------------------------------------
+
+/* Påhittade namn, orter och personer för varianterna. Data, inte copy. */
+const STAMMAR = ["Björkvik", "Norrbacka", "Ekudden", "Tallhed", "Lövnäs", "Granby", "Älvsta", "Bergslund", "Furuvik", "Kvarnby", "Askeby", "Rönnås", "Lindhult", "Hagaberg", "Ängsvik", "Videbo", "Storå", "Klippan"]; // inte-copy: fixturdata
+const ORTER = ["Luleå", "Sundsvall", "Gävle", "Karlstad", "Växjö", "Halmstad", "Uppsala", "Linköping", "Borås", "Kalmar", "Östersund", "Skellefteå"]; // inte-copy: fixturdata
+const KVINNOR = ["Emma", "Johanna", "Maria", "Elin", "Sofia", "Frida", "Hanna", "Malin"]; // inte-copy: fixturdata
+const MAN = ["Anders", "Johan", "Daniel", "Magnus", "Patrik", "Henrik", "Fredrik", "Oskar"]; // inte-copy: fixturdata
+const EFTERNAMN = ["Nyberg", "Holm", "Sandberg", "Lund", "Forsberg", "Wikström", "Åberg", "Hedlund", "Engström", "Sjöberg"]; // inte-copy: fixturdata
+const FIXTURKVINNOR = new Set(["Karin", "Sara", "Lina"]);
+
+const VARIANT_ID = /^v(\d+)-(\d+)$/;
+
+function ascii(s: string): string {
+  return s.toLowerCase().replace(/[åä]/g, "a").replace(/ö/g, "o").replace(/é/g, "e");
+}
+
+function ersattOrd(text: string, fran: string, till: string): string {
+  const monster = fran.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return text.replace(new RegExp(`(?<!\\p{L})${monster}(?!\\p{L})`, "gu"), till);
+}
+
+function djupErsatt<T>(varde: T, byt: (s: string) => string): T {
+  if (typeof varde === "string") return byt(varde) as T;
+  if (Array.isArray(varde)) return varde.map((v) => djupErsatt(v, byt)) as T;
+  if (varde && typeof varde === "object") {
+    return Object.fromEntries(Object.entries(varde).map(([k, v]) => [k, djupErsatt(v, byt)])) as T;
+  }
+  return varde;
+}
+
+/** Variant nummer `n` av fixturbolaget `bas`: nytt namn, ny ort, ny kontakt. */
+export function exempelVariant(bas: ExempelBolag, n: number): ExempelBolag {
+  const stam = bas.companyName.split(" ")[0];
+  const nyStam = STAMMAR[n % STAMMAR.length];
+  const nyOrt = ORTER[(n * 5) % ORTER.length];
+  const fornamn = FIXTURKVINNOR.has(bas.contactFirstName) ? KVINNOR : MAN;
+  const nyttFornamn = fornamn[(n * 3) % fornamn.length];
+  const nyttEfternamn = EFTERNAMN[(n * 7) % EFTERNAMN.length];
+  const nyttNamn = bas.companyName.replace(stam, nyStam);
+  const nyttOrgnr = `5590${String(10 + (n % 90)).padStart(2, "0")}-${String(1000 + ((n * 7919) % 9000))}`;
+  const byt = (s: string) => {
+    let ut = s.split(bas.companyName).join(nyttNamn).split(bas.orgnr).join(nyttOrgnr);
+    ut = ut.split(ascii(stam)).join(ascii(nyStam));
+    ut = ut.split(`${ascii(bas.contactFirstName)}@`).join(`${ascii(nyttFornamn)}@`);
+    for (const [fran, till] of [
+      [stam, nyStam],
+      [bas.contactFirstName, nyttFornamn],
+      [bas.contactLastName, nyttEfternamn],
+      [bas.ort, nyOrt]
+    ] as const) {
+      ut = ersattOrd(ut, fran, till);
+    }
+    return ut;
+  };
+  return {
+    ...djupErsatt(bas, byt),
+    id: `v${n}-${bas.id}`,
+    score: Math.max(58, Math.min(94, bas.score + ((n * 13) % 15) - 7)),
+    status: "new"
+  };
+}
+
+/**
+ * Omgång `omgang` (0, 1, 2 …) av demons körning: först de två handskrivna
+ * omgångarna, sedan tre nya varianter per omgång, utan slut.
+ */
+export function exempelOmgang(omgang: number): ExempelBolag[] {
+  if (omgang === 0) return EXEMPEL_OMGANG_1;
+  if (omgang === 1) return EXEMPEL_OMGANG_2;
+  return [0, 1, 2].map((i) => {
+    const n = omgang * 3 + i;
+    return exempelVariant(EXEMPELBOLAG[n % EXEMPELBOLAG.length], n);
+  });
+}
+
 /**
  * Hittar bolaget en Email Studio-förfrågan gäller. `companyId` (bolagets
  * `id`, skickat i `context.companyId`) prövas först — det är stabilt även om
@@ -896,6 +978,10 @@ export function finnExempelbolag(context: { companyId?: unknown; companyName?: u
   if (id) {
     const traff = EXEMPELBOLAG.find((b) => b.id === id);
     if (traff) return traff;
+    // En variant ur demons fler körningar (exempelVariant) byggs om ur id:t.
+    const variant = VARIANT_ID.exec(id);
+    const bas = variant ? EXEMPELBOLAG.find((b) => b.id === variant[2]) : undefined;
+    if (variant && bas) return exempelVariant(bas, Number(variant[1]));
   }
 
   const namn = typeof context?.companyName === "string" ? context.companyName.trim().toLowerCase() : "";
