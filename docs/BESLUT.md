@@ -57,7 +57,10 @@ höga krav") sa inget om vad mottagaren vinner.
 - Frågan i form B tar bara den valda produktens moment (`erbjudanden.formregler`):
   omskrivningen samma dag gav ett supportmejl med frågan "… eller att hitta nya
   kunder?" och löftet att Supportagenten "tar hand om båda delarna". Stilgrinden
-  fäller fel produkts moment (`fel_moment`) och skriver om mejlet.
+  fäller fel produkts moment (`fel_moment`) och skriver om mejlet. Avslutet
+  "Vill ni testa Iris direkt i demon …, eller svara på mejlet så …" är en halv
+  mening och fälls som `halv_inbjudan`; pilotvillkorets handling är omskriven så
+  att den inte lockar fram den.
 - Snajps inställningar: produkternas nytta börjar med effektiviseringen,
   Iris-instruktionen ber om en varm, kort inblick och förbjuder ingångar om
   vad kunderna förväntar sig, och pilotvillkoret säger "upp till 50 % rabatt

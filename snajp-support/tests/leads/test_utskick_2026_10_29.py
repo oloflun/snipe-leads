@@ -250,3 +250,19 @@ def test_fragan_i_form_b_bar_bara_den_valda_produktens_moment():
 def test_fel_produkts_moment_falls(produkt, text, falls):
     koder = {a.kod for a in stil.erbjudande_fynd(text, villkor=None, produkt=produkt)}
     assert ("fel_moment" in koder) is falls
+
+
+@pytest.mark.parametrize(
+    ("avslut", "falls"),
+    [
+        ("Vill ni testa Iris direkt i demon på snajp.se/demo, eller svara på mejlet så bokar vi en genomgång.", True),
+        ("Vill du testa Iris direkt i demon på snajp.se/demo, eller svara på mejlet så bokar vi en genomgång.", True),
+        ("Vill du veta mer eller testa själv kan du titta på demon på snajp.se/demo, eller svara på det här mejlet "
+         "så bokar vi en kostnadsfri genomgång.", False),
+        ("Vill ni testa själva finns demon på snajp.se/demo, eller så svarar ni på mejlet och vi bokar en genomgång.", False),
+    ],
+)
+def test_halv_inbjudan_falls(avslut, falls):
+    """Omskrivningen 2026-10-29: "Vill ni testa …, eller svara …" är en halv mening."""
+    koder = {a.kod for a in stil.kontrollera(f"Hej,\n\n{PRODUKT}\n\n{avslut}").anmarkningar}
+    assert ("halv_inbjudan" in koder) is falls

@@ -94,8 +94,8 @@ IRIS, SUPPORT = (p["namn"] for p in PRODUKTER)
 #: kräver ingen inloggning (app/demo): mottagaren testar direkt.
 _PILOT = (
     "Just nu tar vi in 20 företag i en kostnadsfri pilot av {agent} i tre månader, med alla funktioner. "
-    "Du får upp till 50 % rabatt om du stannar efteråt. Handling: testa {agent} direkt i demon på "
-    "snajp.se/demo, eller svara på mejlet så bokar vi en kostnadsfri genomgång."
+    "Du får upp till 50 % rabatt om du stannar efteråt. Handling: den som vill testa själv kan titta på "
+    "demon på snajp.se/demo, och den som vill veta mer svarar på mejlet så bokar vi en kostnadsfri genomgång."
 )
 #: Kortnamnet i texten ("Iris", inte "Iris, leadsagenten"): Anton 2026-10-25 om
 #: mejlen som "berättar om 'leadsagenten' helt utan kontext".

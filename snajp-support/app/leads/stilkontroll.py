@@ -66,6 +66,14 @@ _MARKORER: tuple[tuple[str, re.Pattern[str], str], ...] = (
      "effektivisera/effektivitet/optimera"),
     ("i_dagens", re.compile(r"\bi\s+dagens\b", re.IGNORECASE), "\"i dagens …\""),
     ("utropstecken", re.compile(r"!"), "utropstecken"),
+    # Omskrivningen 2026-10-29: "Vill ni testa Iris direkt i demon på
+    # snajp.se/demo, eller svara på mejlet så bokar vi …" är en halv mening,
+    # varken fråga eller inbjudan. "Vill du veta mer kan du titta på demon …"
+    # har sin huvudsats och står kvar.
+    ("halv_inbjudan",
+     re.compile(r"(?:^|[.!?]\s+)vill\s+(?:ni|du)\s+(?:testa|titta|prova)\b(?:(?!\bkan\s+(?:ni|du)\b)(?:[^.?!]|\.(?=\S)))*,\s*eller\s+svara\b",
+                re.IGNORECASE | re.MULTILINE),
+     "avslutet är en halv mening (\"Vill ni testa …, eller svara …\"); skriv \"Vill ni testa själva finns demon på …, eller så svarar ni …\""),
     ("antagande_om_dem",
      re.compile(r"\b(?:kan\s+jag\s+tänka\s+mig|vet\s+jag\s+att|är\s+jag\s+säker\s+på|jag\s+utgår\s+från|jag\s+gissar)\b",
                 re.IGNORECASE),
