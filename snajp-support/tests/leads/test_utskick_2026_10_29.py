@@ -352,3 +352,49 @@ def test_iris_ar_aldrig_hon_och_tilltalet_foljer_halsningen():
     ren = iris.replace("Hon skriver", "Iris skriver")
     assert "iris_hon" not in {a.kod for a in stil.erbjudande_fynd(ren, villkor=None, produkt="Iris, leadsagenten")}
     assert stil.namngiven("Hej Per,\n\nText") and not stil.namngiven("Hej,\n\nText")
+
+
+@pytest.mark.anyio
+async def test_amnesraden_foljer_halsningspasset_vid_koningen(monkeypatch):
+    """Omskrivningen 2026-10-29: hälsningspasset vid köningen gjorde "Hej Per,"
+    till "Hej," men ämnesraden stod kvar i du-form ("… för dina kunder")."""
+    from app.config import get_settings
+    from tests.agent.test_leads_v2_wiring import TENANT, _FakeLLM, _prepare_outreach
+
+    monkeypatch.setenv("LLM_PROVIDER", "deepseek")
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "test-key-not-a-real-credential-000000")
+    get_settings.cache_clear()
+    monkeypatch.setattr(erbjudanden, "valj_amne", lambda rader, nyckel, du: "Support 24/7 för dina kunder")
+    storage = MemoryStorage()
+    thread_id = await _prepare_outreach(storage)
+    await storage.set_agent_settings(
+        TENANT,
+        agent_type="leads",
+        settings={
+            "produkter": PRODUKTER,
+            "erbjudanden": {
+                "aktiva": [{"nyckel": "pilot", "vikt": 1}],
+                "villkor": {"pilot": {"Supportagenten": PILOT.replace("Iris", "Supportagenten")}},
+                "amnen": {"Supportagenten": SUPPORT},
+            },
+        },
+    )
+    with patch("app.agent.step_runner.get_llm_client", return_value=_FakeLLM()):
+        await run_outreach_draft_v2(
+            storage,
+            TENANT,
+            thread_id=thread_id,
+            prospect_email="kundservice@exempelbolaget.se",
+            tenant_name="Snajp",
+            company_name="Exempelbolaget",
+            offer_summary="Supportagenten: svarar på kundmejlen",
+            context_pack="## Kontextpaket\nICP: svensk e-handel.",
+            brief="",
+            research_summary=json.dumps({"vald_produkt": {"namn": "Supportagenten", "nytta": "svar"}}),
+            research_evidence=("Fri retur inom 30 dagar",),
+            is_test=True,
+        )
+    get_settings.cache_clear()
+    ko = await storage.list_review_queue(TENANT)
+    assert ko and ko[0]["body"].startswith("Hej,")
+    assert ko[0]["subject"] == "Support 24/7 för era kunder"

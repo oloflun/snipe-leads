@@ -154,6 +154,15 @@ async def _queue_outreach_draft_impl(
         sprak=sprak,
         epost=prospekt.get("contact_email"),
     )
+    # Hälsningspasset kan göra "Hej Per," till "Hej," och mejlet till ni-form;
+    # ämnesraden följer med (omskrivningen 2026-10-29: "Support 24/7 för dina
+    # kunder" över ett "Hej,").
+    if sprak != "en" and not kampanj_id:
+        from ..leads.erbjudanden import till_ni
+        from ..leads.stilkontroll import namngiven
+
+        if not namngiven(finalized_body):
+            subject = till_ni(subject)
     # En kampanj är samma människoskrivna text till hela listan: korrektur bara
     # när något flaggats, inte ett modellanrop per mottagare.
     kvalitet = await sakra_utgaende_text(finalized_body, sprak=sprak, alltid_korrektur=not kampanj_id)
