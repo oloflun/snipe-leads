@@ -61,6 +61,8 @@ höga krav") sa inget om vad mottagaren vinner.
   "Vill ni testa Iris direkt i demon …, eller svara på mejlet så …" är en halv
   mening och fälls som `halv_inbjudan`; pilotvillkorets handling är omskriven så
   att den inte lockar fram den.
+- Ämnesradens du- eller ni-form följer den slutliga hälsningen, och stilgrinden
+  fäller "Hon" om Iris (`iris_hon`), som Snajps instruktion redan förbjöd.
 - Produkten matchas mot kundens produkter i dag (`erbjudanden.produkt_nu`):
   31 av 243 sparade research i omskrivningen saknade produkten eller bar ett
   äldre namn, så inget erbjudande valdes och mejlet tog researchens gamla

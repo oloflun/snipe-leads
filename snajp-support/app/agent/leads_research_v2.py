@@ -1298,7 +1298,10 @@ async def run_outreach_draft_v2(
             # Sebbe 2026-10-29: ämnesraden ur kundens lista för produkten, i
             # mejlets tilltal, och villkorens "upp till" står kvar i mejlet.
             subject = erbjudanden.valj_amne(
-                list(erbjudande.amnen), f"{tenant_id}:{thread.get('prospect_id') or thread_id}", du=bool(_namn)
+                # Du-form efter den slutliga hälsningen: ratta_tilltal kan ha
+                # gjort "Hej Per," till "Hej," (två du-rader till "Hej," 10-29).
+                list(erbjudande.amnen), f"{tenant_id}:{thread.get('prospect_id') or thread_id}",
+                du=stil.namngiven(body),
             ) or subject
             body = erbjudanden.behall_upp_till(body, erbjudande.villkor)
 

@@ -119,6 +119,11 @@ _TRELEDSLISTA = re.compile(r"[\wåäöÅÄÖ-]+(?:\s+[\wåäöÅÄÖ-]+)?,\s+[\w
 #: … åt er". Pronomenen som TILLTALAR, inte ägandeformen "er egen information".
 _DU = re.compile(r"\b(?:du|dig)\b", re.IGNORECASE)
 _NAMNGIVEN = re.compile(r"^\s*(?:hej|hejsan|hallå)\s+[A-ZÅÄÖ][\wåäöé-]+\s*[,!]", re.IGNORECASE)
+
+
+def namngiven(text: str) -> bool:
+    """Hälsar mejlet en namngiven mottagare ("Hej Per,")? Då är det du-form."""
+    return bool(_NAMNGIVEN.match(text or ""))
 _NI = re.compile(r"\bni\b|\båt\s+er\b|\bhos\s+er\b|\btill\s+er\b|\bert\b|\bera\b", re.IGNORECASE)
 #: Mallord som omkörningen 2026-10-15 gav i fem av elva ingångar efter att
 #: skrivstilen talat om bolagets "löfte": "… är ert löfte, men att svara på
@@ -459,6 +464,10 @@ def erbjudande_fynd(text: str, *, villkor: str | None, produkt: str | None) -> l
     elif slag == "leads" and _SUPPORTMOMENT.search(brod):
         fynd.append(Anmarkning("fel_moment", "Stil: Iris-mejlet talar om kundmejl eller supportchattar; "
                                "Iris hittar nya företagskunder, den svarar inte på kundfrågor", allvarlig=True))
+    # Snajps instruktion: Iris är aldrig "hon" (omskrivningen 2026-10-29:
+    # "Hon skriver färdiga utkast som ni själva godkänner").
+    if slag == "leads" and re.search(r"(?:^|[.!?]\s+)hon\b", brod, re.MULTILINE):
+        fynd.append(Anmarkning("iris_hon", "Stil: Iris kallas \"hon\"; skriv \"Iris\" eller \"den\"", allvarlig=True))
     return fynd
 
 

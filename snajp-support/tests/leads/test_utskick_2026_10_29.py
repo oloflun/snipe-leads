@@ -344,3 +344,11 @@ async def test_piloten_valjs_aven_nar_researchen_saknar_produkten(monkeypatch):
     assert "Prova gratis i två månader" not in llm.user_messages[0]
     assert "effektiviserar kundhanteringen" in llm.user_messages[0]
     assert result["subject"] in {erbjudanden.till_ni(r) for r in SUPPORT}
+
+
+def test_iris_ar_aldrig_hon_och_tilltalet_foljer_halsningen():
+    iris = "Hej,\n\nVår agent Iris hittar nya företagskunder åt er. Hon skriver utkast som ni godkänner."
+    assert "iris_hon" in {a.kod for a in stil.erbjudande_fynd(iris, villkor=None, produkt="Iris, leadsagenten")}
+    ren = iris.replace("Hon skriver", "Iris skriver")
+    assert "iris_hon" not in {a.kod for a in stil.erbjudande_fynd(ren, villkor=None, produkt="Iris, leadsagenten")}
+    assert stil.namngiven("Hej Per,\n\nText") and not stil.namngiven("Hej,\n\nText")
