@@ -275,7 +275,14 @@ async def test_bolaget_utan_sajt_bedoms_mot_behovskravet(_fake_deepseek_key):
 
     assert "## Registeruppgifter (källa: https://www.allabolag.se/5560000101)" in anrop["user"]
     assert f"- kp [BEHOVSKRAV, avgör produktmatchningen]: {BEHOV}" in anrop["user"]
-    assert "BEHOVSKRAVET (går före" in anrop["system"] + anrop["user"]
+    # Behovskravet ERSÄTTER produktfrågan: två frågor om kp gav blandade svar.
+    uppgift = anrop["system"] + anrop["user"]
+    assert "är kundens BEHOVSKRAV i IRIS-PROFILEN och inget annat" in uppgift
+    assert "affärskontexten)? Utslaget är" not in uppgift
+    assert "null BARA när källmaterialet visar" not in uppgift
+    # Overlayens kp-punkt säger samma sak, så att systemlagret inte drar åt
+    # produktfrågan (agent-core/overlays/leads-research-v2.md).
+    assert "Står ett BEHOVSKRAV på kp-raden i IRIS-PROFILEN ersätter det frågan" in anrop["system"]
     # Kundens text står aldrig i uppgiften eller systemlagret.
     assert BEHOV not in anrop["system"]
 
@@ -299,11 +306,14 @@ async def test_utslaget_under_kravets_namn_raknas_som_kp(_fake_deepseek_key):
     [kp] = [r for r in prospekt["score_breakdown"] if r["nyckel"] == "kp"]
     assert kp["utfall"] == "träff"
 
-    # Utan behovskrav rör koden inte modellens id:n: kp saknas och fäller.
+    # Utan behovskrav rör koden inte modellens id:n: kp saknas och fäller,
+    # och uppgiften ställer produktfrågan som förut.
     storage = MemoryStorage()
     pid = await _snajplik(storage, webbplats_kravs=False)
-    await _kor(storage, pid, svar)
+    _, [anrop] = await _kor(storage, pid, svar)
     assert (await storage.get_prospect(TENANT, pid))["niva"] == "C"
+    assert "affärskontexten)? Utslaget är" in anrop["system"] + anrop["user"]
+    assert "BEHOVSKRAV, avgör" not in anrop["user"]
 
 
 async def test_utan_kundval_ar_researchen_som_forut(_fake_deepseek_key):
