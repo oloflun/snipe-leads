@@ -177,7 +177,8 @@ async def test_profilen_far_kraven_och_storleken_ur_icp():
 def test_behovskravet_renderas_som_kundtext():
     text = render_profil({**tom_profil(), "behov": BEHOV, "webbplats_kravs": False})
     # Kundskrivet förblir kundskrivet (INV-SEC-009): inuti omslaget.
-    rad = f"BEHOVSKRAV (avgör produktmatchningen kp): {BEHOV}"
+    # Samma form som kriterierna, med id:t först: modellen svarar med det.
+    rad = f"- kp [BEHOVSKRAV, avgör produktmatchningen]: {BEHOV}"
     assert rad in text and "En egen webbplats krävs inte" in text
     start = text.index("kundens Iris-profil")
     assert text.index(rad) > start
@@ -273,7 +274,7 @@ async def test_bolaget_utan_sajt_bedoms_mot_behovskravet(_fake_deepseek_key):
     ut, [anrop] = await _kor(storage, pid, ja)
 
     assert "## Registeruppgifter (källa: https://www.allabolag.se/5560000101)" in anrop["user"]
-    assert f"BEHOVSKRAV (avgör produktmatchningen kp): {BEHOV}" in anrop["user"]
+    assert f"- kp [BEHOVSKRAV, avgör produktmatchningen]: {BEHOV}" in anrop["user"]
     assert "BEHOVSKRAVET (går före" in anrop["system"] + anrop["user"]
     # Kundens text står aldrig i uppgiften eller systemlagret.
     assert BEHOV not in anrop["system"]
@@ -281,6 +282,28 @@ async def test_bolaget_utan_sajt_bedoms_mot_behovskravet(_fake_deepseek_key):
     prospekt = await storage.get_prospect(TENANT, pid)
     assert prospekt["niva"] in ("A", "B"), prospekt.get("motivering")
     assert ut["qualified"] is True
+
+
+async def test_utslaget_under_kravets_namn_raknas_som_kp(_fake_deepseek_key):
+    # Provet i development 2026-10-30 (Hagmans Tak): ja med belägg, men med
+    # kriterie_id "BEHOVSKRAV" i stället för "kp".
+    storage = MemoryStorage()
+    pid = await _snajplik(storage, webbplats_kravs=False, behov=BEHOV)
+    svar = {"bedomningar": [{"kriterie_id": "BEHOVSKRAV", "utslag": "ja", "resonemang": "Säljer takarbeten.",
+                             "belagg": [{"url": "https://www.allabolag.se/5560000101",
+                                         "citat": "Bolaget ska bedriva takläggning och plåtarbeten."}]}],
+            "produkt": "Iris, leadsagenten"}
+    ut, _ = await _kor(storage, pid, svar)
+    prospekt = await storage.get_prospect(TENANT, pid)
+    assert prospekt["niva"] in ("A", "B"), prospekt.get("motivering")
+    [kp] = [r for r in prospekt["score_breakdown"] if r["nyckel"] == "kp"]
+    assert kp["utfall"] == "träff"
+
+    # Utan behovskrav rör koden inte modellens id:n: kp saknas och fäller.
+    storage = MemoryStorage()
+    pid = await _snajplik(storage, webbplats_kravs=False)
+    await _kor(storage, pid, svar)
+    assert (await storage.get_prospect(TENANT, pid))["niva"] == "C"
 
 
 async def test_utan_kundval_ar_researchen_som_forut(_fake_deepseek_key):

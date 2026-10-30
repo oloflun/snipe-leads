@@ -460,7 +460,9 @@ def render_profil(profil: dict[str, Any] | None) -> str:
     elif profil.get("webbplats_kravs") is False:
         rader.append("- En egen webbplats krävs inte: registeruppgifterna räcker som källmaterial.")
     if profil.get("behov"):
-        rader.append(f"- BEHOVSKRAV (avgör produktmatchningen kp): {profil['behov']}")
+        # Samma form som kriterierna ("- k1 [MÅSTE …]"): med bara ordet först
+        # svarade modellen med kriterie_id "BEHOVSKRAV" (development 2026-10-30).
+        rader.append(f"- {PRODUKTMATCH} [BEHOVSKRAV, avgör produktmatchningen]: {profil['behov']}")
     if profil.get("roller"):
         rader.append("- Kontaktroller: " + ", ".join(profil["roller"]))
     if profil.get("kriterier"):

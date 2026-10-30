@@ -152,12 +152,27 @@ _PRODUKTVAL = (
 _BEHOVSKRAV = (
     "\n\nBEHOVSKRAVET (går före PRODUKTMATCHNINGEN och PRODUKTVAL ovan): står "
     "ett BEHOVSKRAV i IRIS-PROFILEN avgör det ensamt kp, i stället för frågan "
-    "om bolaget kan köpa och använda produkten. Utslaget är \"ja\" när ett "
+    "om bolaget kan köpa och använda produkten. Utslaget har kriterie_id "
+    "\"kp\" och är \"ja\" när ett "
     "ordagrant citat ur källmaterialet (bolagets egna sidor eller "
     "registeruppgifterna) visar att bolaget uppfyller kravet, \"nej\" när "
     "materialet visar motsatsen, \"okänt\" annars. Uppfyller bolaget kravet är "
     "fältet produkt den av kundens produkter som passar bolaget bäst, aldrig null."
 )
+
+
+def _behovskrav_som_kp(fynd: dict[str, Any]) -> None:
+    """Ett utslag märkt med kravets namn ("BEHOVSKRAV") räknas som kp när kp
+    saknas. Provet i development 2026-10-30 (Hagmans Tak): modellen svarade ja
+    med belägg, men under rubriken i stället för id:t, och bolaget fälldes."""
+    from ..leads.profil import PRODUKTMATCH
+
+    bedomningar = [b for b in fynd.get("bedomningar") or [] if isinstance(b, dict)]
+    if any(str(b.get("kriterie_id")) == PRODUKTMATCH for b in bedomningar):
+        return
+    behov = next((b for b in bedomningar if "behovskrav" in str(b.get("kriterie_id") or "").casefold()), None)
+    if behov:
+        behov["kriterie_id"] = PRODUKTMATCH
 
 
 def _kp_ja(fynd: dict[str, Any]) -> bool:
@@ -473,6 +488,8 @@ async def _research_v2(
     # produktbundet kriterium som bolaget uppfyller med citat ("säljer B2B
     # för Iris") ÄR ett produktval, även när modellen lämnade fältet tomt
     # (omkörningen 2026-10-12). Skrivs in i fynd så att utkastet ser det.
+    if profil.get("behov"):
+        _behovskrav_som_kp(fynd)
     vald = _vald_produkt(fynd, produkter) if produkter else None
     if vald is None and produkter:
         harledd = produkt_ur_kriterierna(profil, fynd, [p["namn"] for p in produkter], f"{material}\n{webbfakta_text}")
