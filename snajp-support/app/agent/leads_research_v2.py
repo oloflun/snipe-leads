@@ -156,7 +156,11 @@ _BEHOVSKRAV = (
     "\"kp\" och är \"ja\" när ett "
     "ordagrant citat ur källmaterialet (bolagets egna sidor eller "
     "registeruppgifterna) visar att bolaget uppfyller kravet, \"nej\" när "
-    "materialet visar motsatsen, \"okänt\" annars. Uppfyller bolaget kravet är "
+    "materialet visar motsatsen, \"okänt\" annars. Kravet gäller vad bolaget ÄR "
+    "och GÖR: en bransch, en verksamhetsbeskrivning, en omsättning eller det "
+    "sajten erbjuder sina kunder är belägg, och materialet behöver aldrig "
+    "upprepa kravets ord. Om kundens produkter passar bolaget prövas inte i kp. "
+    "Uppfyller bolaget kravet är "
     "fältet produkt den av kundens produkter som passar bolaget bäst, aldrig null."
 )
 
