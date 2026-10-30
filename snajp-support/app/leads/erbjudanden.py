@@ -10,7 +10,13 @@ resultaten löpande och kunna byta erbjudande enkelt.
   per process, samma mönster som `leads_systemprompt.skrivstil`.
 - **Kundens val** står i leads-agentens inställningar
   (`agent_configs.settings["erbjudanden"]`, samma ställe som `signatur`):
-  `{"aktiva": [{"nyckel", "vikt"}], "villkor": {nyckel: text}}`.
+  `{"aktiva": [{"nyckel", "vikt"}], "villkor": {nyckel: text},
+  "egna": {nyckel: {"namn", "form"}}}`. `egna` är kundens egna erbjudanden
+  (Anton 2026-10-25: kunden listar sina erbjudanden, och agenten anpassar dem
+  till varje prospekt); katalogens nycklar fungerar som förut.
+- **Formen** (`FORMER`) är mejlets struktur: A rakt på, B med frågan om
+  vilket av två moment som tar mest tid. Två erbjudanden med samma villkor
+  och olika form A/B-testar formen.
 - **Tilldelningen** sker per prospekt i utkaststeget (`for_trad`), och valet
   sparas som en `offers`-rad per kund och nyckel plus `outreach_threads.offer_id`
   (migration 010, tabellerna fanns men användes inte).
@@ -48,6 +54,55 @@ KATALOG_FIL = AGENT_CORE_ROOT / "prompts" / "leads-erbjudanden.md"
 #: inte ett erbjudande i ett kallt mejl.
 VILLKOR_MAX = 600
 VIKT_MAX = 10
+NAMN_MAX = 60
+_EGEN_NYCKEL = re.compile(r"^[a-z0-9_-]{1,40}$")
+#: Kundens ämnesrader per produkt (Sebbe 2026-10-29), i tecken och antal.
+AMNE_MAX = 90
+AMNEN_MAX = 40
+
+#: Mejlets form (Anton 2026-10-25): (namn, regler). Reglerna beskriver
+#: rörelsen, aldrig färdiga meningar, så att mejlen inte blir kopior.
+FORMER: dict[str, tuple[str, str]] = {
+    "rak": (
+        "A, rakt på",
+        "Efter hälsningen, i den här ordningen: (1) ingången, högst 25 ord: en utmaning som deras sorts "
+        "arbete för med sig och som produkten löser, med något konkret ur deras verksamhet; (2) vad "
+        "produkten gör åt dem, en mening om högst 15 ord; (3) erbjudandet med villkorens innehåll, en "
+        "mening; (4) avslutet, villkorens handling som en vardaglig inbjudan, högst 20 ord. Hela "
+        "brödtexten högst 90 ord.",
+    ),
+    "fraga": (
+        "B, med en fråga",
+        "Hela brödtexten högst 100 ord. Efter hälsningen, i den här ordningen: (1) samma sorts ingång "
+        "som i form A, i en mening om högst 20 ord; (2) en fråga om högst 15 ord om vilket av två "
+        "konkreta moment som tar mest tid för dem i dag. Båda momenten är "
+        "saker produkten gör enligt dess nytta, aldrig något den inte gör: " + "{moment}" + "; (3) att produkten tar hand om båda delarna "
+        "och anpassas efter deras behov och verksamhet, en mening om högst 15 ord; (4) erbjudandet med "
+        "villkorens innehåll, en mening; (5) avslutet, villkorens handling som en vardaglig inbjudan, "
+        "högst 20 ord. Frågan står aldrig sist.",
+    ),
+}
+#: Frågans två moment i form B. Utan känd produkt får modellen båda paren och
+#: väljer; med Snajps produkt väljs paret i kod (omskrivningen 2026-10-29: ett
+#: supportmejl frågade om att "hitta nya kunder" och lovade att Supportagenten
+#: tog hand om det).
+_MOMENT = {
+    "leads": "att hantera de förfrågningar som redan kommer in eller att hitta nya kunder, inga andra moment",
+    "support": "att gå igenom kundmejlen eller att sitta i supportchattarna, inga andra moment; aldrig att hitta nya kunder",
+    None: (
+        "för en leadsagent att hantera de förfrågningar som redan kommer in eller att hitta nya kunder, "
+        "för en supportagent att gå igenom kundmejlen eller att sitta i supportchattarna"
+    ),
+}
+
+
+def formregler(form: str, produkt: str | None = None) -> str:
+    """Formens regler, med frågans moment för `produkt` i form B."""
+    from .stilkontroll import produktslag
+
+    return FORMER[form][1].replace("{moment}", _MOMENT[produktslag(produkt)])
+
+
 #: Skickade mejl per arm innan någon arm får kallas ledande.
 MIN_SKICKADE = 30
 #: Signifikansnivån för tvåproportionstestet.
@@ -64,7 +119,9 @@ class Erbjudande:
     nyckel: str
     namn: str
     #: Avsnittets skrivregler (hävstång, hur mejlet bär det, uppmaning, undvik).
+    #: Tom för kundens egna erbjudanden: villkoren är hela erbjudandet.
     regler: str
+    form: str = "rak"
 
 
 @lru_cache(maxsize=1)
@@ -144,20 +201,68 @@ def produkt_ur_research(research_summary: str) -> str | None:
     return namn or None
 
 
+def produkt_nu(
+    namn: str | None, text: str, produkter: list[dict[str, str]]
+) -> dict[str, str] | None:
+    """Kundens produkt i dag ({namn, nytta}) för ett utkast, eller None.
+
+    Omskrivningen av Snajps kö 2026-10-29 ("Skapa om utkast" ur sparad
+    research): 31 av 243 leads hade en research där produkten saknades eller
+    hette något annat än i dag. Då valdes inget erbjudande, mejlet tog
+    researchens gamla erbjudandeförslag ("prova gratis i två månader") och
+    varken piloten eller ämnesraderna kom med. Ordningen: samma namn, samma
+    kortform före kommat, det ena namnet början på det andra, samma slag av
+    Snajps agenter; utan namn det första produktnamnet som står i `text`; och
+    har kunden bara en produkt är det den."""
+    from .stilkontroll import produktslag
+
+    if not produkter:
+        return None
+
+    def kort(s: str) -> str:
+        return s.split(",")[0].strip().casefold()
+
+    if namn and namn.strip():
+        n = namn.strip().casefold()
+        for prov in (
+            lambda p: p["namn"].casefold() == n,
+            lambda p: kort(p["namn"]) == kort(n),
+            lambda p: len(kort(n)) >= 4 and (p["namn"].casefold().startswith(kort(n)) or n.startswith(kort(p["namn"]))),
+            lambda p: produktslag(n) is not None and produktslag(p["namn"]) == produktslag(n),
+        ):
+            traff = next((p for p in produkter if prov(p)), None)
+            if traff:
+                return traff
+    lag = (text or "").casefold()
+    forst = sorted(
+        ((lag.find(kort(p["namn"])), p) for p in produkter if kort(p["namn"]) and kort(p["namn"]) in lag),
+        key=lambda t: t[0],
+    )
+    if forst:
+        return forst[0][1]
+    return produkter[0] if len(produkter) == 1 else None
+
+
 def normalisera(raw: Any) -> dict[str, Any]:
     """Kundens sparade val, tolerant läst: okända nycklar faller bort, vikten
     hålls inom 0–10 och villkoren strippas. Skrivvägen (`validera`) är strikt;
     läsvägen ska aldrig fälla en körning för ett gammalt värde."""
     raw = raw if isinstance(raw, dict) else {}
     kat = katalog()
+    egna = {
+        str(k): {"namn": str(v.get("namn") or "").strip()[:NAMN_MAX], "form": v.get("form") if v.get("form") in FORMER else "rak"}
+        for k, v in (raw.get("egna") or {}).items()
+        if isinstance(v, dict) and _EGEN_NYCKEL.match(str(k)) and k not in kat and str(v.get("namn") or "").strip()
+    }
+    kanda = kat.keys() | egna.keys()
     villkor = {
         k: v
         for k, v in ((k, _villkoret(v)) for k, v in (raw.get("villkor") or {}).items())
-        if k in kat and v
+        if k in kanda and v
     }
     aktiva: list[dict[str, Any]] = []
     for rad in raw.get("aktiva") or []:
-        if not isinstance(rad, dict) or rad.get("nyckel") not in kat:
+        if not isinstance(rad, dict) or rad.get("nyckel") not in kanda:
             continue
         if any(a["nyckel"] == rad["nyckel"] for a in aktiva):
             continue
@@ -166,16 +271,120 @@ def normalisera(raw: Any) -> dict[str, Any]:
         except (TypeError, ValueError):
             vikt = 1
         aktiva.append({"nyckel": rad["nyckel"], "vikt": min(max(vikt, 0), VIKT_MAX)})
-    return {"aktiva": aktiva, "villkor": villkor}
+    amnen = _amnena(raw.get("amnen"))
+    return {"aktiva": aktiva, "villkor": villkor, "egna": egna, **({"amnen": amnen} if amnen else {})}
+
+
+# -- Ämnesraderna ------------------------------------------------------------
+#
+# Sebbe 2026-10-29: ämnesraderna ska handla om effektiviseringen, prospektering
+# för Iris och support för Supportagenten, ur kundens egen lista. Modellens
+# ämnesrader ("Fokus på varje affär", "Nya kunder med höga krav") sa inget om
+# vad mottagaren vinner. Listan står per produkt i kundens erbjudandeval
+# (`amnen`), och koden väljer raden efter att modellen skrivit mejlet: en regel
+# i en prompt är en riktning, ett val i kod en garanti. Utan lista för
+# produkten står modellens ämnesrad kvar, så andra kunder märker ingenting.
+
+
+def _amnena(raw: Any) -> dict[str, list[str]]:
+    """{produktnamn: [ämnesrad, …]}, strippat och utan dubbletter."""
+    if not isinstance(raw, dict):
+        return {}
+    ut: dict[str, list[str]] = {}
+    for produkt, rader in raw.items():
+        if not str(produkt).strip() or not isinstance(rader, list):
+            continue
+        unika = list(dict.fromkeys(" ".join(str(r).split())[:AMNE_MAX] for r in rader if str(r).strip()))
+        if unika:
+            ut[str(produkt).strip()] = unika[:AMNEN_MAX]
+    return ut
+
+
+def amnen_for(amnen: dict[str, list[str]] | None, produkt: str | None) -> list[str]:
+    """Ämnesraderna för `produkt` (namnet utan hänsyn till versaler), eller []."""
+    if not amnen or not produkt:
+        return []
+    nyckel = produkt.strip().casefold()
+    return next((r for p, r in amnen.items() if p.casefold() == nyckel), [])
+
+
+#: Du-form → ni-form. Listan skrivs i du-form; ett mejl utan namngiven
+#: mottagare skrivs i ni-form rakt igenom, ämnesraden medräknad.
+_TILL_NI = {"du": "ni", "dig": "er", "din": "er", "ditt": "ert", "dina": "era"}
+_DU_ORD = re.compile(r"\b(du|dig|din|ditt|dina)\b", re.IGNORECASE)
+
+
+def till_ni(amne: str) -> str:
+    def byt(m: re.Match[str]) -> str:
+        ord_ = _TILL_NI[m.group(1).lower()]
+        return ord_.capitalize() if m.group(1)[0].isupper() else ord_
+
+    return _DU_ORD.sub(byt, amne)
+
+
+def valj_amne(rader: list[str], nyckel: str, *, du: bool) -> str | None:
+    """Ämnesraden för ett mejl, deterministisk per `nyckel` (kund och prospekt),
+    så att ett omskrivet utkast behåller sin rad. Den första raden är kundens
+    starkaste och väger som halva resten, ungefär vart tredje mejl; övriga
+    lika. `du` False ger ni-form."""
+    if not rader:
+        return None
+    vikter = [max(1, round((len(rader) - 1) / 2))] + [1] * (len(rader) - 1)
+    punkt = int.from_bytes(hashlib.sha256(f"amne:{nyckel}".encode("utf-8")).digest()[:8], "big") % sum(vikter)
+    for rad, vikt in zip(rader, vikter):
+        if punkt < vikt:
+            return rad if du else till_ni(rad)
+        punkt -= vikt
+    return None  # nås inte: punkt < summan
+
+
+_UPP_TILL = re.compile(r"\bupp\s+till\s+(\d+)\s*%", re.IGNORECASE)
+
+
+def behall_upp_till(body: str, villkor: str) -> str:
+    """Står villkorens siffra som "upp till 50 %" sätts "upp till" tillbaka när
+    mejlet tappat det ("får 50 % rabatt"). Sebbe 2026-10-29: rabatten är upp
+    till 50 %, och ett mejl som lovar 50 % rakt av lovar mer än villkoren.
+    Siffror som redan står med "upp till" eller "högst" rörs inte."""
+    for tal in dict.fromkeys(_UPP_TILL.findall(villkor or "")):
+        body = re.sub(
+            rf"(?<!upp till )(?<!högst )(?<![\d,.])\b{tal}(\s*)(%|procent)",
+            lambda m: f"upp till {tal}{m.group(1)}{m.group(2)}",
+            body,
+            flags=re.IGNORECASE,
+        )
+    return body
+
+
+def armar(val: dict[str, Any] | None) -> dict[str, Erbjudande]:
+    """Alla erbjudanden kunden kan slå på: katalogens, sedan kundens egna i
+    den ordning de lades till."""
+    egna = (val or {}).get("egna") or {}
+    return {
+        **katalog(),
+        **{k: Erbjudande(nyckel=k, namn=e["namn"], regler="", form=e["form"]) for k, e in egna.items()},
+    }
 
 
 def validera(
-    aktiva: list[dict[str, Any]], villkor: dict[str, Villkor], produkter: list[str] | None = None
+    aktiva: list[dict[str, Any]],
+    villkor: dict[str, Villkor],
+    produkter: list[str] | None = None,
+    egna: dict[str, Any] | None = None,
+    amnen: dict[str, list[str]] | None = None,
 ) -> dict[str, Any]:
     """Skrivvägen: kastar ValueError med ett svenskt besked. Typer och
     gränser (vikt 0–10, villkorslängd) prövas redan av API-schemat.
-    `produkter` är kundens produktnamn; villkor per produkt måste gälla en av dem."""
-    kat = katalog()
+    `produkter` är kundens produktnamn; villkor per produkt måste gälla en av dem.
+    `egna`: kundens egna erbjudanden, {nyckel: {namn, form}}.
+    `amnen`: ämnesrader per produkt, {produktnamn: [rad, …]}."""
+    giltiga = normalisera({"egna": egna})["egna"]
+    kat = armar({"egna": giltiga})
+    for nyckel, e in (egna or {}).items():
+        if nyckel not in giltiga:
+            raise ValueError(f"Erbjudandet {nyckel} behöver ett namn och en giltig nyckel.")
+        if (e or {}).get("form", "rak") not in FORMER:
+            raise ValueError(f"Okänd form för {kat[nyckel].namn}.")
     kanda = {p.strip().casefold() for p in produkter or []}
     for nyckel in [a["nyckel"] for a in aktiva] + list(villkor):
         if nyckel not in kat:
@@ -187,6 +396,9 @@ def validera(
                     f"Villkoren för {kat[nyckel].namn} gäller produkten \"{produkt}\", "
                     "som inte finns bland era produkter."
                 )
+    for produkt in amnen or {}:
+        if produkt.strip().casefold() not in kanda:
+            raise ValueError(f"Ämnesraderna gäller produkten \"{produkt}\", som inte finns bland era produkter.")
     nycklar = [a["nyckel"] for a in aktiva]
     if len(nycklar) != len(set(nycklar)):
         raise ValueError("Ett erbjudande står två gånger bland de aktiva.")
@@ -195,19 +407,19 @@ def validera(
             raise ValueError(
                 f"Fyll i villkoren för {kat[a['nyckel']].namn} innan erbjudandet slås på."
             )
-    return normalisera({"aktiva": aktiva, "villkor": villkor})
+    return normalisera({"aktiva": aktiva, "villkor": villkor, "egna": egna, "amnen": amnen})
 
 
 def valbara(val: dict[str, Any], produkt: str | None = None) -> list[tuple[str, int]]:
     """De aktiva erbjudandena som får användas för ett prospekt vars mejl
-    handlar om `produkt`: i katalogen, vikt över noll och med villkor för just
-    den produkten. Katalogens ordning, så att tilldelningen inte beror på i
-    vilken ordning kunden råkade slå på dem."""
+    handlar om `produkt`: kända, vikt över noll och med villkor för just den
+    produkten. Armarnas ordning, så att tilldelningen inte beror på i vilken
+    ordning kunden råkade slå på dem."""
     vikter = {a["nyckel"]: a["vikt"] for a in val.get("aktiva") or []}
     villkor = val.get("villkor") or {}
     return [
         (nyckel, vikter[nyckel])
-        for nyckel in katalog()
+        for nyckel in armar(val)
         if vikter.get(nyckel, 0) > 0 and villkor_for(villkor.get(nyckel), produkt)
     ]
 
@@ -228,25 +440,39 @@ def tilldela(tenant_id: str, prospect_id: str, armar: list[tuple[str, int]]) -> 
     return None  # nås inte: punkt < total
 
 
-def block(nyckel: str, villkor: str) -> str:
+def block(nyckel: str, villkor: str, erbjudande: Erbjudande | None = None, produkt: str | None = None) -> str:
     """Promptblocket för utkaststeget och humanizern. Kundens villkor står
     ordagrant under sin egen rubrik, som katalogens gemensamma regler pekar på."""
-    erbjudande = katalog()[nyckel]
+    erbjudande = erbjudande or katalog()[nyckel]
+    formnamn = FORMER[erbjudande.form][0]
     return (
         "## Erbjudandet i det här mejlet\n"
-        "Kunden har valt det här erbjudandet för mejlet. Det bär stycke 2 och 3 i "
-        "skrivstilen och går före vinkeln under \"Erbjudandet som styr vinkeln\". "
-        "Skriv det i skrivstilen, med villkoren nedan som det enda mejlet lovar.\n"
+        # Anton 2026-10-25: erbjudandet lades till som ett stycke, och vinkeln
+        # kom ur researchens eget förslag. Nu bär det hela mejlet.
+        "Kunden har valt det här erbjudandet för mejlet, och det styr hela mejlet, inte bara ett "
+        "stycke. Det går före vinkeln under \"Erbjudandet som styr vinkeln\".\n"
+        "- Ingångens utmaning är en som erbjudandet och produkten löser för just dem.\n"
+        "- Översätt erbjudandet till mottagarens verksamhet: vad det betyder för just deras arbete "
+        "och kunder. Villkorens innehåll, siffror och löften står kvar oförändrade i sak, och "
+        "inget annat lovas.\n"
+        # Provkörningen 2026-10-25: Iris "föreslår nya tomter för byggen" och
+        # hittar "investerare och tomtägare". Anpassningen hittade på förmågor.
+        "- Produkten gör bara det som står i dess nytta i produktlistan och i villkoren. Hitta "
+        "aldrig på en förmåga för att passa deras verksamhet: en agent som hittar kunder hittar "
+        "inte tomter, investerare, leverantörer eller personal.\n"
+        "- Kort: 60–100 ord i brödtexten. Erbjudandet och avslutet i en mening var.\n"
         # Provkörningen 2026-10-10 (scripts/prova_erbjudanden.py): katalogens
         # exempel på uppmaningar gick ordagrant in i mejlen, samma fråga i
         # upp till elva av tolv, och villkor skrivna i ni-form blandade
         # tilltalet i mejl till en namngiven person.
         "- Citaten nedan visar formen, aldrig orden.\n"
         "- Återge villkorens innehåll exakt, varken mer eller mindre, men i mejlets "
-        "tilltal (du eller ni) och i hela meningar.\n"
-        "- Mejlet slutar med villkorens handling, i en mening, aldrig med en fråga.\n\n"
+        "tilltal (du eller ni) och i hela meningar, så som en person skriver till en annan.\n"
+        "- Mejlet slutar med villkorens handling som en vardaglig inbjudan, aldrig som en order "
+        "av formen \"Svara X så gör vi Y\" och aldrig med en fråga.\n\n"
         f"{gemensamt()}\n\n"
-        f"### {erbjudande.namn}\n{erbjudande.regler}\n\n"
+        f"### {erbjudande.namn}\n{erbjudande.regler or 'Kundens eget erbjudande: villkoren nedan är hela erbjudandet.'}\n\n"
+        f"### Mejlets form ({formnamn})\n{formregler(erbjudande.form, produkt)}\n\n"
         f"### Villkor för erbjudandet\n{villkor.strip()}"
     )
 
@@ -255,9 +481,18 @@ def block(nyckel: str, villkor: str) -> str:
 class Valt:
     nyckel: str
     villkor: str
+    erbjudande: Erbjudande | None = None
+    #: Kundens ämnesrader för produkten (tomt = modellens ämnesrad står kvar).
+    amnen: tuple[str, ...] = ()
+    #: Produkten researchen valde: frågans moment i form B följer den.
+    produkt: str | None = None
+
+    @property
+    def form(self) -> str:
+        return self.erbjudande.form if self.erbjudande else "rak"
 
     def block(self) -> str:
-        return block(self.nyckel, self.villkor)
+        return block(self.nyckel, self.villkor, self.erbjudande, self.produkt)
 
 
 async def for_trad(
@@ -283,7 +518,13 @@ async def for_trad(
     except Exception:  # noqa: BLE001 — se docstringen
         logger.exception("Kunde inte spara erbjudandet för tråd %s; utkastet skrivs utan.", thread["id"])
         return None
-    return Valt(nyckel=nyckel, villkor=villkor_for(val["villkor"][nyckel], produkt))
+    return Valt(
+        nyckel=nyckel,
+        villkor=villkor_for(val["villkor"][nyckel], produkt),
+        erbjudande=armar(val)[nyckel],
+        amnen=tuple(amnen_for(val.get("amnen"), produkt)),
+        produkt=produkt,
+    )
 
 
 # -- Mätningen ------------------------------------------------------------
@@ -301,7 +542,7 @@ def p_varde(x1: int, n1: int, x2: int, n2: int) -> float:
     return math.erfc(abs(z) / math.sqrt(2))
 
 
-def sammanstall(rader: list[dict[str, Any]]) -> dict[str, Any]:
+def sammanstall(rader: list[dict[str, Any]], val: dict[str, Any] | None = None) -> dict[str, Any]:
     """Utfallet per erbjudande ur `storage.erbjudande_utfall`, med andelar och
     en försiktig ledare.
 
@@ -311,21 +552,22 @@ def sammanstall(rader: list[dict[str, Any]]) -> dict[str, Any]:
     håller i ett tvåproportions z-test (p < `ALFA`). Annars är det för tidigt
     att säga, för alla."""
     per = {str(r.get("nyckel")): r for r in rader}
-    armar: list[dict[str, Any]] = []
-    for nyckel, erbjudande in katalog().items():
+    utfall: list[dict[str, Any]] = []
+    for nyckel, erbjudande in armar(val).items():
         r = per.get(nyckel) or {}
         arm = {
             "nyckel": nyckel,
             "namn": erbjudande.namn,
+            "form": erbjudande.form,
             **{f: int(r.get(f) or 0) for f in ("utkast", "skickade", "svar", "positiva", "moten")},
         }
         n = arm["skickade"]
         arm["svarsfrekvens"] = round(arm["svar"] / n, 4) if n else None
         arm["positiv_andel"] = round(arm["positiva"] / n, 4) if n else None
-        armar.append(arm)
+        utfall.append(arm)
 
     mogna = sorted(
-        (a for a in armar if a["skickade"] >= MIN_SKICKADE),
+        (a for a in utfall if a["skickade"] >= MIN_SKICKADE),
         key=lambda a: a["positiva"] / a["skickade"],
         reverse=True,
     )
@@ -335,10 +577,10 @@ def sammanstall(rader: list[dict[str, Any]]) -> dict[str, Any]:
         p = p_varde(bast["positiva"], bast["skickade"], tvaa["positiva"], tvaa["skickade"])
         if p < ALFA and bast["positiva"] / bast["skickade"] > tvaa["positiva"] / tvaa["skickade"]:
             ledare = bast["nyckel"]
-    for arm in armar:
+    for arm in utfall:
         arm["lage"] = "leder" if arm["nyckel"] == ledare else "for_tidigt"
     return {
-        "armar": armar,
+        "armar": utfall,
         "ledare": ledare,
         "p_varde": None if p is None else round(p, 4),
         "min_skickade": MIN_SKICKADE,

@@ -4,14 +4,14 @@
 
 ## Kärnan
 
-Mejlet ska läsas som ett erbjudande som är skrivet just för dem och som är för bra att ignorera, inte som information om en produkt. Mottagaren ska efter första meningen tänka "det där stämmer för oss", efter nästa veta exakt vad de får, och sedan kunna säga ja med ett enda svar eller ett klick. Kort slår utförligt: varje mening som inte gör erbjudandet mer attraktivt stryks.
+Mejlet ska läsas som ett erbjudande som är skrivet just för dem och som är för bra att ignorera, inte som information om en produkt. Mottagaren ska efter första meningen tänka "det där stämmer för oss", efter nästa veta exakt vad de får, och sedan se en enkel väg vidare. Det ska låta som ett vardagligt mejl från en person till en annan, inte som ett utskick. Kort slår utförligt: varje mening som inte gör erbjudandet mer attraktivt stryks.
 
 ## Kritiska regler
 
 1. **Börja i deras värld, aldrig i din iakttagelse av dem.** Inte "Jag ser att ni …", "Jag såg att ni …" eller "Ni är specialister på …". Börja i den typ av arbete de gör och vad som brukar skava där.
 2. **Säg aldrig "vi har skapat", "vi har utvecklat" eller "X är en AI-agent som …".** Säg vad agenten gör FÖR DEM: "Vår [agent] [gör konkret sak] åt er, så att ni får mer tid till [deras kärnarbete]."
 3. **Nyttan landar i deras arbete, inte i en funktion.** "Så att ni kan lägga tiden på svetsningen" slår "som automatiserar insamling och hantering av kvitton".
-4. **Mejlet slutar med EN enkel handling, aldrig en öppen fråga.** Mottagaren ska kunna säga ja med ett ord eller ett klick: "Svara 'ja' så skickar jag dem.", "Följ länken och testa utan kostnad: [länk]", "Svara på mejlet så bokar vi en tid." En fråga som är lätt att tacka nej till ("Har ni 15 minuter nästa vecka?", "Skulle ni vara intresserade?", "Vilken väg passar er bäst?") är förbjuden som avslutning.
+4. **Mejlet slutar med en vardaglig inbjudan, aldrig med en order och aldrig med en öppen fråga.** Inbjudan bär villkorens handling (en länk att titta på, eller att de svarar så bokar vi en genomgång) och säger den som man säger det till någon man respekterar: vill de veta mer eller testa själva finns vägen där. En avslutning av formen "Svara X så gör vi Y", och varje citerat kodord att svara med ("svara 'pilot'", "svara 'ja'"), är förbjuden (Anton 2026-10-25): den läses som ett massutskick och kan sänka hela mejlet. En fråga som är lätt att tacka nej till ("Har ni 15 minuter nästa vecka?", "Skulle ni vara intresserade?") är också förbjuden som avslutning.
 5. **Inga tankstreck (—) i brödtexten.** Använd punkt, komma eller skriv om meningen. Tankstreck i intervall ("15–20 minuter") är okej.
 6. **Ingen hälsningsfras och inget namn sist.** Hälsningen och signaturen läggs på i kod.
 7. **Exemplen i den här filen visar formen, aldrig orden.** Återanvänd aldrig en mening, en bild ("pappersjakt") eller en uppmaning ordagrant ur exemplen. Två mejl i samma körning får inte ha samma ingång, samma vinst eller samma uppmaning: hämta bilden ur just deras bransch och arbete.
@@ -19,9 +19,9 @@ Mejlet ska läsas som ett erbjudande som är skrivet just för dem och som är f
 
 ## Strukturen
 
-Tre korta stycken och 50–90 ord i brödtexten, i den här ordningen: ingången (en mening, högst två), erbjudandet (två till tre meningar) och handlingen (en mening). Igenkänningsfrågan nedan är valfri och står i så fall direkt efter ingången, aldrig sist.
+Korta stycken och 60–100 ord i brödtexten, i den här ordningen: ingången (en mening, högst två), vad agenten gör åt dem (en mening), erbjudandet (en till två meningar) och avslutet (en mening). Formen under "Mejlets form" i ärendet gäller: form B har en kort fråga efter ingången. Igenkänningsfrågan nedan är annars valfri och står i så fall direkt efter ingången, aldrig sist.
 
-**1. Ingången: deras löfte, och det som hotar det.** Ingången är en mening i andra person ("ni", "er", "era", eller "du" och "din" till en namngiven person) som tar det bolaget självt säger att de står för, och ställer det mot det arbetsmoment agenten löser. Deras löfte är det de lovar sina kunder eller lägger vikt vid, med deras egna ord ur citaten: personlig rådgivning genom hela köpet, att följa kunden från måttagning till färdigt kök, att göra projekten smärtfria, att eleverna blir trygga förare, att beställningar går iväg samma dag. Momentet är det som får det löftet att knaka: kundfrågorna som blir många, nästa uppdrag som ska hittas, kvittona som ska in i bokföringen. Mottagaren ska läsa sitt eget löfte och känna igen problemet i samma mening. Löftet visas med deras ord, det benämns aldrig: skriv aldrig "ert löfte", "något ni står för", "är ert mål" eller "ert kärnuppdrag", och aldrig den allmänna svansen "tar tid från det arbetet" eller "tar tid från er kärnverksamhet". Det som bär meningen är konkretionen: exakt vad de lovar (deras ord) och exakt vad kunderna frågar om eller vad som ska hittas (ur sajten).
+**1. Ingången: en utmaning i deras sorts arbete.** Ingången är en mening i andra person ("ni", "er", "era", eller "du" och "din" till en namngiven person) om en utmaning som deras sorts arbete för med sig och som agenten löser, med något konkret ur deras verksamhet: det de lägger vikt vid enligt sajten, vilka de arbetar för, vad kunderna frågar om eller vad som ska hittas. Den beskrivs som en balansgång eller något som tar tid i det arbetet (två saker som ska hinnas samtidigt, något som kan göra det svårare att hinna med det de lägger vikt vid). Mottagaren ska känna igen sig, aldrig känna sig kritiserad (Anton 2026-10-25): påstå aldrig att de brister, inte hinner, att frågor blir liggande eller att något försvinner för dem, och ställ aldrig deras eget löfte mot ett misslyckande ("ni lovar …, men …"). Löftet benämns aldrig: skriv aldrig "ert löfte", "något ni står för", "är ert mål" eller "ert kärnuppdrag", och aldrig den allmänna svansen "tar tid från det arbetet" eller "tar tid från er kärnverksamhet". Det som bär meningen är konkretionen: deras ord för det de gör och exakt vad som ska hinnas med. Greppet att deras arbete kräver att de kan fokusera på sitt hantverk och inte på att hitta nästa uppdrag är tillåtet ibland, men bara med deras eget hantverk som det de fokuserar på (måleriet, fasaderna, köken), aldrig ett allmänt "varje projekt", och aldrig i flera mejl i samma körning. Momentet är alltid något agenten gör enligt produktens nytta; ingången lovar aldrig en förmåga den saknar.
 
 Ingången är aldrig en uppräkning av vad de säljer eller gör. "Med ert breda utbud av fordon, utrustning och service för snöskotrar, motorcyklar och ATV …" och "Med er verksamhet som säljer båtar, motorer och trailers, och med en verkstad …" är sajtens produktlista återberättad, och mottagaren vet redan vad hen säljer. Välj EN sak de lovar, inte allt de har. En detalj ur sortimentet får stå i momentet ("när kundfrågorna om båtar, motorer och trailers blir många"), aldrig som ingångens kärna.
 
@@ -42,7 +42,7 @@ Konstruktionen varierar från mejl till mejl: koden tilldelar varje mejl en form
 
 **2. Erbjudandet: vad agenten gör åt dem, vad de vinner och vad de får nu.** Mönster: "Vår [agent] [konkret handling] åt er, så att ni [vinst i deras eget arbete]." Namnge EN agent och EN sak den gör, och gör det FÖRST i stycket, före löftet, garantin eller piloten: mottagaren ska veta vad som lovas innan siffrorna kommer ("Vi lovar att du lägger 50 % mindre tid …" utan att agenten nämnts är ett löfte om ingenting). Knyt gärna tillbaka till deras löfte ur ingången: "Den lämnar över till en människa när den inte säkert kan svara" håller den personliga servicen kvar. Är det avsändaren som gör jobbet (en tjänst som städning, redovisning eller en ny webbplats, inte en agent eller ett verktyg) är subjektet "vi": "Vi sköter bokföringen åt er …", aldrig "Vår löpande redovisning tar …". Vinsten är deras tid, deras kunder eller deras hantverk, aldrig "effektivitet". Säg vinsten med ett verb ur deras arbete ("hinner med ett jobb till", "svarar kunden samma dag"), inte med formeln "lägga tiden på X i stället".
 
-**3. Handlingen.** En mening som säger exakt vad de gör för att få erbjudandet, så enkelt att det kostar mindre att svara ja än att låta bli: svara "ja", följ en länk, vidarebefordra något, eller svara så bokar vi. Den hänger ihop med erbjudandet ("Svara 'ja' så skickar jag de fem bolagen i veckan."). Ingen fråga, ingen press, och ingen länk som inte står i villkoren eller affärskontexten.
+**3. Avslutet.** En vardaglig mening med villkorens handling, sagd som en inbjudan och inte som en order: vill de veta mer eller testa själva finns länken, eller så svarar de på mejlet och vi bokar en genomgång. Ger villkoren två vägar till samma sak får båda stå i samma mening. Aldrig "Svara X så gör vi Y", inget citerat kodord, ingen fråga, ingen press, och ingen länk som inte står i villkoren eller affärskontexten.
 
 Är erbjudandet tydligt i stycke 2 (något gratis, en garanti eller en begränsad plats) bär det mejlet. Erbjudandet sägs konkret med villkorens siffror, inte som "ett kort samtal för att se hur det skulle kunna fungera". Det överlever varje omskrivning: villkorens siffror och produktens namn står kvar oavsett hur ingången skrivs om, och en kodgrind kontrollerar det.
 
@@ -54,13 +54,13 @@ Konstruktionen varierar från mejl till mejl: koden tilldelar varje mejl en form
 | Med [antal] anställda / platschefer / sedan [år] … | vem de arbetar för, vad de lägger vikt vid, hur de arbetar |
 | Vi har skapat / utvecklat … | Vår [agent] [gör X] åt er … |
 | Snajps X är en AI-agent som automatiserar … | Vår X [plockar upp / svarar på / hittar] … åt er |
-| effektivisera, effektivitet, optimera | mer tid till [deras arbete], slippa [konkret moment] |
+| effektivisera, effektivitet, optimera (om arbetet i allmänhet) | mer tid till [deras arbete], slippa [konkret moment]. Undantaget: att agenten effektiviserar prospekteringen eller kundhanteringen får sägas en gång, när kundens instruktion ber om det (Sebbe 2026-10-29) |
 | administrativa uppgifter | kvittona, mejlen, offertförfrågningarna (det konkreta) |
 | frigöra tid | få mer tid till [konkret] |
 | potentiella kunder | nya kunder |
-| Skulle ni vara intresserade av att se hur …? | Svara "ja" så skickar jag … |
-| Har ni 15 minuter nästa vecka? | Svara på mejlet så bokar vi en tid. |
-| Hör av er om ni vill veta mer. | Följ länken och testa utan kostnad: … |
+| Skulle ni vara intresserade av att se hur …? | en inbjudan med villkorens väg vidare (länken, eller ett svar så bokar vi) |
+| Har ni 15 minuter nästa vecka? | den kostnadsfria genomgången ur villkoren, som ett erbjudande och inte som en fråga |
+| Svara "pilot"/"ja" så … | vill ni veta mer eller testa själva: [villkorens länk eller handling] |
 | lösning, plattform, verktyg | agenten, den, [agentens namn] |
 | Många småföretagare upplever att … | För ett litet [bransch]bolag är det ofta … |
 
@@ -78,7 +78,8 @@ Konstruktionen varierar från mejl till mejl: koden tilldelar varje mejl en form
 ## Ton
 
 - **Varm och direkt.** Som en kunnig person som pratar med en företagare den respekterar, inte som en broschyr.
-- **Säker, inte säljig.** Inga superlativ om oss, inga utropstecken, ingen påhittad brådska eller knapphet.
+- **Säker, inte säljig.** Inga superlativ om oss, inga utropstecken, ingen brådska eller knapphet som inte står i villkoren.
+- **Vardaglig.** Som ett mejl en person skriver till en annan: enkla ord, ingen kampanjton.
 - **Personlig genom igenkänning, inte genom smicker.** Personligt är att träffa rätt i hur deras arbete ser ut. Att berömma dem ("imponerande", "ett starkt engagemang") är inte personligt.
 
 ## Ämnesraden
@@ -103,22 +104,14 @@ Exemplen visar riktningen. Skriv aldrig av dem (regel 7).
 **Före (informerande):**
 "Jag såg att ni är specialister på renovering och byggprojekt i Göteborg. Med en anställd kan jag tänka mig att ni hanterar en del administrativt arbete själv, som kvittohantering. Snajp har en AI-agent som går igenom er e-post, hittar kvitton och samlar in de uppgifter som behövs för bokföringen. Skulle ni vilja ta ett kort samtal för att se hur Kvittohanteraren skulle kunna fungera i er verksamhet?"
 
-**Efter:**
-"Ert löfte om renoveringar som håller tidplanen hänger på att ni står på bygget, inte vid skrivbordet med kvittona inför bokföringen.
-
-Vår Kvittohanterare hämtar dem ur er e-post och lägger dem klara för bokföringen. Prova den på fem av era kvitton, helt utan kostnad.
-
-Vidarebefordra fem kvitton till [adressen i villkoren], så får ni tillbaka dem färdiga samma dag."
+**Efter (riktningen, inte orden):**
+Ingången beskriver hur renoveringar med en hållen tidplan och kvitton som ska in i bokföringen ska rymmas i samma vecka. Sedan en mening om att Kvittohanteraren hämtar kvittona ur e-posten och lägger dem klara, erbjudandet med villkorens siffror, och sist en vardaglig inbjudan med villkorens väg vidare.
 
 **Före (informerande):**
 "Jag ser att ni har hjälpt maskinägare och entreprenörer med hjullastare och grävmaskiner sedan 2014. Många företag i er situation upplever att det tar mycket tid att hitta och kvalificera potentiella kunder manuellt. Snajps AI-agent Iris kan hitta och kvalificera potentiella kunder åt er."
 
-**Efter:**
-"Ni lovar entreprenörerna service på plats inom ett dygn, och de dagarna går sällan att lägga på att leta upp nästa entreprenör att sälja till.
-
-Vår agent Iris hittar dem åt er. Ni får fem entreprenörer som passar er, med kontaktperson och ett färdigt första mejl till var och en, utan kostnad.
-
-Svara 'ja' så skickar jag dem i veckan."
+**Efter (riktningen, inte orden):**
+Ingången beskriver balansgången mellan att ge entreprenörerna service på plats och att samtidigt hinna hitta nästa entreprenör att sälja till, utan att påstå att något brister. Sedan en mening om vad Iris gör åt dem, erbjudandet med villkorens siffror, och sist en vardaglig inbjudan med villkorens väg vidare.
 
 ## Feedbackrundor
 
@@ -143,6 +136,14 @@ Två utkastkedjor i development (Fiskebäck Byggservice, Härlanda Fog & Byggser
 ### Omgång 5 – Anton 2026-10-12, samma natt
 
 Efter omkörningen stod "som ni gör", "som ert" eller "för företag som ert" fortfarande i nästan varje ingång: grinden fångade bara "För företag som ert" i meningens början, och modellen skrev i stället en allmän "när man …"-mening och hängde på etiketten. Skillnaden mot de goda ingångarna (Witekk, Tingstad, Consenso) är att de är skrivna till mottagaren, i andra person, om det som står på deras sajt. Beställningen: anpassa på riktigt, direkt i kedjan, så som en extra runda Personalisera gjorde i granskningen. Därför: ingången skrivs i andra person ur citaten (avsnittet ovan och tabellen), stilgrinden fäller etiketterna var de än står i ingången och "man"/"den som"/"ett företag som", och kedjan har ett obligatoriskt personaliseringssteg som skriver om enbart ingången före humanizern.
+
+### Omgång 7 – Anton 2026-10-25
+
+Grundidén i utkasten i produktion var bra, men ingången blev för ofta offensiv: deras eget löfte ställt mot ett misslyckande ("ni lovar …, men frågorna hinner sällan besvaras", "men den tiden försvinner snabbt"). Det kan träffa en öm tå och tas som kritik redan i första meningen. De goda ingångarna beskrev i stället en balansgång i deras sorts arbete, eller något som kan göra det svårt att hinna med det de lägger vikt vid. Varje mejl slutade dessutom med "Svara X så gör vi Y", som läses som botmejl och massutskick och är förbjudet. Avslutet är en vardaglig inbjudan med villkorens väg vidare. Erbjudandet styr hela mejlet, och hos Snajp står piloten i varje mejl. Mejlen A/B-testas: form A rakt på, och form B med en kort fråga om vilket av två moment som tar mest tid för dem. Tonen är vardaglig, som ett mejl från en person till en annan. Sebbes omgång 7 från 2026-10-24 (erbjudandet först i Iris-mejlen, beviset om att Iris skrev mejlet) är återställd.
+
+### Omgång 8 – Sebbe 2026-10-29
+
+Strukturen från omgång 7 står kvar; mejlet till Andreas ("Att identifiera potentiella köpare och bistå i förhandlingar kräver att du kan fokusera på varje affär", sedan frågan om vad som tar mest tid, Iris och piloten) är rätt nivå. Tre saker skavde. Ingången klankade ibland ner på bolaget ("Era kunder förväntar sig snabb och kunnig hjälp …", "När mängden frågor växer tar det tid från …") eller lät säljig och pushande ("Hur ska ni kunna hantera nya kunder samtidigt som ni har mycket jobb"); stilgrinden fäller nu de mönstren som kritik. Mottagaren ska tidigt förstå att agenten gör jobbet enklare: att hitta nya kunder (prospekteringen) för Iris, kundhanteringen för Supportagenten, sagt varmt och kort med en inblick i hur enkelt det är. Att agenten effektiviserar just prospekteringen eller kundhanteringen får därför sägas en gång. Ämnesraderna ("Fokus på varje affär", "Nya kunder med höga krav") sa inget om vinsten; hos en kund med egna ämnesrader per produkt väljs raden i kod ur den listan (`erbjudanden.valj_amne`), annars gäller ämnesregeln ovan. Rabatten i Snajps pilot är "upp till 50 %", och koden sätter tillbaka "upp till" om mejlet tappar det.
 
 ### Omgång 6 – Anton 2026-10-15
 

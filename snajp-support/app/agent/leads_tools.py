@@ -75,6 +75,7 @@ async def lagstadgad_fot(storage, tenant_id: str, prospect_email: str | None, br
     Blocket byts mot den aktuella foten; avregistreringstoken är idempotent
     per (tenant, adress) så länken i tidigare mejl fortsätter gälla."""
     from ..config import get_settings  # lokalt: undviker cirkulär import vid modulladdning
+    from ..leads.sources.base import Prospect
 
     bas_url = get_settings().publik_bas_url
     tenant = await storage.get_tenant(tenant_id) or {}
@@ -100,6 +101,8 @@ async def lagstadgad_fot(storage, tenant_id: str, prospect_email: str | None, br
             # policyrad och send_guard regel 2 blockerar med besked — samma
             # fail-closed-mönster som resten av underlaget.
             policy_url=str(tenant.get("policy_url") or "").strip(),
+            # Samma bedömning som send_guard regel 4 får i scheduler.
+            personlig=Prospect(company_name="", contact_email=prospect_email).epost_ar_personlig,
         ),
     )
 
@@ -113,6 +116,7 @@ async def _queue_outreach_draft_impl(
     humanizer_variant: str,
     force_review: bool = False,
     stilkontroll: bool = False,
+    kampanj_id: str | None = None,
 ) -> str:
     # Textkvalitetslagret (app/textkvalitet.py): sista efterkontrollen innan
     # texten kan nå en kund. Platshållare ("[förnamn]") kontrolleras på
@@ -150,7 +154,18 @@ async def _queue_outreach_draft_impl(
         sprak=sprak,
         epost=prospekt.get("contact_email"),
     )
-    kvalitet = await sakra_utgaende_text(finalized_body, sprak=sprak, alltid_korrektur=True)
+    # Hälsningspasset kan göra "Hej Per," till "Hej," och mejlet till ni-form;
+    # ämnesraden följer med (omskrivningen 2026-10-29: "Support 24/7 för dina
+    # kunder" över ett "Hej,").
+    if sprak != "en" and not kampanj_id:
+        from ..leads.erbjudanden import till_ni
+        from ..leads.stilkontroll import namngiven
+
+        if not namngiven(finalized_body):
+            subject = till_ni(subject)
+    # En kampanj är samma människoskrivna text till hela listan: korrektur bara
+    # när något flaggats, inte ett modellanrop per mottagare.
+    kvalitet = await sakra_utgaende_text(finalized_body, sprak=sprak, alltid_korrektur=not kampanj_id)
     finalized_body = kvalitet.text
     granskningsskal: str | None = None
     if kvalitet.kraver_granskning or platshallare:
@@ -257,6 +272,7 @@ async def _queue_outreach_draft_impl(
         scheduled_at=scheduled_at,
         status=queue_status,
         gate_checks={"held": granskningsskal} if granskningsskal else None,
+        **({"kampanj_id": kampanj_id} if kampanj_id else {}),
     )
     outreach.queued = True
     svar = {

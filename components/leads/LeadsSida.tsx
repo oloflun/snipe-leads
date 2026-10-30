@@ -5,14 +5,16 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { PageShell } from "@/components/AppShell";
 import { useDashboard } from "@/components/dashboard/DashboardContext";
+import { IrisErbjudanden } from "@/components/leads/IrisErbjudanden";
 import { IrisInkorg } from "@/components/leads/IrisInkorg";
+import { Kampanjer } from "@/components/leads/Kampanjer";
 import { IrisKorningar } from "@/components/leads/IrisKorningar";
 import { LeadDetail, exempelTillRad, type ExempelRad } from "@/components/leads/IrisBolag";
 import { LeadsOversikt } from "@/components/leads/LeadsOversikt";
 import { LeadsRunForm } from "@/components/leads/LeadsRunForm";
 import { Samtalslista } from "@/components/leads/Samtalslista";
 import { btnPrimary, btnSecondary, flik, flikAktiv, flikInaktiv, fliklista } from "@/components/ui";
-import { EXEMPELBOLAG, EXEMPEL_OMGANG_1, EXEMPEL_OMGANG_2 } from "@/lib/demo/iris-exempel";
+import { exempelOmgang } from "@/lib/demo/iris-exempel";
 import { useLocale, type Localized } from "@/lib/i18n";
 import type { SuiteProspekt } from "@/lib/leads/suite";
 import { cn } from "@/lib/utils";
@@ -32,14 +34,16 @@ import { cn } from "@/lib/utils";
  * får hela bredden, och lådan stängs med Esc, krysset eller ett klick utanför.
  */
 
-type Segment = "listor" | "inkorg" | "samtal" | "korningar";
+type Segment = "listor" | "inkorg" | "samtal" | "korningar" | "erbjudanden";
 
 const SEGMENT_ETIKETT: Record<Segment, Localized> = {
   listor: { sv: "Översikt", en: "Overview" },
   inkorg: { sv: "Inkorg", en: "Inbox" },
   // Ringlistan och återkopplingen (Antons beställning 2026-10-07).
   samtal: { sv: "Samtal", en: "Calls" },
-  korningar: { sv: "Körningar", en: "Runs" }
+  korningar: { sv: "Körningar", en: "Runs" },
+  // Erbjudandena, A/B-utfallet och kampanjerna (Anton 2026-10-25), för alla kunder.
+  erbjudanden: { sv: "Erbjudanden", en: "Offers" }
 };
 
 /** Gamla vyadresser landar i översikten (fd Leads/Utkast/Listor, Sebbes
@@ -61,12 +65,17 @@ const T = {
     sv: "Utan filter hittar Iris själv de bolag som passar er produkt bäst, utifrån er sparade målgrupp.",
     en: "Without filters, Iris finds the companies that fit your product best, based on your saved target audience."
   },
-  exempelOverst: { sv: "Exempelbolag läggs överst i listan.", en: "Example companies are added to the top of the list." },
-  kor: { sv: "Kör…", en: "Running…" },
-  allaTillagda: { sv: "Alla tillagda", en: "All added" },
-  allaExempelTillagda: { sv: "Alla exempelbolag tillagda", en: "All example companies added" },
-  korExempel: { sv: "Kör exempel", en: "Run example" },
-  korExempelkorningen: { sv: "Kör exempelkörningen", en: "Run the example" },
+  exempelOverst: {
+    sv: "Iris hittar tre exempelföretag som passar målgruppen, läser deras sajter och skriver ett första mejl till vart och ett. Det tar några sekunder, och du kan köra så många gånger du vill.",
+    en: "Iris finds three sample companies that fit the target group, reads their sites and writes a first email to each. It takes a few seconds, and you can run it as often as you like."
+  },
+  korExempel: { sv: "Kör Iris", en: "Run Iris" },
+  korIgen: { sv: "Kör igen", en: "Run again" },
+  visaIListan: { sv: "Visa i listan", en: "Show in the list" },
+  klarDemo: {
+    sv: "Klart: tre nya företag med färdiga utkast ligger överst i listan under Ny.",
+    en: "Done: three new companies with finished drafts are at the top of the list under New."
+  },
   vy: { sv: "Vy", en: "View" },
   stang: { sv: "Stäng", en: "Close" },
   lead: { sv: "Lead", en: "Lead" },
@@ -81,6 +90,14 @@ function tolkaSegment(vy: string | null): Segment {
   if (vy in GAMLA) return GAMLA[vy];
   return (Object.keys(SEGMENT_ETIKETT) as Segment[]).includes(vy as Segment) ? (vy as Segment) : "listor";
 }
+
+/** Demons körsteg, i den ordning en riktig körning går. */
+const DEMO_STEG: Localized[] = [
+  { sv: "Söker företag som matchar målgruppen", en: "Searching for companies that match the target group" },
+  { sv: "Läser sajterna och hittar kontakten", en: "Reading the sites and finding the contact" },
+  { sv: "Skriver ett första mejl till varje företag", en: "Writing a first email to each company" }
+];
+const DEMO_STEG_MS = 900;
 
 export function IrisBolag({ demo = false }: Readonly<{ demo?: boolean }>) {
   const { addons, isDemo, vy, impersonation, arLasare } = useDashboard();
@@ -97,9 +114,13 @@ export function IrisBolag({ demo = false }: Readonly<{ demo?: boolean }>) {
   const flikRefs = useRef<Partial<Record<Segment, HTMLButtonElement | null>>>({});
   const [korOppen, setKorOppen] = useState(false);
   const [exempelRader, setExempelRader] = useState<ExempelRad[]>([]);
+  // Demons körning (Sebbe 2026-10-29): snabb, på exempelföretag och utan slut.
+  // Stegen visas medan den går; inget anrop lämnar webbläsaren.
   const [demoKorFas, setDemoKorFas] = useState<"vilar" | "kor">("vilar");
+  const [demoSteg, setDemoSteg] = useState(0);
+  const [demoOmgang, setDemoOmgang] = useState(0);
 
-  const segment: Segment[] = demo ? ["listor"] : ["listor", "inkorg", "samtal", "korningar"];
+  const segment: Segment[] = demo ? ["listor"] : ["listor", "inkorg", "samtal", "korningar", "erbjudanden"];
 
   const satt = useCallback(
     (andring: Record<string, string | null>) => {
@@ -123,20 +144,23 @@ export function IrisBolag({ demo = false }: Readonly<{ demo?: boolean }>) {
     return () => window.removeEventListener("snipra:leads-korning-klar", klar);
   }, []);
 
-  const allaExempelTillagda = exempelRader.length >= EXEMPELBOLAG.length;
-
   function korExempel() {
-    if (demoKorFas === "kor" || allaExempelTillagda) return;
+    if (demoKorFas === "kor") return;
     setDemoKorFas("kor");
+    setDemoSteg(0);
+    DEMO_STEG.forEach((_, i) => {
+      if (i > 0) window.setTimeout(() => setDemoSteg(i), i * DEMO_STEG_MS);
+    });
     window.setTimeout(() => {
-      setExempelRader((forr) => {
-        const redan = new Set(forr.map((r) => r.id));
-        const kandidat = EXEMPEL_OMGANG_1.some((b) => !redan.has(b.id)) ? EXEMPEL_OMGANG_1 : EXEMPEL_OMGANG_2;
-        return [...kandidat.filter((b) => !redan.has(b.id)).map(exempelTillRad), ...forr];
-      });
+      // Nya rader är nyast och hamnar överst, under Ny, som en riktig körning.
+      const nu = new Date().toISOString();
+      setExempelRader((forr) => [
+        ...exempelOmgang(demoOmgang).map((b) => ({ ...exempelTillRad(b), status: "new", created_at: nu })),
+        ...forr
+      ]);
+      setDemoOmgang((n) => n + 1);
       setDemoKorFas("vilar");
-      setKorOppen(false);
-    }, 650);
+    }, DEMO_STEG.length * DEMO_STEG_MS);
   }
 
   const valtExempel = exempelRader.find((r) => r.id === valdId)?._exempel;
@@ -187,24 +211,43 @@ export function IrisBolag({ demo = false }: Readonly<{ demo?: boolean }>) {
                 <p className="max-w-[65ch] text-[15px] leading-7 text-ink-muted">{text(T.exempelOverst)}</p>
                 <button
                   type="button"
-                  disabled={demoKorFas === "kor" || allaExempelTillagda}
+                  disabled={demoKorFas === "kor"}
                   onClick={korExempel}
                   className={cn(btnPrimary, "mt-4 whitespace-nowrap")}
                 >
-                  {demoKorFas === "kor" ? (
-                    text(T.kor)
-                  ) : allaExempelTillagda ? (
-                    <>
-                      <span className="sm:hidden">{text(T.allaTillagda)}</span>
-                      <span className="hidden sm:inline">{text(T.allaExempelTillagda)}</span>
-                    </>
-                  ) : (
-                    <>
-                      <span className="sm:hidden">{text(T.korExempel)}</span>
-                      <span className="hidden sm:inline">{text(T.korExempelkorningen)}</span>
-                    </>
-                  )}
+                  {demoOmgang > 0 ? text(T.korIgen) : text(T.korExempel)}
                 </button>
+                {/* Förloppet och utfallet där körningen startades (Antons
+                    regel 2026-10-10), också i demon. */}
+                <div aria-live="polite" className="mt-4 text-[14px] leading-6">
+                  {demoKorFas === "kor" ? (
+                    <ol className="space-y-1">
+                      {DEMO_STEG.map((steg, i) => (
+                        <li
+                          key={steg.sv}
+                          className={cn(
+                            "flex items-center gap-2",
+                            i < demoSteg ? "text-ink-muted" : i === demoSteg ? "font-medium text-ink" : "text-ink-subtle"
+                          )}
+                        >
+                          <span aria-hidden className="num w-4 tabular-nums">{i < demoSteg ? "✓" : `${i + 1}`}</span>
+                          {text(steg)}
+                        </li>
+                      ))}
+                    </ol>
+                  ) : demoOmgang > 0 ? (
+                    <p className="text-ink-muted">
+                      {text(T.klarDemo)}{" "}
+                      <button
+                        type="button"
+                        onClick={() => document.getElementById("leads-iris")?.scrollIntoView({ behavior: "smooth", block: "start" })}
+                        className="focus-ring font-medium text-ink underline underline-offset-4 hover:text-ink-muted"
+                      >
+                        {text(T.visaIListan)}
+                      </button>
+                    </p>
+                  ) : null}
+                </div>
               </div>
             }
           />
@@ -269,6 +312,13 @@ export function IrisBolag({ demo = false }: Readonly<{ demo?: boolean }>) {
           <Samtalslista demo={demo} />
         ) : segmentVal === "korningar" ? (
           <IrisKorningar />
+        ) : segmentVal === "erbjudanden" && !demo ? (
+          <div className="grid gap-12">
+            <IrisErbjudanden />
+            <div className="border-t border-ink/15 pt-8">
+              <Kampanjer />
+            </div>
+          </div>
         ) : (
           <LeadsOversikt
             demo={demo}

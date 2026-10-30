@@ -1,5 +1,12 @@
 # Snipra Status
 
+## 2026-10-23 — Claude — körningarna når beställt antal
+
+Körningen på 200 i main stannade på 18: taket 40 listsidor gav 2 007 av 8 400 bolag, och fällda bolag prövades om
+(Sebbes 7496a97). Nu läses hela registret (400 sidor) och sökningen breddas till fler branscher i samma område när
+kundens tar slut (968e0ea). Release via PR 38, mergad av Anton. **Kvar:** följ nästa körning på 200 i main,
+ScrapeGraph-krediten (Anton). Handoff: `HANDOFF-2026-10-23-KORNINGAR-BESTALLT-ANTAL.md`.
+
 ## 2026-10-21 — Claude — utskicksrättningar, alla leads i listan, leadsbudgeten
 
 Trådsvar som kraschade på en ISO-sträng är rättade, kön skickar äldst först, Skickas snart visar alla godkända

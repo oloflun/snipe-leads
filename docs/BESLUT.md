@@ -9,6 +9,253 @@ möjligt), vad det betyder i koden.
 
 ---
 
+## 2026-10-29 (Sebbe) — Utskicken: nyast först, effektiviseringen i fokus, ämnesrader ur en lista, "upp till 50 %" och en demo utan inloggning
+
+**Beslut.** "Alla de nyaste utskicken ska vara högst upp i listorna, så nyaste
+först i listan och sedan följs den röda tråden nedåt", likadant i inkorgen,
+och nya utskick ska ligga under Ny och Alla, aldrig någon annanstans. Utskicken
+ska vara "varma och informerande och ge mottagaren en intressant och kort
+inblick i hur vår agent fungerar och hur enkel den är att använda", med
+effektiviseringen tidigt: prospekteringen för Iris, kundhanteringen för
+Supportagenten. "Ändra inte mycket": mejlet till Andreas (form B) är rätt nivå.
+Ämnesraderna ska handla om effektiviseringen, ur Sebbes lista per produkt, där
+"Effektivisering av prospektering" och "Support 24/7 för dina kunder" är de
+starkaste. "Du får 50 % rabatt" blir "Du får upp till 50 % rabatt om du stannar
+efteråt". Demolänken ska ge ett inloggat demokonto där mottagaren testar Iris,
+ser demosiffror och kör snabba körningar på påhittade företag, utan riktiga
+körningar som kostar tokens.
+
+**Resonemang.** En ny körnings utkast syntes bara under Körningar, och det är
+slarv i det första kunden ser. Ingångar som "Era kunder förväntar sig snabb och
+kunnig hjälp" klankar ner på bolaget, och "Hur ska ni kunna hantera nya kunder
+samtidigt som ni har mycket jobb" är säljigt, pushande och "känns drygt och
+konstigt". Det som väcker intresse är att se att jobbet blir enklare, så det ska
+sägas tidigt. Modellens ämnesrader ("Fokus på varje affär", "Nya kunder med
+höga krav") sa inget om vad mottagaren vinner.
+
+**I koden och prompterna.**
+- Leads › Översikt sorterar nyast först (`LeadsTabell.sortera`: senaste
+  händelsen, alltså statusbytet när utkastet skrevs, annars när leadet lades
+  till; research pågår överst). Ersätter poängordningen från 2026-10-07.
+- Granskningskön (`list_review_queue`, Postgres och MemoryStorage) kommer
+  nyaste utkastet först. Förut kom de äldsta först och gränsen på 200 klippte
+  bort en ny körnings utkast. Kedjans "redan använda ingångar" tar nu de tolv
+  första i stället för de tolv sista.
+- Inkorgen var redan nyast först (`received_at desc`); ett test låser det.
+- Ämnesrader per produkt (`erbjudanden.amnen`, PUT `/api/leads/erbjudanden`):
+  koden väljer en per mejl efter att modellen skrivit det (`valj_amne`,
+  deterministiskt per prospekt, den första raden i ungefär vart tredje mejl),
+  i ni-form när mottagaren inte är namngiven. Utan lista står modellens
+  ämnesrad kvar, så andra kunder märker ingenting. Snajps listor står i
+  `scripts/snajp_malgrupp.py`.
+- `erbjudanden.behall_upp_till`: står villkorens siffra som "upp till 50 %"
+  sätter koden tillbaka "upp till" om mejlet tappat det.
+- Stilgrinden: `kritisk_ingang` fäller också "era/dina kunder förväntar sig
+  eller kräver", "hur ska ni kunna/hinna", "samtidigt som ni har mycket" och
+  "tar det tid från". `effektivisera` fälls inte längre när det gäller
+  prospekteringen eller kundhanteringen.
+- Frågan i form B tar bara den valda produktens moment (`erbjudanden.formregler`):
+  omskrivningen samma dag gav ett supportmejl med frågan "… eller att hitta nya
+  kunder?" och löftet att Supportagenten "tar hand om båda delarna". Stilgrinden
+  fäller fel produkts moment (`fel_moment`) och skriver om mejlet. Avslutet
+  "Vill ni testa Iris direkt i demon …, eller svara på mejlet så …" är en halv
+  mening och fälls som `halv_inbjudan`; pilotvillkorets handling är omskriven så
+  att den inte lockar fram den.
+- Ämnesradens du- eller ni-form följer den slutliga hälsningen, även efter
+  hälsningspasset vid köningen (`leads_tools`), och stilgrinden
+  fäller "Hon" om Iris (`iris_hon`), som Snajps instruktion redan förbjöd.
+- Produkten matchas mot kundens produkter i dag (`erbjudanden.produkt_nu`):
+  31 av 243 sparade research i omskrivningen saknade produkten eller bar ett
+  äldre namn, så inget erbjudande valdes och mejlet tog researchens gamla
+  förslag ("prova gratis i två månader"). Produktens nytta i utkastet kommer nu
+  också ur dagens inställningar, inte ur researchens tid.
+- Snajps inställningar: produkternas nytta börjar med effektiviseringen,
+  Iris-instruktionen ber om en varm, kort inblick och förbjuder ingångar om
+  vad kunderna förväntar sig, och pilotvillkoret säger "upp till 50 % rabatt
+  om du stannar efteråt" och "testa direkt i demon".
+- Skrivstilen omgång 8.
+- Demon (`/demo`) visas som ett inloggat demokonto utan inloggningsknappar,
+  och "Kör Iris" går hur många gånger som helst. Varje körning visar sina steg
+  i några sekunder och lägger sedan tre nya exempelföretag med färdiga utkast
+  överst under Ny. Efter de sex handskrivna bolagen blir varje omgång tre
+  varianter med nytt namn, ny ort och ny kontakt (`exempelVariant`). Inget
+  anrop går till modellen; Email Studio svarar med de förskrivna svaren även
+  för varianterna.
+
+**Facit.** INV-LEADS-UTKAST-002 är orört och passerar. Facits ämnesregel (två
+till fem ord om deras löfte, utan produkt) gäller fortfarande för kunder utan
+egen ämneslista; Snajps ämnesrader följer Sebbes lista i stället. Facits
+Båtladan-ingång ("Hur hinner du med …") fälls inte av de nya mönstren.
+
+**Öppet för Anton.** (1) Snajps ämnesrader avviker från ämnesregeln i
+facit 2026-10-16 genom att vara produktnära och ibland längre än fem ord.
+(2) Rabatten är nu "upp till 50 %" i stället för 50 %; den slutliga nivån per
+kund avgörs vid avtalet. (3) Några ämnesrader lovar sådant Iris bara gör delvis
+("Vi märker när ett bolag är redo att köpa", "varje morgon" kräver autopilot).
+(4) Inställningarna och koden ligger i development; main kräver en release.
+
+---
+
+## 2026-10-25 (Anton) — Utkasten: mjukare ingång, inget "Svara X så …", piloten i varje mejl, A/B, egna erbjudanden och kampanjer
+
+**Beslut.** Sebbes utkaständringar 2026-10-24 återställs. De nya Iris-mejlen
+"kastar sig in direkt och berättar om 'leadsagenten' helt utan kontext,
+ihoptryckt med ett hophafsat erbjudande … väldigt hastigt och svårt att sätta
+sig in i och känns robotgenererat." Grunden är upplägget i produktion, med
+tre ändringar. (1) Ingången ska läsas som de tre första exemplen Anton gav och
+inte som de två sista: "det blir många gånger för offensivt och angripande mot
+kunden, det kan träffa en öm tå eller tas som kritik." (2) Avslutet "svara med
+x, så gör vi x" är "en svag CTA som läses som botmejl och massutskick och kan
+sänka hela mailet, det måste förbjudas helt." (3) Piloten presenteras i VARJE
+mejl: 20 företag, en kostnadsfri pilot på tre månader med alla funktioner, och
+därefter 50 % för den som är nöjd och vill stanna, "inga mer detaljer där".
+Den som vill veta mer går in på snajp.se/demo eller svarar på mejlet, så bokar
+vi en kostnadsfri genomgång. Tonen är vardaglig, som från en person till en
+annan. Form B testas mot A med lika stor andel: samma ingång, sedan frågan om
+vilket som tar mest tid (hantera inkomna leads eller hitta nya; kundmejl eller
+supportchattar). Erbjudandena ska styra hela utkastet, inte läggas till som ett
+stycke, och kunden ska kunna lägga till egna erbjudanden, se statistik och
+styra A/B/C under Leads, för alla kunder. Onboardingen ska ha en sektion för
+erbjudanden, och det ska gå att skicka en kampanj till befintliga kund- och
+leadslistor med lite anpassning ("Hej Namn," och sedan kampanjen).
+
+**Resonemang.** Kritik i första meningen skapar motvilja innan erbjudandet ens
+är läst. En order sist läses som massutskick. Ett tydligt erbjudande i varje
+mejl, sagt vardagligt, ger mottagaren ett skäl att svara.
+
+**Utkasten skrevs inte automatiskt (felet).** 27 av 57 researchade bolag fälldes
+2026-10-24 med "Ingen av kundens produkter passar bolaget", mot 0 av 53
+2026-10-22, fast researchens egen motivering sa att Snajp passar dem. Skälen
+var två. Iris produkttext hade skrivits om, och kontextpaketet sa "Du har
+INGA godkända erbjudanden … Erbjud därför ingenting" till varje research hos
+Snajp, fast erbjudandena finns i inställningarna. Körningens lista visade dessutom
+de bortvalda som leads utan utkast.
+
+**I koden och prompterna.**
+- Sebbes fyra commits (`16a121f`, `d604e51`, `2f61284`, `7508326`) är
+  återställda i sin utkastdel. Leveransändringarna står kvar.
+- `context_pack.py`: luckan om godkända erbjudanden försvinner när kunden har
+  aktiva erbjudanden. `_korningens_leads`: bortvalda bolag står bara under
+  Bortvalda.
+- Skrivstilen omgång 7 (Anton), grundprompten § 10, `leads-hard-rules.md` och
+  katalogens gemensamma regler: ingången är en utmaning i deras sorts arbete
+  och aldrig kritik, avslutet är en vardaglig inbjudan och 60–110 ord.
+- Stilgrinden: nya fynd `kritisk_ingang` och `svara_sa_avslut`. Facit
+  2026-10-12 och 2026-10-16 slutar med "Svara 'pilot' …" och undantar därför
+  `svara_sa_avslut`. Allt annat i facit gäller. Ett nytt facit tas fram ur
+  första körningen med den nya formen och godkänns av Anton.
+- `erbjudanden.py`: egna erbjudanden (`egna`) med form A (rak) eller B
+  (fråga). Blocket säger att erbjudandet styr hela mejlet och översätts till
+  mottagarens verksamhet. Snajp kör `pilot_a` och `pilot_b` med lika vikt
+  (`scripts/snajp_malgrupp.py`).
+- Leads › Erbjudanden (alla kunder med leads): erbjudandena, egna och
+  katalogens, med vikt och utfall per erbjudande, samt Kampanjer. Kortet i
+  Inställningar är ersatt med en länk dit.
+- Onboardingen: sektionen "Erbjudandet i utskicken" i målgruppssteget. Varje
+  stycke blir ett eget aktivt erbjudande och står också i affärskontexten.
+- Kampanjer (`app/api/leads_kampanjer.py`, migration 114 `kampanj_id`):
+  "Hej," med förnamnet satt i kod, och sedan texten, till en lista (även
+  CRM-kundlistan) eller en körnings leads. Utkasten går till granskning, och
+  "Godkänn och skicka" går genom alla sändspärrar. Spärren släpper ett
+  kampanjmejl till kundens egna kunder, men avregistrerade, arkiverade och
+  avböjda stoppas som förut.
+
+**Tillägg samma natt, efter provkörningen (12 utkast).** Anton: "'kräver att
+ni kan fokusera på varje projekt, inte på att söka upp nästa uppdrag' är
+faktiskt helt okej om den förekommer ibland (i olika formuleringar), så länge
+det inte är i varje mail, och även bygger på deras verksamhet och väver in
+något av det i meningen, som 'att ni fokuserar på måleriet'". Greppet står inte
+längre bland mallorden, men det de fokuserar på måste vara deras hantverk:
+"varje projekt", "arbetet" och "verksamheten" fälls (`mallord_i_ingangen`). Har
+redan två av körningens senaste ingångar greppet fälls det (`samma_grepp`).
+Därtill: mejlen var 105–150 ord, och nu är taket 100 ord och ett långt mejl
+skrivs om. Pilotvillkoret är kortat. Ingen förmåga får hittas på (Iris
+"föreslår nya tomter"). Frågan i form B har fasta moment för Iris och för
+Supportagenten.
+
+**Öppet för Anton.** Kampanjer till befintliga kunder är marknadsföring och
+inte kallkontakt. Det är lagligt B2B med avregistrering i varje mejl, men en
+lista med privatpersoners adresser kräver samtycke. Ingen kod skiljer ut dem
+utöver att enskilda firmor redan sållas bort i listspåren. Migration 114
+behöver köras i development och main.
+
+---
+
+## 2026-10-24 (Sebbe) — Utskickens text: äkta, konkret, trovärdig (skrivstilens omgång 7)
+
+> **Ersatt 2026-10-25 (Anton):** utkastdelen är återställd, se posten ovan.
+
+**Beslut.** "Förbättra utskicken, texten. De ska sälja in vår produkt bra,
+konkret, kort och tydligt. Vi måste få mer svar och bli trovärdiga och
+attraktiva … De får inte bli halvdana, halvbra. De ska vara riktigt bra."
+Och om Iris: den hittar företagsleads "anpassad efter det kunden söker".
+
+**Resonemang.** Facit-ingångarna återberättade bolagets egen säljtext, som
+mottagaren känner igen som sin hemsida omskriven. Erbjudandena var
+abstrakta ("nya kunddialoger"), och inget i mejlet gav ett skäl att tro på
+en okänd avsändare.
+
+**I koden och prompterna.**
+- `leads-skrivstil.md` omgång 7: kärnan (äkta, konkret, tryggt att svara);
+  ingången väljer en händelse ur `trigger_events` först, sedan en konkret sak
+  på sajten och sist löftet, och bär alltid ett konkret substantiv;
+  trovärdighet bara ur underlaget; klyschlistan; konkreta ämnesrader.
+- Grundprompten § 10.1–10.2 följer skrivstilen (50–90 ord, villkorens
+  handling). Tidigare stod det 70–130 ord och "demo eller samtal".
+- `_INGANGSUPPGIFT` och omskrivningen i `leads_research_v2.py` har samma
+  ordning för underlaget.
+- Stilgrinden: nytt fynd `klyscha`. Facit 2026-10-16 passerar oförändrat.
+- `scripts/snajp_malgrupp.py`: Iris nytta säger att leadsen anpassas efter
+  bransch, ort och storlek. Iris-mejlen får beviset att mejlet självt är
+  skrivet av Iris och läst av en människa före utskick.
+
+**Inte ändrat (Antons beslut).** Erbjudandena och deras villkor (pilotens
+"20 företag", de lika vikterna) och regeln att mejlet aldrig slutar med en
+fråga. "Upp till 250 leads" står inte i mejlen: en körning tar högst 200
+och kunskapsbasen säger 150 prospekt per månad.
+
+---
+
+## 2026-10-24 (Sebbe) — Leveransen: ren text först, flack volym, stopp vid studs och klagomål, kort fot till info@
+
+**Beslut.** "Börja med leveransdelen: ren text i första mejlet, flack
+volymkurva med stopp vid studs/klagomål, kort fot till funktionsadresser."
+
+**Resonemang.** ~600 kallmejl gav 9 svar: 2 mänskliga (båda nej) och resten
+autosvar. Ett mejl som fastnar i skräpfiltret ger inget autosvar, så de få
+autosvaren tyder på att många mejl aldrig nådde inkorgen. Dubblingen från
+2026-10-21 (20 → 40 → 80 → 160) släppte ut större delen på några dagar från
+`snajp.se`, som nästan inte hade fått några svar. Varje första mejl bar
+logotyp och HTML, och en GDPR-fot lika lång som själva mejlet. Inget i
+systemet visste hur många mejl som studsat eller markerats som skräppost.
+Hela diagnosen: `docs/UTSKICK-SVARSFREKVENS-DIAGNOS-2026-10-24.md`.
+
+**I koden.**
+- `send_guard` regel 5d: taket är största dagsvolymen senaste sju dagarna
+  + 5, lägst 20, högst `TAK_PER_DAG` = 50. Ersätter dubblingen från 2026-10-21.
+- Regel 5e (ny): leveransstopp. Med fler än 0,1 % klagomål eller fler än 3 %
+  studsar (minst 20 skickade) de senaste 14 dagarna står tenantens utskick
+  still (köa om, även Skicka nu) tills händelserna är äldre än fönstret.
+  Skälet syns på köposten.
+- Resends webhook `POST /api/webhooks/resend/emails` (email.bounced,
+  email.complained) skriver `outreach_messages.leverans` (migration 113) och
+  lägger adressen i suppressions. Tillfälliga studsar räknas inte. Utskicken
+  bär taggarna `tenant` och `meddelande` så att händelsen hittar rätt.
+- Det första mejlet i en tråd går utan HTML och logotyp, och provmejlet följer
+  samma regel. Uppföljningarna bär logotypen som förut.
+- Kort fot till funktionsadresser: avsändare, org.nr, adress och
+  avregistrering, utan art. 14-stycken. Regel 2 kräver policylänken bara vid
+  en personlig adress, liksom regel 4. Personliga adresser får hela foten som
+  förut.
+
+**Kvar att göra (inte kod).** Registrera webhooken hos Resend för båda
+miljöerna och sätt `RESEND_WEBHOOK_SECRET` på api. Utan den svarar webhooken
+401 och stoppet ser inga händelser. Kör migration 113 i varje miljö. En
+separat utskicksdomän och åtgärderna för erbjudandet (Antons beslut) ingår
+inte här.
+
+---
+
 ## 2026-10-23 (Anton) — Körningar ska leverera beställt antal: hela registret, sedan brett i området
 
 **Beslut.** "Läs senaste committen från Sebbe och gör vad som krävs för att

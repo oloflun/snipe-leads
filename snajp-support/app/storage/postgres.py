@@ -1265,6 +1265,52 @@ class PostgresStorage:
                 dagar,
             )
 
+    async def leveransutfall(self, tenant_id: str, *, dagar: int = 14) -> dict[str, int]:
+        try:
+            async with self._scoped(tenant_id) as conn:
+                rad = await conn.fetchrow(
+                    """
+                    select count(*) as skickade,
+                           count(*) filter (where leverans = 'studs') as studsade,
+                           count(*) filter (where leverans = 'klagomal') as klagomal
+                      from outreach_messages
+                     where tenant_id = $1
+                       and direction = 'outbound'
+                       and sent_at is not null
+                       and sent_at >= now() - make_interval(days => $2)
+                    """,
+                    tenant_id,
+                    dagar,
+                )
+        except asyncpg.UndefinedColumnError:
+            # Migration 113 inte körd. Läsningen sker före varje utskick
+            # (send_guard regel 5e), och utan fallet hade en release som
+            # hann före migrationen stoppat alla utskick. Inga händelser kan
+            # heller ha skrivits utan kolumnen, så nollor är sanningen.
+            logger.warning("outreach_messages.leverans saknas: kör migration 113. Leveransstoppet är verkningslöst.")
+            return {"skickade": 0, "studsade": 0, "klagomal": 0}
+        return {k: int(rad[k] or 0) for k in ("skickade", "studsade", "klagomal")}
+
+    async def markera_leverans(self, tenant_id: str, message_id: str, *, utfall: str, at):
+        # Saknas kolumnen (migration 113 inte körd) kastar uppdateringen, och
+        # webhooken svarar fel så att Resend skickar händelsen igen senare
+        # (sending_domains.apply_email_event släpper igenom 42703).
+        async with self._scoped(tenant_id) as conn:
+            rad = await conn.fetchrow(
+                """
+                update outreach_messages
+                   set leverans = case when leverans = 'klagomal' then leverans else $3 end,
+                       leverans_at = case when leverans = 'klagomal' then leverans_at else $4 end
+                 where tenant_id = $1 and id = $2::uuid and direction = 'outbound'
+                returning id, thread_id, leverans
+                """,
+                tenant_id,
+                message_id,
+                utfall,
+                at,
+            )
+        return _row(rad) if rad else None
+
     async def last_contact_with_company(
         self, tenant_id: str, foretagsnyckel: str, *, utom_trad: str | None = None
     ):
@@ -1359,6 +1405,7 @@ class PostgresStorage:
         scheduled_at,
         status: str = "queued",
         gate_checks: dict[str, Any] | None = None,
+        kampanj_id: str | None = None,
     ) -> dict[str, Any]:
         async with self._scoped(tenant_id) as conn:
             message = await conn.fetchrow(
@@ -1374,6 +1421,14 @@ class PostgresStorage:
                 subject,
                 humanizer_variant,
             )
+            if kampanj_id:
+                # Egen sats: köningen utan kampanj rör aldrig kolumnen och tål att
+                # migration 114 saknas. En kampanj utan den fälls här, högljutt.
+                message = await conn.fetchrow(
+                    "update outreach_messages set kampanj_id = $2 where id = $1 returning *",
+                    message["id"],
+                    kampanj_id,
+                )
             queue_item = await conn.fetchrow(
                 """
                 insert into send_queue (tenant_id, thread_id, scheduled_at, status, gate_checks)
@@ -1387,6 +1442,32 @@ class PostgresStorage:
                 json.dumps(gate_checks or {}, ensure_ascii=False),
             )
         return {"message": _row(message), "queue_item": _row(queue_item)}
+
+    async def kampanjens_poster(self, tenant_id: str, kampanj_id: str) -> list[dict[str, Any]]:
+        async with self._scoped(tenant_id) as conn:
+            records = await conn.fetch(
+                """
+                select q.id as queue_item_id, q.status, t.prospect_id, p.company_name,
+                       p.contact_email as email, m.sent_at,
+                       (m.sent_at is not null and exists (
+                          select 1 from outreach_messages i
+                           where i.thread_id = m.thread_id and i.direction = 'inbound'
+                             and i.created_at > m.sent_at)) as svar
+                  from outreach_messages m
+                  join outreach_threads t on t.id = m.thread_id
+                  left join prospects p on p.id = t.prospect_id
+                  left join lateral (
+                    select sq.id, sq.status from send_queue sq
+                     where sq.thread_id = m.thread_id and sq.created_at >= m.created_at
+                     order by sq.created_at limit 1
+                  ) q on true
+                 where m.tenant_id = $1 and m.kampanj_id = $2 and m.direction = 'outbound'
+                 order by p.company_name
+                """,
+                tenant_id,
+                kampanj_id,
+            )
+        return [_row(r) for r in records]
 
     async def tilldela_erbjudande(self, tenant_id: str, thread_id: str, *, nyckel: str) -> str:
         async with self._scoped(tenant_id) as conn:
@@ -4026,7 +4107,10 @@ class PostgresStorage:
                   order by om.created_at desc, om.id desc limit 1
                 ) m on true
                 where q.tenant_id = $1 and q.status = 'awaiting_review'
-                order by q.scheduled_at
+                -- Nyaste utkastet först (Sebbe 2026-10-29). Förut kom de äldsta
+                -- först och gränsen klippte bort de nya, så att en ny körnings
+                -- utkast bara syntes under Körningar.
+                order by coalesce(m.created_at, q.created_at) desc, q.id desc
                 limit $2
                 """,
                 tenant_id,

@@ -18,7 +18,8 @@ REFERENS = (
     f"{INGANG}\n\n"
     "Vår agent Iris hittar kvalificerade kunder åt er. Ni får fem företag i er region som passar er, "
     "med kontaktperson och ett färdigt första mejl till var och en, helt utan kostnad.\n\n"
-    "Svara \"ja\" på mejlet så skickar vi de fem inom två arbetsdagar."
+    # Avslutet som inbjudan, inte "Svara 'ja' så …" (förbjudet 2026-10-25).
+    "Vill ni ha dem räcker ett svar på mejlet, så skickar vi de fem inom två arbetsdagar."
 )
 VILLKOR = (
     "Fem kvalificerade leads i er region, med kontaktperson och ett färdigt första mejl till var och en, "

@@ -141,12 +141,22 @@ async def build_context_pack(
     (renderat paket, saknade onboarding-delar) — paketet är ALLTID
     användbart, så förvillkoret context_pack kan alltid uppfyllas och
     pipelinen aldrig dödlåser sig på utebliven onboarding."""
+    from . import erbjudanden
     from .icp import render_icp
-    from .onboarding_state import get_onboarding_state, render_gap_notice
+    from .onboarding_state import OnboardingState, get_onboarding_state, render_gap_notice
     from .profil import utan_adminrader
 
     state = await get_onboarding_state(storage, tenant_id)
     settings = await storage.get_agent_settings(tenant_id, agent_type="leads")
+    luckor = state
+    if "retention_playbook" in state.missing and erbjudanden.normalisera(settings.get("erbjudanden"))["aktiva"]:
+        # Kundens aktiva erbjudanden ÄR de godkända erbjudandena (Anton
+        # 2026-10-25): luckan "Du har INGA godkända erbjudanden … Erbjud
+        # ingenting" stod ändå i varje research hos Snajp, och modellen
+        # lämnade produktvalet tomt (27 av 57 bolag fällda 2026-10-24).
+        luckor = OnboardingState(
+            present=state.present, missing=tuple(k for k in state.missing if k != "retention_playbook")
+        )
     docs = {
         kind: await storage.get_latest_context_doc(tenant_id, kind=kind)
         for kind in ("product_marketing", "customer_research", "retention_playbook")
@@ -159,7 +169,7 @@ async def build_context_pack(
         else None,
         customer_research=docs["customer_research"]["content"] if docs["customer_research"] else None,
         retention_playbook=docs["retention_playbook"]["content"] if docs["retention_playbook"] else None,
-        gap_notice=render_gap_notice(state),
+        gap_notice=render_gap_notice(luckor),
         icp=render_icp(_med_overrides(settings.get("icp"), overrides)),
     )
     return rendered, state.missing

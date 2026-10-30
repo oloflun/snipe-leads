@@ -30,6 +30,12 @@ async def _seeda(storage) -> dict[str, str]:
     utanfor = await storage.create_prospect(
         DEFAULT_TENANT_ID, company_name="Annan körning AB", contact_email="info@annan.se"
     )
+    bortvald = await storage.create_prospect(
+        DEFAULT_TENANT_ID, company_name="Bortvalda AB", contact_email="info@bortvalda.se"
+    )
+    await storage.spara_bedomning(
+        DEFAULT_TENANT_ID, bortvald["id"], bedomning={"niva": "C", "qualified": False, "disqualifiers": ["x"]}
+    )
 
     for prospekt in (med_utkast, utanfor):
         trad = await storage.ensure_outreach_thread(DEFAULT_TENANT_ID, prospect_id=prospekt["id"])
@@ -45,10 +51,12 @@ async def _seeda(storage) -> dict[str, str]:
                 {"job_id": "barn-1", "prospect_id": med_utkast["id"], "company_name": "Utkastbolaget AB"},
                 {"job_id": "barn-2", "prospect_id": utan_utkast["id"], "company_name": "Saknarbolaget AB"},
                 {"job_id": "barn-3", "prospect_id": utan_mejl["id"], "company_name": "Mejllösa AB"},
+                {"job_id": "barn-4", "prospect_id": bortvald["id"], "company_name": "Bortvalda AB"},
             ],
         },
     )
-    return {"med": med_utkast["id"], "utan": utan_utkast["id"], "mejllos": utan_mejl["id"], "utanfor": utanfor["id"]}
+    return {"med": med_utkast["id"], "utan": utan_utkast["id"], "mejllos": utan_mejl["id"], "utanfor": utanfor["id"],
+            "bortvald": bortvald["id"]}
 
 
 @pytest.mark.anyio
@@ -69,6 +77,8 @@ async def test_status_skriv_och_skicka_galler_bara_korningens_leads(monkeypatch)
             svar = (await client.get("/api/leads/korningar/korning-1/utkast", headers=DEMO)).json()
             status = {l["prospect_id"]: l for l in svar["leads"]}
             assert ids["utanfor"] not in status
+            # Bortvalt i researchen är inget lead: det står under Bortvalda.
+            assert ids["bortvald"] not in status
             assert status[ids["med"]]["status"] == "vantar" and status[ids["med"]]["queue_item_id"]
             # Utkastets text följer med, så att listan kan visa den vid klick.
             assert status[ids["med"]]["body"] and status[ids["utan"]]["body"] is None

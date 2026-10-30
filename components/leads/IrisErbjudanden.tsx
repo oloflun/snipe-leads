@@ -3,25 +3,28 @@
 /* design · Operate-yta i det låsta systemet (DESIGN.md, Tier 0): samma växel,
    fält och knappar som IrisEskalering och IrisProdukter, ingen ny riktning. */
 
+import { Plus, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { Vaxel } from "@/components/leads/IrisEskalering";
-import { btnPrimary, btnSecondary, etikett, meta, rubrikPanel } from "@/components/ui";
+import { btnPrimary, btnSecondary, btnLiten, etikett, meta, rubrikPanel } from "@/components/ui";
 import { felmeddelande } from "@/lib/http/json";
 import { useLocale, type Localized } from "@/lib/i18n";
 import { leadsAnrop } from "@/lib/leads/suite";
 import { cn } from "@/lib/utils";
 
 /**
- * Iris › Inställningar › Erbjudanden (Antons beställning 2026-10-10).
+ * Leads › Erbjudanden (Antons beställning 2026-10-10, flyttad hit ur
+ * Inställningar och utökad 2026-10-25).
  *
- * Kunden väljer vilka erbjudanden ur katalogen (agent-core/prompts/
- * leads-erbjudanden.md) Iris ska A/B-testa i de kalla mejlen, med vikt och
- * med sina egna villkor. Villkoren är det enda mejlet får lova, och ett
+ * Kunden slår på de erbjudanden Iris ska A/B-testa i de kalla mejlen, med
+ * vikt och egna villkor: katalogens tre, och egna erbjudanden med namn och
+ * mejlform (A rakt på, B med en fråga). Två erbjudanden med samma villkor och
+ * olika form A/B-testar formen. Villkoren är det enda mejlet får lova, och ett
  * erbjudande kan bara slås på när de är ifyllda. Har kunden produkter skrivs
  * villkoren per produkt: ett mejl om en produkt får bara den produktens
  * villkor (ett tomt fält betyder att erbjudandet inte används för produkten).
- * Resultatet per erbjudande räknas ur trådarna (GET /leads/erbjudanden) och en
- * arm kallas ledande först när den håller statistiskt
+ * Resultatet per erbjudande räknas ur trådarna (GET /leads/erbjudanden) och ett
+ * erbjudande kallas ledande först när det håller statistiskt
  * (app/leads/erbjudanden.py:sammanstall).
  */
 
@@ -37,20 +40,31 @@ type Arm = {
   positiv_andel: number | null;
   lage: "leder" | "for_tidigt";
 };
+type Form = "rak" | "fraga";
 type Svar = {
-  katalog: { nyckel: string; namn: string }[];
+  katalog: { nyckel: string; namn: string; form: Form; egen: boolean }[];
   produkter: string[];
   aktiva: { nyckel: string; vikt: number }[];
   villkor: Record<string, string | Record<string, string>>;
+  egna: Record<string, { namn: string; form: Form }>;
   resultat: { armar: Arm[]; ledare: string | null; min_skickade: number };
 };
 /** Villkoren per produktnamn; nyckeln "" när kunden saknar produkter (en text för alla). */
-type Rad = { pa: boolean; vikt: string; villkor: Record<string, string> };
+type Rad = {
+  nyckel: string;
+  namn: string;
+  form: Form;
+  egen: boolean;
+  pa: boolean;
+  vikt: string;
+  villkor: Record<string, string>;
+};
 
 const VILLKOR_MAX = 600;
+const NAMN_MAX = 60;
 const ALLA = "";
 
-/** Namn och förklaring per nyckel. Okända nycklar visas med katalogens namn. */
+/** Namn och förklaring per katalognyckel. Egna erbjudanden bär kundens namn. */
 const ERBJUDANDEN: Record<string, { namn: Localized; om: Localized; exempel: Localized }> = {
   gratis_prov: {
     namn: { sv: "Testa gratis", en: "Try it free" },
@@ -59,8 +73,8 @@ const ERBJUDANDEN: Record<string, { namn: Localized; om: Localized; exempel: Loc
       en: "The recipient gets a finished result before anything is decided."
     },
     exempel: {
-      sv: "Till exempel: Fem kvalificerade leads med färdiga första mejl, utan kostnad. Svara ja så skickar vi dem inom två dagar.",
-      en: "For example: Five qualified leads with ready first emails, free of charge. Reply yes and we send them within two days."
+      sv: "Till exempel: Fem kvalificerade leads med färdiga första mejl, utan kostnad. Handling: vill de ha dem räcker ett svar på mejlet.",
+      en: "For example: Five qualified leads with ready first emails, free of charge. Action: if they want them, a reply to the email is enough."
     }
   },
   garanti: {
@@ -81,8 +95,25 @@ const ERBJUDANDEN: Record<string, { namn: Localized; om: Localized; exempel: Loc
       en: "A few places and a price that will not be offered again, with an honest reason."
     },
     exempel: {
-      sv: "Till exempel: 20 pilotplatser, 50 % rabatt första året och 25 % så länge de stannar.",
-      en: "For example: 20 pilot places, 50% off the first year and 25% for as long as they stay."
+      sv: "Till exempel: 20 företag i en pilot, tre månader utan kostnad, sedan 50 % rabatt för den som stannar.",
+      en: "For example: 20 companies in a pilot, three months free of charge, then 50% off for those who stay."
+    }
+  }
+};
+
+const FORMER: Record<Form, { namn: Localized; om: Localized }> = {
+  rak: {
+    namn: { sv: "Form A, rakt på", en: "Form A, straight to the point" },
+    om: {
+      sv: "Utmaningen i deras arbete, vad agenten gör, erbjudandet och en inbjudan.",
+      en: "The challenge in their work, what the agent does, the offer and an invitation."
+    }
+  },
+  fraga: {
+    namn: { sv: "Form B, med en fråga", en: "Form B, with a question" },
+    om: {
+      sv: "Som A, men efter ingången en fråga om vilket av två moment som tar mest tid för dem.",
+      en: "Like A, but after the opening a question about which of two tasks takes them the most time."
     }
   }
 };
@@ -90,20 +121,32 @@ const ERBJUDANDEN: Record<string, { namn: Localized; om: Localized; exempel: Loc
 const T = {
   rubrik: { sv: "Erbjudanden i mejlen", en: "Offers in the emails" },
   om: {
-    sv: "Iris fördelar de påslagna erbjudandena mellan bolagen efter vikten och mäter vad som ger svar. Mejlet lovar bara det som står i villkoren. Ändringar gäller nya utkast.",
-    en: "Iris spreads the offers that are switched on across companies by weight and measures what gets replies. The email only promises what the terms say. Changes apply to new drafts."
+    sv: "Iris fördelar de påslagna erbjudandena mellan bolagen efter vikten och mäter vad som ger svar. Erbjudandet styr hela mejlet, och agenten anpassar det till varje bolags verksamhet. Mejlet lovar bara det som står i villkoren. Ändringar gäller nya utkast.",
+    en: "Iris spreads the offers that are switched on across companies by weight and measures what gets replies. The offer shapes the whole email, and the agent adapts it to each company's business. The email only promises what the terms say. Changes apply to new drafts."
   },
   villkor: { sv: "Villkor, som mejlet får lova dem", en: "Terms, as the email may promise them" },
   villkorFor: { sv: "Villkor för", en: "Terms for" },
   tomtFalt: { sv: "Tomt = används inte för den produkten.", en: "Empty = not used for that product." },
   vikt: { sv: "Vikt (0–10)", en: "Weight (0–10)" },
+  namn: { sv: "Erbjudandets namn", en: "Name of the offer" },
+  form: { sv: "Mejlets form", en: "Email form" },
+  egetExempel: {
+    sv: "Beskriv erbjudandet med era ord: vad de får, vad det kostar och vad de gör för att få det. Till exempel: Tre månader utan kostnad, sedan 50 % rabatt. Handling: demo på er sajt, eller ett svar så bokar vi en genomgång.",
+    en: "Describe the offer in your own words: what they get, what it costs and what they do to get it. For example: Three months free of charge, then 50% off. Action: a demo on your site, or a reply and we book a walkthrough."
+  },
+  laggTill: { sv: "Lägg till erbjudande", en: "Add offer" },
+  taBort: { sv: "Ta bort", en: "Remove" },
+  nyttNamn: { sv: "Nytt erbjudande", en: "New offer" },
   kravVillkor: { sv: "Fyll i villkoren för minst en produkt först.", en: "Fill in the terms for at least one product first." },
+  kravNamn: { sv: "Ge erbjudandet ett namn.", en: "Give the offer a name." },
+  utkast: { sv: "Utkast", en: "Drafts" },
   skickade: { sv: "Skickade", en: "Sent" },
   svar: { sv: "Svar", en: "Replies" },
   positiva: { sv: "Positiva", en: "Positive" },
   moten: { sv: "Möten", en: "Meetings" },
   leder: { sv: "Leder", en: "Leading" },
   tidigt: { sv: "För tidigt att säga", en: "Too early to tell" },
+  inget: { sv: "Inga utkast med erbjudandet än.", en: "No drafts with this offer yet." },
   spara: { sv: "Spara erbjudanden", en: "Save offers" },
   sparar: { sv: "Sparar…", en: "Saving…" },
   sparat: { sv: "Sparat. Gäller nya utkast.", en: "Saved. Applies to new drafts." },
@@ -125,29 +168,27 @@ function faltnycklar(svar: Svar): string[] {
   return svar.produkter.length ? svar.produkter : [ALLA];
 }
 
-function radenAv(svar: Svar): Record<string, Rad> {
+function radernaAv(svar: Svar): Rad[] {
   const vikter = new Map(svar.aktiva.map((a) => [a.nyckel, a.vikt]));
-  return Object.fromEntries(
-    svar.katalog.map(({ nyckel }) => {
-      const sparat = svar.villkor[nyckel];
-      // En sparad text för alla produkter fyller varje produktfält; nästa
-      // sparning gör den till villkor per produkt.
-      const villkor = Object.fromEntries(
-        faltnycklar(svar).map((p) => {
-          if (typeof sparat === "string") return [p, sparat];
-          const traff = Object.entries(sparat ?? {}).find(([namn]) => namn.toLowerCase() === p.toLowerCase());
-          return [p, traff?.[1] ?? ""];
-        })
-      );
-      return [nyckel, { pa: (vikter.get(nyckel) ?? 0) > 0, vikt: String(vikter.get(nyckel) ?? 1), villkor }];
-    })
-  );
+  return svar.katalog.map(({ nyckel, namn, form, egen }) => {
+    const sparat = svar.villkor[nyckel];
+    // En sparad text för alla produkter fyller varje produktfält; nästa
+    // sparning gör den till villkor per produkt.
+    const villkor = Object.fromEntries(
+      faltnycklar(svar).map((p) => {
+        if (typeof sparat === "string") return [p, sparat];
+        const traff = Object.entries(sparat ?? {}).find(([n]) => n.toLowerCase() === p.toLowerCase());
+        return [p, traff?.[1] ?? ""];
+      })
+    );
+    return { nyckel, namn, form, egen, pa: (vikter.get(nyckel) ?? 0) > 0, vikt: String(vikter.get(nyckel) ?? 1), villkor };
+  });
 }
 
 export function IrisErbjudanden() {
   const { text } = useLocale();
   const [data, setData] = useState<Svar | null>(null);
-  const [rader, setRader] = useState<Record<string, Rad>>({});
+  const [rader, setRader] = useState<Rad[]>([]);
   const [laddfel, setLaddfel] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [fel, setFel] = useState<string | null>(null);
@@ -159,7 +200,7 @@ export function IrisErbjudanden() {
     leadsAnrop<Svar>("/leads/erbjudanden")
       .then((svar) => {
         setData(svar);
-        setRader(radenAv(svar));
+        setRader(radernaAv(svar));
       })
       .catch((orsak) => setLaddfel(felmeddelande(orsak)));
   }, []);
@@ -169,28 +210,57 @@ export function IrisErbjudanden() {
   }, [hamta]);
 
   function andra(nyckel: string, andring: Partial<Rad>) {
-    setRader((forra) => ({ ...forra, [nyckel]: { ...forra[nyckel], ...andring } }));
+    setRader((forra) => forra.map((r) => (r.nyckel === nyckel ? { ...r, ...andring } : r)));
     setStatus("");
   }
 
   function andraVillkor(nyckel: string, produkt: string, varde: string) {
-    setRader((forra) => ({
+    setRader((forra) => forra.map((r) => (r.nyckel === nyckel ? { ...r, villkor: { ...r.villkor, [produkt]: varde } } : r)));
+    setStatus("");
+  }
+
+  function laggTill() {
+    if (!data) return;
+    // Nyckeln är bara ett id (a-z, 0-9, _ och -); kunden ser namnet.
+    const nyckel = `eget-${Date.now().toString(36)}`;
+    setRader((forra) => [
       ...forra,
-      [nyckel]: { ...forra[nyckel], villkor: { ...forra[nyckel].villkor, [produkt]: varde } }
-    }));
+      {
+        nyckel,
+        namn: "",
+        form: "rak",
+        egen: true,
+        pa: false,
+        vikt: "1",
+        villkor: Object.fromEntries(faltnycklar(data).map((p) => [p, ""]))
+      }
+    ]);
+    setStatus("");
+    window.setTimeout(() => document.getElementById(`erbjudande-namn-${nyckel}`)?.focus(), 0);
+  }
+
+  function taBort(nyckel: string) {
+    setRader((forra) => forra.filter((r) => r.nyckel !== nyckel));
     setStatus("");
   }
 
   const faltId = (nyckel: string, produkt: string) =>
     `erbjudande-villkor-${nyckel}-${produkt.replace(/[^A-Za-z0-9]+/g, "-") || "alla"}`;
 
+  const visatNamn = (r: Rad) =>
+    r.egen ? r.namn || text(T.nyttNamn) : ERBJUDANDEN[r.nyckel] ? text(ERBJUDANDEN[r.nyckel].namn) : r.namn;
+
   async function spara() {
     if (busy || !data) return;
-    const utanVillkor = data.katalog.find(
-      ({ nyckel }) => rader[nyckel]?.pa && !Object.values(rader[nyckel].villkor).some((v) => v.trim())
-    );
+    const utanNamn = rader.find((r) => r.egen && !r.namn.trim());
+    if (utanNamn) {
+      setFel(text(T.kravNamn));
+      document.getElementById(`erbjudande-namn-${utanNamn.nyckel}`)?.focus();
+      return;
+    }
+    const utanVillkor = rader.find((r) => r.pa && !Object.values(r.villkor).some((v) => v.trim()));
     if (utanVillkor) {
-      setFel(`${text(ERBJUDANDEN[utanVillkor.nyckel]?.namn ?? { sv: utanVillkor.namn, en: utanVillkor.namn })}: ${text(T.kravVillkor)}`);
+      setFel(`${visatNamn(utanVillkor)}: ${text(T.kravVillkor)}`);
       document.getElementById(faltId(utanVillkor.nyckel, faltnycklar(data)[0]))?.focus();
       return;
     }
@@ -201,19 +271,19 @@ export function IrisErbjudanden() {
       const svar = await leadsAnrop<Svar>("/leads/erbjudanden", {
         method: "PUT",
         body: JSON.stringify({
-          aktiva: data.katalog
-            .filter(({ nyckel }) => rader[nyckel]?.pa)
-            .map(({ nyckel }) => ({ nyckel, vikt: Math.min(10, Math.max(0, Math.round(Number(rader[nyckel].vikt) || 0))) })),
+          aktiva: rader
+            .filter((r) => r.pa)
+            .map((r) => ({ nyckel: r.nyckel, vikt: Math.min(10, Math.max(0, Math.round(Number(r.vikt) || 0))) })),
           villkor: Object.fromEntries(
-            data.katalog.map(({ nyckel }) => {
-              const villkor = rader[nyckel]?.villkor ?? {};
-              return [nyckel, data.produkter.length ? villkor : (villkor[ALLA] ?? "")];
-            })
+            rader.map((r) => [r.nyckel, data.produkter.length ? r.villkor : (r.villkor[ALLA] ?? "")])
+          ),
+          egna: Object.fromEntries(
+            rader.filter((r) => r.egen).map((r) => [r.nyckel, { namn: r.namn.trim(), form: r.form }])
           )
         })
       });
       setData(svar);
-      setRader(radenAv(svar));
+      setRader(radernaAv(svar));
       setStatus(text(T.sparat));
     } catch (orsak) {
       setFel(felmeddelande(orsak));
@@ -251,20 +321,47 @@ export function IrisErbjudanden() {
       </div>
 
       <ol className="divide-y divide-ink/12 border-y border-ink/15">
-        {data.katalog.map(({ nyckel, namn }) => {
-          const rad = rader[nyckel];
-          const info = ERBJUDANDEN[nyckel];
-          const arm = armar.get(nyckel);
-          const visatNamn = info ? text(info.namn) : namn;
+        {rader.map((rad) => {
+          const info = ERBJUDANDEN[rad.nyckel];
+          const arm = armar.get(rad.nyckel);
           return (
-            <li key={nyckel} className="grid gap-3 pb-5">
+            <li key={rad.nyckel} className="grid gap-3 py-5">
               <Vaxel
                 paslagen={rad.pa}
-                etikett={visatNamn}
-                beskrivning={info ? text(info.om) : ""}
+                etikett={visatNamn(rad)}
+                beskrivning={info ? text(info.om) : text(FORMER[rad.form].namn)}
                 upptagen={busy}
-                onByt={(pa) => andra(nyckel, { pa })}
+                onByt={(pa) => andra(rad.nyckel, { pa })}
               />
+              {rad.egen ? (
+                <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,16rem)]">
+                  <label className="grid gap-1">
+                    <span className={etikett}>{text(T.namn)}</span>
+                    <input
+                      id={`erbjudande-namn-${rad.nyckel}`}
+                      value={rad.namn}
+                      maxLength={NAMN_MAX}
+                      onChange={(e) => andra(rad.nyckel, { namn: e.target.value })}
+                      className={falt}
+                    />
+                  </label>
+                  <label className="grid gap-1">
+                    <span className={etikett}>{text(T.form)}</span>
+                    <select
+                      value={rad.form}
+                      onChange={(e) => andra(rad.nyckel, { form: e.target.value as Form })}
+                      className={falt}
+                    >
+                      {(Object.keys(FORMER) as Form[]).map((f) => (
+                        <option key={f} value={f}>
+                          {text(FORMER[f].namn)}
+                        </option>
+                      ))}
+                    </select>
+                    <span className={meta}>{text(FORMER[rad.form].om)}</span>
+                  </label>
+                </div>
+              ) : null}
               <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_8rem]">
                 <div className="grid gap-3">
                   {perProdukt ? <p className={meta}>{text(T.tomtFalt)}</p> : null}
@@ -274,12 +371,12 @@ export function IrisErbjudanden() {
                         {produkt ? `${text(T.villkorFor)} ${produkt}` : text(T.villkor)}
                       </span>
                       <textarea
-                        id={faltId(nyckel, produkt)}
+                        id={faltId(rad.nyckel, produkt)}
                         value={rad.villkor[produkt] ?? ""}
                         maxLength={VILLKOR_MAX}
-                        rows={2}
-                        placeholder={info ? text(info.exempel) : undefined}
-                        onChange={(e) => andraVillkor(nyckel, produkt, e.target.value)}
+                        rows={rad.egen ? 3 : 2}
+                        placeholder={info ? text(info.exempel) : text(T.egetExempel)}
+                        onChange={(e) => andraVillkor(rad.nyckel, produkt, e.target.value)}
                         className={cn(falt, "resize-y")}
                       />
                       <span className={meta}>
@@ -297,7 +394,7 @@ export function IrisErbjudanden() {
                       min={0}
                       max={10}
                       value={rad.vikt}
-                      onChange={(e) => andra(nyckel, { vikt: e.target.value })}
+                      onChange={(e) => andra(rad.nyckel, { vikt: e.target.value })}
                       className={falt}
                     />
                   </label>
@@ -305,6 +402,9 @@ export function IrisErbjudanden() {
               </div>
               {arm && arm.utkast > 0 ? (
                 <p className={cn(meta, "flex flex-wrap gap-x-4 gap-y-1")}>
+                  <span>
+                    {text(T.utkast)} {arm.utkast}
+                  </span>
                   <span>
                     {text(T.skickade)} {arm.skickade}
                   </span>
@@ -321,6 +421,22 @@ export function IrisErbjudanden() {
                     {arm.lage === "leder" ? text(T.leder) : text(T.tidigt)}
                   </span>
                 </p>
+              ) : rad.pa ? (
+                <p className={meta}>{text(T.inget)}</p>
+              ) : null}
+              {/* Sist i raden, inte bredvid växeln: där trängde knappen ned
+                  reglaget under namnet (development 2026-10-25). */}
+              {rad.egen ? (
+                <button
+                  type="button"
+                  onClick={() => taBort(rad.nyckel)}
+                  disabled={busy}
+                  aria-label={`${text(T.taBort)}: ${visatNamn(rad)}`}
+                  className={cn(btnSecondary, btnLiten, "justify-self-start")}
+                >
+                  <Trash2 className="h-4 w-4" aria-hidden />
+                  {text(T.taBort)}
+                </button>
               ) : null}
             </li>
           );
@@ -335,6 +451,10 @@ export function IrisErbjudanden() {
           className={cn(btnPrimary, "aria-disabled:opacity-60")}
         >
           {busy ? text(T.sparar) : text(T.spara)}
+        </button>
+        <button type="button" onClick={laggTill} disabled={busy} className={btnSecondary}>
+          <Plus className="h-4 w-4" aria-hidden />
+          {text(T.laggTill)}
         </button>
         <span aria-live="polite" className="text-[0.9375rem] text-ink-muted">
           {status}

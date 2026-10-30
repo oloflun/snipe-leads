@@ -13,6 +13,8 @@ import { halsning } from "../agent/halsning.ts";
 import {
   EXEMPELBOLAG,
   EXEMPEL_ACTIONS,
+  exempelOmgang,
+  exempelVariant,
   finnExempelbolag,
   forvantadHalsning,
   kontaktnamn
@@ -115,4 +117,36 @@ test("finnExempelbolag returnerar undefined för ett okänt bolag (t.ex. marknad
   assert.equal(finnExempelbolag({ companyName: "E-Tech" }), undefined);
   assert.equal(finnExempelbolag({}), undefined);
   assert.equal(finnExempelbolag(null), undefined);
+});
+
+
+// -- Fler körningar i demon (Sebbe 2026-10-29) --------------------------------
+
+test("demons körning tar aldrig slut: varje omgång ger tre nya bolag", () => {
+  const ids = new Set<string>();
+  for (let omgang = 0; omgang < 12; omgang++) {
+    const bolag = exempelOmgang(omgang);
+    assert.equal(bolag.length, 3);
+    for (const b of bolag) {
+      assert.ok(!ids.has(b.id), `samma bolag två gånger: ${b.id}`);
+      ids.add(b.id);
+    }
+  }
+  assert.deepEqual(exempelOmgang(0), EXEMPELBOLAG.slice(0, 3));
+});
+
+test("en variant byter namn, ort och kontakt överallt, också i utkasten och svaren", () => {
+  for (let n = 6; n < 30; n++) {
+    const bas = EXEMPELBOLAG[n % EXEMPELBOLAG.length];
+    const v = exempelVariant(bas, n);
+    const allt = JSON.stringify(v);
+    const stam = bas.companyName.split(" ")[0];
+    assert.ok(!allt.includes(stam), `${v.id} bär kvar ${stam}`);
+    assert.ok(!allt.includes(bas.contactLastName), `${v.id} bär kvar ${bas.contactLastName}`);
+    assert.ok(v.draft.body.startsWith(`Hej ${v.contactFirstName},`), `${v.id}: ${v.draft.body.slice(0, 20)}`);
+    assert.ok(!v.website.includes(stam.toLowerCase()));
+    assert.equal(v.status, "new");
+    // Email Studio-routen hittar samma variant ur id:t.
+    assert.deepEqual(finnExempelbolag({ companyId: v.id }), v);
+  }
 });

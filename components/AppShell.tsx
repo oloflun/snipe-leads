@@ -397,7 +397,7 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
                     gav bara 2.51:1 här. text-ochre ger 6.54:1 mot den
                     ochre-tonade railbakgrunden. */}
                 <span className="inline-flex items-center rounded-input border border-ochre/40 bg-ochre/10 px-2 py-0.5 text-[0.75rem] font-medium text-ochre">
-                  {text({ sv: "Demo · exempeldata", en: "Demo · sample data" })}
+                  {text({ sv: "Demokonto · inloggad", en: "Demo account · signed in" })}
                 </span>
               </p>
             ) : (
@@ -451,12 +451,16 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
                   </form>
                 ) : demolage ? (
                   <div className="flex w-full flex-col lg:w-auto lg:flex-1">
-                    <Link
-                      href="/login"
-                      className="focus-ring flex min-h-11 items-center rounded-input px-3 text-sm font-medium text-paper-muted transition-colors hover:bg-paper/5 hover:text-paper"
-                    >
-                      {text({ sv: "Logga in", en: "Sign in" })}
-                    </Link>
+                    {/* Demon är ett inloggat demokonto (Sebbe 2026-10-29):
+                        mottagaren av ett utskick ska kunna testa Iris direkt,
+                        utan att logga in eller skapa något. Kontot står här
+                        där en inloggad kund ser "Logga ut". */}
+                    <p className="flex min-h-11 flex-col justify-center px-3 text-sm">
+                      <span className="font-medium text-paper">{workspaceName}</span>
+                      <span className="text-[0.75rem] text-paper-muted">
+                        {text({ sv: "Demokonto", en: "Demo account" })}
+                      </span>
+                    </p>
                     <Link
                       href="/"
                       className="focus-ring flex min-h-11 items-center rounded-input px-3 text-sm font-medium text-paper-muted transition-colors hover:bg-paper/5 hover:text-paper"
@@ -491,7 +495,7 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
                   plats — utan den vet en mobil besökare inte vad ytan är. */}
               {demolage ? (
                 <span className="mr-auto inline-flex items-center rounded-input border border-ochre/40 bg-ochre/10 px-2.5 py-1 text-[13px] font-medium text-warning">
-                  {text({ sv: "Demo · exempeldata", en: "Demo · sample data" })}
+                  {text({ sv: "Demokonto · inloggad", en: "Demo account · signed in" })}
                 </span>
               ) : (
                 <span className="mr-auto truncate text-[13px] font-medium text-ink-subtle">
@@ -524,14 +528,6 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
                 </form>
               ) : null}
 
-              {demolage ? (
-                <Link
-                  href="/login"
-                  className="focus-ring inline-flex min-h-11 items-center rounded-input px-3 text-sm font-medium text-ink-subtle transition-colors hover:text-ink"
-                >
-                  {text({ sv: "Logga in", en: "Sign in" })}
-                </Link>
-              ) : null}
             </div>
           </header>
 
@@ -546,8 +542,8 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
                 <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-2 md:px-6">
                   <span className="text-[13px] text-ink-muted">
                     {text({
-                      sv: "Allt här är exempeldata. Klicka fritt, inget skickas.",
-                      en: "Everything here is sample data. Click freely, nothing is sent."
+                      sv: "Du är inloggad på ett demokonto. Kör Iris så många gånger du vill: körningarna går på exempelföretag, tar några sekunder och inget skickas.",
+                      en: "You are signed in to a demo account. Run Iris as often as you like: runs use sample companies, take a few seconds and nothing is sent."
                     })}
                   </span>
                   {/* Ink-knapp, inte ochre-text: --ochre (L 0.74) ger 2.17:1

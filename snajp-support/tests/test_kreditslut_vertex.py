@@ -26,6 +26,7 @@ import httpx
 import pytest
 
 from app.kvotfel import (
+    feltext,
     KUNDTEXT_KREDITSLUT,
     KUNDTEXT_KVOT,
     ar_kreditslut,
@@ -134,7 +135,7 @@ def test_vertex_betalningsfel_ar_kreditslut(body):
     assert ar_kreditslut(fel)
     assert kundtext_for(fel) == KUNDTEXT_KREDITSLUT
     # Den lagrade feltexten (jobbläsvägen) klassas likadant.
-    assert oversatt_felstext(str(fel)) == KUNDTEXT_KREDITSLUT
+    assert oversatt_felstext(feltext(fel)) == KUNDTEXT_KREDITSLUT
 
 
 def test_vertex_minutkvot_ar_overgaende_inte_kreditslut():
@@ -145,8 +146,8 @@ def test_vertex_minutkvot_ar_overgaende_inte_kreditslut():
     assert not ar_kreditslut(fel)
     assert kundtext_for(fel) == KUNDTEXT_KVOT
     # Även utan statuskod-attributet (lagrad text, omslaget fel).
-    assert ar_kvotfel(Exception(str(fel)))
-    assert oversatt_felstext(str(fel)) == KUNDTEXT_KVOT
+    assert ar_kvotfel(Exception(feltext(fel)))
+    assert oversatt_felstext(feltext(fel)) == KUNDTEXT_KVOT
 
 
 @pytest.mark.anyio

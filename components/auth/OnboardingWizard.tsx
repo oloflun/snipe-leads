@@ -86,6 +86,10 @@ const PLACEHOLDER = {
   fokus: {
     sv: "Vi vill helst nå bolag som redan köpt hjärtstartare men saknar utbildning",
     en: "We would rather reach companies that already bought a defibrillator but lack training"
+  },
+  erbjudanden: {
+    sv: "Första utbildningstillfället utan kostnad för arbetsplatser med upp till 20 anställda. Vill de veta mer bokar vi ett kort samtal.",
+    en: "The first training session free of charge for workplaces with up to 20 employees. If they want to know more, we book a short call."
   }
 } as const;
 
@@ -226,6 +230,11 @@ const T = {
     sv: "En nisch, ett segment ni vill åt, eller något Iris ska veta om vilka som brukar köpa.",
     en: "A niche, a segment you want to reach, or something Iris should know about who tends to buy."
   },
+  erbjudanden: { sv: "Erbjudandet i utskicken (valfritt)", en: "The offer in the emails (optional)" },
+  erbjudandenHint: {
+    sv: "Det Iris ska erbjuda bolagen: vad de får, vad det kostar och hur de går vidare. Har ni flera, skriv ett per stycke med en tom rad emellan, så testar Iris dem mot varandra. Iris anpassar erbjudandet till varje bolags verksamhet, och ni ändrar det under Leads › Erbjudanden.",
+    en: "What Iris should offer the companies: what they get, what it costs and how they take the next step. If you have several, write one per paragraph with a blank line in between, and Iris tests them against each other. Iris adapts the offer to each company's business, and you change it under Leads › Offers."
+  },
   intro4: {
     sv: "Alla paket börjar med två månader gratis — inga betalningsuppgifter nu. Byta paket går när som helst under Inställningar → Plan.",
     en: "Every plan starts with two months free, and no payment details now. You can change plan at any time under Settings → Plan."
@@ -329,6 +338,8 @@ export function OnboardingWizard({
   const [roller, setRoller] = useState(standardMalgrupp.roller.join(", "));
   const [undvik, setUndvik] = useState("");
   const [fokus, setFokus] = useState("");
+  // Erbjudandena utskicken bygger på (Anton 2026-10-25). Ett per stycke.
+  const [erbjudanden, setErbjudanden] = useState("");
 
   // Steg 5 — paketet. Duo förvalt: det är paketet vi vill sälja (pricing.ts).
   const [paket, setPaket] = useState<Paket["id"]>("duo");
@@ -421,6 +432,7 @@ export function OnboardingWizard({
         webbplats,
         produkt,
         fokus,
+        erbjudanden,
         malgrupp: {
           branscher,
           orter,
@@ -789,6 +801,20 @@ export function OnboardingWizard({
                     placeholder={text(PLACEHOLDER.fokus)}
                   />
                   <span className="text-[13px] leading-[1.5] text-mineral">{text(T.fokusHint)}</span>
+                </label>
+                {/* Erbjudandet styr utskicken (Anton 2026-10-25): varje stycke
+                    blir ett eget erbjudande i Leads › Erbjudanden, och Iris
+                    anpassar det till varje bolags verksamhet. */}
+                <label className="col-span-12 grid gap-2 border-t border-ink/15 pt-4">
+                  <span className="kicker text-mineral">{text(T.erbjudanden)}</span>
+                  <textarea
+                    rows={4}
+                    className="rounded-input border border-ink/15 bg-paper2/70 px-4 py-3 text-[15px] leading-[1.6] focus:border-ochre"
+                    value={erbjudanden}
+                    onChange={(e) => setErbjudanden(e.target.value)}
+                    placeholder={text(PLACEHOLDER.erbjudanden)}
+                  />
+                  <span className="text-[13px] leading-[1.5] text-mineral">{text(T.erbjudandenHint)}</span>
                 </label>
               </div>
               <Stegfot error={felText} onTillbaka={tillbaka} />

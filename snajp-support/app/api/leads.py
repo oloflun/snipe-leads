@@ -1687,11 +1687,15 @@ async def _erbjudandelage(storage, tenant_id: str, settings: dict) -> dict:
     trådar och statusar räknas; inget härlett ur webbedömningen ingår."""
     val = erbjudanden.normalisera(settings.get("erbjudanden"))
     return {
-        "katalog": [{"nyckel": e.nyckel, "namn": e.namn} for e in erbjudanden.katalog().values()],
+        "katalog": [
+            {"nyckel": e.nyckel, "namn": e.namn, "form": e.form, "egen": e.nyckel in val["egna"]}
+            for e in erbjudanden.armar(val).values()
+        ],
+        "former": [{"nyckel": k, "namn": namn} for k, (namn, _) in erbjudanden.FORMER.items()],
         # Kundens produkter: villkoren kan skrivas per produkt.
         "produkter": [p["namn"] for p in las_produkter(settings)],
         **val,
-        "resultat": erbjudanden.sammanstall(await storage.erbjudande_utfall(tenant_id)),
+        "resultat": erbjudanden.sammanstall(await storage.erbjudande_utfall(tenant_id), val),
     }
 
 
@@ -1714,8 +1718,12 @@ async def put_leads_erbjudanden(
     sparat = erbjudanden.normalisera(current.get("erbjudanden"))
     aktiva = [a.model_dump() for a in payload.aktiva] if payload.aktiva is not None else sparat["aktiva"]
     villkor = payload.villkor if payload.villkor is not None else sparat["villkor"]
+    egna = (
+        {k: e.model_dump() for k, e in payload.egna.items()} if payload.egna is not None else sparat["egna"]
+    )
+    amnen = payload.amnen if payload.amnen is not None else sparat.get("amnen")
     try:
-        nytt = erbjudanden.validera(aktiva, villkor, [p["namn"] for p in las_produkter(current)])
+        nytt = erbjudanden.validera(aktiva, villkor, [p["namn"] for p in las_produkter(current)], egna, amnen)
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from None
     saved = await storage.set_agent_settings(
@@ -1843,6 +1851,12 @@ async def _korningens_leads(request: Request, tenant: dict, job_id: str) -> tupl
         if not prospect:
             continue
         lage = lagen.get(str(pid)) or {}
+        if prospect.get("niva") == "C" and not lage:
+            # Bortvalt i researchen (Anton 2026-10-25): det står under
+            # Bortvalda med skälet och är inget lead. I listan såg det ut som
+            # ett klart lead vars utkast aldrig skrevs, och "Skriv utkast"
+            # researchade om det bara för att fälla det igen.
+            continue
         harlett = utkaststatus.harled(lage)
         post = {
             "prospect_id": pid,

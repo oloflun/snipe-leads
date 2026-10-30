@@ -484,13 +484,9 @@ export function IrisGranskning({
     }
   }
 
-  // Kön kommer äldst först (scheduled_at); den kompakta rutan visar de senaste.
-  const ordnade =
-    kompakt && poster
-      ? [...poster].sort((a, b) =>
-          (b.created_at ?? b.scheduled_at ?? "").localeCompare(a.created_at ?? a.scheduled_at ?? "")
-        )
-      : poster;
+  // Kön kommer nyaste utkastet först (Sebbe 2026-10-29, list_review_queue),
+  // i båda lägena; den kompakta rutan visar de första.
+  const ordnade = poster;
   const begransad = kompakt && !allaVisas;
   const visade = ordnade && begransad ? ordnade.slice(0, max) : ordnade;
 

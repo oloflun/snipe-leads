@@ -121,6 +121,13 @@ class ErbjudandeArmRequest(BaseModel):
     vikt: int = Field(default=1, ge=0, le=10)
 
 
+class EgetErbjudandeRequest(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    namn: str = Field(min_length=1, max_length=60)
+    form: Literal["rak", "fraga"] = "rak"
+
+
 class ErbjudandenRequest(BaseModel):
     """PUT /api/leads/erbjudanden (app/leads/erbjudanden.py). Båda fälten
     valfria: ett utelämnat fält behåller det sparade. Nycklarna och kravet på
@@ -128,9 +135,14 @@ class ErbjudandenRequest(BaseModel):
 
     model_config = {"extra": "forbid"}
 
-    aktiva: list[ErbjudandeArmRequest] | None = Field(default=None, max_length=6)
+    aktiva: list[ErbjudandeArmRequest] | None = Field(default=None, max_length=10)
     #: Per erbjudande: en text för alla produkter, eller {produktnamn: text}.
     villkor: dict[str, str | dict[str, str]] | None = None
+    #: Kundens egna erbjudanden (2026-10-25): {nyckel: {namn, form}}.
+    egna: dict[str, EgetErbjudandeRequest] | None = Field(default=None, max_length=10)
+    #: Ämnesrader per produkt (2026-10-29): {produktnamn: [rad, …]}. Koden
+    #: väljer en per mejl; utan lista skriver modellen ämnesraden.
+    amnen: dict[str, list[str]] | None = Field(default=None, max_length=8)
 
     @model_validator(mode="after")
     def _villkorslangd(self) -> "ErbjudandenRequest":
@@ -140,6 +152,11 @@ class ErbjudandenRequest(BaseModel):
             texter = varde.values() if isinstance(varde, dict) else [varde]
             if any(len(text) > VILLKOR_MAX for text in texter):
                 raise ValueError(f"Villkoren för {nyckel} är längre än {VILLKOR_MAX} tecken.")
+        from ..leads.erbjudanden import AMNE_MAX, AMNEN_MAX
+
+        for produkt, rader in (self.amnen or {}).items():
+            if len(rader) > AMNEN_MAX or any(len(r) > AMNE_MAX for r in rader):
+                raise ValueError(f"Högst {AMNEN_MAX} ämnesrader om högst {AMNE_MAX} tecken för {produkt}.")
         return self
 
 

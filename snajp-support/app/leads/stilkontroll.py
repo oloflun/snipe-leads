@@ -32,8 +32,9 @@ from .grounding_gate import _maska_idiom
 from .text_delta import split_sentences
 
 MAX_ORD = 25
-#: Skrivstilen: tre stycken och 50–90 ord i brödtexten.
-MAX_ORD_MEJL = 90
+#: Skrivstilen: 60–100 ord i brödtexten. Piloten och avslutet står i varje
+#: mejl, men provkörningen 2026-10-25 gav 105–150 ord: för långt (Anton).
+MAX_ORD_MEJL = 100
 
 _HALSNING = re.compile(
     r"^\s*(?:med\s+vänlig(?:a)?\s+hälsning(?:ar)?|vänliga\s+hälsningar|bästa\s+hälsningar|"
@@ -55,10 +56,24 @@ _MARKORER: tuple[tuple[str, re.Pattern[str], str], ...] = (
      "\"vi har skapat/utvecklat\""),
     ("ar_en_ai_agent", re.compile(r"\bär\s+en\s+(?:\w+\s+)?(?:AI-?\s?)?(?:agent|assistent)\s+som\b", re.IGNORECASE),
      "\"X är en AI-agent som …\""),
-    ("effektivisera", re.compile(r"\b(?:effektivisera\w*|effektivitet\w*|optimera\w*)", re.IGNORECASE),
+    # Undantaget (Sebbe 2026-10-29): att agenten effektiviserar just
+    # prospekteringen eller kundhanteringen är budskapet i Snajps utskick, och
+    # säger vad den gör. "Effektivisera arbetet" säger ingenting och fälls.
+    ("effektivisera", re.compile(
+        r"\b(?:effektivisera\w*\b(?!\s+(?:(?:er|din|ditt|era|dina|deras)\s+)?"
+        r"(?:prospektering|kundhantering|support|kundtjänst|kundservice)\w*)|effektivitet\w*|optimera\w*)",
+        re.IGNORECASE),
      "effektivisera/effektivitet/optimera"),
     ("i_dagens", re.compile(r"\bi\s+dagens\b", re.IGNORECASE), "\"i dagens …\""),
     ("utropstecken", re.compile(r"!"), "utropstecken"),
+    # Omskrivningen 2026-10-29: "Vill ni testa Iris direkt i demon på
+    # snajp.se/demo, eller svara på mejlet så bokar vi …" är en halv mening,
+    # varken fråga eller inbjudan. "Vill du veta mer kan du titta på demon …"
+    # har sin huvudsats och står kvar.
+    ("halv_inbjudan",
+     re.compile(r"(?:^|[.!?]\s+)vill\s+(?:ni|du)\s+(?:testa|titta|prova)\b(?:(?!\bkan\s+(?:ni|du)\b)(?:[^.?!]|\.(?=\S)))*,\s*eller\s+svara\b",
+                re.IGNORECASE | re.MULTILINE),
+     "avslutet är en halv mening (\"Vill ni testa …, eller svara …\"); skriv \"Vill ni testa själva finns demon på …, eller så svarar ni …\""),
     ("antagande_om_dem",
      re.compile(r"\b(?:kan\s+jag\s+tänka\s+mig|vet\s+jag\s+att|är\s+jag\s+säker\s+på|jag\s+utgår\s+från|jag\s+gissar)\b",
                 re.IGNORECASE),
@@ -104,6 +119,11 @@ _TRELEDSLISTA = re.compile(r"[\wåäöÅÄÖ-]+(?:\s+[\wåäöÅÄÖ-]+)?,\s+[\w
 #: … åt er". Pronomenen som TILLTALAR, inte ägandeformen "er egen information".
 _DU = re.compile(r"\b(?:du|dig)\b", re.IGNORECASE)
 _NAMNGIVEN = re.compile(r"^\s*(?:hej|hejsan|hallå)\s+[A-ZÅÄÖ][\wåäöé-]+\s*[,!]", re.IGNORECASE)
+
+
+def namngiven(text: str) -> bool:
+    """Hälsar mejlet en namngiven mottagare ("Hej Per,")? Då är det du-form."""
+    return bool(_NAMNGIVEN.match(text or ""))
 _NI = re.compile(r"\bni\b|\båt\s+er\b|\bhos\s+er\b|\btill\s+er\b|\bert\b|\bera\b", re.IGNORECASE)
 #: Mallord som omkörningen 2026-10-15 gav i fem av elva ingångar efter att
 #: skrivstilen talat om bolagets "löfte": "… är ert löfte, men att svara på
@@ -114,11 +134,54 @@ _MALLORD = re.compile(
     r"\b(?:ert|ditt|deras)\s+löfte\b|\blöfte\s+till\b|\bstår\s+(?:ni|du)\s+för\b|\bnågot\s+(?:ni|du)\s+står\s+för\b"
     r"|\btar\s+tid\s+från\s+(?:det\s+arbetet|det\s+(?:ni|du)\s+gör\s+bäst|er\s+kärn\w*|ert\s+kärn\w*)"
     r"|\bkärnverksamhet\w*|\bkärnuppdrag\w*|\båterkommande\s+(?:kund)?frågor\s+tar\s+tid\b"
-    # Körningarna 2026-10-15/16 (189 utkast): ", inte på att hitta/jaga/leta
-    # nästa …", "det är svårt att", "tar tid från att" och "kräver fullt
-    # fokus" stod i fem till nio ingångar var.
-    r"|\binte\s+(?:på|till|med)\s+att\s+(?:hitta|jaga|leta)\b|\bdet\s+är\s+svårt\s+att\b|\bär\s+det\s+svårt\s+att\b"
-    r"|\btar\s+tid\s+från\s+att\b|\bkräver\s+(?:fullt|ditt|ert)\s+fokus\b",
+    # Körningarna 2026-10-15/16 (189 utkast): "det är svårt att", "tar tid från
+    # att" och "kräver fullt fokus" stod i fem till nio ingångar var.
+    # ", inte på att hitta nästa …" är tillåtet igen sedan 2026-10-25 (Anton:
+    # "helt okej om den förekommer ibland"), men bara med deras eget hantverk
+    # som det de fokuserar på ("på måleriet"), aldrig ett allmänt "varje
+    # projekt", och inte i varje mejl (samma_grepp i mot_andra).
+    r"|\bdet\s+är\s+svårt\s+att\b|\bär\s+det\s+svårt\s+att\b"
+    r"|\b(?:ta|tar)\s+tid\s+från\s+att\b|\bkräver\s+(?:fullt|ditt|ert)\s+fokus\b"
+    r"|\b(?:fokus\w*|koncentrera\s+(?:er|dig))\s+på\s+(?:varje\s+(?:enskilt\s+)?(?:projekt|detalj)|projekt(?:et|en)?\b"
+    r"|arbetet|uppdrag(?:et|en)?\b|verksamheten|jobbet|det\s+(?:ni|du)\s+gör)"
+    r"|\bägna\s+(?:er|dig)\s+åt\s+(?:varje\s+(?:enskilt\s+)?projekt|projekt(?:et|en)?\b|arbetet|jobbet)",
+    re.IGNORECASE,
+)
+#: Fokusgreppet ("… kräver att ni kan fokusera på måleriet, inte på att hitta
+#: nästa uppdrag"): rätt ibland, fel i varje mejl (Anton 2026-10-25; 5 av 12 i
+#: provkörningen samma natt, och 4 av 11 i omkörningen med synonymer).
+_FOKUSGREPP = re.compile(
+    r"\b(?:fokus\w*\s+på|koncentrera\s+(?:er|dig)\s+på|ägna\s+(?:er|dig)\s+åt)\b", re.IGNORECASE
+)
+
+
+def fokusgrepp(text: str) -> bool:
+    """Bär ingångens två första meningar fokusgreppet?"""
+    return bool(_FOKUSGREPP.search(_ingangsstycke(text)))
+#: Fler än så här av de senaste ingångarna i körningen får inte redan bära greppet.
+FOKUSGREPP_TAK = 1
+#: Avslutet som order (Anton 2026-10-25: "en svag CTA som läses som botmejl
+#: och massutskick ... måste förbjudas helt"): sista meningen börjar med
+#: "Svara", eller mejlet ber om ett citerat kodord ("svara 'pilot'"). "… eller
+#: svara på mejlet så bokar vi en genomgång" mitt i en inbjudan är tillåtet.
+_SVARA_ORDER = re.compile(r"^svara\b", re.IGNORECASE)
+_SVARA_KODORD = re.compile(r"\bsvara\s+(?:med\s+)?[\"”“'‘’][^\"”“'‘’]{1,20}[\"”“'‘’]", re.IGNORECASE)
+#: Ingången som kritik (Anton 2026-10-25): deras löfte ställt mot ett
+#: misslyckande ("Du lovar …, men frågor … hinner sällan besvaras", "Ni lovar
+#: … Men den tiden försvinner snabbt"). En utmaning i deras sorts arbete är
+#: rätt; ett påstående om att just de brister träffar en öm tå.
+_KRITISK_INGANG = re.compile(
+    r"\b(?:ni|du)\s+lovar\b[^?]*\bmen\b"
+    r"|\b(?:hinner|hinns|besvaras|blir)\s+(?:\w+\s+)?sällan\b|\bsällan\s+(?:hinner|hinns|besvaras)\b"
+    r"|\bförsvinner\b|\bblir\s+(?:liggande|lidande)\b|\bhalkar\s+efter\b"
+    # Sebbe 2026-10-29: "Era kunder förväntar sig snabb och kunnig hjälp …"
+    # klankar ner på bolaget, och "Hur ska ni kunna hantera nya kunder
+    # samtidigt som ni har mycket jobb" är säljigt och påstår att de inte
+    # hinner. Mejlet visar i stället hur agenten gör arbetet enklare.
+    r"|\b(?:era|dina|deras)\s+kunder\s+(?:förväntar|kräver|väntar\s+sig)\b|\bkunderna\s+(?:förväntar|kräver)\b"
+    r"|\bhur\s+ska\s+(?:ni|du)\s+(?:kunna|hinna|klara)\b"
+    r"|\b(?:samtidigt\s+som|när)\s+(?:ni|du)\s+har\s+(?:mycket|fullt)\b"
+    r"|\btar\s+det\s+tid\s+från\b",
     re.IGNORECASE,
 )
 #: Registerfakta i ingången: ett antal (siffra eller ord) följt av anställda,
@@ -231,6 +294,9 @@ def kontrollera(text: str) -> Kontrollresultat:
         kopia = kopierat_exempel(meningar[0])
         if kopia:
             lagg("kopierat_exempel", f"ingången lånar ord ur skrivstilens exempel (\"{kopia}\")")
+        kritik = _KRITISK_INGANG.search(" ".join(meningar[:2]))
+        if kritik:
+            lagg("kritisk_ingang", f"ingången läses som kritik av dem (\"{kritik.group(0)[:40]}\"); beskriv en utmaning i deras sorts arbete")
     tilltal = "\n".join(meningar)
     du, ni = _DU.search(tilltal), _NI.search(tilltal)
     if du and ni:
@@ -248,6 +314,11 @@ def kontrollera(text: str) -> Kontrollresultat:
     # en enkel handling, aldrig en fråga, och brödtexten är högst 90 ord.
     if meningar and meningar[-1].endswith("?"):
         lagg("slutar_med_fraga", f"slutar med en fråga i stället för en handling: \"{meningar[-1][:60]}\"")
+    svara = next((m for m in meningar[-1:] if _SVARA_ORDER.match(m)), None) or next(
+        (m for m in meningar if _SVARA_KODORD.search(m)), None
+    )
+    if svara:
+        lagg("svara_sa_avslut", f"avslutet är en order (\"{svara[:50]}\"); skriv en vardaglig inbjudan")
     antal_ord = sum(len(m.split()) for m in meningar)
     if antal_ord > MAX_ORD_MEJL:
         lagg("for_langt", f"brödtexten är {antal_ord} ord (högst {MAX_ORD_MEJL})")
@@ -383,7 +454,36 @@ def erbjudande_fynd(text: str, *, villkor: str | None, produkt: str | None) -> l
             fynd.append(Anmarkning("agent_efter_loftet",
                                    f"Stil: \"{namn}\" namnges först efter löftet; säg vad agenten gör innan siffrorna",
                                    allvarlig=True))
+    # Fel produkts moment (omskrivningen 2026-10-29): ett supportmejl frågade
+    # "… eller att hitta nya kunder?" och lovade att Supportagenten "tar hand
+    # om båda delarna", en förmåga den inte har; och tvärtom för Iris.
+    slag = produktslag(produkt)
+    if slag == "support" and _LEADSMOMENT.search(brod):
+        fynd.append(Anmarkning("fel_moment", "Stil: supportmejlet talar om att hitta nya kunder; "
+                               "Supportagenten svarar på kundfrågor, den hittar inga kunder", allvarlig=True))
+    elif slag == "leads" and _SUPPORTMOMENT.search(brod):
+        fynd.append(Anmarkning("fel_moment", "Stil: Iris-mejlet talar om kundmejl eller supportchattar; "
+                               "Iris hittar nya företagskunder, den svarar inte på kundfrågor", allvarlig=True))
+    # Snajps instruktion: Iris är aldrig "hon" (omskrivningen 2026-10-29:
+    # "Hon skriver färdiga utkast som ni själva godkänner").
+    if slag == "leads" and re.search(r"(?:^|[.!?]\s+)hon\b", brod, re.MULTILINE):
+        fynd.append(Anmarkning("iris_hon", "Stil: Iris kallas \"hon\"; skriv \"Iris\" eller \"den\"", allvarlig=True))
     return fynd
+
+
+_LEADSMOMENT = re.compile(r"\bhitta\s+(?:nya\s+)?(?:företags)?kunder\b")
+_SUPPORTMOMENT = re.compile(r"\bsupportchatt\w*|\bkundmejl\w*")
+
+
+def produktslag(produkt: str | None) -> str | None:
+    """"support" eller "leads" för Snajps två agenter, annars None (en annan
+    kunds produkt, där frågans moment inte går att avgöra i kod)."""
+    namn = (produkt or "").casefold()
+    if "support" in namn:
+        return "support"
+    if "iris" in namn or "lead" in namn:
+        return "leads"
+    return None
 
 
 def produktstam(produkt: str | None) -> str:
@@ -426,7 +526,19 @@ def mot_andra(text: str, andra: Sequence[str]) -> list[Anmarkning]:
                                    allvarlig=True))
     if egen_uppmaning and any(uppmaning(t) == egen_uppmaning for t in andra):
         fynd.append(Anmarkning("samma_uppmaning", "Stil: samma uppmaning som ett annat mejl i körningen", allvarlig=True))
+    if _FOKUSGREPP.search(_ingangsstycke(text)) and (
+        sum(1 for t in andra[-12:] if _FOKUSGREPP.search(_ingangsstycke(t))) > FOKUSGREPP_TAK
+    ):
+        fynd.append(Anmarkning(
+            "samma_grepp", "Stil: \"fokusera på …\" står redan i flera ingångar i körningen; bygg ingången på ett annat sätt",
+            allvarlig=True,
+        ))
     return fynd
+
+
+def _ingangsstycke(text: str) -> str:
+    """Ingångens två första meningar: greppet står ofta i den andra."""
+    return " ".join(_meningar(_brodtext(text))[:2])
 
 
 def kontrollera_batch(texter: Sequence[str]) -> list[list[Anmarkning]]:

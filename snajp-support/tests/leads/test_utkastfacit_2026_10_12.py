@@ -30,7 +30,8 @@ ERSATTA = FACIT["ersatta"]
 #: Fynd som bara flaggar för granskning och som villkoren själva orsakar
 #: (villkorens mening är ofta över 25 ord; handlingen är densamma i varje
 #: gratisprov-mejl). Allt annat ska vara noll på ett facitutkast.
-TILLATNA = {"lang_mening", "samma_uppmaning", "for_langt", "kopierat_exempel"}
+#: svara_sa_avslut: Antons förbud 2026-10-25, se test_utkastfacit_2026_10_16.
+TILLATNA = {"lang_mening", "samma_uppmaning", "for_langt", "kopierat_exempel", "svara_sa_avslut"}
 # kopierat_exempel: facitutkasten ÄR skrivstilens exempel (Båtladan, Eketräs,
 # ÅW står i tabellen fel/rätt), så de lånar ord ur sig själva.
 

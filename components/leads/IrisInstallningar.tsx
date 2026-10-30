@@ -1,8 +1,9 @@
 "use client";
 
+import Link from "next/link";
+import { useArbetsvag } from "@/components/AppShell";
 import { LeadsControls } from "@/components/leads/LeadsControls";
 import { IrisAutomation } from "@/components/leads/IrisAutomation";
-import { IrisErbjudanden } from "@/components/leads/IrisErbjudanden";
 import { IrisEskalering } from "@/components/leads/IrisEskalering";
 import { IrisProdukter } from "@/components/leads/IrisProdukter";
 import { IrisProfil } from "@/components/leads/IrisProfil";
@@ -20,6 +21,7 @@ import { useLocale } from "@/lib/i18n";
  */
 export function IrisInstallningar({ demo = false }: Readonly<{ demo?: boolean }>) {
   const { text } = useLocale();
+  const arbetsvag = useArbetsvag();
   return (
     <div className="grid gap-12">
       <IrisProfil demo={demo} />
@@ -47,9 +49,17 @@ export function IrisInstallningar({ demo = false }: Readonly<{ demo?: boolean }>
           <div className="border-t border-ink/15 pt-8">
             <IrisProdukter />
           </div>
-          <div className="border-t border-ink/15 pt-8">
-            <IrisErbjudanden />
-          </div>
+          {/* Erbjudandena flyttade till Leads › Erbjudanden (Anton 2026-10-25). */}
+          <p className="border-t border-ink/15 pt-8 text-[0.9375rem] leading-6 text-ink-muted">
+            {text({
+              sv: "Erbjudandena i mejlen och kampanjerna ställer du in under ",
+              en: "The offers in the emails and the campaigns are set up under "
+            })}
+            <Link href={arbetsvag("/dashboard/leads?vy=erbjudanden")} className="focus-ring underline underline-offset-4">
+              {text({ sv: "Leads › Erbjudanden", en: "Leads › Offers" })}
+            </Link>
+            .
+          </p>
           <div className="border-t border-ink/15 pt-8">
             <IrisAutomation />
           </div>

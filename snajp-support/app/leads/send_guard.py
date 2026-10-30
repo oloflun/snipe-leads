@@ -48,16 +48,32 @@ KOLA_OM = "köa_om"
 UPPVARMNING_DAGAR = 14
 UPPVARMNING_TAK_PER_DAG = 20
 
-#: Upptrappningen efter uppvärmningen (Sebbe 2026-10-21): dagens tak är den
-#: största dagsvolymen de senaste sju dagarna gånger den här faktorn, aldrig
-#: under uppvärmningstaket. Volymen får alltså dubblas per dag — den kurva
-#: mottagarfilter accepterar — i stället för att släppas fri dagen taket
-#: försvinner: 234 godkända utkast i kö hade annars gått ut på en dag från en
-#: domän som dittills skickat 20. Sju dagars fönster, så att en helg inte
-#: nollställer kurvan; efter en veckas tystnad börjar den om från golvet,
-#: vilket också är rätt kurva efter ett uppehåll.
-UPPTRAPPNING_FAKTOR = 2
+#: Upptrappningen efter uppvärmningen, flack sedan 2026-10-24 (Sebbe):
+#: dagens tak är den största dagsvolymen de senaste sju dagarna plus
+#: UPPTRAPPNING_STEG, aldrig under uppvärmningens golv och aldrig över
+#: TAK_PER_DAG. Ersätter dubblingen från 2026-10-21 (20 → 40 → 80 → 160),
+#: som släppte ut ~600 kallmejl på några dagar från en domän nästan utan
+#: svar: 2 mänskliga svar av 600 och knappt några autosvar tydde på att
+#: filtren slutat släppa in dem (docs/UTSKICK-SVARSFREKVENS-DIAGNOS-2026-10-24.md).
+#: Sju dagars fönster, så att en helg inte nollställer kurvan.
+UPPTRAPPNING_STEG = 5
 UPPTRAPPNING_FONSTER_DAGAR = 7
+#: Tak per dag och tenant oavsett historik. Femtio kalla mejl om dagen från
+#: en avsändare är vad mottagarfilter tar emot utan att reagera på volymen.
+TAK_PER_DAG = 50
+
+#: Leveransstoppet (regel 5e, Sebbe 2026-10-24). Studsar och klagomål kommer
+#: från Resends webhook (api/sending_domains_api.py). Över gränserna står ALLA
+#: tenantens utskick still tills händelserna är äldre än fönstret: en domän som
+#: fortsätter skicka med hög studs eller klagomål blir spärrad, och en spärr
+#: går inte att överklaga. Gränserna är leverantörernas egna (Google: under
+#: 0,1 % klagomål; studs över några procent läses som en köpt lista).
+LEVERANS_FONSTER_DAGAR = 14
+STUDS_GRANS = 0.03
+KLAGOMAL_GRANS = 0.001
+#: Studsandelen bedöms först med så här många skickade i fönstret: två
+#: studsar av de tio första är inte en trend. Klagomål räknas från första.
+STUDS_MIN_UNDERLAG = 20
 
 #: Ett företag kontaktas högst en gång per kvartal. Det är inte en artighet:
 #: upprepade kallmejl till samma bolag är den enskilt vanligaste orsaken till
@@ -98,6 +114,22 @@ class Utskick:
     #: Skicka nu ur kön (Anton 2026-10-10): en människa har valt att mejlet
     #: går direkt. Bara kontorstiden (regel 5a) släpps; övriga spärrar gäller.
     direkt: bool = False
+    #: Ett kampanjutskick till kundens befintliga lista (migration 114, Anton
+    #: 2026-10-25), inget kallmejl: regel 3 släpper det till egna kunder och
+    #: redan kontaktade. Avregistreringen gäller alltid.
+    kampanj: bool = False
+
+
+@dataclass(frozen=True)
+class Leveransutfall:
+    """Skickade, studsade och klagomål de senaste LEVERANS_FONSTER_DAGAR.
+
+    Studsade och klagomål räknas bland de skickade i fönstret, så andelen
+    går att läsa direkt."""
+
+    skickade: int
+    studsade: int
+    klagomal: int
 
 
 @dataclass(frozen=True)
@@ -112,6 +144,8 @@ class TenantHistorik:
     #: Inget default, som resten av fälten: ett glömt fält ska bli ett
     #: TypeError, inte en tyst tom historik.
     storsta_dagsvolym: int
+    #: Underlaget för leveransstoppet (regel 5e). Inget default, som resten.
+    leverans: Leveransutfall
     senaste_kontakt_med_foretaget: datetime | None
     #: Adresser som avregistrerat sig. Gäller HELA tenanten, inte kampanjen.
     suppressions: frozenset[str]
@@ -216,7 +250,8 @@ def _regel_2_avregistrering(*, avsandare, utskick, historik, nu) -> GuardBeslut 
     som bara gäller en kampanj betyder att samma person får nästa kampanj, och
     då är löftet i mejlet ett brutet löfte.
 
-    VARFÖR policylänken (tillagd 2026-09-20): art. 14-styckena i foten rymmer
+    VARFÖR policylänken (tillagd 2026-09-20, sedan 2026-10-24 bara vid en
+    personlig adress): art. 14-styckena i foten rymmer
     inte allt art. 14.2 kräver — lagringstid, mottagarkategorier, rätten att
     klaga till IMY. Länken till avsändarens integritetspolicy bär resten.
     Kravet ligger i samma regel som opt-out-länken eftersom båda är
@@ -231,7 +266,10 @@ def _regel_2_avregistrering(*, avsandare, utskick, historik, nu) -> GuardBeslut 
             "svara på mejlet räcker inte — den går varken att verifiera eller "
             "att åtgärda automatiskt.",
         )
-    if not _POLICY_MONSTER.search(utskick.brodtext):
+    # Policylänken bär art. 14.2 och krävs därför bara där art. 14 gäller:
+    # vid en personlig adress (regel 4). Till info@ och kontakt@ går den
+    # korta foten utan GDPR-stycken (Sebbe 2026-10-24).
+    if utskick.personlig_adress and not _POLICY_MONSTER.search(utskick.brodtext):
         return GuardBeslut(
             BLOCKERA,
             "2_avregistrering",
@@ -264,6 +302,11 @@ def _regel_3_suppression(*, avsandare, utskick, historik, nu) -> GuardBeslut | N
             f"{utskick.mottagare} har avregistrerat sig. Avregistreringen gäller "
             "hela tenanten och är permanent.",
         )
+
+    if utskick.kampanj:
+        # Kampanjen går till kundens egen lista: att adressen är kund eller
+        # redan kontaktad är skälet till utskicket, inte ett hinder.
+        return None
 
     if adress in {_normaliserad_adress(a) for a in historik.egna_kunder}:
         return GuardBeslut(
@@ -335,8 +378,8 @@ _VECKODAGAR = ("måndag", "tisdag", "onsdag", "torsdag", "fredag", "lördag", "s
 
 
 def _regel_5_volymtak(*, avsandare, utskick, historik, nu) -> GuardBeslut | None:
-    """Tre tak: per dag under uppvärmningen, per företag och kvartal, samt
-    kontorstid.
+    """Tak per dag (uppvärmning och upptrappning), karens per företag,
+    kontorstid och leveransstopp vid studs eller klagomål.
 
     VARFÖR DE HÖR IHOP: alla tre skyddar samma sak — att avsändardomänen
     fortsätter nå fram. En domän som blir spärrad tar med sig varje framtida
@@ -378,6 +421,12 @@ def _regel_5_volymtak(*, avsandare, utskick, historik, nu) -> GuardBeslut | None
                 f"Karenstiden är {KARENS_DAGAR_PER_FORETAG} dagar per företag.",
             )
 
+    # 5e. Leveransstopp, före volymtaken: under ett stopp går inget ut, hur
+    # lite som än skickats i dag. Gäller också Skicka nu.
+    stopp = _leveransstopp(historik.leverans)
+    if stopp:
+        return GuardBeslut(KOLA_OM, "5_leveransstopp", stopp)
+
     # 5c. Domänuppvärmning de första två veckorna.
     if historik.tenant_alder_dagar < UPPVARMNING_DAGAR:
         if historik.skickade_idag >= UPPVARMNING_TAK_PER_DAG:
@@ -390,23 +439,45 @@ def _regel_5_volymtak(*, avsandare, utskick, historik, nu) -> GuardBeslut | None
             )
         return None
 
-    # 5d. Mjuk upptrappning efter uppvärmningen (Sebbe 2026-10-21): volymen
-    # får dubblas per dag från den största dagsvolymen senaste sju dagarna,
-    # aldrig under uppvärmningens golv. Ett tak som bara försvinner dag 15
-    # hade släppt ut hela kön på en gång — se UPPTRAPPNING_FAKTOR. Gäller
-    # också Skicka nu (direkt), precis som 5b och 5c: domänens rykte skyddas
-    # mot volymen, inte mot klockslaget.
-    tak = max(UPPVARMNING_TAK_PER_DAG, UPPTRAPPNING_FAKTOR * historik.storsta_dagsvolym)
+    # 5d. Flack upptrappning efter uppvärmningen (Sebbe 2026-10-24): fem fler
+    # per dag än den största dagsvolymen senaste sju dagarna, lägst golvet och
+    # högst TAK_PER_DAG. Gäller också Skicka nu (direkt), precis som 5b och
+    # 5c: domänens rykte skyddas mot volymen, inte mot klockslaget.
+    tak = min(TAK_PER_DAG, max(UPPVARMNING_TAK_PER_DAG, historik.storsta_dagsvolym + UPPTRAPPNING_STEG))
     if historik.skickade_idag >= tak:
         return GuardBeslut(
             KOLA_OM,
             "5_volymtak",
             f"Dagens tak är nått ({historik.skickade_idag} av {tak}). Volymen "
-            f"trappas upp: taket är {UPPTRAPPNING_FAKTOR} gånger största dagsvolymen de "
-            f"senaste {UPPTRAPPNING_FONSTER_DAGAR} dagarna, lägst {UPPVARMNING_TAK_PER_DAG}. "
-            "Resten av kön skickas kommande dagar.",
+            f"trappas upp med högst {UPPTRAPPNING_STEG} om dagen, till som mest "
+            f"{TAK_PER_DAG}. Resten av kön skickas kommande dagar.",
         )
 
+    return None
+
+
+def _procent(andel: float) -> str:
+    return f"{andel * 100:.1f}".replace(".", ",") + " %"
+
+
+def _leveransstopp(utfall: Leveransutfall) -> str | None:
+    """Skälet till att utskicken står still, eller None."""
+    skickade = max(utfall.skickade, 0)
+    if skickade and utfall.klagomal / skickade > KLAGOMAL_GRANS:
+        return (
+            f"Utskicken är pausade: {utfall.klagomal} av {skickade} mottagare de senaste "
+            f"{LEVERANS_FONSTER_DAGAR} dagarna har markerat mejlet som skräppost "
+            f"({_procent(utfall.klagomal / skickade)}, gränsen är {_procent(KLAGOMAL_GRANS)}). "
+            f"Utskicken fortsätter när klagomålen är äldre än {LEVERANS_FONSTER_DAGAR} dagar. "
+            "Se över målgruppen och texten innan dess."
+        )
+    if skickade >= STUDS_MIN_UNDERLAG and utfall.studsade / skickade > STUDS_GRANS:
+        return (
+            f"Utskicken är pausade: {utfall.studsade} av {skickade} mejl de senaste "
+            f"{LEVERANS_FONSTER_DAGAR} dagarna studsade ({_procent(utfall.studsade / skickade)}, "
+            f"gränsen är {_procent(STUDS_GRANS)}). Studsade adresser kontaktas aldrig igen, "
+            "och utskicken fortsätter när andelen är under gränsen."
+        )
     return None
 
 

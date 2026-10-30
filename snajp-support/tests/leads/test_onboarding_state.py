@@ -74,6 +74,22 @@ async def test_gap_notice_forbids_offers_when_retention_playbook_missing():
 
 
 @pytest.mark.anyio
+async def test_aktiva_erbjudanden_ar_de_godkanda():
+    """Anton 2026-10-25: kundens aktiva erbjudanden är de godkända. Luckan
+    "Erbjud ingenting" fick researchen att lämna produktvalet tomt hos Snajp."""
+    storage = MemoryStorage()
+    await storage.save_context_doc(TENANT, kind="product_marketing", content="X")
+    await storage.set_agent_settings(
+        TENANT, agent_type="leads",
+        settings={"erbjudanden": {"aktiva": [{"nyckel": "pilot", "vikt": 1}], "villkor": {"pilot": "Tre månader gratis."}}},
+    )
+    pack, missing = await build_context_pack(storage, TENANT)
+    assert "Erbjud därför ingenting" not in pack
+    # Onboardingen ser fortfarande vad som saknas.
+    assert "retention_playbook" in missing
+
+
+@pytest.mark.anyio
 async def test_no_gap_notice_when_onboarding_is_complete():
     storage = MemoryStorage()
     for kind in ("product_marketing", "customer_research", "retention_playbook"):

@@ -106,6 +106,19 @@ KUNDTEXT_KVOT_DOKUMENT = (
 )
 
 
+def feltext(fel: BaseException) -> str:
+    """Felets text, med leverantörens svarskropp när SDK:n bär den.
+
+    openai 3.41 (CI 2026-10-29) skriver bara "Error code: 403" när Vertex svar
+    är en lista, och bara meddelandet ("Resource exhausted.") när det är ett
+    objekt: statusen (RESOURCE_EXHAUSTED, CONSUMER_SUSPENDED, BILLING_DISABLED)
+    finns då bara i `.body`. 3.3 skrev hela kroppen i texten. Använd den här,
+    inte str(fel), när en feltext ska klassas eller sparas."""
+    text = str(fel)
+    kropp = getattr(fel, "body", None)
+    return f"{text} {kropp}" if kropp else text
+
+
 def ar_kvotfel(fel: Exception) -> bool:
     """Om felet är leverantörens kvottak (429-klassen) snarare än vårt fel.
 
@@ -119,7 +132,7 @@ def ar_kvotfel(fel: Exception) -> bool:
             return True
         if type(led).__name__ in ("RateLimitError", "ResourceExhausted"):
             return True
-        text = str(led).casefold()
+        text = feltext(led).casefold()
         if "429" in text and (
             "quota" in text
             or "rate limit" in text
@@ -141,7 +154,7 @@ def ar_kreditslut(fel: BaseException | str) -> bool:
     if isinstance(fel, str):
         texter = [fel]
     else:
-        texter = [str(led) for led in _kedja(fel)]
+        texter = [feltext(led) for led in _kedja(fel)]
     return any(markor in text.casefold() for text in texter for markor in _KREDITMARKORER)
 
 

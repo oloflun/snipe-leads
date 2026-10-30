@@ -918,6 +918,35 @@ class MemoryStorage:
             per_dag[dag] = per_dag.get(dag, 0) + 1
         return max(per_dag.values(), default=0)
 
+    async def leveransutfall(self, tenant_id: str, *, dagar: int = 14) -> dict[str, int]:
+        grans = datetime.now(timezone.utc) - timedelta(days=dagar)
+        ut = {"skickade": 0, "studsade": 0, "klagomal": 0}
+        for m in self.outreach_messages.get(tenant_id, []):
+            t = m.get("sent_at")
+            if m.get("direction") != "outbound" or not t:
+                continue
+            if isinstance(t, str):
+                t = datetime.fromisoformat(t)
+            if t.tzinfo is None:
+                t = t.replace(tzinfo=timezone.utc)
+            if t < grans:
+                continue
+            ut["skickade"] += 1
+            if m.get("leverans") == "studs":
+                ut["studsade"] += 1
+            elif m.get("leverans") == "klagomal":
+                ut["klagomal"] += 1
+        return ut
+
+    async def markera_leverans(self, tenant_id: str, message_id: str, *, utfall: str, at) -> dict[str, Any] | None:
+        for m in self.outreach_messages.get(tenant_id, []):
+            if m["id"] == message_id and m.get("direction") == "outbound":
+                # Ett klagomål väger tyngre än en studs och skrivs aldrig över.
+                if m.get("leverans") != "klagomal":
+                    m["leverans"], m["leverans_at"] = utfall, at
+                return m
+        return None
+
     async def last_contact_with_company(
         self, tenant_id: str, foretagsnyckel: str, *, utom_trad: str | None = None
     ):
@@ -980,6 +1009,7 @@ class MemoryStorage:
         scheduled_at,
         status: str = "queued",
         gate_checks: dict[str, Any] | None = None,
+        kampanj_id: str | None = None,
     ) -> dict[str, Any]:
         message = {
             "id": str(uuid.uuid4()),
@@ -992,6 +1022,7 @@ class MemoryStorage:
             "sent_at": None,
             "created_at": _now(),
             "kasserad_at": None,
+            "kampanj_id": kampanj_id,
         }
         queue_item = {
             "id": str(uuid.uuid4()),
@@ -1005,6 +1036,32 @@ class MemoryStorage:
         self.outreach_messages.setdefault(tenant_id, []).append(message)
         self.send_queue.setdefault(tenant_id, []).append(queue_item)
         return {"message": message, "queue_item": queue_item}
+
+    async def kampanjens_poster(self, tenant_id: str, kampanj_id: str) -> list[dict[str, Any]]:
+        meddelanden = self.outreach_messages.get(tenant_id, [])
+        ut = []
+        for m in meddelanden:
+            if m.get("kampanj_id") != kampanj_id:
+                continue
+            trad = self.outreach_threads.get(tenant_id, {}).get(m["thread_id"]) or {}
+            prospekt = next((p for p in self.prospects.get(tenant_id, []) if p["id"] == trad.get("prospect_id")), {})
+            post = next(
+                (q for q in reversed(self.send_queue.get(tenant_id, [])) if q["thread_id"] == m["thread_id"]), {}
+            )
+            ut.append({
+                "queue_item_id": post.get("id"),
+                "status": post.get("status"),
+                "prospect_id": trad.get("prospect_id"),
+                "company_name": prospekt.get("company_name"),
+                "email": trad.get("prospect_email") or prospekt.get("contact_email"),
+                "sent_at": m.get("sent_at"),
+                "svar": bool(m.get("sent_at")) and any(
+                    i["thread_id"] == m["thread_id"] and i.get("direction") == "inbound"
+                    and str(i.get("created_at")) > str(m["sent_at"])
+                    for i in meddelanden
+                ),
+            })
+        return ut
 
     async def find_outreach_thread(
         self, tenant_id: str, *, prospect_id: str
@@ -2968,6 +3025,7 @@ class MemoryStorage:
                 "subject": m.get("subject"),
                 "body": m.get("body"),
                 "message_id": m.get("id"),
+                "_utkast_at": str(m.get("created_at") or item.get("created_at") or ""),
                 "prospect_id": p.get("id"),
                 "prospect_email": p.get("contact_email"),
                 "company_name": p.get("company_name"),
@@ -2977,7 +3035,8 @@ class MemoryStorage:
                 "lagesbeskrivning": p.get("lagesbeskrivning"),
                 "signaler": p.get("signaler"),
             })
-        svar.sort(key=lambda r: str(r.get("scheduled_at") or ""))
+        # Nyaste utkastet först, som Postgres (Sebbe 2026-10-29).
+        svar.sort(key=lambda r: r.pop("_utkast_at"), reverse=True)
         return svar[:limit]
 
     # -- Rate limiting ------------------------------------------------------
