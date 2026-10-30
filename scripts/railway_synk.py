@@ -57,7 +57,6 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import psycopg2  # noqa: E402
-import psycopg2.errors  # noqa: E402
 import psycopg2.extras  # noqa: E402
 
 from railway_migrate import dsn  # noqa: E402
@@ -252,13 +251,14 @@ def skriv(
                     (rad,),
                 )
                 cur.execute("release savepoint rad")
-            except psycopg2.errors.UniqueViolation as e:
-                cur.execute("rollback to savepoint rad")
-                if not (ersatt_krockar and _ersatt_krock(cur, tabell, kolumner, kol, en, k, rad, e)):
-                    fel.append(f"{tabell} {k}: {str(e).splitlines()[0]}")
             except psycopg2.Error as e:
                 cur.execute("rollback to savepoint rad")
-                fel.append(f"{tabell} {k}: {str(e).splitlines()[0]}")
+                # 23505 = unique_violation. Felkoden och inte psycopg2.errors:
+                # INV-DATA-003 laddar skriptet med en psycopg2-stubbe utan
+                # undermoduler.
+                krock = getattr(e, "pgcode", None) == "23505"
+                if not (krock and ersatt_krockar and _ersatt_krock(cur, tabell, kolumner, kol, en, k, rad, e)):
+                    fel.append(f"{tabell} {k}: {str(e).splitlines()[0]}")
     return fel
 
 
