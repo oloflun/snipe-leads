@@ -120,6 +120,28 @@ def nyckeluttryck(kolumner: list[str]) -> str:
     return "concat_ws('|', " + ", ".join(f"x.{k}::text" for k in kolumner) + ")"
 
 
+def nyckelvillkor(cur, tabell: str, kolumner: list[str]) -> tuple[str, str]:
+    """(villkor för en nyckel, villkor för en lista nycklar) i skriv.
+
+    Med en nyckelkolumn jämförs kolumnen mot sin egen typ, så att
+    primärnyckelns index används. concat_ws('|', x.id::text) = … kan inte
+    använda något index, och varje rad blev en läsning av hela tabellen:
+    synken efter en veckas uppehåll (2026-10-30, ~5 000 rader) hann inte klart
+    på 15 minuter och avbröts mitt i outreach_threads. Sammansatta nycklar
+    behåller uttrycket; nycklarnas textform är densamma i båda fallen."""
+    if len(kolumner) != 1:
+        uttryck = nyckeluttryck(kolumner)
+        return f"{uttryck} = %s", f"{uttryck} = any(%s)"
+    cur.execute(
+        "select format_type(atttypid, atttypmod) from pg_attribute "
+        "where attrelid = ('public.' || %s)::regclass and attname = %s",
+        (tabell, kolumner[0]),
+    )
+    typ = cur.fetchone()[0]
+    kolumn = f"x.{kolumner[0]}"
+    return f"{kolumn} = %s::{typ}", f"{kolumn} = any(%s::{typ}[])"
+
+
 def rader(cur, tabell: str, kolumner: list[str], tenants: list[str]) -> dict[str, dict]:
     """Nyckel → {andrad, hash, pmid} för de rader som får synkas. Själva raden
     hämtas först när den skrivs (skriv): alla körningar med spår på en gång
@@ -173,11 +195,17 @@ def planera(
     return plan
 
 
+#: Rader per parti i skriv: en hämtning, en borttagning och en insert.
+PARTI = 100
+
+
 def skriv(kalla, cur, tabell: str, kolumner: list[str], nycklar: list[str], radera: list[str]) -> list[str]:
-    """Raderar och skriver i replica-läge, en savepoint per rad; raderna hämtas
-    ur källan hundra åt gången. Returnerar felen."""
+    """Raderar och skriver i replica-läge, ett parti om PARTI rader åt gången
+    (en savepoint per parti, per rad bara när partiet faller). Returnerar
+    felen."""
     fel: list[str] = []
     nyckel = nyckeluttryck(kolumner)
+    en, flera = nyckelvillkor(cur, tabell, kolumner)
     # Genererade kolumner (prospects.foretagsnyckel) räknas fram av målet och
     # får inte skrivas; 855 prospekt föll på det 2026-10-17.
     cur.execute(
@@ -186,17 +214,36 @@ def skriv(kalla, cur, tabell: str, kolumner: list[str], nycklar: list[str], rade
         (tabell,),
     )
     kol = cur.fetchone()[0]
-    for k in radera:
-        cur.execute(f"delete from public.{tabell} x where {nyckel} = %s", (k,))
-    for i in range(0, len(nycklar), 100):
+    for i in range(0, len(radera), PARTI):
+        cur.execute(f"delete from public.{tabell} x where {flera}", (radera[i:i + PARTI],))
+    for i in range(0, len(nycklar), PARTI):
         kalla.execute(
-            f"select {nyckel}, to_jsonb(x)::text from public.{tabell} x where {nyckel} = any(%s)",
-            (nycklar[i:i + 100],),
+            f"select {nyckel}, to_jsonb(x)::text from public.{tabell} x where {flera}",
+            (nycklar[i:i + PARTI],),
         )
-        for k, rad in kalla.fetchall():
+        parti = kalla.fetchall()
+        if not parti:
+            continue
+        # Hela partiet i två anrop (2026-10-30): synken körs från GitHub mot
+        # Railway, och fyra rundresor per rad var det mesta av tiden. Faller
+        # partiet (en trasig rad) görs det om rad för rad nedan, så att felet
+        # pekar ut raden och resten skrivs som förut.
+        cur.execute("savepoint parti")
+        try:
+            cur.execute(f"delete from public.{tabell} x where {flera}", ([k for k, _ in parti],))
+            cur.execute(
+                f"insert into public.{tabell} ({kol}) select {kol} "
+                f"from jsonb_populate_recordset(null::public.{tabell}, %s::jsonb)",
+                ("[" + ",".join(rad for _, rad in parti) + "]",),
+            )
+            cur.execute("release savepoint parti")
+            continue
+        except psycopg2.Error:
+            cur.execute("rollback to savepoint parti")
+        for k, rad in parti:
             cur.execute("savepoint rad")
             try:
-                cur.execute(f"delete from public.{tabell} x where {nyckel} = %s", (k,))
+                cur.execute(f"delete from public.{tabell} x where {en}", (k,))
                 cur.execute(
                     f"insert into public.{tabell} ({kol}) select {kol} from jsonb_populate_record(null::public.{tabell}, %s::jsonb)",
                     (rad,),
