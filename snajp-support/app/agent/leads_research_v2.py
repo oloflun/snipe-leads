@@ -146,6 +146,30 @@ _PRODUKTVAL = (
     "saknas. offer bygger på den produkten."
 )
 
+#: Läggs till när Iris-profilen bär kundens behovskrav (profil.kundval;
+#: Sebbe 2026-10-30, Snajp: "ett riktigt företag som behöver kunder"). Kravets
+#: text står i profilen som kundskrivet innehåll (INV-SEC-009), aldrig här.
+_BEHOVSKRAV = (
+    "\n\nBEHOVSKRAVET (går före PRODUKTMATCHNINGEN och PRODUKTVAL ovan): står "
+    "ett BEHOVSKRAV i IRIS-PROFILEN avgör det ensamt kp, i stället för frågan "
+    "om bolaget kan köpa och använda produkten. Utslaget är \"ja\" när ett "
+    "ordagrant citat ur källmaterialet (bolagets egna sidor eller "
+    "registeruppgifterna) visar att bolaget uppfyller kravet, \"nej\" när "
+    "materialet visar motsatsen, \"okänt\" annars. Uppfyller bolaget kravet är "
+    "fältet produkt den av kundens produkter som passar bolaget bäst, aldrig null."
+)
+
+
+def _kp_ja(fynd: dict[str, Any]) -> bool:
+    """Modellens utslag på produktmatchningen är ja. Belägget prövar bedom."""
+    from ..leads.profil import PRODUKTMATCH
+
+    return any(
+        isinstance(b, dict) and str(b.get("kriterie_id")) == PRODUKTMATCH
+        and str(b.get("utslag") or "").strip().casefold() == "ja"
+        for b in fynd.get("bedomningar") or []
+    )
+
 
 def _vald_produkt(fynd: dict[str, Any], produkter: list[dict[str, str]]) -> dict[str, str] | None:
     """Produkten researchen valde: fältet produkt, annars erbjudandets namn.
@@ -291,17 +315,14 @@ async def _research_v2(
     # ett filter, inte en kontaktkälla (Antons regler 1 och 3, 2026-10-04).
     # Råsidan i materialet gav leads med "Beslutsfattare: <styrelseledamot> ·
     # <nummer>" (granskningen 2026-10-05).
+    registerfakta = False
     for url in sorted(await storage.list_prospect_source_urls(tenant_id, prospect_id)):
         if "merinfo.se" in url:
             md = await merinfo.hamta(url)
             if md:
                 fakta = merinfo.bolagsfakta_text(md, url)
                 material = f"{material}\n\n## Registeruppgifter (källa: {url})\n{fakta}".strip()
-    sources_block = material or "(inget källmaterial kunde hämtas — se scrape_errors)"
-    # Utan en enda hämtad sida finns ingenting att bedöma. Provkörningen
-    # 2026-10-05: tre påhittade bolag gick genom researchen på den tomma
-    # raden ovan och kom ut med poäng 100, status Redo och ett utkast.
-    har_underlag = bool(material.strip())
+                registerfakta = True
 
     # Iris-profilen (app/leads/profil.py) är kundens instruktionsfil: den
     # avgör vilka kriterier som bedöms och är det ENDA som får fälla bolaget.
@@ -313,6 +334,24 @@ async def _research_v2(
         profil = await sakerstall_profil(storage, tenant_id)
     if icp is not None:
         profil = {**slå_ihop(profil, icp), "version": profil.get("version")}
+
+    # En kund som inte kräver webbplats (Sebbe 2026-10-30, Snajp) får
+    # registrets bolagsfakta ur allabolag som källmaterial: ett bolag utan
+    # sajt, eller vars sajt inte gick att hämta, bedöms då mot behovskravet i
+    # stället för att falla på "Inget källmaterial" (95 av Snajps 365 bortvalda
+    # i development 2026-10-30).
+    if profil.get("webbplats_kravs") is False and not registerfakta:
+        from ..leads.sources import allabolag
+
+        hittat = await allabolag.registerfakta(prospect_row.get("orgnr"))
+        if hittat:
+            url, fakta = hittat
+            material = f"{material}\n\n## Registeruppgifter (källa: {url})\n{fakta}".strip()
+    sources_block = material or "(inget källmaterial kunde hämtas — se scrape_errors)"
+    # Utan en enda hämtad sida finns ingenting att bedöma. Provkörningen
+    # 2026-10-05: tre påhittade bolag gick genom researchen på den tomma
+    # raden ovan och kom ut med poäng 100, status Redo och ett utkast.
+    har_underlag = bool(material.strip())
     # Webbplatsens skick mäts BARA åt kunder som frågar efter det: ett
     # webbkriterium i profilen, eller en målgrupp utan webbplats. Mätningen
     # byggdes åt webbyråerna men kördes för alla, och raderna gick vidare till
@@ -376,7 +415,9 @@ async def _research_v2(
         if produkter
         else ""
     )
-    uppgift = _RESEARCH_V2_UPPGIFT + (_PRODUKTVAL if produkter else "")
+    uppgift = (
+        _RESEARCH_V2_UPPGIFT + (_PRODUKTVAL if produkter else "") + (_BEHOVSKRAV if profil.get("behov") else "")
+    )
     # Kundens tidigare utslag på liknande bolag (app/leads/utslag.py), i
     # användarposition. Bara när det finns material att jämföra med.
     from ..leads.utslag import kalibrering
@@ -438,6 +479,12 @@ async def _research_v2(
         if harledd:
             fynd["produkt"] = harledd
             vald = _vald_produkt(fynd, produkter)
+    if vald is None and produkter and profil.get("behov") and _kp_ja(fynd):
+        # Behovskravet avgör kp (Sebbe 2026-10-30): ett bolag som uppfyller
+        # det fälls inte för att modellen lämnade produkten tom. Det blir
+        # kundens första produkt, den kunden rangordnat först.
+        fynd["produkt"] = produkter[0]["namn"]
+        vald = produkter[0]
     produkt_vald = vald is not None if produkter else None
     bedomning = bedom(
         profil, fynd, korpus=f"{material}\n{webbfakta_text}", kandidat=prospect_row, webbrevision=webbrevision,

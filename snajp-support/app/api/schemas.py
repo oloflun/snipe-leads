@@ -112,6 +112,10 @@ class LeadsConfigRequest(BaseModel):
     segment: "list[SegmentRequest] | None" = Field(default=None, max_length=6)
     #: True bara när kunden själv säljer till offentlig sektor eller skolor.
     offentlig_sektor: bool | None = None
+    #: False när bolag utan webbplats duger (leads/profil.kundval, Sebbe 2026-10-30).
+    webbplats_kravs: bool | None = None
+    #: Behovskravet som avgör produktmatchningen (kp); "" tar bort det.
+    behov: str | None = Field(default=None, max_length=240)
 
 
 class ErbjudandeArmRequest(BaseModel):

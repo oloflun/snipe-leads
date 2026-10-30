@@ -267,7 +267,12 @@ def bolagsfakta_text(md: str, url: str) -> str:
     Registret är ett filter, inte en kontaktkälla (Antons regel 1,
     2026-10-04): det som når researchprompten är bolagsfakta, aldrig namn
     eller nummer som modellen kan göra till leadets kontakt."""
-    b = tolka_bolag(md, url)
+    return bolagsfakta_ur(tolka_bolag(md, url))
+
+
+def bolagsfakta_ur(b: dict[str, Any]) -> str:
+    """Ett bolag i tolka_bolag-formen (merinfo eller allabolag) som
+    källmaterial: samma fält, aldrig personer eller nummer."""
     falt = (
         ("Bolag", b.get("company_name")),
         ("Organisationsnummer", b.get("orgnr")),
@@ -867,7 +872,10 @@ async def sok(
         granskade = [b for b in await asyncio.gather(*(granska(r) for r in batch)) if b]
         rankade = await ranka(granskade)
         godkanda_n += len(rankade)
-        ut += await _komplettera(rankade, behov, lage=lage, puls=puls, listspar=listspar)
+        ut += await _komplettera(
+            rankade, behov, lage=lage, puls=puls, listspar=listspar,
+            webbplats_kravs=(profil or {}).get("webbplats_kravs") is not False,
+        )
         kontext = sidhamtning.aktuell()
         if kontext and kontext.slut and not via_allabolag:
             # allabolags sidor kostar inget, så taket för betalda register-
@@ -1097,7 +1105,9 @@ def registrets_epost(k: dict[str, Any]) -> str | None:
     return epost
 
 
-def fordela(k: dict[str, Any], kontakt: dict[str, Any] | None) -> tuple[str, str | None]:
+def fordela(
+    k: dict[str, Any], kontakt: dict[str, Any] | None, *, webbplats_kravs: bool = True
+) -> tuple[str, str | None]:
     """Spåret efter kontaktsökningen, med skälet (Antons regler 12, 13, 15
     och 16, 2026-10-07). `k` är kandidaten med `website` satt till den
     webbplats som söktes (None utan sajt eller med en parkerad domän),
@@ -1118,6 +1128,12 @@ def fordela(k: dict[str, Any], kontakt: dict[str, Any] | None) -> tuple[str, str
     registret: numret är bolagets eget publicerade. VD-kravet i regel 15
     gäller registrets nummer, som annars inte går att knyta till någon.
 
+    `webbplats_kravs=False` (kundens val, profil.kundval; Sebbe 2026-10-30
+    för Snajp): registrets bolags-e-post räcker för Iris även utan sajt.
+    Researchen läser då registeruppgifterna som källmaterial
+    (allabolag.registerfakta), så att bolaget inte faller på "Inget
+    källmaterial" som 2026-10-15.
+
     Ren funktion: används av körningen (_komplettera) och av
     scripts/omklassa_listspar.py."""
     if ar_enskild(k):
@@ -1131,6 +1147,8 @@ def fordela(k: dict[str, Any], kontakt: dict[str, Any] | None) -> tuple[str, str
     # "Inget källmaterial" (körningen 2026-10-15). Adressen räcker fortfarande
     # som KONTAKT när sajten finns (regel 13).
     if k.get("website") and (kontakt.get("contact_email") or registrets_epost(k)):
+        return "iris", None
+    if not webbplats_kravs and registrets_epost(k):
         return "iris", None
     if kontakt.get("contact_phone"):
         return "ring", None
@@ -1193,7 +1211,7 @@ def ringrad(k: dict[str, Any], kontakt: dict[str, Any] | None) -> dict[str, Any]
 
 async def _komplettera(
     rankade: list[dict[str, Any]], antal: int, *, lage: str, puls: Callable[[], Awaitable[Any]] | None,
-    listspar: list[dict[str, Any]] | None = None,
+    listspar: list[dict[str, Any]] | None = None, webbplats_kravs: bool = True,
 ) -> list[dict[str, Any]]:
     """Iris: kontaktsökningen på bolagets sajt och fördelningen efter den
     (fordela, Antons regler 12–16 2026-10-07). Bolagen på Iris-spåret
@@ -1207,7 +1225,9 @@ async def _komplettera(
 
     ut: list[dict[str, Any]] = []
     if lage == "iris":
-        return await _komplettera_iris(rankade, antal, puls=puls, listspar=listspar)
+        return await _komplettera_iris(
+            rankade, antal, puls=puls, listspar=listspar, webbplats_kravs=webbplats_kravs
+        )
     for k in rankade[: max(antal, 1) * PROV_PER_LEAD]:
         if len(ut) >= antal:
             break
@@ -1230,7 +1250,7 @@ async def _komplettera(
 
 async def _komplettera_iris(
     rankade: list[dict[str, Any]], antal: int, *, puls: Callable[[], Awaitable[Any]] | None,
-    listspar: list[dict[str, Any]] | None,
+    listspar: list[dict[str, Any]] | None, webbplats_kravs: bool = True,
 ) -> list[dict[str, Any]]:
     """Iris-spåret i `_komplettera`, SAMTIDIGT i omgångar om SAMTIDIGA
     bolag (2026-10-09). Förut ett bolag i taget: webbplatsuppslag,
@@ -1283,7 +1303,7 @@ async def _komplettera_iris(
             if svar is None:
                 continue
             k, webb, kontakt, parkerad = svar
-            spar, skal = fordela(k, kontakt)
+            spar, skal = fordela(k, kontakt, webbplats_kravs=webbplats_kravs)
             if spar == "iris":
                 if len(ut) < antal:
                     ut.append(iris_kandidat(k, kontakt))

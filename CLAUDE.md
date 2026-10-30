@@ -244,6 +244,16 @@ Kod för 12–17: `sources/merinfo.py:fordela` (fördelningen),
     stealth bara som andra försök när rutan ändå skymmer (7 krediter).
     PageSpeed bara på mobil, för siffrorna.
 
+**Ändring 2026-10-30 (Sebbe) — per kund, i dag bara Snajp:**
+
+22. **Webbplatskravet och behovskravet är kundval** (`settings.webbplats_kravs`,
+    `settings.behov`, via `profil.kundval`). `webbplats_kravs: false` gör att
+    registrets bolags-e-post räcker för Iris utan sajt, och att researchen
+    läser registrets bolagsfakta (`allabolag.registerfakta`). Det går före
+    regel 8 och 10 för de kunderna. `behov` avgör produktmatchningen (kp).
+    Snajps värden och storleken 1–200 står i `scripts/snajp_malgrupp.py`.
+    Skäl: `docs/BESLUT.md` 2026-10-30.
+
 Koden: `snajp-support/app/leads/sources/merinfo.py` (filtret, `lage="iris"`
 och `lage="lista"`), `app/leads/discovery.py:hamta_person_kontakt`
 (kontaktkontrollen; `hamta_vd_kontakt` är listspårets strängare VD-variant).

@@ -80,8 +80,9 @@ def produktmatch_text(profil: dict[str, Any] | None) -> str:
     """Kriteriets etikett. Kort och hel: med kundens erbjudande inklistrat
     klipptes den vid 160 tecken mitt i en mening ("… hyr ut AI-agenter till
     företag. Varje agent tar över … Kunden", lådan 2026-10-09). Motiveringen
-    under rubriken säger hur bolaget matchar erbjudandet."""
-    return "Har ett belagt behov av det kunden säljer"
+    under rubriken säger hur bolaget matchar erbjudandet. Kundens behovskrav
+    (`behov`, se kundval) är etiketten när det finns: det är frågan som ställs."""
+    return _text((profil or {}).get("behov")) or "Har ett belagt behov av det kunden säljer"
 
 
 def utan_adminrader(text: str | None) -> str:
@@ -110,6 +111,13 @@ def tom_profil() -> dict[str, Any]:
         "anstallda_min": None,
         "anstallda_max": None,
         "utan_webbplats": False,
+        # Kundens uttryckliga val (kundval), aldrig tolkningens. Inte samma
+        # sak som utan_webbplats, som betyder att målgruppen ÄR bolag utan
+        # sajt (webbyråerna) och slår på webbmätningen: False här betyder
+        # bara att en sajt inte krävs (Sebbe 2026-10-30, Snajp).
+        "webbplats_kravs": True,
+        # Behovskravet ersätter produktmatchningens fråga (kp) när det är satt.
+        "behov": "",
         "kriterier": [],
         "uteslut": [],
         "roller": [],
@@ -449,6 +457,10 @@ def render_profil(profil: dict[str, Any] | None) -> str:
         # (bedomning.webbutslag). Instruktionen som stod här låg inuti det
         # opålitliga omslaget nedan och kunde därför ignoreras av modellen.
         rader.append("- Bolag utan webbplats ingår i målgruppen.")
+    elif profil.get("webbplats_kravs") is False:
+        rader.append("- En egen webbplats krävs inte: registeruppgifterna räcker som källmaterial.")
+    if profil.get("behov"):
+        rader.append(f"- BEHOVSKRAV (avgör produktmatchningen kp): {profil['behov']}")
     if profil.get("roller"):
         rader.append("- Kontaktroller: " + ", ".join(profil["roller"]))
     if profil.get("kriterier"):
@@ -532,6 +544,14 @@ def kundval(installningar: dict[str, Any] | None) -> dict[str, Any]:
         ut["segment"] = segment
     if isinstance(i.get("offentlig_sektor"), bool):
         ut["offentlig_sektor"] = i["offentlig_sektor"]
+    # Sebbe 2026-10-30 (Snajp): ett bolag utan webbplats duger, men det ska
+    # vara ett riktigt företag som behöver kunder. Satta av kunden eller ett
+    # skript (scripts/snajp_malgrupp.py), aldrig av tolkningen.
+    if isinstance(i.get("webbplats_kravs"), bool):
+        ut["webbplats_kravs"] = i["webbplats_kravs"]
+    behov = _text(i.get("behov"))
+    if behov:
+        ut["behov"] = behov
     return ut
 
 
@@ -606,6 +626,10 @@ async def kompilera(kundtext: str, icp: object, val: dict[str, Any] | None = Non
             profil["branscher"] = [s["bransch"] for s in val["segment"]]
     if "offentlig_sektor" in val:
         profil["offentlig_sektor"] = val["offentlig_sektor"]
+    if "webbplats_kravs" in val:
+        profil["webbplats_kravs"] = val["webbplats_kravs"]
+    if val.get("behov"):
+        profil["behov"] = val["behov"]
     profil = med_standarduteslutning(profil)
     profil["otolkat"] = tackning(kundtext, profil) if profil["kalla"] == "ai" else []
     profil["anmarkning"] = anmarkning

@@ -17,6 +17,8 @@ igen (lib/routes.ts: VILANDE_PRODUKTER styr arbetsytan).
   * settings.produkter  — researchen väljer EN produkt per bolag
   * settings.segment    — rangordnade målsegment; en körning utan filter söker i dem
   * settings.offentlig_sektor = false — bara privata bolag
+  * ICP:ns storlek, settings.webbplats_kravs och settings.behov — vilka bolag
+    Iris väljer bort (Sebbe 2026-10-30, se STORLEK nedan)
   * kundinstruktionen för Iris — hur Snajp presenterar sig i utkastets mall
   * erbjudandena         — piloten i form A och B, lika viktade (Anton 2026-10-25)
 
@@ -64,6 +66,20 @@ SEGMENT = [
     {"bransch": "IT-konsulter", "varfor": "(förslag) Små IT- och SaaS-bolag med företagskunder behöver nya kunder och har supportfrågor: Iris och Supportagenten."},
     {"bransch": "grossister", "varfor": "(förslag) Grossister och B2B-handel har företagskunder och orderfrågor: Iris och Supportagenten."},
 ]
+
+#: Sebbe 2026-10-30: bolag med upp till 200 anställda (förut 1–49) och utan
+#: krav på webbplats, men riktiga företag som behöver kunder. Större bolag
+#: fälls i förfiltret, registerfiltret och kvalificeringsgrinden (ICP:ns
+#: size). Utan sajt räcker registrets bolags-e-post och registeruppgifterna
+#: blir källmaterial (merinfo.fordela, leads_research_v2). Behovskravet
+#: ersätter produktmatchningens fråga, som fällde 256 av 365 bortvalda
+#: (development 2026-10-30), bland dem takläggare och byggfirmor.
+STORLEK = {"anstallda_min": 1, "anstallda_max": 200}
+WEBBPLATS_KRAVS = False
+BEHOV = (
+    "Ett riktigt, verksamt företag som behöver kunder för att driva verksamheten "
+    "framåt, inte en förening, stiftelse eller ett vilande bolag"
+)
 
 MARKOR = "## Så presenterar sig Snajp i Iris utkast"
 IRIS_INSTRUKTION = f"""{MARKOR}
@@ -204,6 +220,16 @@ def main() -> None:
     print("Produkter:", json.dumps([p["namn"] for p in PRODUKTER], ensure_ascii=False))
     print("Segment:  ", json.dumps([s["bransch"] for s in SEGMENT], ensure_ascii=False))
     print("Offentlig sektor: nej")
+    installningar = profil.get("installningar") or {}
+    icp = dict(installningar.get("icp") or {})
+    storlek_fore = icp.get("size") or {}
+    icp["size"] = {**storlek_fore, **STORLEK}
+    print(
+        f"Anställda: {storlek_fore.get('anstallda_min')}–{storlek_fore.get('anstallda_max')} -> "
+        f"{STORLEK['anstallda_min']}–{STORLEK['anstallda_max']}"
+    )
+    print("Webbplats krävs:", "ja" if installningar.get("webbplats_kravs") is not False else "nej", "-> nej")
+    print("Behovskrav:", "oförändrat" if installningar.get("behov") == BEHOV else f"skrivs: {BEHOV}")
     # Servern sparar texten utan avslutande radbrytning: jämför utan den, annars
     # säger torrkörningen "skrivs" även direkt efter en --apply.
     oforandrad = ny_instruktion.rstrip() == instruktion.rstrip()
@@ -218,11 +244,21 @@ def main() -> None:
     nyckel = (svar or {}).get("api_key") or (svar or {}).get("key")
     if not 200 <= status < 300 or not nyckel:
         sys.exit(f"AVBRYTER: kunde inte hämta nyckel för {args.kund} ({status}).")
-    status, svar = Api(bas, nyckel, skarpt=True).anrop(
-        "PUT", "/api/leads/config", {"produkter": PRODUKTER, "segment": SEGMENT, "offentlig_sektor": False}
+    kundapi = Api(bas, nyckel, skarpt=True)
+    status, svar = kundapi.anrop(
+        "PUT", "/api/leads/config",
+        {
+            "produkter": PRODUKTER, "segment": SEGMENT, "offentlig_sektor": False,
+            "icp": icp, "webbplats_kravs": WEBBPLATS_KRAVS, "behov": BEHOV,
+        },
     )
     if not 200 <= status < 300:
         sys.exit(f"AVBRYTER: inställningarna skrevs inte ({status}) — {svar.get('detail', '')}")
+    # LeadsConfigRequest släpper okända fält tyst: en miljö som inte kör koden
+    # med behovskravet än svarar 200 utan att spara det. Deploya först.
+    sparat = kundapi.get("/api/leads/config")
+    if sparat.get("behov") != BEHOV or sparat.get("webbplats_kravs") is not WEBBPLATS_KRAVS:
+        sys.exit("AVBRYTER: behovskravet sparades inte. Kör miljön koden från 2026-10-30? Se /health.")
     status, svar = Api(bas, nyckel, skarpt=True).anrop("PUT", "/api/leads/erbjudanden", ERBJUDANDEN)
     if not 200 <= status < 300:
         sys.exit(f"AVBRYTER: erbjudandena skrevs inte ({status}) — {svar.get('detail', '')}")

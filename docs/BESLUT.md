@@ -9,6 +9,51 @@ möjligt), vad det betyder i koden.
 
 ---
 
+## 2026-10-30 (Sebbe) — Snajps Iris: upp till 200 anställda, ingen webbplats krävs, men ett riktigt företag som behöver kunder
+
+**Beslut.** "Utskicken som Iris (Snajp) väljer bort som bortvalda måste
+ändras. Stora bolag med 200+ anställda ska filtreras och väljas bort. Ändra
+gränsen från 50 anställda max till 200 anställda max. … Det går bra om
+företaget inte har en hemsida, men det måste vara ett riktigt företag som
+behöver kunder för att kunna driva verksamheten framåt."
+
+**Resonemang.** Snajp säljer Iris och Supportagenten till i stort sett varje
+verksamt bolag som behöver nya kunder. Urvalet var för snävt: målgruppen stod
+på 1–49 anställda, och i development låg 365 bortvalda. 256 av dem föll på
+produktmatchningen ("Ingen av kundens produkter passar bolaget", "visar inget
+behov"), bland dem takläggare och byggfirmor, och 95 på "Inget källmaterial".
+Bolag utan sajt kom aldrig fram som utskick alls. De hamnade i ringlistan
+eller bland ej kvalificerade.
+
+**I koden.**
+- Snajps målgrupp är 1–200 anställda (`scripts/snajp_malgrupp.py`, ICP:ns
+  `size`). Större bolag fälls som förut i förfiltret, registerfiltret och
+  kvalificeringsgrinden. Okänd storlek fäller inget.
+- Två nya kundval i `agent_configs.settings` (PUT `/api/leads/config`), som
+  följer med in i Iris-profilen via `profil.kundval`. Utan dem beter sig allt
+  som förut för alla andra kunder:
+  - `webbplats_kravs: false`: registrets bolags-e-post räcker för Iris även
+    utan sajt (`merinfo.fordela`), och researchen läser registrets bolagsfakta
+    ur allabolag (`allabolag.registerfakta`, uppslag på organisationsnumret,
+    aldrig personer eller nummer). Ersätter för de här kunderna regel 10:s
+    "bolaget måste fortfarande ha en webbplats" och 2026-10-15-ändringen.
+    Valet är inte `utan_webbplats`, som betyder att målgruppen ÄR bolag utan
+    sajt (webbyråerna) och som slår på webbmätningen.
+  - `behov`: kundens behovskrav avgör produktmatchningen (kp) i stället för
+    frågan om bolaget kan köpa produkten. Texten står i Iris-profilen som
+    kundtext (INV-SEC-009), och uppgiften får en fast regel om hur den läses.
+    Uppfyller bolaget kravet med ett belagt citat men modellen lämnade
+    produkten tom, blir det kundens första produkt. För Snajp: "Ett riktigt,
+    verksamt företag som behöver kunder för att driva verksamheten framåt,
+    inte en förening, stiftelse eller ett vilande bolag".
+- Redan bortvalda bolag bedöms inte om av sig själva. Det kräver en ny
+  research (Processa om) och kostar krediter.
+
+**Öppet för Anton.** Ändringen rör regel 8 och 10 (bolag utan webbplats till
+listspåret) för de kunder som väljer bort webbplatskravet, i dag bara Snajp.
+
+---
+
 ## 2026-10-29 (Sebbe) — Utskicken: nyast först, effektiviseringen i fokus, ämnesrader ur en lista, "upp till 50 %" och en demo utan inloggning
 
 **Beslut.** "Alla de nyaste utskicken ska vara högst upp i listorna, så nyaste
