@@ -39,15 +39,28 @@ eller bland ej kvalificerade.
     "bolaget måste fortfarande ha en webbplats" och 2026-10-15-ändringen.
     Valet är inte `utan_webbplats`, som betyder att målgruppen ÄR bolag utan
     sajt (webbyråerna) och som slår på webbmätningen.
-  - `behov`: kundens behovskrav avgör produktmatchningen (kp) i stället för
-    frågan om bolaget kan köpa produkten. Texten står i Iris-profilen som
-    kundtext (INV-SEC-009), och uppgiften får en fast regel om hur den läses.
+  - `behov`: kundens behovskrav ERSÄTTER produktmatchningens fråga (kp), i
+    uppgiften (`_KP_PRODUKT` byts mot `_KP_BEHOV`) och i overlayen
+    `leads-research-v2.md`. Kravet prövas mot vad bolaget är och gör
+    (bransch, verksamhet, omsättning, sajtens erbjudande), aldrig mot om
+    produkterna passar, och produktvalet fäller aldrig. Texten står i
+    Iris-profilen som kundtext (INV-SEC-009), som raden `kp [BEHOVSKRAV …]`.
     Uppfyller bolaget kravet med ett belagt citat men modellen lämnade
     produkten tom, blir det kundens första produkt. För Snajp: "Ett riktigt,
     verksamt företag som behöver kunder för att driva verksamheten framåt,
     inte en förening, stiftelse eller ett vilande bolag".
 - Redan bortvalda bolag bedöms inte om av sig själva. Det kräver en ny
   research (Processa om) och kostar krediter.
+
+**Utfallet i development (samma dag, Sebbes ja till omkörningen).** Snajps
+365 bortvalda kördes om i tre omgångar, med en rättelse mellan varje: först
+som ett tillägg ovanpå produktfrågan (232 blev nivå B), sedan med kravet
+tolkat som vad bolaget är och gör (58 till), sist med produktfrågan helt
+ersatt (45 till). Två frågor om kp i samma uppgift gav blandade svar
+("på ett sätt som Snajps produkter löser"), och modellen märkte först
+utslaget "BEHOVSKRAV" i stället för `kp`. Kvar som bortvalda: 27, nämligen
+bostadsrättsföreningar, stiftelser, Byggnads, 9 bolag utanför Göteborg och
+Umeå, två utan kontaktmejl och två vars sidor inte gick att hämta.
 
 **Öppet för Anton.** Ändringen rör regel 8 och 10 (bolag utan webbplats till
 listspåret) för de kunder som väljer bort webbplatskravet, i dag bara Snajp.
