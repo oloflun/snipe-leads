@@ -194,3 +194,23 @@ async def test_svepet_hoppar_over_ett_lead_vars_utkast_skrivs_om():
     with patch("app.leads.follow_up_generator.run_step", new=_fejk([BRA], fall)):
         assert await generate_due_follow_ups(storage, TENANT, now=NU, tenant_name="Snajp", context_pack=KONTEXT) == []
     assert fall == []
+
+
+def test_grinden_undantar_produkten_efter_loftet_men_jamfor_med_kon():
+    """Provet i development 2026-10-31: `agent_efter_loftet` fällde fem av sex
+    uppföljningar som namngav produkten i första stycket, och alla sex började
+    likadant utan att grinden såg det."""
+    from app.leads.follow_up_generator import _stilfynd
+
+    text = (
+        "Hej,\n\nVår Supportagent svarar på frågorna om hemkörning dygnet runt.\n\n"
+        "Just nu tar vi in 20 företag i en kostnadsfri pilot av Supportagenten, med upp till 50 % rabatt "
+        "efteråt.\n\nTitta gärna på demon på snajp.se/demo när det passar."
+    )
+    utkast = {"subject": "Support 24/7 för era kunder", "body": text}
+    fynd = _stilfynd(utkast, villkor=PILOT, produkt="Supportagenten", bolag="Godhems Zoologiska AB",
+                     amne_i_kod=True, andra=[])
+    assert not any("namnges först efter löftet" in f for f in fynd), fynd
+    med_kon = _stilfynd(utkast, villkor=PILOT, produkt="Supportagenten", bolag="Godhems Zoologiska AB",
+                        amne_i_kod=True, andra=[text])
+    assert any("samma ingång" in f for f in med_kon), med_kon

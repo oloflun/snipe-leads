@@ -322,22 +322,35 @@ async def skriv_om_uppfoljning(
 
 
 #: Stilfynd som inte prövas i en uppföljning: villkoren dikterar
-#: erbjudandets mening och handlingen (som i första mejlet), och ingångens
-#: regler gäller första mejlets öppning, inte en uppföljnings hänvisning till
-#: det förra mejlet.
-_EJ_I_UPPFOLJNING = frozenset({"lang_mening", "samma_uppmaning"})
+#: erbjudandets mening och handlingen (som i första mejlet), och
+#: `agent_efter_loftet` letar efter produkten efter första mejlets ingång,
+#: medan en uppföljning namnger den i första stycket (fem falska av sex i
+#: provet i development 2026-10-31).
+_EJ_I_UPPFOLJNING = frozenset({"lang_mening", "samma_uppmaning", "agent_efter_loftet"})
 
 
 def _stilfynd(
-    utkast: dict[str, Any], *, villkor: str | None, produkt: str | None, bolag: str, amne_i_kod: bool
+    utkast: dict[str, Any],
+    *,
+    villkor: str | None,
+    produkt: str | None,
+    bolag: str,
+    amne_i_kod: bool,
+    andra: list[str],
 ) -> list[str]:
     """Stilgrindens fynd på en uppföljning, som text till omskrivningen.
-    Samma markörer som första mejlet (app/leads/stilkontroll.py) och
-    erbjudandet intakt; ämnesraden prövas bara när modellens rad står kvar."""
+    Samma markörer som första mejlet (app/leads/stilkontroll.py), erbjudandet
+    intakt och inte byggd som de andra utkasten i kön (alla sex i provet
+    började "Om ni hann se mitt förra mejl"); ämnesraden prövas bara när
+    modellens rad står kvar."""
     body = str(utkast.get("body") or "")
     if not body.strip():
         return []
-    fynd = stil.kontrollera(body).anmarkningar + stil.erbjudande_fynd(body, villkor=villkor, produkt=produkt)
+    fynd = (
+        stil.kontrollera(body).anmarkningar
+        + stil.erbjudande_fynd(body, villkor=villkor, produkt=produkt)
+        + stil.mot_andra(body, andra)
+    )
     if not amne_i_kod:
         fynd += stil.amne_fynd(str(utkast.get("subject") or ""), bolag=bolag, produkt=produkt)
     return [a.beskrivning for a in fynd if a.kod not in _EJ_I_UPPFOLJNING]
@@ -429,9 +442,10 @@ async def _en_uppfoljning(
     trace = RunTrace()
     steps = FOLLOWUP_V1.steps
     uppgift = (
-        "Skriv uppföljningsmejlet enligt vinkeln ovan. KORT — 3-5 meningar, högst 90 ord. "
-        "Referera naturligt till att du hört av dig förut, utan att låta "
-        "förebrående. Påstå ingenting som inte står i underlaget. Ämnesraden är två till "
+        "Skriv uppföljningsmejlet enligt vinkeln ovan. KORT: högst 90 ord i brödtexten, "
+        "kortare än det första mejlet. En hänvisning till att du hört av dig förut är "
+        "valfri och i så fall en kort bisats med egna ord, aldrig förebrående; börja "
+        "gärna direkt i vinkeln. Påstå ingenting som inte står i underlaget. Ämnesraden är två till "
         "fem ord, utan bolagets namn och utan produkten. Skriv ingen hälsningsfras sist: "
         "signaturen läggs på automatiskt. "
         "Returnera JSON: subject (svenska, ren text), body (svenska, ren text)."
@@ -484,8 +498,14 @@ async def _en_uppfoljning(
     def version(h: dict[str, Any], d: dict[str, Any]) -> dict[str, Any]:
         return {"subject": h.get("final_subject") or d.get("subject"), "body": h.get("final_body") or d.get("body")}
 
+    andra = [
+        str(r.get("body") or "") for r in await storage.list_review_queue(tenant_id, limit=200)
+        if r.get("thread_id") != thread_id
+    ]
+
     def fynd_i(utkast: dict[str, Any]) -> list[str]:
-        return _stilfynd(utkast, villkor=villkor, produkt=produktnamn, bolag=company_name, amne_i_kod=amne_i_kod)
+        return _stilfynd(utkast, villkor=villkor, produkt=produktnamn, bolag=company_name,
+                         amne_i_kod=amne_i_kod, andra=andra)
 
     # Stilgrinden som i första mejlet (run_outreach_draft_v2): en omskrivning
     # före humanizern, sedan högst två varv efter den, och den humaniserade

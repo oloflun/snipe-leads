@@ -6,12 +6,13 @@ mejl i samma tråd.
 
 ## Formen
 
-- **3 till 5 meningar, högst 90 ord.** En uppföljning är en knuff, inte ett
-  nytt pitchmejl.
-- **Referera till förra mejlet med som mest EN kort bisats** ("om du hann se
-  mitt förra mejl") — aldrig som huvudsak, aldrig med förebråelse. Förbjudna
-  former: "eftersom du inte svarat", "jag har inte hört något", "jag
-  återkommer igen då du inte återkopplat".
+- **3 till 5 meningar, högst 90 ord**, kortare än det första mejlet. En
+  uppföljning är en knuff, inte ett nytt pitchmejl.
+- **En hänvisning till förra mejlet är valfri**, och i så fall som mest EN
+  kort bisats med egna ord — aldrig som huvudsak, aldrig samma fras i varje
+  mejl och aldrig med förebråelse. Förbjudna former: "eftersom du inte
+  svarat", "jag har inte hört något", "jag återkommer igen då du inte
+  återkopplat". Att börja direkt i vinkeln är lika bra.
 - **Tillför något NYTT: vinkeln i uppdraget.** Upprepa inte förra mejlets
   argument med andra ord — den som inte svarade på argumentet svarar inte på
   en parafras av det.
