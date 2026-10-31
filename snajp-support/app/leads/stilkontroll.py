@@ -468,6 +468,14 @@ def erbjudande_fynd(text: str, *, villkor: str | None, produkt: str | None) -> l
     # "Hon skriver färdiga utkast som ni själva godkänner").
     if slag == "leads" and re.search(r"(?:^|[.!?]\s+)hon\b", brod, re.MULTILINE):
         fynd.append(Anmarkning("iris_hon", "Stil: Iris kallas \"hon\"; skriv \"Iris\" eller \"den\"", allvarlig=True))
+    # Fel agent (uppföljningarna i development 2026-10-31): "Med vår agent Iris
+    # … tar hand om återkommande kundfrågor" i ett mejl om Supportagenten.
+    if slag == "support" and re.search(r"\biris\b", brod):
+        fynd.append(Anmarkning("fel_agent", "Stil: supportmejlet kallar agenten Iris; Iris är leadsagenten, "
+                               "skriv Supportagenten", allvarlig=True))
+    elif slag == "leads" and re.search(r"\bsupportagent", brod):
+        fynd.append(Anmarkning("fel_agent", "Stil: Iris-mejlet nämner Supportagenten; mejlet handlar bara om Iris",
+                               allvarlig=True))
     return fynd
 
 

@@ -230,3 +230,30 @@ async def test_iris_ar_aldrig_hon_i_uppfoljningen():
     assert rad["produkt"] == "Iris, leadsagenten" and rad["queued"] is True, rad
     [koad] = [m for m in await storage.list_outreach_messages(TENANT, trad["id"]) if not m.get("sent_at")]
     assert "Hon skriver" not in koad["body"] and "Den skriver också" in koad["body"]
+
+
+def test_fel_agent_i_mejlet_fangas_av_grinden():
+    """Omskrivningen i development 2026-10-31: fem av 382 blandade ihop
+    agenterna ("Med vår agent Iris … tar hand om återkommande kundfrågor" i
+    ett mejl om Supportagenten)."""
+    from app.leads import stilkontroll as stil
+
+    support = "Hej,\n\nMed vår agent Iris får ni svar på kundfrågorna dygnet runt, och Supportagenten lämnar över."
+    iris = "Hej,\n\nIris hittar nya företagskunder, och vår Supportagent svarar på frågorna."
+    assert "fel_agent" in [a.kod for a in stil.erbjudande_fynd(support, villkor=None, produkt="Supportagenten")]
+    assert "fel_agent" in [a.kod for a in stil.erbjudande_fynd(iris, villkor=None, produkt="Iris, leadsagenten")]
+    assert "fel_agent" not in [a.kod for a in stil.erbjudande_fynd(BRA, villkor=None, produkt="Supportagenten")]
+
+
+@pytest.mark.anyio
+async def test_supportagenten_ar_aldrig_hon_i_uppfoljningen():
+    storage = MemoryStorage()
+    await _snajp(storage)
+    _, trad, _ = await _kontaktad(storage)
+    text = BRA.replace("dygnet runt.", "dygnet runt. Hon lämnar över när det behövs.")
+    with patch("app.leads.follow_up_generator.run_step", new=_fejk([text], [])):
+        [rad] = await generate_due_follow_ups(storage, TENANT, now=NU, tenant_name="Snajp", context_pack=KONTEXT)
+
+    assert rad["produkt"] == "Supportagenten" and rad["queued"] is True, rad
+    [koad] = [m for m in await storage.list_outreach_messages(TENANT, trad["id"]) if not m.get("sent_at")]
+    assert "Hon lämnar" not in koad["body"] and "Den lämnar över" in koad["body"]

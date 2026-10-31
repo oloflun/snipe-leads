@@ -434,7 +434,11 @@ async def _en_uppfoljning(
         f"## Uppdrag\nDu skriver uppföljning nr {sekvens} till {company_name} åt {tenant_name}. "
         f"Prospektet har inte svarat på tidigare mejl.\n\n"
         f"{tilltalsblock}"
-        + (f"## Produkten\n{produkttext}\n\n" if produkttext else "")
+        + (
+            f"## Produkten\n{produkttext}\nMejlet handlar bara om den här produkten, med just det namnet; "
+            "nämn ingen annan av kundens produkter.\n\n"
+            if produkttext else ""
+        )
         + (f"{erbjudanden.uppfoljningsblock(villkor)}\n\n" if erbjudande else "")
         + (f"## Om bolaget\n{prospekt['lagesbeskrivning']}\n\n" if prospekt.get("lagesbeskrivning") else "")
         + f"{context_pack}\n\n"
@@ -447,7 +451,8 @@ async def _en_uppfoljning(
     steps = FOLLOWUP_V1.steps
     uppgift = (
         "Skriv uppföljningsmejlet enligt vinkeln ovan. KORT: högst 90 ord i brödtexten, "
-        "kortare än det första mejlet. En hänvisning till att du hört av dig förut är "
+        "kortare än det första mejlet; vinkeln och produkten i högst två meningar före "
+        "erbjudandet. En hänvisning till att du hört av dig förut är "
         "valfri och i så fall en kort bisats med egna ord, aldrig förebrående; börja "
         "gärna direkt i vinkeln. Påstå ingenting som inte står i underlaget, och gissa "
         "aldrig hur deras vardag ser ut (ingen arbetsbelastning, inget \"fullt upp\"). Ämnesraden är två till "
@@ -534,10 +539,11 @@ async def _en_uppfoljning(
     body = sign_off(strip_markdown(basta.get("body") or "").strip(), tenant_name)
     body = ratta_tilltal(body, mottagare, prospect_email)
     subject, body = ett_bolagsnamn(amne_utan_namn(subject, company_name), body, company_name)
-    if stil.produktslag(produktnamn) == "leads":
-        # Iris är aldrig "hon" (Snajps instruktion): humanizern förde in det
-        # efter grinden i två av tolv i provet 2026-10-31. Sista nätet i kod,
-        # samma igenkänning som fyndet iris_hon.
+    if stil.produktslag(produktnamn):
+        # Snajps agenter är aldrig "hon" (Snajps instruktion): humanizern förde
+        # in det efter grinden i två av tolv i provet 2026-10-31, och i tre av
+        # 382 i omskrivningen samma dag, två av dem om Supportagenten. Sista
+        # nätet i kod, samma igenkänning som fyndet iris_hon.
         body = _HON_FORST.sub(lambda m: f"{m.group(1)}Den", body)
 
     # INV-GROUND-001 gäller uppföljningar precis som första mejlet. Villkorens

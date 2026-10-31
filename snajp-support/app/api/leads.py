@@ -3925,11 +3925,18 @@ async def _run_uppfoljningsjobb(
             "draft": {"subject": rad.get("subject"), "queued": bool(rad.get("queued"))},
         }
         if not rad.get("queued"):
+            stoppad = rad.get("stoppad") or {}
+            # Påståendena faktagrinden fällde står i beskedet, som i första
+            # mejlets kedja, så att skälet syns på leadets rad.
+            ostodda = ", ".join(str(p) for p in [*(stoppad.get("grounding") or []), *(stoppad.get("gissningar") or [])])
             result["draft_note"] = _UPPFOLJNING_EJ.get(str(rad.get("hoppad"))) or (
-                "Uppföljningen stoppades före kön av faktagrinden; den tidigare står kvar."
-                if rad.get("stoppad")
+                "Uppföljningen stoppades före kön av faktagrinden"
+                + (f" ({ostodda[:300]})" if ostodda else "")
+                + "; den tidigare står kvar."
+                if stoppad
                 else _FEL_UTKAST
             )
+            result["stoppad"] = stoppad or None
             utkast_fel = result["draft_note"][:500]
         await app_state.jobs.complete(job_id, result)
         slutstatus = "completed"
