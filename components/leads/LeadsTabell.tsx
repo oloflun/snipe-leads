@@ -786,7 +786,7 @@ export function LeadsTabell({
       return {
         text: text({
           sv: `Utkast skrivs för ${koade} leads ur den research som redan finns. Har ett lead redan fått mejl skrivs dess väntande uppföljning om. De står som Skriver utkast tills de är klara.${hoppade.length ? ` ${hoppade.length} har redan fått mejl utan någon uppföljning som väntar och hoppades över.` : ""}${pagar.length ? ` ${pagar.length} bearbetas redan och hoppades över.` : ""}`,
-          en: `Drafts are being written for ${koade} leads from their existing research. For a lead that has already been emailed, its pending follow-up is rewritten. They show as Writing draft until they are done.${hoppade.length ? ` ${hoppade.length} have already been emailed with no follow-up pending and were skipped.` : ""}${pagar.length ? ` ${pagar.length} are already being processed and were skipped.` : ""}`
+          en: `Drafts are being written for ${koade} leads from their existing research. For a lead that has already been emailed, its pending follow-up is rewritten. They show as Writing draft until they are done.${hoppade.length ? ` ${hoppade.length} ${hoppade.length === 1 ? "has" : "have"} already been emailed with no follow-up pending and ${hoppade.length === 1 ? "was" : "were"} skipped.` : ""}${pagar.length ? ` ${pagar.length} ${pagar.length === 1 ? "is" : "are"} already being processed and ${pagar.length === 1 ? "was" : "were"} skipped.` : ""}`
         }),
         fel: false
       };

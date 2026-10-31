@@ -124,6 +124,13 @@ function installeraFetch() {
       const ok = ["q3", "q8", "q9"].some((q) => url.includes(`/queue/${q}/`));
       return svar(ok ? { utfall: "requeued" } : { utfall: "blocked", skal: SIDFOT, besked: `Stoppat av en sändspärr: ${SIDFOT}` });
     }
+    // Skapa om utkast (2026-10-31): kontaktade leads med en väntande uppföljning
+    // köas, övriga kontaktade hoppas över.
+    if (url.includes("/leads/prospects/processa-om")) {
+      const ids: string[] = JSON.parse(String(init?.body ?? "{}")).prospect_ids ?? [];
+      const hoppade = ids.filter((id) => ["p1", "p2", "p6"].includes(id));
+      return svar({ count: ids.length - hoppade.length, hoppade_over: hoppade, pagar_redan: [] });
+    }
     if (url.includes("/leads/prospects")) {
       return svar({ prospects: url.includes("bortvalda") || url.includes("arkiverade") ? [] : PROSPEKT });
     }
