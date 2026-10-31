@@ -3519,6 +3519,17 @@ async def _run_batch_prospect(
     utfall: dict = {"namn": "", "leverbar": False, "skal": "Researchen misslyckades."}
 
     storage = app_state.storage
+    if scope == "utkast" and not batch_id:
+        # Ett lead som redan fått ett mejl har en uppföljning, inte ett första
+        # mejl, att skriva om (Sebbe 2026-10-31).
+        from ..leads.follow_up_generator import uppfoljningstrad
+
+        trad = await uppfoljningstrad(storage, tenant["tenant_id"], prospect_id)
+        if trad is not None:
+            await _run_uppfoljningsjobb(
+                app_state, job_id, tenant, prospect_id=prospect_id, trad=trad, kvotforsok=kvotforsok
+            )
+            return
     if batch_id and await _styrning(app_state, tenant["tenant_id"], batch_id) == "avbruten":
         await app_state.jobs.fail(job_id, AVBRUTEN_KORNING)
         await storage.set_leads_job_status(
@@ -3875,6 +3886,79 @@ async def _run_batch_prospect(
             await _vacka_korning(app_state, tenant, batch_id)
 
 
+#: Utfallet när en uppföljning inte blev omskriven, per skäl ur generatorn.
+_UPPFOLJNING_EJ = {
+    "avslutad": "Ingen ny uppföljning: leadet har svarat, är avslutat eller arkiverat.",
+    "sekvensen_klar": "Ingen ny uppföljning: tråden har fått alla sina uppföljningar.",
+    "vilande_produkt": "Ingen ny uppföljning: tråden sålde en produkt som inte säljs nu.",
+}
+
+
+async def _run_uppfoljningsjobb(
+    app_state, job_id: str, tenant: dict, *, prospect_id: str, trad: dict, kvotforsok: int = 0
+) -> None:
+    """Skapa om utkast för ett lead som redan fått ett mejl: den väntande
+    uppföljningen skrivs om med kundens erbjudande (follow_up_generator.
+    skriv_om_uppfoljning). Samma liggare och jobbpost som ett utkastjobb, så
+    förloppet och utfallet syns på leadets rad även efter en omladdning."""
+    from ..leads.follow_up_generator import skriv_om_uppfoljning
+
+    storage = app_state.storage
+    tenant_id = tenant["tenant_id"]
+    slutstatus: str | None = None
+    utkast_fel: str | None = None
+    omkor_efter_kvot = False
+    await app_state.jobs.start(job_id)
+    await storage.set_leads_job_status(
+        tenant_id, job_id=job_id, status="processing", scope="utkast", prospect_id=prospect_id
+    )
+    registrera_aktiv(job_id)
+    try:
+        context_pack, _missing = await build_context_pack(storage, tenant_id)
+        rad = await skriv_om_uppfoljning(
+            storage, tenant_id, trad, tenant_name=tenant["tenant_name"], context_pack=context_pack
+        )
+        result: dict = {
+            "prospect_id": prospect_id,
+            "uppfoljning": True,
+            "produkt": rad.get("produkt"),
+            "draft": {"subject": rad.get("subject"), "queued": bool(rad.get("queued"))},
+        }
+        if not rad.get("queued"):
+            result["draft_note"] = _UPPFOLJNING_EJ.get(str(rad.get("hoppad"))) or (
+                "Uppföljningen stoppades före kön av faktagrinden; den tidigare står kvar."
+                if rad.get("stoppad")
+                else _FEL_UTKAST
+            )
+            utkast_fel = result["draft_note"][:500]
+        await app_state.jobs.complete(job_id, result)
+        slutstatus = "completed"
+    except Exception as error:  # noqa: BLE001 — ett trasigt lead fäller inte de andra
+        if _ar_tillfallig_kvot(error) and kvotforsok < KVOT_OMFORSOK:
+            logger.warning("Uppföljningsjobb %s föll på modellens kvot (429); körs om.", job_id)
+            omkor_efter_kvot = True
+        else:
+            logger.exception("Uppföljningsjobb %s (prospekt %s) misslyckades", job_id, prospect_id)
+            await _larma_vid_kreditslut(app_state, tenant_id, error)
+            await app_state.jobs.fail(job_id, kundtext_for(error) or _FEL_UTKAST)
+            slutstatus = "failed"
+    finally:
+        avregistrera_aktiv(job_id)
+    if omkor_efter_kvot:
+        import random
+
+        await asyncio.sleep(KVOT_PAUS_S * (kvotforsok + 1) + random.uniform(0, 30))
+        await _run_batch_prospect(
+            app_state, job_id, tenant, prospect_id=prospect_id, scope="utkast", kvotforsok=kvotforsok + 1
+        )
+        return
+    if slutstatus is not None:
+        await storage.set_leads_job_status(
+            tenant_id, job_id=job_id, status=slutstatus, scope="utkast", prospect_id=prospect_id,
+            error=utkast_fel,
+        )
+
+
 def _fas(scope: str) -> str:
     return "skriver" if scope == "utkast" else "research"
 
@@ -3890,7 +3974,9 @@ async def processa_om(
 
     `ersatt` (Skapa om utkast, 2026-10-08): leadets väntande utkast ställs in
     och kasseras innan jobbet köas. Ett lead som redan fått ett mejl hoppas
-    över — ett nytt första mejl i ett pågående samtal är fel mejl.
+    över — ett nytt första mejl i ett pågående samtal är fel mejl — utom med
+    `scope="utkast"` när en uppföljning väntar på granskning: den skrivs om
+    (2026-10-31).
 
     `scope="utkast"` (2026-10-17): bara utkastet skrivs om, ur leadets
     sparade research. Researchen körs inte om, så bedömningen står kvar: när
@@ -3935,10 +4021,20 @@ async def processa_om(
     # Ett rent utkastjobb ersätter alltid leadets väntande utkast.
     if payload.ersatt or payload.scope == "utkast":
         lagen = await storage.utkast_lagen(tenant_id)
-        hoppade = [str(p["id"]) for p in hittade if (lagen.get(str(p["id"])) or {}).get("antal_skickade")]
+        skickade = {str(p["id"]) for p in hittade if (lagen.get(str(p["id"])) or {}).get("antal_skickade")}
+        # Sebbe 2026-10-31: ett lead som redan fått ett mejl och har en
+        # uppföljning som väntar på granskning får den omskriven av jobbet
+        # (_run_uppfoljningsjobb). Den gamla ställs in först när den nya är
+        # klar, inte här. Övriga leads med ett skickat mejl hoppas över.
+        uppfoljningar = {
+            pid for pid in skickade
+            if payload.scope == "utkast" and (lagen.get(pid) or {}).get("ko_status") == "awaiting_review"
+        }
+        hoppade = [pid for pid in (str(p["id"]) for p in hittade) if pid in skickade - uppfoljningar]
         hittade = [p for p in hittade if str(p["id"]) not in hoppade]
         for p in hittade:
-            await avbryt_utskick_for_prospekt(storage, tenant_id, str(p["id"]))
+            if str(p["id"]) not in uppfoljningar:
+                await avbryt_utskick_for_prospekt(storage, tenant_id, str(p["id"]))
         if not hittade:
             return {
                 "jobs": [], "scope": payload.scope, "count": 0, "fase": _fas(payload.scope),

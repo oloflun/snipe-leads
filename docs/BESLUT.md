@@ -9,6 +9,47 @@ möjligt), vad det betyder i koden.
 
 ---
 
+## 2026-10-31 (Sebbe) — Uppföljningarna bär erbjudandet, ämnesraderna och stilgrinden
+
+**Beslut.** "Ingen ändring har ju skett i main? Du måste uppdatera alla mail
+under 'ny' och 'alla'." Efter att de 125 väntande första mejlen i main skrivits
+om med piloten: "Ja, bygg om dem", alltså uppföljningskedjan och de 418
+väntande uppföljningarna.
+
+**Resonemang.** Granskningskön visar uppföljningar bredvid första mejlen, och
+de 418 i main bar fortfarande det gamla: "svara 'pilot' så berättar jag mer",
+"era fem vanligaste kundfrågor" och 20 minuters samtal. 174 hade bolagets
+namn i ämnesraden, 116 slutade med en fråga och 62 blandade du och ni.
+Uppföljningskedjan läste bara trådens tidigare mejl, så den fick aldrig
+erbjudandet, ämnesraderna eller stilgrinden som första mejlet fått sedan
+2026-10-25 och 10-29. En omskrivning utan att bygga om kedjan hade gett samma
+mejl igen.
+
+**I koden.**
+- `follow_up_generator._en_uppfoljning` väljer produkten (researchens, annars
+  den trådens skickade mejl nämner först; `erbjudanden.produkt_nu` hittar nu
+  också "Vår Supportagent" och "vår AI-support") och kundens erbjudande för
+  den (`erbjudanden.for_trad`). Villkoren står i ärendet
+  (`erbjudanden.uppfoljningsblock`, uppföljningens korta form, inte formen
+  A/B) och i faktagrindens underlag. Tilltalet avgörs i kod som i första
+  mejlet. Ämnesraden väljs ur kundens lista och inte en som tråden redan
+  burit, och "upp till" står kvar.
+- Samma stilgrind som första mejlet: en omskrivning före humanizern och högst
+  två varv efter, och versionen med minst fynd köas. Mätt på de 418 gamla är
+  fynden verkliga fel också i en uppföljning, så inga fler än
+  `lang_mening`/`samma_uppmaning` är undantagna.
+- Overlayen `leads-followup.md`: erbjudandet står med, avslutet är dess
+  handling och aldrig en fråga, och ämnesraden saknar bolagsnamn och produkt.
+- Skapa om utkast (`processa-om`, `scope="utkast"`) skriver om ett kontaktat
+  leads väntande uppföljning i stället för att hoppa över leadet
+  (`_run_uppfoljningsjobb`, `skriv_om_uppfoljning`). Det gamla utkastet ställs
+  in först när det nya passerat grindarna, så ett stoppat nytt lämnar det
+  gamla kvar. Timsvepet hoppar över ett lead vars utkast skrivs om, annars
+  kunde det skriva en andra uppföljning i samma tråd. Leads utan väntande
+  uppföljning hoppas över som förut, liksom full research.
+
+---
+
 ## 2026-10-30 (Sebbe) — Snajps Iris: upp till 200 anställda, ingen webbplats krävs, men ett riktigt företag som behöver kunder
 
 **Beslut.** "Utskicken som Iris (Snajp) väljer bort som bortvalda måste

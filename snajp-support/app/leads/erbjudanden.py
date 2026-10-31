@@ -212,15 +212,23 @@ def produkt_nu(
     researchens gamla erbjudandeförslag ("prova gratis i två månader") och
     varken piloten eller ämnesraderna kom med. Ordningen: samma namn, samma
     kortform före kommat, det ena namnet början på det andra, samma slag av
-    Snajps agenter; utan namn det första produktnamnet som står i `text`; och
-    har kunden bara en produkt är det den."""
-    from .stilkontroll import produktslag
+    Snajps agenter; utan namn det första produktnamnet som står i `text`
+    (stammen, så att "Vår Supportagent" räknas), sedan det först nämnda slaget
+    av Snajps agenter ("vår AI-support"); och har kunden bara en produkt är
+    det den. Uppföljningarna läser produkten ur trådens skickade mejl så
+    (Sebbe 2026-10-31): 127 av 418 väntande i main nämnde ingen produkt med
+    dess fulla namn."""
+    from .stilkontroll import produktslag, produktstam
 
     if not produkter:
         return None
 
     def kort(s: str) -> str:
         return s.split(",")[0].strip().casefold()
+
+    def i_text(p: dict[str, str]) -> str:
+        stam = produktstam(p["namn"])
+        return stam if len(stam) >= 4 else kort(p["namn"])
 
     if namn and namn.strip():
         n = namn.strip().casefold()
@@ -235,12 +243,23 @@ def produkt_nu(
                 return traff
     lag = (text or "").casefold()
     forst = sorted(
-        ((lag.find(kort(p["namn"])), p) for p in produkter if kort(p["namn"]) and kort(p["namn"]) in lag),
+        ((lag.find(i_text(p)), p) for p in produkter if i_text(p) and i_text(p) in lag),
         key=lambda t: t[0],
     )
     if forst:
         return forst[0][1]
+    slag = sorted(
+        ((m.start(), p) for p in produkter if produktslag(p["namn"])
+         for m in [_SLAGORD[produktslag(p["namn"])].search(lag)] if m),
+        key=lambda t: t[0],
+    )
+    if slag:
+        return slag[0][1]
     return produkter[0] if len(produkter) == 1 else None
+
+
+#: Orden som bär Snajps agenters slag i en text utan produktnamnet.
+_SLAGORD = {"support": re.compile(r"support"), "leads": re.compile(r"\biris\b|\bleads")}
 
 
 def normalisera(raw: Any) -> dict[str, Any]:
@@ -473,6 +492,26 @@ def block(nyckel: str, villkor: str, erbjudande: Erbjudande | None = None, produ
         f"{gemensamt()}\n\n"
         f"### {erbjudande.namn}\n{erbjudande.regler or 'Kundens eget erbjudande: villkoren nedan är hela erbjudandet.'}\n\n"
         f"### Mejlets form ({formnamn})\n{formregler(erbjudande.form, produkt)}\n\n"
+        f"### Villkor för erbjudandet\n{villkor.strip()}"
+    )
+
+
+def uppfoljningsblock(villkor: str) -> str:
+    """Erbjudandet i en uppföljning: samma villkor som i första mejlet, i
+    uppföljningens korta form och inte formen A/B. Sebbe 2026-10-31: de 418
+    väntande uppföljningarna i main bar ännu "svara 'pilot'" och "era fem
+    vanligaste kundfrågor", för kedjan läste bara de tidigare mejlen."""
+    return (
+        "## Erbjudandet i uppföljningen\n"
+        "Kunden har valt det här erbjudandet för tråden, och det gäller nu, även om ett tidigare mejl "
+        "erbjöd något annat. Det tidigare erbjudandet nämns inte.\n"
+        "- Nämn produkten med sitt namn och vad den gör åt dem, kort och bara det som står i dess nytta.\n"
+        "- Erbjudandet i en mening med villkorens innehåll: siffrorna och löftena oförändrade i sak, i "
+        "mejlets tilltal och i hela meningar. Inget annat lovas.\n"
+        "- Har ett tidigare mejl redan nämnt erbjudandet: påminn om det med andra ord, och låt vinkeln "
+        "vara det nya.\n"
+        "- Mejlet slutar med villkorens handling som en vardaglig inbjudan, aldrig som en order av "
+        "formen \"Svara X så gör vi Y\" och aldrig med en fråga.\n\n"
         f"### Villkor för erbjudandet\n{villkor.strip()}"
     )
 
