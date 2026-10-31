@@ -120,6 +120,28 @@ def nyckeluttryck(kolumner: list[str]) -> str:
     return "concat_ws('|', " + ", ".join(f"x.{k}::text" for k in kolumner) + ")"
 
 
+def nyckelvillkor(cur, tabell: str, kolumner: list[str]) -> tuple[str, str]:
+    """(villkor för en nyckel, villkor för en lista nycklar) i skriv.
+
+    Med en nyckelkolumn jämförs kolumnen mot sin egen typ, så att
+    primärnyckelns index används. concat_ws('|', x.id::text) = … kan inte
+    använda något index, och varje rad blev en läsning av hela tabellen:
+    synken efter en veckas uppehåll (2026-10-30, ~5 000 rader) hann inte klart
+    på 15 minuter och avbröts mitt i outreach_threads. Sammansatta nycklar
+    behåller uttrycket; nycklarnas textform är densamma i båda fallen."""
+    if len(kolumner) != 1:
+        uttryck = nyckeluttryck(kolumner)
+        return f"{uttryck} = %s", f"{uttryck} = any(%s)"
+    cur.execute(
+        "select format_type(atttypid, atttypmod) from pg_attribute "
+        "where attrelid = ('public.' || %s)::regclass and attname = %s",
+        (tabell, kolumner[0]),
+    )
+    typ = cur.fetchone()[0]
+    kolumn = f"x.{kolumner[0]}"
+    return f"{kolumn} = %s::{typ}", f"{kolumn} = any(%s::{typ}[])"
+
+
 def rader(cur, tabell: str, kolumner: list[str], tenants: list[str]) -> dict[str, dict]:
     """Nyckel → {andrad, hash, pmid} för de rader som får synkas. Själva raden
     hämtas först när den skrivs (skriv): alla körningar med spår på en gång
@@ -173,11 +195,19 @@ def planera(
     return plan
 
 
-def skriv(kalla, cur, tabell: str, kolumner: list[str], nycklar: list[str], radera: list[str]) -> list[str]:
-    """Raderar och skriver i replica-läge, en savepoint per rad; raderna hämtas
-    ur källan hundra åt gången. Returnerar felen."""
+#: Rader per parti i skriv: en hämtning, en borttagning och en insert.
+PARTI = 100
+
+
+def skriv(
+    kalla, cur, tabell: str, kolumner: list[str], nycklar: list[str], radera: list[str], *, ersatt_krockar: bool = False,
+) -> list[str]:
+    """Raderar och skriver i replica-läge, ett parti om PARTI rader åt gången
+    (en savepoint per parti, per rad bara när partiet faller). Returnerar
+    felen."""
     fel: list[str] = []
     nyckel = nyckeluttryck(kolumner)
+    en, flera = nyckelvillkor(cur, tabell, kolumner)
     # Genererade kolumner (prospects.foretagsnyckel) räknas fram av målet och
     # får inte skrivas; 855 prospekt föll på det 2026-10-17.
     cur.execute(
@@ -186,17 +216,36 @@ def skriv(kalla, cur, tabell: str, kolumner: list[str], nycklar: list[str], rade
         (tabell,),
     )
     kol = cur.fetchone()[0]
-    for k in radera:
-        cur.execute(f"delete from public.{tabell} x where {nyckel} = %s", (k,))
-    for i in range(0, len(nycklar), 100):
+    for i in range(0, len(radera), PARTI):
+        cur.execute(f"delete from public.{tabell} x where {flera}", (radera[i:i + PARTI],))
+    for i in range(0, len(nycklar), PARTI):
         kalla.execute(
-            f"select {nyckel}, to_jsonb(x)::text from public.{tabell} x where {nyckel} = any(%s)",
-            (nycklar[i:i + 100],),
+            f"select {nyckel}, to_jsonb(x)::text from public.{tabell} x where {flera}",
+            (nycklar[i:i + PARTI],),
         )
-        for k, rad in kalla.fetchall():
+        parti = kalla.fetchall()
+        if not parti:
+            continue
+        # Hela partiet i två anrop (2026-10-30): synken körs från GitHub mot
+        # Railway, och fyra rundresor per rad var det mesta av tiden. Faller
+        # partiet (en trasig rad) görs det om rad för rad nedan, så att felet
+        # pekar ut raden och resten skrivs som förut.
+        cur.execute("savepoint parti")
+        try:
+            cur.execute(f"delete from public.{tabell} x where {flera}", ([k for k, _ in parti],))
+            cur.execute(
+                f"insert into public.{tabell} ({kol}) select {kol} "
+                f"from jsonb_populate_recordset(null::public.{tabell}, %s::jsonb)",
+                ("[" + ",".join(rad for _, rad in parti) + "]",),
+            )
+            cur.execute("release savepoint parti")
+            continue
+        except psycopg2.Error:
+            cur.execute("rollback to savepoint parti")
+        for k, rad in parti:
             cur.execute("savepoint rad")
             try:
-                cur.execute(f"delete from public.{tabell} x where {nyckel} = %s", (k,))
+                cur.execute(f"delete from public.{tabell} x where {en}", (k,))
                 cur.execute(
                     f"insert into public.{tabell} ({kol}) select {kol} from jsonb_populate_record(null::public.{tabell}, %s::jsonb)",
                     (rad,),
@@ -204,8 +253,59 @@ def skriv(kalla, cur, tabell: str, kolumner: list[str], nycklar: list[str], rade
                 cur.execute("release savepoint rad")
             except psycopg2.Error as e:
                 cur.execute("rollback to savepoint rad")
-                fel.append(f"{tabell} {k}: {str(e).splitlines()[0]}")
+                # 23505 = unique_violation. Felkoden och inte psycopg2.errors:
+                # INV-DATA-003 laddar skriptet med en psycopg2-stubbe utan
+                # undermoduler.
+                krock = getattr(e, "pgcode", None) == "23505"
+                if not (krock and ersatt_krockar and _ersatt_krock(cur, tabell, kolumner, kol, en, k, rad, e)):
+                    fel.append(f"{tabell} {k}: {str(e).splitlines()[0]}")
     return fel
+
+
+def _ersatt_krock(cur, tabell: str, kolumner: list[str], kol: str, en: str, k: str, rad: str, e) -> bool:
+    """Main-raden krockar med en ANNAN rad i development på ett unikt index
+    (2026-10-30: agent_suggestions_dedupe_ny_idx, samma förslag skapat i båda
+    miljöerna med olika id). Main är sanningen: development-raden som krockar
+    tas bort och main-raden skrivs. Bara index på vanliga kolumner; ett
+    uttrycksindex rapporteras som förut. True = ersatt."""
+    index = getattr(getattr(e, "diag", None), "constraint_name", None)
+    if not index:
+        return False
+    cur.execute(
+        """select array(select a.attname from unnest(i.indkey) with ordinality k(attnum, ord)
+                        join pg_attribute a on a.attrelid = i.indrelid and a.attnum = k.attnum
+                        order by k.ord),
+                  0 = any(i.indkey), pg_get_expr(i.indpred, i.indrelid)
+             from pg_index i join pg_class c on c.oid = i.indexrelid
+            where c.relname = %s and i.indisunique""",
+        (index,),
+    )
+    rad_index = cur.fetchone()
+    if not rad_index or rad_index[1] or not rad_index[0]:
+        return False
+    indexkolumner, _, predikat = rad_index
+    lika = " and ".join(f"x.{c} is not distinct from n.{c}" for c in indexkolumner)
+    annan = " or ".join(f"x.{c} is distinct from n.{c}" for c in kolumner)
+    cur.execute("savepoint krock")
+    try:
+        cur.execute(
+            f"""delete from public.{tabell} where ctid in (
+                  select x.ctid from public.{tabell} x, jsonb_populate_record(null::public.{tabell}, %s::jsonb) n
+                   where {lika} and ({annan}))"""
+            + (f" and ({predikat})" if predikat else ""),
+            (rad,),
+        )
+        cur.execute(f"delete from public.{tabell} x where {en}", (k,))
+        cur.execute(
+            f"insert into public.{tabell} ({kol}) select {kol} from jsonb_populate_record(null::public.{tabell}, %s::jsonb)",
+            (rad,),
+        )
+        cur.execute("release savepoint krock")
+        print(f"ERSATT: {tabell} {k}: development-raden som krockade på {index} togs bort", flush=True)
+        return True
+    except psycopg2.Error:
+        cur.execute("rollback to savepoint krock")
+        return False
 
 
 def kopiera_tabeller(cur, schema: str) -> None:
@@ -311,7 +411,8 @@ def main() -> int:
         c.execute("set session_replication_role = replica")
     for t, (kol, plan) in planer.items():
         fel += skriv(dc, mc, t, kol, plan["till_main"], plan["radera_main"])
-        fel += skriv(mc, dc, t, kol, plan["till_dev"], plan["radera_dev"])
+        # Main är sanningen: en krock i development på ett unikt index ger vika.
+        fel += skriv(mc, dc, t, kol, plan["till_dev"], plan["radera_dev"], ersatt_krockar=True)
         print(f"skrivet: {t}", flush=True)
     if forsta:
         # Köade utkast godkända i development skickas av main från och med nu

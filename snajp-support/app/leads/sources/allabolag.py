@@ -527,6 +527,28 @@ async def orgnr_traffar(namn: str) -> list[dict[str, str | None]] | None:
     return [{"namn": b["company_name"], "orgnr": b["orgnr"], "ort": b["ort"]} for b in bolag]
 
 
+async def registerfakta(orgnr: object) -> tuple[str, str] | None:
+    """(källadress, bolagsfakta) för ett organisationsnummer, eller None.
+
+    Källmaterialet för ett bolag utan sajt, eller vars sajt inte gick att
+    hämta, hos en kund som inte kräver webbplats (profil.webbplats_kravs,
+    Sebbe 2026-10-30). Sökningen på numret ger bolaget självt (uppmätt
+    2026-10-30: en träff); bara en träff med samma nummer räknas. Gratis och
+    cachad som listsidorna. Bara bolagsfakta, aldrig personer eller nummer
+    (merinfo.bolagsfakta_ur). Kastar aldrig."""
+    from .merinfo import bolagsfakta_ur
+
+    siffror = re.sub(r"\D", "", str(orgnr or ""))
+    if len(siffror) != 10:
+        return None
+    traff = next(
+        (b for b in await sok_sida(siffror, None, 1) or [] if re.sub(r"\D", "", str(b.get("orgnr") or "")) == siffror),
+        None,
+    )
+    fakta = bolagsfakta_ur(traff) if traff else ""
+    return (traff["url"], fakta) if fakta else None
+
+
 # -- Självkontroll ----------------------------------------------------------------
 
 FIXTUR = Path(__file__).resolve().parents[3] / "tests" / "leads" / "fixtures" / "allabolag_redovisning_molndal_2026-10-15.html"

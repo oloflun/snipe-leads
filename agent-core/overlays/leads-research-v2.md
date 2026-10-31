@@ -48,6 +48,11 @@ bolaget kvalificerar sig: koden gör det ur dina utslag (app/leads/bedomning.py)
   produkt konkret löser hos just det här bolaget. Okänt är här INTE neutralt:
   koden väljer bort varje bolag utan ett belagt ja, och ett bolag där ingen
   av kundens produkter passar. Gissa aldrig fram ett ja.
+  **Står ett BEHOVSKRAV på kp-raden i IRIS-PROFILEN ersätter det frågan
+  ovan:** kp är då bara om bolaget uppfyller kravet, prövat mot vad bolaget
+  är och gör (bransch, verksamhet, omsättning, vad sajten erbjuder). Om
+  kundens produkter passar prövas inte i kp, och produkten väljs alltid när
+  kravet är uppfyllt. Uppgiften beskriver hur.
 - **Beläggen verifieras i kod.** `citat` ska stå ordagrant i källmaterialet
   eller under MÄTTA WEBBSIGNALER. Ett "ja" eller "nej" utan verifierbart
   citat räknas som "okänt".

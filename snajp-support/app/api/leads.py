@@ -1555,6 +1555,8 @@ async def get_leads_config(request: Request, tenant: dict = Depends(require_tena
         "produkter": las_produkter(settings),
         "segment": validera_segment(settings.get("segment")),
         "offentlig_sektor": bool(settings.get("offentlig_sektor")),
+        "webbplats_kravs": settings.get("webbplats_kravs") is not False,
+        "behov": str(settings.get("behov") or ""),
         # Valen som finns att välja MELLAN, inte kundens val. UI:t ska kunna
         # rendera en lista utan att ha en egen kopia av geo.py och sni.py —
         # en andra kopia hade drivit isär, och symptomet blivit att ett
@@ -1642,6 +1644,11 @@ async def put_leads_config(
         merged["segment"] = [s.model_dump() for s in payload.segment]
     if payload.offentlig_sektor is not None:
         merged["offentlig_sektor"] = payload.offentlig_sektor
+    # Webbplatskravet och behovskravet (Sebbe 2026-10-30): också profilindata.
+    if payload.webbplats_kravs is not None:
+        merged["webbplats_kravs"] = payload.webbplats_kravs
+    if payload.behov is not None:
+        merged["behov"] = payload.behov.strip()
 
     # auto_send-grinden körs EFTER sammanslagningen, mot det ICP som faktiskt
     # kommer att gälla. Hade den körts mot `current` kunde en och samma PUT
