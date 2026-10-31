@@ -214,3 +214,19 @@ def test_grinden_undantar_produkten_efter_loftet_men_jamfor_med_kon():
     med_kon = _stilfynd(utkast, villkor=PILOT, produkt="Supportagenten", bolag="Godhems Zoologiska AB",
                         amne_i_kod=True, andra=[text])
     assert any("samma ingång" in f for f in med_kon), med_kon
+
+
+@pytest.mark.anyio
+async def test_iris_ar_aldrig_hon_i_uppfoljningen():
+    storage = MemoryStorage()
+    await _snajp(storage)
+    _, trad, _ = await _kontaktad(storage, forsta="Vår agent Iris hittar nya företagskunder.")
+    text = BRA.replace("vår Supportagent svarar på återkommande kundfrågor dygnet runt.",
+                       "Iris hittar nya företagskunder. Hon skriver också första mejlet.").replace(
+                       "pilot,", "pilot av Iris,")
+    with patch("app.leads.follow_up_generator.run_step", new=_fejk([text], [])):
+        [rad] = await generate_due_follow_ups(storage, TENANT, now=NU, tenant_name="Snajp", context_pack=KONTEXT)
+
+    assert rad["produkt"] == "Iris, leadsagenten" and rad["queued"] is True, rad
+    [koad] = [m for m in await storage.list_outreach_messages(TENANT, trad["id"]) if not m.get("sent_at")]
+    assert "Hon skriver" not in koad["body"] and "Den skriver också" in koad["body"]

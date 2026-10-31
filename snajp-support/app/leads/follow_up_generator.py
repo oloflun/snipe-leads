@@ -52,6 +52,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import time
 from datetime import datetime, timedelta
 from typing import Any
@@ -328,6 +329,9 @@ async def skriv_om_uppfoljning(
 #: provet i development 2026-10-31).
 _EJ_I_UPPFOLJNING = frozenset({"lang_mening", "samma_uppmaning", "agent_efter_loftet"})
 
+#: "Hon" först i en mening (stilkontroll: iris_hon).
+_HON_FORST = re.compile(r"((?:^|[.!?]\s+))Hon\b", re.MULTILINE)
+
 
 def _stilfynd(
     utkast: dict[str, Any],
@@ -445,7 +449,8 @@ async def _en_uppfoljning(
         "Skriv uppföljningsmejlet enligt vinkeln ovan. KORT: högst 90 ord i brödtexten, "
         "kortare än det första mejlet. En hänvisning till att du hört av dig förut är "
         "valfri och i så fall en kort bisats med egna ord, aldrig förebrående; börja "
-        "gärna direkt i vinkeln. Påstå ingenting som inte står i underlaget. Ämnesraden är två till "
+        "gärna direkt i vinkeln. Påstå ingenting som inte står i underlaget, och gissa "
+        "aldrig hur deras vardag ser ut (ingen arbetsbelastning, inget \"fullt upp\"). Ämnesraden är två till "
         "fem ord, utan bolagets namn och utan produkten. Skriv ingen hälsningsfras sist: "
         "signaturen läggs på automatiskt. "
         "Returnera JSON: subject (svenska, ren text), body (svenska, ren text)."
@@ -529,6 +534,11 @@ async def _en_uppfoljning(
     body = sign_off(strip_markdown(basta.get("body") or "").strip(), tenant_name)
     body = ratta_tilltal(body, mottagare, prospect_email)
     subject, body = ett_bolagsnamn(amne_utan_namn(subject, company_name), body, company_name)
+    if stil.produktslag(produktnamn) == "leads":
+        # Iris är aldrig "hon" (Snajps instruktion): humanizern förde in det
+        # efter grinden i två av tolv i provet 2026-10-31. Sista nätet i kod,
+        # samma igenkänning som fyndet iris_hon.
+        body = _HON_FORST.sub(lambda m: f"{m.group(1)}Den", body)
 
     # INV-GROUND-001 gäller uppföljningar precis som första mejlet. Villkorens
     # siffror är kundens egna och får stå i mejlet, liksom lägesbeskrivningen
