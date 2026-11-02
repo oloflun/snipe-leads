@@ -97,6 +97,47 @@ async def test_skickat_listar_skickade_mejl_med_bolag():
             assert rad["svarat"] is False
 
 
+async def test_svarat_utskick_bar_hela_konversationen():
+    """Svarat visade bara utskicket (Sebbe 2026-11-02): "man ska se hela
+    konversationen". En rad vars tråd fått svar bär trådens skickade och
+    inkomna mejl, äldst först; ett osänt utkast i tråden hör inte till samtalet."""
+    async with app.router.lifespan_context(app):
+        storage = app.state.storage
+        prospekt = await storage.create_prospect(
+            DEFAULT_TENANT_ID, company_name="Svarade AB", contact_email="info@svarade.se"
+        )
+        trad = await storage.ensure_outreach_thread(DEFAULT_TENANT_ID, prospect_id=prospekt["id"])
+        koat = await storage.queue_outreach_message(
+            DEFAULT_TENANT_ID, thread_id=trad["id"], subject="Kundfrågorna", body="Hej!\n\nVårt erbjudande.",
+            humanizer_variant="x", scheduled_at=WITHIN_WINDOW_UTC, status="awaiting_review",
+        )
+        await storage.mark_outreach_message_sent(DEFAULT_TENANT_ID, koat["message"]["id"], WITHIN_WINDOW_UTC)
+        await storage.record_inbound_reply(DEFAULT_TENANT_ID, thread_id=trad["id"], body="Låter intressant, ring mig.")
+        await storage.queue_outreach_message(
+            DEFAULT_TENANT_ID, thread_id=trad["id"], subject="Svar", body="Ett svarsutkast som väntar.",
+            humanizer_variant="x", scheduled_at=WITHIN_WINDOW_UTC, status="awaiting_review",
+        )
+        tyst = await storage.create_prospect(DEFAULT_TENANT_ID, company_name="Tysta AB", contact_email="info@tysta.se")
+        tyst_trad = await storage.ensure_outreach_thread(DEFAULT_TENANT_ID, prospect_id=tyst["id"])
+        tyst_koat = await storage.queue_outreach_message(
+            DEFAULT_TENANT_ID, thread_id=tyst_trad["id"], subject="Hej", body="Hej!",
+            humanizer_variant="x", scheduled_at=WITHIN_WINDOW_UTC, status="awaiting_review",
+        )
+        await storage.mark_outreach_message_sent(DEFAULT_TENANT_ID, tyst_koat["message"]["id"], WITHIN_WINDOW_UTC)
+
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            rader = (await client.get("/api/leads/skickat", headers=DEMO)).json()["skickat"]
+
+        rad = next(r for r in rader if r["company_name"] == "Svarade AB")
+        assert rad["svarat"] is True
+        assert [(m["direction"], m["body"]) for m in rad["konversation"]] == [
+            ("outbound", "Hej!\n\nVårt erbjudande."),
+            ("inbound", "Låter intressant, ring mig."),
+        ]
+        assert rad["konversation"][0]["subject"] == "Kundfrågorna" and rad["konversation"][1]["sent_at"]
+        assert "konversation" not in next(r for r in rader if r["company_name"] == "Tysta AB")
+
+
 async def test_godkant_som_vantar_pa_sandfonstret_star_overst_i_skickat():
     """Godkänn och skicka efter 16:00 ger ett godkänt utkast som går ut nästa
     vardag 08:00. Det ska synas i Skickat direkt, märkt schemalagt med tiden

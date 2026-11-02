@@ -626,20 +626,43 @@ export function LeadsTabell({
     if (!demo) return skickat;
     return allaRader
       .filter((p) => SKICKADE.has(p.status))
-      .map((p) => ({
-        id: `demo-skickat-${p.id}`,
-        subject: text({ sv: `Hej ${p.company_name}`, en: `Hello ${p.company_name}` }),
-        body: text({
+      .map((p) => {
+        const id = `demo-skickat-${p.id}`;
+        const subject = text({ sv: `Hej ${p.company_name}`, en: `Hello ${p.company_name}` });
+        const body = text({
           sv: "Exempelmejl i demon. I din arbetsyta står mejlet som det skickades.",
           en: "Example email in the demo. In your workspace the email appears as it was sent."
-        }),
-        sent_at: p.senaste_handelse_at ?? p.created_at ?? new Date().toISOString(),
-        prospect_id: p.id,
-        company_name: p.company_name,
-        contact_name: p.contact_name ?? null,
-        prospect_email: p.contact_email ?? null,
-        svarat: SVARADE.has(p.status)
-      }));
+        });
+        const sent_at = p.senaste_handelse_at ?? p.created_at ?? new Date().toISOString();
+        const svarat = SVARADE.has(p.status);
+        return {
+          id,
+          subject,
+          body,
+          sent_at,
+          prospect_id: p.id,
+          company_name: p.company_name,
+          contact_name: p.contact_name ?? null,
+          prospect_email: p.contact_email ?? null,
+          svarat,
+          // Ett svarat exempel visar konversationen, som i arbetsytan.
+          konversation: svarat
+            ? [
+                { id, direction: "outbound" as const, subject, body, sent_at },
+                {
+                  id: `demo-svar-${p.id}`,
+                  direction: "inbound" as const,
+                  subject: null,
+                  body: text({
+                    sv: "Exempelsvar i demon. I din arbetsyta står bolagets svar här, under mejlet ni skickade.",
+                    en: "Example reply in the demo. In your workspace the company's reply appears here, below the email you sent."
+                  }),
+                  sent_at
+                }
+              ]
+            : undefined
+        };
+      });
   }, [demo, skickat, allaRader, text]);
 
   useEffect(() => {

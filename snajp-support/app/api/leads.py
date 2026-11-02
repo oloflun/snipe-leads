@@ -1451,7 +1451,11 @@ async def list_skickat(
     Överst står de godkända som väntar på sändfönstret (`schemalagt`, Sebbe
     2026-10-08): ett utkast som godkänts 17:55 lämnade Iris-listan men syntes
     ingenstans förrän 08:00 nästa vardag. Nu flyttar Godkänn och skicka det
-    hit direkt, med tiden det går ut (`skickas_tidigast`)."""
+    hit direkt, med tiden det går ut (`skickas_tidigast`).
+
+    En rad vars tråd fått svar bär `konversation` (Sebbe 2026-11-02: "man ska
+    se hela konversationen"): trådens skickade och inkomna mejl, äldst först,
+    så att Svarat visar svaret och inte bara utskicket."""
     storage = request.app.state.storage
     tenant_id = tenant["tenant_id"]
     # De tre läsningarna är oberoende: parallellt i stället för i följd
@@ -1468,6 +1472,18 @@ async def list_skickat(
         except TypeError:  # datetime mot sträng (MemoryStorage): jämför ISO-texten
             r["svarat"] = bool(inn and ut and str(inn) >= str(ut))
         r["schemalagt"] = False
+    # Bara trådar med ett inkommet svar: de andra har inget samtal att visa,
+    # och deras utskick står redan på raden.
+    besvarade = sorted({str(r["thread_id"]) for r in rader if r.get("thread_id") and r.get("last_inbound_at")})
+    if besvarade:
+        tradar: dict[str, list[dict]] = {}
+        for m in await storage.list_konversationer(tenant_id, besvarade):
+            tradar.setdefault(str(m["thread_id"]), []).append(
+                {k: m.get(k) for k in ("id", "direction", "subject", "body", "sent_at")}
+            )
+        for r in rader:
+            if any(m["direction"] == "inbound" for m in tradar.get(str(r.get("thread_id")), [])):
+                r["konversation"] = tradar[str(r["thread_id"])]
     svar: dict = {"skickat": schemalagda + rader}
     return await _med_signatur(storage, tenant_id, svar, settings=leadsinst)
 

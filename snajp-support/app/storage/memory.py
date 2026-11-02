@@ -2869,6 +2869,23 @@ class MemoryStorage:
         rader.sort(key=lambda r: str(r["sent_at"]), reverse=True)
         return rader[:limit]
 
+    async def list_konversationer(self, tenant_id: str, thread_ids: list[str]) -> list[dict[str, Any]]:
+        trådar = set(thread_ids)
+
+        def tid(m: dict[str, Any]) -> datetime:
+            # sent_at är ISO-text (_now) eller datetime (mark_outreach_message_sent
+            # i testerna); str() på en datetime sorterar fel mot ISO-texten.
+            t = m["sent_at"] if isinstance(m["sent_at"], datetime) else datetime.fromisoformat(str(m["sent_at"]))
+            return t if t.tzinfo else t.replace(tzinfo=timezone.utc)
+
+        rader = [
+            {k: m.get(k) for k in ("id", "thread_id", "direction", "subject", "body", "sent_at")}
+            for m in self.outreach_messages.get(tenant_id, [])
+            if m["thread_id"] in trådar and m.get("sent_at") and not m.get("kasserad_at")
+        ]
+        rader.sort(key=lambda r: (r["thread_id"], tid(r)))
+        return rader
+
     async def list_replies(self, tenant_id: str, *, limit: int = 50) -> list[dict[str, Any]]:
         # Speglar SQL-varianten: inbound över alla trådar, senast först, med
         # prospektets namn hopslaget. En avvikelse här hade gett en grön svit

@@ -9,6 +9,27 @@ möjligt), vad det betyder i koden.
 
 ---
 
+## 2026-11-02 (Sebbe) — Skickat visar hela konversationen för ett svarat utskick
+
+**Beslut.** "Under 'svarat' ska man se svaren på våra utskick, inte bara
+utskicken som det är nu, utan man ska se hela konversationen = (utskicket och
+svaret på utskicket)."
+
+**Resonemang.** Filtret Svarat i Leads › Inkorg › Skickat visade bara mejlet vi
+skickat. Svaret fanns redan sparat i tråden (`record_inbound_reply`, alla fyra
+svarade leads i development har det), men ingen vy i Skickat läste det, så den
+som öppnade ett svarat lead fick inte veta vad bolaget svarat.
+
+**I koden.**
+- `GET /api/leads/skickat` lägger `konversation` på varje rad vars tråd fått
+  svar: trådens skickade och inkomna mejl äldst först
+  (`storage.list_konversationer`); osända och kasserade utkast hör inte dit.
+- `SkickatLista` visar ett utdrag ur svaret på raden och, utfälld, utskicket
+  med signaturen följt av svaret i en egen ruta. Det citerade originalmejlet i
+  ett svar fälls ihop (`lib/leads/konversation.ts:delaCitat`), så att vår text
+  inte står två gånger. Gäller i alla filter, även ett autosvar under Väntar på
+  svar.
+
 ## 2026-10-31 (Sebbe) — Uppföljningarna bär erbjudandet, ämnesraderna och stilgrinden
 
 **Beslut.** "Ingen ändring har ju skett i main? Du måste uppdatera alla mail
