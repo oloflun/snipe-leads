@@ -176,8 +176,10 @@ AMNEN = {
 #: 40–50 nya företag i veckan …, skulle det vara till nytta?"). Siffran är
 #: Sebbes ("1: ja, fast 40-50 i veckan") och går in i faktagrindens underlag.
 KORT_UTFALL = {
-    IRIS: "40–50 nya företag i veckan som passar er idealkund, med ett färdigt första mejl till varje som ni godkänner innan det skickas",
-    SUPPORT: "svar direkt på de vanligaste kundfrågorna i chatt och mejl, dygnet runt, utifrån er egen information",
+    # Kort som i Sebbes exempel: provet 2026-11-05 gav B-mejl över 60 ord
+    # med den längre texten ("… som ni godkänner innan det skickas").
+    IRIS: "40–50 nya företag i veckan som passar er, med ett färdigt första mejl till varje",
+    SUPPORT: "svar direkt på de vanligaste kundfrågorna, dygnet runt, utifrån er egen information",
 }
 #: A/B (Anton 2026-10-25): samma pilot, två former, hälften var. Katalogens
 #: gratisprov och garanti står kvar avslagna och kan slås på i Leads › Erbjudanden.

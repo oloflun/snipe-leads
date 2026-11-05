@@ -150,13 +150,14 @@ def block(
         )
         steg += 1
     if villkor:
+        # Provet 2026-11-05: utan ordtak per mening blev varianten 66–76 ord.
         delar.append(
-            f"({steg}) En mening om erbjudandet med villkorens innehåll, kort: vad {namn} gör åt dem och "
-            "erbjudandet, siffrorna oförändrade i sak."
+            f"({steg}) En mening om högst 15 ord om vad {namn} gör åt dem, sedan en mening om högst 15 ord "
+            "med erbjudandet ur villkoren nedan, siffrorna oförändrade i sak. Inget annat ur villkoren."
         )
         steg += 1
     delar.append(
-        f"({steg}) En enda fråga om högst 30 ord: om {namn} kunde ge dem utfallet nedan, översatt till "
+        f"({steg}) En enda fråga om högst 25 ord: om {namn} kunde ge dem utfallet nedan, översatt till "
         "deras verksamhet, skulle det vara till nytta (eller användbart, intressant) för dem? "
         f"{namn} namnges i frågan. Frågans ordalydelse väljer du själv."
     )
