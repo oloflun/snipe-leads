@@ -26,10 +26,13 @@ import { cn } from "@/lib/utils";
  * svaret får `role="region"` med `aria-labelledby` tillbaka till frågan så att
  * en skärmläsare vet vad regionen heter.
  *
- * Panelen tas ur DOM:en när den är stängd i stället för att döljas med CSS.
- * En `hidden`-panel är fortfarande sökbar med webbläsarens egen sidsökning och
- * dess länkar är fortfarande tabbbara — vilket ger en tangentbordsanvändare
- * fokus på något osynligt.
+ * Den stängda panelen står kvar i HTML:en med `hidden` (2026-11-05). Förut
+ * togs den ur DOM:en, och då fick en sökmotor eller AI-crawler frågorna utan
+ * ett enda svar: sidan som skulle svara på det folk söker efter levererade
+ * bara rubrikerna. `hidden` är `display: none`, så panelen och dess länkar är
+ * varken tabbbara eller synliga för en skärmläsare, vilket var skälet till att
+ * den togs bort. (En panel dold med opacity eller höjd 0 hade varit tabbbar;
+ * det var den varningen gällde.)
  *
  * ## Ankare
  *
@@ -136,31 +139,31 @@ export function FaqDragspel({ start }: Readonly<{ start?: string }>) {
                       </button>
                     </h3>
 
-                    {utfalld ? (
-                      <div
-                        id={`svar-${post.id}`}
-                        role="region"
-                        aria-labelledby={`fraga-${post.id}`}
-                        className="pb-6"
-                      >
-                        {post.svar.map((stycke) => (
-                          <p
-                            key={stycke.sv}
-                            className="mt-0 max-w-[62ch] pt-1 text-[1rem] leading-[1.7] text-ink-muted [&+&]:mt-4"
-                          >
-                            {text(stycke)}
-                          </p>
-                        ))}
-                        {post.lank ? (
-                          <Link
-                            href={post.lank.href}
-                            className="focus-ring mt-4 inline-block text-[0.9375rem] font-medium underline underline-offset-4 hover:text-ochre"
-                          >
-                            {text(post.lank.etikett)}
-                          </Link>
-                        ) : null}
-                      </div>
-                    ) : null}
+                    {/* Alltid i HTML:en, dold med `hidden`: se "Tillgänglighet" ovan. */}
+                    <div
+                      id={`svar-${post.id}`}
+                      role="region"
+                      aria-labelledby={`fraga-${post.id}`}
+                      hidden={!utfalld}
+                      className="pb-6"
+                    >
+                      {post.svar.map((stycke) => (
+                        <p
+                          key={stycke.sv}
+                          className="mt-0 max-w-[62ch] pt-1 text-[1rem] leading-[1.7] text-ink-muted [&+&]:mt-4"
+                        >
+                          {text(stycke)}
+                        </p>
+                      ))}
+                      {post.lank ? (
+                        <Link
+                          href={post.lank.href}
+                          className="focus-ring mt-4 inline-block text-[0.9375rem] font-medium underline underline-offset-4 hover:text-ochre"
+                        >
+                          {text(post.lank.etikett)}
+                        </Link>
+                      ) : null}
+                    </div>
                   </div>
                 );
               })}

@@ -1,9 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useLocale } from "@/lib/i18n";
+import { useLocale, type Localized } from "@/lib/i18n";
 import { bolagsraden, dataskyddKontakt } from "@/lib/bolag";
-import { KONTAKT_MEJL } from "@/components/marketing/copy";
+import { FAMILJ, LANDNINGAR } from "@/lib/landningar";
+import type { Paket } from "@/lib/pricing";
+import { KONTAKT_MEJL, shared } from "@/components/marketing/copy";
 
 /**
  * Den juridiska raden längst ned på Snajps EGNA publika sidor.
@@ -33,12 +35,62 @@ import { KONTAKT_MEJL } from "@/components/marketing/copy";
  * Ingenting läser den längre, och det är värt att veta: det finns inte längre
  * något i gränssnittet som påminner om att uppgifterna saknas.
  */
+/**
+ * Sökordssidorna i sidfoten (2026-11-05). Utan länkar från varje sida är de
+ * sidor ingen hittar: en sökmotor väger en sida efter hur sajten själv länkar
+ * till den, och Googles sidlänkar under träffen på "snajp" väljs bland sidorna
+ * sajten lyfter fram. Grupperade efter produkt, i lib/landningar.ts ordning.
+ */
+const forPaket = (id: Paket["id"]): { namn: Localized; vag: string }[] => LANDNINGAR.filter((p) => p.produkt === id);
+
+const GRUPPER: { rubrik: Localized; poster: { namn: Localized; vag: string }[] }[] = [
+  { rubrik: FAMILJ.leads.namn, poster: forPaket("leads") },
+  { rubrik: FAMILJ.support.namn, poster: forPaket("support") },
+  {
+    rubrik: { sv: "Snajp", en: "Snajp" },
+    poster: [
+      ...forPaket("duo"),
+      { namn: { sv: "Frågor och svar", en: "Questions and answers" }, vag: "/faq" },
+      { namn: shared.menyTeam, vag: "/vart-team" },
+      { namn: shared.menyBokaDemo, vag: "/boka-demo" }
+    ]
+  }
+];
+
 export function Sidfot() {
   const { text } = useLocale();
   return (
     <div className="border-t border-ink/12">
       <div className="mx-auto max-w-[1480px] px-6 py-8 md:px-10">
-        <div className="flex flex-col gap-4 text-[0.875rem] leading-[1.6] text-ink-subtle md:flex-row md:items-baseline md:justify-between">
+        <nav
+          aria-label={text({ sv: "Lösningar", en: "Solutions" })}
+          className="grid grid-cols-1 gap-x-10 gap-y-8 border-b border-ink/12 pb-10 pt-2 sm:grid-cols-3"
+        >
+          {GRUPPER.map((grupp) => (
+            <div key={grupp.rubrik.sv}>
+              <p className="text-[0.8125rem] font-medium text-ink-subtle">{text(grupp.rubrik)}</p>
+              <ul className="mt-3 flex flex-col gap-2.5">
+                {grupp.poster.map((post) => (
+                  <li key={post.vag}>
+                    {/* Ingen förhämtning: sidorna är dynamiska, och elva
+                        förhämtningar varje gång sidfoten syns hade varit elva
+                        serveranrop som sällan används. En crawler läser href
+                        oavsett. */}
+                    <Link
+                      href={post.vag}
+                      prefetch={false}
+                      className="focus-ring rounded-input text-[0.9375rem] text-ink-muted transition-colors hover:text-ink"
+                    >
+                      {text(post.namn)}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </nav>
+
+        <div className="mt-8 flex flex-col gap-4 text-[0.875rem] leading-[1.6] text-ink-subtle md:flex-row md:items-baseline md:justify-between">
           <p>{bolagsraden()}</p>
 
           <nav className="flex flex-wrap gap-x-6 gap-y-2">

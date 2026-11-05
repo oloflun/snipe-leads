@@ -191,6 +191,21 @@ export const PRIS_SAKNAS: Localized = { sv: "Pris på förfrågan", en: "Price o
  */
 export const BINDNINGSTID_MANADER = 0;
 
+/** "/mån" efter ett månadspris. Här av samma skäl som PRIS_PREFIX. */
+export const PER_MANAD: Localized = { sv: "/mån", en: "/mo" };
+
+/**
+ * Bindningstiden som en fras mitt i en mening: "och det finns ingen
+ * bindningstid". Sökordssidorna, deras sökbeskrivningar och llms.txt läser
+ * den här, så att en ändrad bindningstid inte lämnar kvar "ingen bindningstid"
+ * i en sökträff (INV-SEO-001 fäller ordet skrivet för hand). Prislistan har
+ * sin egen lydelse för nollfallet, se `copy.bindning` i PricingSection.
+ */
+export const BINDNING: Localized =
+  BINDNINGSTID_MANADER === 0
+    ? { sv: "ingen bindningstid", en: "no minimum term" }
+    : { sv: `${BINDNINGSTID_MANADER} månaders bindningstid`, en: `a ${BINDNINGSTID_MANADER}-month minimum term` };
+
 /**
  * Vilka enskilda paket ett kombinationspaket ersätter. Enda stället som vet
  * det, så att besparingen inte kan räknas på fel uppsättning.

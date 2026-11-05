@@ -1,5 +1,6 @@
 import { KANONISK_ORIGIN } from "@/lib/kanonisk";
 import type { MetadataRoute } from "next";
+import { LANDNINGAR } from "@/lib/landningar";
 import { arProduktion } from "@/lib/miljo";
 
 /**
@@ -50,6 +51,9 @@ const SIDOR: { vag: string; prioritet: number; frekvens: MetadataRoute.Sitemap[n
   // FAQ:n svarar på det folk söker efter, och varje fråga har ett eget ankare.
   { vag: "/faq", prioritet: 0.7, frekvens: "monthly" },
   { vag: "/vart-team", prioritet: 0.5, frekvens: "monthly" },
+  // Sökordssidorna (2026-11-05). Läses ur registret, så att en ny sida inte
+  // kan glömmas här: INV-SEO-001 kräver en mapp per post, inte en rad till.
+  ...LANDNINGAR.map(({ vag }) => ({ vag, prioritet: 0.8, frekvens: "monthly" as const })),
   { vag: "/integritetspolicy", prioritet: 0.3, frekvens: "yearly" },
   { vag: "/villkor", prioritet: 0.3, frekvens: "yearly" },
   { vag: "/angerratt", prioritet: 0.3, frekvens: "yearly" },

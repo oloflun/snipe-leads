@@ -1,0 +1,26 @@
+# Anmäler sajtens adresser till IndexNow (Bing, och därmed ChatGPT:s och
+# Copilots webbsökning) efter varje release till main som rör webben.
+#
+# Väntar först några minuter, så att Railway hinner deploya, och sedan tills
+# sajten visar priserna i lib/pricing.ts och varje sökordssida i
+# lib/landningar.ts. En anmälan före deployen hade fått Bing att hämta den
+# gamla sidan med det gamla priset. Se scripts/indexnow.py.
+name: IndexNow efter release
+
+on:
+  push:
+    branches: [main]
+    paths: ["app/**", "components/**", "lib/**", "public/**"]
+  workflow_dispatch:
+
+jobs:
+  anmal:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Ge Railway tid att deploya
+        run: sleep 360
+      # ubuntu-latest har Python 3; skriptet använder bara standardbiblioteket.
+      - name: Vänta på den nya versionen och anmäl
+        run: python3 scripts/indexnow.py --vanta-pa-deploy --apply

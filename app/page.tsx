@@ -1,6 +1,26 @@
+import type { Metadata } from "next";
 import { redirect } from "next/navigation";
+import { JsonLd } from "@/components/JsonLd";
 import { ProductPage } from "@/components/marketing/ProductPage";
+import { KONTAKT_MEJL } from "@/components/marketing/copy";
+import { graf, organisation, produkt, sidmeta, webbplats } from "@/lib/seo";
 import { getCurrentTenant } from "@/lib/tenants/server";
+
+// Kanonisk adress och delningskort bara här, inte i layouten: en canonical i
+// layouten ärvs av varje sida som saknar en egen, och /login hade pekat på
+// startsidan som sin kanoniska version.
+export const metadata: Metadata = {
+  ...sidmeta({
+    vag: "/",
+    titel: "Snajp | Svensk AI-SDR och AI-kundtjänst för B2B",
+    beskrivning:
+      "Snajp är två svenska AI-agenter. Iris skriver säljmejlen till nya B2B-kunder och supportagenten svarar kundmejlen ur er kunskapsbas. Testa båda direkt."
+  })
+};
+
+// Organisationen och webbplatsen bor på startsidan, som Google läser dem;
+// produktsidorna och sökordssidorna pekar hit med @id.
+const SCHEMA = graf(organisation(KONTAKT_MEJL), webbplats(), produkt("leads"), produkt("support"), produkt("duo"));
 
 export default async function Page() {
   const tenant = await getCurrentTenant();
@@ -15,5 +35,10 @@ export default async function Page() {
     redirect(`/chat/${tenant.slug}`);
   }
 
-  return <ProductPage initial="leads" />;
+  return (
+    <>
+      <JsonLd data={SCHEMA} />
+      <ProductPage initial="leads" />
+    </>
+  );
 }

@@ -2,13 +2,16 @@ import type { Metadata } from "next";
 import { BokaDemoFormular } from "@/components/marketing/BokaDemoFormular";
 import { InnehallsSida, SidRubrik } from "@/components/marketing/InnehallsSida";
 import { KONTAKT_MEJL } from "@/components/marketing/copy";
+import { sidmeta } from "@/lib/seo";
 import { notFoundOnTenant } from "@/lib/tenants/server";
 
 export const metadata: Metadata = {
-  title: "Boka demo — Snajp",
-  description:
-    "Femton till tjugo minuter, plattformen live mot era egna ärenden, inga förpliktelser.",
-  alternates: { canonical: "/boka-demo" }
+  ...sidmeta({
+    vag: "/boka-demo",
+    titel: "Boka demo av Snajps AI-agenter för leads och support",
+    beskrivning:
+      "Femton till tjugo minuter där vi kör Iris eller supportagenten live mot era egna kunder och ärenden. Inga förpliktelser, och vi säger rakt ut om det passar."
+  })
 };
 
 /**

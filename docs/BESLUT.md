@@ -9,6 +9,51 @@ möjligt), vad det betyder i koden.
 
 ---
 
+## 2026-11-05 (Anton) — Sökordssidor, strukturerad data och priser som följer prislistan
+
+**Beslut.** "På Snajp som sökord är vi etta med flera toppresultat och en bra
+AI-sammanfattning, men i alla övriga sökord för vår verksamhet dyker vi inte upp
+någonstans." Snajp ska synas på breda ord (leads, support, AI-agent), högre på
+"svensk support" och "svenska leads", och högst på det specifika: "b2b-leads",
+"svensk AI SDR", "leadsagent", "supportagent", "supportbot", "företagssupport".
+Sidlänkar med namn som "Support på svenska", "Svenska B2B-leads", "Svensk
+AI-SDR", "Svensk supportchatt till er hemsida" och "Svenska leads i inkorgen".
+Samma dag: "Se till att priserna automatiskt uppdateras i länkarna vid ändring
+på hemsidan."
+
+**Resonemang.** Sajten hade tre produktadresser, ingen med sökordet i titeln och
+ingen med en H1 (hjälterubriken var ett stycke). FAQ:ns svar togs ur HTML:en när
+de var hopfällda, så en crawler fick bara frågorna. Ingen strukturerad data,
+ingen delningsbild, ingen llms.txt. En sida rankar inte på en fråga den aldrig
+ställer, och en AI-assistent citerar inte ett svar den inte kan läsa. Varje
+sökordssida svarar på EN fråga med eget innehåll (inte åtta kopior, som Googles
+regler om doorway-sidor fäller), och priserna räknas ur prislistan så att en
+sökträff aldrig visar ett gammalt pris.
+
+**I koden.**
+- Åtta sökordssidor (`lib/landningar.ts` registret, `lib/landningssidor.ts`
+  innehållet, `components/marketing/Landningssida.tsx` mallen, en mapp per sida
+  under `app/`). Länkade från sidfoten på varje publik sida och i sitemapen.
+- Nya titlar och beskrivningar på `/`, `/leads`, `/support`, `/faq`,
+  `/vart-team` och `/boka-demo` via `lib/seo.ts:sidmeta`, med Open Graph och
+  delningsbilden `public/og/snajp.jpg` (utan pris, `scripts/generera_og.py`).
+- JSON-LD (`components/JsonLd.tsx`): Organization och WebSite på startsidan,
+  SoftwareApplication med pris ur `lib/pricing.ts`, FAQPage och BreadcrumbList.
+- Hjälterubriken är en h1; FAQ-svaren står i HTML:en med `hidden`.
+- `/llms.txt` (`lib/llms.ts`) för AI-assistenter, byggd ur samma källor.
+- IndexNow: nyckelfil i `public/`, `scripts/indexnow.py` och
+  `.github/workflows/indexnow.yml`, som efter varje push till main väntar tills
+  sajten visar priserna i `lib/pricing.ts` och sökordssidorna i
+  `lib/landningar.ts`, och sedan anmäler alla adresser.
+- Prisfraserna (`PER_MANAD`, `BINDNING`) bor i `lib/pricing.ts` bredvid
+  beloppen, så att även bindningstiden i en sökträff följer prislistan.
+- `GOOGLE_SITE_VERIFICATION` och `BING_SITE_VERIFICATION` (Railway, main) ger
+  verifieringstaggarna utan kodändring.
+- INV-SEO-001 fäller en sökordssida utan mapp, schema eller tenantspärr, en
+  titel över 60 tecken och ett handskrivet kronbelopp i det som bär pris ut.
+- Plan för det som inte är kod (Search Console, Bing, kataloger, listor, mätning
+  med OpenSEO): `docs/SEO.md`.
+
 ## 2026-11-02 (Sebbe) — Skickat visar hela konversationen för ett svarat utskick
 
 **Beslut.** "Under 'svarat' ska man se svaren på våra utskick, inte bara

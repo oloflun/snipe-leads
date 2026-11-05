@@ -214,13 +214,17 @@ export function LandingPhoto({
 
           <div className="relative mx-auto flex min-h-[92vh] max-w-[1480px] flex-col justify-end px-6 pb-14 pt-32 md:px-10 md:pb-20">
             <div className="max-w-[min(100%,980px)]">
-              <p
+              {/* h1, inte p (2026-11-05). /, /leads och /support hade ingen H1
+                  alls: sidans huvudrubrik var ett stycke, och en sökmotor
+                  fick gissa vad sidan handlade om. Rörelsen läser data-mo, inte
+                  taggen. */}
+              <h1
                 key={nyckel}
                 data-mo="hero-h1"
                 className="font-display text-[clamp(2.25rem,5.9vw,5.75rem)] font-semibold leading-[0.99] tracking-[-0.035em] text-paper"
               >
                 <HeroText text={text(copy.headline)} />
-              </p>
+              </h1>
             </div>
 
             <div className="mt-10 grid grid-cols-12 gap-y-8 lg:gap-x-10">
