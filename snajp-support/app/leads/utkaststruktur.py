@@ -98,18 +98,19 @@ FOREBILDER: dict[str | None, tuple[str, ...]] = {
         "första mejl till varje, skulle det vara till nytta?",
         "Ni har nyss börjat ta uppdrag åt fastighetsbolag. Om vår agent Iris varje vecka tog fram "
         "fastighetsbolag i regionen och skrev första mejlet till dem, skulle det hjälpa?",
-        # Agenten före siffrorna (Antons regel, stilkontroll agent_efter_loftet).
-        "Vår agent Iris hittar nya företagskunder åt er och skriver första mejlet, som ni godkänner "
-        "innan det skickas. Just nu tar vi in 20 företag i en kostnadsfri pilot. Vore det intressant "
-        "för er?",
+        # Agenten före siffrorna (Antons regel, stilkontroll agent_efter_loftet),
+        # och erbjudandet i EN mening: provet 2026-11-05 upprepade annars vad
+        # agenten gör i frågan.
+        "Vår agent Iris finns just nu i en kostnadsfri pilot för 20 företag. Om Iris tog fram nya "
+        "företagskunder åt er och skrev första mejlet till dem, vore det intressant för er?",
     ),
     "support": (
         "Om vår Supportagent svarade direkt på de vanligaste kundfrågorna, dygnet runt, utifrån er "
         "egen information, skulle det frigöra tid för er?",
         "Ni har många kurser med olika datum och intyg. Om vår Supportagent svarade på frågorna om "
         "dem direkt i chatten och mejlen, även kvällar och helger, skulle det vara användbart?",
-        "Vår Supportagent svarar på era kunders frågor utifrån er egen information och lämnar över "
-        "till er när den inte är säker. Just nu tar vi in 20 företag i en kostnadsfri pilot. Låter det "
+        "Vår Supportagent finns just nu i en kostnadsfri pilot för 20 företag. Om den svarade på era "
+        "kunders frågor utifrån er egen information och lämnade över när den inte är säker, låter det "
         "som något för er?",
     ),
 }
@@ -145,15 +146,18 @@ def block(
     steg = 1
     if ingang:
         delar.append(
-            f"({steg}) En mening om högst 20 ord om något konkret ur deras verksamhet enligt researchen "
-            f"som {namn} hjälper dem med. Inget problem, ingen kritik, ingen uppräkning av sortimentet."
+            f"({steg}) En mening om högst 20 ord som konstaterar något konkret ur deras verksamhet enligt "
+            f"researchen som {namn} hjälper dem med. Inget problem och ingen kritik: aldrig vad de eller "
+            "deras kunder kräver, förväntar sig eller behöver, och ingen uppräkning av sortimentet."
         )
         steg += 1
     if villkor:
-        # Provet 2026-11-05: utan ordtak per mening blev varianten 66–76 ord.
+        # Provet 2026-11-05: med en egen mening om vad agenten gör blev
+        # varianten 53–76 ord, och frågan upprepade samma sak.
         delar.append(
-            f"({steg}) En mening om högst 15 ord om vad {namn} gör åt dem, sedan en mening om högst 15 ord "
-            "med erbjudandet ur villkoren nedan, siffrorna oförändrade i sak. Inget annat ur villkoren."
+            f"({steg}) EN mening om högst 15 ord med erbjudandet ur villkoren nedan, där {namn} står före "
+            "siffrorna (\"Vår … finns just nu i …\"), siffrorna oförändrade i sak. Ingen separat mening om "
+            "vad agenten gör, och inget annat ur villkoren."
         )
         steg += 1
     delar.append(
@@ -163,7 +167,8 @@ def block(
     )
     delar.append(
         "Mejlet SLUTAR med frågan. Ingen inbjudan efter den, ingen länk, ingen bokning, ingen "
-        "funktionslista och inget annat stycke. "
+        "funktionslista och inget annat stycke. Säg aldrig samma sak två gånger: frågan upprepar inte "
+        "en tidigare mening. "
         + ("" if villkor else "Inget erbjudande, ingen pilot och ingen rabatt i det här mejlet. ")
         + f"Hela brödtexten högst {MAX_ORD_B} ord. Ämnesraden två till fem ord om utfallet för dem."
     )
