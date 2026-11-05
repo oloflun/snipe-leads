@@ -491,3 +491,35 @@ async def test_flytta_och_prova_mot_iris_kor_i_automationens_struktur(monkeypatc
     k = ((await app_state.jobs.get(batch_id)) or {}).get("result", {}).get("korning") or {}
     rad = await storage.get_leads_korning(TENANT, batch_id)
     assert (rad or {}).get("korning", k).get("struktur") == "b"
+
+
+# -- Volymprovet 2026-11-05 (30 B-mejl i development) --------------------------
+
+
+def test_b_ingang_som_staller_krav_falls():
+    krav = (
+        "Hej,\n\nAtt sälja symaskiner kräver att ni kontinuerligt hittar nya kunder. "
+        "Om vår agent Iris kunde ta fram 40–50 syföreningar i veckan, skulle det vara till nytta?"
+    )
+    bra = (
+        "Hej,\n\nNi säljer symaskiner i butik och online. "
+        "Om vår agent Iris kunde ta fram 40–50 syföreningar i veckan, skulle det vara till nytta?"
+    )
+    assert "b_kravande_ingang" in [a.kod for a in stil.kontrollera(krav, struktur="b").anmarkningar]
+    assert "b_kravande_ingang" not in [a.kod for a in stil.kontrollera(bra, struktur="b").anmarkningar]
+    # Bara frågan (ingen ingång) prövas inte: frågan får säga vad som helst.
+    fraga = "Hej,\n\nOm Iris kunde ta fram bolag som behöver er, skulle det vara till nytta?"
+    assert "b_kravande_ingang" not in [a.kod for a in stil.kontrollera(fraga, struktur="b").anmarkningar]
+
+
+def test_pilotmeningen_ar_ingen_ingang_att_variera_i_b():
+    pilot = "Vår agent Iris finns just nu i en kostnadsfri pilot för 20 företag i tre månader, med alla funktioner."
+    ett = f"Hej,\n\n{pilot}\n\nOm Iris kunde ta fram 40–50 golfklubbar i veckan, vore det intressant för er?"
+    tva = f"Hej,\n\n{pilot}\n\nOm Iris kunde ta fram 40–50 bilhandlare i veckan, vore det intressant för er?"
+    assert stil.mot_andra(tva, [ett], struktur="b") == []
+
+
+def test_fragan_ska_bara_en_detalj_om_dem_och_inte_bolagsnamnet():
+    blocket = utkaststruktur.block(produkt=IRIS, nytta="x", utfall=UTFALL_IRIS, villkor=None, ingang=False)
+    assert "konkret detalj ur researchen" in blocket
+    assert "Skriv inte bolagsnamnet i frågan" in blocket

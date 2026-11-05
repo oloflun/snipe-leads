@@ -39,6 +39,8 @@ MAX_ORD_MEJL = 100
 MAX_ORD_B = 60
 #: B:s fråga om utfallet är en enda mening (förebilden 27 ord).
 MAX_ORD_MENING_B = 32
+#: B-ingång som ställer krav på mottagaren i stället för att konstatera något.
+_B_KRAV = re.compile(r"\b(?:kräver|behöver|måste)\b|\bför\s+att\s+driva\s+verksamheten\b", re.IGNORECASE)
 
 _HALSNING = re.compile(
     r"^\s*(?:med\s+vänlig(?:a)?\s+hälsning(?:ar)?|vänliga\s+hälsningar|bästa\s+hälsningar|"
@@ -324,6 +326,11 @@ def kontrollera(text: str, *, struktur: str = "a") -> Kontrollresultat:
     if ar_b:
         if meningar and not meningar[-1].endswith("?"):
             lagg("b_utan_fraga", f"struktur B slutar med sin fråga, inte med \"{meningar[-1][:60]}\"")
+        # Volymprovet 2026-11-05: fyra av 30 B-ingångar sa att de "kräver att
+        # ni kontinuerligt hittar nya kunder". B:s ingång konstaterar, den
+        # ställer inga krav på dem (utkaststruktur.block).
+        if len(meningar) > 1 and _B_KRAV.search(meningar[0]):
+            lagg("b_kravande_ingang", f"B-ingången ställer krav på dem (\"{_B_KRAV.search(meningar[0]).group(0)}\"); konstatera något konkret om dem")
     elif meningar and meningar[-1].endswith("?"):
         lagg("slutar_med_fraga", f"slutar med en fråga i stället för en handling: \"{meningar[-1][:60]}\"")
     svara = next((m for m in meningar[-1:] if _SVARA_ORDER.match(m)), None) or next(
@@ -539,7 +546,10 @@ def mot_andra(text: str, andra: Sequence[str], *, struktur: str = "a") -> list[A
     B-mejl och ge omskrivningar som inte går att lyckas med."""
     fynd = []
     egen_ingang, egen_uppmaning = ingang(text), uppmaning(text)
-    if egen_ingang and any(ingang(t) == egen_ingang for t in andra):
+    # I B är pilotmeningen villkoret självt och står likadant i varje
+    # pilotmejl (volymprovet 2026-11-05): den är ingen ingång att variera.
+    pilot_i_b = struktur == "b" and "pilot" in egen_ingang
+    if egen_ingang and not pilot_i_b and any(ingang(t) == egen_ingang for t in andra):
         fynd.append(Anmarkning("samma_ingang", "Stil: samma ingång som ett annat mejl i körningen", allvarlig=True))
     elif struktur != "b" and egen_ingang and any(konstruktion(t) == konstruktion(text) for t in andra if ingang(t)):
         fynd.append(Anmarkning("samma_konstruktion", "Stil: ingången är byggd som ett annat mejl i körningen",

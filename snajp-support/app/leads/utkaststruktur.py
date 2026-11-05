@@ -148,7 +148,8 @@ def block(
         delar.append(
             f"({steg}) En mening om högst 20 ord som konstaterar något konkret ur deras verksamhet enligt "
             f"researchen som {namn} hjälper dem med. Inget problem och ingen kritik: aldrig vad de eller "
-            "deras kunder kräver, förväntar sig eller behöver, och ingen uppräkning av sortimentet."
+            "deras kunder kräver, förväntar sig, behöver eller måste, aldrig \"för att driva "
+            "verksamheten framåt\", och ingen uppräkning av sortimentet eller märken."
         )
         steg += 1
     if villkor:
@@ -160,10 +161,16 @@ def block(
             "vad agenten gör, och inget annat ur villkoren."
         )
         steg += 1
+    # Volymprovet 2026-11-05 (30 B-mejl): frågan blev ofta samma mening med
+    # bara bolagsnamnet utbytt, och långa bolagsnamn sprängde meningstaket.
     delar.append(
         f"({steg}) En enda fråga om högst 25 ord: om {namn} kunde ge dem utfallet nedan, översatt till "
         "deras verksamhet, skulle det vara till nytta (eller användbart, intressant) för dem? "
-        f"{namn} namnges i frågan. Frågans ordalydelse väljer du själv."
+        f"{namn} namnges i frågan. Frågan bär alltid en konkret detalj ur researchen om just dem, "
+        "till exempel vilka deras kunder är eller vilken sorts bolag som passar dem (\"40–50 "
+        "restauranger och caféer i regionen\" i stället för \"40–50 nya företag som passar er\"), "
+        "aldrig bara bolagsnamnet. Skriv inte bolagsnamnet i frågan: \"för er\" eller \"för dig\" räcker. "
+        "Frågans ordalydelse väljer du själv."
     )
     delar.append(
         "Mejlet SLUTAR med frågan. Ingen inbjudan efter den, ingen länk, ingen bokning, ingen "
