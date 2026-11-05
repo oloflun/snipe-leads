@@ -173,6 +173,8 @@ def block(
         "till exempel vilka deras kunder är eller vilken sorts bolag som passar dem (\"40–50 "
         "restauranger och caféer i regionen\" i stället för \"40–50 nya företag som passar er\"), "
         "aldrig bara bolagsnamnet. Skriv inte bolagsnamnet i frågan: \"för er\" eller \"för dig\" räcker. "
+        "Detaljen får aldrig ändra vad produkten gör: hittar den företag är det sorter av företag "
+        "(\"hotell och restauranger\"), aldrig privatpersoner, uppdrag eller \"kunder\" i allmänhet. "
         "Frågans ordalydelse väljer du själv."
     )
     delar.append(
