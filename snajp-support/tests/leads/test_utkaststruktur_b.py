@@ -565,3 +565,20 @@ def test_kedjans_grind_ber_om_oversattning_av_ordagrant_utfall():
     assert not any("ordagrant" in f for f in fynd(oversatt))
     # A berörs inte.
     assert not any("ordagrant" in f for f in _stilfynd(ordagrant, villkor=None, produkt=IRIS, andra=[], kort_utfall=utfall, amne_i_kod=True))
+
+
+def test_du_i_ett_bolagsnamn_blir_inte_ni():
+    """Volymprov tre: "Magazin du Nord" blev "Magazin ni Nord" (tilltala_med_ni,
+    gäller A och B)."""
+    from app.leads.outreach_playbook import tilltala_med_ni
+
+    ut = tilltala_med_ni("Hej,\n\nSkulle det vara till nytta för Magazin du Nord i Umeå? Vill du veta mer? Hör av dig.")
+    assert "Magazin du Nord" in ut and "Vill ni veta" in ut and "Hör av er" in ut
+
+
+def test_en_anpassad_fraga_pa_37_ord_ar_inte_for_lang_i_b():
+    fraga = (
+        "Hej,\n\nOm vår agent Iris kunde ta fram 40–50 nya byggföretag i veckan i Umeå som behöver era "
+        "tjänster inom bygg och betong, med ett färdigt första mejl till varje, skulle det vara till nytta för er?"
+    )
+    assert "lang_mening" not in [a.kod for a in stil.kontrollera(fraga, struktur="b").anmarkningar]

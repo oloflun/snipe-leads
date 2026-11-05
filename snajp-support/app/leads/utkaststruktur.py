@@ -167,7 +167,7 @@ def block(
     # Volymprovet 2026-11-05 (30 B-mejl): frågan blev ofta samma mening med
     # bara bolagsnamnet utbytt, och långa bolagsnamn sprängde meningstaket.
     delar.append(
-        f"({steg}) En enda fråga om högst 25 ord: om {namn} kunde ge dem utfallet nedan, översatt till "
+        f"({steg}) En enda fråga om högst 30 ord: om {namn} kunde ge dem utfallet nedan, översatt till "
         "deras verksamhet, skulle det vara till nytta (eller användbart, intressant) för dem? "
         f"{namn} namnges i frågan. Frågan bär alltid en konkret detalj ur researchen om just dem, "
         "till exempel vilka deras kunder är eller vilken sorts bolag som passar dem (\"40–50 "

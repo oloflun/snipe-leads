@@ -37,8 +37,10 @@ MAX_ORD = 25
 MAX_ORD_MEJL = 100
 #: Struktur B (app/leads/utkaststruktur.py): kort och rakt på.
 MAX_ORD_B = 60
-#: B:s fråga om utfallet är en enda mening (förebilden 27 ord).
-MAX_ORD_MENING_B = 32
+#: B:s fråga om utfallet är en enda mening (förebilden 27 ord). Med detaljen
+#: om mottagaren som frågan ska bära blev den 33–37 ord i volymprovet
+#: 2026-11-05; 40 fäller de verkligt långa utan att flagga varje anpassad fråga.
+MAX_ORD_MENING_B = 40
 #: B-ingång som ställer krav på mottagaren i stället för att konstatera något.
 _B_KRAV = re.compile(r"\b(?:kräver|behöver|måste)\b|\bför\s+att\s+driva\s+verksamheten\b", re.IGNORECASE)
 

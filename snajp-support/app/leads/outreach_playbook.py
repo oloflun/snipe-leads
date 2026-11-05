@@ -352,6 +352,8 @@ def _produktnamn(text: str) -> str:
 #: du-formerna och deras ni-motsvarighet. "Hör av dig" → "Hör av er".
 _DU_TILL_NI = {"du": "ni", "dig": "er", "din": "er", "ditt": "ert", "dina": "era"}
 _DU_ORD = re.compile(r"\b(du|dig|din|ditt|dina)\b", re.IGNORECASE)
+_I_NAMN_FORE = re.compile(r"\b[A-ZÅÄÖÉ][\wåäöé&.-]*\s+$")
+_I_NAMN_EFTER = re.compile(r"\s+[A-ZÅÄÖÉ]")
 _ANONYM_HALSNING = re.compile(r"^\s*(hej|hejsan|god dag|hallå)\s*[,!]?\s*$", re.IGNORECASE)
 _NAMNGIVEN_HALSNING = re.compile(r"^\s*(hej|hejsan|hallå)\s+([A-ZÅÄÖÉ][\wåäöé-]*(?:\s+[A-ZÅÄÖÉ][\wåäöé-]*)?)\s*[,!]\s*$", re.IGNORECASE)
 
@@ -381,6 +383,11 @@ def tilltala_med_ni(body: str) -> str:
 
     def byt(m: re.Match[str]) -> str:
         ord_ = m.group(1)
+        # Ett gement "du" mellan två ord med versal är en del av ett namn,
+        # inte ett tilltal: "Magazin du Nord" blev "Magazin ni Nord" i
+        # volymprovet 2026-11-05.
+        if ord_ == "du" and _I_NAMN_FORE.search(m.string[: m.start()]) and _I_NAMN_EFTER.match(m.string[m.end():]):
+            return ord_
         ny = _DU_TILL_NI[ord_.casefold()]
         return ny.capitalize() if ord_[0].isupper() else ny
 
