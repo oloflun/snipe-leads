@@ -73,7 +73,8 @@ def test_varianterna_ar_deterministiska_och_ungefar_rätt_andel():
     erb = [utkaststruktur.med_erbjudande(TENANT, f"p-{i}") for i in range(900)]
     ing = [utkaststruktur.med_ingang(TENANT, f"p-{i}") for i in range(900)]
     assert 0.25 < sum(erb) / 900 < 0.42
-    assert 0.40 < sum(ing) / 900 < 0.60
+    # En tredjedel var: bara frågan (B1), en rad om dem (B2), piloten (B3).
+    assert 0.25 < sum(ing) / 900 < 0.42
     assert utkaststruktur.med_erbjudande(TENANT, "p-1") == utkaststruktur.med_erbjudande(TENANT, "p-1")
 
 
@@ -94,6 +95,32 @@ def test_blocket_bar_forebilderna_for_ratt_agent():
     # En annan kunds produkt får formreglerna men inga Snajp-förebilder.
     annan = utkaststruktur.block(produkt="Takläggning", nytta="tak", utfall="", villkor=None, ingang=False)
     assert "Förebilder" not in annan and "Mejlets struktur: B" in annan
+
+
+def test_erbjudandet_och_ingangen_kombineras_aldrig():
+    """Provet i development 2026-11-05: ingång + agent + pilot + fråga gav 76
+    ord. Förebilderna har en sak före frågan, aldrig två."""
+    for i in range(600):
+        pid = f"p-{i}"
+        assert not (utkaststruktur.med_erbjudande(TENANT, pid) and utkaststruktur.med_ingang(TENANT, pid))
+
+
+@pytest.mark.parametrize(
+    ("villkor", "vantat"),
+    [
+        (
+            "Just nu tar vi in 20 företag i en kostnadsfri pilot av Iris i tre månader, med alla funktioner. "
+            "Du får upp till 50 % rabatt om du stannar efteråt. Handling: den som vill testa själv kan titta på "
+            "demon på snajp.se/demo.",
+            "Just nu tar vi in 20 företag i en kostnadsfri pilot av Iris i tre månader, med alla funktioner.",
+        ),
+        ("Fem leads gratis. Handling: svara på mejlet.", "Fem leads gratis."),
+        ("Handling: svara.", ""),
+        (None, ""),
+    ],
+)
+def test_b_far_bara_villkorens_forsta_mening_utan_handling(villkor, vantat):
+    assert utkaststruktur.kort_villkor(villkor) == vantat
 
 
 def test_med_erbjudandet_star_villkoren_i_blocket():

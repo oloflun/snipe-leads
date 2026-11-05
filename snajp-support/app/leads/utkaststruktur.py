@@ -33,6 +33,7 @@ skriver om ett B-mejl som B (`tidigare`).
 from __future__ import annotations
 
 import hashlib
+import re
 from typing import Any, Literal
 
 Struktur = Literal["a", "b"]
@@ -62,10 +63,28 @@ def med_erbjudande(tenant_id: str, prospect_id: str | None) -> bool:
 
 
 def med_ingang(tenant_id: str, prospect_id: str | None) -> bool:
-    """Bär B-mejlet en kort mening om dem före frågan? Hälften,
-    deterministiskt, så att en körnings B-mejl inte alla ser likadana ut."""
+    """Bär B-mejlet en kort mening om dem före frågan? Hälften av mejlen utan
+    erbjudandet, deterministiskt, så att en körnings B-mejl inte alla ser
+    likadana ut. Aldrig tillsammans med erbjudandet: provet i development
+    2026-11-05 gav då 76 ord (ingång + agent + pilot + fråga), förebilderna
+    har en sak före frågan, inte två."""
+    if med_erbjudande(tenant_id, prospect_id):
+        return False
     digest = hashlib.sha256(f"struktur_b_ingang:{tenant_id}:{prospect_id}".encode("utf-8")).digest()
     return digest[0] % 2 == 0
+
+
+_HANDLING = re.compile(r"\s*Handling:.*$", re.IGNORECASE | re.DOTALL)
+
+
+def kort_villkor(villkor: str | None) -> str:
+    """Erbjudandet i B: villkorens första mening, utan dess "Handling".
+    B:s handling är frågan, och villkorens övriga siffror (tre månader, upp
+    till 50 %) gjorde B-mejlet i provet 2026-11-05 lika långt som A. Det som
+    står här är också det stilgrinden kräver ska stå kvar i mejlet."""
+    text = _HANDLING.sub("", (villkor or "").strip())
+    forsta = re.split(r"(?<=[.!?])\s+", text, maxsplit=1)[0].strip()
+    return forsta
 
 
 #: Förebilderna (Sebbe 2026-11-05: "alla utskick ska utgå från de du skrev som

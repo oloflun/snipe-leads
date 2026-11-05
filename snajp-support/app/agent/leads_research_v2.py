@@ -1075,7 +1075,7 @@ async def run_outreach_draft_v2(
             produkt=_bprodukt,
             nytta=vald_nu["nytta"] if vald_nu else None,
             utfall=kort_utfall,
-            villkor=erbjudande.villkor if b_erbjudande else None,
+            villkor=utkaststruktur.kort_villkor(erbjudande.villkor) if b_erbjudande else None,
             ingang=b_ingang,
         ) + "\n\n"
     # Med kundens erbjudande styr det och produktens nytta (första raden,
@@ -1288,8 +1288,12 @@ async def run_outreach_draft_v2(
             draft = {**draft, "subject": personaliserad.get("subject") or draft.get("subject"),
                      "body": personaliserad["body"]}
 
-    # B utan erbjudande: inga villkor att hålla intakta i mejlet.
-    villkor = erbjudande.villkor if erbjudande and (not b or b_erbjudande) else None
+    # B utan erbjudande: inga villkor att hålla intakta i mejlet; B med
+    # erbjudandet: bara villkorens första mening (utkaststruktur.kort_villkor).
+    if b:
+        villkor = utkaststruktur.kort_villkor(erbjudande.villkor) if b_erbjudande else None
+    else:
+        villkor = erbjudande.villkor if erbjudande else None
     omskrivningsregler = (
         "DITT FÖRRA UTKAST FÄLLDES AV STILGRINDEN. Skriv om hela mejlet enligt "
         "\"Mejlets struktur: B\" så att varje punkt nedan är åtgärdad: kort och rakt på, "
