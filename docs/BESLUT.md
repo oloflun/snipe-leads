@@ -9,6 +9,27 @@ möjligt), vad det betyder i koden.
 
 ---
 
+## 2026-11-05 (Sebbe) — En hängd api-process avslutar sig själv
+
+**Beslut.** "Lös det du!! vad som än krävs", efter att www.snajp.se visade
+"Assistenten har svårt att nå sin motor" på varje flik. Om api:s händelseloop
+står still i 120 s skriver processen ut alla trådars stack och avslutar sig,
+så att Railway startar om den.
+
+**Resonemang.** Produktions-API:t tog emot anslutningar men svarade inte ens på
+`/health`, som inte rör databas eller Redis. Processen stod alltså still. Railway
+startar om en process som dör, inte en som hänger, och utan en fungerande token
+kunde ingen härifrån starta om den. Loopvakten loggade redan stacken vid stopp,
+men den startade aldrig om processen. Den kan inte heller köra medan en regex
+håller GIL:en. Det är en sämre affär att avbryta en pågående körning (väckaren
+tar upp den igen) än att låta sajten ligga nere tills någon märker det.
+
+**I koden.** `app/loopvakt.py:starta_dodsvakt` (`faulthandler` i en C-tråd, når
+fram trots GIL:en), `settings.loopvakt_dod_s` (120, 0 = av), startas i
+`lifespan` och stoppas när den stängs. Tester: `tests/test_dodsvakt.py`.
+
+---
+
 ## 2026-11-05 (Anton) — Sökordssidor, strukturerad data och priser som följer prislistan
 
 **Beslut.** "På Snajp som sökord är vi etta med flera toppresultat och en bra

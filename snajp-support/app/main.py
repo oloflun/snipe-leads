@@ -87,8 +87,11 @@ async def lifespan(app: FastAPI):
         raise RuntimeError(master_fel)
 
     from .loopvakt import starta as starta_loopvakt
+    from .loopvakt import starta_dodsvakt
 
     starta_loopvakt(settings.loopvakt_ms)
+    # Startas tidigt, så att också en uppstart som låser loopen fångas.
+    stoppa_dodsvakt = starta_dodsvakt(settings.loopvakt_dod_s)
 
     storage = None
     if settings.database_url:
@@ -321,6 +324,7 @@ async def lifespan(app: FastAPI):
 
     yield
 
+    stoppa_dodsvakt()
     if poller_task:
         poller_task.cancel()
     if send_scheduler_task:

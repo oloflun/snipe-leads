@@ -284,6 +284,11 @@ class Settings(BaseSettings):
     # Loopvakten (app/loopvakt.py): loggar stacken när händelseloopen står
     # still längre än så här många ms. 0 = av.
     loopvakt_ms: int = 250
+    # Dödsvakten (app/loopvakt.py:starta_dodsvakt): står loopen still så här
+    # många sekunder skrivs alla trådars stack ut och processen avslutas, så
+    # att Railway startar om den. 0 = av. Skäl: www.snajp.se låg nere
+    # 2026-11-05 för att api hängde, och Railway startar bara om det som dör.
+    loopvakt_dod_s: int = 120
     # Samtidiga LLM-anrop från bakgrundsjobben (step_runner._bakgrundstak).
     # 4 sedan 2026-10-09: tio samtidiga researchanrop gav Vertex 429 i en
     # minut i sträck och föll. Höj försiktigt; mät 429 i loggen.
