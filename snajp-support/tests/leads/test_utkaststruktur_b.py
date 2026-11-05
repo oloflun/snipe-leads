@@ -523,3 +523,45 @@ def test_fragan_ska_bara_en_detalj_om_dem_och_inte_bolagsnamnet():
     blocket = utkaststruktur.block(produkt=IRIS, nytta="x", utfall=UTFALL_IRIS, villkor=None, ingang=False)
     assert "konkret detalj ur researchen" in blocket
     assert "Skriv inte bolagsnamnet i frågan" in blocket
+
+
+@pytest.mark.parametrize(
+    ("mejl", "ordagrant"),
+    [
+        ("Hej,\n\nOm vår agent Iris kunde ta fram 40–50 nya företagskunder i veckan, med ett färdigt första mejl "
+         "till varje, skulle det vara till nytta för er?", True),
+        ("Hej,\n\nOm vår agent Iris kunde ta fram 40–50 nya hotell och restauranger i veckan, med ett färdigt "
+         "första mejl till varje, skulle det vara till nytta för er?", False),
+    ],
+)
+def test_utfallet_ordagrant_ar_en_oanpassad_fraga(mejl, ordagrant):
+    utfall = "40–50 nya företagskunder i veckan, med ett färdigt första mejl till varje"
+    assert utkaststruktur.utfall_ordagrant(mejl, utfall) is ordagrant
+    assert utkaststruktur.utfall_ordagrant(mejl, "") is False
+
+
+def test_forebilderna_ar_oversatta_till_mottagaren():
+    """Förebilderna visar den anpassade frågan: ingen återger Snajps utfall ordagrant."""
+    import sys
+    from pathlib import Path
+
+    sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "scripts"))
+    import snajp_malgrupp as sm
+
+    for slag, produkt in (("leads", sm.IRIS), ("support", sm.SUPPORT)):
+        for e in utkaststruktur.FOREBILDER[slag]:
+            assert not utkaststruktur.utfall_ordagrant(e, sm.KORT_UTFALL[produkt]), e
+
+
+def test_kedjans_grind_ber_om_oversattning_av_ordagrant_utfall():
+    from app.agent.leads_research_v2 import _stilfynd
+
+    utfall = "40–50 nya företagskunder i veckan, med ett färdigt första mejl till varje"
+    ordagrant = {"subject": "Nya kunder", "body": f"Hej,\n\nOm vår agent Iris kunde ta fram {utfall}, skulle det vara till nytta för er?"}
+    oversatt = {"subject": "Nya kunder", "body": "Hej,\n\nOm vår agent Iris kunde ta fram 40–50 nya hotell i veckan, med ett färdigt första mejl till varje, skulle det vara till nytta för er?"}
+    def fynd(d):
+        return _stilfynd(d, villkor=None, produkt=IRIS, andra=[], struktur="b", kort_utfall=utfall, amne_i_kod=True)
+    assert any("ordagrant" in f for f in fynd(ordagrant))
+    assert not any("ordagrant" in f for f in fynd(oversatt))
+    # A berörs inte.
+    assert not any("ordagrant" in f for f in _stilfynd(ordagrant, villkor=None, produkt=IRIS, andra=[], kort_utfall=utfall, amne_i_kod=True))

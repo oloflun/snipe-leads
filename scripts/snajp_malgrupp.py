@@ -178,7 +178,9 @@ AMNEN = {
 KORT_UTFALL = {
     # Kort som i Sebbes exempel: provet 2026-11-05 gav B-mejl över 60 ord
     # med den längre texten ("… som ni godkänner innan det skickas").
-    IRIS: "40–50 nya företag i veckan som passar er, med ett färdigt första mejl till varje",
+    # Utan "som passar er" (volymprovet 2026-11-05): frågan ska säga VILKA
+    # kunder, och den generiska bisatsen kopierades in i nästan varje mejl.
+    IRIS: "40–50 nya företagskunder i veckan, med ett färdigt första mejl till varje",
     SUPPORT: "svar direkt på de vanligaste kundfrågorna, dygnet runt, utifrån er egen information",
 }
 #: A/B (Anton 2026-10-25): samma pilot, två former, hälften var. Katalogens

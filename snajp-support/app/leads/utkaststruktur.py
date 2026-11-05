@@ -94,19 +94,22 @@ def kort_villkor(villkor: str | None) -> str:
 #: Hälsningen och signaturen läggs på i kod och står därför inte här.
 FOREBILDER: dict[str | None, tuple[str, ...]] = {
     "leads": (
-        "Om vår agent Iris kunde ta fram 40–50 nya företag i veckan som passar er, med ett färdigt "
-        "första mejl till varje, skulle det vara till nytta?",
+        # Sebbes exempel, med frågan översatt till mottagaren (volymprovet
+        # 2026-11-05: utan detaljen blev frågan samma mening till alla).
+        "Om vår agent Iris kunde ta fram 40–50 nya byggföretag i veckan som behöver era tjänster, med "
+        "ett färdigt första mejl till varje, skulle det vara till nytta?",
         "Ni har nyss börjat ta uppdrag åt fastighetsbolag. Om vår agent Iris varje vecka tog fram "
         "fastighetsbolag i regionen och skrev första mejlet till dem, skulle det hjälpa?",
         # Agenten före siffrorna (Antons regel, stilkontroll agent_efter_loftet),
         # och erbjudandet i EN mening: provet 2026-11-05 upprepade annars vad
         # agenten gör i frågan.
-        "Vår agent Iris finns just nu i en kostnadsfri pilot för 20 företag. Om Iris tog fram nya "
-        "företagskunder åt er och skrev första mejlet till dem, vore det intressant för er?",
+        "Vår agent Iris finns just nu i en kostnadsfri pilot för 20 företag. Om Iris tog fram hotell "
+        "och konferensanläggningar som köper era tjänster och skrev första mejlet till dem, vore det "
+        "intressant för er?",
     ),
     "support": (
-        "Om vår Supportagent svarade direkt på de vanligaste kundfrågorna, dygnet runt, utifrån er "
-        "egen information, skulle det frigöra tid för er?",
+        "Om vår Supportagent svarade direkt på kundernas frågor om leveranser och returer, dygnet runt, "
+        "utifrån er egen information, skulle det frigöra tid för er?",
         "Ni har många kurser med olika datum och intyg. Om vår Supportagent svarade på frågorna om "
         "dem direkt i chatten och mejlen, även kvällar och helger, skulle det vara användbart?",
         "Vår Supportagent finns just nu i en kostnadsfri pilot för 20 företag. Om den svarade på era "
@@ -181,8 +184,8 @@ def block(
     )
     delar.append(
         f"\n### Utfallet frågan bygger på\n{grund or 'Det som står om produkten i produktlistan.'}\n"
-        "Lova inget utöver det här och produktens nytta: siffror som inte står här eller i villkoren "
-        "skrivs aldrig."
+        "Översätt det till just dem, skriv det aldrig ordagrant. Lova inget utöver det här och "
+        "produktens nytta: siffror som inte står här eller i villkoren skrivs aldrig."
     )
     exempel = forebilder(produkt)
     if exempel:
@@ -215,6 +218,21 @@ def ar_b(text: str) -> bool:
         rader.pop()
     brod = " ".join(rader)
     return bool(brod) and brod.endswith("?") and len(brod.split()) <= 70
+
+
+def _ordfoljd(text: str) -> list[str]:
+    return re.findall(r"[0-9a-zåäöé–-]+", (text or "").casefold())
+
+
+def utfall_ordagrant(text: str, utfall: str | None) -> bool:
+    """Står kundens utfallstext ordagrant i mejlet? Då är frågan inte översatt
+    till mottagaren (volymprovet 2026-11-05: "40–50 nya företag i veckan som
+    passar er" i nästan varje B-mejl, med bara bolagsnamnet utbytt)."""
+    ord_ = _ordfoljd(utfall or "")
+    if len(ord_) < 5:
+        return False
+    hela = " ".join(_ordfoljd(text))
+    return f" {' '.join(ord_)} " in f" {hela} "
 
 
 def loggpost(struktur: Struktur, *, med_erbjudande_: bool = False, med_ingang_: bool = False) -> dict[str, Any]:

@@ -964,6 +964,7 @@ def _stilfynd(
     fokus_ok: bool = True,
     amne_i_kod: bool = False,
     struktur: str = "a",
+    kort_utfall: str = "",
 ) -> list[str]:
     """Stilgrindens fynd på ett råutkast (före humanizern), som text till
     omskrivningen: markörerna i app/leads/stilkontroll.py, erbjudandets
@@ -989,6 +990,11 @@ def _stilfynd(
     # for_langt skrivs om sedan 2026-10-25: villkoren är korta nu, och
     # provkörningen gav 105–150 ord, längre än Antons exempel.
     ut = [a.beskrivning for a in fynd if a.kod not in ("lang_mening", "samma_uppmaning")]
+    if struktur == "b" and utkaststruktur.utfall_ordagrant(body, kort_utfall):
+        ut.append(
+            "Stil: frågan återger utfallet ordagrant; översätt det till just dem med en konkret detalj ur "
+            "researchen (vilka sorts kunder eller bolag), till exempel \"40–50 nya hotell och restauranger\""
+        )
     if not fokus_ok and stil.fokusgrepp(body):
         ut.append("Stil: greppet \"fokusera på …\" ska inte användas i det här mejlet; bygg ingången på ett annat sätt")
     return ut
@@ -1351,7 +1357,7 @@ async def run_outreach_draft_v2(
 
     stilfynd = _stilfynd(draft, villkor=villkor, produkt=produktnamn, andra=andra_utkast,
                          bolag=company_name, andra_amnen=andra_amnen, fokus_ok=fokus_ok, amne_i_kod=amne_i_kod,
-                         struktur=struktur)
+                         struktur=struktur, kort_utfall=kort_utfall)
     if stilfynd:
         draft = await skriv_om(draft, stilfynd)
     humanized = await humanisera(draft)
@@ -1372,7 +1378,7 @@ async def run_outreach_draft_v2(
     slutligt = _version(humanized, draft)
     kvar = _stilfynd(slutligt, villkor=villkor, produkt=produktnamn, andra=andra_utkast,
                      bolag=company_name, andra_amnen=andra_amnen, fokus_ok=fokus_ok, amne_i_kod=amne_i_kod,
-                         struktur=struktur)
+                         struktur=struktur, kort_utfall=kort_utfall)
     basta, basta_fynd = slutligt, kvar
     for _varv in range(2):
         if not kvar:
@@ -1382,7 +1388,7 @@ async def run_outreach_draft_v2(
         slutligt = _version(humanized, draft)
         kvar = _stilfynd(slutligt, villkor=villkor, produkt=produktnamn, andra=andra_utkast,
                          bolag=company_name, andra_amnen=andra_amnen, fokus_ok=fokus_ok, amne_i_kod=amne_i_kod,
-                         struktur=struktur)
+                         struktur=struktur, kort_utfall=kort_utfall)
         if len(kvar) <= len(basta_fynd):
             basta, basta_fynd = slutligt, kvar
 
