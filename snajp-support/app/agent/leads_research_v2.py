@@ -995,6 +995,12 @@ def _stilfynd(
             "Stil: frågan återger utfallet ordagrant; översätt det till just dem med en konkret detalj ur "
             "researchen (vilka sorts kunder eller bolag), till exempel \"40–50 nya hotell och restauranger\""
         )
+    fel_sak = utkaststruktur.fel_sak_i_fragan(body, produkt) if struktur == "b" else None
+    if fel_sak:
+        ut.append(
+            f"Stil: frågan lovar \"{fel_sak}\", men agenten hittar företag; säg vilka sorters företag "
+            "(\"byggföretag\", \"hotell och restauranger\")"
+        )
     if not fokus_ok and stil.fokusgrepp(body):
         ut.append("Stil: greppet \"fokusera på …\" ska inte användas i det här mejlet; bygg ingången på ett annat sätt")
     return ut

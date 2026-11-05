@@ -582,3 +582,23 @@ def test_en_anpassad_fraga_pa_37_ord_ar_inte_for_lang_i_b():
         "tjänster inom bygg och betong, med ett färdigt första mejl till varje, skulle det vara till nytta för er?"
     )
     assert "lang_mening" not in [a.kod for a in stil.kontrollera(fraga, struktur="b").anmarkningar]
+
+
+@pytest.mark.parametrize(
+    ("mejl", "vantat"),
+    [
+        ("Om Iris kunde ta fram 40–50 nya byggprojekt i Umeå i veckan, skulle det vara till nytta?", "byggprojekt"),
+        ("Om Iris kunde ta fram 40–50 nya konsultuppdrag i veckan, skulle det vara till nytta?", "konsultuppdrag"),
+        ("Om Iris kunde ta fram 40–50 nya kunder som söker hudvård, skulle det vara till nytta?", "kunder"),
+        ("Om Iris kunde ta fram 40–50 nya byggföretag i Umeå, skulle det vara till nytta?", None),
+        ("Om Iris kunde ta fram 40–50 nya företagskunder i veckan, skulle det vara till nytta?", None),
+    ],
+)
+def test_iris_fragan_lovar_bara_foretag(mejl, vantat):
+    assert utkaststruktur.fel_sak_i_fragan(mejl, IRIS) == vantat
+    assert utkaststruktur.fel_sak_i_fragan(mejl, SUPPORT) is None
+
+
+def test_forebilderna_lovar_bara_foretag():
+    for e in utkaststruktur.FOREBILDER["leads"]:
+        assert utkaststruktur.fel_sak_i_fragan(e, IRIS) is None, e

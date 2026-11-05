@@ -237,6 +237,27 @@ def utfall_ordagrant(text: str, utfall: str | None) -> bool:
     return f" {' '.join(ord_)} " in f" {hela} "
 
 
+#: Vad siffran i Iris-frågan får gälla: sorters företag. Bekräftelseprovet
+#: 2026-11-05 lovade "40–50 nya byggprojekt" och "nya konsultuppdrag", och
+#: volymprov fyra "nya kunder som söker hudvårdsbehandlingar" (privatpersoner).
+_FEL_SAK = re.compile(
+    r"\d+\s*[–-]\s*\d+\s+nya\s+(\w*projekt\w*|\w*uppdrag\w*|privatpersoner|kunder|konsumenter)\b",
+    re.IGNORECASE,
+)
+
+
+def fel_sak_i_fragan(text: str, produkt: str | None) -> str | None:
+    """Ordet efter siffran i ett Iris-mejl när det inte är en sorts företag
+    ("byggprojekt", "uppdrag", "kunder"), annars None. Gäller bara Iris:
+    Supportagentens fråga har ingen sådan siffra."""
+    from .stilkontroll import produktslag
+
+    if produktslag(produkt) != "leads":
+        return None
+    traff = _FEL_SAK.search(text or "")
+    return traff.group(1) if traff else None
+
+
 def loggpost(struktur: Struktur, *, med_erbjudande_: bool = False, med_ingang_: bool = False) -> dict[str, Any]:
     post: dict[str, Any] = {"step": LOGGSTEG, "struktur": struktur}
     if struktur == "b":
