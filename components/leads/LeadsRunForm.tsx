@@ -68,6 +68,14 @@ type Korning = {
   sammanfattning?: string | null;
 };
 
+/**
+ * Utkastens struktur (Sebbe 2026-11-05, snajp-support/app/leads/utkaststruktur.py):
+ * A är dagens mejl, B det korta som slutar med en fråga om utfallet. Valet
+ * gäller körningens nya leads; signatur, logga, fot och granskning är samma.
+ */
+type Struktur = "a" | "b";
+const STRUKTURNYCKEL = "snajp:leads-struktur";
+
 type LeadsSvar = {
   jobs?: Jobb[];
   count?: number;
@@ -75,6 +83,8 @@ type LeadsSvar = {
   is_test?: boolean;
   fase?: string;
   overrides?: Record<string, unknown> | null;
+  /** Utkastens struktur i körningen (A/B). */
+  struktur?: Struktur;
   error?: string;
   detail?: string;
 };
@@ -179,6 +189,23 @@ const T = {
     sv: "Ingenting skickades. Utkastet finns kvar här och bolaget är påhittat. Så här skulle utskicket ha sett ut.",
     en: "Nothing was sent. The draft stays here and the company is made up. This is what the email would have looked like."
   },
+  antalLeads: { sv: "Antal leads", en: "Number of leads" },
+  omfattning: { sv: "Omfattning", en: "Scope" },
+  optResearchOchUtkast: { sv: "Research och utkast", en: "Research and drafts" },
+  optBaraResearch: { sv: "Bara research", en: "Research only" },
+  struktur: { sv: "Mejlens struktur", en: "Email structure" },
+  strukturA: { sv: "Utförlig", en: "Detailed" },
+  strukturB: { sv: "Kort och rakt på", en: "Short and direct" },
+  strukturAText: {
+    sv: "Dagens mejl: en ingång om dem, vad agenten gör, erbjudandet och en inbjudan.",
+    en: "Today's email: an opening about them, what the agent does, the offer and an invitation."
+  },
+  strukturBText: {
+    sv: "Ett kort mejl som slutar med en fråga om vad agenten kan ge dem. Samma signatur, logga, fot och granskning som A.",
+    en: "A short email that ends with a question about what the agent can do for them. Same signature, logo, footer and review as A."
+  },
+  strukturKortA: { sv: " · struktur A", en: " · structure A" },
+  strukturKortB: { sv: " · struktur B", en: " · structure B" },
   provarHelaVagen: { sv: "Provar hela vägen fram utan att något lämnar huset.", en: "Tests the whole way without anything leaving the building." }
 } satisfies Record<string, Localized>;
 
@@ -251,6 +278,23 @@ export function LeadsRunForm({
   // Utkast är standard: Iris levererar leads MED utkast (Alunix 2026-09-29 —
   // "lyckades inte generera ett enda utkast"). Bara research är ett val.
   const [scope, setScope] = useState<"research" | "research_and_draft">("research_and_draft");
+  const [struktur, setStruktur] = useState<Struktur>("a");
+  // Senaste valet per webbläsare, en bekvämlighet: utan lagring gäller A.
+  useEffect(() => {
+    try {
+      if (window.localStorage.getItem(STRUKTURNYCKEL) === "b") setStruktur("b");
+    } catch {
+      /* privat läge: A gäller */
+    }
+  }, []);
+  function valjStruktur(v: Struktur) {
+    setStruktur(v);
+    try {
+      window.localStorage.setItem(STRUKTURNYCKEL, v);
+    } catch {
+      /* privat läge: valet gäller bara den här körningen */
+    }
+  }
   const [branscher, setBranscher] = useState("");
   const [undvik, setUndvik] = useState("");
   const [geografi, setGeografi] = useState("");
@@ -491,6 +535,8 @@ export function LeadsRunForm({
         body: JSON.stringify({
           limit: antal,
           scope,
+          // Bara research skriver inga utkast: strukturen är då A, som förut.
+          struktur: scope === "research_and_draft" ? struktur : "a",
           is_test: isTest,
           company_names: egna,
           ...(overrides ? { overrides } : {})
@@ -618,7 +664,7 @@ export function LeadsRunForm({
           att kunden såg det (2026-09-29). */}
       {!demo ? (
         <div className="mt-6 grid max-w-[760px] gap-5 sm:grid-cols-2">
-          <Rad etikett="Antal leads" hint="1–200">
+          <Rad etikett={text(T.antalLeads)} hint="1–200">
             <input
               type="number"
               min={1}
@@ -628,16 +674,49 @@ export function LeadsRunForm({
               className={fältklass}
             />
           </Rad>
-          <Rad etikett="Omfattning">
+          <Rad etikett={text(T.omfattning)}>
             <select
               value={scope}
               onChange={(e) => setScope(e.target.value as typeof scope)}
               className={fältklass}
             >
-              <option value="research_and_draft">Research och utkast</option>
-              <option value="research">Bara research</option>
+              <option value="research_and_draft">{text(T.optResearchOchUtkast)}</option>
+              <option value="research">{text(T.optBaraResearch)}</option>
             </select>
           </Rad>
+          {/* A eller B (Sebbe 2026-11-05): utkastens struktur för körningens
+              nya leads. Bara när körningen skriver utkast. */}
+          {scope === "research_and_draft" ? (
+            <fieldset className="sm:col-span-2">
+              <legend className="text-[13px] font-medium text-ink-muted">{text(T.struktur)}</legend>
+              <div className="mt-1.5 flex flex-wrap gap-2" role="radiogroup" aria-label={text(T.struktur)}>
+                {(["a", "b"] as const).map((v) => {
+                  const vald = struktur === v;
+                  return (
+                    <button
+                      key={v}
+                      type="button"
+                      role="radio"
+                      aria-checked={vald}
+                      onClick={() => valjStruktur(v)}
+                      className={cn(
+                        "focus-ring min-h-11 rounded-input border px-4 py-2 text-left text-[14px] transition-colors",
+                        vald
+                          ? "border-ochre bg-ochre/10 text-ink"
+                          : "border-ink/15 bg-paper2/50 text-ink-muted hover:border-ink/30 hover:text-ink"
+                      )}
+                    >
+                      <span className="font-semibold">{v.toUpperCase()}</span>
+                      <span className="ml-2">{text(v === "a" ? T.strukturA : T.strukturB)}</span>
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="mt-2 max-w-[62ch] text-[13px] leading-5 text-ink-subtle">
+                {text(struktur === "a" ? T.strukturAText : T.strukturBText)}
+              </p>
+            </fieldset>
+          ) : null}
         </div>
       ) : null}
 
@@ -723,6 +802,9 @@ export function LeadsRunForm({
               <strong className="font-semibold">{svar.count}</strong>{" "}
               {korning ? text(T.leadsBestallda) : text(T.bolagIKorningen)} ·{" "}
               {svar.scope === "research_and_draft" ? text(T.researchOchUtkast) : text(T.baraResearch)}
+              {svar.scope === "research_and_draft" && svar.struktur
+                ? text(svar.struktur === "b" ? T.strukturKortB : T.strukturKortA)
+                : null}
               {svar.is_test ? text(T.testkorning) : null}
             </p>
 

@@ -147,6 +147,9 @@ class ErbjudandenRequest(BaseModel):
     #: Ämnesrader per produkt (2026-10-29): {produktnamn: [rad, …]}. Koden
     #: väljer en per mejl; utan lista skriver modellen ämnesraden.
     amnen: dict[str, list[str]] | None = Field(default=None, max_length=8)
+    #: Struktur B:s korta utfall per produkt (2026-11-05): {produktnamn: text}.
+    #: Frågan i B bygger på det; utan text på produktens nytta.
+    kort_utfall: dict[str, str] | None = Field(default=None, max_length=8)
 
     @model_validator(mode="after")
     def _villkorslangd(self) -> "ErbjudandenRequest":
@@ -161,6 +164,11 @@ class ErbjudandenRequest(BaseModel):
         for produkt, rader in (self.amnen or {}).items():
             if len(rader) > AMNEN_MAX or any(len(r) > AMNE_MAX for r in rader):
                 raise ValueError(f"Högst {AMNEN_MAX} ämnesrader om högst {AMNE_MAX} tecken för {produkt}.")
+        from ..leads.erbjudanden import KORT_UTFALL_MAX
+
+        for produkt, text in (self.kort_utfall or {}).items():
+            if len(text) > KORT_UTFALL_MAX:
+                raise ValueError(f"Det korta utfallet för {produkt} är längre än {KORT_UTFALL_MAX} tecken.")
         return self
 
 
@@ -386,6 +394,11 @@ class LeadsBatchRequest(BaseModel):
     #: prospekt i DEN här körningen; gamla rader i registret blandas inte in.
     company_names: list[str] = Field(default_factory=list, max_length=50)
 
+    #: Utkastens struktur i körningen (Sebbe 2026-11-05, app/leads/utkaststruktur.py):
+    #: "a" dagens mejl, "b" det korta mejlet som slutar med en fråga. Väljs
+    #: vid Kör Iris och gäller körningens nya leads.
+    struktur: Literal["a", "b"] = "a"
+
 
 class ProspectPatchRequest(BaseModel):
     status: str | None = None
@@ -466,6 +479,9 @@ class ProcessaOmRequest(BaseModel):
     #: och de osända utkasten kasseras FÖRE omskrivningen, så att det gamla
     #: aldrig kan godkännas eller gå ut efter det nya.
     ersatt: bool = False
+    #: Utkastens struktur (A/B, app/leads/utkaststruktur.py). Utelämnad =
+    #: leadets förra utkasts struktur, så att Skapa om utkast behåller B.
+    struktur: Literal["a", "b"] | None = None
 
 
 class LeadsListaRequest(BaseModel):

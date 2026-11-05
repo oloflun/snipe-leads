@@ -291,7 +291,43 @@ def normalisera(raw: Any) -> dict[str, Any]:
             vikt = 1
         aktiva.append({"nyckel": rad["nyckel"], "vikt": min(max(vikt, 0), VIKT_MAX)})
     amnen = _amnena(raw.get("amnen"))
-    return {"aktiva": aktiva, "villkor": villkor, "egna": egna, **({"amnen": amnen} if amnen else {})}
+    kort = _kort_utfall(raw.get("kort_utfall"))
+    return {
+        "aktiva": aktiva, "villkor": villkor, "egna": egna,
+        **({"amnen": amnen} if amnen else {}),
+        **({"kort_utfall": kort} if kort else {}),
+    }
+
+
+# -- Det korta utfallet (struktur B) -------------------------------------------
+#
+# Sebbe 2026-11-05: struktur B (app/leads/utkaststruktur.py) är en fråga om
+# ett konkret utfall, "Om Iris kunde ta fram 40–50 nya företag i veckan …,
+# skulle det vara till nytta?". Utfallet är kundens text per produkt, inte
+# modellens: siffran ska vara en kunden står för, och den går in i
+# faktagrindens underlag. Utan text bygger frågan på produktens nytta.
+
+#: Ett utfall är en bisats i en fråga, inte ett stycke.
+KORT_UTFALL_MAX = 200
+
+
+def _kort_utfall(raw: Any) -> dict[str, str]:
+    """{produktnamn: utfall}, strippat."""
+    if not isinstance(raw, dict):
+        return {}
+    return {
+        str(p).strip(): " ".join(v.split())[:KORT_UTFALL_MAX]
+        for p, v in raw.items()
+        if str(p).strip() and isinstance(v, str) and v.strip()
+    }
+
+
+def kort_utfall_for(val: dict[str, Any] | None, produkt: str | None) -> str:
+    """Kundens korta utfall för `produkt` (namnet utan hänsyn till versaler), eller ""."""
+    if not produkt:
+        return ""
+    nyckel = produkt.strip().casefold()
+    return next((v for p, v in ((val or {}).get("kort_utfall") or {}).items() if p.casefold() == nyckel), "")
 
 
 # -- Ämnesraderna ------------------------------------------------------------
@@ -391,12 +427,14 @@ def validera(
     produkter: list[str] | None = None,
     egna: dict[str, Any] | None = None,
     amnen: dict[str, list[str]] | None = None,
+    kort_utfall: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """Skrivvägen: kastar ValueError med ett svenskt besked. Typer och
     gränser (vikt 0–10, villkorslängd) prövas redan av API-schemat.
     `produkter` är kundens produktnamn; villkor per produkt måste gälla en av dem.
     `egna`: kundens egna erbjudanden, {nyckel: {namn, form}}.
-    `amnen`: ämnesrader per produkt, {produktnamn: [rad, …]}."""
+    `amnen`: ämnesrader per produkt, {produktnamn: [rad, …]}.
+    `kort_utfall`: struktur B:s utfall per produkt, {produktnamn: text}."""
     giltiga = normalisera({"egna": egna})["egna"]
     kat = armar({"egna": giltiga})
     for nyckel, e in (egna or {}).items():
@@ -418,6 +456,9 @@ def validera(
     for produkt in amnen or {}:
         if produkt.strip().casefold() not in kanda:
             raise ValueError(f"Ämnesraderna gäller produkten \"{produkt}\", som inte finns bland era produkter.")
+    for produkt in kort_utfall or {}:
+        if produkt.strip().casefold() not in kanda:
+            raise ValueError(f"Det korta utfallet gäller produkten \"{produkt}\", som inte finns bland era produkter.")
     nycklar = [a["nyckel"] for a in aktiva]
     if len(nycklar) != len(set(nycklar)):
         raise ValueError("Ett erbjudande står två gånger bland de aktiva.")
@@ -426,7 +467,9 @@ def validera(
             raise ValueError(
                 f"Fyll i villkoren för {kat[a['nyckel']].namn} innan erbjudandet slås på."
             )
-    return normalisera({"aktiva": aktiva, "villkor": villkor, "egna": egna, "amnen": amnen})
+    return normalisera(
+        {"aktiva": aktiva, "villkor": villkor, "egna": egna, "amnen": amnen, "kort_utfall": kort_utfall}
+    )
 
 
 def valbara(val: dict[str, Any], produkt: str | None = None) -> list[tuple[str, int]]:

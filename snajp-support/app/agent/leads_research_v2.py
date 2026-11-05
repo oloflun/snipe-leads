@@ -39,6 +39,7 @@ from ..agentcore.packs import RunLedger
 from ..config import get_settings
 from ..leads import erbjudanden
 from ..leads import stilkontroll as stil
+from ..leads import utkaststruktur
 from ..leads.business_context import require_business_context
 from ..leads.grounding_gate import build_permitted_facts
 from ..leads.language_gate import last_humanizer_variant
@@ -962,11 +963,13 @@ def _stilfynd(
     andra_amnen: list[str] | None = None,
     fokus_ok: bool = True,
     amne_i_kod: bool = False,
+    struktur: str = "a",
 ) -> list[str]:
     """Stilgrindens fynd på ett råutkast (före humanizern), som text till
     omskrivningen: markörerna i app/leads/stilkontroll.py, erbjudandets
     siffror och produkt, och samma ingång eller konstruktion som ett annat
-    utkast i körningen. Tom lista = inget att åtgärda."""
+    utkast i körningen. Tom lista = inget att åtgärda. `struktur` "b" prövar
+    det korta mejlet mot sina egna regler (app/leads/utkaststruktur.py)."""
     body = str(draft.get("body") or "")
     if not body.strip():
         return []
@@ -974,9 +977,9 @@ def _stilfynd(
     # mening och handlingen ("svara 'ja' så skickar vi de fem inom två
     # arbetsdagar" i varje gratis_prov-mejl), så de fynden kan inte skrivas
     # bort och ska bara flaggas vid köningen som förut.
-    fynd = stil.kontrollera(body).anmarkningar
+    fynd = stil.kontrollera(body, struktur=struktur).anmarkningar
     fynd += stil.erbjudande_fynd(body, villkor=villkor, produkt=produkt)
-    fynd += stil.mot_andra(body, andra)
+    fynd += stil.mot_andra(body, andra, struktur=struktur)
     # Ämnesraden (Anton 2026-10-15): inget bolagsnamn, ingen produkt, inte
     # samma början som ett annat mejl i körningen.
     # Väljs ämnesraden ur kundens lista i kod (`amne_i_kod`) prövas modellens
@@ -1013,11 +1016,17 @@ async def run_outreach_draft_v2(
     research_summary: str = "",
     research_evidence: tuple[str, ...] = (),
     is_test: bool = False,
+    struktur: str = "a",
 ) -> dict[str, Any]:
     """Fas C i TVÅ skill-steg (kombinerat skapa/skärp/granska + humanizer),
     sedan köar KODEN utkastet (INV-SEC-004). Samma returnycklar som
     leads_agent.run_outreach_draft; grundningscykeln och tomtext-omförsöket
-    är oförändrade."""
+    är oförändrade.
+
+    `struktur` (Sebbe 2026-11-05, app/leads/utkaststruktur.py): "a" är
+    dagens mejl, oförändrat; "b" det korta mejlet som slutar med en fråga om
+    produktens utfall. B byter erbjudandeblocket mot sitt eget, hoppar över
+    personaliseringen av ingången och prövas mot sina egna stilregler."""
     await require_business_context(storage, tenant_id)
 
     started = time.monotonic()
@@ -1037,21 +1046,43 @@ async def run_outreach_draft_v2(
     # Produkten matchas mot kundens produkter i dag (2026-10-29): en sparad
     # research kan sakna produkten eller bära ett äldre namn, och då valdes
     # inget erbjudande alls (31 av 243 i omskrivningen av Snajps kö).
+    leads_installningar = await storage.get_agent_settings(tenant_id, agent_type="leads")
     vald_nu = erbjudanden.produkt_nu(
         erbjudanden.produkt_ur_research(research_summary),
         offer_summary,
-        las_produkter(await storage.get_agent_settings(tenant_id, agent_type="leads")),
+        las_produkter(leads_installningar),
     )
     erbjudande = await erbjudanden.for_trad(
         storage, tenant_id, thread,
         vald_nu["namn"] if vald_nu else erbjudanden.produkt_ur_research(research_summary),
     )
     erbjudandeblock = f"{erbjudande.block()}\n\n" if erbjudande else ""
+    # Struktur B (app/leads/utkaststruktur.py): blocket ersätter erbjudandets,
+    # och erbjudandet står bara i ungefär vart tredje B-mejl. Varianten väljs
+    # per prospekt, så att ett omskrivet utkast behåller sin.
+    struktur = utkaststruktur.normalisera(struktur)
+    b = struktur == "b"
+    _pid = str(thread.get("prospect_id") or thread_id)
+    b_erbjudande = b and erbjudande is not None and utkaststruktur.med_erbjudande(tenant_id, _pid)
+    b_ingang = b and utkaststruktur.med_ingang(tenant_id, _pid)
+    kort_utfall = ""
+    if b:
+        _bprodukt = vald_nu["namn"] if vald_nu else erbjudanden.produkt_ur_research(research_summary)
+        kort_utfall = erbjudanden.kort_utfall_for(
+            erbjudanden.normalisera(leads_installningar.get("erbjudanden")), _bprodukt
+        )
+        erbjudandeblock = utkaststruktur.block(
+            produkt=_bprodukt,
+            nytta=vald_nu["nytta"] if vald_nu else None,
+            utfall=kort_utfall,
+            villkor=erbjudande.villkor if b_erbjudande else None,
+            ingang=b_ingang,
+        ) + "\n\n"
     # Med kundens erbjudande styr det och produktens nytta (första raden,
     # api/leads.py), inte researchens eget erbjudandeförslag: omkörningen
     # 2026-10-25 lät Iris "hitta nya tomter" därför att researchen föreslagit det.
     # Nyttan kommer ur dagens inställningar, inte ur researchens tid.
-    if erbjudande:
+    if erbjudande or (b and vald_nu):
         offer_summary = f"{vald_nu['namn']}: {vald_nu['nytta']}" if vald_nu else offer_summary.split("\n", 1)[0]
     # Kundens ämnesrader för produkten (Sebbe 2026-10-29): raden väljs i kod
     # sist, så modellens ämnesrad prövas inte av grinden.
@@ -1071,7 +1102,11 @@ async def run_outreach_draft_v2(
             "nästa uppdrag: det används i andra mejl."
         )
     ingangsblock = (
-        f"## Ingångens form i det här mejlet\n{ingangsform}\n"
+        # B har ingen tilldelad ingångsform: ingången är en valfri mening
+        # eller ingen alls (utkaststruktur.block).
+        ""
+        if b
+        else f"## Ingångens form i det här mejlet\n{ingangsform}\n"
         "Formen är tilldelad just det här mejlet så att körningens mejl inte börjar likadant; "
         "innehållet hämtas ur bolagets egna ord.\n\n"
     ) + (
@@ -1130,9 +1165,15 @@ async def run_outreach_draft_v2(
         "mottagare, annars \"Hej,\".\n"
         "- Skriv produktnamnen exakt som i erbjudandet, med samma stora och små "
         "bokstäver varje gång.\n"
-        "- Avsluta med erbjudandets handling som en vardaglig inbjudan, aldrig som "
-        "\"Svara X så gör vi Y\". Skriv INGEN hälsningsfras och "
-        "inget namn: signaturen läggs på automatiskt.\n"
+        + (
+            "- Avsluta med frågan enligt \"Mejlets struktur: B\". Skriv INGEN hälsningsfras och "
+            "inget namn: signaturen läggs på automatiskt.\n"
+            if b
+            else "- Avsluta med erbjudandets handling som en vardaglig inbjudan, aldrig som "
+            "\"Svara X så gör vi Y\". Skriv INGEN hälsningsfras och "
+            "inget namn: signaturen läggs på automatiskt.\n"
+        )
+        +
         "- Korrekt svenska utan stavfel, korta meningar, inga talesätt.\n\n"
         # Antons beställning 2026-10-10: utkasten var korrekta men platta och
         # informerande. Stilen går före skillernas mallar för HUR det sägs;
@@ -1165,7 +1206,15 @@ async def run_outreach_draft_v2(
         "\n\n## Ämnesraden\nTvå till fem ord om utmaningen eller momentet. Skriv ALDRIG "
         "bolagets namn eller vår produkt i ämnesraden (Anton 2026-10-15)."
         # Utan blocket stryker eller skriver humanizern om erbjudandet och villkoren.
-        + (f"\n\n{erbjudande.block()}" if erbjudande else "")
+        # I B är det strukturens block: utan det gör humanizern frågan till
+        # en inbjudan eller lägger till ett stycke.
+        + (f"\n\n{erbjudandeblock.strip()}" if erbjudandeblock else "")
+        + (
+            "\n\n## Strukturen\nBehåll mejlet lika kort och låt det sluta med frågan. Lägg inte till "
+            "något stycke, ingen inbjudan och ingen avslutning."
+            if b
+            else ""
+        )
     )
 
     ledger = RunLedger(satisfied={"offer_selected", "context_pack"})
@@ -1220,7 +1269,9 @@ async def run_outreach_draft_v2(
     # Personalisera i granskningen rättade det, så den rundan ligger nu i
     # kedjan: ett kort anrop som skriver om ENBART första stycket, i andra
     # person, med en detalj ur citaten. Resten av mejlet rörs inte.
-    if str(draft.get("body") or "").strip():
+    # Inte i struktur B: personaliseringen skriver om första stycket till en
+    # ingång i A:s form, och i B är första stycket ofta själva frågan.
+    if str(draft.get("body") or "").strip() and not b:
         personaliserad = await run_step(
             steps[0],
             ledger,
@@ -1237,7 +1288,26 @@ async def run_outreach_draft_v2(
             draft = {**draft, "subject": personaliserad.get("subject") or draft.get("subject"),
                      "body": personaliserad["body"]}
 
-    villkor = erbjudande.villkor if erbjudande else None
+    # B utan erbjudande: inga villkor att hålla intakta i mejlet.
+    villkor = erbjudande.villkor if erbjudande and (not b or b_erbjudande) else None
+    omskrivningsregler = (
+        "DITT FÖRRA UTKAST FÄLLDES AV STILGRINDEN. Skriv om hela mejlet enligt "
+        "\"Mejlets struktur: B\" så att varje punkt nedan är åtgärdad: kort och rakt på, "
+        "produktens namn i frågan, inga siffror utöver utfallet och villkoren, ingen "
+        "kritik av dem och ingen mallfras; ämnesraden är två till fem ord utan bolagets "
+        "namn och utan produkten; mejlet slutar med frågan."
+        if b
+        else "DITT FÖRRA UTKAST FÄLLDES AV STILGRINDEN. Skriv om hela "
+        "mejlet enligt skrivstilen så att varje punkt nedan är åtgärdad: "
+        "ingången är en utmaning i deras sorts arbete som produkten löser, "
+        "med något konkret ur deras egna ord, aldrig kritik av dem, aldrig en "
+        "uppräkning, siffror eller en mallfras; ämnesraden är två till fem ord utan "
+        "bolagets namn och utan produkten; produkten namnges före löftet; "
+        "erbjudandets villkor och produktens namn står kvar ordagrant i "
+        "sak; mejlet följer formen under \"Mejlets form\" och slutar med "
+        "villkorens handling som en vardaglig inbjudan, aldrig \"Svara X så "
+        "gör vi Y\"."
+    )
 
     async def skriv_om(utkast: dict[str, Any], fynd: list[str]) -> dict[str, Any]:
         return await run_step(
@@ -1245,16 +1315,7 @@ async def run_outreach_draft_v2(
             ledger,
             trace,
             task=_UTKAST_V2_UPPGIFT
-            + "\n\nDITT FÖRRA UTKAST FÄLLDES AV STILGRINDEN. Skriv om hela "
-            "mejlet enligt skrivstilen så att varje punkt nedan är åtgärdad: "
-            "ingången är en utmaning i deras sorts arbete som produkten löser, "
-            "med något konkret ur deras egna ord, aldrig kritik av dem, aldrig en "
-            "uppräkning, siffror eller en mallfras; ämnesraden är två till fem ord utan "
-            "bolagets namn och utan produkten; produkten namnges före löftet; "
-            "erbjudandets villkor och produktens namn står kvar ordagrant i "
-            "sak; mejlet följer formen under \"Mejlets form\" och slutar med "
-            "villkorens handling som en vardaglig inbjudan, aldrig \"Svara X så "
-            "gör vi Y\".\n\n## Fynd att åtgärda\n"
+            + f"\n\n{omskrivningsregler}\n\n## Fynd att åtgärda\n"
             + "\n".join(f"- {f}" for f in fynd)
             + f"\n\n## Förra utkastet\nÄmne: {utkast.get('subject', '')}\n\n{utkast.get('body', '')}",
             case_context=base,
@@ -1285,7 +1346,8 @@ async def run_outreach_draft_v2(
         )
 
     stilfynd = _stilfynd(draft, villkor=villkor, produkt=produktnamn, andra=andra_utkast,
-                         bolag=company_name, andra_amnen=andra_amnen, fokus_ok=fokus_ok, amne_i_kod=amne_i_kod)
+                         bolag=company_name, andra_amnen=andra_amnen, fokus_ok=fokus_ok, amne_i_kod=amne_i_kod,
+                         struktur=struktur)
     if stilfynd:
         draft = await skriv_om(draft, stilfynd)
     humanized = await humanisera(draft)
@@ -1305,7 +1367,8 @@ async def run_outreach_draft_v2(
 
     slutligt = _version(humanized, draft)
     kvar = _stilfynd(slutligt, villkor=villkor, produkt=produktnamn, andra=andra_utkast,
-                     bolag=company_name, andra_amnen=andra_amnen, fokus_ok=fokus_ok, amne_i_kod=amne_i_kod)
+                     bolag=company_name, andra_amnen=andra_amnen, fokus_ok=fokus_ok, amne_i_kod=amne_i_kod,
+                         struktur=struktur)
     basta, basta_fynd = slutligt, kvar
     for _varv in range(2):
         if not kvar:
@@ -1314,7 +1377,8 @@ async def run_outreach_draft_v2(
         humanized = await humanisera(draft)
         slutligt = _version(humanized, draft)
         kvar = _stilfynd(slutligt, villkor=villkor, produkt=produktnamn, andra=andra_utkast,
-                         bolag=company_name, andra_amnen=andra_amnen, fokus_ok=fokus_ok, amne_i_kod=amne_i_kod)
+                         bolag=company_name, andra_amnen=andra_amnen, fokus_ok=fokus_ok, amne_i_kod=amne_i_kod,
+                         struktur=struktur)
         if len(kvar) <= len(basta_fynd):
             basta, basta_fynd = slutligt, kvar
 
@@ -1361,7 +1425,11 @@ async def run_outreach_draft_v2(
                 context_pack=context_pack,
                 research_evidence=research_evidence,
                 # Villkorens siffror är kundens egna och får stå i mejlet.
-                offer_summary=f"{offer_summary}\n{erbjudande.villkor}" if erbjudande else offer_summary,
+                # Struktur B:s korta utfall är kundens text likaså ("40–50 nya
+                # företag i veckan"), och frågan bygger på det.
+                offer_summary="\n".join(
+                    d for d in (offer_summary, erbjudande.villkor if erbjudande else "", kort_utfall) if d
+                ),
                 brief=brief,
                 tenant_name=tenant_name,
                 company_name=company_name,
@@ -1384,7 +1452,8 @@ async def run_outreach_draft_v2(
                 list(erbjudande.amnen), f"{tenant_id}:{thread.get('prospect_id') or thread_id}",
                 du=stil.namngiven(body),
             ) or subject
-            body = erbjudanden.behall_upp_till(body, erbjudande.villkor)
+            if villkor:
+                body = erbjudanden.behall_upp_till(body, villkor)
 
         if not grounding["ok"]:
             await _request_human_handoff_impl(
@@ -1406,6 +1475,7 @@ async def run_outreach_draft_v2(
                     language_state=language_state,
                     humanizer_variant=last_humanizer_variant(trace.skills_used),
                     stilkontroll=True,
+                    struktur=struktur,
                 )
             )
 
@@ -1425,6 +1495,9 @@ async def run_outreach_draft_v2(
          "unsupported_before": grounding.get("unsupported_before"),
          "unsupported_after": grounding.get("unsupported_after")},
         {"step": "grind:ko", "koad": bool(context.queued), "skal": context.escalation_reason},
+        # Strukturen (A/B) står i spåret: Skapa om utkast läser den härifrån
+        # (utkaststruktur.tidigare), så att ett B-mejl skrivs om som B.
+        utkaststruktur.loggpost(struktur, med_erbjudande_=b_erbjudande, med_ingang_=b_ingang),
     ]
     await storage.log_agent_run(
         tenant_id,

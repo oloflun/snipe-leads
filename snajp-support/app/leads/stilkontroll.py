@@ -35,6 +35,10 @@ MAX_ORD = 25
 #: Skrivstilen: 60–100 ord i brödtexten. Piloten och avslutet står i varje
 #: mejl, men provkörningen 2026-10-25 gav 105–150 ord: för långt (Anton).
 MAX_ORD_MEJL = 100
+#: Struktur B (app/leads/utkaststruktur.py): kort och rakt på.
+MAX_ORD_B = 60
+#: B:s fråga om utfallet är en enda mening (förebilden 27 ord).
+MAX_ORD_MENING_B = 32
 
 _HALSNING = re.compile(
     r"^\s*(?:med\s+vänlig(?:a)?\s+hälsning(?:ar)?|vänliga\s+hälsningar|bästa\s+hälsningar|"
@@ -250,9 +254,14 @@ def uppmaning(text: str) -> str:
     return _norm(meningar[-1]) if meningar else ""
 
 
-def kontrollera(text: str) -> Kontrollresultat:
-    """Markörerna i ett mejl. Alla fynd är allvarliga: de tvingar granskning."""
+def kontrollera(text: str, *, struktur: str = "a") -> Kontrollresultat:
+    """Markörerna i ett mejl. Alla fynd är allvarliga: de tvingar granskning.
+
+    `struktur` "b" (app/leads/utkaststruktur.py, Sebbe 2026-11-05): det korta
+    mejlet SKA sluta med sin fråga och har ett eget ordtak; övriga markörer
+    gäller som i A."""
     text = text or ""
+    ar_b = struktur == "b"
     fynd: list[Anmarkning] = []
 
     def lagg(kod: str, beskrivning: str) -> None:
@@ -312,7 +321,10 @@ def kontrollera(text: str) -> Kontrollresultat:
             break
     # Skrivstilens regel 4 och strukturen (Antons omgång 3): mejlet slutar med
     # en enkel handling, aldrig en fråga, och brödtexten är högst 90 ord.
-    if meningar and meningar[-1].endswith("?"):
+    if ar_b:
+        if meningar and not meningar[-1].endswith("?"):
+            lagg("b_utan_fraga", f"struktur B slutar med sin fråga, inte med \"{meningar[-1][:60]}\"")
+    elif meningar and meningar[-1].endswith("?"):
         lagg("slutar_med_fraga", f"slutar med en fråga i stället för en handling: \"{meningar[-1][:60]}\"")
     svara = next((m for m in meningar[-1:] if _SVARA_ORDER.match(m)), None) or next(
         (m for m in meningar if _SVARA_KODORD.search(m)), None
@@ -320,11 +332,14 @@ def kontrollera(text: str) -> Kontrollresultat:
     if svara:
         lagg("svara_sa_avslut", f"avslutet är en order (\"{svara[:50]}\"); skriv en vardaglig inbjudan")
     antal_ord = sum(len(m.split()) for m in meningar)
-    if antal_ord > MAX_ORD_MEJL:
-        lagg("for_langt", f"brödtexten är {antal_ord} ord (högst {MAX_ORD_MEJL})")
+    tak = MAX_ORD_B if ar_b else MAX_ORD_MEJL
+    if antal_ord > tak:
+        lagg("for_langt", f"brödtexten är {antal_ord} ord (högst {tak})")
+    # B:s fråga är en mening med flit (förebilden har 27 ord): eget tak.
+    menings_tak = MAX_ORD_MENING_B if ar_b else MAX_ORD
     for mening in meningar:
-        if len(mening.split()) > MAX_ORD:
-            lagg("lang_mening", f"mening över {MAX_ORD} ord: \"{mening[:60]}…\"")
+        if len(mening.split()) > menings_tak:
+            lagg("lang_mening", f"mening över {menings_tak} ord: \"{mening[:60]}…\"")
             break
     for mening in meningar:
         if not mening.upper().startswith("PS") and _KOLONLISTA.search(mening):
@@ -515,16 +530,21 @@ def _gemensam_fras(a: str, b: str, n: int = 4) -> str | None:
     return None
 
 
-def mot_andra(text: str, andra: Sequence[str]) -> list[Anmarkning]:
-    """Batchkontrollen för ETT mejl mot de andra i samma körning."""
+def mot_andra(text: str, andra: Sequence[str], *, struktur: str = "a") -> list[Anmarkning]:
+    """Batchkontrollen för ETT mejl mot de andra i samma körning.
+
+    I struktur B prövas bara samma ingång ordagrant: frågan om utfallet är
+    byggd likadant i varje B-mejl med flit, och kundens utfallstext står i
+    dem alla, så konstruktionen, frasen och uppmaningen skulle fälla varje
+    B-mejl och ge omskrivningar som inte går att lyckas med."""
     fynd = []
     egen_ingang, egen_uppmaning = ingang(text), uppmaning(text)
     if egen_ingang and any(ingang(t) == egen_ingang for t in andra):
         fynd.append(Anmarkning("samma_ingang", "Stil: samma ingång som ett annat mejl i körningen", allvarlig=True))
-    elif egen_ingang and any(konstruktion(t) == konstruktion(text) for t in andra if ingang(t)):
+    elif struktur != "b" and egen_ingang and any(konstruktion(t) == konstruktion(text) for t in andra if ingang(t)):
         fynd.append(Anmarkning("samma_konstruktion", "Stil: ingången är byggd som ett annat mejl i körningen",
                                allvarlig=True))
-    elif egen_ingang:
+    elif struktur != "b" and egen_ingang:
         # Samma fras i ingången som ett annat mejl, var den än står
         # (2026-10-15: "tar tid från det arbetet" sist i fem ingångar som
         # började olika).
@@ -532,6 +552,8 @@ def mot_andra(text: str, andra: Sequence[str]) -> list[Anmarkning]:
         if fras:
             fynd.append(Anmarkning("samma_fras", f"Stil: ingången delar frasen \"{fras}\" med ett annat mejl i körningen",
                                    allvarlig=True))
+    if struktur == "b":
+        return fynd
     if egen_uppmaning and any(uppmaning(t) == egen_uppmaning for t in andra):
         fynd.append(Anmarkning("samma_uppmaning", "Stil: samma uppmaning som ett annat mejl i körningen", allvarlig=True))
     if _FOKUSGREPP.search(_ingangsstycke(text)) and (

@@ -92,7 +92,7 @@ async def test_batch_returnerar_innan_sokningen_ar_klar(live_llm, monkeypatch):
             }
         ][:antal]
 
-    async def _spion(state, job_id, tenant, *, prospect_id, scope, overrides, is_test=False, batch_id=None):
+    async def _spion(state, job_id, tenant, *, prospect_id, scope, overrides, is_test=False, batch_id=None, struktur="a"):
         return None
 
     monkeypatch.setattr(leads_api, "hitta_bolag", _langsam)
@@ -130,7 +130,7 @@ async def test_batch_returnerar_innan_sokningen_ar_klar(live_llm, monkeypatch):
 async def test_batch_hittar_bolag_och_ignorerar_gamla_rader(live_llm, monkeypatch):
     startade: list[str] = []
 
-    async def _spion(state, job_id, tenant, *, prospect_id, scope, overrides, is_test=False, batch_id=None):
+    async def _spion(state, job_id, tenant, *, prospect_id, scope, overrides, is_test=False, batch_id=None, struktur="a"):
         startade.append(prospect_id)
 
     async def _fynd(icp, antal, *, uteslut_namn=None, profil=None, ring=0):
@@ -181,7 +181,7 @@ async def test_batch_hittar_bolag_och_ignorerar_gamla_rader(live_llm, monkeypatc
 
 @pytest.mark.anyio
 async def test_egna_namn_blir_den_har_korningens_prospekt(live_llm, monkeypatch):
-    async def _spion(state, job_id, tenant, *, prospect_id, scope, overrides, is_test=False, batch_id=None):
+    async def _spion(state, job_id, tenant, *, prospect_id, scope, overrides, is_test=False, batch_id=None, struktur="a"):
         return None
 
     async def _webb(namn, *, geografi=None):
@@ -215,7 +215,7 @@ async def test_scope_sok_stannar_efter_sokningen_och_koar_ingen_research(live_ll
     `utan_kontakt` — raden finns kvar i registret för komplettering."""
     startade: list[str] = []
 
-    async def _spion(state, job_id, tenant, *, prospect_id, scope, overrides, is_test=False, batch_id=None):
+    async def _spion(state, job_id, tenant, *, prospect_id, scope, overrides, is_test=False, batch_id=None, struktur="a"):
         startade.append(prospect_id)
 
     async def _fynd(icp, antal, *, uteslut_namn=None, profil=None, ring=0):
@@ -266,3 +266,56 @@ async def test_scope_sok_stannar_efter_sokningen_och_koar_ingen_research(live_ll
             assert lead["contact_name"] == "Eva Ek"
             assert lead["contact_level"] == "named_role_match"
             assert startade == [], "scope=sok får aldrig köa research"
+
+
+@pytest.mark.anyio
+async def test_strukturvalet_vid_kor_iris_nar_varje_barnjobb(live_llm, monkeypatch):
+    """Sebbe 2026-11-05: A eller B väljs vid Kör Iris och gäller körningens nya
+    leads (app/leads/utkaststruktur.py). Valet ska nå utkastjobbet, och en
+    klient som inte skickar fältet får A som förut."""
+
+    varv = iter(range(100))
+
+    async def _hittat(icp, antal, *, uteslut_namn=None, profil=None, ring=0):
+        n = next(varv)
+        return [
+            {
+                "company_name": f"Strukturbolag {n} AB",
+                "website": f"https://strukturbolag{n}.se",
+                "orgnr": None,
+                "ort": "Umeå",
+                "contact_email": f"info@strukturbolag{n}.se",
+                "anstallda": 8,
+            }
+        ][:antal]
+
+    sedda: list[str] = []
+
+    async def _spion(state, job_id, tenant, *, prospect_id, scope, overrides, is_test=False, batch_id=None, struktur="a"):
+        sedda.append(struktur)
+
+    monkeypatch.setattr(leads_api, "hitta_bolag", _hittat)
+    monkeypatch.setattr(leads_api, "_run_batch_prospect", _spion)
+
+    async with app.router.lifespan_context(app):
+        async with _client() as client:
+            for struktur in ("b", None):
+                svar = await client.post(
+                    "/api/leads/runs/batch",
+                    headers=DEMO,
+                    json={
+                        "limit": 1,
+                        "is_test": True,
+                        "scope": "research_and_draft",
+                        "overrides": {"industries": ["Bygg"], "geography": ["Umeå"]},
+                        **({"struktur": struktur} if struktur else {}),
+                    },
+                )
+                assert svar.status_code == 202, svar.text
+                assert svar.json()["struktur"] == (struktur or "a")
+                klart = await _vanta_jobb(client, svar.json()["jobs"][0]["job_id"])
+                assert klart["status"] == "completed", klart
+                await asyncio.sleep(0.05)
+            ogiltig = await client.post("/api/leads/runs/batch", headers=DEMO, json={"limit": 1, "struktur": "c"})
+            assert ogiltig.status_code == 422
+    assert sedda == ["b", "a"]

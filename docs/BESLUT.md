@@ -9,6 +9,42 @@ möjligt), vad det betyder i koden.
 
 ---
 
+## 2026-11-05 (Sebbe) — Utskicksstruktur A och B, vald vid Kör Iris
+
+**Beslut.** Iris första mejl får två strukturer. "A är det vi har nu som vi
+skickar ut, strukturen alltså. Men B ska vara det nya lite snabbare och direkt
+på", efter ett engelskt mejl på tre rader ("If I could … would that be
+useful?"). Valet görs med en knapp A/B när man trycker Kör Iris, och texten i
+utskicken till körningens nya leads följer valet. B utgår från de tre
+exemplen per agent (Iris och Supportagenten): bara frågan, en rad om dem och
+frågan, eller med piloten. Siffran för Iris är "40–50 i veckan".
+
+**Resonemang.** Sebbes ord: reglerna att mejlet aldrig slutar med en fråga och
+att piloten står i varje mejl "gäller bara en förändring i nya B
+alternativ-utskicken": A står kvar som den är. Och: "Det ska vara med samma
+signatur och logga som för A … lika anpassningsbar beroende på företag den
+skickar till … samma disclaimer text längst ner … samma typsnitt i texten och
+färg på texterna. Få in det som rutin (viktigt) för alla utskick som görs för
+B … Det ska ha samma funktion rent administrativt som A men såklart
+annorlunda text."
+
+**I koden.** `app/leads/utkaststruktur.py` (blocket, förebilderna, varianterna
+och `tidigare`), `run_outreach_draft_v2(struktur=…)`, stilgrinden med B:s
+regler (`stilkontroll.kontrollera/mot_andra(struktur=…)`: B ska sluta med sin
+fråga, högst 60 ord), `LeadsBatchRequest.struktur` → körningens tillstånd →
+varje barnjobb, `ProcessaOmRequest.struktur` (utelämnad = leadets förra
+struktur, så att Skapa om utkast behåller B), kundens korta utfall per produkt
+(`erbjudanden.kort_utfall`, Snajps i `scripts/snajp_malgrupp.py`) och väljaren
+i `components/leads/LeadsRunForm.tsx`. B köas genom samma
+`_queue_outreach_draft_impl` som A, och signatur, logga, fot och
+HTML-rendering är därför desamma. `tests/leads/test_utkaststruktur_b.py`
+låser det: svansen efter brödtexten är byte-identisk med A:s och
+stilsättningen i HTML:en densamma. A:s facit (INV-LEADS-UTKAST-002) passerar
+oförändrat. Erbjudandets "form B (frågan)" är något annat: en variant av A:s
+erbjudandestycke, inte struktur B. Anton ska informeras om B.
+
+---
+
 ## 2026-11-05 (Sebbe) — En hängd api-process avslutar sig själv
 
 **Beslut.** "Lös det du!! vad som än krävs", efter att www.snajp.se visade

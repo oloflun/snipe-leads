@@ -117,6 +117,10 @@ async def _queue_outreach_draft_impl(
     force_review: bool = False,
     stilkontroll: bool = False,
     kampanj_id: str | None = None,
+    #: Utkastets struktur (app/leads/utkaststruktur.py): B prövas mot sina
+    #: egna regler, så att varje B-mejl inte flaggas för att det slutar med
+    #: sin fråga.
+    struktur: str = "a",
 ) -> str:
     # Textkvalitetslagret (app/textkvalitet.py): sista efterkontrollen innan
     # texten kan nå en kund. Platshållare ("[förnamn]") kontrolleras på
@@ -188,7 +192,9 @@ async def _queue_outreach_draft_impl(
             for r in await outreach.storage.list_review_queue(outreach.tenant_id)
             if r.get("thread_id") != outreach.thread_id
         ]
-        stilfynd = stil.kontrollera(finalized_body).anmarkningar + stil.mot_andra(finalized_body, andra)
+        stilfynd = stil.kontrollera(finalized_body, struktur=struktur).anmarkningar + stil.mot_andra(
+            finalized_body, andra, struktur=struktur
+        )
         if stilfynd:
             force_review = True
             granskningsskal = "; ".join(

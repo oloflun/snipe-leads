@@ -38,7 +38,7 @@ from ..leads.autonomy import kan_aktivera_auto_send
 from ..leads.autonomy import normalize as normalize_autonomy
 from ..leads.befordran import saknade_falt
 from ..leads.rollkoppling import med_rollflagga
-from ..leads import automation, crm_synk, erbjudanden, eskalering
+from ..leads import automation, crm_synk, erbjudanden, eskalering, utkaststruktur
 from ..leads.business_context import (
     MissingBusinessContextError,
     ar_ifyllt as business_context_ar_ifyllt,
@@ -1745,8 +1745,11 @@ async def put_leads_erbjudanden(
         {k: e.model_dump() for k, e in payload.egna.items()} if payload.egna is not None else sparat["egna"]
     )
     amnen = payload.amnen if payload.amnen is not None else sparat.get("amnen")
+    kort_utfall = payload.kort_utfall if payload.kort_utfall is not None else sparat.get("kort_utfall")
     try:
-        nytt = erbjudanden.validera(aktiva, villkor, [p["namn"] for p in las_produkter(current)], egna, amnen)
+        nytt = erbjudanden.validera(
+            aktiva, villkor, [p["namn"] for p in las_produkter(current)], egna, amnen, kort_utfall
+        )
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from None
     saved = await storage.set_agent_settings(
@@ -1953,6 +1956,8 @@ async def skriv_korningens_utkast(
         overrides=None,
         is_test=bool(rad.get("is_test")),
         limit=len(prospekt),
+        # Körningens struktur (A/B): utkasten den saknade skrivs som resten.
+        struktur=utkaststruktur.normalisera((rad.get("korning") or {}).get("struktur")),
     )
     return {"count": len(jobs), "jobs": jobs}
 
@@ -2546,6 +2551,7 @@ def _payload_till_request(payload: dict) -> LeadsBatchRequest:
         is_test=bool(payload.get("is_test")),
         company_names=list(payload.get("company_names") or []),
         overrides=LeadsRunOverrides(**ov) if ov else None,
+        struktur=utkaststruktur.normalisera(payload.get("struktur")),
     )
 
 
@@ -2559,6 +2565,8 @@ async def _lagg_prospektjobb(
     is_test: bool,
     limit: int,
     batch_id: str | None = None,
+    #: "a"/"b", eller None = leadets förra utkasts struktur (Skapa om utkast).
+    struktur: str | None = "a",
 ) -> list[dict]:
     """En research-rad per prospekt. Sökningen är redan klar här.
 
@@ -2590,6 +2598,7 @@ async def _lagg_prospektjobb(
                     "overrides": overrides,
                     "is_test": is_test,
                     "batch_id": batch_id,
+                    "struktur": struktur,
                 }
             )
         else:
@@ -2603,6 +2612,7 @@ async def _lagg_prospektjobb(
                     overrides=overrides,
                     is_test=is_test,
                     batch_id=batch_id,
+                    struktur=struktur,
                 )
             )
         jobs.append({"job_id": job_id, "prospect_id": prospect["id"]})
@@ -3106,6 +3116,7 @@ async def _fyll_pa_last(app_state, tenant: dict, batch_id: str) -> dict | None:
             is_test=bool(k.get("is_test")),
             limit=1,
             batch_id=batch_id,
+            struktur=utkaststruktur.normalisera(k.get("struktur")),
         )
         k["jobs"].extend({**b, "company_name": prospect.get("company_name")} for b in barn)
         k["pagaende"] += len(barn)
@@ -3308,6 +3319,9 @@ async def _run_batch(app_state, payload: dict) -> None:
             if payload.get("autopilot"):
                 # Startad av autopiloten (leads/autopilot.py): en per vardag.
                 k["autopilot"] = True
+            # Utkastens struktur (A/B, utkaststruktur.py) följer körningen till
+            # varje barn som motorn lägger, också efter ett återtag.
+            k["struktur"] = req.struktur
             await app_state.jobs.complete(job_id, {"fase": "research", "jobs": [], "count": 0, "korning": k})
             # 'processing' med tillståndet, inte 'completed': sökjobbet är
             # klart men KÖRNINGEN har just börjat (migration 080). Raden
@@ -3371,6 +3385,7 @@ async def _run_batch(app_state, payload: dict) -> None:
             overrides=payload.get("overrides"),
             is_test=req.is_test,
             limit=req.limit,
+            struktur=req.struktur,
         )
         await app_state.jobs.complete(
             job_id,
@@ -3442,6 +3457,7 @@ async def start_batch_run(
         "is_test": payload.is_test,
         "limit": payload.limit,
         "company_names": [n.strip() for n in payload.company_names if n and n.strip()],
+        "struktur": payload.struktur,
     }
     leadsstrom = getattr(request.app.state, "leadsstrom", None)
     if leadsstrom is not None:
@@ -3454,6 +3470,7 @@ async def start_batch_run(
         "count": 0,
         "overrides": overrides,
         "is_test": payload.is_test,
+        "struktur": payload.struktur,
         "fase": "soker",
     }
 
@@ -3529,6 +3546,8 @@ async def _run_batch_prospect(
     is_test: bool = False,
     batch_id: str | None = None,
     kvotforsok: int = 0,
+    #: "a"/"b" (körningens val), eller None = leadets förra utkasts struktur.
+    struktur: str | None = "a",
 ) -> None:
     run_research_step, run_outreach_draft = _valj_leads_kedja()
     omkor_efter_kvot = False
@@ -3779,6 +3798,15 @@ async def _run_batch_prospect(
                         if vald
                         else offer[:2000]
                     )
+                    # Utkastets struktur (A/B, utkaststruktur.py): körningens val
+                    # eller det uttryckliga valet i Processa om; utan val (Skapa om
+                    # utkast) den struktur leadets förra utkast skrevs i, så att
+                    # ett B-mejl inte tyst blir ett A-mejl.
+                    struktur_nu = (
+                        utkaststruktur.normalisera(struktur)
+                        if struktur
+                        else await utkaststruktur.tidigare(storage, tenant["tenant_id"], prospect_id)
+                    )
                     draft = await run_outreach_draft(
                         storage,
                         tenant["tenant_id"],
@@ -3795,6 +3823,7 @@ async def _run_batch_prospect(
                         # build_permitted_facts saknade researchcitaten här.
                         research_evidence=tuple(result.get("research_evidence") or ()),
                         is_test=is_test,
+                        struktur=struktur_nu,
                     )
                     # `queued` är utkaststegets eget besked, inte en konstant:
                     # ett utkast som faktagrinden eller utdatakontraktet stoppade
@@ -3874,7 +3903,7 @@ async def _run_batch_prospect(
         await asyncio.sleep(KVOT_PAUS_S * (kvotforsok + 1) + random.uniform(0, 30))
         await _run_batch_prospect(
             app_state, job_id, tenant, prospect_id=prospect_id, scope=scope, overrides=overrides,
-            is_test=is_test, batch_id=batch_id, kvotforsok=kvotforsok + 1,
+            is_test=is_test, batch_id=batch_id, kvotforsok=kvotforsok + 1, struktur=struktur,
         )
         return
     # Här och inte i finally: avbröts tasken (deploy, SIGTERM) finns inget
@@ -4071,6 +4100,7 @@ async def processa_om(
         overrides=None,
         is_test=payload.is_test,
         limit=len(hittade),
+        struktur=payload.struktur,
     )
     return {
         "jobs": jobs,
@@ -5083,6 +5113,8 @@ async def hantera_leads_jobb(app_state, payload: dict) -> None:
         overrides=payload.get("overrides"),
         is_test=bool(payload.get("is_test")),
         batch_id=payload.get("batch_id"),
+        # Rått värde: None (äldre jobb, Skapa om utan val) = förra strukturen.
+        struktur=payload.get("struktur"),
     )
 
 
