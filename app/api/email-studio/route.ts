@@ -8,6 +8,7 @@ import { kanForsokasOm, klassaModellfel, statuskod, type Modellfelklass } from '
 import { DIREKT_OMSKRIVNING, exempelresultat, finnExempelbolag } from '@/lib/demo/iris-exempel';
 import { publiktExempelsvar } from '@/lib/data/emails';
 import { putsaText, utanReferenser } from '@/lib/textkvalitet';
+import { arStrukturB } from '@/lib/leads/struktur';
 
 /**
  * Routen väntar på ett LLM-anrop och var den ENDA under app/api som saknade
@@ -340,6 +341,22 @@ BRA (analys med precisa drag): "7/10. Signalen bär mejlet, men stycke två säl
 `;
 
 /**
+ * Struktur B (Sebbe 2026-11-05, snajp-support/app/leads/utkaststruktur.py):
+ * det korta utskicket som slutar med en fråga om vad agenten kan ge
+ * mottagaren. Knapparna ska fungera lika för B som för A, och utan regeln
+ * gjorde "Förbättra" och "Skriv om" ett B-mejl till ett A-mejl med inbjudan.
+ * Känns igen på texten: brödtexten (utan hälsning och hälsningsfras) är
+ * högst 70 ord och slutar med en fråga. Ett A-mejl slutar aldrig med en
+ * fråga (stilgrinden, slutar_med_fraga).
+ */
+const STRUKTUR_B_REGEL =
+  "STRUKTUR B: Mejlet är det korta utskicket som slutar med en fråga om vad agenten kan ge mottagaren. " +
+  "Behåll formen: högst 60 ord i brödtexten, högst en sak före frågan, och frågan sist. Lägg inte till " +
+  "stycken, inbjudan, länk eller bokningsförslag, och säg inte samma sak två gånger. A/B-varianter är " +
+  "också korta och slutar med en fråga.";
+const BEHALLER_STRUKTUR = new Set(["shorter", "rewrite", "improve", "personalize", "ab_variants", "translate"]);
+
+/**
  * Instruktion per knapp. Fanns tidigare bara i lib/agent/email-studio-prompt.ts
  * — en fil som ingenting anropar — så den levande routen skickade bara den råa
  * slugen ("ab_variants") utan förklaring. Varje instruktion pekar ut FLERA
@@ -561,6 +578,7 @@ export async function POST(request: NextRequest) {
   const userPrompt = [
     `Åtgärd: ${kandAction}`,
     `Instruktion för åtgärden: ${ACTION_INSTRUCTIONS[kandAction]}`,
+    arStrukturB(emailContent) && BEHALLER_STRUKTUR.has(kandAction) && STRUKTUR_B_REGEL,
     `Language: ${locale === 'sv' ? 'Swedish (sv-SE)' : 'English'}`,
     subject && `Current subject: ${subject}`,
     emailContent

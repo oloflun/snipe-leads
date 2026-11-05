@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Vaxel } from "@/components/leads/IrisEskalering";
+import { StrukturVal } from "@/components/leads/StrukturVal";
 import { etikett, meta, rubrikPanel } from "@/components/ui";
 import { felmeddelande } from "@/lib/http/json";
 import { useLocale, type Localized } from "@/lib/i18n";
@@ -20,7 +21,13 @@ import { cn } from "@/lib/utils";
 
 type PerTyp = { utkast_auto: boolean; uppfoljning_dagar: number };
 type Autopilot = { pa: boolean; leads_per_dag: number };
-type Automation = { per_typ: Record<LeadTyp, PerTyp>; jev_bortval: boolean; autopilot?: Autopilot };
+/** struktur: utkastens A/B i automatiska körningar (autopiloten, Flytta och Pröva mot Iris). */
+type Automation = {
+  per_typ: Record<LeadTyp, PerTyp>;
+  jev_bortval: boolean;
+  autopilot?: Autopilot;
+  struktur?: "a" | "b";
+};
 type CrmSynk = { leverantor: "hubspot" | "pipedrive" | null; integration_id: string | null };
 type Config = { automation?: Automation; crm_synk?: CrmSynk | null };
 /** `GET /api/integrationer`: `hemligheter` är namn → maskerat värde, aldrig riktiga värden (lagring.offentlig). */
@@ -36,6 +43,11 @@ const TYPER: LeadTyp[] = ["iris", "lista", "import", "inkorg"];
 const TYP_NAMN: Record<LeadTyp, Localized> = { ...LEAD_TYP_ETIKETT, lista: { sv: "Listor", en: "Lists" } };
 
 const T = {
+  strukturAuto: { sv: "Mejlens struktur i automatiska körningar", en: "Email structure in automatic runs" },
+  strukturAutoHjalp: {
+    sv: "Gäller autopiloten och bolag som flyttas till eller prövas mot Iris igen. Kör Iris har sitt eget val.",
+    en: "Applies to the autopilot and to companies moved to or retried against Iris. Run Iris has its own choice."
+  },
   rubrik: { sv: "Automation", en: "Automation" },
   hamtaFel: { sv: "Inställningarna kunde inte hämtas:", en: "The settings could not be loaded:" },
   utanAutomation: { sv: "Backenden svarade utan automation.", en: "The backend replied without automation." },
@@ -238,6 +250,17 @@ export function IrisAutomation() {
                 {text(T.leadsPerDagHjalp)}
               </span>
             </div>
+          </div>
+          <div className="py-4">
+            <StrukturVal
+              value={lage.automation.struktur === "b" ? "b" : "a"}
+              etikett={T.strukturAuto}
+              disabled={sparar}
+              onChange={(v) =>
+                void spara({ automation: { struktur: v } }, { ...lage, automation: { ...lage.automation, struktur: v } })
+              }
+            />
+            <p className={cn(meta, "mt-1")}>{text(T.strukturAutoHjalp)}</p>
           </div>
           {TYPER.map((typ) => {
             const regel = lage.automation.per_typ[typ] ?? { utkast_auto: false, uppfoljning_dagar: 0 };

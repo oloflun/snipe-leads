@@ -191,6 +191,25 @@ def block(
     return "\n".join(delar)
 
 
+_HALSNINGSRAD = re.compile(r"^(hej|hejsan|hallå|hi|hello)\b[^.?!]*,?$", re.IGNORECASE)
+_HALSNINGSFRAS = re.compile(r"^(vänliga|bästa|med vänlig|hälsningar|mvh|best|kind)\b", re.IGNORECASE)
+
+
+def ar_b(text: str) -> bool:
+    """Är mejlet skrivet i struktur B? Brödtexten (utan hälsningsrad och
+    hälsningsfras) är högst 70 ord och slutar med en fråga; ett A-mejl slutar
+    aldrig med en fråga. Samma regel som `lib/leads/struktur.ts:arStrukturB`,
+    för verktyg som läser köade utkast utan körningens spår
+    (scripts/granska_utkast.py)."""
+    rader = [r.strip() for r in str(text or "").strip().splitlines() if r.strip()]
+    if rader and _HALSNINGSRAD.match(rader[0]):
+        rader.pop(0)
+    while rader and _HALSNINGSFRAS.match(rader[-1]):
+        rader.pop()
+    brod = " ".join(rader)
+    return bool(brod) and brod.endswith("?") and len(brod.split()) <= 70
+
+
 def loggpost(struktur: Struktur, *, med_erbjudande_: bool = False, med_ingang_: bool = False) -> dict[str, Any]:
     post: dict[str, Any] = {"step": LOGGSTEG, "struktur": struktur}
     if struktur == "b":

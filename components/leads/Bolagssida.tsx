@@ -6,6 +6,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useArbetsvag } from "@/components/AppShell";
 import { PageShell } from "@/components/AppShell";
 import { EmailStudioEditor } from "@/components/email/EmailStudioEditor";
+import { StrukturVal, useStruktur } from "@/components/leads/StrukturVal";
 import { Tidslinje } from "@/components/leads/Tidslinje";
 import { EmptyState, SkeletonRows, btnPrimary } from "@/components/ui";
 import type { EmailStudioData } from "@/lib/data/emails";
@@ -467,6 +468,9 @@ export function Bolagssida({ id, demo = false }: Readonly<{ id: string; demo?: b
     void hamta();
   }, [hamta]);
 
+  // Utkastets struktur (A/B), samma val och minne som Kör Iris.
+  const [struktur, valjStruktur] = useStruktur();
+
   /** 5.2/5.3: "Skapa utkast" — anropar den riktiga kedjan, inte studions egen route. */
   const skapaUtkast = useCallback(async () => {
     if (lage.fas !== "klar") return;
@@ -528,7 +532,8 @@ export function Bolagssida({ id, demo = false }: Readonly<{ id: string; demo?: b
           }),
           research_summary: byggForskningssammanfattning(p),
           // OutreachDraftRequest.research_evidence har max_length 60 poster.
-          research_evidence: lage.kallor.slice(0, 60)
+          research_evidence: lage.kallor.slice(0, 60),
+          struktur
         })
       });
 
@@ -563,7 +568,7 @@ export function Bolagssida({ id, demo = false }: Readonly<{ id: string; demo?: b
     } catch (cause) {
       setUtkastLage({ fas: "fel", meddelande: samma(felmeddelande(cause)) });
     }
-  }, [lage, locale, text]);
+  }, [lage, locale, text, struktur]);
 
   /** 5.6: "Godkänn och skicka" — släpper utkastet till schemaläggaren. */
   const godkannOchSkicka = useCallback(async () => {
@@ -838,6 +843,8 @@ export function Bolagssida({ id, demo = false }: Readonly<{ id: string; demo?: b
               {utkastLage.fas === "ingen" ? (
                 <div>
                   <p className="text-[15px] leading-7 text-ink-muted">{text(T.ingetUtkast)}</p>
+                  {/* A eller B (Sebbe 2026-11-05): samma val som vid Kör Iris. */}
+                  <StrukturVal value={struktur} onChange={valjStruktur} className="mt-4" />
                   <button type="button" onClick={() => void skapaUtkast()} className={cn(btnPrimary, "mt-4")}>
                     {text(T.skapaUtkast)}
                   </button>

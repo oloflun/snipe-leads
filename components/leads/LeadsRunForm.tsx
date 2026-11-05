@@ -6,11 +6,13 @@ import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { EmailStudioEditor } from "@/components/email/EmailStudioEditor";
 import { DemoKorning } from "@/components/leads/DemoKorning";
+import { StrukturVal, useStruktur } from "@/components/leads/StrukturVal";
 import type { EmailStudioData } from "@/lib/data/emails";
 import { btnPrimary, btnSecondary } from "@/components/ui";
 import { felmeddelande, readJsonBody } from "@/lib/http/json";
 import { useLocale, type Locale, type Localized } from "@/lib/i18n";
 import { icpEtiketter } from "@/lib/leads/icpLabels";
+import type { Struktur } from "@/lib/leads/struktur";
 import { cn } from "@/lib/utils";
 
 /**
@@ -67,14 +69,6 @@ type Korning = {
   flaskhals?: string | null;
   sammanfattning?: string | null;
 };
-
-/**
- * Utkastens struktur (Sebbe 2026-11-05, snajp-support/app/leads/utkaststruktur.py):
- * A är dagens mejl, B det korta som slutar med en fråga om utfallet. Valet
- * gäller körningens nya leads; signatur, logga, fot och granskning är samma.
- */
-type Struktur = "a" | "b";
-const STRUKTURNYCKEL = "snajp:leads-struktur";
 
 type LeadsSvar = {
   jobs?: Jobb[];
@@ -193,17 +187,6 @@ const T = {
   omfattning: { sv: "Omfattning", en: "Scope" },
   optResearchOchUtkast: { sv: "Research och utkast", en: "Research and drafts" },
   optBaraResearch: { sv: "Bara research", en: "Research only" },
-  struktur: { sv: "Mejlens struktur", en: "Email structure" },
-  strukturA: { sv: "Utförlig", en: "Detailed" },
-  strukturB: { sv: "Kort och rakt på", en: "Short and direct" },
-  strukturAText: {
-    sv: "Dagens mejl: en ingång om dem, vad agenten gör, erbjudandet och en inbjudan.",
-    en: "Today's email: an opening about them, what the agent does, the offer and an invitation."
-  },
-  strukturBText: {
-    sv: "Ett kort mejl som slutar med en fråga om vad agenten kan ge dem. Samma signatur, logga, fot och granskning som A.",
-    en: "A short email that ends with a question about what the agent can do for them. Same signature, logo, footer and review as A."
-  },
   strukturKortA: { sv: " · struktur A", en: " · structure A" },
   strukturKortB: { sv: " · struktur B", en: " · structure B" },
   provarHelaVagen: { sv: "Provar hela vägen fram utan att något lämnar huset.", en: "Tests the whole way without anything leaving the building." }
@@ -278,23 +261,8 @@ export function LeadsRunForm({
   // Utkast är standard: Iris levererar leads MED utkast (Alunix 2026-09-29 —
   // "lyckades inte generera ett enda utkast"). Bara research är ett val.
   const [scope, setScope] = useState<"research" | "research_and_draft">("research_and_draft");
-  const [struktur, setStruktur] = useState<Struktur>("a");
-  // Senaste valet per webbläsare, en bekvämlighet: utan lagring gäller A.
-  useEffect(() => {
-    try {
-      if (window.localStorage.getItem(STRUKTURNYCKEL) === "b") setStruktur("b");
-    } catch {
-      /* privat läge: A gäller */
-    }
-  }, []);
-  function valjStruktur(v: Struktur) {
-    setStruktur(v);
-    try {
-      window.localStorage.setItem(STRUKTURNYCKEL, v);
-    } catch {
-      /* privat läge: valet gäller bara den här körningen */
-    }
-  }
+  // Utkastens struktur (A/B), senaste valet per webbläsare (StrukturVal.tsx).
+  const [struktur, valjStruktur] = useStruktur();
   const [branscher, setBranscher] = useState("");
   const [undvik, setUndvik] = useState("");
   const [geografi, setGeografi] = useState("");
@@ -687,35 +655,7 @@ export function LeadsRunForm({
           {/* A eller B (Sebbe 2026-11-05): utkastens struktur för körningens
               nya leads. Bara när körningen skriver utkast. */}
           {scope === "research_and_draft" ? (
-            <fieldset className="sm:col-span-2">
-              <legend className="text-[13px] font-medium text-ink-muted">{text(T.struktur)}</legend>
-              <div className="mt-1.5 flex flex-wrap gap-2" role="radiogroup" aria-label={text(T.struktur)}>
-                {(["a", "b"] as const).map((v) => {
-                  const vald = struktur === v;
-                  return (
-                    <button
-                      key={v}
-                      type="button"
-                      role="radio"
-                      aria-checked={vald}
-                      onClick={() => valjStruktur(v)}
-                      className={cn(
-                        "focus-ring min-h-11 rounded-input border px-4 py-2 text-left text-[14px] transition-colors",
-                        vald
-                          ? "border-ochre bg-ochre/10 text-ink"
-                          : "border-ink/15 bg-paper2/50 text-ink-muted hover:border-ink/30 hover:text-ink"
-                      )}
-                    >
-                      <span className="font-semibold">{v.toUpperCase()}</span>
-                      <span className="ml-2">{text(v === "a" ? T.strukturA : T.strukturB)}</span>
-                    </button>
-                  );
-                })}
-              </div>
-              <p className="mt-2 max-w-[62ch] text-[13px] leading-5 text-ink-subtle">
-                {text(struktur === "a" ? T.strukturAText : T.strukturBText)}
-              </p>
-            </fieldset>
+            <StrukturVal value={struktur} onChange={valjStruktur} className="sm:col-span-2" />
           ) : null}
         </div>
       ) : null}

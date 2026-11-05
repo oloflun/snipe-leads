@@ -1066,6 +1066,8 @@ async def outreach_draft(
         "brief": payload.brief,
         "research_summary": payload.research_summary,
         "research_evidence": list(payload.research_evidence),
+        # A/B (utkaststruktur.py); None = leadets förra utkasts struktur.
+        "struktur": payload.struktur,
     }
     leadsstrom = getattr(request.app.state, "leadsstrom", None)
     if leadsstrom is not None:
@@ -1087,6 +1089,14 @@ async def _run_draft_job(app_state, payload: dict) -> None:
     registrera_aktiv(job_id)
     try:
         context_pack, missing = await build_context_pack(storage, payload["tenant_id"])
+        struktur = payload.get("struktur")
+        if not struktur:
+            trad = await storage.get_outreach_thread(payload["tenant_id"], payload["thread_id"]) or {}
+            struktur = (
+                await utkaststruktur.tidigare(storage, payload["tenant_id"], str(trad["prospect_id"]))
+                if trad.get("prospect_id")
+                else "a"
+            )
         result = await _run_outreach_draft(
             storage,
             payload["tenant_id"],
@@ -1099,6 +1109,7 @@ async def _run_draft_job(app_state, payload: dict) -> None:
             brief=payload["brief"],
             research_summary=payload.get("research_summary") or "",
             research_evidence=tuple(payload.get("research_evidence") or ()),
+            struktur=utkaststruktur.normalisera(struktur),
         )
         result["onboarding_missing"] = list(missing)
         await app_state.jobs.complete(job_id, result)
@@ -1632,6 +1643,8 @@ async def put_leads_config(
             regler["per_typ"][typ].update(falt)
         if "jev_bortval" in andrat:
             regler["jev_bortval"] = andrat["jev_bortval"]
+        if "struktur" in andrat:
+            regler["struktur"] = andrat["struktur"]
         if andrat.get("autopilot"):
             regler["autopilot"].update(andrat["autopilot"])
         merged["automation"] = automation.normalisera(regler)
@@ -4668,6 +4681,11 @@ async def _starta_listkorning(
     batch_id = await app_state.jobs.create(tenant_id=tenant_id, status="processing")
     k = iris_korning.ny_korning(mal=len(prospekt), scope=scope, overrides=None, is_test=is_test)
     k.update(kalla="lista", list_id=list_id, list_titel=lista.get("titel"))
+    # Utkastens struktur i en körning ingen startade med Kör Iris: kundens val
+    # för automatiska körningar (automation.struktur).
+    k["struktur"] = automation.normalisera(
+        (await storage.get_agent_settings(tenant_id, agent_type="leads")).get("automation")
+    )["struktur"]
     # Barnen är kända innan de köas: jobs och pagaende skrivs FÖRE kön, så
     # ett barn som rapporterar direkt (create_task-vägen) inte läser ett
     # tillstånd utan sig själv. job_id:t är kosmetiskt i vyn (React-nyckel).
@@ -4681,6 +4699,7 @@ async def _starta_listkorning(
     await _lagg_prospektjobb(
         app_state, tenant, prospekt,
         scope=scope, overrides=None, is_test=is_test, limit=len(prospekt), batch_id=batch_id,
+        struktur=k["struktur"],
     )
     return batch_id, scope
 

@@ -245,6 +245,9 @@ class AutomationRequest(BaseModel):
     per_typ: AutomationPerTypRequest | None = None
     jev_bortval: bool | None = None
     autopilot: AutopilotRequest | None = None
+    #: Utkastens struktur i automatiska körningar (autopiloten, Flytta och
+    #: Pröva mot Iris). Kör Iris väljer sin egen.
+    struktur: Literal["a", "b"] | None = None
 
 
 class CrmSynkRequest(BaseModel):
@@ -458,6 +461,9 @@ class OutreachDraftRequest(BaseModel):
     # (fältet research_summary fanns i signaturen men skickades aldrig).
     research_summary: str = Field(default="", max_length=8000)
     research_evidence: list[str] = Field(default_factory=list, max_length=60)
+    #: Utkastets struktur (A/B, app/leads/utkaststruktur.py), vald vid knappen.
+    #: Utelämnad = leadets förra utkasts struktur, annars A.
+    struktur: Literal["a", "b"] | None = None
 
 
 class ProcessaOmRequest(BaseModel):

@@ -376,3 +376,118 @@ async def test_b_koposten_flaggas_inte_for_sin_fraga(miljo):
     await _skriv(storage, trad, _b_llm(prospekt), "b")
     post = storage.send_queue[TENANT][0]
     assert "slutar med en fråga" not in json.dumps(post, ensure_ascii=False, default=str)
+
+
+# -- Samma knappar och funktioner för B som för A (Sebbe 2026-11-05, andra varvet) --
+
+
+def test_automationens_struktur_normaliseras_och_a_ar_standard():
+    from app.leads import automation
+
+    assert automation.normalisera(None)["struktur"] == "a"
+    assert automation.normalisera({"struktur": "b"})["struktur"] == "b"
+    assert automation.normalisera({"struktur": "x"})["struktur"] == "a"
+
+
+@pytest.mark.anyio
+async def test_autopiloten_kor_i_kundens_struktur(monkeypatch):
+    from datetime import datetime, timezone
+    from types import SimpleNamespace
+
+    from app.jobs.store import MemoryJobStore
+    from app.leads import autopilot
+
+    storage = MemoryStorage()
+    tenant = (await storage.list_tenants())[0]
+    await storage.set_agent_settings(
+        tenant["id"], agent_type="leads",
+        settings={"automation": {"autopilot": {"pa": True, "leads_per_dag": 5}, "struktur": "b"}},
+    )
+    koade: list[dict] = []
+
+    class Strom:
+        async def enqueue(self, post):
+            koade.append(post)
+
+    monkeypatch.setenv("LEADS_AUTOPILOT", "1")
+    app_state = SimpleNamespace(storage=storage, jobs=MemoryJobStore(), leadsstrom=Strom())
+    await autopilot.svep(app_state, nu=datetime(2026, 10, 13, 7, 0, tzinfo=timezone.utc))
+    assert koade and koade[0]["struktur"] == "b"
+
+
+def test_automationens_api_tar_emot_strukturen():
+    from app.api.schemas import AutomationRequest, OutreachDraftRequest
+
+    assert AutomationRequest(struktur="b").struktur == "b"
+    with pytest.raises(ValueError):
+        AutomationRequest(struktur="c")
+    bas = {"prospect_id": "x", "prospect_email": "info@x.se", "company_name": "Bolaget", "offer_summary": "o", "brief": "b"}
+    assert OutreachDraftRequest(**bas).struktur is None
+    assert OutreachDraftRequest(**bas, struktur="b").struktur == "b"
+
+
+@pytest.mark.anyio
+async def test_skapa_utkast_pa_bolaget_valjer_struktur_eller_behaller_leadets(miljo, monkeypatch):
+    """Bolagssidans, registrets och Iris bolagslistas "Skapa utkast"
+    (POST /leads/outreach/draft): valet följer med; utan val leadets förra."""
+    from types import SimpleNamespace
+
+    from app.api import leads as leads_api
+    from app.jobs.store import MemoryJobStore
+
+    storage = MemoryStorage()
+    trad, prospekt = await _forbered(storage)
+    sedda: list[str] = []
+
+    async def _utkast(*_a, **k):
+        sedda.append(k.get("struktur"))
+        return {"queued": True}
+
+    monkeypatch.setattr(leads_api, "_valj_leads_kedja", lambda: (None, _utkast))
+    app_state = SimpleNamespace(storage=storage, jobs=MemoryJobStore(), leadsstrom=None)
+
+    async def kor(struktur):
+        job = await app_state.jobs.create(tenant_id=TENANT, status="queued")
+        await leads_api._run_draft_job(app_state, {
+            "job_id": job, "tenant_id": TENANT, "tenant_name": "Snajp", "thread_id": trad,
+            "prospect_email": "info@x.se", "company_name": "X", "offer_summary": "o", "brief": "b",
+            "research_summary": "", "research_evidence": [], "struktur": struktur,
+        })
+
+    await kor("b")
+    await kor(None)  # inget tidigare utkast i spåret: A
+    await _skriv(storage, trad, _b_llm(prospekt), "b")
+    await kor(None)  # nu finns ett B-utkast: B behålls
+    assert sedda == ["b", "a", "b"]
+
+
+def test_ar_b_kanner_igen_b_mejlen_som_granskningsverktyget_provar():
+    assert utkaststruktur.ar_b(f"Hej,\n\n{utkaststruktur.FOREBILDER['leads'][0]}\n\nVänliga hälsningar,")
+    assert not utkaststruktur.ar_b("Hej,\n\nVår agent Iris hittar kunder. Titta gärna på demon.")
+
+
+@pytest.mark.anyio
+async def test_flytta_och_prova_mot_iris_kor_i_automationens_struktur(monkeypatch):
+    from types import SimpleNamespace
+
+    from app.api import leads as leads_api
+    from app.jobs.store import MemoryJobStore
+
+    storage = MemoryStorage()
+    await storage.set_agent_settings(TENANT, agent_type="leads", settings={"automation": {"struktur": "b"}})
+    sedda: list = []
+
+    async def _spion(*_a, **k):
+        sedda.append(k.get("struktur"))
+        return []
+
+    monkeypatch.setattr(leads_api, "_lagg_prospektjobb", _spion)
+    app_state = SimpleNamespace(storage=storage, jobs=MemoryJobStore(), leadsstrom=None)
+    batch_id, _ = await leads_api._starta_listkorning(
+        app_state, {"tenant_id": TENANT, "tenant_name": "Snajp"}, {"id": "lista-1", "titel": "L", "kalla": "lista"},
+        [{"id": "p-1", "company_name": "Bolaget"}], scope="research_and_draft", is_test=True,
+    )
+    assert sedda == ["b"]
+    k = ((await app_state.jobs.get(batch_id)) or {}).get("result", {}).get("korning") or {}
+    rad = await storage.get_leads_korning(TENANT, batch_id)
+    assert (rad or {}).get("korning", k).get("struktur") == "b"

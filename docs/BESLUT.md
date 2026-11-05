@@ -43,6 +43,22 @@ stilsättningen i HTML:en densamma. A:s facit (INV-LEADS-UTKAST-002) passerar
 oförändrat. Erbjudandets "form B (frågan)" är något annat: en variant av A:s
 erbjudandestycke, inte struktur B. Anton ska informeras om B.
 
+**Andra varvet, samma dag (Sebbe: "Se till att allt fungerar lika bra för
+alternativ B som alternativ A … alla knappar och funktioner").** B finns nu
+överallt där ett första mejl skrivs: Kör Iris, "Skapa utkast" på bolagssidan,
+i Iris bolagslista och för valda i registret, "Bearbeta om", Skriv körningens
+utkast, autopiloten och Flytta/Pröva mot Iris (de två sista via
+`automation.struktur`, "Mejlens struktur i automatiska körningar").
+Väljaren är en komponent (`components/leads/StrukturVal.tsx`) med samma
+minne överallt. Email Studios knappar (Förbättra, Skriv om, Personalisera,
+Kortare, A/B-varianter, Översätt) behåller B-formen när mejlet är ett B-mejl
+(`lib/leads/struktur.ts:arStrukturB`), och körningslistan visar strukturen.
+Provet i development: B-varianten med piloten blev 53–76 ord och upprepade
+sig, så piloten är nu en mening med agenten först, villkorens första mening
+utan "Handling" (`utkaststruktur.kort_villkor`), och mejlen fördelas i
+tredjedelar som förebilderna. Listspårets generella utkast (`listutkast.py`)
+har ingen A/B: det är inte Iris första mejl.
+
 ---
 
 ## 2026-11-05 (Sebbe) — En hängd api-process avslutar sig själv
