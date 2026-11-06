@@ -9,6 +9,32 @@ möjligt), vad det betyder i koden.
 
 ---
 
+## 2026-11-06 (Sebbe) — Marknadsvideo för Instagram: Iris från körning till svar
+
+**Beslut.** En kort reel (26 s, 9:16 och 4:5) som visar Iris-flödet som en
+sammanhängande handling: Kör Iris, filter på stad och bransch, 50 leads
+"pang", utkasten redan skrivna, ett klick, 30 svar i inkorgen. Sebbes
+beställning: "DET SKA VARA EN HÄFTIG EFFEKTFULL VIDEO. MAN SKA KÄNNA ATT DET
+GÅR FORT OCH ÄR ENKELT ATT FÅ NYA FÖRETAGSKUNDER I SIN INBOX FRÅN DET ATT MAN
+SKAPAR KÖRNING." Tempo och grepp är hämtade ur en research av storbolagens
+produktfilmer (Apple, Linear, Raycast, Stripe, Klarna med flera), se
+`docs/marknad/video-research.md`.
+
+**Resonemang.** Siffrorna 50 leads och 30 svar är en illustration av hur
+flödet ser ut, inte ett utlovat utfall: raden "Illustration med påhittade
+exempel" ligger i bild under kroken och svarssekvensen, och ingen text
+påstår en svarsfrekvens (marknadsföringslagen). Allt innehåll är påhittat
+och inget är inspelat från development eller main, eftersom båda bär
+riktiga kunders data. Webbplatsbedömningen visas inte (Antons beslut
+2026-10-08). Ljudet är syntetiserat från grunden så att ingen annans musik
+följer med filen.
+
+**I koden.** `marknad/video/` (Remotion, fristående; uteslutet i rotens
+`tsconfig.json` och `.dockerignore` så att Railway aldrig bygger det),
+`marknad/video/README.md` för hur man renderar.
+
+---
+
 ## 2026-11-05 (Sebbe) — Utskicksstruktur A och B, vald vid Kör Iris
 
 **Beslut.** Iris första mejl får två strukturer. "A är det vi har nu som vi
