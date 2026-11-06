@@ -44,7 +44,9 @@ def test_referensutkasten_passerar():
         "Att hitta nya företagsuppdrag i Göteborg, parallellt med villor och fastighetsprojekt, är ofta en tidstjuv.",
         "Med Consensos fokus på komplexa program och projekt behöver ni hitta rätt företag att samarbeta med.",
     ):
-        assert _koder(_med_ingang(ingang)) == set(), ingang
+        # kravande_ingang: sedan 2026-11-06 (Anton, struktur A kortare)
+        # konstaterar ingången något om dem i stället för "behöver ni …".
+        assert _koder(_med_ingang(ingang)) - {"kravande_ingang"} == set(), ingang
     # Anton 2026-10-15: "Med er/ert/era …" blev det nya mallordet och fälls nu.
     assert "slentrian_ingang" in _koder(
         _med_ingang("Med er roll inom värmepumpar och fastighetsautomation i Luleå blir servicefrågorna många.")

@@ -232,3 +232,53 @@ def test_en_lang_produktmening_skrivs_om_nar_villkoren_ar_korta():
     assert any("mening över" in f for f in fynd(None))
     # Villkor med en lång mening dikterar meningen: då flaggas den bara vid köningen.
     assert not any("mening över" in f for f in fynd(langt_villkor))
+
+
+# -- andra varvet 2026-11-06: de tre kvarvarande felen ----------------------------------
+
+
+def test_en_kravande_ingang_falls_i_a_men_inte_i_uppfoljningen():
+    lisa = (
+        "Hej,\n\nAtt erbjuda delikatesser i Stockholm kräver att ni kontinuerligt når ut till nya företagskunder. "
+        "Vår agent Iris hittar nya företagskunder åt er.\n\nTitta gärna på demon på snajp.se/demo."
+    )
+    assert "kravande_ingang" in _koder(lisa)
+    assert "kravande_ingang" in _koder(lisa.replace("kräver att ni", "förutsätter att ni"))
+    # B har sin egen kod, och ett konstaterande passerar.
+    assert "kravande_ingang" not in {a.kod for a in stil.kontrollera(lisa, struktur="b").anmarkningar}
+    assert "kravande_ingang" not in _koder(A_IRIS)
+    from app.leads.follow_up_generator import _EJ_I_UPPFOLJNING
+
+    assert "kravande_ingang" in _EJ_I_UPPFOLJNING
+
+
+@pytest.mark.parametrize(
+    "mening",
+    [
+        "Att ni själva hanterar er e-postsupport visar ert engagemang för integritet.",
+        "Det visar ett aktivt engagemang i branschen.",
+        "Er tillväxt är imponerande.",
+    ],
+)
+def test_smicker_falls(mening):
+    assert "smicker" in _koder(f"Hej,\n\n{mening} Vår Supportagent svarar på frågorna.\n\nTitta gärna på demon.")
+
+
+@pytest.mark.parametrize(
+    ("mening", "fel"),
+    [
+        ("Vår agent Iris tar fram nya hyresgäster åt dig.", True),
+        ("Vår agent Iris hittar och kvalificerar nya privatpersoner åt er.", True),
+        ("Vår agent Iris tar fram 40–50 nya investerare i veckan.", True),
+        # "uppdrag" står i Antons facit 2026-10-12 och fälls bara i B:s fråga.
+        ("Vår agent Iris hittar nya rivningsuppdrag åt er.", False),
+        ("Vår agent Iris tar fram fler fastighetsbolag och bostadsrättsföreningar åt er.", False),
+        ("Vår agent Iris hittar nya företagskunder som vill sälja via er plattform.", False),
+    ],
+)
+def test_iris_tar_bara_fram_foretag(mening, fel):
+    text = f"Hej,\n\nNi förvaltar fastigheter i Stockholm. {mening}\n\nTitta gärna på demon på snajp.se/demo."
+    koder = {a.kod for a in stil.erbjudande_fynd(text, villkor=None, produkt=IRIS)}
+    assert ("fel_sak" in koder) is fel
+    # Supportagenten berörs inte.
+    assert "fel_sak" not in {a.kod for a in stil.erbjudande_fynd(text.replace("agent Iris", "Supportagent"), villkor=None, produkt=SUPPORT)}

@@ -9,6 +9,56 @@ möjligt), vad det betyder i koden.
 
 ---
 
+## 2026-11-07 (Anton) — Pilotpriser: 9 990, 12 990 och 19 990 kr i månaden
+
+**Beslut.** Snajp Support kostar 9 990 kr i månaden, Snajp Leads 12 990 och
+Snajp Duo 19 990, alla exklusive moms (var 3 990, 4 490 och 6 990). Priserna
+är tillfälliga under pilotperioden och kan komma att höjas, och det står på
+sidan.
+
+**Resonemang.** Antons ord: "Ändra även priserna till 9990 ex moms för Support
+och 12990 för Leads 19990 för Duo, skriv även att detta är tillfälliga priser
+under pilotperioden och kan komma att höjas." Han angav inget annat skäl.
+
+**I koden.** `lib/pricing.ts` (beloppen, och `PRISER_AR_PRELIMINARA` tillbaka
+till true så att förbehållet renderas), förbehållets lydelse i
+`PricingSection.tsx` (nu också "exklusive moms") och Snajps egen kunskapsbas
+`snajp-support/app/tenants/snajp_kb.py`, som chatten svarar ur och som fylls på
+vid nästa seedning. Titlar, sökbeskrivningar, schemat, llms.txt och
+sökordssidorna räknar priset ur `lib/pricing.ts` och följer med av sig själva.
+Duo sparar nu 2 990 kr i månaden (räknas fram). Inte ändrat: avtalsmallen
+`docs/pilotavtal.md` och planerna i `GOALS.md`, som är Antons dokument.
+
+## 2026-11-07 (Anton) — Startsidan blir en egen sida
+
+**Beslut.** `/` är inte längre samma sida som `/leads`. Den har en egen hjälte
+(koncept 2a: rubriken "AI-agenter för leads och kundtjänst, på svenska." på
+Göteborgsfotot, med Iris utkast och supportagentens ärende svävande över
+himlen) och en sektion per agent, och den skrivs inte längre om till `/leads`
+i adressfältet. `/leads` och `/support` är oförändrade.
+
+**Resonemang.** Båda adresserna renderade samma kropp och samma H1, och `/`
+byttes till `/leads` med `replaceState`; Google slår ihop sådana adresser och
+rankar bara en av dem. Anton valde variant 1a med rutorna från 1c, "som flyter
+in över bakgrunden och svävar stilla och reagerar dynamiskt på hovring", med en
+"Läs mer" under varje ruta till agentens sektion, och "samma sida för det mer
+generella om vår filosofi och arbetssätt". Sedan: "bygg inte om resten av
+sidan från grunden, använd endast de befintliga 3 första sektionerna för varje
+agent ... fram tills Haga-bilden". Löftet ska ha resultatvyns tal och panel
+nedanför sig, "ett dynamiskt scroll-drivet flöde som mjukt visar sig eftersom
+användaren scrollar ned, en sak i taget, med allt i bild och inget som är
+ryckigt eller börjar innan det är fullt synligt eller försvinner innan
+animationen är klar", och demon ska stå med texten bredvid, "inte ta upp hela
+bredden".
+
+**I koden.** `components/marketing/Startsida.tsx` (hjälten, agentsektionerna,
+gränserna för båda), läget `hem` i `LandingPhoto.tsx` och `ProductPage.tsx`,
+rörelserna `svav` och `steg` i `useLandingMotion.ts`, frågorna för båda
+agenterna (`hemFragor` i `copy-sections.ts`, också i startsidans FAQPage-schema).
+Produktbilderna och "Så tänker vi"-bandet står inte på startsidan: ytorna bär
+hjälten, och bandet var inte en av agenternas tre sektioner. INV-SEO-001
+(`test_startsidan_ar_en_egen_sida`) fäller en återgång.
+
 ## 2026-11-06 (agenten, på Antons uppdrag) — Jämförelsesidor med namngivna leverantörer
 
 **Beslut.** Två nya sidor, `/jamfor-ai-sdr` och `/jamfor-supportagenter`,
@@ -111,7 +161,21 @@ researchen gjort. Två saker rättades: "När Footnet säljer …" och "När Nä
 Bygg …" var "När ni …"-mallen med bolagets namn, så `slentrian_ingang` fäller
 nu varje ingång som börjar med "När"; och produktmeningen blev 26–30 ord i sex
 av åtta, så kedjan skriver om `lang_mening` i A när villkoren inte själva har
-en mening över taket.
+en mening över taket. Andra varvet med samma nio leads (`0cbdbed`): 9 av 9
+utkast, median 72 ord (66–89), fem utan stilfynd mot två av åtta, ingen
+"När …"-ingång. Kvar och inte rättat: en ingång som ställer krav ("… kräver att
+ni kontinuerligt når ut …", en fiskhandel), smicker ("visar ert engagemang",
+ett it-bolag) och en översättning av utfallet som går utöver vad Iris gör ("nya
+hyresgäster", ett fastighetsbolag). De två första står på köposten som "Stil: …" eller
+syns i granskningen; det tredje fångar ingen grind i dag. Anton: "Ja, täpp till
+dem." Alla tre fälls nu i kod och skrivs om i kedjan: `kravande_ingang` (A:s
+ingång med kräver, behöver, måste eller förutsätter; uppföljningarna undantas),
+`smicker` ("visar ert engagemang", "imponerande") och `fel_sak` (Iris tar fram
+hyresgäster, privatpersoner, investerare, personal …; inte "uppdrag", som står i
+Antons facit 2026-10-12 och fälls bara i B:s fråga). Facit 2026-10-16 och
+referensen 2026-10-12 undantar `kravande_ingang` för Ö-Logistik och Consenso,
+som `svara_sa_avslut` undantogs 2026-10-25, tills facit för den nya formen är
+godkänt.
 
 **Öppet för Anton.** (1) Ett nytt facit för A tas ur de första utkasten med
 den nya formen och läggs in först efter ditt ja. (2) A/B-testet är nu struktur

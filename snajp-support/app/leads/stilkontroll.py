@@ -41,8 +41,12 @@ MAX_ORD_B = 60
 #: om mottagaren som frågan ska bära blev den 33–37 ord i volymprovet
 #: 2026-11-05; 40 fäller de verkligt långa utan att flagga varje anpassad fråga.
 MAX_ORD_MENING_B = 40
-#: B-ingång som ställer krav på mottagaren i stället för att konstatera något.
-_B_KRAV = re.compile(r"\b(?:kräver|behöver|måste)\b|\bför\s+att\s+driva\s+verksamheten\b", re.IGNORECASE)
+#: Ingång som ställer krav på mottagaren i stället för att konstatera något: B
+#: (volymprovet 2026-11-05) och A sedan förslag 1 (Anton 2026-11-06; provet
+#: samma kväll: "… kräver att ni kontinuerligt når ut till nya företagskunder").
+_KRAV_INGANG = re.compile(
+    r"\b(?:kräver|behöver|måste|förutsätter)\b|\bför\s+att\s+driva\s+verksamheten\b", re.IGNORECASE
+)
 
 _HALSNING = re.compile(
     r"^\s*(?:med\s+vänlig(?:a)?\s+hälsning(?:ar)?|vänliga\s+hälsningar|bästa\s+hälsningar|"
@@ -58,6 +62,10 @@ _MARKORER: tuple[tuple[str, re.Pattern[str], str], ...] = (
     # Ett tankstreck i intervall ("15–20 minuter") står utan blanksteg och
     # träffas inte; ett med blanksteg runt sig är ett tankstreck i löptext.
     ("tankstreck", re.compile(r"—|\s[–-]\s"), "tankstreck i brödtexten"),
+    # Skrivreglerna (granskningen 2026-10-09) förbjöd värderingen av bolaget,
+    # men provet 2026-11-06 öppnade ändå "… visar ert engagemang för integritet".
+    ("smicker", re.compile(r"\b(?:visar|vittnar\s+om)\s+(?:\w+\s+){0,3}(?:engagemang|passion)\b|\bimponerande\b",
+                           re.IGNORECASE), "smicker eller värdering av dem"),
     ("jag_ser_att", re.compile(r"\bjag\s+(?:ser|såg|märkte|noterade|har\s+sett)\s+att\b", re.IGNORECASE),
      "börjar i vår iakttagelse (\"Jag ser att …\")"),
     ("vi_har_skapat", re.compile(r"\bvi\s+har\s+(?:skapat|utvecklat|byggt|tagit\s+fram)\b", re.IGNORECASE),
@@ -339,10 +347,15 @@ def kontrollera(text: str, *, struktur: str = "a", tak: int | None = None) -> Ko
         # Volymprovet 2026-11-05: fyra av 30 B-ingångar sa att de "kräver att
         # ni kontinuerligt hittar nya kunder". B:s ingång konstaterar, den
         # ställer inga krav på dem (utkaststruktur.block).
-        if len(meningar) > 1 and _B_KRAV.search(meningar[0]):
-            lagg("b_kravande_ingang", f"B-ingången ställer krav på dem (\"{_B_KRAV.search(meningar[0]).group(0)}\"); konstatera något konkret om dem")
+        if len(meningar) > 1 and _KRAV_INGANG.search(meningar[0]):
+            lagg("b_kravande_ingang", f"B-ingången ställer krav på dem (\"{_KRAV_INGANG.search(meningar[0]).group(0)}\"); konstatera något konkret om dem")
     elif meningar and meningar[-1].endswith("?"):
         lagg("slutar_med_fraga", f"slutar med en fråga i stället för en handling: \"{meningar[-1][:60]}\"")
+    # A:s ingång konstaterar något om dem (Anton 2026-11-06); uppföljningarna
+    # undantar fyndet (follow_up_generator._EJ_I_UPPFOLJNING).
+    krav = _KRAV_INGANG.search(meningar[0]) if not ar_b and len(meningar) > 1 else None
+    if krav:
+        lagg("kravande_ingang", f"ingången ställer krav på dem (\"{krav.group(0)}\"); konstatera något konkret om dem")
     svara = next((m for m in meningar[-1:] if _SVARA_ORDER.match(m)), None) or next(
         (m for m in meningar if _SVARA_KODORD.search(m)), None
     )
@@ -498,6 +511,9 @@ def erbjudande_fynd(text: str, *, villkor: str | None, produkt: str | None) -> l
     if slag == "support" and _LEADSMOMENT.search(brod):
         fynd.append(Anmarkning("fel_moment", "Stil: supportmejlet talar om att hitta nya kunder; "
                                "Supportagenten svarar på kundfrågor, den hittar inga kunder", allvarlig=True))
+    elif slag == "leads" and _IRIS_FEL_SAK.search(brod):
+        fynd.append(Anmarkning("fel_sak", f"Stil: Iris tar fram \"{_IRIS_FEL_SAK.search(brod).group(1)}\", men Iris "
+                               "hittar företag; säg vilka sorters företag", allvarlig=True))
     elif slag == "leads" and _SUPPORTMOMENT.search(brod):
         fynd.append(Anmarkning("fel_moment", "Stil: Iris-mejlet talar om kundmejl eller supportchattar; "
                                "Iris hittar nya företagskunder, den svarar inte på kundfrågor", allvarlig=True))
@@ -518,6 +534,16 @@ def erbjudande_fynd(text: str, *, villkor: str | None, produkt: str | None) -> l
 
 _LEADSMOMENT = re.compile(r"\bhitta\s+(?:nya\s+)?(?:företags)?kunder\b")
 _SUPPORTMOMENT = re.compile(r"\bsupportchatt\w*|\bkundmejl\w*")
+#: Vad Iris "hittar" eller "tar fram" när det inte är företag (provet
+#: 2026-11-06: "Vår agent Iris tar fram nya hyresgäster åt dig"). B:s fråga har
+#: sin egen kontroll av siffran (utkaststruktur.fel_sak_i_fragan), där också
+#: "uppdrag" och "projekt" fälls; i A står "hittar nya uppdrag" i Antons facit
+#: 2026-10-12 (Svensk Rivtjänst) och fälls därför inte här.
+_IRIS_FEL_SAK = re.compile(
+    r"\b(?:hittar|hitta|tar\s+fram|ta\s+fram|tog\s+fram)\s+(?:och\s+kvalificerar\s+)?(?:\d+\s*[–-]\s*\d+\s+)?"
+    r"(?:nya\s+|fler\s+)?(hyresgäst\w*|privatperson\w*|konsument\w*|tomt\w*|"
+    r"investerare|leverantör\w*|personal|medarbetare|studenter|elever|patienter)\b"
+)
 
 
 def produktslag(produkt: str | None) -> str | None:
