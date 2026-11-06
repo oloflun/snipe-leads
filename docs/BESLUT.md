@@ -103,6 +103,16 @@ exemplet inte klarar hade skickat nästan varje rätt mejl till omskrivning.
 - Låst av `tests/leads/test_struktur_a_kort.py`. Facit 2026-10-16
   (INV-LEADS-UTKAST-002) passerar oförändrat; det tillåter redan `for_langt`.
 
+**Provet i development samma kväll** (nio Snajp-leads i sex branscher, båda
+produkterna, Skapa om utkast): 8 av 9 utkast (det nionde föll på
+utdatakontraktet, som 2–4 % av utkasten varje dag även före ändringen), median
+78 ord mot 105, ingen "balansgång" och ingen fråga, och samma produktval som
+researchen gjort. Två saker rättades: "När Footnet säljer …" och "När Nälsta
+Bygg …" var "När ni …"-mallen med bolagets namn, så `slentrian_ingang` fäller
+nu varje ingång som börjar med "När"; och produktmeningen blev 26–30 ord i sex
+av åtta, så kedjan skriver om `lang_mening` i A när villkoren inte själva har
+en mening över taket.
+
 **Öppet för Anton.** (1) Ett nytt facit för A tas ur de första utkasten med
 den nya formen och läggs in först efter ditt ja. (2) A/B-testet är nu struktur
 A mot struktur B; erbjudandets form A mot B mäts inte längre hos Snajp.

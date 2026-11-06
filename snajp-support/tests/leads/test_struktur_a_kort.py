@@ -200,3 +200,35 @@ def test_snajp_kor_bara_form_a_och_piloten_ryms_i_tva_korta_meningar():
     assert "20 företag" in forsta and "tre månader" in forsta and "50 %" not in forsta
     assert "Svara" not in villkor.split("Handling:")[1]
     assert json.dumps(sm.ERBJUDANDEN, ensure_ascii=False)  # serialiserbart till PUT /api/leads/erbjudanden
+
+
+# -- provet i development 2026-11-06 -------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "ingang",
+    [
+        "När Footnet säljer naturlig fotvård online svarar vår Supportagent direkt på kundfrågorna.",
+        "När Nälsta Bygg välkomnar nya projekt kan vår agent Iris hitta nya företagskunder.",
+        "När ni säljer fisk och skaldjur behöver ni nya företagskunder.",
+    ],
+)
+def test_nar_oppningen_ar_en_mall_oavsett_subjekt(ingang):
+    assert "slentrian_ingang" in _koder(f"Hej,\n\n{ingang}\n\nTitta gärna på demon på snajp.se/demo.")
+
+
+def test_en_lang_produktmening_skrivs_om_nar_villkoren_ar_korta():
+    lang = (
+        "Hej,\n\nVIASALES utbildar unga säljare inom uppsökande försäljning. Vår agent Iris hittar nya "
+        "företagskunder åt er och skriver färdiga första mejl som ni godkänner, så att tiden går till samtal i "
+        "stället för research.\n\nTitta gärna på demon på snajp.se/demo."
+    )
+    utkast = {"subject": "Nya kunder", "body": lang}
+    kort_villkor = sm._PILOTER[sm.IRIS]
+    langt_villkor = "Vi lovar " + " ".join(["ord"] * 30) + ". Handling: svara på mejlet."
+    def fynd(villkor):
+        return _stilfynd(utkast, villkor=villkor, produkt=IRIS, andra=[], amne_i_kod=True, tak=erbjudanden.ORDTAK["rak"])
+    assert any("mening över" in f for f in fynd(kort_villkor))
+    assert any("mening över" in f for f in fynd(None))
+    # Villkor med en lång mening dikterar meningen: då flaggas den bara vid köningen.
+    assert not any("mening över" in f for f in fynd(langt_villkor))

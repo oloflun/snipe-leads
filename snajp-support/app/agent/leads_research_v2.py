@@ -984,7 +984,12 @@ def _stilfynd(
         fynd += stil.amne_fynd(str(draft.get("subject") or ""), bolag=bolag, produkt=produkt, andra=andra_amnen or [])
     # for_langt skrivs om sedan 2026-10-25: villkoren är korta nu, och
     # provkörningen gav 105–150 ord, längre än Antons exempel.
-    ut = [a.beskrivning for a in fynd if a.kod not in ("lang_mening", "samma_uppmaning")]
+    # lang_mening skrivs om i A när villkoren inte kan vara orsaken (varje
+    # villkorsmening inom taket): provet 2026-11-06 gav en produktmening på
+    # 26–30 ord i sex av åtta A-mejl, och den kan skrivas kortare.
+    villkor_langt = any(len(m.split()) > stil.MAX_ORD for m in stil._meningar(villkor or ""))
+    ej = {"samma_uppmaning"} | ({"lang_mening"} if struktur == "b" or villkor_langt else set())
+    ut = [a.beskrivning for a in fynd if a.kod not in ej]
     if struktur == "b" and utkaststruktur.utfall_ordagrant(body, kort_utfall):
         ut.append(
             "Stil: frågan återger utfallet ordagrant; översätt det till just dem med en konkret detalj ur "

@@ -112,7 +112,10 @@ _GENERELL_INGANG = re.compile(
 #: "som ni gör" fälldes blev "Med er/ert/era …", "När ni …" och "Ni som …" de
 #: nya mallorden, i mejl efter mejl. Ingången börjar i deras löfte eller i en
 #: fråga till dem, aldrig i en av de här öppningarna.
-_SLENTRIAN = re.compile(r"^(?:med\s+(?:er|ert|era|din|ditt|dina)|när\s+(?:ni|du)|(?:ni|du)\s+som)\b", re.IGNORECASE)
+#: "När …" gäller varje subjekt sedan provet 2026-11-06 (struktur A kortare):
+#: "När ni …" blev "När Footnet säljer …" och "När Nälsta Bygg välkomnar …",
+#: samma mall med bolagets namn, och ingången smälte ihop med produktmeningen.
+_SLENTRIAN = re.compile(r"^(?:med\s+(?:er|ert|era|din|ditt|dina)|när|(?:ni|du)\s+som)\b", re.IGNORECASE)
 #: Uppräkningen av deras utbud (Anton 2026-10-15: "en generisk upprabbling av
 #: deras verksamhet"): "Med ert breda utbud av fordon, utrustning och service
 #: för snöskotrar …", "Med er verksamhet som säljer båtar, motorer och
