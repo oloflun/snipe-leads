@@ -39,8 +39,15 @@ export function arStrukturB(text: string): boolean {
     .map((r) => r.trim())
     .filter(Boolean);
   if (rader.length && /^(hej|hejsan|hallå|hi|hello)\b[^.?!]*,?$/i.test(rader[0])) rader.shift();
-  while (rader.length && /^(vänliga|bästa|med vänlig|hälsningar|mvh|best|kind)\b/i.test(rader[rader.length - 1])) {
-    rader.pop();
+  const fras = (r: string) => /^(vänliga|bästa|med vänlig|hälsningar|mvh|best|kind)\b/i.test(r);
+  // Namnraden efter hälsningsfrasen ("Anna, Hjärtsäker AB") hör till
+  // signaturen: kort, utan meningsslut. Demons utkast bär den i texten.
+  const namnrad = (r: string) => r.split(/\s+/).length <= 6 && !/[.?!:]$/.test(r);
+  while (rader.length) {
+    const sist = rader[rader.length - 1];
+    if (fras(sist)) rader.pop();
+    else if (rader.length >= 2 && namnrad(sist) && fras(rader[rader.length - 2])) rader.splice(-2);
+    else break;
   }
   const brod = rader.join(" ");
   return brod.length > 0 && brod.endsWith("?") && brod.split(/\s+/).length <= 70;

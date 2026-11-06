@@ -10,6 +10,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { halsning } from "../agent/halsning.ts";
+import { arStrukturB } from "../leads/struktur.ts";
 import {
   EXEMPELBOLAG,
   EXEMPEL_ACTIONS,
@@ -17,7 +18,8 @@ import {
   exempelVariant,
   finnExempelbolag,
   forvantadHalsning,
-  kontaktnamn
+  kontaktnamn,
+  medStruktur
 } from "./iris-exempel.ts";
 
 /** Varje icke-tom rad ska inledas med versal (eller vara en siffra/citat) — aldrig gemen. */
@@ -148,5 +150,57 @@ test("en variant byter namn, ort och kontakt överallt, också i utkasten och sv
     assert.equal(v.status, "new");
     // Email Studio-routen hittar samma variant ur id:t.
     assert.deepEqual(finnExempelbolag({ companyId: v.id }), v);
+  }
+});
+
+// Struktur A/B (Sebbe 2026-11-07): de flesta exempelutkasten är B, några A,
+// och båda formerna finns för varje bolag så att demons Kör Iris kan visa valet.
+test("de flesta exempelbolagen visar struktur B, men inte alla", () => {
+  const b = EXEMPELBOLAG.filter((x) => x.struktur === "b").length;
+  assert.ok(b > EXEMPELBOLAG.length / 2, `bara ${b} av ${EXEMPELBOLAG.length} är B`);
+  assert.ok(b < EXEMPELBOLAG.length, "inget bolag visar A");
+});
+
+for (const bolag of EXEMPELBOLAG) {
+  test(`${bolag.companyName}: standardutkastet är utkast[struktur], och formen stämmer`, () => {
+    assert.equal(bolag.draft, bolag.utkast[bolag.struktur]);
+    assert.equal(arStrukturB(bolag.utkast.b.body), true, "B-utkastet känns inte igen som B");
+    // A är det utförliga utkastet. (Demons A-utkast slutar med en fråga,
+    // skrivna före B-regeln, så igenkänningen på text skiljer dem inte alltid
+    // åt; längden gör det.)
+    assert.ok(
+      bolag.utkast.a.body.split(/\s+/).length > bolag.utkast.b.body.split(/\s+/).length + 15,
+      "A-utkastet är inte tydligt längre än B-utkastet"
+    );
+    for (const u of [bolag.utkast.a, bolag.utkast.b]) {
+      assert.ok(u.body.startsWith(`Hej ${bolag.contactFirstName},`));
+      assert.deepEqual(raderMedGemenStart(u.body), []);
+      assert.ok(!u.body.includes("—"));
+    }
+  });
+
+  if (bolag.struktur === "b") {
+    test(`${bolag.companyName}: åtgärderna som behåller strukturen svarar i B-form`, () => {
+      for (const a of ["shorter", "rewrite", "improve", "personalize"] as const) {
+        assert.equal(arStrukturB(bolag.resultat[a].new_version), true, `${a} svarar inte i B-form`);
+      }
+    });
+  }
+}
+
+test("medStruktur byter utkastet men inte bolaget", () => {
+  const b = EXEMPELBOLAG.find((x) => x.struktur === "a")!;
+  const som_b = medStruktur(b, "b");
+  assert.equal(som_b.struktur, "b");
+  assert.equal(som_b.draft, b.utkast.b);
+  assert.equal(som_b.companyName, b.companyName);
+  assert.equal(medStruktur(b, "a"), b);
+  assert.equal(medStruktur(b, undefined), b);
+});
+
+test("exempelOmgang följer valet i Kör Iris", () => {
+  for (const omgang of [0, 1, 2]) {
+    assert.ok(exempelOmgang(omgang, "b").every((x) => arStrukturB(x.draft.body)));
+    assert.ok(exempelOmgang(omgang, "a").every((x) => x.struktur === "a" && x.draft === x.utkast.a));
   }
 });
