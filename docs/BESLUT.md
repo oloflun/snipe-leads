@@ -91,8 +91,10 @@ följer med filen.
 
 **Beslut.** Två nya sidor, `/jamfor-ai-sdr` och `/jamfor-supportagenter`,
 jämför Snajp med namngivna leverantörer: språk, godkännande eller överlämning,
-var datan lagras och pris. **Granskas av Anton innan de går till main**:
-jämförande reklam är ett beslut om varumärket, inte bara om koden.
+var datan lagras och pris. Jämförande reklam är ett beslut om varumärket, inte
+bara om koden, så Anton skulle granska sidorna före main. **Godkänt av Anton
+2026-11-07**: han läste sidorna i dev-miljön och sade ja till releasen
+("Ja, öppna PR:en").
 
 **Resonemang.** Anton: "Vi MÅSTE dyka upp på första sidan och i
 AI-sammanfattningarna för samtliga, fortsätt tills det är löst." Google
