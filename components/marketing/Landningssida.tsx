@@ -108,6 +108,33 @@ const H2 = "font-display text-[clamp(1.75rem,3.4vw,2.5rem)] font-semibold leadin
 const LEDGERRAD = "mt-24 grid grid-cols-12 border-t border-ink/15 pt-8 lg:gap-x-12";
 const H_RAD = "col-span-12 font-display text-[1.375rem] font-semibold leading-snug tracking-[-0.015em] lg:col-span-4";
 
+/**
+ * Jämförelsetabellens brytpunkt. Tre kolumner ryms som tabell från md; en
+ * leverantörsjämförelse med fem värden per rad blir för trång där och staplas
+ * till lg. Två fullständiga klassuppsättningar, eftersom Tailwind bara hittar
+ * klasser som står utskrivna i källan.
+ */
+const TABELL_SMAL = {
+  table: "md:table",
+  thead: "sr-only md:not-sr-only md:table-header-group",
+  huvudrad: "md:border-b md:border-ink/15",
+  tbody: "block md:table-row-group",
+  rad: "md:table-row md:py-0",
+  etikett: "md:table-cell md:w-[28%] md:py-5 md:align-top",
+  cell: "text-[1rem] md:table-cell md:py-5 md:align-top",
+  cellEtikett: "md:hidden"
+} as const;
+const TABELL_BRED = {
+  table: "lg:table",
+  thead: "sr-only lg:not-sr-only lg:table-header-group",
+  huvudrad: "lg:border-b lg:border-ink/15",
+  tbody: "block lg:table-row-group",
+  rad: "lg:table-row lg:py-0",
+  etikett: "lg:table-cell lg:w-[17%] lg:py-5 lg:align-top",
+  cell: "text-[1rem] lg:table-cell lg:py-5 lg:align-top lg:text-[0.9375rem]",
+  cellEtikett: "lg:hidden"
+} as const;
+
 export function Landningssida({ sida }: Readonly<{ sida: Landning }>) {
   const { text, locale } = useLocale();
   const post = landningsPost(sida.vag);
@@ -116,6 +143,7 @@ export function Landningssida({ sida }: Readonly<{ sida: Landning }>) {
   const avslut = AVSLUT[post.produkt];
   const [primar, sekundar] = KNAPPAR[post.produkt];
   const smulor = smulspar(sida.vag);
+  const tabell = (sida.jamforelse?.kolumner.length ?? 0) > 4 ? TABELL_BRED : TABELL_SMAL;
 
   return (
     <>
@@ -220,9 +248,9 @@ export function Landningssida({ sida }: Readonly<{ sida: Landning }>) {
       {sida.jamforelse ? (
         <section className="mt-24">
           <h2 className={H2}>{text(sida.jamforelse.rubrik)}</h2>
-          <table className="mt-10 block w-full border-t border-ink/15 text-left md:table">
-            <thead className="sr-only md:not-sr-only md:table-header-group">
-              <tr className="md:border-b md:border-ink/15">
+          <table className={`mt-10 block w-full border-t border-ink/15 text-left ${tabell.table}`}>
+            <thead className={tabell.thead}>
+              <tr className={tabell.huvudrad}>
                 {sida.jamforelse.kolumner.map((kolumn, i) => (
                   <th
                     key={i}
@@ -234,21 +262,18 @@ export function Landningssida({ sida }: Readonly<{ sida: Landning }>) {
                 ))}
               </tr>
             </thead>
-            <tbody className="block md:table-row-group">
-              {sida.jamforelse.rader.map(([etikett, a, b]) => (
-                <tr key={etikett.sv} className="block border-b border-ink/12 py-5 md:table-row md:py-0">
+            <tbody className={tabell.tbody}>
+              {sida.jamforelse.rader.map(([etikett, ...varden]) => (
+                <tr key={etikett.sv} className={`block border-b border-ink/12 py-5 ${tabell.rad}`}>
                   <th
                     scope="row"
-                    className="block pb-2 pr-6 font-display text-[1.125rem] font-semibold leading-snug md:table-cell md:w-[28%] md:py-5 md:align-top"
+                    className={`block pb-2 pr-6 font-display text-[1.125rem] font-semibold leading-snug ${tabell.etikett}`}
                   >
                     {text(etikett)}
                   </th>
-                  {[a, b].map((varde, i) => (
-                    <td
-                      key={i}
-                      className="block py-1 pr-6 text-[1rem] leading-[1.6] text-ink-muted md:table-cell md:py-5 md:align-top"
-                    >
-                      <span className="block text-[0.8125rem] text-ink-subtle md:hidden">
+                  {varden.map((varde, i) => (
+                    <td key={i} className={`block py-1 pr-6 leading-[1.6] text-ink-muted ${tabell.cell}`}>
+                      <span className={`block text-[0.8125rem] text-ink-subtle ${tabell.cellEtikett}`}>
                         {text(sida.jamforelse!.kolumner[i + 1])}
                       </span>
                       {text(varde)}
@@ -258,6 +283,29 @@ export function Landningssida({ sida }: Readonly<{ sida: Landning }>) {
               ))}
             </tbody>
           </table>
+          {/* Källorna: varje uppgift om en annan leverantör ska gå att kontrollera
+              (jämförande reklam, marknadsföringslagen). nofollow: länken är en
+              källhänvisning, inte en rekommendation. */}
+          {sida.jamforelse.kallor ? (
+            <div className="mt-8 max-w-[68ch]">
+              {sida.jamforelse.kontrollerad ? (
+                <p className="text-[0.875rem] leading-[1.6] text-ink-subtle">{text(sida.jamforelse.kontrollerad)}</p>
+              ) : null}
+              <ul className="mt-3 flex flex-wrap gap-x-5 gap-y-2 text-[0.875rem]">
+                {sida.jamforelse.kallor.map((kalla) => (
+                  <li key={kalla.url}>
+                    <a
+                      href={kalla.url}
+                      rel="nofollow noopener"
+                      className="focus-ring rounded-input whitespace-nowrap text-ink-muted underline decoration-ink/25 underline-offset-4 hover:text-ink"
+                    >
+                      {kalla.namn}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
         </section>
       ) : null}
 

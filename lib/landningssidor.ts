@@ -13,6 +13,7 @@ import {
   formateraPris,
   type Paket
 } from "@/lib/pricing";
+import { AI_SDR_VERKTYG, KONTROLLERAD, SUPPORTVERKTYG } from "@/lib/jamforelser";
 import { brodsmulor, faqSida, graf, paketpris, produkt } from "@/lib/seo";
 import { TEAM } from "@/lib/team";
 
@@ -21,12 +22,17 @@ import { TEAM } from "@/lib/team";
  *
  * ## Vad som får stå här
  *
- * Bara det som går att belägga. Sakuppgifterna kommer ur tre källor och inga
- * andra: Snajps egen kunskapsbas (snajp-support/app/tenants/snajp_kb.py, som
- * vår supportchatt svarar ur), lib/faq.ts och Antons regler för leads i
- * CLAUDE.md. Inga påhittade siffror, kundcitat eller jämförelser med namngivna
- * konkurrenter (DESIGN.md, Honest-proof rule). Priser och volymer räknas ur
- * lib/pricing.ts och skrivs aldrig in för hand.
+ * Bara det som går att belägga. Sakuppgifterna om Snajp kommer ur tre källor
+ * och inga andra: Snajps egen kunskapsbas (snajp-support/app/tenants/snajp_kb.py,
+ * som vår supportchatt svarar ur), lib/faq.ts och Antons regler för leads i
+ * CLAUDE.md. Inga påhittade siffror eller kundcitat (DESIGN.md, Honest-proof
+ * rule). Priser och volymer räknas ur lib/pricing.ts och skrivs aldrig in för hand.
+ *
+ * Andra leverantörer nämns bara på jämförelsesidorna och bara ur
+ * lib/jamforelser.ts, där varje uppgift har en källa på leverantörens egen sajt
+ * och ett kontrolldatum (docs/SEO-JAMFORELSER-KALLOR.md). Jämförande reklam
+ * ska vara saklig och gå att kontrollera; därför står "Ej angivet" där
+ * leverantören inte själv säger något, och sidan säger att Snajp är en av dem.
  *
  * Webbplatsbedömningen nämns inte. Den är hemlig utanför plattformsadmin och
  * webbyråkunderna (CLAUDE.md, beslut 2026-10-08), och en sökordssida är det
@@ -56,11 +62,17 @@ export type Landning = {
   steg: { rubrik: Localized; text: Localized }[];
   yta: { typ: ProduktYta; rubrik: Localized; text: Localized };
   granser: { rubrik: Localized; punkter: Localized[] };
-  /** Valfri: tre kolumner, första är radens etikett. */
+  /**
+   * Valfri. Första kolumnen är radens etikett; varje rad har lika många värden
+   * som kolumner. Fler än fyra kolumner staplas till lg i stället för md.
+   * `kallor` och `kontrollerad` krävs när tabellen namnger andra leverantörer.
+   */
   jamforelse?: {
     rubrik: Localized;
-    kolumner: [Localized, Localized, Localized];
-    rader: [Localized, Localized, Localized][];
+    kolumner: Localized[];
+    rader: Localized[][];
+    kallor?: { namn: string; url: string }[];
+    kontrollerad?: Localized;
   };
   fragor: Fraga[];
   relaterade: LandningsVag[];
@@ -235,7 +247,7 @@ const SVENSK_AI_SDR: Landning = {
       }
     }
   ],
-  relaterade: ["/b2b-leads", "/b2b-prospektering", "/leads-i-inkorgen"]
+  relaterade: ["/jamfor-ai-sdr", "/b2b-leads", "/b2b-prospektering"]
 };
 
 const B2B_LEADS: Landning = {
@@ -789,7 +801,7 @@ const SUPPORTCHATT: Landning = {
       }
     }
   ],
-  relaterade: ["/support-pa-svenska", "/ai-supportagent", "/ai-agenter"]
+  relaterade: ["/jamfor-supportagenter", "/support-pa-svenska", "/ai-supportagent"]
 };
 
 const AI_SUPPORTAGENT: Landning = {
@@ -909,7 +921,7 @@ const AI_SUPPORTAGENT: Landning = {
       }
     }
   ],
-  relaterade: ["/support-pa-svenska", "/supportchatt", "/ai-agenter"]
+  relaterade: ["/jamfor-supportagenter", "/support-pa-svenska", "/supportchatt"]
 };
 
 const AI_AGENTER: Landning = {
@@ -1032,6 +1044,260 @@ const AI_AGENTER: Landning = {
   relaterade: ["/svensk-ai-sdr", "/support-pa-svenska", "/b2b-leads"]
 };
 
+/** Kontrolldagen som text, t.ex. "6 november 2026". UTC så att servern och webbläsaren skriver samma dag. */
+const KONTROLL_DAG: Localized = {
+  sv: new Date(`${KONTROLLERAD}T12:00:00Z`).toLocaleDateString("sv-SE", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" }),
+  en: new Date(`${KONTROLLERAD}T12:00:00Z`).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" })
+};
+
+const SA_HAR_VI_JAMFORT = (saljer: Localized): Landning["granser"] => ({
+  rubrik: { sv: "Så har vi jämfört", en: "How we compared" },
+  punkter: [
+    { sv: `Bara leverantörernas egna sidor, kontrollerade ${KONTROLL_DAG.sv}.`, en: `Only the vendors' own pages, checked on ${KONTROLL_DAG.en}.` },
+    { sv: "Det en leverantör inte själv skriver står som Ej angivet.", en: "What a vendor does not state itself is marked Not stated." },
+    { sv: "Priserna är leverantörernas egna, i den valuta de anger.", en: "Prices are the vendors' own, in the currency they give." },
+    saljer
+  ]
+});
+
+const KONTROLL_FRAGA: Fraga = {
+  fraga: { sv: "Hur ofta kontrolleras jämförelsen?", en: "How often is the comparison checked?" },
+  svar: {
+    sv: `Minst var tredje månad, senast ${KONTROLL_DAG.sv}. Har en leverantör ändrat något, eller har vi fel om någon, skriv till oss så rättar vi tabellen.`,
+    en: `At least every three months, most recently on ${KONTROLL_DAG.en}. If a vendor has changed something, or we have got someone wrong, write to us and we will correct the table.`
+  }
+};
+
+const JAMFOR_AI_SDR: Landning = {
+  vag: "/jamfor-ai-sdr",
+  rubrik: { sv: "AI-SDR i Sverige, *jämförda*.", en: "AI SDRs in Sweden, *compared*." },
+  ingress: {
+    sv: "Vi har läst varje leverantörs egna sidor och ställt upp det de själva säger om språk, godkännande, data och pris. Snajp säljer Iris, som står först. Det en leverantör inte skriver står som Ej angivet.",
+    en: "We read each vendor's own pages and set out what they say themselves about language, approval, data and price. Snajp sells Iris, listed first. What a vendor does not state is marked Not stated."
+  },
+  kortSvar: {
+    fraga: { sv: "Vilken AI-SDR passar ett svenskt företag?", en: "Which AI SDR suits a Swedish company?" },
+    svar: {
+      sv: `Den som skriver på svenska från början, låter en människa godkänna utskicken tills texterna håller, lagrar datan inom EU och har ett pris ni kan räkna hem. Tabellen nedan jämför ${AI_SDR_VERKTYG.length + 1} verktyg på de punkterna, hämtat ur varje leverantörs egna sidor. Snajp säljer ett av dem, Iris.`,
+      en: `One that writes in Swedish from the start, lets a person approve the sends until the texts hold up, stores data in the EU and has a price you can earn back. The table below compares ${AI_SDR_VERKTYG.length + 1} tools on those points, taken from each vendor's own pages. Snajp sells one of them, Iris.`
+    }
+  },
+  stegRubrik: { sv: "Fyra frågor att ställa", en: "Four questions to ask" },
+  steg: [
+    {
+      rubrik: { sv: "Språket", en: "The language" },
+      text: {
+        sv: "Skrivs mejlet på svenska från början, eller översätts det i efterhand? Svenska köpare läser tilltalet och ordvalen först.",
+        en: "Is the email written in Swedish from the start, or translated afterwards? Swedish buyers read the form of address and the word choice first."
+      }
+    },
+    {
+      rubrik: { sv: "Urvalet", en: "The selection" },
+      text: {
+        sv: "Var kommer bolagen ifrån? En köpt lista, LinkedIn och bolagsregistret ger olika träffar och har olika regler.",
+        en: "Where do the companies come from? A bought list, LinkedIn and the company register give different hits and come with different rules."
+      }
+    },
+    {
+      rubrik: { sv: "Godkännandet", en: "The approval" },
+      text: {
+        sv: "Vem trycker på skicka? Börja med att en människa godkänner varje mejl, och släpp på när ni litar på texterna.",
+        en: "Who presses send? Start with a person approving every email, and loosen it once you trust the texts."
+      }
+    },
+    {
+      rubrik: { sv: "Datan", en: "The data" },
+      text: {
+        sv: "Var lagras uppgifterna, och skriver leverantören ett personuppgiftsbiträdesavtal? Det avgör om ni kan använda verktyget enligt GDPR.",
+        en: "Where is the data stored, and does the vendor sign a data processing agreement? That decides whether you can use the tool under GDPR."
+      }
+    }
+  ],
+  yta: {
+    typ: "irisLista",
+    rubrik: { sv: "Iris urval av nya bolag", en: "Iris's selection of new companies" },
+    text: {
+      sv: "Så ser urvalet ut i Snajp: bolag, skäl och ett utkast per rad.",
+      en: "What the selection looks like in Snajp: company, reason and a draft per row."
+    }
+  },
+  granser: SA_HAR_VI_JAMFORT({ sv: "Snajp säljer Iris. Läs tabellen med det i minnet.", en: "Snajp sells Iris. Read the table with that in mind." }),
+  jamforelse: {
+    rubrik: { sv: "AI-SDR och leadsagenter för svenska företag", en: "AI SDRs and lead agents for Swedish companies" },
+    kolumner: [
+      { sv: "Verktyg", en: "Tool" },
+      { sv: "Vad det är", en: "What it is" },
+      { sv: "Svenska", en: "Swedish" },
+      { sv: "Godkännande", en: "Approval" },
+      { sv: "Data", en: "Data" },
+      { sv: "Pris", en: "Price" }
+    ],
+    rader: [
+      [
+        { sv: "Iris (Snajp)", en: "Iris (Snajp)" },
+        { sv: "Svensk AI-SDR: urval ur bolagsregistret, research på bolagets egen sajt, mejl på svenska", en: "Swedish AI SDR: selection from the company register, research on the company's own site, email in Swedish" },
+        { sv: "Ja, skriver på svenska från början", en: "Yes, writes in Swedish from the start" },
+        { sv: "Ni väljer: utkast, första mejlet eller fram till möte; de tre första granskas alltid", en: "You choose: drafts, the first email or up to a meeting; the first three are always reviewed" },
+        { sv: "Inom EU", en: "In the EU" },
+        { sv: `Från ${LEADS}/mån, ${BINDNING.sv}`, en: `From ${LEADS} a month, ${BINDNING.en}` }
+      ],
+      ...AI_SDR_VERKTYG.map((v) => [{ sv: v.namn, en: v.namn }, v.vad, v.svenska, v.godkannande, v.data, v.pris])
+    ],
+    kallor: AI_SDR_VERKTYG.map((v) => ({ namn: v.namn, url: v.kalla })),
+    kontrollerad: {
+      sv: `Kontrollerat ${KONTROLL_DAG.sv} mot varje leverantörs egna sidor. Källor:`,
+      en: `Checked on ${KONTROLL_DAG.en} against each vendor's own pages. Sources:`
+    }
+  },
+  fragor: [
+    {
+      fraga: { sv: "Vilka verktyg kallas leadsagent men gör något annat?", en: "Which tools are called lead agents but do something else?" },
+      svar: {
+        sv: "Flera. Rebel är en kontaktdatabas och skickar inget själv. Kust IT:s KIT Lead Agent är en vägvisare i chatten på en hemsida. Finn från hirefinn.ai ringer upp inkommande leads. Leadsson säljer listor, och Franzens Leads säljer leads till B2C-företag. Därför står de inte i tabellen.",
+        en: "Several. Rebel is a contact database and sends nothing itself. Kust IT's KIT Lead Agent is a guide in the chat on a website. Finn from hirefinn.ai calls inbound leads. Leadsson sells lists, and Franzens Leads sells leads to consumer businesses. That is why they are not in the table."
+      }
+    },
+    {
+      fraga: { sv: "Behöver en AI-SDR skriva på svenska?", en: "Does an AI SDR need to write in Swedish?" },
+      svar: {
+        sv: "Ja, om mottagarna är svenska. Fråga om utskicken skrivs på svenska eller översätts i efterhand; en översättning märks ofta på tilltal och ordval. Iris skriver på svenska från början och på engelska när mottagaren gör det.",
+        en: "Yes, if the recipients are Swedish. Ask whether the sends are written in Swedish or translated afterwards; a translation often shows in the form of address and the word choice. Iris writes in Swedish from the start and in English when the recipient does."
+      }
+    },
+    {
+      fraga: { sv: "Får man skicka kalla säljmejl till företag i Sverige?", en: "Can you send cold sales emails to companies in Sweden?" },
+      svar: {
+        sv: "Till aktiebolag och andra juridiska personer, ja, om mejlet är relevant för mottagaren och har en tydlig avregistrering. Enskilda firmor räknas som privatpersoner och kräver samtycke, så Iris kontaktar dem inte.",
+        en: "To limited companies and other legal persons, yes, if the email is relevant to the recipient and has a clear unsubscribe. Sole traders count as private individuals and require consent, so Iris does not contact them."
+      }
+    },
+    {
+      fraga: { sv: "Vad kostar en AI-SDR?", en: "What does an AI SDR cost?" },
+      svar: {
+        sv: `Prismodellerna skiljer sig: fast pris per månad, pris per kontakt eller ett projekt. I tabellen går spannet från under tusen kronor till flera tusen dollar i månaden. Iris kostar från ${LEADS} i månaden, och ${BINDNING_GALLER.sv}.`,
+        en: `The pricing models differ: a fixed monthly price, a price per contact or a project. In the table the range runs from under a thousand kronor to several thousand dollars a month. Iris costs from ${LEADS} a month, and ${BINDNING_GALLER.en}.`
+      }
+    },
+    KONTROLL_FRAGA
+  ],
+  relaterade: ["/svensk-ai-sdr", "/b2b-prospektering", "/b2b-leads"]
+};
+
+const JAMFOR_SUPPORTAGENTER: Landning = {
+  vag: "/jamfor-supportagenter",
+  rubrik: { sv: "Supportagenter i Sverige, *jämförda*.", en: "Support agents in Sweden, *compared*." },
+  ingress: {
+    sv: "Vi har läst varje leverantörs egna sidor och ställt upp det de själva säger om svenska svar, överlämning, data och pris. Snajp säljer Snajp Support, som står först. Det en leverantör inte skriver står som Ej angivet.",
+    en: "We read each vendor's own pages and set out what they say themselves about Swedish answers, handover, data and price. Snajp sells Snajp Support, listed first. What a vendor does not state is marked Not stated."
+  },
+  kortSvar: {
+    fraga: { sv: "Vilken supportagent passar ett svenskt företag?", en: "Which support agent suits a Swedish company?" },
+    svar: {
+      sv: `Den som svarar på svenska ur ert eget material, lämnar över till en människa när underlaget tar slut och lagrar kundernas meddelanden inom EU. Tabellen nedan jämför ${SUPPORTVERKTYG.length + 1} supportagenter och chattbotar på de punkterna och på pris, hämtat ur varje leverantörs egna sidor. Snajp säljer en av dem.`,
+      en: `One that answers in Swedish from your own material, hands over to a person when the material runs out and stores your customers' messages in the EU. The table below compares ${SUPPORTVERKTYG.length + 1} support agents and chatbots on those points and on price, taken from each vendor's own pages. Snajp sells one of them.`
+    }
+  },
+  stegRubrik: { sv: "Fyra frågor att ställa", en: "Four questions to ask" },
+  steg: [
+    {
+      rubrik: { sv: "Underlaget", en: "The material" },
+      text: {
+        sv: "Svarar den bara ur ert eget material, eller fyller språkmodellen i luckorna själv?",
+        en: "Does it answer only from your own material, or does the language model fill the gaps on its own?"
+      }
+    },
+    {
+      rubrik: { sv: "Språket", en: "The language" },
+      text: {
+        sv: "Svarar den på svenska i både chatten och mejlen, och står svenska i leverantörens språklista?",
+        en: "Does it answer in Swedish in both the chat and email, and is Swedish on the vendor's language list?"
+      }
+    },
+    {
+      rubrik: { sv: "Överlämningen", en: "The handover" },
+      text: {
+        sv: "Vad händer när den inte vet? Ärendet ska gå vidare till en människa med hela tråden.",
+        en: "What happens when it does not know? The case should go on to a person with the whole thread."
+      }
+    },
+    {
+      rubrik: { sv: "Datan och priset", en: "Data and price" },
+      text: {
+        sv: "Var lagras kundernas meddelanden, och betalar ni per agent, per löst ärende eller ett fast pris?",
+        en: "Where are your customers' messages stored, and do you pay per agent, per resolution or a fixed price?"
+      }
+    }
+  ],
+  yta: {
+    typ: "inkorg",
+    rubrik: { sv: "Supportagenten i inkorgen", en: "The support agent in the inbox" },
+    text: {
+      sv: "Kundmejlen sorterade efter ämne och brådska, med svar att godkänna.",
+      en: "Customer email sorted by topic and urgency, with replies to approve."
+    }
+  },
+  granser: SA_HAR_VI_JAMFORT({ sv: "Snajp säljer Snajp Support. Läs tabellen med det i minnet.", en: "Snajp sells Snajp Support. Read the table with that in mind." }),
+  jamforelse: {
+    rubrik: { sv: "Supportagenter och chattbotar för svenska företag", en: "Support agents and chatbots for Swedish companies" },
+    kolumner: [
+      { sv: "Verktyg", en: "Tool" },
+      { sv: "Vad det är", en: "What it is" },
+      { sv: "Svenska", en: "Swedish" },
+      { sv: "Överlämning", en: "Handover" },
+      { sv: "Data", en: "Data" },
+      { sv: "Pris", en: "Price" }
+    ],
+    rader: [
+      [
+        { sv: "Snajp Support", en: "Snajp Support" },
+        { sv: "Supportagent i mejlinkorgen och i chatten på hemsidan, ur er kunskapsbas", en: "Support agent in the email inbox and the website chat, from your knowledge base" },
+        { sv: "Ja, svenska och engelska", en: "Yes, Swedish and English" },
+        { sv: "Ja; återbetalningar, fakturafel, juridik och arga kunder går alltid till en människa", en: "Yes; refunds, invoice errors, legal matters and angry customers always go to a person" },
+        { sv: "Inom EU", en: "In the EU" },
+        { sv: `Från ${SUPPORT}/mån, obegränsade chattar`, en: `From ${SUPPORT} a month, unlimited chats` }
+      ],
+      ...SUPPORTVERKTYG.map((v) => [{ sv: v.namn, en: v.namn }, v.vad, v.svenska, v.overlamning, v.data, v.pris])
+    ],
+    kallor: SUPPORTVERKTYG.map((v) => ({ namn: v.namn, url: v.kalla })),
+    kontrollerad: {
+      sv: `Kontrollerat ${KONTROLL_DAG.sv} mot varje leverantörs egna sidor. Källor:`,
+      en: `Checked on ${KONTROLL_DAG.en} against each vendor's own pages. Sources:`
+    }
+  },
+  fragor: [
+    {
+      fraga: { sv: "Vad skiljer en supportagent från en chattbot?", en: "How is a support agent different from a chatbot?" },
+      svar: {
+        sv: "En chattbot svarar i chatten på hemsidan. En supportagent arbetar också i mejlinkorgen: den sorterar kundmejlen, skriver svar ur ert underlag och lämnar över det den inte ska hantera. Flera av verktygen i tabellen gör båda.",
+        en: "A chatbot answers in the chat on your website. A support agent also works in the email inbox: it sorts customer email, writes replies from your material and hands over what it should not handle. Several of the tools in the table do both."
+      }
+    },
+    {
+      fraga: { sv: "Svarar verktygen på svenska?", en: "Do the tools answer in Swedish?" },
+      svar: {
+        sv: "Zendesk, Intercom och Dstnys röstagent har svenska i sina språklistor. Flera andra stöder många språk utan att nämna svenska särskilt. Snajp Support svarar på svenska och engelska.",
+        en: "Zendesk, Intercom and Dstny's voice agent have Swedish on their language lists. Several others support many languages without naming Swedish. Snajp Support answers in Swedish and English."
+      }
+    },
+    {
+      fraga: { sv: "Vad händer med kundernas meddelanden?", en: "What happens to your customers' messages?" },
+      svar: {
+        sv: "Det beror på verktyget, och tabellen visar var varje leverantör säger att datan lagras. Se också till att ni får ett personuppgiftsbiträdesavtal, eftersom kundmejl innehåller personuppgifter. Snajp lagrar datan inom EU.",
+        en: "It depends on the tool, and the table shows where each vendor says the data is stored. Also make sure you get a data processing agreement, since customer email contains personal data. Snajp stores the data in the EU."
+      }
+    },
+    {
+      fraga: { sv: "Vad kostar en supportagent?", en: "What does a support agent cost?" },
+      svar: {
+        sv: `Tre modeller är vanligast: pris per agent och månad, pris per löst ärende eller ett fast månadspris. Snajp Support kostar från ${SUPPORT} i månaden med obegränsade chattar.`,
+        en: `Three models are most common: a price per agent per month, a price per resolution or a fixed monthly price. Snajp Support costs from ${SUPPORT} a month with unlimited chats.`
+      }
+    },
+    KONTROLL_FRAGA
+  ],
+  relaterade: ["/ai-supportagent", "/supportchatt", "/support-pa-svenska"]
+};
+
 /**
  * Sidans JSON-LD: brödsmulan, frågorna (det korta svaret först) och den
  * produkt sidan handlar om. Produktens @id är produktsidans, så att alla
@@ -1067,8 +1333,10 @@ export const LANDNING: Record<LandningsVag, Landning> = {
   "/b2b-leads": B2B_LEADS,
   "/b2b-prospektering": B2B_PROSPEKTERING,
   "/leads-i-inkorgen": LEADS_I_INKORGEN,
+  "/jamfor-ai-sdr": JAMFOR_AI_SDR,
   "/support-pa-svenska": SUPPORT_PA_SVENSKA,
   "/supportchatt": SUPPORTCHATT,
   "/ai-supportagent": AI_SUPPORTAGENT,
+  "/jamfor-supportagenter": JAMFOR_SUPPORTAGENTER,
   "/ai-agenter": AI_AGENTER
 };

@@ -204,6 +204,24 @@ def test_supportbot_bara_i_sokträffen():
     assert not fel, "Sajten säger supportagent; supportbot får bara stå i titel och beskrivning bredvid supportagent:\n" + "\n".join(fel)
 
 
+def test_jamforelserna_har_kalla_och_ar_aktuella():
+    """Jämförande reklam ska gå att kontrollera: varje leverantör har en källa på
+    sin egen sajt, och kontrollen får inte bli gammal (lib/jamforelser.ts)."""
+    import datetime
+
+    kalla = _utan_kommentarer(_las("lib/jamforelser.ts"))
+    datum = re.search(r'KONTROLLERAD = "(\d{4}-\d{2}-\d{2})"', kalla)
+    assert datum, "KONTROLLERAD saknas i lib/jamforelser.ts"
+    alder = (datetime.date.today() - datetime.date.fromisoformat(datum.group(1))).days
+    assert alder <= 120, f"Jämförelsen kontrollerades för {alder} dagar sedan. Kör om kontrollen (docs/SEO-JAMFORELSER-KALLOR.md) och ändra KONTROLLERAD."
+    namn = re.findall(r'namn: "([^"]+)"', kalla)
+    kallor = re.findall(r'kalla: "([^"]+)"', kalla)
+    assert len(namn) >= 10 and len(namn) == len(kallor), (namn, kallor)
+    assert all(k.startswith("https://") for k in kallor), kallor
+    # Snajps eget pris står aldrig här: det räknas ur lib/pricing.ts.
+    assert "Snajp" not in "".join(namn), namn
+
+
 def test_hjalterubriken_ar_en_h1():
     assert re.search(r'<h1\s+key=\{nyckel\}\s+data-mo="hero-h1"', _las("components/marketing/LandingPhoto.tsx"))
 

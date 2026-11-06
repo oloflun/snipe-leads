@@ -76,6 +76,15 @@ export const LANDNINGAR = [
     }
   },
   {
+    vag: "/jamfor-ai-sdr",
+    produkt: "leads",
+    namn: { sv: "Jämför AI-SDR i Sverige", en: "Compare AI SDRs in Sweden" },
+    kort: {
+      sv: "AI-SDR och leadsagenter för svenska företag sida vid sida: språk, godkännande, data och pris.",
+      en: "AI SDRs and lead agents for Swedish companies side by side: language, approval, data and price."
+    }
+  },
+  {
     vag: "/support-pa-svenska",
     produkt: "support",
     namn: { sv: "Support på svenska", en: "Support in Swedish" },
@@ -100,6 +109,15 @@ export const LANDNINGAR = [
     kort: {
       sv: "Supportagenten sorterar kundmejlen, skriver svaren och lämnar över det som kräver en människa.",
       en: "The support agent sorts customer emails, writes the replies and hands over what needs a person."
+    }
+  },
+  {
+    vag: "/jamfor-supportagenter",
+    produkt: "support",
+    namn: { sv: "Jämför supportagenter i Sverige", en: "Compare support agents in Sweden" },
+    kort: {
+      sv: "Supportagenter och chattbotar för svenska företag sida vid sida: språk, överlämning, data och pris.",
+      en: "Support agents and chatbots for Swedish companies side by side: language, handover, data and price."
     }
   },
   {

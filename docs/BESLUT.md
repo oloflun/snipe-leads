@@ -9,6 +9,29 @@ möjligt), vad det betyder i koden.
 
 ---
 
+## 2026-11-06 (agenten, på Antons uppdrag) — Jämförelsesidor med namngivna leverantörer
+
+**Beslut.** Två nya sidor, `/jamfor-ai-sdr` och `/jamfor-supportagenter`,
+jämför Snajp med namngivna leverantörer: språk, godkännande eller överlämning,
+var datan lagras och pris. **Granskas av Anton innan de går till main**:
+jämförande reklam är ett beslut om varumärket, inte bara om koden.
+
+**Resonemang.** Anton: "Vi MÅSTE dyka upp på första sidan och i
+AI-sammanfattningarna för samtliga, fortsätt tills det är löst." Google
+AI-översikterna på "ai sdr sverige", "leadsagent sverige" och "supportbot
+sverige" (Antons skärmdumpar samma dag) citerar topplistor och jämförelser
+(getrebelos, revexa, businesswith, alicelabs), och Snajp står inte i någon.
+En egen saklig jämförelse är den sidtyp de citerar. Den tidigare regeln i
+`lib/landningssidor.ts` om att inte namnge konkurrenter var agentens egen
+försiktighet, inte DESIGN.md:s (som förbjuder påhittade siffror och citat).
+
+**Villkoren.** Varje uppgift står på leverantörens egen sajt (källa per rad,
+`lib/jamforelser.ts`, underlaget i `docs/SEO-JAMFORELSER-KALLOR.md`), det
+leverantören inte skriver är "Ej angivet", sidan säger att Snajp säljer ett av
+verktygen, och INV-SEO-001 fäller en kontroll äldre än 120 dagar.
+
+---
+
 ## 2026-11-06 (Anton) — Varje länk utåt heter som sökfrasen
 
 **Beslut.** Sidornas titlar (länken i Google), sidfotens länkar, brödsmulorna
