@@ -22,3 +22,5 @@ node_modules
 docs
 **/.env
 **/.env.*
+# Marknadsvideon (Remotion) byggs aldrig i tjänsterna.
+marknad

@@ -890,6 +890,42 @@ html.lenis {
   background: linear-gradient(to bottom, oklch(var(--ink) / 0) 16%, oklch(var(--ink) / 0.48) 32%, oklch(var(--ink) / 0.48) 58%, oklch(var(--ink) / 0) 76%);
 }
 
+/* Startsidans hjälte (Startsida.tsx). Mobil: fotot är 640 px högt och tonar ut i
+   bläck, så att rubriken börjar där staden tar över från himlen och ytorna står på
+   bläck. Från 768 px täcker fotot hela hjälten; vänsterkanten mörknar för rubriken. */
+.landing .hem-scrim {
+  background: linear-gradient(to bottom, oklch(var(--ink) / 0.5) 0px, oklch(var(--ink) / 0.18) 170px, oklch(var(--ink) / 0.55) 380px, oklch(var(--ink)) 640px);
+}
+
+@media (min-width: 768px) {
+  .landing .hem-scrim {
+    background:
+      linear-gradient(to right, oklch(var(--ink) / 0.42) 0%, oklch(var(--ink) / 0) 55%),
+      linear-gradient(to bottom, oklch(var(--ink) / 0.55) 0%, oklch(var(--ink) / 0.14) 26%, oklch(var(--ink) / 0.3) 55%, oklch(var(--ink) / 0.86) 100%);
+  }
+}
+
+/* Ytorna svävar över fotot: fast papper med hårlinje och en skugga som bara
+   djupnar vid hovring. --lyft (0 i vila, 1 vid hovring) skrivs av GSAP
+   (useLandingMotion, svav) och är registrerad, så att den tonar och kan mätas. */
+@property --lyft {
+  syntax: "<number>";
+  inherits: false;
+  initial-value: 0;
+}
+
+.landing .hem-yta {
+  --lyft: 0;
+  box-shadow:
+    0 1px 0 oklch(var(--ink) / 0.04),
+    0 calc(18px + 16px * var(--lyft)) calc(48px + 24px * var(--lyft)) -18px oklch(var(--ink) / calc(0.55 + 0.15 * var(--lyft)));
+}
+
+.landing .svav-flyt,
+.landing .svav-lut {
+  will-change: transform;
+}
+
 /* Markören medan en text skrivs fram (LiveText). Noll bredd: raderna bryts
    likadant med och utan den. */
 .live-caret {

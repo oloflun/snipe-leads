@@ -48,6 +48,7 @@
 // (lib/demo/iris-exempel.test.ts), och alias-uppslagningen finns bara i
 // Next.js/TypeScript-bygget, inte i node:s egna modulupplösning.
 import { halsning } from "../agent/halsning.ts";
+import type { Struktur } from "../leads/struktur.ts";
 
 export const IRIS_AVSANDARE = {
   fornamn: "Anna",
@@ -94,6 +95,8 @@ export type ExempelActionResultat = {
   confidence_tips?: string;
 };
 
+export type Utkast = { subject: string; body: string };
+
 export type ExempelBolag = {
   id: string;
   companyName: string;
@@ -118,7 +121,16 @@ export type ExempelBolag = {
   status: string;
   /** Källorna research bygger på. Alltid minst en, annars får Iris inte skriva utkastet (GRANSER i lib/iris.ts). */
   kallor: { label: string; url: string }[];
-  draft: { subject: string; body: string };
+  /**
+   * Utkastets struktur som standard (Sebbe 2026-11-07): de flesta exempelbolagen
+   * visar B, kort och rakt på, några A. `utkast` bär båda formerna så att demons
+   * Kör Iris kan visa den struktur besökaren valde (`medStruktur`).
+   */
+  struktur: Struktur;
+  utkast: Record<Struktur, Utkast>;
+  /** Standardstrukturens utkast, samma objekt som `utkast[struktur]`. */
+  draft: Utkast;
+  /** Åtgärdsresultaten är skrivna i standardstrukturens form. */
   resultat: Record<ExempelAction, ExempelActionResultat>;
 };
 
@@ -130,6 +142,26 @@ export function kontaktnamn(bolag: Pick<ExempelBolag, "contactFirstName" | "cont
 // ---------------------------------------------------------------------------
 // Omgång 1 — de tre bolagen som visas först.
 // ---------------------------------------------------------------------------
+
+const LUNDSUND_A: Utkast = {
+  subject: "Ny inköpschef hos Lundsund",
+  body:
+      "Hej Karin,\n\n" +
+      "Grattis till rollen som inköpschef. Jag såg att tjänsten stått öppen sedan i våras, så ni har säkert en hel del att komma igång med.\n\n" +
+      "En sak som ofta hamnar sist på en sådan lista är hjärtstartare och HLR för teamet, trots att någon snart brukar fråga efter det. Vi monterar en hjärtstartare i lokalen och håller en kort HLR-genomgång för hela teamet, bokad innan sommaren.\n\n" +
+      "Vill du att jag skickar ett förslag anpassat efter er lokal?\n\n" +
+      "Vänliga hälsningar,\nAnna, Hjärtsäker AB"
+};
+
+const LUNDSUND_B: Utkast = {
+  subject: "Hjärtstartare på listan?",
+  body:
+        "Hej Karin,\n\n" +
+        "Grattis till rollen som inköpschef.\n\n" +
+        "Om vi monterade en hjärtstartare i er lokal och höll en HLR-genomgång för hela teamet innan sommaren, utan att det tar mer än en förmiddag av er tid, skulle det vara till nytta?\n\n" +
+        "Vänliga hälsningar,\n" +
+        "Anna, Hjärtsäker AB"
+};
 
 const LUNDSUND: ExempelBolag = {
   id: "1",
@@ -153,86 +185,80 @@ const LUNDSUND: ExempelBolag = {
     { label: "Platsannons", url: "https://platsbanken.example/annons/lundsund-inkopschef" },
     { label: "Företagets webbplats", url: "https://lundsundbyggpartnerab.example/om-oss" }
   ],
-  draft: {
-    subject: "Ny inköpschef hos Lundsund",
-    body:
-      "Hej Karin,\n\n" +
-      "Grattis till rollen som inköpschef. Jag såg att tjänsten stått öppen sedan i våras, så ni har säkert en hel del att komma igång med.\n\n" +
-      "En sak som ofta hamnar sist på en sådan lista är hjärtstartare och HLR för teamet, trots att någon snart brukar fråga efter det. Vi monterar en hjärtstartare i lokalen och håller en kort HLR-genomgång för hela teamet, bokad innan sommaren.\n\n" +
-      "Vill du att jag skickar ett förslag anpassat efter er lokal?\n\n" +
-      "Vänliga hälsningar,\nAnna, Hjärtsäker AB"
-  },
+  struktur: "b",
+  utkast: { a: LUNDSUND_A, b: LUNDSUND_B },
+  draft: LUNDSUND_B,
   resultat: {
     shorter: {
       new_version:
         "Hej Karin,\n\n" +
-        "Grattis till rollen som inköpschef. En hjärtstartare och en kort HLR-genomgång brukar hamna sist på en sådan lista, trots att det snabbt efterfrågas.\n\n" +
-        "Vill du ha ett förslag anpassat efter er lokal?\n\n" +
-        "Vänliga hälsningar,\nAnna, Hjärtsäker AB",
+        "Om vi monterade en hjärtstartare i er lokal och höll en HLR-genomgång för teamet innan sommaren, skulle det vara till nytta?\n\n" +
+        "Vänliga hälsningar,\n" +
+        "Anna, Hjärtsäker AB",
       explanation:
-        "Kortare: bakgrunden om tjänsten är borta, en enda mening bär signalen och erbjudandet, och CTA:n står kvar oförändrad.",
+        "Kortare: gratulationen är borta och frågan står ensam. Fortfarande B: en fråga om utfallet, och den sist.",
       subject_suggestions: ["Kort fråga till Lundsund", "Hjärtstartare hos Lundsund?"]
     },
     rewrite: {
       new_version:
         "Hej Karin,\n\n" +
-        "Har ni redan en hjärtstartare på plats, eller ligger det på listan som ny inköpschef?\n\n" +
-        "Många byggbolag i er storlek skjuter den frågan framför sig tills någon efterfrågar den. Vi löser det i ett svep: hjärtstartare monterad i lokalen och en HLR-genomgång för hela teamet, klart innan sommaren.\n\n" +
-        "Är det något att titta på nu när du ändå går igenom listan?\n\n" +
-        "Vänliga hälsningar,\nAnna, Hjärtsäker AB",
+        "Har ni en hjärtstartare på plats, eller ligger det på listan som ny inköpschef?\n\n" +
+        "Om vi löste både den och HLR för teamet på en förmiddag innan sommaren, skulle det hjälpa dig?\n\n" +
+        "Vänliga hälsningar,\n" +
+        "Anna, Hjärtsäker AB",
       explanation:
-        "Skriven om till Fråga → Värde → Fråga i stället för observation → erbjudande. Samma fakta, ny ingång via en direkt fråga till den nya rollen.",
+        "Skriven om: öppnar med en fråga om läget i stället för en gratulation, men behåller B-formen med frågan om utfallet sist.",
       subject_suggestions: ["En fråga till nya inköpschefen", "Redan koll på hjärtstartaren?"]
     },
     improve: {
       new_version:
         "Hej Karin,\n\n" +
-        "Grattis till rollen som inköpschef på Lundsund. Tjänsten har stått öppen sedan i våras, så listan är sannolikt lång redan.\n\n" +
-        "Hjärtstartare och HLR-utbildning brukar hamna långt ner på den, trots att det är snabbt löst: vi monterar hjärtstartaren i lokalen och håller en HLR-genomgång för hela teamet, bokad innan sommaren.\n\n" +
-        "Ska jag skicka ett förslag anpassat efter er lokal?\n\n" +
-        "Vänliga hälsningar,\nAnna, Hjärtsäker AB",
+        "Grattis till rollen som inköpschef på Lundsund.\n\n" +
+        "Om en hjärtstartare satt monterad i er lokal och hela teamet kunde HLR redan innan sommaren, utan att det kostar er mer än en förmiddag, vore det till nytta för dig?\n\n" +
+        "Vänliga hälsningar,\n" +
+        "Anna, Hjärtsäker AB",
       explanation:
-        "Förbättrad: aktiv röst genomgående, CTA:n skärpt till en direkt fråga i stället för 'vill du att', och ämnesraden pekar på vad mejlet faktiskt handlar om.",
+        "Förbättrad: bolagsnamnet i gratulationen, utfallet före villkoret i frågan, och frågan riktad till henne, inte till bolaget.",
       subject_suggestions: ["Hjärtstartare in på listan?", "En sak till inköpschefslistan"]
     },
     personalize: {
       new_version:
         "Hej Karin,\n\n" +
-        "Att en inköpschefstjänst stått öppen sedan i våras säger något om hur mycket som samlats på hög under tiden. Hjärtstartare och HLR brukar vara precis den sortens punkt: viktig, men aldrig akut nog för att gå före allt annat.\n\n" +
-        "Vi tar det steget åt er: en hjärtstartare monterad i lokalen och en HLR-genomgång för hela teamet, bokad innan sommaren.\n\n" +
-        "Vill du att jag skickar ett förslag anpassat efter er lokal?\n\n" +
-        "Vänliga hälsningar,\nAnna, Hjärtsäker AB",
+        "En tjänst som stått öppen sedan i våras lämnar en lång lista att gå igenom.\n\n" +
+        "Om hjärtstartaren och HLR för teamet var avbockade innan sommaren, utan att du själv behöver driva det, skulle det vara till nytta?\n\n" +
+        "Vänliga hälsningar,\n" +
+        "Anna, Hjärtsäker AB",
       explanation:
-        "Personaliserad kring den faktiska signalen: en länge obesatt tjänst, inte bara att den är ny. Kopplar direkt till varför hjärtstartarfrågan blivit liggande.",
+        "Personaliserad kring signalen: tjänsten var obesatt länge, så listan är lång. Frågan erbjuder att ta en punkt från den.",
       subject_suggestions: ["Det som blivit liggande sedan i våras", "Till nya inköpschefen på Lundsund"]
     },
     translate: {
       new_version:
         "Hi Karin,\n\n" +
-        "Congratulations on the purchasing manager role. I saw the position had been open since spring, so the list is probably already long.\n\n" +
-        "Defibrillators and CPR training tend to end up near the bottom of that list, even though they are quick to sort out. We mount a defibrillator on site and run a short CPR session for the whole team, arranged before summer.\n\n" +
-        "Would you like a proposal tailored to your premises?\n\n" +
-        "Best regards,\nAnna, Hjärtsäker AB",
+        "Congratulations on the purchasing manager role.\n\n" +
+        "If we mounted a defibrillator on your premises and ran a short CPR session for the whole team before summer, taking no more than a morning of your time, would that be useful?\n\n" +
+        "Best regards,\n" +
+        "Anna, Hjärtsäker AB",
       explanation:
-        "Hela mejlet skrivet på engelska, tonen bevarad. Titeln 'purchasing manager' används i stället för en ordagrann översättning av 'inköpschef'.",
-      subject_suggestions: ["A note for Lundsund's new purchasing manager"]
+        "Hela mejlet på engelska, samma korta form: en mening om dem, en fråga om utfallet, frågan sist.",
+      subject_suggestions: ["A quick question for Lundsund's new purchasing manager"]
     },
     ab_variants: {
       new_version:
-        "Variant A (problemet som blir liggande):\n" +
+        "Variant A (gratulationen först):\n" +
         "Hej Karin,\n\n" +
-        "En inköpschefstjänst som stått öppen sedan i våras brukar betyda en lista av saker som fått vänta. Hjärtstartare och HLR är ofta en av dem, trots att det är enkelt att lösa.\n\n" +
-        "Vi monterar en hjärtstartare i lokalen och håller en HLR-genomgång för hela teamet, bokad innan sommaren.\n\n" +
-        "Vill du att jag skickar ett förslag anpassat efter er lokal?\n\n" +
-        "Vänliga hälsningar,\nAnna, Hjärtsäker AB\n\n" +
-        "Variant B (ett enkelt förstaval):\n" +
+        "Grattis till rollen som inköpschef.\n\n" +
+        "Om vi monterade en hjärtstartare i er lokal och höll en HLR-genomgång för teamet innan sommaren, skulle det vara till nytta?\n\n" +
+        "Vänliga hälsningar,\n" +
+        "Anna, Hjärtsäker AB\n\n" +
+        "Variant B (bara frågan):\n" +
         "Hej Karin,\n\n" +
-        "Grattis till rollen. Om du letar efter något enkelt att bocka av tidigt: en hjärtstartare monterad i lokalen och en HLR-genomgång för hela teamet, klart innan sommaren.\n\n" +
-        "Ska jag skicka ett förslag anpassat efter er lokal?\n\n" +
-        "Vänliga hälsningar,\nAnna, Hjärtsäker AB",
+        "Om en hjärtstartare och HLR för hela teamet var klart innan sommaren, på en förmiddag, vore det till nytta för dig som ny inköpschef?\n\n" +
+        "Vänliga hälsningar,\n" +
+        "Anna, Hjärtsäker AB",
       explanation:
-        "Två vinklar: A utgår från det som blivit liggande, B presenterar det som ett enkelt förstaval i den nya rollen. Olika öppning och olika CTA-formulering.",
-      subject_suggestions: ["Det som blivit liggande (A)", "Ett enkelt förstaval (B)"]
+        "Två korta varianter: A har en mening om dem före frågan, B går rakt på frågan. Båda slutar med frågan.",
+      subject_suggestions: ["Hjärtstartare på listan? (A)", "En förmiddag innan sommaren (B)"]
     },
     followup: {
       new_version:
@@ -247,16 +273,36 @@ const LUNDSUND: ExempelBolag = {
     analyze: {
       new_version:
         "Hej Karin,\n\n" +
-        "Grattis till rollen som inköpschef. Jag såg att tjänsten stått öppen sedan i våras, så ni har säkert en hel del att komma igång med.\n\n" +
-        "En sak som ofta hamnar sist på en sådan lista är hjärtstartare och HLR för teamet, trots att någon snart brukar fråga efter det. Vi monterar en hjärtstartare i lokalen och håller en kort HLR-genomgång för hela teamet, bokad innan sommaren.\n\n" +
-        "Vill du att jag skickar ett förslag anpassat efter er lokal?\n\n" +
-        "Vänliga hälsningar,\nAnna, Hjärtsäker AB",
+        "Grattis till rollen som inköpschef.\n\n" +
+        "Om vi monterade en hjärtstartare i er lokal och höll en HLR-genomgång för hela teamet innan sommaren, utan att det tar mer än en förmiddag av er tid, skulle det vara till nytta?\n\n" +
+        "Vänliga hälsningar,\n" +
+        "Anna, Hjärtsäker AB",
       explanation:
-        "Bedömning: Signalen (ny inköpschef, tjänsten öppen sedan i våras) bär mejlet och gör det tydligt varför just nu. Stycke två är en aning långt för en kall första kontakt och kan kortas till en mening. CTA:n är bra: låg tröskel och specifik. Ämnesraden är korrekt men lite trög, en fråga i ämnesraden brukar öppnas oftare.",
+        "Bedömning: Struktur B, 34 ord i brödtexten, en sak före frågan och frågan sist. Signalen (ny inköpschef) bär gratulationen, och frågan beskriver ett konkret utfall med en tidsgräns. Villkoret 'utan att det tar mer än en förmiddag' gör frågan lätt att svara ja på. Ämnesraden är en fråga, vilket passar formen.",
       subject_suggestions: [],
-      confidence_tips: "Nästa steg: prova Kortare för att se stycke två skalat ner, eller A/B på ämnesraden."
+      confidence_tips: "Nästa steg: prova Skriv om för en annan ingång, eller A/B för två frågor att välja mellan."
     }
   }
+};
+
+const VIKSUND_A: Utkast = {
+  subject: "Servicelöftet på er nya hemsida",
+  body:
+      "Hej Mikael,\n\n" +
+      "Jag såg att ni lagt om hemsidan och lyfter fram service som ert löfte till kunderna. Det löftet syns snabbast i sådant kunder faktiskt möter på plats.\n\n" +
+      "En hjärtstartare synlig i entrén och en HLR-utbildning för teamet är precis den sortens detalj, och den går att nämna i löftet ni redan skrivit.\n\n" +
+      "Vill du ha ett kort förslag du kan väga in i servicelöftet?\n\n" +
+      "Vänliga hälsningar,\nAnna, Hjärtsäker AB"
+};
+
+const VIKSUND_B: Utkast = {
+  subject: "En sak till servicelöftet",
+  body:
+        "Hej Mikael,\n\n" +
+        "Ni lyfter fram service som löfte på nya hemsidan.\n\n" +
+        "Om en hjärtstartare satt synlig i er entré och hela teamet kunde HLR, något ni kan nämna i just det löftet, vore det intressant för er?\n\n" +
+        "Vänliga hälsningar,\n" +
+        "Anna, Hjärtsäker AB"
 };
 
 const VIKSUND: ExempelBolag = {
@@ -280,82 +326,80 @@ const VIKSUND: ExempelBolag = {
     { label: "Företagets webbplats", url: "https://viksundbygggruppenab.example/service" },
     { label: "Pressmeddelande", url: "https://viksundbygggruppenab.example/nyheter/ny-hemsida" }
   ],
-  draft: {
-    subject: "Servicelöftet på er nya hemsida",
-    body:
-      "Hej Mikael,\n\n" +
-      "Jag såg att ni lagt om hemsidan och lyfter fram service som ert löfte till kunderna. Det löftet syns snabbast i sådant kunder faktiskt möter på plats.\n\n" +
-      "En hjärtstartare synlig i entrén och en HLR-utbildning för teamet är precis den sortens detalj, och den går att nämna i löftet ni redan skrivit.\n\n" +
-      "Vill du ha ett kort förslag du kan väga in i servicelöftet?\n\n" +
-      "Vänliga hälsningar,\nAnna, Hjärtsäker AB"
-  },
+  struktur: "b",
+  utkast: { a: VIKSUND_A, b: VIKSUND_B },
+  draft: VIKSUND_B,
   resultat: {
     shorter: {
       new_version:
         "Hej Mikael,\n\n" +
-        "Ni lyfter fram service på nya hemsidan. En hjärtstartare i entrén och en HLR-utbildning för teamet är den sortens detalj som syns direkt.\n\n" +
-        "Vill du ha ett förslag du kan väga in i löftet?\n\n" +
-        "Vänliga hälsningar,\nAnna, Hjärtsäker AB",
-      explanation: "Kortare: bakgrundsmeningen om varför är struken, kärnan (synlig hjärtstartare, HLR för teamet) står kvar i en mening.",
-      subject_suggestions: ["Kort fråga om servicelöftet", "Till Viksund om entrén"]
+        "Om en hjärtstartare satt synlig i er entré och hela teamet kunde HLR, vore det intressant för er?\n\n" +
+        "Vänliga hälsningar,\n" +
+        "Anna, Hjärtsäker AB",
+      explanation:
+        "Kortare: meningen om hemsidan är borta, frågan står ensam och slutar mejlet.",
+      subject_suggestions: ["Hjärtstartare i entrén?", "Kort fråga till Viksund"]
     },
     rewrite: {
       new_version:
         "Hej Mikael,\n\n" +
-        "Ett servicelöfte på hemsidan är ett löfte kunder minns när de går genom entrén, inte bara när de läser texten.\n\n" +
-        "Många byggbolag skriver om service utan att ha något konkret att peka på i lokalen. En hjärtstartare synlig i entrén och en HLR-utbildning för teamet är ett sätt att göra löftet påtagligt, inte bara skrivet.\n\n" +
-        "Är det värt ett kort förslag?\n\n" +
-        "Vänliga hälsningar,\nAnna, Hjärtsäker AB",
+        "Vad i servicelöftet på nya hemsidan ser kunderna först när de kliver in hos er?\n\n" +
+        "Om det var en hjärtstartare i entrén och ett team som kan HLR, skulle det vara värt att titta på?\n\n" +
+        "Vänliga hälsningar,\n" +
+        "Anna, Hjärtsäker AB",
       explanation:
-        "Ny struktur: Observation → Problem (löfte utan motsvarighet i lokalen) → Idé → Fråga. Annat öppningsord än originalet.",
-      subject_suggestions: ["Ett löfte som syns i entrén", "Service på hemsidan, och i lokalen"]
+        "Skriven om: öppnar med en fråga om löftet i stället för ett konstaterande, och frågan om utfallet står kvar sist.",
+      subject_suggestions: ["Det första kunderna ser", "Servicelöftet i entrén"]
     },
     improve: {
       new_version:
         "Hej Mikael,\n\n" +
-        "Ni har lyft fram service som löfte på nya hemsidan. En hjärtstartare synlig i entrén och en HLR-utbildning för teamet gör det löftet konkret för alla som går in genom dörren.\n\n" +
-        "Ska jag skicka ett förslag du kan väga in i löftet?\n\n" +
-        "Vänliga hälsningar,\nAnna, Hjärtsäker AB",
-      explanation: "Förbättrad: två stycken i stället för tre, aktiv röst, och CTA:n skärpt till en direkt fråga.",
-      subject_suggestions: ["Gör servicelöftet synligt", "En detalj till entrén"]
+        "Ni lyfter fram service som ert löfte på nya hemsidan.\n\n" +
+        "Om en hjärtstartare satt synlig i entrén och hela teamet kunde HLR, en konkret sak att nämna i löftet, vore det intressant för er?\n\n" +
+        "Vänliga hälsningar,\n" +
+        "Anna, Hjärtsäker AB",
+      explanation:
+        "Förbättrad: 'ert löfte' kopplar till deras ord, och utfallet står som en konkret sak i löftet i stället för 'något'.",
+      subject_suggestions: ["En konkret sak i servicelöftet", "Service som syns i entrén"]
     },
     personalize: {
       new_version:
         "Hej Mikael,\n\n" +
-        "Att skriva 'service' på hemsidan är enkelt. Det som gör löftet trovärdigt är sådant kunder ser med egna ögon när de kliver in, inte det som står i texten.\n\n" +
-        "En hjärtstartare synlig i entrén och en HLR-utbildning för teamet är precis den sortens detalj, och den kostar er inget att nämna i löftet ni redan skrivit.\n\n" +
-        "Vill du ha ett kort förslag du kan väga in i servicelöftet?\n\n" +
-        "Vänliga hälsningar,\nAnna, Hjärtsäker AB",
+        "Servicelöftet på nya hemsidan märks mest i det kunderna möter på plats.\n\n" +
+        "Om en hjärtstartare syntes i er entré och teamet kunde HLR, skulle det passa in i löftet ni redan skrivit?\n\n" +
+        "Vänliga hälsningar,\n" +
+        "Anna, Hjärtsäker AB",
       explanation:
-        "Personaliserad kring den faktiska iakttagelsen: ett skrivet löfte utan synlig motsvarighet i lokalen, inte bara att hemsidan bytts.",
-      subject_suggestions: ["Det som gör löftet trovärdigt", "Till Viksund om service i praktiken"]
+        "Personaliserad kring signalen: löftet står på hemsidan, och frågan handlar om att göra det synligt på plats.",
+      subject_suggestions: ["Löftet som syns på plats", "Till servicelöftet hos Viksund"]
     },
     translate: {
       new_version:
         "Hi Mikael,\n\n" +
-        "I noticed you have updated your website and now highlight service as your promise to customers. That promise shows fastest in what customers actually see on site.\n\n" +
-        "A defibrillator visible in the entrance and CPR training for the team is exactly that kind of detail, and it fits naturally into the promise you already wrote.\n\n" +
-        "Would you like a short proposal you can weigh into the service promise?\n\n" +
-        "Best regards,\nAnna, Hjärtsäker AB",
-      explanation: "Engelsk version av hela mejlet. 'Servicelöfte' blir 'service promise' snarare än en ordagrann översättning.",
-      subject_suggestions: ["The service promise on your new site"]
+        "Your new website puts service at the heart of your promise to customers.\n\n" +
+        "If a defibrillator sat visibly in your entrance hall with a team trained in CPR, something to mention in that promise, would that be of interest?\n\n" +
+        "Best regards,\n" +
+        "Anna, Hjärtsäker AB",
+      explanation:
+        "Hela mejlet på engelska, samma korta form, frågan sist.",
+      subject_suggestions: ["A detail for Viksund's service promise"]
     },
     ab_variants: {
       new_version:
-        "Variant A (löftet blir påtagligt):\n" +
+        "Variant A (hemsidan först):\n" +
         "Hej Mikael,\n\n" +
-        "Ni lyfter fram service på nya hemsidan. En hjärtstartare synlig i entrén och en HLR-utbildning för teamet gör det löftet påtagligt för alla som kliver in.\n\n" +
-        "Vill du ha ett kort förslag du kan väga in i löftet?\n\n" +
-        "Vänliga hälsningar,\nAnna, Hjärtsäker AB\n\n" +
-        "Variant B (nyfikenhet):\n" +
+        "Ni lyfter fram service som löfte på nya hemsidan.\n\n" +
+        "Om en hjärtstartare satt synlig i entrén och teamet kunde HLR, vore det intressant för er?\n\n" +
+        "Vänliga hälsningar,\n" +
+        "Anna, Hjärtsäker AB\n\n" +
+        "Variant B (bara frågan):\n" +
         "Hej Mikael,\n\n" +
-        "Har ni redan en hjärtstartare i lokalen, eller är det något som hamnat på 'ska göra'-listan sedan hemsidan skrevs om?\n\n" +
-        "Vi löser båda delarna i ett svep: hjärtstartare i entrén och HLR-utbildning för teamet.\n\n" +
-        "Värt en kort fråga?\n\n" +
-        "Vänliga hälsningar,\nAnna, Hjärtsäker AB",
+        "Om en hjärtstartare satt synlig i er entré och hela teamet kunde HLR, något att nämna i ert servicelöfte, skulle det vara värt ett kort förslag?\n\n" +
+        "Vänliga hälsningar,\n" +
+        "Anna, Hjärtsäker AB",
       explanation:
-        "Två vinklar: A kopplar direkt till löftet på hemsidan, B öppnar med en nyfiken fråga om nuläget. Olika öppning och olika CTA.",
-      subject_suggestions: ["Löftet, påtagligt (A)", "En fråga om nuläget (B)"]
+        "Två korta varianter: A konstaterar hemsidan först, B går rakt på frågan. Båda slutar med frågan.",
+      subject_suggestions: ["Till servicelöftet (A)", "Ett kort förslag (B)"]
     },
     followup: {
       new_version:
@@ -370,16 +414,36 @@ const VIKSUND: ExempelBolag = {
     analyze: {
       new_version:
         "Hej Mikael,\n\n" +
-        "Jag såg att ni lagt om hemsidan och lyfter fram service som ert löfte till kunderna. Det löftet syns snabbast i sådant kunder faktiskt möter på plats.\n\n" +
-        "En hjärtstartare synlig i entrén och en HLR-utbildning för teamet är precis den sortens detalj, och den går att nämna i löftet ni redan skrivit.\n\n" +
-        "Vill du ha ett kort förslag du kan väga in i servicelöftet?\n\n" +
-        "Vänliga hälsningar,\nAnna, Hjärtsäker AB",
+        "Ni lyfter fram service som löfte på nya hemsidan.\n\n" +
+        "Om en hjärtstartare satt synlig i er entré och hela teamet kunde HLR, något ni kan nämna i just det löftet, vore det intressant för er?\n\n" +
+        "Vänliga hälsningar,\n" +
+        "Anna, Hjärtsäker AB",
       explanation:
-        "Bedömning: kopplingen mellan hemsidans servicelöfte och ett konkret objekt i entrén är stark och icke-uppenbar, den bär hela mejlet. Sista stycket före CTA:n är en aning defensivt formulerat ('går att nämna') och kan bytas till ett rakare påstående. Ämnesraden är tydlig men säger inte vad avsändaren erbjuder.",
+        "Bedömning: Struktur B, 31 ord i brödtexten. Ingången är en mening om deras egna ord på hemsidan, och frågan beskriver ett utfall de kan se i entrén. Bisatsen 'något ni kan nämna i just det löftet' binder ihop utfallet med signalen. Ämnesraden pekar på löftet, inte på produkten, vilket passar en kall första kontakt.",
       subject_suggestions: [],
-      confidence_tips: "Nästa steg: prova Förbättra för en rakare mening före CTA:n, eller Kortare om mejlet ska ner till tre rader."
+      confidence_tips: "Nästa steg: prova Skriv om för en annan ingång, eller A/B för två frågor att välja mellan."
     }
   }
+};
+
+const HAMMARNAS_A: Utkast = {
+  subject: "Den nya lokalen hos Hammarnäs",
+  body:
+      "Hej Sara,\n\n" +
+      "Grattis till den nya, större lokalen. Med fler kvadratmeter och 31 anställda på plats blir avståndet till en hjärtstartare snabbt en annan fråga än i den gamla lokalen.\n\n" +
+      "Vi monterar en hjärtstartare i den nya lokalen och håller en HLR-genomgång för hela teamet, uppdelad på två pass så att produktionen inte behöver stå still.\n\n" +
+      "Vill du att jag skickar ett förslag anpassat efter de 31 anställda?\n\n" +
+      "Vänliga hälsningar,\nAnna, Hjärtsäker AB"
+};
+
+const HAMMARNAS_B: Utkast = {
+  subject: "Hjärtstartare i nya lokalen?",
+  body:
+        "Hej Sara,\n\n" +
+        "Grattis till den nya, större lokalen.\n\n" +
+        "Om vi monterade en hjärtstartare där och höll HLR-genomgången för alla 31 i två pass, så att produktionen inte står still, skulle det vara till nytta?\n\n" +
+        "Vänliga hälsningar,\n" +
+        "Anna, Hjärtsäker AB"
 };
 
 const HAMMARNAS: ExempelBolag = {
@@ -404,15 +468,9 @@ const HAMMARNAS: ExempelBolag = {
     { label: "Företagets webbplats", url: "https://hammarnasbyggsverigeab.example/kontakt" },
     { label: "Pressmeddelande", url: "https://hammarnasbyggsverigeab.example/nyheter/ny-lokal" }
   ],
-  draft: {
-    subject: "Den nya lokalen hos Hammarnäs",
-    body:
-      "Hej Sara,\n\n" +
-      "Grattis till den nya, större lokalen. Med fler kvadratmeter och 31 anställda på plats blir avståndet till en hjärtstartare snabbt en annan fråga än i den gamla lokalen.\n\n" +
-      "Vi monterar en hjärtstartare i den nya lokalen och håller en HLR-genomgång för hela teamet, uppdelad på två pass så att produktionen inte behöver stå still.\n\n" +
-      "Vill du att jag skickar ett förslag anpassat efter de 31 anställda?\n\n" +
-      "Vänliga hälsningar,\nAnna, Hjärtsäker AB"
-  },
+  struktur: "a",
+  utkast: { a: HAMMARNAS_A, b: HAMMARNAS_B },
+  draft: HAMMARNAS_A,
   resultat: {
     shorter: {
       new_version:
@@ -509,6 +567,26 @@ const HAMMARNAS: ExempelBolag = {
 // Omgång 2 — visas efter "Uppdatera".
 // ---------------------------------------------------------------------------
 
+const GRANSTRAND_A: Utkast = {
+  subject: "Tre nya i produktionen hos Granstrand",
+  body:
+      "Hej Erik,\n\n" +
+      "Jag såg att ni har tre annonser ute till produktionen samtidigt. Fler på golvet är bra, men det betyder också fler att introducera i säkerhetsrutinerna innan de står vid maskinerna själva.\n\n" +
+      "Vi sätter en hjärtstartare i produktionslokalen och lägger en HLR-genomgång direkt i introduktionen, så att den följer med automatiskt för alla nya.\n\n" +
+      "Vill du att HLR-genomgången läggs in i introduktionen för de nya?\n\n" +
+      "Vänliga hälsningar,\nAnna, Hjärtsäker AB"
+};
+
+const GRANSTRAND_B: Utkast = {
+  subject: "HLR i introduktionen för de nya?",
+  body:
+        "Hej Erik,\n\n" +
+        "Ni tar in tre nya till produktionen just nu.\n\n" +
+        "Om HLR-genomgången låg färdig i introduktionen för alla nya och en hjärtstartare satt i produktionslokalen innan de börjar, skulle det hjälpa er?\n\n" +
+        "Vänliga hälsningar,\n" +
+        "Anna, Hjärtsäker AB"
+};
+
 const GRANSTRAND: ExempelBolag = {
   id: "4",
   companyName: "Granstrand Tillverkning AB",
@@ -530,83 +608,80 @@ const GRANSTRAND: ExempelBolag = {
     { label: "Platsannons", url: "https://platsbanken.example/annons/granstrand-produktion" },
     { label: "Företagets webbplats", url: "https://granstrandtillverkningab.example/jobba-hos-oss" }
   ],
-  draft: {
-    subject: "Tre nya i produktionen hos Granstrand",
-    body:
-      "Hej Erik,\n\n" +
-      "Jag såg att ni har tre annonser ute till produktionen samtidigt. Fler på golvet är bra, men det betyder också fler att introducera i säkerhetsrutinerna innan de står vid maskinerna själva.\n\n" +
-      "Vi sätter en hjärtstartare i produktionslokalen och lägger en HLR-genomgång direkt i introduktionen, så att den följer med automatiskt för alla nya.\n\n" +
-      "Vill du att HLR-genomgången läggs in i introduktionen för de nya?\n\n" +
-      "Vänliga hälsningar,\nAnna, Hjärtsäker AB"
-  },
+  struktur: "b",
+  utkast: { a: GRANSTRAND_A, b: GRANSTRAND_B },
+  draft: GRANSTRAND_B,
   resultat: {
     shorter: {
       new_version:
         "Hej Erik,\n\n" +
-        "Tre annonser ute till produktionen betyder tre nya att introducera i säkerhetsrutinerna. Vi lägger en HLR-genomgång direkt i introduktionen och sätter en hjärtstartare i lokalen.\n\n" +
-        "Vill du att den läggs in för de nya redan nu?\n\n" +
-        "Vänliga hälsningar,\nAnna, Hjärtsäker AB",
+        "Om HLR-genomgången låg färdig i introduktionen för de nya och en hjärtstartare satt i produktionslokalen, skulle det hjälpa er?\n\n" +
+        "Vänliga hälsningar,\n" +
+        "Anna, Hjärtsäker AB",
       explanation:
-        "Kortare: två stycken slås ihop till ett, och upprepningen av 'innan de står vid maskinerna själva' är struken eftersom poängen redan finns i 'säkerhetsrutinerna'.",
-      subject_suggestions: ["Kort fråga om introduktionen", "Granstrand: tre nya i produktionen"]
+        "Kortare: meningen om rekryteringen är borta, frågan står ensam och slutar mejlet.",
+      subject_suggestions: ["HLR i introduktionen?", "Kort fråga till Granstrand"]
     },
     rewrite: {
       new_version:
         "Hej Erik,\n\n" +
-        "Tre samtidiga rekryteringar till produktionen är tre introduktioner som ska hålla samma standard, oavsett vem som håller i dem den veckan.\n\n" +
-        "Vi löser en del av det: en hjärtstartare i lokalen och en HLR-genomgång som ligger fast i introduktionen, inte beroende av vem som visar runt.\n\n" +
-        "Är det värt att lägga in redan för de tre som börjar nu?\n\n" +
-        "Vänliga hälsningar,\nAnna, Hjärtsäker AB",
-      explanation: "Ny struktur: problemet (introduktioner som varierar i kvalitet) före lösningen, i stället för observation följt av erbjudande.",
-      subject_suggestions: ["Samma introduktion, oavsett vem", "En fråga om introduktionen"]
+        "Vad får de tre nya i produktionen lära sig första veckan?\n\n" +
+        "Om HLR låg i introduktionen och en hjärtstartare satt i lokalen innan de står vid maskinerna själva, skulle det vara värt att titta på?\n\n" +
+        "Vänliga hälsningar,\n" +
+        "Anna, Hjärtsäker AB",
+      explanation:
+        "Skriven om: öppnar med en fråga om introduktionen i stället för ett konstaterande, och frågan om utfallet står sist.",
+      subject_suggestions: ["Första veckan för de nya", "Innan de står vid maskinerna"]
     },
     improve: {
       new_version:
         "Hej Erik,\n\n" +
-        "Ni har tre annonser ute till produktionen samtidigt. Fler på golvet betyder fler att introducera i säkerhetsrutinerna innan de står vid maskinerna själva.\n\n" +
-        "Vi sätter en hjärtstartare i lokalen och lägger en HLR-genomgång direkt i introduktionen, så att den följer med automatiskt för alla nya.\n\n" +
-        "Ska HLR-genomgången läggas in i introduktionen för de tre som börjar nu?\n\n" +
-        "Vänliga hälsningar,\nAnna, Hjärtsäker AB",
-      explanation: "Förbättrad: CTA:n skärpt till en direkt fråga med siffran tre kvar, vilket gör den konkret i stället för generell.",
-      subject_suggestions: ["In i introduktionen redan nu", "Säkerheten för de tre nya"]
+        "Ni tar in tre nya till produktionen just nu.\n\n" +
+        "Om HLR-genomgången följde med automatiskt i introduktionen för alla nya och en hjärtstartare satt i produktionslokalen innan de börjar, skulle det hjälpa dig?\n\n" +
+        "Vänliga hälsningar,\n" +
+        "Anna, Hjärtsäker AB",
+      explanation:
+        "Förbättrad: 'följde med automatiskt' säger vad utfallet är i vardagen, och frågan riktas till honom, inte till bolaget.",
+      subject_suggestions: ["HLR som följer med introduktionen", "Tre nya i produktionen"]
     },
     personalize: {
       new_version:
         "Hej Erik,\n\n" +
-        "Tre annonser ute samtidigt säger något: ni har antagligen redan en introduktion som ska hinna med mycket på kort tid. Säkerhetsdelen hamnar lätt sist i en sådan lista, trots att den borde ligga tidigt.\n\n" +
-        "Vi sätter en hjärtstartare i produktionslokalen och lägger en HLR-genomgång direkt i introduktionen, så att den inte beror på vem som visar runt den veckan.\n\n" +
-        "Vill du att HLR-genomgången läggs in i introduktionen för de nya?\n\n" +
-        "Vänliga hälsningar,\nAnna, Hjärtsäker AB",
+        "Tre annonser samtidigt betyder tre introduktioner i säkerhetsrutinerna på kort tid.\n\n" +
+        "Om HLR var en färdig punkt i den introduktionen och hjärtstartaren redan satt på plats, skulle det hjälpa er?\n\n" +
+        "Vänliga hälsningar,\n" +
+        "Anna, Hjärtsäker AB",
       explanation:
-        "Personaliserad kring en icke-uppenbar följd av tre samtidiga rekryteringar: en pressad introduktion där säkerhet lätt hamnar sist.",
-      subject_suggestions: ["Det som lätt hamnar sist i introduktionen", "Till Granstrand om de tre nya"]
+        "Personaliserad kring signalen: tre annonser samtidigt, alltså flera introduktioner på en gång. Frågan erbjuder en färdig punkt i dem.",
+      subject_suggestions: ["Tre introduktioner på kort tid", "Till produktionen hos Granstrand"]
     },
     translate: {
       new_version:
         "Hi Erik,\n\n" +
-        "I saw you have three job ads out for production at the same time. More people on the floor also means more people to introduce to safety routines before they are on their own by the machines.\n\n" +
-        "We install a defibrillator in the production area and build CPR training directly into the induction, so it follows automatically for every new hire.\n\n" +
-        "Would you like the CPR training added to the induction for the new hires?\n\n" +
-        "Best regards,\nAnna, Hjärtsäker AB",
-      explanation: "Engelsk version. 'Introduktion' blir 'induction', den vanliga termen i engelskt HR-språk snarare än en bokstavlig översättning.",
-      subject_suggestions: ["Three new hires at Granstrand"]
+        "You are bringing three new people into production right now.\n\n" +
+        "If CPR training sat ready in the onboarding for every new hire, with a defibrillator mounted in the production hall before they start, would that help you?\n\n" +
+        "Best regards,\n" +
+        "Anna, Hjärtsäker AB",
+      explanation:
+        "Hela mejlet på engelska, samma korta form, frågan sist.",
+      subject_suggestions: ["CPR in onboarding at Granstrand?"]
     },
     ab_variants: {
       new_version:
-        "Variant A (introduktionen som grund):\n" +
+        "Variant A (rekryteringen först):\n" +
         "Hej Erik,\n\n" +
-        "Tre annonser ute till produktionen betyder tre introduktioner som ska hålla samma standard. Vi lägger en HLR-genomgång direkt i introduktionen och sätter en hjärtstartare i lokalen.\n\n" +
-        "Vill du att den läggs in för de nya redan nu?\n\n" +
-        "Vänliga hälsningar,\nAnna, Hjärtsäker AB\n\n" +
-        "Variant B (praktisk nyfikenhet):\n" +
+        "Ni tar in tre nya till produktionen just nu.\n\n" +
+        "Om HLR låg i introduktionen och en hjärtstartare satt i lokalen innan de börjar, skulle det hjälpa er?\n\n" +
+        "Vänliga hälsningar,\n" +
+        "Anna, Hjärtsäker AB\n\n" +
+        "Variant B (bara frågan):\n" +
         "Hej Erik,\n\n" +
-        "Ingår HLR i introduktionen ni kör för nya i produktionen, eller är det något som tas separat, om alls?\n\n" +
-        "Vi kan lägga in både hjärtstartare och genomgång så att det följer med automatiskt.\n\n" +
-        "Värt en kort fråga?\n\n" +
-        "Vänliga hälsningar,\nAnna, Hjärtsäker AB",
+        "Om HLR-genomgången var en färdig punkt i introduktionen för alla nya i produktionen, med hjärtstartaren på plats innan de börjar, vore det till nytta?\n\n" +
+        "Vänliga hälsningar,\n" +
+        "Anna, Hjärtsäker AB",
       explanation:
-        "Två vinklar: A utgår från standarden i introduktionen, B ställer en rak fråga om hur det ser ut i dag. Olika öppning och olika CTA-ton.",
-      subject_suggestions: ["Samma standard för alla tre (A)", "Ingår HLR redan? (B)"]
+        "Två korta varianter: A konstaterar rekryteringen först, B går rakt på frågan. Båda slutar med frågan.",
+      subject_suggestions: ["HLR i introduktionen (A)", "En färdig punkt (B)"]
     },
     followup: {
       new_version:
@@ -620,16 +695,36 @@ const GRANSTRAND: ExempelBolag = {
     analyze: {
       new_version:
         "Hej Erik,\n\n" +
-        "Jag såg att ni har tre annonser ute till produktionen samtidigt. Fler på golvet är bra, men det betyder också fler att introducera i säkerhetsrutinerna innan de står vid maskinerna själva.\n\n" +
-        "Vi sätter en hjärtstartare i produktionslokalen och lägger en HLR-genomgång direkt i introduktionen, så att den följer med automatiskt för alla nya.\n\n" +
-        "Vill du att HLR-genomgången läggs in i introduktionen för de nya?\n\n" +
-        "Vänliga hälsningar,\nAnna, Hjärtsäker AB",
+        "Ni tar in tre nya till produktionen just nu.\n\n" +
+        "Om HLR-genomgången låg färdig i introduktionen för alla nya och en hjärtstartare satt i produktionslokalen innan de börjar, skulle det hjälpa er?\n\n" +
+        "Vänliga hälsningar,\n" +
+        "Anna, Hjärtsäker AB",
       explanation:
-        "Bedömning: kopplingen mellan tre samtidiga rekryteringar och introduktionens innehåll är stark och konkret, siffran tre gör mejlet specifikt. Första stycket är en aning långt, meningen om att stå vid maskinerna själva upprepar det 'säkerhetsrutinerna' redan sagt. CTA:n är tydlig och lätt att svara ja eller nej på.",
+        "Bedömning: Struktur B, 32 ord i brödtexten. Ingången är en mening om rekryteringen, och frågan beskriver utfallet i deras egen rutin (introduktionen) med en tidpunkt (innan de börjar). Frågan riktar sig till 'er', vilket kan bli 'dig' för att träffa produktionschefen direkt. Ämnesraden är en fråga som speglar mejlets fråga.",
       subject_suggestions: [],
-      confidence_tips: "Nästa steg: prova Kortare för att se första stycket kortat, eller Analysera igen efter en omskrivning."
+      confidence_tips: "Nästa steg: prova Skriv om för en annan ingång, eller A/B för två frågor att välja mellan."
     }
   }
+};
+
+const SJOHAGA_A: Utkast = {
+  subject: "Bytet av affärssystem hos Sjöhaga",
+  body:
+      "Hej Lina,\n\n" +
+      "Jag läste inlägget om att ni bytt affärssystem. När ett sånt byte väl är gjort brukar man passa på att se över annat som ändå legat och väntat, innan allt sätter sig igen.\n\n" +
+      "Vi sätter en hjärtstartare i lagerlokalen och lägger en HLR-genomgång som går att boka digitalt, samma väg som ni redan lagt om till för annat.\n\n" +
+      "Vill du ha ett förslag du kan boka direkt digitalt?\n\n" +
+      "Vänliga hälsningar,\nAnna, Hjärtsäker AB"
+};
+
+const SJOHAGA_B: Utkast = {
+  subject: "Bokas digitalt, som resten",
+  body:
+        "Hej Lina,\n\n" +
+        "Jag läste inlägget om bytet av affärssystem.\n\n" +
+        "Om en hjärtstartare i lagerlokalen och en HLR-genomgång för teamet gick att boka digitalt, samma väg som ni redan lagt om till, skulle det vara användbart?\n\n" +
+        "Vänliga hälsningar,\n" +
+        "Anna, Hjärtsäker AB"
 };
 
 const SJOHAGA: ExempelBolag = {
@@ -653,81 +748,80 @@ const SJOHAGA: ExempelBolag = {
     { label: "Företagets webbplats", url: "https://sjohagalogistikgruppenab.example/blogg/nytt-affarssystem" },
     { label: "Pressmeddelande", url: "https://sjohagalogistikgruppenab.example/nyheter/systembyte" }
   ],
-  draft: {
-    subject: "Bytet av affärssystem hos Sjöhaga",
-    body:
-      "Hej Lina,\n\n" +
-      "Jag läste inlägget om att ni bytt affärssystem. När ett sånt byte väl är gjort brukar man passa på att se över annat som ändå legat och väntat, innan allt sätter sig igen.\n\n" +
-      "Vi sätter en hjärtstartare i lagerlokalen och lägger en HLR-genomgång som går att boka digitalt, samma väg som ni redan lagt om till för annat.\n\n" +
-      "Vill du ha ett förslag du kan boka direkt digitalt?\n\n" +
-      "Vänliga hälsningar,\nAnna, Hjärtsäker AB"
-  },
+  struktur: "b",
+  utkast: { a: SJOHAGA_A, b: SJOHAGA_B },
+  draft: SJOHAGA_B,
   resultat: {
     shorter: {
       new_version:
         "Hej Lina,\n\n" +
-        "Ni har precis bytt affärssystem. Ett sånt byte brukar vara ett bra läge att också se över annat som väntat, som en hjärtstartare i lagerlokalen och en HLR-genomgång.\n\n" +
-        "Vill du ha ett förslag du kan boka digitalt?\n\n" +
-        "Vänliga hälsningar,\nAnna, Hjärtsäker AB",
-      explanation: "Kortare: bakgrunden om bloggen är struken, systembytet och kopplingen till hjärtstartaren står kvar i en mening.",
-      subject_suggestions: ["Kort fråga om lagerlokalen", "Sjöhaga: efter systembytet"]
+        "Om en hjärtstartare i lagerlokalen och en HLR-genomgång för teamet gick att boka digitalt, skulle det vara användbart?\n\n" +
+        "Vänliga hälsningar,\n" +
+        "Anna, Hjärtsäker AB",
+      explanation:
+        "Kortare: meningen om blogginlägget är borta, frågan står ensam och slutar mejlet.",
+      subject_suggestions: ["Bokas digitalt?", "Kort fråga till Sjöhaga"]
     },
     rewrite: {
       new_version:
         "Hej Lina,\n\n" +
-        "Ett systembyte är sällan bara ett system. Det brukar vara den punkt där man ändå går igenom vad mer som legat och väntat.\n\n" +
-        "Hjärtstartare i lagerlokalen och en HLR-genomgång hör ofta till den listan. Vi löser båda, och genomgången går att boka digitalt, precis som ni redan lagt om till för annat.\n\n" +
-        "Värt att titta på nu medan ni ändå är i det läget?\n\n" +
-        "Vänliga hälsningar,\nAnna, Hjärtsäker AB",
-      explanation: "Ny struktur: ett generellt konstaterande om systembyten som öppning, i stället för att direkt referera bloggen.",
-      subject_suggestions: ["Sällan bara ett system", "En fråga medan ni ändå är i läget"]
+        "Vad mer än affärssystemet har ni lagt om till digitalt det senaste året?\n\n" +
+        "Om hjärtstartaren och HLR för teamet gick samma väg, bokade direkt på webben, skulle det passa er?\n\n" +
+        "Vänliga hälsningar,\n" +
+        "Anna, Hjärtsäker AB",
+      explanation:
+        "Skriven om: öppnar med en fråga om omläggningen i stället för att referera inlägget, och frågan om utfallet står sist.",
+      subject_suggestions: ["Samma väg som affärssystemet", "Nästa sak att lägga om"]
     },
     improve: {
       new_version:
         "Hej Lina,\n\n" +
-        "Jag läste att ni bytt affärssystem. Ett sånt byte brukar vara ett bra läge att också se över annat som legat och väntat.\n\n" +
-        "Vi sätter en hjärtstartare i lagerlokalen och lägger en HLR-genomgång som går att boka digitalt, samma väg som ni redan lagt om till.\n\n" +
-        "Vill du ha ett förslag du kan boka direkt?\n\n" +
-        "Vänliga hälsningar,\nAnna, Hjärtsäker AB",
-      explanation: "Förbättrad: den överflödiga bisatsen om att allt 'sätter sig igen' är struken, och CTA:n kortad till 'boka direkt'.",
-      subject_suggestions: ["Läget efter systembytet", "Digital bokning hos Sjöhaga"]
+        "Jag läste ert inlägg om bytet av affärssystem.\n\n" +
+        "Om en hjärtstartare i lagerlokalen och en HLR-genomgång för teamet gick att boka digitalt, samma väg som ni redan valt för annat, skulle det vara användbart för dig?\n\n" +
+        "Vänliga hälsningar,\n" +
+        "Anna, Hjärtsäker AB",
+      explanation:
+        "Förbättrad: 'ert inlägg' och 'redan valt' knyter till deras eget beslut, och frågan riktas till henne.",
+      subject_suggestions: ["Bokas digitalt, som affärssystemet", "Till lagret hos Sjöhaga"]
     },
     personalize: {
       new_version:
         "Hej Lina,\n\n" +
-        "Att skriva om systembytet på bloggen säger att ni gillar att göra saker ordentligt och visa hur det går till, inte bara byta i det tysta. Det säger också att digitala lösningar är vägen ni väljer när ni kan.\n\n" +
-        "En hjärtstartare i lagerlokalen och en HLR-genomgång som går att boka digitalt passar samma linje.\n\n" +
-        "Vill du ha ett förslag du kan boka direkt digitalt?\n\n" +
-        "Vänliga hälsningar,\nAnna, Hjärtsäker AB",
+        "Ett systembyte brukar vara tillfället då annat som legat och väntat också blir gjort.\n\n" +
+        "Om hjärtstartaren och HLR för teamet var en sådan sak, bokad digitalt på fem minuter, skulle det vara till nytta?\n\n" +
+        "Vänliga hälsningar,\n" +
+        "Anna, Hjärtsäker AB",
       explanation:
-        "Personaliserad kring en icke-uppenbar detalj: att de valt att skriva om bytet offentligt säger något om hur de vill göra saker, inte bara att bytet skedde.",
-      subject_suggestions: ["Samma linje som systembytet", "Till Sjöhaga om digital bokning"]
+        "Personaliserad kring signalen: bytet som tillfälle att göra annat som väntat. Frågan gör hjärtstartaren till en av de sakerna.",
+      subject_suggestions: ["Det som väntat under systembytet", "Till platschefen på Sjöhaga"]
     },
     translate: {
       new_version:
         "Hi Lina,\n\n" +
-        "I read that you switched business systems. A change like that is usually the moment when other things that have been waiting also get looked at.\n\n" +
-        "We install a defibrillator in the warehouse and set up CPR training that can be booked digitally, the same route you already moved other things to.\n\n" +
-        "Would you like a proposal you can book directly online?\n\n" +
-        "Best regards,\nAnna, Hjärtsäker AB",
-      explanation: "Engelsk version. 'Lagerlokalen' blir 'warehouse' snarare än en ordagrann 'storage premises'.",
-      subject_suggestions: ["After the system switch at Sjöhaga"]
+        "I read your post about switching business systems.\n\n" +
+        "If a defibrillator for the warehouse with CPR training for the team could be booked online, the same route you have already chosen for other things, would that be useful?\n\n" +
+        "Best regards,\n" +
+        "Anna, Hjärtsäker AB",
+      explanation:
+        "Hela mejlet på engelska, samma korta form, frågan sist.",
+      subject_suggestions: ["Booked online, like the rest"]
     },
     ab_variants: {
       new_version:
-        "Variant A (rätt läge):\n" +
+        "Variant A (inlägget först):\n" +
         "Hej Lina,\n\n" +
-        "Ett systembyte brukar vara ett bra läge att också se över annat som legat och väntat. Hjärtstartare i lagerlokalen och en HLR-genomgång hör ofta dit.\n\n" +
-        "Vill du ha ett förslag du kan boka direkt digitalt?\n\n" +
-        "Vänliga hälsningar,\nAnna, Hjärtsäker AB\n\n" +
-        "Variant B (samma linje):\n" +
+        "Jag läste inlägget om bytet av affärssystem.\n\n" +
+        "Om hjärtstartaren och HLR för teamet gick att boka digitalt, skulle det vara användbart?\n\n" +
+        "Vänliga hälsningar,\n" +
+        "Anna, Hjärtsäker AB\n\n" +
+        "Variant B (bara frågan):\n" +
         "Hej Lina,\n\n" +
-        "Ni valde en digital väg för affärssystemet. Vi erbjuder samma sak för HLR-genomgången: bokas digitalt, ingen extra administration.\n\n" +
-        "Värt att titta på?\n\n" +
-        "Vänliga hälsningar,\nAnna, Hjärtsäker AB",
+        "Om en hjärtstartare i lagerlokalen och en HLR-genomgång för teamet gick att boka direkt på webben, utan offert och telefonsamtal, vore det till nytta för er?\n\n" +
+        "Vänliga hälsningar,\n" +
+        "Anna, Hjärtsäker AB",
       explanation:
-        "Två vinklar: A utgår från tajmingen efter bytet, B kopplar till att de redan valt digitala lösningar. Olika öppning, olika betoning i CTA:n.",
-      subject_suggestions: ["Rätt läge efter bytet (A)", "Samma digitala linje (B)"]
+        "Två korta varianter: A refererar inlägget först, B går rakt på frågan. Båda slutar med frågan.",
+      subject_suggestions: ["Bokas digitalt (A)", "Utan offert och samtal (B)"]
     },
     followup: {
       new_version:
@@ -741,16 +835,36 @@ const SJOHAGA: ExempelBolag = {
     analyze: {
       new_version:
         "Hej Lina,\n\n" +
-        "Jag läste inlägget om att ni bytt affärssystem. När ett sånt byte väl är gjort brukar man passa på att se över annat som ändå legat och väntat, innan allt sätter sig igen.\n\n" +
-        "Vi sätter en hjärtstartare i lagerlokalen och lägger en HLR-genomgång som går att boka digitalt, samma väg som ni redan lagt om till för annat.\n\n" +
-        "Vill du ha ett förslag du kan boka direkt digitalt?\n\n" +
-        "Vänliga hälsningar,\nAnna, Hjärtsäker AB",
+        "Jag läste inlägget om bytet av affärssystem.\n\n" +
+        "Om en hjärtstartare i lagerlokalen och en HLR-genomgång för teamet gick att boka digitalt, samma väg som ni redan lagt om till, skulle det vara användbart?\n\n" +
+        "Vänliga hälsningar,\n" +
+        "Anna, Hjärtsäker AB",
       explanation:
-        "Bedömning: kopplingen mellan systembytet och 'rätt läge att se över annat' är rimlig men något generisk, den skulle kunna gälla vilket bolag som helst efter ett systembyte. Det digitala bokningserbjudandet är däremot en stark, specifik koppling till just den här signalen och kunde lyftas fram tidigare i mejlet. CTA:n är bra och låg tröskel.",
+        "Bedömning: Struktur B, 33 ord i brödtexten. Ingången visar att mejlet bygger på deras egen blogg, och frågan beskriver utfallet (bokas digitalt) som en fortsättning på det beslut de redan tagit. Frågan är riktad till 'det', inte till henne; 'för dig' hade gjort den mer personlig. Ämnesraden knyter an till inlägget utan att upprepa det.",
       subject_suggestions: [],
-      confidence_tips: "Nästa steg: prova Personalisera för att flytta fram den digitala kopplingen, eller Skriv om med den som öppning."
+      confidence_tips: "Nästa steg: prova Skriv om för en annan ingång, eller A/B för två frågor att välja mellan."
     }
   }
+};
+
+const ALMNAS_A: Utkast = {
+  subject: "Servicelöftet till hyresgästerna hos Almnäs",
+  body:
+      "Hej Jonas,\n\n" +
+      "Jag såg er nya tjänstesida och löftet om service till hyresgästerna. Ett sånt löfte märks mest i sådant som finns på plats i huset, inte bara i texten om det.\n\n" +
+      "En hjärtstartare i fastighetens gemensamma utrymme och en HLR-genomgång för personalen är precis den sortens sak, och går att lyfta fram i löftet ni redan skrivit.\n\n" +
+      "Vill du ha ett förslag att väga in i servicelöftet till hyresgästerna?\n\n" +
+      "Vänliga hälsningar,\nAnna, Hjärtsäker AB"
+};
+
+const ALMNAS_B: Utkast = {
+  subject: "Till servicelöftet för hyresgästerna",
+  body:
+        "Hej Jonas,\n\n" +
+        "Ni lyfter fram service till hyresgästerna på nya tjänstesidan.\n\n" +
+        "Om en hjärtstartare fanns i fastighetens gemensamma utrymme och personalen kunde HLR, något ni kan lyfta fram i det löftet, vore det intressant?\n\n" +
+        "Vänliga hälsningar,\n" +
+        "Anna, Hjärtsäker AB"
 };
 
 const ALMNAS: ExempelBolag = {
@@ -774,15 +888,9 @@ const ALMNAS: ExempelBolag = {
     { label: "Företagets webbplats", url: "https://almnasfastighetab.example/tjanster" },
     { label: "Pressmeddelande", url: "https://almnasfastighetab.example/nyheter/nytt-servicelofte" }
   ],
-  draft: {
-    subject: "Servicelöftet till hyresgästerna hos Almnäs",
-    body:
-      "Hej Jonas,\n\n" +
-      "Jag såg er nya tjänstesida och löftet om service till hyresgästerna. Ett sånt löfte märks mest i sådant som finns på plats i huset, inte bara i texten om det.\n\n" +
-      "En hjärtstartare i fastighetens gemensamma utrymme och en HLR-genomgång för personalen är precis den sortens sak, och går att lyfta fram i löftet ni redan skrivit.\n\n" +
-      "Vill du ha ett förslag att väga in i servicelöftet till hyresgästerna?\n\n" +
-      "Vänliga hälsningar,\nAnna, Hjärtsäker AB"
-  },
+  struktur: "a",
+  utkast: { a: ALMNAS_A, b: ALMNAS_B },
+  draft: ALMNAS_A,
   resultat: {
     shorter: {
       new_version:
@@ -941,8 +1049,11 @@ export function exempelVariant(bas: ExempelBolag, n: number): ExempelBolag {
     }
     return ut;
   };
+  const ny = djupErsatt(bas, byt);
   return {
-    ...djupErsatt(bas, byt),
+    ...ny,
+    // Djupkopian gav `draft` och `utkast[struktur]` var sitt objekt; knyt ihop dem igen.
+    draft: ny.utkast[ny.struktur],
     id: `v${n}-${bas.id}`,
     score: Math.max(58, Math.min(94, bas.score + ((n * 13) % 15) - 7)),
     status: "new"
@@ -950,16 +1061,32 @@ export function exempelVariant(bas: ExempelBolag, n: number): ExempelBolag {
 }
 
 /**
- * Omgång `omgang` (0, 1, 2 …) av demons körning: först de två handskrivna
- * omgångarna, sedan tre nya varianter per omgång, utan slut.
+ * Bolaget med utkastet i strukturen besökaren valde vid Kör Iris. Utan val
+ * (eller samma som standarden) returneras bolaget orört, med sina handskrivna
+ * åtgärdsresultat; med en annan struktur följer bara utkastet med, och
+ * resultaten är fortfarande skrivna i standardformen.
  */
-export function exempelOmgang(omgang: number): ExempelBolag[] {
-  if (omgang === 0) return EXEMPEL_OMGANG_1;
-  if (omgang === 1) return EXEMPEL_OMGANG_2;
-  return [0, 1, 2].map((i) => {
-    const n = omgang * 3 + i;
-    return exempelVariant(EXEMPELBOLAG[n % EXEMPELBOLAG.length], n);
-  });
+export function medStruktur(bolag: ExempelBolag, struktur: Struktur | undefined): ExempelBolag {
+  if (!struktur || struktur === bolag.struktur) return bolag;
+  return { ...bolag, struktur, draft: bolag.utkast[struktur] };
+}
+
+/**
+ * Omgång `omgang` (0, 1, 2 …) av demons körning: först de två handskrivna
+ * omgångarna, sedan tre nya varianter per omgång, utan slut. `struktur` är
+ * valet i Kör Iris; utan det visar varje bolag sin standard (de flesta B).
+ */
+export function exempelOmgang(omgang: number, struktur?: Struktur): ExempelBolag[] {
+  const bas =
+    omgang === 0
+      ? EXEMPEL_OMGANG_1
+      : omgang === 1
+        ? EXEMPEL_OMGANG_2
+        : [0, 1, 2].map((i) => {
+            const n = omgang * 3 + i;
+            return exempelVariant(EXEMPELBOLAG[n % EXEMPELBOLAG.length], n);
+          });
+  return bas.map((b) => medStruktur(b, struktur));
 }
 
 /**

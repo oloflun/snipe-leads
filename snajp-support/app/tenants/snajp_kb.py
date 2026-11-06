@@ -125,14 +125,16 @@ KB_ARTICLES: list[dict] = [
         "category": "betalning",
         "content": (
             "Vi har tre paket, priser per månad exklusive moms:\n"
-            "• Snajp Support — 3 990 kr/mån. Kundservice-agenten som svarar utifrån er "
+            "• Snajp Support — 9 990 kr/mån. Kundservice-agenten som svarar utifrån er "
             "egen kunskapsbas.\n"
-            "• Snajp Leads — 4 490 kr/mån. Leads-agenten som hittar och skriver till rätt "
+            "• Snajp Leads — 12 990 kr/mån. Leads-agenten som hittar och skriver till rätt "
             "företag.\n"
-            "• Snajp Duo — 6 990 kr/mån. Leads- och kundservice-agenten i samma dashboard, "
+            "• Snajp Duo — 19 990 kr/mån. Leads- och kundservice-agenten i samma dashboard, "
             "med delad kunddata.\n"
-            "Duo kostar 1 490 kr mindre per månad än att köpa Support och Leads var för "
-            "sig (3 990 + 4 490 = 8 480 kr)."
+            "Duo kostar 2 990 kr mindre per månad än att köpa Support och Leads var för "
+            "sig (9 990 + 12 990 = 22 980 kr).\n"
+            "Priserna är tillfälliga under pilotperioden och kan komma att höjas. Vi hör "
+            "av oss innan något ändras för den som redan är kund."
         ),
     },
     {
