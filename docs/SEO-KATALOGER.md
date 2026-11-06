@@ -111,54 +111,97 @@ utan omdömen syns inte i G2:s rutnät och gör mer skada än nytta.
 - **Headquarters:** Gothenburg, Sweden
 - **Industries:** Artificial Intelligence, Sales Automation, Customer Service, SaaS
 
-## Mejlutkast
+## Mejlen till listorna
 
-Skicka från er egen adress. Ett mejl per redaktion, och inget mer än en
-påminnelse efter en vecka.
+Skickas från snajpsupport@gmail.com (Antons beställning 2026-11-07). Ett mejl
+per redaktion och högst en påminnelse efter en vecka. Status och datum står
+i tabellen sist i avsnittet.
 
-### A. Alice Labs (svensk topplista)
+Ett tidigare utkast sade "En människa godkänner varje utskick". Det stämmer
+inte när kunden låter Iris skicka själv, så alla fyra säger nu det som står i
+llms.txt: kunden väljer, och de tre första utskicken granskas alltid.
 
-> **Ämne:** Snajp till listan över AI-verktyg för försäljning i Sverige
+### A. Alice Labs (linus@alicelabs.ai)
+
+> **Ämne:** Snajp till er genomgång av AI-verktyg för försäljning i Sverige
+>
+> Hej Linus,
+>
+> Jag läste er genomgång av de bästa AI-verktygen för försäljning i Sverige 2026 och såg att den ses över igen i december. Inför det vill jag tipsa om Snajp.
+>
+> Vi bygger AI-agenter för svenska B2B-företag i Göteborg och Umeå. Vår AI-SDR Iris väljer ut bolag ur bolagsregistret, läser på om dem på deras egen webbplats och skriver ett första mejl på svenska. Kunden väljer hur mycket Iris får skicka själv, och de tre första utskicken granskas alltid av en människa. Data lagras inom EU.
+>
+> Demon går att prova utan konto: https://www.snajp.se/demo/leads
+> Fakta och priser på en sida: https://www.snajp.se/llms.txt
+>
+> Hör gärna av dig om du vill ha en genomgång eller mer underlag.
+>
+> Vänliga hälsningar
+> Anton Lundin
+> Snajp, https://www.snajp.se
+
+### B. Revexa (hey@revexa.io)
+
+> **Ämne:** Iris från Snajp till er jämförelse av AI-säljagenter på svenska
 >
 > Hej,
 >
-> Jag läste er genomgång av AI-verktyg för försäljning i Sverige 2026. Vi bygger Snajp i Göteborg och Umeå, och vår AI-SDR Iris är byggd för just den svenska marknaden: urvalet görs ur bolagsregistret, researchen på bolagets egen webbplats och mejlet skrivs på svenska. En människa godkänner varje utskick.
+> Er jämförelse "AI-säljagent på svenska 2026" kontrollerar tolv verktyg mot leverantörernas egna sidor, och den är den noggrannaste vi har hittat. Iris från Snajp saknas, och vi vill gärna vara med vid nästa uppdatering.
 >
-> Om ni uppdaterar listan får ni gärna pröva Iris. Demon kräver inget konto: https://www.snajp.se/demo/leads. All fakta om produkten och priserna finns på en sida: https://www.snajp.se/llms.txt
+> Iris är en AI-SDR för svensk B2B. Hon väljer ut bolag ur bolagsregistret, läser på om dem på deras egen webbplats och skriver ett första mejl på svenska, och på engelska när mottagaren gör det. Kunden väljer hur mycket Iris får skicka själv, och de tre första utskicken granskas alltid av en människa. Data lagras inom EU.
 >
-> Hör av er om ni vill ha mer underlag eller en genomgång.
+> Allt ni behöver för tabellen, med priser, står på en sida: https://www.snajp.se/llms.txt
+> Demon kräver inget konto: https://www.snajp.se/demo/leads
 >
 > Vänliga hälsningar
-> Anton Lundin, Snajp
+> Anton Lundin
+> Snajp, https://www.snajp.se
 
-### B. revenuebase.ai (engelska)
+### C. Rebel (hello@getrebelos.com)
 
-> **Subject:** Adding Snajp to the AI SDR platforms in Sweden list
+> **Ämne:** Snajp till listan över AI SDR-verktyg för Sverige
+>
+> Hej Timmy,
+>
+> Jag läste din genomgång av de bästa AI SDR-verktygen för att sälja i Sverige 2026. Snajp är inte med, och jag tror att vi passar bland de svenska alternativen.
+>
+> Iris är vår AI-SDR för svensk B2B: urval ur bolagsregistret, research på bolagets egen webbplats och ett första mejl på svenska. Kunden väljer hur mycket hon får skicka själv, och de tre första utskicken granskas alltid av en människa. Byggt i Göteborg och Umeå.
+>
+> Fakta och priser: https://www.snajp.se/llms.txt
+> Demo utan konto: https://www.snajp.se/demo/leads
+>
+> Säg till om du vill testa Iris själv.
+>
+> Vänliga hälsningar
+> Anton Lundin
+> Snajp, https://www.snajp.se
+
+### D. RevenueBase (sales@revenuebase.ai, engelska)
+
+> **Subject:** Snajp for your list of AI SDR platforms in Sweden
 >
 > Hi,
 >
-> Your list of AI SDR platforms in Sweden is the most complete one we have found. We would like Snajp to be considered for it.
+> Your list of AI SDR platforms in Sweden does not include Snajp yet. We are a Swedish company in Gothenburg and Umeå, and Iris, our AI SDR, is built for Swedish B2B: companies are selected from the Swedish business register, researched on their own website and written to in Swedish. The customer decides how much Iris may send on her own, and the first three sends are always reviewed by a person.
 >
-> Snajp's AI SDR, Iris, is built for Swedish B2B: companies are selected from the Swedish business register, researched on their own website, and written to in Swedish. A person approves every email. Founded in Gothenburg and Umeå by Sebastian Bergman and Anton Lundin.
->
-> Product facts and pricing: https://www.snajp.se/llms.txt
-> Demo without an account: https://www.snajp.se/demo/leads
+> Could Snajp be included at your next refresh? Product facts and pricing are on one page: https://www.snajp.se/llms.txt
 >
 > Best regards,
-> Anton Lundin, Snajp
+> Anton Lundin
+> Snajp, https://www.snajp.se
 
-### C. Skribenter som skrivit om AI-SDR i Sverige
+### Utskicken
 
-> **Ämne:** En svensk AI-SDR till er nästa genomgång
->
-> Hej,
->
-> Jag såg att ni skrivit om AI-SDR-verktyg för svenska företag. De flesta i genomgången är byggda för engelska och översätter mejlet i efterhand. Iris, vår AI-SDR, skriver på svenska från början, väljer bolag ur bolagsregistret och läser på om dem på deras egen webbplats innan hon skriver.
->
-> Om det är intressant finns allt på en sida, med priser: https://www.snajp.se/llms.txt. Demon kräver inget konto.
->
-> Vänliga hälsningar
-> Anton Lundin, Snajp
+| Mottagare | Mejl | Status |
+|---|---|---|
+| linus@alicelabs.ai | A | Skickat 2026-11-07 från snajpsupport@gmail.com |
+| hey@revexa.io | B | Skickat 2026-11-07 från snajpsupport@gmail.com |
+| hello@getrebelos.com | C | Skickat 2026-11-07 från snajpsupport@gmail.com |
+| sales@revenuebase.ai | D | Skickat 2026-11-07 från snajpsupport@gmail.com |
+
+Gmail-kontots standardsignatur är Sebastians. Den togs bort ur de fyra mejlen
+så att bara ett namn står i dem (Antons krav). Påminnelse tidigast 2026-11-14,
+en gång, och bara till den som inte svarat.
 
 ## Google Företagsprofil
 
