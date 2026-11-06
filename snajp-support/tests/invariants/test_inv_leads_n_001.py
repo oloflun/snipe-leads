@@ -175,3 +175,35 @@ async def test_kundens_branscher_slut_breddar_i_omradet_och_levererar(monkeypatc
     assert k["levererade"] == 3 and k["slut_orsak"] == "klar", k
     assert k["bred"] and anrop[0] is False and True in anrop
     assert "breddades" in k["sammanfattning"]
+
+
+async def test_strukturvalet_foljer_korningen_till_varje_barn(monkeypatch):
+    """Utkastens struktur (A/B, Sebbe 2026-11-05) står i körningens tillstånd
+    och följer med varje prospektjobb motorn lägger, också påfyllningarna."""
+    pool = [_bolag(n) for n in ("Bra Ett", "Bra Två", "Bra Tre")]
+    _installera(monkeypatch, pool, bra={"Bra Ett", "Bra Två", "Bra Tre"})
+    sedda: list[str] = []
+    riktig = leads_api._lagg_prospektjobb
+
+    async def _spion(*a, **k):
+        sedda.append(k.get("struktur"))
+        return await riktig(*a, **k)
+
+    monkeypatch.setattr(leads_api, "_lagg_prospektjobb", _spion)
+    app_state = SimpleNamespace(jobs=MemoryJobStore(), storage=MemoryStorage(), leadsstrom=None)
+    job_id = await app_state.jobs.create(tenant_id=TENANT["tenant_id"], status="queued")
+    await leads_api._run_batch(
+        app_state,
+        {
+            "kind": "batch", "job_id": job_id, **TENANT, "scope": "research",
+            "overrides": {"industries": ["Redovisning"]}, "is_test": True, "limit": 2,
+            "company_names": [], "struktur": "b",
+        },
+    )
+    for _ in range(200):
+        k = ((await app_state.jobs.get(job_id)).get("result") or {}).get("korning") or {}
+        if k.get("klar"):
+            break
+        await asyncio.sleep(0.02)
+    assert k.get("struktur") == "b"
+    assert sedda and set(sedda) == {"b"}

@@ -80,6 +80,12 @@ export function SidRubrik({
   );
 }
 
+/** Innehållssidornas två knappar, delade med sökordssidornas rubrikrad. */
+export const KNAPP_PRIMAR =
+  "focus-ring inline-flex min-h-12 items-center rounded-input bg-ink px-6 text-[0.9375rem] font-semibold text-paper transition-colors hover:bg-ink2";
+export const KNAPP_SEKUNDAR =
+  "focus-ring inline-flex min-h-12 items-center rounded-input border border-ink/20 px-6 text-[0.9375rem] font-semibold transition-colors hover:border-ink";
+
 /**
  * Avslutande uppmaning. Varje innehållssida ska sluta med en väg vidare —
  * annars är sista raden en återvändsgränd.
@@ -102,17 +108,11 @@ export function SidAvslut({
       </h2>
       <p className="mt-3 max-w-[58ch] text-[1rem] leading-[1.7] text-ink-muted">{text}</p>
       <div className="mt-6 flex flex-wrap gap-3">
-        <Link
-          href={primar.href}
-          className="focus-ring inline-flex min-h-12 items-center rounded-input bg-ink px-6 text-[0.9375rem] font-semibold text-paper transition-colors hover:bg-ink2"
-        >
+        <Link href={primar.href} className={KNAPP_PRIMAR}>
           {primar.etikett}
         </Link>
         {sekundar ? (
-          <a
-            href={sekundar.href}
-            className="focus-ring inline-flex min-h-12 items-center rounded-input border border-ink/20 px-6 text-[0.9375rem] font-semibold transition-colors hover:border-ink"
-          >
+          <a href={sekundar.href} className={KNAPP_SEKUNDAR}>
             {sekundar.etikett}
           </a>
         ) : null}

@@ -6,11 +6,13 @@ import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { EmailStudioEditor } from "@/components/email/EmailStudioEditor";
 import { DemoKorning } from "@/components/leads/DemoKorning";
+import { StrukturVal, useStruktur } from "@/components/leads/StrukturVal";
 import type { EmailStudioData } from "@/lib/data/emails";
 import { btnPrimary, btnSecondary } from "@/components/ui";
 import { felmeddelande, readJsonBody } from "@/lib/http/json";
 import { useLocale, type Locale, type Localized } from "@/lib/i18n";
 import { icpEtiketter } from "@/lib/leads/icpLabels";
+import type { Struktur } from "@/lib/leads/struktur";
 import { cn } from "@/lib/utils";
 
 /**
@@ -75,6 +77,8 @@ type LeadsSvar = {
   is_test?: boolean;
   fase?: string;
   overrides?: Record<string, unknown> | null;
+  /** Utkastens struktur i körningen (A/B). */
+  struktur?: Struktur;
   error?: string;
   detail?: string;
 };
@@ -179,6 +183,12 @@ const T = {
     sv: "Ingenting skickades. Utkastet finns kvar här och bolaget är påhittat. Så här skulle utskicket ha sett ut.",
     en: "Nothing was sent. The draft stays here and the company is made up. This is what the email would have looked like."
   },
+  antalLeads: { sv: "Antal leads", en: "Number of leads" },
+  omfattning: { sv: "Omfattning", en: "Scope" },
+  optResearchOchUtkast: { sv: "Research och utkast", en: "Research and drafts" },
+  optBaraResearch: { sv: "Bara research", en: "Research only" },
+  strukturKortA: { sv: " · struktur A", en: " · structure A" },
+  strukturKortB: { sv: " · struktur B", en: " · structure B" },
   provarHelaVagen: { sv: "Provar hela vägen fram utan att något lämnar huset.", en: "Tests the whole way without anything leaving the building." }
 } satisfies Record<string, Localized>;
 
@@ -251,6 +261,8 @@ export function LeadsRunForm({
   // Utkast är standard: Iris levererar leads MED utkast (Alunix 2026-09-29 —
   // "lyckades inte generera ett enda utkast"). Bara research är ett val.
   const [scope, setScope] = useState<"research" | "research_and_draft">("research_and_draft");
+  // Utkastens struktur (A/B), senaste valet per webbläsare (StrukturVal.tsx).
+  const [struktur, valjStruktur] = useStruktur();
   const [branscher, setBranscher] = useState("");
   const [undvik, setUndvik] = useState("");
   const [geografi, setGeografi] = useState("");
@@ -491,6 +503,8 @@ export function LeadsRunForm({
         body: JSON.stringify({
           limit: antal,
           scope,
+          // Bara research skriver inga utkast: strukturen är då A, som förut.
+          struktur: scope === "research_and_draft" ? struktur : "a",
           is_test: isTest,
           company_names: egna,
           ...(overrides ? { overrides } : {})
@@ -618,7 +632,7 @@ export function LeadsRunForm({
           att kunden såg det (2026-09-29). */}
       {!demo ? (
         <div className="mt-6 grid max-w-[760px] gap-5 sm:grid-cols-2">
-          <Rad etikett="Antal leads" hint="1–200">
+          <Rad etikett={text(T.antalLeads)} hint="1–200">
             <input
               type="number"
               min={1}
@@ -628,16 +642,21 @@ export function LeadsRunForm({
               className={fältklass}
             />
           </Rad>
-          <Rad etikett="Omfattning">
+          <Rad etikett={text(T.omfattning)}>
             <select
               value={scope}
               onChange={(e) => setScope(e.target.value as typeof scope)}
               className={fältklass}
             >
-              <option value="research_and_draft">Research och utkast</option>
-              <option value="research">Bara research</option>
+              <option value="research_and_draft">{text(T.optResearchOchUtkast)}</option>
+              <option value="research">{text(T.optBaraResearch)}</option>
             </select>
           </Rad>
+          {/* A eller B (Sebbe 2026-11-05): utkastens struktur för körningens
+              nya leads. Bara när körningen skriver utkast. */}
+          {scope === "research_and_draft" ? (
+            <StrukturVal value={struktur} onChange={valjStruktur} className="sm:col-span-2" />
+          ) : null}
         </div>
       ) : null}
 
@@ -723,6 +742,9 @@ export function LeadsRunForm({
               <strong className="font-semibold">{svar.count}</strong>{" "}
               {korning ? text(T.leadsBestallda) : text(T.bolagIKorningen)} ·{" "}
               {svar.scope === "research_and_draft" ? text(T.researchOchUtkast) : text(T.baraResearch)}
+              {svar.scope === "research_and_draft" && svar.struktur
+                ? text(svar.struktur === "b" ? T.strukturKortB : T.strukturKortA)
+                : null}
               {svar.is_test ? text(T.testkorning) : null}
             </p>
 

@@ -3897,6 +3897,25 @@ class PostgresStorage:
             )
         return [_row(r) for r in records]
 
+    async def list_konversationer(self, tenant_id: str, thread_ids: list[str]) -> list[dict[str, Any]]:
+        if not thread_ids:
+            return []
+        async with self._scoped(tenant_id) as conn:
+            records = await conn.fetch(
+                """
+                select m.id, m.thread_id, m.direction, m.subject, m.body, m.sent_at
+                  from outreach_messages m
+                 where m.tenant_id = $1
+                   and m.thread_id = any($2::uuid[])
+                   and m.sent_at is not null
+                   and m.kasserad_at is null
+                 order by m.thread_id, m.sent_at, m.created_at, m.id
+                """,
+                tenant_id,
+                list(thread_ids),
+            )
+        return [_row(r) for r in records]
+
     async def list_outreach_messages(
         self, tenant_id: str, thread_id: str
     ) -> list[dict[str, Any]]:

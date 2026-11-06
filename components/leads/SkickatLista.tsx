@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 import { Badge, SkeletonRows, Tomt, btnPrimary, btnSecondary, chip, chipAktiv, chipInaktiv, chiplista, meta } from "@/components/ui";
 import { felmeddelande } from "@/lib/http/json";
 import { useLocale, type Localized } from "@/lib/i18n";
+import { delaCitat, senasteSvar, type KonversationsMejl } from "@/lib/leads/konversation";
 import { leadsAnrop, relativTid } from "@/lib/leads/suite";
 import { meddelaLeadsUppdaterade, sandtid } from "@/lib/leads/utkast";
 import { STATUS_ETIKETT } from "@/lib/prospekt";
@@ -31,6 +32,10 @@ import { MejlMedSignatur, type Signatur } from "@/components/leads/IrisGransknin
  * (snajp-support/app/leads/svar.py) och samtalsutfallen flyttar statusen, så
  * raden byter filter av sig själv: Väntar på svar (kontaktad), Svarat, Möte
  * (möte, vunnen) och Ej intresserad (förlorad, spärrad).
+ *
+ * Ett utskick som fått svar visar hela konversationen (Sebbe 2026-11-02):
+ * raden bär ett utdrag ur svaret, och utfälld står trådens mejl äldst först,
+ * utskicket och svaret, i stället för bara utskicket.
  */
 
 export type SkickatRad = {
@@ -52,6 +57,8 @@ export type SkickatRad = {
   svarat: boolean;
   /** Leadets nuvarande status (prospects.status). */
   status?: string | null;
+  /** Trådens skickade och inkomna mejl, äldst först. Bara när bolaget svarat. */
+  konversation?: KonversationsMejl[];
 };
 
 type Filter = "alla" | "schemalagt" | "vantar" | "svarat" | "mote" | "ej";
@@ -84,6 +91,88 @@ const PRICK: Record<string, string> = {
 
 function Antal({ aktiv, children }: Readonly<{ aktiv: boolean; children: React.ReactNode }>) {
   return <span className={cn("num tabular-nums", aktiv ? "text-paper-muted" : "text-ink-subtle")}>{children}</span>;
+}
+
+function tidpunkt(iso: string, locale: string): string {
+  return new Date(iso).toLocaleString(locale === "sv" ? "sv-SE" : "en-GB", {
+    dateStyle: "medium",
+    timeStyle: "short",
+    timeZone: "Europe/Stockholm"
+  });
+}
+
+/** Hela konversationen för ett utskick som fått svar: våra mejl så som
+ *  mottagaren såg dem (med signaturen), och svaren med det citerade mejlet
+ *  hopfällt, så att det vi skrev inte står två gånger. */
+function Konversation({ rad, signatur }: Readonly<{ rad: SkickatRad; signatur: Signatur | null }>) {
+  const { locale, text } = useLocale();
+  const mejl = rad.konversation ?? [];
+  // Följer en uppföljning i tråden: märk vilket av utskicken raden gäller.
+  const flerUtskick = mejl.filter((m) => m.direction === "outbound").length > 1;
+  const bolag = rad.company_name ?? rad.prospect_email ?? text({ sv: "bolaget", en: "the company" });
+  return (
+    <ol className="space-y-3" aria-label={text({ sv: "Konversationen", en: "The conversation" })}>
+      {mejl.map((m) => {
+        const inkommet = m.direction === "inbound";
+        const [svar, citat] = inkommet ? delaCitat(m.body) : ["", ""];
+        return (
+          <li
+            key={m.id}
+            className={cn(
+              "rounded-card border px-4 py-4 sm:px-5",
+              inkommet ? "border-chart-blue/30 bg-chart-blue/[0.06]" : "border-ink/12 bg-paper"
+            )}
+          >
+            <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+              <p className="min-w-0 break-words text-[0.875rem] font-semibold text-ink">
+                {inkommet
+                  ? text({ sv: `Svar från ${bolag}`, en: `Reply from ${bolag}` })
+                  : text({
+                      sv: `Vårt mejl till ${rad.prospect_email ?? bolag}`,
+                      en: `Our email to ${rad.prospect_email ?? bolag}`
+                    })}
+                {!inkommet && flerUtskick && m.id === rad.id ? (
+                  <span className="font-normal text-ink-subtle">
+                    {text({ sv: " · det här utskicket", en: " · this email" })}
+                  </span>
+                ) : null}
+              </p>
+              <time dateTime={m.sent_at} title={relativTid(m.sent_at, locale)} className={cn(meta, "num tabular-nums")}>
+                {tidpunkt(m.sent_at, locale)}
+              </time>
+            </div>
+            {!inkommet && m.subject ? (
+              <p className="mt-1 break-words text-[0.8125rem] text-ink-muted">
+                {text({ sv: "Ämne: ", en: "Subject: " })}
+                {m.subject}
+              </p>
+            ) : null}
+            {inkommet ? (
+              <>
+                <p className="mt-3 whitespace-pre-wrap break-words text-[0.9375rem] leading-7 text-ink">
+                  {svar || text({ sv: "Svaret har ingen text.", en: "The reply has no text." })}
+                </p>
+                {citat ? (
+                  <details className="mt-3">
+                    <summary className="focus-ring w-fit cursor-pointer rounded-input text-[0.8125rem] font-medium text-ink-muted hover:text-ink">
+                      {text({ sv: "Visa citerad text", en: "Show quoted text" })}
+                    </summary>
+                    <p className="mt-2 whitespace-pre-wrap break-words text-[0.875rem] leading-6 text-ink-muted">{citat}</p>
+                  </details>
+                ) : null}
+              </>
+            ) : (
+              <MejlMedSignatur
+                body={m.body}
+                signatur={signatur}
+                className="mt-3 whitespace-pre-wrap break-words text-[0.9375rem] leading-7 text-ink"
+              />
+            )}
+          </li>
+        );
+      })}
+    </ol>
+  );
 }
 
 export function SkickatLista({
@@ -416,6 +505,7 @@ export function SkickatLista({
             const oppnad = oppen === r.id;
             const nar = r.sent_at ? new Date(r.sent_at) : null;
             const skickas = r.schemalagt && r.skickas_tidigast ? sandtid(r.skickas_tidigast, locale) : "";
+            const svar = senasteSvar(r.konversation);
             return (
               <li key={r.id} className="py-3">
                 <div className="flex items-start gap-3">
@@ -447,6 +537,13 @@ export function SkickatLista({
                       <p className="mt-0.5 truncate text-[0.875rem] text-ink-muted">
                         {r.subject || text({ sv: "Utan ämnesrad", en: "No subject line" })}
                       </p>
+                      {svar ? (
+                        <p className="mt-0.5 truncate text-[0.875rem] text-ink">
+                          <span className="font-medium">{text({ sv: "Svar: ", en: "Reply: " })}</span>
+                          {delaCitat(svar.body)[0].replace(/\s+/g, " ") ||
+                            text({ sv: "Svaret har ingen text.", en: "The reply has no text." })}
+                        </p>
+                      ) : null}
                       <p className={cn(meta, "mt-0.5 truncate")}>
                         {/* Datum och klockslag på raden (Sebbe 2026-10-09: "se när det
                             skickades ut"), den relativa tiden i title. */}
@@ -493,36 +590,43 @@ export function SkickatLista({
                 </button>
                 </div>
                 {oppnad ? (
-                  <div className="mt-3 rounded-card border border-ink/12 bg-paper px-4 py-4 sm:px-5">
-                    <dl className="grid gap-1 text-[0.8125rem] sm:grid-cols-[auto_1fr] sm:gap-x-4">
-                      <dt className="text-ink-subtle">{text({ sv: "Till", en: "To" })}</dt>
-                      <dd className="break-all text-ink">{r.prospect_email ?? "–"}</dd>
-                      <dt className="text-ink-subtle">
-                        {r.schemalagt ? text({ sv: "Skickas", en: "Sends" }) : text({ sv: "Skickat", en: "Sent" })}
-                      </dt>
-                      <dd className="num tabular-nums text-ink">
-                        {nar
-                          ? nar.toLocaleString(locale === "sv" ? "sv-SE" : "en-GB", {
-                              dateStyle: "medium",
-                              timeStyle: "short",
-                              timeZone: "Europe/Stockholm"
-                            })
-                          : r.skickas_tidigast
-                            ? `${new Date(r.skickas_tidigast).toLocaleString(locale === "sv" ? "sv-SE" : "en-GB", {
-                                dateStyle: "medium",
-                                timeStyle: "short",
-                                timeZone: "Europe/Stockholm"
-                              })} ${text({ sv: "(nästa sändfönster, vardagar 08–16)", en: "(next sending window, weekdays 08–16)" })}`
-                            : "–"}
-                      </dd>
-                      <dt className="text-ink-subtle">{text({ sv: "Ämne", en: "Subject" })}</dt>
-                      <dd className="text-ink">{r.subject || "–"}</dd>
-                    </dl>
-                    <MejlMedSignatur
-                      body={r.body}
-                      signatur={signatur}
-                      className="mt-4 whitespace-pre-wrap break-words text-[0.9375rem] leading-7 text-ink"
-                    />
+                  // Fått svar: hela konversationen, varje mejl i sin egen ruta.
+                  <div className={cn("mt-3", !svar && "rounded-card border border-ink/12 bg-paper px-4 py-4 sm:px-5")}>
+                    {svar ? (
+                      <Konversation rad={r} signatur={signatur} />
+                    ) : (
+                      <>
+                        <dl className="grid gap-1 text-[0.8125rem] sm:grid-cols-[auto_1fr] sm:gap-x-4">
+                          <dt className="text-ink-subtle">{text({ sv: "Till", en: "To" })}</dt>
+                          <dd className="break-all text-ink">{r.prospect_email ?? "–"}</dd>
+                          <dt className="text-ink-subtle">
+                            {r.schemalagt ? text({ sv: "Skickas", en: "Sends" }) : text({ sv: "Skickat", en: "Sent" })}
+                          </dt>
+                          <dd className="num tabular-nums text-ink">
+                            {nar
+                              ? nar.toLocaleString(locale === "sv" ? "sv-SE" : "en-GB", {
+                                  dateStyle: "medium",
+                                  timeStyle: "short",
+                                  timeZone: "Europe/Stockholm"
+                                })
+                              : r.skickas_tidigast
+                                ? `${new Date(r.skickas_tidigast).toLocaleString(locale === "sv" ? "sv-SE" : "en-GB", {
+                                    dateStyle: "medium",
+                                    timeStyle: "short",
+                                    timeZone: "Europe/Stockholm"
+                                  })} ${text({ sv: "(nästa sändfönster, vardagar 08–16)", en: "(next sending window, weekdays 08–16)" })}`
+                                : "–"}
+                          </dd>
+                          <dt className="text-ink-subtle">{text({ sv: "Ämne", en: "Subject" })}</dt>
+                          <dd className="text-ink">{r.subject || "–"}</dd>
+                        </dl>
+                        <MejlMedSignatur
+                          body={r.body}
+                          signatur={signatur}
+                          className="mt-4 whitespace-pre-wrap break-words text-[0.9375rem] leading-7 text-ink"
+                        />
+                      </>
+                    )}
                     {provmejl ? (
                       <ProvmejlKnapp
                         className="mt-4"

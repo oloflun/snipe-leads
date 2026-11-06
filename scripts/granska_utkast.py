@@ -30,7 +30,7 @@ import psycopg2.extras  # noqa: E402
 from railway_migrate import dsn  # noqa: E402
 from railway_provision import env_read  # noqa: E402
 
-from app.leads import erbjudanden, stilkontroll as stil  # noqa: E402
+from app.leads import erbjudanden, stilkontroll as stil, utkaststruktur  # noqa: E402
 
 SQL = """
 select q.id queue_id, q.status, q.created_at, p.id prospect_id, p.company_name, p.contact_name, p.contact_email,
@@ -85,10 +85,15 @@ def main() -> int:
         produkt = next((p for p in produkter if stil.produktstam(p) and stil.produktstam(p) in brod), None)
         villkor = erbjudanden.villkor_for(villkor_alla.get(r["erbjudande"] or ""), produkt) if r["erbjudande"] else ""
         # Brödtexten utan kodens signatur och fot: det är den kedjan prövade.
-        fynd = stil.kontrollera(stil._brodtext(body)).anmarkningar
+        # Struktur B (utkaststruktur.py) prövas mot B:s regler, som i kedjan:
+        # frågan sist och bara villkorens första mening (kort_villkor).
+        struktur = "b" if utkaststruktur.ar_b(stil._brodtext(body)) else "a"
+        if struktur == "b":
+            villkor = utkaststruktur.kort_villkor(villkor) if "pilot" in brod else ""
+        fynd = stil.kontrollera(stil._brodtext(body), struktur=struktur).anmarkningar
         if r["erbjudande"]:
             fynd += stil.erbjudande_fynd(body, villkor=villkor, produkt=produkt or (produkter[0] if produkter else None))
-        fynd += stil.mot_andra(body, [*texter[:i], *texter[i + 1 :]])
+        fynd += stil.mot_andra(body, [*texter[:i], *texter[i + 1 :]], struktur=struktur)
         koder = [f.kod for f in fynd]
         raknare.update(koder)
         ut.append({

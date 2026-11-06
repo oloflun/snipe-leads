@@ -82,13 +82,15 @@ async def svep(app_state: Any, *, nu: datetime | None = None) -> list[str]:
             )
             if not ska_kora(regler, await storage.list_leads_korningar(tid, limit=20), nu):
                 continue
-            startade.append(await _starta(app_state, tenant, regler["autopilot"]["leads_per_dag"]))
+            startade.append(
+                await _starta(app_state, tenant, regler["autopilot"]["leads_per_dag"], struktur=regler["struktur"])
+            )
         except Exception:  # noqa: BLE001 — en kund stoppar inte de andra
             logger.exception("Autopiloten kunde inte starta en körning för %s.", tid)
     return startade
 
 
-async def _starta(app_state: Any, tenant: dict[str, Any], antal: int) -> str:
+async def _starta(app_state: Any, tenant: dict[str, Any], antal: int, *, struktur: str = "a") -> str:
     """Samma väg som POST /api/leads/runs/batch, märkt `autopilot`."""
     from ..api.leads import _run_batch
     from .budget import kontrollera_leads_budget
@@ -101,6 +103,8 @@ async def _starta(app_state: Any, tenant: dict[str, Any], antal: int) -> str:
         "kind": "batch", "job_id": job_id, "tenant_id": tid, "tenant_name": tenant.get("name") or "",
         "scope": "research_and_draft", "overrides": None, "is_test": False, "limit": antal,
         "company_names": [], "autopilot": True,
+        # Kundens val för automatiska körningar (automation.struktur, A/B).
+        "struktur": struktur,
     }
     strom = getattr(app_state, "leadsstrom", None)
     if strom is not None:

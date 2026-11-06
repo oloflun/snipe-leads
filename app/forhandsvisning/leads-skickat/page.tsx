@@ -14,6 +14,9 @@ import { LeadsTabell } from "@/components/leads/LeadsTabell";
  * bekräftelsen erbjuder att flytta över dem), stoppade utkast som går att
  * skicka igen, ett godkänt utkast som väntar på sändfönstret i Skickat, och
  * approve-svar med regel 1-stopp så att beskedet grupperas per orsak.
+ *
+ * 2026-11-02: de svarade utskicken bär konversationen (utskicket och svaret,
+ * ett med citerat originalmejl), så att Svarat visar svaren.
  */
 
 /** Regel 1:s besked, så som send_guard skriver det. */
@@ -51,6 +54,9 @@ const SIGNATURINSTALLNING = {
   text: SIGNATUR.split("\n").slice(1).join("\n")
 };
 
+const M2 = `Hej Anna,\n\nTvå nya montörer på kort tid. Då brukar frågan snart bli var nästa uppdrag kommer ifrån.\n\nHör av dig om du vill se ett exempel.\n\n${SIGNATUR}`;
+const M3 = `Hej,\n\nEn kort fråga om er nya verkstad.\n\n${SIGNATUR}`;
+
 const SKICKAT = [
   {
     id: "ko-q4",
@@ -81,26 +87,40 @@ const SKICKAT = [
   {
     id: "m2",
     subject: "Två nya montörer i Luleå",
-    body: `Hej Anna,\n\nTvå nya montörer på kort tid. Då brukar frågan snart bli var nästa uppdrag kommer ifrån.\n\nHör av dig om du vill se ett exempel.\n\n${SIGNATUR}`,
+    body: M2,
     sent_at: iso(26),
     prospect_id: "p2",
     company_name: "Exempelrör Norr AB",
     contact_name: "Anna",
     prospect_email: "anna@exempelror.example",
     svarat: true,
-    status: "replied"
+    status: "replied",
+    konversation: [
+      { id: "m2", direction: "outbound", subject: "Två nya montörer i Luleå", body: M2, sent_at: iso(26) },
+      {
+        id: "s2",
+        direction: "inbound",
+        subject: null,
+        body: `Hej Sebastian,\n\nLåter intressant. Kan du ringa mig på torsdag efter lunch?\n\nMvh Anna\n\nDen tors 22 okt. 2026 kl. 08:00 skrev Sebastian Bergman <sebastian@snajp.example>:\n${M2.split("\n").map((r) => `> ${r}`).join("\n")}`,
+        sent_at: iso(20)
+      }
+    ]
   },
   {
     id: "m3",
     subject: "Er nya verkstad",
-    body: `Hej,\n\nEn kort fråga om er nya verkstad.\n\n${SIGNATUR}`,
+    body: M3,
     sent_at: iso(80),
     prospect_id: "p7",
     company_name: "Testtak Väst AB",
     contact_name: null,
     prospect_email: "info@testtak.example",
     svarat: true,
-    status: "lost"
+    status: "lost",
+    konversation: [
+      { id: "m3", direction: "outbound", subject: "Er nya verkstad", body: M3, sent_at: iso(80) },
+      { id: "s3", direction: "inbound", subject: null, body: "Tack, men vi är inte intresserade just nu.", sent_at: iso(74) }
+    ]
   }
 ];
 
@@ -123,6 +143,13 @@ function installeraFetch() {
       // q3 och de flyttade provkörningsleadsen går ut; övriga stoppas av regel 1.
       const ok = ["q3", "q8", "q9"].some((q) => url.includes(`/queue/${q}/`));
       return svar(ok ? { utfall: "requeued" } : { utfall: "blocked", skal: SIDFOT, besked: `Stoppat av en sändspärr: ${SIDFOT}` });
+    }
+    // Skapa om utkast (2026-10-31): kontaktade leads med en väntande uppföljning
+    // köas, övriga kontaktade hoppas över.
+    if (url.includes("/leads/prospects/processa-om")) {
+      const ids: string[] = JSON.parse(String(init?.body ?? "{}")).prospect_ids ?? [];
+      const hoppade = ids.filter((id) => ["p1", "p2", "p6"].includes(id));
+      return svar({ count: ids.length - hoppade.length, hoppade_over: hoppade, pagar_redan: [] });
     }
     if (url.includes("/leads/prospects")) {
       return svar({ prospects: url.includes("bortvalda") || url.includes("arkiverade") ? [] : PROSPEKT });

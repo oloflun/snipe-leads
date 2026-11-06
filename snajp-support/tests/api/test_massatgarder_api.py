@@ -136,6 +136,66 @@ async def test_skapa_om_bara_utkast_ersatter_utan_ersatt_flaggan(monkeypatch):
         assert gammalt["queue_item"]["status"] == "cancelled" and gammalt["message"]["kasserad_at"]
 
 
+async def test_skapa_om_utkast_skriver_om_en_vantande_uppfoljning(monkeypatch):
+    """Sebbe 2026-10-31: ett kontaktat lead med en uppföljning som väntar på
+    granskning köas (den gamla ställs in av jobbet, inte här); ett kontaktat
+    lead utan väntande uppföljning hoppas över, liksom med full research."""
+    async with app.router.lifespan_context(app):
+        storage = app.state.storage
+        foljs_upp = await _lead(storage, "Uppfoljd AB")
+        await _skickat(storage, foljs_upp["id"])
+        vantande = await _utkast(storage, foljs_upp["id"], text="gammal uppföljning")
+        bara_skickat = await _lead(storage, "Bara Skickat AB")
+        await _skickat(storage, bara_skickat["id"])
+        koade: list[str] = []
+
+        async def fejk_lagg(app_state, tenant, prospects, **kw):
+            koade.extend(p["id"] for p in prospects)
+            return [{"job_id": f"j-{p['id']}", "prospect_id": p["id"]} for p in prospects]
+
+        monkeypatch.setattr(leads_api, "_require_live_llm", lambda: None)
+        monkeypatch.setattr(leads_api, "_lagg_prospektjobb", fejk_lagg)
+        ids = [foljs_upp["id"], bara_skickat["id"]]
+        async with _klient() as klient:
+            svar = await klient.post("/api/leads/prospects/processa-om", headers=DEMO,
+                                     json={"prospect_ids": ids, "scope": "utkast"})
+            research = await klient.post("/api/leads/prospects/processa-om", headers=DEMO,
+                                         json={"prospect_ids": ids, "scope": "research_and_draft", "ersatt": True})
+        assert svar.status_code == 202, svar.text
+        assert koade == [foljs_upp["id"]] and svar.json()["hoppade_over"] == [bara_skickat["id"]]
+        assert vantande["queue_item"]["status"] == "awaiting_review"
+        assert research.json()["hoppade_over"] == ids and koade == [foljs_upp["id"]]
+
+
+async def test_utkastjobbet_for_ett_kontaktat_lead_skriver_uppfoljningen(monkeypatch):
+    import app.leads.follow_up_generator as generatorn
+
+    async with app.router.lifespan_context(app):
+        storage = app.state.storage
+        lead = await _lead(storage, "Jobbad AB")
+        await _skickat(storage, lead["id"])
+        anrop: list[dict] = []
+
+        async def fejk_skriv_om(storage_, tenant_id, trad, **kw):
+            anrop.append(trad)
+            return {"thread_id": trad["id"], "queued": True, "subject": "Support 24/7 för era kunder",
+                    "produkt": "Supportagenten"}
+
+        async def ingen_forsta(*a, **k):
+            raise AssertionError("ett kontaktat lead får inget nytt första mejl")
+
+        monkeypatch.setattr(generatorn, "skriv_om_uppfoljning", fejk_skriv_om)
+        monkeypatch.setattr(leads_api, "_valj_leads_kedja", lambda: (ingen_forsta, ingen_forsta))
+        job_id = await app.state.jobs.create(tenant_id=T, status="queued")
+        await leads_api._run_batch_prospect(
+            app.state, job_id, {"tenant_id": T, "tenant_name": "Demo AB"}, prospect_id=lead["id"], scope="utkast"
+        )
+        assert [t["outbound_sent_count"] for t in anrop] == [1]
+        jobb = await app.state.jobs.get(job_id)
+        assert jobb["status"] == "completed" and jobb["result"]["uppfoljning"] is True
+        assert (await storage.utkastjobb_lage(T))[str(lead["id"])]["status"] == "completed"
+
+
 async def test_skapa_utkast_har_inget_tak():
     """Anton 2026-10-12: inget tak på antal markerade i någon liståtgärd."""
     from app.api.schemas import ProcessaOmRequest

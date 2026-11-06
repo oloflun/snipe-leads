@@ -8,6 +8,7 @@ import { paletteToCss } from "@/lib/tenants";
 import { arProduktion } from "@/lib/miljo";
 import { getCurrentTenant } from "@/lib/tenants/server";
 import { KANONISK_ORIGIN } from "@/lib/kanonisk";
+import { DELNING } from "@/lib/seo";
 import { InstalleraApp } from "@/components/InstalleraApp";
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -44,6 +45,19 @@ export async function generateMetadata(): Promise<Metadata> {
       "Snajp skriver säljmejlen och svarar på kundmejlen. Två verktyg, en arbetsyta. Testa båda direkt i webbläsaren.",
     metadataBase: new URL(KANONISK_ORIGIN),
     robots,
+    // Delningskortet för alla Snajps sidor; titel och beskrivning fyller Next
+    // i ur varje sidas egen metadata (lib/seo.ts, DELNING). Ingen `url` här:
+    // den hade ärvts av varje sida och pekat delningen på fel adress.
+    ...DELNING,
+    // Verifieringen hos Google Search Console och Bing Webmaster Tools. Värdet
+    // är tokenet tjänsten visar vid "HTML-tagg"; sätts som miljövariabel i
+    // Railways main, så att det inte krävs en kodändring per tjänst. Osatt
+    // skrivs ingen tagg alls. Inte hemligt, men det hör till kontot och inte
+    // till koden.
+    verification: {
+      google: process.env.GOOGLE_SITE_VERIFICATION || undefined,
+      other: process.env.BING_SITE_VERIFICATION ? { "msvalidate.01": process.env.BING_SITE_VERIFICATION } : undefined
+    },
     manifest: "/manifest.webmanifest",
     icons: {
       // Bara SVG:n här. icon-192.png har med flit en ogenomskinlig

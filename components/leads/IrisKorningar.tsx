@@ -46,6 +46,8 @@ export type Korning = {
   flaskhals?: string | null;
   sammanfattning?: string | null;
   scope?: string;
+  /** Utkastens struktur (A/B, Sebbe 2026-11-05); saknas i äldre körningar = A. */
+  struktur?: "a" | "b";
   tratt?: Tratt[];
   jobs?: Jobb[];
   /** Kundens styrning: satt av pausa/avbryt, borta när körningen går. */
@@ -247,9 +249,12 @@ function nar(iso: string | null, locale: Locale): string {
 export function korningsTyp(rad: KorningsRad): Localized {
   if (rad.scope === "lista") return { sv: "Leadslista", en: "Lead list" };
   if (!rad.korning) return { sv: "Egna bolag", en: "Own companies" };
-  return rad.korning.scope === "research_and_draft"
-    ? { sv: "Iris · research och utkast", en: "Iris · research and drafts" }
-    : { sv: "Iris · research", en: "Iris · research" };
+  if (rad.korning.scope !== "research_and_draft") return { sv: "Iris · research", en: "Iris · research" };
+  // Strukturen syns på körningen, så att det går att följa vilka utkast som
+  // skrevs i A och vilka i B.
+  return rad.korning.struktur === "b"
+    ? { sv: "Iris · research och utkast, struktur B", en: "Iris · research and drafts, structure B" }
+    : { sv: "Iris · research och utkast, struktur A", en: "Iris · research and drafts, structure A" };
 }
 
 /** Pågår? Både liggarens status och motorns eget `klar` räknas: raden kan

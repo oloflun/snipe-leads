@@ -9,6 +9,186 @@ möjligt), vad det betyder i koden.
 
 ---
 
+## 2026-11-05 (Sebbe) — Utskicksstruktur A och B, vald vid Kör Iris
+
+**Beslut.** Iris första mejl får två strukturer. "A är det vi har nu som vi
+skickar ut, strukturen alltså. Men B ska vara det nya lite snabbare och direkt
+på", efter ett engelskt mejl på tre rader ("If I could … would that be
+useful?"). Valet görs med en knapp A/B när man trycker Kör Iris, och texten i
+utskicken till körningens nya leads följer valet. B utgår från de tre
+exemplen per agent (Iris och Supportagenten): bara frågan, en rad om dem och
+frågan, eller med piloten. Siffran för Iris är "40–50 i veckan".
+
+**Resonemang.** Sebbes ord: reglerna att mejlet aldrig slutar med en fråga och
+att piloten står i varje mejl "gäller bara en förändring i nya B
+alternativ-utskicken": A står kvar som den är. Och: "Det ska vara med samma
+signatur och logga som för A … lika anpassningsbar beroende på företag den
+skickar till … samma disclaimer text längst ner … samma typsnitt i texten och
+färg på texterna. Få in det som rutin (viktigt) för alla utskick som görs för
+B … Det ska ha samma funktion rent administrativt som A men såklart
+annorlunda text."
+
+**I koden.** `app/leads/utkaststruktur.py` (blocket, förebilderna, varianterna
+och `tidigare`), `run_outreach_draft_v2(struktur=…)`, stilgrinden med B:s
+regler (`stilkontroll.kontrollera/mot_andra(struktur=…)`: B ska sluta med sin
+fråga, högst 60 ord), `LeadsBatchRequest.struktur` → körningens tillstånd →
+varje barnjobb, `ProcessaOmRequest.struktur` (utelämnad = leadets förra
+struktur, så att Skapa om utkast behåller B), kundens korta utfall per produkt
+(`erbjudanden.kort_utfall`, Snajps i `scripts/snajp_malgrupp.py`) och väljaren
+i `components/leads/LeadsRunForm.tsx`. B köas genom samma
+`_queue_outreach_draft_impl` som A, och signatur, logga, fot och
+HTML-rendering är därför desamma. `tests/leads/test_utkaststruktur_b.py`
+låser det: svansen efter brödtexten är byte-identisk med A:s och
+stilsättningen i HTML:en densamma. A:s facit (INV-LEADS-UTKAST-002) passerar
+oförändrat. Erbjudandets "form B (frågan)" är något annat: en variant av A:s
+erbjudandestycke, inte struktur B. Anton ska informeras om B.
+
+**Andra varvet, samma dag (Sebbe: "Se till att allt fungerar lika bra för
+alternativ B som alternativ A … alla knappar och funktioner").** B finns nu
+överallt där ett första mejl skrivs: Kör Iris, "Skapa utkast" på bolagssidan,
+i Iris bolagslista och för valda i registret, "Bearbeta om", Skriv körningens
+utkast, autopiloten och Flytta/Pröva mot Iris (de två sista via
+`automation.struktur`, "Mejlens struktur i automatiska körningar").
+Väljaren är en komponent (`components/leads/StrukturVal.tsx`) med samma
+minne överallt. Email Studios knappar (Förbättra, Skriv om, Personalisera,
+Kortare, A/B-varianter, Översätt) behåller B-formen när mejlet är ett B-mejl
+(`lib/leads/struktur.ts:arStrukturB`), och körningslistan visar strukturen.
+Provet i development: B-varianten med piloten blev 53–76 ord och upprepade
+sig, så piloten är nu en mening med agenten först, villkorens första mening
+utan "Handling" (`utkaststruktur.kort_villkor`), och mejlen fördelas i
+tredjedelar som förebilderna. Listspårets generella utkast (`listutkast.py`)
+har ingen A/B: det är inte Iris första mejl.
+
+---
+
+## 2026-11-05 (Sebbe) — En hängd api-process avslutar sig själv
+
+**Beslut.** "Lös det du!! vad som än krävs", efter att www.snajp.se visade
+"Assistenten har svårt att nå sin motor" på varje flik. Om api:s händelseloop
+står still i 120 s skriver processen ut alla trådars stack och avslutar sig,
+så att Railway startar om den.
+
+**Resonemang.** Produktions-API:t tog emot anslutningar men svarade inte ens på
+`/health`, som inte rör databas eller Redis. Processen stod alltså still. Railway
+startar om en process som dör, inte en som hänger, och utan en fungerande token
+kunde ingen härifrån starta om den. Loopvakten loggade redan stacken vid stopp,
+men den startade aldrig om processen. Den kan inte heller köra medan en regex
+håller GIL:en. Det är en sämre affär att avbryta en pågående körning (väckaren
+tar upp den igen) än att låta sajten ligga nere tills någon märker det.
+
+**I koden.** `app/loopvakt.py:starta_dodsvakt` (`faulthandler` i en C-tråd, når
+fram trots GIL:en), `settings.loopvakt_dod_s` (120, 0 = av), startas i
+`lifespan` och stoppas när den stängs. Tester: `tests/test_dodsvakt.py`.
+
+---
+
+## 2026-11-05 (Anton) — Sökordssidor, strukturerad data och priser som följer prislistan
+
+**Beslut.** "På Snajp som sökord är vi etta med flera toppresultat och en bra
+AI-sammanfattning, men i alla övriga sökord för vår verksamhet dyker vi inte upp
+någonstans." Snajp ska synas på breda ord (leads, support, AI-agent), högre på
+"svensk support" och "svenska leads", och högst på det specifika: "b2b-leads",
+"svensk AI SDR", "leadsagent", "supportagent", "supportbot", "företagssupport".
+Sidlänkar med namn som "Support på svenska", "Svenska B2B-leads", "Svensk
+AI-SDR", "Svensk supportchatt till er hemsida" och "Svenska leads i inkorgen".
+Samma dag: "Se till att priserna automatiskt uppdateras i länkarna vid ändring
+på hemsidan."
+
+**Resonemang.** Sajten hade tre produktadresser, ingen med sökordet i titeln och
+ingen med en H1 (hjälterubriken var ett stycke). FAQ:ns svar togs ur HTML:en när
+de var hopfällda, så en crawler fick bara frågorna. Ingen strukturerad data,
+ingen delningsbild, ingen llms.txt. En sida rankar inte på en fråga den aldrig
+ställer, och en AI-assistent citerar inte ett svar den inte kan läsa. Varje
+sökordssida svarar på EN fråga med eget innehåll (inte åtta kopior, som Googles
+regler om doorway-sidor fäller), och priserna räknas ur prislistan så att en
+sökträff aldrig visar ett gammalt pris.
+
+**I koden.**
+- Åtta sökordssidor (`lib/landningar.ts` registret, `lib/landningssidor.ts`
+  innehållet, `components/marketing/Landningssida.tsx` mallen, en mapp per sida
+  under `app/`). Länkade från sidfoten på varje publik sida och i sitemapen.
+- Nya titlar och beskrivningar på `/`, `/leads`, `/support`, `/faq`,
+  `/vart-team` och `/boka-demo` via `lib/seo.ts:sidmeta`, med Open Graph och
+  delningsbilden `public/og/snajp.jpg` (utan pris, `scripts/generera_og.py`).
+- JSON-LD (`components/JsonLd.tsx`): Organization och WebSite på startsidan,
+  SoftwareApplication med pris ur `lib/pricing.ts`, FAQPage och BreadcrumbList.
+- Hjälterubriken är en h1; FAQ-svaren står i HTML:en med `hidden`.
+- `/llms.txt` (`lib/llms.ts`) för AI-assistenter, byggd ur samma källor.
+- IndexNow: nyckelfil i `public/`, `scripts/indexnow.py` och
+  `.github/workflows/indexnow.yml`, som efter varje push till main väntar tills
+  sajten visar priserna i `lib/pricing.ts` och sökordssidorna i
+  `lib/landningar.ts`, och sedan anmäler alla adresser.
+- Prisfraserna (`PER_MANAD`, `BINDNING`) bor i `lib/pricing.ts` bredvid
+  beloppen, så att även bindningstiden i en sökträff följer prislistan.
+- `GOOGLE_SITE_VERIFICATION` och `BING_SITE_VERIFICATION` (Railway, main) ger
+  verifieringstaggarna utan kodändring.
+- INV-SEO-001 fäller en sökordssida utan mapp, schema eller tenantspärr, en
+  titel över 60 tecken och ett handskrivet kronbelopp i det som bär pris ut.
+- Plan för det som inte är kod (Search Console, Bing, kataloger, listor, mätning
+  med OpenSEO): `docs/SEO.md`.
+
+## 2026-11-02 (Sebbe) — Skickat visar hela konversationen för ett svarat utskick
+
+**Beslut.** "Under 'svarat' ska man se svaren på våra utskick, inte bara
+utskicken som det är nu, utan man ska se hela konversationen = (utskicket och
+svaret på utskicket)."
+
+**Resonemang.** Filtret Svarat i Leads › Inkorg › Skickat visade bara mejlet vi
+skickat. Svaret fanns redan sparat i tråden (`record_inbound_reply`, alla fyra
+svarade leads i development har det), men ingen vy i Skickat läste det, så den
+som öppnade ett svarat lead fick inte veta vad bolaget svarat.
+
+**I koden.**
+- `GET /api/leads/skickat` lägger `konversation` på varje rad vars tråd fått
+  svar: trådens skickade och inkomna mejl äldst först
+  (`storage.list_konversationer`); osända och kasserade utkast hör inte dit.
+- `SkickatLista` visar ett utdrag ur svaret på raden och, utfälld, utskicket
+  med signaturen följt av svaret i en egen ruta. Det citerade originalmejlet i
+  ett svar fälls ihop (`lib/leads/konversation.ts:delaCitat`), så att vår text
+  inte står två gånger. Gäller i alla filter, även ett autosvar under Väntar på
+  svar.
+
+## 2026-10-31 (Sebbe) — Uppföljningarna bär erbjudandet, ämnesraderna och stilgrinden
+
+**Beslut.** "Ingen ändring har ju skett i main? Du måste uppdatera alla mail
+under 'ny' och 'alla'." Efter att de 125 väntande första mejlen i main skrivits
+om med piloten: "Ja, bygg om dem", alltså uppföljningskedjan och de 418
+väntande uppföljningarna.
+
+**Resonemang.** Granskningskön visar uppföljningar bredvid första mejlen, och
+de 418 i main bar fortfarande det gamla: "svara 'pilot' så berättar jag mer",
+"era fem vanligaste kundfrågor" och 20 minuters samtal. 174 hade bolagets
+namn i ämnesraden, 116 slutade med en fråga och 62 blandade du och ni.
+Uppföljningskedjan läste bara trådens tidigare mejl, så den fick aldrig
+erbjudandet, ämnesraderna eller stilgrinden som första mejlet fått sedan
+2026-10-25 och 10-29. En omskrivning utan att bygga om kedjan hade gett samma
+mejl igen.
+
+**I koden.**
+- `follow_up_generator._en_uppfoljning` väljer produkten (researchens, annars
+  den trådens skickade mejl nämner först; `erbjudanden.produkt_nu` hittar nu
+  också "Vår Supportagent" och "vår AI-support") och kundens erbjudande för
+  den (`erbjudanden.for_trad`). Villkoren står i ärendet
+  (`erbjudanden.uppfoljningsblock`, uppföljningens korta form, inte formen
+  A/B) och i faktagrindens underlag. Tilltalet avgörs i kod som i första
+  mejlet. Ämnesraden väljs ur kundens lista och inte en som tråden redan
+  burit, och "upp till" står kvar.
+- Samma stilgrind som första mejlet: en omskrivning före humanizern och högst
+  två varv efter, och versionen med minst fynd köas. Mätt på de 418 gamla är
+  fynden verkliga fel också i en uppföljning, så inga fler än
+  `lang_mening`/`samma_uppmaning` är undantagna.
+- Overlayen `leads-followup.md`: erbjudandet står med, avslutet är dess
+  handling och aldrig en fråga, och ämnesraden saknar bolagsnamn och produkt.
+- Skapa om utkast (`processa-om`, `scope="utkast"`) skriver om ett kontaktat
+  leads väntande uppföljning i stället för att hoppa över leadet
+  (`_run_uppfoljningsjobb`, `skriv_om_uppfoljning`). Det gamla utkastet ställs
+  in först när det nya passerat grindarna, så ett stoppat nytt lämnar det
+  gamla kvar. Timsvepet hoppar över ett lead vars utkast skrivs om, annars
+  kunde det skriva en andra uppföljning i samma tråd. Leads utan väntande
+  uppföljning hoppas över som förut, liksom full research.
+
+---
+
 ## 2026-10-30 (Sebbe) — Snajps Iris: upp till 200 anställda, ingen webbplats krävs, men ett riktigt företag som behöver kunder
 
 **Beslut.** "Utskicken som Iris (Snajp) väljer bort som bortvalda måste

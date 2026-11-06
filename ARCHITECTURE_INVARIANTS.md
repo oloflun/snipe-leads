@@ -761,6 +761,23 @@ I18N, eftersom meta-testet bara parsar områden utan siffror.
 Test: tests/invariants/test_inv_copy_001.py
 Införd: 2026-10-02 · Upphävs endast genom waiver
 
+### INV-SEO-001 — Sökordssidorna hänger ihop och priserna i länkarna räknas ur prislistan
+Varje post i `lib/landningar.ts` har en mapp under `app/` med tenantspärr,
+`sidmeta`, JSON-LD och innehåll i `lib/landningssidor.ts`, och sitemapen läser
+registret. Varje sidas titel är unik, högst 60 tecken och utan tankstreck;
+beskrivningen 70 till 160 tecken. Inget kronbelopp skrivs för hand i sidornas
+metadata, sökordssidornas innehåll, schemat eller llms.txt: det räknas ur
+`lib/pricing.ts` (`prisrad`, `paketpris`, `formateraPris`). Hjälterubriken på
+`/`, `/leads` och `/support` är en h1, och FAQ:ns svar står i HTML:en även
+hopfällda.
+Varför: Anton 2026-11-05. Snajp syntes bara på sökordet "snajp": tre produkt-
+adresser utan sökord i titeln, ingen H1 och FAQ-svar som saknades i det en
+crawler läser. Samma dag: priserna i länkarna ska uppdateras av sig själva när
+de ändras på hemsidan, och ett handskrivet belopp i en metabeskrivning är just
+det som inte gör det.
+Test: tests/invariants/test_inv_seo_001.py
+Införd: 2026-11-05 · Upphävs endast genom waiver
+
 ### INV-LEADS-SCORE-001 — Ett researchat bolag har alltid poäng, nivå och motivering
 Efter research skriver `storage.spara_bedomning` (migration 079) på
 prospektraden: `score_total`, minst en `score_breakdown`-rad med motivering,

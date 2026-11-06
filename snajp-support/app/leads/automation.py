@@ -37,6 +37,10 @@ STANDARD: dict[str, Any] = {
     # Autopiloten (leads/autopilot.py, Anton 2026-10-10): en Iris-körning per
     # vardag med så många leads. Av som standard.
     "autopilot": {"pa": False, "leads_per_dag": 10},
+    # Utkastens struktur (A/B, app/leads/utkaststruktur.py) i körningar som
+    # ingen startar med Kör Iris: autopiloten och Flytta/Pröva mot Iris
+    # (Sebbe 2026-11-05: "alla knappar och funktioner för alternativ B").
+    "struktur": "a",
 }
 
 MAX_DAGAR = 60
@@ -50,6 +54,8 @@ def normalisera(ratt: Any) -> dict[str, Any]:
         return regler
     if isinstance(ratt.get("jev_bortval"), bool):
         regler["jev_bortval"] = ratt["jev_bortval"]
+    if ratt.get("struktur") in ("a", "b"):
+        regler["struktur"] = ratt["struktur"]
     ap = ratt.get("autopilot")
     if isinstance(ap, dict):
         if isinstance(ap.get("pa"), bool):

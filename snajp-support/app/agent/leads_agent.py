@@ -1064,6 +1064,10 @@ async def run_outreach_draft(
     # rätt form. Ingen har uttryckt det behovet 2026-08-14.
     research_evidence: tuple[str, ...] = (),
     is_test: bool = False,
+    # Utkastets struktur (A/B, app/leads/utkaststruktur.py) finns bara i V2,
+    # som går i drift. V1 tar emot värdet så att batchvägen kan anropa båda
+    # kedjorna likadant, och skriver alltid A.
+    struktur: str = "a",
 ) -> dict[str, Any]:
     """Fas C: fyra skill-steg, sedan köar KODEN utkastet (INV-SEC-004 —
     modellen har inget sändverktyg och kan inte köa själv)."""

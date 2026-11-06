@@ -58,6 +58,15 @@ YTOR = [
     *sorted((ROOT / "components" / "crm").rglob("*.tsx")),
     *sorted((ROOT / "components" / "auth").rglob("*.tsx")),
     ROOT / "lib" / "demo" / "sektioner.ts",
+    # Sökordssidorna (INV-SEO-001): innehållet, registret och en mapp per post i
+    # registret, läst ur lib/landningar.ts så att en ny sida inte kan glömmas här.
+    ROOT / "lib" / "landningssidor.ts",
+    ROOT / "lib" / "landningar.ts",
+    *sorted(
+        p
+        for vag in _syskon("test_inv_seo_001")._landningar()
+        for p in (ROOT / "app" / vag.strip("/")).rglob("*.tsx")
+    ),
 ]
 
 #: Ordböcker och fixturdata är svenska med flit, eller bär sina par i en annan form.

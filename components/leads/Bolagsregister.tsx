@@ -1,6 +1,7 @@
 "use client";
 
 import { AlertTriangle } from "lucide-react";
+import { StrukturVal, useStruktur } from "@/components/leads/StrukturVal";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { useArbetsvag } from "@/components/AppShell";
@@ -468,6 +469,10 @@ export function Bolagsregister({ demo = false }: Readonly<{ demo?: boolean }>) {
    * innan anropet görs, så att den raden syns som "saknar adress" i stället
    * för att hela satsen misslyckas på fältet som saknades för just den raden.
    */
+  // Utkastens struktur (A/B) för "Skapa utkast" och "Bearbeta om", samma
+  // val och minne som Kör Iris.
+  const [struktur, valjStruktur] = useStruktur();
+
   const skapaUtkastForValda = useCallback(async () => {
     if (lage.fas !== "klar") return;
     const kandidater = lage.prospekt.filter((p) => valda.has(p.id));
@@ -518,7 +523,8 @@ export function Bolagsregister({ demo = false }: Readonly<{ demo?: boolean }>) {
                 sv: `Skriv ett kort, personligt första mejl till kontaktpersonen på ${p.company_name}. Utgå ifrån poängmotiveringen i researchunderlaget och håll dig till det som redan är känt. Ingen hype, inga superlativ, ren text. Utkastet ska köas för granskning, inte skickas.`,
                 en: `Write a short, personal first email to the contact at ${p.company_name}. Start from the score rationale in the research and stick to what is already known. No hype, no superlatives, plain text. The draft is queued for review, not sent.`
               }),
-              research_summary: byggForskningssammanfattning(p)
+              research_summary: byggForskningssammanfattning(p),
+              struktur
             })
           });
           const kropp = await readJsonBody<{
@@ -572,7 +578,7 @@ export function Bolagsregister({ demo = false }: Readonly<{ demo?: boolean }>) {
     } finally {
       setGenererarUtkast(false);
     }
-  }, [lage, valda]);
+  }, [lage, valda, struktur]);
 
   const processaOmValda = useCallback(async () => {
     if (lage.fas !== "klar") return;
@@ -601,7 +607,8 @@ export function Bolagsregister({ demo = false }: Readonly<{ demo?: boolean }>) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           prospect_ids: kandidater.map((p) => p.id),
-          scope: "research_and_draft"
+          scope: "research_and_draft",
+          struktur
         })
       });
       const kropp = await readJsonBody<{
@@ -660,7 +667,7 @@ export function Bolagsregister({ demo = false }: Readonly<{ demo?: boolean }>) {
     } finally {
       setProcessarOm(false);
     }
-  }, [lage, valda, hamta, text]);
+  }, [lage, valda, hamta, text, struktur]);
 
   if (lage.fas === "laddar") {
     return <SkeletonRows />;
@@ -738,6 +745,14 @@ export function Bolagsregister({ demo = false }: Readonly<{ demo?: boolean }>) {
                   ? text({ sv: "Bearbetar om…", en: "Reprocessing…" })
                   : text({ sv: `Bearbeta om (${valda.size})`, en: `Reprocess (${valda.size})` })}
               </button>
+              {/* A eller B för utkasten ovan (Sebbe 2026-11-05). */}
+              <StrukturVal
+                value={struktur}
+                onChange={valjStruktur}
+                beskrivning={false}
+                disabled={genererarUtkast || processarOm}
+                className="basis-full"
+              />
             </div>
           ) : (
             <span />

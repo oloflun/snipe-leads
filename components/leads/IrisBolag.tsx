@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { EmailStudioEditor } from "@/components/email/EmailStudioEditor";
 import { MejlSvans, type Signatur } from "@/components/leads/IrisGranskning";
+import { StrukturVal, useStruktur } from "@/components/leads/StrukturVal";
 import { Tidslinje } from "@/components/leads/Tidslinje";
 import { SkeletonRows, btnPrimary, btnSecondary, flik, flikAktiv, flikInaktiv, fliklista } from "@/components/ui";
 import { mejlaOss } from "@/components/marketing/copy";
@@ -547,6 +548,9 @@ export function LeadDetail({
     };
   }, [id, demo, exempel, forsok]);
 
+  // Utkastets struktur (A/B), samma val och minne som Kör Iris.
+  const [struktur, valjStruktur] = useStruktur();
+
   const skapaUtkastFor = useCallback(async (p: Prospekt) => {
     setUtkastLage({ fas: "skapar" });
     try {
@@ -572,7 +576,8 @@ export function LeadDetail({
             sv: `Skriv ett kort, personligt första mejl till kontaktpersonen på ${p.company_name}. Utgå ifrån poängmotiveringen i researchunderlaget och håll dig till det som redan är känt. Ingen hype, inga superlativ, ren text. Utkastet ska köas för granskning, inte skickas.`,
             en: `Write a short, personal first email to the contact person at ${p.company_name}. Start from the score reasoning in the research and stick to what is already known. No hype, no superlatives, plain text. The draft is queued for review, not sent.`
           }),
-          research_summary: byggForskningssammanfattning(p)
+          research_summary: byggForskningssammanfattning(p),
+          struktur
         })
       });
 
@@ -639,7 +644,7 @@ export function LeadDetail({
     } catch (error) {
       setUtkastLage({ fas: "fel", meddelande: samma(felmeddelande(error)) });
     }
-  }, [locale, text]);
+  }, [locale, text, struktur]);
 
   const skapaUtkast = useCallback(async () => {
     if (lage.fas !== "klar" || demo || exempel) return;
@@ -834,6 +839,8 @@ export function LeadDetail({
           ) : (
             <div className="mt-3">
               <p className="text-[14px] leading-6 text-ink-muted">{text(T.ingetUtkast)}</p>
+              {/* A eller B (Sebbe 2026-11-05): samma val som vid Kör Iris. */}
+              <StrukturVal value={struktur} onChange={valjStruktur} className="mt-4" />
               <button type="button" onClick={() => void skapaUtkast()} className={cn(btnPrimary, "mt-4")}>
                 {text(T.skapaUtkast)}
               </button>

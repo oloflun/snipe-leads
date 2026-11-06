@@ -538,6 +538,13 @@ class Storage(Protocol):
         (Sebbe 2026-10-07). `last_inbound_at` säger om bolaget svarat."""
         ...
 
+    async def list_konversationer(self, tenant_id: str, thread_ids: list[str]) -> list[dict[str, Any]]:
+        """Trådarnas skickade och inkomna meddelanden (id, thread_id,
+        direction, subject, body, sent_at), äldst först per tråd — Skickat
+        visar hela konversationen för ett utskick som fått svar (Sebbe
+        2026-11-02). Osända och kasserade utkast är inte en del av samtalet."""
+        ...
+
     async def list_replies(self, tenant_id: str, *, limit: int = 50) -> list[dict[str, Any]]:
         """Inkomna svar över ALLA trådar, senast först — arbetsytans Svar-flik.
 

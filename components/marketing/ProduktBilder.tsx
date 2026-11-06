@@ -521,6 +521,19 @@ const FALT: Record<ProductKey, [Falt, Falt]> = {
   ]
 };
 
+/**
+ * Ytorna en och en, för sökordssidorna (components/marketing/Landningssida.tsx).
+ * Kvittoytorna står inte med: tillägget säljs inte och har ingen sökordssida.
+ */
+export const PRODUKTYTOR = {
+  widget: WidgetYta,
+  inkorg: InkorgYta,
+  irisLista: IrisListYta,
+  irisUtkast: IrisUtkastYta
+} satisfies Record<string, Yta>;
+
+export type ProduktYta = keyof typeof PRODUKTYTOR;
+
 export const EXEMPELRAD: Localized = {
   sv: "Ytorna ovan är produktens egna, återgivna med exempeldata.",
   en: "The surfaces above are the product's own, shown with example data."

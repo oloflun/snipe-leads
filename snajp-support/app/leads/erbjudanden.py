@@ -212,15 +212,23 @@ def produkt_nu(
     researchens gamla erbjudandeförslag ("prova gratis i två månader") och
     varken piloten eller ämnesraderna kom med. Ordningen: samma namn, samma
     kortform före kommat, det ena namnet början på det andra, samma slag av
-    Snajps agenter; utan namn det första produktnamnet som står i `text`; och
-    har kunden bara en produkt är det den."""
-    from .stilkontroll import produktslag
+    Snajps agenter; utan namn det första produktnamnet som står i `text`
+    (stammen, så att "Vår Supportagent" räknas), sedan det först nämnda slaget
+    av Snajps agenter ("vår AI-support"); och har kunden bara en produkt är
+    det den. Uppföljningarna läser produkten ur trådens skickade mejl så
+    (Sebbe 2026-10-31): 127 av 418 väntande i main nämnde ingen produkt med
+    dess fulla namn."""
+    from .stilkontroll import produktslag, produktstam
 
     if not produkter:
         return None
 
     def kort(s: str) -> str:
         return s.split(",")[0].strip().casefold()
+
+    def i_text(p: dict[str, str]) -> str:
+        stam = produktstam(p["namn"])
+        return stam if len(stam) >= 4 else kort(p["namn"])
 
     if namn and namn.strip():
         n = namn.strip().casefold()
@@ -235,12 +243,23 @@ def produkt_nu(
                 return traff
     lag = (text or "").casefold()
     forst = sorted(
-        ((lag.find(kort(p["namn"])), p) for p in produkter if kort(p["namn"]) and kort(p["namn"]) in lag),
+        ((lag.find(i_text(p)), p) for p in produkter if i_text(p) and i_text(p) in lag),
         key=lambda t: t[0],
     )
     if forst:
         return forst[0][1]
+    slag = sorted(
+        ((m.start(), p) for p in produkter if produktslag(p["namn"])
+         for m in [_SLAGORD[produktslag(p["namn"])].search(lag)] if m),
+        key=lambda t: t[0],
+    )
+    if slag:
+        return slag[0][1]
     return produkter[0] if len(produkter) == 1 else None
+
+
+#: Orden som bär Snajps agenters slag i en text utan produktnamnet.
+_SLAGORD = {"support": re.compile(r"support"), "leads": re.compile(r"\biris\b|\bleads")}
 
 
 def normalisera(raw: Any) -> dict[str, Any]:
@@ -272,7 +291,43 @@ def normalisera(raw: Any) -> dict[str, Any]:
             vikt = 1
         aktiva.append({"nyckel": rad["nyckel"], "vikt": min(max(vikt, 0), VIKT_MAX)})
     amnen = _amnena(raw.get("amnen"))
-    return {"aktiva": aktiva, "villkor": villkor, "egna": egna, **({"amnen": amnen} if amnen else {})}
+    kort = _kort_utfall(raw.get("kort_utfall"))
+    return {
+        "aktiva": aktiva, "villkor": villkor, "egna": egna,
+        **({"amnen": amnen} if amnen else {}),
+        **({"kort_utfall": kort} if kort else {}),
+    }
+
+
+# -- Det korta utfallet (struktur B) -------------------------------------------
+#
+# Sebbe 2026-11-05: struktur B (app/leads/utkaststruktur.py) är en fråga om
+# ett konkret utfall, "Om Iris kunde ta fram 40–50 nya företag i veckan …,
+# skulle det vara till nytta?". Utfallet är kundens text per produkt, inte
+# modellens: siffran ska vara en kunden står för, och den går in i
+# faktagrindens underlag. Utan text bygger frågan på produktens nytta.
+
+#: Ett utfall är en bisats i en fråga, inte ett stycke.
+KORT_UTFALL_MAX = 200
+
+
+def _kort_utfall(raw: Any) -> dict[str, str]:
+    """{produktnamn: utfall}, strippat."""
+    if not isinstance(raw, dict):
+        return {}
+    return {
+        str(p).strip(): " ".join(v.split())[:KORT_UTFALL_MAX]
+        for p, v in raw.items()
+        if str(p).strip() and isinstance(v, str) and v.strip()
+    }
+
+
+def kort_utfall_for(val: dict[str, Any] | None, produkt: str | None) -> str:
+    """Kundens korta utfall för `produkt` (namnet utan hänsyn till versaler), eller ""."""
+    if not produkt:
+        return ""
+    nyckel = produkt.strip().casefold()
+    return next((v for p, v in ((val or {}).get("kort_utfall") or {}).items() if p.casefold() == nyckel), "")
 
 
 # -- Ämnesraderna ------------------------------------------------------------
@@ -372,12 +427,14 @@ def validera(
     produkter: list[str] | None = None,
     egna: dict[str, Any] | None = None,
     amnen: dict[str, list[str]] | None = None,
+    kort_utfall: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """Skrivvägen: kastar ValueError med ett svenskt besked. Typer och
     gränser (vikt 0–10, villkorslängd) prövas redan av API-schemat.
     `produkter` är kundens produktnamn; villkor per produkt måste gälla en av dem.
     `egna`: kundens egna erbjudanden, {nyckel: {namn, form}}.
-    `amnen`: ämnesrader per produkt, {produktnamn: [rad, …]}."""
+    `amnen`: ämnesrader per produkt, {produktnamn: [rad, …]}.
+    `kort_utfall`: struktur B:s utfall per produkt, {produktnamn: text}."""
     giltiga = normalisera({"egna": egna})["egna"]
     kat = armar({"egna": giltiga})
     for nyckel, e in (egna or {}).items():
@@ -399,6 +456,9 @@ def validera(
     for produkt in amnen or {}:
         if produkt.strip().casefold() not in kanda:
             raise ValueError(f"Ämnesraderna gäller produkten \"{produkt}\", som inte finns bland era produkter.")
+    for produkt in kort_utfall or {}:
+        if produkt.strip().casefold() not in kanda:
+            raise ValueError(f"Det korta utfallet gäller produkten \"{produkt}\", som inte finns bland era produkter.")
     nycklar = [a["nyckel"] for a in aktiva]
     if len(nycklar) != len(set(nycklar)):
         raise ValueError("Ett erbjudande står två gånger bland de aktiva.")
@@ -407,7 +467,9 @@ def validera(
             raise ValueError(
                 f"Fyll i villkoren för {kat[a['nyckel']].namn} innan erbjudandet slås på."
             )
-    return normalisera({"aktiva": aktiva, "villkor": villkor, "egna": egna, "amnen": amnen})
+    return normalisera(
+        {"aktiva": aktiva, "villkor": villkor, "egna": egna, "amnen": amnen, "kort_utfall": kort_utfall}
+    )
 
 
 def valbara(val: dict[str, Any], produkt: str | None = None) -> list[tuple[str, int]]:
@@ -473,6 +535,27 @@ def block(nyckel: str, villkor: str, erbjudande: Erbjudande | None = None, produ
         f"{gemensamt()}\n\n"
         f"### {erbjudande.namn}\n{erbjudande.regler or 'Kundens eget erbjudande: villkoren nedan är hela erbjudandet.'}\n\n"
         f"### Mejlets form ({formnamn})\n{formregler(erbjudande.form, produkt)}\n\n"
+        f"### Villkor för erbjudandet\n{villkor.strip()}"
+    )
+
+
+def uppfoljningsblock(villkor: str) -> str:
+    """Erbjudandet i en uppföljning: samma villkor som i första mejlet, i
+    uppföljningens korta form och inte formen A/B. Sebbe 2026-10-31: de 418
+    väntande uppföljningarna i main bar ännu "svara 'pilot'" och "era fem
+    vanligaste kundfrågor", för kedjan läste bara de tidigare mejlen."""
+    return (
+        "## Erbjudandet i uppföljningen\n"
+        "Kunden har valt det här erbjudandet för tråden, och det gäller nu, även om ett tidigare mejl "
+        "erbjöd något annat. Det tidigare erbjudandet nämns inte.\n"
+        "- Nämn produkten med sitt namn och vad den gör åt dem i en kort mening, bara det som står i "
+        "dess nytta.\n"
+        "- Erbjudandet i en mening med villkorens innehåll: siffrorna och löftena oförändrade i sak, i "
+        "mejlets tilltal. Handlingen i en mening till. Inget annat lovas.\n"
+        "- Har ett tidigare mejl redan nämnt erbjudandet: påminn om det med andra ord, och låt vinkeln "
+        "vara det nya.\n"
+        "- Mejlet slutar med villkorens handling som en vardaglig inbjudan, aldrig som en order av "
+        "formen \"Svara X så gör vi Y\" och aldrig med en fråga.\n\n"
         f"### Villkor för erbjudandet\n{villkor.strip()}"
     )
 

@@ -38,7 +38,7 @@ from ..leads.autonomy import kan_aktivera_auto_send
 from ..leads.autonomy import normalize as normalize_autonomy
 from ..leads.befordran import saknade_falt
 from ..leads.rollkoppling import med_rollflagga
-from ..leads import automation, crm_synk, erbjudanden, eskalering
+from ..leads import automation, crm_synk, erbjudanden, eskalering, utkaststruktur
 from ..leads.business_context import (
     MissingBusinessContextError,
     ar_ifyllt as business_context_ar_ifyllt,
@@ -1066,6 +1066,8 @@ async def outreach_draft(
         "brief": payload.brief,
         "research_summary": payload.research_summary,
         "research_evidence": list(payload.research_evidence),
+        # A/B (utkaststruktur.py); None = leadets förra utkasts struktur.
+        "struktur": payload.struktur,
     }
     leadsstrom = getattr(request.app.state, "leadsstrom", None)
     if leadsstrom is not None:
@@ -1087,6 +1089,14 @@ async def _run_draft_job(app_state, payload: dict) -> None:
     registrera_aktiv(job_id)
     try:
         context_pack, missing = await build_context_pack(storage, payload["tenant_id"])
+        struktur = payload.get("struktur")
+        if not struktur:
+            trad = await storage.get_outreach_thread(payload["tenant_id"], payload["thread_id"]) or {}
+            struktur = (
+                await utkaststruktur.tidigare(storage, payload["tenant_id"], str(trad["prospect_id"]))
+                if trad.get("prospect_id")
+                else "a"
+            )
         result = await _run_outreach_draft(
             storage,
             payload["tenant_id"],
@@ -1099,6 +1109,7 @@ async def _run_draft_job(app_state, payload: dict) -> None:
             brief=payload["brief"],
             research_summary=payload.get("research_summary") or "",
             research_evidence=tuple(payload.get("research_evidence") or ()),
+            struktur=utkaststruktur.normalisera(struktur),
         )
         result["onboarding_missing"] = list(missing)
         await app_state.jobs.complete(job_id, result)
@@ -1451,7 +1462,11 @@ async def list_skickat(
     Överst står de godkända som väntar på sändfönstret (`schemalagt`, Sebbe
     2026-10-08): ett utkast som godkänts 17:55 lämnade Iris-listan men syntes
     ingenstans förrän 08:00 nästa vardag. Nu flyttar Godkänn och skicka det
-    hit direkt, med tiden det går ut (`skickas_tidigast`)."""
+    hit direkt, med tiden det går ut (`skickas_tidigast`).
+
+    En rad vars tråd fått svar bär `konversation` (Sebbe 2026-11-02: "man ska
+    se hela konversationen"): trådens skickade och inkomna mejl, äldst först,
+    så att Svarat visar svaret och inte bara utskicket."""
     storage = request.app.state.storage
     tenant_id = tenant["tenant_id"]
     # De tre läsningarna är oberoende: parallellt i stället för i följd
@@ -1468,6 +1483,18 @@ async def list_skickat(
         except TypeError:  # datetime mot sträng (MemoryStorage): jämför ISO-texten
             r["svarat"] = bool(inn and ut and str(inn) >= str(ut))
         r["schemalagt"] = False
+    # Bara trådar med ett inkommet svar: de andra har inget samtal att visa,
+    # och deras utskick står redan på raden.
+    besvarade = sorted({str(r["thread_id"]) for r in rader if r.get("thread_id") and r.get("last_inbound_at")})
+    if besvarade:
+        tradar: dict[str, list[dict]] = {}
+        for m in await storage.list_konversationer(tenant_id, besvarade):
+            tradar.setdefault(str(m["thread_id"]), []).append(
+                {k: m.get(k) for k in ("id", "direction", "subject", "body", "sent_at")}
+            )
+        for r in rader:
+            if any(m["direction"] == "inbound" for m in tradar.get(str(r.get("thread_id")), [])):
+                r["konversation"] = tradar[str(r["thread_id"])]
     svar: dict = {"skickat": schemalagda + rader}
     return await _med_signatur(storage, tenant_id, svar, settings=leadsinst)
 
@@ -1616,6 +1643,8 @@ async def put_leads_config(
             regler["per_typ"][typ].update(falt)
         if "jev_bortval" in andrat:
             regler["jev_bortval"] = andrat["jev_bortval"]
+        if "struktur" in andrat:
+            regler["struktur"] = andrat["struktur"]
         if andrat.get("autopilot"):
             regler["autopilot"].update(andrat["autopilot"])
         merged["automation"] = automation.normalisera(regler)
@@ -1729,8 +1758,11 @@ async def put_leads_erbjudanden(
         {k: e.model_dump() for k, e in payload.egna.items()} if payload.egna is not None else sparat["egna"]
     )
     amnen = payload.amnen if payload.amnen is not None else sparat.get("amnen")
+    kort_utfall = payload.kort_utfall if payload.kort_utfall is not None else sparat.get("kort_utfall")
     try:
-        nytt = erbjudanden.validera(aktiva, villkor, [p["namn"] for p in las_produkter(current)], egna, amnen)
+        nytt = erbjudanden.validera(
+            aktiva, villkor, [p["namn"] for p in las_produkter(current)], egna, amnen, kort_utfall
+        )
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from None
     saved = await storage.set_agent_settings(
@@ -1937,6 +1969,8 @@ async def skriv_korningens_utkast(
         overrides=None,
         is_test=bool(rad.get("is_test")),
         limit=len(prospekt),
+        # Körningens struktur (A/B): utkasten den saknade skrivs som resten.
+        struktur=utkaststruktur.normalisera((rad.get("korning") or {}).get("struktur")),
     )
     return {"count": len(jobs), "jobs": jobs}
 
@@ -2530,6 +2564,7 @@ def _payload_till_request(payload: dict) -> LeadsBatchRequest:
         is_test=bool(payload.get("is_test")),
         company_names=list(payload.get("company_names") or []),
         overrides=LeadsRunOverrides(**ov) if ov else None,
+        struktur=utkaststruktur.normalisera(payload.get("struktur")),
     )
 
 
@@ -2543,6 +2578,8 @@ async def _lagg_prospektjobb(
     is_test: bool,
     limit: int,
     batch_id: str | None = None,
+    #: "a"/"b", eller None = leadets förra utkasts struktur (Skapa om utkast).
+    struktur: str | None = "a",
 ) -> list[dict]:
     """En research-rad per prospekt. Sökningen är redan klar här.
 
@@ -2574,6 +2611,7 @@ async def _lagg_prospektjobb(
                     "overrides": overrides,
                     "is_test": is_test,
                     "batch_id": batch_id,
+                    "struktur": struktur,
                 }
             )
         else:
@@ -2587,6 +2625,7 @@ async def _lagg_prospektjobb(
                     overrides=overrides,
                     is_test=is_test,
                     batch_id=batch_id,
+                    struktur=struktur,
                 )
             )
         jobs.append({"job_id": job_id, "prospect_id": prospect["id"]})
@@ -3090,6 +3129,7 @@ async def _fyll_pa_last(app_state, tenant: dict, batch_id: str) -> dict | None:
             is_test=bool(k.get("is_test")),
             limit=1,
             batch_id=batch_id,
+            struktur=utkaststruktur.normalisera(k.get("struktur")),
         )
         k["jobs"].extend({**b, "company_name": prospect.get("company_name")} for b in barn)
         k["pagaende"] += len(barn)
@@ -3292,6 +3332,9 @@ async def _run_batch(app_state, payload: dict) -> None:
             if payload.get("autopilot"):
                 # Startad av autopiloten (leads/autopilot.py): en per vardag.
                 k["autopilot"] = True
+            # Utkastens struktur (A/B, utkaststruktur.py) följer körningen till
+            # varje barn som motorn lägger, också efter ett återtag.
+            k["struktur"] = req.struktur
             await app_state.jobs.complete(job_id, {"fase": "research", "jobs": [], "count": 0, "korning": k})
             # 'processing' med tillståndet, inte 'completed': sökjobbet är
             # klart men KÖRNINGEN har just börjat (migration 080). Raden
@@ -3355,6 +3398,7 @@ async def _run_batch(app_state, payload: dict) -> None:
             overrides=payload.get("overrides"),
             is_test=req.is_test,
             limit=req.limit,
+            struktur=req.struktur,
         )
         await app_state.jobs.complete(
             job_id,
@@ -3426,6 +3470,7 @@ async def start_batch_run(
         "is_test": payload.is_test,
         "limit": payload.limit,
         "company_names": [n.strip() for n in payload.company_names if n and n.strip()],
+        "struktur": payload.struktur,
     }
     leadsstrom = getattr(request.app.state, "leadsstrom", None)
     if leadsstrom is not None:
@@ -3438,6 +3483,7 @@ async def start_batch_run(
         "count": 0,
         "overrides": overrides,
         "is_test": payload.is_test,
+        "struktur": payload.struktur,
         "fase": "soker",
     }
 
@@ -3513,12 +3559,25 @@ async def _run_batch_prospect(
     is_test: bool = False,
     batch_id: str | None = None,
     kvotforsok: int = 0,
+    #: "a"/"b" (körningens val), eller None = leadets förra utkasts struktur.
+    struktur: str | None = "a",
 ) -> None:
     run_research_step, run_outreach_draft = _valj_leads_kedja()
     omkor_efter_kvot = False
     utfall: dict = {"namn": "", "leverbar": False, "skal": "Researchen misslyckades."}
 
     storage = app_state.storage
+    if scope == "utkast" and not batch_id:
+        # Ett lead som redan fått ett mejl har en uppföljning, inte ett första
+        # mejl, att skriva om (Sebbe 2026-10-31).
+        from ..leads.follow_up_generator import uppfoljningstrad
+
+        trad = await uppfoljningstrad(storage, tenant["tenant_id"], prospect_id)
+        if trad is not None:
+            await _run_uppfoljningsjobb(
+                app_state, job_id, tenant, prospect_id=prospect_id, trad=trad, kvotforsok=kvotforsok
+            )
+            return
     if batch_id and await _styrning(app_state, tenant["tenant_id"], batch_id) == "avbruten":
         await app_state.jobs.fail(job_id, AVBRUTEN_KORNING)
         await storage.set_leads_job_status(
@@ -3752,6 +3811,15 @@ async def _run_batch_prospect(
                         if vald
                         else offer[:2000]
                     )
+                    # Utkastets struktur (A/B, utkaststruktur.py): körningens val
+                    # eller det uttryckliga valet i Processa om; utan val (Skapa om
+                    # utkast) den struktur leadets förra utkast skrevs i, så att
+                    # ett B-mejl inte tyst blir ett A-mejl.
+                    struktur_nu = (
+                        utkaststruktur.normalisera(struktur)
+                        if struktur
+                        else await utkaststruktur.tidigare(storage, tenant["tenant_id"], prospect_id)
+                    )
                     draft = await run_outreach_draft(
                         storage,
                         tenant["tenant_id"],
@@ -3768,6 +3836,7 @@ async def _run_batch_prospect(
                         # build_permitted_facts saknade researchcitaten här.
                         research_evidence=tuple(result.get("research_evidence") or ()),
                         is_test=is_test,
+                        struktur=struktur_nu,
                     )
                     # `queued` är utkaststegets eget besked, inte en konstant:
                     # ett utkast som faktagrinden eller utdatakontraktet stoppade
@@ -3847,7 +3916,7 @@ async def _run_batch_prospect(
         await asyncio.sleep(KVOT_PAUS_S * (kvotforsok + 1) + random.uniform(0, 30))
         await _run_batch_prospect(
             app_state, job_id, tenant, prospect_id=prospect_id, scope=scope, overrides=overrides,
-            is_test=is_test, batch_id=batch_id, kvotforsok=kvotforsok + 1,
+            is_test=is_test, batch_id=batch_id, kvotforsok=kvotforsok + 1, struktur=struktur,
         )
         return
     # Här och inte i finally: avbröts tasken (deploy, SIGTERM) finns inget
@@ -3875,6 +3944,86 @@ async def _run_batch_prospect(
             await _vacka_korning(app_state, tenant, batch_id)
 
 
+#: Utfallet när en uppföljning inte blev omskriven, per skäl ur generatorn.
+_UPPFOLJNING_EJ = {
+    "avslutad": "Ingen ny uppföljning: leadet har svarat, är avslutat eller arkiverat.",
+    "sekvensen_klar": "Ingen ny uppföljning: tråden har fått alla sina uppföljningar.",
+    "vilande_produkt": "Ingen ny uppföljning: tråden sålde en produkt som inte säljs nu.",
+}
+
+
+async def _run_uppfoljningsjobb(
+    app_state, job_id: str, tenant: dict, *, prospect_id: str, trad: dict, kvotforsok: int = 0
+) -> None:
+    """Skapa om utkast för ett lead som redan fått ett mejl: den väntande
+    uppföljningen skrivs om med kundens erbjudande (follow_up_generator.
+    skriv_om_uppfoljning). Samma liggare och jobbpost som ett utkastjobb, så
+    förloppet och utfallet syns på leadets rad även efter en omladdning."""
+    from ..leads.follow_up_generator import skriv_om_uppfoljning
+
+    storage = app_state.storage
+    tenant_id = tenant["tenant_id"]
+    slutstatus: str | None = None
+    utkast_fel: str | None = None
+    omkor_efter_kvot = False
+    await app_state.jobs.start(job_id)
+    await storage.set_leads_job_status(
+        tenant_id, job_id=job_id, status="processing", scope="utkast", prospect_id=prospect_id
+    )
+    registrera_aktiv(job_id)
+    try:
+        context_pack, _missing = await build_context_pack(storage, tenant_id)
+        rad = await skriv_om_uppfoljning(
+            storage, tenant_id, trad, tenant_name=tenant["tenant_name"], context_pack=context_pack
+        )
+        result: dict = {
+            "prospect_id": prospect_id,
+            "uppfoljning": True,
+            "produkt": rad.get("produkt"),
+            "draft": {"subject": rad.get("subject"), "queued": bool(rad.get("queued"))},
+        }
+        if not rad.get("queued"):
+            stoppad = rad.get("stoppad") or {}
+            # Påståendena faktagrinden fällde står i beskedet, som i första
+            # mejlets kedja, så att skälet syns på leadets rad.
+            ostodda = ", ".join(str(p) for p in [*(stoppad.get("grounding") or []), *(stoppad.get("gissningar") or [])])
+            result["draft_note"] = _UPPFOLJNING_EJ.get(str(rad.get("hoppad"))) or (
+                "Uppföljningen stoppades före kön av faktagrinden"
+                + (f" ({ostodda[:300]})" if ostodda else "")
+                + "; den tidigare står kvar."
+                if stoppad
+                else _FEL_UTKAST
+            )
+            result["stoppad"] = stoppad or None
+            utkast_fel = result["draft_note"][:500]
+        await app_state.jobs.complete(job_id, result)
+        slutstatus = "completed"
+    except Exception as error:  # noqa: BLE001 — ett trasigt lead fäller inte de andra
+        if _ar_tillfallig_kvot(error) and kvotforsok < KVOT_OMFORSOK:
+            logger.warning("Uppföljningsjobb %s föll på modellens kvot (429); körs om.", job_id)
+            omkor_efter_kvot = True
+        else:
+            logger.exception("Uppföljningsjobb %s (prospekt %s) misslyckades", job_id, prospect_id)
+            await _larma_vid_kreditslut(app_state, tenant_id, error)
+            await app_state.jobs.fail(job_id, kundtext_for(error) or _FEL_UTKAST)
+            slutstatus = "failed"
+    finally:
+        avregistrera_aktiv(job_id)
+    if omkor_efter_kvot:
+        import random
+
+        await asyncio.sleep(KVOT_PAUS_S * (kvotforsok + 1) + random.uniform(0, 30))
+        await _run_batch_prospect(
+            app_state, job_id, tenant, prospect_id=prospect_id, scope="utkast", kvotforsok=kvotforsok + 1
+        )
+        return
+    if slutstatus is not None:
+        await storage.set_leads_job_status(
+            tenant_id, job_id=job_id, status=slutstatus, scope="utkast", prospect_id=prospect_id,
+            error=utkast_fel,
+        )
+
+
 def _fas(scope: str) -> str:
     return "skriver" if scope == "utkast" else "research"
 
@@ -3890,7 +4039,9 @@ async def processa_om(
 
     `ersatt` (Skapa om utkast, 2026-10-08): leadets väntande utkast ställs in
     och kasseras innan jobbet köas. Ett lead som redan fått ett mejl hoppas
-    över — ett nytt första mejl i ett pågående samtal är fel mejl.
+    över — ett nytt första mejl i ett pågående samtal är fel mejl — utom med
+    `scope="utkast"` när en uppföljning väntar på granskning: den skrivs om
+    (2026-10-31).
 
     `scope="utkast"` (2026-10-17): bara utkastet skrivs om, ur leadets
     sparade research. Researchen körs inte om, så bedömningen står kvar: när
@@ -3935,10 +4086,20 @@ async def processa_om(
     # Ett rent utkastjobb ersätter alltid leadets väntande utkast.
     if payload.ersatt or payload.scope == "utkast":
         lagen = await storage.utkast_lagen(tenant_id)
-        hoppade = [str(p["id"]) for p in hittade if (lagen.get(str(p["id"])) or {}).get("antal_skickade")]
+        skickade = {str(p["id"]) for p in hittade if (lagen.get(str(p["id"])) or {}).get("antal_skickade")}
+        # Sebbe 2026-10-31: ett lead som redan fått ett mejl och har en
+        # uppföljning som väntar på granskning får den omskriven av jobbet
+        # (_run_uppfoljningsjobb). Den gamla ställs in först när den nya är
+        # klar, inte här. Övriga leads med ett skickat mejl hoppas över.
+        uppfoljningar = {
+            pid for pid in skickade
+            if payload.scope == "utkast" and (lagen.get(pid) or {}).get("ko_status") == "awaiting_review"
+        }
+        hoppade = [pid for pid in (str(p["id"]) for p in hittade) if pid in skickade - uppfoljningar]
         hittade = [p for p in hittade if str(p["id"]) not in hoppade]
         for p in hittade:
-            await avbryt_utskick_for_prospekt(storage, tenant_id, str(p["id"]))
+            if str(p["id"]) not in uppfoljningar:
+                await avbryt_utskick_for_prospekt(storage, tenant_id, str(p["id"]))
         if not hittade:
             return {
                 "jobs": [], "scope": payload.scope, "count": 0, "fase": _fas(payload.scope),
@@ -3952,6 +4113,7 @@ async def processa_om(
         overrides=None,
         is_test=payload.is_test,
         limit=len(hittade),
+        struktur=payload.struktur,
     )
     return {
         "jobs": jobs,
@@ -4519,6 +4681,11 @@ async def _starta_listkorning(
     batch_id = await app_state.jobs.create(tenant_id=tenant_id, status="processing")
     k = iris_korning.ny_korning(mal=len(prospekt), scope=scope, overrides=None, is_test=is_test)
     k.update(kalla="lista", list_id=list_id, list_titel=lista.get("titel"))
+    # Utkastens struktur i en körning ingen startade med Kör Iris: kundens val
+    # för automatiska körningar (automation.struktur).
+    k["struktur"] = automation.normalisera(
+        (await storage.get_agent_settings(tenant_id, agent_type="leads")).get("automation")
+    )["struktur"]
     # Barnen är kända innan de köas: jobs och pagaende skrivs FÖRE kön, så
     # ett barn som rapporterar direkt (create_task-vägen) inte läser ett
     # tillstånd utan sig själv. job_id:t är kosmetiskt i vyn (React-nyckel).
@@ -4532,6 +4699,7 @@ async def _starta_listkorning(
     await _lagg_prospektjobb(
         app_state, tenant, prospekt,
         scope=scope, overrides=None, is_test=is_test, limit=len(prospekt), batch_id=batch_id,
+        struktur=k["struktur"],
     )
     return batch_id, scope
 
@@ -4964,6 +5132,8 @@ async def hantera_leads_jobb(app_state, payload: dict) -> None:
         overrides=payload.get("overrides"),
         is_test=bool(payload.get("is_test")),
         batch_id=payload.get("batch_id"),
+        # Rått värde: None (äldre jobb, Skapa om utan val) = förra strukturen.
+        struktur=payload.get("struktur"),
     )
 
 

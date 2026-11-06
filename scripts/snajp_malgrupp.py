@@ -20,7 +20,8 @@ igen (lib/routes.ts: VILANDE_PRODUKTER styr arbetsytan).
   * ICP:ns storlek, settings.webbplats_kravs och settings.behov — vilka bolag
     Iris väljer bort (Sebbe 2026-10-30, se STORLEK nedan)
   * kundinstruktionen för Iris — hur Snajp presenterar sig i utkastets mall
-  * erbjudandena         — piloten i form A och B, lika viktade (Anton 2026-10-25)
+  * erbjudandena         — piloten i form A och B, lika viktade (Anton 2026-10-25),
+    och struktur B:s korta utfall per produkt (Sebbe 2026-11-05)
 
 Segmenten kommer ur Antons tabell 2026-10-06 (utbildning, e-handel, bygg,
 konsult och byrå) plus fyra förslag (markerade nedan). Max sex segment ryms i
@@ -86,10 +87,11 @@ IRIS_INSTRUKTION = f"""{MARKOR}
 
 - Erbjud den produkt researchen valt, och bara den. Nämn aldrig de andra agenterna.
 - Nämn aldrig kvitton, bokföring eller Kvittohanteraren: den säljs inte just nu.
+- Struktur B (det korta mejlet) följer blocket "Mejlets struktur: B" och förebilderna där: kort, rakt på, och mejlet slutar med frågan. Reglerna nedan om avslutet, frågan i erbjudandets form B, meningen efter ingången och ingången gäller struktur A; resten gäller båda.
 - Avsluta med erbjudandets handling enligt villkoren under "Erbjudandet i det här mejlet", som en vardaglig inbjudan. Aldrig "Svara X så gör vi Y" och aldrig med en fråga.
 - Kalla Iris "vår agent Iris" första gången och sedan "Iris". Aldrig "Iris, leadsagenten", "leadsagenten Iris", "Vår Iris" eller "hon".
 - Iris hittar och kvalificerar nya företagskunder och skriver första mejlet till dem. Iris hittar aldrig tomter, investerare, leverantörer eller personal.
-- Frågan i form B: för Iris om det tar mest tid att hantera de förfrågningar som redan kommer in eller att hitta nya kunder; för Supportagenten om det tar mest tid att gå igenom kundmejlen eller att sitta i supportchattarna. Inga andra moment.
+- Frågan i erbjudandets form B ("Piloten, form B", inte struktur B): för Iris om det tar mest tid att hantera de förfrågningar som redan kommer in eller att hitta nya kunder; för Supportagenten om det tar mest tid att gå igenom kundmejlen eller att sitta i supportchattarna. Inga andra moment.
 - Mejlet är varmt och informerande, aldrig säljigt eller pushande. Senast i meningen efter ingången ska mottagaren förstå att agenten effektiviserar deras arbete: för Iris att hitta nya kunder (prospekteringen), för Supportagenten kundhanteringen. Säg det med vad de slipper eller får tid till, och ge en kort inblick i hur enkelt det är (Iris: ni säger vilka kunder ni söker, och Iris tar fram bolagen och skriver första mejlet som ni godkänner; Supportagenten: den svarar utifrån er egen information). "Effektiviserar prospekteringen" eller "effektiviserar kundhanteringen" får stå en gång.
 - Ingången beskriver vad deras arbete går ut på, utan problem och utan krav på dem: aldrig vad deras kunder förväntar sig eller kräver, aldrig att frågorna växer eller tar tid från något, och aldrig en fråga om hur de ska hinna eller kunna klara något.
 - Rabatten är "upp till 50 %" för den som stannar efter piloten, aldrig "50 %" rakt av.
@@ -169,6 +171,18 @@ AMNEN = {
         "Färre tickets till teamet, snabbare svar till kunden",
     ],
 }
+#: Struktur B:s utfall per produkt (Sebbe 2026-11-05, app/leads/utkaststruktur.py):
+#: frågan i det korta mejlet bygger på det ("Om vår agent Iris kunde ta fram
+#: 40–50 nya företag i veckan …, skulle det vara till nytta?"). Siffran är
+#: Sebbes ("1: ja, fast 40-50 i veckan") och går in i faktagrindens underlag.
+KORT_UTFALL = {
+    # Kort som i Sebbes exempel: provet 2026-11-05 gav B-mejl över 60 ord
+    # med den längre texten ("… som ni godkänner innan det skickas").
+    # Utan "som passar er" (volymprovet 2026-11-05): frågan ska säga VILKA
+    # kunder, och den generiska bisatsen kopierades in i nästan varje mejl.
+    IRIS: "40–50 nya företagskunder i veckan, med ett färdigt första mejl till varje",
+    SUPPORT: "svar direkt på de vanligaste kundfrågorna, dygnet runt, utifrån er egen information",
+}
 #: A/B (Anton 2026-10-25): samma pilot, två former, hälften var. Katalogens
 #: gratisprov och garanti står kvar avslagna och kan slås på i Leads › Erbjudanden.
 ERBJUDANDEN = {
@@ -178,6 +192,7 @@ ERBJUDANDEN = {
         "pilot_b": {"namn": "Piloten, form B (frågan)", "form": "fraga"},
     },
     "amnen": AMNEN,
+    "kort_utfall": KORT_UTFALL,
     "villkor": {
         "pilot_a": _PILOTER,
         "pilot_b": _PILOTER,

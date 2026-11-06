@@ -1,14 +1,17 @@
 import type { Metadata } from "next";
 import { InnehallsSida, SidAvslut, SidRubrik } from "@/components/marketing/InnehallsSida";
 import { KONTAKT_MEJL, varforSnajp } from "@/components/marketing/copy";
+import { sidmeta } from "@/lib/seo";
 import { initialer, TEAM, teametArIfyllt } from "@/lib/team";
 import { notFoundOnTenant } from "@/lib/tenants/server";
 
 export const metadata: Metadata = {
-  title: "Vårt team — Snajp",
-  description:
-    "Vilka som bygger Snajp, varför bolaget finns och hur vi arbetar. Utvecklat i Göteborg och Umeå för svensk B2B.",
-  alternates: { canonical: "/vart-team" }
+  ...sidmeta({
+    vag: "/vart-team",
+    titel: "Vårt team: AI-agenter byggda i Göteborg och Umeå | Snajp",
+    beskrivning:
+      "Vilka som bygger Snajp, varför bolaget finns och hur vi arbetar. Svenska AI-agenter för leads och kundtjänst, utvecklade i Göteborg och Umeå för svensk B2B."
+  })
 };
 
 const VARDERINGAR = [

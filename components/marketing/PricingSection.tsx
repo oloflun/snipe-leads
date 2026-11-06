@@ -7,6 +7,7 @@ import {
   EXTRA_MEJL_PRIS,
   EXTRA_PROSPEKT_PRIS,
   PAKET,
+  PER_MANAD,
   PRISER_AR_PRELIMINARA,
   PRIS_PREFIX,
   PRIS_SAKNAS,
@@ -62,7 +63,7 @@ const copy = {
     sv: "Månadsavgift per arbetsyta. Uppstarten är engångs och täcker kunskapsbas och konfiguration.",
     en: "Monthly fee per workspace. Onboarding is a one-off covering knowledge base and configuration."
   },
-  perManad: { sv: "/mån", en: "/mo" },
+  perManad: PER_MANAD,
   ingar: { sv: "Ingår", en: "Included" },
   populärast: { sv: "Populärast", en: "Most popular" },
   uppstart: {
