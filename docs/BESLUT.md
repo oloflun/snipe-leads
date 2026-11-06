@@ -30,6 +30,64 @@ lg, så att de längre länknamnen ryms på en rad.
 
 ---
 
+## 2026-11-06 (Anton) — Struktur A kortare: en mening per steg, högst 80 ord
+
+**Beslut.** A får förslag 1 av tre: samma ordning som förut (mottagaren,
+agenten, erbjudandet, inbjudan) men en mening per steg och högst 80 ord.
+Ingången konstaterar en konkret sak om dem som produktmeningen tar vid ifrån,
+produktmeningen bär kundens korta utfall översatt till dem, piloten står i en
+eller två korta meningar och inbjudan i en. Ingen fråga i A, och erbjudandets
+form B (frågan om vad som tar mest tid) är avslagen hos Snajp.
+
+**Resonemang.** Antons ord: "Utifrån de senaste ändringarna känns just nu
+alternativ B bättre då det är mer rakt på sak, där man inte riskerar att tappa
+läsaren, men kan samtidigt läsas som oproffesionellt av vissa." Han bad om tre
+sätt att göra A kortare och mer direkt utan att tappa den professionella
+strukturen, valde det första och la till: "säkerställ att den fortfarande
+anpassar utkasten efter varje kund och deras verksamhet, samt vilken produkt
+som är den bästa fiten." Underlaget (Snajp i development 2026-11-01–06, 105
+A-mejl): median 105 ord och 96 över formens 90 fast grinden skrev om långa mejl,
+95 började "Att …", 57 sa "balansgång", 47 frågade vad som tar mest tid och
+svarade själva i nästa mening, och alla slutade med två vägar i en lång mening.
+Längden kom ur upplägget, inte ur orden, så ett lägre tak räckte inte. Taket är
+80 och inte 70: förslagets exempel hade 76 ord, och ett tak som det godkända
+exemplet inte klarar hade skickat nästan varje rätt mejl till omskrivning.
+
+**I koden och prompterna.**
+- `erbjudanden.FORMER` och `ORDTAK` (80 för form A, 90 för form B): formen
+  beskriver ingången och produktmeningen, och blocket bär "Utfallet
+  produktmeningen bygger på" ur kundens `kort_utfall` för produkten researchen
+  valde (`Valt.utfall`, satt i `for_trad`); utan utfall bygger den på
+  produktens nytta, så andra kunders produkter fungerar som förut.
+- `leads_research_v2`: ingångsformerna konstaterar (vilka de arbetar för,
+  något nytt hos dem, momentet, vad kunderna får), personaliseringssteget 1a
+  skriver om ingången och produktmeningen ur citaten, och utfallet går in i
+  faktagrindens underlag även i A. Omskrivningen och humanizern håller
+  ordtaket.
+- `stilkontroll.kontrollera(tak=…)`: kedjan, köningen
+  (`_queue_outreach_draft_impl(ordtak=…)`) och `scripts/granska_utkast.py`
+  prövar A mot formens tak; uppföljningarna behåller det allmänna taket 100.
+  "Balansgång" fälls i ingången (`mallord_i_ingangen`). `agent_efter_loftet`
+  jämför nu produktens första omnämnande med villkorens siffror: förut söktes
+  namnet först efter första stycket, och ett A-mejl med Iris i produktmeningen
+  och "pilot av Iris" efter "20" fälldes fel.
+- Skrivstilen omgång 11, grundprompten § 10, katalogens gemensamma regel.
+- `scripts/snajp_malgrupp.py`: bara `pilot_a` aktiv (`pilot_b` står kvar under
+  `egna`), pilotvillkoret i två korta meningar utan "med alla funktioner", och
+  handlingen "titta gärna på demon …, eller svara på mejlet för en kostnadsfri
+  genomgång". Villkorens första mening, den B bär, har samma siffror som förut.
+  Iris-instruktionen säger att produktmeningen bär effektiviseringen.
+- Låst av `tests/leads/test_struktur_a_kort.py`. Facit 2026-10-16
+  (INV-LEADS-UTKAST-002) passerar oförändrat; det tillåter redan `for_langt`.
+
+**Öppet för Anton.** (1) Ett nytt facit för A tas ur de första utkasten med
+den nya formen och läggs in först efter ditt ja. (2) A/B-testet är nu struktur
+A mot struktur B; erbjudandets form A mot B mäts inte längre hos Snajp.
+(3) Main kräver en release, och `snajp_malgrupp.py --env main --apply` efter
+den.
+
+---
+
 ## 2026-11-06 (Anton) — Supportagent i texten, supportbot bara i sökträffen
 
 **Beslut.** Produkten heter supportagent i all text på sajten. "Supportbot"

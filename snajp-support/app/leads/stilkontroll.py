@@ -152,7 +152,10 @@ _MALLORD = re.compile(
     r"|\b(?:ta|tar)\s+tid\s+från\s+att\b|\bkräver\s+(?:fullt|ditt|ert)\s+fokus\b"
     r"|\b(?:fokus\w*|koncentrera\s+(?:er|dig))\s+på\s+(?:varje\s+(?:enskilt\s+)?(?:projekt|detalj)|projekt(?:et|en)?\b"
     r"|arbetet|uppdrag(?:et|en)?\b|verksamheten|jobbet|det\s+(?:ni|du)\s+gör)"
-    r"|\bägna\s+(?:er|dig)\s+åt\s+(?:varje\s+(?:enskilt\s+)?projekt|projekt(?:et|en)?\b|arbetet|jobbet)",
+    r"|\bägna\s+(?:er|dig)\s+åt\s+(?:varje\s+(?:enskilt\s+)?projekt|projekt(?:et|en)?\b|arbetet|jobbet)"
+    # "Att … är en balansgång" i 57 av 105 A-mejl 2026-11-01–06; ingången i
+    # A är sedan Antons förslag 1 (2026-11-06) ett konstaterande om dem.
+    r"|\bbalansgång\w*",
     re.IGNORECASE,
 )
 #: Fokusgreppet ("… kräver att ni kan fokusera på måleriet, inte på att hitta
@@ -258,12 +261,14 @@ def uppmaning(text: str) -> str:
     return _norm(meningar[-1]) if meningar else ""
 
 
-def kontrollera(text: str, *, struktur: str = "a") -> Kontrollresultat:
+def kontrollera(text: str, *, struktur: str = "a", tak: int | None = None) -> Kontrollresultat:
     """Markörerna i ett mejl. Alla fynd är allvarliga: de tvingar granskning.
 
     `struktur` "b" (app/leads/utkaststruktur.py, Sebbe 2026-11-05): det korta
     mejlet SKA sluta med sin fråga och har ett eget ordtak; övriga markörer
-    gäller som i A."""
+    gäller som i A. `tak` är brödtextens ordtak när anroparen vet mejlets form
+    (första mejlet i A: `erbjudanden.ORDTAK`); utan det gäller B:s eller det
+    allmänna taket, som uppföljningarna också prövas mot."""
     text = text or ""
     ar_b = struktur == "b"
     fynd: list[Anmarkning] = []
@@ -341,7 +346,7 @@ def kontrollera(text: str, *, struktur: str = "a") -> Kontrollresultat:
     if svara:
         lagg("svara_sa_avslut", f"avslutet är en order (\"{svara[:50]}\"); skriv en vardaglig inbjudan")
     antal_ord = sum(len(m.split()) for m in meningar)
-    tak = MAX_ORD_B if ar_b else MAX_ORD_MEJL
+    tak = tak or (MAX_ORD_B if ar_b else MAX_ORD_MEJL)
     if antal_ord > tak:
         lagg("for_langt", f"brödtexten är {antal_ord} ord (högst {tak})")
     # B:s fråga är en mening med flit (förebilden har 27 ord): eget tak.
@@ -471,10 +476,15 @@ def erbjudande_fynd(text: str, *, villkor: str | None, produkt: str | None) -> l
         # Agenten före löftet (Båthuset 2026-10-12: "Vi lovar att du lägger
         # minst 50 % mindre tid …" och Supportagenten först i sista meningen):
         # mottagaren ska veta VAD som lovas innan siffrorna kommer.
-        ingang_slut = brod.find("\n\n", brod.find(ingang(text)[:20]) if ingang(text) else 0)
+        # Produktens FÖRSTA omnämnande mot villkorens första siffra efter
+        # ingången. Förut söktes namnet först efter första stycket, men i A står
+        # produktmeningen i samma stycke som ingången (Anton 2026-11-06), och
+        # pilotens "av Iris" efter siffrorna fällde då ett rätt mejl.
+        forsta = ingang(text)
+        ingang_slut = brod.find(forsta) + len(forsta) if forsta and forsta in brod else -1
         siffror = [m.start() for t in _TAL.findall(villkor or "") for m in re.finditer(rf"\b{re.escape(t)}\b", brod)
                    if m.start() > ingang_slut]
-        if siffror and brod.find(namn, max(ingang_slut, 0)) > min(siffror):
+        if siffror and brod.find(namn) > min(siffror):
             fynd.append(Anmarkning("agent_efter_loftet",
                                    f"Stil: \"{namn}\" namnges först efter löftet; säg vad agenten gör innan siffrorna",
                                    allvarlig=True))

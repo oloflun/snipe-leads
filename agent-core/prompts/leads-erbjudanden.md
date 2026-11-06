@@ -7,7 +7,7 @@ Gemensamt för alla erbjudanden:
 - Erbjudandet sägs med villkorens innehåll och siffror och inget annat. Står något inte under "Villkor för erbjudandet" i ärendet får det inte stå i mejlet, inte ens omskrivet.
 - Ett erbjudande per mejl, och det gäller produkten mejlet handlar om.
 - Mejlet slutar med villkorens handling som en vardaglig inbjudan (en länk att titta på, eller att de svarar så bokar vi), aldrig som en order av formen "Svara X så gör vi Y" och aldrig med en fråga.
-- Erbjudandet styr hela mejlet: ingångens utmaning är en som erbjudandet löser, och erbjudandet sägs med mottagarens verksamhet i tanke.
+- Erbjudandet styr hela mejlet: ingången och produktmeningen bygger på det erbjudandet och produkten ger just dem, och erbjudandet sägs med mottagarens verksamhet i tanke.
 - Sakligt, utan utropstecken och utan säljord ("unikt", "exklusivt", "missa inte").
 
 ## gratis_prov
