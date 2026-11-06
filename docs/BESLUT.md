@@ -9,6 +9,46 @@ möjligt), vad det betyder i koden.
 
 ---
 
+## 2026-11-06 (Anton) — Varje länk utåt heter som sökfrasen
+
+**Beslut.** Sidornas titlar (länken i Google), sidfotens länkar, brödsmulorna
+och llms.txt använder Antons fraser: "Svensk AI-SDR", "Svenska B2B-leads",
+"B2B-prospektering för svenska företag", "Svenska leads i inkorgen", "Support
+på svenska", "Svensk supportchatt till er hemsida", "Support som svarar på
+svenska", och i samma stil "Svensk leadsagent", "Svensk AI-supportagent" och
+"Svenska AI-agenter för företag". Titeln är frasen följd av "| Snajp".
+
+**Resonemang.** Antons ord: "Se även till att all kommunikation utåt i alla
+länkar är enligt det jag sa i början av konversationen … ALLA som söker på
+detta i kombination med 'Sverige' eller 'svenska' ska få upp oss." En kort
+titel som är exakt sökfrasen är också den Google helst använder som sidlänk.
+
+**I koden.** Titlarna i `app/<sida>/page.tsx`, länknamnen i
+`lib/landningar.ts` (`LANDNINGAR[].namn`, `FAMILJ[].lank`). Sidfoten länkar nu
+även produktsidorna /leads och /support och har två kolumner från md, tre från
+lg, så att de längre länknamnen ryms på en rad.
+
+---
+
+## 2026-11-06 (Anton) — Supportagent i texten, supportbot bara i sökträffen
+
+**Beslut.** Produkten heter supportagent i all text på sajten. "Supportbot"
+får stå i en sidas titel och beskrivning, alltså det som syns i sökträffen och
+i länkar, men då alltid tillsammans med "supportagent".
+
+**Resonemang.** Antons ord: "Jag vill fortfarande att det står 'Supportagent' i
+all text på hemsidan, även om länkar och beskrivningar till dessa kan nämna
+'supportbot', men se till att även supportagent används." Supportbot är ett
+ord folk söker på ("supportbot sverige"), men det är inte vad produkten heter.
+
+**I koden.** `tests/invariants/test_inv_seo_001.py:test_supportbot_bara_i_sokträffen`
+fäller ordet i sökordssidornas innehåll, marknadskomponenterna och sidornas
+kropp, och en titel eller beskrivning som nämner supportbot utan supportagent.
+`/supportchatt`s beskrivning: "Svensk supportagent för hemsidan: en supportbot
+som svarar besökarna ur er kunskapsbas."
+
+---
+
 ## 2026-11-05 (Sebbe) — Utskicksstruktur A och B, vald vid Kör Iris
 
 **Beslut.** Iris första mejl får två strukturer. "A är det vi har nu som vi

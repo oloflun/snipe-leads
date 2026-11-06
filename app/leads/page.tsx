@@ -9,8 +9,8 @@ import { notFoundOnTenant } from "@/lib/tenants/server";
 export const metadata: Metadata = {
   ...sidmeta({
     vag: "/leads",
-    titel: "Leadsagent för B2B-leads på svenska | Iris från Snajp",
-    beskrivning: `Iris är Snajps leadsagent och AI-SDR. Hon letar prospekt utifrån er produkt, gör en behovsanalys med källor och skriver mejlet på svenska. ${prisrad("leads")}`
+    titel: "Svensk leadsagent för B2B | Iris från Snajp",
+    beskrivning: `Iris är en svensk leadsagent och AI-SDR. Hon letar svenska B2B-prospekt, gör en behovsanalys med källor och skriver mejlet på svenska. ${prisrad("leads")}`
   })
 };
 

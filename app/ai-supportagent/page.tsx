@@ -5,8 +5,8 @@ import { prisrad, sidmeta } from "@/lib/seo";
 export const metadata: Metadata = {
   ...sidmeta({
     vag: "/ai-supportagent",
-    titel: "AI-supportagent för företagssupport på svenska | Snajp",
-    beskrivning: `En AI-supportagent som sorterar kundmejlen, skriver svaren ur er kunskapsbas och lämnar över det som kräver en människa. ${prisrad("support")}`
+    titel: "Svensk AI-supportagent för företag | Snajp",
+    beskrivning: `Svensk AI-supportagent för företagssupport: sorterar kundmejlen, skriver svaren ur er kunskapsbas och lämnar över resten. ${prisrad("support")}`
   })
 };
 

@@ -200,6 +200,13 @@ const SVENSK_AI_SDR: Landning = {
       }
     },
     {
+      fraga: { sv: "Är en AI-SDR samma sak som en leadsagent?", en: "Is an AI SDR the same as a lead agent?" },
+      svar: {
+        sv: "I stort sett. Leadsagent är det ord som används i Sverige för en AI-agent som hittar nya kunder och skriver till dem, och AI-SDR är den engelska yrkestiteln för samma arbete. Ordet används också för chattbotar som fångar besökare på en hemsida; Iris är den första sorten och kontaktar bolag som ännu inte har hittat er.",
+        en: "Largely, yes. Lead agent is the word used in Sweden for an AI agent that finds new customers and writes to them, and AI SDR is the English job title for the same work. The word is also used for chatbots that capture visitors on a website; Iris is the first kind and contacts companies that have not found you yet."
+      }
+    },
+    {
       fraga: { sv: "Vad kostar en AI-SDR från Snajp?", en: "What does an AI SDR from Snajp cost?" },
       svar: {
         sv: `Snajp Leads kostar från ${LEADS} i månaden och innehåller ${PROSPEKT.sv} och ${MEJL.sv}. Uppstarten är en engångsavgift från ${UPPSTART}, och ${BINDNING_GALLER.sv}.`,
@@ -684,10 +691,10 @@ const SUPPORTCHATT: Landning = {
     en: "The chat goes onto your website with one line of code and answers visitors around the clock in Swedish, from the same knowledge base as your email support. It carries your logo and your colours, and it does not make things up."
   },
   kortSvar: {
-    fraga: { sv: "Vad är en AI-chatbot för hemsidan?", en: "What is an AI chatbot for a website?" },
+    fraga: { sv: "Vad är en supportagent för hemsidan?", en: "What is a support agent for a website?" },
     svar: {
-      sv: "En AI-chatbot för hemsidan är en chattruta som svarar besökarnas frågor direkt, utan att någon behöver bevaka den. Snajps chatt svarar ur er egen kunskapsbas i stället för förskrivna flöden. Frågor den saknar underlag för lämnar den till er, i stället för att gissa.",
-      en: "An AI chatbot for a website is a chat box that answers visitors' questions straight away, without anyone having to watch it. Snajp's chat answers from your own knowledge base rather than pre-written flows. Questions it has no material for it passes to you instead of guessing."
+      sv: "En supportagent för hemsidan är en chattruta som svarar besökarnas frågor direkt, utan att någon behöver bevaka den. Snajps supportagent svarar på svenska ur er egen kunskapsbas i stället för förskrivna flöden. Frågor den saknar underlag för lämnar den till er, i stället för att gissa.",
+      en: "A support agent for a website is a chat box that answers visitors' questions straight away, without anyone having to watch it. Snajp's support agent answers in Swedish from your own knowledge base rather than pre-written flows. Questions it has no material for it passes to you instead of guessing."
     }
   },
   stegRubrik: { sv: "Från kodrad till svar", en: "From one line of code to an answer" },
@@ -772,6 +779,13 @@ const SUPPORTCHATT: Landning = {
       svar: {
         sv: "Ja. Svaren är märkta. Att dölja det skulle spara en sekund och kosta förtroendet.",
         en: "Yes. The replies are labelled. Hiding it would save a second and cost the trust."
+      }
+    },
+    {
+      fraga: { sv: "Är det samma supportagent i chatten och i mejlen?", en: "Is it the same support agent in the chat and in email?" },
+      svar: {
+        sv: "Ja. Supportagenten svarar i chatten på hemsidan och arbetar i mejlinkorgen: den sorterar kundmejlen, skriver svaren och lämnar över det som kräver en människa. Det är samma agent och samma kunskapsbas i båda kanalerna.",
+        en: "Yes. The support agent answers in the chat on your website and works in the email inbox: it sorts customer email, writes the replies and hands over what needs a person. It is the same agent and the same knowledge base in both channels."
       }
     }
   ],

@@ -40,7 +40,9 @@ def _las(rel: str) -> str:
 
 
 def _landningar() -> list[str]:
-    return re.findall(r'^\s*vag: "(/[^"]+)"', _las("lib/landningar.ts"), re.MULTILINE)
+    """Adresserna i LANDNINGAR, och bara där: FAMILJ längre ned har egna `vag:`."""
+    registret = _las("lib/landningar.ts").split("export const LANDNINGAR", 1)[1].split("] as const", 1)[0]
+    return re.findall(r'^\s*vag: "(/[^"]+)"', registret, re.MULTILINE)
 
 
 def test_registret_har_poster():
@@ -169,6 +171,37 @@ def test_grinden_fäller_ett_handskrivet_pris():
     assert _KRONOR.search("kostar 3990 kr")
     assert not _KRONOR.search("beskrivning: `Ni godkänner. ${prisrad(\"leads\")}`")
     assert not _KRONOR.search("en demo på 15 till 20 minuter")
+
+
+#: Antons regel 2026-11-06: produkten heter supportagent i all text på sajten.
+#: "Supportbot" är ett sökord och får stå i en sökträffs titel och beskrivning,
+#: men bara bredvid "supportagent".
+_SUPPORTBOT = re.compile(r"(?i)support[\s-]?bot")
+_SYNLIG_TEXT = [
+    "lib/landningssidor.ts",
+    "lib/landningar.ts",
+    "lib/faq.ts",
+    *(p.relative_to(ROOT).as_posix() for p in sorted((ROOT / "components" / "marketing").rglob("*.ts*"))),
+]
+
+
+def test_supportbot_bara_i_sokträffen():
+    fel = [
+        f"{rel}: {rad.strip()[:100]}"
+        for rel in _SYNLIG_TEXT
+        for rad in _utan_kommentarer(_las(rel)).splitlines()
+        if _SUPPORTBOT.search(rad)
+    ]
+    for sida in _sidor():
+        utan_meta = _SIDMETA.sub("", _utan_kommentarer(sida.read_text(encoding="utf-8")))
+        fel += [f"{sida.relative_to(ROOT).as_posix()}: {rad.strip()[:100]}" for rad in utan_meta.splitlines() if _SUPPORTBOT.search(rad)]
+    for falt in ("titel", "beskrivning"):
+        fel += [
+            f"{fil}: {falt} nämner supportbot utan supportagent: {t}"
+            for fil, t in _metatext(falt)
+            if _SUPPORTBOT.search(t) and not re.search(r"(?i)supportagent", t)
+        ]
+    assert not fel, "Sajten säger supportagent; supportbot får bara stå i titel och beskrivning bredvid supportagent:\n" + "\n".join(fel)
 
 
 def test_hjalterubriken_ar_en_h1():

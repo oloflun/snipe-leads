@@ -60,7 +60,7 @@ export const LANDNINGAR = [
   {
     vag: "/b2b-prospektering",
     produkt: "leads",
-    namn: { sv: "B2B-prospektering", en: "B2B prospecting" },
+    namn: { sv: "B2B-prospektering för svenska företag", en: "B2B prospecting for Swedish companies" },
     kort: {
       sv: "Så prospekterar svenska företag utan att skriva varje mejl själva, och vilka regler som gäller.",
       en: "How Swedish companies prospect without writing every email themselves, and which rules apply."
@@ -87,7 +87,7 @@ export const LANDNINGAR = [
   {
     vag: "/supportchatt",
     produkt: "support",
-    namn: { sv: "Supportchatt till hemsidan", en: "Support chat for your website" },
+    namn: { sv: "Svensk supportchatt till er hemsida", en: "Swedish support chat for your website" },
     kort: {
       sv: "En svensk AI-chatt på er webbplats, inlagd med en rad kod och i era färger.",
       en: "A Swedish AI chat on your website, added with one line of code and in your colours."
@@ -96,7 +96,7 @@ export const LANDNINGAR = [
   {
     vag: "/ai-supportagent",
     produkt: "support",
-    namn: { sv: "AI-supportagent", en: "AI support agent" },
+    namn: { sv: "Svensk AI-supportagent", en: "Swedish AI support agent" },
     kort: {
       sv: "Supportagenten sorterar kundmejlen, skriver svaren och lämnar över det som kräver en människa.",
       en: "The support agent sorts customer emails, writes the replies and hands over what needs a person."
@@ -105,7 +105,7 @@ export const LANDNINGAR = [
   {
     vag: "/ai-agenter",
     produkt: "duo",
-    namn: { sv: "AI-agenter för företag", en: "AI agents for business" },
+    namn: { sv: "Svenska AI-agenter för företag", en: "Swedish AI agents for business" },
     kort: {
       sv: "Snajps två AI-agenter: en som hittar nya kunder och en som svarar dem ni redan har.",
       en: "Snajp's two AI agents: one that finds new customers and one that answers the ones you have."
@@ -124,10 +124,22 @@ export function landningsPost(vag: LandningsVag): LandningsPost {
 /**
  * Produktsidan som en sökordssida hör till, för brödsmulan och sidfotens
  * rubriker. Duo har ingen egen produktsida: dess sidor hör till Snajp direkt.
+ *
+ * `lank` är produktsidans egen länktext i sidfoten. Varje länk utåt ska läsa
+ * som ett sökord i Antons stil ("Svensk AI-SDR", "Support på svenska"), inte
+ * som ett menyord (Anton 2026-11-06).
  */
-export const FAMILJ: Record<"leads" | "support", { namn: Localized; vag: string }> = {
-  leads: { namn: { sv: "Leads", en: "Leads" }, vag: "/leads" },
-  support: { namn: { sv: "Support", en: "Support" }, vag: "/support" }
+export const FAMILJ: Record<"leads" | "support", { namn: Localized; lank: Localized; vag: string }> = {
+  leads: {
+    namn: { sv: "Leads", en: "Leads" },
+    lank: { sv: "Svensk leadsagent", en: "Swedish lead agent" },
+    vag: "/leads"
+  },
+  support: {
+    namn: { sv: "Support", en: "Support" },
+    lank: { sv: "Support som svarar på svenska", en: "Support that answers in Swedish" },
+    vag: "/support"
+  }
 };
 
 /**
