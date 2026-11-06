@@ -5,7 +5,7 @@ import { prisrad, sidmeta } from "@/lib/seo";
 export const metadata: Metadata = {
   ...sidmeta({
     vag: "/b2b-leads",
-    titel: "Svenska B2B-leads med research och färdigt mejl | Snajp",
+    titel: "Svenska B2B-leads | Snajp",
     beskrivning: `Svenska B2B-leads utvalda efter bransch, ort och storlek, med kontaktväg, research och ett färdigt säljmejl att godkänna. ${prisrad("leads")}`
   })
 };

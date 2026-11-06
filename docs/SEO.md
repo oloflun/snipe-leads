@@ -71,10 +71,12 @@ Ordningen är efter effekt.
 
 ### 1. Google Search Console: klart 2026-11-06
 
-- **Domänegendomen `snajp.se`** finns under oloflundin@hotmail.com, verifierad
-  med en TXT-post hos Loopia (`google-site-verification=...`, lagd med
-  `python scripts/loopia_dns.py --txt "..." --apply`). **Ta inte bort posten:**
-  Google kontrollerar den igen, och utan den tappar kontot egendomen.
+- **Domänegendomen `snajp.se`** finns under Snajp-kontot snajpsupport@gmail.com,
+  verifierad med en TXT-post hos Loopia (`google-site-verification=dokltW6...`,
+  lagd med `python scripts/loopia_dns.py --txt "..." --apply`). **Ta inte bort
+  posten:** Google kontrollerar den igen, och utan den tappar kontot egendomen.
+  En första egendom skapades av misstag under Antons privata konto; den är
+  borttagen och dess TXT-post likaså (`--ta-bort`).
 - **Sitemapen** `https://www.snajp.se/sitemap.xml` är inskickad och läst
   (18 sidor).
 - **Indexering begärd** för de åtta sökordssidorna, `/leads` och `/support`.
@@ -101,13 +103,11 @@ innehåll och ur länkarna till den; det är vad sökordssidorna är till för.
 ChatGPT:s webbsökning och Copilot står till stor del på Bings index. Utan Bing
 finns sidorna inte för dem.
 
-1. bing.com/webmasters → logga in (Anton; inloggningen skapar ett konto, så
-   den görs inte av agenten) → **Importera från Google Search Console**
-   (snabbast, egendomen ovan finns), eller verifiera med en CNAME- eller
-   TXT-post via `scripts/loopia_dns.py`.
-2. Skicka in sitemapen.
-3. IndexNow sköts sedan av workflowet efter varje release. Första anmälan
-   gick 2026-11-06 22:18 (18 adresser, svar 202).
+Klart 2026-11-06: Anton loggade in med Snajp-kontot, egendomen importerades
+från Search Console (läsbehörighet), sitemapen är inskickad och 15 adresser
+skickades in direkt med URL Submission (kvot 100 per dag). IndexNow sköts av
+workflowet efter varje release; första anmälan gick 2026-11-06 22:18
+(18 adresser, svar 202).
 
 robots.txt släpper redan in GPTBot, OAI-SearchBot, PerplexityBot, ClaudeBot och
 Google-Extended (regeln `User-Agent: *`).
