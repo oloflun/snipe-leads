@@ -69,18 +69,29 @@ de specifika orden.
 
 Ordningen är efter effekt.
 
-### 1. Google Search Console (Anton, 10 minuter)
+### 1. Google Search Console: klart 2026-11-06
 
-1. search.google.com/search-console → Lägg till egendom → **Domän** `snajp.se`.
-   Google visar en TXT-post. Lägg in den hos Loopia (DNS för snajp.se), eller
-   skicka den till agenten, som kan lägga in den via Loopias API.
-   *Alternativ:* egendomstyp URL-prefix `https://www.snajp.se`, metod HTML-tagg,
-   och sätt tokenet som `GOOGLE_SITE_VERIFICATION` i Railway (main).
-2. Sitemaps → skicka in `https://www.snajp.se/sitemap.xml`.
-3. URL-inspektion → **Begär indexering** för de åtta nya sidorna och `/`,
-   `/leads`, `/support`.
-4. Efter två veckor: Prestanda → Sökfrågor. Det är den enda riktiga källan till
-   vilka sökord som faktiskt ger visningar.
+- **Domänegendomen `snajp.se`** finns under oloflundin@hotmail.com, verifierad
+  med en TXT-post hos Loopia (`google-site-verification=...`, lagd med
+  `python scripts/loopia_dns.py --txt "..." --apply`). **Ta inte bort posten:**
+  Google kontrollerar den igen, och utan den tappar kontot egendomen.
+- **Sitemapen** `https://www.snajp.se/sitemap.xml` är inskickad och läst
+  (18 sidor).
+- **Indexering begärd** för de åtta sökordssidorna, `/leads` och `/support`.
+  Alla var "Upptäckt, inte indexerad". `/` var redan indexerad; dagens kvot
+  (tio begäranden) tog slut innan den hann begäras om, så den hämtas om på
+  Googles egen takt.
+- **Kvar:** efter två veckor, Prestanda → Sökfrågor. Det är den enda riktiga
+  källan till vilka sökord som faktiskt ger visningar. Fler användare (Sebbe)
+  läggs till under Inställningar → Användare och behörigheter.
+
+Testet för rika resultat (2026-11-06, `/svensk-ai-sdr`): brödsmulor och
+produkt giltiga. Två valfria anmärkningar: inget `aggregateRating` (rätt,
+vi har inga omdömen att visa) och att Googles test inte känner igen
+`UnitPriceSpecification` under `priceSpecification`. Typen är korrekt
+schema.org och bär månadspriset, så den står kvar. FAQ-rutor visar Google
+sedan 2023 bara för myndigheter och vårdsajter; FAQPage-schemat är till
+för AI-sökningarna.
 
 Search Console kan inte "koppla sökord" till en sida. Sökorden kommer ur sidans
 innehåll och ur länkarna till den; det är vad sökordssidorna är till för.
@@ -90,10 +101,13 @@ innehåll och ur länkarna till den; det är vad sökordssidorna är till för.
 ChatGPT:s webbsökning och Copilot står till stor del på Bings index. Utan Bing
 finns sidorna inte för dem.
 
-1. bing.com/webmasters → **Importera från Google Search Console** (snabbast),
-   eller verifiera med `BING_SITE_VERIFICATION` i Railway.
+1. bing.com/webmasters → logga in (Anton; inloggningen skapar ett konto, så
+   den görs inte av agenten) → **Importera från Google Search Console**
+   (snabbast, egendomen ovan finns), eller verifiera med en CNAME- eller
+   TXT-post via `scripts/loopia_dns.py`.
 2. Skicka in sitemapen.
-3. IndexNow sköts sedan av workflowet efter varje release.
+3. IndexNow sköts sedan av workflowet efter varje release. Första anmälan
+   gick 2026-11-06 22:18 (18 adresser, svar 202).
 
 robots.txt släpper redan in GPTBot, OAI-SearchBot, PerplexityBot, ClaudeBot och
 Google-Extended (regeln `User-Agent: *`).
@@ -102,6 +116,8 @@ Google-Extended (regeln `User-Agent: *`).
 
 business.google.com: Snajp, Göteborg, kategori programvaruföretag, webbplats
 och kontaktadress. Stärker kunskapspanelen på "snajp" och lokala sökningar.
+Fälten och beskrivningen står färdiga i [SEO-KATALOGER.md](SEO-KATALOGER.md);
+adress, telefon och verifieringen är er.
 
 ### 4. Synas där AI-svaren hämtar sina listor (störst effekt för ChatGPT)
 
@@ -121,7 +137,8 @@ och ett utskick sker bara med ert ja.
 | Product Hunt | En lansering av Iris | Länk och omnämnande |
 
 Underlag att skicka: llms.txt (`https://www.snajp.se/llms.txt`) har allt en
-redaktör behöver på en sida.
+redaktör behöver på en sida. Texter per katalog, mejlutkast och ordningen står
+i [SEO-KATALOGER.md](SEO-KATALOGER.md).
 
 ## Mätning: OpenSEO
 

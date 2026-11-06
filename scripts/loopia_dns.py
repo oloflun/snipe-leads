@@ -4,6 +4,11 @@
     python scripts/loopia_dns.py                 # visa nuvarande poster
     python scripts/loopia_dns.py --apply         # sätt www-CNAME mot Railway
     python scripts/loopia_dns.py --doman x.se --apply
+    python scripts/loopia_dns.py --txt "google-site-verification=..." --apply
+
+`--txt` lägger en TXT-post på apex (Search Consoles och Bings domänverifiering)
+och rör inget annat: befintliga TXT-poster som SPF står kvar, och en post som
+redan finns läggs inte in igen.
 
 ## Varför skriptet finns
 
@@ -210,6 +215,25 @@ def satt_www(api, anv, los, doman: str, mal: str, apply: bool) -> None:
         print(f"  SKULLE sätta CNAME www.{doman} -> {mal}")
 
 
+def lagg_txt(api, anv, los, doman: str, varde: str, apply: bool) -> None:
+    """En TXT-post på apex, bredvid de som finns. Tar aldrig bort något: SPF
+    och tidigare verifieringar ligger på samma namn och ska stå kvar."""
+    varde = varde.strip().strip('"')
+    befintliga = {
+        str(r.get("rdata", "")).strip().strip('"')
+        for r in poster(api, anv, los, doman, "@")
+        if r.get("type") == "TXT"
+    }
+    if varde in befintliga:
+        print(f"  {doman} har redan TXT {varde} — inget att göra")
+        return
+    if not apply:
+        print(f"  SKULLE lägga till TXT {doman} {varde}")
+        return
+    svar = api.addZoneRecord(anv, los, doman, "@", {"type": "TXT", "ttl": 3600, "priority": 0, "rdata": varde})
+    print(f"  lade till TXT {doman} {varde}  ({svar})")
+
+
 def apexrad(api, anv, los, doman: str) -> None:
     rader = poster(api, anv, los, doman, "@")
     varden = {str(r.get("rdata", "")).rstrip(".") for r in rader}
@@ -228,6 +252,7 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--doman", default="snajp.se")
     ap.add_argument("--mal", default=STANDARD_MAL, help="Railway-målet för CNAME")
+    ap.add_argument("--txt", help="lägg en TXT-post på apex i stället för att röra www")
     ap.add_argument("--apply", action="store_true")
     args = ap.parse_args()
 
@@ -247,14 +272,20 @@ def main() -> int:
     visa(api, anv, los, args.doman)
 
     print("\nåtgärd:")
-    satt_www(api, anv, los, args.doman, args.mal, args.apply)
-    apexrad(api, anv, los, args.doman)
+    if args.txt:
+        lagg_txt(api, anv, los, args.doman, args.txt, args.apply)
+    else:
+        satt_www(api, anv, los, args.doman, args.mal, args.apply)
+        apexrad(api, anv, los, args.doman)
 
     if args.apply:
         print("\nefter ändringen:")
         visa(api, anv, los, args.doman)
-        print("\nDNS sprider sig enligt TTL. Verifiera kopplingen med:")
-        print("  python scripts/railway_doman.py --env main")
+        print("\nDNS sprider sig enligt TTL.", end=" ")
+        if args.txt:
+            print("Kontrollera med: nslookup -type=TXT " + args.doman + " ns1.loopia.se")
+        else:
+            print("Verifiera kopplingen med:\n  python scripts/railway_doman.py --env main")
     else:
         print("\nInget ändrat. Kör med --apply.")
     return 0
