@@ -63,9 +63,11 @@ _MARKORER: tuple[tuple[str, re.Pattern[str], str], ...] = (
     # träffas inte; ett med blanksteg runt sig är ett tankstreck i löptext.
     ("tankstreck", re.compile(r"—|\s[–-]\s"), "tankstreck i brödtexten"),
     # Skrivreglerna (granskningen 2026-10-09) förbjöd värderingen av bolaget,
-    # men provet 2026-11-06 öppnade ändå "… visar ert engagemang för integritet".
-    ("smicker", re.compile(r"\b(?:visar|vittnar\s+om)\s+(?:\w+\s+){0,3}(?:engagemang|passion)\b|\bimponerande\b",
-                           re.IGNORECASE), "smicker eller värdering av dem"),
+    # men provet 2026-11-06 öppnade ändå "… visar ert engagemang för integritet",
+    # och varvet efter "… visar ert kontinuerliga arbete med …".
+    ("smicker", re.compile(
+        r"\b(?:visar|vittnar\s+om)\s+(?:\w+\s+){0,3}(?:engagemang|passion|arbete|ambition\w*|kompetens|fokus)\b"
+        r"|\bimponerande\b", re.IGNORECASE), "smicker eller värdering av dem"),
     ("jag_ser_att", re.compile(r"\bjag\s+(?:ser|såg|märkte|noterade|har\s+sett)\s+att\b", re.IGNORECASE),
      "börjar i vår iakttagelse (\"Jag ser att …\")"),
     ("vi_har_skapat", re.compile(r"\bvi\s+har\s+(?:skapat|utvecklat|byggt|tagit\s+fram)\b", re.IGNORECASE),

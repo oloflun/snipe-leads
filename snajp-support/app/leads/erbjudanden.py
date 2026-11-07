@@ -73,7 +73,8 @@ _INGANG_A = (
     "ingången, en mening om högst 20 ord: ett konstaterande om något konkret ur deras verksamhet enligt "
     "researchen, valt så att produkten bygger vidare på det (för en agent som hittar kunder vilka sorters "
     "kunder de arbetar för, för en supportagent vad deras kunder frågar om eller behöver hjälp med, annars "
-    "det moment produkten tar hand om hos dem). Aldrig en utmaning, en balansgång, ett problem eller en fråga"
+    "det moment produkten tar hand om hos dem). En egen huvudsats, aldrig en bisats som leder in i "
+    "produktmeningen (\"När ni …\"), och aldrig en utmaning, en balansgång, ett problem eller en fråga"
 )
 _PRODUKTMENING_A = (
     "produktmeningen, högst 25 ord: produkten namnges först och vad den ger just dem, med utfallet nedan "

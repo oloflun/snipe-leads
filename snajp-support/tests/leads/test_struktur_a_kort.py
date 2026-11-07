@@ -64,7 +64,7 @@ def test_formen_ar_en_mening_per_steg_utan_balansgang_och_fraga():
     assert f"högst {erbjudanden.ORDTAK['rak']} ord" in regler
     assert "Ingen fråga" in regler
     # "balansgång" står bara som förbud, aldrig som anvisning.
-    assert "Aldrig en utmaning, en balansgång" in regler
+    assert "aldrig en utmaning, en balansgång" in regler
     assert erbjudanden.ORDTAK["rak"] < erbjudanden.ORDTAK["fraga"] <= stil.MAX_ORD_MEJL
 
 
@@ -282,3 +282,37 @@ def test_iris_tar_bara_fram_foretag(mening, fel):
     assert ("fel_sak" in koder) is fel
     # Supportagenten berörs inte.
     assert "fel_sak" not in {a.kod for a in stil.erbjudande_fynd(text.replace("agent Iris", "Supportagent"), villkor=None, produkt=SUPPORT)}
+
+
+# -- tredje varvet 2026-11-06 ---------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("mening", "generisk"),
+    [
+        ("Vår agent Iris hittar och kvalificerar nya företagskunder åt er och skriver färdiga första mejl.", True),
+        ("Vår agent Iris hittar nya företagskunder som passar dig och skriver ett första mejl till dem.", True),
+        ("Den hittar och kvalificerar nya företagskunder som passar er och skriver ett första mejl.", True),
+        ("Vår agent Iris hittar nya företagskunder som vill sälja via er plattform.", False),
+        ("Vår agent Iris tar fram fler fastighetsbolag och bostadsrättsföreningar åt er varje vecka.", False),
+    ],
+)
+def test_kedjan_ber_om_vilka_foretag_nar_iris_meningen_ar_generisk(mening, generisk):
+    utkast = {"subject": "Nya kunder", "body": f"Hej,\n\nNi säljer maskiner till verkstäder. {mening}\n\nTitta gärna på demon."}
+    fynd = _stilfynd(utkast, villkor=None, produkt=IRIS, andra=[], amne_i_kod=True, tak=erbjudanden.ORDTAK["rak"])
+    assert any("vilka sorters företag" in f for f in fynd) is generisk
+    # Supportagenten och B berörs inte, och stilkontrollen (facit) inte heller.
+    assert not utkaststruktur.generisk_iris_mening(utkast["body"], SUPPORT)
+    b = _stilfynd(utkast, villkor=None, produkt=IRIS, andra=[], amne_i_kod=True, struktur="b")
+    assert not any("vilka sorters företag" in f for f in b)
+
+
+def test_smicker_i_andra_ordalag_falls():
+    assert "smicker" in _koder("Hej,\n\nAtt ni lanserade en ny tjänst visar ert kontinuerliga arbete med integritet. "
+                               "Vår Supportagent svarar på frågorna.\n\nTitta gärna på demon.")
+
+
+def test_ingangsformerna_bjuder_inte_in_till_nar_bisatsen():
+    assert all("När" not in f for f in _INGANGSFORMER)
+    assert "egen huvudsats" in erbjudanden.formregler("rak", IRIS)
+    assert "egen huvudsats" in _INGANGSUPPGIFT

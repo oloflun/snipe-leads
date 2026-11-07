@@ -271,8 +271,9 @@ _INGANGSUPPGIFT = (
     "sak ur deras verksamhet enligt citaten, vald så att produkten bygger vidare "
     "på den: för en agent som hittar kunder vilka sorters kunder de arbetar för, "
     "för en supportagent vad deras kunder frågar om eller behöver hjälp med, "
-    "annars det moment produkten tar hand om hos dem. Den är aldrig en utmaning, "
-    "en balansgång, ett problem, en fråga eller kritik: påstå aldrig att de "
+    "annars det moment produkten tar hand om hos dem. Den är en egen huvudsats, "
+    "aldrig en bisats som leder in i produktmeningen (\"När ni …\"), och aldrig "
+    "en utmaning, en balansgång, ett problem, en fråga eller kritik: påstå aldrig att de "
     "brister, inte hinner eller behöver något. Produktmeningen tar vid där "
     "ingången slutar (\"fler av dem\", \"de frågorna\"): produkten namnges först "
     "och sedan vad den ger just dem, med utfallet ur erbjudandet översatt till "
@@ -936,7 +937,10 @@ _INGANGSFORMER: tuple[str, ...] = (
     "rekrytering, ett nytt slags uppdrag). Finns inget sådant: vad deras kunder får av dem, med deras ord.",
     "Det konkreta momentet i deras vardag som produkten tar hand om, enligt sajten: vilka sorters kunder "
     "som passar dem, eller vad deras kunder frågar om.",
-    "Vad deras kunder får av dem enligt sajten, med deras egna ord.",
+    # Provet 2026-11-06: formen "vad deras kunder får av dem" blev "När ni
+    # erbjuder X kan Iris …" i alla tre varven för samma två leads.
+    "Det deras kunder får av dem enligt sajten, med deras egna ord och med kunderna eller bolaget som "
+    "subjekt i en egen huvudsats.",
 )
 
 
@@ -1000,6 +1004,13 @@ def _stilfynd(
         ut.append(
             f"Stil: frågan lovar \"{fel_sak}\", men agenten hittar företag; säg vilka sorters företag "
             "(\"byggföretag\", \"hotell och restauranger\")"
+        )
+    # A (Anton 2026-11-06: "säkerställ att den fortfarande anpassar utkasten"):
+    # produktmeningen säger vilka sorters företag Iris tar fram åt just dem.
+    if struktur != "b" and utkaststruktur.generisk_iris_mening(body, produkt):
+        ut.append(
+            "Stil: produktmeningen säger bara \"nya företagskunder\"; säg vilka sorters företag Iris tar fram åt "
+            "just dem, ur researchen om vilka de säljer till"
         )
     if not fokus_ok and stil.fokusgrepp(body):
         ut.append("Stil: greppet \"fokusera på …\" ska inte användas i det här mejlet; bygg ingången på ett annat sätt")
