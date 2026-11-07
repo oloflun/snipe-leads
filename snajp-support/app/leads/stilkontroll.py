@@ -41,8 +41,12 @@ MAX_ORD_B = 60
 #: om mottagaren som frågan ska bära blev den 33–37 ord i volymprovet
 #: 2026-11-05; 40 fäller de verkligt långa utan att flagga varje anpassad fråga.
 MAX_ORD_MENING_B = 40
-#: B-ingång som ställer krav på mottagaren i stället för att konstatera något.
-_B_KRAV = re.compile(r"\b(?:kräver|behöver|måste)\b|\bför\s+att\s+driva\s+verksamheten\b", re.IGNORECASE)
+#: Ingång som ställer krav på mottagaren i stället för att konstatera något: B
+#: (volymprovet 2026-11-05) och A sedan förslag 1 (Anton 2026-11-06; provet
+#: samma kväll: "… kräver att ni kontinuerligt når ut till nya företagskunder").
+_KRAV_INGANG = re.compile(
+    r"\b(?:kräver|behöver|måste|förutsätter)\b|\bför\s+att\s+driva\s+verksamheten\b", re.IGNORECASE
+)
 
 _HALSNING = re.compile(
     r"^\s*(?:med\s+vänlig(?:a)?\s+hälsning(?:ar)?|vänliga\s+hälsningar|bästa\s+hälsningar|"
@@ -58,6 +62,12 @@ _MARKORER: tuple[tuple[str, re.Pattern[str], str], ...] = (
     # Ett tankstreck i intervall ("15–20 minuter") står utan blanksteg och
     # träffas inte; ett med blanksteg runt sig är ett tankstreck i löptext.
     ("tankstreck", re.compile(r"—|\s[–-]\s"), "tankstreck i brödtexten"),
+    # Skrivreglerna (granskningen 2026-10-09) förbjöd värderingen av bolaget,
+    # men provet 2026-11-06 öppnade ändå "… visar ert engagemang för integritet",
+    # och varvet efter "… visar ert kontinuerliga arbete med …".
+    ("smicker", re.compile(
+        r"\b(?:visar|vittnar\s+om)\s+(?:\w+\s+){0,3}(?:engagemang|passion|arbete|ambition\w*|kompetens|fokus)\b"
+        r"|\bimponerande\b", re.IGNORECASE), "smicker eller värdering av dem"),
     ("jag_ser_att", re.compile(r"\bjag\s+(?:ser|såg|märkte|noterade|har\s+sett)\s+att\b", re.IGNORECASE),
      "börjar i vår iakttagelse (\"Jag ser att …\")"),
     ("vi_har_skapat", re.compile(r"\bvi\s+har\s+(?:skapat|utvecklat|byggt|tagit\s+fram)\b", re.IGNORECASE),
@@ -112,7 +122,10 @@ _GENERELL_INGANG = re.compile(
 #: "som ni gör" fälldes blev "Med er/ert/era …", "När ni …" och "Ni som …" de
 #: nya mallorden, i mejl efter mejl. Ingången börjar i deras löfte eller i en
 #: fråga till dem, aldrig i en av de här öppningarna.
-_SLENTRIAN = re.compile(r"^(?:med\s+(?:er|ert|era|din|ditt|dina)|när\s+(?:ni|du)|(?:ni|du)\s+som)\b", re.IGNORECASE)
+#: "När …" gäller varje subjekt sedan provet 2026-11-06 (struktur A kortare):
+#: "När ni …" blev "När Footnet säljer …" och "När Nälsta Bygg välkomnar …",
+#: samma mall med bolagets namn, och ingången smälte ihop med produktmeningen.
+_SLENTRIAN = re.compile(r"^(?:med\s+(?:er|ert|era|din|ditt|dina)|när|(?:ni|du)\s+som)\b", re.IGNORECASE)
 #: Uppräkningen av deras utbud (Anton 2026-10-15: "en generisk upprabbling av
 #: deras verksamhet"): "Med ert breda utbud av fordon, utrustning och service
 #: för snöskotrar …", "Med er verksamhet som säljer båtar, motorer och
@@ -152,7 +165,10 @@ _MALLORD = re.compile(
     r"|\b(?:ta|tar)\s+tid\s+från\s+att\b|\bkräver\s+(?:fullt|ditt|ert)\s+fokus\b"
     r"|\b(?:fokus\w*|koncentrera\s+(?:er|dig))\s+på\s+(?:varje\s+(?:enskilt\s+)?(?:projekt|detalj)|projekt(?:et|en)?\b"
     r"|arbetet|uppdrag(?:et|en)?\b|verksamheten|jobbet|det\s+(?:ni|du)\s+gör)"
-    r"|\bägna\s+(?:er|dig)\s+åt\s+(?:varje\s+(?:enskilt\s+)?projekt|projekt(?:et|en)?\b|arbetet|jobbet)",
+    r"|\bägna\s+(?:er|dig)\s+åt\s+(?:varje\s+(?:enskilt\s+)?projekt|projekt(?:et|en)?\b|arbetet|jobbet)"
+    # "Att … är en balansgång" i 57 av 105 A-mejl 2026-11-01–06; ingången i
+    # A är sedan Antons förslag 1 (2026-11-06) ett konstaterande om dem.
+    r"|\bbalansgång\w*",
     re.IGNORECASE,
 )
 #: Fokusgreppet ("… kräver att ni kan fokusera på måleriet, inte på att hitta
@@ -258,12 +274,14 @@ def uppmaning(text: str) -> str:
     return _norm(meningar[-1]) if meningar else ""
 
 
-def kontrollera(text: str, *, struktur: str = "a") -> Kontrollresultat:
+def kontrollera(text: str, *, struktur: str = "a", tak: int | None = None) -> Kontrollresultat:
     """Markörerna i ett mejl. Alla fynd är allvarliga: de tvingar granskning.
 
     `struktur` "b" (app/leads/utkaststruktur.py, Sebbe 2026-11-05): det korta
     mejlet SKA sluta med sin fråga och har ett eget ordtak; övriga markörer
-    gäller som i A."""
+    gäller som i A. `tak` är brödtextens ordtak när anroparen vet mejlets form
+    (första mejlet i A: `erbjudanden.ORDTAK`); utan det gäller B:s eller det
+    allmänna taket, som uppföljningarna också prövas mot."""
     text = text or ""
     ar_b = struktur == "b"
     fynd: list[Anmarkning] = []
@@ -331,17 +349,22 @@ def kontrollera(text: str, *, struktur: str = "a") -> Kontrollresultat:
         # Volymprovet 2026-11-05: fyra av 30 B-ingångar sa att de "kräver att
         # ni kontinuerligt hittar nya kunder". B:s ingång konstaterar, den
         # ställer inga krav på dem (utkaststruktur.block).
-        if len(meningar) > 1 and _B_KRAV.search(meningar[0]):
-            lagg("b_kravande_ingang", f"B-ingången ställer krav på dem (\"{_B_KRAV.search(meningar[0]).group(0)}\"); konstatera något konkret om dem")
+        if len(meningar) > 1 and _KRAV_INGANG.search(meningar[0]):
+            lagg("b_kravande_ingang", f"B-ingången ställer krav på dem (\"{_KRAV_INGANG.search(meningar[0]).group(0)}\"); konstatera något konkret om dem")
     elif meningar and meningar[-1].endswith("?"):
         lagg("slutar_med_fraga", f"slutar med en fråga i stället för en handling: \"{meningar[-1][:60]}\"")
+    # A:s ingång konstaterar något om dem (Anton 2026-11-06); uppföljningarna
+    # undantar fyndet (follow_up_generator._EJ_I_UPPFOLJNING).
+    krav = _KRAV_INGANG.search(meningar[0]) if not ar_b and len(meningar) > 1 else None
+    if krav:
+        lagg("kravande_ingang", f"ingången ställer krav på dem (\"{krav.group(0)}\"); konstatera något konkret om dem")
     svara = next((m for m in meningar[-1:] if _SVARA_ORDER.match(m)), None) or next(
         (m for m in meningar if _SVARA_KODORD.search(m)), None
     )
     if svara:
         lagg("svara_sa_avslut", f"avslutet är en order (\"{svara[:50]}\"); skriv en vardaglig inbjudan")
     antal_ord = sum(len(m.split()) for m in meningar)
-    tak = MAX_ORD_B if ar_b else MAX_ORD_MEJL
+    tak = tak or (MAX_ORD_B if ar_b else MAX_ORD_MEJL)
     if antal_ord > tak:
         lagg("for_langt", f"brödtexten är {antal_ord} ord (högst {tak})")
     # B:s fråga är en mening med flit (förebilden har 27 ord): eget tak.
@@ -471,10 +494,15 @@ def erbjudande_fynd(text: str, *, villkor: str | None, produkt: str | None) -> l
         # Agenten före löftet (Båthuset 2026-10-12: "Vi lovar att du lägger
         # minst 50 % mindre tid …" och Supportagenten först i sista meningen):
         # mottagaren ska veta VAD som lovas innan siffrorna kommer.
-        ingang_slut = brod.find("\n\n", brod.find(ingang(text)[:20]) if ingang(text) else 0)
+        # Produktens FÖRSTA omnämnande mot villkorens första siffra efter
+        # ingången. Förut söktes namnet först efter första stycket, men i A står
+        # produktmeningen i samma stycke som ingången (Anton 2026-11-06), och
+        # pilotens "av Iris" efter siffrorna fällde då ett rätt mejl.
+        forsta = ingang(text)
+        ingang_slut = brod.find(forsta) + len(forsta) if forsta and forsta in brod else -1
         siffror = [m.start() for t in _TAL.findall(villkor or "") for m in re.finditer(rf"\b{re.escape(t)}\b", brod)
                    if m.start() > ingang_slut]
-        if siffror and brod.find(namn, max(ingang_slut, 0)) > min(siffror):
+        if siffror and brod.find(namn) > min(siffror):
             fynd.append(Anmarkning("agent_efter_loftet",
                                    f"Stil: \"{namn}\" namnges först efter löftet; säg vad agenten gör innan siffrorna",
                                    allvarlig=True))
@@ -485,6 +513,9 @@ def erbjudande_fynd(text: str, *, villkor: str | None, produkt: str | None) -> l
     if slag == "support" and _LEADSMOMENT.search(brod):
         fynd.append(Anmarkning("fel_moment", "Stil: supportmejlet talar om att hitta nya kunder; "
                                "Supportagenten svarar på kundfrågor, den hittar inga kunder", allvarlig=True))
+    elif slag == "leads" and _IRIS_FEL_SAK.search(brod):
+        fynd.append(Anmarkning("fel_sak", f"Stil: Iris tar fram \"{_IRIS_FEL_SAK.search(brod).group(1)}\", men Iris "
+                               "hittar företag; säg vilka sorters företag", allvarlig=True))
     elif slag == "leads" and _SUPPORTMOMENT.search(brod):
         fynd.append(Anmarkning("fel_moment", "Stil: Iris-mejlet talar om kundmejl eller supportchattar; "
                                "Iris hittar nya företagskunder, den svarar inte på kundfrågor", allvarlig=True))
@@ -505,6 +536,16 @@ def erbjudande_fynd(text: str, *, villkor: str | None, produkt: str | None) -> l
 
 _LEADSMOMENT = re.compile(r"\bhitta\s+(?:nya\s+)?(?:företags)?kunder\b")
 _SUPPORTMOMENT = re.compile(r"\bsupportchatt\w*|\bkundmejl\w*")
+#: Vad Iris "hittar" eller "tar fram" när det inte är företag (provet
+#: 2026-11-06: "Vår agent Iris tar fram nya hyresgäster åt dig"). B:s fråga har
+#: sin egen kontroll av siffran (utkaststruktur.fel_sak_i_fragan), där också
+#: "uppdrag" och "projekt" fälls; i A står "hittar nya uppdrag" i Antons facit
+#: 2026-10-12 (Svensk Rivtjänst) och fälls därför inte här.
+_IRIS_FEL_SAK = re.compile(
+    r"\b(?:hittar|hitta|tar\s+fram|ta\s+fram|tog\s+fram)\s+(?:och\s+kvalificerar\s+)?(?:\d+\s*[–-]\s*\d+\s+)?"
+    r"(?:nya\s+|fler\s+)?(hyresgäst\w*|privatperson\w*|konsument\w*|tomt\w*|"
+    r"investerare|leverantör\w*|personal|medarbetare|studenter|elever|patienter)\b"
+)
 
 
 def produktslag(produkt: str | None) -> str | None:

@@ -15,6 +15,7 @@ import { LeadsRunForm } from "@/components/leads/LeadsRunForm";
 import { Samtalslista } from "@/components/leads/Samtalslista";
 import { btnPrimary, btnSecondary, flik, flikAktiv, flikInaktiv, fliklista } from "@/components/ui";
 import { exempelOmgang } from "@/lib/demo/iris-exempel";
+import { lasStruktur } from "@/lib/leads/struktur";
 import { useLocale, type Localized } from "@/lib/i18n";
 import type { SuiteProspekt } from "@/lib/leads/suite";
 import { cn } from "@/lib/utils";
@@ -155,7 +156,10 @@ export function IrisBolag({ demo = false }: Readonly<{ demo?: boolean }>) {
       // Nya rader är nyast och hamnar överst, under Ny, som en riktig körning.
       const nu = new Date().toISOString();
       setExempelRader((forr) => [
-        ...exempelOmgang(demoOmgang).map((b) => ({ ...exempelTillRad(b), status: "new", created_at: nu })),
+        // Utkasten i den struktur besökaren valde i Kör Iris (A/B, Sebbe
+        // 2026-11-07). Valet sparas av StrukturVal i webbläsaren, så det läses
+        // här i stället för att trådas genom formuläret.
+        ...exempelOmgang(demoOmgang, lasStruktur()).map((b) => ({ ...exempelTillRad(b), status: "new", created_at: nu })),
         ...forr
       ]);
       setDemoOmgang((n) => n + 1);

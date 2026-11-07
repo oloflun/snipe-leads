@@ -9,6 +9,249 @@ möjligt), vad det betyder i koden.
 
 ---
 
+## 2026-11-07 (Anton) — Pilotpriser: 9 990, 12 990 och 19 990 kr i månaden
+
+**Beslut.** Snajp Support kostar 9 990 kr i månaden, Snajp Leads 12 990 och
+Snajp Duo 19 990, alla exklusive moms (var 3 990, 4 490 och 6 990). Priserna
+är tillfälliga under pilotperioden och kan komma att höjas, och det står på
+sidan.
+
+**Resonemang.** Antons ord: "Ändra även priserna till 9990 ex moms för Support
+och 12990 för Leads 19990 för Duo, skriv även att detta är tillfälliga priser
+under pilotperioden och kan komma att höjas." Han angav inget annat skäl.
+
+**I koden.** `lib/pricing.ts` (beloppen, och `PRISER_AR_PRELIMINARA` tillbaka
+till true så att förbehållet renderas), förbehållets lydelse i
+`PricingSection.tsx` (nu också "exklusive moms") och Snajps egen kunskapsbas
+`snajp-support/app/tenants/snajp_kb.py`, som chatten svarar ur och som fylls på
+vid nästa seedning. Titlar, sökbeskrivningar, schemat, llms.txt och
+sökordssidorna räknar priset ur `lib/pricing.ts` och följer med av sig själva.
+Duo sparar nu 2 990 kr i månaden (räknas fram). Inte ändrat: avtalsmallen
+`docs/pilotavtal.md` och planerna i `GOALS.md`, som är Antons dokument.
+
+## 2026-11-07 (Anton) — Startsidan blir en egen sida
+
+**Beslut.** `/` är inte längre samma sida som `/leads`. Den har en egen hjälte
+(koncept 2a: rubriken "AI-agenter för leads och kundtjänst, på svenska." på
+Göteborgsfotot, med Iris utkast och supportagentens ärende svävande över
+himlen) och en sektion per agent, och den skrivs inte längre om till `/leads`
+i adressfältet. `/leads` och `/support` är oförändrade.
+
+**Resonemang.** Båda adresserna renderade samma kropp och samma H1, och `/`
+byttes till `/leads` med `replaceState`; Google slår ihop sådana adresser och
+rankar bara en av dem. Anton valde variant 1a med rutorna från 1c, "som flyter
+in över bakgrunden och svävar stilla och reagerar dynamiskt på hovring", med en
+"Läs mer" under varje ruta till agentens sektion, och "samma sida för det mer
+generella om vår filosofi och arbetssätt". Sedan: "bygg inte om resten av
+sidan från grunden, använd endast de befintliga 3 första sektionerna för varje
+agent ... fram tills Haga-bilden". Löftet ska ha resultatvyns tal och panel
+nedanför sig, "ett dynamiskt scroll-drivet flöde som mjukt visar sig eftersom
+användaren scrollar ned, en sak i taget, med allt i bild och inget som är
+ryckigt eller börjar innan det är fullt synligt eller försvinner innan
+animationen är klar", och demon ska stå med texten bredvid, "inte ta upp hela
+bredden".
+
+**I koden.** `components/marketing/Startsida.tsx` (hjälten, agentsektionerna,
+gränserna för båda), läget `hem` i `LandingPhoto.tsx` och `ProductPage.tsx`,
+rörelserna `svav` och `steg` i `useLandingMotion.ts`, frågorna för båda
+agenterna (`hemFragor` i `copy-sections.ts`, också i startsidans FAQPage-schema).
+Produktbilderna och "Så tänker vi"-bandet står inte på startsidan: ytorna bär
+hjälten, och bandet var inte en av agenternas tre sektioner. INV-SEO-001
+(`test_startsidan_ar_en_egen_sida`) fäller en återgång.
+
+**Rättat samma dag (Anton).** Produktbilderna togs bort på agentens eget
+initiativ, och då fylldes agentens sektion nästan bara av resultatvyn. Anton:
+de två dynamiska rutorna hör till den första sektionen, och resultatet ska vara
+"den sista delen innan den interaktiva rutan med Email-studio eller inkorg".
+Ordningen per agent är nu: löftet, de två rutorna (`ProduktBilder`, läget
+`fullt`), resultatets tal och panel, demon med texten bredvid. Bandet står
+fortfarande inte med.
+
+---
+
+## 2026-11-06 (Sebbe) — Marknadsvideo för Instagram: Iris från körning till svar
+
+**Beslut.** En kort reel (26 s, 9:16 och 4:5) som visar Iris-flödet som en
+sammanhängande handling: Kör Iris, filter på stad och bransch, 50 leads
+"pang", utkasten redan skrivna, ett klick, 30 svar i inkorgen. Sebbes
+beställning: "DET SKA VARA EN HÄFTIG EFFEKTFULL VIDEO. MAN SKA KÄNNA ATT DET
+GÅR FORT OCH ÄR ENKELT ATT FÅ NYA FÖRETAGSKUNDER I SIN INBOX FRÅN DET ATT MAN
+SKAPAR KÖRNING." Tempo och grepp är hämtade ur en research av storbolagens
+produktfilmer (Apple, Linear, Raycast, Stripe, Klarna med flera), se
+`docs/marknad/video-research.md`.
+
+**Resonemang.** Siffrorna 50 leads och 30 svar är en illustration av hur
+flödet ser ut, inte ett utlovat utfall: raden "Illustration med påhittade
+exempel" ligger i bild under kroken och svarssekvensen, och ingen text
+påstår en svarsfrekvens (marknadsföringslagen). Allt innehåll är påhittat
+och inget är inspelat från development eller main, eftersom båda bär
+riktiga kunders data. Webbplatsbedömningen visas inte (Antons beslut
+2026-10-08). Ljudet är syntetiserat från grunden så att ingen annans musik
+följer med filen.
+
+**I koden.** `marknad/video/` (Remotion, fristående; uteslutet i rotens
+`tsconfig.json` och `.dockerignore` så att Railway aldrig bygger det),
+`marknad/video/README.md` för hur man renderar.
+
+---
+
+## 2026-11-06 (agenten, på Antons uppdrag) — Jämförelsesidor med namngivna leverantörer
+
+**Beslut.** Två nya sidor, `/jamfor-ai-sdr` och `/jamfor-supportagenter`,
+jämför Snajp med namngivna leverantörer: språk, godkännande eller överlämning,
+var datan lagras och pris. Jämförande reklam är ett beslut om varumärket, inte
+bara om koden, så Anton skulle granska sidorna före main. **Godkänt av Anton
+2026-11-07**: han läste sidorna i dev-miljön och sade ja till releasen
+("Ja, öppna PR:en").
+
+**Resonemang.** Anton: "Vi MÅSTE dyka upp på första sidan och i
+AI-sammanfattningarna för samtliga, fortsätt tills det är löst." Google
+AI-översikterna på "ai sdr sverige", "leadsagent sverige" och "supportbot
+sverige" (Antons skärmdumpar samma dag) citerar topplistor och jämförelser
+(getrebelos, revexa, businesswith, alicelabs), och Snajp står inte i någon.
+En egen saklig jämförelse är den sidtyp de citerar. Den tidigare regeln i
+`lib/landningssidor.ts` om att inte namnge konkurrenter var agentens egen
+försiktighet, inte DESIGN.md:s (som förbjuder påhittade siffror och citat).
+
+**Villkoren.** Varje uppgift står på leverantörens egen sajt (källa per rad,
+`lib/jamforelser.ts`, underlaget i `docs/SEO-JAMFORELSER-KALLOR.md`), det
+leverantören inte skriver är "Ej angivet", sidan säger att Snajp säljer ett av
+verktygen, och INV-SEO-001 fäller en kontroll äldre än 120 dagar.
+
+---
+
+## 2026-11-06 (Anton) — Varje länk utåt heter som sökfrasen
+
+**Beslut.** Sidornas titlar (länken i Google), sidfotens länkar, brödsmulorna
+och llms.txt använder Antons fraser: "Svensk AI-SDR", "Svenska B2B-leads",
+"B2B-prospektering för svenska företag", "Svenska leads i inkorgen", "Support
+på svenska", "Svensk supportchatt till er hemsida", "Support som svarar på
+svenska", och i samma stil "Svensk leadsagent", "Svensk AI-supportagent" och
+"Svenska AI-agenter för företag". Titeln är frasen följd av "| Snajp".
+
+**Resonemang.** Antons ord: "Se även till att all kommunikation utåt i alla
+länkar är enligt det jag sa i början av konversationen … ALLA som söker på
+detta i kombination med 'Sverige' eller 'svenska' ska få upp oss." En kort
+titel som är exakt sökfrasen är också den Google helst använder som sidlänk.
+
+**I koden.** Titlarna i `app/<sida>/page.tsx`, länknamnen i
+`lib/landningar.ts` (`LANDNINGAR[].namn`, `FAMILJ[].lank`). Sidfoten länkar nu
+även produktsidorna /leads och /support och har två kolumner från md, tre från
+lg, så att de längre länknamnen ryms på en rad.
+
+---
+
+## 2026-11-06 (Anton) — Struktur A kortare: en mening per steg, högst 80 ord
+
+**Beslut.** A får förslag 1 av tre: samma ordning som förut (mottagaren,
+agenten, erbjudandet, inbjudan) men en mening per steg och högst 80 ord.
+Ingången konstaterar en konkret sak om dem som produktmeningen tar vid ifrån,
+produktmeningen bär kundens korta utfall översatt till dem, piloten står i en
+eller två korta meningar och inbjudan i en. Ingen fråga i A, och erbjudandets
+form B (frågan om vad som tar mest tid) är avslagen hos Snajp.
+
+**Resonemang.** Antons ord: "Utifrån de senaste ändringarna känns just nu
+alternativ B bättre då det är mer rakt på sak, där man inte riskerar att tappa
+läsaren, men kan samtidigt läsas som oproffesionellt av vissa." Han bad om tre
+sätt att göra A kortare och mer direkt utan att tappa den professionella
+strukturen, valde det första och la till: "säkerställ att den fortfarande
+anpassar utkasten efter varje kund och deras verksamhet, samt vilken produkt
+som är den bästa fiten." Underlaget (Snajp i development 2026-11-01–06, 105
+A-mejl): median 105 ord och 96 över formens 90 fast grinden skrev om långa mejl,
+95 började "Att …", 57 sa "balansgång", 47 frågade vad som tar mest tid och
+svarade själva i nästa mening, och alla slutade med två vägar i en lång mening.
+Längden kom ur upplägget, inte ur orden, så ett lägre tak räckte inte. Taket är
+80 och inte 70: förslagets exempel hade 76 ord, och ett tak som det godkända
+exemplet inte klarar hade skickat nästan varje rätt mejl till omskrivning.
+
+**I koden och prompterna.**
+- `erbjudanden.FORMER` och `ORDTAK` (80 för form A, 90 för form B): formen
+  beskriver ingången och produktmeningen, och blocket bär "Utfallet
+  produktmeningen bygger på" ur kundens `kort_utfall` för produkten researchen
+  valde (`Valt.utfall`, satt i `for_trad`); utan utfall bygger den på
+  produktens nytta, så andra kunders produkter fungerar som förut.
+- `leads_research_v2`: ingångsformerna konstaterar (vilka de arbetar för,
+  något nytt hos dem, momentet, vad kunderna får), personaliseringssteget 1a
+  skriver om ingången och produktmeningen ur citaten, och utfallet går in i
+  faktagrindens underlag även i A. Omskrivningen och humanizern håller
+  ordtaket.
+- `stilkontroll.kontrollera(tak=…)`: kedjan, köningen
+  (`_queue_outreach_draft_impl(ordtak=…)`) och `scripts/granska_utkast.py`
+  prövar A mot formens tak; uppföljningarna behåller det allmänna taket 100.
+  "Balansgång" fälls i ingången (`mallord_i_ingangen`). `agent_efter_loftet`
+  jämför nu produktens första omnämnande med villkorens siffror: förut söktes
+  namnet först efter första stycket, och ett A-mejl med Iris i produktmeningen
+  och "pilot av Iris" efter "20" fälldes fel.
+- Skrivstilen omgång 11, grundprompten § 10, katalogens gemensamma regel.
+- `scripts/snajp_malgrupp.py`: bara `pilot_a` aktiv (`pilot_b` står kvar under
+  `egna`), pilotvillkoret i två korta meningar utan "med alla funktioner", och
+  handlingen "titta gärna på demon …, eller svara på mejlet för en kostnadsfri
+  genomgång". Villkorens första mening, den B bär, har samma siffror som förut.
+  Iris-instruktionen säger att produktmeningen bär effektiviseringen.
+- Låst av `tests/leads/test_struktur_a_kort.py`. Facit 2026-10-16
+  (INV-LEADS-UTKAST-002) passerar oförändrat; det tillåter redan `for_langt`.
+
+**Provet i development samma kväll** (nio Snajp-leads i sex branscher, båda
+produkterna, Skapa om utkast): 8 av 9 utkast (det nionde föll på
+utdatakontraktet, som 2–4 % av utkasten varje dag även före ändringen), median
+78 ord mot 105, ingen "balansgång" och ingen fråga, och samma produktval som
+researchen gjort. Två saker rättades: "När Footnet säljer …" och "När Nälsta
+Bygg …" var "När ni …"-mallen med bolagets namn, så `slentrian_ingang` fäller
+nu varje ingång som börjar med "När"; och produktmeningen blev 26–30 ord i sex
+av åtta, så kedjan skriver om `lang_mening` i A när villkoren inte själva har
+en mening över taket. Andra varvet med samma nio leads (`0cbdbed`): 9 av 9
+utkast, median 72 ord (66–89), fem utan stilfynd mot två av åtta, ingen
+"När …"-ingång. Kvar och inte rättat: en ingång som ställer krav ("… kräver att
+ni kontinuerligt når ut …", en fiskhandel), smicker ("visar ert engagemang",
+ett it-bolag) och en översättning av utfallet som går utöver vad Iris gör ("nya
+hyresgäster", ett fastighetsbolag). De två första står på köposten som "Stil: …" eller
+syns i granskningen; det tredje fångar ingen grind i dag. Anton: "Ja, täpp till
+dem." Alla tre fälls nu i kod och skrivs om i kedjan: `kravande_ingang` (A:s
+ingång med kräver, behöver, måste eller förutsätter; uppföljningarna undantas),
+`smicker` ("visar ert engagemang", "imponerande") och `fel_sak` (Iris tar fram
+hyresgäster, privatpersoner, investerare, personal …; inte "uppdrag", som står i
+Antons facit 2026-10-12 och fälls bara i B:s fråga). Facit 2026-10-16 och
+referensen 2026-10-12 undantar `kravande_ingang` för Ö-Logistik och Consenso,
+som `svara_sa_avslut` undantogs 2026-10-25, tills facit för den nya formen är
+godkänt. Tredje varvet: 8 av 9, sex av åtta utan fynd, men samma två leads
+öppnade "När ni …" i alla tre varven (båda med ingångsformen "vad deras kunder
+får av dem", nu omskriven, och ingången är en egen huvudsats), och fyra av fem
+Iris-mejl sa bara "nya företagskunder åt er": kedjan skriver nu om en sådan
+mening så att den säger vilka sorters företag (`generisk_iris_mening`, bara i
+kedjan, inte i stilkontrollen som facit prövas mot). Fjärde varvet: 8 av 9, sju
+av åtta utan fynd, median 72 ord. Det nionde utkastet föll i varv 1, 3 och 4 på
+att sista omskrivningen saknade `sources_used`, fast en godkänd version fanns,
+och de fler omskrivningarna gjorde det vanligare (3 av 36 mot 2–4 % per dag).
+En omskrivning eller personalisering som bryter utdatakontraktet fäller nu inte
+utkastet: versionen före står kvar och köas med sina stilfynd.
+
+**Öppet för Anton.** (1) Ett nytt facit för A tas ur de första utkasten med
+den nya formen och läggs in först efter ditt ja. (2) A/B-testet är nu struktur
+A mot struktur B; erbjudandets form A mot B mäts inte längre hos Snajp.
+(3) Main kräver en release, och `snajp_malgrupp.py --env main --apply` efter
+den.
+
+---
+
+## 2026-11-06 (Anton) — Supportagent i texten, supportbot bara i sökträffen
+
+**Beslut.** Produkten heter supportagent i all text på sajten. "Supportbot"
+får stå i en sidas titel och beskrivning, alltså det som syns i sökträffen och
+i länkar, men då alltid tillsammans med "supportagent".
+
+**Resonemang.** Antons ord: "Jag vill fortfarande att det står 'Supportagent' i
+all text på hemsidan, även om länkar och beskrivningar till dessa kan nämna
+'supportbot', men se till att även supportagent används." Supportbot är ett
+ord folk söker på ("supportbot sverige"), men det är inte vad produkten heter.
+
+**I koden.** `tests/invariants/test_inv_seo_001.py:test_supportbot_bara_i_sokträffen`
+fäller ordet i sökordssidornas innehåll, marknadskomponenterna och sidornas
+kropp, och en titel eller beskrivning som nämner supportbot utan supportagent.
+`/supportchatt`s beskrivning: "Svensk supportagent för hemsidan: en supportbot
+som svarar besökarna ur er kunskapsbas."
+
+---
+
 ## 2026-11-05 (Sebbe) — Utskicksstruktur A och B, vald vid Kör Iris
 
 **Beslut.** Iris första mejl får två strukturer. "A är det vi har nu som vi

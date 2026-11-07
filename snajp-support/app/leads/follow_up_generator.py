@@ -327,7 +327,9 @@ async def skriv_om_uppfoljning(
 #: `agent_efter_loftet` letar efter produkten efter första mejlets ingång,
 #: medan en uppföljning namnger den i första stycket (fem falska av sex i
 #: provet i development 2026-10-31).
-_EJ_I_UPPFOLJNING = frozenset({"lang_mening", "samma_uppmaning", "agent_efter_loftet"})
+#: kravande_ingang: A:s ingångsregel (2026-11-06) gäller första mejlet, och en
+#: uppföljning får börja "Om ni behöver …".
+_EJ_I_UPPFOLJNING = frozenset({"lang_mening", "samma_uppmaning", "agent_efter_loftet", "kravande_ingang"})
 
 #: "Hon" först i en mening (stilkontroll: iris_hon).
 _HON_FORST = re.compile(r"((?:^|[.!?]\s+))Hon\b", re.MULTILINE)

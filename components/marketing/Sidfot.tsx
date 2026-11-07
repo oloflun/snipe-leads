@@ -44,8 +44,8 @@ import { KONTAKT_MEJL, shared } from "@/components/marketing/copy";
 const forPaket = (id: Paket["id"]): { namn: Localized; vag: string }[] => LANDNINGAR.filter((p) => p.produkt === id);
 
 const GRUPPER: { rubrik: Localized; poster: { namn: Localized; vag: string }[] }[] = [
-  { rubrik: FAMILJ.leads.namn, poster: forPaket("leads") },
-  { rubrik: FAMILJ.support.namn, poster: forPaket("support") },
+  { rubrik: FAMILJ.leads.namn, poster: [{ namn: FAMILJ.leads.lank, vag: FAMILJ.leads.vag }, ...forPaket("leads")] },
+  { rubrik: FAMILJ.support.namn, poster: [{ namn: FAMILJ.support.lank, vag: FAMILJ.support.vag }, ...forPaket("support")] },
   {
     rubrik: { sv: "Snajp", en: "Snajp" },
     poster: [
@@ -64,7 +64,7 @@ export function Sidfot() {
       <div className="mx-auto max-w-[1480px] px-6 py-8 md:px-10">
         <nav
           aria-label={text({ sv: "Lösningar", en: "Solutions" })}
-          className="grid grid-cols-1 gap-x-10 gap-y-8 border-b border-ink/12 pb-10 pt-2 sm:grid-cols-3"
+          className="grid grid-cols-1 gap-x-10 gap-y-8 border-b border-ink/12 pb-10 pt-2 md:grid-cols-2 lg:grid-cols-3"
         >
           {GRUPPER.map((grupp) => (
             <div key={grupp.rubrik.sv}>

@@ -658,7 +658,15 @@ export function LeadsRunForm({
             <StrukturVal value={struktur} onChange={valjStruktur} className="sm:col-span-2" />
           ) : null}
         </div>
-      ) : null}
+      ) : (
+        /* Demon (Sebbe 2026-11-07): A/B-valet finns även här, så att besökaren
+           ser att strukturen väljs vid Kör Iris. Antal och omfattning är
+           låsta i exempelkörningen, så bara valet visas. Exempelkörningen
+           läser valet ur webbläsaren (lasStruktur) när den lägger in raderna. */
+        <div className="mt-6 max-w-[760px]">
+          <StrukturVal value={struktur} onChange={valjStruktur} />
+        </div>
+      )}
 
       {filterOppna ? (
       <div id="leads-filter" className="mt-6 grid max-w-[760px] gap-5 sm:grid-cols-2">

@@ -258,6 +258,24 @@ def fel_sak_i_fragan(text: str, produkt: str | None) -> str | None:
     return traff.group(1) if traff else None
 
 
+#: Iris produktmening i A som inte säger vilka kunder (provet 2026-11-06: fyra
+#: av fem Iris-mejl i tredje varvet sa bara "nya företagskunder åt er"). Prövas
+#: i kedjan och inte i stilkontrollen, som `utfall_ordagrant`: facit 2026-10-16
+#: (Ö-Logistik) har just den meningen.
+_GENERISK_IRIS = re.compile(
+    r"\b(?:iris|den)\s+(?:hittar|tar\s+fram)\s+(?:och\s+kvalificerar\s+)?(?:nya\s+|fler\s+)?(?:företags)?kunder"
+    r"(?:\s+(?:åt\s+(?:er|dig)|som\s+passar\s+(?:er|dig)))?\s*(?:[,.]|och\b)",
+    re.IGNORECASE,
+)
+
+
+def generisk_iris_mening(text: str, produkt: str | None) -> bool:
+    """Säger Iris-mejlet bara "nya företagskunder (åt er)" utan vilka sorters?"""
+    from .stilkontroll import produktslag
+
+    return produktslag(produkt) == "leads" and bool(_GENERISK_IRIS.search(text or ""))
+
+
 def loggpost(struktur: Struktur, *, med_erbjudande_: bool = False, med_ingang_: bool = False) -> dict[str, Any]:
     post: dict[str, Any] = {"step": LOGGSTEG, "struktur": struktur}
     if struktur == "b":

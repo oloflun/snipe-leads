@@ -41,6 +41,7 @@
     "supabase/functions",
     "email-studio/kopior",
     "snajp-support/frontend",
-    "support-webb"
+    "support-webb",
+    "marknad/video"
   ]
 }

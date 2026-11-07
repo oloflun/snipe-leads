@@ -40,7 +40,9 @@ def _las(rel: str) -> str:
 
 
 def _landningar() -> list[str]:
-    return re.findall(r'^\s*vag: "(/[^"]+)"', _las("lib/landningar.ts"), re.MULTILINE)
+    """Adresserna i LANDNINGAR, och bara där: FAMILJ längre ned har egna `vag:`."""
+    registret = _las("lib/landningar.ts").split("export const LANDNINGAR", 1)[1].split("] as const", 1)[0]
+    return re.findall(r'^\s*vag: "(/[^"]+)"', registret, re.MULTILINE)
 
 
 def test_registret_har_poster():
@@ -171,8 +173,66 @@ def test_grinden_fäller_ett_handskrivet_pris():
     assert not _KRONOR.search("en demo på 15 till 20 minuter")
 
 
+#: Antons regel 2026-11-06: produkten heter supportagent i all text på sajten.
+#: "Supportbot" är ett sökord och får stå i en sökträffs titel och beskrivning,
+#: men bara bredvid "supportagent".
+_SUPPORTBOT = re.compile(r"(?i)support[\s-]?bot")
+_SYNLIG_TEXT = [
+    "lib/landningssidor.ts",
+    "lib/landningar.ts",
+    "lib/faq.ts",
+    *(p.relative_to(ROOT).as_posix() for p in sorted((ROOT / "components" / "marketing").rglob("*.ts*"))),
+]
+
+
+def test_supportbot_bara_i_sokträffen():
+    fel = [
+        f"{rel}: {rad.strip()[:100]}"
+        for rel in _SYNLIG_TEXT
+        for rad in _utan_kommentarer(_las(rel)).splitlines()
+        if _SUPPORTBOT.search(rad)
+    ]
+    for sida in _sidor():
+        utan_meta = _SIDMETA.sub("", _utan_kommentarer(sida.read_text(encoding="utf-8")))
+        fel += [f"{sida.relative_to(ROOT).as_posix()}: {rad.strip()[:100]}" for rad in utan_meta.splitlines() if _SUPPORTBOT.search(rad)]
+    for falt in ("titel", "beskrivning"):
+        fel += [
+            f"{fil}: {falt} nämner supportbot utan supportagent: {t}"
+            for fil, t in _metatext(falt)
+            if _SUPPORTBOT.search(t) and not re.search(r"(?i)supportagent", t)
+        ]
+    assert not fel, "Sajten säger supportagent; supportbot får bara stå i titel och beskrivning bredvid supportagent:\n" + "\n".join(fel)
+
+
+def test_jamforelserna_har_kalla_och_ar_aktuella():
+    """Jämförande reklam ska gå att kontrollera: varje leverantör har en källa på
+    sin egen sajt, och kontrollen får inte bli gammal (lib/jamforelser.ts)."""
+    import datetime
+
+    kalla = _utan_kommentarer(_las("lib/jamforelser.ts"))
+    datum = re.search(r'KONTROLLERAD = "(\d{4}-\d{2}-\d{2})"', kalla)
+    assert datum, "KONTROLLERAD saknas i lib/jamforelser.ts"
+    alder = (datetime.date.today() - datetime.date.fromisoformat(datum.group(1))).days
+    assert alder <= 120, f"Jämförelsen kontrollerades för {alder} dagar sedan. Kör om kontrollen (docs/SEO-JAMFORELSER-KALLOR.md) och ändra KONTROLLERAD."
+    namn = re.findall(r'namn: "([^"]+)"', kalla)
+    kallor = re.findall(r'kalla: "([^"]+)"', kalla)
+    assert len(namn) >= 10 and len(namn) == len(kallor), (namn, kallor)
+    assert all(k.startswith("https://") for k in kallor), kallor
+    # Snajps eget pris står aldrig här: det räknas ur lib/pricing.ts.
+    assert "Snajp" not in "".join(namn), namn
+
+
 def test_hjalterubriken_ar_en_h1():
     assert re.search(r'<h1\s+key=\{nyckel\}\s+data-mo="hero-h1"', _las("components/marketing/LandingPhoto.tsx"))
+
+
+def test_startsidan_ar_en_egen_sida():
+    """Anton 2026-11-07: / och /leads renderade samma sida med samma H1, och / skrevs om
+    till /leads i adressfältet. Google slår ihop två sådana adresser och rankar en av dem."""
+    assert '<ProductPage initial="leads" hem />' in _las("app/page.tsx")
+    assert re.search(r'<h1\s+key=\{locale\}\s+data-mo="hero-h1"', _las("components/marketing/Startsida.tsx"))
+    # Omskrivningen till /leads hör till produktväxeln, som startsidan inte har.
+    assert "if (hem) return;" in _las("components/marketing/LandingPhoto.tsx")
 
 
 def test_faq_svaren_star_i_html():

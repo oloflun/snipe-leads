@@ -30,3 +30,11 @@ test("ett A-mejl är aldrig B", () => {
 test("ett långt mejl som råkar sluta med en fråga är inte B", () => {
   assert.equal(arStrukturB(`Hej,\n\n${"Ord ".repeat(80)}skulle det hjälpa?`), false);
 });
+
+test("signaturens namnrad räknas inte in i brödtexten", () => {
+  assert.equal(
+    arStrukturB("Hej Karin,\n\nOm vi monterade en hjärtstartare hos er innan sommaren, skulle det vara till nytta?\n\nVänliga hälsningar,\nAnna, Hjärtsäker AB"),
+    true
+  );
+  assert.equal(arStrukturB("Hej Karin,\n\nVi hör av oss nästa vecka.\n\nVänliga hälsningar,\nAnna, Hjärtsäker AB"), false);
+});

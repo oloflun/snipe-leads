@@ -20,8 +20,11 @@ import type { Localized } from "@/lib/i18n";
  * utan den texten finns ingen skrivning på sidan som säger att priserna kan
  * ändras, alltså läses de som utlovade. Sätt tillbaka den till true samma dag
  * som ett pris ska kunna röra sig.
+ *
+ * Satt till true 2026-11-07 (Anton): priserna nedan är tillfälliga under
+ * pilotperioden och kan komma att höjas (docs/BESLUT.md).
  */
-export const PRISER_AR_PRELIMINARA = false;
+export const PRISER_AR_PRELIMINARA = true;
 
 export type Paket = {
   id: "support" | "leads" | "duo";
@@ -54,7 +57,8 @@ export const PAKET: Paket[] = [
   {
     id: "support",
     namn: "Snajp Support",
-    prisPerManad: 3990,
+    // Exklusive moms, som alla belopp här. 3 990 till 2026-11-07.
+    prisPerManad: 9990,
     beskrivning: {
       sv: "Kundtjänstagenten som svarar utifrån er egen kunskapsbas.",
       en: "The customer service agent that answers from your own knowledge base."
@@ -69,7 +73,8 @@ export const PAKET: Paket[] = [
   {
     id: "leads",
     namn: "Snajp Leads",
-    prisPerManad: 4490,
+    // 4 490 till 2026-11-07.
+    prisPerManad: 12990,
     beskrivning: {
       sv: "Iris, leadsagenten som hittar och skriver till rätt företag.",
       en: "Iris, the leads agent that finds and writes to the right companies."
@@ -85,7 +90,8 @@ export const PAKET: Paket[] = [
   {
     id: "duo",
     namn: "Snajp Duo",
-    prisPerManad: 6990,
+    // 6 990 till 2026-11-07.
+    prisPerManad: 19990,
     populärast: true,
     beskrivning: {
       sv: "Båda agenterna i samma dashboard, med delad kunddata.",
@@ -101,7 +107,8 @@ export const PAKET: Paket[] = [
      * för att stå som en siffra i texten. Den stod som "990 kr" när paketen
      * kostade 2 990 och 4 490 mot 6 490; efter prisändringen till 3 990,
      * 4 490 och 6 990 är den 1 490, och en handskriven siffra hade blivit fel
-     * i samma sekund utan att något sagt ifrån.
+     * i samma sekund utan att något sagt ifrån. Med pilotpriserna 2026-11-07
+     * (9 990, 12 990, 19 990) är den 2 990.
      */
     notisMall: {
       sv: "Sparar {belopp}/mån jämfört med att köpa dem var för sig.",
