@@ -69,16 +69,24 @@ ORDTAK = {"rak": 80, "fraga": 90}
 #: Ingången och produktmeningen i struktur A (Anton 2026-11-06, förslag 1):
 #: ett konstaterande om dem som produktmeningen tar vid ifrån, i stället för
 #: "utmaningen" som blev "Att … är en balansgång" i 57 av 105 mejl.
+#: Anton 2026-11-07: "konstaterande om deras verksamhet" blev bolagets
+#: verksamhetsbeskrivning ("[Webbutiken] erbjuder …", "[Plattformen] arbetar för att …") i
+#: sex av nio, opersonligt och mallaktigt. Ingången är det konkreta i deras
+#: vardag som produkten tar vid ifrån, som i förslagets exempel ("Ni lägger de
+#: flesta golven åt fastighetsbolag …", "Dina kunder frågar ofta om …").
 _INGANG_A = (
-    "ingången, en mening om högst 20 ord: ett konstaterande om något konkret ur deras verksamhet enligt "
-    "researchen, valt så att produkten bygger vidare på det (för en agent som hittar kunder vilka sorters "
-    "kunder de arbetar för, för en supportagent vad deras kunder frågar om eller behöver hjälp med, annars "
-    "det moment produkten tar hand om hos dem). En egen huvudsats, aldrig en bisats som leder in i "
-    "produktmeningen (\"När ni …\"), och aldrig en utmaning, en balansgång, ett problem eller en fråga"
+    "ingången, en mening om högst 20 ord skriven till dem, med \"ni\" (\"du\") eller deras kunder som subjekt "
+    "och aldrig bolagets namn: det konkreta i deras vardag som produkten tar vid ifrån och som går att anta "
+    "ur deras verksamhet enligt researchen. För en agent som hittar kunder: vilka kunder de säljer till eller "
+    "arbetar åt, så konkret som underlaget tillåter (bransch, ort), så att produkten kan ta fram fler sådana. "
+    "För en supportagent: vad deras kunder (hyresgäster, medlemmar, gäster) hör av sig om, ett eller två "
+    "konkreta ämnen utifrån vad de säljer eller gör. En egen huvudsats, aldrig en beskrivning av bolaget eller "
+    "vad det erbjuder, aldrig en bisats som leder in i produktmeningen (\"När ni …\"), aldrig en abstrakt utmaning eller "
+    "balansgång och aldrig en fråga"
 )
 _PRODUKTMENING_A = (
-    "produktmeningen, högst 25 ord: produkten namnges först och vad den ger just dem, med utfallet nedan "
-    "översatt till deras verksamhet, och den tar vid där ingången slutar (\"fler av dem\", \"de frågorna\")"
+    "produktmeningen, högst 25 ord: produkten namnges först och tar vid där ingången slutar (\"fler sådana "
+    "kunder\", \"de frågorna\"), med utfallet nedan översatt till deras verksamhet"
 )
 
 #: Mejlets form (Anton 2026-10-25): (namn, regler). Reglerna beskriver

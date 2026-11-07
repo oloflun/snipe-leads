@@ -94,7 +94,7 @@ def main() -> int:
             villkor = utkaststruktur.kort_villkor(villkor) if "pilot" in brod else ""
         # A prövas mot formens ordtak, som i kedjan (erbjudanden.ORDTAK).
         tak = None if struktur == "b" else erbjudanden.ORDTAK.get(former.get(r["erbjudande"] or ""), erbjudanden.ORDTAK["rak"])
-        fynd = stil.kontrollera(stil._brodtext(body), struktur=struktur, tak=tak).anmarkningar
+        fynd = stil.kontrollera(stil._brodtext(body), struktur=struktur, tak=tak, bolag=r["company_name"]).anmarkningar
         if r["erbjudande"]:
             fynd += stil.erbjudande_fynd(body, villkor=villkor, produkt=produkt or (produkter[0] if produkter else None))
         fynd += stil.mot_andra(body, [*texter[:i], *texter[i + 1 :]], struktur=struktur)

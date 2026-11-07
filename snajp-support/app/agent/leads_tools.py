@@ -195,7 +195,9 @@ async def _queue_outreach_draft_impl(
             for r in await outreach.storage.list_review_queue(outreach.tenant_id)
             if r.get("thread_id") != outreach.thread_id
         ]
-        stilfynd = stil.kontrollera(finalized_body, struktur=struktur, tak=ordtak).anmarkningar + stil.mot_andra(
+        stilfynd = stil.kontrollera(
+            finalized_body, struktur=struktur, tak=ordtak, bolag=prospekt.get("company_name")
+        ).anmarkningar + stil.mot_andra(
             finalized_body, andra, struktur=struktur
         )
         if stilfynd:

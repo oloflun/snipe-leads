@@ -119,6 +119,7 @@ def test_produktens_kortform_raknas():
 def test_ingangsformen_roterar_per_prospekt():
     from app.agent.leads_research_v2 import _INGANGSFORMER, _ingangsform
 
-    former = {_ingangsform(f"prospekt-{i}") for i in range(40)}
-    assert former == set(_INGANGSFORMER), "fem former ska alla förekomma över en körning"
-    assert _ingangsform("samma") == _ingangsform("samma")
+    for slag in ("leads", "support", None):
+        former = {_ingangsform(f"prospekt-{i}", slag) for i in range(40)}
+        assert former == set(_INGANGSFORMER[slag]), "varje form ska förekomma över en körning"
+    assert _ingangsform("samma", "leads") == _ingangsform("samma", "leads")

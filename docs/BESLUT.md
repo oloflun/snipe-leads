@@ -9,6 +9,51 @@ möjligt), vad det betyder i koden.
 
 ---
 
+## 2026-11-07 (Anton) — A:s ingång är deras vardag, aldrig bolagets verksamhetsbeskrivning
+
+**Beslut.** Ingången i struktur A säger det konkreta i mottagarens vardag som
+produkten tar vid ifrån och som går att anta ur deras verksamhet, skrivet till
+dem, som i förslag 1:s exempel ("Ni lägger de flesta golven åt fastighetsbolag
+och bostadsrättsföreningar runt Göteborg. Vår agent Iris tar fram fler sådana
+kunder …"): för Iris vilka kunder de säljer till, för Supportagenten vad deras
+kunder hör av sig om. Bolagets namn som subjekt, "[Bolaget] erbjuder …", är
+ingen ingång och fälls i kod. Ersätter "ett konstaterande om något konkret ur
+deras verksamhet" i beslutet 2026-11-06 nedan; resten av det står kvar.
+
+**Resonemang.** Antons ord om provets nio utkast: "De här inledningarna som i
+princip är en repetition av företagets verksamhetsbeskrivning är exakt vad vi
+ville undvika för länge sedan och blir väldigt opersonligt och mall-aktigt,
+istället för att koppla direkt mot något konkret som de antagligen brottas med
+i sin verksamhet, som att hitta nya företagskunder eller hantera ärenden från
+hyresgäster … Det känns som att vi sorterade bort på för mycket, får inte kräva
+något eller vara smickrande och landar i att det blir väldigt generellt och
+opersonligt, hela strukturen tappades dessutom från det första exemplet för
+Förslag 1 … som var bra som det var." Sex av nio ingångar började med bolagets
+namn och sajtens beskrivning. Orsaken låg i reglerna: två av fyra
+ingångsformer bad om "vad deras kunder får av dem" eller "något nytt hos dem",
+personaliseringssteget förbjöd allt som liknade något de brottas med, och
+stilgrindens omskrivningstips pekade fortfarande på "deras löfte".
+
+**I koden och prompterna.**
+- `erbjudanden._INGANG_A` och `leads_research_v2._INGANGSUPPGIFT`: ingången
+  med "ni" eller deras kunder som subjekt, vilka kunder de säljer till (Iris)
+  eller vad kunderna hör av sig om (Supportagenten), aldrig bolagets namn.
+- `_INGANGSFORMER` per produktslag (`_ingangsform(prospect_id, slag)`): tre
+  former för Iris, tre för Supportagenten, inga om "vad kunderna får av dem".
+- `stilkontroll.kontrollera(bolag=…)` och `bolag_i_ingangen`: bolagets
+  namnord bland ingångens tre första ord fälls i A (`bolagsbeskrivning`) och
+  skrivs om i kedjan; köningen och `scripts/granska_utkast.py` skickar med
+  namnet. Utan namn (facit, uppföljningar) prövas det inte.
+- `kravande_ingang` i A fäller bara krav riktade till dem ("kräver att ni",
+  "ni behöver", "måste ni"): vad deras kunder behöver får ingången säga. B
+  behåller sitt bredare förbud.
+- Skrivstilen (omgång 12, ingångsavsnittet med förslagets två exempel utan
+  citattecken, så att en verklig golvfirma inte fälls som kopia), grundmallen
+  § 10.2, Snajps Iris-instruktion och stilgrindens omskrivningstips.
+- Låst av `tests/leads/test_struktur_a_kort.py`.
+
+---
+
 ## 2026-11-07 (Anton) — Pilotpriser: 9 990, 12 990 och 19 990 kr i månaden
 
 **Beslut.** Snajp Support kostar 9 990 kr i månaden, Snajp Leads 12 990 och

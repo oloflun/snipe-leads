@@ -262,20 +262,26 @@ _UTKAST_V2_UPPGIFT = (
 #: Personaliseringssteget för första stycket (Anton 2026-10-12): skriver om
 #: ENBART ingången och produktmeningen. Samma svarsform som utkastet, så
 #: run_step-kontraktet håller. Sedan Antons förslag 1 (2026-11-06) är ingången
-#: ett konstaterande som produktmeningen tar vid ifrån, inte en "utmaning":
-#: den blev "Att … är en balansgång" i 57 av 105 A-mejl.
+#: det som produktmeningen tar vid ifrån, inte en "utmaning": den blev "Att …
+#: är en balansgång" i 57 av 105 A-mejl. Sedan 2026-11-07 (Anton) är den det
+#: konkreta i deras vardag, aldrig bolagets verksamhetsbeskrivning: "ett
+#: konstaterande om deras verksamhet" gav "[Webbutiken] erbjuder …" i sex av nio.
 _INGANGSUPPGIFT = (
     "Skriv om ENBART första stycket i utkastet nedan, ingången och meningen om "
-    "produkten, så att det är skrivet till mottagaren om just deras verksamhet, "
-    "och låt resten av mejlet stå ordagrant kvar. Ingången konstaterar EN konkret "
-    "sak ur deras verksamhet enligt citaten, vald så att produkten bygger vidare "
-    "på den: för en agent som hittar kunder vilka sorters kunder de arbetar för, "
-    "för en supportagent vad deras kunder frågar om eller behöver hjälp med, "
-    "annars det moment produkten tar hand om hos dem. Den är en egen huvudsats, "
-    "aldrig en bisats som leder in i produktmeningen (\"När ni …\"), och aldrig "
-    "en utmaning, en balansgång, ett problem, en fråga eller kritik: påstå aldrig att de "
-    "brister, inte hinner eller behöver något. Produktmeningen tar vid där "
-    "ingången slutar (\"fler av dem\", \"de frågorna\"): produkten namnges först "
+    "produkten, så att det är skrivet till mottagaren om just deras vardag, "
+    "och låt resten av mejlet stå ordagrant kvar. Ingången är EN mening om det "
+    "konkreta i deras vardag som produkten tar vid ifrån och som går att anta ur "
+    "deras verksamhet enligt citaten: för en agent som hittar kunder vilka kunder "
+    "de säljer till eller arbetar åt, så konkret som citaten tillåter (bransch, "
+    "ort); för en supportagent vad deras kunder (hyresgäster, medlemmar, gäster) "
+    "hör av sig om, ett eller två konkreta ämnen utifrån vad de säljer eller gör. "
+    "Subjektet är \"ni\" (\"du\") eller deras kunder, aldrig bolagets namn: "
+    "\"[Bolaget] erbjuder …\" och \"[Bolaget] arbetar för att …\" är en "
+    "verksamhetsbeskrivning, inte en ingång. Den är en egen huvudsats, aldrig "
+    "en bisats som leder in i produktmeningen (\"När ni …\"), aldrig en abstrakt "
+    "utmaning eller balansgång, aldrig en fråga och aldrig kritik: påstå aldrig "
+    "att de brister eller inte hinner. Produktmeningen tar vid där ingången "
+    "slutar (\"fler sådana kunder\", \"de frågorna\"): produkten namnges först "
     "och sedan vad den ger just dem, med utfallet ur erbjudandet översatt till "
     "deras verksamhet, och bara det produkten gör enligt dess nytta i "
     "produktlistan. Regler: (1) andra person rakt igenom, \"ni\"/\"er\"/\"era\" "
@@ -931,23 +937,41 @@ def _utkastens_researchvy(research_summary: str) -> str:
 #: kritik. Sedan Antons förslag 1 (2026-11-06) är ingången ett konstaterande
 #: som produktmeningen tar vid ifrån, aldrig en utmaning, balansgång eller
 #: fråga: formerna skiljer sig i VAD de konstaterar.
-_INGANGSFORMER: tuple[str, ...] = (
-    "Vilka de arbetar för eller säljer till enligt sajten, sagt rakt till dem.",
-    "Något som har hänt eller är nytt hos dem enligt källmaterialet (en ny ort, en ny tjänst, en "
-    "rekrytering, ett nytt slags uppdrag). Finns inget sådant: vad deras kunder får av dem, med deras ord.",
-    "Det konkreta momentet i deras vardag som produkten tar hand om, enligt sajten: vilka sorters kunder "
-    "som passar dem, eller vad deras kunder frågar om.",
-    # Provet 2026-11-06: formen "vad deras kunder får av dem" blev "När ni
-    # erbjuder X kan Iris …" i alla tre varven för samma två leads.
-    "Det deras kunder får av dem enligt sajten, med deras egna ord och med kunderna eller bolaget som "
-    "subjekt i en egen huvudsats.",
-)
+#: Sedan 2026-11-07 (Anton) per produkt och utan "vad deras kunder får av
+#: dem": den formen och "något nytt hos dem" blev bolagets
+#: verksamhetsbeskrivning ("[Webbutiken] erbjuder naturlig fotvård online …").
+#: Varje form säger det i deras vardag som produkten tar vid ifrån.
+_INGANGSFORMER: dict[str | None, tuple[str, ...]] = {
+    "leads": (
+        "Vilka kunder de säljer till eller arbetar åt, så konkret som källmaterialet tillåter (bransch, "
+        "storlek, ort), med \"ni\" som subjekt: de kunder produkten tar fram fler av.",
+        "Var och åt vilka de gör sina uppdrag, med kunderna som subjekt (\"Era kunder är …\", \"Era "
+        "beställare finns …\"): de kunder produkten tar fram fler av.",
+        "Något nytt hos dem enligt källmaterialet (en ny ort, en ny tjänst, ett nytt slags uppdrag) och "
+        "vilka kunder det riktar sig till. Finns inget nytt: vilka kunder de säljer till, med \"ni\" som subjekt.",
+    ),
+    "support": (
+        "Vad deras kunder (hyresgäster, medlemmar, gäster) hör av sig om, ett eller två konkreta ämnen "
+        "utifrån vad de säljer eller gör, med kunderna som subjekt.",
+        "I vilket läge deras kunder hör av sig (före köpet, efter leveransen, på kvällen) och om vad, "
+        "utifrån vad de säljer eller gör, med kunderna som subjekt.",
+        "Något nytt hos dem enligt källmaterialet (en ny tjänst, ett nytt sortiment, en lansering) och vad "
+        "deras kunder då hör av sig om. Finns inget nytt: vad kunderna hör av sig om.",
+    ),
+    None: (
+        "Det konkreta momentet i deras vardag som produkten tar hand om, enligt sajten, med \"ni\" eller "
+        "deras kunder som subjekt.",
+        "Vilka de arbetar åt och vad de gör åt dem, sagt rakt till dem, så att produkten kan ta vid.",
+    ),
+}
 
 
-def _ingangsform(prospect_id: str | None) -> str:
-    """Formen för just det här mejlet, deterministisk per prospekt."""
+def _ingangsform(prospect_id: str | None, slag: str | None = None) -> str:
+    """Formen för just det här mejlet, deterministisk per prospekt; `slag` är
+    produktens slag (stilkontroll.produktslag)."""
+    former = _INGANGSFORMER.get(slag) or _INGANGSFORMER[None]
     digest = hashlib.sha256(str(prospect_id or "").encode("utf-8")).digest()
-    return _INGANGSFORMER[digest[0] % len(_INGANGSFORMER)]
+    return former[digest[0] % len(former)]
 
 
 def _stilfynd(
@@ -977,7 +1001,7 @@ def _stilfynd(
     # mening och handlingen ("svara 'ja' så skickar vi de fem inom två
     # arbetsdagar" i varje gratis_prov-mejl), så de fynden kan inte skrivas
     # bort och ska bara flaggas vid köningen som förut.
-    fynd = stil.kontrollera(body, struktur=struktur, tak=tak).anmarkningar
+    fynd = stil.kontrollera(body, struktur=struktur, tak=tak, bolag=bolag).anmarkningar
     fynd += stil.erbjudande_fynd(body, villkor=villkor, produkt=produkt)
     fynd += stil.mot_andra(body, andra, struktur=struktur)
     # Ämnesraden (Anton 2026-10-15): inget bolagsnamn, ingen produkt, inte
@@ -1123,7 +1147,10 @@ async def run_outreach_draft_v2(
     andra_utkast = [str(r.get("body") or "") for r in koade]
     andra_amnen = [str(r.get("subject") or "") for r in koade]
     anvanda_ingangar = [i for i in (stil.ingang(t) for t in andra_utkast[:12]) if i]  # kön kommer nyast först
-    ingangsform = _ingangsform(thread.get("prospect_id"))
+    ingangsform = _ingangsform(
+        thread.get("prospect_id"),
+        stil.produktslag(vald_nu["namn"] if vald_nu else erbjudanden.produkt_ur_research(research_summary)),
+    )
     fokus_ok = _fokus_ok(thread.get("prospect_id"))
     if not fokus_ok:
         ingangsform += (
@@ -1347,8 +1374,10 @@ async def run_outreach_draft_v2(
         if b
         else "DITT FÖRRA UTKAST FÄLLDES AV STILGRINDEN. Skriv om hela "
         "mejlet enligt skrivstilen så att varje punkt nedan är åtgärdad: "
-        "ingången konstaterar något konkret ur deras egna ord som "
-        "produktmeningen tar vid ifrån, aldrig en utmaning, en balansgång, kritik "
+        "ingången säger det konkreta i deras vardag som produktmeningen tar vid "
+        "ifrån (vilka kunder de har, vad kunderna hör av sig om), med \"ni\" eller "
+        "deras kunder som subjekt och aldrig bolagets namn, aldrig en "
+        "verksamhetsbeskrivning, en abstrakt utmaning, en balansgång, kritik "
         "av dem, en uppräkning, siffror eller en mallfras; ämnesraden är två till "
         "fem ord utan bolagets namn och utan produkten; produkten namnges före "
         "löftet; erbjudandets villkor och produktens namn står kvar ordagrant i "

@@ -47,6 +47,34 @@ MAX_ORD_MENING_B = 40
 _KRAV_INGANG = re.compile(
     r"\b(?:kräver|behöver|måste|förutsätter)\b|\bför\s+att\s+driva\s+verksamheten\b", re.IGNORECASE
 )
+#: A fäller sedan 2026-11-07 bara krav riktade till dem ("kräver att ni …",
+#: "ni behöver …"). Anton: förbuden gjorde ingången "väldigt generell och
+#: opersonlig"; vad deras kunder behöver ("Era hyresgäster behöver svar om …")
+#: är det konkreta i deras vardag som ingången ska säga. B behåller _KRAV_INGANG.
+_KRAV_PA_DEM = re.compile(
+    r"\b(?:kräver|förutsätter)\s+att\s+(?:ni|du)\b"
+    r"|\b(?:ni|du)\s+(?:\w+\s+)?(?:behöver|måste)\b|\b(?:behöver|måste)\s+(?:ni|du)\b"
+    r"|\bför\s+att\s+driva\s+verksamheten\b",
+    re.IGNORECASE,
+)
+#: Bolagets verksamhetsbeskrivning som ingång (Anton 2026-11-07): "[Webbutiken]
+#: erbjuder naturlig fotvård online …", "[Fastighetsbolaget] förvaltar
+#: fastigheter …", sex av nio i provet samma dag, "exakt vad vi ville undvika
+#: för länge sedan". A:s ingång skrivs till dem ("ni", deras kunder), så
+#: bolagets namn bland ingångens första ord är fel. Namnordet är bolagsnamnets
+#: första ord på minst tre bokstäver, inte bransch- eller bolagsformsorden.
+_BOLAGSFORM = re.compile(r"\b(?:aktiebolag|ab|hb|kb|handelsbolag|publ)\b", re.IGNORECASE)
+_EJ_NAMNORD = frozenset({"ni", "du", "er", "era", "ert", "din", "dina", "ditt", "de", "vi", "the", "och"})
+
+
+def bolag_i_ingangen(text: str, bolag: str | None) -> str | None:
+    """Bolagets namnord bland ingångens tre första ord, eller None."""
+    ord_i_namn = [o for o in re.findall(r"[\wÅÄÖåäö]+", _BOLAGSFORM.sub(" ", bolag or "")) if len(o) >= 3]
+    if not ord_i_namn or ord_i_namn[0].casefold() in _EJ_NAMNORD:
+        return None
+    meningar = _meningar(_brodtext(text))
+    forsta = re.findall(r"[\wÅÄÖåäö]+", meningar[0])[:3] if meningar else []
+    return next((o for o in forsta if o.casefold() == ord_i_namn[0].casefold()), None)
 
 _HALSNING = re.compile(
     r"^\s*(?:med\s+vänlig(?:a)?\s+hälsning(?:ar)?|vänliga\s+hälsningar|bästa\s+hälsningar|"
@@ -274,14 +302,17 @@ def uppmaning(text: str) -> str:
     return _norm(meningar[-1]) if meningar else ""
 
 
-def kontrollera(text: str, *, struktur: str = "a", tak: int | None = None) -> Kontrollresultat:
+def kontrollera(
+    text: str, *, struktur: str = "a", tak: int | None = None, bolag: str | None = None
+) -> Kontrollresultat:
     """Markörerna i ett mejl. Alla fynd är allvarliga: de tvingar granskning.
 
     `struktur` "b" (app/leads/utkaststruktur.py, Sebbe 2026-11-05): det korta
     mejlet SKA sluta med sin fråga och har ett eget ordtak; övriga markörer
     gäller som i A. `tak` är brödtextens ordtak när anroparen vet mejlets form
     (första mejlet i A: `erbjudanden.ORDTAK`); utan det gäller B:s eller det
-    allmänna taket, som uppföljningarna också prövas mot."""
+    allmänna taket, som uppföljningarna också prövas mot. `bolag` är
+    mottagarens namn: A:s ingång får inte vara bolagets verksamhetsbeskrivning."""
     text = text or ""
     ar_b = struktur == "b"
     fynd: list[Anmarkning] = []
@@ -313,12 +344,12 @@ def kontrollera(text: str, *, struktur: str = "a", tak: int | None = None) -> Ko
             lagg("registerfakta_i_ingangen", f"registerfakta i ingången (mottagaren vet redan): \"{fakta.group(0)}\"")
         slentrian = _SLENTRIAN.search(meningar[0])
         if slentrian:
-            lagg("slentrian_ingang", f"ingången börjar med en slentrianöppning (\"{slentrian.group(0)} …\"); börja i deras löfte eller med en fråga till dem")
+            lagg("slentrian_ingang", f"ingången börjar med en slentrianöppning (\"{slentrian.group(0)} …\"); börja i det konkreta i deras vardag, vilka kunder de har eller vad kunderna hör av sig om")
         utbud = _UTBUD.search(meningar[0])
         lista = _TRELEDSLISTA.search(meningar[0])
         if utbud or (lista and lista.start() < len(meningar[0]) / 2):
             traff = (utbud or lista).group(0)
-            lagg("uppraknad_ingang", f"ingången räknar upp vad de säljer (\"{traff}\") i stället för vad de lovar sina kunder")
+            lagg("uppraknad_ingang", f"ingången räknar upp vad de säljer (\"{traff}\") i stället för vilka kunder de har eller vad kunderna hör av sig om")
         mallord = _MALLORD.search(" ".join(meningar[:2]))
         if mallord:
             lagg("mallord_i_ingangen", f"ingången bär ett mallord (\"{mallord.group(0)}\"); säg det med deras egna, konkreta ord")
@@ -355,9 +386,16 @@ def kontrollera(text: str, *, struktur: str = "a", tak: int | None = None) -> Ko
         lagg("slutar_med_fraga", f"slutar med en fråga i stället för en handling: \"{meningar[-1][:60]}\"")
     # A:s ingång konstaterar något om dem (Anton 2026-11-06); uppföljningarna
     # undantar fyndet (follow_up_generator._EJ_I_UPPFOLJNING).
-    krav = _KRAV_INGANG.search(meningar[0]) if not ar_b and len(meningar) > 1 else None
+    krav = _KRAV_PA_DEM.search(meningar[0]) if not ar_b and len(meningar) > 1 else None
     if krav:
-        lagg("kravande_ingang", f"ingången ställer krav på dem (\"{krav.group(0)}\"); konstatera något konkret om dem")
+        lagg("kravande_ingang", f"ingången ställer krav på dem (\"{krav.group(0)}\"); säg det konkreta i deras vardag")
+    namn = bolag_i_ingangen(text, bolag) if not ar_b and len(meningar) > 1 else None
+    if namn:
+        lagg(
+            "bolagsbeskrivning",
+            f"ingången beskriver bolaget (\"{namn} …\") i stället för att skriva till dem; säg vilka kunder de "
+            "har, eller vad deras kunder hör av sig om, med \"ni\" eller kunderna som subjekt",
+        )
     svara = next((m for m in meningar[-1:] if _SVARA_ORDER.match(m)), None) or next(
         (m for m in meningar if _SVARA_KODORD.search(m)), None
     )

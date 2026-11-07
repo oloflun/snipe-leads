@@ -60,19 +60,23 @@ def _koder(text: str, tak: int | None = erbjudanden.ORDTAK["rak"]) -> set[str]:
 
 def test_formen_ar_en_mening_per_steg_utan_balansgang_och_fraga():
     regler = erbjudanden.formregler("rak", IRIS)
-    assert "konstaterande" in regler and "produktmeningen" in regler
+    assert "deras vardag" in regler and "produktmeningen" in regler
     assert f"högst {erbjudanden.ORDTAK['rak']} ord" in regler
     assert "Ingen fråga" in regler
     # "balansgång" står bara som förbud, aldrig som anvisning.
-    assert "aldrig en utmaning, en balansgång" in regler
+    assert "aldrig en abstrakt utmaning eller balansgång" in regler
     assert erbjudanden.ORDTAK["rak"] < erbjudanden.ORDTAK["fraga"] <= stil.MAX_ORD_MEJL
 
 
+def _alla_former() -> list[str]:
+    return [form for former in _INGANGSFORMER.values() for form in former]
+
+
 def test_ingangsformerna_och_personaliseringen_ber_aldrig_om_balansgang_eller_fraga():
-    for form in _INGANGSFORMER:
+    for form in _alla_former():
         assert "balansgång" not in form and "fråga till dem" not in form, form
     assert "som en balansgång" not in _INGANGSUPPGIFT
-    assert "aldrig en utmaning, en balansgång" in _INGANGSUPPGIFT.casefold()
+    assert "aldrig en abstrakt utmaning eller balansgång" in _INGANGSUPPGIFT.casefold()
     # Steget skriver om första stycket: ingången OCH produktmeningen.
     assert "produktmeningen" in _INGANGSUPPGIFT or "meningen om produkten" in _INGANGSUPPGIFT
 
@@ -313,7 +317,7 @@ def test_smicker_i_andra_ordalag_falls():
 
 
 def test_ingangsformerna_bjuder_inte_in_till_nar_bisatsen():
-    assert all("När" not in f for f in _INGANGSFORMER)
+    assert all("När" not in f for f in _alla_former())
     assert "egen huvudsats" in erbjudanden.formregler("rak", IRIS)
     assert "egen huvudsats" in _INGANGSUPPGIFT
 
@@ -359,3 +363,88 @@ async def test_en_omskrivning_som_bryter_kontraktet_faller_inte_utkastet(miljo):
     assert "balansgång" in storage.outreach_messages[TENANT][0]["body"]
     post = json.dumps(storage.send_queue[TENANT][0], ensure_ascii=False, default=str)
     assert "mallord" in post or "Stil:" in post
+
+
+# -- Anton 2026-11-07: ingången är deras vardag, aldrig bolagets verksamhetsbeskrivning --
+
+
+#: Provets ingångar med påhittade namn: bolagets namn som subjekt och sajtens
+#: beskrivning av vad det gör.
+BESKRIVNINGAR = [
+    ("Fotnät AB", "Fotnät erbjuder naturlig fotvård online med produkter utvalda av en fotterapeut."),
+    ("C Lindqvist Maskin & Verktyg Aktiebolag", "C Lindqvist Maskin & Verktyg säljer maskiner och verktyg till företagskunder."),
+    ("Corvina Fastigheter AB", "Corvina Fastigheter förvaltar fastigheter med ett långsiktigt ägarperspektiv."),
+    ("Mälsta Bygg AB", "Mälsta Bygg välkomnar frågor om nya projekt och tjänster."),
+]
+
+
+def _a_mejl(ingang: str, produktmening: str = "Vår agent Iris tar fram fler sådana kunder åt er.") -> str:
+    return f"Hej,\n\n{ingang} {produktmening}\n\nTitta gärna på demon på snajp.se/demo."
+
+
+@pytest.mark.parametrize(("bolag", "ingang"), BESKRIVNINGAR)
+def test_bolagets_verksamhetsbeskrivning_som_ingang_falls(bolag, ingang):
+    mejl = _a_mejl(ingang)
+    assert "bolagsbeskrivning" in {a.kod for a in stil.kontrollera(mejl, tak=80, bolag=bolag).anmarkningar}
+    # Kedjan skickar fyndet till omskrivningen med vad ingången ska säga i stället.
+    fynd = _stilfynd({"subject": "Nya kunder", "body": mejl}, villkor=None, produkt=IRIS, andra=[], bolag=bolag,
+                     amne_i_kod=True, tak=80)
+    assert any("beskriver bolaget" in f and "vilka kunder" in f for f in fynd)
+    # Utan bolagets namn (facit, uppföljningar) och i B prövas det inte.
+    assert "bolagsbeskrivning" not in _koder(mejl)
+    b = {a.kod for a in stil.kontrollera(mejl, struktur="b", bolag=bolag).anmarkningar}
+    assert "bolagsbeskrivning" not in b
+
+
+@pytest.mark.parametrize(
+    ("bolag", "mejl"),
+    [
+        ("Golvbolaget i Göteborg AB", A_IRIS),
+        ("Jeansverkstan AB", A_SUPPORT),
+        ("Corvina Fastigheter AB", _a_mejl("Era hyresgäster hör av sig om felanmälningar, nycklar och tvättider.",
+                                           "Vår Supportagent svarar på de frågorna direkt, dygnet runt.")),
+        # Branschordet i namnet är inte namnordet: "fastigheter" i ingången är inte bolaget.
+        ("Corvina Fastigheter AB", _a_mejl("Era fastigheter i Uppsala har många hyresgäster med frågor om avtalet.",
+                                           "Vår Supportagent svarar på de frågorna direkt, dygnet runt.")),
+        # Ett bolagsnamn som börjar med ett pronomen fäller aldrig "Era kunder …".
+        ("Era Bygg AB", _a_mejl("Era kunder är bostadsrättsföreningar runt Uppsala.")),
+    ],
+)
+def test_forslagets_ingang_passerar_med_bolagets_namn(bolag, mejl):
+    assert "bolagsbeskrivning" not in {a.kod for a in stil.kontrollera(mejl, tak=80, bolag=bolag).anmarkningar}
+
+
+def test_vad_deras_kunder_behover_ar_ingen_kravande_ingang():
+    """Anton 2026-11-07: förbuden gjorde ingången generell. Kraven på dem fälls,
+    vad deras kunder behöver får ingången säga."""
+    kunder = _a_mejl("Era hyresgäster behöver snabba svar om nycklar och felanmälningar.",
+                     "Vår Supportagent svarar på de frågorna direkt, dygnet runt.")
+    assert "kravande_ingang" not in _koder(kunder)
+    for krav in ("För att växa behöver ni hela tiden nya företagskunder.",
+                 "Ni måste hela tiden hitta nya beställare.",
+                 "Att sälja delikatesser kräver att ni når ut till nya kunder."):
+        assert "kravande_ingang" in _koder(_a_mejl(krav)), krav
+    # B behåller sitt bredare krav-förbud.
+    assert "b_kravande_ingang" in {a.kod for a in stil.kontrollera(kunder, struktur="b").anmarkningar}
+
+
+def test_ingangsformerna_foljer_produkten_och_ber_aldrig_om_vad_kunderna_far():
+    assert all("kunder de säljer till" in f or "uppdrag" in f for f in _INGANGSFORMER["leads"])
+    assert all("hör av sig" in f for f in _INGANGSFORMER["support"])
+    for form in _alla_former():
+        assert "får av dem" not in form, form
+    # Personaliseringen och formregeln säger samma sak: deras vardag, aldrig bolagets namn.
+    assert "aldrig bolagets namn" in _INGANGSUPPGIFT
+    assert "verksamhetsbeskrivning, inte en ingång" in _INGANGSUPPGIFT
+    assert "aldrig bolagets namn" in erbjudanden.formregler("rak", IRIS)
+
+
+def test_skrivstilen_bar_forslagets_exempel_utan_att_grinden_fäller_dem():
+    from app.agent.leads_systemprompt import skrivstil
+
+    text = skrivstil()
+    assert "Ni lägger de flesta golven" in text and "Dina kunder frågar ofta om skötsel" in text
+    assert "Omgång 12" in text
+    # Exemplen står utan citattecken: en verklig golvfirma med samma kunder
+    # ska inte fällas som "kopierat_exempel".
+    assert stil.kopierat_exempel("Ni lägger golv åt fastighetsbolag och bostadsrättsföreningar runt Göteborg.") is None
