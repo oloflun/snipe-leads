@@ -9,6 +9,30 @@ möjligt), vad det betyder i koden.
 
 ---
 
+## 2026-11-08 (Anton) — Startsidan följer inte med release #42
+
+**Beslut.** Den enade startsidan (posten "Startsidan blir en egen sida",
+2026-11-07) går inte till main med release-PR:en #42. Den är borttagen från
+`development` tills PR:en är mergad, så att PR:en bara bär resten: Sebbes demo
+och reel, struktur A och SEO-arbetet med jämförelsesidorna och länktexterna.
+
+**Resonemang.** Antons ord: "Se till att ändringarna på hemsidan inte kommer
+med i PR:en, SEOn arbetet och då tillhörande länkarna, inte den enade
+startsidan från den här sessionen." Jämförelsesidorna hade han godkänt för
+releasen dagen innan. PR:en går från `development`, så det som ska stå utanför
+måste lämna grenen tills mergen är gjord; en flagga hade tagit koden till main
+ändå. Pilotpriserna räknades inte till startsidan och följer med releasen
+(agentens tolkning, inte Antons ord).
+
+**I koden.** Commiten `revert(startsida): startsidan hålls utanför release #42`
+återställer startsidans filer till läget före bygget (`app/page.tsx`,
+`LandingPhoto.tsx`, `ProductPage.tsx`, `useLandingMotion.ts`,
+`AgentResultat.tsx`, `ProduktBilder.tsx`, `UspSection.tsx`, `copy-sections.ts`,
+`app/globals.css`) och tar bort `Startsida.tsx` och testet
+`test_startsidan_ar_en_egen_sida`. `/` skrivs alltså om till `/leads` igen,
+också i development. **Efter mergen av #42:** `git revert` av den commiten på
+`development` tar tillbaka startsidan precis som den var.
+
 ## 2026-11-07 (Anton) — Produkten väljs efter vad som tar mest tid hos bolaget
 
 **Beslut.** Hos Snajp får fastighetsbolag och förvaltare Supportagenten
@@ -154,6 +178,9 @@ de två dynamiska rutorna hör till den första sektionen, och resultatet ska va
 Ordningen per agent är nu: löftet, de två rutorna (`ProduktBilder`, läget
 `fullt`), resultatets tal och panel, demon med texten bredvid. Bandet står
 fortfarande inte med.
+
+**Hålls utanför release #42 (Anton 2026-11-08).** Se posten "Startsidan följer
+inte med release #42".
 
 ---
 

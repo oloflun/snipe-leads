@@ -3,8 +3,7 @@ import { redirect } from "next/navigation";
 import { JsonLd } from "@/components/JsonLd";
 import { ProductPage } from "@/components/marketing/ProductPage";
 import { KONTAKT_MEJL } from "@/components/marketing/copy";
-import { hemFragor } from "@/components/marketing/copy-sections";
-import { faqSida, graf, organisation, produkt, sidmeta, webbplats } from "@/lib/seo";
+import { graf, organisation, produkt, sidmeta, webbplats } from "@/lib/seo";
 import { getCurrentTenant } from "@/lib/tenants/server";
 
 // Kanonisk adress och delningskort bara här, inte i layouten: en canonical i
@@ -21,15 +20,7 @@ export const metadata: Metadata = {
 
 // Organisationen och webbplatsen bor på startsidan, som Google läser dem;
 // produktsidorna och sökordssidorna pekar hit med @id.
-const SCHEMA = graf(
-  organisation(KONTAKT_MEJL),
-  webbplats(),
-  produkt("leads"),
-  produkt("support"),
-  produkt("duo"),
-  // Frågorna står synliga på startsidan, så de får stå i schemat.
-  faqSida(hemFragor.map((o) => ({ fraga: o.q.sv, svar: o.a.sv })))
-);
+const SCHEMA = graf(organisation(KONTAKT_MEJL), webbplats(), produkt("leads"), produkt("support"), produkt("duo"));
 
 export default async function Page() {
   const tenant = await getCurrentTenant();
@@ -47,8 +38,7 @@ export default async function Page() {
   return (
     <>
       <JsonLd data={SCHEMA} />
-      {/* En egen sida, inte /leads (Anton 2026-11-07): egen H1 och kropp, och ingen omskrivning till /leads. */}
-      <ProductPage initial="leads" hem />
+      <ProductPage initial="leads" />
     </>
   );
 }

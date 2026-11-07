@@ -39,8 +39,7 @@ import { cn } from "@/lib/utils";
  * svenska kunders vardag som visas.
  */
 
-/** `kompakt`: ytan svävar i startsidans hjälte, en tredjedel så bred som här. */
-export type Yta = (props: Readonly<{ locale: Locale; kompakt?: boolean }>) => React.ReactNode;
+type Yta = (props: Readonly<{ locale: Locale }>) => React.ReactNode;
 type Falt = { rubrik: Localized; bild: Yta; not: Localized };
 
 function T({ text, locale }: Readonly<{ text: Localized; locale: Locale }>) {
@@ -215,14 +214,11 @@ function WidgetYta({ locale }: Readonly<{ locale: Locale }>) {
 
 /* -- Ytan 2: supportinkorgen med offertutkastet ----------------------------- */
 
-function InkorgYta({ locale, kompakt = false }: Readonly<{ locale: Locale; kompakt?: boolean }>) {
+function InkorgYta({ locale }: Readonly<{ locale: Locale }>) {
   return (
-    <div
-      aria-hidden
-      className={cn("grid gap-0 bg-paper text-left", !kompakt && "min-h-[420px] sm:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]")}
-    >
-      {/* Ärendelistan. Kompakt står bara det öppna ärendet: listan ryms inte i hjältens ruta. */}
-      <div className={cn("hidden border-r border-ink/10 p-4", !kompakt && "sm:block")}>
+    <div aria-hidden className="grid min-h-[420px] gap-0 bg-paper text-left sm:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
+      {/* Ärendelistan */}
+      <div className="hidden border-r border-ink/10 p-4 sm:block">
         <div className="divide-y divide-ink/10 border-y border-ink/12 text-[0.75rem]">
           <div className="bg-paper2/60 py-2.5 pl-2 pr-1">
             <span className="flex items-baseline justify-between gap-2">
@@ -291,18 +287,14 @@ function InkorgYta({ locale, kompakt = false }: Readonly<{ locale: Locale; kompa
             <Sparkles className="h-3 w-3" />
             <T text={UI.forbattra} locale={locale} />
           </Knapp>
-          {kompakt ? null : (
-            <>
-              <Knapp>
-                <Scissors className="h-3 w-3" />
-                <T text={UI.kortare} locale={locale} />
-              </Knapp>
-              <Knapp>
-                <Smile className="h-3 w-3" />
-                <T text={UI.personlig} locale={locale} />
-              </Knapp>
-            </>
-          )}
+          <Knapp>
+            <Scissors className="h-3 w-3" />
+            <T text={UI.kortare} locale={locale} />
+          </Knapp>
+          <Knapp>
+            <Smile className="h-3 w-3" />
+            <T text={UI.personlig} locale={locale} />
+          </Knapp>
         </div>
       </div>
     </div>
@@ -346,9 +338,9 @@ function IrisListYta({ locale }: Readonly<{ locale: Locale }>) {
   );
 }
 
-function IrisUtkastYta({ locale, kompakt = false }: Readonly<{ locale: Locale; kompakt?: boolean }>) {
+function IrisUtkastYta({ locale }: Readonly<{ locale: Locale }>) {
   return (
-    <div aria-hidden className={cn("flex flex-col bg-paper p-4 text-left sm:p-5", !kompakt && "min-h-[420px]")}>
+    <div aria-hidden className="flex min-h-[420px] flex-col bg-paper p-4 text-left sm:p-5">
       <p className="text-[0.875rem] font-semibold text-ink">
         <T text={UI.utkastTill} locale={locale} /> Byggnads AB Norr
       </p>
@@ -547,15 +539,10 @@ export const EXEMPELRAD: Localized = {
   en: "The surfaces above are the product's own, shown with example data."
 };
 
-/**
- * `fullt`: startsidans flöde (Startsida.tsx). Rutan glider in först när den står
- * helt i bild, i samma kö som stegen runt den (useLandingMotion, data-full).
- */
 export function ProduktBilder({
   product,
-  locale,
-  fullt = false
-}: Readonly<{ product: ProductKey; locale: Locale; fullt?: boolean }>) {
+  locale
+}: Readonly<{ product: ProductKey; locale: Locale }>) {
   const [vanster, hoger] = FALT[product];
   return (
     // Toppen nära löftet ovanför: punkterna där slutar i samma tanke som ytorna här
@@ -570,7 +557,7 @@ export function ProduktBilder({
             // (useLandingMotion, caseEntry). key per språk på bildtexten: dess
             // rader spaltas av SplitText, och React ska byta noderna, inte diffa i dem.
             return (
-              <figure key={falt.rubrik.sv} data-case data-full={fullt || undefined}>
+              <figure key={falt.rubrik.sv} data-case>
                 {/* data-hole: ytan lyfts ur dygnsljuset (LandingPhoto) så att
                     produktens egna färger står kvar. */}
                 <div

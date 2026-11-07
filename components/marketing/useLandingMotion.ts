@@ -61,10 +61,9 @@ const STATES: Record<string, [number, number, number, number, number, number, nu
 };
 const ANCHORS: [string, string, number][] = [
   // [state, selector, offset in vh relative to the section's top]
-  // Startsidan (Startsida.tsx) har inga produktbilder och ingen #demo: där bär agenternas sektioner ljuset.
   ["soluppgang", "[data-mo=\"hero\"]", 0],
-  ["morgon", "[data-mo=\"produktbilder\"], #iris", -0.5],
-  ["formiddag", "#demo, #support", -0.2],
+  ["morgon", "[data-mo=\"produktbilder\"]", -0.5],
+  ["formiddag", "#demo", -0.2],
   ["middag", "[data-mo=\"place\"]", -0.3],
   ["eftermiddag", "#fragor", -0.2],
   ["varmvit", "#priser", -0.2]
@@ -142,7 +141,7 @@ export function useLandingMotion({ root, lenis: lenisRef }: DomRefs, product: st
       lenisRef.current = lenis;
       const firstRun = first.current;
       first.current = false;
-      teardown = setup({ gsap, ScrollTrigger, SplitText, spring } as Gsap, rootEl, firstRun && !doorPlayed, lenis);
+      teardown = setup({ gsap, ScrollTrigger, SplitText, spring } as Gsap, rootEl, firstRun && !doorPlayed);
       if (firstRun) doorPlayed = true;
     })().catch((e: unknown) => {
       // Importen föll (nätet, en gammal webbläsare): sidan står synlig utan
@@ -172,17 +171,7 @@ const CASE_GAP = 0.85;
 const TEXT_AFTER = 0.6;
 let queueEnd = 0;
 
-// Startsidans flöde (data-mo="steg"): nästa sak börjar när den förra nästan är klar.
-const STEG_GAP = 0.6;
-const STEG_TID = 0.8;
-// Hjältens ytor (data-mo="svav"): första ytan när rubriken skrivit "kundtjänst,", så att
-// rubriken hinner läsas innan ytorna tar blicken (F-025); nästa när den förra landat.
-const SVAV_START = 2.0;
-const SVAV_GAP = 1.05;
-const SVAV_TEXT = 0.9;
-const SVAV_FAILSAFE_MS = 6000;
-
-function setup(G: Gsap, rootEl: HTMLElement, fullDoor: boolean, lenis: Lenis): () => void {
+function setup(G: Gsap, rootEl: HTMLElement, fullDoor: boolean): () => void {
   const { gsap, ScrollTrigger, SplitText, spring } = G;
   const ARRIVAL = spring(0.66, 0.95);
   const $ = <T extends HTMLElement = HTMLElement>(s: string, r: ParentNode = rootEl) => r.querySelector<T>(s);
@@ -337,23 +326,13 @@ function setup(G: Gsap, rootEl: HTMLElement, fullDoor: boolean, lenis: Lenis): (
       for (const e of entries) if (e.isIntersecting) play(e.target as HTMLElement);
     }, { rootMargin: "0px 0px -8% 0px", threshold: 0 });
     cleanups.push(() => io.disconnect());
-    // Helt i bild (startsidans flöde, Anton 2026-11-07: inget får börja "innan det är
-    // fullt synligt"). Ett element som är högre än skärmen kan aldrig stå helt i bild;
-    // det startar när en bra bit av det syns i stället för först vid sin nederkant.
-    const ioHel = new IntersectionObserver((entries) => {
-      for (const e of entries) if (e.isIntersecting) play(e.target as HTMLElement);
-    }, { rootMargin: "0px 0px -4% 0px", threshold: 1 });
-    cleanups.push(() => ioHel.disconnect());
-    const ryms = (el: HTMLElement) => el.offsetHeight < innerHeight * 0.9;
     // arm: dölj en gång, visa en gång. Tre vägar till play, alla idempotenta.
-    function arm(el: HTMLElement, hide: () => void, show: () => void, start = "top 88%", hel = false) {
+    function arm(el: HTMLElement, hide: () => void, show: () => void, start = "top 88%") {
       if (revealed(el)) return;
       hide();
       shows.set(el, show);
-      const helt = hel && ryms(el);
-      ScrollTrigger.create({ trigger: el, start: hel ? (helt ? "bottom 96%" : "top 60%") : start, once: true, onEnter: () => play(el) });
-      if (!hel) io.observe(el);
-      else if (helt) ioHel.observe(el);
+      ScrollTrigger.create({ trigger: el, start, once: true, onEnter: () => play(el) });
+      io.observe(el);
     }
 
     function fadeUp(el: HTMLElement, delay = 0) {
@@ -408,12 +387,8 @@ function setup(G: Gsap, rootEl: HTMLElement, fullDoor: boolean, lenis: Lenis): (
       const offset = () => from === "up" ? { x: 0, y: 120 } : { x: (from === "left" ? -1 : 1) * Math.min(180, innerWidth * 0.14), y: 0 };
       // will-change redan i viloläget: lagret finns när glidningen börjar, så första bildrutan
       // målas inte om mitt i rörelsen. LiveText lyssnar på case:armed / case:landed.
-      // data-full (startsidan): rutan väntar tills den står helt i bild, och en förskjuten
-      // ruta som hänger utanför kanten så länge läses som ett fel. Den väntar därför osynlig
-      // och tonas fram under glidningens första 0,35 s, som hjältens ytor (svav).
-      const hel = el.hasAttribute("data-full");
       arm(el, () => {
-        gsap.set(box, { ...offset(), willChange: "transform", ...(hel ? { opacity: 0 } : {}) });
+        gsap.set(box, { ...offset(), willChange: "transform" });
         el.dispatchEvent(new Event("case:armed"));
       }, () => {
         const now = gsap.ticker.time;
@@ -421,106 +396,12 @@ function setup(G: Gsap, rootEl: HTMLElement, fullDoor: boolean, lenis: Lenis): (
         queueEnd = start + CASE_GAP;
         const tl = gsap.timeline({ delay: start - now });
         tl.to(box, { x: 0, y: 0, ease: ARRIVAL.ease, duration: ARRIVAL.duration, force3D: true, clearProps: "transform,willChange" }, 0);
-        if (hel) tl.to(box, { opacity: 1, duration: 0.35, ease: "power1.out" }, 0);
         tl.call(() => { el.dispatchEvent(new Event("case:landed")); }, [], TEXT_AFTER);
         texts.forEach((t, i) => {
           t.dataset.rv = "1";
           tl.add(showLines(t), TEXT_AFTER + i * 0.12);
         });
-      }, wide ? "top 85%" : "top 90%", hel);
-    }
-    // ------------------------------------------- startsidans flöde (data-mo="steg")
-    // En sak i taget, när den står helt i bild, i samma kö som rutorna. Spelar en gång och
-    // skrubbas aldrig: inget backar eller försvinner innan animationen är klar.
-    function steg(el: HTMLElement) {
-      arm(el, () => {
-        gsap.set(el, { opacity: 0, y: 24 });
-        el.dataset.armerad = "1";
-      }, () => {
-        const now = gsap.ticker.time;
-        const start = Math.max(now, queueEnd);
-        queueEnd = start + STEG_GAP;
-        gsap.to(el, {
-          opacity: 1, y: 0, duration: STEG_TID, ease: "power3.out", delay: start - now,
-          // RaknaUpp (AgentResultat) väntar på den här innan talen räknas.
-          onComplete: () => { el.dataset.visad = "1"; el.dispatchEvent(new Event("steg:visad")); }
-        });
-      }, "", true);
-    }
-    // --------------------------------------- hjältens ytor (data-mo="svav", Startsida.tsx)
-    // Glider in på fjädern en i taget när rubriken skrivits en bit, skriver sitt utkast när de
-    // landat, svävar sedan några pixlar i vila (F-045) och lutar sig mot pekaren.
-    function svav(figurer: HTMLElement[]) {
-      if (!figurer.length) return;
-      const text = figurer.map((f) => $("[data-svav-text]", f)).filter(Boolean) as HTMLElement[];
-      const dx = () => Math.min(180, innerWidth * 0.14);
-      gsap.set(figurer, { x: dx, opacity: 0 });
-      gsap.set(text, { opacity: 0, y: 12 });
-      figurer.forEach((f) => f.dispatchEvent(new Event("case:armed")));
-      const landad = figurer.map(() => false);
-      let startad = false;
-      const kom = (fordrojning: number) => {
-        if (startad) return;
-        startad = true;
-        figurer.forEach((f, i) => {
-          const tl = gsap.timeline({ delay: fordrojning + i * SVAV_GAP });
-          tl.to(f, { x: 0, ease: ARRIVAL.ease, duration: ARRIVAL.duration, force3D: true }, 0)
-            .to(f, { opacity: 1, duration: 0.35, ease: "power1.out" }, 0)
-            .call(() => { landad[i] = true; f.dispatchEvent(new Event("case:landed")); }, [], SVAV_TEXT);
-          const t = $("[data-svav-text]", f);
-          if (t) tl.to(t, { opacity: 1, y: 0, duration: 0.3, ease: "power2.out" }, SVAV_TEXT + 0.25);
-        });
-      };
-      const h1 = $("[data-mo=\"hero-h1\"]");
-      const onType = () => kom(SVAV_START);
-      h1?.addEventListener("hero:type", onType);
-      cleanups.push(() => h1?.removeEventListener("hero:type", onType));
-      timers.push(window.setTimeout(() => kom(0), SVAV_FAILSAFE_MS));
-
-      // Vilan: några pixlar och en halv grad över 4,6–5,8 s, i olika takt. Tonar ut medan
-      // man skrollar och står still när hjälten är utanför skärmen.
-      const hero = $("[data-mo=\"hero\"]");
-      const lager = figurer.map((f, i) => {
-        const flyt = $(".svav-flyt", f);
-        return flyt && {
-          y: gsap.quickSetter(flyt, "y", "px"), r: gsap.quickSetter(flyt, "rotation", "deg"),
-          fas: i * 1.9, periodY: 4.6 + i * 0.7, periodR: 5.8 - i * 0.6, styrka: 0
-        };
-      });
-      const vila = (tid: number) => {
-        if (hero && hero.getBoundingClientRect().bottom < 0) return;
-        const lugn = Math.max(0, 1 - Math.abs(lenis.velocity) / 6);
-        lager.forEach((l, i) => {
-          if (!l) return;
-          l.styrka += ((landad[i] ? lugn : 0) - l.styrka) * 0.04;
-          l.y(Math.sin((tid / l.periodY) * Math.PI * 2 + l.fas) * 6 * l.styrka);
-          l.r(Math.sin((tid / l.periodR) * Math.PI * 2 + l.fas) * 0.45 * l.styrka);
-        });
-      };
-      gsap.ticker.add(vila);
-      cleanups.push(() => gsap.ticker.remove(vila));
-
-      // Hovringen, bara med mus: ytan lutar sig mot pekaren, lyfts och skuggan djupnar (--lyft).
-      if (!matchMedia("(hover: hover) and (pointer: fine)").matches) return;
-      for (const f of figurer) {
-        const lut = $(".svav-lut", f);
-        const yta = $(".hem-yta", f);
-        if (!lut || !yta) continue;
-        gsap.set(lut, { transformPerspective: 900 });
-        const rx = gsap.quickTo(lut, "rotationX", { duration: 0.7, ease: "power3.out" });
-        const ry = gsap.quickTo(lut, "rotationY", { duration: 0.7, ease: "power3.out" });
-        const in_ = () => { gsap.to(lut, { y: -8, scale: 1.02, duration: 0.6, ease: "power3.out" }); gsap.to(yta, { "--lyft": 1, duration: 0.6, ease: "power3.out" }); };
-        const rör = (e: PointerEvent) => {
-          const b = yta.getBoundingClientRect();
-          ry(((e.clientX - b.left) / b.width - 0.5) * 7);
-          rx(-((e.clientY - b.top) / b.height - 0.5) * 5);
-        };
-        const ut = () => { rx(0); ry(0); gsap.to(lut, { y: 0, scale: 1, duration: 0.8, ease: "power3.out" }); gsap.to(yta, { "--lyft": 0, duration: 0.8, ease: "power3.out" }); };
-        yta.addEventListener("pointerenter", in_);
-        yta.addEventListener("pointermove", rör);
-        yta.addEventListener("pointerleave", ut);
-        cleanups.push(() => { yta.removeEventListener("pointerenter", in_); yta.removeEventListener("pointermove", rör); yta.removeEventListener("pointerleave", ut); });
-      }
+      }, wide ? "top 85%" : "top 90%");
     }
     function plate(el: HTMLElement) {
       // Fotot står helt från början, ingen avtäckning: en klippning som drogs
@@ -567,9 +448,7 @@ function setup(G: Gsap, rootEl: HTMLElement, fullDoor: boolean, lenis: Lenis): (
         default: fadeUp(el);
       }
     }
-    $$("[data-case]:not([data-mo=\"svav\"])").forEach(caseEntry);
-    $$("[data-mo=\"steg\"]").forEach(steg);
-    svav($$("[data-mo=\"svav\"]"));
+    $$("[data-case]").forEach(caseEntry);
 
     // tangentbord: ett fokuserat element visas alltid, även före sitt avslöjande
     const onFocus = (e: FocusEvent) => {

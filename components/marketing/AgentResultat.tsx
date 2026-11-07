@@ -75,7 +75,9 @@ function RaknaUpp({ varde, ordning }: Readonly<{ varde: string; ordning: number 
     // inte när det skymtar längst ned: där hann det räknas klart medan raden
     // ännu tonades in (Anton 2026-10-19). Ett andetag innan, så att inintoningen
     // hunnit klart, och en mjuk kurva över 2,6 s, så att det inte går för fort.
-    const rakna = () => {
+    const obs = new IntersectionObserver(([e]) => {
+      if (!e?.isIntersecting) return;
+      obs.disconnect();
       const start = performance.now() + 450 + ordning * 280;
       const tick = (nu: number) => {
         const t = Math.min(1, Math.max(0, (nu - start) / 2600));
@@ -83,24 +85,10 @@ function RaknaUpp({ varde, ordning }: Readonly<{ varde: string; ordning: number 
         if (t < 1) id = requestAnimationFrame(tick);
       };
       id = requestAnimationFrame(tick);
-    };
-    // Startsidans flöde (useLandingMotion, steg): raden kan stå i kö bakom
-    // stegen ovanför. Då väntar räkningen tills raden har tonats fram helt, så
-    // att inget tal börjar räknas medan det ännu är osynligt (Anton 2026-11-07).
-    const steg = el.closest<HTMLElement>('[data-mo="steg"]');
-    const obs = new IntersectionObserver(([e]) => {
-      if (!e?.isIntersecting) return;
-      obs.disconnect();
-      if (steg?.dataset.armerad === "1" && steg.dataset.visad !== "1") {
-        steg.addEventListener("steg:visad", rakna, { once: true });
-      } else {
-        rakna();
-      }
     }, { threshold: 1, rootMargin: "0px 0px -20% 0px" });
     obs.observe(el);
     return () => {
       obs.disconnect();
-      steg?.removeEventListener("steg:visad", rakna);
       cancelAnimationFrame(id);
     };
   }, [varde, ordning]);
@@ -115,7 +103,7 @@ function RaknaUpp({ varde, ordning }: Readonly<{ varde: string; ordning: number 
 }
 
 /** Nyckeltalsraden: stora tabulära tal i Fraunces, ochre — DESIGN.md:s "ochre at display scale". */
-export function StatRad({ stats }: Readonly<{ stats: Stat[] }>) {
+function StatRad({ stats }: Readonly<{ stats: Stat[] }>) {
   const { text } = useLocale();
   return (
     <dl className="grid grid-cols-2 gap-x-6 gap-y-6 border-y border-ink/15 py-6 sm:grid-cols-4">
@@ -306,17 +294,10 @@ type SektionsCopy = {
   panel: React.ReactNode;
 };
 
-/** Honest-proof: siffrorna i panelen är illustration, och det står under den. */
-export const RESULTAT_NOT: Localized = {
-  sv: "Illustration med exempeldata, inte uppmätta resultat.",
-  en: "Illustration with example data, not measured results."
-};
+export function AgentResultat({ product }: Readonly<{ product: ProductKey }>) {
+  const { text, locale } = useLocale();
 
-/**
- * Per produkt, på modulnivå: startsidan (Startsida.tsx) lägger samma tal och
- * panel under löftet i stället för i en egen sektion.
- */
-export const RESULTAT: Record<ProductKey, SektionsCopy> = {
+  const perProdukt: Record<ProductKey, SektionsCopy> = {
     leads: {
       rubrik: {
         sv: "*Förvärmda* leads, levererade till er.",
@@ -368,11 +349,9 @@ export const RESULTAT: Record<ProductKey, SektionsCopy> = {
       ],
       panel: <BokforingPanel />
     }
-};
+  };
 
-export function AgentResultat({ product }: Readonly<{ product: ProductKey }>) {
-  const { text, locale } = useLocale();
-  const copy = RESULTAT[product];
+  const copy = perProdukt[product];
 
   return (
     <section aria-labelledby="agentresultat-rubrik" className="relative">
@@ -402,7 +381,12 @@ export function AgentResultat({ product }: Readonly<{ product: ProductKey }>) {
             {/* Glider in från höger och fjädrar tillbaka (useLandingMotion, caseEntry). */}
             <div data-case data-from="right">{copy.panel}</div>
             {/* Honest-proof: siffrorna ovan är illustration, och det står. */}
-            <p className="mt-4 text-[0.8125rem] font-medium text-ink-subtle">{text(RESULTAT_NOT)}</p>
+            <p className="mt-4 text-[0.8125rem] font-medium text-ink-subtle">
+              {text({
+                sv: "Illustration med exempeldata, inte uppmätta resultat.",
+                en: "Illustration with example data, not measured results."
+              })}
+            </p>
           </div>
         </div>
       </div>

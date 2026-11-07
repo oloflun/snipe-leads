@@ -8,9 +8,8 @@ import { useLocale } from "@/lib/i18n";
 import type { ProductKey } from "@/lib/routes";
 import { saljbaraProdukter } from "@/lib/routes";
 import { KONTAKT_MEJL, mejlaOss, productCopy, shared, varforSnajp, varforSupport } from "@/components/marketing/copy";
-import { hemFragor, imagery, photo, sectionCopy } from "@/components/marketing/copy-sections";
+import { imagery, photo, sectionCopy } from "@/components/marketing/copy-sections";
 import { AgentResultat } from "@/components/marketing/AgentResultat";
-import { AgentFlode, HemGranser, HemHjalte } from "@/components/marketing/Startsida";
 import { HeroText } from "@/components/marketing/LiveText";
 import { ProduktBilder } from "@/components/marketing/ProduktBilder";
 import { PricingSection } from "@/components/marketing/PricingSection";
@@ -81,20 +80,12 @@ function Label({ children, tone = "ink" }: Readonly<{ children: React.ReactNode;
   );
 }
 
-/**
- * `hem`: startsidan `/` (Anton 2026-11-07). Egen hjälte och en sektion per agent
- * (Startsida.tsx) i stället för produktväxeln och produktsidans sektioner fram
- * till Haga-bilden; resten av skalet är detsamma, med frågorna och gränserna för
- * båda agenterna.
- */
 export function LandingPhoto({
   initial,
-  hem = false,
   leadsDemo,
   supportDemo
 }: Readonly<{
   initial: ProductKey;
-  hem?: boolean;
   leadsDemo: React.ReactNode;
   supportDemo: React.ReactNode;
 }>) {
@@ -107,12 +98,9 @@ export function LandingPhoto({
   useLandingMotion({ root: rootRef, lenis: lenisRef }, product, locale);
 
   useEffect(() => {
-    // Startsidan har ingen produktväxel och skrivs aldrig om till /leads: två
-    // adresser med samma innehåll slås ihop av Google (Anton 2026-11-07).
-    if (hem) return;
     const next = pathForProduct[product];
     if (window.location.pathname !== next) window.history.replaceState(null, "", next);
-  }, [product, hem]);
+  }, [product]);
 
   const scrollToDemo = useCallback(() => {
     const el = demoRef.current;
@@ -139,7 +127,7 @@ export function LandingPhoto({
       <script
         dangerouslySetInnerHTML={{
           __html:
-            "(function(){var s=document.createElement('style');s.id='door-armed';s.textContent='.landing [data-mo=hero-h1],.landing [data-mo=hero-lede],.landing [data-mo=hero-acts],.landing [data-mo=hero-side],.landing [data-mo=header],.landing [data-mo=svav]{opacity:0}.landing [data-mo=hero-img]{transform:scale(1.06)}.landing [data-mo=hero-scrim]{opacity:.4}';document.head.appendChild(s);setTimeout(function(){s.remove()},3000)})();"
+            "(function(){var s=document.createElement('style');s.id='door-armed';s.textContent='.landing [data-mo=hero-h1],.landing [data-mo=hero-lede],.landing [data-mo=hero-acts],.landing [data-mo=hero-side],.landing [data-mo=header]{opacity:0}.landing [data-mo=hero-img]{transform:scale(1.06)}.landing [data-mo=hero-scrim]{opacity:.4}';document.head.appendChild(s);setTimeout(function(){s.remove()},3000)})();"
         }}
       />
       {/* Dygnsljuset: marken och ljuslagret skrivs bara av ljusmotorn i useLandingMotion. */}
@@ -148,7 +136,7 @@ export function LandingPhoto({
         <div className="light__panes"><i /><i /><i /><i /></div>
       </div>
       <a
-        href={hem ? "#iris" : "#demo"}
+        href="#demo"
         className="focus-ring sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-input focus:bg-ink focus:px-4 focus:py-2 focus:text-paper"
       >
         {text(shared.skipToContent)}
@@ -201,7 +189,6 @@ export function LandingPhoto({
       <main id="main">
         {/* HERO. The photograph is the design. Type sits on it directly. */}
         {/* data-hole: hjälten lyfts ur dygnsljuset och står som den är. */}
-        {hem ? <HemHjalte /> : (
         <section data-mo="hero" data-hole className="relative min-h-[92vh] overflow-hidden">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
@@ -336,17 +323,7 @@ export function LandingPhoto({
             </div>
           </div>
         </section>
-        )}
 
-        {/* Startsidan: en sektion per agent, byggd av produktsidans tre (löftet,
-            resultatvyn, demon) i Antons ordning. Produktsidan: sektionerna nedan. */}
-        {hem ? (
-          <>
-            <AgentFlode agent="leads" demo={leadsDemo} />
-            <AgentFlode agent="support" demo={supportDemo} />
-          </>
-        ) : (
-        <>
         {/* LÖFTET, direkt efter hjältebilden. Det här är det första en
             besökare läser efter rubriken, och det ska svara på "vad får jag"
             innan sidan hinner beskriva problemet. */}
@@ -461,8 +438,6 @@ export function LandingPhoto({
             exempeldata inuti produktpanelen och en rad som säger det. Se
             components/marketing/AgentResultat.tsx för förebilderna. */}
         <AgentResultat product={product} />
-        </>
-        )}
 
         {/* PLACE. Photograph and copy share the row; the image is content here,
             not decoration, so it carries a real alt. */}
@@ -553,7 +528,7 @@ export function LandingPhoto({
                 </h2>
               </div>
               <dl className="col-span-12 lg:col-span-7 lg:col-start-6">
-                {(hem ? hemFragor : sec.objections).map((item) => (
+                {sec.objections.map((item) => (
                   <div key={item.q.sv} data-mo="row" className="hrule py-7 first:border-t-0 first:pt-0">
                     <dt className="font-display text-[1.25rem] font-semibold leading-snug tracking-[-0.015em]">
                       {text(item.q)}
@@ -580,8 +555,7 @@ export function LandingPhoto({
           </div>
         </section>
 
-        {/* LIMITS on ink, then the close. Startsidan: en spalt per agent. */}
-        {hem ? <HemGranser /> : (
+        {/* LIMITS on ink, then the close. */}
         <section data-mo="band" className="bg-ink text-paper">
           <div className="mx-auto max-w-[1480px] px-6 py-24 md:px-10 md:py-28">
             <h2
@@ -604,7 +578,6 @@ export function LandingPhoto({
             </ul>
           </div>
         </section>
-        )}
 
         {/* Priset är den sista frågan läsaren har innan kontaktuppmaningen,
             alltså före avslutningssektionen och inte efter den. */}

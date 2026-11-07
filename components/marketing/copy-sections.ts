@@ -273,21 +273,6 @@ export const sectionCopy: Record<ProductKey, SectionCopy> = {
   bookkeeping: bokforing
 };
 
-/**
- * Startsidans frågor, för båda agenterna (Anton 2026-11-07: "texten för dessa
- * anpassade utifrån bägge agenterna"). Samma godkända frågor och svar som på
- * /leads och /support, valda så att varje agent får sin vanligaste invändning
- * och dataskyddet, som gäller båda, står sist. Här och inte i Startsida.tsx:
- * app/page.tsx läser listan till sitt FAQPage-schema, och en server-
- * komponent får inte värden ur en klientmodul.
- */
-export const hemFragor: Objection[] = [
-  leads.objections[0],
-  support.objections[0],
-  support.objections[2],
-  leads.objections[2]
-];
-
 export const imagery = {
   /**
    * Photographs are vendored into `public/photos` rather than hotlinked. Each was

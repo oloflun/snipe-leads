@@ -108,8 +108,7 @@ const bokforing: ProduktCopy = {
   }
 };
 
-/** Exporterad: startsidan (Startsida.tsx) bygger varje agents flöde på samma löfte. */
-export const LOFTET: Record<ProductKey, ProduktCopy> = {
+const perProdukt: Record<ProductKey, ProduktCopy> = {
   leads,
   support,
   bookkeeping: bokforing
@@ -117,7 +116,7 @@ export const LOFTET: Record<ProductKey, ProduktCopy> = {
 
 export function UspSection({ product }: Readonly<{ product: ProductKey }>) {
   const { locale, text } = useLocale();
-  const copy = LOFTET[product];
+  const copy = perProdukt[product];
   const punkter = copy.punkter[locale];
 
   return (

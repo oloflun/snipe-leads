@@ -226,15 +226,6 @@ def test_hjalterubriken_ar_en_h1():
     assert re.search(r'<h1\s+key=\{nyckel\}\s+data-mo="hero-h1"', _las("components/marketing/LandingPhoto.tsx"))
 
 
-def test_startsidan_ar_en_egen_sida():
-    """Anton 2026-11-07: / och /leads renderade samma sida med samma H1, och / skrevs om
-    till /leads i adressfältet. Google slår ihop två sådana adresser och rankar en av dem."""
-    assert '<ProductPage initial="leads" hem />' in _las("app/page.tsx")
-    assert re.search(r'<h1\s+key=\{locale\}\s+data-mo="hero-h1"', _las("components/marketing/Startsida.tsx"))
-    # Omskrivningen till /leads hör till produktväxeln, som startsidan inte har.
-    assert "if (hem) return;" in _las("components/marketing/LandingPhoto.tsx")
-
-
 def test_faq_svaren_star_i_html():
     kalla = _las("components/marketing/FaqDragspel.tsx")
     assert "hidden={!utfalld}" in kalla
