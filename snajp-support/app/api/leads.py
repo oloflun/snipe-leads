@@ -3800,6 +3800,8 @@ async def _run_batch_prospect(
                                 "roll": prospect.get("contact_role"),
                             },
                             "vald_produkt": result.get("produkt"),
+                            # Skälet till produktvalet (Anton 2026-11-07).
+                            "tar_mest_tid": result.get("tar_mest_tid"),
                         },
                         ensure_ascii=False,
                     )

@@ -9,6 +9,37 @@ möjligt), vad det betyder i koden.
 
 ---
 
+## 2026-11-07 (Anton) — Produkten väljs efter vad som tar mest tid hos bolaget
+
+**Beslut.** Hos Snajp får fastighetsbolag och förvaltare Supportagenten
+(hyresgästernas frågor och ärenden) och byggföretag och hantverkare Iris (nya
+uppdrag). Övriga bolag får den produkt som täcker det som rimligtvis tar mest
+tid hos dem. Researchen avgör det själv: den skriver först vad som tar mest tid
+i bolagets vardag (`tar_mest_tid`) och väljer sedan den produkt vars nytta bäst
+täcker det.
+
+**Resonemang.** Antons ord, efter att ett fastighetsbolag fått Iris och ett
+mejl om "nya hyresgäster": "Ja, satsa på support för fastighetsbolag och leads
+för bygg, se till att agenten bättre kan avgöra detta själv utifrån vad som
+rimligtvis tar mest tid av företaget och vilken produkt som bäst täcker detta."
+Produktvalet var en rad, "den som passar bolaget bäst", utan något skäl att
+väga, och det gav Iris till ett bolag vars tid går åt till hyresgästerna.
+
+**I koden.**
+- `leads_research_v2._TIDSVAL` i båda produktvalen (`_PRODUKTVAL`,
+  `_PRODUKTVAL_BEHOV`): väg vad som tar mest tid, välj produkten som bäst
+  täcker det, kundens egna instruktioner om produktvalet går före. Gäller alla
+  kunder med en produktlista.
+- Nytt fält `tar_mest_tid` i researchen, före `produkt` (uppgiften och
+  overlayen `leads-research-v2.md`). Det sparas i utkastets underlag
+  (`sparad_research.UNDERLAGSFALT`) och når utkastet som
+  `tar_mest_tid_hos_dem`, det ingången och produktmeningen tar vid ifrån.
+- Snajps regel om fastighet och bygg i Iris-instruktionen
+  (`scripts/snajp_malgrupp.py`), som researchen också läser.
+- Låst av `tests/leads/test_produktval_tid.py`.
+
+---
+
 ## 2026-11-07 (Anton) — A:s ingång är deras vardag, aldrig bolagets verksamhetsbeskrivning
 
 **Beslut.** Ingången i struktur A säger det konkreta i mottagarens vardag som

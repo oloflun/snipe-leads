@@ -109,6 +109,8 @@ _RESEARCH_V2_UPPGIFT = (
     "med ROLLER), trigger_events (lista), open_questions (lista), "
     "prospect_positioning, comparison_angles (lista), honest_caveats (lista), "
     "likely_objections (lista med {objection, response}), hardest_objection, "
+    "tar_mest_tid (EN mening: det som rimligtvis tar mest tid i bolagets "
+    "vardag enligt källmaterialet, skälet till produktvalet), "
     "offer ({name, promise, proof, risk_reversal, cta}), produkt (namnet på "
     "den av kundens produkter erbjudandet bygger på, ordagrant, eller null), "
     "weakest_lever, "
@@ -143,12 +145,29 @@ _RESEARCH_V2_UPPGIFT = (
     "källmaterialet bär; de är utkastets tillåtna faktabas."
 )
 
+#: Produktvalet efter vad som tar mest tid hos bolaget (Anton 2026-11-07:
+#: "se till att agenten bättre kan avgöra detta själv utifrån vad som
+#: rimligtvis tar mest tid av företaget och vilken produkt som bäst täcker
+#: detta"). Provet samma dag: ett fastighetsbolag fick Iris och mejlet lovade
+#: "nya hyresgäster", fast hyresgästernas ärenden är det som tar tiden.
+_TIDSVAL = (
+    "Väg först tar_mest_tid: vad som rimligtvis tar mest tid i bolagets vardag. "
+    "Ett bolag vars kunder, hyresgäster eller medlemmar hör av sig med "
+    "återkommande frågor och ärenden (fastighetsbolag och förvaltare, "
+    "e-handel, butiker, föreningar) lägger mest tid på att svara dem; ett bolag "
+    "som lever på uppdrag eller order från andra företag (bygg, hantverk, "
+    "konsulter, grossister) lägger mest tid på att hitta nästa kund. Välj sedan "
+    "den produkt vars nytta i listan bäst täcker just det, aldrig den som bara "
+    "går att koppla till bolaget på något sätt. Kundens egna instruktioner om "
+    "produktvalet gäller före den här regeln."
+)
+
 #: Läggs till researchuppgiften när kunden har en produktlista.
 _PRODUKTVAL = (
     "\n\nPRODUKTVAL: fältet produkt är namnet på EN av kundens produkter, "
     "ordagrant som det står i listan: den vars nytta i listan svarar mot något "
     "bolaget självt beskriver (vilka det säljer till, vilka ärenden det får, vad "
-    "det hanterar). Ett citat som visar det räcker som belägg för kp när "
+    f"det hanterar). {_TIDSVAL} Ett citat som visar det räcker som belägg för kp när "
     "produktens nytta gäller just det. null BARA när källmaterialet visar att "
     "bolaget inte kan använda någon av produkterna, aldrig för att ett citat "
     "saknas. offer bygger på den produkten."
@@ -173,8 +192,8 @@ _KP_BEHOV = (
 #: Produktvalet när kp är behovskravet: produkten väljs, den fäller aldrig.
 _PRODUKTVAL_BEHOV = (
     "\n\nPRODUKTVAL: fältet produkt är namnet på EN av kundens produkter, "
-    "ordagrant som det står i listan: den som passar bolaget bäst. Uppfyller "
-    "bolaget behovskravet är fältet aldrig null. offer bygger på den produkten."
+    f"ordagrant som det står i listan: den som passar bolaget bäst. {_TIDSVAL} "
+    "Uppfyller bolaget behovskravet är fältet aldrig null. offer bygger på den produkten."
 )
 
 
@@ -777,6 +796,7 @@ async def _research_v2(
                 "webbsignaler": webbfakta.get("rader") or [],
                 "citat": citat,
                 "lagesbeskrivning": bedomning.get("lagesbeskrivning"),
+                "tar_mest_tid": fynd.get("tar_mest_tid"),
                 "produkt": vald_produkt,
                 "offer_summary": offer_summary,
                 "research_evidence": research_evidence,
@@ -806,6 +826,7 @@ async def _research_v2(
         "lagesbeskrivning": bedomning.get("lagesbeskrivning"),
         "signaler": bedomning.get("signaler"),
         "citat": citat,
+        "tar_mest_tid": fynd.get("tar_mest_tid"),
         "produkt": vald_produkt,
         "scraped_sources": scraped_sources,
         "scrape_errors": scrape_errors,
@@ -894,6 +915,9 @@ def _utkastens_researchvy(research_summary: str) -> str:
         # och räknade upp hela produktbeskrivningen (provkörningen 2026-10-05).
         "mottagare": fynd.get("mottagare"),
         "vald_produkt": fynd.get("vald_produkt"),
+        # Skälet till produktvalet (Anton 2026-11-07): det i deras vardag som
+        # ingången och produktmeningen tar vid ifrån.
+        "tar_mest_tid_hos_dem": fynd.get("tar_mest_tid"),
         # Ordagranna citat ur bolagets egna sidor och lägesbeskrivningen. Före
         # 2026-10-06 fick utkastet bara en mening om bolaget och öppnade med
         # "Jag såg att ni ligger i Göteborg".

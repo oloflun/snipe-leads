@@ -86,6 +86,7 @@ MARKOR = "## Så presenterar sig Snajp i Iris utkast"
 IRIS_INSTRUKTION = f"""{MARKOR}
 
 - Erbjud den produkt researchen valt, och bara den. Nämn aldrig de andra agenterna.
+- Produktvalet: fastighetsbolag och förvaltare (bostäder eller lokaler) får Supportagenten, för hyresgästernas frågor och ärenden; byggföretag och hantverkare får Iris, för nya uppdrag. Andra bolag får den produkt som täcker det som rimligtvis tar mest tid hos dem.
 - Nämn aldrig kvitton, bokföring eller Kvittohanteraren: den säljs inte just nu.
 - Struktur B (det korta mejlet) följer blocket "Mejlets struktur: B" och förebilderna där: kort, rakt på, och mejlet slutar med frågan. Reglerna nedan om avslutet, frågan i erbjudandets form B, meningen efter ingången och ingången gäller struktur A; resten gäller båda.
 - Avsluta med erbjudandets handling enligt villkoren under "Erbjudandet i det här mejlet", som en vardaglig inbjudan. Aldrig "Svara X så gör vi Y" och aldrig med en fråga.

@@ -44,6 +44,7 @@ UNDERLAGSFALT = (
     "webbsignaler",
     "citat",
     "lagesbeskrivning",
+    "tar_mest_tid",
     "produkt",
     "offer_summary",
     "research_evidence",
