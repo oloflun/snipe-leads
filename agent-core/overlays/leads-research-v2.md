@@ -117,9 +117,14 @@ demoskript, inga ROI-kalkylatorer.
   infriad av produkten; proof är belägg som finns (inte påhittade
   kundcase); risk_reversal sänker tröskeln (t.ex. pilot, ingen bindning);
   cta är EN lågfriktionsfråga.
+- `tar_mest_tid`: EN mening om det som rimligtvis tar mest tid i bolagets
+  vardag enligt källmaterialet: att hitta nästa kund eller uppdrag, att svara
+  på kunders, hyresgästers eller medlemmars återkommande frågor och ärenden,
+  eller något annat som deras verksamhet visar. Skrivs FÖRE `produkt`: det är
+  skälet till produktvalet (Anton 2026-11-07).
 - `produkt`: namnet på den av kundens produkter som `offer` bygger på,
   ordagrant som i listan, eller null om kunden saknar produktlista eller
-  ingen passar.
+  ingen passar. Det är den produkt vars nytta täcker `tar_mest_tid`.
 - `weakest_lever`: vilken av spakarna som är svagast och varför.
 
 ## Osäkerhet (mk:ab-testing-kärnan)

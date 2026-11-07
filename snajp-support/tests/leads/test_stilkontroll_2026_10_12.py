@@ -44,7 +44,9 @@ def test_referensutkasten_passerar():
         "Att hitta nya företagsuppdrag i Göteborg, parallellt med villor och fastighetsprojekt, är ofta en tidstjuv.",
         "Med Consensos fokus på komplexa program och projekt behöver ni hitta rätt företag att samarbeta med.",
     ):
-        assert _koder(_med_ingang(ingang)) == set(), ingang
+        # kravande_ingang: sedan 2026-11-06 (Anton, struktur A kortare)
+        # konstaterar ingången något om dem i stället för "behöver ni …".
+        assert _koder(_med_ingang(ingang)) - {"kravande_ingang"} == set(), ingang
     # Anton 2026-10-15: "Med er/ert/era …" blev det nya mallordet och fälls nu.
     assert "slentrian_ingang" in _koder(
         _med_ingang("Med er roll inom värmepumpar och fastighetsautomation i Luleå blir servicefrågorna många.")
@@ -117,6 +119,7 @@ def test_produktens_kortform_raknas():
 def test_ingangsformen_roterar_per_prospekt():
     from app.agent.leads_research_v2 import _INGANGSFORMER, _ingangsform
 
-    former = {_ingangsform(f"prospekt-{i}") for i in range(40)}
-    assert former == set(_INGANGSFORMER), "fem former ska alla förekomma över en körning"
-    assert _ingangsform("samma") == _ingangsform("samma")
+    for slag in ("leads", "support", None):
+        former = {_ingangsform(f"prospekt-{i}", slag) for i in range(40)}
+        assert former == set(_INGANGSFORMER[slag]), "varje form ska förekomma över en körning"
+    assert _ingangsform("samma", "leads") == _ingangsform("samma", "leads")

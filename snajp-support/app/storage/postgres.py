@@ -2626,6 +2626,18 @@ class PostgresStorage:
           from leads_job_ledger
          where tenant_id = $1 and scope in ('batch', 'lista')
     """
+    #: Samma rad utan motorns arbetsminne (api/leads.py:_ARBETSMINNE), bortskuret
+    #: i Postgres så att det aldrig lämnar databasen. En körning på 200 (main
+    #: 2026-11-07) bar flera MB kandidater, listspår och utslag; listan,
+    #: städaren och autopiloten avkodade det för varje körning i händelseloopen
+    #: och API:t slutade svara ("Assistenten har svårt att nå sin motor").
+    _KORNING_SQL_LATT = """
+        select job_id, status, scope, is_test, created_at, updated_at, completed_at,
+               error,
+               korning - 'kandidater' - 'webbpool' - 'listspar' - 'utslag' - 'rapporterade' as korning
+          from leads_job_ledger
+         where tenant_id = $1 and scope in ('batch', 'lista')
+    """
 
     async def list_prospekt_i_research(self, tenant_id: str) -> set[str]:
         async with self._scoped(tenant_id) as conn:
@@ -2653,10 +2665,20 @@ class PostgresStorage:
             )
         return {str(r["prospect_id"]): {"status": r["status"], "error": r["error"]} for r in records}
 
-    async def list_leads_korningar(self, tenant_id: str, *, limit: int = 20) -> list[dict[str, Any]]:
+    async def list_leads_korningar(
+        self,
+        tenant_id: str,
+        *,
+        limit: int = 20,
+        arbetsminne: bool = False,
+        status: str | None = None,
+        utom: str | None = None,
+    ) -> list[dict[str, Any]]:
+        sql = self._KORNING_SQL if arbetsminne else self._KORNING_SQL_LATT
+        sql += " and ($3::text is null or status = $3) and ($4::text is null or job_id <> $4)"
         async with self._scoped(tenant_id) as conn:
             records = await conn.fetch(
-                self._KORNING_SQL + " order by created_at desc limit $2", tenant_id, limit
+                sql + " order by created_at desc limit $2", tenant_id, limit, status, utom
             )
         return [_avkoda_jsonb(_row(r), "korning") for r in records]
 
@@ -2695,10 +2717,21 @@ class PostgresStorage:
                 job_id, tenant_id, styrning,
             ))
 
-    async def get_leads_korning(self, tenant_id: str, job_id: str) -> dict[str, Any] | None:
+    async def get_leads_korning(
+        self, tenant_id: str, job_id: str, *, arbetsminne: bool = True
+    ) -> dict[str, Any] | None:
+        sql = self._KORNING_SQL if arbetsminne else self._KORNING_SQL_LATT
         async with self._scoped(tenant_id) as conn:
-            record = await conn.fetchrow(self._KORNING_SQL + " and job_id = $2", tenant_id, job_id)
+            record = await conn.fetchrow(sql + " and job_id = $2", tenant_id, job_id)
         return _avkoda_jsonb(_row(record), "korning")
+
+    async def get_korning_styrning(self, tenant_id: str, job_id: str) -> str | None:
+        async with self._scoped(tenant_id) as conn:
+            return await conn.fetchval(
+                "select korning ->> 'styrning' from leads_job_ledger"
+                " where tenant_id = $1 and job_id = $2 and scope in ('batch', 'lista')",
+                tenant_id, job_id,
+            )
 
     # -- Leadslistor (tillägget 'leadlists', migration 060) -----------------
 

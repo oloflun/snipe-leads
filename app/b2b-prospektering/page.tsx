@@ -5,7 +5,7 @@ import { sidmeta } from "@/lib/seo";
 export const metadata: Metadata = {
   ...sidmeta({
     vag: "/b2b-prospektering",
-    titel: "B2B-prospektering för svenska företag med AI | Snajp",
+    titel: "B2B-prospektering för svenska företag | Snajp",
     beskrivning:
       "Så prospekterar ni B2B i Sverige utan att skriva varje mejl själva: urval, research, första mejl och uppföljning, och reglerna för kall kontakt."
   })

@@ -62,6 +62,7 @@ YTOR = [
     # registret, läst ur lib/landningar.ts så att en ny sida inte kan glömmas här.
     ROOT / "lib" / "landningssidor.ts",
     ROOT / "lib" / "landningar.ts",
+    ROOT / "lib" / "jamforelser.ts",
     *sorted(
         p
         for vag in _syskon("test_inv_seo_001")._landningar()

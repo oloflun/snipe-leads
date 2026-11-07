@@ -60,26 +60,53 @@ _EGEN_NYCKEL = re.compile(r"^[a-z0-9_-]{1,40}$")
 AMNE_MAX = 90
 AMNEN_MAX = 40
 
+#: Brödtextens tak per form i första mejlet (struktur A), hälsningen oräknad.
+#: Anton 2026-11-06 (förslag 1): A låg på median 105 ord och 96 av 105 över
+#: formens 90, så A blev en mening per steg. Form B har en mening till, frågan.
+#: Stilgrinden prövar taket (stilkontroll.kontrollera(tak=…)).
+ORDTAK = {"rak": 80, "fraga": 90}
+
+#: Ingången och produktmeningen i struktur A (Anton 2026-11-06, förslag 1):
+#: ett konstaterande om dem som produktmeningen tar vid ifrån, i stället för
+#: "utmaningen" som blev "Att … är en balansgång" i 57 av 105 mejl.
+#: Anton 2026-11-07: "konstaterande om deras verksamhet" blev bolagets
+#: verksamhetsbeskrivning ("[Webbutiken] erbjuder …", "[Plattformen] arbetar för att …") i
+#: sex av nio, opersonligt och mallaktigt. Ingången är det konkreta i deras
+#: vardag som produkten tar vid ifrån, som i förslagets exempel ("Ni lägger de
+#: flesta golven åt fastighetsbolag …", "Dina kunder frågar ofta om …").
+_INGANG_A = (
+    "ingången, en mening om högst 20 ord skriven till dem, med \"ni\" (\"du\") eller deras kunder som subjekt "
+    "och aldrig bolagets namn: det konkreta i deras vardag som produkten tar vid ifrån och som går att anta "
+    "ur deras verksamhet enligt researchen. För en agent som hittar kunder: vilka kunder de säljer till eller "
+    "arbetar åt, så konkret som underlaget tillåter (bransch, ort), så att produkten kan ta fram fler sådana. "
+    "För en supportagent: vad deras kunder (hyresgäster, medlemmar, gäster) hör av sig om, en eller två "
+    "konkreta frågor de ställer, aldrig bara bolagets bransch eller produktkategori. En egen huvudsats, aldrig en beskrivning av bolaget eller "
+    "vad det erbjuder, aldrig en bisats som leder in i produktmeningen (\"När ni …\"), aldrig en abstrakt utmaning eller "
+    "balansgång och aldrig en fråga"
+)
+_PRODUKTMENING_A = (
+    "produktmeningen, högst 25 ord: produkten namnges först och tar vid där ingången slutar (\"fler sådana "
+    "kunder\", \"de frågorna\"), med utfallet nedan översatt till deras verksamhet"
+)
+
 #: Mejlets form (Anton 2026-10-25): (namn, regler). Reglerna beskriver
 #: rörelsen, aldrig färdiga meningar, så att mejlen inte blir kopior.
 FORMER: dict[str, tuple[str, str]] = {
     "rak": (
         "A, rakt på",
-        "Efter hälsningen, i den här ordningen: (1) ingången, högst 25 ord: en utmaning som deras sorts "
-        "arbete för med sig och som produkten löser, med något konkret ur deras verksamhet; (2) vad "
-        "produkten gör åt dem, en mening om högst 15 ord; (3) erbjudandet med villkorens innehåll, en "
-        "mening; (4) avslutet, villkorens handling som en vardaglig inbjudan, högst 20 ord. Hela "
-        "brödtexten högst 90 ord.",
+        f"Efter hälsningen, i den här ordningen och inget annat: (1) {_INGANG_A}; (2) {_PRODUKTMENING_A}. "
+        "(1) och (2) är första stycket. (3) Erbjudandet med villkorens innehåll, en eller två korta "
+        "meningar; (4) avslutet, villkorens handling som en vardaglig inbjudan, en mening om högst 20 ord. "
+        f"Ingen fråga och ingen mening utöver dessa. Hela brödtexten högst {ORDTAK['rak']} ord.",
     ),
     "fraga": (
         "B, med en fråga",
-        "Hela brödtexten högst 100 ord. Efter hälsningen, i den här ordningen: (1) samma sorts ingång "
-        "som i form A, i en mening om högst 20 ord; (2) en fråga om högst 15 ord om vilket av två "
-        "konkreta moment som tar mest tid för dem i dag. Båda momenten är "
-        "saker produkten gör enligt dess nytta, aldrig något den inte gör: " + "{moment}" + "; (3) att produkten tar hand om båda delarna "
-        "och anpassas efter deras behov och verksamhet, en mening om högst 15 ord; (4) erbjudandet med "
-        "villkorens innehåll, en mening; (5) avslutet, villkorens handling som en vardaglig inbjudan, "
-        "högst 20 ord. Frågan står aldrig sist.",
+        f"Hela brödtexten högst {ORDTAK['fraga']} ord. Efter hälsningen, i den här ordningen: (1) {_INGANG_A}; "
+        "(2) en fråga om högst 15 ord om vilket av två konkreta moment som tar mest tid för dem i dag. "
+        "Båda momenten är saker produkten gör enligt dess nytta, aldrig något den inte gör: " + "{moment}" + "; "
+        f"(3) {_PRODUKTMENING_A}, i båda delarna; (4) erbjudandet med villkorens innehåll, en eller två "
+        "korta meningar; (5) avslutet, villkorens handling som en vardaglig inbjudan, högst 20 ord. "
+        "Frågan står aldrig sist.",
     ),
 }
 #: Frågans två moment i form B. Utan känd produkt får modellen båda paren och
@@ -502,9 +529,13 @@ def tilldela(tenant_id: str, prospect_id: str, armar: list[tuple[str, int]]) -> 
     return None  # nås inte: punkt < total
 
 
-def block(nyckel: str, villkor: str, erbjudande: Erbjudande | None = None, produkt: str | None = None) -> str:
+def block(
+    nyckel: str, villkor: str, erbjudande: Erbjudande | None = None, produkt: str | None = None, utfall: str = ""
+) -> str:
     """Promptblocket för utkaststeget och humanizern. Kundens villkor står
-    ordagrant under sin egen rubrik, som katalogens gemensamma regler pekar på."""
+    ordagrant under sin egen rubrik, som katalogens gemensamma regler pekar på.
+    `utfall` är kundens korta utfall för produkten (`kort_utfall_for`), som
+    produktmeningen översätter; utan det bygger den på produktens nytta."""
     erbjudande = erbjudande or katalog()[nyckel]
     formnamn = FORMER[erbjudande.form][0]
     return (
@@ -513,7 +544,8 @@ def block(nyckel: str, villkor: str, erbjudande: Erbjudande | None = None, produ
         # kom ur researchens eget förslag. Nu bär det hela mejlet.
         "Kunden har valt det här erbjudandet för mejlet, och det styr hela mejlet, inte bara ett "
         "stycke. Det går före vinkeln under \"Erbjudandet som styr vinkeln\".\n"
-        "- Ingångens utmaning är en som erbjudandet och produkten löser för just dem.\n"
+        "- Ingången och produktmeningen bygger på samma konkreta sak hos just dem, och produkten är den "
+        "researchen valde.\n"
         "- Översätt erbjudandet till mottagarens verksamhet: vad det betyder för just deras arbete "
         "och kunder. Villkorens innehåll, siffror och löften står kvar oförändrade i sak, och "
         "inget annat lovas.\n"
@@ -522,7 +554,7 @@ def block(nyckel: str, villkor: str, erbjudande: Erbjudande | None = None, produ
         "- Produkten gör bara det som står i dess nytta i produktlistan och i villkoren. Hitta "
         "aldrig på en förmåga för att passa deras verksamhet: en agent som hittar kunder hittar "
         "inte tomter, investerare, leverantörer eller personal.\n"
-        "- Kort: 60–100 ord i brödtexten. Erbjudandet och avslutet i en mening var.\n"
+        f"- Kort: högst {ORDTAK[erbjudande.form]} ord i brödtexten, i formen nedan och utan andra meningar.\n"
         # Provkörningen 2026-10-10 (scripts/prova_erbjudanden.py): katalogens
         # exempel på uppmaningar gick ordagrant in i mejlen, samma fråga i
         # upp till elva av tolv, och villkor skrivna i ni-form blandade
@@ -535,6 +567,10 @@ def block(nyckel: str, villkor: str, erbjudande: Erbjudande | None = None, produ
         f"{gemensamt()}\n\n"
         f"### {erbjudande.namn}\n{erbjudande.regler or 'Kundens eget erbjudande: villkoren nedan är hela erbjudandet.'}\n\n"
         f"### Mejlets form ({formnamn})\n{formregler(erbjudande.form, produkt)}\n\n"
+        "### Utfallet produktmeningen bygger på\n"
+        f"{utfall.strip() or 'Produktens nytta i produktlistan.'}\n"
+        "Översätt det till just dem, skriv det aldrig ordagrant. Siffror som inte står här eller i villkoren "
+        "skrivs aldrig.\n\n"
         f"### Villkor för erbjudandet\n{villkor.strip()}"
     )
 
@@ -569,13 +605,15 @@ class Valt:
     amnen: tuple[str, ...] = ()
     #: Produkten researchen valde: frågans moment i form B följer den.
     produkt: str | None = None
+    #: Kundens korta utfall för produkten (tomt = produktens nytta).
+    utfall: str = ""
 
     @property
     def form(self) -> str:
         return self.erbjudande.form if self.erbjudande else "rak"
 
     def block(self) -> str:
-        return block(self.nyckel, self.villkor, self.erbjudande, self.produkt)
+        return block(self.nyckel, self.villkor, self.erbjudande, self.produkt, self.utfall)
 
 
 async def for_trad(
@@ -607,6 +645,7 @@ async def for_trad(
         erbjudande=armar(val)[nyckel],
         amnen=tuple(amnen_for(val.get("amnen"), produkt)),
         produkt=produkt,
+        utfall=kort_utfall_for(val, produkt),
     )
 
 

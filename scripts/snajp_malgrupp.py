@@ -86,14 +86,15 @@ MARKOR = "## Så presenterar sig Snajp i Iris utkast"
 IRIS_INSTRUKTION = f"""{MARKOR}
 
 - Erbjud den produkt researchen valt, och bara den. Nämn aldrig de andra agenterna.
+- Produktvalet: fastighetsbolag och förvaltare (bostäder eller lokaler) får Supportagenten, för hyresgästernas frågor och ärenden; byggföretag och hantverkare får Iris, för nya uppdrag. Andra bolag får den produkt som täcker det som rimligtvis tar mest tid hos dem.
 - Nämn aldrig kvitton, bokföring eller Kvittohanteraren: den säljs inte just nu.
 - Struktur B (det korta mejlet) följer blocket "Mejlets struktur: B" och förebilderna där: kort, rakt på, och mejlet slutar med frågan. Reglerna nedan om avslutet, frågan i erbjudandets form B, meningen efter ingången och ingången gäller struktur A; resten gäller båda.
 - Avsluta med erbjudandets handling enligt villkoren under "Erbjudandet i det här mejlet", som en vardaglig inbjudan. Aldrig "Svara X så gör vi Y" och aldrig med en fråga.
 - Kalla Iris "vår agent Iris" första gången och sedan "Iris". Aldrig "Iris, leadsagenten", "leadsagenten Iris", "Vår Iris" eller "hon".
 - Iris hittar och kvalificerar nya företagskunder och skriver första mejlet till dem. Iris hittar aldrig tomter, investerare, leverantörer eller personal.
 - Frågan i erbjudandets form B ("Piloten, form B", inte struktur B): för Iris om det tar mest tid att hantera de förfrågningar som redan kommer in eller att hitta nya kunder; för Supportagenten om det tar mest tid att gå igenom kundmejlen eller att sitta i supportchattarna. Inga andra moment.
-- Mejlet är varmt och informerande, aldrig säljigt eller pushande. Senast i meningen efter ingången ska mottagaren förstå att agenten effektiviserar deras arbete: för Iris att hitta nya kunder (prospekteringen), för Supportagenten kundhanteringen. Säg det med vad de slipper eller får tid till, och ge en kort inblick i hur enkelt det är (Iris: ni säger vilka kunder ni söker, och Iris tar fram bolagen och skriver första mejlet som ni godkänner; Supportagenten: den svarar utifrån er egen information). "Effektiviserar prospekteringen" eller "effektiviserar kundhanteringen" får stå en gång.
-- Ingången beskriver vad deras arbete går ut på, utan problem och utan krav på dem: aldrig vad deras kunder förväntar sig eller kräver, aldrig att frågorna växer eller tar tid från något, och aldrig en fråga om hur de ska hinna eller kunna klara något.
+- Mejlet är varmt och informerande, aldrig säljigt eller pushande. I meningen efter ingången (produktmeningen i struktur A) ska mottagaren förstå att agenten effektiviserar deras arbete: för Iris att hitta nya kunder (prospekteringen), för Supportagenten kundhanteringen. Säg det med vad de får och hur enkelt det är, i samma mening (Iris: tar fram sådana bolag åt dem och skriver första mejlet, som de godkänner innan något skickas; Supportagenten: svarar utifrån deras egen information). "Effektiviserar prospekteringen" eller "effektiviserar kundhanteringen" får stå en gång.
+- Ingången säger det konkreta i deras vardag som agenten tar vid ifrån, skrivet till dem och aldrig som en beskrivning av bolaget ("[Bolaget] erbjuder …"): för Iris vilka kunder de säljer till, så konkret som underlaget tillåter (bransch, ort), så att Iris kan ta fram fler sådana; för Supportagenten vad deras kunder (hyresgäster, medlemmar) hör av sig om. Aldrig vad deras kunder förväntar sig eller kräver, aldrig att frågorna växer eller tar tid från något, och aldrig en fråga om hur de ska hinna eller kunna klara något.
 - Rabatten är "upp till 50 %" för den som stannar efter piloten, aldrig "50 %" rakt av.
 """
 
@@ -110,10 +111,14 @@ IRIS, SUPPORT = (p["namn"] for p in PRODUKTER)
 #: Kort (2026-10-25): piloten och avslutet tog 60 av 105–150 ord i provet.
 #: Sebbe 2026-10-29: "upp till 50 % rabatt om du stannar efteråt", och demon
 #: kräver ingen inloggning (app/demo): mottagaren testar direkt.
+#: Anton 2026-11-06 (förslag 1): piloten i en eller två korta meningar och
+#: handlingen i en, så att A ryms i 80 ord; "med alla funktioner" är borta.
+#: Första meningen är den struktur B bär (utkaststruktur.kort_villkor), och
+#: dess siffror (20, tre månader) är desamma som förut.
 _PILOT = (
-    "Just nu tar vi in 20 företag i en kostnadsfri pilot av {agent} i tre månader, med alla funktioner. "
-    "Du får upp till 50 % rabatt om du stannar efteråt. Handling: den som vill testa själv kan titta på "
-    "demon på snajp.se/demo, och den som vill veta mer svarar på mejlet så bokar vi en kostnadsfri genomgång."
+    "Just nu tar vi in 20 företag i en kostnadsfri pilot av {agent} i tre månader. "
+    "Den som stannar efteråt får upp till 50 % rabatt. Handling: titta gärna på demon på snajp.se/demo, "
+    "eller svara på mejlet för en kostnadsfri genomgång."
 )
 #: Kortnamnet i texten ("Iris", inte "Iris, leadsagenten"): Anton 2026-10-25 om
 #: mejlen som "berättar om 'leadsagenten' helt utan kontext".
@@ -183,10 +188,14 @@ KORT_UTFALL = {
     IRIS: "40–50 nya företagskunder i veckan, med ett färdigt första mejl till varje",
     SUPPORT: "svar direkt på de vanligaste kundfrågorna, dygnet runt, utifrån er egen information",
 }
-#: A/B (Anton 2026-10-25): samma pilot, två former, hälften var. Katalogens
-#: gratisprov och garanti står kvar avslagna och kan slås på i Leads › Erbjudanden.
+#: A/B (Anton 2026-10-25): samma pilot, två former, hälften var. Sedan
+#: 2026-11-06 (Anton, förslag 1) bara form A: frågan i form B besvarades i
+#: nästa mening och lästes som ett säljmanus, och A/B-testet är nu struktur A
+#: mot struktur B (utkaststruktur.py). pilot_b står kvar under `egna` så att
+#: dess utfall syns i Leads › Erbjudanden och den kan slås på igen.
+#: Katalogens gratisprov och garanti står kvar avslagna.
 ERBJUDANDEN = {
-    "aktiva": [{"nyckel": "pilot_a", "vikt": 1}, {"nyckel": "pilot_b", "vikt": 1}],
+    "aktiva": [{"nyckel": "pilot_a", "vikt": 1}],
     "egna": {
         "pilot_a": {"namn": "Piloten, form A", "form": "rak"},
         "pilot_b": {"namn": "Piloten, form B (frågan)", "form": "fraga"},

@@ -121,6 +121,9 @@ async def _queue_outreach_draft_impl(
     #: egna regler, så att varje B-mejl inte flaggas för att det slutar med
     #: sin fråga.
     struktur: str = "a",
+    #: A-formens ordtak (erbjudanden.ORDTAK, Anton 2026-11-06), samma tak som
+    #: kedjans stilgrind prövade; None = stilkontrollens eget.
+    ordtak: int | None = None,
 ) -> str:
     # Textkvalitetslagret (app/textkvalitet.py): sista efterkontrollen innan
     # texten kan nå en kund. Platshållare ("[förnamn]") kontrolleras på
@@ -192,7 +195,9 @@ async def _queue_outreach_draft_impl(
             for r in await outreach.storage.list_review_queue(outreach.tenant_id)
             if r.get("thread_id") != outreach.thread_id
         ]
-        stilfynd = stil.kontrollera(finalized_body, struktur=struktur).anmarkningar + stil.mot_andra(
+        stilfynd = stil.kontrollera(
+            finalized_body, struktur=struktur, tak=ordtak, bolag=prospekt.get("company_name")
+        ).anmarkningar + stil.mot_andra(
             finalized_body, andra, struktur=struktur
         )
         if stilfynd:

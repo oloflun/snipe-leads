@@ -70,7 +70,9 @@ def main() -> int:
     installningar = rad["settings"] if rad else {}
     if isinstance(installningar, str):
         installningar = json.loads(installningar)
-    villkor_alla = erbjudanden.normalisera((installningar or {}).get("erbjudanden")).get("villkor") or {}
+    val = erbjudanden.normalisera((installningar or {}).get("erbjudanden"))
+    villkor_alla = val.get("villkor") or {}
+    former = {k: (v or {}).get("form", "rak") for k, v in (val.get("egna") or {}).items()}
     produkter = [str(p.get("namn") or "") for p in (installningar or {}).get("produkter") or []]
 
     cur.execute(SQL, {"t": t})
@@ -90,7 +92,9 @@ def main() -> int:
         struktur = "b" if utkaststruktur.ar_b(stil._brodtext(body)) else "a"
         if struktur == "b":
             villkor = utkaststruktur.kort_villkor(villkor) if "pilot" in brod else ""
-        fynd = stil.kontrollera(stil._brodtext(body), struktur=struktur).anmarkningar
+        # A prövas mot formens ordtak, som i kedjan (erbjudanden.ORDTAK).
+        tak = None if struktur == "b" else erbjudanden.ORDTAK.get(former.get(r["erbjudande"] or ""), erbjudanden.ORDTAK["rak"])
+        fynd = stil.kontrollera(stil._brodtext(body), struktur=struktur, tak=tak, bolag=r["company_name"]).anmarkningar
         if r["erbjudande"]:
             fynd += stil.erbjudande_fynd(body, villkor=villkor, produkt=produkt or (produkter[0] if produkter else None))
         fynd += stil.mot_andra(body, [*texter[:i], *texter[i + 1 :]], struktur=struktur)

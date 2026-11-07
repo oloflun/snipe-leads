@@ -1,0 +1,24 @@
+{
+  "name": "snajp-marknadsvideo",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Instagram-reel om Iris: fran korning till svar. Fristaende Remotion-projekt, ingen del av appen.",
+  "scripts": {
+    "studio": "remotion studio src/index.ts",
+    "ljud": "python ljud/gor_ljud.py",
+    "rendera": "remotion render src/index.ts Reel-9x16 out/snajp-iris-reel-9x16.mp4 && remotion render src/index.ts Flode-4x5 out/snajp-iris-flode-4x5.mp4",
+    "typkoll": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@remotion/cli": "4.0.541",
+    "@remotion/google-fonts": "4.0.541",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "remotion": "4.0.541"
+  },
+  "devDependencies": {
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "typescript": "7.0.2"
+  }
+}

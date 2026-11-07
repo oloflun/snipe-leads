@@ -1847,7 +1847,7 @@ async def hamta_korning(
 ) -> dict:
     """EN körning. 404 när raden inte finns — inte ett tomt svar, så UI:t
     kan skilja "borta" från "inte startad än"."""
-    rad = await request.app.state.storage.get_leads_korning(tenant["tenant_id"], job_id)
+    rad = await request.app.state.storage.get_leads_korning(tenant["tenant_id"], job_id, arbetsminne=False)
     if rad is None:
         raise HTTPException(status_code=404, detail="Körningen finns inte.")
     return _utan_kandidater(rad)
@@ -2703,7 +2703,11 @@ async def _andra_korningars_bolag(storage, tenant_id: str, batch_id: str) -> set
     men förbrukade ändå en av sina rundor. Nycklar som upptagna.nyckel."""
     ut: set[str] = set()
     try:
-        rader = await storage.list_leads_korningar(tenant_id, limit=20)
+        # Bara de ANDRA pågående körningarna, med arbetsminnet: körningens
+        # eget tillstånd (flera MB vid 200) lästes förut här för varje runda.
+        rader = await storage.list_leads_korningar(
+            tenant_id, limit=20, arbetsminne=True, status="processing", utom=batch_id
+        )
     except Exception:  # noqa: BLE001 — utan läsningen gäller bara det sparade
         logger.exception("Kunde inte läsa de andra körningarna för %s.", tenant_id)
         return ut
@@ -2797,8 +2801,7 @@ async def _ateruppta_korning(app_state, payload: dict) -> bool:
 async def _styrning(app_state, tenant_id: str, batch_id: str) -> str | None:
     """'paus' | 'avbruten' | None, ur liggaren (inte Redis-posten, som bär
     motorns egen kopia av tillståndet och kan vara äldre än kundens knapptryck)."""
-    rad = await app_state.storage.get_leads_korning(tenant_id, batch_id)
-    return ((rad or {}).get("korning") or {}).get("styrning")
+    return await app_state.storage.get_korning_styrning(tenant_id, batch_id)
 
 
 _STYRNING = {"pausa": "paus", "aterupta": None, "avbryt": "avbruten"}
@@ -3800,6 +3803,8 @@ async def _run_batch_prospect(
                                 "roll": prospect.get("contact_role"),
                             },
                             "vald_produkt": result.get("produkt"),
+                            # Skälet till produktvalet (Anton 2026-11-07).
+                            "tar_mest_tid": result.get("tar_mest_tid"),
                         },
                         ensure_ascii=False,
                     )

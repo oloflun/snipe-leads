@@ -81,9 +81,11 @@ const copy = {
           sv: `${BINDNINGSTID_MANADER} månaders bindningstid`,
           en: `${BINDNINGSTID_MANADER} months minimum term`
         },
+  //: Antons lydelse 2026-11-07: tillfälliga priser under pilotperioden, som kan
+  //: komma att höjas. Momsen står här eftersom korten visar beloppet utan den.
   preliminart: {
-    sv: "Priserna är preliminära under pilotperioden och kan komma att ändras. Vi hör av oss innan något ändras för dig som redan är kund.",
-    en: "Prices are provisional during the pilot period and may change. We will contact you before anything changes for existing customers."
+    sv: "Priserna är exklusive moms och tillfälliga under pilotperioden. De kan komma att höjas, men vi hör av oss innan något ändras för dig som redan är kund.",
+    en: "Prices exclude VAT and are temporary during the pilot period. They may be raised, but we will contact you before anything changes for existing customers."
   },
   ctaRubrik: {
     sv: "Osäker på vilket paket som passar?",

@@ -30,7 +30,10 @@ UTKAST = FACIT["utkast"]
 #: svara_sa_avslut: facit slutar med "Svara 'pilot' …", som Anton förbjöd
 #: 2026-10-25 (docs/BESLUT.md). Facit gäller för allt annat tills ett nytt
 #: facit med den nya formen är godkänt.
-TILLATNA = {"lang_mening", "samma_uppmaning", "for_langt", "kopierat_exempel", "svara_sa_avslut"}
+#: kravande_ingang: Ö-Logistik öppnar "… för att växa behöver ni …", och sedan
+#: Antons struktur A kortare (2026-11-06) konstaterar ingången i stället; facit
+#: för den nya formen ersätter det här när Anton godkänt det.
+TILLATNA = {"lang_mening", "samma_uppmaning", "for_langt", "kopierat_exempel", "svara_sa_avslut", "kravande_ingang"}
 
 
 def _koder(text: str) -> set[str]:
