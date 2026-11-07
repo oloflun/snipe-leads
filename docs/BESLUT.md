@@ -52,6 +52,18 @@ stilgrindens omskrivningstips pekade fortfarande på "deras löfte".
   § 10.2, Snajps Iris-instruktion och stilgrindens omskrivningstips.
 - Låst av `tests/leads/test_struktur_a_kort.py`.
 
+**Provet samma kväll** (samma nio leads, två varv, `860941c` och `648d0ae`):
+ingen ingång började med bolagets namn i något varv, mot sex av nio före, och
+de flesta följde förslagets form ("Era kunder vill sälja maskiner, fordon och
+inventarier. Vår agent Iris hittar fler sådana företag åt er …"). Första
+varvet skrev av utfallet ("40–50 nya företagskunder åt er varje vecka") i tre
+av sex Iris-mejl och sa bara bolagets kategori i supportingångarna; båda
+fälls nu (`_GENERISK_IRIS`, supportformerna), liksom "fler sådana
+hyresgäster" (`fel_sak`). Kvar: en ingång som fortfarande beskriver bolaget
+med "Ni" som subjekt (en säljbyrå), ett fastighetsbolag där researchen valt
+Iris och mejlet därför lovar hyresgäster, och tunn research som ger
+"företagskunder" utan bransch.
+
 ---
 
 ## 2026-11-07 (Anton) — Pilotpriser: 9 990, 12 990 och 19 990 kr i månaden
