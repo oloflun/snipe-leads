@@ -60,7 +60,7 @@ export const AI_SDR_VERKTYG: AiSdrVerktyg[] = [
     svenska: { sv: "Sajten är svensk; skrivspråket anges inte", en: "The site is Swedish; the writing language is not stated" },
     godkannande: { sv: "Ja, ni godkänner det som går ut", en: "Yes, you approve what goes out" },
     data: { sv: "Lagring och drift inom EU; krävande uppgifter i amerikanska modeller", en: "Storage and hosting in the EU; demanding tasks on US models" },
-    pris: { sv: "4 900 kr/mån exkl. moms", en: "SEK 4,900 a month excl. VAT" }
+    pris: { sv: "4 900 kr/mån exkl. moms", en: "SEK 4,900 a month excl. VAT" }
   },
   {
     namn: "Revexa (Leo)",
@@ -87,7 +87,7 @@ export const AI_SDR_VERKTYG: AiSdrVerktyg[] = [
     svenska: { sv: "Fler än 105 språk; svenska nämns inte", en: "105+ languages; Swedish is not named" },
     godkannande: { sv: "Valfritt", en: "Optional" },
     data: { sv: "AWS; region anges inte", en: "AWS; region not stated" },
-    pris: { sv: "Från 3 750 USD/mån, årsvis", en: "From USD 3,750 a month, billed yearly" }
+    pris: { sv: "Från 3 750 USD/mån, årsvis", en: "From USD 3,750 a month, billed yearly" }
   },
   {
     namn: "SuperOffice Lead Agent",
@@ -105,7 +105,7 @@ export const AI_SDR_VERKTYG: AiSdrVerktyg[] = [
     svenska: EJ_ANGIVET,
     godkannande: { sv: "Ja, i piloten", en: "Yes, in the pilot" },
     data: EJ_ANGIVET,
-    pris: { sv: "Pilot 7 000 EUR", en: "Pilot EUR 7,000" }
+    pris: { sv: "Pilot 7 000 EUR", en: "Pilot EUR 7,000" }
   }
 ];
 
