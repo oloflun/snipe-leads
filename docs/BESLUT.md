@@ -21,8 +21,8 @@ med i PR:en, SEOn arbetet och då tillhörande länkarna, inte den enade
 startsidan från den här sessionen." Jämförelsesidorna hade han godkänt för
 releasen dagen innan. PR:en går från `development`, så det som ska stå utanför
 måste lämna grenen tills mergen är gjord; en flagga hade tagit koden till main
-ändå. Pilotpriserna räknades inte till startsidan och följer med releasen
-(agentens tolkning, inte Antons ord).
+ändå. Pilotpriserna följer med releasen till produktionen; på frågan om de
+också skulle hållas utanför svarade Anton: "Yes, let them go to production".
 
 **I koden.** Commiten `revert(startsida): startsidan hålls utanför release #42`
 återställer startsidans filer till läget före bygget (`app/page.tsx`,
