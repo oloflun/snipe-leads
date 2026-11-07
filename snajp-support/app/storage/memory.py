@@ -1907,17 +1907,37 @@ class MemoryStorage:
                 ut[str(r["prospect_id"])] = {"status": r["status"], "error": r.get("error")}
         return ut
 
-    async def list_leads_korningar(self, tenant_id: str, *, limit: int = 20) -> list[dict[str, Any]]:
+    #: Som PostgresStorage._KORNING_SQL_LATT: arbetsminnet skärs bort om det inte begärs.
+    _ARBETSMINNE = ("kandidater", "webbpool", "listspar", "utslag", "rapporterade")
+
+    def _latt(self, rad: dict[str, Any]) -> dict[str, Any]:
+        k = rad.get("korning")
+        if isinstance(k, dict):
+            rad = {**rad, "korning": {f: v for f, v in k.items() if f not in self._ARBETSMINNE}}
+        return rad
+
+    async def list_leads_korningar(
+        self,
+        tenant_id: str,
+        *,
+        limit: int = 20,
+        arbetsminne: bool = False,
+        status: str | None = None,
+        utom: str | None = None,
+    ) -> list[dict[str, Any]]:
         rader = [
             r for r in self.leads_job_ledger.values()
             if r["tenant_id"] == tenant_id and r["scope"] in ("batch", "lista")
+            and (status is None or r["status"] == status)
+            and (utom is None or r["job_id"] != utom)
         ]
         # Senast insatta först INNAN sorteringen: sort() är stabil, så två
         # jobb med samma created_at (snabb maskin, samma millisekund) behåller
         # annars äldst-först-ordningen och bryter "nyast först"-kontraktet.
         rader.reverse()
         rader.sort(key=lambda r: r["created_at"], reverse=True)
-        return [self._korningsrad(r) for r in rader[:limit]]
+        ut = [self._korningsrad(r) for r in rader[:limit]]
+        return ut if arbetsminne else [self._latt(r) for r in ut]
 
     async def get_sidcache(self, tenant_id: str, url: str) -> dict[str, Any] | None:
         rad = self.__dict__.setdefault("sidcache", {}).get((tenant_id, url))
@@ -1937,11 +1957,18 @@ class MemoryStorage:
         rad["updated_at"] = _now()
         return True
 
-    async def get_leads_korning(self, tenant_id: str, job_id: str) -> dict[str, Any] | None:
+    async def get_leads_korning(
+        self, tenant_id: str, job_id: str, *, arbetsminne: bool = True
+    ) -> dict[str, Any] | None:
         rad = self.leads_job_ledger.get(job_id)
         if not rad or rad["tenant_id"] != tenant_id or rad["scope"] not in ("batch", "lista"):
             return None
-        return self._korningsrad(rad)
+        ut = self._korningsrad(rad)
+        return ut if arbetsminne else self._latt(ut)
+
+    async def get_korning_styrning(self, tenant_id: str, job_id: str) -> str | None:
+        rad = await self.get_leads_korning(tenant_id, job_id)
+        return ((rad or {}).get("korning") or {}).get("styrning")
 
     # -- Leadslistor (tillägget 'leadlists', migration 060) -----------------
 

@@ -850,12 +850,25 @@ class Storage(Protocol):
         det slutade utan ett utkast i kön — också efter en omladdning."""
         ...
 
-    async def list_leads_korningar(self, tenant_id: str, *, limit: int = 20) -> list[dict[str, Any]]:
+    async def list_leads_korningar(
+        self,
+        tenant_id: str,
+        *,
+        limit: int = 20,
+        arbetsminne: bool = False,
+        status: str | None = None,
+        utom: str | None = None,
+    ) -> list[dict[str, Any]]:
         """Tenantens körningar (liggarens batch- och listrader), nyast
         först: job_id, status, scope, is_test, created_at, updated_at,
         completed_at, error, korning (INV-JOB-003). Prospektjobben (scope
         research/research_and_draft/draft) är inte körningar och tas inte
-        med — de är körningens barn och står i `korning.jobs`."""
+        med — de är körningens barn och står i `korning.jobs`.
+
+        `korning` är UTAN motorns arbetsminne (kandidater, webbpool, listspar,
+        utslag, rapporterade) om inte `arbetsminne=True`: i en körning på 200
+        var det flera MB per rad, och att läsa det för varje lista låste API:t
+        (main 2026-11-07). `status` och `utom` (ett job_id) filtrerar i frågan."""
         ...
 
     async def get_sidcache(self, tenant_id: str, url: str) -> dict[str, Any] | None:
@@ -874,8 +887,17 @@ class Storage(Protocol):
         körningen inte finns, inte är en pågående batch eller redan är klar."""
         ...
 
-    async def get_leads_korning(self, tenant_id: str, job_id: str) -> dict[str, Any] | None:
-        """EN körning med samma fält som list_leads_korningar, eller None."""
+    async def get_leads_korning(
+        self, tenant_id: str, job_id: str, *, arbetsminne: bool = True
+    ) -> dict[str, Any] | None:
+        """EN körning med samma fält som list_leads_korningar, eller None.
+        Här är arbetsminnet MED som standard: motorn läser tillståndet och
+        skriver tillbaka det helt, och ett bortskuret arbetsminne vore borta."""
+        ...
+
+    async def get_korning_styrning(self, tenant_id: str, job_id: str) -> str | None:
+        """Bara `korning.styrning` ('paus' | 'avbruten' | None). Motorn frågar
+        före varje bolag; att läsa hela tillståndet för det låste API:t."""
         ...
 
     async def sum_leads_tokens(self, tenant_id: str, *, hours: int = 24) -> int:
