@@ -1302,7 +1302,20 @@ async def run_outreach_draft_v2(
     # person, med en detalj ur citaten. Resten av mejlet rörs inte.
     # Inte i struktur B: personaliseringen skriver om första stycket till en
     # ingång i A:s form, och i B är första stycket ofta själva frågan.
+    # Personaliseringen och omskrivningarna förbättrar ett utkast som redan
+    # finns: bryter en av dem utdatakontraktet står versionen före kvar, och
+    # utkastet köas ändå. Provet 2026-11-06 (struktur A kortare) tappade tre av
+    # 36 utkast på att sista omskrivningen saknade sources_used, fast en
+    # godkänd version fanns. Bara utkaststeget självt fäller utkastet.
+    valfria_brott: set[int] = set()
+
+    def _brott(fore: int) -> bool:
+        brutna = {i for i in range(fore, len(trace.steps)) if trace.steps[i].escalated}
+        valfria_brott.update(brutna)
+        return bool(brutna)
+
     if str(draft.get("body") or "").strip() and not b:
+        fore = len(trace.steps)
         personaliserad = await run_step(
             steps[0],
             ledger,
@@ -1315,7 +1328,7 @@ async def run_outreach_draft_v2(
             instruktioner=lager,
             talamod_429=True,
         )
-        if str(personaliserad.get("body") or "").strip():
+        if not _brott(fore) and str(personaliserad.get("body") or "").strip():
             draft = {**draft, "subject": personaliserad.get("subject") or draft.get("subject"),
                      "body": personaliserad["body"]}
 
@@ -1384,7 +1397,10 @@ async def run_outreach_draft_v2(
                          bolag=company_name, andra_amnen=andra_amnen, fokus_ok=fokus_ok, amne_i_kod=amne_i_kod,
                          struktur=struktur, kort_utfall=kort_utfall, tak=ordtak)
     if stilfynd:
-        draft = await skriv_om(draft, stilfynd)
+        fore = len(trace.steps)
+        omskriven = await skriv_om(draft, stilfynd)
+        if not _brott(fore):
+            draft = omskriven
     humanized = await humanisera(draft)
     # Grinden igen EFTER humanizern (Anton 2026-10-15): omkörningen samma kväll
     # köade utkast med "ert löfte … tar tid från det arbetet" och tankstreck,
@@ -1408,8 +1424,11 @@ async def run_outreach_draft_v2(
     for _varv in range(2):
         if not kvar:
             break
+        fore = len(trace.steps)
         draft = await skriv_om(slutligt, kvar)
         humanized = await humanisera(draft)
+        if _brott(fore):
+            break
         slutligt = _version(humanized, draft)
         kvar = _stilfynd(slutligt, villkor=villkor, produkt=produktnamn, andra=andra_utkast,
                          bolag=company_name, andra_amnen=andra_amnen, fokus_ok=fokus_ok, amne_i_kod=amne_i_kod,
@@ -1436,7 +1455,7 @@ async def run_outreach_draft_v2(
         prospect_email=prospect_email,
         is_test=is_test,
     )
-    escalated_steps = [s.skill for s in trace.steps if s.escalated]
+    escalated_steps = [s.skill for i, s in enumerate(trace.steps) if s.escalated and i not in valfria_brott]
     queue_result: dict[str, Any] = {}
     grounding: dict[str, Any] = {"ok": True, "fired": False}
 
@@ -1470,7 +1489,7 @@ async def run_outreach_draft_v2(
                 company_name=company_name,
             ),
         )
-        escalated_steps = [s.skill for s in trace.steps if s.escalated]
+        escalated_steps = [s.skill for i, s in enumerate(trace.steps) if s.escalated and i not in valfria_brott]
         # Reparationen kan ha skrivit om hälsningen; samma regel igen.
         body = ratta_tilltal(body, mottagare, prospect_email)
         # Registernamnet ("… Aktiebolag") blir kortnamnet i det som köas, i

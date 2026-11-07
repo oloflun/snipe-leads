@@ -316,3 +316,46 @@ def test_ingangsformerna_bjuder_inte_in_till_nar_bisatsen():
     assert all("När" not in f for f in _INGANGSFORMER)
     assert "egen huvudsats" in erbjudanden.formregler("rak", IRIS)
     assert "egen huvudsats" in _INGANGSUPPGIFT
+
+
+# -- utdatakontraktet i omskrivningen (provet 2026-11-06, 3 av 36 utkast föll) --------
+
+
+@pytest.mark.anyio
+async def test_en_omskrivning_som_bryter_kontraktet_faller_inte_utkastet(miljo):
+    """Utkastet och personaliseringen svarar rätt, men med en ingång grinden
+    fäller; varje omskrivning därefter saknar sources_used, som i provet. Då
+    står den senaste godkända versionen kvar och köas, med stilfyndet på
+    köposten, i stället för att hela utkastet kastas."""
+    from tests.agent.test_leads_v2_wiring import _FakeLLM
+
+    med_fynd = (
+        "Hej,\n\nAtt lägga golv och samtidigt hitta nya kunder är en balansgång. Vår agent Iris tar fram "
+        "fler fastighetsbolag åt er.\n\nJust nu tar vi in 20 företag i en kostnadsfri pilot av Iris.\n\n"
+        "Titta gärna på demon på snajp.se/demo."
+    )
+
+    class _BrytandeOmskrivning(_FakeLLM):
+        async def create(self, **kw):
+            svar = await super().create(**kw)
+            if self.calls[-1] == "sa:draft-outreach" and self.calls.count("sa:draft-outreach") > 2:
+                data = json.loads(svar.choices[0].message.content)
+                data.pop("sources_used", None)
+                data.pop("context_refs", None)
+                svar.choices[0].message.content = json.dumps(data, ensure_ascii=False)
+            return svar
+
+    llm = _BrytandeOmskrivning(
+        {
+            "sa:draft-outreach": {"subject": "Nya kunder", "body": med_fynd},
+            "snajp:humanizer-svenska": {"final_subject": "Nya kunder", "final_body": med_fynd},
+        }
+    )
+    storage = MemoryStorage()
+    trad, _ = await _forbered(storage)
+    resultat = await _skriv(storage, trad, llm, "a")
+    assert llm.calls.count("sa:draft-outreach") > 2, "omskrivningen ska ha körts och brutit kontraktet"
+    assert resultat["queued"], resultat.get("escalation_reason")
+    assert "balansgång" in storage.outreach_messages[TENANT][0]["body"]
+    post = json.dumps(storage.send_queue[TENANT][0], ensure_ascii=False, default=str)
+    assert "mallord" in post or "Stil:" in post

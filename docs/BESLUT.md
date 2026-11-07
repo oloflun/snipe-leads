@@ -213,7 +213,17 @@ hyresgäster, privatpersoner, investerare, personal …; inte "uppdrag", som st�
 Antons facit 2026-10-12 och fälls bara i B:s fråga). Facit 2026-10-16 och
 referensen 2026-10-12 undantar `kravande_ingang` för Ö-Logistik och Consenso,
 som `svara_sa_avslut` undantogs 2026-10-25, tills facit för den nya formen är
-godkänt.
+godkänt. Tredje varvet: 8 av 9, sex av åtta utan fynd, men samma två leads
+öppnade "När ni …" i alla tre varven (båda med ingångsformen "vad deras kunder
+får av dem", nu omskriven, och ingången är en egen huvudsats), och fyra av fem
+Iris-mejl sa bara "nya företagskunder åt er": kedjan skriver nu om en sådan
+mening så att den säger vilka sorters företag (`generisk_iris_mening`, bara i
+kedjan, inte i stilkontrollen som facit prövas mot). Fjärde varvet: 8 av 9, sju
+av åtta utan fynd, median 72 ord. Det nionde utkastet föll i varv 1, 3 och 4 på
+att sista omskrivningen saknade `sources_used`, fast en godkänd version fanns,
+och de fler omskrivningarna gjorde det vanligare (3 av 36 mot 2–4 % per dag).
+En omskrivning eller personalisering som bryter utdatakontraktet fäller nu inte
+utkastet: versionen före står kvar och köas med sina stilfynd.
 
 **Öppet för Anton.** (1) Ett nytt facit för A tas ur de första utkasten med
 den nya formen och läggs in först efter ditt ja. (2) A/B-testet är nu struktur
