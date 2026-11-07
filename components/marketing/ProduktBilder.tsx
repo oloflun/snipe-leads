@@ -547,10 +547,15 @@ export const EXEMPELRAD: Localized = {
   en: "The surfaces above are the product's own, shown with example data."
 };
 
+/**
+ * `fullt`: startsidans flöde (Startsida.tsx). Rutan glider in först när den står
+ * helt i bild, i samma kö som stegen runt den (useLandingMotion, data-full).
+ */
 export function ProduktBilder({
   product,
-  locale
-}: Readonly<{ product: ProductKey; locale: Locale }>) {
+  locale,
+  fullt = false
+}: Readonly<{ product: ProductKey; locale: Locale; fullt?: boolean }>) {
   const [vanster, hoger] = FALT[product];
   return (
     // Toppen nära löftet ovanför: punkterna där slutar i samma tanke som ytorna här
@@ -565,7 +570,7 @@ export function ProduktBilder({
             // (useLandingMotion, caseEntry). key per språk på bildtexten: dess
             // rader spaltas av SplitText, och React ska byta noderna, inte diffa i dem.
             return (
-              <figure key={falt.rubrik.sv} data-case>
+              <figure key={falt.rubrik.sv} data-case data-full={fullt || undefined}>
                 {/* data-hole: ytan lyfts ur dygnsljuset (LandingPhoto) så att
                     produktens egna färger står kvar. */}
                 <div

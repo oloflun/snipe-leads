@@ -8,7 +8,7 @@ import { useLocale, type Localized } from "@/lib/i18n";
 import { landningsPost } from "@/lib/landningar";
 import { cn } from "@/lib/utils";
 import { HeroText } from "@/components/marketing/LiveText";
-import { PRODUKTYTOR, type Yta } from "@/components/marketing/ProduktBilder";
+import { PRODUKTYTOR, ProduktBilder, type Yta } from "@/components/marketing/ProduktBilder";
 import { LOFTET } from "@/components/marketing/UspSection";
 import { RESULTAT, RESULTAT_NOT, StatRad } from "@/components/marketing/AgentResultat";
 import { leadsCopy, productCopy, shared, supportCopy } from "@/components/marketing/copy";
@@ -203,10 +203,12 @@ export function HemHjalte() {
 /* --------------------------------------------------------------- Agenterna */
 
 /**
- * En agents sektion. Varje del är ett `steg` som visas när den står helt i bild,
- * i kö efter den förra (useLandingMotion), och resultatets tal räknas först när
- * deras rad har visats (RaknaUpp). Inget skrubbas, så inget backar eller
- * försvinner när man skrollar tillbaka.
+ * En agents sektion, i Antons ordning (2026-11-07): löftet med produktsidans två
+ * rutor direkt under, sedan resultatets tal och panel som sista del före demon,
+ * sist demon med texten bredvid. Varje del är ett `steg` eller en ruta som visas
+ * när den står helt i bild, i kö efter den förra (useLandingMotion), och
+ * resultatets tal räknas först när deras rad har visats (RaknaUpp). Inget
+ * skrubbas, så inget backar eller försvinner när man skrollar tillbaka.
  */
 export function AgentFlode({ agent, demo }: Readonly<{ agent: Agent; demo: React.ReactNode }>) {
   const { text, locale } = useLocale();
@@ -218,7 +220,8 @@ export function AgentFlode({ agent, demo }: Readonly<{ agent: Agent; demo: React
   return (
     <section id={a.ankare} aria-labelledby={`${a.ankare}-rubrik`} className="relative scroll-mt-6">
       <i aria-hidden="true" data-mo="rule" className="mo-rule" />
-      <div className="mx-auto max-w-[1480px] px-6 py-24 md:px-10 md:py-32">
+      {/* Kort botten, som på produktsidan: rutorna nedanför fortsätter löftets punkter. */}
+      <div className="mx-auto max-w-[1480px] px-6 pb-12 pt-24 md:px-10 md:pb-16 md:pt-32">
         {/* LÖFTET: rubrik, ingress och tre punkter i en rad, NOT tre kort. */}
         <p data-mo="steg" className="text-[0.8125rem] font-medium tracking-[0.02em] text-ink-subtle">
           {text(a.etikett)}
@@ -241,9 +244,16 @@ export function AgentFlode({ agent, demo }: Readonly<{ agent: Agent; demo: React
             </div>
           ))}
         </div>
+      </div>
 
-        {/* RESULTATET under löftet: vad verktyget ger, med talen som räknas fram. */}
-        <div className="mt-24 grid grid-cols-12 gap-y-12 md:mt-28 lg:gap-x-14">
+      {/* DE TVÅ RUTORNA under löftet, samma som på produktsidan: de glider in en i
+          taget när de står helt i bild, och bildtexten avtäcks när de landat. */}
+      <ProduktBilder product={agent} locale={locale} fullt />
+
+      <div className="mx-auto max-w-[1480px] px-6 pb-24 pt-20 md:px-10 md:pb-32 md:pt-28">
+        {/* RESULTATET efter rutorna: vad verktyget ger, med talen som räknas fram,
+            som sista del före demon. */}
+        <div className="grid grid-cols-12 gap-y-12 lg:gap-x-14">
           <div className="col-span-12 lg:col-span-5">
             <h3
               data-mo="steg"

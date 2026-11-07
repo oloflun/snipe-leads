@@ -59,6 +59,14 @@ Produktbilderna och "Så tänker vi"-bandet står inte på startsidan: ytorna b�
 hjälten, och bandet var inte en av agenternas tre sektioner. INV-SEO-001
 (`test_startsidan_ar_en_egen_sida`) fäller en återgång.
 
+**Rättat samma dag (Anton).** Produktbilderna togs bort på agentens eget
+initiativ, och då fylldes agentens sektion nästan bara av resultatvyn. Anton:
+de två dynamiska rutorna hör till den första sektionen, och resultatet ska vara
+"den sista delen innan den interaktiva rutan med Email-studio eller inkorg".
+Ordningen per agent är nu: löftet, de två rutorna (`ProduktBilder`, läget
+`fullt`), resultatets tal och panel, demon med texten bredvid. Bandet står
+fortfarande inte med.
+
 ---
 
 ## 2026-11-06 (Sebbe) — Marknadsvideo för Instagram: Iris från körning till svar
