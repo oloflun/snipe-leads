@@ -60,7 +60,7 @@ export const AI_SDR_VERKTYG: AiSdrVerktyg[] = [
     svenska: { sv: "Sajten är svensk; skrivspråket anges inte", en: "The site is Swedish; the writing language is not stated" },
     godkannande: { sv: "Ja, ni godkänner det som går ut", en: "Yes, you approve what goes out" },
     data: { sv: "Lagring och drift inom EU; krävande uppgifter i amerikanska modeller", en: "Storage and hosting in the EU; demanding tasks on US models" },
-    pris: { sv: "4 900 kr/mån exkl. moms", en: "SEK 4,900 a month excl. VAT" }
+    pris: { sv: "4 900 kr/mån exkl. moms", en: "SEK 4,900 a month excl. VAT" }
   },
   {
     namn: "Revexa (Leo)",
@@ -69,7 +69,7 @@ export const AI_SDR_VERKTYG: AiSdrVerktyg[] = [
     svenska: { sv: "Ja, enligt Revexa", en: "Yes, according to Revexa" },
     godkannande: { sv: "Ja, som standard", en: "Yes, by default" },
     data: { sv: "Inom EU; krypterade säkerhetskopior i USA", en: "In the EU; encrypted backups in the US" },
-    pris: { sv: "999 kr/mån exkl. moms, 7 dagar gratis", en: "SEK 999 a month excl. VAT, 7 days free" }
+    pris: { sv: "999 kr/mån exkl. moms, 7 dagar gratis", en: "SEK 999 a month excl. VAT, 7 days free" }
   },
   {
     namn: "Salesforge (Agent Frank)",
@@ -78,7 +78,7 @@ export const AI_SDR_VERKTYG: AiSdrVerktyg[] = [
     svenska: { sv: "Ja, bland drygt 20 språk", en: "Yes, among 20+ languages" },
     godkannande: { sv: "Valfritt: Co-Pilot granskar, Auto-Pilot skickar själv", en: "Optional: Co-Pilot reviews, Auto-Pilot sends on its own" },
     data: { sv: "Servrar inom EU", en: "Servers in the EU" },
-    pris: { sv: "499 USD/mån, lägre vid årsbetalning", en: "USD 499 a month, less when billed yearly" }
+    pris: { sv: "499 USD/mån, lägre vid årsbetalning", en: "USD 499 a month, less when billed yearly" }
   },
   {
     namn: "11x (Alice)",
@@ -87,7 +87,7 @@ export const AI_SDR_VERKTYG: AiSdrVerktyg[] = [
     svenska: { sv: "Fler än 105 språk; svenska nämns inte", en: "105+ languages; Swedish is not named" },
     godkannande: { sv: "Valfritt", en: "Optional" },
     data: { sv: "AWS; region anges inte", en: "AWS; region not stated" },
-    pris: { sv: "Från 3 750 USD/mån, årsvis", en: "From USD 3,750 a month, billed yearly" }
+    pris: { sv: "Från 3 750 USD/mån, årsvis", en: "From USD 3,750 a month, billed yearly" }
   },
   {
     namn: "SuperOffice Lead Agent",
@@ -105,7 +105,7 @@ export const AI_SDR_VERKTYG: AiSdrVerktyg[] = [
     svenska: EJ_ANGIVET,
     godkannande: { sv: "Ja, i piloten", en: "Yes, in the pilot" },
     data: EJ_ANGIVET,
-    pris: { sv: "Pilot 7 000 EUR", en: "Pilot EUR 7,000" }
+    pris: { sv: "Pilot 7 000 EUR", en: "Pilot EUR 7,000" }
   }
 ];
 
@@ -153,7 +153,7 @@ export const SUPPORTVERKTYG: Supportverktyg[] = [
     svenska: EJ_ANGIVET,
     overlamning: EJ_ANGIVET,
     data: EJ_ANGIVET,
-    pris: { sv: "Från 899 kr/mån, 30 dagar gratis", en: "From SEK 899 a month, 30 days free" }
+    pris: { sv: "Från 899 kr/mån, 30 dagar gratis", en: "From SEK 899 a month, 30 days free" }
   },
   {
     namn: "Zendesk AI agents",
@@ -162,7 +162,7 @@ export const SUPPORTVERKTYG: Supportverktyg[] = [
     svenska: { sv: "Ja", en: "Yes" },
     overlamning: { sv: "Ja, dirigerar till rätt team", en: "Yes, routes to the right team" },
     data: { sv: "EES som tillägg", en: "EEA as an add-on" },
-    pris: { sv: "Från 55 USD per agent/mån; AI-ärenden över kvoten extra", en: "From USD 55 per agent a month; AI resolutions above quota extra" }
+    pris: { sv: "Från 55 USD per agent/mån; AI-ärenden över kvoten extra", en: "From USD 55 per agent a month; AI resolutions above quota extra" }
   },
   {
     namn: "Intercom Fin",
@@ -171,6 +171,6 @@ export const SUPPORTVERKTYG: Supportverktyg[] = [
     svenska: { sv: "Ja", en: "Yes" },
     overlamning: { sv: "Ja, med hela sammanhanget", en: "Yes, with full context" },
     data: { sv: "USA som standard, EU på avtal", en: "US by default, EU on contract" },
-    pris: { sv: "0,99 USD per löst ärende", en: "USD 0.99 per resolution" }
+    pris: { sv: "0,99 USD per löst ärende", en: "USD 0.99 per resolution" }
   }
 ];
