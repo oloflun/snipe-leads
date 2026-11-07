@@ -299,6 +299,10 @@ def test_iris_tar_bara_fram_foretag(mening, fel):
         ("Den hittar och kvalificerar nya företagskunder som passar er och skriver ett första mejl.", True),
         ("Vår agent Iris hittar nya företagskunder som vill sälja via er plattform.", False),
         ("Vår agent Iris tar fram fler fastighetsbolag och bostadsrättsföreningar åt er varje vecka.", False),
+        # Provet 2026-11-07: utfallet avskrivet i stället för "fler sådana".
+        ("Vår agent Iris hittar 40–50 nya företagskunder åt er varje vecka och skriver ett första mejl.", True),
+        ("Vår agent Iris tar fram 40–50 nya företagskunder varje vecka som behöver era produkter och skriver.", True),
+        ("Vår agent Iris tar fram fler sådana kunder åt er varje vecka och skriver ett första mejl.", False),
     ],
 )
 def test_kedjan_ber_om_vilka_foretag_nar_iris_meningen_ar_generisk(mening, generisk):
@@ -448,3 +452,17 @@ def test_skrivstilen_bar_forslagets_exempel_utan_att_grinden_fäller_dem():
     # Exemplen står utan citattecken: en verklig golvfirma med samma kunder
     # ska inte fällas som "kopierat_exempel".
     assert stil.kopierat_exempel("Ni lägger golv åt fastighetsbolag och bostadsrättsföreningar runt Göteborg.") is None
+
+
+def test_iris_lovar_aldrig_fler_sadana_hyresgaster():
+    """Provet 2026-11-07: "tar fram fler sådana hyresgäster åt dig" (ett fastighetsbolag)."""
+    text = ("Hej,\n\nDu hyr ut bostäder och lokaler i Uppsala. Vår agent Iris tar fram fler sådana hyresgäster åt dig "
+            "varje vecka.\n\nTitta gärna på demon.")
+    assert "fel_sak" in {a.kod for a in stil.erbjudande_fynd(text, villkor=None, produkt=IRIS)}
+
+
+def test_supportingangen_ar_en_fraga_kunderna_staller_inte_kategorin():
+    for form in _INGANGSFORMER["support"][:1]:
+        assert "aldrig bara bolagets bransch eller produktkategori" in form
+    assert "aldrig bara bolagets bransch eller produktkategori" in _INGANGSUPPGIFT
+    assert "aldrig bara bolagets bransch eller produktkategori" in erbjudanden.formregler("rak", SUPPORT)

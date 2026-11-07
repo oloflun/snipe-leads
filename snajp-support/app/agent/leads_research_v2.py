@@ -274,7 +274,8 @@ _INGANGSUPPGIFT = (
     "deras verksamhet enligt citaten: för en agent som hittar kunder vilka kunder "
     "de säljer till eller arbetar åt, så konkret som citaten tillåter (bransch, "
     "ort); för en supportagent vad deras kunder (hyresgäster, medlemmar, gäster) "
-    "hör av sig om, ett eller två konkreta ämnen utifrån vad de säljer eller gör. "
+    "hör av sig om, en eller två konkreta frågor de ställer utifrån vad bolaget "
+    "säljer eller gör, aldrig bara bolagets bransch eller produktkategori. "
     "Subjektet är \"ni\" (\"du\") eller deras kunder, aldrig bolagets namn: "
     "\"[Bolaget] erbjuder …\" och \"[Bolaget] arbetar för att …\" är en "
     "verksamhetsbeskrivning, inte en ingång. Den är en egen huvudsats, aldrig "
@@ -950,9 +951,12 @@ _INGANGSFORMER: dict[str | None, tuple[str, ...]] = {
         "Något nytt hos dem enligt källmaterialet (en ny ort, en ny tjänst, ett nytt slags uppdrag) och "
         "vilka kunder det riktar sig till. Finns inget nytt: vilka kunder de säljer till, med \"ni\" som subjekt.",
     ),
+    # Provet 2026-11-07: "Era kunder frågar ofta om naturlig fotvård online"
+    # och "… om barnprodukter": bolagets kategori, inte en fråga kunderna ställer.
     "support": (
-        "Vad deras kunder (hyresgäster, medlemmar, gäster) hör av sig om, ett eller två konkreta ämnen "
-        "utifrån vad de säljer eller gör, med kunderna som subjekt.",
+        "Vad deras kunder (hyresgäster, medlemmar, gäster) hör av sig om: en eller två konkreta frågor de "
+        "ställer utifrån vad bolaget säljer eller gör, aldrig bara bolagets bransch eller produktkategori, "
+        "med kunderna som subjekt.",
         "I vilket läge deras kunder hör av sig (före köpet, efter leveransen, på kvällen) och om vad, "
         "utifrån vad de säljer eller gör, med kunderna som subjekt.",
         "Något nytt hos dem enligt källmaterialet (en ny tjänst, ett nytt sortiment, en lansering) och vad "
@@ -1034,7 +1038,7 @@ def _stilfynd(
     if struktur != "b" and utkaststruktur.generisk_iris_mening(body, produkt):
         ut.append(
             "Stil: produktmeningen säger bara \"nya företagskunder\"; säg vilka sorters företag Iris tar fram åt "
-            "just dem, ur researchen om vilka de säljer till"
+            "just dem, ur researchen om vilka de säljer till, eller \"fler sådana\" om ingången redan sagt vilka"
         )
     if not fokus_ok and stil.fokusgrepp(body):
         ut.append("Stil: greppet \"fokusera på …\" ska inte användas i det här mejlet; bygg ingången på ett annat sätt")

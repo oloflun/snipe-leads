@@ -262,9 +262,15 @@ def fel_sak_i_fragan(text: str, produkt: str | None) -> str | None:
 #: av fem Iris-mejl i tredje varvet sa bara "nya företagskunder åt er"). Prövas
 #: i kedjan och inte i stilkontrollen, som `utfall_ordagrant`: facit 2026-10-16
 #: (Ö-Logistik) har just den meningen.
+#: Provet 2026-11-07 (ingången som deras vardag): "Iris hittar 40–50 nya
+#: företagskunder åt er varje vecka och …" och "… varje vecka som behöver era
+#: produkter" i tre av sex Iris-mejl, utfallet avskrivet i stället för "fler
+#: sådana" ur ingången som i förslag 1.
 _GENERISK_IRIS = re.compile(
-    r"\b(?:iris|den)\s+(?:hittar|tar\s+fram)\s+(?:och\s+kvalificerar\s+)?(?:nya\s+|fler\s+)?(?:företags)?kunder"
-    r"(?:\s+(?:åt\s+(?:er|dig)|som\s+passar\s+(?:er|dig)))?\s*(?:[,.]|och\b)",
+    r"\b(?:iris|den)\s+(?:hittar|tar\s+fram)\s+(?:och\s+kvalificerar\s+)?(?:\d+\s*[–-]\s*\d+\s+)?"
+    r"(?:nya\s+|fler\s+)?(?:företags)?kunder"
+    r"(?:\s+(?:åt\s+(?:er|dig)|varje\s+vecka|i\s+veckan|som\s+passar\s+(?:er|dig)"
+    r"|som\s+behöver\s+(?:era|dina)\s+(?:produkter|tjänster)))*\s*(?:[,.]|och\b)",
     re.IGNORECASE,
 )
 

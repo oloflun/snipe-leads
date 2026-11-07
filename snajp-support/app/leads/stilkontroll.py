@@ -581,7 +581,7 @@ _SUPPORTMOMENT = re.compile(r"\bsupportchatt\w*|\bkundmejl\w*")
 #: 2026-10-12 (Svensk Rivtjänst) och fälls därför inte här.
 _IRIS_FEL_SAK = re.compile(
     r"\b(?:hittar|hitta|tar\s+fram|ta\s+fram|tog\s+fram)\s+(?:och\s+kvalificerar\s+)?(?:\d+\s*[–-]\s*\d+\s+)?"
-    r"(?:nya\s+|fler\s+)?(hyresgäst\w*|privatperson\w*|konsument\w*|tomt\w*|"
+    r"(?:nya\s+|fler\s+)?(?:sådana\s+)?(hyresgäst\w*|privatperson\w*|konsument\w*|tomt\w*|"
     r"investerare|leverantör\w*|personal|medarbetare|studenter|elever|patienter)\b"
 )
 

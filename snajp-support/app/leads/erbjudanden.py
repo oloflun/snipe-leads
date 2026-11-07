@@ -79,8 +79,8 @@ _INGANG_A = (
     "och aldrig bolagets namn: det konkreta i deras vardag som produkten tar vid ifrån och som går att anta "
     "ur deras verksamhet enligt researchen. För en agent som hittar kunder: vilka kunder de säljer till eller "
     "arbetar åt, så konkret som underlaget tillåter (bransch, ort), så att produkten kan ta fram fler sådana. "
-    "För en supportagent: vad deras kunder (hyresgäster, medlemmar, gäster) hör av sig om, ett eller två "
-    "konkreta ämnen utifrån vad de säljer eller gör. En egen huvudsats, aldrig en beskrivning av bolaget eller "
+    "För en supportagent: vad deras kunder (hyresgäster, medlemmar, gäster) hör av sig om, en eller två "
+    "konkreta frågor de ställer, aldrig bara bolagets bransch eller produktkategori. En egen huvudsats, aldrig en beskrivning av bolaget eller "
     "vad det erbjuder, aldrig en bisats som leder in i produktmeningen (\"När ni …\"), aldrig en abstrakt utmaning eller "
     "balansgång och aldrig en fråga"
 )
