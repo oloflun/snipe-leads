@@ -2807,15 +2807,40 @@ async def _styrning(app_state, tenant_id: str, batch_id: str) -> str | None:
 _STYRNING = {"pausa": "paus", "aterupta": None, "avbryt": "avbruten"}
 AVBRUTEN_KORNING = "Körningen avbröts innan researchen startade."
 
+#: Slutets fält som nollas när en körning fortsätter (styr_korning "fortsatt").
+_SLUTFALT = ("slut_orsak", "flaskhals", "sammanfattning", "stopp", "tomma_rundor",
+             "dubblettrundor", "listspar_sparad", "listspar_lista", "fordelning")
+
+
+def _kan_fortsatta(rad: dict) -> bool:
+    """En avslutad Iris-körning som levererade under det beställda och inte
+    avbröts av kunden. Sebbes regel 2026-11-08: beställt antal ska levereras."""
+    k = rad.get("korning") or {}
+    return (
+        rad.get("scope") == "batch"
+        and rad.get("status") in ("completed", "failed")
+        and bool(k.get("mal"))
+        and int(k.get("levererade") or 0) < int(k["mal"])
+        and k.get("slut_orsak") != "avbruten"
+        and k.get("kalla") != "lista"
+    )
+
 
 @router.post("/api/leads/korningar/{job_id}/{atgard}")
 async def styr_korning(
     request: Request,
     job_id: str,
-    atgard: Literal["pausa", "aterupta", "avbryt"],
+    atgard: Literal["pausa", "aterupta", "avbryt", "fortsatt"],
     tenant: dict = Depends(require_tenant),
 ) -> dict:
-    """Pausar, återupptar eller avbryter en pågående Iris-körning.
+    """Pausar, återupptar eller avbryter en pågående Iris-körning — eller
+    fortsätter en avslutad som levererade under målet ("fortsatt").
+
+    Fortsätt (Sebbe 2026-11-08: "om man söker 200 ska 200 hittas"):
+    körningen öppnas igen med allt den redan gjort (tratt, prövade bolag,
+    levererade) och motorn fyller på till målet. Ingen budgetdörr här:
+    beställningen är redan tagen. 409 när körningen nådde målet, avbröts
+    eller fortfarande pågår.
 
     Paus: inga nya prospekt köas; de som redan forskas blir klara och räknas
     in. Avbryt: dessutom hoppar köade men ej startade prospekt över sin
@@ -2824,6 +2849,8 @@ async def styr_korning(
     en pågående Iris-körning (klar, föll, eller ett listjobb)."""
     storage = request.app.state.storage
     tenant_id = tenant["tenant_id"]
+    if atgard == "fortsatt":
+        return await _fortsatt_korning(request.app.state, tenant, job_id)
     if await storage.get_leads_korning(tenant_id, job_id) is None:
         raise HTTPException(status_code=404, detail="Körningen finns inte.")
     if not await storage.set_korning_styrning(tenant_id, job_id, _STYRNING[atgard]):
@@ -2839,6 +2866,51 @@ async def styr_korning(
         else:
             asyncio.create_task(_ateruppta_korning(request.app.state, post))
     return {"job_id": job_id, "styrning": _STYRNING[atgard]}
+
+
+async def _fortsatt_korning(app_state, tenant: dict, job_id: str) -> dict:
+    """Öppnar en avslutad körning under målet igen och väcker motorn."""
+    tenant_id = tenant["tenant_id"]
+    async with _korningslas(job_id):
+        rad = await app_state.storage.get_leads_korning(tenant_id, job_id)
+        if rad is None:
+            raise HTTPException(status_code=404, detail="Körningen finns inte.")
+        if not _kan_fortsatta(rad):
+            raise HTTPException(
+                status_code=409,
+                detail="Körningen kan inte fortsätta: den pågår, nådde målet eller avbröts.",
+            )
+        k = dict(rad["korning"])
+        for falt in _SLUTFALT:
+            k.pop(falt, None)
+        # Samma form som en ny körning (korning.ny_korning).
+        k.update(slut_orsak=None, flaskhals=None)
+        k["klar"] = False
+        k["pagaende"] = 0
+        k["styrning"] = None
+        k["fortsatt"] = int(k.get("fortsatt") or 0) + 1
+        # Taket följer målet: en körning som stannade på taket får nya
+        # TAK_FAKTOR per lead som återstår, annars stannar den direkt igen.
+        if int(k.get("undersokta") or 0) >= int(k.get("tak") or 0):
+            k["tak"] = int(k.get("undersokta") or 0) + (
+                (int(k["mal"]) - int(k.get("levererade") or 0)) * iris_korning.TAK_FAKTOR
+            )
+        await app_state.storage.set_leads_job_status(
+            tenant_id, job_id=job_id, status="processing", scope="batch", korning=k
+        )
+        post = await app_state.jobs.get(job_id) or {}
+        resultat = dict(post.get("result") or {})
+        resultat.update(korning=k, jobs=k.get("jobs") or [], count=len(k.get("jobs") or []))
+        await app_state.jobs.complete(job_id, resultat)
+    post = {"kind": "batch", "job_id": job_id, "tenant_id": tenant_id,
+            "tenant_name": tenant.get("tenant_name")}
+    leadsstrom = getattr(app_state, "leadsstrom", None)
+    if leadsstrom is not None:
+        await leadsstrom.enqueue(post)
+    else:
+        asyncio.create_task(_ateruppta_korning(app_state, post))
+    logger.info("Körning %s fortsätter mot %s (levererade %s).", job_id, k["mal"], k.get("levererade"))
+    return {"job_id": job_id, "fortsatt": True, "mal": k["mal"], "levererade": k.get("levererade")}
 
 
 async def _fyll_pa(app_state, tenant: dict, batch_id: str) -> None:
@@ -3098,11 +3170,12 @@ async def _fyll_pa_last(app_state, tenant: dict, batch_id: str) -> dict | None:
                 "bred": bool(k.get("bred")),
                 "is_test": bool(k.get("is_test")),
             }
-        try:
-            await kontrollera_leads_budget(storage, tenant_id)
-        except LeadsBudgetExceededError:
-            orsak = "budget"
-            break
+        # Ingen budgetkoll här (Sebbe 2026-11-08): dygnsbudgeten är en dörr
+        # vid starten (_kraev_leads_budget), aldrig en vakt inne i en
+        # beställd körning. Två körningar på 200 i main stannade 18:43 på 33
+        # och 68 leverade med slutorsak "budget" fast målgruppen hade
+        # tusentals bolag kvar. En körnings kostnad är redan begränsad av
+        # taket (TAK_FAKTOR per beställt lead) och kredittaket.
         kandidat = k["kandidater"].pop(0)
         # Sista kontrollen mot listorna (Antons krav 2026-10-06): mängden
         # lästes när sökrundan började, och ett listbygge som körts sedan dess

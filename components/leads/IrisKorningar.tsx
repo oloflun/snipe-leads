@@ -126,7 +126,9 @@ const T = {
   },
   styrFel: { sv: "Körningen gick inte att styra.", en: "The run could not be controlled." },
   stannade: { sv: "Stannade utan leads", en: "Stalled without leads" },
-  underMalet: { sv: "Klar, under målet", en: "Done, under target" }
+  underMalet: { sv: "Klar, under målet", en: "Done, under target" },
+  fortsatt: { sv: "Fortsätt körningen", en: "Continue the run" },
+  fortsattFel: { sv: "Körningen gick inte att fortsätta.", en: "The run could not be continued." }
 } satisfies Record<string, Localized>;
 
 /** Lägesfraserna i "Just nu" (Sebbe 2026-10-18): börjar i det sakliga
@@ -616,6 +618,74 @@ function Pagaende({
   );
 }
 
+/** En avslutad Iris-körning under målet som inte avbröts av kunden går att
+ *  fortsätta (Sebbe 2026-11-08: "om man söker 200 ska 200 hittas"). Samma
+ *  villkor som api/leads.py:_kan_fortsatta. */
+export function kanFortsatta(rad: KorningsRad): boolean {
+  const k = rad.korning;
+  return (
+    rad.scope === "batch" &&
+    (rad.status === "completed" || rad.status === "failed") &&
+    Boolean(k?.mal) &&
+    (k?.levererade ?? 0) < (k?.mal ?? 0) &&
+    k?.slut_orsak !== "avbruten"
+  );
+}
+
+function Fortsatt({ rad, onStyrd }: Readonly<{ rad: KorningsRad; onStyrd: () => Promise<void> }>) {
+  const { text } = useLocale();
+  const [skickar, setSkickar] = useState(false);
+  const [fel, setFel] = useState<string | null>(null);
+  const k = rad.korning;
+  const kvar = Math.max(0, (k?.mal ?? 0) - (k?.levererade ?? 0));
+
+  async function fortsatt() {
+    setSkickar(true);
+    setFel(null);
+    try {
+      const response = await fetch(
+        `/api/snajp-support/leads/korningar/${encodeURIComponent(rad.job_id)}/fortsatt`,
+        { method: "POST" }
+      );
+      if (!response.ok) {
+        const kropp = await readJsonBody<{ detail?: string }>(response);
+        setFel(kropp?.detail ?? text(T.fortsattFel));
+      }
+      await onStyrd();
+    } catch (cause) {
+      setFel(felmeddelande(cause));
+    } finally {
+      setSkickar(false);
+    }
+  }
+
+  return (
+    <div>
+      <p className="max-w-[60ch] text-[0.9375rem] text-ink">
+        {text({
+          sv: `Körningen levererade ${k?.levererade ?? 0} av ${k?.mal ?? 0}. Fortsätt så letar Iris vidare efter de ${kvar} som återstår, utan att pröva samma bolag igen.`,
+          en: `The run delivered ${k?.levererade ?? 0} of ${k?.mal ?? 0}. Continue and Iris keeps looking for the remaining ${kvar}, without trying the same companies again.`
+        })}
+      </p>
+      <button
+        type="button"
+        className={cn(btnSecondary, btnLiten, "mt-3")}
+        disabled={skickar}
+        aria-busy={skickar}
+        onClick={() => void fortsatt()}
+      >
+        {skickar ? <Loader2 aria-hidden className="h-4 w-4 animate-spin" /> : null}
+        {text(T.fortsatt)}
+      </button>
+      {fel ? (
+        <p role="alert" className="mt-3 text-[15px] text-danger">
+          {fel}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
 function StyrKnapp({
   atgard,
   skickar,
@@ -711,6 +781,10 @@ function RadMedDetalj({
             {pagar(rad) ? (
               <div className="mb-8 border-b border-ink/15 pb-8">
                 <Pagaende rad={rad} onStyrd={onStyrd} styrbar={styrbar} />
+              </div>
+            ) : styrbar && kanFortsatta(rad) ? (
+              <div className="mb-8 border-b border-ink/15 pb-8">
+                <Fortsatt rad={rad} onStyrd={onStyrd} />
               </div>
             ) : null}
             <div className="grid gap-8 md:grid-cols-2">

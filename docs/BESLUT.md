@@ -9,6 +9,31 @@ möjligt), vad det betyder i koden.
 
 ---
 
+## 2026-11-08 (Sebbe) — En beställd körning levererar beställt antal; budgeten är bara en dörr
+
+**Beslut.** "Det är en riktigt hård regel att alla leads som söks ska hittas.
+Om man söker körning för 200 leads ska 200 leads hittas." Och: fortsätt
+körningen som stannade.
+
+**Resonemanget.** Två körningar på 200 i main stannade 18:43 på 33 och 68
+med slutorsak "budget". Målgruppen var inte slut (0 tomma rundor, 37 av 2 400
+undersökta); dygnsbudgeten för leads-tokens kontrollerades före varje bolag
+inne i motorn och avslutade beställningen. `app/leads/budget.py` säger själv
+att grinden är "en dörr, inte en vakt inne i rummet": den skyddar mot en
+skenande kostnad (INV-JOB-002), inte mot vanligt arbete (Antons beslut
+2026-10-20 nedan). En körnings kostnad är redan begränsad av taket (12
+undersökta per beställt lead) och kredittaket för sidhämtningar.
+
+**I koden.** Budgetkollen i `_fyll_pa_last` är borta; dörren vid starten
+(`_kraev_leads_budget`, 429) står kvar. Nytt: `POST
+/api/leads/korningar/{id}/fortsatt` öppnar en avslutad körning under målet
+(inte avbruten) igen med allt den redan prövat, och knappen "Fortsätt
+körningen" i körningens detalj (`IrisKorningar.tsx`). Ingen budgetdörr vid
+fortsättningen: beställningen är redan tagen. Anton ska informeras: att
+budgeten tog slut efter fyra körningar på 200 tyder på att förbrukningen per
+körning är långt över de ~3 M tokens som låg till grund för taket 2026-10-20,
+eller att `LEADS_DAILY_TOKEN_BUDGET` inte längre är satt i main.
+
 ## 2026-11-08 (Anton) — Startsidan följer inte med release #42
 
 **Beslut.** Den enade startsidan (posten "Startsidan blir en egen sida",
