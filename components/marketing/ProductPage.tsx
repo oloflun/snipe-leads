@@ -13,7 +13,8 @@ import type { ProductKey } from "@/lib/routes";
  * Example data only: a public page must never reach for a session or a database,
  * and the fine print under the demo says as much.
  */
-export function ProductPage({ initial }: Readonly<{ initial: ProductKey }>) {
+/** `hem`: startsidan `/`, en egen sida med båda agenterna (LandingPhoto, Startsida.tsx). */
+export function ProductPage({ initial, hem = false }: Readonly<{ initial: ProductKey; hem?: boolean }>) {
   const emailData = loadPublicEmailStudioData();
 
   // Publika chatten svarar ur Snajps EGEN kunskapsbas (priser, dataskydd,
@@ -25,6 +26,7 @@ export function ProductPage({ initial }: Readonly<{ initial: ProductKey }>) {
   return (
     <LandingPhoto
       initial={initial}
+      hem={hem}
       leadsDemo={<EmailStudioEditor data={emailData} compact />}
       supportDemo={<SupportShowcase tenant={supportTenant} />}
     />

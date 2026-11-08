@@ -33,6 +33,11 @@ också skulle hållas utanför svarade Anton: "Yes, let them go to production".
 också i development. **Efter mergen av #42:** `git revert` av den commiten på
 `development` tar tillbaka startsidan precis som den var.
 
+**Återställd 2026-11-08.** #42 mergades 2026-11-07 23:51 UTC. Commiten
+`feat(startsida): startsidan tillbaka på development efter release #42` tar
+tillbaka startsidans filer; den här beslutsposten står kvar. Startsidan går
+till main med nästa release.
+
 ## 2026-11-07 (Anton) — Produkten väljs efter vad som tar mest tid hos bolaget
 
 **Beslut.** Hos Snajp får fastighetsbolag och förvaltare Supportagenten
