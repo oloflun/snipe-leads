@@ -70,6 +70,7 @@ const T = {
   hamtar: { sv: "Hämtar körningar…", en: "Loading runs…" },
   hamtaFel: { sv: "Körningarna gick inte att hämta.", en: "The runs could not be loaded." },
   tillBolag: { sv: "Till Leads", en: "To Leads" },
+  oppnaBolaget: { sv: "Öppna bolaget", en: "Open the company" },
   tomt: {
     sv: "Inga körningar än. Starta en under Leads, så syns den här med förlopp och resultat.",
     en: "No runs yet. Start one under Leads and it shows up here with progress and results."
@@ -802,9 +803,14 @@ function RadMedDetalj({
                     {k.jobs.map((j) => (
                       <li key={j.job_id} className="flex items-center justify-between gap-3 py-2.5">
                         <span className="min-w-0 truncate">{j.company_name ?? j.prospect_id ?? j.job_id}</span>
+                        {/* Länken öppnar just det bolaget i Leads (?lead=), inte
+                            bara listan: annars fick man leta upp raden själv. */}
                         {j.prospect_id ? (
-                          <Link href={bas} className="shrink-0 text-[13px] underline underline-offset-4">
-                            {text(T.tillBolag)}
+                          <Link
+                            href={`${bas}?lead=${encodeURIComponent(j.prospect_id)}`}
+                            className="shrink-0 text-[13px] underline underline-offset-4"
+                          >
+                            {text(T.oppnaBolaget)}
                           </Link>
                         ) : null}
                       </li>

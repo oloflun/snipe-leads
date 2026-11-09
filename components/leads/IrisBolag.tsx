@@ -11,8 +11,8 @@ import { addonSpec } from "@/lib/addons";
 import { offertForUtkast } from "@/lib/leads/offert";
 import { UTKAST_TON, meddelaLeadsUppdaterade, utkastText, type UtkastStatus } from "@/lib/leads/utkast";
 import type { EmailStudioData } from "@/lib/data/emails";
-import { demoOversiktSvar } from "@/lib/demo/oversikt";
-import { kontaktnamn, type ExempelBolag } from "@/lib/demo/iris-exempel";
+import { demoOversiktSvar, demoTidslinje } from "@/lib/demo/oversikt";
+import { finnExempelbolag, kontaktnamn, type ExempelBolag } from "@/lib/demo/iris-exempel";
 import { felmeddelande, readJsonBody } from "@/lib/http/json";
 import { sv, useLocale, type Locale, type Localized } from "@/lib/i18n";
 import { STATUS_ETIKETT, UTFALL_ETIKETT, kriterier, nivaEtikett } from "@/lib/prospekt";
@@ -477,14 +477,25 @@ export function LeadDetail({
       setLage({ fas: "laddar" });
       setUtkastLage({ fas: "kontrollerar" });
 
-      if (exempel) {
-        setLage({ fas: "klar", prospekt: exempelTillRad(exempel), kallor: exempel.kallor });
-        const data = exempelStudioData(exempel);
+      // Demons leads är exempelbolagen (lib/demo/oversikt.ts): listraden bär
+      // status och utkaststatus, bolaget bär källorna och utkastet. Ett bolag
+      // ur besökarens egen körning (Kör Iris) har ingen listrad i fixturen.
+      const demorad = demo
+        ? (
+            demoOversiktSvar("/leads/prospects") as { prospects?: (Prospekt & { utkast_status?: string | null })[] } | undefined
+          )?.prospects?.find((p) => p.id === id)
+        : undefined;
+      const bolag = exempel ?? (demo ? finnExempelbolag({ companyId: id }) : undefined);
+      if (bolag) {
+        setLage({ fas: "klar", prospekt: demorad ?? exempelTillRad(bolag), kallor: bolag.kallor });
+        const data = exempelStudioData(bolag);
+        // Ett skickat mejl visas som det gick ut, inte i editorn.
+        const skickat = demorad?.utkast_status === "skickat";
         setUtkastLage({
           fas: "klar",
           data,
           queueItemId: null,
-          status: null,
+          status: skickat ? "skickat" : null,
           amne: data.email.subject,
           brodtext: data.email.body
         });
@@ -492,11 +503,9 @@ export function LeadDetail({
       }
 
       if (demo) {
-        const svar = demoOversiktSvar("/leads/prospects") as { prospects?: Prospekt[] } | undefined;
-        const träff = svar?.prospects?.find((p) => p.id === id);
         if (avbruten) return;
-        if (träff) {
-          setLage({ fas: "klar", prospekt: träff, kallor: [] });
+        if (demorad) {
+          setLage({ fas: "klar", prospekt: demorad, kallor: [] });
           setUtkastLage({ fas: "ingen" });
         } else {
           setLage({ fas: "fel", meddelande: T.bolagetHittadesInte });
@@ -887,7 +896,19 @@ export function LeadDetail({
 
       {postFlik === "tidslinje" ? (
         <div className="mt-5">
-          <Tidslinje prospectId={id} demo={demo || Boolean(exempel)} />
+          {/* Demon visar exempelbolagets eget förlopp (lib/demo/oversikt.ts). */}
+          <Tidslinje
+            prospectId={id}
+            demo={demo || Boolean(exempel)}
+            demoHandelser={
+              demo || exempel
+                ? (() => {
+                    const bolag = exempel ?? finnExempelbolag({ companyId: id });
+                    return bolag ? demoTidslinje(bolag, text) : undefined;
+                  })()
+                : undefined
+            }
+          />
         </div>
       ) : null}
     </div>
@@ -957,7 +978,8 @@ function UtkastIRutan({
   const [besked, setBesked] = useState<{ text: string; fel: boolean } | null>(null);
 
   const status = lage.status;
-  const redigerbar = !skarp || status === null || REDIGERBARA.has(status);
+  // Demon och exemplen redigeras fritt, utom ett mejl som redan gått ut.
+  const redigerbar = skarp ? status === null || REDIGERBARA.has(status) : status !== "skickat";
   const andrad = andring !== null && (andring.subject !== lage.amne || andring.brodtext !== lage.brodtext);
   // Stoppat ingår sedan 2026-10-09: spärren kan vara åtgärdad (sidfoten, kundregistret)
   // och alla spärrar prövas om vid sändningen.
@@ -1015,7 +1037,7 @@ function UtkastIRutan({
 
   return (
     <div className="mt-4">
-      {skarp && status ? (
+      {status ? (
         <p className={cn("mb-3 text-[14px] font-medium", UTKAST_TON[status])}>
           {utkastText({ utkast_status: status, skickas_tidigast: lage.skickasTidigast }, locale, text)}
           {lage.skal && (status === "stoppat" || status === "vantar") ? (
@@ -1042,7 +1064,7 @@ function UtkastIRutan({
       )}
 
       {!skarp ? (
-        <p className="mt-4 text-[13px] leading-6 text-ink-subtle">{text(T.exempelutkast)}</p>
+        status === "skickat" ? null : <p className="mt-4 text-[13px] leading-6 text-ink-subtle">{text(T.exempelutkast)}</p>
       ) : (
         <div className="mt-4 flex flex-wrap items-center gap-3">
           {kanGodkannas ? (

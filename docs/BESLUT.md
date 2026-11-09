@@ -9,6 +9,76 @@ möjligt), vad det betyder i koden.
 
 ---
 
+## 2026-11-09 (Anton) — Startsidan: hjälten ryms i en skärm, innehållet följer skrollen, kapitelrubrik per agent
+
+**Beslut.** Hjältens text står med tyngdpunkten strax över skärmens mitt och hela
+hjälten ryms i första skärmen; på mobil står första ytan i första skärmen. Flödet
+under hjälten har ingen kö i tid: varje sak kommer i samma ögonblick som den står
+i bild, och löptext reser sig rad för rad ur sin rad (den tonas inte och skrivs
+inte ut som rubriken). Varje agent inleds av en kapitelrubrik: namnet i displaygrad
+på bläck med ljuset från ett fönster över golvet. Fälten i de konstruerade ytorna
+svarar på pekaren, och ett klick på en yta öppnar demon.
+
+**Resonemang.** Antons ord: "Just nu är sidan laggig och dåligt anpassad,
+innehållet halkar efter och dyker upp för sent och texten hamnar för långt ned i
+heron och känns som att den ska ramla igenom skärmen, som är exakt det vi ska
+undvika enligt reglerna i designsystemet, på mobil är det ännu värre där rutorna
+hamnar långt ned på skärmen. Se till att allt blir bra timat och mjukt och att
+texten dyker upp, inte ser ut som att den renderas, det är en viktig skillnad,
+utan att skrivas ut på samma sätt som i rubriken. Lägg även till en tydlig
+rubrik-sektion för de båda agenterna med en effektfull animation och passande
+bakgrund som markerar det avsnittet, så att det inte övergångarna sker med knappt
+märkbara rubriker som nu." Under arbetet: "Ser bra ut: Viktigt, gör alla fält i
+rutorna interaktiva vid hovring, precis som email-studio och supportinkorgen".
+Orsakerna var mätbara. Hjälten var högre än skärmen och texten låg mot dess
+nederkant (på Antons skärm, 1536 × 745 i CSS-pixlar, stod rubriken 470–890 px
+ned). Flödets kö (0,6 s per sak, från beställningen 2026-11-07 "en sak i taget")
+lät sex saker i följd bli 3,6 s sena, och rutor som väntade dolda tills hela
+höjden stod i bild lämnade tomma skärmar. "En sak i taget" kommer nu av skrollen
+själv: det som står på olika höjd når bilden vid olika tillfällen.
+
+**I koden.** `Startsida.tsx` (hjältens rutnät, `Kapitel`-delen i `AgentFlode`,
+texten som `data-mo="lines" data-full`), `useLandingMotion.ts` (`steg` utan kö,
+`slot`, `kapitel`, rutor med `data-full` startar vid `top 68%` och döljs aldrig,
+hjältens ytor från 0,7 s, ingressen radvis, sidhuvudet från första målningen),
+`globals.css` (`.hem-scrim`, `.kapitel-ljus`), `ProduktBilder.tsx` och
+`AgentResultat.tsx` (fältens hovring, länken till demon). Uppmätt: text på
+hjältefotot minst 10:1 på mobil, kapitelnamnet mot ljuset minst 5,9:1; efter full
+skroll 0 dolda element på 1536 och 375 px. Inte mätt: bildfrekvensen i en
+webbläsare med grafikkort (den huvudlösa mätningen mättar på 100 ms för både
+gammal och ny sida och säger därför ingenting).
+
+## 2026-11-09 (Anton) — Demon: ingen orange "Demokonto"-ruta, ingen statisk körning, allt klickbart gör något
+
+**Beslut.** Den orangea rutan "Demokonto · inloggad" är förbjuden och borta ur
+railen, mobilraden och railfoten; railen visar arbetsytans namn som för en kund.
+Bandet överst står kvar. Översiktens statiska "Pågår just nu" är borta. Demons
+leads är de sex exempelbolagen, vart och ett med bedömning, källor, utkast och
+tidslinje. Ärenderaderna och luckorna i kundtjänstens översikt går att öppna.
+
+**Resonemang.** Antons ord: "Fixa även demosidan, många av sidorna/knapparna går
+inte att trycka på, till exempel ärenden från listorna i översikterna och flera
+bolag i leads visar fel eller inget utkast, samt en statisk text som säger att
+körning pågår, vilket inte behövs och ser väldigt fake ut, se helt enkelt till
+att allt håller en högre nivå, SKIPPA den orangea "demokonto" -rutan, de är
+FÖRBJUDNA." Det ersätter Sebbes markör från 2026-10-29 (demon som inloggat
+demokonto): kontot finns kvar, etiketten inte. Listans bolag kom ur
+`lib/mock-data`, som saknade utkast och källor och vars signaler sålde Snajp i
+stället för demons avsändare; därför "Inget utkast ännu" och "Bolaget hittades
+inte".
+
+**I koden.** `AppShell.tsx`, `lib/demo/aktivitet.ts`, `lib/demo/oversikt.ts`
+(`demoLeadrad`, `demoTidslinje`), `lib/demo/support-oversikt.ts`,
+`SupportOversikt.tsx` (`onOppnaArende`, Granska), `Dashboard.tsx` (`oppnaId`),
+`LeadsTabell.tsx`, `Tidslinje.tsx`, `IrisBolag.tsx`, `LeadsSida.tsx` (en okänd
+`?lead=` i demon tas ur adressen i stället för att visa fel). Följder som Anton
+bör känna till: "Kör Iris" i demon börjar nu på varianterna av exempelbolagen,
+eftersom de sex handskrivna redan står i listan (varianterna är samma brev med
+andra namn och kan läsas som mall sida vid sida); körningsdetaljens länk heter
+"Öppna bolaget" också i arbetsytan. Inte rättat: bolagslänkarna på
+`/demo/companies` och `/demo/contacts` (rutter utan menyval) leder ut ur demon
+till inloggningen.
+
 ## 2026-11-08 (Sebbe) — En beställd körning levererar beställt antal; budgeten är bara en dörr
 
 **Beslut.** "Det är en riktigt hård regel att alla leads som söks ska hittas.

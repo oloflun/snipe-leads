@@ -49,10 +49,39 @@ export function demoSupportOversikt(): OversiktSvar {
     vantande: { antal: 3, aldsta: new Date(nu - 94 * 60_000).toISOString() },
     kb_luckor: {
       antal: 3,
+      // Förslaget och kundernas frågor (samma innehåll som Lärandes kort) fälls
+      // ut i översikten, så att raderna går att granska i demon (2026-11-09).
       rader: [
-        { id: "kb-1", titel: "Byta leveransadress efter beställning", created_at: new Date(nu - 86_400_000).toISOString() },
-        { id: "kb-2", titel: "Leverans till Åland", created_at: new Date(nu - 3 * 86_400_000).toISOString() },
-        { id: "kb-3", titel: "Presentkortets giltighetstid", created_at: new Date(nu - 5 * 86_400_000).toISOString() }
+        {
+          id: "kb-1",
+          titel: "Byta leveransadress efter beställning",
+          created_at: new Date(nu - 86_400_000).toISOString(),
+          forslag:
+            "Du kan byta leveransadress så länge ordern inte har skickats. Svara på orderbekräftelsen med den nya adressen, så ändrar vi den innan paketet packas. Har paketet redan skickats kan du byta utlämningsställe via spårningslänken från fraktbolaget.",
+          belagg: [
+            "Jag beställde i går men har flyttat, kan ni skicka till en annan adress?",
+            "Går det att ändra adressen på min order innan den skickas?"
+          ]
+        },
+        {
+          id: "kb-2",
+          titel: "Leverans till Åland",
+          created_at: new Date(nu - 3 * 86_400_000).toISOString(),
+          forslag:
+            "Vi skickar till Åland. Räkna med en till två dagar längre leveranstid än till fastlandet. Åland ligger utanför EU:s skatteområde, så fraktbolaget kan ta ut en avgift för tullhanteringen vid leveransen.",
+          belagg: ["Skickar ni till Åland, och tillkommer det tull?", "Hur lång leveranstid har ni till Åland?"]
+        },
+        {
+          id: "kb-3",
+          titel: "Presentkortets giltighetstid",
+          created_at: new Date(nu - 5 * 86_400_000).toISOString(),
+          forslag:
+            "Presentkort gäller i två år från köpdagen. Datumet står i mejlet med presentkortskoden. Har kortet nyss gått ut kan du höra av dig, så förlänger vi det en gång.",
+          belagg: [
+            "Hur länge gäller presentkortet jag fick i julklapp?",
+            "Mitt presentkort gick ut förra månaden, går det att använda ändå?"
+          ]
+        }
       ]
     },
     drift: { korningar: 702, tokens_in: 3_850_000, tokens_out: 410_000, cache: 64, modell: "vertex:gemini-2.5-flash", kb_artiklar: 48 }

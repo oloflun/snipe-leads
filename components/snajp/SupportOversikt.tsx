@@ -16,7 +16,7 @@ import {
   type Kpi,
   type Vecka
 } from "@/components/dashboard/OversiktPaneler";
-import { btnLiten, btnSecondary, etikett, meta } from "@/components/ui";
+import { btnLiten, btnPrimary, btnSecondary, etikett, meta } from "@/components/ui";
 import { grundmejl } from "@/lib/demo/support-inbox";
 import { demoSupportOversikt } from "@/lib/demo/support-oversikt";
 import { readJsonBody } from "@/lib/http/json";
@@ -64,7 +64,11 @@ export type OversiktSvar = {
   kategorier: { id: string; antal: number; eskalerade: number }[];
   svarstider: { id: string; antal: number }[];
   vantande: { antal: number; aldsta: string | null };
-  kb_luckor: { antal: number; rader: { id: string; titel: string; created_at: string }[] };
+  kb_luckor: {
+    antal: number;
+    /** `forslag` och `belagg` bär bara demon (lib/demo/support-oversikt.ts); arbetsytan granskar i Lärande. */
+    rader: { id: string; titel: string; created_at: string; forslag?: string; belagg?: string[] }[];
+  };
   drift: { korningar: number; tokens_in: number; tokens_out: number; cache: number; modell: string | null; kb_artiklar: number };
 };
 
@@ -123,6 +127,13 @@ const T = {
   },
   ingaLuckor: { sv: "Inga luckor just nu.", en: "No gaps right now." },
   granska: { sv: "Granska", en: "Review" },
+  dolj: { sv: "Dölj", en: "Hide" },
+  forslagRubrik: { sv: "Förslag till artikel", en: "Suggested article" },
+  fragadeRubrik: { sv: "Kunderna frågade", en: "Customers asked" },
+  godkannArtikel: { sv: "Godkänn och skapa artikeln", en: "Approve and create the article" },
+  avfarda: { sv: "Avfärda", en: "Dismiss" },
+  artikelSkapad: { sv: "Artikeln är skapad. Nästa likadana fråga besvaras direkt.", en: "The article is created. The next question like it is answered right away." },
+  forslagAvfardat: { sv: "Förslaget är avfärdat.", en: "The suggestion is dismissed." },
   eskaleringar: { sv: "Till en människa, per kategori", en: "To a human, by category" },
   drift: { sv: "Drift", en: "Operations" },
   driftText: { sv: "Syns bara för Snajp-admin.", en: "Visible to Snajp admins only." },
@@ -288,7 +299,11 @@ function Laddar({ hojd = "h-24" }: Readonly<{ hojd?: string }>) {
   return <div className={cn("animate-pulse rounded-input bg-ink/[0.05]", hojd)} aria-hidden />;
 }
 
-function UtkastRuta({ utkast, onOppna }: Readonly<{ utkast: Mejl[] | null; onOppna?: () => void }>) {
+function UtkastRuta({
+  utkast,
+  onOppna,
+  onOppnaArende
+}: Readonly<{ utkast: Mejl[] | null; onOppna?: () => void; onOppnaArende?: (id: string) => void }>) {
   const { text, locale } = useLocale();
   const [alla, setAlla] = useState(false);
   const [oppen, setOppen] = useState<string | null>(null);
@@ -344,8 +359,12 @@ function UtkastRuta({ utkast, onOppna }: Readonly<{ utkast: Mejl[] | null; onOpp
                         {m.draft.content}
                       </p>
                     ) : null}
-                    {onOppna ? (
-                      <button type="button" onClick={onOppna} className={cn(btnSecondary, btnLiten, "mt-2.5")}>
+                    {onOppna || onOppnaArende ? (
+                      <button
+                        type="button"
+                        onClick={() => (onOppnaArende ? onOppnaArende(m.id) : onOppna?.())}
+                        className={cn(btnSecondary, btnLiten, "mt-2.5")}
+                      >
                         {text(T.oppnaIArenden)}
                         <ArrowRight className="h-3.5 w-3.5" aria-hidden />
                       </button>
@@ -399,7 +418,16 @@ function Svarstider({ svar }: Readonly<{ svar: OversiktSvar | null }>) {
   );
 }
 
-function Arendelista({ arenden, onOppna }: Readonly<{ arenden: Mejl[] | null; onOppna?: () => void }>) {
+/**
+ * `onOppnaArende` gör varje rad till en knapp som öppnar just det ärendet i
+ * Ärenden (demon, 2026-11-09: raderna såg klickbara ut men gjorde ingenting).
+ * Utan den är raderna text, som förut, och "Alla ärenden" byter flik.
+ */
+function Arendelista({
+  arenden,
+  onOppna,
+  onOppnaArende
+}: Readonly<{ arenden: Mejl[] | null; onOppna?: () => void; onOppnaArende?: (id: string) => void }>) {
   const { text, locale } = useLocale();
   if (arenden === null) return <Laddar hojd="h-48" />;
   if (arenden.length === 0) return <p className={meta}>{text(T.ingaArenden)}</p>;
@@ -409,8 +437,8 @@ function Arendelista({ arenden, onOppna }: Readonly<{ arenden: Mejl[] | null; on
         {arenden.slice(0, 8).map((m) => {
           const s = ARENDESTATUS[m.status] ?? ARENDESTATUS.new;
           const kat = m.classification?.category ? kategoriEtikett(m.classification.category) : null;
-          return (
-            <li key={m.id} className="flex flex-col gap-1 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+          const innehall = (
+            <>
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-[0.9375rem] font-medium">{m.subject || "–"}</span>
                 <span className={cn(meta, "block truncate")}>
@@ -422,6 +450,21 @@ function Arendelista({ arenden, onOppna }: Readonly<{ arenden: Mejl[] | null; on
                 <span aria-hidden className={cn("h-1.5 w-1.5 rounded-full", s.prick)} />
                 {text(s.etikett)}
               </span>
+            </>
+          );
+          return (
+            <li key={m.id} className={onOppnaArende ? "py-1.5" : "flex flex-col gap-1 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4"}>
+              {onOppnaArende ? (
+                <button
+                  type="button"
+                  onClick={() => onOppnaArende(m.id)}
+                  className="focus-ring -mx-1.5 flex w-[calc(100%+0.75rem)] flex-col gap-1 rounded-input px-1.5 py-1.5 text-left hover:bg-paper2/60 sm:flex-row sm:items-center sm:justify-between sm:gap-4"
+                >
+                  {innehall}
+                </button>
+              ) : (
+                innehall
+              )}
             </li>
           );
         })}
@@ -433,6 +476,105 @@ function Arendelista({ arenden, onOppna }: Readonly<{ arenden: Mejl[] | null; on
         </button>
       ) : null}
     </>
+  );
+}
+
+/**
+ * Luckorna i demon. Arbetsytan granskar dem i Lärande (/dashboard/larande),
+ * som demon saknar; här fälls förslaget ut på plats med samma innehåll som
+ * Lärandes kort (artikeln och kundernas frågor) och samma två beslut. Besluten
+ * ändrar bara demons tillstånd i webbläsaren. Förut stod raderna utan knapp
+ * och gick inte att öppna (Anton 2026-11-09).
+ */
+function DemoLuckor({
+  rader,
+  datum
+}: Readonly<{ rader: OversiktSvar["kb_luckor"]["rader"]; datum: Intl.DateTimeFormat }>) {
+  const { text } = useLocale();
+  const [oppen, setOppen] = useState<string | null>(null);
+  const [beslut, setBeslut] = useState<Record<string, "godkand" | "avfardad">>({});
+
+  return (
+    <ul className="mt-2 divide-y divide-ink/10">
+      {rader.map((l) => {
+        const ar = oppen === l.id;
+        const avgjord = beslut[l.id];
+        return (
+          <li key={l.id} className="py-2.5">
+            <div className="flex items-center justify-between gap-4">
+              <span className="flex min-w-0 items-center gap-2.5">
+                <BookOpen className="h-4 w-4 shrink-0 text-ink-subtle" aria-hidden />
+                <span className="min-w-0">
+                  <span className="line-clamp-2 block text-[0.9375rem] font-medium">{l.titel || "–"}</span>
+                  {avgjord ? (
+                    <span className={cn(meta, avgjord === "godkand" && "text-moss")} role="status">
+                      {text(avgjord === "godkand" ? T.artikelSkapad : T.forslagAvfardat)}
+                    </span>
+                  ) : l.created_at && !Number.isNaN(Date.parse(l.created_at)) ? (
+                    <span className={meta}>{datum.format(new Date(l.created_at))}</span>
+                  ) : null}
+                </span>
+              </span>
+              {avgjord ? null : (
+                <button
+                  type="button"
+                  aria-expanded={ar}
+                  aria-controls={`lucka-${l.id}`}
+                  onClick={() => setOppen(ar ? null : l.id)}
+                  className={cn(btnSecondary, btnLiten, "shrink-0")}
+                >
+                  {text(ar ? T.dolj : T.granska)}
+                </button>
+              )}
+            </div>
+            {ar && !avgjord ? (
+              <div id={`lucka-${l.id}`} className="mt-3 rounded-input border border-ink/12 bg-paper2/40 px-3 py-3">
+                {l.forslag ? (
+                  <>
+                    <p className={etikett}>{text(T.forslagRubrik)}</p>
+                    <p className="mt-1 max-w-[65ch] whitespace-pre-line text-[0.875rem] leading-6 text-ink">{l.forslag}</p>
+                  </>
+                ) : null}
+                {l.belagg?.length ? (
+                  <>
+                    <p className={cn(etikett, "mt-3")}>{text(T.fragadeRubrik)}</p>
+                    <ul className="mt-1 space-y-1">
+                      {l.belagg.map((b) => (
+                        <li key={b} className="border-l-2 border-ink/15 pl-3 text-[0.8125rem] leading-5 text-ink-subtle">
+                          ”{b}”
+                        </li>
+                      ))}
+                    </ul>
+                  </>
+                ) : null}
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setBeslut((b) => ({ ...b, [l.id]: "godkand" }));
+                      setOppen(null);
+                    }}
+                    className={cn(btnPrimary, btnLiten)}
+                  >
+                    {text(T.godkannArtikel)}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setBeslut((b) => ({ ...b, [l.id]: "avfardad" }));
+                      setOppen(null);
+                    }}
+                    className={cn(btnSecondary, btnLiten)}
+                  >
+                    {text(T.avfarda)}
+                  </button>
+                </div>
+              </div>
+            ) : null}
+          </li>
+        );
+      })}
+    </ul>
   );
 }
 
@@ -464,6 +606,8 @@ function Kunskapsbas({ svar, demo }: Readonly<{ svar: OversiktSvar | null; demo:
         <p className={cn(meta, "mt-1 max-w-[60ch]")}>{text(T.luckorText)}</p>
         {svar.kb_luckor.rader.length === 0 ? (
           <p className={cn(meta, "mt-3")}>{text(T.ingaLuckor)}</p>
+        ) : demo ? (
+          <DemoLuckor rader={svar.kb_luckor.rader} datum={datum} />
         ) : (
           <ul className="mt-2 divide-y divide-ink/10">
             {svar.kb_luckor.rader.map((l) => (
@@ -477,11 +621,9 @@ function Kunskapsbas({ svar, demo }: Readonly<{ svar: OversiktSvar | null; demo:
                     ) : null}
                   </span>
                 </span>
-                {demo ? null : (
-                  <Link href={vag("/dashboard/larande")} className={cn(btnSecondary, btnLiten, "shrink-0")}>
-                    {text(T.granska)}
-                  </Link>
-                )}
+                <Link href={vag("/dashboard/larande")} className={cn(btnSecondary, btnLiten, "shrink-0")}>
+                  {text(T.granska)}
+                </Link>
               </li>
             ))}
           </ul>
@@ -562,11 +704,14 @@ export function SupportOversikt({
   demo = false,
   visaDrift = false,
   onOppnaArenden,
+  onOppnaArende,
   onMeta
 }: Readonly<{
   demo?: boolean;
   visaDrift?: boolean;
   onOppnaArenden?: () => void;
+  /** Öppnar ett visst ärende i Ärenden (demon). Gör listornas rader klickbara. */
+  onOppnaArende?: (id: string) => void;
   onMeta?: (meta: { visar_test_i_arenden: boolean }) => void;
 }>) {
   const { isPlatformAdmin } = useDashboard();
@@ -727,7 +872,7 @@ export function SupportOversikt({
       </div>
 
       <div className="grid min-w-0 gap-4 lg:grid-cols-2">
-        <UtkastRuta utkast={utkast} onOppna={onOppnaArenden} />
+        <UtkastRuta utkast={utkast} onOppna={onOppnaArenden} onOppnaArende={onOppnaArende} />
         <Svarstider svar={svar} />
       </div>
 
@@ -737,7 +882,7 @@ export function SupportOversikt({
             {text(T.arenden)}
           </h2>
           <p className={cn(meta, "mb-2 mt-1")}>{text(T.arendenText)}</p>
-          <Arendelista arenden={arenden} onOppna={onOppnaArenden} />
+          <Arendelista arenden={arenden} onOppna={onOppnaArenden} onOppnaArende={onOppnaArende} />
         </section>
         <section aria-labelledby="support-kb" className={kolumn}>
           <h2 id="support-kb" className="mb-4 text-[1.0625rem] font-semibold tracking-[-0.01em]">

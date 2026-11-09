@@ -14,8 +14,10 @@ import { cn } from "@/lib/utils";
  * Prospektets tidslinje (Fas 10, Leads Suite F6): statusbyten, mejl ut och
  * in, anteckningar och uppgifter, nyast först. Backenden komponerar listan
  * (`GET /leads/prospects/{id}/tidslinje`); här skrivs anteckningar och
- * uppgifter, och en uppgift bockas av med kryssrutan. Demon visar en tom
- * tidslinje och anropar ingenting.
+ * uppgifter, och en uppgift bockas av med kryssrutan. Demon anropar
+ * ingenting: den visar exempelbolagets förlopp (`demoHandelser`, ur
+ * lib/demo/oversikt.ts) utan skrivfälten, och en tom ruta bara om bolaget
+ * saknar fixtur. Förut var tidslinjen alltid tom i demon (2026-11-09).
  */
 
 const T = {
@@ -50,7 +52,11 @@ const TYP_ETIKETT: Record<Handelse["typ"], Localized> = {
 
 const faltKlass = "focus-ring min-h-11 w-full rounded-input border border-ink/15 bg-paper px-3 text-[16px] text-ink";
 
-export function Tidslinje({ prospectId, demo = false }: Readonly<{ prospectId: string; demo?: boolean }>) {
+export function Tidslinje({
+  prospectId,
+  demo = false,
+  demoHandelser
+}: Readonly<{ prospectId: string; demo?: boolean; demoHandelser?: Handelse[] }>) {
   const { locale, text } = useLocale();
   // Leadsmejlen ligger i Att göra sedan Snajp Suite; vägen följer ytan (/admin).
   const vag = useArbetsvag();
@@ -119,6 +125,53 @@ export function Tidslinje({ prospectId, demo = false }: Readonly<{ prospectId: s
   const nar = (iso: string) =>
     new Date(iso).toLocaleString(datumFormat(locale), { dateStyle: "medium", timeStyle: "short" });
 
+  /** Händelserna, nyast först. Samma rendering i arbetsytan och demon. */
+  const listan = (rader: Handelse[]) => (
+    <>
+      {rader.some((h) => h.typ === "mejl_in") ? (
+        <Link
+          href={vag("/dashboard/att-gora")}
+          className="focus-ring mb-3 inline-flex min-h-11 items-center rounded-input text-[15px] font-medium underline underline-offset-4"
+        >
+          {text(T.svaraIInkorgen)}
+        </Link>
+      ) : null}
+      <Radlista ariaLabel={text(T.tidslinje)}>
+        {rader.map((h, i) => (
+          <Rad key={`${h.typ}-${h.id ?? i}-${h.nar}`}>
+            <div className="flex flex-wrap items-baseline justify-between gap-x-3">
+              <span className={etikett}>{text(TYP_ETIKETT[h.typ])}</span>
+              <time dateTime={h.nar} className={meta}>
+                {nar(h.nar)}
+              </time>
+            </div>
+            {h.typ === "uppgift" && h.id ? (
+              <label className="mt-1 flex min-h-11 cursor-pointer items-center gap-3">
+                <input
+                  type="checkbox"
+                  checked={Boolean(h.klar)}
+                  onChange={(e) => void bocka(h.id!, e.target.checked)}
+                  className="focus-ring h-5 w-5 shrink-0 accent-ink"
+                />
+                <span className={cn("font-medium", h.klar && "text-ink-muted line-through")}>{h.rubrik}</span>
+                {h.klar ? <span className="sr-only">{text(T.klar)}</span> : null}
+              </label>
+            ) : rubrik(h) ? (
+              <p className="mt-1 break-words font-medium">{rubrik(h)}</p>
+            ) : null}
+            {h.text ? (
+              <p className="mt-1 whitespace-pre-line break-words text-[15px] text-ink-muted">
+                {h.typ === "uppgift"
+                  ? `${text(T.forfaller)} ${new Date(`${h.text}T00:00:00`).toLocaleDateString(datumFormat(locale), { day: "numeric", month: "short" })}`
+                  : h.text}
+              </p>
+            ) : null}
+          </Rad>
+        ))}
+      </Radlista>
+    </>
+  );
+
   return (
     <section aria-labelledby={`tidslinje-${prospectId}`}>
       <h3 id={`tidslinje-${prospectId}`} className={rubrikPanel}>
@@ -126,9 +179,7 @@ export function Tidslinje({ prospectId, demo = false }: Readonly<{ prospectId: s
       </h3>
 
       {demo ? (
-        <div className="mt-3">
-          <Tomt>{text(T.demo)}</Tomt>
-        </div>
+        <div className="mt-3">{demoHandelser?.length ? listan(demoHandelser) : <Tomt>{text(T.demo)}</Tomt>}</div>
       ) : (
         <>
           <form
@@ -200,49 +251,7 @@ export function Tidslinje({ prospectId, demo = false }: Readonly<{ prospectId: s
             ) : handelser.length === 0 ? (
               <Tomt>{text(T.tom)}</Tomt>
             ) : (
-              <>
-                {handelser.some((h) => h.typ === "mejl_in") ? (
-                  <Link
-                    href={vag("/dashboard/att-gora")}
-                    className="focus-ring mb-3 inline-flex min-h-11 items-center rounded-input text-[15px] font-medium underline underline-offset-4"
-                  >
-                    {text(T.svaraIInkorgen)}
-                  </Link>
-                ) : null}
-                <Radlista ariaLabel={text(T.tidslinje)}>
-                  {handelser.map((h, i) => (
-                    <Rad key={`${h.typ}-${h.id ?? i}-${h.nar}`}>
-                      <div className="flex flex-wrap items-baseline justify-between gap-x-3">
-                        <span className={etikett}>{text(TYP_ETIKETT[h.typ])}</span>
-                        <time dateTime={h.nar} className={meta}>
-                          {nar(h.nar)}
-                        </time>
-                      </div>
-                      {h.typ === "uppgift" && h.id ? (
-                        <label className="mt-1 flex min-h-11 cursor-pointer items-center gap-3">
-                          <input
-                            type="checkbox"
-                            checked={Boolean(h.klar)}
-                            onChange={(e) => void bocka(h.id!, e.target.checked)}
-                            className="focus-ring h-5 w-5 shrink-0 accent-ink"
-                          />
-                          <span className={cn("font-medium", h.klar && "text-ink-muted line-through")}>{h.rubrik}</span>
-                          {h.klar ? <span className="sr-only">{text(T.klar)}</span> : null}
-                        </label>
-                      ) : rubrik(h) ? (
-                        <p className="mt-1 break-words font-medium">{rubrik(h)}</p>
-                      ) : null}
-                      {h.text ? (
-                        <p className="mt-1 whitespace-pre-line break-words text-[15px] text-ink-muted">
-                          {h.typ === "uppgift"
-                            ? `${text(T.forfaller)} ${new Date(`${h.text}T00:00:00`).toLocaleDateString(datumFormat(locale), { day: "numeric", month: "short" })}`
-                            : h.text}
-                        </p>
-                      ) : null}
-                    </Rad>
-                  ))}
-                </Radlista>
-              </>
+              listan(handelser)
             )}
           </div>
         </>
