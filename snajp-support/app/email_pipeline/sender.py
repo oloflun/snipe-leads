@@ -138,6 +138,15 @@ async def skicka_supportsvar(
         # tar emot parametern — samma mjuka kontrakt som from_email ovan.
         if "headers" in params or har_kwargs:
             extra["headers"] = _svarsheaders(email)
+        # Samma svar på samma mejl skickas en gång (K5, 2026-11-09): ett
+        # dubbelklick på Godkänn, eller ett omtag efter att webbens proxy
+        # gett upp, bar förut ut svaret två gånger. Texten ingår i nyckeln,
+        # så ett ÄNDRAT svar på samma mejl är ett nytt utskick.
+        if ("idempotensnyckel" in params or har_kwargs) and email.get("id"):
+            import hashlib
+
+            avtryck = hashlib.sha256(content.encode("utf-8")).hexdigest()[:16]
+            extra["idempotensnyckel"] = f"svar-{email['id']}-{avtryck}"
         message_id = await provider.send(to=mottagare, subject=amne, body=content, **extra)
     except Exception as fel:
         # Loggen får detaljerna; anroparen får ett svenskt besked utan

@@ -429,6 +429,11 @@ async def _process_due_item(
         # email_pipeline/sender.py: bara providers som tar parametrarna.
         if "reply_to" in params or har_kwargs:
             extra.update(await _avsandaridentitet(storage, tenant_id))
+        # Sändning, markering och status är tre steg. Ett avbrott mellan dem
+        # får inte ge prospektet samma mejl två gånger (K5, 2026-11-09):
+        # sändaren får meddelandets id att känna igen ett omtag på.
+        if "idempotensnyckel" in params or har_kwargs:
+            extra["idempotensnyckel"] = f"utskick-{message['id']}"
 
         await provider.send(
             to=thread.get("prospect_email", "okänd"),

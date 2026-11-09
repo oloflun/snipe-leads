@@ -263,10 +263,13 @@ class ResendMailer:
     def _from(self) -> str:
         return f"{self.avsandarnamn} <{self.avsandare}>" if self.avsandarnamn else self.avsandare
 
-    async def send(self, *, to: str, subject: str, body: str, html: str | None = None, from_email: str | None = None, from_name: str | None = None, reply_to: str | None = None, tags: list[dict[str, str]] | None = None, headers: dict[str, str] | None = None) -> str | None:
+    async def send(self, *, to: str, subject: str, body: str, html: str | None = None, from_email: str | None = None, from_name: str | None = None, reply_to: str | None = None, tags: list[dict[str, str]] | None = None, headers: dict[str, str] | None = None, idempotensnyckel: str | None = None) -> str | None:
         adress = (to or "").strip()
         if not adress or "@" not in adress:
             raise ValueError(f"Ogiltig mottagaradress: {to!r} — inget skickat.")
+
+        import hashlib
+        import json
 
         import httpx
         actual_from = from_email or self.avsandare
@@ -281,8 +284,23 @@ class ResendMailer:
         # Resend tar egna headrar rakt av — trådningen (In-Reply-To/References)
         # går samma väg som i SMTP-fallet.
         if headers: payload["headers"] = headers
+        anropshuvud = {"Authorization": f"Bearer {self.api_key}"}
+        if idempotensnyckel:
+            # Anroparen sätter 'sent' EFTER ett lyckat anrop. Bryts processen
+            # däremellan skickar nästa varv samma rad igen (Fas 0-fyndet K5,
+            # 2026-11-09). Med nyckeln svarar Resend med det första
+            # utskickets svar i stället för att skicka en gång till (24 h).
+            #
+            # Innehållets hash ingår med flit: samma nyckel med ANNAT
+            # innehåll ger 409 hos Resend, och ett utkast som rättats efter
+            # ett misslyckat försök hade då fastnat i ett dygn. Samma
+            # utskick ger samma nyckel; ett ändrat utskick är ett nytt.
+            avtryck = hashlib.sha256(
+                json.dumps(payload, sort_keys=True, ensure_ascii=False).encode("utf-8")
+            ).hexdigest()[:24]
+            anropshuvud["Idempotency-Key"] = f"{idempotensnyckel[:200]}-{avtryck}"
         async with httpx.AsyncClient(timeout=SMTP_TIDSTAK_SEKUNDER) as klient:
-            svar = await klient.post(self.ENDPOINT, headers={"Authorization": f"Bearer {self.api_key}"}, json=payload)
+            svar = await klient.post(self.ENDPOINT, headers=anropshuvud, json=payload)
         if svar.status_code >= 400:
             # Kroppen bär Resends egen förklaring (overifierad domän, ogiltig
             # nyckel, kvot slut) och är det som gör felet åtgärdbart. Klipps
