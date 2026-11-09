@@ -1007,16 +1007,18 @@ html.lenis {
 /* Showcase-ytorna på desktop: samma ruta, större innehåll som fyller den
    (Anton 2026-10-19). zoom och inte transform: layouten räknas om i den nya
    storleken, så inget sticker ut ur rutan. Minsta höjden delas med zoomen så
-   att rutan står kvar i samma höjd. Mobilen och smala desktopfönster rörs inte:
+   att rutan står kvar i samma höjd (också inuti länken till demon, som ligger runt ytan). Mobilen och smala desktopfönster rörs inte:
    där är kolumnen för smal för inkorgens två spalter. */
 @media (min-width: 1280px) {
   .landing .case-zoom { zoom: 1.12; }
-  .landing .case-zoom > * { min-height: 375px; }
+  .landing .case-zoom > *,
+  .landing .case-zoom > a > * { min-height: 375px; }
 }
 
 @media (min-width: 1536px) {
   .landing .case-zoom { zoom: 1.25; }
-  .landing .case-zoom > * { min-height: 336px; }
+  .landing .case-zoom > *,
+  .landing .case-zoom > a > * { min-height: 336px; }
 }
 
 /* Hjälterubrikens markör: i textens egen färg och tjock nog för displaystorleken. */
