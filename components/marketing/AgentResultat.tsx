@@ -185,7 +185,7 @@ function LeadsPanel() {
       <PanelHuvud>{text({ sv: "Varma svar, redo att ta över", en: "Warm replies, ready to take over" })}</PanelHuvud>
       <div className="divide-y divide-ink/10">
         {kort.map((k) => (
-          <div key={k.namn} className="px-5 py-4 transition-colors hover:bg-ink/[0.035]">
+          <div key={k.namn} className="px-5 py-4 transition-colors peka:bg-ink/[0.035]">
             <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
               <p className="font-semibold tracking-[-0.01em]">
                 {k.namn}
@@ -230,7 +230,7 @@ function SupportPanel() {
       <PanelHuvud>{text({ sv: "Veckan i kundtjänsten", en: "The week in support" })}</PanelHuvud>
       <div className="divide-y divide-ink/10">
         {rader.map((rad) => (
-          <div key={rad.kategori.sv} className="grid grid-cols-12 items-baseline gap-x-4 px-5 py-3.5 transition-colors hover:bg-ink/[0.035]">
+          <div key={rad.kategori.sv} className="grid grid-cols-12 items-baseline gap-x-4 px-5 py-3.5 transition-colors peka:bg-ink/[0.035]">
             <p className="col-span-7 truncate text-[0.9375rem]">{text(rad.kategori)}</p>
             <p className="num col-span-5 text-right text-[0.9375rem] text-ink-muted">
               {rad.losta}{" "}

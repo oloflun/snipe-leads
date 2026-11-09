@@ -148,8 +148,8 @@ function Badge({
  * en bild av produkten, så ett klick tar besökaren till demon där knapparna gör något
  * (länken runt ytan i ProduktBilder och Startsida).
  */
-const RAD = "cursor-pointer transition-colors hover:bg-ink/[0.05]";
-const TEXTFALT = "cursor-text transition-colors hover:border-ink/35";
+const RAD = "cursor-pointer transition-colors peka:bg-ink/[0.05]";
+const TEXTFALT = "cursor-text transition-colors peka:border-ink/35";
 
 function Knapp({
   children,
@@ -158,8 +158,8 @@ function Knapp({
   return (
     <span
       className={cn(
-        "inline-flex cursor-pointer items-center gap-1.5 rounded-input px-3 py-1.5 text-[0.75rem] font-semibold transition-colors",
-        variant === "primar" ? "bg-ink text-paper hover:bg-ink2" : "border border-ink/15 bg-paper text-ink hover:border-ink hover:bg-ink hover:text-paper"
+        "inline-flex cursor-pointer items-center gap-1.5 rounded-input px-3 py-1.5 text-[0.75rem] font-semibold transition-colors active:translate-y-px",
+        variant === "primar" ? "bg-ink text-paper peka:bg-ink2" : "border border-ink/15 bg-paper text-ink peka:border-ink peka:bg-ink peka:text-paper"
       )}
     >
       {children}
@@ -184,7 +184,7 @@ function WidgetYta({ locale }: Readonly<{ locale: Locale }>) {
         <div className="w-full overflow-hidden rounded-[16px] border border-ink/12 bg-paper shadow-[0_12px_36px_oklch(var(--ink)/0.16)]">
           <div className="flex items-center justify-between border-b border-ink/10 px-4 py-2.5">
             <span className="kicker text-mineral">Powered by Snajp</span>
-            <X className="h-3.5 w-3.5 cursor-pointer text-ink-subtle transition-colors hover:text-ink" />
+            <X className="h-3.5 w-3.5 cursor-pointer text-ink-subtle transition-colors peka:text-ink" />
           </div>
           <div className="space-y-2.5 px-3.5 py-3.5 text-[0.75rem] leading-[1.5]">
             <div className="ml-auto w-fit max-w-[85%] rounded-[12px] rounded-br-[4px] bg-ink px-3 py-2 text-paper">
@@ -194,11 +194,11 @@ function WidgetYta({ locale }: Readonly<{ locale: Locale }>) {
               {CHATT_SVAR}
             </div>
           </div>
-          <div className="group/skriv flex cursor-text items-center gap-2 border-t border-ink/10 px-3.5 py-2.5 transition-colors hover:bg-ink/[0.04]">
+          <div className="group/skriv flex cursor-text items-center gap-2 border-t border-ink/10 px-3.5 py-2.5 transition-colors peka:bg-ink/[0.04]">
             <span className="flex-1 text-[0.75rem] text-ink-subtle transition-colors group-hover/skriv:text-ink-muted">
               <T text={UI.skriv} locale={locale} />
             </span>
-            <span className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-full bg-ink text-paper transition-colors hover:bg-ink2">
+            <span className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-full bg-ink text-paper transition-colors peka:bg-ink2">
               <Send className="h-3.5 w-3.5" />
             </span>
           </div>
@@ -206,7 +206,7 @@ function WidgetYta({ locale }: Readonly<{ locale: Locale }>) {
 
         {/* Inbjudan + knappen — stängda läget, Skatteverkets mönster. */}
         <div className="flex items-end gap-2.5">
-          <div className="cursor-pointer rounded-[12px] border border-ink/10 bg-paper px-3 py-2 text-[0.75rem] shadow-[0_6px_20px_oklch(var(--ink)/0.10)] transition-colors hover:border-ink/35">
+          <div className="cursor-pointer rounded-[12px] border border-ink/10 bg-paper px-3 py-2 text-[0.75rem] shadow-[0_6px_20px_oklch(var(--ink)/0.10)] transition-colors peka:border-ink/35">
             <span className="block font-semibold text-ink">
               <T text={UI.fraga} locale={locale} />
             </span>
@@ -214,7 +214,7 @@ function WidgetYta({ locale }: Readonly<{ locale: Locale }>) {
               <T text={UI.fragaOss} locale={locale} />
             </span>
           </div>
-          <span className="flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-full bg-ink text-paper shadow-[0_6px_20px_oklch(var(--ink)/0.22)] transition-colors hover:bg-ink2">
+          <span className="flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-full bg-ink text-paper shadow-[0_6px_20px_oklch(var(--ink)/0.22)] transition-colors peka:bg-ink2">
             <MessageCircle className="h-5 w-5" />
           </span>
         </div>
@@ -234,7 +234,7 @@ function InkorgYta({ locale, kompakt = false }: Readonly<{ locale: Locale; kompa
       {/* Ärendelistan. Kompakt står bara det öppna ärendet: listan ryms inte i hjältens ruta. */}
       <div className={cn("hidden border-r border-ink/10 p-4", !kompakt && "sm:block")}>
         <div className="divide-y divide-ink/10 border-y border-ink/12 text-[0.75rem]">
-          <div className="cursor-pointer bg-paper2/60 py-2.5 pl-2 pr-1 transition-colors hover:bg-paper2">
+          <div className="cursor-pointer bg-paper2/60 py-2.5 pl-2 pr-1 transition-colors peka:bg-paper2">
             <span className="flex items-baseline justify-between gap-2">
               <span className="truncate font-medium text-ink">{ARENDE_HLR}</span>
               <Badge ton="warn">
