@@ -9,6 +9,49 @@ möjligt), vad det betyder i koden.
 
 ---
 
+## 2026-11-09 (Sebbe) — Stabilitetsarbetet, fas 1: felen ska höras, och samma sak ska inte hända två gånger
+
+**Beslut.** Sebbe beställde en genomgång i fyra faser ("Snajp kraschar inte,
+svarar snabbt, agenterna är vassa") och sa ja till fas 1 efter kartläggningen
+(`docs/fas0-2026-11-09/RAPPORT.md`). Sebbe beslutade ordningen; de enskilda
+valen nedan gjordes i arbetet och ligger på grenen `stabilitet` för hans och
+Antons granskning innan något går till `development`.
+
+**Resonemanget.** Kartläggningen visade att de allvarligaste felen var tysta:
+api:t gick upp i minnesläge med grön hälsokontroll när databasen inte svarade,
+ett hängt modellanrop väntade i tio minuter, och supportagenten lämnade över
+"Hur anmäler jag mig till en HLR-kurs?" som ett känsligt ärende. Inget av det
+syntes förrän en kund mötte det.
+
+**I koden, val för val.**
+
+- **Uppstarten vägrar minnesläge.** En satt `DATABASE_URL` som inte går att nå
+  efter fem försök fäller deployen (`main.py:_anslut_postgres`), så att
+  Railway behåller föregående version. Utan `DATABASE_URL` är minnesläget kvar.
+  Ersätter "degraderar gracefully till in-memory" för databasen; Redis och
+  LLM-nyckeln degraderar som förut.
+- **Tidsgränser.** LLM-anrop 120 s (`LLM_TIMEOUT_S`), chattens steg 45 s med
+  ett omtag (`LLM_TIMEOUT_CHATT_S`), databasen 10 s att ansluta och 60 s per
+  fråga, Redis 5 s att ansluta och 20 s per svar. Talen är valda ur
+  mätningen i fas 0 (chattens steg låg under 20 s i p95) och går att ställa
+  om med miljövariabler.
+- **Ordfiltret för känsliga ärenden** fäller hotet om en anmälan och kravet på
+  ersättning, inte orden `anmäl*` och `ersättning`. "Pengarna tillbaka" läggs
+  till. Hotfiltret kräver ett offer för "slå" och "hitta".
+- **Den anonyma chatten tar bara sessionsidentiteter**
+  (`<uuid>@session.snajp.se`). En kund som vill skicka riktiga adresser gör
+  det med sin egen nyckel mot api:t.
+- **Samma start två gånger är en start.** En likadan beställning från samma
+  kund inom 30 sekunder får samma svar (`api/dubbelstart.py`). Per process;
+  fler repliker kräver Redis.
+- **Utskick bär en idempotensnyckel** till Resend, byggd på meddelandets id
+  och innehållets hash.
+- **Varje anrop har ett id** (`X-Request-Id`, `app/sparning.py`) i svaret, i
+  loggen och i `platform_events`.
+
+Lösenordet till plattformsadminkontot togs ur skript och handoffs samma dag.
+Det ligger kvar i historiken och ska bytas.
+
 ## 2026-11-08 (Sebbe) — En beställd körning levererar beställt antal; budgeten är bara en dörr
 
 **Beslut.** "Det är en riktigt hård regel att alla leads som söks ska hittas.
