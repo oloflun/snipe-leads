@@ -100,6 +100,18 @@ def _scrapegraph_kredit_noll():
 
 
 @pytest.fixture(autouse=True)
+def _dubbelstartsvakten_nollstalld():
+    """Vakten mot dubbla starter (app/api/dubbelstart.py) minns en likadan
+    beställning i en halv minut, per process. Två tester som startar samma
+    körning hade annars fått varandras svar."""
+    from app.api import dubbelstart
+
+    dubbelstart.nollstall()
+    yield
+    dubbelstart.nollstall()
+
+
+@pytest.fixture(autouse=True)
 def _hermetisk_irisprofil(monkeypatch):
     """Profilkompileringen (app/leads/profil.py) anropar LLM:en direkt, och
     tester som sätter en fejkad nyckel för att nå live-vägen hade annars gjort

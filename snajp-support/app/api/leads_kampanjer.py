@@ -28,6 +28,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field, model_validator
 
 from ..leads import utkaststatus
+from . import dubbelstart
 from .deps import kraev_uuid, require_tenant
 
 logger = logging.getLogger("snajp-support.api.kampanjer")
@@ -207,7 +208,15 @@ async def hamta_kampanj(request: Request, kampanj_id: str, tenant: dict = Depend
 @router.post("/api/leads/kampanjer", status_code=202)
 async def skapa_kampanj(request: Request, payload: KampanjRequest, tenant: dict = Depends(require_tenant)) -> dict:
     """Skapar kampanjen och köar dess utkast i bakgrunden. Svarar direkt;
-    förloppet läses med GET."""
+    förloppet läses med GET. En likadan beställning inom en halv minut är
+    samma klick och får samma kampanj tillbaka (api/dubbelstart.py)."""
+    return await dubbelstart.en_gang(
+        dubbelstart.nyckel(tenant["tenant_id"], "kampanj", payload.model_dump(mode="json")),
+        lambda: _skapa_kampanj(request, payload, tenant),
+    )
+
+
+async def _skapa_kampanj(request: Request, payload: KampanjRequest, tenant: dict) -> dict:
     storage = request.app.state.storage
     tenant_id = tenant["tenant_id"]
     prospekt, kallnamn, is_test = await _mottagare(storage, tenant_id, payload)
@@ -238,7 +247,15 @@ _uppgifter: set[asyncio.Task] = set()
 async def skicka_kampanj(request: Request, kampanj_id: str, tenant: dict = Depends(require_tenant)) -> dict:
     """Godkänn och skicka kampanjens väntande utkast, genom samma väg som ett
     enskilt klick (scheduler.skicka_godkant): tidsgrinden, språkgrinden och de
-    sex sändspärrarna. I tur och ordning, inte parallellt."""
+    sex sändspärrarna. I tur och ordning, inte parallellt. Ett andra klick
+    medan det första pågår väntar in det (api/dubbelstart.py)."""
+    return await dubbelstart.en_gang(
+        dubbelstart.nyckel(tenant["tenant_id"], "kampanjens-utskick", kampanj_id),
+        lambda: _skicka_kampanj(request, kampanj_id, tenant),
+    )
+
+
+async def _skicka_kampanj(request: Request, kampanj_id: str, tenant: dict) -> dict:
     from ..leads.scheduler import skicka_godkant
     from ..leads.send_provider import get_send_provider
 

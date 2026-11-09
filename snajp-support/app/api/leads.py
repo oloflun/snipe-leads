@@ -75,6 +75,7 @@ from ..leads.onboarding_state import REQUIRED_KINDS, get_onboarding_state
 from ..leads import korning as iris_korning
 from ..leads import omprova, utkaststatus
 from ..leads.profil import las_kundtext, sakerstall_profil, slå_ihop, som_icp
+from . import dubbelstart
 from .deps import kraev_uuid, require_tenant
 from ..agent.leads_research_v2 import las_produkter
 from ..agentcore.baka_in import baka_in
@@ -1976,6 +1977,13 @@ async def skriv_korningens_utkast(
     kontaktmejl (regel 10). Samma kedja som "Processa om" med utkast — ingen
     egen utkastväg — så faktagrinden, underlagsgolvet och mottagarregeln
     gäller precis som i körningen. Leads utan kontaktmejl hoppas över."""
+    return await dubbelstart.en_gang(
+        dubbelstart.nyckel(tenant["tenant_id"], "korningens-utkast", job_id),
+        lambda: _skriv_korningens_utkast(request, job_id, tenant),
+    )
+
+
+async def _skriv_korningens_utkast(request: Request, job_id: str, tenant: dict) -> dict:
     _require_live_llm()
     storage = request.app.state.storage
     rad, leads = await _korningens_leads(request, tenant, job_id)
@@ -2005,7 +2013,18 @@ async def skicka_korningens_utkast(
     """Godkänn och skicka ALLA körningens väntande utkast. Varje utkast går
     genom samma väg som ett enskilt klick (scheduler.skicka_godkant): tids-
     grinden, språkgrinden och de sex sändspärrarna — ett ja här går aldrig
-    förbi dem. I tur och ordning, inte parallellt."""
+    förbi dem. I tur och ordning, inte parallellt.
+
+    Ett andra klick medan det första pågår väntar in det och får samma utfall
+    (api/dubbelstart.py): två varv över samma utkast samtidigt var vägen till
+    dubbla utskick."""
+    return await dubbelstart.en_gang(
+        dubbelstart.nyckel(tenant["tenant_id"], "korningens-utskick", job_id),
+        lambda: _skicka_korningens_utkast(request, job_id, tenant),
+    )
+
+
+async def _skicka_korningens_utkast(request: Request, job_id: str, tenant: dict) -> dict:
     from datetime import datetime, timezone
 
     from ..leads.scheduler import skicka_godkant
@@ -3543,7 +3562,17 @@ async def start_batch_run(
     Svaret kommer INNAN sökningen. `fase=soker` och ett jobb; när det är
     completed ligger research-jobben i `result.jobs`. En jobbrad PER PROSPEKT
     därefter, så ett dött prospekt inte fäller de andra.
+
+    En likadan beställning från samma kund inom en halv minut är samma klick
+    och får samma körning tillbaka (api/dubbelstart.py).
     """
+    return await dubbelstart.en_gang(
+        dubbelstart.nyckel(tenant["tenant_id"], "korning", payload.model_dump(mode="json")),
+        lambda: _starta_batch(request, payload, tenant),
+    )
+
+
+async def _starta_batch(request: Request, payload: LeadsBatchRequest, tenant: dict) -> dict:
     _require_live_llm()
     await _kraev_leads_budget(request.app.state.storage, tenant["tenant_id"])
     await _validera_batch_kan_starta(request.app.state.storage, tenant, payload)
