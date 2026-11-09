@@ -75,6 +75,10 @@ type KvittoRad = Pick<
 const T = {
   vantarTotalt: { sv: "Väntar på dig", en: "Waiting for you" },
   allaHanterat: { sv: "allt är hanterat", en: "everything is handled" },
+  koOlast: {
+    sv: "en kö gick inte att läsa, ladda om sidan",
+    en: "one queue could not be read, reload the page",
+  },
   aldst: { sv: "äldst", en: "oldest" },
   kundtjanst: { sv: "Kundtjänst", en: "Customer service" },
   leads: { sv: "Leads", en: "Leads" },
@@ -393,6 +397,14 @@ export function AttGora({ demo = false }: Readonly<{ demo?: boolean }>) {
       ? lage[k.id] !== null
       : ovrigaKlara,
   );
+  // En kö vars hämtning föll står kvar som null. Den räknades förut som noll,
+  // så ett avbrott i api:t visade "Inget väntar på dig" med grön bock (Fas
+  // 0-fyndet, 2026-11-09). Ett okänt antal är inte noll.
+  const nagonOlast =
+    ovrigaKlara &&
+    aktuella.some(
+      (k) => !["eskalerade", "vantar", "larm"].includes(k.id) && lage[k.id] === null,
+    );
   const total = aktuella.reduce((s, k) => s + (lage[k.id]?.antal ?? 0), 0);
   const tider = aktuella.flatMap((k) => lage[k.id]?.tider ?? []);
   const aldsta = tider.length ? Math.min(...tider) : null;
@@ -410,7 +422,9 @@ export function AttGora({ demo = false }: Readonly<{ demo?: boolean }>) {
       varde: laddat ? total : null,
       larm: total > 0,
       detalj:
-        laddat && total === 0
+        nagonOlast
+          ? T.koOlast
+          : laddat && total === 0
           ? T.allaHanterat
           : aldsta !== null
             ? {
@@ -496,7 +510,7 @@ export function AttGora({ demo = false }: Readonly<{ demo?: boolean }>) {
         ))}
       </div>
 
-      {laddat && total === 0 ? (
+      {laddat && total === 0 && !nagonOlast ? (
         <section
           className={cn(kort, "flex items-center gap-4")}
           aria-live="polite"

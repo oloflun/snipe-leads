@@ -7,6 +7,7 @@ import { AgentMenu } from "@/components/snajp/AgentMenu";
 import { LÄSBARA, läsbar } from "@/components/settings/Kunskapsbas";
 import { HttpJsonError, felmeddelande, readJsonBody } from "@/lib/http/json";
 import { useLocale, type Locale, type Localized } from "@/lib/i18n";
+import { sessionsId } from "@/lib/sessionslagring";
 import { getTenant } from "@/lib/tenants";
 import { cn } from "@/lib/utils";
 
@@ -262,13 +263,8 @@ function slumpad(texter: Localized[], locale: Locale): string {
 class VisbartFel extends Error {}
 
 function demoSessionId(): string {
-  const KEY = "snajp.demo.session";
-  let id = window.sessionStorage.getItem(KEY);
-  if (!id) {
-    id = crypto.randomUUID();
-    window.sessionStorage.setItem(KEY, id);
-  }
-  return id;
+  // sessionsId kastar aldrig, se lib/sessionslagring.ts.
+  return sessionsId("snajp.demo.session");
 }
 
 /** Samma mönster som demoSessionId, EGEN nyckel: en testchatt-flik ska inte
@@ -276,13 +272,7 @@ function demoSessionId(): string {
  * samma webbläsare), och tenanten är ändå alltid den inloggades — sessionen
  * avgör det, inte det här id:t. */
 function testchattSessionId(): string {
-  const KEY = "snajp.testchatt.session";
-  let id = window.sessionStorage.getItem(KEY);
-  if (!id) {
-    id = crypto.randomUUID();
-    window.sessionStorage.setItem(KEY, id);
-  }
-  return id;
+  return sessionsId("snajp.testchatt.session");
 }
 
 //: R1.5 — pollningen mot jobbet ska tåla ett transient 5xx/nätfel under en

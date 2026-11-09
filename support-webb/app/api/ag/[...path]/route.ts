@@ -90,15 +90,24 @@ async function vidare(
       method: request.method,
       headers,
       body: kropp,
-      cache: "no-store"
+      cache: "no-store",
+      // Utan gräns väntade ett anrop mot en hängd backend tills webbläsaren
+      // gav upp, och vyn stod med sin laddsnurra (Fas 0, 2026-11-09). 55 s
+      // ligger under routens maxDuration; det som tar längre är jobb som
+      // pollas, inte en enda begäran.
+      signal: AbortSignal.timeout(55_000)
     });
-  } catch {
+  } catch (fel) {
+    const tidsgrans = fel instanceof Error && fel.name === "TimeoutError";
     return Response.json(
       {
-        error:
-          "Bokföringstjänsten svarar inte. Kontrollera att backenden är igång och försök igen."
+        // Texten sa förut "Bokföringstjänsten" — kvar från filen routen
+        // kopierades ur. Läsaren är en supportmedarbetare, inte en utvecklare.
+        error: tidsgrans
+          ? "Supportagenten svarade inte i tid. Försök igen om en stund. / The support agent did not respond in time. Try again shortly."
+          : "Supportagenten går inte att nå just nu. Försök igen om en stund. / The support agent cannot be reached right now. Try again shortly."
       },
-      { status: 503 }
+      { status: tidsgrans ? 504 : 503 }
     );
   }
 

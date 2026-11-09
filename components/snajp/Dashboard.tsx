@@ -424,8 +424,11 @@ export function Dashboard({
       // ur kundtjänsten. Utan den här vyn försvann de spårlöst.
       if (lager === "ej_relaterat") params.set("klass", "ej_relaterat");
       const data = await api(`/inbox?${params.toString()}`);
-      setEmails(data.emails);
-      setCategoryCounts(data.category_counts);
+      // Ett svar utan listan (ett 503 med felkropp, en trasig proxy) satte
+      // förut `undefined` här, och `emails.filter` i renderingen blankade
+      // hela sidan (Fas 0-fyndet H8). En tom lista är ett läsbart läge.
+      setEmails(Array.isArray(data?.emails) ? data.emails : []);
+      setCategoryCounts(data?.category_counts ?? {});
       if (typeof data.visar_test_i_arenden === "boolean") {
         setVisarTestIArenden(data.visar_test_i_arenden);
         onMetaRef.current?.({ visar_test_i_arenden: data.visar_test_i_arenden });
