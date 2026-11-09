@@ -54,7 +54,7 @@ Två konton skapas, och båda behövs — grinden går inte att bevisa med bara 
 
 | Konto | Lösenord | Förväntat |
 |---|---|---|
-| `snajpsupport@gmail.com` | `Snajpen123!` | Plattformsadmin. Landar på `/admin`. |
+| `snajpsupport@gmail.com` | `[borttaget 2026-11-09, se QA_ADMIN_LOSEN i .env.deploy]` | Plattformsadmin. Landar på `/admin`. |
 | `kund@example.com` | `Kundtest123!` | Vanlig kund, kopplad till `livrustning`. Landar på `/dashboard`, får **404** på hela `/admin`. |
 
 `scripts/qa_vyer.mjs` besiktigar 20 publika, 11 inloggade och 15 admin-vägar i

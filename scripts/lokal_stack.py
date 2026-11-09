@@ -59,7 +59,11 @@ LOSEN_WEB = "localweb"
 LOSEN_APP = "localapp"
 
 ADMIN_EMAIL = "snajpsupport@gmail.com"
-ADMIN_LOSEN = os.environ.get("SNAJP_ADMIN_PASSWORD", "Snajpen123!")
+# Bara den LOKALA databasen. Reservvärdet var förut samma lösenord som det
+# riktiga plattformsadminkontot (Fas 0-fyndet K1, 2026-11-09); den lokala
+# stacken har inget med det kontot att göra och får ett eget, öppet värde.
+# QA-skripten mot localhost körs med QA_ADMIN_LOSEN satt till detsamma.
+ADMIN_LOSEN = os.environ.get("SNAJP_ADMIN_PASSWORD", "lokal-admin-2026")
 
 
 def _dsn_utan_db(dsn: str) -> tuple[str, str]:

@@ -22,12 +22,13 @@
  *   npm i --no-save playwright && npx playwright install chromium
  */
 import { chromium } from "playwright";
+import { hemlighet } from "./qa_hemlighet.mjs";
 
 const BASE = process.env.BASE ?? "http://localhost:3000";
 const EXEC = process.env.PW_CHROMIUM || undefined;
 const ADMIN = [
   process.env.QA_ADMIN_EPOST ?? "snajpsupport@gmail.com",
-  process.env.QA_ADMIN_LOSEN ?? "Snajpen123!"
+  hemlighet("QA_ADMIN_LOSEN")
 ];
 
 /**

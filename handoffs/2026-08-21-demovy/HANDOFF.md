@@ -362,7 +362,7 @@ node scripts\qa_klick.mjs
 
 | Roll | Konto |
 |---|---|
-| Plattformsadmin | `snajpsupport@gmail.com` / `Snajpen123!` |
+| Plattformsadmin | `snajpsupport@gmail.com` / `[borttaget 2026-11-09, se QA_ADMIN_LOSEN i .env.deploy]` |
 | Kund | `testkund+qa031732@snajp.se` / `Testkund123!` |
 
 Kundkontot skapades av `qa_testkund.mjs` under den här sessionen. `qa_vyer.mjs`
