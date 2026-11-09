@@ -766,3 +766,49 @@ async def test_svara_utan_lucka_far_inget_erbjudande():
     storage = MemoryStorage()
     svar = await _tur(storage, _LLM(), "Vilka betalsätt har ni?")
     assert "kollega" not in svar["reply"]
+
+
+# -- Ordfiltret för känsliga ärenden (Fas 0-fyndet K2, 2026-11-09) ------------
+#
+# `anmäl\w*` och `ersättning` stod ensamma i listan. En träff ger alltid
+# överlämning, så "Hur anmäler jag mig till en HLR-kurs?" gick till en människa
+# hos en kund vars hela verksamhet är kursanmälningar. Det som ska lämnas över
+# är hotet om en anmälan och kravet på ersättning, inte orden.
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Hur anmäler jag mig till en HLR-kurs?",
+        "Kan jag anmäla fem personer samtidigt?",
+        "Var hittar jag min anmälan?",
+        "När är sista anmälningsdag till kursen i Umeå?",
+        "Jag anmälde mig i går men har inte fått någon bekräftelse",
+        "Får man ersättning från arbetsgivaren för kursen?",
+        "Ingår det någon ersättning för resan till kursen?",
+        "Vad kostar eHLR online?",
+        "Hur länge gäller certifikatet?",
+    ],
+)
+def test_vanliga_kursfragor_ar_inte_kansliga(text):
+    assert not _ar_kansligt(text)
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Jag kommer att anmäla er",
+        "Jag anmäler er till Konsumentverket",
+        "Jag gör en anmälan mot er om det här inte löser sig",
+        "Jag anmäler det här till polisen",
+        "Det här kommer jag anmäla till Arbetsmiljöverket",
+        "Jag kräver ersättning för den inställda kursen",
+        "Jag vill ha ersättning",
+        "Vi har rätt till ersättning för förseningen",
+        "Jag vill ha pengarna tillbaka",
+        "Kan jag få pengar tillbaka om jag avbokar?",
+        "Kan jag få återbetalning?",
+    ],
+)
+def test_hot_om_anmalan_och_krav_pa_pengar_ar_kansliga(text):
+    assert _ar_kansligt(text)

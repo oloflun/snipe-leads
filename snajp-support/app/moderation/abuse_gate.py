@@ -105,8 +105,19 @@ _RIKTADE = {
 #: folkgrupp. Listan innehåller medvetet inga slurord i klartext — de matchas
 #: via mönster nedan, så att filen går att läsa högt i ett möte.
 _ALLVARLIGA_MONSTER = (
-    # Hot om våld, riktat mot mottagaren.
-    re.compile(r"\b(jag\s+ska\s+(döda|slå|mörda|hitta|spöa)|ta\s+livet\s+av\s+dig)\b"),
+    # Hot om våld, riktat mot mottagaren. "Slå" och "hitta" kräver ett OFFER:
+    # fram till 2026-11-09 räckte verbet, och "jag ska hitta mitt ordernummer"
+    # och "jag ska slå upp det i mejlen" avslutade samtalet med hotrepliken
+    # (Fas 0-fyndet K3). "Er" är både objekt och ägande ("hitta er adress",
+    # "slå er en signal"), så det räknas bara när meningen slutar där.
+    re.compile(
+        r"\b(jag\s+ska\s+(döda|mörda|spöa)"
+        r"|jag\s+ska\s+slå\s+(ihjäl|ner|sönder)\s+(dig|er)"
+        r"|jag\s+ska\s+(slå|hitta|leta\s+upp|leta\s+rätt\s+på)\s+dig"
+        r"|jag\s+ska\s+(slå|hitta|leta\s+upp|leta\s+rätt\s+på)\s+er(?=\s*(?:[.!?,;]|$))"
+        r"|jag\s+vet\s+var\s+(du|ni)\s+bor"
+        r"|ta\s+livet\s+av\s+dig)\b"
+    ),
     re.compile(r"\b(kill\s+you|i\s+will\s+find\s+you)\b"),
     # Uppmaning till självskada.
     re.compile(r"\b(ta\s+livet\s+av\s+dig|dö\s+bort|kys\b|kill\s+yourself)\b"),

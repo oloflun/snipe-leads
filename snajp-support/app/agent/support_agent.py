@@ -187,12 +187,26 @@ HELA_GRUNDPROMPTEN = frozenset(
 #: sin egen dokumentation. Det som SKA eskalera är utövandet av en rättighet —
 #: radering, registerutdrag — och de mönstren står kvar nedan, breddade så att
 #: de fångar "raderar alla mina uppgifter" och inte bara "radera mina data".
+#: 2026-11-09 (Fas 0-fyndet K2): `anmäl\w*` och `ersättning` stod ensamma och
+#: fällde "Hur anmäler jag mig till en HLR-kurs?" och "Får man ersättning från
+#: arbetsgivaren?" — hos en kund vars hela verksamhet är kursanmälningar. Samma
+#: lärdom som GDPR-orden ovan: det som ska lämnas över är HOTET om en anmälan
+#: (mot oss, eller till en myndighet) och KRAVET på ersättning, inte orden.
+#: "Pengarna tillbaka" lades till samtidigt; funktionens egen beskrivning
+#: lovade det, men bara "återbetal*" fångades.
 _KANSLIGT = re.compile(
     r"\b(arn|allmänna\s+reklamationsnämnden|konsumentverket|konsumentombudsman|"
     r"rader(?:a|ar|at|as)\s+(?:\w+\s+){0,3}?(?:uppgift\w*|data|konto\w*)|"
     r"registerutdrag|rätt(?:en)?\s+att\s+bli\s+glömd|"
-    r"advokat|jurist|stämning|stämma\s+er|rättslig\w*|anmäl\w*|polisanmäl\w*|"
-    r"skadestånd|återbetal\w*|kompensation|ersättning|kronofogden|inkasso|"
+    r"advokat|jurist|stämning|stämma\s+er|rättslig\w*|polisanmäl\w*|"
+    r"anmäl\w*\s+(?:er|detta|det\s+här|företaget|bolaget)|"
+    r"anmäl\w*\s+(?:\w+\s+){0,3}?(?:till|hos)\s+(?:polisen|myndighet\w*|imy|"
+    r"integritetsskydds\w*|datainspektionen|arbetsmiljöverket)|"
+    r"anmälan\s+(?:mot|om)\s+(?:er|företaget|bolaget)|"
+    r"skadestånd|återbetal\w*|pengar(?:na)?\s+tillbaka|kompensation|ersättningskrav\w*|"
+    r"(?:kräv\w*|begär\w*|yrka\w*|vill\s+ha|ska\s+ha|rätt\s+till)\s+(?:\w+\s+){0,2}?ersättning|"
+    r"ersättning\s+för\s+(?:\w+\s+){0,2}?(?:skad\w*|förlor\w*|försen\w*|utebliv\w*|inställ\w*)|"
+    r"kronofogden|inkasso|"
     r"häv(a|er|ning)\s+köpet|ångerrätt\w*|reklamation\w*|"
     # Grundprompten 6.3 (2026-10-05): betalningsproblem, GDPR-rättigheter
     # utöver radering, personskada och säkerhetsrisk. Smala mönster med flit
