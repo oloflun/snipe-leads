@@ -9,6 +9,7 @@ import {
   Sparkles,
   X
 } from "lucide-react";
+import Link from "next/link";
 import { LiveText } from "@/components/marketing/LiveText";
 import type { Locale, Localized } from "@/lib/i18n";
 import type { ProductKey } from "@/lib/routes";
@@ -141,6 +142,15 @@ function Badge({
   );
 }
 
+/**
+ * Fälten i ytorna svarar på pekaren som i Email Studio och supportinkorgen (Anton
+ * 2026-11-09): knappar slår om, rader tonas och textfält får mörkare kant. Ytan är
+ * en bild av produkten, så ett klick tar besökaren till demon där knapparna gör något
+ * (länken runt ytan i ProduktBilder och Startsida).
+ */
+const RAD = "cursor-pointer transition-colors hover:bg-ink/[0.05]";
+const TEXTFALT = "cursor-text transition-colors hover:border-ink/35";
+
 function Knapp({
   children,
   variant = "sekundar"
@@ -148,8 +158,8 @@ function Knapp({
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-input px-3 py-1.5 text-[0.75rem] font-semibold",
-        variant === "primar" ? "bg-ink text-paper" : "border border-ink/15 bg-paper text-ink"
+        "inline-flex cursor-pointer items-center gap-1.5 rounded-input px-3 py-1.5 text-[0.75rem] font-semibold transition-colors",
+        variant === "primar" ? "bg-ink text-paper hover:bg-ink2" : "border border-ink/15 bg-paper text-ink hover:border-ink hover:bg-ink hover:text-paper"
       )}
     >
       {children}
@@ -174,7 +184,7 @@ function WidgetYta({ locale }: Readonly<{ locale: Locale }>) {
         <div className="w-full overflow-hidden rounded-[16px] border border-ink/12 bg-paper shadow-[0_12px_36px_oklch(var(--ink)/0.16)]">
           <div className="flex items-center justify-between border-b border-ink/10 px-4 py-2.5">
             <span className="kicker text-mineral">Powered by Snajp</span>
-            <X className="h-3.5 w-3.5 text-ink-subtle" />
+            <X className="h-3.5 w-3.5 cursor-pointer text-ink-subtle transition-colors hover:text-ink" />
           </div>
           <div className="space-y-2.5 px-3.5 py-3.5 text-[0.75rem] leading-[1.5]">
             <div className="ml-auto w-fit max-w-[85%] rounded-[12px] rounded-br-[4px] bg-ink px-3 py-2 text-paper">
@@ -184,11 +194,11 @@ function WidgetYta({ locale }: Readonly<{ locale: Locale }>) {
               {CHATT_SVAR}
             </div>
           </div>
-          <div className="flex items-center gap-2 border-t border-ink/10 px-3.5 py-2.5">
-            <span className="flex-1 text-[0.75rem] text-ink-subtle">
+          <div className="group/skriv flex cursor-text items-center gap-2 border-t border-ink/10 px-3.5 py-2.5 transition-colors hover:bg-ink/[0.04]">
+            <span className="flex-1 text-[0.75rem] text-ink-subtle transition-colors group-hover/skriv:text-ink-muted">
               <T text={UI.skriv} locale={locale} />
             </span>
-            <span className="flex h-7 w-7 items-center justify-center rounded-full bg-ink text-paper">
+            <span className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-full bg-ink text-paper transition-colors hover:bg-ink2">
               <Send className="h-3.5 w-3.5" />
             </span>
           </div>
@@ -196,7 +206,7 @@ function WidgetYta({ locale }: Readonly<{ locale: Locale }>) {
 
         {/* Inbjudan + knappen — stängda läget, Skatteverkets mönster. */}
         <div className="flex items-end gap-2.5">
-          <div className="rounded-[12px] border border-ink/10 bg-paper px-3 py-2 text-[0.75rem] shadow-[0_6px_20px_oklch(var(--ink)/0.10)]">
+          <div className="cursor-pointer rounded-[12px] border border-ink/10 bg-paper px-3 py-2 text-[0.75rem] shadow-[0_6px_20px_oklch(var(--ink)/0.10)] transition-colors hover:border-ink/35">
             <span className="block font-semibold text-ink">
               <T text={UI.fraga} locale={locale} />
             </span>
@@ -204,7 +214,7 @@ function WidgetYta({ locale }: Readonly<{ locale: Locale }>) {
               <T text={UI.fragaOss} locale={locale} />
             </span>
           </div>
-          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-ink text-paper shadow-[0_6px_20px_oklch(var(--ink)/0.22)]">
+          <span className="flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-full bg-ink text-paper shadow-[0_6px_20px_oklch(var(--ink)/0.22)] transition-colors hover:bg-ink2">
             <MessageCircle className="h-5 w-5" />
           </span>
         </div>
@@ -224,7 +234,7 @@ function InkorgYta({ locale, kompakt = false }: Readonly<{ locale: Locale; kompa
       {/* Ärendelistan. Kompakt står bara det öppna ärendet: listan ryms inte i hjältens ruta. */}
       <div className={cn("hidden border-r border-ink/10 p-4", !kompakt && "sm:block")}>
         <div className="divide-y divide-ink/10 border-y border-ink/12 text-[0.75rem]">
-          <div className="bg-paper2/60 py-2.5 pl-2 pr-1">
+          <div className="cursor-pointer bg-paper2/60 py-2.5 pl-2 pr-1 transition-colors hover:bg-paper2">
             <span className="flex items-baseline justify-between gap-2">
               <span className="truncate font-medium text-ink">{ARENDE_HLR}</span>
               <Badge ton="warn">
@@ -235,7 +245,7 @@ function InkorgYta({ locale, kompakt = false }: Readonly<{ locale: Locale; kompa
               Maria Ek · <T text={UI.offertforfragan} locale={locale} />
             </span>
           </div>
-          <div className="py-2.5 pl-2 pr-1">
+          <div className={cn("py-2.5 pl-2 pr-1", RAD)}>
             <span className="flex items-baseline justify-between gap-2">
               <span className="truncate font-medium text-ink">{ARENDE_ORDER}</span>
               <Badge ton="good">
@@ -246,7 +256,7 @@ function InkorgYta({ locale, kompakt = false }: Readonly<{ locale: Locale; kompa
               Johan Berg · <T text={UI.orderstatus} locale={locale} />
             </span>
           </div>
-          <div className="py-2.5 pl-2 pr-1">
+          <div className={cn("py-2.5 pl-2 pr-1", RAD)}>
             <span className="flex items-baseline justify-between gap-2">
               <span className="truncate font-medium text-ink">{ARENDE_OCR}</span>
               <Badge>
@@ -273,7 +283,7 @@ function InkorgYta({ locale, kompakt = false }: Readonly<{ locale: Locale; kompa
         <p className="mt-4 font-display text-[0.9375rem] text-ink">
           <T text={UI.agentensUtkast} locale={locale} />
         </p>
-        <div className="mt-1.5 rounded-input border border-ink/12 bg-paper px-3 py-2.5 text-[0.75rem] leading-[1.55] text-ink">
+        <div className={cn("mt-1.5 rounded-input border border-ink/12 bg-paper px-3 py-2.5 text-[0.75rem] leading-[1.55] text-ink", TEXTFALT)}>
           <LiveText text={MARIA_UTKAST} />
         </div>
 
@@ -328,7 +338,7 @@ function IrisListYta({ locale }: Readonly<{ locale: Locale }>) {
       </p>
       <div className="mt-3 divide-y divide-ink/10 border-y border-ink/12">
         {rader.map((rad) => (
-          <div key={rad.bolag} className="flex items-center gap-3 py-3">
+          <div key={rad.bolag} className={cn("flex items-center gap-3 py-3", RAD)}>
             <span className="numeral w-12 text-[1.75rem]">{rad.poang}</span>
             <span className="min-w-0">
               <span className="block truncate text-[0.8125rem] font-medium text-ink">
@@ -357,7 +367,7 @@ function IrisUtkastYta({ locale, kompakt = false }: Readonly<{ locale: Locale; k
         {JOHAN_AMNE} · <T text={UI.bifogas} locale={locale} />
       </p>
       {/* Mejlet skriver sig självt: texten skrivs fram när rutan har landat. */}
-      <div className="mt-3 rounded-input border border-ink/12 bg-paper px-3 py-2.5 text-[0.75rem] leading-[1.55] text-ink">
+      <div className={cn("mt-3 rounded-input border border-ink/12 bg-paper px-3 py-2.5 text-[0.75rem] leading-[1.55] text-ink", TEXTFALT)}>
         <LiveText text={JOHAN_MEJL} />
       </div>
       <div className="mt-3 flex flex-wrap items-center gap-1.5">
@@ -372,9 +382,12 @@ function IrisUtkastYta({ locale, kompakt = false }: Readonly<{ locale: Locale; k
           <T text={UI.hoppaOver} locale={locale} />
         </Knapp>
       </div>
-      <p className="mt-auto border-t border-ink/10 pt-2.5 text-[0.6875rem] leading-[1.5] text-ink-subtle">
-        <T text={UI.kalla} locale={locale} />
-      </p>
+      {/* Kompakt (hjälten): utan fotnoten, så att hela hjälten ryms i en skärm. */}
+      {kompakt ? null : (
+        <p className="mt-auto border-t border-ink/10 pt-2.5 text-[0.6875rem] leading-[1.5] text-ink-subtle">
+          <T text={UI.kalla} locale={locale} />
+        </p>
+      )}
     </div>
   );
 }
@@ -399,7 +412,7 @@ function KvittoListYta({ locale }: Readonly<{ locale: Locale }>) {
       </p>
       <div className="mt-3 divide-y divide-ink/10 border-y border-ink/12 text-[0.75rem]">
         {rader.map((rad) => (
-          <div key={rad.fran} className="flex items-center justify-between gap-3 py-3">
+          <div key={rad.fran} className={cn("flex items-center justify-between gap-3 py-3", RAD)}>
             <span className="flex min-w-0 items-center gap-2.5">
               <Paperclip className="h-3.5 w-3.5 shrink-0 text-ink-subtle" />
               <span className="truncate font-medium text-ink">{rad.fran}</span>
@@ -446,7 +459,7 @@ function VerifikatYta({ locale }: Readonly<{ locale: Locale }>) {
         ].map(([konto, debet, kredit]) => (
           <div
             key={konto}
-            className="grid grid-cols-[1fr_auto_auto] gap-x-4 border-b border-ink/10 py-2 last:border-b-0"
+            className={cn("grid grid-cols-[1fr_auto_auto] gap-x-4 border-b border-ink/10 py-2 last:border-b-0", RAD)}
           >
             <span className="truncate text-ink">{konto}</span>
             <span className="min-w-[4.5rem] text-right tabular-nums text-ink">{debet}</span>
@@ -551,12 +564,16 @@ export const EXEMPELRAD: Localized = {
  * `fullt`: startsidans flöde (Startsida.tsx). Rutan glider in först när den står
  * helt i bild, i samma kö som stegen runt den (useLandingMotion, data-full).
  */
+/** Demon där ytans knappar gör något. Kvittoagenten är vilande och har ingen. */
+const YTANS_DEMO: Partial<Record<ProductKey, string>> = { leads: "/demo/leads", support: "/demo/support" };
+
 export function ProduktBilder({
   product,
   locale,
   fullt = false
 }: Readonly<{ product: ProductKey; locale: Locale; fullt?: boolean }>) {
   const [vanster, hoger] = FALT[product];
+  const demo = YTANS_DEMO[product];
   return (
     // Toppen nära löftet ovanför: punkterna där slutar i samma tanke som ytorna här
     // visar, och 240 px luft mellan dem lästes som att sidan tog slut (Anton 2026-10-19).
@@ -580,7 +597,15 @@ export function ProduktBilder({
                   className="overflow-hidden rounded-panel border border-ink/12 bg-paper"
                 >
                   <div className="case-zoom">
-                    <Bild locale={locale} />
+                    {/* Ytan är dekor för skärmläsaren (aria-hidden), så länken tar inte
+                        fokus: vägen till demon med tangentbord är länken i sektionen. */}
+                    {demo ? (
+                      <Link href={demo} aria-hidden tabIndex={-1} className="block">
+                        <Bild locale={locale} />
+                      </Link>
+                    ) : (
+                      <Bild locale={locale} />
+                    )}
                   </div>
                 </div>
                 <figcaption key={locale} className="mt-5">

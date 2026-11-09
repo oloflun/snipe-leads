@@ -172,14 +172,17 @@ const CASE_GAP = 0.85;
 const TEXT_AFTER = 0.6;
 let queueEnd = 0;
 
-// Startsidans flöde (data-mo="steg"): nästa sak börjar när den förra nästan är klar.
-const STEG_GAP = 0.6;
-const STEG_TID = 0.8;
-// Hjältens ytor (data-mo="svav"): första ytan när rubriken skrivit "kundtjänst,", så att
-// rubriken hinner läsas innan ytorna tar blicken (F-025); nästa när den förra landat.
-const SVAV_START = 2.0;
-const SVAV_GAP = 1.05;
-const SVAV_TEXT = 0.9;
+// Startsidans flöde (data-mo="steg" och rader med data-full). Varje sak börjar i samma
+// ögonblick som den står helt i bild. Ingen kö i tid: kön (0,6 s per sak) lät innehållet
+// halka efter skrollen och lämnade tomma skärmar (Anton 2026-11-09). Det som når bilden
+// i samma bildruta får bara ett kort steg emellan, så att det läses som en följd.
+const STEG_STEG = 0.07;
+const STEG_TID = 0.55;
+// Hjältens ytor (data-mo="svav"): första ytan när rubriken skrivit sina första ord, nästa
+// när den förra har landat. Hela hjälten står inom drygt två sekunder.
+const SVAV_START = 0.7;
+const SVAV_GAP = 0.8;
+const SVAV_TEXT = 0.6;
 const SVAV_FAILSAFE_MS = 6000;
 
 function setup(G: Gsap, rootEl: HTMLElement, fullDoor: boolean, lenis: Lenis): () => void {
@@ -203,9 +206,13 @@ function setup(G: Gsap, rootEl: HTMLElement, fullDoor: boolean, lenis: Lenis): (
     const side = $("[data-mo=\"hero-side\"]");
     const header = $("[data-mo=\"header\"]");
     const door = { on: fullDoor ? 0 : 1 };
+    // Startsidan (Startsida.tsx): sidhuvudet står från första målningen och ingressen
+    // reser sig rad för rad, i stället för att tonas upp sent som en sida som laddar.
+    const hem = !!$("[data-mo=\"svav\"]");
+    let visaIngress = () => {};
 
     if (h1) {
-      const late = [lede, acts, side, header].filter(Boolean) as HTMLElement[];
+      const late = (hem ? [] : [lede, acts, side, header]).filter(Boolean) as HTMLElement[];
       if (fullDoor) {
         gsap.set(h1, { autoAlpha: 0 });
         gsap.set(late, { opacity: 0, y: 14 });
@@ -224,6 +231,7 @@ function setup(G: Gsap, rootEl: HTMLElement, fullDoor: boolean, lenis: Lenis): (
           gsap.set(h1, { autoAlpha: 1 });
           h1.dispatchEvent(new Event("hero:type"));
           gsap.set(late, { opacity: 1, y: 0 });
+          visaIngress();
           if (heroImg) gsap.set(heroImg, { scale: 1 });
           if (heroScrim) gsap.set(heroScrim, { opacity: 1 });
           door.on = 1;
@@ -241,11 +249,12 @@ function setup(G: Gsap, rootEl: HTMLElement, fullDoor: boolean, lenis: Lenis): (
           gsap.to(door, { on: 1, duration: 1.2 });
           return;
         }
-        if (!fullDoor) return;
+        if (!fullDoor) { visaIngress(); return; }
         const tl = gsap.timeline({ defaults: { ease: "power3.out" } });
         if (heroImg) tl.to(heroImg, { scale: 1, duration: 2.2, ease: "power2.out" }, 0);
         if (heroScrim) tl.to(heroScrim, { opacity: 1, duration: 1.4, ease: "power2.inOut" }, 0);
-        tl.to(late, { opacity: 1, y: 0, duration: 0.8, stagger: 0.1 }, 1.2)
+        if (late.length) tl.to(late, { opacity: 1, y: 0, duration: 0.8, stagger: 0.1 }, 1.2);
+        tl.call(() => visaIngress(), [], 0.45)
           .to(door, { on: 1, duration: 1.6, ease: "power2.inOut" }, 1.0);
       }));
       // hjältens foto glider långsammare än sidan när man lämnar den
@@ -344,17 +353,30 @@ function setup(G: Gsap, rootEl: HTMLElement, fullDoor: boolean, lenis: Lenis): (
       for (const e of entries) if (e.isIntersecting) play(e.target as HTMLElement);
     }, { rootMargin: "0px 0px -4% 0px", threshold: 1 });
     cleanups.push(() => ioHel.disconnect());
-    const ryms = (el: HTMLElement) => el.offsetHeight < innerHeight * 0.9;
+    // Det som är lägre än knappt halva skärmen väntar tills det står helt i bild. Det som
+    // är högre startar när överkanten nått en bit upp: att vänta in hela höjden lät
+    // läsaren skrolla förbi tom yta.
+    const ryms = (el: HTMLElement) => el.offsetHeight < innerHeight * 0.45;
     // arm: dölj en gång, visa en gång. Tre vägar till play, alla idempotenta.
-    function arm(el: HTMLElement, hide: () => void, show: () => void, start = "top 88%", hel = false) {
+    // hel: starta först helt i bild (startsidans flöde). `start` gäller annars, och med
+    // utanIo är ScrollTrigger ensam utlösare (io eldar redan vid 92 %).
+    function arm(el: HTMLElement, hide: () => void, show: () => void, start = "top 88%", hel = false, utanIo = false) {
       if (revealed(el)) return;
       hide();
       shows.set(el, show);
       const helt = hel && ryms(el);
-      ScrollTrigger.create({ trigger: el, start: hel ? (helt ? "bottom 96%" : "top 60%") : start, once: true, onEnter: () => play(el) });
-      if (!hel) io.observe(el);
-      else if (helt) ioHel.observe(el);
+      ScrollTrigger.create({ trigger: el, start: hel ? (helt ? "bottom 96%" : "top 62%") : start, once: true, onEnter: () => play(el) });
+      if (hel) { if (helt) ioHel.observe(el); }
+      else if (!utanIo) io.observe(el);
     }
+    // Ett kort steg mellan det som når bilden i samma bildruta (STEG_STEG), aldrig en kö.
+    let slotTid = -1;
+    let slotN = 0;
+    const slot = () => {
+      const now = gsap.ticker.time;
+      if (now - slotTid > 0.05) { slotTid = now; slotN = 0; }
+      return Math.min(slotN++, 6) * STEG_STEG;
+    };
 
     function fadeUp(el: HTMLElement, delay = 0) {
       arm(el, () => gsap.set(el, { opacity: 0, y: 18 }),
@@ -368,10 +390,13 @@ function setup(G: Gsap, rootEl: HTMLElement, fullDoor: boolean, lenis: Lenis): (
         onSplit(self) { if (!revealed(el)) gsap.set(self.lines, { yPercent: 120 }); }
       });
     }
-    const showLines = (el: HTMLElement) => gsap.to($$(".ln", el), { yPercent: 0, duration: 0.9, ease: "power4.out", stagger: 0.07 });
+    const showLines = (el: HTMLElement, delay = 0) => gsap.to($$(".ln", el), { yPercent: 0, duration: 0.9, ease: "power4.out", stagger: 0.07, delay });
     function headingLines(el: HTMLElement) {
       splitLines(el);
-      arm(el, () => {}, () => showLines(el));
+      // data-full (startsidans flöde): texten reser sig ur sina rader när den står helt i
+      // bild. Den tonas aldrig: en toning läses som en sida som renderas (Anton 2026-11-09).
+      if (el.hasAttribute("data-full")) arm(el, () => {}, () => showLines(el, slot()), "", true);
+      else arm(el, () => {}, () => showLines(el));
     }
     function words(el: HTMLElement) {
       SplitText.create(el, {
@@ -408,12 +433,12 @@ function setup(G: Gsap, rootEl: HTMLElement, fullDoor: boolean, lenis: Lenis): (
       const offset = () => from === "up" ? { x: 0, y: 120 } : { x: (from === "left" ? -1 : 1) * Math.min(180, innerWidth * 0.14), y: 0 };
       // will-change redan i viloläget: lagret finns när glidningen börjar, så första bildrutan
       // målas inte om mitt i rörelsen. LiveText lyssnar på case:armed / case:landed.
-      // data-full (startsidan): rutan väntar tills den står helt i bild, och en förskjuten
-      // ruta som hänger utanför kanten så länge läses som ett fel. Den väntar därför osynlig
-      // och tonas fram under glidningens första 0,35 s, som hjältens ytor (svav).
+      // data-full (startsidan): rutan glider in när en dryg tredjedel av den står i bild
+      // (top 68 %), så att glidningen syns. Den är aldrig osynlig (spring-arrival): en ruta
+      // som väntade dold tills hela höjden stod i bild lämnade skärmen tom (Anton 2026-11-09).
       const hel = el.hasAttribute("data-full");
       arm(el, () => {
-        gsap.set(box, { ...offset(), willChange: "transform", ...(hel ? { opacity: 0 } : {}) });
+        gsap.set(box, { ...offset(), willChange: "transform" });
         el.dispatchEvent(new Event("case:armed"));
       }, () => {
         const now = gsap.ticker.time;
@@ -421,30 +446,53 @@ function setup(G: Gsap, rootEl: HTMLElement, fullDoor: boolean, lenis: Lenis): (
         queueEnd = start + CASE_GAP;
         const tl = gsap.timeline({ delay: start - now });
         tl.to(box, { x: 0, y: 0, ease: ARRIVAL.ease, duration: ARRIVAL.duration, force3D: true, clearProps: "transform,willChange" }, 0);
-        if (hel) tl.to(box, { opacity: 1, duration: 0.35, ease: "power1.out" }, 0);
         tl.call(() => { el.dispatchEvent(new Event("case:landed")); }, [], TEXT_AFTER);
         texts.forEach((t, i) => {
           t.dataset.rv = "1";
           tl.add(showLines(t), TEXT_AFTER + i * 0.12);
         });
-      }, wide ? "top 85%" : "top 90%", hel);
+      }, hel ? "top 68%" : wide ? "top 85%" : "top 90%", false, hel);
     }
     // ------------------------------------------- startsidans flöde (data-mo="steg")
-    // En sak i taget, när den står helt i bild, i samma kö som rutorna. Spelar en gång och
-    // skrubbas aldrig: inget backar eller försvinner innan animationen är klar.
+    // Det i flödet som inte är löptext (talraden, länkraden): kommer upp i samma ögonblick
+    // som det står helt i bild. Spelar en gång och skrubbas aldrig: inget backar eller
+    // försvinner innan animationen är klar. Texten går genom headingLines (data-full).
     function steg(el: HTMLElement) {
       arm(el, () => {
-        gsap.set(el, { opacity: 0, y: 24 });
+        gsap.set(el, { opacity: 0, y: 20 });
         el.dataset.armerad = "1";
       }, () => {
-        const now = gsap.ticker.time;
-        const start = Math.max(now, queueEnd);
-        queueEnd = start + STEG_GAP;
         gsap.to(el, {
-          opacity: 1, y: 0, duration: STEG_TID, ease: "power3.out", delay: start - now,
+          opacity: 1, y: 0, duration: STEG_TID, ease: "power3.out", delay: slot(),
           // RaknaUpp (AgentResultat) väntar på den här innan talen räknas.
           onComplete: () => { el.dataset.visad = "1"; el.dispatchEvent(new Event("steg:visad")); }
         });
+      }, "", true);
+    }
+    // ------------------------------------- kapitelrubriken (data-mo="kapitel", Startsida.tsx)
+    // Agentens namn i displaygrad på bläck. Två lager som hör ihop: bokstäverna reser sig
+    // en i taget ur sin rad när namnet står helt i bild, och ljuset från ett fönster faller
+    // in över golvet i samma ögonblick och vandrar sedan med skrollen (skrubbat, åt båda
+    // hållen). Löftet under namnet reser sig när namnet står.
+    function kapitel(el: HTMLElement) {
+      const namn = $("[data-kapitel-namn]", el);
+      const rad = $("[data-kapitel-rad]", el);
+      const ljus = $("[data-kapitel-ljus]", el);
+      if (ljus) {
+        const hoger = ljus.hasAttribute("data-hoger");
+        gsap.fromTo(ljus, { xPercent: hoger ? 16 : -16, skewX: hoger ? 30 : -30 }, { xPercent: hoger ? -10 : 10, skewX: hoger ? 14 : -14, ease: "none",
+          scrollTrigger: { trigger: el, start: "top bottom", end: "bottom top", scrub: true } });
+      }
+      if (!namn) return;
+      SplitText.create(namn, {
+        aria: "none", type: "lines,chars", mask: "lines", linesClass: "ln", charsClass: "kb", autoSplit: true,
+        onSplit(self) { if (!revealed(namn)) gsap.set(self.chars, { yPercent: 118 }); }
+      });
+      if (rad) splitLines(rad);
+      arm(namn, () => { if (ljus) gsap.set(ljus, { opacity: 0 }); }, () => {
+        gsap.to($$(".kb", namn), { yPercent: 0, duration: 1.05, ease: "power4.out", stagger: 0.045 });
+        if (ljus) gsap.to(ljus, { opacity: 1, duration: 1.8, ease: "power2.out" });
+        if (rad) { rad.dataset.rv = "1"; showLines(rad, 0.45); }
       }, "", true);
     }
     // --------------------------------------- hjältens ytor (data-mo="svav", Startsida.tsx)
@@ -487,8 +535,12 @@ function setup(G: Gsap, rootEl: HTMLElement, fullDoor: boolean, lenis: Lenis): (
           fas: i * 1.9, periodY: 4.6 + i * 0.7, periodR: 5.8 - i * 0.6, styrka: 0
         };
       });
+      // Om hjälten syns avgörs av en utlösare, inte av en mätning per bildruta: en läsning
+      // av layouten efter att rörelsen skrivit stilar tvingar fram en omräkning varje gång.
+      let heroSyns = true;
+      if (hero) ScrollTrigger.create({ trigger: hero, start: "top bottom", end: "bottom top", onToggle: (self) => { heroSyns = self.isActive; } });
       const vila = (tid: number) => {
-        if (hero && hero.getBoundingClientRect().bottom < 0) return;
+        if (!heroSyns) return;
         const lugn = Math.max(0, 1 - Math.abs(lenis.velocity) / 6);
         lager.forEach((l, i) => {
           if (!l) return;
@@ -569,7 +621,17 @@ function setup(G: Gsap, rootEl: HTMLElement, fullDoor: boolean, lenis: Lenis): (
     }
     $$("[data-case]:not([data-mo=\"svav\"])").forEach(caseEntry);
     $$("[data-mo=\"steg\"]").forEach(steg);
+    $$("[data-mo=\"kapitel\"]").forEach(kapitel);
     svav($$("[data-mo=\"svav\"]"));
+    // Startsidans ingress: radspaltad här, visad av dörren (visaIngress).
+    if (hem && lede) {
+      splitLines(lede);
+      visaIngress = () => {
+        if (revealed(lede)) return;
+        lede.dataset.rv = "1";
+        showLines(lede);
+      };
+    }
 
     // tangentbord: ett fokuserat element visas alltid, även före sitt avslöjande
     const onFocus = (e: FocusEvent) => {

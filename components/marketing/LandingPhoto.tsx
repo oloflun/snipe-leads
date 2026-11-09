@@ -135,11 +135,12 @@ export function LandingPhoto({
           inline och tar bort det (useLandingMotion), eller tills timern
           tar bort det efter 3 s om modulen aldrig laddar. React kör aldrig
           om ett inline-skript på klienten, så vid en klientnavigering hit
-          spelas dörren inte om. */}
+          spelas dörren inte om. Startsidans sidhuvud döljs inte: det står
+          från första målningen (Anton 2026-11-09, sidan "dyker upp för sent"). */}
       <script
         dangerouslySetInnerHTML={{
           __html:
-            "(function(){var s=document.createElement('style');s.id='door-armed';s.textContent='.landing [data-mo=hero-h1],.landing [data-mo=hero-lede],.landing [data-mo=hero-acts],.landing [data-mo=hero-side],.landing [data-mo=header],.landing [data-mo=svav]{opacity:0}.landing [data-mo=hero-img]{transform:scale(1.06)}.landing [data-mo=hero-scrim]{opacity:.4}';document.head.appendChild(s);setTimeout(function(){s.remove()},3000)})();"
+            `(function(){var s=document.createElement('style');s.id='door-armed';s.textContent='.landing [data-mo=hero-h1],.landing [data-mo=hero-lede],.landing [data-mo=hero-acts],.landing [data-mo=hero-side],${hem ? "" : ".landing [data-mo=header],"}.landing [data-mo=svav]{opacity:0}.landing [data-mo=hero-img]{transform:scale(1.06)}.landing [data-mo=hero-scrim]{opacity:.4}';document.head.appendChild(s);setTimeout(function(){s.remove()},3000)})();`
         }}
       />
       {/* Dygnsljuset: marken och ljuslagret skrivs bara av ljusmotorn i useLandingMotion. */}

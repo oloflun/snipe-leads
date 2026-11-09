@@ -48,7 +48,6 @@ const AGENTER: Record<
   Agent,
   {
     namn: Localized;
-    etikett: Localized;
     vad: Localized;
     prova: Localized;
     lasMerOm: Localized;
@@ -61,7 +60,6 @@ const AGENTER: Record<
 > = {
   leads: {
     namn: { sv: "Iris", en: "Iris" },
-    etikett: { sv: "Iris, leadsagenten", en: "Iris, the leads agent" },
     // Sökordssidans mening (/svensk-ai-sdr) utan subjektet: namnet står redan ovanför.
     vad: {
       sv: "Hittar rätt bolag, läser på om dem och skriver säljmejlet.",
@@ -77,7 +75,6 @@ const AGENTER: Record<
   },
   support: {
     namn: { sv: "Supportagenten", en: "The support agent" },
-    etikett: { sv: "Supportagenten", en: "The support agent" },
     // Sökordssidans mening (/ai-supportagent) utan subjektet.
     vad: {
       sv: "Sorterar kundmejlen, skriver svaren och lämnar över det som kräver en människa.",
@@ -125,12 +122,16 @@ function Svavare({ agent, andra }: Readonly<{ agent: Agent; andra: boolean }>) {
   const Yta = a.yta;
   return (
     // data-case: LiveText i ytan skriver fram utkastet när ytan har landat.
-    <figure data-mo="svav" data-case className={cn("min-w-0", andra ? "ml-5 md:ml-0 md:mt-24" : "mr-5 md:mr-0")}>
+    <figure data-mo="svav" data-case className={cn("min-w-0", andra ? "ml-5 md:ml-0 md:mt-14" : "mr-5 md:mr-0")}>
       <div className="svav-flyt">
         <div className="svav-lut">
           {/* YTA: produktens egen yta på fast papper, NOT ett glaskort över fotot (F-006). */}
           <div data-hole className="hem-yta overflow-hidden rounded-panel border border-ink/12 bg-paper">
-            <Yta locale={locale} kompakt />
+            {/* Fälten svarar på pekaren, och ett klick på ytan öppnar demon. Länken
+                tar inte fokus: "Prova …" under ytan är samma väg med tangentbord. */}
+            <Link href={a.demo} aria-hidden tabIndex={-1} className="block">
+              <Yta locale={locale} kompakt />
+            </Link>
           </div>
         </div>
       </div>
@@ -164,33 +165,40 @@ export function HemHjalte() {
   return (
     // HERO: 1a:s foto och rubrik, ytorna svävar över himlen. NOT ett produktreglage.
     <section data-mo="hero" data-hole className="relative overflow-hidden bg-ink md:min-h-[100svh]">
-      {/* Mobil: fotot har en fast höjd och tonar ut i bläck (hem-scrim), så att
-          rubriken står på staden och aldrig på den ljusa horisonten. */}
+      {/* Mobil: fotot är 420 px högt och tonar ut i bläck (hem-scrim). Rubriken
+          börjar under horisonten, på staden, och första ytan står i första skärmen. */}
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         data-mo="hero-img"
         src={photo(imagery.hero.src)}
         alt={text(imagery.hero.alt)}
-        className="absolute inset-x-0 top-0 h-[640px] w-full bg-ink object-cover object-center md:h-full"
+        className="absolute inset-x-0 top-0 h-[420px] w-full bg-ink object-cover object-center md:h-full"
         fetchPriority="high"
       />
       <div data-mo="hero-scrim" className="hem-scrim absolute inset-0" aria-hidden="true" />
 
-      <div className="relative mx-auto grid max-w-[1480px] grid-cols-12 gap-y-12 px-6 pb-16 pt-[290px] md:min-h-[100svh] md:px-10 md:pb-20 md:pt-36 xl:items-end xl:gap-x-10">
-        <div className="col-span-12 xl:col-span-6">
+      {/* Desktop: hela hjälten ryms i en skärm. Texten står med tyngdpunkten strax
+          över skärmens mitt (xl:pb lyfter den), aldrig mot nederkanten, där den
+          såg ut att falla ur bild (Anton 2026-11-09). */}
+      <div className="relative mx-auto grid max-w-[1480px] grid-cols-12 gap-y-9 px-6 pb-14 pt-[168px] md:min-h-[100svh] md:gap-y-12 md:px-10 md:pb-20 md:pt-40 xl:items-center xl:gap-x-10 xl:pb-10 xl:pt-28">
+        <div className="col-span-12 xl:col-span-6 xl:pb-[13svh]">
           {/* key per språk: HeroText skriver fram en ny rubrik när språket byts. */}
           <h1
             key={locale}
             data-mo="hero-h1"
-            className="max-w-[15ch] font-display text-[clamp(2.25rem,5.6vw,5.5rem)] font-semibold leading-[0.99] tracking-[-0.035em] text-paper"
+            className="max-w-[9.4em] font-display text-[clamp(2.0625rem,4.7vw,4.5rem)] font-semibold leading-[1.01] tracking-[-0.035em] text-paper"
           >
             <HeroText text={text(COPY.rubrik)} />
           </h1>
-          <p data-mo="hero-lede" className="hero-lede mt-7 max-w-[42ch] text-[1.0625rem] leading-[1.65] text-paper">
+          <p
+            key={`lede-${locale}`}
+            data-mo="hero-lede"
+            className="hero-lede mt-5 max-w-[42ch] text-[1.0625rem] leading-[1.6] text-paper md:mt-7"
+          >
             {text(landningsPost("/ai-agenter").kort)}
           </p>
         </div>
-        <div className="col-span-12 grid gap-12 md:grid-cols-2 md:gap-6 xl:col-span-6 xl:self-center xl:pt-10">
+        <div className="col-span-12 grid gap-10 md:grid-cols-2 md:gap-6 xl:col-span-6">
           {ORDNING.map((agent, i) => (
             <Svavare key={agent} agent={agent} andra={i === 1} />
           ))}
@@ -218,29 +226,55 @@ export function AgentFlode({ agent, demo }: Readonly<{ agent: Agent; demo: React
   const pc = productCopy[agent];
 
   return (
-    <section id={a.ankare} aria-labelledby={`${a.ankare}-rubrik`} className="relative scroll-mt-6">
-      <i aria-hidden="true" data-mo="rule" className="mo-rule" />
-      {/* Kort botten, som på produktsidan: rutorna nedanför fortsätter löftets punkter. */}
-      <div className="mx-auto max-w-[1480px] px-6 pb-12 pt-24 md:px-10 md:pb-16 md:pt-32">
-        {/* LÖFTET: rubrik, ingress och tre punkter i en rad, NOT tre kort. */}
-        <p data-mo="steg" className="text-[0.8125rem] font-medium tracking-[0.02em] text-ink-subtle">
-          {text(a.etikett)}
-        </p>
-        <h2
-          id={`${a.ankare}-rubrik`}
-          data-mo="steg"
-          className="mt-4 max-w-[22ch] font-display text-[clamp(2rem,4.6vw,3.5rem)] font-semibold leading-[1.03] tracking-[-0.03em]"
+    <section id={a.ankare} aria-labelledby={`${a.ankare}-rubrik`} className="relative">
+      {/* KAPITEL: agentens namn i displaygrad på bläck, med ljuset från ett fönster över
+          golvet, NOT en liten etikett över löftet (Anton 2026-11-09: övergångarna skedde
+          "med knappt märkbara rubriker"). Löftet står under namnet i samma rubrik. */}
+      <div data-mo="kapitel" data-hole className="kapitel relative overflow-hidden bg-ink text-paper">
+        <div
+          aria-hidden="true"
+          data-kapitel-ljus
+          data-hoger={agent === "support" ? "" : undefined}
+          className="kapitel-ljus"
         >
-          {text(lofte.rubrik)}
-        </h2>
-        <p data-mo="steg" className="mt-6 max-w-[58ch] text-[1.125rem] leading-[1.65] text-ink-muted">
+          <i /><i /><i /><i /><i /><i />
+        </div>
+        <div className="relative mx-auto max-w-[1480px] px-6 py-24 md:px-10 md:py-36">
+          {/* key per språk: namnet och löftet spaltas av SplitText (useLandingMotion). */}
+          <h2 id={`${a.ankare}-rubrik`} key={locale}>
+            <span
+              data-kapitel-namn
+              // Samma grad på desktop. På mobil fyller "Iris" bredden med en större grad;
+              // "Supportagenten" har redan gjort det med den mindre.
+              className={cn(
+                "block font-display font-semibold leading-[0.98] tracking-[-0.045em]",
+                agent === "leads" ? "text-[clamp(5.5rem,11.5vw,11rem)]" : "text-[clamp(2.875rem,11.5vw,11rem)]"
+              )}
+            >
+              {text(a.namn)}
+            </span>
+            <span className="sr-only">. </span>
+            <span
+              data-kapitel-rad
+              className="mt-6 block max-w-[20ch] font-display text-[clamp(1.75rem,3.6vw,3rem)] font-semibold leading-[1.06] tracking-[-0.03em] md:mt-9"
+            >
+              {text(lofte.rubrik)}
+            </span>
+          </h2>
+        </div>
+      </div>
+
+      {/* Kort botten, som på produktsidan: rutorna nedanför fortsätter löftets punkter. */}
+      <div className="mx-auto max-w-[1480px] px-6 pb-12 pt-16 md:px-10 md:pb-16 md:pt-24">
+        {/* LÖFTET: ingress och tre punkter i en rad, NOT tre kort. */}
+        <p key={locale} data-mo="lines" data-full className="max-w-[58ch] text-[1.125rem] leading-[1.65] text-ink-muted">
           {text(lofte.lede)}
         </p>
-        <div className="mt-14 grid gap-8 md:grid-cols-3 md:gap-10">
+        <div className="mt-12 grid gap-8 md:grid-cols-3 md:gap-10">
           {lofte.punkter[locale].map(([rubrik, brod]) => (
-            <div key={rubrik} data-mo="steg" className="border-t border-ink/15 pt-5">
-              <h3 className="text-[1.0625rem] font-semibold tracking-[-0.01em]">{rubrik}</h3>
-              <p className="mt-2 max-w-[42ch] text-[0.9375rem] leading-[1.6] text-ink-muted">{brod}</p>
+            <div key={rubrik} className="border-t border-ink/15 pt-5">
+              <h3 data-mo="lines" data-full className="text-[1.0625rem] font-semibold tracking-[-0.01em]">{rubrik}</h3>
+              <p data-mo="lines" data-full className="mt-2 max-w-[42ch] text-[0.9375rem] leading-[1.6] text-ink-muted">{brod}</p>
             </div>
           ))}
         </div>
@@ -250,18 +284,20 @@ export function AgentFlode({ agent, demo }: Readonly<{ agent: Agent; demo: React
           taget när de står helt i bild, och bildtexten avtäcks när de landat. */}
       <ProduktBilder product={agent} locale={locale} fullt />
 
-      <div className="mx-auto max-w-[1480px] px-6 pb-24 pt-20 md:px-10 md:pb-32 md:pt-28">
+      <div className="mx-auto max-w-[1480px] px-6 pb-20 pt-16 md:px-10 md:pb-28 md:pt-24">
         {/* RESULTATET efter rutorna: vad verktyget ger, med talen som räknas fram,
             som sista del före demon. */}
         <div className="grid grid-cols-12 gap-y-12 lg:gap-x-14">
           <div className="col-span-12 lg:col-span-5">
             <h3
-              data-mo="steg"
+              key={locale}
+              data-mo="lines"
+              data-full
               className="max-w-[16ch] font-display text-[clamp(1.75rem,3.4vw,2.75rem)] font-semibold leading-[1.05] tracking-[-0.03em]"
             >
               <Markerad text={text(resultat.rubrik)} />
             </h3>
-            <p data-mo="steg" className="mt-6 max-w-[48ch] text-[1.0625rem] leading-[1.7] text-ink-muted">
+            <p key={`brod-${locale}`} data-mo="lines" data-full className="mt-6 max-w-[48ch] text-[1.0625rem] leading-[1.7] text-ink-muted">
               {text(resultat.brod)}
             </p>
             <div data-mo="steg" className="mt-10">
@@ -269,11 +305,11 @@ export function AgentFlode({ agent, demo }: Readonly<{ agent: Agent; demo: React
             </div>
           </div>
           <div className="col-span-12 lg:col-span-6 lg:col-start-7">
-            {/* Glider in från höger på fjädern när den står helt i bild. */}
+            {/* Glider in från höger på fjädern när en dryg tredjedel står i bild. */}
             <div data-case data-from="right" data-full>
               {resultat.panel}
             </div>
-            <p data-mo="steg" className="mt-4 text-[0.8125rem] font-medium text-ink-subtle">
+            <p key={`not-${locale}`} data-mo="lines" data-full className="mt-4 text-[0.8125rem] font-medium text-ink-subtle">
               {text(RESULTAT_NOT)}
             </p>
           </div>
@@ -282,20 +318,22 @@ export function AgentFlode({ agent, demo }: Readonly<{ agent: Agent; demo: React
         {/* DEMON: inte i hela bredden; texten bredvid väger upp de mindre rutorna ovanför. */}
         <div
           id={`demo-${a.ankare}`}
-          className="mt-28 grid scroll-mt-16 grid-cols-12 items-start gap-y-10 md:mt-36 lg:gap-x-14"
+          className="mt-20 grid scroll-mt-16 grid-cols-12 items-start gap-y-10 md:mt-28 lg:gap-x-14"
         >
           <div className="col-span-12 lg:sticky lg:top-28 lg:col-span-4 lg:col-start-9 lg:row-start-1">
             <h3
-              data-mo="steg"
+              key={locale}
+              data-mo="lines"
+              data-full
               className="max-w-[18ch] font-display text-[clamp(1.75rem,3.2vw,2.5rem)] font-semibold leading-[1.06] tracking-[-0.028em]"
             >
               <Markerad text={text(pc.demoHeading)} />
             </h3>
-            <p data-mo="steg" className="mt-5 max-w-[40ch] text-[1.0625rem] leading-[1.65] text-ink-muted">
+            <p key={`lede-${locale}`} data-mo="lines" data-full className="mt-5 max-w-[40ch] text-[1.0625rem] leading-[1.65] text-ink-muted">
               {text(pc.demoLede)}
             </p>
             {text(pc.exampleNote) ? (
-              <p data-mo="steg" className="mt-4 max-w-[40ch] text-[0.8125rem] font-medium text-ink-subtle">
+              <p key={`ex-${locale}`} data-mo="lines" data-full className="mt-4 max-w-[40ch] text-[0.8125rem] font-medium text-ink-subtle">
                 {text(pc.exampleNote)}
               </p>
             ) : null}
