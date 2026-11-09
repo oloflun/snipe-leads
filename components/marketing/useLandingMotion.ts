@@ -538,7 +538,12 @@ function setup(G: Gsap, rootEl: HTMLElement, fullDoor: boolean, lenis: Lenis): (
       // Om hjälten syns avgörs av en utlösare, inte av en mätning per bildruta: en läsning
       // av layouten efter att rörelsen skrivit stilar tvingar fram en omräkning varje gång.
       let heroSyns = true;
-      if (hero) ScrollTrigger.create({ trigger: hero, start: "top bottom", end: "bottom top", onToggle: (self) => { heroSyns = self.isActive; } });
+      // onRefresh också: en sida som laddas nedanför hjälten (#iris) växlar aldrig läge,
+      // och utan den avläsningen hade vilan fortsatt räkna på ytor som inte syns.
+      if (hero) {
+        const satt = (self: { isActive: boolean }) => { heroSyns = self.isActive; };
+        ScrollTrigger.create({ trigger: hero, start: "top bottom", end: "bottom top", onToggle: satt, onRefresh: satt });
+      }
       const vila = (tid: number) => {
         if (!heroSyns) return;
         const lugn = Math.max(0, 1 - Math.abs(lenis.velocity) / 6);
