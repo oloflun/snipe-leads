@@ -15,7 +15,7 @@ import time
 import uuid
 import weakref
 from datetime import date, datetime, timedelta, timezone
-from typing import Literal
+from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
@@ -432,7 +432,7 @@ async def create_prospect(
         contact_email=payload.contact_email,
         origin="test" if is_test else "manual",
     )
-    return {"prospect": prospect}
+    return {"prospect": await _utan_dold_bedomning(request, tenant, prospect)}
 
 
 @router.post("/api/leads/prospects/exempel", status_code=201)
@@ -676,6 +676,25 @@ async def get_prospect(
     return {"prospect": med_rollflagga(prospect), "sources": sorted(urls)}
 
 
+async def _utan_dold_bedomning(request: Request, tenant: dict, prospect: Any) -> Any:
+    """Prospektraden så som kunden får se den i ett SKRIVSVAR.
+
+    Webbplatsbedömningen är hemlig för alla utom plattformsadmin, Umeå
+    Webdesign och Alunix (Antons beslut 2026-10-08). Läsvägarna grindade den,
+    men svaren från skapa, ändra, befordra, degradera och "lista → prospekt"
+    bar hela raden ogrindad (Fas 0-fyndet H9, 2026-11-09). Varje väg som
+    svarar med en prospektrad ska gå genom den här eller `webbpool.dolj`;
+    tests/api/test_webbbedomning_skrivsvar.py håller räkningen.
+    """
+    if not isinstance(prospect, dict):
+        return prospect
+    from ..leads import webbpool
+
+    if await webbpool.far_se(request.app.state.storage, tenant["tenant_id"]):
+        return prospect
+    return webbpool.dolj(prospect)
+
+
 @router.post("/api/leads/prospects/{prospect_id}/sources", status_code=201)
 async def add_prospect_source(
     request: Request,
@@ -787,7 +806,7 @@ async def befordra_prospekt(
         # Redan i kundens riktiga lista (eller en import) — inget att göra.
         # 200 och inte 409: knappen "Flytta över valda" ska kunna köras om över
         # en blandad markering utan att fråga vilka rader som redan gått igenom.
-        return {"prospect": prospect, "andrad": False}
+        return {"prospect": await _utan_dold_bedomning(request, tenant, prospect), "andrad": False}
 
     # Ifyllnad i samma anrop: PATCH sedan validera. Tom kropp är tillåten —
     # befintliga tester POSTar utan JSON och ska fortsätta göra det.
@@ -849,7 +868,11 @@ async def befordra_prospekt(
         )
 
     updated = await storage.update_prospect(tenant["tenant_id"], prospect_id, origin="manual")
-    return {"prospect": updated, "andrad": True, "orgnr_hamtat": orgnr_hamtat}
+    return {
+        "prospect": await _utan_dold_bedomning(request, tenant, updated),
+        "andrad": True,
+        "orgnr_hamtat": orgnr_hamtat,
+    }
 
 
 @router.post("/api/leads/prospects/{prospect_id}/degradera")
@@ -882,10 +905,10 @@ async def degradera_prospekt(
         # Redan oskickbar — inget att göra. 200 och inte 409, av samma skäl
         # som befordra ovan: knappen ska kunna köras om över en blandad
         # markering utan att fråga vilka rader som redan gått igenom.
-        return {"prospect": prospect, "andrad": False}
+        return {"prospect": await _utan_dold_bedomning(request, tenant, prospect), "andrad": False}
 
     updated = await storage.update_prospect(tenant["tenant_id"], prospect_id, origin="test")
-    return {"prospect": updated, "andrad": True}
+    return {"prospect": await _utan_dold_bedomning(request, tenant, updated), "andrad": True}
 
 
 # -- SOUL: kundens röstdokument -------------------------------------------
@@ -2318,7 +2341,7 @@ async def patch_prospect(
                 text=fields["status"],
             )
         )
-    return {"prospect": updated}
+    return {"prospect": await _utan_dold_bedomning(request, tenant, updated)}
 
 
 async def _registrera_webb(storage, tenant_id: str, prospect_id: str, website: str) -> None:
@@ -4521,7 +4544,7 @@ async def listrad_till_prospekt(
     _kraev_ej_crm(lista)
 
     prospect, skapad = await _befordra_listrad(storage, tenant_id, lista, rad)
-    return {"prospect": prospect, "skapad": skapad}
+    return {"prospect": await _utan_dold_bedomning(request, tenant, prospect), "skapad": skapad}
 
 
 def _listans_origin(lista: dict) -> str:
