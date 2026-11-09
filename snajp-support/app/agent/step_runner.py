@@ -21,6 +21,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import logging
 import re
 import time
 from dataclasses import dataclass, field
@@ -33,6 +34,8 @@ from ..agentcore.packs import PlaybookStep, RunLedger, check_output_contract, ch
 from ..config import get_settings
 from ..kvotfel import ar_kreditslut
 from .llm import TANKANDE_AV, _uses_vertex, gemini_tank_kwargs, get_llm_client, vertex_regioner
+
+logger = logging.getLogger(__name__)
 
 #: Bakgrundsjobbens samtidiga LLM-anrop (talamod_429), per process och
 #: händelseloop (2026-10-09). Med tio parallella researchjobb slog Vertex
@@ -497,14 +500,31 @@ async def run_step(
                             **extra,
                         )
                 else:
-                    response = await client.chat.completions.create(
-                        model=effective_model,
-                        response_format={"type": "json_object"},
-                        temperature=effective_temperature,
-                        messages=messages,
-                        **extra,
+                    # En människa väntar: steget får llm_timeout_chatt_s, inte
+                    # klientens 120 s gånger SDK:ns omtag (2026-11-09, K6).
+                    # wait_for och inte klientens timeout-parameter, så att
+                    # gränsen också gäller SDK:ns egna omtag inuti anropet.
+                    response = await asyncio.wait_for(
+                        client.chat.completions.create(
+                            model=effective_model,
+                            response_format={"type": "json_object"},
+                            temperature=effective_temperature,
+                            messages=messages,
+                            **extra,
+                        ),
+                        timeout=float(settings.llm_timeout_chatt_s),
                     )
                 break
+            except asyncio.TimeoutError:
+                # Ett omtag: ett hängt anrop är oftast en enskild anslutning.
+                # Hänger det andra också är leverantören nere, och då ska
+                # steget falla så att kunden får ett ärligt besked nu.
+                if vanta_forsok >= 2:
+                    raise
+                logger.warning(
+                    "LLM-steget %s svarade inte inom %.0f s; försöker en gång till.",
+                    step.skill, float(settings.llm_timeout_chatt_s),
+                )
             except Exception as fel:  # noqa: BLE001 — bara 429 särbehandlas
                 ar_429 = getattr(fel, "status_code", None) == 429
                 # KREDITSLUT är inte transient: "prepayment credits are

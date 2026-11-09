@@ -41,6 +41,8 @@ from __future__ import annotations
 import json
 import logging
 import threading
+
+import httpx
 from functools import lru_cache
 
 from openai import AsyncOpenAI
@@ -73,15 +75,109 @@ def _vertex_credentials(sa_json: str):
         return _vertex_creds
 
 
-def _vertex_token(settings: Settings) -> str:
-    """Aktuell OAuth2-token, refreshad om den gått ut."""
+#: Förnya så här långt före utgången, i en bakgrundstråd. Googles token gäller
+#: en timme och räknas som utgången 3 min 45 s i förväg (klockmarginalen i
+#: google-auth), så tio minuter ger gott om tid för ett omtag.
+_FORNYA_FORE_S = 600
+#: Det längsta en förnyelse får blockera. google-auths standard är 120 s.
+_FORNYELSE_TIMEOUT_S = 10
+_fornyelse_pagar = threading.Event()
+
+
+def _fornyelseanrop():
+    """google-auths HTTP-anrop med vår tidsgräns i stället för 120 s."""
     from google.auth.transport.requests import Request
+
+    anrop = Request()
+
+    def med_tidsgrans(*args, **kwargs):
+        kwargs["timeout"] = _FORNYELSE_TIMEOUT_S
+        return anrop(*args, **kwargs)
+
+    return med_tidsgrans
+
+
+def _sekunder_kvar(creds) -> float | None:
+    utgang = getattr(creds, "expiry", None)
+    if utgang is None:
+        return None
+    from datetime import datetime, timezone
+
+    nu = datetime.now(timezone.utc).replace(tzinfo=None)  # google-auth bär naiv UTC
+    return (utgang - nu).total_seconds()
+
+
+def _fornya_i_bakgrunden(creds) -> None:
+    """Hämtar en ny token i en egen tråd, UTAN att hålla `_vertex_lock`.
+
+    Låset får inte hållas över nätanropet: den som då frågar efter tokenen
+    från händelseloopen väntar på låset, alltså på nätet, och det är just den
+    frysningen som ska bort. `creds.refresh` byter token och utgång först när
+    svaret kommit, så en läsare ser antingen den gamla (giltiga) eller den nya.
+    """
+    if _fornyelse_pagar.is_set():
+        return
+    _fornyelse_pagar.set()
+
+    def kor() -> None:
+        try:
+            creds.refresh(_fornyelseanrop())
+            logger.debug("Vertex AI-token förnyad i bakgrunden")
+        except Exception as fel:  # noqa: BLE001 — nästa anrop försöker igen
+            logger.warning("Vertex AI-tokenen kunde inte förnyas i förväg (%s).", type(fel).__name__)
+        finally:
+            _fornyelse_pagar.clear()
+
+    threading.Thread(target=kor, name="vertex-token", daemon=True).start()
+
+
+def _vertex_token(settings: Settings) -> str:
+    """Aktuell OAuth2-token.
+
+    Anropas synkront från händelseloopen (klienternas api_key sätts före varje
+    anrop), så den får inte vänta på nätet i onödan. Före 2026-11-09 gjordes
+    förnyelsen här, en gång i timmen, som ett blockerande HTTPS-anrop med 120 s
+    tidsgräns — hela api:t stod still så länge (Fas 0-fyndet H7). Nu:
+
+      * giltig token med mer än tio minuter kvar: returnera den;
+      * giltig men nära utgången: returnera den och förnya i en bakgrundstråd;
+      * saknas eller utgången (första anropet, eller en process som stått
+        orörd i en timme): förnya här, men högst tio sekunder.
+
+    `varm_vertex_token` tar det första fallet vid uppstart, utanför loopen.
+    """
     creds = _vertex_credentials(settings.google_service_account_json)
+    if creds.token and not creds.expired:
+        kvar = _sekunder_kvar(creds)
+        if kvar is not None and kvar < _FORNYA_FORE_S:
+            _fornya_i_bakgrunden(creds)
+        return creds.token
     with _vertex_lock:
         if not creds.token or creds.expired:
-            creds.refresh(Request())
+            creds.refresh(_fornyelseanrop())
             logger.debug("Vertex AI-token refreshad")
         return creds.token
+
+
+async def varm_vertex_token(settings: Settings) -> None:
+    """Hämtar den första tokenen i en tråd vid uppstart, och håller den färsk.
+
+    Utan det blockerar det första kundanropet efter varje deploy på
+    tokenhämtningen, och en process utan trafik i en timme gör om det. Slingan
+    väcks var femte minut; `_vertex_token` startar själv bakgrundsförnyelsen
+    när tokenen närmar sig utgången. Fel här får aldrig fälla uppstarten:
+    nästa riktiga anrop försöker igen och rapporterar felet där det hör hemma.
+    """
+    import asyncio
+
+    if not _uses_vertex(settings):
+        return
+    while True:
+        try:
+            await asyncio.to_thread(_vertex_token, settings)
+        except Exception as fel:  # noqa: BLE001
+            logger.warning("Vertex AI-tokenen kunde inte hämtas i förväg (%s).", type(fel).__name__)
+        await asyncio.sleep(300)
 
 
 def vertex_regioner(settings: Settings) -> list[str]:
@@ -271,6 +367,20 @@ def tankande_kwargs() -> dict:
 # fungerar eftersom openai SDK:n läser self.api_key i _build_headers() vid
 # varje request, inte vid __init__.
 
+def _tidsgrans(settings: Settings) -> httpx.Timeout:
+    """Tidsgränsen för ETT LLM-anrop.
+
+    Ingen klient hade en egen gräns före 2026-11-09 (Fas 0-fyndet K6): SDK:ns
+    standard är 600 s, så ett anrop som Vertex slutat svara på höll en av
+    chattens fyra arbetare i tio minuter — medan jobbet redan visats som
+    misslyckat efter fem. Anslutningen får tio sekunder; hela svaret får
+    LLM_TIMEOUT_S (standard 120 s, det längsta ett friskt researchanrop tar
+    med marginal). Chatten har dessutom en egen, kortare gräns per steg i
+    step_runner.
+    """
+    return httpx.Timeout(float(settings.llm_timeout_s), connect=10.0)
+
+
 _llm_client: AsyncOpenAI | None = None
 _embedding_client: AsyncOpenAI | None = None
 _vision_client: AsyncOpenAI | None = None
@@ -314,6 +424,7 @@ def get_llm_client(region: str | None = None) -> AsyncOpenAI:
                     api_key=_vertex_token(settings),
                     base_url=_vertex_base_url(settings, region),
                     max_retries=1,
+                    timeout=_tidsgrans(settings),
                 )
                 _med_vertex_modellnamn(klient)
                 _regionklienter[region] = klient
@@ -339,6 +450,7 @@ def get_llm_client(region: str | None = None) -> AsyncOpenAI:
             api_key=api_key,
             base_url=_resolve_base_url(settings),
             max_retries=1,
+            timeout=_tidsgrans(settings),
         )
         if _uses_vertex(settings):
             _med_vertex_modellnamn(_llm_client)
@@ -359,6 +471,7 @@ def get_embedding_client() -> AsyncOpenAI | None:
             _embedding_client = AsyncOpenAI(
                 api_key=_vertex_token(settings),
                 base_url=_vertex_base_url(settings),
+                timeout=_tidsgrans(settings),
             )
             return _embedding_client
 
@@ -369,7 +482,9 @@ def get_embedding_client() -> AsyncOpenAI | None:
     with _clients_lock:
         if _embedding_client is not None:
             return _embedding_client
-        _embedding_client = AsyncOpenAI(api_key=key, base_url=_GEMINI_BASE_URL)
+        _embedding_client = AsyncOpenAI(
+            api_key=key, base_url=_GEMINI_BASE_URL, timeout=_tidsgrans(settings)
+        )
         return _embedding_client
 
 
@@ -390,6 +505,7 @@ def get_vision_client() -> AsyncOpenAI | None:
                 AsyncOpenAI(
                     api_key=_vertex_token(settings),
                     base_url=_vertex_base_url(settings),
+                    timeout=_tidsgrans(settings),
                 )
             )
             return _vision_client
@@ -401,7 +517,9 @@ def get_vision_client() -> AsyncOpenAI | None:
     with _clients_lock:
         if _vision_client is not None:
             return _vision_client
-        _vision_client = AsyncOpenAI(api_key=key, base_url=_GEMINI_BASE_URL)
+        _vision_client = AsyncOpenAI(
+            api_key=key, base_url=_GEMINI_BASE_URL, timeout=_tidsgrans(settings)
+        )
         return _vision_client
 
 

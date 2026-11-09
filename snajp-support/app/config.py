@@ -293,6 +293,16 @@ class Settings(BaseSettings):
     # 4 sedan 2026-10-09: tio samtidiga researchanrop gav Vertex 429 i en
     # minut i sträck och föll. Höj försiktigt; mät 429 i loggen.
     leads_llm_samtidiga: int = 4
+    # Tidsgränser för LLM-anrop (2026-11-09, Fas 0-fyndet K6). Före dem gällde
+    # SDK:ns 600 s. llm_timeout_s är HTTP-klientens gräns för ett helt svar och
+    # gäller allt; llm_timeout_chatt_s är den kortare gränsen per steg när en
+    # människa väntar i chatten (stegens p95 låg under 20 s vid mätningen).
+    llm_timeout_s: float = 120.0
+    llm_timeout_chatt_s: float = 45.0
+    # Uppstarten försöker nå Postgres så här många gånger innan den vägrar
+    # starta (main.py:_anslut_postgres). Före 2026-11-09 föll den tyst tillbaka
+    # på minneslagring med grön hälsokontroll.
+    db_start_forsok: int = 5
     # V2-kostnadsarbetet (2026-09-02): vilken leads-kedja som körs.
     # "v1" = niostegsresearchen + fyrstegsutkastet (dagens beteende).
     # "v2" = 1 research-anrop + 2 utkastanrop (RESEARCH_V2/OUTREACH_V2,

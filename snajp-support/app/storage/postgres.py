@@ -229,6 +229,14 @@ class PostgresStorage:
             max_size=int(os.environ.get("DB_POOL_MAX", "20")),
             init=_init_connection,
             reset=_ingen_sessionsaterstallning,
+            # Tidsgränser (2026-11-09, Fas 0-fyndet K6). Utan dem väntade en
+            # anslutning 60 s på en död värd och en fråga hur länge som helst
+            # på en låst rad, med en av poolens platser upptagen så länge.
+            # Tio sekunder att ansluta; en fråga får en minut (den långsammaste
+            # läsvägen tog 2 s vid mätningen). Miljövariablerna finns för den
+            # som måste köra något tyngre för hand.
+            timeout=float(os.environ.get("DB_CONNECT_TIMEOUT_S", "10")),
+            command_timeout=float(os.environ.get("DB_COMMAND_TIMEOUT_S", "60")),
             # Statement-cachen PÅ (asyncpg:s standard, 100 per anslutning).
             # Den stod på 0 för Supabases transaction pooler, som inte finns
             # kvar: utan cache förbereddes varje parametriserad fråga i en

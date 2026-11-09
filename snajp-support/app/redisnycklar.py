@@ -111,3 +111,24 @@ def nyckel(ra: str) -> str:
     stänga. INV-REDIS-001 fäller en nyckelfamilj som byggs utan den.
     """
     return f"ns{namnrymd()}:{ra}"
+
+
+def anslutningsval() -> dict:
+    """Tidsgränser och livstecken för varje Redis-klient (2026-11-09, K6).
+
+    Klienterna skapades med bara `from_url(url)`: ingen tidsgräns på anslutning
+    eller svar och inget livstecken. En förbindelse som nätet tyst släppt såg
+    då ut som en väntan utan slut, och chatt- och leadsarbetarna stod still
+    utan en rad i loggen.
+
+    `socket_timeout` måste vara LÄNGRE än köernas blockerande läsning
+    (jobs/stream.py:BLOCK_MS, 5 s), annars bryts varje tom läsning som ett fel.
+    Omtag lämnas åt redis-py:s standard med flit: ett omtag av XADD efter en
+    tidsgräns kan lägga samma jobb två gånger i kön.
+    """
+    return {
+        "socket_connect_timeout": 5.0,
+        "socket_timeout": 20.0,
+        "socket_keepalive": True,
+        "health_check_interval": 30,
+    }
