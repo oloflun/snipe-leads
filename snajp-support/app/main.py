@@ -52,10 +52,12 @@ from .api import (
 from .api.events import install_exception_handler
 from .config import DEFAULT_TENANT_ID, get_settings
 from .jobs.store import MemoryJobStore, RedisJobStore
+from .sparning import Sparning, installera_loggning
 from .storage.memory import MemoryStorage
 
 logger = logging.getLogger("snajp-support")
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
+# Formatet bär anropets id på varje rad (app/sparning.py).
+installera_loggning(logging.INFO)
 
 
 async def _anslut_postgres(settings, *, paus_s: float = 3.0):
@@ -399,6 +401,9 @@ app = FastAPI(title="Snajp-Support", version="0.1.0", lifespan=lifespan)
 from .matning import Matning  # noqa: E402
 
 app.add_middleware(Matning)
+# Ytterst (läggs till sist): id:t ska finnas innan något annat loggar, och
+# sättas på svaret även när ett inre lager svarar. Se app/sparning.py.
+app.add_middleware(Sparning)
 
 # CORS är AV som default och behövs inte för vår egen frontend — Next-proxyn
 # anropar backenden server-side, så webbläsaren träffar aldrig den här

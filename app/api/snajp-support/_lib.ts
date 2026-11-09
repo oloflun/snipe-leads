@@ -258,14 +258,28 @@ export async function proxyWithApiKey(
         if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
           if (typeof parsed.detail === "string" && typeof parsed.error !== "string") {
             parsed.error = parsed.detail;
+          } else if (typeof parsed.error !== "string" && parsed.detail) {
+            // Två former till som klienten inte kunde läsa (Fas 0, 2026-11-09):
+            // backendens egna {"detail": {"message": ...}} och pydantics
+            // valideringslista på engelska. Båda blev "Okänt fel" i vyn.
+            const detalj = parsed.detail as { message?: unknown };
+            parsed.error =
+              !Array.isArray(detalj) && typeof detalj.message === "string"
+                ? detalj.message
+                : "Uppgifterna gick inte att läsa. Kontrollera det du fyllt i och försök igen.";
           }
         }
         // api:ts mätning (frågor och databastid, app/matning.py) följer med
-        // till webbläsarens nätverkspanel.
+        // till webbläsarens nätverkspanel, och anropets id (app/sparning.py)
+        // gör att ett fel i vyn går att hitta i api:ts logg.
+        const utHuvuden: Record<string, string> = {};
         const timing = response.headers.get("server-timing");
+        if (timing) utHuvuden["Server-Timing"] = timing;
+        const anrop = response.headers.get("x-request-id");
+        if (anrop) utHuvuden["X-Request-Id"] = anrop;
         return NextResponse.json(parsed, {
           status: response.status,
-          headers: timing ? { "Server-Timing": timing } : undefined
+          headers: utHuvuden
         });
       } catch {
         if (arGatewayStatus && farGorasOm && attempt < forsok - 1) {

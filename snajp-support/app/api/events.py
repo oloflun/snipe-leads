@@ -101,8 +101,22 @@ def install_exception_handler(app) -> None:
     from fastapi import Request
     from fastapi.responses import JSONResponse
 
+    from ..sparning import SCOPE_NYCKEL, anrops_id, inom
+
     @app.exception_handler(Exception)
     async def _unhandled(request: Request, error: Exception):  # noqa: ANN202
+        # Den här hanteraren körs av Starlettes yttersta lager, utanför våra
+        # mellanlager: anropets id finns i scopet, inte längre i
+        # kontextvariabeln, och svaret passerar inte Sparning. Id:t sätts
+        # därför tillbaka medan felet loggas, och läggs på svaret här.
+        anrop = request.scope.get(SCOPE_NYCKEL)
+        with inom(anrop):
+            svar = await _hantera(request, error)
+        if anrop:
+            svar.headers["x-request-id"] = anrop
+        return svar
+
+    async def _hantera(request: Request, error: Exception):  # noqa: ANN202
         # LEVERANTÖRENS KVOT ÄR INTE EN KRASCH.
         #
         # Ett 429 från modelleverantören renderades som "Något gick fel på vår
@@ -152,6 +166,9 @@ def install_exception_handler(app) -> None:
                 extra={
                     "path": request.url.path,
                     "method": request.method,
+                    # Samma id som svaret bär som `referens` och som står på
+                    # loggraderna: det kunden citerar är det vi söker på.
+                    "anrop": anrops_id(),
                     # Ingen query, ingen body: de kan innehålla kunddata, och
                     # ett notiscenter är inte rätt ställe att lagra den.
                 },
@@ -159,5 +176,8 @@ def install_exception_handler(app) -> None:
         logger.exception("Ohanterat fel på %s %s", request.method, request.url.path)
         return JSONResponse(
             status_code=500,
-            content={"error": "Något gick fel på vår sida. Felet är loggat."},
+            content={
+                "error": "Något gick fel på vår sida. Felet är loggat.",
+                "referens": anrops_id(),
+            },
         )
