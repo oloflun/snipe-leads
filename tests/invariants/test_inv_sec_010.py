@@ -170,3 +170,22 @@ def test_proxy_matchern_utokas_inte_till_api():
         f"till /login är fel svarsform för ett API-anrop och döljer 401:an. "
         f"Grinden hör hemma i routen."
     )
+
+
+def test_anonym_chatt_tar_bara_sessionsidentiteter():
+    """Fas 0-fyndet H1 (2026-11-09): backenden laddar kundens tidigare samtal
+    och sparade fakta in i agentens kontext utifrån `customer_email`. Den
+    anonyma vägen skickade fältet vidare orört, så en besökare som angav en
+    riktig kunds adress kunde fråga agenten om den kundens ärenden.
+
+    Testet är statiskt av samma skäl som resten av filen: det fäller den som
+    tar bort kontrollen, i CI och utan nätverk.
+    """
+    source = (API_DIR / "snajp-support/chat/route.ts").read_text(encoding="utf-8")
+    assert "@session.snajp.se" in source and "arSessionsidentitet(parsed.customer_email)" in source, (
+        "Den anonyma chattvägen måste avvisa en customer_email som inte är en "
+        "chattsession (<uuid>@session.snajp.se) innan anropet går till backenden."
+    )
+    kontroll = source.index("arSessionsidentitet(parsed.customer_email)")
+    vidare = source.index('proxyToBackend("/api/chat"')
+    assert kontroll < vidare, "Identitetskontrollen måste stå före anropet till backenden."

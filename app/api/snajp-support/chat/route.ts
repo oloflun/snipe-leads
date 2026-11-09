@@ -16,6 +16,14 @@ export const maxDuration = 60;
  * som överlever Renders spin-down. Ingen session, ingen kunddata, ingen
  * administrativ yta — den får bara starta ett chattjobb.
  */
+const SESSIONSDOMAN = "@session.snajp.se";
+
+/** Saknad identitet är tillåten (en besökare utan session får ingen historik). */
+function arSessionsidentitet(varde: unknown): boolean {
+  if (varde === undefined || varde === null) return true;
+  return typeof varde === "string" && varde.trim().toLowerCase().endsWith(SESSIONSDOMAN);
+}
+
 export async function POST(request: NextRequest) {
   const body = await request.text();
 
@@ -26,8 +34,29 @@ export async function POST(request: NextRequest) {
   let tenant: string | null = null;
   let payload = body;
   try {
-    const parsed = JSON.parse(body) as { tenant?: string; arbetsyta?: unknown };
+    const parsed = JSON.parse(body) as {
+      tenant?: string;
+      arbetsyta?: unknown;
+      customer_email?: unknown;
+    };
     tenant = parsed.tenant ?? null;
+    // Besökaren är anonym och får bara vara sin egen chattsession
+    // (`<uuid>@session.snajp.se`, se SupportChat.tsx). Backenden laddar
+    // kundens tidigare samtal och sparade fakta in i agentens kontext utifrån
+    // adressen — med en riktig mejladress härifrån hade vem som helst kunnat
+    // fråga agenten om en annan kunds ärenden (Fas 0-fyndet H1, 2026-11-09).
+    // Samma regel som backendens läsväg /api/chat/samtal redan har. En kund
+    // som integrerar /api/chat med riktiga adresser gör det med sin egen
+    // nyckel mot backenden, inte genom den här anonyma vägen.
+    if (!arSessionsidentitet(parsed.customer_email)) {
+      return Response.json(
+        {
+          error:
+            "Chatten kunde inte starta. Ladda om sidan och försök igen. / The chat could not start. Reload the page and try again.",
+        },
+        { status: 422 },
+      );
+    }
     // `arbetsyta` ger agenten tenantens interna nyckeltal och får BARA
     // sättas av den autentiserade testchatt-routen. Här är vem som helst —
     // fältet strippas, oavsett värde (2026-10-05).
