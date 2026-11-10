@@ -1729,16 +1729,15 @@ class PostgresStorage:
             if med_text
             else ""
         )
-        async with self._scoped(tenant_id) as conn:
-            records = await conn.fetch(
-                f"""
-                select distinct on (t.prospect_id)
-                       t.prospect_id, t.id as thread_id,
-                       s.skickat_at, coalesce(s.antal_skickade, 0) as antal_skickade,
-                       coalesce(s.antal_osanda, 0) as antal_osanda,
-                       q.id as queue_item_id, q.status as ko_status, q.gate_checks, q.scheduled_at
-                       {text_kolumner}
-                  from outreach_threads t
+        # Två former av samma fråga (2026-11-10). För ETT prospekt slås
+        # meddelanden och köpost upp per tråd (lateral). För HELA kunden gav
+        # den formen en genomläsning av send_queue per tråd, som saknar index
+        # på thread_id: uppmätt i development 3 184 genomläsningar och 1,8 s
+        # per anrop, från varje vy som visar utkastens läge. Då läses båda
+        # tabellerna i stället EN gång och paras ihop. Formerna ger samma
+        # rader (jämfört rad för rad mot development, 1 826 ms mot 99 ms).
+        if prospect_id is not None:
+            underlag = """
                   left join lateral (
                     select max(om.sent_at) as skickat_at,
                            (count(*) filter (where om.sent_at is not null))::int as antal_skickade,
@@ -1753,6 +1752,36 @@ class PostgresStorage:
                      order by sq.created_at desc, sq.scheduled_at desc
                      limit 1
                   ) q on true
+            """
+        else:
+            underlag = """
+                  left join (
+                    select om.thread_id, max(om.sent_at) as skickat_at,
+                           (count(*) filter (where om.sent_at is not null))::int as antal_skickade,
+                           (count(*) filter (where om.sent_at is null and om.kasserad_at is null))::int as antal_osanda
+                      from outreach_messages om
+                     where om.tenant_id = $1 and om.direction = 'outbound'
+                     group by om.thread_id
+                  ) s on s.thread_id = t.id
+                  left join (
+                    select distinct on (sq.thread_id)
+                           sq.thread_id, sq.id, sq.status, sq.gate_checks, sq.scheduled_at
+                      from send_queue sq
+                     where sq.tenant_id = $1
+                     order by sq.thread_id, sq.created_at desc, sq.scheduled_at desc
+                  ) q on q.thread_id = t.id
+            """
+        async with self._scoped(tenant_id) as conn:
+            records = await conn.fetch(
+                f"""
+                select distinct on (t.prospect_id)
+                       t.prospect_id, t.id as thread_id,
+                       s.skickat_at, coalesce(s.antal_skickade, 0) as antal_skickade,
+                       coalesce(s.antal_osanda, 0) as antal_osanda,
+                       q.id as queue_item_id, q.status as ko_status, q.gate_checks, q.scheduled_at
+                       {text_kolumner}
+                  from outreach_threads t
+                  {underlag}
                   {text_join}
                  where t.tenant_id = $1
                    and ($2::uuid is null or t.prospect_id = $2::uuid)
