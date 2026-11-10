@@ -3348,6 +3348,13 @@ async def _spara_listspar(storage, tenant_id: str, k: dict) -> None:
     k["fordelning"] = fordelning
 
 
+#: Pauserna mellan rapportens försök. Ett fel i Redis eller databasen medan
+#: ett klart prospektjobb rapporterar är oftast över på en sekund (en bruten
+#: anslutning, en tidsgräns); körningen fälldes förut på första felet och
+#: rapporten gick förlorad (Fas 0-fyndet H6, 2026-11-09).
+_RAPPORT_PAUSER_S = (0.5, 2.0)
+
+
 async def _rapportera_till_korning(
     app_state, tenant: dict, batch_id: str, *, job_id: str, namn: str, leverbar: bool,
     skal: str | None, skrap: dict | None = None, undersokt: bool = True, fyll: bool = True,
@@ -3359,25 +3366,43 @@ async def _rapportera_till_korning(
     gånger (återtag efter deploy) räknas en gång. `fyll=False` sparar bara
     utfallet; anroparen väcker motorn själv (_vacka_korning). Läs-ändra-skriv
     under körningens lås: med leads_workers > 1 rapporterar två barn annars
-    över varandra och den enas utfall försvinner."""
-    try:
-        async with _korningslas(batch_id):
-            resultat, k = await _las_korning(app_state, tenant["tenant_id"], batch_id)
-            if not k:
-                return
-            rapporterade = k.setdefault("rapporterade", [])
-            if job_id not in rapporterade:
-                rapporterade.append(job_id)
-                iris_korning.registrera_utfall(k, namn=namn, leverbar=leverbar, skal=skal, undersokt=undersokt)
-                if skrap:
-                    k["skrap"] = sidhamtning.summera(k.get("skrap"), skrap)
-                resultat["korning"] = k
-                await app_state.jobs.complete(batch_id, resultat)
-                await _spara_korning(app_state, tenant["tenant_id"], batch_id, k)
-    except Exception as fel:  # noqa: BLE001 — se docstringen
-        logger.exception("Kunde inte rapportera till körning %s", batch_id)
-        await _markera_korning_fallen(app_state, tenant["tenant_id"], batch_id, fel)
-        return
+    över varandra och den enas utfall försvinner.
+
+    Ett fel försöks om (_RAPPORT_PAUSER_S) innan körningen fälls. Varje
+    försök läser tillståndet på nytt, och ett barn som redan står i
+    `rapporterade` räknas inte igen; liggaren sparas ändå, för det kan vara
+    just den skrivningen som föll förra gången."""
+    forsok = 0
+    while True:
+        forsok += 1
+        try:
+            async with _korningslas(batch_id):
+                resultat, k = await _las_korning(app_state, tenant["tenant_id"], batch_id)
+                if not k:
+                    return
+                rapporterade = k.setdefault("rapporterade", [])
+                ny = job_id not in rapporterade
+                if ny:
+                    rapporterade.append(job_id)
+                    iris_korning.registrera_utfall(k, namn=namn, leverbar=leverbar, skal=skal, undersokt=undersokt)
+                    if skrap:
+                        k["skrap"] = sidhamtning.summera(k.get("skrap"), skrap)
+                    resultat["korning"] = k
+                    await app_state.jobs.complete(batch_id, resultat)
+                if ny or forsok > 1:
+                    await _spara_korning(app_state, tenant["tenant_id"], batch_id, k)
+            break
+        except Exception as fel:  # noqa: BLE001 — se docstringen
+            if forsok <= len(_RAPPORT_PAUSER_S):
+                logger.warning(
+                    "Rapporten till körning %s föll (försök %s, %s); försöker igen.",
+                    batch_id, forsok, type(fel).__name__,
+                )
+                await asyncio.sleep(_RAPPORT_PAUSER_S[forsok - 1])
+                continue
+            logger.exception("Kunde inte rapportera till körning %s", batch_id)
+            await _markera_korning_fallen(app_state, tenant["tenant_id"], batch_id, fel)
+            return
     if fyll:
         await _vacka_korning(app_state, tenant, batch_id)
 
