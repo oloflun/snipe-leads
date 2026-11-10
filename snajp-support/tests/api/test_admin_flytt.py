@@ -379,3 +379,68 @@ def test_prospektets_faltlista_ar_riktiga_kolumner():
     sql = re.sub(r"--[^\n]*", "", sql)  # kommentarer räknas inte
     for falt in _PROSPEKT_PROFILFALT:
         assert re.search(rf"\b{falt}\s+(text|int|integer|numeric|bigint|jsonb|uuid|smallint|boolean)", sql), falt
+
+
+# -- Tidsstämpeln (Fas 0-fyndet H14, 2026-11-09) ------------------------------
+#
+# Signaturen sa förut bara ATT paketet kom från en miljö med nyckeln, inte NÄR.
+# Ett paket som fångats en gång gick att spela upp i all framtid mot
+# produktionen. Nu bär paketet sin tid, tiden är signerad, och mottagaren tar
+# bara emot färska paket.
+
+
+def _signerat(paket: dict) -> tuple[str, dict[str, str]]:
+    kropp = json.dumps(paket, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    sig = admin_flytt.signera(paket, get_settings().flytt_nyckel)
+    return kropp, {"Content-Type": "application/json", admin_flytt.SIGNATURHUVUD: sig}
+
+
+def _tomt_paket(**extra) -> dict:
+    return {"version": 1, "fran": "development", "tenant_id": DEFAULT_TENANT_ID, "tenant_slug": "x",
+            "typ": "mejl", "poster": [], **extra}
+
+
+async def test_paketet_bar_sin_tid(client):
+    from datetime import datetime, timezone
+
+    e = await app.state.storage.save_email(
+        DEFAULT_TENANT_ID, provider="imap", provider_message_id="flytt-tid-1", from_email="kund@exempel.se",
+        from_name="Kund", subject="Fråga", body_text="Hej", is_test=True,
+    )
+    svar = client.post("/api/admin/flytt/paket", headers=_master(client),
+                       json={"slug": _slug(client), "typ": "mejl", "ids": [e["id"]]})
+    assert svar.status_code == 200, svar.text
+    skapad = datetime.fromisoformat(svar.json()["paket"]["skapad"])
+    assert abs((datetime.now(timezone.utc) - skapad).total_seconds()) < 60
+
+
+def test_importera_vagrar_ett_paket_utan_tid(client):
+    kropp, huvud = _signerat(_tomt_paket())
+    svar = client.post("/api/admin/flytt/importera", content=kropp, headers=huvud)
+    assert svar.status_code == 403
+    assert "tid" in svar.json()["detail"].lower()
+
+
+def test_importera_vagrar_ett_gammalt_paket(client):
+    from datetime import datetime, timedelta, timezone
+
+    gammalt = (datetime.now(timezone.utc) - admin_flytt.PAKET_MAX_ALDER - timedelta(seconds=5)).isoformat()
+    kropp, huvud = _signerat(_tomt_paket(skapad=gammalt))
+    assert client.post("/api/admin/flytt/importera", content=kropp, headers=huvud).status_code == 403
+
+
+def test_importera_vagrar_ett_paket_fran_framtiden(client):
+    from datetime import datetime, timedelta, timezone
+
+    framtid = (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat()
+    kropp, huvud = _signerat(_tomt_paket(skapad=framtid))
+    assert client.post("/api/admin/flytt/importera", content=kropp, headers=huvud).status_code == 403
+
+
+def test_importera_tar_emot_ett_farskt_paket(client):
+    from datetime import datetime, timezone
+
+    kropp, huvud = _signerat(_tomt_paket(skapad=datetime.now(timezone.utc).isoformat()))
+    svar = client.post("/api/admin/flytt/importera", content=kropp, headers=huvud)
+    assert svar.status_code == 200, svar.text
+    assert svar.json() == {"rader": [], "importerade": 0}
