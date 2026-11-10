@@ -229,6 +229,18 @@ def _filnamnssaker(text: str) -> str:
     return re.sub(r"[^A-Za-z0-9._-]", "_", text)[:80] or "okand"
 
 
+class SandningAvvisad(RuntimeError):
+    """Mejltjänsten svarade med en felkod. `status_code` låter sändvägen
+    skilja ett mejl tjänsten aldrig tar emot (400, 422: ogiltig adress eller
+    avvisat innehåll) från ett tillfälligt fel (5xx, 429, nyckel eller domän
+    som vi rättar). RuntimeError som förut, så att äldre anropare som fångar
+    den fortsätter att göra det."""
+
+    def __init__(self, meddelande: str, *, status_code: int) -> None:
+        super().__init__(meddelande)
+        self.status_code = status_code
+
+
 class BlockeradSmtpPort(OSError):
     """Porten är stängd av hostingplattformen, inte av mottagaren.
 
@@ -305,8 +317,9 @@ class ResendMailer:
             # Kroppen bär Resends egen förklaring (overifierad domän, ogiltig
             # nyckel, kvot slut) och är det som gör felet åtgärdbart. Klipps
             # för att inte fylla en logg med HTML vid ett gateway-fel.
-            raise RuntimeError(
-                f"Resend avvisade sändningen ({svar.status_code}): {svar.text[:300]}"
+            raise SandningAvvisad(
+                f"Resend avvisade sändningen ({svar.status_code}): {svar.text[:300]}",
+                status_code=svar.status_code,
             )
         data = svar.json() if hasattr(svar, "json") else {}
         logger.info("RESEND-UTSKICK till %s: %r (%d tecken)", adress, subject, len(body))

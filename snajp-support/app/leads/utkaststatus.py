@@ -107,6 +107,8 @@ def harled(lage: dict[str, Any] | None, *, now: datetime | None = None) -> dict[
         ut.update(
             utkast_status="godkant" if grind.get("approved_by") == "human" else "koad",
             queue_item_id=lage.get("queue_item_id"),
+            # Mejltjänsten tog inte emot det senaste försöket (scheduler.py).
+            utkast_skal=grind.get("sandfel_skal"),
             skickas_tidigast=nasta_sandtid(lage.get("scheduled_at"), now=now or datetime.now(timezone.utc)),
         )
     elif lage.get("skickat_at") or ko == "sent":

@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from ..config import get_settings
 from ..storage.base import Storage
@@ -36,7 +36,7 @@ from .send_guard import (
     check_send_guard,
     foretagsnyckel,
 )
-from .send_provider import SendProvider, get_send_provider
+from .send_provider import SandningAvvisad, SendProvider, get_send_provider
 from .signatur import HALSNING, med_aktuell_signatur
 from .signatur import bygg_html as bygg_signatur_html
 from .signatur import normalisera as normalisera_signatur
@@ -278,6 +278,63 @@ async def _fot_vid_godkannande(storage: Storage, tenant_id: str, item: dict) -> 
         )
 
 
+#: Sändfel (Fas 0, 2026-11-09). Före: ett utskick som mejltjänsten inte tog
+#: emot kastade ut ur sändvägen, stod kvar som godkänt och försöktes om varje
+#: minut utan slut. Nu bokförs felet på köposten (`sandfel_*` i gate_checks).
+#:
+#: Ett mejl tjänsten AVVISAR stoppas direkt: samma mejl ger samma svar nästa
+#: minut. Allt annat (tidsgräns, 5xx, 429, nyckel eller domän vi rättar)
+#: försöks om med växande paus och stoppas efter MAX_SANDFORSOK, vilket med
+#: pausens tak är omkring en arbetsdag i sändfönstret. Ett stoppat utkast syns
+#: som Stoppat med skälet, och Godkänn och skicka prövar det igen från noll.
+MAX_SANDFORSOK = 20
+_PAUS_TAK_MINUTER = 30
+_AVVISANDE_STATUS = (400, 422)
+
+SANDFEL_AVVISAT = (
+    "Mejltjänsten tog inte emot mejlet. Kontrollera mottagarens adress och "
+    "välj Godkänn och skicka för att försöka igen."
+)
+SANDFEL_GETT_UPP = (
+    f"Mejltjänsten har inte gått att nå på {MAX_SANDFORSOK} försök. "
+    "Välj Godkänn och skicka för att försöka igen."
+)
+SANDFEL_TILLFALLIGT = (
+    "Mejltjänsten svarade inte. Utkastet ligger kvar som godkänt och försöks igen automatiskt."
+)
+
+
+def _grindar(item: dict | None) -> dict:
+    """Köpostens gate_checks som dict (Postgres ger jsonb som sträng)."""
+    from .utkaststatus import _grind
+
+    return _grind((item or {}).get("gate_checks"))
+
+
+def _sandfel_ur(item: dict | None) -> dict:
+    return {k: v for k, v in _grindar(item).items() if k.startswith("sandfel_")}
+
+
+def nasta_forsok(gate_checks: dict) -> datetime | None:
+    """När en köpost med bokförda sändfel tidigast prövas igen: 1, 2, 4, 8,
+    16 och sedan 30 minuter efter det senaste felet. None utan sändfel."""
+    from .utkaststatus import _tid
+
+    antal = int(gate_checks.get("sandfel_antal") or 0)
+    tid = _tid(gate_checks.get("sandfel_senast"))
+    if antal < 1 or tid is None:
+        return None
+    # 2 ** 5 är redan över taket; större exponenter räknas aldrig ut.
+    return tid + timedelta(minutes=min(2 ** min(antal - 1, 5), _PAUS_TAK_MINUTER))
+
+
+def _ar_avvisat(fel: Exception) -> bool:
+    if isinstance(fel, SandningAvvisad):
+        return fel.status_code in _AVVISANDE_STATUS
+    # Sändarnas egen adresskontroll (ResendMailer, SmtpMailer) kastar ValueError.
+    return isinstance(fel, ValueError)
+
+
 async def process_due_item(
     storage: Storage,
     tenant_id: str,
@@ -296,7 +353,15 @@ async def process_due_item(
         farsk = await storage.get_send_queue_item(tenant_id, nyckel) if item.get("id") else None
         if farsk is not None and farsk.get("status") not in _SANDBARA:
             return "redan_hanterad"
-        return await _process_due_item(storage, tenant_id, item, provider, now=now, godkant=godkant)
+        aktuell = farsk or item
+        # Ett utskick som nyss misslyckats väntar ut sin paus (nasta_forsok).
+        paus_till = nasta_forsok(_grindar(aktuell))
+        if paus_till is not None and now < paus_till:
+            return "requeued"
+        return await _process_due_item(
+            storage, tenant_id, {**item, "gate_checks": aktuell.get("gate_checks")},
+            provider, now=now, godkant=godkant,
+        )
 
 
 async def _process_due_item(
@@ -309,7 +374,10 @@ async def _process_due_item(
     godkant: dict | None = None,
     direkt: bool = False,
 ) -> str:
-    """Returnerar 'sent' | 'requeued' | 'blocked' | 'awaiting_review'.
+    """Returnerar 'sent' | 'requeued' | 'blocked' | 'awaiting_review' | 'sandfel'.
+
+    'sandfel': mejltjänsten tog inte emot utskicket just nu. Posten står kvar
+    som köad och prövas igen efter en paus (se MAX_SANDFORSOK).
 
     `direkt` (Skicka nu ur kön, Anton 2026-10-10): sändfönstret (tidsgrinden
     och regel 5a) gäller inte; språkgrinden och övriga spärrar gör det.
@@ -321,9 +389,14 @@ async def _process_due_item(
     varje statusskrivning, så att ett utkast som väntar på sändfönstret
     fortfarande är godkänt när fönstret öppnar."""
 
-    async def satt_status(*, status: str, gate_checks: dict) -> None:
+    # Bokförda sändfel följer med varje statusskrivning utom 'sent': ett
+    # stängt sändfönster däremellan får inte börja om räkningen.
+    tidigare_sandfel = _sandfel_ur(item)
+
+    async def satt_status(*, status: str, gate_checks: dict, behall_sandfel: bool = True) -> None:
         await storage.update_send_queue_status(
-            tenant_id, item["id"], status=status, gate_checks={**gate_checks, **(godkant or {})}
+            tenant_id, item["id"], status=status,
+            gate_checks={**(tidigare_sandfel if behall_sandfel else {}), **gate_checks, **(godkant or {})},
         )
     thread = await storage.get_outreach_thread(tenant_id, item["thread_id"])
     message = (
@@ -435,15 +508,41 @@ async def _process_due_item(
         if "idempotensnyckel" in params or har_kwargs:
             extra["idempotensnyckel"] = f"utskick-{message['id']}"
 
-        await provider.send(
-            to=thread.get("prospect_email", "okänd"),
-            subject=message.get("subject", ""),
-            body=message["body"],
-            **extra,
-        )
+        try:
+            await provider.send(
+                to=thread.get("prospect_email", "okänd"),
+                subject=message.get("subject", ""),
+                body=message["body"],
+                **extra,
+            )
+        except Exception as fel:  # noqa: BLE001 — ett sändfel bokförs, det fäller inte de andra
+            antal = int(tidigare_sandfel.get("sandfel_antal") or 0) + 1
+            avvisat = _ar_avvisat(fel)
+            bokfort = {
+                "decision": decision.reason,
+                "sandfel_antal": antal,
+                "sandfel_senast": now.isoformat(),
+                "sandfel_teknik": f"{type(fel).__name__}: {str(fel)[:300]}",
+            }
+            logger.warning(
+                "Utskick %s gick inte att skicka (försök %s, %s): %s",
+                item.get("id"), antal, "avvisat" if avvisat else "tillfälligt",
+                bokfort["sandfel_teknik"],
+            )
+            if avvisat or antal >= MAX_SANDFORSOK:
+                await satt_status(
+                    status="blocked",
+                    gate_checks={
+                        **bokfort,
+                        "send_guard_regel": "leverans",
+                        "send_guard_skal": SANDFEL_AVVISAT if avvisat else SANDFEL_GETT_UPP,
+                    },
+                )
+                return "blocked"
+            await satt_status(status="queued", gate_checks={**bokfort, "sandfel_skal": SANDFEL_TILLFALLIGT})
+            return "sandfel"
         await storage.mark_outreach_message_sent(tenant_id, message["id"], now)
-        await satt_status(status="sent", gate_checks={"decision": decision.reason}
-        )
+        await satt_status(status="sent", gate_checks={"decision": decision.reason}, behall_sandfel=False)
         # Ett skickat första mejl gör bolaget Kontaktat — statusen sattes förut
         # bara för hand, och fliken Kontaktad stod tom fast mejlen gått ut.
         # Bara framåt: ett bolag som redan svarat eller bokat möte flyttas inte
@@ -606,8 +705,11 @@ async def skicka_godkant(
             "godkand_i": miljo(await storage.spegel_info()),
         }
         await storage.update_send_queue_status(tenant_id, item_id, status="queued", gate_checks=godkant)
+        # gate_checks=godkant: ett nytt ja från en människa börjar om
+        # räkningen av sändfel.
         utfall = await _process_due_item(
-            storage, tenant_id, {**item, "status": "queued"}, provider, now=now, godkant=godkant, direkt=direkt
+            storage, tenant_id, {**item, "status": "queued", "gate_checks": godkant},
+            provider, now=now, godkant=godkant, direkt=direkt,
         )
     efter = await storage.get_send_queue_item(tenant_id, item_id) or {}
     gc = efter.get("gate_checks") or {}
@@ -615,7 +717,10 @@ async def skicka_godkant(
         import json
 
         gc = json.loads(gc)
-    skal = gc.get("send_guard_skal") or gc.get("held") or gc.get("decision")
+    skal = (
+        gc.get("sandfel_skal") if utfall == "sandfel"
+        else gc.get("send_guard_skal") or gc.get("held") or gc.get("decision")
+    )
     return utfall, (None if utfall == "sent" else skal)
 
 

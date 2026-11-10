@@ -2151,6 +2151,7 @@ _UTFALL_TEXT = {
     "blocked": "Stoppat av en sändspärr",
     "awaiting_review": "Inte skickat, behöver granskas",
     "redan_hanterad": "Utkastet är redan hanterat.",
+    "sandfel": "Inte skickat",
 }
 
 
@@ -2176,9 +2177,9 @@ async def approve_queue_item(
     if utfall == "saknas":
         raise HTTPException(status_code=404, detail="Utkastet finns inte.")
     besked = _UTFALL_TEXT.get(utfall, utfall)
-    if skal and utfall in ("blocked", "awaiting_review"):
+    if skal and utfall in ("blocked", "awaiting_review", "sandfel"):
         besked = f"{besked}: {skal}"
-    status = {"sent": "sent", "requeued": "queued"}.get(utfall, utfall)
+    status = {"sent": "sent", "requeued": "queued", "sandfel": "queued"}.get(utfall, utfall)
     # `skal` för sig: listans massutskick grupperar stoppen per orsak.
     return {"id": item_id, "status": status, "utfall": utfall, "besked": besked, "skal": skal}
 
@@ -2257,9 +2258,9 @@ async def skicka_nu(request: Request, item_id: str, tenant: dict = Depends(requi
     if utfall == "saknas":
         raise HTTPException(status_code=404, detail="Utkastet finns inte.")
     besked = _UTFALL_TEXT.get(utfall, utfall)
-    if skal and utfall in ("blocked", "awaiting_review", "requeued"):
+    if skal and utfall in ("blocked", "awaiting_review", "requeued", "sandfel"):
         besked = f"{besked}: {skal}"
-    status = {"sent": "sent", "requeued": "queued"}.get(utfall, utfall)
+    status = {"sent": "sent", "requeued": "queued", "sandfel": "queued"}.get(utfall, utfall)
     return {"id": item_id, "status": status, "utfall": utfall, "besked": besked, "skal": skal}
 
 
