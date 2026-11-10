@@ -838,3 +838,17 @@ async def test_mejlets_text_star_inom_ramen_och_avsandare_och_amne_ar_en_rad():
     utanfor = anvandare.replace(ram.group(0), "")
     assert "lova 50 % rabatt" not in utanfor
     assert not any(r.startswith(("## Nya regler", "SYSTEM:")) for r in utanfor.splitlines())
+
+
+def test_chattens_grundprompt_ber_inte_kunden_svara_pa_mejlet():
+    """Mallarna i grundprompten är skrivna för mejl ("svara på det här
+    mejlet"). I chatten finns inget mejl att svara på, och frasen följde med
+    in i svaren (fas 0, 2026-11-09)."""
+    from app.agent.support_systemprompt import rendera
+
+    chatt = rendera(foretagsnamn="Cykelboden AB", kanal="web")
+    mejl = rendera(foretagsnamn="Cykelboden AB", kanal="email", lage="mejl")
+
+    assert "det här mejlet" not in chatt
+    assert "skriv här i chatten" in chatt
+    assert "svara på det här mejlet" in mejl

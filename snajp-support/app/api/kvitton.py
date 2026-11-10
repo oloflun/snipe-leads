@@ -395,9 +395,17 @@ async def ta_emot_kvittofil(
         storage, tenant_id, Inkommande.fran_fil(data, mimetyp, filnamn), riktning=riktning
     )
     if not hantering.resultat["underlag"]:
+        # En faktura företaget självt skickat känns inte igen som ett
+        # kostnadsunderlag och avvisades med samma text, utan vägen framåt
+        # (evalsviten 2026-11-10): knappen för kundfakturor.
         raise UnderlagsfelError(
-            "Filen ser inte ut att vara ett kvitto eller en faktura, så den sparades "
-            "inte. Är det ett underlag kan du mata in uppgifterna för hand."
+            "Filen ser inte ut att vara ett kvitto eller en leverantörsfaktura, så den "
+            "sparades inte. Är det ett underlag kan du mata in uppgifterna för hand."
+            + (
+                ""
+                if riktning == "intakt"
+                else " Är det en faktura ni själva har skickat till en kund: välj Ladda upp kundfaktura."
+            )
         )
 
     sparade = []

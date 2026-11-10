@@ -111,7 +111,8 @@ def test_stallena_dar_kundtext_nar_modellen_ar_kanda():
 
     rot = Path(__file__).resolve().parent.parent / "app" / "agent"
     vagar = {
-        "triage.py": "body=maskera_personnummer",
+        # Kroppen står dessutom inom en ram sedan 2026-11-10 (kapsla_kundtext).
+        "triage.py": "maskera_personnummer(body)",
         "support_agent.py": "maskera_personnummer(message)",
         "demo_agent.py": "maskera_personnummer(message)",
     }

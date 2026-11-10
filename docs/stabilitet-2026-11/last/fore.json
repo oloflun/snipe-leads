@@ -1,0 +1,202 @@
+{
+ "etikett": "fore",
+ "miljo": "development",
+ "tid": "2026-11-10T08:28:41+00:00",
+ "commit": "6df6c2f",
+ "lasning": {
+  "anvandare": 10,
+  "sekunder": 40,
+  "anrop": 651,
+  "anrop_per_sekund": 16.3,
+  "fel": 0,
+  "p50_ms": 117.2,
+  "p95_ms": 3548.7,
+  "vagar": {
+   "/api/leads/prospects?limit=1000": {
+    "antal": 50,
+    "fel": 0,
+    "koder": {
+     "200": 50
+    },
+    "p50_ms": 2392.8,
+    "p95_ms": 3254.9,
+    "max_ms": 4583.4,
+    "db_p50_ms": 2623.5,
+    "kb": 2056.9
+   },
+   "/api/leads/skickat?limit=500": {
+    "antal": 41,
+    "fel": 0,
+    "koder": {
+     "200": 41
+    },
+    "p50_ms": 3882.8,
+    "p95_ms": 4605.4,
+    "max_ms": 5011.0,
+    "db_p50_ms": 3523.9,
+    "kb": 3125.1
+   },
+   "/api/leads/korningar?limit=30": {
+    "antal": 42,
+    "fel": 0,
+    "koder": {
+     "200": 42
+    },
+    "p50_ms": 585.1,
+    "p95_ms": 947.6,
+    "max_ms": 1185.5,
+    "db_p50_ms": 313.4,
+    "kb": 2158.6
+   },
+   "/api/leads/queue": {
+    "antal": 43,
+    "fel": 0,
+    "koder": {
+     "200": 43
+    },
+    "p50_ms": 286.9,
+    "p95_ms": 647.8,
+    "max_ms": 801.6,
+    "db_p50_ms": 136.5,
+    "kb": 585.0
+   },
+   "/api/leads/runs": {
+    "antal": 44,
+    "fel": 0,
+    "koder": {
+     "200": 44
+    },
+    "p50_ms": 479.0,
+    "p95_ms": 1195.9,
+    "max_ms": 1642.7,
+    "db_p50_ms": 211.3,
+    "kb": 4254.4
+   },
+   "/api/leads/config": {
+    "antal": 45,
+    "fel": 0,
+    "koder": {
+     "200": 45
+    },
+    "p50_ms": 86.0,
+    "p95_ms": 259.6,
+    "max_ms": 316.8,
+    "db_p50_ms": 12.5,
+    "kb": 7.3
+   },
+   "/api/leads/listor": {
+    "antal": 46,
+    "fel": 0,
+    "koder": {
+     "200": 46
+    },
+    "p50_ms": 93.0,
+    "p95_ms": 360.0,
+    "max_ms": 507.4,
+    "db_p50_ms": 25.3,
+    "kb": 20.5
+   },
+   "/api/inbox": {
+    "antal": 47,
+    "fel": 0,
+    "koder": {
+     "200": 47
+    },
+    "p50_ms": 108.9,
+    "p95_ms": 314.7,
+    "max_ms": 553.9,
+    "db_p50_ms": 43.4,
+    "kb": 110.8
+   },
+   "/api/kb": {
+    "antal": 48,
+    "fel": 0,
+    "koder": {
+     "200": 48
+    },
+    "p50_ms": 74.3,
+    "p95_ms": 209.8,
+    "max_ms": 272.4,
+    "db_p50_ms": 15.0,
+    "kb": 15.0
+   },
+   "/api/usage": {
+    "antal": 49,
+    "fel": 0,
+    "koder": {
+     "200": 49
+    },
+    "p50_ms": 76.6,
+    "p95_ms": 168.0,
+    "max_ms": 350.1,
+    "db_p50_ms": 41.6,
+    "kb": 0.4
+   },
+   "/api/kvitton": {
+    "antal": 49,
+    "fel": 0,
+    "koder": {
+     "200": 49
+    },
+    "p50_ms": 80.8,
+    "p95_ms": 269.5,
+    "max_ms": 297.8,
+    "db_p50_ms": 22.2,
+    "kb": 1.2
+   },
+   "/api/chattar": {
+    "antal": 49,
+    "fel": 0,
+    "koder": {
+     "200": 49
+    },
+    "p50_ms": 64.6,
+    "p95_ms": 295.9,
+    "max_ms": 404.5,
+    "db_p50_ms": 15.5,
+    "kb": 5.8
+   },
+   "/api/support/oversikt": {
+    "antal": 49,
+    "fel": 0,
+    "koder": {
+     "200": 49
+    },
+    "p50_ms": 107.8,
+    "p95_ms": 316.8,
+    "max_ms": 336.0,
+    "db_p50_ms": 67.1,
+    "kb": 2.0
+   },
+   "/health/ready": {
+    "antal": 49,
+    "fel": 0,
+    "koder": {
+     "200": 49
+    },
+    "p50_ms": 67.6,
+    "p95_ms": 265.7,
+    "max_ms": 312.5,
+    "db_p50_ms": 14.9,
+    "kb": 0.1
+   }
+  }
+ },
+ "chattskur": {
+  "samtidiga": 8,
+  "lyckade": 8,
+  "misslyckade": [],
+  "p50_s": 14.4,
+  "langsta_s": 19.6,
+  "tider_s": [
+   9.7,
+   10.2,
+   10.3,
+   11.3,
+   17.5,
+   17.9,
+   18.6,
+   19.6
+  ]
+ }
+}

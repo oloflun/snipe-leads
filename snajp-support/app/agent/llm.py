@@ -264,6 +264,45 @@ def _med_vertex_modellnamn(client: AsyncOpenAI) -> AsyncOpenAI:
     return client
 
 
+def _med_hel_anvandning(client: AsyncOpenAI) -> AsyncOpenAI:
+    """Låt klientens chat.completions.create fylla i saknade tokenfält.
+
+    Vertex svarar ibland utan utdata och med `completion_tokens: null` (ett
+    blockerat eller tomt svar). Agents SDK:n bygger sin `Usage` av fälten och
+    kastade då ett valideringsfel rakt genom den agent som anropade: två av
+    fyrtio kvitton i evalsvitens första körning gav ett serverfel av det
+    skälet (2026-11-10). Ett tomt svar ska hanteras som ett tomt svar, av
+    agentens egen väg för det, inte fälla begäran på bokföringen av tokens.
+
+    Samma inpackning som `_med_vertex_modellnamn`, och idempotent som den.
+    """
+    completions = client.chat.completions
+    original = completions.create
+    if getattr(original, "_hel_anvandning", False):
+        return client
+
+    async def create(*args, **kwargs):
+        svar = await original(*args, **kwargs)
+        usage = getattr(svar, "usage", None)
+        if usage is not None:
+            try:
+                if getattr(usage, "prompt_tokens", 0) is None:
+                    usage.prompt_tokens = 0
+                if getattr(usage, "completion_tokens", 0) is None:
+                    usage.completion_tokens = 0
+                if getattr(usage, "total_tokens", 0) is None:
+                    usage.total_tokens = usage.prompt_tokens + usage.completion_tokens
+            except (AttributeError, TypeError):  # ett svar i en form vi inte känner: lämna det
+                pass
+        return svar
+
+    create._hel_anvandning = True  # type: ignore[attr-defined]
+    if getattr(original, "_vertex_modellnamn", False):
+        create._vertex_modellnamn = True  # type: ignore[attr-defined]
+    completions.create = create  # type: ignore[method-assign]
+    return client
+
+
 # --- URL-upplösning -----------------------------------------------------------
 
 
@@ -427,6 +466,7 @@ def get_llm_client(region: str | None = None) -> AsyncOpenAI:
                     timeout=_tidsgrans(settings),
                 )
                 _med_vertex_modellnamn(klient)
+                _med_hel_anvandning(klient)
                 _regionklienter[region] = klient
             else:
                 klient.api_key = _vertex_token(settings)
@@ -454,6 +494,7 @@ def get_llm_client(region: str | None = None) -> AsyncOpenAI:
         )
         if _uses_vertex(settings):
             _med_vertex_modellnamn(_llm_client)
+        _med_hel_anvandning(_llm_client)
         return _llm_client
 
 
