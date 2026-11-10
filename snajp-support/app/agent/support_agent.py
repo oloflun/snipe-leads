@@ -2068,6 +2068,16 @@ async def run_support_agent(
     reply = slutlig_text(
         strip_markdown(_textfalt(humanized, "final_reply") or current_draft or "").strip()
     )
+    # Språkputsen får inte göra om ett svar till en hälsning (2026-11-10).
+    # Utkastets grind ovan fångar "Hej, hur kan jag hjälpa dig?" i UTKASTET;
+    # samma sak ur putsen gick rakt ut till kunden. Bar utkastet ett riktigt
+    # svar är det utkastet som gäller.
+    if (
+        _ar_tomt_halsningssvar(reply)
+        and current_draft
+        and not _ar_tomt_halsningssvar(str(current_draft))
+    ):
+        reply = slutlig_text(strip_markdown(str(current_draft)).strip())
     # Efter humaniseraren, före längdkapningen: en avslutningsfras utan namn
     # under är trasig oavsett vilket steg som skrev den.
     reply = strip_dangling_sign_off(reply)
