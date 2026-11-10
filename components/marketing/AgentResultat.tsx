@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { AlertTriangle, ArrowUpRight, CheckCircle2 } from "lucide-react";
 import { useLocale } from "@/lib/i18n";
 import type { Localized } from "@/lib/i18n";
@@ -184,7 +185,7 @@ function LeadsPanel() {
       <PanelHuvud>{text({ sv: "Varma svar, redo att ta över", en: "Warm replies, ready to take over" })}</PanelHuvud>
       <div className="divide-y divide-ink/10">
         {kort.map((k) => (
-          <div key={k.namn} className="px-5 py-4">
+          <div key={k.namn} className="px-5 py-4 transition-colors peka:bg-ink/[0.035]">
             <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
               <p className="font-semibold tracking-[-0.01em]">
                 {k.namn}
@@ -193,10 +194,15 @@ function LeadsPanel() {
               <p className="text-[0.8125rem] text-ink-subtle">{text(k.tid)}</p>
             </div>
             <p className="mt-2 max-w-[58ch] text-[0.9375rem] leading-[1.6] text-ink-muted">{text(k.rad)}</p>
-            <p className="mt-3 inline-flex items-center gap-1.5 text-[0.875rem] font-semibold text-ink">
+            {/* Fälten svarar på pekaren som i demon (Anton 2026-11-09), och raden som
+                ser ut som en länk är en: den öppnar demon. */}
+            <Link
+              href="/demo/leads"
+              className="focus-ring group mt-3 inline-flex items-center gap-1.5 rounded-input text-[0.875rem] font-semibold text-ink underline-offset-4 hover:underline"
+            >
               {text({ sv: "Ta över tråden", en: "Take over the thread" })}
-              <ArrowUpRight className="h-4 w-4 text-warning" aria-hidden />
-            </p>
+              <ArrowUpRight className="h-4 w-4 text-warning transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5" aria-hidden />
+            </Link>
           </div>
         ))}
       </div>
@@ -224,7 +230,7 @@ function SupportPanel() {
       <PanelHuvud>{text({ sv: "Veckan i kundtjänsten", en: "The week in support" })}</PanelHuvud>
       <div className="divide-y divide-ink/10">
         {rader.map((rad) => (
-          <div key={rad.kategori.sv} className="grid grid-cols-12 items-baseline gap-x-4 px-5 py-3.5">
+          <div key={rad.kategori.sv} className="grid grid-cols-12 items-baseline gap-x-4 px-5 py-3.5 transition-colors peka:bg-ink/[0.035]">
             <p className="col-span-7 truncate text-[0.9375rem]">{text(rad.kategori)}</p>
             <p className="num col-span-5 text-right text-[0.9375rem] text-ink-muted">
               {rad.losta}{" "}

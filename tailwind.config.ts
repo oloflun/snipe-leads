@@ -1,4 +1,5 @@
 import type { Config } from "tailwindcss";
+import plugin from "tailwindcss/plugin";
 
 const config: Config = {
   content: ["./app/**/*.{ts,tsx}", "./components/**/*.{ts,tsx}", "./lib/**/*.{ts,tsx}"],
@@ -48,7 +49,11 @@ const config: Config = {
       }
     }
   },
-  plugins: []
+  plugins: [
+    // peka: hovring bara där pekaren kan sväva. Ett tryck på en pekskärm lämnar annars
+    // hovringen kvar på det man tryckte på.
+    plugin(({ addVariant }) => addVariant("peka", "@media (hover: hover) and (pointer: fine) { &:hover }"))
+  ]
 };
 
 export default config;

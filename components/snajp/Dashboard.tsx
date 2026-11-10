@@ -289,8 +289,11 @@ export function Dashboard({
   lager = "arenden",
   onMeta,
   tak,
-  onAntal
+  onAntal,
+  oppnaId = null
 }: Readonly<{
+  /** Ärendet som ska öppnas direkt, t.ex. en rad översikten klickades på (demon). */
+  oppnaId?: string | null;
   demo?: boolean;
   /** "leads" (migration 084): leadsmejlen, klass=lead. "vantar" (Snajp Suite
    *  2026-10-03): bara utkast som väntar på godkännande, för Att göra;
@@ -493,6 +496,21 @@ export function Dashboard({
     },
     [api]
   );
+
+  // Ett ärende valt utifrån (översiktens rad) öppnas direkt, som ett klick i
+  // listan, och detaljen rullas fram: under xl står den under listan.
+  const detaljRef = useRef<HTMLDivElement>(null);
+  const rullaTillDetalj = useRef(false);
+  useEffect(() => {
+    if (!oppnaId) return;
+    rullaTillDetalj.current = true;
+    void openEmail(oppnaId);
+  }, [oppnaId, openEmail]);
+  useEffect(() => {
+    if (!selected || !rullaTillDetalj.current) return;
+    rullaTillDetalj.current = false;
+    detaljRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [selected]);
 
   const act = useCallback(
     async (label: string, run: () => Promise<unknown>) => {
@@ -1183,7 +1201,7 @@ export function Dashboard({
 
         {/* Detaljpanel */}
         {selected ? (
-          <div className="min-w-0 xl:col-span-6">
+          <div ref={detaljRef} className="min-w-0 scroll-mt-24 xl:col-span-6">
             <div className="space-y-5 rounded-card bg-paper p-5">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
