@@ -945,8 +945,8 @@ async def run_support_agent(
     )
     lager_karna = replace(lager, agent_md=renderat(karna=True))
     lager = replace(lager, agent_md=renderat())
-    steg = partial(run_step, instruktioner=lager_karna)
-    steg_hel = partial(run_step, instruktioner=lager)
+    steg = partial(run_step, instruktioner=lager_karna, paminn_om_kontrakt=True)
+    steg_hel = partial(run_step, instruktioner=lager, paminn_om_kontrakt=True)
 
     # G9: bilder beskrivs av vision-sidovagnen och kastas — aldrig lagrade.
     vision_note = ""
@@ -1132,11 +1132,21 @@ async def run_support_agent(
     # (2026-08-29, Fas R2) — låg tidigare direkt efter bildbeskrivningen,
     # men det är precis den positionen en cache-TRÄFF måste undvika för att
     # "noll LLM-anrop" ska vara sant och inte bara nästan sant.
-    try:
-        intent, dissatisfaction = await classify_cancellation_risk(message)
-    except Exception:  # noqa: BLE001 — en trasig klassificerare får inte fälla ärendet
-        intent, dissatisfaction = 0.0, 0.0
-    cancellation_risk = is_cancellation_risk(intent, dissatisfaction)
+    #
+    # Klassaren är ett eget modellanrop, och dess utslag läses först när
+    # eskaleringen avgörs, efter researchen. Den STARTAS därför här och går
+    # samtidigt med triagen och researchen (2026-11-10: omkring en sekund per
+    # svar). `sleep(0)` låter anropet gå iväg innan triagen börjar.
+    async def _klassa() -> tuple[float, float]:
+        try:
+            return await asyncio.wait_for(
+                classify_cancellation_risk(message), timeout=float(settings.llm_timeout_chatt_s)
+            )
+        except Exception:  # noqa: BLE001 — en trasig eller hängd klassare får inte fälla ärendet
+            return 0.0, 0.0
+
+    klassning = asyncio.create_task(_klassa())
+    await asyncio.sleep(0)
 
     case_context = (
         f"## Ärendet\nKanal: {channel} (ton: {ton_lage}, max {config['max_length']} tecken)\n"
@@ -1354,17 +1364,20 @@ async def run_support_agent(
     elif sokfraga_sv and sokfraga_sv.casefold() not in sokfraga.casefold():
         sokfraga = f"{sokfraga} {sokfraga_sv}"
         kb_forsok = [f"hela meddelandet + omformulering ({sokfraga_sv!r})"]
-    articles = await _sok_kb(storage, tenant_id, sokfraga)
     # 2026-10-06 (Sebbe: "hitta och researcha fram svaren", men billigt): den
     # svenska omformuleringen söks OCKSÅ ensam och träffarna slås ihop. I den
     # långa frågan dränks dess ord — "dubbeldebiterad" hittade inte artikeln
     # "Dubbeldragning eller felaktig debitering" i skarptestet. Databasfrågor,
-    # inga LLM-anrop.
+    # inga LLM-anrop. De två sökningarna är oberoende och går samtidigt.
     if sokfraga_sv and sokfraga_sv.casefold() != sokfraga.casefold():
-        fler = await _sok_kb(storage, tenant_id, sokfraga_sv)
+        articles, fler = await asyncio.gather(
+            _sok_kb(storage, tenant_id, sokfraga), _sok_kb(storage, tenant_id, sokfraga_sv)
+        )
         if any(_artikelnyckel(a) not in {_artikelnyckel(b) for b in articles} for a in fler):
             articles = _sla_ihop(articles, fler)
             kb_forsok.append(f"svensk sökfråga ensam ({sokfraga_sv!r})")
+    else:
+        articles = await _sok_kb(storage, tenant_id, sokfraga)
     if not articles:
         bredare = _forenklad_fraga(subject, message)
         if bredare:
@@ -1489,6 +1502,8 @@ async def run_support_agent(
     kb_saknar_svar = (not articles and not underlag.kallor) or not kb_stodjer_svar
 
     sentimentgrans = regler["sentimentgrans"] / 100
+    intent, dissatisfaction = await klassning
+    cancellation_risk = is_cancellation_risk(intent, dissatisfaction)
     kris = bool(_KRIS.search(f"{subject} {message}"))
     sakerhetskritiskt = bool(
         abuse.ska_eskalera

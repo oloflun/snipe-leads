@@ -69,6 +69,18 @@ Ljug inte i dessa fält — de kontrolleras maskinellt.
 """
 
 
+#: Sist i användarmeddelandet, efter stegets uppgift (2026-11-10). Uppgiften
+#: räknar oftast upp sina egna fält ("Returnera JSON med: ..."), och modellen
+#: följde den listan och glömde bokföringsfälten i systemprompten. Uppmätt i
+#: development: supportens triagesteg gjordes om i 71 % av anropen av det
+#: skälet, ett helt modellanrop till varje gång. Anroparen väljer påminnelsen
+#: (`paminn_om_kontrakt`); utan den är meddelandet som förut.
+KONTRAKTSPAMINNELSE = (
+    "\n\nUtöver fälten ovan ska JSON-objektet alltid ha \"sources_used\" och "
+    "\"context_refs\" (tomma listor om du inte använde något underlag)."
+)
+
+
 def thinking_kwargs(mode: str) -> dict[str, Any]:
     """DeepSeek v4:s thinking-toggle. Verifierat empiriskt mot API:t:
     `{'thinking': {'type': 'disabled'}}` stänger av reasoning_content helt
@@ -411,6 +423,7 @@ async def run_step(
     playbook_role: str = "en svensk kundtjänst-playbook",
     instruktioner: Instruktionslager | None = None,
     talamod_429: bool = False,
+    paminn_om_kontrakt: bool = False,
 ) -> dict[str, Any]:
     """Kör ETT skill-steg som ett eget LLM-anrop.
 
@@ -442,7 +455,11 @@ async def run_step(
 
     messages = [
         {"role": "system", "content": SYSTEM_FOG.join(s.text for s in segment)},
-        {"role": "user", "content": f"{case_context}\n\n## Din uppgift i det här steget\n{task}"},
+        {
+            "role": "user",
+            "content": f"{case_context}\n\n## Din uppgift i det här steget\n{task}"
+            + (KONTRAKTSPAMINNELSE if paminn_om_kontrakt else ""),
+        },
     ]
 
     output: dict[str, Any] = {}
@@ -458,6 +475,11 @@ async def run_step(
         extra = gemini_tank_kwargs(step.thinking, settings.gemini_reasoning_effort.strip().lower())
     else:
         extra = {}
+
+    # Chattens gräns per modellanrop. Ett steg som tänker (eskaleringen)
+    # får dubbla tiden: dess svar tar längre tid av en anledning, och en gräns
+    # det ofta slår i hade gjort varje eskalering till två anrop som faller.
+    chattgrans = float(settings.llm_timeout_chatt_s) * (2 if effective_mode == "enabled" else 1)
 
     # Formuleringssteg (humanizer, utkast) får deklarera en varmare temperatur
     # i playbooken; analys- och bedömningssteg ärver den kalla defaulten.
@@ -512,7 +534,7 @@ async def run_step(
                             messages=messages,
                             **extra,
                         ),
-                        timeout=float(settings.llm_timeout_chatt_s),
+                        timeout=chattgrans,
                     )
                 break
             except asyncio.TimeoutError:
@@ -523,7 +545,7 @@ async def run_step(
                     raise
                 logger.warning(
                     "LLM-steget %s svarade inte inom %.0f s; försöker en gång till.",
-                    step.skill, float(settings.llm_timeout_chatt_s),
+                    step.skill, chattgrans,
                 )
             except Exception as fel:  # noqa: BLE001 — bara 429 särbehandlas
                 ar_429 = getattr(fel, "status_code", None) == 429

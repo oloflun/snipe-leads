@@ -296,9 +296,12 @@ class Settings(BaseSettings):
     # Tidsgränser för LLM-anrop (2026-11-09, Fas 0-fyndet K6). Före dem gällde
     # SDK:ns 600 s. llm_timeout_s är HTTP-klientens gräns för ett helt svar och
     # gäller allt; llm_timeout_chatt_s är den kortare gränsen per steg när en
-    # människa väntar i chatten (stegens p95 låg under 20 s vid mätningen).
+    # människa väntar i chatten. 20 s sedan 2026-11-10 (45 förut): stegen
+    # tar 1–3 s i median och under 10 s i p95 (uppmätt i development, 91
+    # körningar), och gränsen följs av ETT omförsök. Ett steg som tänker får
+    # dubbla gränsen (step_runner).
     llm_timeout_s: float = 120.0
-    llm_timeout_chatt_s: float = 45.0
+    llm_timeout_chatt_s: float = 20.0
     # Uppstarten försöker nå Postgres så här många gånger innan den vägrar
     # starta (main.py:_anslut_postgres). Före 2026-11-09 föll den tyst tillbaka
     # på minneslagring med grön hälsokontroll.
