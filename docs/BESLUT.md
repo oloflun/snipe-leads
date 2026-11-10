@@ -9,6 +9,60 @@ möjligt), vad det betyder i koden.
 
 ---
 
+## 2026-11-10 (Sebbe) — Stabilitetsarbetet, fas 1 fortsatt: ett fel gäller sin egen rad, inte hela arbetet
+
+**Beslut.** Sebbe sa ja till de återstående punkterna i fas 1 efter att den
+första delen gått in i `development`. De enskilda valen nedan gjordes i arbetet.
+
+**Resonemanget.** Det gemensamma i punkterna är att ett enda fel fick för stor
+följd: ett avvisat mejl fällde hela massutskicket och försöktes sedan om i
+evighet, ett trasigt kvittomejl stoppade alla mejl efter det, ett avbrott på en
+sekund i Redis fällde en körning vars research redan var betald, och ett
+modellsvar i fel form gav ett serverfel. Felet ska stanna vid sin rad, synas
+där, och resten ska gå vidare.
+
+**I koden, val för val.**
+
+- **Ett utskick som mejltjänsten inte tar emot bokförs på köposten.** 400/422
+  och ogiltig adress stoppas direkt med skälet (samma mejl ger samma svar nästa
+  minut). Övriga fel försöks om med växande paus, 1 till 30 minuter, och
+  stoppas efter 20 försök, omkring en arbetsdag i sändfönstret. Valet att inte
+  stoppa på första tillfälliga felet: ett avbrott hos Resend en förmiddag ska
+  inte kräva att en människa godkänner om varje utkast. Ett stoppat utkast
+  prövas igen från noll med Godkänn och skicka (`leads/scheduler.py`).
+- **Kvittoskanningen läser vidare.** Ett mejl som faller får utfallet "gick
+  inte att läsa" och prövas igen vid nästa skanning; kontofel och slut kvot
+  avbryter fortfarande hela skanningen, för de går inte över av nästa mejl. Två
+  samtidiga skanningar blir en. Att skanningen fortfarande körs inne i en
+  begäran, utan förlopp som finns kvar efter omladdning, är inte löst här: det
+  är förslaget om skanningen som jobb, som väntar på Sebbes ja.
+- **Körningens rapport gör tre försök** innan körningen fälls.
+- **Modellsvar normaliseras där de läses.** Stegköraren ger alltid ett objekt.
+  Supportens triage: sentimentet 0,0 betyder så argt det går och läses inte
+  längre som neutralt, `"false"` inom citattecken lämnar inte över ärendet.
+  Följden att räkna med: ett sentiment på exakt 0 lämnar nu över, vilket är
+  vad regeln alltid sa.
+- **Supportportalen ger aldrig den delade nyckeln till en kundsession som inte
+  håller,** och inte till någon alls när sajten är driftsatt utan
+  inloggningsvägg. Hellre utloggad än i fel kunds data.
+- **Flyttpaketet bär sin tid** och main tar bara emot paket yngre än en kvart.
+  Det begränsar återuppspelning. Det löser inte att nyckeln delas mellan
+  development och main: den som har nyckeln kan fortfarande skriva till
+  produktionen, och det är så flytten är tänkt. Kundnycklarna i klartext i
+  development kräver en migration och är ett eget beslut.
+- **Leadshämtarna når bara det publika nätet** (`leads/hamtvakt.py`). Samma
+  regler som integrationernas nätvakt, men http tillåts: en liten firmas sajt
+  saknar ibland https och ska gå att läsa ändå.
+- **Leadsbudgeten förvarnar vid 80 %** i plattformshändelserna. Supportens
+  dagsbudget är fortfarande avstängd som standard och kvittohanteraren har
+  inget tak; att sätta dem är ett beslut om vad en kund får kosta, inte en
+  kodfråga.
+- **Demons IP-tak läser det sista värdet i `X-Forwarded-For`,** det kantproxyn
+  lade dit. Hur Railways kant skriver huvudet är inte provat; läser den över
+  besökarens värde är första och sista samma, och ändringen är ofarlig.
+
+---
+
 ## 2026-11-09 (Sebbe) — Stabilitetsarbetet, fas 1: felen ska höras, och samma sak ska inte hända två gånger
 
 **Beslut.** Sebbe beställde en genomgång i fyra faser ("Snajp kraschar inte,
