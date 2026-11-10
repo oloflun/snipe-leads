@@ -1,49 +1,30 @@
 # Stabilitetsuppdraget: arbetslogg
 
-Löpande läge för uppdraget "Snajp stabilt, snabbt och agenterna vassa"
-(Sebbe 2026-11-09). Fas 0-rapporten ligger i `docs/fas0-2026-11-09/` i
-huvudkatalogen (inte incheckad). Besluten står i `docs/BESLUT.md`.
+Uppdraget "Snajp stabilt, snabbt och agenterna vassa" (Sebbe 2026-11-09) är
+genomfört i fyra faser och ligger i `development` (`8f23e29` och den commit som
+bär slutrapporten). Inget är släppt till `main`.
 
-Sebbe 2026-11-10: "kör klart alla faser, du får godkännelse för allt. När du
-är klar med ALLT så pushar du." En push till `development` i slutet, inget
-till `main` (det är Antons handgrepp).
+- **Slutrapporten:** [`SLUTRAPPORT.md`](SLUTRAPPORT.md), med före och efter,
+  ändringar per fas, det som inte är gjort, risker, driftguide och GO/NO-GO.
+- **Besluten:** `docs/BESLUT.md`, 2026-11-09 och 2026-11-10 (tre poster).
+- **Mätresultaten:** `eval/` (före och efter per agent) och `last/`.
+- **Mätinstrumenten:** `snajp-support/evals/` (README där) och
+  `scripts/lasttest.py`.
 
-## Klart
+## Läget i development
 
-- **Fas 1** (i development, `6df6c2f`): se BESLUT.md 2026-11-09 och 2026-11-10.
-- **Fas 2** (commits efter `6df6c2f`, inte pushade):
-  - Läcka stängd: jobbsvaret, `/api/leads/runs` och två direkta agentsvar
-    lämnade ut stegloggens texter (promptar, SOUL, kundminne, KB,
-    webbplatsbedömningen). Gäller produktionen tills nästa release.
-  - `utkast_lagen` i en genomläsning (1,8 s → 0,1 s), migration 115 med index.
-  - Support: triagens omförsök (71 %) bort med en påminnelserad, klassaren
-    samtidigt, KB-sökningarna samtidigt, 20 s per modellanrop, skeden i
-    chatten, tätare hämtning.
-  - Kvittoskanningen och massutskicken som jobb med förlopp
-    (`app/jobs/bakgrund.py`).
-- **Fas 3, delar**: injektionsskydd i supporten (ram runt kundens text,
-  läckspärr), evalsviterna i `snajp-support/evals/` med körare och mall.
-- **Fas 4, delar**: 503 för beroendefel (`tests/kaos/`), `scripts/lasttest.py`.
-
-## Mätningar
-
-- Evalkunder i development: `eval-11100817-1..4` (nycklar i `.env.deploy`,
-  `EVAL_DEVELOPMENT_NYCKLAR`; kund 1 har Livrustnings kunskapsbas).
-- Före-värden körs mot development medan den kör `6df6c2f`:
-  `python -m evals.kor kor --env development --agent <agent> --etikett fore`,
-  `python scripts/lasttest.py --env development --etikett fore`.
-- Efter pushen: samma med `--etikett efter`, sedan `python -m evals.kor jamfor fore efter`.
-- Före pushen: `python scripts/railway_migrate.py --env development` (torrkörning), sedan `--apply` (migration 115).
-
-## Kvar
-
-1. Före-värden för Iris och kvitto (sviterna skrivs), lasttestets före-värde.
-2. Fas 3: promptändringar som evalen pekar ut, mätta före och efter.
-3. Slutrapport med före/efter och GO/NO-GO, BESLUT.md, sedan push och
-   efter-mätning.
+- Migration 115 (index) är körd mot development. Main saknar den, så
+  speglingen står still tills releasen.
+- Evalkunder: sex `eval-…` plus kvittohanterarens. Nycklarna står i
+  `.env.deploy` (`EVAL_DEVELOPMENT_NYCKLAR`, första är supportens;
+  `EVAL_DEVELOPMENT_IRISNYCKLAR`; `EVAL_DEVELOPMENT_KVITTONYCKEL`).
 
 ## Väntar på människor
 
+- Release till main: Antons ord, PR #43. Produktionen lämnar ut agentens
+  promptar i jobbsvaret tills dess (slutrapporten 5.1).
+- Före mergen: `python scripts/railway_migrate.py --env main --apply`.
 - Byt plattformsadminens lösenord (ligger i git-historiken).
+- Kontrollera `AGENTSAJT_LOSEN` för supportportalen i Railway.
 - Ny Railway-token i `.env.deploy`.
-- Release till main: Antons ord, PR #43. Läckan ovan är ett skäl att inte vänta.
+- Besluten i slutrapportens avsnitt 6.
