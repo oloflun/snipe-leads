@@ -192,7 +192,9 @@ type Handelse = {
   avsandare: string;
   amne: string;
   datum: string;
-  utfall: "kvitto" | "kvitto_granska" | "ej_kvitto" | "redan_last";
+  // "fel": mejlet gick inte att läsa den här gången och prövas igen vid
+  // nästa skanning (snajp-support/app/kvitton/skanning.py).
+  utfall: "kvitto" | "kvitto_granska" | "ej_kvitto" | "redan_last" | "fel";
   belopp?: string | null;
   belopp_original?: string | null;
   kategori?: string | null;
@@ -776,6 +778,8 @@ export function KvittoYta() {
                       <Badge tone="warn">{text({ sv: "Granska", en: "Review" })}</Badge>
                     ) : h.utfall === "redan_last" ? (
                       <span className="text-[0.75rem] text-mineral">{text({ sv: "redan inläst", en: "already read" })}</span>
+                    ) : h.utfall === "fel" ? (
+                      <Badge tone="danger">{text({ sv: "Gick inte att läsa", en: "Could not be read" })}</Badge>
                     ) : (
                       <span className="text-[0.75rem] text-mineral">{text({ sv: "inte ett kvitto", en: "not a receipt" })}</span>
                     )}

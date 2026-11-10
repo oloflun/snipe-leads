@@ -56,6 +56,7 @@ from ..kvitton.sammanfattning import (
 )
 from ..kvitton.hanterare import Inkommande, hantera, spara
 from ..kvitton.skanning import skanna_inkorg
+from . import dubbelstart
 from .bookkeeping import _kvotsvar
 from .deps import require_bookkeeping_tenant, require_tenant
 
@@ -169,7 +170,21 @@ async def skanna(
     Svaret bär en händelse per genomläst mejl (inkorgsvyns animation), de
     sparade kvittona och sammanfattningen — allt i ETT anrop, så att vyn
     aldrig kan visa en skanning och en tabell som inte hör ihop.
+
+    En skanning i taget per kund och period (api/dubbelstart.py): ett
+    dubbelklick väntar in den som redan går och får dess svar. Två samtidiga
+    skanningar såg samma mejl som oläst och sparade kvittot två gånger.
+    Vakten gäller bara medan skanningen pågår (fonster_s=0), så en ny
+    skanning efteråt läser inkorgen på nytt.
     """
+    return await dubbelstart.en_gang(
+        dubbelstart.nyckel(tenant["tenant_id"], "kvittoskanning", [fran, till]),
+        lambda: _skanna(request, fran, till, tenant),
+        fonster_s=0.0,
+    )
+
+
+async def _skanna(request: Request, fran: date | None, till: date | None, tenant: dict) -> dict:
     storage = request.app.state.storage
     tenant_id = tenant["tenant_id"]
     konto = valj_mejlkonto(tenant["tenant_id"])
@@ -219,6 +234,8 @@ async def skanna(
         "genomlasta": resultat.genomlasta,
         "nya_kvitton": resultat.nya_kvitton,
         "redan_lasta": resultat.hoppade_dubbletter,
+        # Mejl som inte gick att läsa; de prövas igen vid nästa skanning.
+        "misslyckade": resultat.misslyckade,
         "handelser": resultat.handelser,
         "kvitton": [_kvitto_ut(r) for r in rader],
         "sammanfattning": {k: v for k, v in samman.items() if not k.startswith("_")},

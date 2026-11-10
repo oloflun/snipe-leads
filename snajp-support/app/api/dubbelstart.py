@@ -40,7 +40,9 @@ def nyckel(tenant_id: str, handling: str, innehall: Any = None) -> str:
 
 def _stada(nu: float, fonster_s: float) -> None:
     for k, (tid, framtid) in list(_poster.items()):
-        if framtid.done() and nu - tid > fonster_s:
+        # >=: med fonster_s=0 ("bara medan arbetet pågår") ska en klar post
+        # städas även när klockan inte hunnit ticka sedan den blev klar.
+        if framtid.done() and nu - tid >= fonster_s:
             _poster.pop(k, None)
 
 
