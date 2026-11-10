@@ -13,6 +13,7 @@ grundorsaken osynlig bakom sig själv.
 
 from __future__ import annotations
 
+import errno
 import logging
 import traceback
 from typing import Any
@@ -91,6 +92,44 @@ def _ar_kvotfel(error: Exception) -> bool:
     return ar_kvotfel(error)
 
 
+#: Nätverksfel på operativsystemsnivå som betyder "den andra sidan är inte
+#: nåbar just nu". Övriga OSError (saknad fil, åtkomst nekad) är programfel.
+_NATFEL = frozenset(
+    {errno.ENETUNREACH, errno.EHOSTUNREACH, errno.ECONNREFUSED, errno.ECONNRESET,
+     errno.ECONNABORTED, errno.ETIMEDOUT, errno.EPIPE}
+)
+
+
+def ar_beroendefel(error: BaseException) -> bool:
+    """Tappade Redis, databasen eller nätet anslutningen, eller tog det för
+    lång tid? Då är api:t friskt men tillfälligt utan ett beroende."""
+    import asyncio
+
+    if isinstance(error, (ConnectionError, TimeoutError, asyncio.TimeoutError)):
+        return True
+    if isinstance(error, OSError) and error.errno in _NATFEL:
+        return True
+    try:
+        import redis.exceptions as redisfel
+
+        if isinstance(error, (redisfel.ConnectionError, redisfel.TimeoutError, redisfel.BusyLoadingError)):
+            return True
+    except ImportError:  # pragma: no cover — redis står i requirements
+        pass
+    try:
+        import asyncpg
+
+        if isinstance(
+            error,
+            (asyncpg.PostgresConnectionError, asyncpg.InterfaceError, asyncpg.TooManyConnectionsError,
+             asyncpg.CannotConnectNowError),
+        ):
+            return True
+    except ImportError:  # pragma: no cover — asyncpg står i requirements
+        pass
+    return False
+
+
 def install_exception_handler(app) -> None:
     """Fångar allt som ingen route hanterade.
 
@@ -156,6 +195,26 @@ def install_exception_handler(app) -> None:
 
                 return JSONResponse(status_code=429, content={"error": KUNDTEXT_KREDITSLUT})
             return JSONResponse(status_code=429, content={"error": KUNDTEXT_KVOT})
+
+        # ETT BEROENDE SOM ÄR NERE ÄR INTE ETT PROGRAMFEL (2026-11-10).
+        #
+        # Redis eller databasen som tappar anslutningen efter uppstart gav
+        # samma 500 och samma text som ett nullpekarfel. 503 säger det som är
+        # sant: tjänsten är tillfälligt otillgänglig, försök igen. Proxyn gör
+        # om en GET på 503, och den som felsöker ser i loggen vilket beroende
+        # det var utan att läsa en stack som slutar i en nätverksklient.
+        if ar_beroendefel(error):
+            logger.error(
+                "Ett beroende svarade inte på %s %s: %s",
+                request.method, request.url.path, type(error).__name__,
+            )
+            return JSONResponse(
+                status_code=503,
+                content={
+                    "error": "Tjänsten är tillfälligt otillgänglig. Försök igen om en liten stund.",
+                    "referens": anrops_id(),
+                },
+            )
 
         storage = getattr(request.app.state, "storage", None)
         if storage is not None:
