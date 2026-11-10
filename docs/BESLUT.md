@@ -51,6 +51,7 @@ syntes förrän en kund mötte det.
 
 Lösenordet till plattformsadminkontot togs ur skript och handoffs samma dag.
 Det ligger kvar i historiken och ska bytas.
+
 ## 2026-11-09 (Anton) — Startsidan: hjälten ryms i en skärm, innehållet följer skrollen, kapitelrubrik per agent
 
 **Beslut.** Hjältens text står med tyngdpunkten strax över skärmens mitt och hela
