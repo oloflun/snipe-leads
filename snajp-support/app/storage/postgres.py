@@ -1709,8 +1709,11 @@ class PostgresStorage:
         return int(resultat.split()[-1])
 
     async def utkast_lagen(
-        self, tenant_id: str, *, med_text: bool = False, prospect_id: str | None = None
+        self, tenant_id: str, *, med_text: bool = False, prospect_id: str | None = None,
+        bara: list[str] | None = None,
     ) -> dict[str, dict[str, Any]]:
+        if bara is not None and not bara:
+            return {}
         # Texten bara på begäran: listan över alla leads ska inte bära 500
         # mejlkroppar. Väntande meddelande först (osänt, icke-kasserat),
         # därefter det senaste; created_at kom med 107, och äldre rader har
@@ -1785,10 +1788,12 @@ class PostgresStorage:
                   {text_join}
                  where t.tenant_id = $1
                    and ($2::uuid is null or t.prospect_id = $2::uuid)
+                   and ($3::uuid[] is null or t.prospect_id = any($3::uuid[]))
                  order by t.prospect_id, t.created_at
                 """,
                 tenant_id,
                 prospect_id,
+                bara,
             )
         return {str(r["prospect_id"]): _avkoda_jsonb(_row(r), "gate_checks") for r in records}
 

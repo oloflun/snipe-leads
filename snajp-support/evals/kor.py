@@ -74,6 +74,9 @@ class Miljo:
         #: Kvittohanterarens evalkund heter som bolaget i sviten och har dess
         #: org.nr, så att kundfakturorna (intäkter) går att känna igen.
         self.kvittonyckel = env.get(f"EVAL_{namn.upper()}_KVITTONYCKEL", "")
+        #: Iris evalkunder: de som fått affärskontexten (forbered-iris). Utan
+        #: den skriver Iris inget utkast, så en supportkund får aldrig hamna här.
+        self.irisnycklar = [n for n in env.get(f"EVAL_{namn.upper()}_IRISNYCKLAR", "").split(",") if n]
 
     def spara_varde(self, namn: str, varde: str) -> None:
         rader = [r for r in self.envfil.read_text(encoding="utf-8").splitlines() if not r.startswith(namn + "=")]
@@ -168,8 +171,9 @@ def forbered_iris(miljo: Miljo) -> None:
     }
     # Supportens evalkund (den första) får ingen affärskontext: den ska bara
     # bära kunskapsbasen, annars beskriver dess supportsvar fel bolag.
+    iriskunder = miljo.irisnycklar or miljo.nycklar[1:] or miljo.nycklar
     with httpx.Client(timeout=120) as klient:
-        for nr, nyckel in enumerate(miljo.nycklar[1:] or miljo.nycklar, 2):
+        for nr, nyckel in enumerate(iriskunder, 1):
             for slag, text in underlag.items():
                 svar = klient.post(
                     miljo.api + "/api/leads/context-docs",
@@ -179,6 +183,8 @@ def forbered_iris(miljo: Miljo) -> None:
                 svar.raise_for_status()
             status = klient.get(miljo.api + "/api/leads/onboarding/status", headers={"X-API-Key": nyckel}).json()
             print(f"evalkund {nr}: affärskontext sparad, saknas fortfarande: {status.get('missing') or 'inget'}")
+    miljo.spara_varde(f"EVAL_{miljo.namn.upper()}_IRISNYCKLAR", ",".join(iriskunder))
+    miljo.irisnycklar = list(iriskunder)
 
 
 # -- Körning per agent -----------------------------------------------------------
@@ -236,7 +242,7 @@ def _kor_support(miljo: Miljo, fall: dict[str, Any], nr: int) -> dict[str, Any]:
 
 
 def _kor_iris(miljo: Miljo, fall: dict[str, Any], nr: int) -> dict[str, Any]:
-    iriskunder = miljo.nycklar[1:] or miljo.nycklar
+    iriskunder = miljo.irisnycklar or miljo.nycklar[1:] or miljo.nycklar
     huvud = {"X-API-Key": iriskunder[nr % len(iriskunder)]}
     with httpx.Client(timeout=60) as klient:
         start = time.perf_counter()

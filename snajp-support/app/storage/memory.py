@@ -1226,7 +1226,8 @@ class MemoryStorage:
         return antal
 
     async def utkast_lagen(
-        self, tenant_id: str, *, med_text: bool = False, prospect_id: str | None = None
+        self, tenant_id: str, *, med_text: bool = False, prospect_id: str | None = None,
+        bara: list[str] | None = None,
     ) -> dict[str, dict[str, Any]]:
         # Speglar Postgres-frågan: listornas ordning är skapelseordningen, så
         # "senaste" är sist i listan (samma som created_at desc i SQL).
@@ -1236,6 +1237,8 @@ class MemoryStorage:
         for thread in self.outreach_threads.get(tenant_id, {}).values():
             pid = thread.get("prospect_id")
             if not pid or pid in ut or (prospect_id is not None and pid != prospect_id):
+                continue
+            if bara is not None and pid not in bara:
                 continue
             utgaende = [m for m in meddelanden if m["thread_id"] == thread["id"] and m["direction"] == "outbound"]
             skickade = [m["sent_at"] for m in utgaende if m.get("sent_at")]

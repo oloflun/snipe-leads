@@ -621,10 +621,13 @@ class Storage(Protocol):
         ...
 
     async def utkast_lagen(
-        self, tenant_id: str, *, med_text: bool = False, prospect_id: str | None = None
+        self, tenant_id: str, *, med_text: bool = False, prospect_id: str | None = None,
+        bara: list[str] | None = None,
     ) -> dict[str, dict[str, Any]]:
         """Underlaget för utkaststatusen per lead (app/leads/utkaststatus.py),
         nycklat på prospect_id, i EN fråga för hela tenanten (eller ett lead).
+        `bara` begränsar svaret till de prospekt-id:n som anges: texten
+        (`med_text`) slås då upp för just dem och inte för varje tråd.
 
         Per lead: thread_id, skickat_at (senaste skickade utgående),
         antal_skickade, och trådens SENASTE köpost (queue_item_id, ko_status,

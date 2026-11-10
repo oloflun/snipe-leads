@@ -382,7 +382,9 @@
      "hela\\s+landet",
      "hos\\s+er",
      "till\\s+er\\b",
-     "på\\s+plats"
+     "på\\s+plats",
+     "i\\s+västerås",
+     "kommer\\s+(ut\\s+)?till"
     ]
    ],
    "far_inte_innehalla": [

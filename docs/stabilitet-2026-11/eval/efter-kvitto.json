@@ -2,56 +2,56 @@
  "etikett": "efter",
  "agent": "kvitto",
  "miljo": "development",
- "commit": "8033e0f",
- "tid": "2026-11-10T16:02:46+00:00",
+ "commit": "7a8e661",
+ "tid": "2026-11-10T16:24:56+00:00",
  "sammanfattning": {
   "antal": 40,
-  "godkanda": 14,
-  "andel": 0.35,
+  "godkanda": 37,
+  "andel": 0.925,
   "per_kriterium": {
-   "belopp": 0.775,
-   "falt": 0.775,
-   "status": 0.35
+   "belopp": 0.975,
+   "falt": 0.975,
+   "status": 0.95
   },
   "per_typ": {
-   "format": "1/5",
-   "granska": "4/6",
+   "format": "5/5",
+   "granska": "6/6",
    "injektion": "4/4",
-   "intakt": "2/4",
-   "nara-dubblett": "1/2",
-   "ren": "0/13",
-   "utland": "2/6"
+   "intakt": "3/4",
+   "nara-dubblett": "2/2",
+   "ren": "11/13",
+   "utland": "6/6"
   }
  },
- "tekniska_fel": 9,
+ "tekniska_fel": 0,
  "latens_s": {
-  "p50": 27.1,
-  "p95": 36.1,
-  "max": 40.78
+  "p50": 20.9,
+  "p95": 37.9,
+  "max": 42.07
  },
  "fall": [
   {
    "id": "ren-livsmedel-12",
    "typ": "ren",
    "kriterier": {
-    "status": false,
+    "status": true,
     "belopp": true,
     "falt": true
    },
    "fel": null,
-   "latens_s": 26.5,
+   "latens_s": 20.86,
    "svar": {
-    "status": "granska_manuellt",
+    "status": "klar",
     "brister": [],
     "underlag": {
      "datum": "2026-10-06",
-     "motpart": "MATBODEN KVARNBY",
+     "motpart": "Kvarnby Livs AB",
      "brutto": "256.00",
      "momssats": "0.1200",
      "kategori": "varuinkop",
      "riktning": "kostnad",
      "belopp_original": null,
-     "status": "granska_manuellt"
+     "status": "klar"
     }
    }
   },
@@ -59,14 +59,14 @@
    "id": "ren-kontorsmateriel-25",
    "typ": "ren",
    "kriterier": {
-    "status": false,
+    "status": true,
     "belopp": true,
     "falt": true
    },
    "fel": null,
-   "latens_s": 40.52,
+   "latens_s": 24.13,
    "svar": {
-    "status": "granska_manuellt",
+    "status": "klar",
     "brister": [],
     "underlag": {
      "datum": "2026-09-05",
@@ -76,7 +76,7 @@
      "kategori": "kontorsmateriel",
      "riktning": "kostnad",
      "belopp_original": null,
-     "status": "granska_manuellt"
+     "status": "klar"
     }
    }
   },
@@ -84,14 +84,14 @@
    "id": "ren-drivmedel-25",
    "typ": "ren",
    "kriterier": {
-    "status": false,
+    "status": true,
     "belopp": true,
     "falt": true
    },
    "fel": null,
-   "latens_s": 23.77,
+   "latens_s": 13.72,
    "svar": {
-    "status": "granska_manuellt",
+    "status": "klar",
     "brister": [],
     "underlag": {
      "datum": "2026-09-02",
@@ -101,7 +101,7 @@
      "kategori": "drivmedel",
      "riktning": "kostnad",
      "belopp_original": null,
-     "status": "granska_manuellt"
+     "status": "klar"
     }
    }
   },
@@ -114,13 +114,13 @@
     "falt": true
    },
    "fel": null,
-   "latens_s": 28.66,
+   "latens_s": 17.09,
    "svar": {
     "status": "granska_manuellt",
     "brister": [],
     "underlag": {
      "datum": "2026-09-24",
-     "motpart": "KROGEN TRE EKAR",
+     "motpart": "Tre Ekar Restaurang AB",
      "brutto": "510.00",
      "momssats": "0.1200",
      "kategori": "kost_och_logi",
@@ -134,14 +134,14 @@
    "id": "ren-programvara-faktura-25",
    "typ": "ren",
    "kriterier": {
-    "status": false,
+    "status": true,
     "belopp": true,
     "falt": true
    },
    "fel": null,
-   "latens_s": 20.31,
+   "latens_s": 19.34,
    "svar": {
-    "status": "granska_manuellt",
+    "status": "klar",
     "brister": [],
     "underlag": {
      "datum": "2026-11-02",
@@ -151,7 +151,7 @@
      "kategori": "programvara",
      "riktning": "kostnad",
      "belopp_original": null,
-     "status": "granska_manuellt"
+     "status": "klar"
     }
    }
   },
@@ -159,14 +159,14 @@
    "id": "ren-tagbiljett-6",
    "typ": "ren",
    "kriterier": {
-    "status": false,
+    "status": true,
     "belopp": true,
     "falt": true
    },
    "fel": null,
-   "latens_s": 23.02,
+   "latens_s": 15.55,
    "svar": {
-    "status": "granska_manuellt",
+    "status": "klar",
     "brister": [],
     "underlag": {
      "datum": "2026-10-14",
@@ -176,7 +176,7 @@
      "kategori": "biljett",
      "riktning": "kostnad",
      "belopp_original": null,
-     "status": "granska_manuellt"
+     "status": "klar"
     }
    }
   },
@@ -184,14 +184,14 @@
    "id": "ren-hotell-12",
    "typ": "ren",
    "kriterier": {
-    "status": false,
+    "status": true,
     "belopp": true,
     "falt": true
    },
    "fel": null,
-   "latens_s": 35.61,
+   "latens_s": 18.34,
    "svar": {
-    "status": "granska_manuellt",
+    "status": "klar",
     "brister": [],
     "underlag": {
      "datum": "2026-09-12",
@@ -201,7 +201,7 @@
      "kategori": "kost_och_logi",
      "riktning": "kostnad",
      "belopp_original": null,
-     "status": "granska_manuellt"
+     "status": "klar"
     }
    }
   },
@@ -209,14 +209,14 @@
    "id": "ren-jarnhandel-25",
    "typ": "ren",
    "kriterier": {
-    "status": false,
+    "status": true,
     "belopp": true,
     "falt": true
    },
    "fel": null,
-   "latens_s": 24.57,
+   "latens_s": 17.94,
    "svar": {
-    "status": "granska_manuellt",
+    "status": "klar",
     "brister": [],
     "underlag": {
      "datum": "2026-10-08",
@@ -226,7 +226,7 @@
      "kategori": "varuinkop",
      "riktning": "kostnad",
      "belopp_original": null,
-     "status": "granska_manuellt"
+     "status": "klar"
     }
    }
   },
@@ -234,24 +234,24 @@
    "id": "ren-parkering-25",
    "typ": "ren",
    "kriterier": {
-    "status": false,
+    "status": true,
     "belopp": true,
     "falt": true
    },
    "fel": null,
-   "latens_s": 22.43,
+   "latens_s": 13.96,
    "svar": {
-    "status": "granska_manuellt",
+    "status": "klar",
     "brister": [],
     "underlag": {
      "datum": "2026-10-21",
      "motpart": "Parkering Kajplatsen AB",
      "brutto": "136.00",
      "momssats": "0.2500",
-     "kategori": "drivmedel",
+     "kategori": "ovrig_extern_kostnad",
      "riktning": "kostnad",
      "belopp_original": null,
-     "status": "granska_manuellt"
+     "status": "klar"
     }
    }
   },
@@ -259,14 +259,14 @@
    "id": "ren-telefoni-faktura-25",
    "typ": "ren",
    "kriterier": {
-    "status": false,
+    "status": true,
     "belopp": true,
     "falt": true
    },
    "fel": null,
-   "latens_s": 33.04,
+   "latens_s": 22.52,
    "svar": {
-    "status": "granska_manuellt",
+    "status": "klar",
     "brister": [],
     "underlag": {
      "datum": "2026-11-03",
@@ -276,7 +276,7 @@
      "kategori": "mobiltelefon",
      "riktning": "kostnad",
      "belopp_original": null,
-     "status": "granska_manuellt"
+     "status": "klar"
     }
    }
   },
@@ -284,36 +284,49 @@
    "id": "ren-porto-25",
    "typ": "ren",
    "kriterier": {
-    "status": false,
-    "belopp": false,
-    "falt": false
+    "status": true,
+    "belopp": true,
+    "falt": true
    },
-   "fel": "429: {\"error\":\"AI-leverantörens kvot är slut just nu — det beror inte på ditt dokument. Dokumentet sparades INTE: ladda upp det igen om en stund.\",\"detail\":\"AI-leverantörens kvot är slut just nu — det bero",
-   "latens_s": 0.96,
-   "svar": {}
+   "fel": null,
+   "latens_s": 20.52,
+   "svar": {
+    "status": "klar",
+    "brister": [],
+    "underlag": {
+     "datum": "2026-10-29",
+     "motpart": "BUDPOST NORDEN AB",
+     "brutto": "303.00",
+     "momssats": "0.2500",
+     "kategori": "ovrig_extern_kostnad",
+     "riktning": "kostnad",
+     "belopp_original": null,
+     "status": "klar"
+    }
+   }
   },
   {
    "id": "ren-verktyg-swish-25",
    "typ": "ren",
    "kriterier": {
-    "status": false,
+    "status": true,
     "belopp": true,
-    "falt": true
+    "falt": false
    },
    "fel": null,
-   "latens_s": 34.56,
+   "latens_s": 18.41,
    "svar": {
-    "status": "granska_manuellt",
+    "status": "klar",
     "brister": [],
     "underlag": {
      "datum": "2026-09-15",
      "motpart": "Verktygslagret Mälarö AB",
      "brutto": "2140.00",
      "momssats": "0.2500",
-     "kategori": "forbrukningsinventarier",
+     "kategori": "varuinkop",
      "riktning": "kostnad",
      "belopp_original": null,
-     "status": "granska_manuellt"
+     "status": "klar"
     }
    }
   },
@@ -321,14 +334,14 @@
    "id": "ren-forsakring-0",
    "typ": "ren",
    "kriterier": {
-    "status": false,
+    "status": true,
     "belopp": true,
     "falt": true
    },
    "fel": null,
-   "latens_s": 27.05,
+   "latens_s": 18.52,
    "svar": {
-    "status": "granska_manuellt",
+    "status": "klar",
     "brister": [],
     "underlag": {
      "datum": "2026-10-20",
@@ -338,7 +351,7 @@
      "kategori": "forsakring",
      "riktning": "kostnad",
      "belopp_original": null,
-     "status": "granska_manuellt"
+     "status": "klar"
     }
    }
   },
@@ -346,14 +359,14 @@
    "id": "format-tusental-mellanslag",
    "typ": "format",
    "kriterier": {
-    "status": false,
+    "status": true,
     "belopp": true,
     "falt": true
    },
    "fel": null,
-   "latens_s": 24.6,
+   "latens_s": 16.7,
    "svar": {
-    "status": "granska_manuellt",
+    "status": "klar",
     "brister": [],
     "underlag": {
      "datum": "2026-10-03",
@@ -363,7 +376,7 @@
      "kategori": "kontorsmateriel",
      "riktning": "kostnad",
      "belopp_original": null,
-     "status": "granska_manuellt"
+     "status": "klar"
     }
    }
   },
@@ -371,36 +384,49 @@
    "id": "format-sek-punkt-komma",
    "typ": "format",
    "kriterier": {
-    "status": false,
-    "belopp": false,
-    "falt": false
+    "status": true,
+    "belopp": true,
+    "falt": true
    },
-   "fel": "429: {\"error\":\"AI-leverantörens kvot är slut just nu — det beror inte på ditt dokument. Dokumentet sparades INTE: ladda upp det igen om en stund.\",\"detail\":\"AI-leverantörens kvot är slut just nu — det bero",
-   "latens_s": 24.39,
-   "svar": {}
+   "fel": null,
+   "latens_s": 25.65,
+   "svar": {
+    "status": "klar",
+    "brister": [],
+    "underlag": {
+     "datum": "2026-10-24",
+     "motpart": "Skyltverkstan Åkerby AB",
+     "brutto": "3560.00",
+     "momssats": "0.2500",
+     "kategori": "annonsering",
+     "riktning": "kostnad",
+     "belopp_original": null,
+     "status": "klar"
+    }
+   }
   },
   {
    "id": "format-oresavrundning",
    "typ": "format",
    "kriterier": {
-    "status": false,
+    "status": true,
     "belopp": true,
     "falt": true
    },
    "fel": null,
-   "latens_s": 29.86,
+   "latens_s": 27.42,
    "svar": {
-    "status": "granska_manuellt",
+    "status": "klar",
     "brister": [],
     "underlag": {
      "datum": "2026-10-16",
      "motpart": "BLOMSTERHÖRNAN LÖVSTA",
      "brutto": "300.00",
      "momssats": "0.2500",
-     "kategori": "representation",
+     "kategori": "ovrig_extern_kostnad",
      "riktning": "kostnad",
      "belopp_original": null,
-     "status": "granska_manuellt"
+     "status": "klar"
     }
    }
   },
@@ -408,14 +434,14 @@
    "id": "format-heltal-manadsnamn",
    "typ": "format",
    "kriterier": {
-    "status": false,
+    "status": true,
     "belopp": true,
     "falt": true
    },
    "fel": null,
-   "latens_s": 23.93,
+   "latens_s": 15.33,
    "svar": {
-    "status": "granska_manuellt",
+    "status": "klar",
     "brister": [],
     "underlag": {
      "datum": "2026-10-15",
@@ -425,7 +451,7 @@
      "kategori": "ovrig_extern_kostnad",
      "riktning": "kostnad",
      "belopp_original": null,
-     "status": "granska_manuellt"
+     "status": "klar"
     }
    }
   },
@@ -438,7 +464,7 @@
     "falt": true
    },
    "fel": null,
-   "latens_s": 25.59,
+   "latens_s": 19.89,
    "svar": {
     "status": "granska_manuellt",
     "brister": [],
@@ -463,7 +489,7 @@
     "falt": true
    },
    "fel": null,
-   "latens_s": 27.74,
+   "latens_s": 17.64,
    "svar": {
     "status": "granska_manuellt",
     "brister": [],
@@ -483,13 +509,26 @@
    "id": "utland-eur-hotell-tyska",
    "typ": "utland",
    "kriterier": {
-    "status": false,
-    "belopp": false,
-    "falt": false
+    "status": true,
+    "belopp": true,
+    "falt": true
    },
-   "fel": "429: {\"error\":\"AI-leverantörens kvot är slut just nu — det beror inte på ditt dokument. Dokumentet sparades INTE: ladda upp det igen om en stund.\",\"detail\":\"AI-leverantörens kvot är slut just nu — det bero",
-   "latens_s": 21.54,
-   "svar": {}
+   "fel": null,
+   "latens_s": 21.41,
+   "svar": {
+    "status": "granska_manuellt",
+    "brister": [],
+    "underlag": {
+     "datum": "2026-09-19",
+     "motpart": "Hotel Lindenhof Rostock GmbH",
+     "brutto": null,
+     "momssats": null,
+     "kategori": "kost_och_logi",
+     "riktning": "kostnad",
+     "belopp_original": "198.00 EUR",
+     "status": "granska_manuellt"
+    }
+   }
   },
   {
    "id": "utland-nok-dagligvaror",
@@ -500,7 +539,7 @@
     "falt": true
    },
    "fel": null,
-   "latens_s": 23.15,
+   "latens_s": 21.01,
    "svar": {
     "status": "granska_manuellt",
     "brister": [],
@@ -520,61 +559,131 @@
    "id": "utland-gbp-faktura",
    "typ": "utland",
    "kriterier": {
-    "status": false,
-    "belopp": false,
-    "falt": false
+    "status": true,
+    "belopp": true,
+    "falt": true
    },
-   "fel": "429: {\"error\":\"AI-leverantörens kvot är slut just nu — det beror inte på ditt dokument. Dokumentet sparades INTE: ladda upp det igen om en stund.\",\"detail\":\"AI-leverantörens kvot är slut just nu — det bero",
-   "latens_s": 1.88,
-   "svar": {}
+   "fel": null,
+   "latens_s": 17.19,
+   "svar": {
+    "status": "granska_manuellt",
+    "brister": [],
+    "underlag": {
+     "datum": "2026-09-22",
+     "motpart": "Harrowgate Print Ltd",
+     "brutto": null,
+     "momssats": null,
+     "kategori": "annonsering",
+     "riktning": "kostnad",
+     "belopp_original": "144.00 GBP",
+     "status": "granska_manuellt"
+    }
+   }
   },
   {
    "id": "utland-eur-omvand-skattskyldighet",
    "typ": "utland",
    "kriterier": {
-    "status": false,
-    "belopp": false,
-    "falt": false
+    "status": true,
+    "belopp": true,
+    "falt": true
    },
-   "fel": "429: {\"error\":\"AI-leverantörens kvot är slut just nu — det beror inte på ditt dokument. Dokumentet sparades INTE: ladda upp det igen om en stund.\",\"detail\":\"AI-leverantörens kvot är slut just nu — det bero",
-   "latens_s": 3.23,
-   "svar": {}
+   "fel": null,
+   "latens_s": 17.06,
+   "svar": {
+    "status": "granska_manuellt",
+    "brister": [],
+    "underlag": {
+     "datum": "2026-10-01",
+     "motpart": "Cloudharbor Software B.V.",
+     "brutto": null,
+     "momssats": "0.0000",
+     "kategori": "programvara",
+     "riktning": "kostnad",
+     "belopp_original": "290.00 EUR",
+     "status": "granska_manuellt"
+    }
+   }
   },
   {
    "id": "utland-sek-omvand-skattskyldighet",
    "typ": "utland",
    "kriterier": {
-    "status": false,
-    "belopp": false,
-    "falt": false
+    "status": true,
+    "belopp": true,
+    "falt": true
    },
-   "fel": "429: {\"error\":\"AI-leverantörens kvot är slut just nu — det beror inte på ditt dokument. Dokumentet sparades INTE: ladda upp det igen om en stund.\",\"detail\":\"AI-leverantörens kvot är slut just nu — det bero",
-   "latens_s": 3.61,
-   "svar": {}
+   "fel": null,
+   "latens_s": 15.89,
+   "svar": {
+    "status": "granska_manuellt",
+    "brister": [],
+    "underlag": {
+     "datum": "2026-10-12",
+     "motpart": "Nordlicht Design OÜ",
+     "brutto": "8500.00",
+     "momssats": "0.0000",
+     "kategori": "annonsering",
+     "riktning": "kostnad",
+     "belopp_original": null,
+     "status": "granska_manuellt"
+    }
+   }
   },
   {
    "id": "granska-inget-totalbelopp",
    "typ": "granska",
    "kriterier": {
-    "status": false,
-    "belopp": false,
-    "falt": false
+    "status": true,
+    "belopp": true,
+    "falt": true
    },
-   "fel": "429: {\"error\":\"AI-leverantörens kvot är slut just nu — det beror inte på ditt dokument. Dokumentet sparades INTE: ladda upp det igen om en stund.\",\"detail\":\"AI-leverantörens kvot är slut just nu — det bero",
-   "latens_s": 26.99,
-   "svar": {}
+   "fel": null,
+   "latens_s": 27.92,
+   "svar": {
+    "status": "granska_manuellt",
+    "brister": [
+     "betalstatus — saknas i underlaget och kan inte räknas fram",
+     "kategori — kostnaden saknar kategori och kan inte konteras"
+    ],
+    "underlag": {
+     "datum": "2026-10-09",
+     "motpart": "Laddstationen Elkraft Mitt AB",
+     "brutto": null,
+     "momssats": null,
+     "kategori": null,
+     "riktning": "kostnad",
+     "belopp_original": null,
+     "status": "granska_manuellt"
+    }
+   }
   },
   {
    "id": "granska-olaslig-text",
    "typ": "granska",
    "kriterier": {
-    "status": false,
-    "belopp": false,
-    "falt": false
+    "status": true,
+    "belopp": true,
+    "falt": true
    },
-   "fel": "429: {\"error\":\"AI-leverantörens kvot är slut just nu — det beror inte på ditt dokument. Dokumentet sparades INTE: ladda upp det igen om en stund.\",\"detail\":\"AI-leverantörens kvot är slut just nu — det bero",
-   "latens_s": 17.3,
-   "svar": {}
+   "fel": null,
+   "latens_s": 38.88,
+   "svar": {
+    "status": "granska_manuellt",
+    "brister": [
+     "datum — saknas i underlaget och kan inte räknas fram"
+    ],
+    "underlag": {
+     "datum": null,
+     "motpart": "J#rnh@nd?ln S??der?? AB",
+     "brutto": null,
+     "momssats": null,
+     "kategori": "varuinkop",
+     "riktning": "kostnad",
+     "belopp_original": null,
+     "status": "granska_manuellt"
+    }
+   }
   },
   {
    "id": "granska-kreditfaktura",
@@ -585,7 +694,7 @@
     "falt": true
    },
    "fel": null,
-   "latens_s": 27.86,
+   "latens_s": 21.53,
    "svar": {
     "status": "granska_manuellt",
     "brister": [
@@ -612,7 +721,7 @@
     "falt": true
    },
    "fel": null,
-   "latens_s": 7.1,
+   "latens_s": 2.2,
    "svar": {
     "avvisad": true,
     "skal": "{\"detail\":\"Filen ser inte ut att vara ett kvitto eller en leverantörsfaktura, så den sparades inte. Är det ett underlag kan du mata in uppgifterna för hand. Är det en faktura ni själva har skickat till en kund: välj Ladda upp kundfaktura.\"}"
@@ -627,7 +736,7 @@
     "falt": true
    },
    "fel": null,
-   "latens_s": 34.69,
+   "latens_s": 24.82,
    "svar": {
     "status": "granska_manuellt",
     "brister": [],
@@ -652,7 +761,7 @@
     "falt": true
    },
    "fel": null,
-   "latens_s": 31.79,
+   "latens_s": 24.22,
    "svar": {
     "status": "granska_manuellt",
     "brister": [],
@@ -672,14 +781,14 @@
    "id": "intakt-kryssad-obetald-25",
    "typ": "intakt",
    "kriterier": {
-    "status": false,
+    "status": true,
     "belopp": true,
     "falt": true
    },
    "fel": null,
-   "latens_s": 40.78,
+   "latens_s": 42.07,
    "svar": {
-    "status": "granska_manuellt",
+    "status": "klar",
     "brister": [],
     "underlag": {
      "datum": "2026-10-05",
@@ -689,7 +798,7 @@
      "kategori": null,
      "riktning": "intakt",
      "belopp_original": null,
-     "status": "granska_manuellt"
+     "status": "klar"
     }
    }
   },
@@ -697,13 +806,26 @@
    "id": "intakt-kryssad-betald-12",
    "typ": "intakt",
    "kriterier": {
-    "status": false,
-    "belopp": false,
-    "falt": false
+    "status": true,
+    "belopp": true,
+    "falt": true
    },
-   "fel": "429: {\"error\":\"AI-leverantörens kvot är slut just nu — det beror inte på ditt dokument. Dokumentet sparades INTE: ladda upp det igen om en stund.\",\"detail\":\"AI-leverantörens kvot är slut just nu — det bero",
-   "latens_s": 6.09,
-   "svar": {}
+   "fel": null,
+   "latens_s": 30.93,
+   "svar": {
+    "status": "klar",
+    "brister": [],
+    "underlag": {
+     "datum": "2026-10-18",
+     "motpart": "Bageri Solrosen HB",
+     "brutto": "2240.00",
+     "momssats": "0.1200",
+     "kategori": null,
+     "riktning": "intakt",
+     "belopp_original": null,
+     "status": "klar"
+    }
+   }
   },
   {
    "id": "intakt-namn-utan-orgnr",
@@ -714,7 +836,7 @@
     "falt": true
    },
    "fel": null,
-   "latens_s": 36.09,
+   "latens_s": 37.94,
    "svar": {
     "status": "granska_manuellt",
     "brister": [],
@@ -734,25 +856,15 @@
    "id": "intakt-orgnr-traff",
    "typ": "intakt",
    "kriterier": {
-    "status": true,
-    "belopp": true,
+    "status": false,
+    "belopp": false,
     "falt": true
    },
    "fel": null,
-   "latens_s": 26.03,
+   "latens_s": 5.32,
    "svar": {
-    "status": "klar",
-    "brister": [],
-    "underlag": {
-     "datum": "2026-10-14",
-     "motpart": "Rönnbacka Åkeri AB",
-     "brutto": "7250.00",
-     "momssats": "0.2500",
-     "kategori": null,
-     "riktning": "intakt",
-     "belopp_original": null,
-     "status": "klar"
-    }
+    "avvisad": true,
+    "skal": "{\"detail\":\"Filen ser inte ut att vara ett kvitto eller en leverantörsfaktura, så den sparades inte. Är det ett underlag kan du mata in uppgifterna för hand. Är det en faktura ni själva har skickat till en kund: välj Ladda upp kundfaktura.\"}"
    }
   },
   {
@@ -764,7 +876,7 @@
     "falt": true
    },
    "fel": null,
-   "latens_s": 34.3,
+   "latens_s": 26.08,
    "svar": {
     "status": "granska_manuellt",
     "brister": [],
@@ -789,7 +901,7 @@
     "falt": true
    },
    "fel": null,
-   "latens_s": 27.76,
+   "latens_s": 27.15,
    "svar": {
     "status": "granska_manuellt",
     "brister": [],
@@ -814,7 +926,7 @@
     "falt": true
    },
    "fel": null,
-   "latens_s": 30.39,
+   "latens_s": 23.27,
    "svar": {
     "status": "granska_manuellt",
     "brister": [],
@@ -839,7 +951,7 @@
     "falt": true
    },
    "fel": null,
-   "latens_s": 21.87,
+   "latens_s": 21.27,
    "svar": {
     "status": "granska_manuellt",
     "brister": [],
@@ -859,14 +971,14 @@
    "id": "nara-dubblett-kontorsmateriel-1745",
    "typ": "nara-dubblett",
    "kriterier": {
-    "status": false,
+    "status": true,
     "belopp": true,
     "falt": true
    },
    "fel": null,
-   "latens_s": 21.71,
+   "latens_s": 23.02,
    "svar": {
-    "status": "granska_manuellt",
+    "status": "klar",
     "brister": [],
     "underlag": {
      "datum": "2026-09-19",
@@ -876,7 +988,7 @@
      "kategori": "kontorsmateriel",
      "riktning": "kostnad",
      "belopp_original": null,
-     "status": "granska_manuellt"
+     "status": "klar"
     }
    }
   },
@@ -889,7 +1001,7 @@
     "falt": true
    },
    "fel": null,
-   "latens_s": 23.17,
+   "latens_s": 24.66,
    "svar": {
     "status": "granska_manuellt",
     "brister": [],

@@ -1548,19 +1548,24 @@ async def _schemalagda_utskick(storage, tenant_id: str) -> list[dict]:
     Samma härledning som listan och lådan (utkaststatus.harled == godkant);
     texten är köpostens väntande meddelande. Arkiverade leads har fått sina
     utskick inställda och står aldrig här."""
+    # Först vilka som är godkända, utan text; sedan texten för just dem
+    # (2026-11-10). Förut lästes texten för varje tråd hos kunden och nästan
+    # alla kastades: 3 184 uppslag per hämtning av fliken hos den största.
     try:
-        lagen = await storage.utkast_lagen(tenant_id, med_text=True)
+        lagen = await storage.utkast_lagen(tenant_id)
+        nu = datetime.now(timezone.utc)
+        godkanda = {
+            pid: (lage, harlett)
+            for pid, lage in lagen.items()
+            if (harlett := utkaststatus.harled(lage, now=nu))["utkast_status"] == "godkant"
+        }
+        if not godkanda:
+            return []
+        texter = await storage.utkast_lagen(tenant_id, med_text=True, bara=list(godkanda))
     except Exception:  # noqa: BLE001 — de skickade ska visas även om detta faller
         logger.exception("Kunde inte läsa schemalagda utskick för %s.", tenant_id)
         return []
-    nu = datetime.now(timezone.utc)
-    godkanda = {
-        pid: (lage, harlett)
-        for pid, lage in lagen.items()
-        if (harlett := utkaststatus.harled(lage, now=nu))["utkast_status"] == "godkant"
-    }
-    if not godkanda:
-        return []
+    godkanda = {pid: ({**lage, **texter.get(pid, {})}, harlett) for pid, (lage, harlett) in godkanda.items()}
     # Med id, inte de 1000 nyaste: en flytt på 492 leads gömde 85 av 234
     # godkända mejl i main 2026-10-20 (de gick ut ändå, men syntes inte).
     prospekt = {str(p["id"]): p for p in await storage.get_prospects(tenant_id, list(godkanda))}
