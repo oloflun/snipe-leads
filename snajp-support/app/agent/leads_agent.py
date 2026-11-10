@@ -154,6 +154,25 @@ def sign_off(body: str, sender: str) -> str:
     return body
 
 
+def stoppskal_grundning(grounding: dict[str, Any]) -> str:
+    """Skälet till människan när faktagrinden stoppar ett utkast efter
+    reparationsrundan.
+
+    Grinden fäller på två saker: påståenden utan stöd i underlaget och
+    meningar som gissar om mottagaren (gissnings_gate). Skälet skrev förut
+    bara ut den första listan, och ett utkast som stoppades för en gissning
+    fick en tom lista som förklaring (2026-11-10)."""
+    ostodda = list(grounding.get("unsupported_after") or [])
+    gissningar = list(grounding.get("gissningar_after") or [])
+    delar = []
+    if ostodda:
+        delar.append(f"påståenden utan stöd i underlaget: {ostodda}")
+    if gissningar:
+        delar.append(f"meningar som gissar om mottagaren: {gissningar}")
+    vad = "; ".join(delar) or "utkastet höll inte mot underlaget"
+    return f"Faktagrinden stoppade utkastet även efter en reparationsrunda ({vad}). Utkastet köas inte."
+
+
 async def _run_grounding_cycle(
     ledger: RunLedger,
     trace: RunTrace,
@@ -1238,11 +1257,7 @@ async def run_outreach_draft(
         if not grounding["ok"]:
             # INV-GROUND-001: den ENDA utgången för ett kvarstående ostött
             # påstående är en människa. Ingen kodväg härifrån når kön.
-            await _request_human_handoff_impl(
-                context,
-                "Grindningen hittade påståenden utan stöd i underlaget, även efter "
-                f"en reparationsrunda: {grounding['unsupported_after']}. Utkastet köas inte.",
-            )
+            await _request_human_handoff_impl(context, stoppskal_grundning(grounding))
         elif escalated_steps:
             await _request_human_handoff_impl(
                 context,

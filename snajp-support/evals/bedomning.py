@@ -81,7 +81,6 @@ def bedom_iris(fall: dict[str, Any], svar: dict[str, Any], rubrik: dict[str, Any
 
     `svar` är utkastjobbets resultat: `subject`, `body`, `queued`.
     - levererat: ett utkast finns och gick till granskningskön.
-    - ingang: mejlet bygger på fallets signal (faktagrupperna).
     - inga_pahitt: inget av fallets förbjudna påståenden, och varje tal i
       mejlet finns i underlaget (erbjudande, brief, research).
     - skrivregler: rubrikens mekaniska regler (längd, förbjudna fraser och
@@ -90,7 +89,6 @@ def bedom_iris(fall: dict[str, Any], svar: dict[str, Any], rubrik: dict[str, Any
     amne = str(svar.get("subject") or "")
     kropp = str(svar.get("body") or "")
     levererat = bool(kropp.strip()) and bool(svar.get("queued"))
-    ingang = _grupper_uppfyllda(fall.get("ska_innehalla") or [], kropp)
 
     underlag = " ".join(
         [fall.get("offer_summary", ""), fall.get("brief", ""), fall.get("research_summary", "")]
@@ -121,7 +119,19 @@ def bedom_iris(fall: dict[str, Any], svar: dict[str, Any], rubrik: dict[str, Any
         regler = regler and _traffar(halsning["monster"], forsta_rad)
     if rubrik.get("fragor_max") is not None:
         regler = regler and brodtext.count("?") <= int(rubrik["fragor_max"])
-    return {"levererat": levererat, "ingang": ingang, "inga_pahitt": inga_pahitt, "skrivregler": regler}
+    return {"levererat": levererat, "inga_pahitt": inga_pahitt, "skrivregler": regler}
+
+
+def iris_signal(fall: dict[str, Any], svar: dict[str, Any]) -> bool:
+    """Nämner mejlet fallets daterade signal (nyheten, rekryteringen)?
+
+    En UPPLYSNING, inget kriterium. Nivån för ett första mejl
+    (docs/UTKASTKEDJAN-REFERENS-2026-10-16.md, avsnitt 1) är en ingång som
+    tar det bolaget självt lovar sina kunder och ställer det mot momentet
+    produkten löser. En nyhet är ett sätt att göra det, inte ett krav, och om
+    ingången håller nivån avgörs av stilgrinden och av en människa som läser
+    de sparade utkasten, inte av ett mönster här."""
+    return _grupper_uppfyllda(fall.get("ska_innehalla") or [], str(svar.get("body") or ""))
 
 
 # -- Kvittohanteraren ------------------------------------------------------------

@@ -327,6 +327,8 @@ def kor(miljo: Miljo, agent: str, etikett: str, urval: int | None, samtidiga: in
             kriterier = bedomning.bedom_kvitto(f, utfall["svar"])
         if utfall["fel"]:
             kriterier = {k: False for k in kriterier}
+        if agent == "iris":
+            utfall["upplysning"] = {"signal": bedomning.iris_signal(f, utfall["svar"])}
         print(f"  {'ok ' if all(kriterier.values()) else 'NEJ'} {f['id']:<34} {utfall['latens_s']:>6.1f} s"
               + (f"  ({utfall['fel'][:60]})" if utfall["fel"] else ""), flush=True)
         return {"id": f["id"], "typ": f.get("typ"), "kriterier": kriterier, **utfall}
@@ -351,6 +353,8 @@ def kor(miljo: Miljo, agent: str, etikett: str, urval: int | None, samtidiga: in
         },
         "fall": rader,
     }
+    if agent == "iris":
+        rapport["signal_andel"] = round(sum(bool((r.get("upplysning") or {}).get("signal")) for r in rader) / len(rader), 3)
     if agent == "support":
         forsok = [s["forsok"] for r in rader for s in r["svar"].get("steg") or [] if s["skill"] == "cs:ticket-triage"]
         rapport["triage_omforsok_andel"] = round(sum(1 for f in forsok if (f or 1) > 1) / len(forsok), 3) if forsok else None
@@ -383,11 +387,16 @@ def ombedom(etikett: str) -> None:
                 kriterier = bedomning.bedom_support(f, rad["svar"])
             elif agent == "iris":
                 kriterier = bedomning.bedom_iris(f, rad["svar"], rubrik)
+                rad["upplysning"] = {"signal": bedomning.iris_signal(f, rad["svar"])}
             else:
                 kriterier = bedomning.bedom_kvitto(f, rad["svar"])
             rad["kriterier"] = {k: False for k in kriterier} if rad.get("fel") else kriterier
             rad["typ"] = f.get("typ")
         rapport["sammanfattning"] = bedomning.sammanfatta(rapport["fall"])
+        if agent == "iris":
+            rapport["signal_andel"] = round(
+                sum(bool((r.get("upplysning") or {}).get("signal")) for r in rapport["fall"]) / len(rapport["fall"]), 3
+            )
         rapport["ombedomd"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
         fil.write_text(json.dumps(rapport, ensure_ascii=False, indent=1), encoding="utf-8")
         s = rapport["sammanfattning"]

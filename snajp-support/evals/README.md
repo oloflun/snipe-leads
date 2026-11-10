@@ -7,7 +7,7 @@ efter en ändring av promptar, modell eller kedja.
 | Agent | Fil | Körs genom | Kriterier |
 |---|---|---|---|
 | Support | `support_livrustning.json` | chatten (`POST /api/chat`, `is_test`) | utfall, fakta, inga fel, format |
-| Iris | `iris_utkast.json` + `iris_rubrik.json` | utkastvägen (`POST /api/leads/outreach/draft`) | levererat, ingång, inga påhitt, skrivregler |
+| Iris | `iris_utkast.json` + `iris_rubrik.json` | utkastvägen (`POST /api/leads/outreach/draft`) | levererat, inga påhitt, skrivregler (signalen är en upplysning) |
 | Kvittohanteraren | `kvitto.json` | uppladdningen (`POST /api/kvitton/underlag`) | status, belopp, fält |
 
 Supportens fall bygger på Livrustnings kunskapsbas (`kb/livrustning.json`, en

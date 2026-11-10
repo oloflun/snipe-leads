@@ -6,11 +6,10 @@
  "tid": "2026-11-10T08:42:48+00:00",
  "sammanfattning": {
   "antal": 33,
-  "godkanda": 21,
-  "andel": 0.636,
+  "godkanda": 25,
+  "andel": 0.758,
   "per_kriterium": {
    "inga_pahitt": 0.939,
-   "ingang": 0.848,
    "levererat": 0.939,
    "skrivregler": 0.879
   },
@@ -20,7 +19,7 @@
    "namngiven-kontakt": "5/5",
    "struktur-b": "2/3",
    "svag-signal": "5/6",
-   "tydlig-signal": "4/10"
+   "tydlig-signal": "8/10"
   }
  },
  "tekniska_fel": 0,
@@ -35,7 +34,6 @@
    "typ": "tydlig-signal",
    "kriterier": {
     "levererat": true,
-    "ingang": false,
     "inga_pahitt": false,
     "skrivregler": true
    },
@@ -70,6 +68,9 @@
       "forsok": 1
      }
     ]
+   },
+   "upplysning": {
+    "signal": false
    }
   },
   {
@@ -77,7 +78,6 @@
    "typ": "tydlig-signal",
    "kriterier": {
     "levererat": true,
-    "ingang": true,
     "inga_pahitt": true,
     "skrivregler": true
    },
@@ -107,6 +107,9 @@
       "forsok": 1
      }
     ]
+   },
+   "upplysning": {
+    "signal": true
    }
   },
   {
@@ -114,7 +117,6 @@
    "typ": "tydlig-signal",
    "kriterier": {
     "levererat": true,
-    "ingang": true,
     "inga_pahitt": true,
     "skrivregler": true
    },
@@ -154,6 +156,9 @@
       "forsok": 1
      }
     ]
+   },
+   "upplysning": {
+    "signal": true
    }
   },
   {
@@ -161,7 +166,6 @@
    "typ": "tydlig-signal",
    "kriterier": {
     "levererat": true,
-    "ingang": false,
     "inga_pahitt": true,
     "skrivregler": true
    },
@@ -216,6 +220,9 @@
       "forsok": 1
      }
     ]
+   },
+   "upplysning": {
+    "signal": false
    }
   },
   {
@@ -223,7 +230,6 @@
    "typ": "tydlig-signal",
    "kriterier": {
     "levererat": true,
-    "ingang": false,
     "inga_pahitt": true,
     "skrivregler": true
    },
@@ -278,6 +284,9 @@
       "forsok": 1
      }
     ]
+   },
+   "upplysning": {
+    "signal": false
    }
   },
   {
@@ -285,7 +294,6 @@
    "typ": "tydlig-signal",
    "kriterier": {
     "levererat": true,
-    "ingang": false,
     "inga_pahitt": true,
     "skrivregler": true
    },
@@ -315,6 +323,9 @@
       "forsok": 1
      }
     ]
+   },
+   "upplysning": {
+    "signal": false
    }
   },
   {
@@ -322,7 +333,6 @@
    "typ": "tydlig-signal",
    "kriterier": {
     "levererat": true,
-    "ingang": true,
     "inga_pahitt": true,
     "skrivregler": false
    },
@@ -377,6 +387,9 @@
       "forsok": 1
      }
     ]
+   },
+   "upplysning": {
+    "signal": true
    }
   },
   {
@@ -384,7 +397,6 @@
    "typ": "tydlig-signal",
    "kriterier": {
     "levererat": true,
-    "ingang": true,
     "inga_pahitt": true,
     "skrivregler": true
    },
@@ -439,6 +451,9 @@
       "forsok": 1
      }
     ]
+   },
+   "upplysning": {
+    "signal": true
    }
   },
   {
@@ -446,7 +461,6 @@
    "typ": "tydlig-signal",
    "kriterier": {
     "levererat": true,
-    "ingang": false,
     "inga_pahitt": true,
     "skrivregler": true
    },
@@ -501,6 +515,9 @@
       "forsok": 1
      }
     ]
+   },
+   "upplysning": {
+    "signal": false
    }
   },
   {
@@ -508,7 +525,6 @@
    "typ": "tydlig-signal",
    "kriterier": {
     "levererat": true,
-    "ingang": true,
     "inga_pahitt": true,
     "skrivregler": true
    },
@@ -563,6 +579,9 @@
       "forsok": 1
      }
     ]
+   },
+   "upplysning": {
+    "signal": true
    }
   },
   {
@@ -570,7 +589,6 @@
    "typ": "svag-signal",
    "kriterier": {
     "levererat": true,
-    "ingang": true,
     "inga_pahitt": true,
     "skrivregler": true
    },
@@ -625,6 +643,9 @@
       "forsok": 1
      }
     ]
+   },
+   "upplysning": {
+    "signal": true
    }
   },
   {
@@ -632,7 +653,6 @@
    "typ": "svag-signal",
    "kriterier": {
     "levererat": true,
-    "ingang": true,
     "inga_pahitt": true,
     "skrivregler": true
    },
@@ -687,6 +707,9 @@
       "forsok": 1
      }
     ]
+   },
+   "upplysning": {
+    "signal": true
    }
   },
   {
@@ -694,7 +717,6 @@
    "typ": "svag-signal",
    "kriterier": {
     "levererat": true,
-    "ingang": true,
     "inga_pahitt": true,
     "skrivregler": true
    },
@@ -724,6 +746,9 @@
       "forsok": 1
      }
     ]
+   },
+   "upplysning": {
+    "signal": true
    }
   },
   {
@@ -731,7 +756,6 @@
    "typ": "svag-signal",
    "kriterier": {
     "levererat": true,
-    "ingang": true,
     "inga_pahitt": true,
     "skrivregler": false
    },
@@ -791,6 +815,9 @@
       "forsok": 1
      }
     ]
+   },
+   "upplysning": {
+    "signal": true
    }
   },
   {
@@ -798,7 +825,6 @@
    "typ": "svag-signal",
    "kriterier": {
     "levererat": true,
-    "ingang": true,
     "inga_pahitt": true,
     "skrivregler": true
    },
@@ -848,6 +874,9 @@
       "forsok": 1
      }
     ]
+   },
+   "upplysning": {
+    "signal": true
    }
   },
   {
@@ -855,7 +884,6 @@
    "typ": "svag-signal",
    "kriterier": {
     "levererat": true,
-    "ingang": true,
     "inga_pahitt": true,
     "skrivregler": true
    },
@@ -910,6 +938,9 @@
       "forsok": 1
      }
     ]
+   },
+   "upplysning": {
+    "signal": true
    }
   },
   {
@@ -917,7 +948,6 @@
    "typ": "namngiven-kontakt",
    "kriterier": {
     "levererat": true,
-    "ingang": true,
     "inga_pahitt": true,
     "skrivregler": true
    },
@@ -962,6 +992,9 @@
       "forsok": 1
      }
     ]
+   },
+   "upplysning": {
+    "signal": true
    }
   },
   {
@@ -969,7 +1002,6 @@
    "typ": "namngiven-kontakt",
    "kriterier": {
     "levererat": true,
-    "ingang": true,
     "inga_pahitt": true,
     "skrivregler": true
    },
@@ -1024,6 +1056,9 @@
       "forsok": 1
      }
     ]
+   },
+   "upplysning": {
+    "signal": true
    }
   },
   {
@@ -1031,7 +1066,6 @@
    "typ": "namngiven-kontakt",
    "kriterier": {
     "levererat": true,
-    "ingang": true,
     "inga_pahitt": true,
     "skrivregler": true
    },
@@ -1066,6 +1100,9 @@
       "forsok": 1
      }
     ]
+   },
+   "upplysning": {
+    "signal": true
    }
   },
   {
@@ -1073,7 +1110,6 @@
    "typ": "namngiven-kontakt",
    "kriterier": {
     "levererat": true,
-    "ingang": true,
     "inga_pahitt": true,
     "skrivregler": true
    },
@@ -1128,6 +1164,9 @@
       "forsok": 1
      }
     ]
+   },
+   "upplysning": {
+    "signal": true
    }
   },
   {
@@ -1135,7 +1174,6 @@
    "typ": "namngiven-kontakt",
    "kriterier": {
     "levererat": true,
-    "ingang": true,
     "inga_pahitt": true,
     "skrivregler": true
    },
@@ -1190,6 +1228,9 @@
       "forsok": 1
      }
     ]
+   },
+   "upplysning": {
+    "signal": true
    }
   },
   {
@@ -1197,7 +1238,6 @@
    "typ": "funktionsadress",
    "kriterier": {
     "levererat": true,
-    "ingang": true,
     "inga_pahitt": true,
     "skrivregler": true
    },
@@ -1232,6 +1272,9 @@
       "forsok": 1
      }
     ]
+   },
+   "upplysning": {
+    "signal": true
    }
   },
   {
@@ -1239,7 +1282,6 @@
    "typ": "funktionsadress",
    "kriterier": {
     "levererat": true,
-    "ingang": true,
     "inga_pahitt": true,
     "skrivregler": true
    },
@@ -1294,6 +1336,9 @@
       "forsok": 1
      }
     ]
+   },
+   "upplysning": {
+    "signal": true
    }
   },
   {
@@ -1301,7 +1346,6 @@
    "typ": "funktionsadress",
    "kriterier": {
     "levererat": true,
-    "ingang": true,
     "inga_pahitt": true,
     "skrivregler": false
    },
@@ -1356,6 +1400,9 @@
       "forsok": 1
      }
     ]
+   },
+   "upplysning": {
+    "signal": true
    }
   },
   {
@@ -1363,7 +1410,6 @@
    "typ": "funktionsadress",
    "kriterier": {
     "levererat": true,
-    "ingang": true,
     "inga_pahitt": true,
     "skrivregler": true
    },
@@ -1418,6 +1464,9 @@
       "forsok": 1
      }
     ]
+   },
+   "upplysning": {
+    "signal": true
    }
   },
   {
@@ -1425,7 +1474,6 @@
    "typ": "funktionsadress",
    "kriterier": {
     "levererat": true,
-    "ingang": true,
     "inga_pahitt": true,
     "skrivregler": true
    },
@@ -1480,6 +1528,9 @@
       "forsok": 1
      }
     ]
+   },
+   "upplysning": {
+    "signal": true
    }
   },
   {
@@ -1487,7 +1538,6 @@
    "typ": "struktur-b",
    "kriterier": {
     "levererat": true,
-    "ingang": true,
     "inga_pahitt": true,
     "skrivregler": false
    },
@@ -1537,6 +1587,9 @@
       "forsok": 1
      }
     ]
+   },
+   "upplysning": {
+    "signal": true
    }
   },
   {
@@ -1544,7 +1597,6 @@
    "typ": "struktur-b",
    "kriterier": {
     "levererat": true,
-    "ingang": true,
     "inga_pahitt": true,
     "skrivregler": true
    },
@@ -1574,6 +1626,9 @@
       "forsok": 1
      }
     ]
+   },
+   "upplysning": {
+    "signal": true
    }
   },
   {
@@ -1581,7 +1636,6 @@
    "typ": "struktur-b",
    "kriterier": {
     "levererat": true,
-    "ingang": true,
     "inga_pahitt": true,
     "skrivregler": true
    },
@@ -1611,6 +1665,9 @@
       "forsok": 1
      }
     ]
+   },
+   "upplysning": {
+    "signal": true
    }
   },
   {
@@ -1618,7 +1675,6 @@
    "typ": "fallgrop",
    "kriterier": {
     "levererat": true,
-    "ingang": true,
     "inga_pahitt": false,
     "skrivregler": true
    },
@@ -1673,6 +1729,9 @@
       "forsok": 1
      }
     ]
+   },
+   "upplysning": {
+    "signal": true
    }
   },
   {
@@ -1680,7 +1739,6 @@
    "typ": "fallgrop",
    "kriterier": {
     "levererat": false,
-    "ingang": true,
     "inga_pahitt": true,
     "skrivregler": true
    },
@@ -1725,6 +1783,9 @@
       "forsok": 1
      }
     ]
+   },
+   "upplysning": {
+    "signal": true
    }
   },
   {
@@ -1732,7 +1793,6 @@
    "typ": "fallgrop",
    "kriterier": {
     "levererat": false,
-    "ingang": true,
     "inga_pahitt": true,
     "skrivregler": true
    },
@@ -1797,6 +1857,9 @@
       "forsok": 1
      }
     ]
+   },
+   "upplysning": {
+    "signal": true
    }
   },
   {
@@ -1804,7 +1867,6 @@
    "typ": "fallgrop",
    "kriterier": {
     "levererat": true,
-    "ingang": true,
     "inga_pahitt": true,
     "skrivregler": true
    },
@@ -1859,7 +1921,12 @@
       "forsok": 1
      }
     ]
+   },
+   "upplysning": {
+    "signal": true
    }
   }
- ]
+ ],
+ "signal_andel": 0.848,
+ "ombedomd": "2026-11-10T15:41:44+00:00"
 }

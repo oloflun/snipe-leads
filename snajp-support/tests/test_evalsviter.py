@@ -160,8 +160,19 @@ BRA_MEJL = (
 def test_iris_bra_mejl_godkanns_och_signaturens_tal_raknas_inte():
     svar = {"subject": "Nya kontoret i Holmsund", "body": BRA_MEJL, "queued": True}
     assert bedomning.bedom_iris(IRISFALL, svar, RUBRIK) == {
-        "levererat": True, "ingang": True, "inga_pahitt": True, "skrivregler": True,
+        "levererat": True, "inga_pahitt": True, "skrivregler": True,
     }
+
+
+def test_iris_signalen_ar_en_upplysning_inte_ett_kriterium():
+    """Nivån för en ingång är bolagets eget löfte mot momentet (referensen,
+    avsnitt 1). En daterad nyhet är ett sätt, inte ett krav."""
+    utan_signal = BRA_MEJL.replace("Jag såg att ni öppnat kontor i Holmsund.", "Ni lovar era kunder svar samma dag.")
+    svar = {"subject": "Svar samma dag", "body": utan_signal, "queued": True}
+
+    assert all(bedomning.bedom_iris(IRISFALL, svar, RUBRIK).values())
+    assert bedomning.iris_signal(IRISFALL, svar) is False
+    assert bedomning.iris_signal(IRISFALL, {"body": BRA_MEJL}) is True
 
 
 def test_iris_pahittat_tal_underkanns():
