@@ -56,6 +56,7 @@ from ..kvitton.sammanfattning import (
 )
 from ..kvitton.hanterare import Inkommande, hantera, spara
 from ..kvitton.skanning import skanna_inkorg
+from ..jobs import bakgrund
 from . import dubbelstart
 from .bookkeeping import _kvotsvar
 from .deps import require_bookkeeping_tenant, require_tenant
@@ -184,7 +185,50 @@ async def skanna(
     )
 
 
-async def _skanna(request: Request, fran: date | None, till: date | None, tenant: dict) -> dict:
+@router.post("/api/kvitton/skanning", status_code=202)
+async def starta_skanning(
+    request: Request,
+    fran: date | None = None,
+    till: date | None = None,
+    tenant: dict = Depends(require_tenant),
+) -> dict:
+    """Startar skanningen som ett jobb och svarar direkt (2026-11-10).
+
+    `POST /skanna` gör hela arbetet i begäran, och en skanning av tjugo mejl
+    tar längre än de nio sekunder webbens proxy ger en POST: vyn visade ett
+    fel medan arbetet gick vidare. Här får vyn ett jobb-id, hämtar förloppet
+    (mejl x av y) med `GET /skanning/{id}` och till sist samma svar som
+    `/skanna` ger. Går en skanning redan för kunden svarar starten med den.
+    """
+    if valj_mejlkonto(tenant["tenant_id"]) is None:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Ingen mejlinkorg är kopplad ännu. Koppla Gmail eller Outlook under "
+                "Inställningar, eller ladda upp kvitton manuellt."
+            ),
+        )
+
+    async def _arbete(forlopp: bakgrund.Forlopp) -> dict:
+        async def _mejl(lasta: int, totalt: int) -> None:
+            await forlopp.satt(lasta=lasta, totalt=totalt)
+
+        return await _skanna(request, fran, till, tenant, forlopp=_mejl)
+
+    job_id, pagar = await bakgrund.starta(request.app.state, tenant["tenant_id"], "kvittoskanning", _arbete)
+    return {"job_id": job_id, "pagar": pagar}
+
+
+@router.get("/api/kvitton/skanning/{job_id}")
+async def las_skanning(request: Request, job_id: str, tenant: dict = Depends(require_tenant)) -> dict:
+    """Skanningens läge: status, förlopp (`lasta`, `totalt`) och, när den är
+    klar, samma svar som `POST /skanna`."""
+    return await bakgrund.lasa(request.app.state, tenant["tenant_id"], job_id)
+
+
+async def _skanna(
+    request: Request, fran: date | None, till: date | None, tenant: dict, *, forlopp: Any = None
+) -> dict:
     storage = request.app.state.storage
     tenant_id = tenant["tenant_id"]
     konto = valj_mejlkonto(tenant["tenant_id"])
@@ -198,7 +242,7 @@ async def _skanna(request: Request, fran: date | None, till: date | None, tenant
         )
 
     try:
-        resultat = await skanna_inkorg(storage, tenant_id, konto)
+        resultat = await skanna_inkorg(storage, tenant_id, konto, forlopp=forlopp)
     except MejlkontofelError as fel:
         raise HTTPException(status_code=502, detail=str(fel)) from fel
     except Exception as fel:

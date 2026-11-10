@@ -105,10 +105,13 @@ def _dubbelstartsvakten_nollstalld():
     beställning i en halv minut, per process. Två tester som startar samma
     körning hade annars fått varandras svar."""
     from app.api import dubbelstart
+    from app.jobs import bakgrund
 
     dubbelstart.nollstall()
+    bakgrund.nollstall()
     yield
     dubbelstart.nollstall()
+    bakgrund.nollstall()
 
 
 @pytest.fixture(autouse=True)

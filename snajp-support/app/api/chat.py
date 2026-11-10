@@ -383,4 +383,8 @@ async def get_job(
     }
     if job.get("steg") and job["status"] not in ("completed", "failed"):
         svar["fas"] = _FASER.get(str(job["steg"]), "arbetar")
+    # Arbete som räknar sig fram (massutskick: `klara` av `totalt`), se
+    # app/jobs/bakgrund.py.
+    if job.get("forlopp"):
+        svar["forlopp"] = job["forlopp"]
     return svar

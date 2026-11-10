@@ -27,6 +27,7 @@ from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field, model_validator
 
+from ..jobs import bakgrund
 from ..leads import utkaststatus
 from . import dubbelstart
 from .deps import kraev_uuid, require_tenant
@@ -255,7 +256,21 @@ async def skicka_kampanj(request: Request, kampanj_id: str, tenant: dict = Depen
     )
 
 
-async def _skicka_kampanj(request: Request, kampanj_id: str, tenant: dict) -> dict:
+@router.post("/api/leads/kampanjer/{kampanj_id}/skicka-jobb", status_code=202)
+async def starta_kampanjutskick(request: Request, kampanj_id: str, tenant: dict = Depends(require_tenant)) -> dict:
+    """Samma utskick som `/skicka`, som ett jobb med förlopp (2026-11-10): en
+    kampanj till en hel lista tar längre än en begäran får ta. Förloppet och
+    utfallet hämtas med `GET /api/jobs/{id}`."""
+    jobb, pagar = await bakgrund.starta(
+        request.app.state, tenant["tenant_id"], f"kampanjens-utskick:{kampanj_id}",
+        lambda forlopp: _skicka_kampanj(request, kampanj_id, tenant, forlopp=forlopp),
+    )
+    return {"job_id": jobb, "pagar": pagar}
+
+
+async def _skicka_kampanj(
+    request: Request, kampanj_id: str, tenant: dict, *, forlopp: bakgrund.Forlopp | None = None
+) -> dict:
     from ..leads.scheduler import skicka_godkant
     from ..leads.send_provider import get_send_provider
 
@@ -263,11 +278,17 @@ async def _skicka_kampanj(request: Request, kampanj_id: str, tenant: dict) -> di
     tenant_id = tenant["tenant_id"]
     provider = get_send_provider()
     utfall: list[dict] = []
-    for post in await storage.kampanjens_poster(tenant_id, kampanj_id):
-        if post.get("status") != "awaiting_review" or not post.get("queue_item_id"):
-            continue
+    vantande = [
+        post for post in await storage.kampanjens_poster(tenant_id, kampanj_id)
+        if post.get("status") == "awaiting_review" and post.get("queue_item_id")
+    ]
+    if forlopp is not None:
+        await forlopp.satt(klara=0, totalt=len(vantande))
+    for post in vantande:
         res, skal = await skicka_godkant(storage, tenant_id, post["queue_item_id"], provider, now=datetime.now(timezone.utc))
         utfall.append({"company_name": post.get("company_name"), "utfall": res, "skal": skal})
+        if forlopp is not None:
+            await forlopp.satt(klara=len(utfall), totalt=len(vantande))
     return {
         "skickade": sum(1 for u in utfall if u["utfall"] == "sent"),
         "vantar_pa_fonstret": sum(1 for u in utfall if u["utfall"] == "requeued"),

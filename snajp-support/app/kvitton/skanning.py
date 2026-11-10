@@ -64,13 +64,19 @@ _anvand_deterministisk = anvand_deterministisk
 
 
 async def skanna_inkorg(
-    storage: Any, tenant_id: str, konto: Mejlkonto, *, max_antal: int = 50
+    storage: Any, tenant_id: str, konto: Mejlkonto, *, max_antal: int = 50,
+    forlopp: Any = None,
 ) -> Skanningsresultat:
     """Hela kedjan. Returnerar en händelse per genomläst mejl, i inkorgens
-    ordning, så att gränssnittet kan visa exakt vad agenten gjorde."""
+    ordning, så att gränssnittet kan visa exakt vad agenten gjorde.
+
+    `forlopp(lasta, totalt)` anropas när inkorgen är hämtad och efter varje
+    mejl, så att vyn kan visa hur långt skanningen kommit."""
     resultat = Skanningsresultat()
     mejlen = await konto.hamta_mejl(max_antal=max_antal)
     profil = await hamta_profil(storage, tenant_id)
+    if forlopp is not None:
+        await forlopp(0, len(mejlen))
 
     for mejl in mejlen:
         resultat.genomlasta += 1
@@ -95,6 +101,8 @@ async def skanna_inkorg(
             handelse["utfall"] = "fel"
             resultat.misslyckade += 1
         resultat.handelser.append(handelse)
+        if forlopp is not None:
+            await forlopp(resultat.genomlasta, len(mejlen))
 
     return resultat
 

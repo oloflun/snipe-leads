@@ -75,6 +75,7 @@ from ..leads.onboarding_state import REQUIRED_KINDS, get_onboarding_state
 from ..leads import korning as iris_korning
 from ..leads import omprova, utkaststatus
 from ..leads.profil import las_kundtext, sakerstall_profil, slå_ihop, som_icp
+from ..jobs import bakgrund
 from . import dubbelstart
 from .stegtexter import utan_stegtexter
 from .deps import kraev_uuid, require_tenant
@@ -2030,7 +2031,30 @@ async def skicka_korningens_utkast(
     )
 
 
-async def _skicka_korningens_utkast(request: Request, job_id: str, tenant: dict) -> dict:
+@router.post("/api/leads/korningar/{job_id}/utkast/skicka-jobb", status_code=202)
+async def starta_korningens_utskick(
+    request: Request, job_id: str, tenant: dict = Depends(require_tenant)
+) -> dict:
+    """Samma utskick som `/utkast/skicka`, som ett jobb (2026-11-10).
+
+    Utskicket går igenom utkasten i tur och ordning och tar med fler än en
+    handfull längre än de nio sekunder webbens proxy ger en POST: vyn visade
+    ett fel medan utskicket gick vidare. Här får vyn ett jobb-id, hämtar
+    förloppet (`klara` av `totalt`) med `GET /api/jobs/{id}` och till sist
+    samma utfall. Går ett utskick redan för körningen svarar starten med det.
+    """
+    if await request.app.state.storage.get_leads_korning(tenant["tenant_id"], job_id) is None:
+        raise HTTPException(status_code=404, detail="Körningen finns inte.")
+    jobb, pagar = await bakgrund.starta(
+        request.app.state, tenant["tenant_id"], f"korningens-utskick:{job_id}",
+        lambda forlopp: _skicka_korningens_utkast(request, job_id, tenant, forlopp=forlopp),
+    )
+    return {"job_id": jobb, "pagar": pagar}
+
+
+async def _skicka_korningens_utkast(
+    request: Request, job_id: str, tenant: dict, *, forlopp: bakgrund.Forlopp | None = None
+) -> dict:
     from datetime import datetime, timezone
 
     from ..leads.scheduler import skicka_godkant
@@ -2039,14 +2063,17 @@ async def _skicka_korningens_utkast(request: Request, job_id: str, tenant: dict)
     _, leads = await _korningens_leads(request, tenant, job_id)
     provider = get_send_provider()
     utfall: list[dict] = []
-    for lead in leads:
-        if lead["status"] != "vantar" or not lead["queue_item_id"]:
-            continue
+    vantande = [lead for lead in leads if lead["status"] == "vantar" and lead["queue_item_id"]]
+    if forlopp is not None:
+        await forlopp.satt(klara=0, totalt=len(vantande))
+    for lead in vantande:
         res, skal = await skicka_godkant(
             request.app.state.storage, tenant["tenant_id"], lead["queue_item_id"], provider,
             now=datetime.now(timezone.utc),
         )
         utfall.append({"company_name": lead["company_name"], "utfall": res, "skal": skal})
+        if forlopp is not None:
+            await forlopp.satt(klara=len(utfall), totalt=len(vantande))
     return {
         "skickade": sum(1 for u in utfall if u["utfall"] == "sent"),
         "vantar_pa_fonstret": sum(1 for u in utfall if u["utfall"] == "requeued"),

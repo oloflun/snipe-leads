@@ -32,6 +32,8 @@ const KO = {
   }))
 };
 
+let utskicksvarv = 0;
+
 function svar(kropp: unknown, status = 200) {
   return Promise.resolve(
     new Response(JSON.stringify(kropp), { status, headers: { "Content-Type": "application/json" } })
@@ -45,9 +47,23 @@ function installeraFetch() {
   window.fetch = (input, init) => {
     const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
     if (!url.includes("/api/snajp-support/")) return riktig(input, init);
-    if (url.endsWith("/utkast/skicka")) {
+    // Massutskicket går som ett jobb (lib/leads/utskicksjobb.ts): starten
+    // svarar med ett id, och pollningen visar förloppet i tre varv.
+    if (url.endsWith("/utkast/skicka-jobb")) {
+      utskicksvarv = 0;
+      return svar({ job_id: "utskick-1", pagar: false }, 202);
+    }
+    if (url.endsWith("/leads/jobb/utskick-1")) {
+      utskicksvarv += 1;
+      if (utskicksvarv < 4) {
+        return svar({ status: "processing", forlopp: { klara: Math.min(utskicksvarv - 1, 2), totalt: 2 } });
+      }
       for (const l of LEADS) if (l.status === "vantar") l.status = "skickat";
-      return svar({ skickade: 2, vantar_pa_fonstret: 0, stoppade: [] });
+      return svar({
+        status: "completed",
+        forlopp: { klara: 2, totalt: 2 },
+        result: { skickade: 2, vantar_pa_fonstret: 0, stoppade: [] }
+      });
     }
     if (url.endsWith("/utkast/skriv")) return svar({ count: 1, jobs: [] }, 202);
     if (url.endsWith("/reject")) {
