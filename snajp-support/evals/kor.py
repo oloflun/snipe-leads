@@ -307,6 +307,12 @@ def _kor_kvitto(miljo: Miljo, fall: dict[str, Any], nr: int, etikett: str = "") 
 def kor(miljo: Miljo, agent: str, etikett: str, urval: int | None, samtidiga: int) -> dict[str, Any]:
     if not miljo.nycklar:
         sys.exit("Inga evalnycklar för miljön. Kör `forbered` först.")
+    if agent == "kvitto" and miljo.master:
+        # En NY kund per körning: samma dokument en gång till hos samma kund
+        # flaggas (med rätta) som möjliga dubbletter och går till granskning.
+        # Första omkörningen mätte just det: 35 av 40 blev 14 av 40.
+        forbered_kvitto(miljo)
+        miljo.kvittonyckel = _las_env(miljo.envfil).get(f"EVAL_{miljo.namn.upper()}_KVITTONYCKEL", "")
     fall = _las_svit(agent)
     if urval:
         fall = [f for f in fall if f.get("kor_live", True)][:urval]

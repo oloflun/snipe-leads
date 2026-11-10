@@ -9,6 +9,66 @@ möjligt), vad det betyder i koden.
 
 ---
 
+## 2026-11-10 (Sebbe) — Stabilitetsarbetet, fas 2 till 4: mät först, och låt mätningen välja ändringen
+
+**Beslut.** Sebbe: "kör klart alla faser och allting du ska göra, du får
+godkännelse för allt. När du är klar med ALLT så pushar du." Godkännandet
+gällde också det som annars kräver ett ja först (migration, jobb med förlopp).
+De enskilda valen nedan gjordes i arbetet. Slutrapporten ligger i
+`docs/stabilitet-2026-11/SLUTRAPPORT.md`.
+
+**Resonemanget.** Fas 0 gav en lista. Fas 2 till 4 byggde mätinstrument
+(evalsviter mot riktig modell, ett lasttest, frågor mot databasen) och lät dem
+peka ut vad som skulle ändras. Tre av de allvarligaste fynden stod inte på
+listan: jobbsvaret lämnade ut agentens promptar till varje besökare, två av
+fyrtio kvitton gav serverfel, och supporten lydde en inbäddad instruktion och
+lovade rabatt.
+
+**I koden, val för val.**
+
+- **Agentsvar till kunden bär inte stegloggens texter** (`api/stegtexter.py`).
+  Rensningen sker där svaret lämnas ut, inte där det sparas: kvotbokföringen
+  läser det lagrade, och redan lagrade jobb täcks. `/api/leads/runs` ger ett
+  sammandrag; ingen vy läste texterna.
+- **`utkast_lagen` läser tabellerna en gång** när hela kunden efterfrågas, och
+  har kvar uppslaget per tråd för ett enda prospekt. Den nya frågan jämfördes
+  rad för rad mot development innan den infördes. Migration 115 lägger index;
+  frågan är snabb även utan dem, så en miljö som inte kört migrationen går.
+- **Supportens steg påminns om kontraktets två fält** sist i meddelandet.
+  Triagen gjordes om i 74 % av anropen för att svaret saknade dem. Valet att
+  inte släppa kravet i stället: fälten är spårbarheten, och en rad kostar
+  mindre än ett omförsök. Bara supporten får raden; Iris kedja är låst mot
+  facit och rörs inte utan egna prov.
+- **Avhoppsklassaren går samtidigt med triagen.** Dess utslag läses först
+  efter researchen.
+- **20 sekunder per modellanrop i chatten** (45 förut), dubbelt för steg som
+  tänker. Följden att räkna med: en trög stund hos Vertex ger fler omförsök.
+- **Chatten visar fyra skeden**, inte stegens namn: namnen är interna.
+- **Kvittoskanningen och massutskicken är jobb med förlopp**
+  (`jobs/bakgrund.py`), som en uppgift i api-processen med en post i det
+  befintliga jobblagret. Ingen ny kö. Valet har ett pris: en deploy mitt i
+  avbryter arbetet, och det som hunnit göras är gjort. Båda går att starta om
+  utan att något händer två gånger, och det var villkoret för valet.
+- **Kundens text står inom en ram** med förklaringen FÖRE taggarna. Första
+  versionen hade förklaringen inuti, och evalsviten visade följden samma dag:
+  modellen läste den som kundens text och svarade med en hälsning på två av
+  femtio frågor. Ett svar som bär våra instruktionsmarkörer stoppas i kod.
+- **Ett beroende som är nere ger 503**, ett programfel 500.
+- **Ett modellsvar utan tokenräkning fäller inte agenten.** Klienten fyller i
+  fälten; kvittohanteraren läser underlaget maskinellt till granskning.
+- **Evalsviterna bedöms mekaniskt**, utan en andra modell som domare: samma
+  svar ska ge samma poäng. Det mallen inte kan mäta (tonen, om en ingång
+  håller nivån) står kvar hos en människa. Iris signal mäts som en upplysning:
+  nivån för en ingång är bolagets löfte mot momentet, inte en nyhet.
+- **Sviterna körs mot egna evalkunder i development**, aldrig mot en riktig
+  kunds konto och aldrig mot produktionen.
+
+**Inte gjort, med flit.** Iris promptar och grindar (låsta mot facit, ändras
+enligt referensens avsnitt 8), strömmat supportsvar, reservmodell på Vertex,
+Sentry (kräver ett konto), kundnycklarna i klartext i development.
+
+---
+
 ## 2026-11-10 (Sebbe) — Stabilitetsarbetet, fas 1 fortsatt: ett fel gäller sin egen rad, inte hela arbetet
 
 **Beslut.** Sebbe sa ja till de återstående punkterna i fas 1 efter att den

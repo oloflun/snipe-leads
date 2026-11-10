@@ -29,6 +29,9 @@ Resultaten skrivs till `docs/stabilitet-2026-11/eval/<etikett>-<agent>.json`
 med varje falls svar, kriterier och svarstid. Sviterna körs aldrig mot
 produktionen (`--env main` avvisas).
 
+Kvittohanteraren får en ny evalkund vid varje körning: samma dokument en
+gång till hos samma kund flaggas, med rätta, som möjliga dubbletter.
+
 Evalkunderna är egna kunder (`eval-…`) utan koppling till någon riktig kund.
 Nycklarna läggs i `.env.deploy` som `EVAL_<MILJÖ>_NYCKLAR` och skrivs aldrig
 ut. Iris fördelas över flera evalkunder, eftersom leadsbudgeten räknas per
