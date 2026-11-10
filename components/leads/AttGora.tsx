@@ -25,7 +25,7 @@ import type { Kvitto } from "@/components/kvitton/KvittoYta";
 import { Dashboard } from "@/components/snajp/Dashboard";
 import { btnLiten, btnSecondary, meta } from "@/components/ui";
 import { demoKvitton } from "@/lib/demo/kvitto-oversikt";
-import { demoOversiktSvar } from "@/lib/demo/oversikt";
+import { DEMO_SVARAT_ID, demoOversiktSvar } from "@/lib/demo/oversikt";
 import { readJsonBody } from "@/lib/http/json";
 import { useLocale, type Localized } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
@@ -75,6 +75,10 @@ type KvittoRad = Pick<
 const T = {
   vantarTotalt: { sv: "Väntar på dig", en: "Waiting for you" },
   allaHanterat: { sv: "allt är hanterat", en: "everything is handled" },
+  koOlast: {
+    sv: "en kö gick inte att läsa, ladda om sidan",
+    en: "one queue could not be read, reload the page",
+  },
   aldst: { sv: "äldst", en: "oldest" },
   kundtjanst: { sv: "Kundtjänst", en: "Customer service" },
   leads: { sv: "Leads", en: "Leads" },
@@ -123,6 +127,7 @@ const T = {
   svarFranLeads: { sv: "Svar från leads", en: "Replies from leads" },
   leadsutkast: { sv: "Utkast att godkänna", en: "Drafts to approve" },
   oppnaInkorgen: { sv: "Öppna inkorgen", en: "Open the inbox" },
+  oppnaSvaret: { sv: "Öppna svaret", en: "Open the reply" },
   oppnaUtkasten: { sv: "Öppna utkasten", en: "Open the drafts" },
   samtalIdag: { sv: "Samtal att ringa i dag", en: "Calls to make today" },
   oppnaSamtalen: { sv: "Öppna samtalen", en: "Open the calls" },
@@ -393,6 +398,14 @@ export function AttGora({ demo = false }: Readonly<{ demo?: boolean }>) {
       ? lage[k.id] !== null
       : ovrigaKlara,
   );
+  // En kö vars hämtning föll står kvar som null. Den räknades förut som noll,
+  // så ett avbrott i api:t visade "Inget väntar på dig" med grön bock (Fas
+  // 0-fyndet, 2026-11-09). Ett okänt antal är inte noll.
+  const nagonOlast =
+    ovrigaKlara &&
+    aktuella.some(
+      (k) => !["eskalerade", "vantar", "larm"].includes(k.id) && lage[k.id] === null,
+    );
   const total = aktuella.reduce((s, k) => s + (lage[k.id]?.antal ?? 0), 0);
   const tider = aktuella.flatMap((k) => lage[k.id]?.tider ?? []);
   const aldsta = tider.length ? Math.min(...tider) : null;
@@ -410,7 +423,9 @@ export function AttGora({ demo = false }: Readonly<{ demo?: boolean }>) {
       varde: laddat ? total : null,
       larm: total > 0,
       detalj:
-        laddat && total === 0
+        nagonOlast
+          ? T.koOlast
+          : laddat && total === 0
           ? T.allaHanterat
           : aldsta !== null
             ? {
@@ -496,7 +511,7 @@ export function AttGora({ demo = false }: Readonly<{ demo?: boolean }>) {
         ))}
       </div>
 
-      {laddat && total === 0 ? (
+      {laddat && total === 0 && !nagonOlast ? (
         <section
           className={cn(kort, "flex items-center gap-4")}
           aria-live="polite"
@@ -636,8 +651,11 @@ export function AttGora({ demo = false }: Readonly<{ demo?: boolean }>) {
                       etikett={T.svarFranLeads}
                       ko={lage.leadsvar}
                       klar={ovrigaKlara}
-                      href={vag("/dashboard/leads?vy=inkorg")}
-                      knapp={T.oppnaInkorgen}
+                      // Demon har ingen kopplad inkorg: svaret öppnas i leadets
+                      // låda (Skickat-konversationen och tidslinjen) i stället för
+                      // en tom Inkorg-flik.
+                      href={vag(demo ? `/dashboard/leads?lead=${DEMO_SVARAT_ID}` : "/dashboard/leads?vy=inkorg")}
+                      knapp={demo ? T.oppnaSvaret : T.oppnaInkorgen}
                     />
                     <Lankrad
                       ikon={<PenLine className="h-4 w-4" aria-hidden />}

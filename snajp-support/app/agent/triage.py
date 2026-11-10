@@ -11,7 +11,7 @@ import json
 from typing import Any
 
 from ..config import CATEGORIES, CATEGORY_LABELS, get_settings
-from ..leads.untrusted_content import wrap_untrusted_content
+from ..leads.untrusted_content import kapsla_kundtext, wrap_untrusted_content
 from ..moderation.maskering import maskera_personnummer
 from .llm import get_llm_client, tankande_kwargs
 from .support_systemprompt import rendera
@@ -120,9 +120,12 @@ async def triage_email_llm(
         sprakregler=SPRAKREGLER,
         kb=kb_text,
         profil=foretagsprofil.strip() or "(ingen profil registrerad)",
-        sender=sender,
-        subject=maskera_personnummer(subject),
-        body=maskera_personnummer(body),
+        # Avsändare, ämne och kropp skrivs av en utomstående (2026-11-10):
+        # de korta fälten blir en rad var, och kroppen står inom samma ram
+        # som chattens meddelanden (kapsla_kundtext).
+        sender=" ".join(str(sender or "").split())[:200],
+        subject=" ".join(maskera_personnummer(subject).split())[:200],
+        body=kapsla_kundtext(maskera_personnummer(body)),
     ) + (f"\n\n{onskemal}" if onskemal else "")
     # Grundprompten är systemmeddelandet: allt kundarbete utgår från den.
     grundprompt = rendera(

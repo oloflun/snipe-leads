@@ -9,6 +9,258 @@ möjligt), vad det betyder i koden.
 
 ---
 
+## 2026-11-10 (Sebbe) — Stabilitetsarbetet, fas 2 till 4: mät först, och låt mätningen välja ändringen
+
+**Beslut.** Sebbe: "kör klart alla faser och allting du ska göra, du får
+godkännelse för allt. När du är klar med ALLT så pushar du." Godkännandet
+gällde också det som annars kräver ett ja först (migration, jobb med förlopp).
+De enskilda valen nedan gjordes i arbetet. Slutrapporten ligger i
+`docs/stabilitet-2026-11/SLUTRAPPORT.md`.
+
+**Resonemanget.** Fas 0 gav en lista. Fas 2 till 4 byggde mätinstrument
+(evalsviter mot riktig modell, ett lasttest, frågor mot databasen) och lät dem
+peka ut vad som skulle ändras. Tre av de allvarligaste fynden stod inte på
+listan: jobbsvaret lämnade ut agentens promptar till varje besökare, två av
+fyrtio kvitton gav serverfel, och supporten lydde en inbäddad instruktion och
+lovade rabatt.
+
+**I koden, val för val.**
+
+- **Agentsvar till kunden bär inte stegloggens texter** (`api/stegtexter.py`).
+  Rensningen sker där svaret lämnas ut, inte där det sparas: kvotbokföringen
+  läser det lagrade, och redan lagrade jobb täcks. `/api/leads/runs` ger ett
+  sammandrag; ingen vy läste texterna.
+- **`utkast_lagen` läser tabellerna en gång** när hela kunden efterfrågas, och
+  har kvar uppslaget per tråd för ett enda prospekt. Den nya frågan jämfördes
+  rad för rad mot development innan den infördes. Migration 115 lägger index;
+  frågan är snabb även utan dem, så en miljö som inte kört migrationen går.
+- **Supportens steg påminns om kontraktets två fält** sist i meddelandet.
+  Triagen gjordes om i 74 % av anropen för att svaret saknade dem. Valet att
+  inte släppa kravet i stället: fälten är spårbarheten, och en rad kostar
+  mindre än ett omförsök. Bara supporten får raden; Iris kedja är låst mot
+  facit och rörs inte utan egna prov.
+- **Avhoppsklassaren går samtidigt med triagen.** Dess utslag läses först
+  efter researchen.
+- **20 sekunder per modellanrop i chatten** (45 förut), dubbelt för steg som
+  tänker. Följden att räkna med: en trög stund hos Vertex ger fler omförsök.
+- **Chatten visar fyra skeden**, inte stegens namn: namnen är interna.
+- **Kvittoskanningen och massutskicken är jobb med förlopp**
+  (`jobs/bakgrund.py`), som en uppgift i api-processen med en post i det
+  befintliga jobblagret. Ingen ny kö. Valet har ett pris: en deploy mitt i
+  avbryter arbetet, och det som hunnit göras är gjort. Båda går att starta om
+  utan att något händer två gånger, och det var villkoret för valet.
+- **Kundens text står inom en ram** med förklaringen FÖRE taggarna. Första
+  versionen hade förklaringen inuti, och evalsviten visade följden samma dag:
+  modellen läste den som kundens text och svarade med en hälsning på två av
+  femtio frågor. Ett svar som bär våra instruktionsmarkörer stoppas i kod.
+- **Ett beroende som är nere ger 503**, ett programfel 500.
+- **Ett modellsvar utan tokenräkning fäller inte agenten.** Klienten fyller i
+  fälten; kvittohanteraren läser underlaget maskinellt till granskning.
+- **Evalsviterna bedöms mekaniskt**, utan en andra modell som domare: samma
+  svar ska ge samma poäng. Det mallen inte kan mäta (tonen, om en ingång
+  håller nivån) står kvar hos en människa. Iris signal mäts som en upplysning:
+  nivån för en ingång är bolagets löfte mot momentet, inte en nyhet.
+- **Sviterna körs mot egna evalkunder i development**, aldrig mot en riktig
+  kunds konto och aldrig mot produktionen.
+
+**Inte gjort, med flit.** Iris promptar och grindar (låsta mot facit, ändras
+enligt referensens avsnitt 8), strömmat supportsvar, reservmodell på Vertex,
+Sentry (kräver ett konto), kundnycklarna i klartext i development.
+
+---
+
+## 2026-11-10 (Sebbe) — Stabilitetsarbetet, fas 1 fortsatt: ett fel gäller sin egen rad, inte hela arbetet
+
+**Beslut.** Sebbe sa ja till de återstående punkterna i fas 1 efter att den
+första delen gått in i `development`. De enskilda valen nedan gjordes i arbetet.
+
+**Resonemanget.** Det gemensamma i punkterna är att ett enda fel fick för stor
+följd: ett avvisat mejl fällde hela massutskicket och försöktes sedan om i
+evighet, ett trasigt kvittomejl stoppade alla mejl efter det, ett avbrott på en
+sekund i Redis fällde en körning vars research redan var betald, och ett
+modellsvar i fel form gav ett serverfel. Felet ska stanna vid sin rad, synas
+där, och resten ska gå vidare.
+
+**I koden, val för val.**
+
+- **Ett utskick som mejltjänsten inte tar emot bokförs på köposten.** 400/422
+  och ogiltig adress stoppas direkt med skälet (samma mejl ger samma svar nästa
+  minut). Övriga fel försöks om med växande paus, 1 till 30 minuter, och
+  stoppas efter 20 försök, omkring en arbetsdag i sändfönstret. Valet att inte
+  stoppa på första tillfälliga felet: ett avbrott hos Resend en förmiddag ska
+  inte kräva att en människa godkänner om varje utkast. Ett stoppat utkast
+  prövas igen från noll med Godkänn och skicka (`leads/scheduler.py`).
+- **Kvittoskanningen läser vidare.** Ett mejl som faller får utfallet "gick
+  inte att läsa" och prövas igen vid nästa skanning; kontofel och slut kvot
+  avbryter fortfarande hela skanningen, för de går inte över av nästa mejl. Två
+  samtidiga skanningar blir en. Att skanningen fortfarande körs inne i en
+  begäran, utan förlopp som finns kvar efter omladdning, är inte löst här: det
+  är förslaget om skanningen som jobb, som väntar på Sebbes ja.
+- **Körningens rapport gör tre försök** innan körningen fälls.
+- **Modellsvar normaliseras där de läses.** Stegköraren ger alltid ett objekt.
+  Supportens triage: sentimentet 0,0 betyder så argt det går och läses inte
+  längre som neutralt, `"false"` inom citattecken lämnar inte över ärendet.
+  Följden att räkna med: ett sentiment på exakt 0 lämnar nu över, vilket är
+  vad regeln alltid sa.
+- **Supportportalen ger aldrig den delade nyckeln till en kundsession som inte
+  håller,** och inte till någon alls när sajten är driftsatt utan
+  inloggningsvägg. Hellre utloggad än i fel kunds data.
+- **Flyttpaketet bär sin tid** och main tar bara emot paket yngre än en kvart.
+  Det begränsar återuppspelning. Det löser inte att nyckeln delas mellan
+  development och main: den som har nyckeln kan fortfarande skriva till
+  produktionen, och det är så flytten är tänkt. Kundnycklarna i klartext i
+  development kräver en migration och är ett eget beslut.
+- **Leadshämtarna når bara det publika nätet** (`leads/hamtvakt.py`). Samma
+  regler som integrationernas nätvakt, men http tillåts: en liten firmas sajt
+  saknar ibland https och ska gå att läsa ändå.
+- **Leadsbudgeten förvarnar vid 80 %** i plattformshändelserna. Supportens
+  dagsbudget är fortfarande avstängd som standard och kvittohanteraren har
+  inget tak; att sätta dem är ett beslut om vad en kund får kosta, inte en
+  kodfråga.
+- **Demons IP-tak läser det sista värdet i `X-Forwarded-For`,** det kantproxyn
+  lade dit. Hur Railways kant skriver huvudet är inte provat; läser den över
+  besökarens värde är första och sista samma, och ändringen är ofarlig.
+
+---
+
+## 2026-11-09 (Sebbe) — Stabilitetsarbetet, fas 1: felen ska höras, och samma sak ska inte hända två gånger
+
+**Beslut.** Sebbe beställde en genomgång i fyra faser ("Snajp kraschar inte,
+svarar snabbt, agenterna är vassa") och sa ja till fas 1 efter kartläggningen
+(`docs/fas0-2026-11-09/RAPPORT.md`). Sebbe beslutade ordningen; de enskilda
+valen nedan gjordes i arbetet och ligger på grenen `stabilitet` för hans och
+Antons granskning innan något går till `development`.
+
+**Resonemanget.** Kartläggningen visade att de allvarligaste felen var tysta:
+api:t gick upp i minnesläge med grön hälsokontroll när databasen inte svarade,
+ett hängt modellanrop väntade i tio minuter, och supportagenten lämnade över
+"Hur anmäler jag mig till en HLR-kurs?" som ett känsligt ärende. Inget av det
+syntes förrän en kund mötte det.
+
+**I koden, val för val.**
+
+- **Uppstarten vägrar minnesläge.** En satt `DATABASE_URL` som inte går att nå
+  efter fem försök fäller deployen (`main.py:_anslut_postgres`), så att
+  Railway behåller föregående version. Utan `DATABASE_URL` är minnesläget kvar.
+  Ersätter "degraderar gracefully till in-memory" för databasen; Redis och
+  LLM-nyckeln degraderar som förut.
+- **Tidsgränser.** LLM-anrop 120 s (`LLM_TIMEOUT_S`), chattens steg 45 s med
+  ett omtag (`LLM_TIMEOUT_CHATT_S`), databasen 10 s att ansluta och 60 s per
+  fråga, Redis 5 s att ansluta och 20 s per svar. Talen är valda ur
+  mätningen i fas 0 (chattens steg låg under 20 s i p95) och går att ställa
+  om med miljövariabler.
+- **Ordfiltret för känsliga ärenden** fäller hotet om en anmälan och kravet på
+  ersättning, inte orden `anmäl*` och `ersättning`. "Pengarna tillbaka" läggs
+  till. Hotfiltret kräver ett offer för "slå" och "hitta".
+- **Den anonyma chatten tar bara sessionsidentiteter**
+  (`<uuid>@session.snajp.se`). En kund som vill skicka riktiga adresser gör
+  det med sin egen nyckel mot api:t.
+- **Samma start två gånger är en start.** En likadan beställning från samma
+  kund inom 30 sekunder får samma svar (`api/dubbelstart.py`). Per process;
+  fler repliker kräver Redis.
+- **Utskick bär en idempotensnyckel** till Resend, byggd på meddelandets id
+  och innehållets hash.
+- **Varje anrop har ett id** (`X-Request-Id`, `app/sparning.py`) i svaret, i
+  loggen och i `platform_events`.
+
+Lösenordet till plattformsadminkontot togs ur skript och handoffs samma dag.
+Det ligger kvar i historiken och ska bytas.
+
+## 2026-11-09 (Anton) — Startsidan: hjälten ryms i en skärm, innehållet följer skrollen, kapitelrubrik per agent
+
+**Beslut.** Hjältens text står med tyngdpunkten strax över skärmens mitt och hela
+hjälten ryms i första skärmen; på mobil står första ytan i första skärmen. Flödet
+under hjälten har ingen kö i tid: varje sak kommer i samma ögonblick som den står
+i bild, och löptext reser sig rad för rad ur sin rad (den tonas inte och skrivs
+inte ut som rubriken). Varje agent inleds av en kapitelrubrik: namnet i displaygrad
+på bläck med ljuset från ett fönster över golvet. Fälten i de konstruerade ytorna
+svarar på pekaren, och ett klick på en yta öppnar demon.
+
+**Resonemang.** Antons ord: "Just nu är sidan laggig och dåligt anpassad,
+innehållet halkar efter och dyker upp för sent och texten hamnar för långt ned i
+heron och känns som att den ska ramla igenom skärmen, som är exakt det vi ska
+undvika enligt reglerna i designsystemet, på mobil är det ännu värre där rutorna
+hamnar långt ned på skärmen. Se till att allt blir bra timat och mjukt och att
+texten dyker upp, inte ser ut som att den renderas, det är en viktig skillnad,
+utan att skrivas ut på samma sätt som i rubriken. Lägg även till en tydlig
+rubrik-sektion för de båda agenterna med en effektfull animation och passande
+bakgrund som markerar det avsnittet, så att det inte övergångarna sker med knappt
+märkbara rubriker som nu." Under arbetet: "Ser bra ut: Viktigt, gör alla fält i
+rutorna interaktiva vid hovring, precis som email-studio och supportinkorgen".
+Orsakerna var mätbara. Hjälten var högre än skärmen och texten låg mot dess
+nederkant (på Antons skärm, 1536 × 745 i CSS-pixlar, stod rubriken 470–890 px
+ned). Flödets kö (0,6 s per sak, från beställningen 2026-11-07 "en sak i taget")
+lät sex saker i följd bli 3,6 s sena, och rutor som väntade dolda tills hela
+höjden stod i bild lämnade tomma skärmar. "En sak i taget" kommer nu av skrollen
+själv: det som står på olika höjd når bilden vid olika tillfällen.
+
+**I koden.** `Startsida.tsx` (hjältens rutnät, `Kapitel`-delen i `AgentFlode`,
+texten som `data-mo="lines" data-full`), `useLandingMotion.ts` (`steg` utan kö,
+`slot`, `kapitel`, rutor med `data-full` startar vid `top 68%` och döljs aldrig,
+hjältens ytor från 0,7 s, ingressen radvis, sidhuvudet från första målningen),
+`globals.css` (`.hem-scrim`, `.kapitel-ljus`), `ProduktBilder.tsx` och
+`AgentResultat.tsx` (fältens hovring, länken till demon). Uppmätt: text på
+hjältefotot minst 10:1 på mobil, kapitelnamnet mot ljuset minst 5,9:1; efter full
+skroll 0 dolda element på 1536 och 375 px. Inte mätt: bildfrekvensen i en
+webbläsare med grafikkort (den huvudlösa mätningen mättar på 100 ms för både
+gammal och ny sida och säger därför ingenting).
+
+## 2026-11-09 (Anton) — Demon: ingen orange "Demokonto"-ruta, ingen statisk körning, allt klickbart gör något
+
+**Beslut.** Den orangea rutan "Demokonto · inloggad" är förbjuden och borta ur
+railen, mobilraden och railfoten; railen visar arbetsytans namn som för en kund.
+Bandet överst står kvar. Översiktens statiska "Pågår just nu" är borta. Demons
+leads är de sex exempelbolagen, vart och ett med bedömning, källor, utkast och
+tidslinje. Ärenderaderna och luckorna i kundtjänstens översikt går att öppna.
+
+**Resonemang.** Antons ord: "Fixa även demosidan, många av sidorna/knapparna går
+inte att trycka på, till exempel ärenden från listorna i översikterna och flera
+bolag i leads visar fel eller inget utkast, samt en statisk text som säger att
+körning pågår, vilket inte behövs och ser väldigt fake ut, se helt enkelt till
+att allt håller en högre nivå, SKIPPA den orangea "demokonto" -rutan, de är
+FÖRBJUDNA." Det ersätter Sebbes markör från 2026-10-29 (demon som inloggat
+demokonto): kontot finns kvar, etiketten inte. Listans bolag kom ur
+`lib/mock-data`, som saknade utkast och källor och vars signaler sålde Snajp i
+stället för demons avsändare; därför "Inget utkast ännu" och "Bolaget hittades
+inte".
+
+**I koden.** `AppShell.tsx`, `lib/demo/aktivitet.ts`, `lib/demo/oversikt.ts`
+(`demoLeadrad`, `demoTidslinje`), `lib/demo/support-oversikt.ts`,
+`SupportOversikt.tsx` (`onOppnaArende`, Granska), `Dashboard.tsx` (`oppnaId`),
+`LeadsTabell.tsx`, `Tidslinje.tsx`, `IrisBolag.tsx`, `LeadsSida.tsx` (en okänd
+`?lead=` i demon tas ur adressen i stället för att visa fel). Följder som Anton
+bör känna till: "Kör Iris" i demon börjar nu på varianterna av exempelbolagen,
+eftersom de sex handskrivna redan står i listan (varianterna är samma brev med
+andra namn och kan läsas som mall sida vid sida); körningsdetaljens länk heter
+"Öppna bolaget" också i arbetsytan. Inte rättat: bolagslänkarna på
+`/demo/companies` och `/demo/contacts` (rutter utan menyval) leder ut ur demon
+till inloggningen.
+
+## 2026-11-08 (Sebbe) — En beställd körning levererar beställt antal; budgeten är bara en dörr
+
+**Beslut.** "Det är en riktigt hård regel att alla leads som söks ska hittas.
+Om man söker körning för 200 leads ska 200 leads hittas." Och: fortsätt
+körningen som stannade.
+
+**Resonemanget.** Två körningar på 200 i main stannade 18:43 på 33 och 68
+med slutorsak "budget". Målgruppen var inte slut (0 tomma rundor, 37 av 2 400
+undersökta); dygnsbudgeten för leads-tokens kontrollerades före varje bolag
+inne i motorn och avslutade beställningen. `app/leads/budget.py` säger själv
+att grinden är "en dörr, inte en vakt inne i rummet": den skyddar mot en
+skenande kostnad (INV-JOB-002), inte mot vanligt arbete (Antons beslut
+2026-10-20 nedan). En körnings kostnad är redan begränsad av taket (12
+undersökta per beställt lead) och kredittaket för sidhämtningar.
+
+**I koden.** Budgetkollen i `_fyll_pa_last` är borta; dörren vid starten
+(`_kraev_leads_budget`, 429) står kvar. Nytt: `POST
+/api/leads/korningar/{id}/fortsatt` öppnar en avslutad körning under målet
+(inte avbruten) igen med allt den redan prövat, och knappen "Fortsätt
+körningen" i körningens detalj (`IrisKorningar.tsx`). Ingen budgetdörr vid
+fortsättningen: beställningen är redan tagen. Anton ska informeras: att
+budgeten tog slut efter fyra körningar på 200 tyder på att förbrukningen per
+körning är långt över de ~3 M tokens som låg till grund för taket 2026-10-20,
+eller att `LEADS_DAILY_TOKEN_BUDGET` inte längre är satt i main.
+
 ## 2026-11-08 (Anton) — Startsidan följer inte med release #42
 
 **Beslut.** Den enade startsidan (posten "Startsidan blir en egen sida",
@@ -32,6 +284,11 @@ också skulle hållas utanför svarade Anton: "Yes, let them go to production".
 `test_startsidan_ar_en_egen_sida`. `/` skrivs alltså om till `/leads` igen,
 också i development. **Efter mergen av #42:** `git revert` av den commiten på
 `development` tar tillbaka startsidan precis som den var.
+
+**Återställd 2026-11-08.** #42 mergades 2026-11-07 23:51 UTC. Commiten
+`feat(startsida): startsidan tillbaka på development efter release #42` tar
+tillbaka startsidans filer; den här beslutsposten står kvar. Startsidan går
+till main med nästa release.
 
 ## 2026-11-07 (Anton) — Produkten väljs efter vad som tar mest tid hos bolaget
 

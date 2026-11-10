@@ -6,6 +6,7 @@ import {
   tillatnaBackends,
   type Kundsession
 } from "@/lib/kundsession";
+import { valjNyckel, type Nyckelval } from "@/lib/proxynyckel";
 
 /**
  * Proxyn mot snajp-support-backenden — GENERISK spegel under /api/ag.
@@ -49,21 +50,24 @@ const NYCKEL = process.env.SNAJP_AGENT_API_KEY ?? "snajp_demo_2f8c1a9e4b7d";
  *
  * Utan kundkaka (förhandslösnet, lokal utveckling): miljöns delade nyckel
  * mot miljöns backend — demo-tenanten.
+ *
+ * En kundkaka som inte håller ger aldrig den delade nyckeln, och en driftsatt
+ * sajt utan inloggningsvägg ger den inte till någon (lib/proxynyckel.ts).
  */
-async function nyckelOchMal(request: NextRequest): Promise<{ nyckel: string; bas: string }> {
+async function nyckelval(request: NextRequest): Promise<Nyckelval> {
   const kaka = request.cookies.get(KUND_KAKA)?.value;
   const hemlighet = process.env.AGENTSAJT_SSO_SECRET;
-  if (kaka && hemlighet) {
-    const kund = await dekrypteraKundsession<Kundsession>(kaka, hemlighet);
-    if (
-      kund?.apiKey &&
-      Date.now() - kund.utfardad < KUNDSESSION_MAX_MS &&
-      tillatnaBackends().includes(kund.backendUrl)
-    ) {
-      return { nyckel: kund.apiKey, bas: kund.backendUrl };
-    }
-  }
-  return { nyckel: NYCKEL, bas: MAL };
+  const kund =
+    kaka && hemlighet ? await dekrypteraKundsession<Kundsession>(kaka, hemlighet) : null;
+  return valjNyckel({
+    harKundkaka: Boolean(kaka),
+    kund,
+    nu: Date.now(),
+    maxAlderMs: KUNDSESSION_MAX_MS,
+    tillatna: tillatnaBackends(),
+    vaggPa: Boolean(process.env.AGENTSAJT_LOSEN),
+    produktion: process.env.NODE_ENV === "production"
+  });
 }
 
 async function vidare(
@@ -72,7 +76,23 @@ async function vidare(
 ): Promise<Response> {
   const { path } = await params;
   const inUrl = new URL(request.url);
-  const { nyckel, bas } = await nyckelOchMal(request);
+  const val = await nyckelval(request);
+  if (val.slag === "avvisad") {
+    const svar = Response.json(
+      {
+        error:
+          "Din session har gått ut. Öppna supportagenten från Snajp igen. / Your session has expired. Open the support agent from Snajp again."
+      },
+      { status: 401 }
+    );
+    // En utgången kundkaka plockas bort: nästa begäran prövas då som en utan
+    // kaka, i stället för att fastna på samma svar.
+    if (val.skal === "kundsession") {
+      svar.headers.append("Set-Cookie", `${KUND_KAKA}=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax`);
+    }
+    return svar;
+  }
+  const { nyckel, bas } = val.slag === "kund" ? val : { nyckel: NYCKEL, bas: MAL };
   const mal = `${bas}/api/${path.join("/")}${inUrl.search}`;
 
   const headers = new Headers({ "X-API-Key": nyckel });
@@ -90,15 +110,24 @@ async function vidare(
       method: request.method,
       headers,
       body: kropp,
-      cache: "no-store"
+      cache: "no-store",
+      // Utan gräns väntade ett anrop mot en hängd backend tills webbläsaren
+      // gav upp, och vyn stod med sin laddsnurra (Fas 0, 2026-11-09). 55 s
+      // ligger under routens maxDuration; det som tar längre är jobb som
+      // pollas, inte en enda begäran.
+      signal: AbortSignal.timeout(55_000)
     });
-  } catch {
+  } catch (fel) {
+    const tidsgrans = fel instanceof Error && fel.name === "TimeoutError";
     return Response.json(
       {
-        error:
-          "Bokföringstjänsten svarar inte. Kontrollera att backenden är igång och försök igen."
+        // Texten sa förut "Bokföringstjänsten" — kvar från filen routen
+        // kopierades ur. Läsaren är en supportmedarbetare, inte en utvecklare.
+        error: tidsgrans
+          ? "Supportagenten svarade inte i tid. Försök igen om en stund. / The support agent did not respond in time. Try again shortly."
+          : "Supportagenten går inte att nå just nu. Försök igen om en stund. / The support agent cannot be reached right now. Try again shortly."
       },
-      { status: 503 }
+      { status: tidsgrans ? 504 : 503 }
     );
   }
 

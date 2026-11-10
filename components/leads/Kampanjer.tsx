@@ -11,6 +11,7 @@ import { btnLiten, btnPrimary, btnSecondary, etikett, meta, rubrikPanel } from "
 import { felmeddelande } from "@/lib/http/json";
 import { useLocale, type Localized } from "@/lib/i18n";
 import { leadsAnrop } from "@/lib/leads/suite";
+import { foljUtskick, startaUtskick } from "@/lib/leads/utskicksjobb";
 import { cn } from "@/lib/utils";
 
 /**
@@ -163,11 +164,16 @@ export function Kampanjer() {
     if (!bekrafta) return;
     setSkickar(true);
     try {
-      const svar = await leadsAnrop<{
-        skickade: number;
-        vantar_pa_fonstret: number;
-        stoppade: { company_name: string | null; skal: string | null }[];
-      }>(`/leads/kampanjer/${encodeURIComponent(bekrafta.id)}/skicka`, { method: "POST" });
+      // Som ett jobb: en kampanj till en hel lista tar längre än en begäran
+      // får ta. Förloppet visas medan utskicket går (lib/leads/utskicksjobb.ts).
+      const utskicksId = await startaUtskick(
+        `/leads/kampanjer/${encodeURIComponent(bekrafta.id)}/skicka-jobb`
+      );
+      const svar = await foljUtskick(utskicksId, (f) =>
+        setBesked(
+          text({ sv: `Skickar ${f.klara} av ${f.totalt}`, en: `Sending ${f.klara} of ${f.totalt}` })
+        )
+      );
       setBesked(text(T.skickat(svar.skickade, svar.vantar_pa_fonstret)));
       if (svar.stoppade.length) {
         setFel(svar.stoppade.map((s) => `${s.company_name ?? "?"}${s.skal ? `: ${s.skal}` : ""}`).join("; "));

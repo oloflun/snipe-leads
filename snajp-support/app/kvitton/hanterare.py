@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import base64
 import json
+import logging
 import re
 import time
 from dataclasses import dataclass, field
@@ -54,6 +55,8 @@ from . import granskning, kontrollsiffror
 from .mejl import Bilaga, Mejl, Mejlkonto
 from .systemprompt import Foretagsprofil, anvandarmeddelande, dagens_datum, hamta_profil, rendera
 from .tolkning import tolka_deterministiskt
+
+logger = logging.getLogger("snajp-support.kvittohanterare")
 
 STEG_HANTERING = "snajp:kvittohanterare"
 STEG_KONTROLL = "snajp:kvittohanterare-kontrollasning"
@@ -486,22 +489,38 @@ async def _kor_modellen(
     )
     start = time.monotonic()
     meddelanden: list[Any] = [{"role": "user", "content": anvandare}]
-    result = await Runner.run(agent, meddelanden, context=ctx, max_turns=12)
-    rat = las_json(str(result.final_output or ""))
+    result: Any = None
+    rat: dict[str, Any] | None = None
     forsok = 1
-    if rat is None:
-        # Ett omförsök med hela historiken, som step_runner gör vid brutet
-        # kontrakt. Två misslyckanden ger den deterministiska läsningen.
-        forsok = 2
-        historik = result.to_input_list()
-        historik.append(
-            {
-                "role": "user",
-                "content": "Ditt svar gick inte att läsa som JSON. Svara ENDAST med JSON-objektet enligt avsnitt 12.",
-            }
-        )
-        result = await Runner.run(agent, historik, context=ctx, max_turns=4)
+    try:
+        result = await Runner.run(agent, meddelanden, context=ctx, max_turns=12)
         rat = las_json(str(result.final_output or ""))
+        if rat is None:
+            # Ett omförsök med hela historiken, som step_runner gör vid brutet
+            # kontrakt. Två misslyckanden ger den deterministiska läsningen.
+            forsok = 2
+            historik = result.to_input_list()
+            historik.append(
+                {
+                    "role": "user",
+                    "content": "Ditt svar gick inte att läsa som JSON. Svara ENDAST med JSON-objektet enligt avsnitt 12.",
+                }
+            )
+            result = await Runner.run(agent, historik, context=ctx, max_turns=4)
+            rat = las_json(str(result.final_output or ""))
+    except Exception as fel:  # noqa: BLE001 — se nedan
+        # Slut kvot eller kredit är inte ett trasigt svar: det ska bli sitt
+        # eget besked (api/bookkeeping._kvotsvar) och går vidare. Allt annat
+        # (ett svar SDK:n inte kan tolka, ett avbrutet verktygsanrop) betyder
+        # att modellens avläsning inte går att använda. Underlaget läses då
+        # maskinellt och går till granskning (hantera), i stället för att
+        # användaren får ett serverfel (2026-11-10).
+        from ..kvotfel import ar_kreditslut, ar_kvotfel
+
+        if ar_kvotfel(fel) or ar_kreditslut(fel):
+            raise
+        logger.exception("Kvittohanterarens modellkörning föll; underlaget läses maskinellt.")
+        rat = None
     tokens_in, tokens_out = _anvandning(result)
     trace.steps.append(
         StepResult(

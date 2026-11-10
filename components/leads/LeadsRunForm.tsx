@@ -12,6 +12,7 @@ import { btnPrimary, btnSecondary } from "@/components/ui";
 import { felmeddelande, readJsonBody } from "@/lib/http/json";
 import { useLocale, type Locale, type Localized } from "@/lib/i18n";
 import { icpEtiketter } from "@/lib/leads/icpLabels";
+import { taligHamtning } from "@/lib/leads/pollning";
 import type { Struktur } from "@/lib/leads/struktur";
 import { cn } from "@/lib/utils";
 
@@ -414,13 +415,19 @@ export function LeadsRunForm({
     // Prefixet är en literal i anropet så rotvakten ser sökvägen.
     // `/leads/jobb/` är den inloggade proxyn — inte `/jobs/`, som är den
     // anonyma chattpollningen och slår upp under demonyckeln.
-    for (let forsok = 0; forsok < maxForsok; forsok += 1) {
-      await new Promise((r) => setTimeout(r, forsok < 5 ? 800 : 2000));
-      const jobb = await anropa<{
+    // En hämtning som faller (nätavbrott, 502 under en deploy) hoppas över:
+    // jobbet går vidare på servern (lib/leads/pollning.ts).
+    const hamta = taligHamtning(() =>
+      anropa<{
         status?: string;
         error?: string;
         result?: { jobs?: Jobb[]; korning?: Korning };
-      }>("/leads/jobb/" + jobId, { method: "GET" });
+      }>("/leads/jobb/" + jobId, { method: "GET" })
+    );
+    for (let forsok = 0; forsok < maxForsok; forsok += 1) {
+      await new Promise((r) => setTimeout(r, forsok < 5 ? 800 : 2000));
+      const jobb = await hamta();
+      if (!jobb) continue;
       if (jobb.status === "completed" || jobb.status === "failed") {
         return { status: jobb.status, error: jobb.error, jobs: jobb.result?.jobs, korning: jobb.result?.korning };
       }
@@ -441,6 +448,15 @@ export function LeadsRunForm({
     setBusy(false);
     let k = första;
     let sett = -1;
+    // Liggaren, inte Redis-posten (`/leads/jobb/`): den uppdateras efter
+    // varje steg och överlever både TTL:n och en deploy (INV-JOB-003).
+    // En hämtning som faller hoppas över; körningen går vidare på servern.
+    const hamtaRad = taligHamtning(() =>
+      anropa<{ status?: string; error?: string | null; korning?: Korning | null }>(
+        "/leads/korningar/" + batchId,
+        { method: "GET" }
+      )
+    );
     for (let forsok = 0; forsok < 900; forsok += 1) {
       if (!aktuell()) return;
       setKorning(k);
@@ -458,13 +474,9 @@ export function LeadsRunForm({
       );
       await new Promise((r) => setTimeout(r, 3000));
       if (!aktuell()) return;
-      // Liggaren, inte Redis-posten (`/leads/jobb/`): den uppdateras efter
-      // varje steg och överlever både TTL:n och en deploy (INV-JOB-003).
-      const rad = await anropa<{ status?: string; error?: string | null; korning?: Korning | null }>(
-        "/leads/korningar/" + batchId,
-        { method: "GET" }
-      );
+      const rad = await hamtaRad();
       if (!aktuell()) return;
+      if (!rad) continue;
       if (rad.status === "failed") {
         // Motorn dog (felorsaken står i liggaren): sluta polla, säg varför.
         glomKorning();

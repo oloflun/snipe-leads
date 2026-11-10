@@ -93,3 +93,73 @@ async def test_tak_noll_stanger_grinden(monkeypatch):
     storage = MemoryStorage()
     await _logga_leads_korning(storage, tokens_in=10_000, tokens_out=10_000)
     await kontrollera_leads_budget(storage, TENANT)  # ska inte kasta
+
+
+# -- Förvarning och besked (Fas 0-fyndet H10, 2026-11-09) ---------------------
+
+
+async def test_beskedet_namner_ingen_miljovariabel():
+    """Kunden läser texten. Ett variabelnamn säger den ingenting, och "höj
+    taket" är inget kunden kan göra."""
+    storage = MemoryStorage()
+    await _logga_leads_korning(storage, tokens_in=900, tokens_out=200)
+    with pytest.raises(LeadsBudgetExceededError) as fangad:
+        await kontrollera_leads_budget(storage, TENANT)
+    text = str(fangad.value)
+    assert "LEADS_DAILY_TOKEN_BUDGET" not in text
+    assert "tokens" not in text.lower()
+    assert "kontakta" in text.lower()
+
+
+async def test_forvarning_vid_attio_procent_utan_att_stoppa():
+    from app import budget as supportbudget
+
+    supportbudget.nollstall_larmminne()
+    storage = MemoryStorage()
+    await _logga_leads_korning(storage, tokens_in=700, tokens_out=150)  # 85 % av 1000
+
+    await kontrollera_leads_budget(storage, TENANT)  # ska inte kasta
+
+    larm = [h for h in storage.platform_events if h["source"] == "budget"]
+    assert len(larm) == 1
+    assert larm[0]["level"] == "warning" and larm[0]["tenant_id"] == TENANT
+    assert "85 %" in larm[0]["message"]
+
+
+async def test_forvarningen_gar_en_gang_per_dygn():
+    from app import budget as supportbudget
+
+    supportbudget.nollstall_larmminne()
+    storage = MemoryStorage()
+    await _logga_leads_korning(storage, tokens_in=700, tokens_out=150)
+
+    for _ in range(3):
+        await kontrollera_leads_budget(storage, TENANT)
+
+    assert len([h for h in storage.platform_events if h["source"] == "budget"]) == 1
+
+
+async def test_ingen_forvarning_under_attio_procent():
+    from app import budget as supportbudget
+
+    supportbudget.nollstall_larmminne()
+    storage = MemoryStorage()
+    await _logga_leads_korning(storage, tokens_in=400, tokens_out=100)
+
+    await kontrollera_leads_budget(storage, TENANT)
+
+    assert [h for h in storage.platform_events if h["source"] == "budget"] == []
+
+
+async def test_taket_larmar_ocksa():
+    from app import budget as supportbudget
+
+    supportbudget.nollstall_larmminne()
+    storage = MemoryStorage()
+    await _logga_leads_korning(storage, tokens_in=900, tokens_out=200)
+
+    with pytest.raises(LeadsBudgetExceededError):
+        await kontrollera_leads_budget(storage, TENANT)
+
+    larm = [h for h in storage.platform_events if h["source"] == "budget"]
+    assert len(larm) == 1 and larm[0]["level"] == "error"

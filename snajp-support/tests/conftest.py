@@ -100,6 +100,21 @@ def _scrapegraph_kredit_noll():
 
 
 @pytest.fixture(autouse=True)
+def _dubbelstartsvakten_nollstalld():
+    """Vakten mot dubbla starter (app/api/dubbelstart.py) minns en likadan
+    beställning i en halv minut, per process. Två tester som startar samma
+    körning hade annars fått varandras svar."""
+    from app.api import dubbelstart
+    from app.jobs import bakgrund
+
+    dubbelstart.nollstall()
+    bakgrund.nollstall()
+    yield
+    dubbelstart.nollstall()
+    bakgrund.nollstall()
+
+
+@pytest.fixture(autouse=True)
 def _hermetisk_irisprofil(monkeypatch):
     """Profilkompileringen (app/leads/profil.py) anropar LLM:en direkt, och
     tester som sätter en fejkad nyckel för att nå live-vägen hade annars gjort
@@ -110,3 +125,17 @@ def _hermetisk_irisprofil(monkeypatch):
         raise RuntimeError("Ingen LLM i testsviten")
 
     monkeypatch.setattr("app.leads.profil._anropa_modell", _ingen_modell)
+
+
+@pytest.fixture(autouse=True)
+def _ingen_riktig_dns(monkeypatch):
+    """Hämtvakten och nätvakten slår upp värdnamn innan de släpper en
+    förfrågan (app/leads/hamtvakt.py, app/integrationer/natvakt.py). Testsviten
+    ska inte bero på DNS: varje namn svarar här med en publik adress. Tester
+    som prövar själva spärren sätter en egen uppslagning ovanpå."""
+    from app.integrationer import natvakt
+
+    async def _publik(vard: str, port: int) -> list[str]:
+        return ["93.184.216.34"]
+
+    monkeypatch.setattr(natvakt, "upplos", _publik)

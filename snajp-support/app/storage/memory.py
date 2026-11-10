@@ -25,6 +25,7 @@ from ..config import (
 )
 from ..kb_articles import DEMO_KB_ARTICLES, KB_ARTICLES
 from .base import (
+    AGENT_RUN_SAMMANDRAG,
     BEDOMNINGSFALT,
     AGENT_RUN_TYPES,
     ANALYTICS_COVERAGE,
@@ -1225,7 +1226,8 @@ class MemoryStorage:
         return antal
 
     async def utkast_lagen(
-        self, tenant_id: str, *, med_text: bool = False, prospect_id: str | None = None
+        self, tenant_id: str, *, med_text: bool = False, prospect_id: str | None = None,
+        bara: list[str] | None = None,
     ) -> dict[str, dict[str, Any]]:
         # Speglar Postgres-frågan: listornas ordning är skapelseordningen, så
         # "senaste" är sist i listan (samma som created_at desc i SQL).
@@ -1235,6 +1237,8 @@ class MemoryStorage:
         for thread in self.outreach_threads.get(tenant_id, {}).values():
             pid = thread.get("prospect_id")
             if not pid or pid in ut or (prospect_id is not None and pid != prospect_id):
+                continue
+            if bara is not None and pid not in bara:
                 continue
             utgaende = [m for m in meddelanden if m["thread_id"] == thread["id"] and m["direction"] == "outbound"]
             skickade = [m["sent_at"] for m in utgaende if m.get("sent_at")]
@@ -1822,12 +1826,19 @@ class MemoryStorage:
         return {h: self.prompt_lager[h] for h in hashar if h in self.prompt_lager}
 
     async def list_agent_runs(
-        self, tenant_id: str, *, agent_type: str | None = None, limit: int = 50
+        self, tenant_id: str, *, agent_type: str | None = None, limit: int = 50,
+        sammandrag: bool = False,
     ) -> list[dict[str, Any]]:
         runs = self.agent_runs.get(tenant_id, [])
         if agent_type:
             runs = [r for r in runs if r["agent_type"] == agent_type]
-        return sorted(runs, key=lambda r: r["created_at"], reverse=True)[:limit]
+        runs = sorted(runs, key=lambda r: r["created_at"], reverse=True)[:limit]
+        if sammandrag:
+            return [{k: r.get(k) for k in AGENT_RUN_SAMMANDRAG} for r in runs]
+        return runs
+
+    async def hamta_agent_run(self, tenant_id: str, run_id: str) -> dict[str, Any] | None:
+        return next((r for r in self.agent_runs.get(tenant_id, []) if r["id"] == run_id), None)
 
     # -- Leads-jobbens liggare (INV-JOB-002, migration 059) -----------------
 

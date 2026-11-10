@@ -13,6 +13,7 @@ grundorsaken osynlig bakom sig själv.
 
 from __future__ import annotations
 
+import errno
 import logging
 import traceback
 from typing import Any
@@ -91,6 +92,44 @@ def _ar_kvotfel(error: Exception) -> bool:
     return ar_kvotfel(error)
 
 
+#: Nätverksfel på operativsystemsnivå som betyder "den andra sidan är inte
+#: nåbar just nu". Övriga OSError (saknad fil, åtkomst nekad) är programfel.
+_NATFEL = frozenset(
+    {errno.ENETUNREACH, errno.EHOSTUNREACH, errno.ECONNREFUSED, errno.ECONNRESET,
+     errno.ECONNABORTED, errno.ETIMEDOUT, errno.EPIPE}
+)
+
+
+def ar_beroendefel(error: BaseException) -> bool:
+    """Tappade Redis, databasen eller nätet anslutningen, eller tog det för
+    lång tid? Då är api:t friskt men tillfälligt utan ett beroende."""
+    import asyncio
+
+    if isinstance(error, (ConnectionError, TimeoutError, asyncio.TimeoutError)):
+        return True
+    if isinstance(error, OSError) and error.errno in _NATFEL:
+        return True
+    try:
+        import redis.exceptions as redisfel
+
+        if isinstance(error, (redisfel.ConnectionError, redisfel.TimeoutError, redisfel.BusyLoadingError)):
+            return True
+    except ImportError:  # pragma: no cover — redis står i requirements
+        pass
+    try:
+        import asyncpg
+
+        if isinstance(
+            error,
+            (asyncpg.PostgresConnectionError, asyncpg.InterfaceError, asyncpg.TooManyConnectionsError,
+             asyncpg.CannotConnectNowError),
+        ):
+            return True
+    except ImportError:  # pragma: no cover — asyncpg står i requirements
+        pass
+    return False
+
+
 def install_exception_handler(app) -> None:
     """Fångar allt som ingen route hanterade.
 
@@ -101,8 +140,22 @@ def install_exception_handler(app) -> None:
     from fastapi import Request
     from fastapi.responses import JSONResponse
 
+    from ..sparning import SCOPE_NYCKEL, anrops_id, inom
+
     @app.exception_handler(Exception)
     async def _unhandled(request: Request, error: Exception):  # noqa: ANN202
+        # Den här hanteraren körs av Starlettes yttersta lager, utanför våra
+        # mellanlager: anropets id finns i scopet, inte längre i
+        # kontextvariabeln, och svaret passerar inte Sparning. Id:t sätts
+        # därför tillbaka medan felet loggas, och läggs på svaret här.
+        anrop = request.scope.get(SCOPE_NYCKEL)
+        with inom(anrop):
+            svar = await _hantera(request, error)
+        if anrop:
+            svar.headers["x-request-id"] = anrop
+        return svar
+
+    async def _hantera(request: Request, error: Exception):  # noqa: ANN202
         # LEVERANTÖRENS KVOT ÄR INTE EN KRASCH.
         #
         # Ett 429 från modelleverantören renderades som "Något gick fel på vår
@@ -143,6 +196,26 @@ def install_exception_handler(app) -> None:
                 return JSONResponse(status_code=429, content={"error": KUNDTEXT_KREDITSLUT})
             return JSONResponse(status_code=429, content={"error": KUNDTEXT_KVOT})
 
+        # ETT BEROENDE SOM ÄR NERE ÄR INTE ETT PROGRAMFEL (2026-11-10).
+        #
+        # Redis eller databasen som tappar anslutningen efter uppstart gav
+        # samma 500 och samma text som ett nullpekarfel. 503 säger det som är
+        # sant: tjänsten är tillfälligt otillgänglig, försök igen. Proxyn gör
+        # om en GET på 503, och den som felsöker ser i loggen vilket beroende
+        # det var utan att läsa en stack som slutar i en nätverksklient.
+        if ar_beroendefel(error):
+            logger.error(
+                "Ett beroende svarade inte på %s %s: %s",
+                request.method, request.url.path, type(error).__name__,
+            )
+            return JSONResponse(
+                status_code=503,
+                content={
+                    "error": "Tjänsten är tillfälligt otillgänglig. Försök igen om en liten stund.",
+                    "referens": anrops_id(),
+                },
+            )
+
         storage = getattr(request.app.state, "storage", None)
         if storage is not None:
             await log_exception(
@@ -152,6 +225,9 @@ def install_exception_handler(app) -> None:
                 extra={
                     "path": request.url.path,
                     "method": request.method,
+                    # Samma id som svaret bär som `referens` och som står på
+                    # loggraderna: det kunden citerar är det vi söker på.
+                    "anrop": anrops_id(),
                     # Ingen query, ingen body: de kan innehålla kunddata, och
                     # ett notiscenter är inte rätt ställe att lagra den.
                 },
@@ -159,5 +235,8 @@ def install_exception_handler(app) -> None:
         logger.exception("Ohanterat fel på %s %s", request.method, request.url.path)
         return JSONResponse(
             status_code=500,
-            content={"error": "Något gick fel på vår sida. Felet är loggat."},
+            content={
+                "error": "Något gick fel på vår sida. Felet är loggat.",
+                "referens": anrops_id(),
+            },
         )

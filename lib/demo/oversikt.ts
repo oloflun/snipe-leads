@@ -1,6 +1,8 @@
-import { EXEMPELBOLAG } from "@/lib/demo/iris-exempel";
+import { EXEMPELBOLAG, kontaktnamn, type ExempelBolag } from "@/lib/demo/iris-exempel";
 import { grundmejl } from "@/lib/demo/support-inbox";
 import { isoVecka } from "@/lib/admin/statistik";
+import type { Localized } from "@/lib/i18n";
+import type { Handelse } from "@/lib/leads/suite";
 import { analyticsSeries, companies } from "@/lib/mock-data";
 
 /**
@@ -25,27 +27,148 @@ import { analyticsSeries, companies } from "@/lib/mock-data";
 /** Samma text som backendens `autonomy.describe("draft")`. Inte en parafras. */
 const AUTONOMI_DRAFT = "Agenterna researchar och skriver. Ingenting skickas förrän du tryckt skicka.";
 
-/**
- * Exempeldatans statusord → backendens värdemängd (migration 010).
- *
- * `recommended` och `queued` finns inte i produkten; de är kvar från
- * mock-erans vokabulär. Kartan hålls här och inte i komponenten, så att
- * översättningen sker en gång, på demons väg in.
- */
-const DEMOSTATUS: Record<string, string> = {
-  recommended: "ready",
-  // "new", inte "researching" (kritik 3, 2026-10-07): en exempelrad som står
-  // i research för alltid ("för 11 timmar sedan") fick produkten att se
-  // hängd ut. Research visas i stället av demons uppspelade körning
-  // (LeadsTabell, DEMO_KORNING), som blir klar.
-  researching: "new",
-  queued: "ready",
-  contacted: "contacted",
-  replied: "replied"
-};
-
 function timmarSedan(timmar: number): string {
   return new Date(Date.now() - timmar * 3_600_000).toISOString();
+}
+
+/**
+ * Demons leads är de sex exempelbolagen (lib/demo/iris-exempel.ts), inte
+ * mock-datans bolag (Anton 2026-11-09). Mock-bolagen hade varken utkast eller
+ * sparade källor, och deras signaler sålde Snajp i stället för demons
+ * avsändare (Hjärtsäker AB), så lådan visade "Inget utkast ännu" och "Inga
+ * källor sparade". Exempelbolagen bär källor, ett skrivet utkast och
+ * Email Studios svar, så varje rad i listan går att öppna fullt ut.
+ *
+ * `skapad` och `skickad` är timmar bakåt. Viksund (2) och Sjöhaga (5) är
+ * bolagen i listans uppspelade körning (LeadsTabell, DEMO_KORNING_IDS): de
+ * dyker upp under research och blir klara medan besökaren tittar.
+ * Almnäs (6) har fått sitt mejl och svarat, så att Skickat och tidslinjen
+ * visar ett helt förlopp.
+ */
+type DemoLead = { status: "new" | "ready" | "replied"; skapad: number; skickad?: number; svar?: { timmar: number; text: string } };
+
+const DEMO_LEADS: Record<string, DemoLead> = {
+  "1": { status: "ready", skapad: 2 },
+  "2": { status: "new", skapad: 0.1 },
+  "3": { status: "ready", skapad: 11 },
+  "4": { status: "ready", skapad: 26 },
+  "5": { status: "new", skapad: 0.1 },
+  "6": {
+    status: "replied",
+    skapad: 140,
+    skickad: 116,
+    // Skrivet som ett riktigt svar (samma skäl som /leads/svar nedan): kort,
+    // utan artighetsfraser. En broschyrton avslöjar att datan är påhittad.
+    svar: {
+      timmar: 30,
+      text: "Hej Anna,\n\nBra timing, vi går igenom de gemensamma utrymmena i tre av husen nu i höst. Skicka ett förslag för ett av husen att börja med, så tar jag upp det på ledningsmötet nästa vecka.\n\nJonas"
+    }
+  }
+};
+
+/** Bolagen listans uppspelade körning lägger till (LeadsTabell). */
+export const DEMO_KORNING_IDS: readonly string[] = ["2", "5"];
+
+/** Leadet vars svar demons Att göra pekar på ("Svar från leads"). */
+export const DEMO_SVARAT_ID = "6";
+
+/** Sista meningen i beskrivningen: det källan faktiskt säger, som belägg. */
+function citat(b: ExempelBolag): string {
+  return b.beskrivning.split(/(?<=\.)\s+/).pop() ?? b.beskrivning;
+}
+
+/** Ett exempelbolag som en rad ur `GET /leads/prospects`. */
+function demoLeadrad(b: ExempelBolag) {
+  const d: DemoLead = DEMO_LEADS[b.id] ?? { status: "ready", skapad: 1 };
+  const skickat = d.skickad !== undefined ? timmarSedan(d.skickad) : null;
+  return {
+    id: b.id,
+    company_name: b.companyName,
+    contact_name: `${kontaktnamn(b)}, ${b.contactRole}`,
+    contact_email: `${b.contactFirstName.toLowerCase()}@${b.website}`,
+    website: b.website,
+    orgnr: b.orgnr,
+    anstallda: b.anstallda,
+    score_total: b.score,
+    status: d.status,
+    origin: "manual",
+    ort: b.ort,
+    sni: b.bransch,
+    icp_fit: b.score / 100,
+    qualified: true,
+    disqualifiers: [],
+    // Iris-bedömningen (migration 079): nivån räknas i backenden ur utslagen.
+    niva: b.score >= 80 ? "A" : "B",
+    motivering: b.beskrivning,
+    // Utfallsnycklarna är data (UTFALL_ETIKETT i lib/prospekt.ts), inte copy.
+    score_breakdown: [
+      { etikett: "Signal", utfall: "träff", motivering: b.signal, hart: false, belagg: [{ citat: citat(b), url: b.kallor[0].url }] },
+      {
+        etikett: "Storlek",
+        utfall: "träff",
+        motivering: `${b.anstallda} anställda, inom målgruppens 10 till 250.`,
+        hart: true
+      }
+    ],
+    utkast_status: skickat ? "skickat" : "vantar",
+    queue_item_id: skickat ? null : b.id,
+    skickat_at: skickat,
+    created_at: timmarSedan(d.skapad),
+    senaste_handelse_at: d.svar ? timmarSedan(d.svar.timmar) : (skickat ?? timmarSedan(d.skapad))
+  };
+}
+
+/** Svaret ett exempelbolag skickat tillbaka, om det svarat. */
+export function demoSvar(id: string): { text: string; at: string } | null {
+  const svar = DEMO_LEADS[id]?.svar;
+  return svar ? { text: svar.text, at: timmarSedan(svar.timmar) } : null;
+}
+
+/**
+ * Leadets tidslinje i demon, i samma form som
+ * `GET /leads/prospects/{id}/tidslinje` (nyast först). Härledd ur samma
+ * rad som listan visar, så att tidslinjen och listan aldrig säger olika
+ * saker. Ett bolag ur besökarens egen körning (Kör Iris) har bara hittats.
+ */
+export function demoTidslinje(bolag: ExempelBolag, text: (l: Localized) => string): Handelse[] {
+  const d = DEMO_LEADS[bolag.id];
+  const rad = d ? demoLeadrad(bolag) : null;
+  const skapad = rad?.created_at ?? new Date().toISOString();
+  const om = (iso: string, minuter: number) => new Date(new Date(iso).getTime() + minuter * 60_000).toISOString();
+  const handelse = (typ: Handelse["typ"], nar: string, rubrik: string, brodtext: string | null): Handelse => ({
+    typ,
+    nar,
+    rubrik,
+    text: brodtext,
+    id: null,
+    klar: null
+  });
+  const lista: Handelse[] = [
+    handelse("skapad", skapad, text({ sv: "Iris hittade bolaget", en: "Iris found the company" }), bolag.signal)
+  ];
+  if (!rad || rad.status === "new") return lista;
+  lista.push(
+    handelse(
+      "status",
+      om(skapad, 4),
+      "new → ready",
+      text({ sv: "Researchen klar och utkastet skrivet.", en: "Research done and the draft written." })
+    )
+  );
+  if (rad.skickat_at) {
+    lista.push(
+      handelse("status", rad.skickat_at, "ready → contacted", null),
+      handelse("mejl_ut", rad.skickat_at, bolag.draft.subject, text({ sv: `Till ${rad.contact_email}`, en: `To ${rad.contact_email}` }))
+    );
+  }
+  const svar = demoSvar(bolag.id);
+  if (svar) {
+    lista.push(
+      handelse("status", svar.at, "contacted → replied", null),
+      handelse("mejl_in", svar.at, text({ sv: `Svar från ${kontaktnamn(bolag)}`, en: `Reply from ${kontaktnamn(bolag)}` }), svar.text)
+    );
+  }
+  return lista.reverse();
 }
 
 /** Returnerar `undefined` för en väg demon inte äger — anroparen faller vidare. */
@@ -53,45 +176,10 @@ export function demoOversiktSvar(path: string): unknown | undefined {
   const [rutt] = path.split("?");
 
   if (rutt === "/leads/prospects") {
-    return {
-      prospects: companies.map((bolag, index) => ({
-        id: bolag.id,
-        company_name: bolag.name,
-        contact_name: bolag.contacts[0]?.fullName ?? null,
-        contact_email: bolag.contacts[0]?.email ?? null,
-        website: bolag.website ?? null,
-        score_total: bolag.score,
-        // Exempeldatans egna statusord ("recommended", "queued") är INTE
-        // backendens värdemängd. Att låta dem gå ut orenderade var precis
-        // varför statuskolumnen en gång togs bort ur den kundvända tabellen —
-        // och en demo som visar tillstånd produkten inte kan producera lovar
-        // något den inte har. Därför översätts de hit, till migration 010:s
-        // faktiska värden.
-        status: DEMOSTATUS[bolag.status] ?? "new",
-        // Signalen som motiverade poängen. Riktiga prospekt bär den i
-        // `score_breakdown` (migration 031); exempelbolagen har den som text.
-        score_breakdown: [
-          {
-            etikett: "Signal",
-            utfall: "träff",
-            motivering: bolag.latestSignal.sv,
-            hart: false
-          }
-        ],
-        origin: index % 3 === 0 ? "example" : "manual",
-        ort: bolag.location,
-        sni: bolag.industry,
-        icp_fit: Math.min(1, bolag.score / 100),
-        qualified: bolag.score >= 70,
-        disqualifiers: bolag.score >= 70 ? [] : ["Utanför storleksspannet"],
-        // Iris-bedömningen (migration 079): nivån räknas i backenden ur
-        // utslagen per kriterium; här härledd ur exempelpoängen.
-        niva: bolag.score >= 80 ? "A" : bolag.score >= 70 ? "B" : "C",
-        motivering:
-          bolag.score >= 70 ? bolag.latestSignal.sv : "Bortvald: fler anställda än målgruppens övre gräns.",
-        created_at: timmarSedan(index * 9 + 2)
-      }))
-    };
+    // Statusvärdena är backendens (migration 010) och utkastfälten samma som
+    // GET /leads/prospects bär (lib/leads/utkast.ts), så att listan visar
+    // "Väntar på ditt ja" och Skickat precis som i arbetsytan.
+    return { prospects: EXEMPELBOLAG.map(demoLeadrad) };
   }
 
   if (rutt === "/leads/profil") {
@@ -157,9 +245,9 @@ export function demoOversiktSvar(path: string): unknown | undefined {
 
   if (rutt === "/leads/queue") {
     // Samma utkast som demons Att göra (IrisGranskning demoKo), så att
-    // översiktens antal och kön visar samma sak.
+    // översiktens antal och kön visar samma sak. Ett skickat mejl väntar inte.
     return {
-      items: EXEMPELBOLAG.map((b, index) => ({
+      items: EXEMPELBOLAG.filter((b) => !DEMO_LEADS[b.id]?.skickad).map((b, index) => ({
         id: b.id,
         company_name: b.companyName,
         prospect_email: `${b.contactFirstName.toLowerCase()}@${b.website}`,
@@ -206,29 +294,29 @@ export function demoOversiktSvar(path: string): unknown | undefined {
      *
      * Klassificeringsordet är borta. Det fanns aldrig i databasen, och en demo
      * som visar ett agentbeslut produkten inte fattar lovar något den inte har.
+     *
+     * Sedan 2026-11-09 är svaren desamma som demons leads bär (DEMO_LEADS):
+     * de gamla svaren gällde mock-bolag som inte fanns i listan och handlade
+     * om en annan avsändares erbjudande.
      */
-    const svar: [string, string, number][] = [
-      ["Låter relevant. Skicka gärna exempel på IT-chefer i regionen.", "replied", 3],
-      ["Vi kan ta ett kort möte. Tisdag 14 eller torsdag 10 funkar.", "meeting", 9],
-      ["Kan du förtydliga vad ni menar med signaler? Vi har testat liknande förut.", "replied", 26],
-      ["Inte rätt läge just nu, men återkom efter sommaren.", "lost", 48],
-      ["Jag är föräldraledig till mars. Kontakta Petra Lund i stället.", "replied", 71],
-      ["Ta bort mig från utskicken tack.", "suppressed", 95]
-    ];
-
     return {
-      replies: svar.map(([text, status, timmar], index) => {
-        const bolag = companies[index % companies.length];
-        return {
-          id: `demo-svar-${index}`,
-          body: text,
-          sent_at: timmarSedan(timmar),
-          thread_id: `demo-trad-${index}`,
-          company_name: bolag.name,
-          contact_name: bolag.contacts[0]?.fullName ?? null,
-          contact_email: bolag.contacts[0]?.email ?? null,
-          status
-        };
+      replies: EXEMPELBOLAG.flatMap((bolag) => {
+        const svar = demoSvar(bolag.id);
+        const rad = demoLeadrad(bolag);
+        return svar
+          ? [
+              {
+                id: `demo-svar-${bolag.id}`,
+                body: svar.text,
+                sent_at: svar.at,
+                thread_id: `demo-trad-${bolag.id}`,
+                company_name: bolag.companyName,
+                contact_name: kontaktnamn(bolag),
+                contact_email: rad.contact_email,
+                status: rad.status
+              }
+            ]
+          : [];
       })
     };
   }

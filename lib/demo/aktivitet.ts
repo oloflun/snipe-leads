@@ -1,5 +1,6 @@
 import type { ChattRad, UsageSvar } from "@/components/dashboard/Aktivitet";
 import type { KorningsRad } from "@/components/leads/IrisKorningar";
+import { EXEMPELBOLAG } from "@/lib/demo/iris-exempel";
 
 /**
  * Aktivitet på /demo (Sebbes beställning 2026-10-07): samma former som
@@ -12,7 +13,11 @@ import type { KorningsRad } from "@/components/leads/IrisKorningar";
  * mellan server och klient).
  *
  * Talen hänger ihop: varje körnings levererade och undersökta ryms i dess
- * beställning och tak, och en pågående körning står i 'processing'.
+ * beställning och tak.
+ *
+ * Ingen körning står som pågående (Anton 2026-11-09): en fast "Pågår just
+ * nu" som aldrig blev klar såg fejkad ut. Förlopp visar demon bara för en
+ * körning besökaren själv startar (Kör Iris under Leads).
  */
 
 const DYGN = 86_400_000;
@@ -35,7 +40,6 @@ type Underlag = {
 };
 
 const KORNINGAR: Underlag[] = [
-  { dygn: 0.05, scope: "batch", irisScope: "research_and_draft", mal: 10, levererade: 4, undersokta: 11, status: "processing", pagaende: 2 },
   { dygn: 1, scope: "batch", irisScope: "research_and_draft", mal: 10, levererade: 10, undersokta: 23, slut: "klar" },
   { dygn: 3, scope: "lista", mal: 50, levererade: 0, undersokta: 0 },
   { dygn: 5, scope: "batch", irisScope: "research_and_draft", mal: 10, levererade: 7, undersokta: 40, slut: "tak" },
@@ -56,7 +60,15 @@ const KORNINGAR: Underlag[] = [
   { dygn: 75, scope: "batch", irisScope: "research", mal: 5, levererade: 5, undersokta: 8, slut: "klar" }
 ];
 
-const BOLAG = ["Lundsund Mekaniska AB", "Viksund Plåt AB", "Hammarnäs Bygg AB", "Granstrand Logistik AB", "Sjöhaga Snickeri AB"];
+/**
+ * Körningarnas bolag är demons egna leads (lib/demo/iris-exempel.ts, samma id
+ * som i Leads-listan), så att "Till bolaget" i en körning öppnar just det
+ * bolaget med bedömning, utkast och tidslinje. Varje körning börjar på ett
+ * annat bolag, så att listorna inte är identiska.
+ */
+function korningensBolag(korning: number, antal: number) {
+  return Array.from({ length: Math.min(EXEMPELBOLAG.length - 1, antal) }, (_, j) => EXEMPELBOLAG[(korning + j) % EXEMPELBOLAG.length]);
+}
 
 export function demoKorningar(): KorningsRad[] {
   return KORNINGAR.map((u, i) => {
@@ -84,14 +96,14 @@ export function demoKorningar(): KorningsRad[] {
               klar,
               slut_orsak: klar ? (u.slut ?? "klar") : null,
               scope: u.irisScope,
-              jobs: BOLAG.slice(0, Math.min(BOLAG.length, u.levererade)).map((namn, j) => ({
+              jobs: korningensBolag(i, u.levererade).map((bolag, j) => ({
                 job_id: `demo-jobb-${i}-${j}`,
-                prospect_id: `demo-prospekt-${i}-${j}`,
-                company_name: namn
+                prospect_id: bolag.id,
+                company_name: bolag.companyName
               })),
               tratt:
                 u.undersokta > u.levererade
-                  ? [{ namn: "Norrby Måleri AB", steg: "Webbkriterier", skal: "Sajten saknar kontaktuppgifter till någon på bolaget." }]
+                  ? [{ namn: "Norrby Måleri AB", steg: "Kontakt", skal: "Sajten saknar kontaktuppgifter till någon på bolaget." }]
                   : []
             }
     };

@@ -111,7 +111,9 @@ class RedisJobStore:
     async def connect(cls, redis_url: str) -> "RedisJobStore":
         import redis.asyncio as redis
 
-        client = redis.from_url(redis_url, decode_responses=True)
+        from ..redisnycklar import anslutningsval
+
+        client = redis.from_url(redis_url, decode_responses=True, **anslutningsval())
         await client.ping()
         return cls(client)
 

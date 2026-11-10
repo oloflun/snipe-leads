@@ -126,3 +126,47 @@ def test_filtret_faller_inte_pa_ord_som_innehaller_ett_kraftuttryck():
     Varje falskt utslag är en kund som får en tillrättavisning i stället för
     hjälp."""
     assert check_abuse("Assistenten var skitbra, tack!").niva == INGET
+
+
+# -- Hot kräver ett offer (Fas 0-fyndet K3, 2026-11-09) -----------------------
+#
+# Mönstret var `jag ska (döda|slå|mörda|hitta|spöa)` utan krav på vem. "Jag ska
+# hitta mitt ordernummer" och "Jag ska slå upp det i mejlen" avslutade därför
+# samtalet med hotrepliken, mitt i ett helt vanligt supportärende.
+
+
+@pytest.mark.parametrize(
+    "meddelande",
+    [
+        "Jag ska hitta mitt ordernummer, vänta lite",
+        "Jag ska slå upp det i mejlen",
+        "Jag ska slå er en signal i morgon",
+        "Jag ska hitta er adress på hemsidan",
+        "Jag ska hitta kvittot och återkommer",
+        "Jag ska slå ihop två bokningar, går det?",
+        "Jag ska hitta en kurs som passar oss",
+    ],
+)
+def test_vardagliga_meningar_ar_inte_hot(meddelande):
+    beslut = check_abuse(meddelande)
+    assert beslut.niva != ALLVARLIG, beslut.trafford_term
+    assert beslut.ska_svara_normalt
+
+
+@pytest.mark.parametrize(
+    "meddelande",
+    [
+        "Jag ska hitta dig.",
+        "Jag ska hitta er.",
+        "Jag ska slå dig",
+        "Jag ska slå ihjäl dig",
+        "Jag ska slå er, era idioter!",
+        "Jag vet var du bor",
+        "Jag ska leta upp dig",
+        "Jag ska mörda er",
+    ],
+)
+def test_riktade_hot_avbryter_fortfarande(meddelande):
+    beslut = check_abuse(meddelande)
+    assert beslut.niva == ALLVARLIG
+    assert beslut.ska_eskalera

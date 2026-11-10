@@ -15,12 +15,13 @@
  */
 import fs from "node:fs";
 import { chromium } from "playwright";
+import { hemlighet } from "./qa_hemlighet.mjs";
 
 const BASE = process.env.BASE ?? "http://localhost:3000";
 const BILDER = process.env.BILDER || null;
 if (BILDER) fs.mkdirSync(BILDER, { recursive: true });
 const ADMIN = [process.env.QA_ADMIN_EPOST ?? "snajpsupport@gmail.com",
-               process.env.QA_ADMIN_LOSEN ?? "Snajpen123!"];
+               hemlighet("QA_ADMIN_LOSEN")];
 
 let fel = 0;
 const nätfel = [];

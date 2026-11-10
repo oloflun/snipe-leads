@@ -31,6 +31,7 @@
  */
 import fs from "node:fs";
 import { chromium } from "playwright";
+import { hemlighet } from "./qa_hemlighet.mjs";
 
 const BASE = process.env.BASE ?? "http://localhost:3000";
 // BILDER=<katalog> sparar en skärmdump per besiktad väg. Avstängt som default:
@@ -44,7 +45,7 @@ const PROXY = process.env.HTTPS_PROXY && !BASE.includes("localhost")
   : undefined;
 
 const ADMIN = [process.env.QA_ADMIN_EPOST ?? "snajpsupport@gmail.com",
-               process.env.QA_ADMIN_LOSEN ?? "Snajpen123!"];
+               hemlighet("QA_ADMIN_LOSEN")];
 const KUND = [process.env.QA_KUND_EPOST ?? "kund@example.com",
               process.env.QA_KUND_LOSEN ?? "Kundtest123!"];
 

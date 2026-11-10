@@ -25,18 +25,39 @@ import {
 } from "@/components/ui";
 import { Integritetsnotis } from "@/components/kvitton/Integritetsnotis";
 import { HttpJsonError, felmeddelande, readJson } from "@/lib/http/json";
+import { taligHamtning } from "@/lib/leads/pollning";
 import { cn } from "@/lib/utils";
 import { useLocale, type Localized } from "@/lib/i18n";
 
 const ord = (s: string): Localized => ({ sv: s, en: s });
+
+/** Den pågående skanningens jobb-id, så att förloppet finns kvar efter en omladdning. */
+const SKANNINGSNYCKEL = "snajp:kvittoskanning";
+
+function minnsSkanning(jobId: string | null) {
+  try {
+    if (jobId) window.sessionStorage.setItem(SKANNINGSNYCKEL, jobId);
+    else window.sessionStorage.removeItem(SKANNINGSNYCKEL);
+  } catch {
+    // Blockerad lagring: förloppet visas ändå, bara inte efter en omladdning.
+  }
+}
+
+function mindSkanning(): string | null {
+  try {
+    return window.sessionStorage.getItem(SKANNINGSNYCKEL);
+  } catch {
+    return null;
+  }
+}
 
 /**
  * Kvittohanterarens arbetsyta — skanning, resultat och sammanfattning.
  *
  * ## Skanningen SPELAS UPP, inte simuleras
  *
- * `POST /skanna` gör hela jobbet i ett anrop och svarar med en händelse per
- * genomläst mejl. Vyn spelar upp händelserna i tur och ordning (mejlet glider
+ * `POST /skanning` startar ett jobb. Vyn följer förloppet (mejl x av y) och får
+ * till sist en händelse per genomläst mejl. Vyn spelar upp händelserna i tur och ordning (mejlet glider
  * in, beloppet markeras när det identifierats) — samma rörelse som demon, men
  * varje rad är en RIKTIG händelse ur körningen, inte en inspelning. Reduced
  * motion hoppar direkt till slutläget.
@@ -192,7 +213,9 @@ type Handelse = {
   avsandare: string;
   amne: string;
   datum: string;
-  utfall: "kvitto" | "kvitto_granska" | "ej_kvitto" | "redan_last";
+  // "fel": mejlet gick inte att läsa den här gången och prövas igen vid
+  // nästa skanning (snajp-support/app/kvitton/skanning.py).
+  utfall: "kvitto" | "kvitto_granska" | "ej_kvitto" | "redan_last" | "fel";
   belopp?: string | null;
   belopp_original?: string | null;
   kategori?: string | null;
@@ -458,6 +481,14 @@ export function KvittoYta() {
   const [fel, setFel] = useState<Localized | null>(null);
 
   const [skannar, setSkannar] = useState(false);
+  const [skanningsforlopp, setSkanningsforlopp] = useState<{ lasta: number; totalt: number } | null>(null);
+  const levande = useRef(true);
+  useEffect(() => {
+    levande.current = true;
+    return () => {
+      levande.current = false;
+    };
+  }, []);
   const [handelser, setHandelser] = useState<Handelse[] | null>(null);
   const [visadeHandelser, setVisadeHandelser] = useState(0);
 
@@ -508,28 +539,90 @@ export function KvittoYta() {
 
   const uppspelningKlar = handelser !== null && visadeHandelser >= handelser.length;
 
+  /**
+   * Följer skanningsjobbet tills det är klart. Skanningen går på servern
+   * (ett modellanrop per kvittomejl) och tar ofta längre än en begäran får
+   * ta; vyn hämtar förloppet och till sist svaret. En hämtning som faller
+   * hoppas över: jobbet går vidare ändå.
+   */
+  const foljSkanning = useCallback(async (jobId: string) => {
+    type Skanningssvar = {
+      handelser: Handelse[];
+      kvitton: Kvitto[];
+      sammanfattning: Sammanfattning;
+      text: string;
+    };
+    const hamta = taligHamtning(() =>
+      fetch(`${BAS}/skanning/${jobId}`).then((s) =>
+        readJson<{
+          status: string;
+          forlopp?: { lasta: number; totalt: number } | null;
+          result?: Skanningssvar | null;
+          error?: string | null;
+        }>(s)
+      )
+    );
+    try {
+      // Tjugo minuter: femtio mejl med ett modellanrop var ryms med marginal.
+      for (let varv = 0; varv < 1000; varv += 1) {
+        const jobb = await hamta();
+        if (!levande.current) return;
+        if (jobb?.forlopp) setSkanningsforlopp(jobb.forlopp);
+        if (jobb?.status === "completed") {
+          const data = jobb.result;
+          setHandelser(data?.handelser ?? []);
+          setKvitton(data?.kvitton ?? []);
+          setSamman(data ? { ...data.sammanfattning, text: data.text } : null);
+          return;
+        }
+        if (jobb?.status === "failed") {
+          setFel(
+            jobb.error
+              ? ord(jobb.error)
+              : { sv: "Skanningen gick inte att slutföra. Försök igen om en stund.", en: "The scan could not be completed. Try again shortly." }
+          );
+          return;
+        }
+        await new Promise((r) => setTimeout(r, 1200));
+        if (!levande.current) return;
+      }
+    } catch (orsak) {
+      // 404: jobbet är städat (en gammal flik). Inget att visa, inget fel.
+      if (!(orsak instanceof HttpJsonError && orsak.status === 404)) setFel(ord(feltext(orsak)));
+    } finally {
+      minnsSkanning(null);
+      if (levande.current) {
+        setSkannar(false);
+        setSkanningsforlopp(null);
+      }
+    }
+  }, []);
+
+  // En skanning som pågick när sidan laddades om följs vidare.
+  useEffect(() => {
+    const jobId = mindSkanning();
+    if (!jobId) return;
+    setSkannar(true);
+    void foljSkanning(jobId);
+  }, [foljSkanning]);
+
   async function skanna() {
     setSkannar(true);
+    setSkanningsforlopp(null);
     setFel(null);
     setHandelser(null);
     setVisadeHandelser(0);
     try {
       const svar = await fetch(
-        `${BAS}/skanna?fran=${period.fran}&till=${period.till}`,
+        `${BAS}/skanning?fran=${period.fran}&till=${period.till}`,
         { method: "POST" }
       );
-      const data = await readJson<{
-        handelser: Handelse[];
-        kvitton: Kvitto[];
-        sammanfattning: Sammanfattning;
-        text: string;
-      }>(svar);
-      setHandelser(data?.handelser ?? []);
-      setKvitton(data?.kvitton ?? []);
-      setSamman(data ? { ...data.sammanfattning, text: data.text } : null);
+      const start = await readJson<{ job_id: string }>(svar);
+      if (!start?.job_id) throw new Error("Skanningen kunde inte starta.");
+      minnsSkanning(start.job_id);
+      await foljSkanning(start.job_id);
     } catch (orsak) {
       setFel(ord(feltext(orsak)));
-    } finally {
       setSkannar(false);
     }
   }
@@ -653,7 +746,14 @@ export function KvittoYta() {
               ) : (
                 <ScanLine className="h-4 w-4" aria-hidden />
               )}
-              {text({ sv: "Skanna inkorgen", en: "Scan mailbox" })}
+              {!skannar
+                ? text({ sv: "Skanna inkorgen", en: "Scan mailbox" })
+                : skanningsforlopp?.totalt
+                  ? text({
+                      sv: `Läser mejl ${skanningsforlopp.lasta} av ${skanningsforlopp.totalt}`,
+                      en: `Reading email ${skanningsforlopp.lasta} of ${skanningsforlopp.totalt}`
+                    })
+                  : text({ sv: "Hämtar inkorgen", en: "Fetching mailbox" })}
             </button>
             <button
               type="button"
@@ -776,6 +876,8 @@ export function KvittoYta() {
                       <Badge tone="warn">{text({ sv: "Granska", en: "Review" })}</Badge>
                     ) : h.utfall === "redan_last" ? (
                       <span className="text-[0.75rem] text-mineral">{text({ sv: "redan inläst", en: "already read" })}</span>
+                    ) : h.utfall === "fel" ? (
+                      <Badge tone="danger">{text({ sv: "Gick inte att läsa", en: "Could not be read" })}</Badge>
                     ) : (
                       <span className="text-[0.75rem] text-mineral">{text({ sv: "inte ett kvitto", en: "not a receipt" })}</span>
                     )}

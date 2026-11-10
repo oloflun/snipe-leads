@@ -264,12 +264,15 @@ def check_output_contract(
 ) -> OutputContractResult:
     """output måste innehålla sources_used[] och context_refs[] (Del C punkt 4).
     Saknas en referens skillens mall kräver: körs om en gång, sedan eskalera."""
-    if "sources_used" not in output or "context_refs" not in output:
+    if not isinstance(output, dict) or "sources_used" not in output or "context_refs" not in output:
         return OutputContractResult(
             verdict="escalate" if already_retried else "retry",
             missing_refs=("sources_used", "context_refs"),
         )
-    context_refs = set(output.get("context_refs") or [])
+    # Bara textreferenser i en lista räknas. Modellen svarar ibland med
+    # objekt eller ett ensamt tal, och set() över det kastade TypeError.
+    ratt = output.get("context_refs")
+    context_refs = {r for r in (ratt if isinstance(ratt, (list, tuple)) else ()) if isinstance(r, str)}
     missing = tuple(ref for ref in required_context_refs if ref not in context_refs)
     if not missing:
         return OutputContractResult(verdict="ok")

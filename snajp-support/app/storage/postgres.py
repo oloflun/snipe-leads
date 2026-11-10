@@ -25,6 +25,7 @@ import asyncpg
 from ..leads import upptagna
 
 from .base import (
+    AGENT_RUN_SAMMANDRAG,
     BEDOMNINGSFALT,
     ANALYTICS_COVERAGE,
     KUNDDATA_FALT,
@@ -229,6 +230,14 @@ class PostgresStorage:
             max_size=int(os.environ.get("DB_POOL_MAX", "20")),
             init=_init_connection,
             reset=_ingen_sessionsaterstallning,
+            # Tidsgränser (2026-11-09, Fas 0-fyndet K6). Utan dem väntade en
+            # anslutning 60 s på en död värd och en fråga hur länge som helst
+            # på en låst rad, med en av poolens platser upptagen så länge.
+            # Tio sekunder att ansluta; en fråga får en minut (den långsammaste
+            # läsvägen tog 2 s vid mätningen). Miljövariablerna finns för den
+            # som måste köra något tyngre för hand.
+            timeout=float(os.environ.get("DB_CONNECT_TIMEOUT_S", "10")),
+            command_timeout=float(os.environ.get("DB_COMMAND_TIMEOUT_S", "60")),
             # Statement-cachen PÅ (asyncpg:s standard, 100 per anslutning).
             # Den stod på 0 för Supabases transaction pooler, som inte finns
             # kvar: utan cache förbereddes varje parametriserad fråga i en
@@ -1700,8 +1709,11 @@ class PostgresStorage:
         return int(resultat.split()[-1])
 
     async def utkast_lagen(
-        self, tenant_id: str, *, med_text: bool = False, prospect_id: str | None = None
+        self, tenant_id: str, *, med_text: bool = False, prospect_id: str | None = None,
+        bara: list[str] | None = None,
     ) -> dict[str, dict[str, Any]]:
+        if bara is not None and not bara:
+            return {}
         # Texten bara på begäran: listan över alla leads ska inte bära 500
         # mejlkroppar. Väntande meddelande först (osänt, icke-kasserat),
         # därefter det senaste; created_at kom med 107, och äldre rader har
@@ -1720,16 +1732,15 @@ class PostgresStorage:
             if med_text
             else ""
         )
-        async with self._scoped(tenant_id) as conn:
-            records = await conn.fetch(
-                f"""
-                select distinct on (t.prospect_id)
-                       t.prospect_id, t.id as thread_id,
-                       s.skickat_at, coalesce(s.antal_skickade, 0) as antal_skickade,
-                       coalesce(s.antal_osanda, 0) as antal_osanda,
-                       q.id as queue_item_id, q.status as ko_status, q.gate_checks, q.scheduled_at
-                       {text_kolumner}
-                  from outreach_threads t
+        # Två former av samma fråga (2026-11-10). För ETT prospekt slås
+        # meddelanden och köpost upp per tråd (lateral). För HELA kunden gav
+        # den formen en genomläsning av send_queue per tråd, som saknar index
+        # på thread_id: uppmätt i development 3 184 genomläsningar och 1,8 s
+        # per anrop, från varje vy som visar utkastens läge. Då läses båda
+        # tabellerna i stället EN gång och paras ihop. Formerna ger samma
+        # rader (jämfört rad för rad mot development, 1 826 ms mot 99 ms).
+        if prospect_id is not None:
+            underlag = """
                   left join lateral (
                     select max(om.sent_at) as skickat_at,
                            (count(*) filter (where om.sent_at is not null))::int as antal_skickade,
@@ -1744,13 +1755,45 @@ class PostgresStorage:
                      order by sq.created_at desc, sq.scheduled_at desc
                      limit 1
                   ) q on true
+            """
+        else:
+            underlag = """
+                  left join (
+                    select om.thread_id, max(om.sent_at) as skickat_at,
+                           (count(*) filter (where om.sent_at is not null))::int as antal_skickade,
+                           (count(*) filter (where om.sent_at is null and om.kasserad_at is null))::int as antal_osanda
+                      from outreach_messages om
+                     where om.tenant_id = $1 and om.direction = 'outbound'
+                     group by om.thread_id
+                  ) s on s.thread_id = t.id
+                  left join (
+                    select distinct on (sq.thread_id)
+                           sq.thread_id, sq.id, sq.status, sq.gate_checks, sq.scheduled_at
+                      from send_queue sq
+                     where sq.tenant_id = $1
+                     order by sq.thread_id, sq.created_at desc, sq.scheduled_at desc
+                  ) q on q.thread_id = t.id
+            """
+        async with self._scoped(tenant_id) as conn:
+            records = await conn.fetch(
+                f"""
+                select distinct on (t.prospect_id)
+                       t.prospect_id, t.id as thread_id,
+                       s.skickat_at, coalesce(s.antal_skickade, 0) as antal_skickade,
+                       coalesce(s.antal_osanda, 0) as antal_osanda,
+                       q.id as queue_item_id, q.status as ko_status, q.gate_checks, q.scheduled_at
+                       {text_kolumner}
+                  from outreach_threads t
+                  {underlag}
                   {text_join}
                  where t.tenant_id = $1
                    and ($2::uuid is null or t.prospect_id = $2::uuid)
+                   and ($3::uuid[] is null or t.prospect_id = any($3::uuid[]))
                  order by t.prospect_id, t.created_at
                 """,
                 tenant_id,
                 prospect_id,
+                bara,
             )
         return {str(r["prospect_id"]): _avkoda_jsonb(_row(r), "gate_checks") for r in records}
 
@@ -2534,12 +2577,17 @@ class PostgresStorage:
         return {r["hash"]: r["text"] for r in records}
 
     async def list_agent_runs(
-        self, tenant_id: str, *, agent_type: str | None = None, limit: int = 50
+        self, tenant_id: str, *, agent_type: str | None = None, limit: int = 50,
+        sammandrag: bool = False,
     ) -> list[dict[str, Any]]:
+        # Sammandraget läser inte input/output/step_log alls (samma skäl som
+        # i list_agent_runs_all): 50 hela rader var 8,5 MB som lästes ur
+        # TOAST, avkodades och kodades om för en lista med mätvärden.
+        kolumner = ", ".join(AGENT_RUN_SAMMANDRAG) if sammandrag else "*"
         async with self._scoped(tenant_id) as conn:
             if agent_type:
                 records = await conn.fetch(
-                    """select * from agent_runs where tenant_id = $1 and agent_type = $2
+                    f"""select {kolumner} from agent_runs where tenant_id = $1 and agent_type = $2
                        order by created_at desc limit $3""",
                     tenant_id,
                     agent_type,
@@ -2547,10 +2595,12 @@ class PostgresStorage:
                 )
             else:
                 records = await conn.fetch(
-                    "select * from agent_runs where tenant_id = $1 order by created_at desc limit $2",
+                    f"select {kolumner} from agent_runs where tenant_id = $1 order by created_at desc limit $2",
                     tenant_id,
                     limit,
                 )
+        if sammandrag:
+            return [_row(r) for r in records]
         # Samma avkodning som list_agent_runs_all och get_agent_run redan gör.
         # Saknades här, och det syntes inte på ett halvår av EN anledning: den
         # enda konsumenten — översiktens körningsräknare — frågade efter
@@ -4387,6 +4437,13 @@ class PostgresStorage:
         if sammandrag:
             return [_row(r) for r in records]
         return [_avkoda_jsonb(_row(r), "step_log", "grounding") for r in records]
+
+    async def hamta_agent_run(self, tenant_id: str, run_id: str) -> dict[str, Any] | None:
+        async with self._scoped(tenant_id) as conn:
+            record = await conn.fetchrow(
+                "select * from agent_runs where tenant_id = $1 and id = $2", tenant_id, run_id
+            )
+        return _avkoda_jsonb(_row(record), "step_log", "grounding") if record else None
 
     async def get_agent_run(self, run_id: str) -> dict[str, Any] | None:
         async with self.pool.acquire() as conn:

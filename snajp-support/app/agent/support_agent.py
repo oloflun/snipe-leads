@@ -41,6 +41,7 @@ from ..leads.untrusted_content import wrap_untrusted_content
 from ..config import CATEGORY_LABELS, get_settings
 from ..storage.base import Storage
 from . import support_faktagrind, support_regler, support_systemprompt, support_texter
+from ..leads.untrusted_content import kapsla_kundtext
 from .retention_classifier import classify_cancellation_risk, is_cancellation_risk
 from .step_runner import RunTrace, run_step
 from .support_playbook import SUPPORT_V1
@@ -187,12 +188,26 @@ HELA_GRUNDPROMPTEN = frozenset(
 #: sin egen dokumentation. Det som SKA eskalera är utövandet av en rättighet —
 #: radering, registerutdrag — och de mönstren står kvar nedan, breddade så att
 #: de fångar "raderar alla mina uppgifter" och inte bara "radera mina data".
+#: 2026-11-09 (Fas 0-fyndet K2): `anmäl\w*` och `ersättning` stod ensamma och
+#: fällde "Hur anmäler jag mig till en HLR-kurs?" och "Får man ersättning från
+#: arbetsgivaren?" — hos en kund vars hela verksamhet är kursanmälningar. Samma
+#: lärdom som GDPR-orden ovan: det som ska lämnas över är HOTET om en anmälan
+#: (mot oss, eller till en myndighet) och KRAVET på ersättning, inte orden.
+#: "Pengarna tillbaka" lades till samtidigt; funktionens egen beskrivning
+#: lovade det, men bara "återbetal*" fångades.
 _KANSLIGT = re.compile(
     r"\b(arn|allmänna\s+reklamationsnämnden|konsumentverket|konsumentombudsman|"
     r"rader(?:a|ar|at|as)\s+(?:\w+\s+){0,3}?(?:uppgift\w*|data|konto\w*)|"
     r"registerutdrag|rätt(?:en)?\s+att\s+bli\s+glömd|"
-    r"advokat|jurist|stämning|stämma\s+er|rättslig\w*|anmäl\w*|polisanmäl\w*|"
-    r"skadestånd|återbetal\w*|kompensation|ersättning|kronofogden|inkasso|"
+    r"advokat|jurist|stämning|stämma\s+er|rättslig\w*|polisanmäl\w*|"
+    r"anmäl\w*\s+(?:er|detta|det\s+här|företaget|bolaget)|"
+    r"anmäl\w*\s+(?:\w+\s+){0,3}?(?:till|hos)\s+(?:polisen|myndighet\w*|imy|"
+    r"integritetsskydds\w*|datainspektionen|arbetsmiljöverket)|"
+    r"anmälan\s+(?:mot|om)\s+(?:er|företaget|bolaget)|"
+    r"skadestånd|återbetal\w*|pengar(?:na)?\s+tillbaka|kompensation|ersättningskrav\w*|"
+    r"(?:kräv\w*|begär\w*|yrka\w*|vill\s+ha|ska\s+ha|rätt\s+till)\s+(?:\w+\s+){0,2}?ersättning|"
+    r"ersättning\s+för\s+(?:\w+\s+){0,2}?(?:skad\w*|förlor\w*|försen\w*|utebliv\w*|inställ\w*)|"
+    r"kronofogden|inkasso|"
     r"häv(a|er|ning)\s+köpet|ångerrätt\w*|reklamation\w*|"
     # Grundprompten 6.3 (2026-10-05): betalningsproblem, GDPR-rättigheter
     # utöver radering, personskada och säkerhetsrisk. Smala mönster med flit
@@ -378,6 +393,81 @@ _NAMNER_KOLLEGA = re.compile(r"\b(kollega\w*|medarbetare\w*|colleague\w*)\b", re
 
 #: Namnen modellerna brukar välja när de lägger texten i ett objekt.
 _TEXTNYCKLAR = ("text", "draft", "final_reply", "revised_draft", "reply", "svar", "content", "message")
+
+
+#: Triagens ja/nej-fält. Koden frågar `is True` och `is False` på dem.
+_TRIAGE_JA_NEJ = ("escalate", "ber_om_manniska", "inom_amnesomradet", "missforstadd")
+_JA_ORD = frozenset({"true", "ja", "yes"})
+_NEJ_ORD = frozenset({"false", "nej", "no"})
+
+
+def _normalisera_triage(triage: Any) -> dict[str, Any]:
+    """Triagens svar i den form resten av körningen läser (Fas 0-fyndet H15).
+
+    Kontraktet säger tal, sanningsvärden och en lista. Modellen svarar ibland
+    med annat, och varje avvikelse hade sin egen följd: `"false"` i `escalate`
+    är sant i Python och lämnade över ärendet, sentimentet 0,0 (så argt det
+    går) lästes som 0,5 av `or 0.5`, ett sentiment i ord kastade, och
+    `kundfakta` som en enda sträng sparades som en bokstav per faktum.
+
+    - `sentiment`: tal i 0–1; saknat eller oläsligt är neutralt (0,5).
+    - ja/nej-fälten: riktiga sanningsvärden, även ur "true"/"nej". Ett värde
+      som inte går att tolka tas bort, vilket koden läser som "inget sagt".
+    - `kundfakta`: lista med text.
+    Övriga fält lämnas som de är; de har redan egna skydd där de läses.
+    """
+    ut: dict[str, Any] = dict(triage) if isinstance(triage, dict) else {}
+
+    ratt = ut.get("sentiment")
+    sentiment = 0.5
+    if isinstance(ratt, str):
+        ratt = ratt.strip().replace(",", ".")
+    if not isinstance(ratt, bool) and isinstance(ratt, (int, float, str)):
+        try:
+            tal = float(ratt)
+        except ValueError:
+            tal = None
+        if tal is not None and tal == tal:  # NaN är inte lika med sig självt
+            sentiment = max(0.0, min(1.0, tal))
+    ut["sentiment"] = sentiment
+
+    for falt in _TRIAGE_JA_NEJ:
+        varde = ut.pop(falt, None)
+        if isinstance(varde, str):
+            ord_ = varde.strip().lower()
+            varde = True if ord_ in _JA_ORD else False if ord_ in _NEJ_ORD else None
+        if isinstance(varde, bool):
+            ut[falt] = varde
+
+    fakta = ut.get("kundfakta")
+    if isinstance(fakta, str):
+        fakta = [fakta]
+    ut["kundfakta"] = [
+        str(f).strip()
+        for f in (fakta if isinstance(fakta, list) else [])
+        if isinstance(f, (str, int, float)) and not isinstance(f, bool) and str(f).strip()
+    ]
+    return ut
+
+
+def _en_rad(varde: Any, tak: int) -> str:
+    """Kundskriven korttext (namn, ämne) som EN rad om högst `tak` tecken."""
+    return " ".join(str(varde or "").split())[:tak]
+
+
+#: Det stegköraren själv skriver i prompten (step_runner: lagrens rubriker,
+#: overlayens ram, kontraktet, uppgiftsrubriken) och ramarna runt opålitlig
+#: text. Inget av det hör hemma i ett svar till en kund.
+_INSTRUKTIONSMARKORER = re.compile(
+    r"GLOBALA REGLER|TILLÄGGSINSTRUKTIONER|styrs av skillen|"
+    r"Din uppgift i det här steget|<\/?untrusted-data|<\/?kundtext-|"
+    r"sources_used|context_refs",
+    re.IGNORECASE,
+)
+
+
+def _lacker_instruktioner(text: str) -> bool:
+    return bool(_INSTRUKTIONSMARKORER.search(text or ""))
 
 
 def _text(varde: Any) -> str:
@@ -836,6 +926,9 @@ async def run_support_agent(
     # se app/agent/arbetsyta_siffror.py för varför den aldrig får sättas
     # för en slutkund.
     arbetsyta: bool = False,
+    # 2026-11-10: anropas med stegets namn före varje modellanrop, så att
+    # chatten kan visa vad agenten gör (step_runner.RunTrace.vid_steg).
+    forlopp: Callable[[str], Awaitable[None]] | None = None,
 ) -> dict[str, Any]:
     started = time.monotonic()
     settings = get_settings()
@@ -876,8 +969,8 @@ async def run_support_agent(
     )
     lager_karna = replace(lager, agent_md=renderat(karna=True))
     lager = replace(lager, agent_md=renderat())
-    steg = partial(run_step, instruktioner=lager_karna)
-    steg_hel = partial(run_step, instruktioner=lager)
+    steg = partial(run_step, instruktioner=lager_karna, paminn_om_kontrakt=True)
+    steg_hel = partial(run_step, instruktioner=lager, paminn_om_kontrakt=True)
 
     # G9: bilder beskrivs av vision-sidovagnen och kastas — aldrig lagrade.
     vision_note = ""
@@ -1063,20 +1156,33 @@ async def run_support_agent(
     # (2026-08-29, Fas R2) — låg tidigare direkt efter bildbeskrivningen,
     # men det är precis den positionen en cache-TRÄFF måste undvika för att
     # "noll LLM-anrop" ska vara sant och inte bara nästan sant.
-    try:
-        intent, dissatisfaction = await classify_cancellation_risk(message)
-    except Exception:  # noqa: BLE001 — en trasig klassificerare får inte fälla ärendet
-        intent, dissatisfaction = 0.0, 0.0
-    cancellation_risk = is_cancellation_risk(intent, dissatisfaction)
+    #
+    # Klassaren är ett eget modellanrop, och dess utslag läses först när
+    # eskaleringen avgörs, efter researchen. Den STARTAS därför här och går
+    # samtidigt med triagen och researchen (2026-11-10: omkring en sekund per
+    # svar). `sleep(0)` låter anropet gå iväg innan triagen börjar.
+    async def _klassa() -> tuple[float, float]:
+        try:
+            return await asyncio.wait_for(
+                classify_cancellation_risk(message), timeout=float(settings.llm_timeout_chatt_s)
+            )
+        except Exception:  # noqa: BLE001 — en trasig eller hängd klassare får inte fälla ärendet
+            return 0.0, 0.0
+
+    klassning = asyncio.create_task(_klassa())
+    await asyncio.sleep(0)
 
     case_context = (
         f"## Ärendet\nKanal: {channel} (ton: {ton_lage}, max {config['max_length']} tecken)\n"
-        f"Kund: {customer_name or 'okänd'} <{customer_email or 'okänd'}>\n"
-        f"Ämne: {maskera_personnummer(subject) or '(inget)'}\n\n"
+        # Namn och ämne skrivs av kunden: en rad var och korta, så att de
+        # inte kan bli en rubrik eller en instruktion i prompten (2026-11-10).
+        f"Kund: {_en_rad(customer_name, 80) or 'okänd'} <{_en_rad(customer_email, 120) or 'okänd'}>\n"
+        f"Ämne: {_en_rad(maskera_personnummer(subject), 160) or '(inget)'}\n\n"
         # Maskerat innan det går till modellen. Se DPIA:ns R1 och
         # app/moderation/maskering.py — originalet ligger kvar i databasen,
-        # det är bara prompten som bär en maskerad kopia.
-        f"Kundens meddelande:\n{maskera_personnummer(message)}{vision_note}\n\n"
+        # det är bara prompten som bär en maskerad kopia. Inom en ram: det är
+        # den enda texten här som en utomstående skriver (kapsla_kundtext).
+        f"Kundens meddelande:\n{kapsla_kundtext(maskera_personnummer(message))}{vision_note}\n\n"
         f"Giltiga kategorier för den här kunden: {', '.join(taxonomy)}"
         + (f"\n\n{affarskontext_block}" if affarskontext_block else "")
         + (f"\n\n{kalibrering_block}" if kalibrering_block else "")
@@ -1131,7 +1237,7 @@ async def run_support_agent(
         + (
             "\n\nSVARA PÅ KUNDENS AKTUELLA MEDDELANDE, inte på något tidigare "
             "i historiken ovan (den är bara bakgrund). Det aktuella "
-            f"meddelandet är:\n{maskera_personnummer(message)[:400]}"
+            f"meddelandet är:\n{kapsla_kundtext(maskera_personnummer(message)[:400])}"
             if turn_count > 0
             else ""
         )
@@ -1139,7 +1245,7 @@ async def run_support_agent(
     case_context = f"{case_context}\n\n{conversation_state}"
 
     ledger = RunLedger(satisfied={"context_pack"})
-    trace = RunTrace()
+    trace = RunTrace(vid_steg=forlopp)
 
     # --- Steg 1: triage ----------------------------------------------------
     #
@@ -1189,8 +1295,10 @@ async def run_support_agent(
         ),
         case_context=case_context,
     )
-    category = triage.get("category") if triage.get("category") in taxonomy else "ovrigt"
-    sentiment = max(0.0, min(1.0, float(triage.get("sentiment") or 0.5)))
+    triage = _normalisera_triage(triage)
+    kategori_ratt = triage.get("category")
+    category = kategori_ratt if isinstance(kategori_ratt, str) and kategori_ratt in taxonomy else "ovrigt"
+    sentiment = triage["sentiment"]
 
     # Svarsspråket (bd snipe-xtr): kundens språk om kunden (tenanten) valt
     # det, med förra turens språk som reserv och svenska i varje tveksamhet.
@@ -1283,17 +1391,20 @@ async def run_support_agent(
     elif sokfraga_sv and sokfraga_sv.casefold() not in sokfraga.casefold():
         sokfraga = f"{sokfraga} {sokfraga_sv}"
         kb_forsok = [f"hela meddelandet + omformulering ({sokfraga_sv!r})"]
-    articles = await _sok_kb(storage, tenant_id, sokfraga)
     # 2026-10-06 (Sebbe: "hitta och researcha fram svaren", men billigt): den
     # svenska omformuleringen söks OCKSÅ ensam och träffarna slås ihop. I den
     # långa frågan dränks dess ord — "dubbeldebiterad" hittade inte artikeln
     # "Dubbeldragning eller felaktig debitering" i skarptestet. Databasfrågor,
-    # inga LLM-anrop.
+    # inga LLM-anrop. De två sökningarna är oberoende och går samtidigt.
     if sokfraga_sv and sokfraga_sv.casefold() != sokfraga.casefold():
-        fler = await _sok_kb(storage, tenant_id, sokfraga_sv)
+        articles, fler = await asyncio.gather(
+            _sok_kb(storage, tenant_id, sokfraga), _sok_kb(storage, tenant_id, sokfraga_sv)
+        )
         if any(_artikelnyckel(a) not in {_artikelnyckel(b) for b in articles} for a in fler):
             articles = _sla_ihop(articles, fler)
             kb_forsok.append(f"svensk sökfråga ensam ({sokfraga_sv!r})")
+    else:
+        articles = await _sok_kb(storage, tenant_id, sokfraga)
     if not articles:
         bredare = _forenklad_fraga(subject, message)
         if bredare:
@@ -1418,6 +1529,8 @@ async def run_support_agent(
     kb_saknar_svar = (not articles and not underlag.kallor) or not kb_stodjer_svar
 
     sentimentgrans = regler["sentimentgrans"] / 100
+    intent, dissatisfaction = await klassning
+    cancellation_risk = is_cancellation_risk(intent, dissatisfaction)
     kris = bool(_KRIS.search(f"{subject} {message}"))
     sakerhetskritiskt = bool(
         abuse.ska_eskalera
@@ -1955,6 +2068,16 @@ async def run_support_agent(
     reply = slutlig_text(
         strip_markdown(_textfalt(humanized, "final_reply") or current_draft or "").strip()
     )
+    # Språkputsen får inte göra om ett svar till en hälsning (2026-11-10).
+    # Utkastets grind ovan fångar "Hej, hur kan jag hjälpa dig?" i UTKASTET;
+    # samma sak ur putsen gick rakt ut till kunden. Bar utkastet ett riktigt
+    # svar är det utkastet som gäller.
+    if (
+        _ar_tomt_halsningssvar(reply)
+        and current_draft
+        and not _ar_tomt_halsningssvar(str(current_draft))
+    ):
+        reply = slutlig_text(strip_markdown(str(current_draft)).strip())
     # Efter humaniseraren, före längdkapningen: en avslutningsfras utan namn
     # under är trasig oavsett vilket steg som skrev den.
     reply = strip_dangling_sign_off(reply)
@@ -2126,6 +2249,22 @@ async def run_support_agent(
             utkastbeslut,
             kartan,
         )
+    # Läckspärren (2026-11-10): ett svar som bär stegkörarens egna rubriker
+    # eller ramar är ett svar där modellen skrivit av sina instruktioner,
+    # oftast för att kunden bad om det. Det når aldrig kunden: hon får be om
+    # frågan på nytt, och försöket syns för plattformsadmin.
+    if _lacker_instruktioner(reply):
+        reply = support_texter.text("tomt", svar_sprak)
+        try:
+            await storage.log_platform_event(
+                level="warning",
+                source="injektion",
+                message="Ett supportsvar bar agentens instruktioner och stoppades före kunden.",
+                tenant_id=tenant_id,
+                detail={"kanal": channel},
+            )
+        except Exception:  # noqa: BLE001 — loggningen får inte fälla svaret
+            logger.warning("Kunde inte logga det stoppade svaret.")
     reply = utan_kall_id(reply)
     # Krisgarantin: hänvisningen till 112 ska inte hänga på att modellen och
     # humaniseraren behöll den (skarptest 2026-10-06: den föll bort).

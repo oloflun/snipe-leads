@@ -7,6 +7,8 @@ import { AgentMenu } from "@/components/snajp/AgentMenu";
 import { LÄSBARA, läsbar } from "@/components/settings/Kunskapsbas";
 import { HttpJsonError, felmeddelande, readJsonBody } from "@/lib/http/json";
 import { useLocale, type Locale, type Localized } from "@/lib/i18n";
+import { sessionsId } from "@/lib/sessionslagring";
+import { POLL_FORSOK, fastext, pollpaus } from "@/lib/snajp/chattfas";
 import { getTenant } from "@/lib/tenants";
 import { cn } from "@/lib/utils";
 
@@ -262,13 +264,8 @@ function slumpad(texter: Localized[], locale: Locale): string {
 class VisbartFel extends Error {}
 
 function demoSessionId(): string {
-  const KEY = "snajp.demo.session";
-  let id = window.sessionStorage.getItem(KEY);
-  if (!id) {
-    id = crypto.randomUUID();
-    window.sessionStorage.setItem(KEY, id);
-  }
-  return id;
+  // sessionsId kastar aldrig, se lib/sessionslagring.ts.
+  return sessionsId("snajp.demo.session");
 }
 
 /** Samma mönster som demoSessionId, EGEN nyckel: en testchatt-flik ska inte
@@ -276,13 +273,7 @@ function demoSessionId(): string {
  * samma webbläsare), och tenanten är ändå alltid den inloggades — sessionen
  * avgör det, inte det här id:t. */
 function testchattSessionId(): string {
-  const KEY = "snajp.testchatt.session";
-  let id = window.sessionStorage.getItem(KEY);
-  if (!id) {
-    id = crypto.randomUUID();
-    window.sessionStorage.setItem(KEY, id);
-  }
-  return id;
+  return sessionsId("snajp.testchatt.session");
 }
 
 //: R1.5 — pollningen mot jobbet ska tåla ett transient 5xx/nätfel under en
@@ -296,6 +287,8 @@ type JobbSvar = {
   offline?: boolean;
   error?: string;
   status?: string;
+  /** Vad agenten gör just nu, medan jobbet går (lib/snajp/chattfas.ts). */
+  fas?: string;
   result?: {
     simulation?: boolean;
     reply: string;
@@ -371,6 +364,7 @@ export function SupportChat({
   // Sant medan vi ger backenden en andra chans att vakna ur viloläge — då
   // byter arbetsindikatorn text så att väntan har en förklaring.
   const [vaknar, setVaknar] = useState(false);
+  const [fas, setFas] = useState<string | null>(null);
   const [mode, setMode] = useState<"unknown" | "simulation" | "live" | "offline">("unknown");
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -494,6 +488,7 @@ export function SupportChat({
       const attachments = attachment ? [{ data_url: attachment }] : [];
       setAttachment(null);
       setBusy(true);
+      setFas(null);
 
       try {
         const posta = async () => {
@@ -589,8 +584,8 @@ export function SupportChat({
           );
         }
 
-        for (let attempt = 0; attempt < 90; attempt += 1) {
-          await new Promise((resolve) => setTimeout(resolve, attempt < 5 ? 800 : 2000));
+        for (let attempt = 0; attempt < POLL_FORSOK; attempt += 1) {
+          await new Promise((resolve) => setTimeout(resolve, pollpaus(attempt)));
           // Tenanten måste med: jobbet skapades med kundens nyckel, och utan
           // den pollar vi demo-tenanten där jobbet inte finns. Testchatten
           // har sin egen, autentiserade pollningsroute (session avgör
@@ -622,6 +617,7 @@ export function SupportChat({
             return;
           }
           if (!alive.current) return;
+          if (job.fas) setFas(job.fas);
           if (job.status === "completed" && job.result) {
             // Lokal bindning: inuti setMessages-callbacken kan TS inte behålla
             // avsmalningen av job.result.
@@ -1167,7 +1163,7 @@ export function SupportChat({
                     sv: "Assistenten vaknar. Det kan ta upp till en minut.",
                     en: "The assistant is waking up. This can take up to a minute."
                   })
-                : text({ sv: "Agenten arbetar", en: "The agent is working" })}
+                : text(fastext(fas))}
             </div>
           </div>
         ) : null}

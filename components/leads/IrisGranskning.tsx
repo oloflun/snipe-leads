@@ -6,6 +6,7 @@ import { EmailStudioEditor } from "@/components/email/EmailStudioEditor";
 import { EmptyState, SkeletonRows, btnLiten, btnPrimary, btnSecondary } from "@/components/ui";
 import type { EmailStudioData } from "@/lib/data/emails";
 import { EXEMPELBOLAG } from "@/lib/demo/iris-exempel";
+import { demoOversiktSvar } from "@/lib/demo/oversikt";
 import { felmeddelande, readJsonBody } from "@/lib/http/json";
 import { offertForUtkast } from "@/lib/leads/offert";
 import { LEADS_UPPDATERADE, meddelaLeadsUppdaterade } from "@/lib/leads/utkast";
@@ -251,9 +252,13 @@ function tillStudioData(post: KöItem, utanAmne: string, offer: string | null): 
   };
 }
 
-/** Demons kö: de sex fixturbolagens utkast, oavsett vilken omgång som visas i Bolag. */
+/** Demons kö: fixturbolagens utkast som väntar, samma som demons Leads-lista
+ *  visar med "Väntar på ditt ja" (lib/demo/oversikt.ts). Ett skickat mejl väntar inte. */
 function demoKo(): KöItem[] {
-  return EXEMPELBOLAG.map((b) => ({
+  const vantar = new Set(
+    ((demoOversiktSvar("/leads/queue") as { items?: { id: string }[] } | undefined)?.items ?? []).map((i) => i.id)
+  );
+  return EXEMPELBOLAG.filter((b) => vantar.has(b.id)).map((b) => ({
     id: b.id,
     subject: b.draft.subject,
     body: b.draft.body,

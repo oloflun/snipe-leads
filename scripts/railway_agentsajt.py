@@ -42,8 +42,9 @@ MILJOER: dict[str, str] = {"development": "development", "main": "main"}
 WEB_SERVICE_ID = "0261f633-1247-4d92-b5ab-40c2a1828b90"
 
 #: Förhandsversionens delade inloggning — Sebbes beslut 2026-09-15, samma
-#: uppgifter som QA-adminkontot (redan incheckade i scripts/qa_vyer.mjs).
-LOSEN = "Snajpen123!"
+#: uppgifter som QA-adminkontot. Lösenordet stod incheckat här och i
+#: scripts/qa_*.mjs till 2026-11-09 (Fas 0-fyndet K1); nu läses det ur
+#: .env.deploy (QA_ADMIN_LOSEN) och skrivs aldrig ut.
 EPOST = "Snajpsupport@gmail.com"
 
 TJANSTER: dict[str, dict[str, str]] = {
@@ -139,6 +140,9 @@ def main() -> None:
     api_url = store.get(f"{prefix}_API_URL")
     demo_key = store.get(f"{prefix}_DEMO_API_KEY")
     sso = store.get("RAILWAY_BOKFORING_SSO_SECRET")
+    losen = store.get("QA_ADMIN_LOSEN")
+    if not losen:
+        sys.exit("QA_ADMIN_LOSEN saknas i .env.deploy.")
     if not api_url or not demo_key or not sso:
         sys.exit(f"{prefix}_API_URL/_DEMO_API_KEY eller RAILWAY_BOKFORING_SSO_SECRET saknas i .env.deploy.")
     main_api = (store.get("RAILWAY_MAIN_API_URL") or "").rstrip("/")
@@ -149,7 +153,7 @@ def main() -> None:
         "SNAJP_SUPPORT_TILLATNA": f"{main_api},{dev_api}",
         "SNAJP_AGENT_API_KEY": demo_key,
         "AGENTSAJT_SSO_SECRET": sso,
-        "AGENTSAJT_LOSEN": LOSEN,
+        "AGENTSAJT_LOSEN": losen,
         "AGENTSAJT_EPOST": EPOST,
     })
     env_set(f"{prefix}_{args.tjanst.upper()}_URL", f"https://{domain}")

@@ -21,9 +21,11 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import logging
 import re
 import time
 from dataclasses import dataclass, field
+from collections.abc import Awaitable, Callable
 from typing import Any
 
 from ..agentcore.instruktioner import Instruktionslager, las_instruktioner  # noqa: F401
@@ -33,6 +35,8 @@ from ..agentcore.packs import PlaybookStep, RunLedger, check_output_contract, ch
 from ..config import get_settings
 from ..kvotfel import ar_kreditslut
 from .llm import TANKANDE_AV, _uses_vertex, gemini_tank_kwargs, get_llm_client, vertex_regioner
+
+logger = logging.getLogger(__name__)
 
 #: Bakgrundsjobbens samtidiga LLM-anrop (talamod_429), per process och
 #: händelseloop (2026-10-09). Med tio parallella researchjobb slog Vertex
@@ -64,6 +68,18 @@ alltid inkludera:
   "context_refs": [...]   // vilka av de tillhandahållna referenserna du använde
 Ljug inte i dessa fält — de kontrolleras maskinellt.
 """
+
+
+#: Sist i användarmeddelandet, efter stegets uppgift (2026-11-10). Uppgiften
+#: räknar oftast upp sina egna fält ("Returnera JSON med: ..."), och modellen
+#: följde den listan och glömde bokföringsfälten i systemprompten. Uppmätt i
+#: development: supportens triagesteg gjordes om i 71 % av anropen av det
+#: skälet, ett helt modellanrop till varje gång. Anroparen väljer påminnelsen
+#: (`paminn_om_kontrakt`); utan den är meddelandet som förut.
+KONTRAKTSPAMINNELSE = (
+    "\n\nUtöver fälten ovan ska JSON-objektet alltid ha \"sources_used\" och "
+    "\"context_refs\" (tomma listor om du inte använde något underlag)."
+)
 
 
 def thinking_kwargs(mode: str) -> dict[str, Any]:
@@ -286,6 +302,18 @@ class RunTrace:
     Skrivs till agent_runs (G10) och returneras till API-anroparen."""
 
     steps: list[StepResult] = field(default_factory=list)
+    #: Anropas med stegets namn precis innan dess modellanrop (2026-11-10), så
+    #: att den som väntar kan se vad agenten gör. Chatten skriver skedet på
+    #: jobbet (api/chat.py). Ett fel här får aldrig fälla steget.
+    vid_steg: Callable[[str], Awaitable[None]] | None = None
+
+    async def meddela(self, skill: str) -> None:
+        if self.vid_steg is None:
+            return
+        try:
+            await self.vid_steg(skill)
+        except Exception:  # noqa: BLE001 — förloppet är en upplysning, inte en del av svaret
+            logger.warning("Kunde inte meddela förloppet för steget %s.", skill)
 
     @property
     def skills_used(self) -> list[str]:
@@ -408,6 +436,7 @@ async def run_step(
     playbook_role: str = "en svensk kundtjänst-playbook",
     instruktioner: Instruktionslager | None = None,
     talamod_429: bool = False,
+    paminn_om_kontrakt: bool = False,
 ) -> dict[str, Any]:
     """Kör ETT skill-steg som ett eget LLM-anrop.
 
@@ -439,8 +468,14 @@ async def run_step(
 
     messages = [
         {"role": "system", "content": SYSTEM_FOG.join(s.text for s in segment)},
-        {"role": "user", "content": f"{case_context}\n\n## Din uppgift i det här steget\n{task}"},
+        {
+            "role": "user",
+            "content": f"{case_context}\n\n## Din uppgift i det här steget\n{task}"
+            + (KONTRAKTSPAMINNELSE if paminn_om_kontrakt else ""),
+        },
     ]
+
+    await trace.meddela(step.skill)
 
     output: dict[str, Any] = {}
     tokens_in = tokens_out = reasoning_tokens = cached_tokens = 0
@@ -455,6 +490,11 @@ async def run_step(
         extra = gemini_tank_kwargs(step.thinking, settings.gemini_reasoning_effort.strip().lower())
     else:
         extra = {}
+
+    # Chattens gräns per modellanrop. Ett steg som tänker (eskaleringen)
+    # får dubbla tiden: dess svar tar längre tid av en anledning, och en gräns
+    # det ofta slår i hade gjort varje eskalering till två anrop som faller.
+    chattgrans = float(settings.llm_timeout_chatt_s) * (2 if effective_mode == "enabled" else 1)
 
     # Formuleringssteg (humanizer, utkast) får deklarera en varmare temperatur
     # i playbooken; analys- och bedömningssteg ärver den kalla defaulten.
@@ -497,14 +537,31 @@ async def run_step(
                             **extra,
                         )
                 else:
-                    response = await client.chat.completions.create(
-                        model=effective_model,
-                        response_format={"type": "json_object"},
-                        temperature=effective_temperature,
-                        messages=messages,
-                        **extra,
+                    # En människa väntar: steget får llm_timeout_chatt_s, inte
+                    # klientens 120 s gånger SDK:ns omtag (2026-11-09, K6).
+                    # wait_for och inte klientens timeout-parameter, så att
+                    # gränsen också gäller SDK:ns egna omtag inuti anropet.
+                    response = await asyncio.wait_for(
+                        client.chat.completions.create(
+                            model=effective_model,
+                            response_format={"type": "json_object"},
+                            temperature=effective_temperature,
+                            messages=messages,
+                            **extra,
+                        ),
+                        timeout=chattgrans,
                     )
                 break
+            except asyncio.TimeoutError:
+                # Ett omtag: ett hängt anrop är oftast en enskild anslutning.
+                # Hänger det andra också är leverantören nere, och då ska
+                # steget falla så att kunden får ett ärligt besked nu.
+                if vanta_forsok >= 2:
+                    raise
+                logger.warning(
+                    "LLM-steget %s svarade inte inom %.0f s; försöker en gång till.",
+                    step.skill, chattgrans,
+                )
             except Exception as fel:  # noqa: BLE001 — bara 429 särbehandlas
                 ar_429 = getattr(fel, "status_code", None) == 429
                 # KREDITSLUT är inte transient: "prepayment credits are
@@ -562,6 +619,12 @@ async def run_step(
         try:
             output = json.loads(choice_message.content or "{}")
         except json.JSONDecodeError:
+            output = {}
+        if not isinstance(output, dict):
+            # Kontraktet är ett objekt. En lista, en sträng eller null är
+            # giltig JSON men inget steg kan läsa den: anroparna gör
+            # `.get(...)` och föll på det (Fas 0-fyndet H15, 2026-11-09).
+            # Tomt objekt bryter kontraktet nedan och ger ett omförsök.
             output = {}
 
         verdict = check_output_contract(

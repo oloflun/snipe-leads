@@ -388,23 +388,12 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
           }
           brand={
             // Arbetsytans namn — samma plats som "Bokföring"-etiketten i
-            // bokforing-webbs rail. I demon står demomarkören här i stället:
-            // den säger vad ytan ÄR, alltså hör den ihop med märket.
-            demolage ? (
-              <p className="hidden px-5 pb-4 lg:block">
-                {/* Renderas inuti railen (bg-ink) via Rail-komponentens
-                    brand-slot — text-warning är kalibrerad mot ljusa ytor och
-                    gav bara 2.51:1 här. text-ochre ger 6.54:1 mot den
-                    ochre-tonade railbakgrunden. */}
-                <span className="inline-flex items-center rounded-input border border-ochre/40 bg-ochre/10 px-2 py-0.5 text-[0.75rem] font-medium text-ochre">
-                  {text({ sv: "Demokonto · inloggad", en: "Demo account · signed in" })}
-                </span>
-              </p>
-            ) : (
-              <p className="hidden truncate px-5 pb-4 text-[0.8125rem] font-medium text-paper-muted lg:block">
-                {workspaceName}
-              </p>
-            )
+            // bokforing-webbs rail. Demon visar sitt arbetsytenamn som en
+            // kund: den orangea rutan "Demokonto · inloggad" är förbjuden
+            // (Anton 2026-11-09). Bandet överst säger redan att ytan är en demo.
+            <p className="hidden truncate px-5 pb-4 text-[0.8125rem] font-medium text-paper-muted lg:block">
+              {workspaceName}
+            </p>
           }
           navLabel={t("nav.dashboard")}
           groups={[{ items: navItems }]}
@@ -453,14 +442,10 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
                   <div className="flex w-full flex-col lg:w-auto lg:flex-1">
                     {/* Demon är ett inloggat demokonto (Sebbe 2026-10-29):
                         mottagaren av ett utskick ska kunna testa Iris direkt,
-                        utan att logga in eller skapa något. Kontot står här
-                        där en inloggad kund ser "Logga ut". */}
-                    <p className="flex min-h-11 flex-col justify-center px-3 text-sm">
-                      <span className="font-medium text-paper">{workspaceName}</span>
-                      <span className="text-[0.75rem] text-paper-muted">
-                        {text({ sv: "Demokonto", en: "Demo account" })}
-                      </span>
-                    </p>
+                        utan att logga in eller skapa något. Kontonamnet står
+                        överst i railen och bandet över sidan säger att det är
+                        en demo; ingen egen "Demokonto"-etikett här (Anton
+                        2026-11-09). Där en kund ser "Logga ut" står vägen ut. */}
                     <Link
                       href="/"
                       className="focus-ring flex min-h-11 items-center rounded-input px-3 text-sm font-medium text-paper-muted transition-colors hover:bg-paper/5 hover:text-paper"
@@ -491,17 +476,11 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
               och saknas på mobilen — samma avgränsning som adminytan gör. */}
           <header className="safe-top sticky top-0 z-30 border-b border-ink/10 bg-paper/85 backdrop-blur-xl lg:hidden">
             <div className="flex min-h-[52px] flex-wrap items-center justify-end gap-x-1.5 gap-y-1 px-4 py-1.5 md:px-6">
-              {/* Demomarkören för smala skärmar där railens etikett inte får
-                  plats — utan den vet en mobil besökare inte vad ytan är. */}
-              {demolage ? (
-                <span className="mr-auto inline-flex items-center rounded-input border border-ochre/40 bg-ochre/10 px-2.5 py-1 text-[13px] font-medium text-warning">
-                  {text({ sv: "Demokonto · inloggad", en: "Demo account · signed in" })}
-                </span>
-              ) : (
-                <span className="mr-auto truncate text-[13px] font-medium text-ink-subtle">
-                  {workspaceName}
-                </span>
-              )}
+              {/* Arbetsytans namn, även i demon: ingen orange demomarkör
+                  (Anton 2026-11-09). Bandet under raden säger att det är en demo. */}
+              <span className="mr-auto truncate text-[13px] font-medium text-ink-subtle">
+                {workspaceName}
+              </span>
 
               <AgentMenu yta="leads" kontext={`dashboard${pathname ? `:${pathname}` : ""}`} />
               <button

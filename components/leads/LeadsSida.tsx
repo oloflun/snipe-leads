@@ -14,7 +14,7 @@ import { LeadsOversikt } from "@/components/leads/LeadsOversikt";
 import { LeadsRunForm } from "@/components/leads/LeadsRunForm";
 import { Samtalslista } from "@/components/leads/Samtalslista";
 import { btnPrimary, btnSecondary, flik, flikAktiv, flikInaktiv, fliklista } from "@/components/ui";
-import { exempelOmgang } from "@/lib/demo/iris-exempel";
+import { exempelOmgang, finnExempelbolag } from "@/lib/demo/iris-exempel";
 import { lasStruktur } from "@/lib/leads/struktur";
 import { useLocale, type Localized } from "@/lib/i18n";
 import type { SuiteProspekt } from "@/lib/leads/suite";
@@ -159,7 +159,10 @@ export function IrisBolag({ demo = false }: Readonly<{ demo?: boolean }>) {
         // Utkasten i den struktur besökaren valde i Kör Iris (A/B, Sebbe
         // 2026-11-07). Valet sparas av StrukturVal i webbläsaren, så det läses
         // här i stället för att trådas genom formuläret.
-        ...exempelOmgang(demoOmgang, lasStruktur()).map((b) => ({ ...exempelTillRad(b), status: "new", created_at: nu })),
+        // Omgång 0 och 1 är de sex handskrivna bolagen, som sedan 2026-11-09
+        // redan står i demons lista (lib/demo/oversikt.ts). Körningen börjar
+        // därför på omgång 2, nya bolag, så att den inte lägger dit dubbletter.
+        ...exempelOmgang(demoOmgang + 2, lasStruktur()).map((b) => ({ ...exempelTillRad(b), status: "new", created_at: nu })),
         ...forr
       ]);
       setDemoOmgang((n) => n + 1);
@@ -168,6 +171,14 @@ export function IrisBolag({ demo = false }: Readonly<{ demo?: boolean }>) {
   }
 
   const valtExempel = exempelRader.find((r) => r.id === valdId)?._exempel;
+
+  // Demon: en gammal eller felskriven länk (?lead=byggkompaniet-syd från före
+  // 2026-11-09) pekar på ett bolag som inte finns. Lådan visade då "Bolaget
+  // hittades inte"; nu tas id:t ur adressen och listan står kvar.
+  const okantDemoLead = demo && Boolean(valdId) && !valtExempel && !finnExempelbolag({ companyId: valdId });
+  useEffect(() => {
+    if (okantDemoLead) satt({ lead: null, flik: null });
+  }, [okantDemoLead, satt]);
   const harListaddon = addons.includes("leadlists");
 
   return (
@@ -335,7 +346,7 @@ export function IrisBolag({ demo = false }: Readonly<{ demo?: boolean }>) {
         )}
       </div>
 
-      {valdId ? (
+      {valdId && !okantDemoLead ? (
         <Lada etikett={text(T.lead)} aterFokus={`iris-rad-${valdId}`} onStang={() => satt({ lead: null })}>
           <LeadDetail key={valdId} id={valdId} demo={demo} exempel={valtExempel} />
         </Lada>

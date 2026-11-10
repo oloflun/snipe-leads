@@ -57,6 +57,7 @@ from .leads_agent import (
     _run_grounding_cycle,
     _uppgradera_kontakt,
     sign_off,
+    stoppskal_grundning,
 )
 from .step_runner import RunTrace, run_step
 from .tools import strip_markdown
@@ -1567,11 +1568,7 @@ async def run_outreach_draft_v2(
                 body = erbjudanden.behall_upp_till(body, villkor)
 
         if not grounding["ok"]:
-            await _request_human_handoff_impl(
-                context,
-                "Grindningen hittade påståenden utan stöd i underlaget, även efter "
-                f"en reparationsrunda: {grounding['unsupported_after']}. Utkastet köas inte.",
-            )
+            await _request_human_handoff_impl(context, stoppskal_grundning(grounding))
         elif escalated_steps:
             await _request_human_handoff_impl(
                 context,

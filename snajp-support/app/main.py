@@ -52,10 +52,55 @@ from .api import (
 from .api.events import install_exception_handler
 from .config import DEFAULT_TENANT_ID, get_settings
 from .jobs.store import MemoryJobStore, RedisJobStore
+from .sparning import Sparning, installera_loggning
 from .storage.memory import MemoryStorage
 
 logger = logging.getLogger("snajp-support")
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
+# Formatet bär anropets id på varje rad (app/sparning.py).
+installera_loggning(logging.INFO)
+
+
+async def _anslut_postgres(settings, *, paus_s: float = 3.0):
+    """Ansluter till Postgres, eller vägrar starta.
+
+    Före 2026-11-09 föll uppstarten tillbaka på MemoryStorage när databasen
+    inte svarade (Fas 0-fyndet K4). Processen gick då upp med TOM lagring och
+    grön hälsokontroll: varje kundnyckel gav 401, det som skrevs hamnade i
+    minnet, och läget låg kvar tills någon startade om för hand. Det har hänt
+    (RAILWAY.md). En satt DATABASE_URL är ett löfte om en databas; kan det
+    inte hållas ska deployen dö, så att Railway behåller den föregående
+    versionen. Samma princip som dataskyddsspärren och masternyckeln ovan.
+
+    Minnesläget finns kvar för den som startar UTAN DATABASE_URL (testsviten,
+    den lokala demon). Det är ett val, inte ett fel.
+
+    Flera försök, för att en databas som startar om samtidigt med api:t inte
+    ska fälla en frisk deploy. Felet loggas med värdnamn och feltyp, aldrig
+    med anslutningssträngen: den bär lösenordet.
+    """
+    from .config import _vard_ur_dsn
+    from .storage.postgres import PostgresStorage
+
+    forsok = max(int(settings.db_start_forsok), 1)
+    senaste: Exception | None = None
+    for n in range(1, forsok + 1):
+        try:
+            return await PostgresStorage.connect(settings.database_url)
+        except Exception as error:  # noqa: BLE001 — varje anslutningsfel räknas
+            senaste = error
+            logger.warning(
+                "Postgres svarar inte (försök %d av %d, %s: %s).",
+                n, forsok, _vard_ur_dsn(settings.database_url), type(error).__name__,
+            )
+            if n < forsok:
+                await asyncio.sleep(paus_s * n)
+    besked = (
+        f"DATABASE_URL är satt men Postgres ({_vard_ur_dsn(settings.database_url)}) "
+        f"gick inte att nå efter {forsok} försök ({type(senaste).__name__}). "
+        "Tjänsten startar inte i minnesläge mot en databas som ska finnas."
+    )
+    logger.critical("Startvägran: %s", besked)
+    raise RuntimeError(besked)
 
 
 @asynccontextmanager
@@ -95,27 +140,22 @@ async def lifespan(app: FastAPI):
 
     storage = None
     if settings.database_url:
+        storage = await _anslut_postgres(settings)
+        logger.info("Lagring: Postgres")
+        # En färsk databas har tom KB. Utan artiklar tvingar grundningsregeln
+        # eskalering av varje ärende — seeda text direkt (embeddings via
+        # `python -m app.scripts.seed_kb` när en EMBEDDING_API_KEY finns).
         try:
-            from .storage.postgres import PostgresStorage
+            from .scripts.seed_kb import ensure_default_kb, ensure_public_demo_kb
 
-            storage = await PostgresStorage.connect(settings.database_url)
-            logger.info("Lagring: Postgres (Supabase)")
-            # En färsk databas har tom KB. Utan artiklar tvingar grundningsregeln
-            # eskalering av varje ärende — seeda text direkt (embeddings via
-            # `python -m app.scripts.seed_kb` när en EMBEDDING_API_KEY finns).
-            try:
-                from .scripts.seed_kb import ensure_default_kb, ensure_public_demo_kb
-
-                added = await ensure_default_kb(storage)
-                if added:
-                    logger.info("Kunskapsbasen var tom — seedade %s artiklar.", added)
-                demo_added = await ensure_public_demo_kb(storage)
-                if demo_added:
-                    logger.info("G8-demons kunskapsbas var tom — seedade %s artiklar.", demo_added)
-            except Exception as error:  # noqa: BLE001 — seedning får aldrig fälla uppstarten
-                logger.warning("Kunde inte seeda kunskapsbasen (%s).", error)
-        except Exception as error:
-            logger.warning("Postgres otillgänglig (%s) — faller tillbaka till in-memory.", error)
+            added = await ensure_default_kb(storage)
+            if added:
+                logger.info("Kunskapsbasen var tom — seedade %s artiklar.", added)
+            demo_added = await ensure_public_demo_kb(storage)
+            if demo_added:
+                logger.info("G8-demons kunskapsbas var tom — seedade %s artiklar.", demo_added)
+        except Exception as error:  # noqa: BLE001 — seedning får aldrig fälla uppstarten
+            logger.warning("Kunde inte seeda kunskapsbasen (%s).", error)
     if storage is None:
         storage = MemoryStorage()
         logger.info("Lagring: in-memory (demo-läge)")
@@ -146,7 +186,11 @@ async def lifespan(app: FastAPI):
         try:
             import redis.asyncio as redis_asyncio
 
-            cache_redis = redis_asyncio.from_url(settings.redis_url, decode_responses=False)
+            from .redisnycklar import anslutningsval
+
+            cache_redis = redis_asyncio.from_url(
+                settings.redis_url, decode_responses=False, **anslutningsval()
+            )
             await cache_redis.ping()
             from .cache import embeddingcache, svarscache
             from .cache import versioner as cache_versioner
@@ -322,21 +366,32 @@ async def lifespan(app: FastAPI):
 
         trial_task = asyncio.create_task(run_trial_paminnare(app.state))
 
+    # Vertex-tokenen hämtas och hålls färsk utanför händelseloopen (H7): utan
+    # det blockerade det första kundanropet efter varje deploy, och sedan ett
+    # i timmen, hela api:t medan tokenen förnyades. Se agent/llm.py.
+    from .agent.llm import varm_vertex_token
+
+    vertex_task = asyncio.create_task(varm_vertex_token(settings))
+
     yield
 
     stoppa_dodsvakt()
-    if poller_task:
-        poller_task.cancel()
-    if send_scheduler_task:
-        send_scheduler_task.cancel()
-    if stadare_task:
-        stadare_task.cancel()
-    if trial_task:
-        trial_task.cancel()
-    for task in chat_worker_tasks:
+    # Avbryt och VÄNTA IN (2026-11-09). Förut avbröts uppgifterna utan att
+    # någon väntade på dem, och databaspoolen stängdes medan sändloopen eller
+    # en arbetare kunde stå mitt i en skrivning. Tio sekunder räcker för att
+    # ett pågående steg ska hinna ta emot avbrottet; Railway ger processen 30.
+    uppgifter = [
+        t
+        for t in (poller_task, send_scheduler_task, stadare_task, trial_task, vertex_task,
+                  *chat_worker_tasks, *leads_worker_tasks)
+        if t is not None
+    ]
+    for task in uppgifter:
         task.cancel()
-    for task in leads_worker_tasks:
-        task.cancel()
+    if uppgifter:
+        _, kvar = await asyncio.wait(uppgifter, timeout=10)
+        if kvar:
+            logger.warning("%d bakgrundsuppgifter hann inte avslutas före nedstängning.", len(kvar))
     await storage.close()
 
 
@@ -346,6 +401,9 @@ app = FastAPI(title="Snajp-Support", version="0.1.0", lifespan=lifespan)
 from .matning import Matning  # noqa: E402
 
 app.add_middleware(Matning)
+# Ytterst (läggs till sist): id:t ska finnas innan något annat loggar, och
+# sättas på svaret även när ett inre lager svarar. Se app/sparning.py.
+app.add_middleware(Sparning)
 
 # CORS är AV som default och behövs inte för vår egen frontend — Next-proxyn
 # anropar backenden server-side, så webbläsaren träffar aldrig den här

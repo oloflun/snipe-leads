@@ -56,6 +56,8 @@ from ..kvitton.sammanfattning import (
 )
 from ..kvitton.hanterare import Inkommande, hantera, spara
 from ..kvitton.skanning import skanna_inkorg
+from ..jobs import bakgrund
+from . import dubbelstart
 from .bookkeeping import _kvotsvar
 from .deps import require_bookkeeping_tenant, require_tenant
 
@@ -169,7 +171,64 @@ async def skanna(
     Svaret bär en händelse per genomläst mejl (inkorgsvyns animation), de
     sparade kvittona och sammanfattningen — allt i ETT anrop, så att vyn
     aldrig kan visa en skanning och en tabell som inte hör ihop.
+
+    En skanning i taget per kund och period (api/dubbelstart.py): ett
+    dubbelklick väntar in den som redan går och får dess svar. Två samtidiga
+    skanningar såg samma mejl som oläst och sparade kvittot två gånger.
+    Vakten gäller bara medan skanningen pågår (fonster_s=0), så en ny
+    skanning efteråt läser inkorgen på nytt.
     """
+    return await dubbelstart.en_gang(
+        dubbelstart.nyckel(tenant["tenant_id"], "kvittoskanning", [fran, till]),
+        lambda: _skanna(request, fran, till, tenant),
+        fonster_s=0.0,
+    )
+
+
+@router.post("/api/kvitton/skanning", status_code=202)
+async def starta_skanning(
+    request: Request,
+    fran: date | None = None,
+    till: date | None = None,
+    tenant: dict = Depends(require_tenant),
+) -> dict:
+    """Startar skanningen som ett jobb och svarar direkt (2026-11-10).
+
+    `POST /skanna` gör hela arbetet i begäran, och en skanning av tjugo mejl
+    tar längre än de nio sekunder webbens proxy ger en POST: vyn visade ett
+    fel medan arbetet gick vidare. Här får vyn ett jobb-id, hämtar förloppet
+    (mejl x av y) med `GET /skanning/{id}` och till sist samma svar som
+    `/skanna` ger. Går en skanning redan för kunden svarar starten med den.
+    """
+    if valj_mejlkonto(tenant["tenant_id"]) is None:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Ingen mejlinkorg är kopplad ännu. Koppla Gmail eller Outlook under "
+                "Inställningar, eller ladda upp kvitton manuellt."
+            ),
+        )
+
+    async def _arbete(forlopp: bakgrund.Forlopp) -> dict:
+        async def _mejl(lasta: int, totalt: int) -> None:
+            await forlopp.satt(lasta=lasta, totalt=totalt)
+
+        return await _skanna(request, fran, till, tenant, forlopp=_mejl)
+
+    job_id, pagar = await bakgrund.starta(request.app.state, tenant["tenant_id"], "kvittoskanning", _arbete)
+    return {"job_id": job_id, "pagar": pagar}
+
+
+@router.get("/api/kvitton/skanning/{job_id}")
+async def las_skanning(request: Request, job_id: str, tenant: dict = Depends(require_tenant)) -> dict:
+    """Skanningens läge: status, förlopp (`lasta`, `totalt`) och, när den är
+    klar, samma svar som `POST /skanna`."""
+    return await bakgrund.lasa(request.app.state, tenant["tenant_id"], job_id)
+
+
+async def _skanna(
+    request: Request, fran: date | None, till: date | None, tenant: dict, *, forlopp: Any = None
+) -> dict:
     storage = request.app.state.storage
     tenant_id = tenant["tenant_id"]
     konto = valj_mejlkonto(tenant["tenant_id"])
@@ -183,7 +242,7 @@ async def skanna(
         )
 
     try:
-        resultat = await skanna_inkorg(storage, tenant_id, konto)
+        resultat = await skanna_inkorg(storage, tenant_id, konto, forlopp=forlopp)
     except MejlkontofelError as fel:
         raise HTTPException(status_code=502, detail=str(fel)) from fel
     except Exception as fel:
@@ -219,6 +278,8 @@ async def skanna(
         "genomlasta": resultat.genomlasta,
         "nya_kvitton": resultat.nya_kvitton,
         "redan_lasta": resultat.hoppade_dubbletter,
+        # Mejl som inte gick att läsa; de prövas igen vid nästa skanning.
+        "misslyckade": resultat.misslyckade,
         "handelser": resultat.handelser,
         "kvitton": [_kvitto_ut(r) for r in rader],
         "sammanfattning": {k: v for k, v in samman.items() if not k.startswith("_")},
@@ -334,9 +395,17 @@ async def ta_emot_kvittofil(
         storage, tenant_id, Inkommande.fran_fil(data, mimetyp, filnamn), riktning=riktning
     )
     if not hantering.resultat["underlag"]:
+        # En faktura företaget självt skickat känns inte igen som ett
+        # kostnadsunderlag och avvisades med samma text, utan vägen framåt
+        # (evalsviten 2026-11-10): knappen för kundfakturor.
         raise UnderlagsfelError(
-            "Filen ser inte ut att vara ett kvitto eller en faktura, så den sparades "
-            "inte. Är det ett underlag kan du mata in uppgifterna för hand."
+            "Filen ser inte ut att vara ett kvitto eller en leverantörsfaktura, så den "
+            "sparades inte. Är det ett underlag kan du mata in uppgifterna för hand."
+            + (
+                ""
+                if riktning == "intakt"
+                else " Är det en faktura ni själva har skickat till en kund: välj Ladda upp kundfaktura."
+            )
         )
 
     sparade = []

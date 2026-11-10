@@ -5,6 +5,14 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { btnLiten, btnPrimary, btnSecondary, meta, rubrikPanel } from "@/components/ui";
 import { felmeddelande, readJsonBody } from "@/lib/http/json";
 import { useLocale, type Localized } from "@/lib/i18n";
+import {
+  foljUtskick,
+  mindUtskick,
+  minnsUtskick,
+  startaUtskick,
+  type Utskicksforlopp,
+  type Utskicksutfall
+} from "@/lib/leads/utskicksjobb";
 import { cn } from "@/lib/utils";
 import { BekraftaUtskick, forstaMening } from "@/components/leads/BekraftaUtskick";
 import { ProvmejlKnapp } from "@/components/leads/ProvmejlKnapp";
@@ -75,6 +83,8 @@ export function KorningensUtkast({ jobId }: Readonly<{ jobId: string }>) {
   const [fel, setFel] = useState<Localized | null>(null);
   const [besked, setBesked] = useState<Localized | null>(null);
   const [pagar, setPagar] = useState<"skriv" | "skicka" | null>(null);
+  // Hur långt "Godkänn och skicka alla" har kommit (lib/leads/utskicksjobb.ts).
+  const [utskick, setUtskick] = useState<Utskicksforlopp | null>(null);
   const [skriver, setSkriver] = useState(0);
   const [oppen, setOppen] = useState<string | null>(null);
   // Vilket utkast som hanteras just nu, och hur: knapparna låses under tiden.
@@ -149,24 +159,53 @@ export function KorningensUtkast({ jobId }: Readonly<{ jobId: string }>) {
   // Bekräftelsen med mottagarlistan (kritik 3) i stället för confirm-rutan.
   const [bekrafta, setBekrafta] = useState(false);
 
+  // Utskicket går som ett jobb på servern: vyn följer förloppet och visar
+  // utfallet, även för ett utskick som pågick när sidan laddades om.
+  const foljUtskicket = useCallback(
+    async (utskicksId: string) => {
+      setPagar("skicka");
+      try {
+        visaUtfall(await foljUtskick(utskicksId, setUtskick));
+        await hamta();
+      } catch (orsak) {
+        const m = felmeddelande(orsak);
+        setFel({ sv: m, en: m });
+      } finally {
+        minnsUtskick(`korning:${jobId}`, null);
+        setUtskick(null);
+        setPagar(null);
+      }
+    },
+    // visaUtfall och hamta läser bara tillståndssättare och jobId.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [jobId]
+  );
+
+  useEffect(() => {
+    const pagaende = mindUtskick(`korning:${jobId}`);
+    if (pagaende) void foljUtskicket(pagaende);
+  }, [jobId, foljUtskicket]);
+
   async function skicka() {
     setBekrafta(false);
     setPagar("skicka");
     setFel(null);
     setBesked(null);
     try {
-      const response = await fetch(`${bas}/skicka`, { method: "POST" });
-      const data = await readJsonBody<{
-        skickade?: number;
-        vantar_pa_fonstret?: number;
-        stoppade?: { company_name: string | null; skal: string | null }[];
-        detail?: string;
-      }>(response);
-      if (!response.ok || !data) {
-        const orsak = typeof data?.detail === "string" ? data.detail : `status ${response.status}`;
-        setFel({ sv: `Utkasten kunde inte skickas (${orsak}).`, en: `The drafts could not be sent (${orsak}).` });
-        return;
-      }
+      const utskicksId = await startaUtskick(
+        `/leads/korningar/${encodeURIComponent(jobId)}/utkast/skicka-jobb`
+      );
+      minnsUtskick(`korning:${jobId}`, utskicksId);
+      await foljUtskicket(utskicksId);
+    } catch (orsak) {
+      const m = felmeddelande(orsak);
+      setFel({ sv: m, en: m });
+      setPagar(null);
+    }
+  }
+
+  function visaUtfall(data: Utskicksutfall) {
+    {
       const skickade = data.skickade ?? 0;
       const vantar = data.vantar_pa_fonstret ?? 0;
       const stoppade = data.stoppade ?? [];
@@ -184,16 +223,10 @@ export function KorningensUtkast({ jobId }: Readonly<{ jobId: string }>) {
       if (stoppade.length) {
         const lista = stoppade.map((s) => `${s.company_name ?? "?"}${s.skal ? `: ${s.skal}` : ""}`).join("; ");
         setFel({
-          sv: `${stoppade.length} stoppades av en sändspärr. ${lista}`,
-          en: `${stoppade.length} were stopped by a send guard. ${lista}`
+          sv: `${stoppade.length} skickades inte. ${lista}`,
+          en: `${stoppade.length} were not sent. ${lista}`
         });
       }
-      await hamta();
-    } catch (orsak) {
-      const m = felmeddelande(orsak);
-      setFel({ sv: m, en: m });
-    } finally {
-      setPagar(null);
     }
   }
 
@@ -298,7 +331,12 @@ export function KorningensUtkast({ jobId }: Readonly<{ jobId: string }>) {
               ) : (
                 <Check className="h-4 w-4" aria-hidden />
               )}
-              {text({ sv: `Godkänn och skicka alla ${vantar}`, en: `Approve and send all ${vantar}` })}
+              {pagar === "skicka" && utskick?.totalt
+                ? text({
+                    sv: `Skickar ${utskick.klara} av ${utskick.totalt}`,
+                    en: `Sending ${utskick.klara} of ${utskick.totalt}`
+                  })
+                : text({ sv: `Godkänn och skicka alla ${vantar}`, en: `Approve and send all ${vantar}` })}
             </button>
           ) : null}
           {kanSkrivas > 0 ? (

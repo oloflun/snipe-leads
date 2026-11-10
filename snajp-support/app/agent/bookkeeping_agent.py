@@ -232,6 +232,10 @@ async def _kor_avlasning(
             output = json.loads(choice.content or "{}")
         except json.JSONDecodeError:
             output = {}
+        if not isinstance(output, dict):
+            # Samma skydd som step_runner: en lista eller null är giltig JSON
+            # men inget anroparen kan läsa fält ur.
+            output = {}
 
         verdict = check_output_contract(
             output, required_context_refs=("underlag",), already_retried=(attempt == 2)

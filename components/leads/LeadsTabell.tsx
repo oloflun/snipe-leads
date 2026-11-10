@@ -9,7 +9,8 @@ import { SkickatLista, type SkickatRad } from "@/components/leads/SkickatLista";
 import type { Signatur } from "@/components/leads/IrisGranskning";
 import { useRadrorelse } from "@/components/leads/useRadrorelse";
 import { BekraftaUtskick, type Bekraftelsetyp } from "@/components/leads/BekraftaUtskick";
-import { demoOversiktSvar } from "@/lib/demo/oversikt";
+import { finnExempelbolag } from "@/lib/demo/iris-exempel";
+import { DEMO_KORNING_IDS, demoOversiktSvar, demoSvar } from "@/lib/demo/oversikt";
 import { felmeddelande } from "@/lib/http/json";
 import { useLocale, type Localized } from "@/lib/i18n";
 import {
@@ -287,29 +288,11 @@ const LIVE_MS = 4000;
 /**
  * Demons uppspelade körning (kritiken 2026-10-07: det som Sebbe beställt,
  * leads som flyttar live från Research pågår till Ny, syntes aldrig i demon,
- * som är säljytan). Två påhittade bolag dyker upp under research och blir
- * klara ett i taget. Exempeldata, märkt som allt annat i demon.
+ * som är säljytan). Två av demons exempelbolag (DEMO_KORNING_IDS) dyker upp
+ * under research och blir klara ett i taget, med samma bedömning, källor och
+ * utkast som resten av listan. Förut var det två egna påhittade bolag utan
+ * fixtur bakom sig, och lådan svarade "Bolaget hittades inte" (2026-11-09).
  */
-const DEMO_KORNING: { id: string; namn: string; ort: Localized; webb: string; niva: "A" | "B"; poang: number; varfor: Localized }[] = [
-  {
-    id: "demo-live-1",
-    namn: "Norrsken Snickeri AB",
-    ort: { sv: "Umeå", en: "Umeå" },
-    webb: "norrskensnickeri.se",
-    niva: "B",
-    poang: 71,
-    varfor: { sv: "Snickeri med sju anställda som just öppnat en andra verkstad.", en: "Joinery with seven employees that just opened a second workshop." }
-  },
-  {
-    id: "demo-live-2",
-    namn: "Kustvik Elteknik AB",
-    ort: { sv: "Luleå", en: "Luleå" },
-    webb: "kustvikel.se",
-    niva: "A",
-    poang: 86,
-    varfor: { sv: "Elfirma som söker fler företagskunder och rekryterar en säljare.", en: "Electrical firm looking for more business customers and hiring a salesperson." }
-  }
-];
 /** När i demons körning: bolagen dyker upp, och när vart och ett blir klart. */
 const DEMO_TIDER = { start: 1200, klara: [5000, 8500] };
 
@@ -411,12 +394,16 @@ export function LeadsTabell({
   const [bortvaldaFel, setBortvaldaFel] = useState<string | null>(null);
   const [vyNamn, setVyNamn] = useState("");
   const [sparar, setSparar] = useState(false);
+  // Demon: har den uppspelade körningen lagt sina bolag i listan än?
+  const demoKorningSpelad = useRef(false);
 
   const hamta = useCallback(async () => {
     setFel(null);
     if (demo) {
       const svar = demoOversiktSvar("/leads/prospects") as { prospects?: SuiteProspekt[] } | undefined;
-      setProspekt(svar?.prospects ?? []);
+      // Körningens bolag finns inte i listan förrän körningen lagt dit dem.
+      const alla = svar?.prospects ?? [];
+      setProspekt(demoKorningSpelad.current ? alla : alla.filter((p) => !DEMO_KORNING_IDS.includes(p.id)));
       return;
     }
     try {
@@ -449,30 +436,34 @@ export function LeadsTabell({
   useEffect(() => {
     if (!demo) return;
     const nu = new Date().toISOString();
-    const rad = (k: (typeof DEMO_KORNING)[number], klar: boolean): SuiteProspekt => ({
-      id: k.id,
-      company_name: k.namn,
-      ort: text(k.ort),
-      website: k.webb,
-      origin: "manual",
+    const svar = demoOversiktSvar("/leads/prospects") as { prospects?: SuiteProspekt[] } | undefined;
+    const fardiga = (svar?.prospects ?? []).filter((p) => DEMO_KORNING_IDS.includes(p.id));
+    // Under research: bolaget är hittat, men bedömning, kontakt och utkast saknas än.
+    const underResearch = (p: SuiteProspekt): SuiteProspekt => ({
+      ...p,
       created_at: nu,
-      status: klar ? "new" : "researching",
-      niva: klar ? k.niva : null,
-      score_total: klar ? k.poang : null,
-      motivering: klar ? text(k.varfor) : null,
-      contact_email: klar ? `info@${k.webb}` : null
+      status: "researching",
+      niva: null,
+      score_total: null,
+      motivering: null,
+      contact_email: null,
+      utkast_status: null
     });
+    const klar = (p: SuiteProspekt): SuiteProspekt => ({ ...p, created_at: nu });
     const timers: number[] = [];
     const spela = () => {
       timers.push(
         window.setTimeout(() => {
           setDemoKorning(true);
-          setProspekt((forra) => [...(forra ?? []), ...DEMO_KORNING.map((k) => rad(k, false))]);
+          setProspekt((forra) => [...(forra ?? []).filter((p) => !DEMO_KORNING_IDS.includes(p.id)), ...fardiga.map(underResearch)]);
         }, DEMO_TIDER.start),
-        ...DEMO_KORNING.map((k, i) =>
+        ...fardiga.map((k, i) =>
           window.setTimeout(() => {
-            setProspekt((forra) => (forra ?? []).map((p) => (p.id === k.id ? rad(k, true) : p)));
-            if (i === DEMO_KORNING.length - 1) setDemoKorning(false);
+            setProspekt((forra) => (forra ?? []).map((p) => (p.id === k.id ? klar(k) : p)));
+            if (i === fardiga.length - 1) {
+              demoKorningSpelad.current = true;
+              setDemoKorning(false);
+            }
           }, DEMO_TIDER.klara[i])
         )
       );
@@ -503,7 +494,7 @@ export function LeadsTabell({
       observer?.disconnect();
       timers.forEach((t) => window.clearTimeout(t));
     };
-    // Språket läses när raden blir klar; ett språkbyte mitt i spelar inte om körningen.
+    // Körningen spelas en gång per besök; den hänger bara på demoläget.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [demo]);
 
@@ -621,20 +612,26 @@ export function LeadsTabell({
   const listref = useRef<HTMLDivElement>(null);
   useRadrorelse(listref, prospekt === null ? null : urval);
   // Demon har ingen utskickslogg: dess Skickat byggs av samma exempelleads
-  // som listan (kritiken 2: "Skickade 1 122" bredvid "Skickat 0").
+  // som listan (kritiken 2: "Skickade 1 122" bredvid "Skickat 0"). Mejlet är
+  // bolagets eget utkast och svaret bolagets eget svar (lib/demo/oversikt.ts),
+  // inte en platshållare om att mejlet "står här i din arbetsyta" (2026-11-09).
   const skickatVisat = useMemo<SkickatRad[] | null>(() => {
     if (!demo) return skickat;
     return allaRader
       .filter((p) => SKICKADE.has(p.status))
       .map((p) => {
         const id = `demo-skickat-${p.id}`;
-        const subject = text({ sv: `Hej ${p.company_name}`, en: `Hello ${p.company_name}` });
-        const body = text({
-          sv: "Exempelmejl i demon. I din arbetsyta står mejlet som det skickades.",
-          en: "Example email in the demo. In your workspace the email appears as it was sent."
-        });
-        const sent_at = p.senaste_handelse_at ?? p.created_at ?? new Date().toISOString();
+        const utkast = finnExempelbolag({ companyId: p.id })?.draft;
+        const subject = utkast?.subject ?? text({ sv: `Hej ${p.company_name}`, en: `Hello ${p.company_name}` });
+        const body =
+          utkast?.body ??
+          text({
+            sv: "Exempelmejl i demon. I din arbetsyta står mejlet som det skickades.",
+            en: "Example email in the demo. In your workspace the email appears as it was sent."
+          });
+        const sent_at = p.skickat_at ?? p.senaste_handelse_at ?? p.created_at ?? new Date().toISOString();
         const svarat = SVARADE.has(p.status);
+        const svar = demoSvar(p.id);
         return {
           id,
           subject,
@@ -653,11 +650,13 @@ export function LeadsTabell({
                   id: `demo-svar-${p.id}`,
                   direction: "inbound" as const,
                   subject: null,
-                  body: text({
-                    sv: "Exempelsvar i demon. I din arbetsyta står bolagets svar här, under mejlet ni skickade.",
-                    en: "Example reply in the demo. In your workspace the company's reply appears here, below the email you sent."
-                  }),
-                  sent_at
+                  body:
+                    svar?.text ??
+                    text({
+                      sv: "Exempelsvar i demon. I din arbetsyta står bolagets svar här, under mejlet ni skickade.",
+                      en: "Example reply in the demo. In your workspace the company's reply appears here, below the email you sent."
+                    }),
+                  sent_at: svar?.at ?? sent_at
                 }
               ]
             : undefined

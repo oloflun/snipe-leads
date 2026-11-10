@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { AlertTriangle, ArrowUpRight, CheckCircle2 } from "lucide-react";
 import { useLocale } from "@/lib/i18n";
 import type { Localized } from "@/lib/i18n";
@@ -75,9 +76,7 @@ function RaknaUpp({ varde, ordning }: Readonly<{ varde: string; ordning: number 
     // inte när det skymtar längst ned: där hann det räknas klart medan raden
     // ännu tonades in (Anton 2026-10-19). Ett andetag innan, så att inintoningen
     // hunnit klart, och en mjuk kurva över 2,6 s, så att det inte går för fort.
-    const obs = new IntersectionObserver(([e]) => {
-      if (!e?.isIntersecting) return;
-      obs.disconnect();
+    const rakna = () => {
       const start = performance.now() + 450 + ordning * 280;
       const tick = (nu: number) => {
         const t = Math.min(1, Math.max(0, (nu - start) / 2600));
@@ -85,10 +84,24 @@ function RaknaUpp({ varde, ordning }: Readonly<{ varde: string; ordning: number 
         if (t < 1) id = requestAnimationFrame(tick);
       };
       id = requestAnimationFrame(tick);
+    };
+    // Startsidans flöde (useLandingMotion, steg): raden kan stå i kö bakom
+    // stegen ovanför. Då väntar räkningen tills raden har tonats fram helt, så
+    // att inget tal börjar räknas medan det ännu är osynligt (Anton 2026-11-07).
+    const steg = el.closest<HTMLElement>('[data-mo="steg"]');
+    const obs = new IntersectionObserver(([e]) => {
+      if (!e?.isIntersecting) return;
+      obs.disconnect();
+      if (steg?.dataset.armerad === "1" && steg.dataset.visad !== "1") {
+        steg.addEventListener("steg:visad", rakna, { once: true });
+      } else {
+        rakna();
+      }
     }, { threshold: 1, rootMargin: "0px 0px -20% 0px" });
     obs.observe(el);
     return () => {
       obs.disconnect();
+      steg?.removeEventListener("steg:visad", rakna);
       cancelAnimationFrame(id);
     };
   }, [varde, ordning]);
@@ -103,7 +116,7 @@ function RaknaUpp({ varde, ordning }: Readonly<{ varde: string; ordning: number 
 }
 
 /** Nyckeltalsraden: stora tabulära tal i Fraunces, ochre — DESIGN.md:s "ochre at display scale". */
-function StatRad({ stats }: Readonly<{ stats: Stat[] }>) {
+export function StatRad({ stats }: Readonly<{ stats: Stat[] }>) {
   const { text } = useLocale();
   return (
     <dl className="grid grid-cols-2 gap-x-6 gap-y-6 border-y border-ink/15 py-6 sm:grid-cols-4">
@@ -172,7 +185,7 @@ function LeadsPanel() {
       <PanelHuvud>{text({ sv: "Varma svar, redo att ta över", en: "Warm replies, ready to take over" })}</PanelHuvud>
       <div className="divide-y divide-ink/10">
         {kort.map((k) => (
-          <div key={k.namn} className="px-5 py-4">
+          <div key={k.namn} className="px-5 py-4 transition-colors peka:bg-ink/[0.035]">
             <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
               <p className="font-semibold tracking-[-0.01em]">
                 {k.namn}
@@ -181,10 +194,15 @@ function LeadsPanel() {
               <p className="text-[0.8125rem] text-ink-subtle">{text(k.tid)}</p>
             </div>
             <p className="mt-2 max-w-[58ch] text-[0.9375rem] leading-[1.6] text-ink-muted">{text(k.rad)}</p>
-            <p className="mt-3 inline-flex items-center gap-1.5 text-[0.875rem] font-semibold text-ink">
+            {/* Fälten svarar på pekaren som i demon (Anton 2026-11-09), och raden som
+                ser ut som en länk är en: den öppnar demon. */}
+            <Link
+              href="/demo/leads"
+              className="focus-ring group mt-3 inline-flex items-center gap-1.5 rounded-input text-[0.875rem] font-semibold text-ink underline-offset-4 hover:underline"
+            >
               {text({ sv: "Ta över tråden", en: "Take over the thread" })}
-              <ArrowUpRight className="h-4 w-4 text-warning" aria-hidden />
-            </p>
+              <ArrowUpRight className="h-4 w-4 text-warning transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5" aria-hidden />
+            </Link>
           </div>
         ))}
       </div>
@@ -212,7 +230,7 @@ function SupportPanel() {
       <PanelHuvud>{text({ sv: "Veckan i kundtjänsten", en: "The week in support" })}</PanelHuvud>
       <div className="divide-y divide-ink/10">
         {rader.map((rad) => (
-          <div key={rad.kategori.sv} className="grid grid-cols-12 items-baseline gap-x-4 px-5 py-3.5">
+          <div key={rad.kategori.sv} className="grid grid-cols-12 items-baseline gap-x-4 px-5 py-3.5 transition-colors peka:bg-ink/[0.035]">
             <p className="col-span-7 truncate text-[0.9375rem]">{text(rad.kategori)}</p>
             <p className="num col-span-5 text-right text-[0.9375rem] text-ink-muted">
               {rad.losta}{" "}
@@ -294,10 +312,17 @@ type SektionsCopy = {
   panel: React.ReactNode;
 };
 
-export function AgentResultat({ product }: Readonly<{ product: ProductKey }>) {
-  const { text, locale } = useLocale();
+/** Honest-proof: siffrorna i panelen är illustration, och det står under den. */
+export const RESULTAT_NOT: Localized = {
+  sv: "Illustration med exempeldata, inte uppmätta resultat.",
+  en: "Illustration with example data, not measured results."
+};
 
-  const perProdukt: Record<ProductKey, SektionsCopy> = {
+/**
+ * Per produkt, på modulnivå: startsidan (Startsida.tsx) lägger samma tal och
+ * panel under löftet i stället för i en egen sektion.
+ */
+export const RESULTAT: Record<ProductKey, SektionsCopy> = {
     leads: {
       rubrik: {
         sv: "*Förvärmda* leads, levererade till er.",
@@ -349,9 +374,11 @@ export function AgentResultat({ product }: Readonly<{ product: ProductKey }>) {
       ],
       panel: <BokforingPanel />
     }
-  };
+};
 
-  const copy = perProdukt[product];
+export function AgentResultat({ product }: Readonly<{ product: ProductKey }>) {
+  const { text, locale } = useLocale();
+  const copy = RESULTAT[product];
 
   return (
     <section aria-labelledby="agentresultat-rubrik" className="relative">
@@ -381,12 +408,7 @@ export function AgentResultat({ product }: Readonly<{ product: ProductKey }>) {
             {/* Glider in från höger och fjädrar tillbaka (useLandingMotion, caseEntry). */}
             <div data-case data-from="right">{copy.panel}</div>
             {/* Honest-proof: siffrorna ovan är illustration, och det står. */}
-            <p className="mt-4 text-[0.8125rem] font-medium text-ink-subtle">
-              {text({
-                sv: "Illustration med exempeldata, inte uppmätta resultat.",
-                en: "Illustration with example data, not measured results."
-              })}
-            </p>
+            <p className="mt-4 text-[0.8125rem] font-medium text-ink-subtle">{text(RESULTAT_NOT)}</p>
           </div>
         </div>
       </div>

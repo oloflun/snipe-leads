@@ -95,6 +95,10 @@ def dagens_datum(nu: datetime | None = None) -> str:
     return f"{dag.isoformat()} ({_VECKODAGAR[dag.weekday()]})"
 
 
+#: "svara på det här mejlet" i mallarna, i de böjningar texten använder.
+_SVARA_PA_MEJLET = re.compile(r"svara på det här mejlet", re.IGNORECASE)
+
+
 def ar_brevkanal(kanal: str) -> bool:
     return (kanal or "").strip().lower() in _BREVKANALER
 
@@ -331,6 +335,10 @@ def rendera(
 
     text = _PLATSHALLARE.sub(_byt, _OM_FILEN.sub("", mall or _mall()))
     text = _INSTALLNINGSBLOCK.sub(_KALLRUBRIK, text).rstrip()
+    if not ar_brevkanal(kanal):
+        # Mallarna är skrivna för mejl. I en chatt finns inget mejl att svara
+        # på, och frasen följde med in i svaren (2026-11-10).
+        text = _SVARA_PA_MEJLET.sub("skriv här i chatten", text)
     if karna:
         return f"{_avsnitt(text, KARNAN)}\n\n---\n\n{_KARNA_TEXT}"
     # Exemplen (§12) följer inte med i drift: ~900 tokens per anrop, och

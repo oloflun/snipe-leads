@@ -86,6 +86,8 @@ export function DemoSupportYta({ visaDrift = false }: Readonly<{ visaDrift?: boo
   const { text } = useLocale();
   // `valdFlik` och inte `flik`: det namnet är klassen ur components/ui.tsx.
   const [valdFlik, setFlik] = useState<"oversikt" | "inkorg" | "chatt">("oversikt");
+  // Ärendet en rad i översikten pekade på; Ärenden öppnar det direkt.
+  const [oppnaId, setOppnaId] = useState<string | null>(null);
 
   return (
     <div>
@@ -105,7 +107,10 @@ export function DemoSupportYta({ visaDrift = false }: Readonly<{ visaDrift?: boo
             type="button"
             role="tab"
             aria-selected={valdFlik === id}
-            onClick={() => setFlik(id)}
+            onClick={() => {
+              setOppnaId(null);
+              setFlik(id);
+            }}
             className={cn(flik, valdFlik === id ? flikAktiv : flikInaktiv)}
           >
             {etikett}
@@ -115,9 +120,17 @@ export function DemoSupportYta({ visaDrift = false }: Readonly<{ visaDrift?: boo
 
       <div className="mt-6">
         {valdFlik === "oversikt" ? (
-          <SupportOversikt demo visaDrift={visaDrift} onOppnaArenden={() => setFlik("inkorg")} />
+          <SupportOversikt
+            demo
+            visaDrift={visaDrift}
+            onOppnaArenden={() => setFlik("inkorg")}
+            onOppnaArende={(id) => {
+              setOppnaId(id);
+              setFlik("inkorg");
+            }}
+          />
         ) : valdFlik === "inkorg" ? (
-          <SupportDashboard demo />
+          <SupportDashboard demo oppnaId={oppnaId} />
         ) : (
           <Kundchatt />
         )}

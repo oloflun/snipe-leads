@@ -25,6 +25,7 @@ from ..kvotfel import (
 from . import rate_limit_db
 from .deps import require_tenant
 from .schemas import ChatRequest, SamtalRequest
+from .stegtexter import utan_stegtexter
 
 logger = logging.getLogger("snajp-support")
 
@@ -92,6 +93,7 @@ async def _process(
                 vid_arende=vid_arende,
                 is_test=request.is_test,
                 arbetsyta=request.arbetsyta,
+                forlopp=lambda steg: app_state.jobs.annotate(job_id, steg=steg),
             )
         # Bokför de LLM-anrop körningen FAKTISKT gjorde — ett steg är ett
         # anrop, och antalet varierar med eskalering och omkörning. Ett tak
@@ -350,6 +352,19 @@ async def hamta_samtal(
     }
 
 
+#: Vad chattfönstret får veta medan jobbet går: ett av fyra skeden, inte
+#: stegens interna namn. Texterna står i webben (lib/snajp/chattfas.ts).
+_FASER = {
+    "cs:ticket-triage": "laser",
+    "cs:customer-research": "soker",
+    "cs:draft-response": "skriver",
+    "snajp:humanizer-svenska": "skriver",
+    "snajp:retention-conversation": "skriver",
+    "cs:customer-escalation": "kontrollerar",
+    "cs:kb-article": "kontrollerar",
+}
+
+
 @router.get("/api/jobs/{job_id}")
 async def get_job(
     request: Request, job_id: str, tenant: dict = Depends(require_tenant)
@@ -361,8 +376,15 @@ async def get_job(
     # leverantören ("Error code: 429 - [{'error': ...}]") har nått kundytan
     # den här vägen. Översättningen här täcker varje pollande yta på en
     # gång — gamla redan-lagrade fel inräknade. Icke-kvotfel passerar orörda.
-    return {
+    svar = {
         "status": job["status"],
-        "result": job.get("result"),
+        "result": utan_stegtexter(job.get("result")),
         "error": oversatt_felstext(job.get("error")),
     }
+    if job.get("steg") and job["status"] not in ("completed", "failed"):
+        svar["fas"] = _FASER.get(str(job["steg"]), "arbetar")
+    # Arbete som räknar sig fram (massutskick: `klara` av `totalt`), se
+    # app/jobs/bakgrund.py.
+    if job.get("forlopp"):
+        svar["forlopp"] = job["forlopp"]
+    return svar

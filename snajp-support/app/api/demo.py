@@ -36,10 +36,13 @@ class DemoChatRequest(BaseModel):
 
 
 def _client_ip(request: Request) -> str:
-    # Bakom en proxy (Render) är X-Forwarded-For auktoritativ; annars client.host.
-    forwarded = request.headers.get("x-forwarded-for")
-    if forwarded:
-        return forwarded.split(",")[0].strip()
+    # Bakom kantproxyn (Railway) bär X-Forwarded-For besökarens adress. Det
+    # SISTA värdet är det proxyn själv lade dit; allt före det har besökaren
+    # kunnat skriva. Förut lästes det första, och ett nytt påhittat värde per
+    # anrop gav då ett eget tak varje gång (Fas 0, 2026-11-09).
+    led = [d.strip() for d in (request.headers.get("x-forwarded-for") or "").split(",") if d.strip()]
+    if led:
+        return led[-1]
     return request.client.host if request.client else "unknown"
 
 

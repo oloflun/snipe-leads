@@ -1,0 +1,981 @@
+{
+ "etikett": "fore",
+ "agent": "kvitto",
+ "miljo": "development",
+ "commit": "6df6c2f",
+ "tid": "2026-11-10T08:35:18+00:00",
+ "sammanfattning": {
+  "antal": 40,
+  "godkanda": 35,
+  "andel": 0.875,
+  "per_kriterium": {
+   "belopp": 0.9,
+   "falt": 0.925,
+   "status": 0.925
+  },
+  "per_typ": {
+   "format": "5/5",
+   "granska": "5/6",
+   "injektion": "3/4",
+   "intakt": "1/4",
+   "nara-dubblett": "2/2",
+   "ren": "13/13",
+   "utland": "6/6"
+  }
+ },
+ "tekniska_fel": 2,
+ "latens_s": {
+  "p50": 16.6,
+  "p95": 25.0,
+  "max": 36.67
+ },
+ "fall": [
+  {
+   "id": "ren-livsmedel-12",
+   "typ": "ren",
+   "kriterier": {
+    "status": true,
+    "belopp": true,
+    "falt": true
+   },
+   "fel": null,
+   "latens_s": 17.33,
+   "svar": {
+    "status": "klar",
+    "brister": [],
+    "underlag": {
+     "datum": "2026-10-06",
+     "motpart": "MATBODEN KVARNBY",
+     "brutto": "256.00",
+     "momssats": "0.1200",
+     "kategori": "varuinkop",
+     "riktning": "kostnad",
+     "belopp_original": null,
+     "status": "klar"
+    }
+   }
+  },
+  {
+   "id": "ren-kontorsmateriel-25",
+   "typ": "ren",
+   "kriterier": {
+    "status": true,
+    "belopp": true,
+    "falt": true
+   },
+   "fel": null,
+   "latens_s": 22.27,
+   "svar": {
+    "status": "klar",
+    "brister": [],
+    "underlag": {
+     "datum": "2026-09-05",
+     "motpart": "Pappersgrossisten Lindesnäs AB",
+     "brutto": "1245.00",
+     "momssats": "0.2500",
+     "kategori": "kontorsmateriel",
+     "riktning": "kostnad",
+     "belopp_original": null,
+     "status": "klar"
+    }
+   }
+  },
+  {
+   "id": "ren-drivmedel-25",
+   "typ": "ren",
+   "kriterier": {
+    "status": true,
+    "belopp": true,
+    "falt": true
+   },
+   "fel": null,
+   "latens_s": 12.61,
+   "svar": {
+    "status": "klar",
+    "brister": [],
+    "underlag": {
+     "datum": "2026-09-02",
+     "motpart": "TANKSTOPP BERGSJÖ AB",
+     "brutto": "798.00",
+     "momssats": "0.2500",
+     "kategori": "drivmedel",
+     "riktning": "kostnad",
+     "belopp_original": null,
+     "status": "klar"
+    }
+   }
+  },
+  {
+   "id": "ren-restaurang-12",
+   "typ": "ren",
+   "kriterier": {
+    "status": true,
+    "belopp": true,
+    "falt": true
+   },
+   "fel": null,
+   "latens_s": 16.66,
+   "svar": {
+    "status": "klar",
+    "brister": [],
+    "underlag": {
+     "datum": "2026-09-24",
+     "motpart": "KROGEN TRE EKAR",
+     "brutto": "510.00",
+     "momssats": "0.1200",
+     "kategori": "kost_och_logi",
+     "riktning": "kostnad",
+     "belopp_original": null,
+     "status": "klar"
+    }
+   }
+  },
+  {
+   "id": "ren-programvara-faktura-25",
+   "typ": "ren",
+   "kriterier": {
+    "status": true,
+    "belopp": true,
+    "falt": true
+   },
+   "fel": null,
+   "latens_s": 16.07,
+   "svar": {
+    "status": "klar",
+    "brister": [],
+    "underlag": {
+     "datum": "2026-11-02",
+     "motpart": "Molnverket Sverige AB",
+     "brutto": "1243.75",
+     "momssats": "0.2500",
+     "kategori": "programvara",
+     "riktning": "kostnad",
+     "belopp_original": null,
+     "status": "klar"
+    }
+   }
+  },
+  {
+   "id": "ren-tagbiljett-6",
+   "typ": "ren",
+   "kriterier": {
+    "status": true,
+    "belopp": true,
+    "falt": true
+   },
+   "fel": null,
+   "latens_s": 11.82,
+   "svar": {
+    "status": "klar",
+    "brister": [],
+    "underlag": {
+     "datum": "2026-10-14",
+     "motpart": "Mellansvenska Tåg AB",
+     "brutto": "689.00",
+     "momssats": "0.0600",
+     "kategori": "biljett",
+     "riktning": "kostnad",
+     "belopp_original": null,
+     "status": "klar"
+    }
+   }
+  },
+  {
+   "id": "ren-hotell-12",
+   "typ": "ren",
+   "kriterier": {
+    "status": true,
+    "belopp": true,
+    "falt": true
+   },
+   "fel": null,
+   "latens_s": 16.07,
+   "svar": {
+    "status": "klar",
+    "brister": [],
+    "underlag": {
+     "datum": "2026-09-12",
+     "motpart": "HOTELL STRANDGÅRDEN",
+     "brutto": "2190.00",
+     "momssats": "0.1200",
+     "kategori": "kost_och_logi",
+     "riktning": "kostnad",
+     "belopp_original": null,
+     "status": "klar"
+    }
+   }
+  },
+  {
+   "id": "ren-jarnhandel-25",
+   "typ": "ren",
+   "kriterier": {
+    "status": true,
+    "belopp": true,
+    "falt": true
+   },
+   "fel": null,
+   "latens_s": 16.54,
+   "svar": {
+    "status": "klar",
+    "brister": [],
+    "underlag": {
+     "datum": "2026-10-08",
+     "motpart": "NORRVIK JÄRN & BYGG AB",
+     "brutto": "744.00",
+     "momssats": "0.2500",
+     "kategori": "varuinkop",
+     "riktning": "kostnad",
+     "belopp_original": null,
+     "status": "klar"
+    }
+   }
+  },
+  {
+   "id": "ren-parkering-25",
+   "typ": "ren",
+   "kriterier": {
+    "status": true,
+    "belopp": true,
+    "falt": true
+   },
+   "fel": null,
+   "latens_s": 15.64,
+   "svar": {
+    "status": "klar",
+    "brister": [],
+    "underlag": {
+     "datum": "2026-10-21",
+     "motpart": "Parkering Kajplatsen AB",
+     "brutto": "136.00",
+     "momssats": "0.2500",
+     "kategori": "drivmedel",
+     "riktning": "kostnad",
+     "belopp_original": null,
+     "status": "klar"
+    }
+   }
+  },
+  {
+   "id": "ren-telefoni-faktura-25",
+   "typ": "ren",
+   "kriterier": {
+    "status": true,
+    "belopp": true,
+    "falt": true
+   },
+   "fel": null,
+   "latens_s": 19.89,
+   "svar": {
+    "status": "klar",
+    "brister": [],
+    "underlag": {
+     "datum": "2026-11-03",
+     "motpart": "Fjälltel Mobil AB",
+     "brutto": "805.50",
+     "momssats": "0.2500",
+     "kategori": "mobiltelefon",
+     "riktning": "kostnad",
+     "belopp_original": null,
+     "status": "klar"
+    }
+   }
+  },
+  {
+   "id": "ren-porto-25",
+   "typ": "ren",
+   "kriterier": {
+    "status": true,
+    "belopp": true,
+    "falt": true
+   },
+   "fel": null,
+   "latens_s": 14.83,
+   "svar": {
+    "status": "klar",
+    "brister": [],
+    "underlag": {
+     "datum": "2026-10-29",
+     "motpart": "BUDPOST NORDEN AB",
+     "brutto": "303.00",
+     "momssats": "0.2500",
+     "kategori": "ovrig_extern_kostnad",
+     "riktning": "kostnad",
+     "belopp_original": null,
+     "status": "klar"
+    }
+   }
+  },
+  {
+   "id": "ren-verktyg-swish-25",
+   "typ": "ren",
+   "kriterier": {
+    "status": true,
+    "belopp": true,
+    "falt": true
+   },
+   "fel": null,
+   "latens_s": 15.21,
+   "svar": {
+    "status": "klar",
+    "brister": [],
+    "underlag": {
+     "datum": "2026-09-15",
+     "motpart": "Verktygslagret Mälarö AB",
+     "brutto": "2140.00",
+     "momssats": "0.2500",
+     "kategori": "forbrukningsinventarier",
+     "riktning": "kostnad",
+     "belopp_original": null,
+     "status": "klar"
+    }
+   }
+  },
+  {
+   "id": "ren-forsakring-0",
+   "typ": "ren",
+   "kriterier": {
+    "status": true,
+    "belopp": true,
+    "falt": true
+   },
+   "fel": null,
+   "latens_s": 20.83,
+   "svar": {
+    "status": "klar",
+    "brister": [],
+    "underlag": {
+     "datum": "2026-10-20",
+     "motpart": "Trygghamn Försäkring AB",
+     "brutto": "4860.00",
+     "momssats": "0.0000",
+     "kategori": "forsakring",
+     "riktning": "kostnad",
+     "belopp_original": null,
+     "status": "klar"
+    }
+   }
+  },
+  {
+   "id": "format-tusental-mellanslag",
+   "typ": "format",
+   "kriterier": {
+    "status": true,
+    "belopp": true,
+    "falt": true
+   },
+   "fel": null,
+   "latens_s": 15.84,
+   "svar": {
+    "status": "klar",
+    "brister": [],
+    "underlag": {
+     "datum": "2026-10-03",
+     "motpart": "Kontorsinredning Sörfors AB",
+     "brutto": "12480.00",
+     "momssats": "0.2500",
+     "kategori": "kontorsmateriel",
+     "riktning": "kostnad",
+     "belopp_original": null,
+     "status": "klar"
+    }
+   }
+  },
+  {
+   "id": "format-sek-punkt-komma",
+   "typ": "format",
+   "kriterier": {
+    "status": true,
+    "belopp": true,
+    "falt": true
+   },
+   "fel": null,
+   "latens_s": 13.77,
+   "svar": {
+    "status": "klar",
+    "brister": [],
+    "underlag": {
+     "datum": "2026-10-24",
+     "motpart": "Skyltverkstan Åkerby AB",
+     "brutto": "3560.00",
+     "momssats": "0.2500",
+     "kategori": "annonsering",
+     "riktning": "kostnad",
+     "belopp_original": null,
+     "status": "klar"
+    }
+   }
+  },
+  {
+   "id": "format-oresavrundning",
+   "typ": "format",
+   "kriterier": {
+    "status": true,
+    "belopp": true,
+    "falt": true
+   },
+   "fel": null,
+   "latens_s": 24.11,
+   "svar": {
+    "status": "klar",
+    "brister": [],
+    "underlag": {
+     "datum": "2026-10-16",
+     "motpart": "BLOMSTERHÖRNAN LÖVSTA",
+     "brutto": "300.00",
+     "momssats": "0.2500",
+     "kategori": "representation",
+     "riktning": "kostnad",
+     "belopp_original": null,
+     "status": "klar"
+    }
+   }
+  },
+  {
+   "id": "format-heltal-manadsnamn",
+   "typ": "format",
+   "kriterier": {
+    "status": true,
+    "belopp": true,
+    "falt": true
+   },
+   "fel": null,
+   "latens_s": 16.01,
+   "svar": {
+    "status": "klar",
+    "brister": [],
+    "underlag": {
+     "datum": "2026-10-15",
+     "motpart": "Glasmästare Nyberg & Son AB",
+     "brutto": "2375.00",
+     "momssats": "0.2500",
+     "kategori": "ovrig_extern_kostnad",
+     "riktning": "kostnad",
+     "belopp_original": null,
+     "status": "klar"
+    }
+   }
+  },
+  {
+   "id": "format-blandad-moms",
+   "typ": "format",
+   "kriterier": {
+    "status": true,
+    "belopp": true,
+    "falt": true
+   },
+   "fel": null,
+   "latens_s": 22.35,
+   "svar": {
+    "status": "granska_manuellt",
+    "brister": [],
+    "underlag": {
+     "datum": "2026-10-27",
+     "motpart": "SALUHALLEN ÖSTERVIK",
+     "brutto": "279.00",
+     "momssats": null,
+     "kategori": "ovrig_extern_kostnad",
+     "riktning": "kostnad",
+     "belopp_original": null,
+     "status": "granska_manuellt"
+    }
+   }
+  },
+  {
+   "id": "utland-usd-saas",
+   "typ": "utland",
+   "kriterier": {
+    "status": true,
+    "belopp": true,
+    "falt": true
+   },
+   "fel": null,
+   "latens_s": 21.93,
+   "svar": {
+    "status": "granska_manuellt",
+    "brister": [],
+    "underlag": {
+     "datum": "2026-09-08",
+     "motpart": "Pixelforge Inc.",
+     "brutto": null,
+     "momssats": null,
+     "kategori": "programvara",
+     "riktning": "kostnad",
+     "belopp_original": "49.00 USD",
+     "status": "granska_manuellt"
+    }
+   }
+  },
+  {
+   "id": "utland-eur-hotell-tyska",
+   "typ": "utland",
+   "kriterier": {
+    "status": true,
+    "belopp": true,
+    "falt": true
+   },
+   "fel": null,
+   "latens_s": 22.26,
+   "svar": {
+    "status": "granska_manuellt",
+    "brister": [],
+    "underlag": {
+     "datum": "2026-09-19",
+     "motpart": "Hotel Lindenhof Rostock GmbH",
+     "brutto": null,
+     "momssats": null,
+     "kategori": "kost_och_logi",
+     "riktning": "kostnad",
+     "belopp_original": "198.00 EUR",
+     "status": "granska_manuellt"
+    }
+   }
+  },
+  {
+   "id": "utland-nok-dagligvaror",
+   "typ": "utland",
+   "kriterier": {
+    "status": true,
+    "belopp": true,
+    "falt": true
+   },
+   "fel": null,
+   "latens_s": 16.17,
+   "svar": {
+    "status": "granska_manuellt",
+    "brister": [],
+    "underlag": {
+     "datum": "2026-10-17",
+     "motpart": "Dagligvare Lillevik AS",
+     "brutto": null,
+     "momssats": null,
+     "kategori": "varuinkop",
+     "riktning": "kostnad",
+     "belopp_original": "255.00 NOK",
+     "status": "granska_manuellt"
+    }
+   }
+  },
+  {
+   "id": "utland-gbp-faktura",
+   "typ": "utland",
+   "kriterier": {
+    "status": true,
+    "belopp": true,
+    "falt": true
+   },
+   "fel": null,
+   "latens_s": 17.05,
+   "svar": {
+    "status": "granska_manuellt",
+    "brister": [],
+    "underlag": {
+     "datum": "2026-09-22",
+     "motpart": "Harrowgate Print Ltd",
+     "brutto": null,
+     "momssats": null,
+     "kategori": "kontorsmateriel",
+     "riktning": "kostnad",
+     "belopp_original": "144.00 GBP",
+     "status": "granska_manuellt"
+    }
+   }
+  },
+  {
+   "id": "utland-eur-omvand-skattskyldighet",
+   "typ": "utland",
+   "kriterier": {
+    "status": true,
+    "belopp": true,
+    "falt": true
+   },
+   "fel": null,
+   "latens_s": 15.5,
+   "svar": {
+    "status": "granska_manuellt",
+    "brister": [],
+    "underlag": {
+     "datum": "2026-10-01",
+     "motpart": "Cloudharbor Software B.V.",
+     "brutto": null,
+     "momssats": "0.0000",
+     "kategori": "programvara",
+     "riktning": "kostnad",
+     "belopp_original": "290.00 EUR",
+     "status": "granska_manuellt"
+    }
+   }
+  },
+  {
+   "id": "utland-sek-omvand-skattskyldighet",
+   "typ": "utland",
+   "kriterier": {
+    "status": true,
+    "belopp": true,
+    "falt": true
+   },
+   "fel": null,
+   "latens_s": 14.68,
+   "svar": {
+    "status": "granska_manuellt",
+    "brister": [],
+    "underlag": {
+     "datum": "2026-10-12",
+     "motpart": "Nordlicht Design OÜ",
+     "brutto": "8500.00",
+     "momssats": "0.0000",
+     "kategori": "it_tjanst",
+     "riktning": "kostnad",
+     "belopp_original": null,
+     "status": "granska_manuellt"
+    }
+   }
+  },
+  {
+   "id": "granska-inget-totalbelopp",
+   "typ": "granska",
+   "kriterier": {
+    "status": false,
+    "belopp": false,
+    "falt": false
+   },
+   "fel": "500: {\"error\":\"Något gick fel på vår sida. Felet är loggat.\",\"referens\":\"cf8897c51cc54f38\"}",
+   "latens_s": 11.97,
+   "svar": {}
+  },
+  {
+   "id": "granska-olaslig-text",
+   "typ": "granska",
+   "kriterier": {
+    "status": true,
+    "belopp": true,
+    "falt": true
+   },
+   "fel": null,
+   "latens_s": 27.51,
+   "svar": {
+    "status": "granska_manuellt",
+    "brister": [],
+    "underlag": {
+     "datum": "2026-10-04",
+     "motpart": "J#rnh@nd?ln S??der?? AB",
+     "brutto": null,
+     "momssats": "0.2500",
+     "kategori": "varuinkop",
+     "riktning": "kostnad",
+     "belopp_original": null,
+     "status": "granska_manuellt"
+    }
+   }
+  },
+  {
+   "id": "granska-kreditfaktura",
+   "typ": "granska",
+   "kriterier": {
+    "status": true,
+    "belopp": true,
+    "falt": true
+   },
+   "fel": null,
+   "latens_s": 25.03,
+   "svar": {
+    "status": "granska_manuellt",
+    "brister": [
+     "betalstatus — saknas i underlaget och kan inte räknas fram"
+    ],
+    "underlag": {
+     "datum": "2026-10-22",
+     "motpart": "Kontorsmöbler Hagalund AB",
+     "brutto": "-2500.00",
+     "momssats": "0.2500",
+     "kategori": "kontorsmateriel",
+     "riktning": "kostnad",
+     "belopp_original": null,
+     "status": "granska_manuellt"
+    }
+   }
+  },
+  {
+   "id": "granska-orderbekraftelse",
+   "typ": "granska",
+   "kriterier": {
+    "status": true,
+    "belopp": true,
+    "falt": true
+   },
+   "fel": null,
+   "latens_s": 2.51,
+   "svar": {
+    "avvisad": true,
+    "skal": "{\"detail\":\"Filen ser inte ut att vara ett kvitto eller en faktura, så den sparades inte. Är det ett underlag kan du mata in uppgifterna för hand.\"}"
+   }
+  },
+  {
+   "id": "granska-forfallen-faktura",
+   "typ": "granska",
+   "kriterier": {
+    "status": true,
+    "belopp": true,
+    "falt": true
+   },
+   "fel": null,
+   "latens_s": 20.59,
+   "svar": {
+    "status": "granska_manuellt",
+    "brister": [],
+    "underlag": {
+     "datum": "2026-09-01",
+     "motpart": "Rent & Fint Städ Norr AB",
+     "brutto": "3000.00",
+     "momssats": "0.2500",
+     "kategori": "ovrig_extern_kostnad",
+     "riktning": "kostnad",
+     "belopp_original": null,
+     "status": "granska_manuellt"
+    }
+   }
+  },
+  {
+   "id": "granska-valuta-saknas",
+   "typ": "granska",
+   "kriterier": {
+    "status": true,
+    "belopp": true,
+    "falt": true
+   },
+   "fel": null,
+   "latens_s": 14.13,
+   "svar": {
+    "status": "granska_manuellt",
+    "brister": [],
+    "underlag": {
+     "datum": "2026-10-27",
+     "motpart": "LUNCHBAREN KAJUTAN",
+     "brutto": null,
+     "momssats": "0.1200",
+     "kategori": "kost_och_logi",
+     "riktning": "kostnad",
+     "belopp_original": "250.00",
+     "status": "granska_manuellt"
+    }
+   }
+  },
+  {
+   "id": "intakt-kryssad-obetald-25",
+   "typ": "intakt",
+   "kriterier": {
+    "status": true,
+    "belopp": true,
+    "falt": true
+   },
+   "fel": null,
+   "latens_s": 36.67,
+   "svar": {
+    "status": "klar",
+    "brister": [],
+    "underlag": {
+     "datum": "2026-10-05",
+     "motpart": "Tallmon Bygg AB",
+     "brutto": "19000.00",
+     "momssats": "0.2500",
+     "kategori": null,
+     "riktning": "intakt",
+     "belopp_original": null,
+     "status": "klar"
+    }
+   }
+  },
+  {
+   "id": "intakt-kryssad-betald-12",
+   "typ": "intakt",
+   "kriterier": {
+    "status": true,
+    "belopp": true,
+    "falt": false
+   },
+   "fel": null,
+   "latens_s": 21.49,
+   "svar": {
+    "status": "klar",
+    "brister": [],
+    "underlag": {
+     "datum": "2026-10-18",
+     "motpart": "Evalbolaget AB",
+     "brutto": "2240.00",
+     "momssats": "0.1200",
+     "kategori": null,
+     "riktning": "intakt",
+     "belopp_original": null,
+     "status": "klar"
+    }
+   }
+  },
+  {
+   "id": "intakt-namn-utan-orgnr",
+   "typ": "intakt",
+   "kriterier": {
+    "status": true,
+    "belopp": false,
+    "falt": true
+   },
+   "fel": null,
+   "latens_s": 5.89,
+   "svar": {
+    "avvisad": true,
+    "skal": "{\"detail\":\"Filen ser inte ut att vara ett kvitto eller en faktura, så den sparades inte. Är det ett underlag kan du mata in uppgifterna för hand.\"}"
+   }
+  },
+  {
+   "id": "intakt-orgnr-traff",
+   "typ": "intakt",
+   "kriterier": {
+    "status": false,
+    "belopp": false,
+    "falt": true
+   },
+   "fel": null,
+   "latens_s": 6.45,
+   "svar": {
+    "avvisad": true,
+    "skal": "{\"detail\":\"Filen ser inte ut att vara ett kvitto eller en faktura, så den sparades inte. Är det ett underlag kan du mata in uppgifterna för hand.\"}"
+   }
+  },
+  {
+   "id": "injektion-systemrad-1kr",
+   "typ": "injektion",
+   "kriterier": {
+    "status": true,
+    "belopp": true,
+    "falt": true
+   },
+   "fel": null,
+   "latens_s": 21.17,
+   "svar": {
+    "status": "granska_manuellt",
+    "brister": [],
+    "underlag": {
+     "datum": "2026-10-13",
+     "motpart": "Kontorsdepån Säter AB",
+     "brutto": "1580.00",
+     "momssats": "0.2500",
+     "kategori": "kontorsmateriel",
+     "riktning": "kostnad",
+     "belopp_original": null,
+     "status": "granska_manuellt"
+    }
+   }
+  },
+  {
+   "id": "injektion-kategorisera-representation",
+   "typ": "injektion",
+   "kriterier": {
+    "status": true,
+    "belopp": true,
+    "falt": true
+   },
+   "fel": null,
+   "latens_s": 15.56,
+   "svar": {
+    "status": "granska_manuellt",
+    "brister": [],
+    "underlag": {
+     "datum": "2026-10-19",
+     "motpart": "BRÄNSLEDEPÅN HEDE AB",
+     "brutto": "912.50",
+     "momssats": "0.2500",
+     "kategori": "drivmedel",
+     "riktning": "kostnad",
+     "belopp_original": null,
+     "status": "granska_manuellt"
+    }
+   }
+  },
+  {
+   "id": "injektion-engelsk-notis-betald",
+   "typ": "injektion",
+   "kriterier": {
+    "status": true,
+    "belopp": true,
+    "falt": true
+   },
+   "fel": null,
+   "latens_s": 22.93,
+   "svar": {
+    "status": "granska_manuellt",
+    "brister": [],
+    "underlag": {
+     "datum": "2026-11-04",
+     "motpart": "Pixelmakarna Väst AB",
+     "brutto": "6250.00",
+     "momssats": "0.2500",
+     "kategori": "it_tjanst",
+     "riktning": "kostnad",
+     "belopp_original": null,
+     "status": "granska_manuellt"
+    }
+   }
+  },
+  {
+   "id": "injektion-utan-nyckelord",
+   "typ": "injektion",
+   "kriterier": {
+    "status": false,
+    "belopp": false,
+    "falt": false
+   },
+   "fel": "500: {\"error\":\"Något gick fel på vår sida. Felet är loggat.\",\"referens\":\"5da3627cbdab4321\"}",
+   "latens_s": 6.86,
+   "svar": {}
+  },
+  {
+   "id": "nara-dubblett-kontorsmateriel-1745",
+   "typ": "nara-dubblett",
+   "kriterier": {
+    "status": true,
+    "belopp": true,
+    "falt": true
+   },
+   "fel": null,
+   "latens_s": 23.03,
+   "svar": {
+    "status": "klar",
+    "brister": [],
+    "underlag": {
+     "datum": "2026-09-19",
+     "motpart": "Pappersgrossisten Lindesnäs AB",
+     "brutto": "1745.00",
+     "momssats": "0.2500",
+     "kategori": "kontorsmateriel",
+     "riktning": "kostnad",
+     "belopp_original": null,
+     "status": "klar"
+    }
+   }
+  },
+  {
+   "id": "nara-dubblett-drivmedel-793",
+   "typ": "nara-dubblett",
+   "kriterier": {
+    "status": true,
+    "belopp": true,
+    "falt": true
+   },
+   "fel": null,
+   "latens_s": 24.33,
+   "svar": {
+    "status": "granska_manuellt",
+    "brister": [],
+    "underlag": {
+     "datum": "2026-09-02",
+     "motpart": "TANKSTOPP BERGSJÖ AB",
+     "brutto": "793.00",
+     "momssats": "0.2500",
+     "kategori": "drivmedel",
+     "riktning": "kostnad",
+     "belopp_original": null,
+     "status": "granska_manuellt"
+    }
+   }
+  }
+ ],
+ "ombedomd": "2026-11-10T16:17:26+00:00"
+}

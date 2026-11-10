@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { SupportChat } from "@/components/snajp/SupportChat";
 import type { TenantLogo } from "@/lib/tenants";
 import { useLocale } from "@/lib/i18n";
+import { sessionsId } from "@/lib/sessionslagring";
 
 /**
  * Widgetens innehåll — det som renderas INUTI iframen på kundens sajt.
@@ -31,13 +32,9 @@ export type EmbedYtaProps = {
 };
 
 function embedSessionId(slug: string): string {
-  const KEY = `snajp.embed.session.${slug}`;
-  let id = window.sessionStorage.getItem(KEY);
-  if (!id) {
-    id = crypto.randomUUID();
-    window.sessionStorage.setItem(KEY, id);
-  }
-  return id;
+  // sessionsId kastar aldrig: i en iframe med blockerad tredjepartslagring
+  // föll hela widgeten här (lib/sessionslagring.ts).
+  return sessionsId(`snajp.embed.session.${slug}`);
 }
 
 function tillForaldern(data: Record<string, string>) {

@@ -15,7 +15,7 @@ import time
 import uuid
 import weakref
 from datetime import date, datetime, timedelta, timezone
-from typing import Literal
+from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
@@ -75,6 +75,9 @@ from ..leads.onboarding_state import REQUIRED_KINDS, get_onboarding_state
 from ..leads import korning as iris_korning
 from ..leads import omprova, utkaststatus
 from ..leads.profil import las_kundtext, sakerstall_profil, slå_ihop, som_icp
+from ..jobs import bakgrund
+from . import dubbelstart
+from .stegtexter import utan_stegtexter
 from .deps import kraev_uuid, require_tenant
 from ..agent.leads_research_v2 import las_produkter
 from ..agentcore.baka_in import baka_in
@@ -432,7 +435,7 @@ async def create_prospect(
         contact_email=payload.contact_email,
         origin="test" if is_test else "manual",
     )
-    return {"prospect": prospect}
+    return {"prospect": await _utan_dold_bedomning(request, tenant, prospect)}
 
 
 @router.post("/api/leads/prospects/exempel", status_code=201)
@@ -676,6 +679,25 @@ async def get_prospect(
     return {"prospect": med_rollflagga(prospect), "sources": sorted(urls)}
 
 
+async def _utan_dold_bedomning(request: Request, tenant: dict, prospect: Any) -> Any:
+    """Prospektraden så som kunden får se den i ett SKRIVSVAR.
+
+    Webbplatsbedömningen är hemlig för alla utom plattformsadmin, Umeå
+    Webdesign och Alunix (Antons beslut 2026-10-08). Läsvägarna grindade den,
+    men svaren från skapa, ändra, befordra, degradera och "lista → prospekt"
+    bar hela raden ogrindad (Fas 0-fyndet H9, 2026-11-09). Varje väg som
+    svarar med en prospektrad ska gå genom den här eller `webbpool.dolj`;
+    tests/api/test_webbbedomning_skrivsvar.py håller räkningen.
+    """
+    if not isinstance(prospect, dict):
+        return prospect
+    from ..leads import webbpool
+
+    if await webbpool.far_se(request.app.state.storage, tenant["tenant_id"]):
+        return prospect
+    return webbpool.dolj(prospect)
+
+
 @router.post("/api/leads/prospects/{prospect_id}/sources", status_code=201)
 async def add_prospect_source(
     request: Request,
@@ -787,7 +809,7 @@ async def befordra_prospekt(
         # Redan i kundens riktiga lista (eller en import) — inget att göra.
         # 200 och inte 409: knappen "Flytta över valda" ska kunna köras om över
         # en blandad markering utan att fråga vilka rader som redan gått igenom.
-        return {"prospect": prospect, "andrad": False}
+        return {"prospect": await _utan_dold_bedomning(request, tenant, prospect), "andrad": False}
 
     # Ifyllnad i samma anrop: PATCH sedan validera. Tom kropp är tillåten —
     # befintliga tester POSTar utan JSON och ska fortsätta göra det.
@@ -849,7 +871,11 @@ async def befordra_prospekt(
         )
 
     updated = await storage.update_prospect(tenant["tenant_id"], prospect_id, origin="manual")
-    return {"prospect": updated, "andrad": True, "orgnr_hamtat": orgnr_hamtat}
+    return {
+        "prospect": await _utan_dold_bedomning(request, tenant, updated),
+        "andrad": True,
+        "orgnr_hamtat": orgnr_hamtat,
+    }
 
 
 @router.post("/api/leads/prospects/{prospect_id}/degradera")
@@ -882,10 +908,10 @@ async def degradera_prospekt(
         # Redan oskickbar — inget att göra. 200 och inte 409, av samma skäl
         # som befordra ovan: knappen ska kunna köras om över en blandad
         # markering utan att fråga vilka rader som redan gått igenom.
-        return {"prospect": prospect, "andrad": False}
+        return {"prospect": await _utan_dold_bedomning(request, tenant, prospect), "andrad": False}
 
     updated = await storage.update_prospect(tenant["tenant_id"], prospect_id, origin="test")
-    return {"prospect": updated, "andrad": True}
+    return {"prospect": await _utan_dold_bedomning(request, tenant, updated), "andrad": True}
 
 
 # -- SOUL: kundens röstdokument -------------------------------------------
@@ -1036,7 +1062,8 @@ async def research_step(
         brief=payload.brief,
     )
     result["onboarding_missing"] = list(missing)
-    return result
+    # Stegloggens texter (promptar, modellens råa utdata) stannar i agent_runs.
+    return utan_stegtexter(result)
 
 
 @router.post("/api/leads/outreach/draft", status_code=202)
@@ -1147,11 +1174,15 @@ async def list_runs(
     agent_type: str | None = None,
     limit: int = 50,
 ) -> dict:
-    """G10-revisionsloggen. step_log innehåller ett steg per faktiskt
-    LLM-anrop: vilken skill, antal försök, om steget eskalerade, latens och
-    de sources_used/context_refs steget rapporterade."""
+    """G10-revisionsloggen som sammandrag: vilken agent, vilka steg, tokens
+    och latens per körning.
+
+    Texterna (indata, utdata och stegloggen med varje stegs prompt) lämnas
+    inte ut här sedan 2026-11-10. De var 8,5 MB per anrop som ingen vy läste,
+    och de bär Snajps interna promptar. Plattformsadmin läser hela raden via
+    /api/admin/runs."""
     runs = await request.app.state.storage.list_agent_runs(
-        tenant["tenant_id"], agent_type=agent_type, limit=min(limit, 200)
+        tenant["tenant_id"], agent_type=agent_type, limit=min(limit, 200), sammandrag=True
     )
     return {"runs": runs}
 
@@ -1199,7 +1230,7 @@ async def ta_emot_prospektsvar(
     storage = request.app.state.storage
     thread_id = await _los_trad(storage, tenant["tenant_id"], payload.thread_id, payload.prospect_id)
     context_pack, _missing = await build_context_pack(storage, tenant["tenant_id"])
-    return await hantera_prospektsvar(
+    return utan_stegtexter(await hantera_prospektsvar(
         storage,
         tenant["tenant_id"],
         thread_id=thread_id,
@@ -1207,7 +1238,7 @@ async def ta_emot_prospektsvar(
         tenant_name=tenant["tenant_name"],
         context_pack=context_pack,
         publik_bas_url=get_settings().publik_bas_url,
-    )
+    ))
 
 
 @router.post("/api/leads/uppfoljning/svep")
@@ -1371,8 +1402,9 @@ async def lamna_agent_feedback(
     det starkaste underlaget lärandeflödet kan få."""
     kraev_uuid(payload.run_id, "run_id")
     storage = request.app.state.storage
-    korningar = await storage.list_agent_runs(tenant["tenant_id"], limit=200)
-    korning = next((r for r in korningar if str(r.get("id")) == payload.run_id), None)
+    # En rad, inte de 200 senaste i sin helhet (två gånger): uppslaget läste
+    # tiotals megabyte för att hitta ett id, och en äldre körning fanns "inte".
+    korning = await storage.hamta_agent_run(tenant["tenant_id"], payload.run_id)
     if korning is None:
         raise HTTPException(status_code=404, detail="Körningen finns inte.")
     if not korning.get("is_test"):
@@ -1398,8 +1430,7 @@ async def lamna_agent_feedback(
     # ingen modell: input är körningens input, facit är människans text.
     eval_case = None
     if payload.verdict == "bad" and payload.corrected_output:
-        runs = await storage.list_agent_runs(tenant["tenant_id"], limit=200)
-        run = next((r for r in runs if str(r.get("id")) == payload.run_id), None)
+        run = korning
         if run and str(run.get("input") or "").strip():
             eval_case = await storage.save_eval_case(
                 tenant["tenant_id"],
@@ -1517,19 +1548,24 @@ async def _schemalagda_utskick(storage, tenant_id: str) -> list[dict]:
     Samma härledning som listan och lådan (utkaststatus.harled == godkant);
     texten är köpostens väntande meddelande. Arkiverade leads har fått sina
     utskick inställda och står aldrig här."""
+    # Först vilka som är godkända, utan text; sedan texten för just dem
+    # (2026-11-10). Förut lästes texten för varje tråd hos kunden och nästan
+    # alla kastades: 3 184 uppslag per hämtning av fliken hos den största.
     try:
-        lagen = await storage.utkast_lagen(tenant_id, med_text=True)
+        lagen = await storage.utkast_lagen(tenant_id)
+        nu = datetime.now(timezone.utc)
+        godkanda = {
+            pid: (lage, harlett)
+            for pid, lage in lagen.items()
+            if (harlett := utkaststatus.harled(lage, now=nu))["utkast_status"] == "godkant"
+        }
+        if not godkanda:
+            return []
+        texter = await storage.utkast_lagen(tenant_id, med_text=True, bara=list(godkanda))
     except Exception:  # noqa: BLE001 — de skickade ska visas även om detta faller
         logger.exception("Kunde inte läsa schemalagda utskick för %s.", tenant_id)
         return []
-    nu = datetime.now(timezone.utc)
-    godkanda = {
-        pid: (lage, harlett)
-        for pid, lage in lagen.items()
-        if (harlett := utkaststatus.harled(lage, now=nu))["utkast_status"] == "godkant"
-    }
-    if not godkanda:
-        return []
+    godkanda = {pid: ({**lage, **texter.get(pid, {})}, harlett) for pid, (lage, harlett) in godkanda.items()}
     # Med id, inte de 1000 nyaste: en flytt på 492 leads gömde 85 av 234
     # godkända mejl i main 2026-10-20 (de gick ut ändå, men syntes inte).
     prospekt = {str(p["id"]): p for p in await storage.get_prospects(tenant_id, list(godkanda))}
@@ -1953,6 +1989,13 @@ async def skriv_korningens_utkast(
     kontaktmejl (regel 10). Samma kedja som "Processa om" med utkast — ingen
     egen utkastväg — så faktagrinden, underlagsgolvet och mottagarregeln
     gäller precis som i körningen. Leads utan kontaktmejl hoppas över."""
+    return await dubbelstart.en_gang(
+        dubbelstart.nyckel(tenant["tenant_id"], "korningens-utkast", job_id),
+        lambda: _skriv_korningens_utkast(request, job_id, tenant),
+    )
+
+
+async def _skriv_korningens_utkast(request: Request, job_id: str, tenant: dict) -> dict:
     _require_live_llm()
     storage = request.app.state.storage
     rad, leads = await _korningens_leads(request, tenant, job_id)
@@ -1982,7 +2025,41 @@ async def skicka_korningens_utkast(
     """Godkänn och skicka ALLA körningens väntande utkast. Varje utkast går
     genom samma väg som ett enskilt klick (scheduler.skicka_godkant): tids-
     grinden, språkgrinden och de sex sändspärrarna — ett ja här går aldrig
-    förbi dem. I tur och ordning, inte parallellt."""
+    förbi dem. I tur och ordning, inte parallellt.
+
+    Ett andra klick medan det första pågår väntar in det och får samma utfall
+    (api/dubbelstart.py): två varv över samma utkast samtidigt var vägen till
+    dubbla utskick."""
+    return await dubbelstart.en_gang(
+        dubbelstart.nyckel(tenant["tenant_id"], "korningens-utskick", job_id),
+        lambda: _skicka_korningens_utkast(request, job_id, tenant),
+    )
+
+
+@router.post("/api/leads/korningar/{job_id}/utkast/skicka-jobb", status_code=202)
+async def starta_korningens_utskick(
+    request: Request, job_id: str, tenant: dict = Depends(require_tenant)
+) -> dict:
+    """Samma utskick som `/utkast/skicka`, som ett jobb (2026-11-10).
+
+    Utskicket går igenom utkasten i tur och ordning och tar med fler än en
+    handfull längre än de nio sekunder webbens proxy ger en POST: vyn visade
+    ett fel medan utskicket gick vidare. Här får vyn ett jobb-id, hämtar
+    förloppet (`klara` av `totalt`) med `GET /api/jobs/{id}` och till sist
+    samma utfall. Går ett utskick redan för körningen svarar starten med det.
+    """
+    if await request.app.state.storage.get_leads_korning(tenant["tenant_id"], job_id) is None:
+        raise HTTPException(status_code=404, detail="Körningen finns inte.")
+    jobb, pagar = await bakgrund.starta(
+        request.app.state, tenant["tenant_id"], f"korningens-utskick:{job_id}",
+        lambda forlopp: _skicka_korningens_utkast(request, job_id, tenant, forlopp=forlopp),
+    )
+    return {"job_id": jobb, "pagar": pagar}
+
+
+async def _skicka_korningens_utkast(
+    request: Request, job_id: str, tenant: dict, *, forlopp: bakgrund.Forlopp | None = None
+) -> dict:
     from datetime import datetime, timezone
 
     from ..leads.scheduler import skicka_godkant
@@ -1991,14 +2068,17 @@ async def skicka_korningens_utkast(
     _, leads = await _korningens_leads(request, tenant, job_id)
     provider = get_send_provider()
     utfall: list[dict] = []
-    for lead in leads:
-        if lead["status"] != "vantar" or not lead["queue_item_id"]:
-            continue
+    vantande = [lead for lead in leads if lead["status"] == "vantar" and lead["queue_item_id"]]
+    if forlopp is not None:
+        await forlopp.satt(klara=0, totalt=len(vantande))
+    for lead in vantande:
         res, skal = await skicka_godkant(
             request.app.state.storage, tenant["tenant_id"], lead["queue_item_id"], provider,
             now=datetime.now(timezone.utc),
         )
         utfall.append({"company_name": lead["company_name"], "utfall": res, "skal": skal})
+        if forlopp is not None:
+            await forlopp.satt(klara=len(utfall), totalt=len(vantande))
     return {
         "skickade": sum(1 for u in utfall if u["utfall"] == "sent"),
         "vantar_pa_fonstret": sum(1 for u in utfall if u["utfall"] == "requeued"),
@@ -2109,6 +2189,7 @@ _UTFALL_TEXT = {
     "blocked": "Stoppat av en sändspärr",
     "awaiting_review": "Inte skickat, behöver granskas",
     "redan_hanterad": "Utkastet är redan hanterat.",
+    "sandfel": "Inte skickat",
 }
 
 
@@ -2134,9 +2215,9 @@ async def approve_queue_item(
     if utfall == "saknas":
         raise HTTPException(status_code=404, detail="Utkastet finns inte.")
     besked = _UTFALL_TEXT.get(utfall, utfall)
-    if skal and utfall in ("blocked", "awaiting_review"):
+    if skal and utfall in ("blocked", "awaiting_review", "sandfel"):
         besked = f"{besked}: {skal}"
-    status = {"sent": "sent", "requeued": "queued"}.get(utfall, utfall)
+    status = {"sent": "sent", "requeued": "queued", "sandfel": "queued"}.get(utfall, utfall)
     # `skal` för sig: listans massutskick grupperar stoppen per orsak.
     return {"id": item_id, "status": status, "utfall": utfall, "besked": besked, "skal": skal}
 
@@ -2215,9 +2296,9 @@ async def skicka_nu(request: Request, item_id: str, tenant: dict = Depends(requi
     if utfall == "saknas":
         raise HTTPException(status_code=404, detail="Utkastet finns inte.")
     besked = _UTFALL_TEXT.get(utfall, utfall)
-    if skal and utfall in ("blocked", "awaiting_review", "requeued"):
+    if skal and utfall in ("blocked", "awaiting_review", "requeued", "sandfel"):
         besked = f"{besked}: {skal}"
-    status = {"sent": "sent", "requeued": "queued"}.get(utfall, utfall)
+    status = {"sent": "sent", "requeued": "queued", "sandfel": "queued"}.get(utfall, utfall)
     return {"id": item_id, "status": status, "utfall": utfall, "besked": besked, "skal": skal}
 
 
@@ -2318,7 +2399,7 @@ async def patch_prospect(
                 text=fields["status"],
             )
         )
-    return {"prospect": updated}
+    return {"prospect": await _utan_dold_bedomning(request, tenant, updated)}
 
 
 async def _registrera_webb(storage, tenant_id: str, prospect_id: str, website: str) -> None:
@@ -2807,15 +2888,40 @@ async def _styrning(app_state, tenant_id: str, batch_id: str) -> str | None:
 _STYRNING = {"pausa": "paus", "aterupta": None, "avbryt": "avbruten"}
 AVBRUTEN_KORNING = "Körningen avbröts innan researchen startade."
 
+#: Slutets fält som nollas när en körning fortsätter (styr_korning "fortsatt").
+_SLUTFALT = ("slut_orsak", "flaskhals", "sammanfattning", "stopp", "tomma_rundor",
+             "dubblettrundor", "listspar_sparad", "listspar_lista", "fordelning")
+
+
+def _kan_fortsatta(rad: dict) -> bool:
+    """En avslutad Iris-körning som levererade under det beställda och inte
+    avbröts av kunden. Sebbes regel 2026-11-08: beställt antal ska levereras."""
+    k = rad.get("korning") or {}
+    return (
+        rad.get("scope") == "batch"
+        and rad.get("status") in ("completed", "failed")
+        and bool(k.get("mal"))
+        and int(k.get("levererade") or 0) < int(k["mal"])
+        and k.get("slut_orsak") != "avbruten"
+        and k.get("kalla") != "lista"
+    )
+
 
 @router.post("/api/leads/korningar/{job_id}/{atgard}")
 async def styr_korning(
     request: Request,
     job_id: str,
-    atgard: Literal["pausa", "aterupta", "avbryt"],
+    atgard: Literal["pausa", "aterupta", "avbryt", "fortsatt"],
     tenant: dict = Depends(require_tenant),
 ) -> dict:
-    """Pausar, återupptar eller avbryter en pågående Iris-körning.
+    """Pausar, återupptar eller avbryter en pågående Iris-körning — eller
+    fortsätter en avslutad som levererade under målet ("fortsatt").
+
+    Fortsätt (Sebbe 2026-11-08: "om man söker 200 ska 200 hittas"):
+    körningen öppnas igen med allt den redan gjort (tratt, prövade bolag,
+    levererade) och motorn fyller på till målet. Ingen budgetdörr här:
+    beställningen är redan tagen. 409 när körningen nådde målet, avbröts
+    eller fortfarande pågår.
 
     Paus: inga nya prospekt köas; de som redan forskas blir klara och räknas
     in. Avbryt: dessutom hoppar köade men ej startade prospekt över sin
@@ -2824,6 +2930,8 @@ async def styr_korning(
     en pågående Iris-körning (klar, föll, eller ett listjobb)."""
     storage = request.app.state.storage
     tenant_id = tenant["tenant_id"]
+    if atgard == "fortsatt":
+        return await _fortsatt_korning(request.app.state, tenant, job_id)
     if await storage.get_leads_korning(tenant_id, job_id) is None:
         raise HTTPException(status_code=404, detail="Körningen finns inte.")
     if not await storage.set_korning_styrning(tenant_id, job_id, _STYRNING[atgard]):
@@ -2839,6 +2947,51 @@ async def styr_korning(
         else:
             asyncio.create_task(_ateruppta_korning(request.app.state, post))
     return {"job_id": job_id, "styrning": _STYRNING[atgard]}
+
+
+async def _fortsatt_korning(app_state, tenant: dict, job_id: str) -> dict:
+    """Öppnar en avslutad körning under målet igen och väcker motorn."""
+    tenant_id = tenant["tenant_id"]
+    async with _korningslas(job_id):
+        rad = await app_state.storage.get_leads_korning(tenant_id, job_id)
+        if rad is None:
+            raise HTTPException(status_code=404, detail="Körningen finns inte.")
+        if not _kan_fortsatta(rad):
+            raise HTTPException(
+                status_code=409,
+                detail="Körningen kan inte fortsätta: den pågår, nådde målet eller avbröts.",
+            )
+        k = dict(rad["korning"])
+        for falt in _SLUTFALT:
+            k.pop(falt, None)
+        # Samma form som en ny körning (korning.ny_korning).
+        k.update(slut_orsak=None, flaskhals=None)
+        k["klar"] = False
+        k["pagaende"] = 0
+        k["styrning"] = None
+        k["fortsatt"] = int(k.get("fortsatt") or 0) + 1
+        # Taket följer målet: en körning som stannade på taket får nya
+        # TAK_FAKTOR per lead som återstår, annars stannar den direkt igen.
+        if int(k.get("undersokta") or 0) >= int(k.get("tak") or 0):
+            k["tak"] = int(k.get("undersokta") or 0) + (
+                (int(k["mal"]) - int(k.get("levererade") or 0)) * iris_korning.TAK_FAKTOR
+            )
+        await app_state.storage.set_leads_job_status(
+            tenant_id, job_id=job_id, status="processing", scope="batch", korning=k
+        )
+        post = await app_state.jobs.get(job_id) or {}
+        resultat = dict(post.get("result") or {})
+        resultat.update(korning=k, jobs=k.get("jobs") or [], count=len(k.get("jobs") or []))
+        await app_state.jobs.complete(job_id, resultat)
+    post = {"kind": "batch", "job_id": job_id, "tenant_id": tenant_id,
+            "tenant_name": tenant.get("tenant_name")}
+    leadsstrom = getattr(app_state, "leadsstrom", None)
+    if leadsstrom is not None:
+        await leadsstrom.enqueue(post)
+    else:
+        asyncio.create_task(_ateruppta_korning(app_state, post))
+    logger.info("Körning %s fortsätter mot %s (levererade %s).", job_id, k["mal"], k.get("levererade"))
+    return {"job_id": job_id, "fortsatt": True, "mal": k["mal"], "levererade": k.get("levererade")}
 
 
 async def _fyll_pa(app_state, tenant: dict, batch_id: str) -> None:
@@ -3098,11 +3251,12 @@ async def _fyll_pa_last(app_state, tenant: dict, batch_id: str) -> dict | None:
                 "bred": bool(k.get("bred")),
                 "is_test": bool(k.get("is_test")),
             }
-        try:
-            await kontrollera_leads_budget(storage, tenant_id)
-        except LeadsBudgetExceededError:
-            orsak = "budget"
-            break
+        # Ingen budgetkoll här (Sebbe 2026-11-08): dygnsbudgeten är en dörr
+        # vid starten (_kraev_leads_budget), aldrig en vakt inne i en
+        # beställd körning. Två körningar på 200 i main stannade 18:43 på 33
+        # och 68 leverade med slutorsak "budget" fast målgruppen hade
+        # tusentals bolag kvar. En körnings kostnad är redan begränsad av
+        # taket (TAK_FAKTOR per beställt lead) och kredittaket.
         kandidat = k["kandidater"].pop(0)
         # Sista kontrollen mot listorna (Antons krav 2026-10-06): mängden
         # lästes när sökrundan började, och ett listbygge som körts sedan dess
@@ -3232,6 +3386,13 @@ async def _spara_listspar(storage, tenant_id: str, k: dict) -> None:
     k["fordelning"] = fordelning
 
 
+#: Pauserna mellan rapportens försök. Ett fel i Redis eller databasen medan
+#: ett klart prospektjobb rapporterar är oftast över på en sekund (en bruten
+#: anslutning, en tidsgräns); körningen fälldes förut på första felet och
+#: rapporten gick förlorad (Fas 0-fyndet H6, 2026-11-09).
+_RAPPORT_PAUSER_S = (0.5, 2.0)
+
+
 async def _rapportera_till_korning(
     app_state, tenant: dict, batch_id: str, *, job_id: str, namn: str, leverbar: bool,
     skal: str | None, skrap: dict | None = None, undersokt: bool = True, fyll: bool = True,
@@ -3243,25 +3404,43 @@ async def _rapportera_till_korning(
     gånger (återtag efter deploy) räknas en gång. `fyll=False` sparar bara
     utfallet; anroparen väcker motorn själv (_vacka_korning). Läs-ändra-skriv
     under körningens lås: med leads_workers > 1 rapporterar två barn annars
-    över varandra och den enas utfall försvinner."""
-    try:
-        async with _korningslas(batch_id):
-            resultat, k = await _las_korning(app_state, tenant["tenant_id"], batch_id)
-            if not k:
-                return
-            rapporterade = k.setdefault("rapporterade", [])
-            if job_id not in rapporterade:
-                rapporterade.append(job_id)
-                iris_korning.registrera_utfall(k, namn=namn, leverbar=leverbar, skal=skal, undersokt=undersokt)
-                if skrap:
-                    k["skrap"] = sidhamtning.summera(k.get("skrap"), skrap)
-                resultat["korning"] = k
-                await app_state.jobs.complete(batch_id, resultat)
-                await _spara_korning(app_state, tenant["tenant_id"], batch_id, k)
-    except Exception as fel:  # noqa: BLE001 — se docstringen
-        logger.exception("Kunde inte rapportera till körning %s", batch_id)
-        await _markera_korning_fallen(app_state, tenant["tenant_id"], batch_id, fel)
-        return
+    över varandra och den enas utfall försvinner.
+
+    Ett fel försöks om (_RAPPORT_PAUSER_S) innan körningen fälls. Varje
+    försök läser tillståndet på nytt, och ett barn som redan står i
+    `rapporterade` räknas inte igen; liggaren sparas ändå, för det kan vara
+    just den skrivningen som föll förra gången."""
+    forsok = 0
+    while True:
+        forsok += 1
+        try:
+            async with _korningslas(batch_id):
+                resultat, k = await _las_korning(app_state, tenant["tenant_id"], batch_id)
+                if not k:
+                    return
+                rapporterade = k.setdefault("rapporterade", [])
+                ny = job_id not in rapporterade
+                if ny:
+                    rapporterade.append(job_id)
+                    iris_korning.registrera_utfall(k, namn=namn, leverbar=leverbar, skal=skal, undersokt=undersokt)
+                    if skrap:
+                        k["skrap"] = sidhamtning.summera(k.get("skrap"), skrap)
+                    resultat["korning"] = k
+                    await app_state.jobs.complete(batch_id, resultat)
+                if ny or forsok > 1:
+                    await _spara_korning(app_state, tenant["tenant_id"], batch_id, k)
+            break
+        except Exception as fel:  # noqa: BLE001 — se docstringen
+            if forsok <= len(_RAPPORT_PAUSER_S):
+                logger.warning(
+                    "Rapporten till körning %s föll (försök %s, %s); försöker igen.",
+                    batch_id, forsok, type(fel).__name__,
+                )
+                await asyncio.sleep(_RAPPORT_PAUSER_S[forsok - 1])
+                continue
+            logger.exception("Kunde inte rapportera till körning %s", batch_id)
+            await _markera_korning_fallen(app_state, tenant["tenant_id"], batch_id, fel)
+            return
     if fyll:
         await _vacka_korning(app_state, tenant, batch_id)
 
@@ -3447,7 +3626,17 @@ async def start_batch_run(
     Svaret kommer INNAN sökningen. `fase=soker` och ett jobb; när det är
     completed ligger research-jobben i `result.jobs`. En jobbrad PER PROSPEKT
     därefter, så ett dött prospekt inte fäller de andra.
+
+    En likadan beställning från samma kund inom en halv minut är samma klick
+    och får samma körning tillbaka (api/dubbelstart.py).
     """
+    return await dubbelstart.en_gang(
+        dubbelstart.nyckel(tenant["tenant_id"], "korning", payload.model_dump(mode="json")),
+        lambda: _starta_batch(request, payload, tenant),
+    )
+
+
+async def _starta_batch(request: Request, payload: LeadsBatchRequest, tenant: dict) -> dict:
     _require_live_llm()
     await _kraev_leads_budget(request.app.state.storage, tenant["tenant_id"])
     await _validera_batch_kan_starta(request.app.state.storage, tenant, payload)
@@ -4448,7 +4637,7 @@ async def listrad_till_prospekt(
     _kraev_ej_crm(lista)
 
     prospect, skapad = await _befordra_listrad(storage, tenant_id, lista, rad)
-    return {"prospect": prospect, "skapad": skapad}
+    return {"prospect": await _utan_dold_bedomning(request, tenant, prospect), "skapad": skapad}
 
 
 def _listans_origin(lista: dict) -> str:

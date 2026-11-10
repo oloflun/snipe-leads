@@ -10,6 +10,11 @@ sparas till den riktiga miljön. Det får vara den enda vägen.
 - **Paketet signeras** med HMAC-SHA256 över exakt den JSON som skickas, med
   `FLYTT_NYCKEL` som bara finns som miljövariabel i main och development.
   Mottagaren verifierar signaturen innan den läser en byte av innehållet.
+- **Paketet bär sin tid** (`skapad`, 2026-11-09). Tiden ingår i det som
+  signeras, och mottagaren tar bara emot paket yngre än PAKET_MAX_ALDER. Förut
+  gick ett paket som fångats en gång att spela upp mot produktionen i all
+  framtid. Inom fönstret skyddar idempotensen nedan: samma paket en gång till
+  ger "redan flyttad".
 - **Mottagaren vägrar i en spegel.** `/importera` kontrollerar att databasen
   saknar `mirror_meta` (markören spegelskriptet sätter). Development kan
   alltså aldrig importera till sig själv eller till en annan spegel, och
@@ -55,7 +60,7 @@ import hashlib
 import hmac
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Literal
 
 import httpx
@@ -75,6 +80,12 @@ router = APIRouter(prefix="/api/admin/flytt", dependencies=[Depends(require_mast
 mottag = APIRouter(prefix="/api/admin/flytt")
 
 SIGNATURHUVUD = "X-Flytt-Signatur"
+#: Så gammalt får ett paket vara när main tar emot det. Avsändaren bygger,
+#: signerar och skickar i ett svep, så minuter räcker gott; marginalen är för
+#: klockor som går olika och en långsam första anslutning.
+PAKET_MAX_ALDER = timedelta(minutes=15)
+#: Så långt fram i tiden får `skapad` ligga (klockor som går olika).
+_PAKET_FRAMTID = timedelta(minutes=5)
 #: Nästa nattliga spegling (.github/workflows/spegla-dev.yml, cron 0 2 * * * UTC).
 NASTA_SPEGLING = "04:00 svensk sommartid (02:00 UTC)"
 
@@ -240,6 +251,7 @@ async def _bygg_paket(storage, tenant: dict[str, Any], typ: str, ids: list[str])
     # svarade 500 (Alunix bolag 2026-10-18). Samma form som /paket returnerar.
     return jsonable_encoder({
         "version": 1,
+        "skapad": datetime.now(timezone.utc).isoformat(),
         "fran": get_settings().aktiv_miljo() or "development",
         "tenant_id": tenant_id,
         "tenant_slug": str(tenant.get("slug") or ""),
@@ -354,6 +366,20 @@ async def flytt_skicka(request: Request, payload: FlyttRequest) -> dict:
 # -- Mottagarsidan (main, HMAC) ------------------------------------------------
 
 
+def _farskt(skapad: Any) -> bool:
+    """Bär paketet en tid inom fönstret? Saknad eller oläslig tid är nej."""
+    if not isinstance(skapad, str) or not skapad:
+        return False
+    try:
+        tid = datetime.fromisoformat(skapad)
+    except ValueError:
+        return False
+    if tid.tzinfo is None:
+        tid = tid.replace(tzinfo=timezone.utc)
+    nu = datetime.now(timezone.utc)
+    return nu - PAKET_MAX_ALDER <= tid <= nu + _PAKET_FRAMTID
+
+
 @mottag.post("/importera")
 async def flytt_importera(
     request: Request, x_flytt_signatur: str | None = Header(default=None, alias=SIGNATURHUVUD)
@@ -372,6 +398,15 @@ async def flytt_importera(
         paket = json.loads(kropp)
     except ValueError as fel:
         raise HTTPException(status_code=422, detail="Paketet är inte giltig JSON.") from fel
+    if not isinstance(paket, dict):
+        raise HTTPException(status_code=422, detail="Okänt paketformat.")
+    if not _farskt(paket.get("skapad")):
+        # Tiden är signerad, så den går inte att skriva om utan nyckeln.
+        logger.warning("Flyttpaket avvisat på tiden: skapad=%r", paket.get("skapad"))
+        raise HTTPException(
+            status_code=403,
+            detail="Paketets tid saknas eller är för gammal. Flytta en gång till från development.",
+        )
     if paket.get("version") != 1 or paket.get("typ") not in ("mejl", "korning", "prospekt", "lista"):
         raise HTTPException(status_code=422, detail="Okänt paketformat.")
     tenant_id = str(paket.get("tenant_id") or "")
