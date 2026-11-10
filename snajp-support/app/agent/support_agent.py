@@ -905,6 +905,9 @@ async def run_support_agent(
     # se app/agent/arbetsyta_siffror.py för varför den aldrig får sättas
     # för en slutkund.
     arbetsyta: bool = False,
+    # 2026-11-10: anropas med stegets namn före varje modellanrop, så att
+    # chatten kan visa vad agenten gör (step_runner.RunTrace.vid_steg).
+    forlopp: Callable[[str], Awaitable[None]] | None = None,
 ) -> dict[str, Any]:
     started = time.monotonic()
     settings = get_settings()
@@ -1218,7 +1221,7 @@ async def run_support_agent(
     case_context = f"{case_context}\n\n{conversation_state}"
 
     ledger = RunLedger(satisfied={"context_pack"})
-    trace = RunTrace()
+    trace = RunTrace(vid_steg=forlopp)
 
     # --- Steg 1: triage ----------------------------------------------------
     #

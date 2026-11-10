@@ -25,6 +25,7 @@ import logging
 import re
 import time
 from dataclasses import dataclass, field
+from collections.abc import Awaitable, Callable
 from typing import Any
 
 from ..agentcore.instruktioner import Instruktionslager, las_instruktioner  # noqa: F401
@@ -301,6 +302,18 @@ class RunTrace:
     Skrivs till agent_runs (G10) och returneras till API-anroparen."""
 
     steps: list[StepResult] = field(default_factory=list)
+    #: Anropas med stegets namn precis innan dess modellanrop (2026-11-10), så
+    #: att den som väntar kan se vad agenten gör. Chatten skriver skedet på
+    #: jobbet (api/chat.py). Ett fel här får aldrig fälla steget.
+    vid_steg: Callable[[str], Awaitable[None]] | None = None
+
+    async def meddela(self, skill: str) -> None:
+        if self.vid_steg is None:
+            return
+        try:
+            await self.vid_steg(skill)
+        except Exception:  # noqa: BLE001 — förloppet är en upplysning, inte en del av svaret
+            logger.warning("Kunde inte meddela förloppet för steget %s.", skill)
 
     @property
     def skills_used(self) -> list[str]:
@@ -461,6 +474,8 @@ async def run_step(
             + (KONTRAKTSPAMINNELSE if paminn_om_kontrakt else ""),
         },
     ]
+
+    await trace.meddela(step.skill)
 
     output: dict[str, Any] = {}
     tokens_in = tokens_out = reasoning_tokens = cached_tokens = 0
