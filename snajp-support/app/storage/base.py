@@ -69,6 +69,12 @@ def normalisera_kunddata(falt: dict[str, Any]) -> dict[str, Any]:
 #: Fälten `spara_bedomning` får skriva på prospektraden (Iris-bedömningen,
 #: migration 024/031/079). En lista, delad av båda lagringarna, så att de
 #: aldrig kan glida isär.
+#: Kolumnerna i körningsloggens sammandrag (list_agent_runs). Inga texter.
+AGENT_RUN_SAMMANDRAG = (
+    "id", "tenant_id", "agent_type", "pack_version", "skills_used", "tokens_in", "tokens_out",
+    "latency_ms", "is_test", "model", "prospect_id", "created_at",
+)
+
 BEDOMNINGSFALT = (
     # Migration 083 (plan del C): lägesbeskrivning, signaler, och telefonen
     # ur källmaterialet när registret (081) saknade den.
@@ -788,8 +794,18 @@ class Storage(Protocol):
         ...
 
     async def list_agent_runs(
-        self, tenant_id: str, *, agent_type: str | None = None, limit: int = 50
-    ) -> list[dict[str, Any]]: ...
+        self, tenant_id: str, *, agent_type: str | None = None, limit: int = 50,
+        sammandrag: bool = False,
+    ) -> list[dict[str, Any]]:
+        """Kundens körningar, nyast först. `sammandrag` ger bara mätvärdena
+        (AGENT_RUN_SAMMANDRAG): indata, utdata och stegloggen väger i snitt
+        54 kB per rad och bär agentens promptar."""
+        ...
+
+    async def hamta_agent_run(self, tenant_id: str, run_id: str) -> dict[str, Any] | None:
+        """EN körning hos kunden, hela raden. None om den inte finns hos just
+        den kunden."""
+        ...
 
     async def get_prompt_lager(self, hashar: list[str]) -> dict[str, str]:
         """Lagertexterna för de givna hasharna (prompt_lager, migration 101).

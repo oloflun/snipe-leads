@@ -25,6 +25,7 @@ import asyncpg
 from ..leads import upptagna
 
 from .base import (
+    AGENT_RUN_SAMMANDRAG,
     BEDOMNINGSFALT,
     ANALYTICS_COVERAGE,
     KUNDDATA_FALT,
@@ -2542,12 +2543,17 @@ class PostgresStorage:
         return {r["hash"]: r["text"] for r in records}
 
     async def list_agent_runs(
-        self, tenant_id: str, *, agent_type: str | None = None, limit: int = 50
+        self, tenant_id: str, *, agent_type: str | None = None, limit: int = 50,
+        sammandrag: bool = False,
     ) -> list[dict[str, Any]]:
+        # Sammandraget läser inte input/output/step_log alls (samma skäl som
+        # i list_agent_runs_all): 50 hela rader var 8,5 MB som lästes ur
+        # TOAST, avkodades och kodades om för en lista med mätvärden.
+        kolumner = ", ".join(AGENT_RUN_SAMMANDRAG) if sammandrag else "*"
         async with self._scoped(tenant_id) as conn:
             if agent_type:
                 records = await conn.fetch(
-                    """select * from agent_runs where tenant_id = $1 and agent_type = $2
+                    f"""select {kolumner} from agent_runs where tenant_id = $1 and agent_type = $2
                        order by created_at desc limit $3""",
                     tenant_id,
                     agent_type,
@@ -2555,10 +2561,12 @@ class PostgresStorage:
                 )
             else:
                 records = await conn.fetch(
-                    "select * from agent_runs where tenant_id = $1 order by created_at desc limit $2",
+                    f"select {kolumner} from agent_runs where tenant_id = $1 order by created_at desc limit $2",
                     tenant_id,
                     limit,
                 )
+        if sammandrag:
+            return [_row(r) for r in records]
         # Samma avkodning som list_agent_runs_all och get_agent_run redan gör.
         # Saknades här, och det syntes inte på ett halvår av EN anledning: den
         # enda konsumenten — översiktens körningsräknare — frågade efter
@@ -4395,6 +4403,13 @@ class PostgresStorage:
         if sammandrag:
             return [_row(r) for r in records]
         return [_avkoda_jsonb(_row(r), "step_log", "grounding") for r in records]
+
+    async def hamta_agent_run(self, tenant_id: str, run_id: str) -> dict[str, Any] | None:
+        async with self._scoped(tenant_id) as conn:
+            record = await conn.fetchrow(
+                "select * from agent_runs where tenant_id = $1 and id = $2", tenant_id, run_id
+            )
+        return _avkoda_jsonb(_row(record), "step_log", "grounding") if record else None
 
     async def get_agent_run(self, run_id: str) -> dict[str, Any] | None:
         async with self.pool.acquire() as conn:

@@ -25,6 +25,7 @@ from ..kvotfel import (
 from . import rate_limit_db
 from .deps import require_tenant
 from .schemas import ChatRequest, SamtalRequest
+from .stegtexter import utan_stegtexter
 
 logger = logging.getLogger("snajp-support")
 
@@ -363,6 +364,6 @@ async def get_job(
     # gång — gamla redan-lagrade fel inräknade. Icke-kvotfel passerar orörda.
     return {
         "status": job["status"],
-        "result": job.get("result"),
+        "result": utan_stegtexter(job.get("result")),
         "error": oversatt_felstext(job.get("error")),
     }

@@ -76,6 +76,7 @@ from ..leads import korning as iris_korning
 from ..leads import omprova, utkaststatus
 from ..leads.profil import las_kundtext, sakerstall_profil, slå_ihop, som_icp
 from . import dubbelstart
+from .stegtexter import utan_stegtexter
 from .deps import kraev_uuid, require_tenant
 from ..agent.leads_research_v2 import las_produkter
 from ..agentcore.baka_in import baka_in
@@ -1060,7 +1061,8 @@ async def research_step(
         brief=payload.brief,
     )
     result["onboarding_missing"] = list(missing)
-    return result
+    # Stegloggens texter (promptar, modellens råa utdata) stannar i agent_runs.
+    return utan_stegtexter(result)
 
 
 @router.post("/api/leads/outreach/draft", status_code=202)
@@ -1171,11 +1173,15 @@ async def list_runs(
     agent_type: str | None = None,
     limit: int = 50,
 ) -> dict:
-    """G10-revisionsloggen. step_log innehåller ett steg per faktiskt
-    LLM-anrop: vilken skill, antal försök, om steget eskalerade, latens och
-    de sources_used/context_refs steget rapporterade."""
+    """G10-revisionsloggen som sammandrag: vilken agent, vilka steg, tokens
+    och latens per körning.
+
+    Texterna (indata, utdata och stegloggen med varje stegs prompt) lämnas
+    inte ut här sedan 2026-11-10. De var 8,5 MB per anrop som ingen vy läste,
+    och de bär Snajps interna promptar. Plattformsadmin läser hela raden via
+    /api/admin/runs."""
     runs = await request.app.state.storage.list_agent_runs(
-        tenant["tenant_id"], agent_type=agent_type, limit=min(limit, 200)
+        tenant["tenant_id"], agent_type=agent_type, limit=min(limit, 200), sammandrag=True
     )
     return {"runs": runs}
 
@@ -1223,7 +1229,7 @@ async def ta_emot_prospektsvar(
     storage = request.app.state.storage
     thread_id = await _los_trad(storage, tenant["tenant_id"], payload.thread_id, payload.prospect_id)
     context_pack, _missing = await build_context_pack(storage, tenant["tenant_id"])
-    return await hantera_prospektsvar(
+    return utan_stegtexter(await hantera_prospektsvar(
         storage,
         tenant["tenant_id"],
         thread_id=thread_id,
@@ -1231,7 +1237,7 @@ async def ta_emot_prospektsvar(
         tenant_name=tenant["tenant_name"],
         context_pack=context_pack,
         publik_bas_url=get_settings().publik_bas_url,
-    )
+    ))
 
 
 @router.post("/api/leads/uppfoljning/svep")
@@ -1395,8 +1401,9 @@ async def lamna_agent_feedback(
     det starkaste underlaget lärandeflödet kan få."""
     kraev_uuid(payload.run_id, "run_id")
     storage = request.app.state.storage
-    korningar = await storage.list_agent_runs(tenant["tenant_id"], limit=200)
-    korning = next((r for r in korningar if str(r.get("id")) == payload.run_id), None)
+    # En rad, inte de 200 senaste i sin helhet (två gånger): uppslaget läste
+    # tiotals megabyte för att hitta ett id, och en äldre körning fanns "inte".
+    korning = await storage.hamta_agent_run(tenant["tenant_id"], payload.run_id)
     if korning is None:
         raise HTTPException(status_code=404, detail="Körningen finns inte.")
     if not korning.get("is_test"):
@@ -1422,8 +1429,7 @@ async def lamna_agent_feedback(
     # ingen modell: input är körningens input, facit är människans text.
     eval_case = None
     if payload.verdict == "bad" and payload.corrected_output:
-        runs = await storage.list_agent_runs(tenant["tenant_id"], limit=200)
-        run = next((r for r in runs if str(r.get("id")) == payload.run_id), None)
+        run = korning
         if run and str(run.get("input") or "").strip():
             eval_case = await storage.save_eval_case(
                 tenant["tenant_id"],

@@ -25,6 +25,7 @@ from ..config import (
 )
 from ..kb_articles import DEMO_KB_ARTICLES, KB_ARTICLES
 from .base import (
+    AGENT_RUN_SAMMANDRAG,
     BEDOMNINGSFALT,
     AGENT_RUN_TYPES,
     ANALYTICS_COVERAGE,
@@ -1822,12 +1823,19 @@ class MemoryStorage:
         return {h: self.prompt_lager[h] for h in hashar if h in self.prompt_lager}
 
     async def list_agent_runs(
-        self, tenant_id: str, *, agent_type: str | None = None, limit: int = 50
+        self, tenant_id: str, *, agent_type: str | None = None, limit: int = 50,
+        sammandrag: bool = False,
     ) -> list[dict[str, Any]]:
         runs = self.agent_runs.get(tenant_id, [])
         if agent_type:
             runs = [r for r in runs if r["agent_type"] == agent_type]
-        return sorted(runs, key=lambda r: r["created_at"], reverse=True)[:limit]
+        runs = sorted(runs, key=lambda r: r["created_at"], reverse=True)[:limit]
+        if sammandrag:
+            return [{k: r.get(k) for k in AGENT_RUN_SAMMANDRAG} for r in runs]
+        return runs
+
+    async def hamta_agent_run(self, tenant_id: str, run_id: str) -> dict[str, Any] | None:
+        return next((r for r in self.agent_runs.get(tenant_id, []) if r["id"] == run_id), None)
 
     # -- Leads-jobbens liggare (INV-JOB-002, migration 059) -----------------
 
