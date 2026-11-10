@@ -23,6 +23,7 @@ from typing import Any
 
 import httpx
 from ..tls import ssl_kontext
+from . import hamtvakt
 
 logger = logging.getLogger("snajp-support.leads.platshallare")
 
@@ -209,6 +210,7 @@ async def platshallare_for_webbplats(url: str | None) -> str | None:
             timeout=httpx.Timeout(6.0, connect=4.0),
             follow_redirects=True,
             headers={"user-agent": "Mozilla/5.0 (compatible; snajp-leads/1.0; +https://snajp.se)"},
+            event_hooks=hamtvakt.krokar(),
         ) as client:
             svar = await client.get(url)
     except httpx.HTTPError:

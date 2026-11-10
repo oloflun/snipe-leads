@@ -25,6 +25,7 @@ import httpx
 from ..config import get_settings
 from . import upptagna
 from ..tls import ssl_kontext
+from . import hamtvakt
 
 logger = logging.getLogger("snajp-support.leads-discovery")
 
@@ -724,7 +725,10 @@ def skala_karriarsubdoman(url: str) -> str | None:
 
 
 async def _head_ok(url: str) -> bool:
-    async with httpx.AsyncClient(verify=ssl_kontext(), timeout=httpx.Timeout(5.0), follow_redirects=False) as client:
+    async with httpx.AsyncClient(
+        verify=ssl_kontext(), timeout=httpx.Timeout(5.0), follow_redirects=False,
+        event_hooks=hamtvakt.krokar(),
+    ) as client:
         try:
             svar = await client.head(url)
         except httpx.HTTPError:
@@ -746,6 +750,7 @@ async def hamta_kontaktvag(website: str) -> dict[str, Any]:
             verify=ssl_kontext(),
             timeout=httpx.Timeout(8.0), follow_redirects=True,
             headers={"user-agent": "snajp-leads/1.0 (+https://snajp.se)"},
+            event_hooks=hamtvakt.krokar(),
         ) as client:
             svar = await client.get(website)
             if svar.status_code >= 400:
@@ -1341,6 +1346,7 @@ async def hamta_vd_kontakt(website: str, vd_namn: str) -> dict[str, Any] | None:
             verify=ssl_kontext(),
             timeout=httpx.Timeout(8.0), follow_redirects=True,
             headers={"user-agent": "snajp-leads/1.0 (+https://snajp.se)"},
+            event_hooks=hamtvakt.krokar(),
         ) as client:
             svar = await client.get(website)
             if svar.status_code >= 400:
@@ -1446,7 +1452,10 @@ async def gissa_webbplats_via_head(namn: str) -> str | None:
     if len(slug) < 3:
         return None
     kandidater = (f"https://{slug}.se", f"https://www.{slug}.se", f"http://{slug}.se")
-    async with httpx.AsyncClient(verify=ssl_kontext(), timeout=httpx.Timeout(5.0), follow_redirects=False) as client:
+    async with httpx.AsyncClient(
+        verify=ssl_kontext(), timeout=httpx.Timeout(5.0), follow_redirects=False,
+        event_hooks=hamtvakt.krokar(),
+    ) as client:
         for url in kandidater:
             try:
                 svar = await client.head(url)

@@ -122,3 +122,17 @@ def _hermetisk_irisprofil(monkeypatch):
         raise RuntimeError("Ingen LLM i testsviten")
 
     monkeypatch.setattr("app.leads.profil._anropa_modell", _ingen_modell)
+
+
+@pytest.fixture(autouse=True)
+def _ingen_riktig_dns(monkeypatch):
+    """Hämtvakten och nätvakten slår upp värdnamn innan de släpper en
+    förfrågan (app/leads/hamtvakt.py, app/integrationer/natvakt.py). Testsviten
+    ska inte bero på DNS: varje namn svarar här med en publik adress. Tester
+    som prövar själva spärren sätter en egen uppslagning ovanpå."""
+    from app.integrationer import natvakt
+
+    async def _publik(vard: str, port: int) -> list[str]:
+        return ["93.184.216.34"]
+
+    monkeypatch.setattr(natvakt, "upplos", _publik)
