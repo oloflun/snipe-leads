@@ -162,3 +162,18 @@ async def test_andra_genomgangen_fangar_falt_den_forsta_missade():
 
     assert avlasning.falt["datum"] == date(2026, 3, 5)
     assert avlasning.status == "klar"
+
+
+@pytest.mark.anyio
+async def test_ett_svar_som_inte_ar_ett_objekt_faller_inte_avlasningen():
+    """Modellen svarar ibland med en lista. `_kor_avlasning` lämnade den vidare
+    och nästa `.get` kastade: kvittot gav ett serverfel i stället för att gå
+    till granskning (Fas 0-fyndet H15, 2026-11-09)."""
+    llm = _FejkadLLM([[1, 2], "text", None, 7])
+
+    with patch("app.agent.bookkeeping_agent.get_llm_client", return_value=llm):
+        avlasning = await las_underlag(KVITTOTEXT)
+
+    assert avlasning.status != "klar"
+    assert not avlasning.verifikat
+    assert all(steg.escalated for steg in avlasning.trace.steps)

@@ -583,6 +583,12 @@ async def run_step(
             output = json.loads(choice_message.content or "{}")
         except json.JSONDecodeError:
             output = {}
+        if not isinstance(output, dict):
+            # Kontraktet är ett objekt. En lista, en sträng eller null är
+            # giltig JSON men inget steg kan läsa den: anroparna gör
+            # `.get(...)` och föll på det (Fas 0-fyndet H15, 2026-11-09).
+            # Tomt objekt bryter kontraktet nedan och ger ett omförsök.
+            output = {}
 
         verdict = check_output_contract(
             output,

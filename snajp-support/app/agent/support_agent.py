@@ -394,6 +394,61 @@ _NAMNER_KOLLEGA = re.compile(r"\b(kollega\w*|medarbetare\w*|colleague\w*)\b", re
 _TEXTNYCKLAR = ("text", "draft", "final_reply", "revised_draft", "reply", "svar", "content", "message")
 
 
+#: Triagens ja/nej-fält. Koden frågar `is True` och `is False` på dem.
+_TRIAGE_JA_NEJ = ("escalate", "ber_om_manniska", "inom_amnesomradet", "missforstadd")
+_JA_ORD = frozenset({"true", "ja", "yes"})
+_NEJ_ORD = frozenset({"false", "nej", "no"})
+
+
+def _normalisera_triage(triage: Any) -> dict[str, Any]:
+    """Triagens svar i den form resten av körningen läser (Fas 0-fyndet H15).
+
+    Kontraktet säger tal, sanningsvärden och en lista. Modellen svarar ibland
+    med annat, och varje avvikelse hade sin egen följd: `"false"` i `escalate`
+    är sant i Python och lämnade över ärendet, sentimentet 0,0 (så argt det
+    går) lästes som 0,5 av `or 0.5`, ett sentiment i ord kastade, och
+    `kundfakta` som en enda sträng sparades som en bokstav per faktum.
+
+    - `sentiment`: tal i 0–1; saknat eller oläsligt är neutralt (0,5).
+    - ja/nej-fälten: riktiga sanningsvärden, även ur "true"/"nej". Ett värde
+      som inte går att tolka tas bort, vilket koden läser som "inget sagt".
+    - `kundfakta`: lista med text.
+    Övriga fält lämnas som de är; de har redan egna skydd där de läses.
+    """
+    ut: dict[str, Any] = dict(triage) if isinstance(triage, dict) else {}
+
+    ratt = ut.get("sentiment")
+    sentiment = 0.5
+    if isinstance(ratt, str):
+        ratt = ratt.strip().replace(",", ".")
+    if not isinstance(ratt, bool) and isinstance(ratt, (int, float, str)):
+        try:
+            tal = float(ratt)
+        except ValueError:
+            tal = None
+        if tal is not None and tal == tal:  # NaN är inte lika med sig självt
+            sentiment = max(0.0, min(1.0, tal))
+    ut["sentiment"] = sentiment
+
+    for falt in _TRIAGE_JA_NEJ:
+        varde = ut.pop(falt, None)
+        if isinstance(varde, str):
+            ord_ = varde.strip().lower()
+            varde = True if ord_ in _JA_ORD else False if ord_ in _NEJ_ORD else None
+        if isinstance(varde, bool):
+            ut[falt] = varde
+
+    fakta = ut.get("kundfakta")
+    if isinstance(fakta, str):
+        fakta = [fakta]
+    ut["kundfakta"] = [
+        str(f).strip()
+        for f in (fakta if isinstance(fakta, list) else [])
+        if isinstance(f, (str, int, float)) and not isinstance(f, bool) and str(f).strip()
+    ]
+    return ut
+
+
 def _text(varde: Any) -> str:
     """Ett stegs textfält som text, vad modellen än returnerade.
 
@@ -1203,8 +1258,10 @@ async def run_support_agent(
         ),
         case_context=case_context,
     )
-    category = triage.get("category") if triage.get("category") in taxonomy else "ovrigt"
-    sentiment = max(0.0, min(1.0, float(triage.get("sentiment") or 0.5)))
+    triage = _normalisera_triage(triage)
+    kategori_ratt = triage.get("category")
+    category = kategori_ratt if isinstance(kategori_ratt, str) and kategori_ratt in taxonomy else "ovrigt"
+    sentiment = triage["sentiment"]
 
     # Svarsspråket (bd snipe-xtr): kundens språk om kunden (tenanten) valt
     # det, med förra turens språk som reserv och svenska i varje tveksamhet.
