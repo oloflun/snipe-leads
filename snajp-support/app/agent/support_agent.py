@@ -41,6 +41,7 @@ from ..leads.untrusted_content import wrap_untrusted_content
 from ..config import CATEGORY_LABELS, get_settings
 from ..storage.base import Storage
 from . import support_faktagrind, support_regler, support_systemprompt, support_texter
+from ..leads.untrusted_content import kapsla_kundtext
 from .retention_classifier import classify_cancellation_risk, is_cancellation_risk
 from .step_runner import RunTrace, run_step
 from .support_playbook import SUPPORT_V1
@@ -447,6 +448,26 @@ def _normalisera_triage(triage: Any) -> dict[str, Any]:
         if isinstance(f, (str, int, float)) and not isinstance(f, bool) and str(f).strip()
     ]
     return ut
+
+
+def _en_rad(varde: Any, tak: int) -> str:
+    """Kundskriven korttext (namn, ämne) som EN rad om högst `tak` tecken."""
+    return " ".join(str(varde or "").split())[:tak]
+
+
+#: Det stegköraren själv skriver i prompten (step_runner: lagrens rubriker,
+#: overlayens ram, kontraktet, uppgiftsrubriken) och ramarna runt opålitlig
+#: text. Inget av det hör hemma i ett svar till en kund.
+_INSTRUKTIONSMARKORER = re.compile(
+    r"GLOBALA REGLER|TILLÄGGSINSTRUKTIONER|styrs av skillen|"
+    r"Din uppgift i det här steget|<\/?untrusted-data|<\/?kundtext-|"
+    r"sources_used|context_refs",
+    re.IGNORECASE,
+)
+
+
+def _lacker_instruktioner(text: str) -> bool:
+    return bool(_INSTRUKTIONSMARKORER.search(text or ""))
 
 
 def _text(varde: Any) -> str:
@@ -1153,12 +1174,15 @@ async def run_support_agent(
 
     case_context = (
         f"## Ärendet\nKanal: {channel} (ton: {ton_lage}, max {config['max_length']} tecken)\n"
-        f"Kund: {customer_name or 'okänd'} <{customer_email or 'okänd'}>\n"
-        f"Ämne: {maskera_personnummer(subject) or '(inget)'}\n\n"
+        # Namn och ämne skrivs av kunden: en rad var och korta, så att de
+        # inte kan bli en rubrik eller en instruktion i prompten (2026-11-10).
+        f"Kund: {_en_rad(customer_name, 80) or 'okänd'} <{_en_rad(customer_email, 120) or 'okänd'}>\n"
+        f"Ämne: {_en_rad(maskera_personnummer(subject), 160) or '(inget)'}\n\n"
         # Maskerat innan det går till modellen. Se DPIA:ns R1 och
         # app/moderation/maskering.py — originalet ligger kvar i databasen,
-        # det är bara prompten som bär en maskerad kopia.
-        f"Kundens meddelande:\n{maskera_personnummer(message)}{vision_note}\n\n"
+        # det är bara prompten som bär en maskerad kopia. Inom en ram: det är
+        # den enda texten här som en utomstående skriver (kapsla_kundtext).
+        f"Kundens meddelande:\n{kapsla_kundtext(maskera_personnummer(message))}{vision_note}\n\n"
         f"Giltiga kategorier för den här kunden: {', '.join(taxonomy)}"
         + (f"\n\n{affarskontext_block}" if affarskontext_block else "")
         + (f"\n\n{kalibrering_block}" if kalibrering_block else "")
@@ -1213,7 +1237,7 @@ async def run_support_agent(
         + (
             "\n\nSVARA PÅ KUNDENS AKTUELLA MEDDELANDE, inte på något tidigare "
             "i historiken ovan (den är bara bakgrund). Det aktuella "
-            f"meddelandet är:\n{maskera_personnummer(message)[:400]}"
+            f"meddelandet är:\n{kapsla_kundtext(maskera_personnummer(message)[:400])}"
             if turn_count > 0
             else ""
         )
@@ -2215,6 +2239,22 @@ async def run_support_agent(
             utkastbeslut,
             kartan,
         )
+    # Läckspärren (2026-11-10): ett svar som bär stegkörarens egna rubriker
+    # eller ramar är ett svar där modellen skrivit av sina instruktioner,
+    # oftast för att kunden bad om det. Det når aldrig kunden: hon får be om
+    # frågan på nytt, och försöket syns för plattformsadmin.
+    if _lacker_instruktioner(reply):
+        reply = support_texter.text("tomt", svar_sprak)
+        try:
+            await storage.log_platform_event(
+                level="warning",
+                source="injektion",
+                message="Ett supportsvar bar agentens instruktioner och stoppades före kunden.",
+                tenant_id=tenant_id,
+                detail={"kanal": channel},
+            )
+        except Exception:  # noqa: BLE001 — loggningen får inte fälla svaret
+            logger.warning("Kunde inte logga det stoppade svaret.")
     reply = utan_kall_id(reply)
     # Krisgarantin: hänvisningen till 112 ska inte hänga på att modellen och
     # humaniseraren behöll den (skarptest 2026-10-06: den föll bort).
