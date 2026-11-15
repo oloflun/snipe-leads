@@ -150,6 +150,9 @@ class ErbjudandenRequest(BaseModel):
     #: Struktur B:s korta utfall per produkt (2026-11-05): {produktnamn: text}.
     #: Frågan i B bygger på det; utan text på produktens nytta.
     kort_utfall: dict[str, str] | None = Field(default=None, max_length=8)
+    #: Demolänken i varje utkast (2026-11-15, app/leads/demolank.py): en URL
+    #: för alla produkter eller {produktnamn: URL}; "" tar bort den.
+    demo: str | dict[str, str] | None = None
 
     @model_validator(mode="after")
     def _villkorslangd(self) -> "ErbjudandenRequest":

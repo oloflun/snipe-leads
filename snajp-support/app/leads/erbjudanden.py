@@ -319,10 +319,15 @@ def normalisera(raw: Any) -> dict[str, Any]:
         aktiva.append({"nyckel": rad["nyckel"], "vikt": min(max(vikt, 0), VIKT_MAX)})
     amnen = _amnena(raw.get("amnen"))
     kort = _kort_utfall(raw.get("kort_utfall"))
+    from .demolank import normalisera as normalisera_demo
+
+    demo = normalisera_demo(raw.get("demo"))
     return {
         "aktiva": aktiva, "villkor": villkor, "egna": egna,
         **({"amnen": amnen} if amnen else {}),
         **({"kort_utfall": kort} if kort else {}),
+        # Demolänken i varje utkast (Anton 2026-11-15, app/leads/demolank.py).
+        **({"demo": demo} if demo else {}),
     }
 
 
@@ -455,13 +460,18 @@ def validera(
     egna: dict[str, Any] | None = None,
     amnen: dict[str, list[str]] | None = None,
     kort_utfall: dict[str, str] | None = None,
+    demo: Any = None,
 ) -> dict[str, Any]:
     """Skrivvägen: kastar ValueError med ett svenskt besked. Typer och
     gränser (vikt 0–10, villkorslängd) prövas redan av API-schemat.
     `produkter` är kundens produktnamn; villkor per produkt måste gälla en av dem.
     `egna`: kundens egna erbjudanden, {nyckel: {namn, form}}.
     `amnen`: ämnesrader per produkt, {produktnamn: [rad, …]}.
-    `kort_utfall`: struktur B:s utfall per produkt, {produktnamn: text}."""
+    `kort_utfall`: struktur B:s utfall per produkt, {produktnamn: text}.
+    `demo`: demolänken, en URL för alla eller {produktnamn: URL}."""
+    from .demolank import validera as validera_demo
+
+    demo = validera_demo(demo, list(produkter or []))
     giltiga = normalisera({"egna": egna})["egna"]
     kat = armar({"egna": giltiga})
     for nyckel, e in (egna or {}).items():
@@ -495,7 +505,7 @@ def validera(
                 f"Fyll i villkoren för {kat[a['nyckel']].namn} innan erbjudandet slås på."
             )
     return normalisera(
-        {"aktiva": aktiva, "villkor": villkor, "egna": egna, "amnen": amnen, "kort_utfall": kort_utfall}
+        {"aktiva": aktiva, "villkor": villkor, "egna": egna, "amnen": amnen, "kort_utfall": kort_utfall, "demo": demo}
     )
 
 
@@ -664,30 +674,36 @@ def p_varde(x1: int, n1: int, x2: int, n2: int) -> float:
     return math.erfc(abs(z) / math.sqrt(2))
 
 
-def sammanstall(rader: list[dict[str, Any]], val: dict[str, Any] | None = None) -> dict[str, Any]:
-    """Utfallet per erbjudande ur `storage.erbjudande_utfall`, med andelar och
-    en försiktig ledare.
+#: Räknefälten per arm (storage.erbjudande_utfall / struktur_utfall).
+UTFALLSFALT = ("utkast", "skickade", "svar", "positiva", "moten", "ja", "nej", "kanske", "fragor", "klick", "besok")
 
-    Ledaren avgörs på positiva svar per skickat mejl: det är det kunden vill
+
+def _arm(nyckel: str, namn: str, form: str | None, r: dict[str, Any]) -> dict[str, Any]:
+    """En arms räkning med andelar. Ja, Nej och Kanske/Återkom är andelar av
+    svaren (vad svaren säger); svar, klick och besök är andelar av de
+    skickade (hur många som reagerade alls)."""
+    arm: dict[str, Any] = {
+        "nyckel": nyckel,
+        "namn": namn,
+        **({"form": form} if form else {}),
+        **{f: int(r.get(f) or 0) for f in UTFALLSFALT},
+    }
+    n, svar = arm["skickade"], arm["svar"]
+    arm["svarsfrekvens"] = round(svar / n, 4) if n else None
+    arm["positiv_andel"] = round(arm["positiva"] / n, 4) if n else None
+    for f in ("ja", "nej", "kanske", "fragor"):
+        arm[f"{f}_andel"] = round(arm[f] / svar, 4) if svar else None
+    for f in ("klick", "besok"):
+        arm[f"{f}_andel"] = round(arm[f] / n, 4) if n else None
+    return arm
+
+
+def _ledare(utfall: list[dict[str, Any]]) -> tuple[str | None, float | None]:
+    """Ledaren avgörs på positiva svar per skickat mejl: det är det kunden vill
     ha mer av, och svar räknar även nej. En arm kallas ledande först när minst
     två armar har `MIN_SKICKADE` skickade och skillnaden mot den näst bästa
     håller i ett tvåproportions z-test (p < `ALFA`). Annars är det för tidigt
     att säga, för alla."""
-    per = {str(r.get("nyckel")): r for r in rader}
-    utfall: list[dict[str, Any]] = []
-    for nyckel, erbjudande in armar(val).items():
-        r = per.get(nyckel) or {}
-        arm = {
-            "nyckel": nyckel,
-            "namn": erbjudande.namn,
-            "form": erbjudande.form,
-            **{f: int(r.get(f) or 0) for f in ("utkast", "skickade", "svar", "positiva", "moten")},
-        }
-        n = arm["skickade"]
-        arm["svarsfrekvens"] = round(arm["svar"] / n, 4) if n else None
-        arm["positiv_andel"] = round(arm["positiva"] / n, 4) if n else None
-        utfall.append(arm)
-
     mogna = sorted(
         (a for a in utfall if a["skickade"] >= MIN_SKICKADE),
         key=lambda a: a["positiva"] / a["skickade"],
@@ -701,9 +717,36 @@ def sammanstall(rader: list[dict[str, Any]], val: dict[str, Any] | None = None) 
             ledare = bast["nyckel"]
     for arm in utfall:
         arm["lage"] = "leder" if arm["nyckel"] == ledare else "for_tidigt"
+    return ledare, p
+
+
+#: Strukturernas namn i mätningen (app/leads/utkaststruktur.py).
+STRUKTURNAMN = {"a": "A", "b": "B"}
+
+
+def sammanstall(
+    rader: list[dict[str, Any]],
+    val: dict[str, Any] | None = None,
+    strukturrader: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """Utfallet per erbjudande ur `storage.erbjudande_utfall`, och per
+    utkaststruktur A/B ur `storage.struktur_utfall`, med andelar och en
+    försiktig ledare per dimension (`_ledare`)."""
+    per = {str(r.get("nyckel")): r for r in rader}
+    utfall = [
+        _arm(nyckel, erbjudande.namn, erbjudande.form, per.get(nyckel) or {})
+        for nyckel, erbjudande in armar(val).items()
+    ]
+    ledare, p = _ledare(utfall)
+    per_struktur = {str(r.get("nyckel")): r for r in strukturrader or []}
+    strukturer = [_arm(k, namn, None, per_struktur.get(k) or {}) for k, namn in STRUKTURNAMN.items()]
+    struktur_ledare, struktur_p = _ledare(strukturer)
     return {
         "armar": utfall,
         "ledare": ledare,
         "p_varde": None if p is None else round(p, 4),
+        "strukturer": strukturer,
+        "struktur_ledare": struktur_ledare,
+        "struktur_p_varde": None if struktur_p is None else round(struktur_p, 4),
         "min_skickade": MIN_SKICKADE,
     }

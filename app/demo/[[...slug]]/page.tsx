@@ -3,6 +3,7 @@ import { PageShell } from "@/components/AppShell";
 import { DashboardProvider } from "@/components/dashboard/DashboardContext";
 import { StartView } from "@/components/dashboard/StartView";
 import { CrmDemo } from "@/components/crm/CrmDemo";
+import { DemoBesok } from "@/components/demo/DemoBesok";
 import { DemoSupportYta } from "@/components/snajp/DemoSupportYta";
 import { AttGora } from "@/components/leads/AttGora";
 import { IrisBolag } from "@/components/leads/LeadsSida";
@@ -101,6 +102,8 @@ export default async function Page({
       <DashboardProvider state={{ ...DEMO_STATE, products: [...DEMO_STATE.products] }}>
         {innehall}
       </DashboardProvider>
+      {/* Besöket från en spårad demolänk i ett utskick (app/prova/[token]). */}
+      <DemoBesok />
     </div>
   );
 }

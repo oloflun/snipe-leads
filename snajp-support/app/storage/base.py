@@ -1190,7 +1190,55 @@ class Storage(Protocol):
         med källan 'kod' till replied/meeting/lost/suppressed (statusloggen,
         migration 086), och 'meeting' med 'kod' är just klassen positivt. Ett
         möte är ett samtalsutfall 'mote' (lead_samtal), en manuell flytt till
-        'meeting' eller status 'won'. Bara loggrader från trådens start räknas."""
+        'meeting' eller status 'won'. Bara loggrader från trådens start räknas.
+
+        Sedan 2026-11-15 (migration 116) även svarsklasserna och demolänken:
+        `ja` (positivt), `nej` (negativt, avregistrering), `kanske`
+        (aterkom), `fragor` (fraga, invandning), `klick` (ett klick som inte
+        ser ut som en skanner, eller ett besök) och `besok` (mottagarens
+        interaktion på demosidan). Klassen är `outreach_threads.svarsklass`,
+        och för svar från före kolumnen den klass statusloggen bär."""
+        ...
+
+    async def struktur_utfall(self, tenant_id: str) -> list[dict[str, Any]]:
+        """Samma räkning som `erbjudande_utfall`, grupperad på trådens
+        utkaststruktur (`outreach_threads.struktur`, "a"/"b"). Trådar utan
+        struktur (från före strukturvalet) räknas inte."""
+        ...
+
+    async def satt_svarsklass(self, tenant_id: str, thread_id: str, klass: str) -> None:
+        """Sparar prospektsvarets klass på tråden (app/leads/svar.py). Senaste
+        meningsfulla svaret vinner; anroparen skickar aldrig 'autosvar'."""
+        ...
+
+    async def satt_trad_struktur(self, tenant_id: str, thread_id: str, struktur: str) -> None:
+        """Trådens utkaststruktur, satt av första mejlet. Skriver bara över ett
+        tomt värde: ett omskrivet första mejl ska inte byta arm."""
+        ...
+
+    async def demolanktoken(self, tenant_id: str, *, thread_id: str, mal_url: str) -> str:
+        """Demolänkens ogenomskinliga token för tråden (app/leads/demolank.py).
+        Idempotent per tråd, så att uppföljningar och omskrivna utkast bär
+        samma länk; `mal_url` uppdateras om kunden bytt demolänk."""
+        ...
+
+    async def registrera_demolank(
+        self, token: str, *, typ: str, user_agent: str | None = None
+    ) -> str | None:
+        """Loggar ett klick ('klick') eller besök ('besok') på en demolänk, som
+        Next-routen app/prova/[token] gör via SQL-funktionerna i migration 116.
+        Returnerar mål-URL:en (klick) eller "ok" (besök), None för okänd token."""
+        ...
+
+    async def demobesok(self, tenant_id: str, *, limit: int = 200) -> list[dict[str, Any]]:
+        """Trådar vars demolänk klickats eller besökts, senast aktiva först:
+        prospect_id, foretag, kontakt, erbjudande (nyckel), struktur, klick,
+        forsta_klick, senaste_klick, besok, forsta_besok, senaste_besok,
+        skanner_klick (klick märkta som skanner)."""
+        ...
+
+    async def demolank_totalt(self, tenant_id: str) -> dict[str, int]:
+        """{lankar, klickade, besokta}: trådar med demolänk, med klick, med besök."""
         ...
 
     # -- Leads: proveniensregister (Fas B, INV-DATA-001, research-verktygets allowlist) --

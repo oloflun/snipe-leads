@@ -202,6 +202,10 @@ ERBJUDANDEN = {
     },
     "amnen": AMNEN,
     "kort_utfall": KORT_UTFALL,
+    # Demolänken sist i varje utkast (Anton 2026-11-15, app/leads/demolank.py):
+    # en spårad länk per mottagare till produktens demo. Vägar på den egna
+    # webbplatsen, så att samma värde gäller i development och main.
+    "demo": {IRIS: "/demo/leads", SUPPORT: "/demo/support"},
     "villkor": {
         "pilot_a": _PILOTER,
         "pilot_b": _PILOTER,
