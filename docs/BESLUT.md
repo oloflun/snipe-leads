@@ -64,6 +64,45 @@ körning, och flytta arbetarna till en egen tjänst om den visar stopp.
 
 ---
 
+## 2026-11-16 (Anton) — Migrationerna körs av sig själva
+
+**Beslut.** Anton, efter att demolänken gått live i development: "Ja, kör
+migrationerna. Finns det något sätt att automatisera även det?" Migration 115
+och 116 kördes mot main samma kväll, och migrationerna körs sedan av ett
+arbetsflöde i stället för för hand.
+
+**Resonemanget (agentens val inom frågan).**
+
+- **Det glömda handgreppet hade redan kostat.** Migration 115 kördes i
+  development 2026-11-10 men inte i main, och synken mellan miljöerna
+  (`synk.yml`) stod röd i sex dagar, för den vägrar när schemaversionerna
+  skiljer sig. Ingen såg det.
+- **GitHub Actions och inte ett steg i Railways deploy.** Repot har redan
+  hemligheten (`ENV_DEPLOY`, samma som synken), och skriptet är detsamma som
+  körs för hand. Ett steg i Railways deploy hade krävt att migrationerna och
+  ett superuser-lösenord låg i api-tjänstens avbild.
+- **Development: vid pushen.** Railways bygge tar flera minuter och jobbet
+  under en, så schemat ligger före koden. Det är en ordning och ingen grind,
+  eftersom Railway inte väntar på GitHub Actions.
+- **Main: vid mergen av release-PR:en, inte tidigare.** Mergen är Antons
+  handgrepp (grenskyddet), så hans ord gäller fortfarande för varje ändring
+  av produktionens schema. PR:en får en kontroll som visar vad releasen bär
+  och fäller den om development har okörda migrationer: development är en
+  spegel av produktionen, så en migration som gått där är provad.
+- **Migrationer ska vara additiva och idempotenta**, så att schemat får ligga
+  före koden. Det var redan praxis; nu är det ett krav.
+
+**I koden.** `.github/workflows/migrera.yml`, `DEPLOY.md` ("Migrationer körs
+mot Railway") och `CLAUDE.md`. Main-delen börjar gälla först när
+arbetsflödet självt nått main med nästa release.
+
+**Öppet.** Synken stannar fortfarande så länge en migration bara finns i
+development. Anton avgör om additiva migrationer ska gå till main direkt
+efter att de gått i development (synken hålls då vid liv, men produktionens
+schema ändras utan en release), eller som nu först vid mergen.
+
+---
+
 ## 2026-11-15 (Anton) — Demolänk i varje utkast, spårning av besök, och A/B-mätning av Ja, Nej, Kanske och klick
 
 **Beslut.** Anton: "Updatera alla mailutskick i utkorgen samt alla olika
