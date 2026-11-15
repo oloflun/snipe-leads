@@ -5,7 +5,9 @@
 # Flytta till main. Provkörningar synkas aldrig. pipefail nedan: 2026-10-04
 # avbröt jobbet medan det stod grönt (tee dolde felkoden).
 #
-# Skriptet vägrar tills första synken gjorts och när schemaversionerna skiljer sig.
+# Skriptet vägrar tills första synken gjorts och när main ligger före
+# development i schemat. Development får ligga före main (2026-11-16): en
+# migration som väntar på nästa release stoppar inte längre synken.
 #
 # Fönsterlöst per definition: körs på GitHubs runner, inte på en lokal maskin.
 name: synk

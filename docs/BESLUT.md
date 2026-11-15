@@ -64,6 +64,43 @@ körning, och flytta arbetarna till en egen tjänst om den visar stopp.
 
 ---
 
+## 2026-11-16 (Anton) — Synken körs även när development ligger före main
+
+**Beslut.** På frågan om synken ska få köra när development ligger före main
+i schemat svarade Anton "Ja, bygg det". Det avgör den öppna punkten i
+beslutet nedan: migrationer går fortfarande till main först vid releasen, och
+det är synken som tål skillnaden.
+
+**Resonemanget.** Alternativet var att skicka additiva migrationer till main
+direkt efter development. Det hade ändrat produktionens schema utan en
+release och utan Antons ord. Att låta synken tåla skillnaden rör bara
+development, som är spegeln.
+
+**Agentens val i bygget.**
+
+- **Det räckte inte att släppa på versionsspärren.** Synken jämför rader med
+  en kontrollsumma över alla kolumner och skriver om hela raden. Med en egen
+  kolumn i development hade varje rad sett ändrad ut vid varje synk, och
+  kolumnens värden hade nollats. Raderna jämförs därför på de gemensamma
+  kolumnerna, en rad som skrivs över behåller developments egna värden, och
+  en ny rad får kolumnernas standardvärden.
+- **Spärren jämför den högsta versionen, inte mängden.** Developments liggare
+  bär tre äldre poster under namn som sedan bytts (056, 066, 092). En
+  mängdjämförelse hade sagt "tre migrationer före" för alltid och kunnat
+  stoppa synken åt andra hållet.
+- **Det som inte går att spegla stoppar som förut:** main före development,
+  en kolumn som bara finns i main, och en gemensam kolumn med olika typ.
+  Första synken, som skriver till main, kräver fortfarande samma schema.
+- **Samma schema ger exakt den gamla skrivningen.** Den nya vägen går bara
+  när development faktiskt har egna kolumner.
+
+**I koden.** `scripts/railway_synk.py` (`schemalage`, `tabellkolumner`,
+`jamfor_kolumner`, `rader(utan=…)`, `skriv(egna=…)`),
+`tests/test_railway_synk.py`. Provat mot de riktiga databaserna med en
+provkolumn i development i en transaktion som rullades tillbaka.
+
+---
+
 ## 2026-11-16 (Anton) — Migrationerna körs av sig själva
 
 **Beslut.** Anton, efter att demolänken gått live i development: "Ja, kör
@@ -100,6 +137,7 @@ arbetsflödet självt nått main med nästa release.
 development. Anton avgör om additiva migrationer ska gå till main direkt
 efter att de gått i development (synken hålls då vid liv, men produktionens
 schema ändras utan en release), eller som nu först vid mergen.
+*Avgjort samma dag: synken tål att development ligger före, se beslutet ovan.*
 
 ---
 

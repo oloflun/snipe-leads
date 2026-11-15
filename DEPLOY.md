@@ -102,8 +102,10 @@ identiteter" längst ned i den här filen.
 
 Skälet: 2026-11-10 kördes migration 115 i development men inte i main, och
 synken mellan miljöerna (`synk.yml`) stod röd i sex dagar, eftersom den vägrar
-när schemaversionerna skiljer sig. Varje migration som bara finns i
-development stoppar fortfarande synken tills releasen når main.
+när schemaversionerna skiljer sig. Sedan samma dag får development ligga
+före main i synken (`scripts/railway_synk.py`, "Development före main"): en
+migration som väntar på nästa release stoppar den inte längre. Main före
+development stoppar den fortfarande.
 
 Samma skript för hand:
 

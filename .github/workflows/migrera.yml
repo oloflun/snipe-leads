@@ -3,7 +3,8 @@
 # Förut var `python scripts/railway_migrate.py --env <miljö> --apply` ett
 # handgrepp som gick att glömma. 2026-11-10 kördes migration 115 i development
 # men inte i main, och synken mellan miljöerna (synk.yml) stod röd i sex dagar
-# utan att någon såg det: den vägrar när schemaversionerna skiljer sig.
+# utan att någon såg det: den vägrade när schemaversionerna skilde sig.
+# (Synken tål sedan 2026-11-16 att development ligger före main.)
 #
 # Tre lägen:
 #
