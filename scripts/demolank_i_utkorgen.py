@@ -77,7 +77,16 @@ def produkt_i_text(text: str, produkter: list[str]) -> str | None:
     traffar = sorted(
         (i, p) for p in produkter if (i := lag.find(p.split(",")[0].strip().casefold())) >= 0
     )
-    return traffar[0][1] if traffar else None
+    if traffar:
+        return traffar[0][1]
+    # Utan produktnamnet: slaget ("vår AI-support", "nya leads"), samma ord
+    # som erbjudanden.produkt_nu läser i appen.
+    for ord_, slag in (("support", "support"), ("leads", "leads")):
+        if ord_ in lag:
+            traff = next((p for p in produkter if slag in p.casefold()), None)
+            if traff:
+                return traff
+    return None
 
 
 def med_rad(body: str, *, demo, sig: dict | None, sprak: str, lank: str) -> str:
@@ -215,6 +224,7 @@ def main() -> int:
     parser.add_argument("--demo", default=None, help="demolänk för alla produkter (kräver --kund)")
     parser.add_argument("--demo-produkt", action="append", default=[], metavar="PRODUKT=URL",
                         help="demolänk per produkt, kan upprepas (kräver --kund)")
+    parser.add_argument("--bas-url", default=None, help="sajtens publika adress (annars ur Railway eller kön)")
     parser.add_argument("--apply", action="store_true")
     parser.add_argument("--main-godkand", action="store_true", help="krävs för --apply mot main")
     args = parser.parse_args()
@@ -234,15 +244,32 @@ def main() -> int:
     from railway_migrate import dsn
     from railway_provision import env_read, read_vars
 
-    variabler = read_vars(API_SERVICE_ID, MILJO_ID[args.env])
-    bas_url = (variabler.get("PUBLIK_BAS_URL") or variabler.get("PUBLIC_BASE_URL") or "").strip()
+    # Samma två namn som Settings.publik_bas_url läser. Säger Railway nej
+    # (token utan läsrätt, 2026-11-15) läses adressen ur det API:t självt
+    # skrivit: avregistreringslänken i det senast köade utkastet.
+    bas_url = (args.bas_url or "").strip()
     if not bas_url:
-        sys.exit(f"AVBRYTER: PUBLIC_BASE_URL saknas för api i {args.env}; demolänken går inte att bygga.")
+        try:
+            variabler = read_vars(API_SERVICE_ID, MILJO_ID[args.env])
+            bas_url = (variabler.get("PUBLIK_BAS_URL") or variabler.get("PUBLIC_BASE_URL") or "").strip()
+        except Exception as fel:  # noqa: BLE001 — reservvägen nedan
+            print(f"Railway svarade inte på variabelfrågan ({str(fel)[:60]}); läser adressen ur kön.")
 
     conn = psycopg2.connect(dsn(env_read(), args.env), connect_timeout=20)
     try:
         with conn, conn.cursor() as cur:
             print(f"Miljö: {args.env}{'' if args.apply else ' (torrkörning)'}")
+            if not bas_url:
+                cur.execute(
+                    "select substring(body from '(https?://[^[:space:]]+)/avregistrera/') from outreach_messages"
+                    " where direction = 'outbound' and body like '%%/avregistrera/%%'"
+                    " order by created_at desc limit 1"
+                )
+                rad = cur.fetchone()
+                bas_url = (rad[0] if rad else "") or ""
+            if not bas_url:
+                sys.exit(f"AVBRYTER: den publika adressen för {args.env} gick inte att läsa; ange --bas-url.")
+            print(f"Publik adress: {bas_url}")
             cur.execute("select to_regclass('public.ss_demolankar')")
             if cur.fetchone()[0] is None:
                 sys.exit("AVBRYTER: migration 116 är inte körd här (ss_demolankar saknas).")
