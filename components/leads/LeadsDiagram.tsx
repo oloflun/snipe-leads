@@ -6,7 +6,7 @@ import { meta } from "@/components/ui";
 import { demoOversiktSvar } from "@/lib/demo/oversikt";
 import { readJsonBody } from "@/lib/http/json";
 import { useLocale, type Localized } from "@/lib/i18n";
-import { allaProspekt, kontaktvagAv, type SuiteProspekt } from "@/lib/leads/suite";
+import { kontaktvagAv, type Fordelning, type SuiteProspekt } from "@/lib/leads/suite";
 import { STATUS_ETIKETT } from "@/lib/prospekt";
 import { cn } from "@/lib/utils";
 
@@ -55,9 +55,29 @@ const STATUSFARG: Record<string, string> = {
 const kort = "rounded-card border border-ink/12 bg-paper p-4 sm:p-5";
 const rubrik = "text-[1rem] font-semibold";
 
-/** Ett fel blir null, och rutan visar tankstreck. */
+/** Demons fördelning räknas ur dess exempelleads, med samma uppdelning som
+ *  servern (snajp-support/app/leads/listvy.py:fordelning). */
+function raknaFordelning(rader: SuiteProspekt[]): Fordelning {
+  const status: Record<string, number> = {};
+  const kontaktvag: Fordelning["kontaktvag"] = { bada: 0, telefon: 0, mejl: 0, saknas: 0 };
+  for (const p of rader) {
+    const s = p.status ?? "new";
+    status[s] = (status[s] ?? 0) + 1;
+    kontaktvag[kontaktvagAv(p)] += 1;
+  }
+  return { antal: rader.length, status, kontaktvag };
+}
+
+/**
+ * Ett fel blir null, och rutan visar tankstreck.
+ *
+ * Fördelningen räknas av servern (GET /leads/prospects/fordelning,
+ * 2026-11-15): rutan hämtade förut hela leadslistan — 9,6 MB i sex anrop
+ * efter varandra hos den största kunden — för att räkna två munkdiagram, och
+ * det var en stor del av varför Översikten laddade långsamt.
+ */
 export function useLeadsdata(demo: boolean) {
-  const [prospekt, setProspekt] = useState<SuiteProspekt[] | null>(null);
+  const [fordelning, setFordelning] = useState<Fordelning | null>(null);
   const [veckor, setVeckor] = useState<Vecka[] | null>(null);
 
   const hamta = useCallback(
@@ -75,13 +95,15 @@ export function useLeadsdata(demo: boolean) {
   );
 
   const ladda = useCallback(async () => {
-    const [p, w] = await Promise.all([
-      allaProspekt<SuiteProspekt>((vag) => hamta<{ prospects?: SuiteProspekt[]; fler?: boolean; nasta?: number }>(vag)).then((prospects) => ({ prospects })),
+    const [f, w] = await Promise.all([
+      demo
+        ? hamta<{ prospects?: SuiteProspekt[] }>("/leads/prospects").then((svar) => raknaFordelning(svar?.prospects ?? []))
+        : hamta<Fordelning>("/leads/prospects/fordelning"),
       hamta<{ weeks?: Vecka[] }>("/analytics/weekly?weeks=24")
     ]);
-    setProspekt(p ? (p.prospects ?? []) : []);
+    setFordelning(f ?? { antal: 0, status: {}, kontaktvag: { bada: 0, telefon: 0, mejl: 0, saknas: 0 } });
     setVeckor(w ? (w.weeks ?? []) : []);
-  }, [hamta]);
+  }, [demo, hamta]);
 
   useEffect(() => {
     void ladda();
@@ -91,26 +113,25 @@ export function useLeadsdata(demo: boolean) {
     return () => window.removeEventListener("snipra:leads-korning-klar", uppdatera);
   }, [ladda]);
 
-  return { prospekt, veckor };
+  return { fordelning, veckor };
 }
 
 export function LeadsDiagram({ demo = false }: Readonly<{ demo?: boolean }>) {
   const { text } = useLocale();
-  const { prospekt, veckor } = useLeadsdata(demo);
+  const { fordelning, veckor } = useLeadsdata(demo);
   const v = veckor ?? [];
-  const rader = prospekt ?? [];
 
   const statusdelar: Andel[] = Object.keys(STATUSFARG).map((s) => ({
     id: s,
     etikett: STATUS_ETIKETT[s],
-    antal: rader.filter((p) => (p.status ?? "new") === s).length,
+    antal: fordelning?.status[s] ?? 0,
     farg: STATUSFARG[s]
   }));
   const kontaktdelar: Andel[] = KONTAKT.map((k) => ({
     id: k.id,
     etikett: k.etikett,
     farg: k.farg,
-    antal: rader.filter((p) => kontaktvagAv(p) === k.id).length
+    antal: fordelning?.kontaktvag[k.id] ?? 0
   }));
 
   return (
@@ -138,7 +159,7 @@ export function LeadsDiagram({ demo = false }: Readonly<{ demo?: boolean }>) {
         <h3 id="aktivitet-leads-fordelning" className={cn(rubrik, "mb-4")}>
           {text(T.fordelning)}
         </h3>
-        {prospekt === null ? (
+        {fordelning === null ? (
           <p className={meta}>…</p>
         ) : (
           <div className="grid gap-6">

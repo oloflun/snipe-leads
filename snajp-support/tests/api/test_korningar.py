@@ -81,4 +81,8 @@ async def test_motorns_arbetsminne_och_webbpoolen_lamnar_aldrig_api_t():
     for korning in (rad["korning"], en["korning"]):
         for falt in ("kandidater", "webbpool", "listspar", "utslag", "rapporterade"):
             assert falt not in korning, falt
-        assert korning["mal"] == 2 and korning["tratt"] == [] and korning["jobs"] == []
+        assert korning["mal"] == 2
+    # Listan är ett sammandrag (2026-11-15): antal i stället för listorna,
+    # som bara detaljen bär (tests/leads/test_listvy.py).
+    assert rad["korning"]["tratt_antal"] == 0 and rad["korning"]["jobs_antal"] == 0
+    assert en["korning"]["tratt"] == [] and en["korning"]["jobs"] == []

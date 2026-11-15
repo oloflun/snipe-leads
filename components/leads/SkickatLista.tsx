@@ -11,6 +11,7 @@ import { meddelaLeadsUppdaterade, sandtid } from "@/lib/leads/utkast";
 import { STATUS_ETIKETT } from "@/lib/prospekt";
 import { cn } from "@/lib/utils";
 import { ProvmejlKnapp } from "@/components/leads/ProvmejlKnapp";
+import { Sidvaljare, useSida } from "@/components/leads/sidindelning";
 import { MejlMedSignatur, type Signatur } from "@/components/leads/IrisGranskning";
 
 /**
@@ -214,9 +215,18 @@ export function SkickatLista({
 
   // Bara schemalagda med köpost går att markera, och bara de som syns räknas.
   // `provmejl` är av i demon: där skickas ingenting på riktigt.
-  const markerbara = provmejl ? synliga.filter((r) => r.schemalagt && r.queue_item_id) : [];
+  const markerbara = useMemo(
+    () => (provmejl ? synliga.filter((r) => r.schemalagt && r.queue_item_id) : []),
+    [provmejl, synliga]
+  );
+  // Ett uppslag per rad, inte en genomsökning: med 2 400 rader var
+  // `markerbara.includes(r)` miljontals jämförelser per rendering (2026-11-15).
+  const markerbaraIds = useMemo(() => new Set(markerbara.map((r) => r.id)), [markerbara]);
   const valt = markerbara.filter((r) => valda.has(r.id));
   const allaValda = markerbara.length > 0 && valt.length === markerbara.length;
+  // En sida i taget i sidan (components/leads/sidindelning.tsx); markeringen
+  // och Markera alla gäller fortfarande hela filtret.
+  const sidor = useSida(synliga.length, filter);
 
   function vaxlaVald(id: string) {
     setValda((nu) => {
@@ -500,8 +510,9 @@ export function SkickatLista({
       {synliga.length === 0 ? (
         <Tomt>{text({ sv: "Inga skickade mejl i det här filtret.", en: "No sent emails in this filter." })}</Tomt>
       ) : (
+        <>
         <ul className="divide-y divide-ink/12 border-y border-ink/15" aria-label={text({ sv: "Skickade mejl", en: "Sent emails" })}>
-          {synliga.map((r) => {
+          {synliga.slice(sidor.fran, sidor.till).map((r) => {
             const oppnad = oppen === r.id;
             const nar = r.sent_at ? new Date(r.sent_at) : null;
             const skickas = r.schemalagt && r.skickas_tidigast ? sandtid(r.skickas_tidigast, locale) : "";
@@ -509,7 +520,7 @@ export function SkickatLista({
             return (
               <li key={r.id} className="py-3">
                 <div className="flex items-start gap-3">
-                {markerbara.includes(r) ? (
+                {markerbaraIds.has(r.id) ? (
                   <label className="-m-2 inline-flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center">
                     <input
                       type="checkbox"
@@ -649,6 +660,15 @@ export function SkickatLista({
             );
           })}
         </ul>
+        <Sidvaljare
+          antal={synliga.length}
+          sida={sidor.sida}
+          antalSidor={sidor.antalSidor}
+          fran={sidor.fran}
+          till={sidor.till}
+          onSida={sidor.setSida}
+        />
+        </>
       )}
     </div>
   );

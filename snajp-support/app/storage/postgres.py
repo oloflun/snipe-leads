@@ -18,7 +18,7 @@ import uuid
 from contextlib import asynccontextmanager
 from datetime import date
 from decimal import Decimal
-from typing import Any
+from typing import Any, Sequence
 
 import asyncpg
 
@@ -76,6 +76,29 @@ _PROSPEKT_PROFILFALT = frozenset(
         # (2026-10-18). Spårningen är flyttloggen och plattformshändelsen.
     }
 )
+
+#: Kolumnerna en projektion av prospects får be om (list_prospects(kolumner=)).
+#: ALLOWLIST av samma skäl som profilfälten ovan: namnen sätts in i SQL:en.
+_PROSPEKT_LASKOLUMNER = frozenset(
+    {
+        "id", "tenant_id", "company_name", "contact_name", "contact_email", "language_state",
+        "status", "created_at", "icp_fit", "qualified", "disqualifiers", "score_breakdown",
+        "score_total", "foretagsnyckel", "origin", "motivering", "niva", "profil_version",
+        "jev", "lagesbeskrivning", "signaler", "webbrevision", "arkiverad_at", "synk_andrad_at",
+    }
+    | _PROSPEKT_PROFILFALT
+)
+
+
+def _prospektkolumner(kolumner: Sequence[str] | None) -> str:
+    """`*` utan projektion, annars de begärda kolumnerna (alltid med id).
+    En okänd kolumn är ett programmeringsfel och fäller anropet."""
+    if kolumner is None:
+        return "*"
+    okanda = [k for k in kolumner if k not in _PROSPEKT_LASKOLUMNER]
+    if okanda:
+        raise ValueError(f"Okända prospektkolumner: {okanda}")
+    return ", ".join(dict.fromkeys(("id", *kolumner)))
 
 
 async def _init_connection(conn: asyncpg.Connection) -> None:
@@ -2258,12 +2281,20 @@ class PostgresStorage:
             )
         return [_avkoda_prospekt(_row(r)) for r in records]
 
-    async def list_prospects(self, tenant_id: str, *, limit: int = 500, offset: int = 0) -> list[dict[str, Any]]:
+    async def list_prospects(
+        self,
+        tenant_id: str,
+        *,
+        limit: int = 500,
+        offset: int = 0,
+        kolumner: Sequence[str] | None = None,
+    ) -> list[dict[str, Any]]:
+        urval = _prospektkolumner(kolumner)
         async with self._scoped(tenant_id) as conn:
             # id som andra nyckel: lika created_at (en flytt skapar hundratals
             # samma sekund) får en fast ordning, annars glider sidorna.
             records = await conn.fetch(
-                "select * from prospects where tenant_id = $1 order by created_at desc, id limit $2 offset $3",
+                f"select {urval} from prospects where tenant_id = $1 order by created_at desc, id limit $2 offset $3",
                 tenant_id,
                 limit,
                 offset,
@@ -2807,6 +2838,24 @@ class PostgresStorage:
           from leads_job_ledger
          where tenant_id = $1 and scope in ('batch', 'lista')
     """
+    #: Körningslistans form (app/leads/listvy.py:korning_sammandrag): som den
+    #: lätta raden, men trattens och barnjobbens listor ersatta av sina antal.
+    #: De var 98 % av listans 2,8 MB för 100 körningar (development 2026-11-15)
+    #: och visas bara i den utfällda raden, som hämtar körningen för sig.
+    _KORNING_SQL_SAMMANDRAG = """
+        select job_id, status, scope, is_test, created_at, updated_at, completed_at,
+               error,
+               korning - 'kandidater' - 'webbpool' - 'listspar' - 'utslag' - 'rapporterade'
+                       - 'tratt' - 'jobs'
+                 || jsonb_build_object(
+                      'tratt_antal', case when jsonb_typeof(korning -> 'tratt') = 'array'
+                                          then jsonb_array_length(korning -> 'tratt') else 0 end,
+                      'jobs_antal', case when jsonb_typeof(korning -> 'jobs') = 'array'
+                                         then jsonb_array_length(korning -> 'jobs') else 0 end
+                    ) as korning
+          from leads_job_ledger
+         where tenant_id = $1 and scope in ('batch', 'lista')
+    """
 
     async def list_prospekt_i_research(self, tenant_id: str) -> set[str]:
         async with self._scoped(tenant_id) as conn:
@@ -2842,8 +2891,15 @@ class PostgresStorage:
         arbetsminne: bool = False,
         status: str | None = None,
         utom: str | None = None,
+        sammandrag: bool = False,
     ) -> list[dict[str, Any]]:
-        sql = self._KORNING_SQL if arbetsminne else self._KORNING_SQL_LATT
+        sql = (
+            self._KORNING_SQL
+            if arbetsminne
+            else self._KORNING_SQL_SAMMANDRAG
+            if sammandrag
+            else self._KORNING_SQL_LATT
+        )
         sql += " and ($3::text is null or status = $3) and ($4::text is null or job_id <> $4)"
         async with self._scoped(tenant_id) as conn:
             records = await conn.fetch(
@@ -4098,6 +4154,24 @@ class PostgresStorage:
                 limit,
             )
         return [_row(r) for r in records]
+
+    async def antal_skickade(self, tenant_id: str, *, sedan: Any) -> dict[str, int]:
+        async with self._scoped(tenant_id) as conn:
+            rad = await conn.fetchrow(
+                """
+                select count(*)::int as skickat,
+                       (count(*) filter (where t.last_inbound_at >= m.sent_at))::int as svarat
+                  from outreach_messages m
+                  join outreach_threads t on t.id = m.thread_id and t.tenant_id = m.tenant_id
+                 where m.tenant_id = $1
+                   and m.direction = 'outbound'
+                   and m.sent_at is not null
+                   and m.sent_at >= $2
+                """,
+                tenant_id,
+                sedan,
+            )
+        return {"skickat": int(rad["skickat"] or 0), "svarat": int(rad["svarat"] or 0)}
 
     async def list_konversationer(self, tenant_id: str, thread_ids: list[str]) -> list[dict[str, Any]]:
         if not thread_ids:

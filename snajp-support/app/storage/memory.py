@@ -13,7 +13,7 @@ import unicodedata
 import uuid
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
-from typing import Any
+from typing import Any, Sequence
 
 from ..config import (
     DEFAULT_TENANT_ID,
@@ -1601,10 +1601,23 @@ class MemoryStorage:
         valda = {str(i) for i in prospect_ids}
         return [p for p in self.prospects.get(tenant_id, []) if str(p["id"]) in valda]
 
-    async def list_prospects(self, tenant_id: str, *, limit: int = 500, offset: int = 0) -> list[dict[str, Any]]:
-        return sorted(
+    async def list_prospects(
+        self,
+        tenant_id: str,
+        *,
+        limit: int = 500,
+        offset: int = 0,
+        kolumner: Sequence[str] | None = None,
+    ) -> list[dict[str, Any]]:
+        sida = sorted(
             self.prospects.get(tenant_id, []), key=lambda p: p["created_at"], reverse=True
         )[offset : offset + limit]
+        if kolumner is None:
+            return sida
+        # Som Postgres: bara de begärda kolumnerna (och id), så att en vy som
+        # läser ett fält projektionen saknar fäller i sviten, inte i drift.
+        falt = dict.fromkeys(("id", *kolumner))
+        return [{k: p.get(k) for k in falt} for p in sida]
 
     async def arkivera_prospekt(
         self, tenant_id: str, prospect_ids: list[str], *, arkivera: bool
@@ -2044,7 +2057,10 @@ class MemoryStorage:
         arbetsminne: bool = False,
         status: str | None = None,
         utom: str | None = None,
+        sammandrag: bool = False,
     ) -> list[dict[str, Any]]:
+        from ..leads.listvy import korning_sammandrag
+
         rader = [
             r for r in self.leads_job_ledger.values()
             if r["tenant_id"] == tenant_id and r["scope"] in ("batch", "lista")
@@ -2057,7 +2073,12 @@ class MemoryStorage:
         rader.reverse()
         rader.sort(key=lambda r: r["created_at"], reverse=True)
         ut = [self._korningsrad(r) for r in rader[:limit]]
-        return ut if arbetsminne else [self._latt(r) for r in ut]
+        if arbetsminne:
+            return ut
+        latta = [self._latt(r) for r in ut]
+        if sammandrag:
+            return [{**r, "korning": korning_sammandrag(r.get("korning"))} for r in latta]
+        return latta
 
     async def get_sidcache(self, tenant_id: str, url: str) -> dict[str, Any] | None:
         rad = self.__dict__.setdefault("sidcache", {}).get((tenant_id, url))
@@ -3015,6 +3036,26 @@ class MemoryStorage:
             )
         rader.sort(key=lambda r: str(r["sent_at"]), reverse=True)
         return rader[:limit]
+
+    async def antal_skickade(self, tenant_id: str, *, sedan: Any) -> dict[str, int]:
+        def tid(v: Any) -> datetime | None:
+            if v is None:
+                return None
+            t = v if isinstance(v, datetime) else datetime.fromisoformat(str(v))
+            return t if t.tzinfo else t.replace(tzinfo=timezone.utc)
+
+        grans = tid(sedan)
+        trådar = self.outreach_threads.get(tenant_id, {})
+        skickat = svarat = 0
+        for m in self.outreach_messages.get(tenant_id, []):
+            ut = tid(m.get("sent_at")) if m["direction"] == "outbound" else None
+            if ut is None or (grans is not None and ut < grans):
+                continue
+            skickat += 1
+            inn = tid((trådar.get(m["thread_id"]) or {}).get("last_inbound_at"))
+            if inn is not None and inn >= ut:
+                svarat += 1
+        return {"skickat": skickat, "svarat": svarat}
 
     async def list_konversationer(self, tenant_id: str, thread_ids: list[str]) -> list[dict[str, Any]]:
         trådar = set(thread_ids)

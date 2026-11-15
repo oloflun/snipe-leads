@@ -14,7 +14,7 @@ Bokföringsdelen (`bk_*`) följer i stället dubbel bokföring som referens­ark
 
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Any, Protocol
+from typing import Any, Protocol, Sequence
 
 #: Kundregistrets skrivbara fält (migration 053). Listan bor HÄR och läses av
 #: båda lagringarna och av API-schemat — tre kopior av en fältlista blir förr
@@ -544,6 +544,13 @@ class Storage(Protocol):
         (Sebbe 2026-10-07). `last_inbound_at` säger om bolaget svarat."""
         ...
 
+    async def antal_skickade(self, tenant_id: str, *, sedan: Any) -> dict[str, int]:
+        """{skickat, svarat}: skickade leadsmejl sedan `sedan`, och hur många
+        av dem vars tråd fått svar efter utskicket — samma regel som `svarat`
+        i Skickat (list_skickade), men räknat i databasen och utan tak.
+        Översiktens nyckeltal läste förut hela Skickat-listan (3 MB) för två tal."""
+        ...
+
     async def list_konversationer(self, tenant_id: str, thread_ids: list[str]) -> list[dict[str, Any]]:
         """Trådarnas skickade och inkomna meddelanden (id, thread_id,
         direction, subject, body, sent_at), äldst först per tråd — Skickat
@@ -877,6 +884,7 @@ class Storage(Protocol):
         arbetsminne: bool = False,
         status: str | None = None,
         utom: str | None = None,
+        sammandrag: bool = False,
     ) -> list[dict[str, Any]]:
         """Tenantens körningar (liggarens batch- och listrader), nyast
         först: job_id, status, scope, is_test, created_at, updated_at,
@@ -887,7 +895,11 @@ class Storage(Protocol):
         `korning` är UTAN motorns arbetsminne (kandidater, webbpool, listspar,
         utslag, rapporterade) om inte `arbetsminne=True`: i en körning på 200
         var det flera MB per rad, och att läsa det för varje lista låste API:t
-        (main 2026-11-07). `status` och `utom` (ett job_id) filtrerar i frågan."""
+        (main 2026-11-07). `status` och `utom` (ett job_id) filtrerar i frågan.
+
+        `sammandrag=True` (körningslistan i vyerna): dessutom utan `tratt` och
+        `jobs`, med `tratt_antal` och `jobs_antal` i stället
+        (app/leads/listvy.py:korning_sammandrag)."""
         ...
 
     async def get_sidcache(self, tenant_id: str, url: str) -> dict[str, Any] | None:
@@ -1263,7 +1275,18 @@ class Storage(Protocol):
         """Exakt de här prospekten, oavsett ålder (list_prospects tar bara de nyaste)."""
         ...
 
-    async def list_prospects(self, tenant_id: str, *, limit: int = 500, offset: int = 0) -> list[dict[str, Any]]: ...
+    async def list_prospects(
+        self,
+        tenant_id: str,
+        *,
+        limit: int = 500,
+        offset: int = 0,
+        kolumner: Sequence[str] | None = None,
+    ) -> list[dict[str, Any]]:
+        """En sida prospekt, nyast först. `kolumner` = bara de kolumnerna (id
+        följer alltid med): listorna ska inte läsa researchen de inte visar
+        (app/leads/listvy.py). Utan den: hela raden."""
+        ...
 
     async def arkivera_prospekt(
         self, tenant_id: str, prospect_ids: list[str], *, arkivera: bool

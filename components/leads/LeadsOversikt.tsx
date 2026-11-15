@@ -78,6 +78,10 @@ const T = {
 
 const PERIOD = 4;
 
+/** Stabilt tomt urval: ett nytt `[]` vid varje rendering sorterade om hela
+ *  Iris-listan i tabellen varje gång översikten ritades (2026-11-15). */
+const INGA_EXEMPEL: SuiteProspekt[] = [];
+
 const kort = "rounded-card border border-ink/12 bg-paper p-4 sm:p-5";
 
 /**
@@ -211,7 +215,7 @@ export function LeadsOversikt({
   demo = false,
   crmOppen = false,
   valdId = null,
-  exempel = [],
+  exempel = INGA_EXEMPEL,
   onValjLead,
   onOppnaKorningar
 }: Readonly<{
