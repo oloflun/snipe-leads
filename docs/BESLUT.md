@@ -64,6 +64,69 @@ körning, och flytta arbetarna till en egen tjänst om den visar stopp.
 
 ---
 
+## 2026-11-15 (Anton) — Demolänk i varje utkast, spårning av besök, och A/B-mätning av Ja, Nej, Kanske och klick
+
+**Beslut.** Anton: "Updatera alla mailutskick i utkorgen samt alla olika
+erbjudanden oavsett A eller B så att de innehåller en länk till demon, med en
+fras som till exempel: länk till vår demo, där ni kan se hur det
+fungerar/testa mot ert företag, ett snäpp ned från resten av texten. Jag vill
+även att du kollar upp och gör så att vi kan se vilka som faktiskt besökt
+länken, hitta på ett bra system för detta, eller en befintlig lösning som vi
+kan implementera. Se även till att lösa mätning för A/B på totala svar, andel
+Ja, Nej, Kanske/Återkom och andel som klickat på länken i de olika utkasten."
+
+**Resonemanget (agentens val inom beställningen).**
+
+- **Raden skrivs av kod, inte av modellen.** Samma skäl som signaturen och
+  foten: en URL i modellens text fälls av faktagrinden, och en rad som bara
+  brukar komma med gör mätningen tyst fel. Raden står i ett eget stycke efter
+  mejlets sista mening och före hälsningsfrasen.
+- **Eget spårningssystem i stället för en färdig tjänst.** Mejlen går ut över
+  SMTP med ren text i grunden, så en mejltjänsts klickspårning
+  (Resend, Postmark, Mailgun) går inte att slå på, och den hade skrivit om
+  länken till en tredjepartsdomän, vilket är en spamsignal i kalla mejl.
+  Länken är `{sajten}/prova/<token>`, en token per tråd, på samma domän som
+  avsändarens webbplats och med samma mönster som avregistreringslänken (046).
+- **Klick och besök är två saker.** E-postskydd (Safe Links, Proofpoint,
+  Mimecast) klickar på länkar i inkommande mejl innan mottagaren ser dem. Ett
+  klick loggas vid vidarebefordringen och märks som skanner när user agent
+  eller tiden (inom två minuter från utskicket) tyder på det. Ett besök loggas
+  först när mottagaren scrollar eller klickar på demosidan. "Besökt" betyder
+  alltså en människa, och det är det listan "Vilka har besökt demon" visar.
+- **Kanske/Återkom är en egen svarsklass (`aterkom`).** Förut föll "inte nu,
+  hör av er i vår" under fråga eller negativt. Köade uppföljningar ställs in
+  och kunden aviseras: när man återkommer är en människas beslut.
+- **Svarsklassen sparas på tråden.** Förut härleddes svar och positiva ur
+  statusloggen. Äldre svar räknas fortfarande därifrån (möte = Ja, förlorad
+  och avregistrerad = Nej, svarat = fråga), så mätningen börjar inte om.
+- **A/B mäts i två dimensioner:** per erbjudande (som förut) och per
+  utkaststruktur A/B, som nu sparas på tråden. Trådar från före strukturvalet
+  2026-11-05 räknas inte i strukturjämförelsen, eftersom de bara kan vara A
+  och hade gett A ett försprång i tid.
+- **Inget i svar till den som redan svarat.** Ett svar i ett levande samtal
+  bär ingen demolänk.
+
+**I koden.** `app/leads/demolank.py` (raden, kundens val, bytet av en naken
+demoadress mot "länken nedan"), `leads_tools._queue_outreach_draft_impl` och
+`scheduler._fot_vid_godkannande` (raden läggs på vid köningen och vid
+godkännandet), `svar.py` (klassen `aterkom`, `satt_svarsklass`),
+`erbjudanden.sammanstall` och `storage.erbjudande_utfall`/`struktur_utfall`
+(Ja, Nej, Kanske, frågor, klick och besök per arm), migration 116
+(`outreach_threads.svarsklass`/`struktur`, `ss_demolankar`,
+`ss_demolank_handelser`, `demolank_klick`, `demolank_besok`),
+`app/prova/[token]/route.ts` och `components/demo/DemoBesok.tsx` (Next),
+`GET /api/leads/demobesok` och fliken Leads › Erbjudanden (demolänken,
+mätningen och besökslistan), `scripts/demolank_i_utkorgen.py` (raden på
+utkasten som redan ligger i kön). Kundens demolänk står i
+`settings.erbjudanden.demo`; utan den ändras ingenting.
+
+**Öppet.** Synlighet: mätningen och besökslistan visas för kunden själv, om
+kundens egna trådar. Dataskydd: klicket knyts till en namngiven mottagare, så
+integritetspolicyn och utskicksfotens ändamålsrad bör nämna att länkar i
+utskicken mäts (se `docs/JURIDIK_ATGARDER.md`). Anton avgör.
+
+---
+
 ## 2026-11-10 (Sebbe) — Stabilitetsarbetet, fas 2 till 4: mät först, och låt mätningen välja ändringen
 
 **Beslut.** Sebbe: "kör klart alla faser och allting du ska göra, du får

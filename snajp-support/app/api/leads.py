@@ -1815,7 +1815,9 @@ async def _erbjudandelage(storage, tenant_id: str, settings: dict) -> dict:
         # Kundens produkter: villkoren kan skrivas per produkt.
         "produkter": [p["namn"] for p in las_produkter(settings)],
         **val,
-        "resultat": erbjudanden.sammanstall(await storage.erbjudande_utfall(tenant_id), val),
+        "resultat": erbjudanden.sammanstall(
+            await storage.erbjudande_utfall(tenant_id), val, await storage.struktur_utfall(tenant_id)
+        ),
     }
 
 
@@ -1843,9 +1845,10 @@ async def put_leads_erbjudanden(
     )
     amnen = payload.amnen if payload.amnen is not None else sparat.get("amnen")
     kort_utfall = payload.kort_utfall if payload.kort_utfall is not None else sparat.get("kort_utfall")
+    demo = payload.demo if payload.demo is not None else sparat.get("demo")
     try:
         nytt = erbjudanden.validera(
-            aktiva, villkor, [p["namn"] for p in las_produkter(current)], egna, amnen, kort_utfall
+            aktiva, villkor, [p["namn"] for p in las_produkter(current)], egna, amnen, kort_utfall, demo
         )
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from None
@@ -1853,6 +1856,39 @@ async def put_leads_erbjudanden(
         tenant["tenant_id"], agent_type="leads", settings={**current, "erbjudanden": nytt}
     )
     return await _erbjudandelage(storage, tenant["tenant_id"], saved)
+
+
+@router.get("/api/leads/demobesok")
+async def get_leads_demobesok(
+    request: Request, tenant: dict = Depends(require_tenant), limit: int = 200
+) -> dict:
+    """Vilka som klickat på demolänken i utkasten och vilka som faktiskt
+    besökt demon (app/leads/demolank.py, migration 116). Ett klick utan besök
+    kan vara mottagarens e-postskydd; ett besök är en människa på sidan."""
+    storage = request.app.state.storage
+    tenant_id = tenant["tenant_id"]
+    rader = await storage.demobesok(tenant_id, limit=max(1, min(limit, 500)))
+    settings = await storage.get_agent_settings(tenant_id, agent_type="leads")
+    namn = {k: e.namn for k, e in erbjudanden.armar(erbjudanden.normalisera(settings.get("erbjudanden"))).items()}
+    return {
+        "besokare": [
+            {
+                **{k: r.get(k) for k in ("foretag", "kontakt", "struktur")},
+                "prospect_id": str(r["prospect_id"]) if r.get("prospect_id") else None,
+                "erbjudande": namn.get(r.get("erbjudande"), r.get("erbjudande")),
+                "klick": int(r.get("klick") or 0),
+                "besok": int(r.get("besok") or 0),
+                **{
+                    k: (r[k].isoformat() if hasattr(r.get(k), "isoformat") else r.get(k))
+                    for k in ("forsta_klick", "senaste_klick", "forsta_besok", "senaste_besok")
+                },
+                # Bara skannerklick, inget mänskligt klick och inget besök.
+                "skanner_misstankt": bool(r.get("skanner_klick")) and not r.get("klick") and not r.get("besok"),
+            }
+            for r in rader
+        ],
+        "totalt": await storage.demolank_totalt(tenant_id),
+    }
 
 
 def _crm_synk_val(settings: dict) -> dict:

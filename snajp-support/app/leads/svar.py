@@ -26,6 +26,11 @@ koden AGERAR. Ett svar ger:
                     den utgående SEKVENSEN; ett svar i ett levande samtal med
                     en människa är en annan sak, och den gränsen flyttas inte
                     av en inställning.
+  aterkom        -> "inte nu, hör av er senare" (Anton 2026-11-15: Kanske/
+                    Återkom är ett eget utfall i A/B-mätningen). Köade
+                    utskick ställs in och kunden aviseras: när och hur man
+                    återkommer är en människas beslut, aldrig nästa
+                    schemalagda uppföljning.
   negativt       -> köade utskick ställs in. Ett nej är ett nej.
   avregistrering -> som negativt + adressen till suppressions — samma spärr
                     som avregistreringslänken sätter, och send_guard läser den
@@ -75,7 +80,7 @@ _ROLL = "en svensk playbook för att tolka och besvara ett prospektsvar"
 
 #: Klasserna koden agerar på. Modellen får inte hitta på egna — allt okänt
 #: faller till 'fraga', som är den mildaste utgången (utkast till granskning).
-KLASSER = ("positivt", "invandning", "fraga", "negativt", "avregistrering", "autosvar")
+KLASSER = ("positivt", "aterkom", "invandning", "fraga", "negativt", "avregistrering", "autosvar")
 
 #: Ett autosvar skjuter kön så här långt. En vecka och inte tre dagar: den
 #: som satt ett frånvaromeddelande är borta på riktigt, och en uppföljning
@@ -238,6 +243,8 @@ async def hantera_prospektsvar(
             "tar_upp_pris (bool — frågar eller resonerar om pris, kostnad, rabatt "
             "eller budget), tar_upp_juridik (bool — avtal, villkor, juridik eller "
             "personuppgifter). "
+            "'aterkom' är ett svar som varken är ja eller nej men skjuter frågan framåt: "
+            "\"inte just nu\", \"hör av er i vår\", \"återkom efter sommaren\", \"kanske längre fram\". "
             "'autosvar' är frånvaromeddelanden och autosvar. 'avregistrering' är en "
             "uttrycklig begäran att slippa fler mejl. Osäker mellan två klasser: välj "
             "den försiktigare (fraga före positivt, negativt före avregistrering)."
@@ -248,6 +255,13 @@ async def hantera_prospektsvar(
     )
     klass = _klass(klassificering.get("klass"))
     utfall["klass"] = klass
+    # Klassen på tråden (migration 116): A/B-mätningen räknar Ja, Nej och
+    # Kanske/Återkom ur den. Ett autosvar är inget svar och skriver inget.
+    if klass != "autosvar":
+        try:
+            await storage.satt_svarsklass(tenant_id, thread_id, klass)
+        except Exception:  # noqa: BLE001 — mätningen får inte fälla hanteringen
+            pass
 
     prospect_id = str(thread.get("prospect_id") or "")
 
@@ -278,6 +292,22 @@ async def hantera_prospektsvar(
                 varfor="Din eskaleringsregel för negativa svar.",
                 nyckel=f"leads-svar:{tenant_id}:{thread_id}",
             )
+
+    elif klass == "aterkom":
+        utfall["cancelled_sends"] = await storage.cancel_pending_sends(tenant_id, thread_id)
+        utfall["handoff"] = True
+        if prospect_id:
+            await storage.update_prospect(tenant_id, prospect_id, status="replied")
+        await _notifiera(
+            tenant_id,
+            rubrik=f"{company_name} vill bli kontaktade senare",
+            vad=(
+                f"{company_name} svarade att de inte är redo just nu men att ni kan återkomma. "
+                "Köade uppföljningar är stoppade, så när ni hör av er igen bestämmer ni."
+            ),
+            varfor=str(klassificering.get("motivering") or "Svaret skjuter frågan framåt.")[:300],
+            nyckel=f"leads-svar:{tenant_id}:{thread_id}",
+        )
 
     elif klass == "autosvar":
         until = datetime.now(timezone.utc) + AUTOSVAR_UPPSKJUTNING
@@ -432,6 +462,8 @@ async def hantera_prospektsvar(
                     language_state=str(thread.get("language_state") or "sv"),
                     humanizer_variant=last_humanizer_variant(trace.skills_used),
                     force_review=True,
+                    # Ett svar i ett levande samtal bär ingen demolänk.
+                    demolank=False,
                 )
             )
             utfall["queued"] = bool(resultat.get("queued"))

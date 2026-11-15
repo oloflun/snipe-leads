@@ -255,7 +255,7 @@ async def test_agent_run_loggas_med_steglogg():
 
 
 def test_klasserna_ar_de_koden_agerar_pa():
-    assert KLASSER == ("positivt", "invandning", "fraga", "negativt", "avregistrering", "autosvar")
+    assert KLASSER == ("positivt", "aterkom", "invandning", "fraga", "negativt", "avregistrering", "autosvar")
 
 
 # -- Eskaleringsreglerna (app/leads/eskalering.py) ---------------------------

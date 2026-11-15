@@ -262,12 +262,20 @@ async def _fot_vid_godkannande(storage: Storage, tenant_id: str, item: dict) -> 
     # signatur byts mot den aktuella (Sebbe 2026-10-12: mejlet gick annars
     # ut med gamla blocket som rå text och loggan ensam längst ner). Före
     # foten, som alltid är sist.
-    sig = normalisera_signatur(
-        (await storage.get_agent_settings(tenant_id, agent_type="leads")).get("signatur")
-    )
+    installningar = await storage.get_agent_settings(tenant_id, agent_type="leads")
+    sig = normalisera_signatur(installningar.get("signatur"))
     if sig:
         sprak = "en" if thread.get("language_state") == "en_confirmed" else "sv"
         ny = med_aktuell_signatur(ny, sig, halsning=HALSNING[sprak])
+    # Demolänken (Anton 2026-11-15) även på utkast skrivna innan den fanns,
+    # eller där en omskrivning i granskningen strök raden. Idempotent; aldrig
+    # i ett svar till någon som redan svarat (svar.py).
+    if not thread.get("last_inbound_at"):
+        from . import demolank
+
+        ny = await demolank.lagg_till(
+            storage, tenant_id, item["thread_id"], ny, sprak=sprak_h, installningar=installningar
+        )
     # Alltid, inte bara när foten saknas: lagstadgad_fot byter en föråldrad
     # fot (byggd innan kundregistret fylldes, utan policyrad) mot den
     # aktuella. Idempotent — samma underlag ger samma text.
