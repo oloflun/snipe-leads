@@ -73,7 +73,7 @@ from ..leads.signatur import normalisera as normalisera_signatur
 from ..leads.sni import SNI_NAMN, beskriv_kod
 from ..leads.onboarding_state import REQUIRED_KINDS, get_onboarding_state
 from ..leads import korning as iris_korning
-from ..leads import omprova, utkaststatus
+from ..leads import listvy, omprova, utkaststatus
 from ..leads.profil import las_kundtext, sakerstall_profil, slå_ihop, som_icp
 from ..jobs import bakgrund
 from . import dubbelstart
@@ -543,16 +543,29 @@ async def create_example_prospects(
     return {"created": skapade, "count": len(skapade)}
 
 
+#: Listlägets sidstorlek: raderna är smala, så en kund med några tusen leads
+#: får hela listan i ETT anrop i stället för sex i följd (2026-11-15).
+LISTLAGE_SIDA = 5000
+
+
 @router.get("/api/leads/prospects")
 async def list_prospects(
-    request: Request, limit: int = 500, offset: int = 0, tenant: dict = Depends(require_tenant)
+    request: Request,
+    limit: int = 500,
+    offset: int = 0,
+    lista: bool = False,
+    tenant: dict = Depends(require_tenant),
 ) -> dict:
     """En sida leads, nyaste först. Sidan räknas på databasraderna (filtren
     nedan gör den kortare): `fler` säger om det finns en sida till och `nasta`
     var den börjar. Klienten hämtar tills `fler` är falskt (lib/leads/suite.ts:
-    allaProspekt) — förut visades bara de 500 nyaste (main 2026-10-21: 1331)."""
+    allaProspekt) — förut visades bara de 500 nyaste (main 2026-10-21: 1331).
+
+    `lista=1` är Iris-listans läge (app/leads/listvy.py): bara det tabellen
+    visar per rad, upp till LISTLAGE_SIDA rader per sida. Utan det: hela
+    raden, som förut (bolagsregistret och kontaktvyn läser den)."""
     storage = request.app.state.storage
-    sida = max(1, min(limit, 1000))
+    sida = max(1, min(limit, LISTLAGE_SIDA if lista else 1000))
     offset = max(0, offset)
     tenant_id = tenant["tenant_id"]
     from ..leads import webbpool
@@ -578,7 +591,9 @@ async def list_prospects(
             return {}
 
     prospects, kopplade, lagen, statuslogg, i_research, far_se_webb, utkastjobb = await asyncio.gather(
-        storage.list_prospects(tenant_id, limit=sida, offset=offset),
+        storage.list_prospects(
+            tenant_id, limit=sida, offset=offset, kolumner=listvy.LISTKOLUMNER if lista else None
+        ),
         storage.listkopplade_prospekt(tenant_id),
         storage.utkast_lagen(tenant_id),
         storage.list_status_logg(tenant_id),
@@ -587,32 +602,24 @@ async def list_prospects(
         _utkastjobb(),
     )
     fler, nasta = len(prospects) == sida, offset + len(prospects)
-    # Exempelbolag syns bara hos demotenanten. Kvarlämnade rader från den
-    # gamla default-checkboxen ska inte dyka upp som "fynd" hos en kund.
-    if tenant["tenant_id"] != DEFAULT_TENANT_ID:
-        prospects = [p for p in prospects if p.get("origin") != "example"]
-    # Ringlistans bolag (origin 'ring', leadsregel 15) är inga Iris-leads:
-    # de har bara ett telefonnummer och visas i samtalsvyn, aldrig här.
-    prospects = [p for p in prospects if p.get("origin") != "ring"]
-    # Listans leads stannar i listan (migration 110, Anton 2026-10-10): deras
-    # bakgrundsprospekt hör inte hemma i Iris-tabellen.
-    prospects = [p for p in prospects if str(p["id"]) not in kopplade]
     # Arkiverade (107) är dolda; `?arkiverade=1` listar just dem, så att de
     # går att återställa. Inget får se ut som raderat.
     arkiverade = request.query_params.get("arkiverade") == "1"
-    prospects = [p for p in prospects if bool(p.get("arkiverad_at")) == arkiverade]
     # Bara leads som uppfyller kraven visas (Antons krav 2026-10-06): ett
     # bortvalt bolag med motiveringen "uppfyller inte ..." är brus för kunden.
     # Raden står kvar i databasen så att nästa sökning utesluter bolaget.
     # `?bortvalda=1` listar i stället just de bortvalda (Sebbe 2026-10-06:
     # inget får SE UT som raderat — ett dolt bolag måste gå att hitta igen;
     # raderas görs bara med uttrycklig handling).
-    # Arkivvyn visar alla arkiverade, bortvalda eller inte.
-    if not arkiverade:
-        bortvalda = request.query_params.get("bortvalda") == "1"
-        prospects = [
-            p for p in prospects if (p.get("niva") == "C" or p.get("qualified") is False) == bortvalda
-        ]
+    # Exempelbolag bara hos demotenanten, aldrig ringlistans bolag (regel 15)
+    # eller en listas bakgrundsprospekt (110) — se listvy.synliga.
+    prospects = listvy.synliga(
+        prospects,
+        tenant_id=tenant_id,
+        kopplade=kopplade,
+        arkiverade=arkiverade,
+        bortvalda=request.query_params.get("bortvalda") == "1",
+    )
     # Utkaststatusen per lead (app/leads/utkaststatus.py): EN fråga för hela
     # tenanten, samma härledning som körningsvyn och lådan läser.
     utkast = utkaststatus.per_prospekt(lagen, [p["id"] for p in prospects])
@@ -628,23 +635,52 @@ async def list_prospects(
         prospects = [webbpool.dolj(p) for p in prospects]
     # rollkoppling_oklar: underlag för intresseavvägningen, härlett vid
     # läsning — se app/leads/rollkoppling.py för varför den inte lagras.
+    # Listläget läser den inte, och projektionen saknar fälten den vilar på.
+    rader = [
+        {
+            **(p if lista else med_rollflagga(p)),
+            **utkaststatus.med_utkastjobb(utkast[str(p["id"])], utkastjobb.get(str(p["id"]))),
+            "senaste_handelse_at": senast.get(str(p["id"])) or p.get("created_at"),
+            **(
+                {"status": "researching"}
+                if (p.get("status") or "new") == "new" and str(p["id"]) in i_research
+                else {}
+            ),
+        }
+        for p in prospects
+    ]
     return {
-        "prospects": [
-            {
-                **med_rollflagga(p),
-                **utkaststatus.med_utkastjobb(utkast[str(p["id"])], utkastjobb.get(str(p["id"]))),
-                "senaste_handelse_at": senast.get(str(p["id"])) or p.get("created_at"),
-                **(
-                    {"status": "researching"}
-                    if (p.get("status") or "new") == "new" and str(p["id"]) in i_research
-                    else {}
-                ),
-            }
-            for p in prospects
-        ],
+        "prospects": [listvy.listrad(r) for r in rader] if lista else rader,
         "fler": fler,
         "nasta": nasta,
     }
+
+
+@router.get("/api/leads/prospects/fordelning")
+async def prospekt_fordelning(request: Request, tenant: dict = Depends(require_tenant)) -> dict:
+    """Antal leads per status och per kontaktväg — Översiktens munkdiagram
+    (components/leads/LeadsDiagram.tsx). Samma leads som Iris-listan visar
+    (listvy.synliga), räknade här i stället för i webbläsaren: diagrammet
+    hämtade förut hela listan, 9,6 MB i sex anrop, för att räkna dem
+    (development 2026-11-15). Står före /prospects/{id}, annars tas
+    "fordelning" för ett id."""
+    storage = request.app.state.storage
+    tenant_id = tenant["tenant_id"]
+    kopplade, i_research = await asyncio.gather(
+        storage.listkopplade_prospekt(tenant_id),
+        storage.list_prospekt_i_research(tenant_id),
+    )
+    rader: list[dict] = []
+    offset = 0
+    while True:
+        sida = await storage.list_prospects(
+            tenant_id, limit=LISTLAGE_SIDA, offset=offset, kolumner=listvy.FORDELNINGSKOLUMNER
+        )
+        rader += sida
+        if len(sida) < LISTLAGE_SIDA:
+            break
+        offset += len(sida)
+    return listvy.fordelning(listvy.synliga(rader, tenant_id=tenant_id, kopplade=kopplade), i_research)
 
 
 @router.get("/api/leads/prospects/{prospect_id}")
@@ -1530,6 +1566,18 @@ async def list_skickat(
     return await _med_signatur(storage, tenant_id, svar, settings=leadsinst)
 
 
+@router.get("/api/leads/skickat/antal")
+async def antal_skickat(request: Request, dagar: int = 28, tenant: dict = Depends(require_tenant)) -> dict:
+    """Skickade leadsmejl och svar de senaste `dagar` dagarna — Leads-
+    översiktens nyckeltal. Samma regel som Skickat (`svarat` = tråden fick
+    svar efter utskicket), räknad i databasen: översikten hämtade förut hela
+    Skickat-listan, 3,2 MB med varje mejls text, för de två talen
+    (development 2026-11-15). Listan hämtas nu först när Skickat öppnas."""
+    dagar = max(1, min(dagar, 366))
+    sedan = datetime.now(timezone.utc) - timedelta(days=dagar)
+    return {"dagar": dagar, **await request.app.state.storage.antal_skickade(tenant["tenant_id"], sedan=sedan)}
+
+
 async def _med_signatur(storage, tenant_id: str, svar: dict, *, settings: dict | None = None) -> dict:
     """Signaturen (med logotyp-URL och textblocket) i ett svar med mejltexter,
     så att vyn visar mejlet med loggan så som mottagaren ser det (Sebbe
@@ -1846,14 +1894,19 @@ async def get_jev_statistik(request: Request, tenant: dict = Depends(require_ten
 
 @router.get("/api/leads/korningar")
 async def lista_korningar(
-    request: Request, tenant: dict = Depends(require_tenant), limit: int = 20
+    request: Request, tenant: dict = Depends(require_tenant), limit: int = 20, detalj: bool = False
 ) -> dict:
     """Kundens körningar ur liggaren (migration 080, INV-JOB-003): det som
     går att följa, lämna och återvända till. `korning` är motorns tillstånd
     (app/leads/korning.py) för Iris-körningar; listjobb (scope 'lista') har
-    inget tillstånd men syns med status och felorsak. Nyast först."""
+    inget tillstånd men syns med status och felorsak. Nyast först.
+
+    Listan är ett sammandrag (2026-11-15): trattens bortvalda bolag och
+    barnjobben står som `tratt_antal` och `jobs_antal`, och den utfällda raden
+    hämtar körningen själv (GET /leads/korningar/{id}). `detalj=1` ger de
+    hela listorna, som förut."""
     rader = await request.app.state.storage.list_leads_korningar(
-        tenant["tenant_id"], limit=max(1, min(limit, 100))
+        tenant["tenant_id"], limit=max(1, min(limit, 100)), sammandrag=not detalj
     )
     return {"korningar": [_utan_kandidater(r) for r in rader]}
 

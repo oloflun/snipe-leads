@@ -9,6 +9,61 @@ möjligt), vad det betyder i koden.
 
 ---
 
+## 2026-11-15 (Sebbe) — Antalet leads och körningar får inte märkas i sidan
+
+**Beslut.** Sebbe: "Nu när vi har 4400 utkast på snajp leads så börjar sidan
+gå långsamt och det laggar mer och mer … Du ska lösa uppgiften och problemet
+så att antalet leads körningar inte påverkar hemsidans upplevelse. Det får
+inte lagga, hacka eller gå långsamt oavsett." Och: "Du får godkännelse för att
+göra allt som krävs." De enskilda valen nedan gjordes i arbetet.
+
+**Resonemanget.** Mätt hos den största kunden i development (5 615 prospekt,
+3 126 synliga leads, 1 937 godkända utkast som väntar): servern svarade i
+rimlig tid per anrop, men sidorna hämtade och ritade allt. Iris-listan var
+9,6 MB i sex anrop efter varandra (~3,5 s), Översiktens munkdiagram hämtade
+samma 9,6 MB för att räkna, körningslistan var 2,8 MB för 100 körningar (98 %
+trattens bortvalda bolag och barnjobben), och Skickat (3,2 MB, varje mejls
+text) hämtades vid varje besök på Leads för två nyckeltal. I webbläsaren stod
+varje lead två gånger (tabellen och korten, den ena dold) och radrörelsen läste
+stilen för varje rad efter varje rendering. Med samma mängd syntetiska leads
+tog ett klick i en kryssruta 4,7 s och ett tangenttryck i sökfältet 3,7 s
+(utvecklingsläge). Allt det växer med antalet leads och körningar; det var
+därför det blev sämre för varje körning.
+
+**I koden, val för val.**
+
+- **Listläget** (`GET /leads/prospects?lista=1`, `app/leads/listvy.py`): bara
+  det tabellen visar per rad, upp till 5 000 rader per anrop. Researchen läses
+  inte ens ur databasen. Lådan hämtar den fulla raden som förut.
+- **Iris-listan, Skickat och undanvyerna visar 100 rader per sida**
+  (`components/leads/sidindelning.tsx`). Valet: sidor och inte en lång lista
+  med "Visa fler", eftersom det är det enda som håller sidan lika snabb hur
+  många leads det än blir. Filtren, Markera alla och massåtgärderna gäller
+  fortfarande hela urvalet; en länk till ett lead öppnar sidan där det står.
+- **Tabell eller kort**, aldrig båda i sidan.
+- **Fördelningen räknas på servern** (`GET /leads/prospects/fordelning`), med
+  samma synlighetsregel som listan (`listvy.synliga`, en regel på ett ställe).
+- **Körningslistan är ett sammandrag**: `tratt_antal` och `jobs_antal` i
+  stället för listorna. Den utfällda raden hämtar körningen själv. `?detalj=1`
+  ger det gamla svaret.
+- **Skickat hämtas när det öppnas**; nyckeltalen kommer från
+  `GET /leads/skickat/antal`, med samma regel för svarat och utan listans tak
+  på 500 (talet kan därför bli högre än förut, och är då det riktiga).
+- **Radrörelsen läser stil bara för rader som animeras**, och sorteringen
+  jämför tidsstämplar som text i stället för med `localeCompare`.
+
+Efter (samma syntetiska mängd): klicket 170 ms, tangenttrycket 82 ms, sidan
+3 254 DOM-noder i stället för 99 901.
+
+**Kvar, inte gjort.** Körningarna går i samma process som API:t (leads- och
+chattarbetarna i `app/main.py`). En körning som gör tungt arbete i
+händelseloopen kan därför fortfarande göra varje sida trög medan den pågår.
+Det gick inte att mäta i dag: Railway-tokenen är död, så loopvaktens loggar
+("står still") går inte att läsa. Med en ny token: läs loopvakten under en
+körning, och flytta arbetarna till en egen tjänst om den visar stopp.
+
+---
+
 ## 2026-11-10 (Sebbe) — Stabilitetsarbetet, fas 2 till 4: mät först, och låt mätningen välja ändringen
 
 **Beslut.** Sebbe: "kör klart alla faser och allting du ska göra, du får

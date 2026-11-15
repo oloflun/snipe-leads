@@ -50,11 +50,14 @@ export function useRadrorelse(
     if (!rot || rader === null) return;
     const lugn = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const forra = forraStatus.current;
-    const nu = new Map(rader.map((r) => [r.id, r.status]));
-    const andrat = forra === null || forra.size !== nu.size || [...nu].some(([id, s]) => forra.get(id) !== s);
     const nyttData = rader !== forraRader.current;
     forraRader.current = rader;
-    const ton = ockra();
+    // Statusen kan bara ha ändrats om datat är nytt: en rendering av samma
+    // rader (ett klick, ett tangenttryck) jämför ingenting.
+    const nu = forra === null || nyttData ? new Map(rader.map((r) => [r.id, r.status])) : forra;
+    const andrat = forra === null || (nu !== forra && (forra.size !== nu.size || [...nu].some(([id, s]) => forra.get(id) !== s)));
+    let tonCache: string | null = null;
+    const ton = () => (tonCache ??= ockra());
     const nyaPositioner = new Map<string, number>();
 
     for (const el of rot.querySelectorAll<HTMLElement>("[data-rad-id]")) {
@@ -64,9 +67,17 @@ export function useRadrorelse(
       const topp = el.offsetTop;
       nyaPositioner.set(id, topp);
       if (forra === null || typeof el.animate !== "function") continue;
+      const ny = !forra.has(id);
+      const fran = positioner.current.get(id);
+      const flyttad = nyttData && !lugn && fran !== undefined && fran !== topp && Math.abs(fran - topp) < 4000;
+      const bytt = andrat && forra.get(id) !== nu.get(id);
+      // Det vanliga fallet: raden står still och är oförändrad. Då läses
+      // ingen stil alls — getComputedStyle per rad efter varje rendering var
+      // det som gjorde varje klick i en lång lista segt (2026-11-15).
+      if (!ny && !flyttad && !bytt) continue;
 
       const bas = getComputedStyle(el).backgroundColor;
-      if (!forra.has(id)) {
+      if (ny) {
         // Rörelsen i husets takt, markeringen för sig och längre.
         if (!lugn) {
           el.animate([{ opacity: 0, transform: "translateY(-8px)" }, { opacity: 1, transform: "none" }], {
@@ -74,21 +85,20 @@ export function useRadrorelse(
             easing: EASE_OUT
           });
         }
-        el.animate([{ backgroundColor: ton }, { backgroundColor: ton, offset: 0.3 }, { backgroundColor: bas }], {
+        el.animate([{ backgroundColor: ton() }, { backgroundColor: ton(), offset: 0.3 }, { backgroundColor: bas }], {
           duration: MARKERING,
           easing: EASE_OUT
         });
         continue;
       }
-      const fran = positioner.current.get(id);
-      if (nyttData && !lugn && fran !== undefined && fran !== topp && Math.abs(fran - topp) < 4000) {
+      if (flyttad && fran !== undefined) {
         el.animate([{ transform: `translateY(${fran - topp}px)` }, { transform: "none" }], {
           duration: DUR_MID,
           easing: EASE_OUT
         });
       }
-      if (andrat && forra.get(id) !== nu.get(id)) {
-        el.animate([{ backgroundColor: ton }, { backgroundColor: bas }], { duration: MARKERING, easing: EASE_OUT });
+      if (bytt) {
+        el.animate([{ backgroundColor: ton() }, { backgroundColor: bas }], { duration: MARKERING, easing: EASE_OUT });
       }
     }
 

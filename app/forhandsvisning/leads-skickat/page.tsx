@@ -135,6 +135,8 @@ function installeraFetch() {
   window.fetch = (input, init) => {
     const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
     if (!url.includes("/api/snajp-support/")) return riktig(input, init);
+    // Nyckeltalen räknas av servern sedan 2026-11-15 (GET /leads/skickat/antal).
+    if (url.includes("/leads/skickat/antal")) return svar({ dagar: 28, skickat: 3, svarat: 2 });
     if (url.includes("/leads/skickat")) return svar({ skickat: SKICKAT, signatur: SIGNATURINSTALLNING });
     if (url.includes("/leads/provmejl/mottagare")) return svar({ mottagare: ["support@snajp.example", "faktura@snajp.example"] });
     if (url.includes("/leads/provmejl")) return svar({ till: "support@snajp.example", saknar_fot: true });

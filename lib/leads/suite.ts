@@ -147,17 +147,36 @@ export async function leadsAnrop<T>(vag: string, init?: RequestInit): Promise<T>
 export async function allaProspekt<T>(
   hamtaSida: (vag: string) => Promise<{ prospects?: T[]; fler?: boolean; nasta?: number } | null>,
   fraga = "",
-  start = 0
+  start = 0,
+  sidstorlek = 1000
 ): Promise<T[]> {
   const alla: T[] = [];
   let offset = start;
   for (;;) {
-    const sida = await hamtaSida(`/leads/prospects?limit=1000&offset=${offset}${fraga ? `&${fraga}` : ""}`);
+    const sida = await hamtaSida(`/leads/prospects?limit=${sidstorlek}&offset=${offset}${fraga ? `&${fraga}` : ""}`);
     alla.push(...(sida?.prospects ?? []));
     if (!sida?.fler || typeof sida.nasta !== "number" || sida.nasta <= offset) return alla;
     offset = sida.nasta;
   }
 }
+
+/** Iris-listans läge (Sebbe 2026-11-15): bara det tabellen visar per rad och
+ *  upp till 5 000 rader per anrop (snajp-support/app/leads/listvy.py). Den
+ *  fulla raden — researchen, källorna — hämtar lådan för sig. Förut hämtade
+ *  listan 9,6 MB i sex anrop efter varandra hos den största kunden. */
+export function listansProspekt<T>(
+  hamtaSida: (vag: string) => Promise<{ prospects?: T[]; fler?: boolean; nasta?: number } | null>,
+  fraga = ""
+): Promise<T[]> {
+  return allaProspekt(hamtaSida, fraga ? `lista=1&${fraga}` : "lista=1", 0, 5000);
+}
+
+/** Antal leads per status och kontaktväg (GET /leads/prospects/fordelning). */
+export type Fordelning = {
+  antal: number;
+  status: Record<string, number>;
+  kontaktvag: Record<Kontaktvag, number>;
+};
 
 export function datumFormat(locale: Locale): string {
   return locale === "en" ? "en-GB" : "sv-SE";

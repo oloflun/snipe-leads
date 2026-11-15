@@ -50,6 +50,11 @@ export type Korning = {
   struktur?: "a" | "b";
   tratt?: Tratt[];
   jobs?: Jobb[];
+  /** Körningslistan bär antalen i stället för listorna (2026-11-15,
+   *  snajp-support/app/leads/listvy.py:korning_sammandrag); listorna ger
+   *  GET /leads/korningar/{id}, som den utfällda raden hämtar. */
+  tratt_antal?: number;
+  jobs_antal?: number;
   /** Kundens styrning: satt av pausa/avbryt, borta när körningen går. */
   styrning?: "paus" | "avbruten" | null;
 };
@@ -488,6 +493,47 @@ export function IrisKorningar({
 
 type Atgard = "pausa" | "aterupta" | "avbryt";
 
+/** Bortvalda bolag i körningen: listan när den finns (demon, detaljen), annars antalet. */
+function antalTratt(k: Korning | null | undefined): number {
+  return k?.tratt?.length ?? k?.tratt_antal ?? 0;
+}
+
+function antalJobb(k: Korning | null | undefined): number {
+  return k?.jobs?.length ?? k?.jobs_antal ?? 0;
+}
+
+/**
+ * Körningens tratt för den utfällda raden. Listan bär bara antalet (2,8 MB
+ * för 100 körningar blev några kB), så raden hämtar körningen när den
+ * öppnas — och igen när körningen rört sig, så att en pågående körnings
+ * bortvalda fylls på medan man tittar.
+ */
+function useTratt(rad: KorningsRad, oppen: boolean, styrbar: boolean): Tratt[] | null {
+  const k = rad.korning;
+  const [hamtad, setHamtad] = useState<Tratt[] | null>(null);
+  const behovs = oppen && styrbar && !k?.tratt && antalTratt(k) > 0;
+  useEffect(() => {
+    if (!behovs) return;
+    let aktiv = true;
+    void (async () => {
+      try {
+        const response = await fetch(`/api/snajp-support/leads/korningar/${encodeURIComponent(rad.job_id)}`, {
+          cache: "no-store"
+        });
+        if (!response.ok) return;
+        const kropp = await readJsonBody<KorningsRad>(response);
+        if (aktiv) setHamtad(kropp?.korning?.tratt ?? []);
+      } catch {
+        // Raden visar antalet; nästa öppning försöker igen.
+      }
+    })();
+    return () => {
+      aktiv = false;
+    };
+  }, [behovs, rad.job_id, rad.updated_at]);
+  return k?.tratt ?? hamtad;
+}
+
 function Pagaende({
   rad,
   onStyrd,
@@ -543,7 +589,7 @@ function Pagaende({
         poster={[
           { etikett: text(T.leadsKlara), varde: `${k.levererade} ${text(T.av)} ${k.mal}` },
           { etikett: text(T.bolagUndersokta), varde: k.undersokta, notis: k.tak ? `${text(T.tak)} ${k.tak}` : undefined },
-          { etikett: text(T.bortvalda), varde: (k.tratt ?? []).length },
+          { etikett: text(T.bortvalda), varde: antalTratt(k) },
           {
             etikett: text(T.justNu),
             varde:
@@ -751,6 +797,7 @@ function RadMedDetalj({
   const { locale, text } = useLocale();
   const k = rad.korning;
   const kolumner = 6;
+  const tratt = useTratt(rad, oppen, styrbar);
   return (
     <>
       <tr className={cn(tabellRad, "cursor-pointer")} onClick={onToggle}>
@@ -793,7 +840,7 @@ function RadMedDetalj({
                 {/* Utkastpanelen ersätter namnlistan i den riktiga vyn: varje
                     lead med utkaststatus, och skriv/skicka för alla på en gång.
                     Demon (styrbar=false) har ingen backend och behåller listan. */}
-                {styrbar && rad.scope === "batch" && k?.jobs?.length ? (
+                {styrbar && rad.scope === "batch" && antalJobb(k) > 0 ? (
                   <KorningensUtkast jobId={rad.job_id} />
                 ) : (
                 <>
@@ -836,11 +883,11 @@ function RadMedDetalj({
               </div>
               <div>
                 <h3 className="text-[1.0625rem] font-semibold">
-                  {text(T.bortvalda)} <span className={cn(meta, "font-normal")}>{(k?.tratt ?? []).length}</span>
+                  {text(T.bortvalda)} <span className={cn(meta, "font-normal")}>{antalTratt(k)}</span>
                 </h3>
-                {k?.tratt?.length ? (
-                  <ul className={cn("mt-3 divide-y divide-ink/12", rullbarLista(k.tratt.length))}>
-                    {k.tratt.map((t, i) => (
+                {tratt?.length ? (
+                  <ul className={cn("mt-3 divide-y divide-ink/12", rullbarLista(tratt.length))}>
+                    {tratt.map((t, i) => (
                       <li key={`${t.namn}-${i}`} className="py-2.5">
                         <div className="flex items-baseline justify-between gap-3">
                           <span className="min-w-0 truncate font-medium">{t.namn}</span>
@@ -851,6 +898,8 @@ function RadMedDetalj({
                       </li>
                     ))}
                   </ul>
+                ) : tratt === null && antalTratt(k) > 0 ? (
+                  <p className={cn(meta, "mt-3")} aria-busy="true">…</p>
                 ) : (
                   <p className={cn(meta, "mt-3")}>{text(T.ingetBortvalt)}</p>
                 )}
