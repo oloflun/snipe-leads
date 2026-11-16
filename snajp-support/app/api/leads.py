@@ -4636,7 +4636,13 @@ async def hamta_leadslista(
     # Iris-tabellen, så att listan visar samma läge som ett Iris-lead.
     kopplade = [str(i["prospect_id"]) for i in items if i.get("prospect_id")]
     if kopplade:
-        lagen = utkaststatus.per_prospekt(await storage.utkast_lagen(tenant["tenant_id"]), kopplade)
+        nu = datetime.now(timezone.utc)
+        lagen = utkaststatus.per_prospekt(
+            await storage.utkast_lagen(tenant["tenant_id"]), kopplade, now=nu,
+            # Listornas bolag står först i kön (de äldsta utkasten): samma
+            # sändtid som Iris-listan och Skickat visar (leads/sandplan.py).
+            plan=await sandplan.for_kund(storage, tenant["tenant_id"], now=nu),
+        )
         items = [
             {**i, "utkast_status": lagen.get(str(i["prospect_id"]))} if i.get("prospect_id") else i
             for i in items
