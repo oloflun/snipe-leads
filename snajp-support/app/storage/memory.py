@@ -802,14 +802,27 @@ class MemoryStorage:
         return max(docs, key=lambda d: d["version"])
 
     async def list_due_send_queue(self, tenant_id: str, now) -> list[dict[str, Any]]:
+        # trad_svarad_at speglar Postgres-joinen mot outreach_threads.
+        tradar = self.outreach_threads.get(tenant_id, {})
         return sorted(
             (
-                item
+                {**item, "trad_svarad_at": (tradar.get(item.get("thread_id")) or {}).get("last_inbound_at")}
                 for item in self.send_queue.get(tenant_id, [])
                 if item["status"] == "queued" and item["scheduled_at"] <= now
             ),
             key=lambda item: item["scheduled_at"],
         )
+
+    async def godkand_ko_ordning(self, tenant_id: str) -> list[dict[str, Any]]:
+        def godkand(item: dict[str, Any]) -> bool:
+            gc = item.get("gate_checks") or {}
+            if isinstance(gc, str):
+                gc = json.loads(gc)
+            return gc.get("approved_by") == "human"
+
+        poster = [i for i in self.send_queue.get(tenant_id, []) if i["status"] == "queued" and godkand(i)]
+        poster.sort(key=lambda i: (str(i.get("scheduled_at") or ""), str(i.get("created_at") or "")))
+        return [{"id": i["id"], "scheduled_at": i.get("scheduled_at")} for i in poster]
 
     async def update_send_queue_status(
         self, tenant_id: str, item_id: str, *, status: str, gate_checks: dict[str, Any]

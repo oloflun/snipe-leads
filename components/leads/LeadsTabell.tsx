@@ -926,8 +926,8 @@ export function LeadsTabell({
         return godkanda
           ? {
               text: text({
-                sv: `De ${godkanda} markerade utkasten är redan godkända och skickas när sändfönstret öppnar (vardagar 08–16).`,
-                en: `The ${godkanda} selected drafts are already approved and go out when the sending window opens (weekdays 08–16).`
+                sv: `De ${godkanda} markerade utkasten är redan godkända och skickas i tur och ordning från kön (vardagar från 08:00).`,
+                en: `The ${godkanda} selected drafts are already approved and go out in turn from the queue (weekdays from 08:00).`
               }),
               fel: false
             }
@@ -990,7 +990,7 @@ export function LeadsTabell({
         text: text({
           sv: [
             `${skickade} skickade`,
-            vantar + godkanda ? `${vantar + godkanda} skickas när sändfönstret öppnar (vardagar 08–16)` : null,
+            vantar + godkanda ? `${vantar + godkanda} skickas i tur och ordning från kön (vardagar från 08:00)` : null,
             flyttade.length ? `${flyttade.length} flyttades över från provkörningen` : null,
             orgnrHamtade ? `org.nr hämtades från ${orgnrHamtade} ${orgnrHamtade === 1 ? "bolags" : "bolagens"} webbplats` : null,
             antalStopp + kvarProv ? `${antalStopp + kvarProv} skickades inte` : null,
@@ -998,7 +998,7 @@ export function LeadsTabell({
           ].filter(Boolean).join(", ") + ".",
           en: [
             `${skickade} sent`,
-            vantar + godkanda ? `${vantar + godkanda} go out when the sending window opens (weekdays 08–16)` : null,
+            vantar + godkanda ? `${vantar + godkanda} go out in turn from the queue (weekdays from 08:00)` : null,
             flyttade.length ? `${flyttade.length} moved over from the test run` : null,
             orgnrHamtade ? `company number found on ${orgnrHamtade} ${orgnrHamtade === 1 ? "company's" : "companies'"} website` : null,
             antalStopp + kvarProv ? `${antalStopp + kvarProv} were not sent` : null,

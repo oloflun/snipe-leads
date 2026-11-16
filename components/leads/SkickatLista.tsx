@@ -45,7 +45,7 @@ export type SkickatRad = {
   body: string;
   /** null för ett schemalagt utkast: det har inte gått ut än. */
   sent_at: string | null;
-  /** Godkänt, väntar på sändfönstret (vardagar 08–16). */
+  /** Godkänt, står i kön (vardagar från 08:00). */
   schemalagt?: boolean;
   /** När ett schemalagt utkast tidigast går ut. */
   skickas_tidigast?: string | null;
@@ -283,12 +283,12 @@ export function SkickatLista({
       text: text({
         sv: [
           `${skickade} skickade`,
-          vantar ? `${vantar} väntar på sändfönstret (vardagar 08–16)` : null,
+          vantar ? `${vantar} står i kön (vardagar från 08:00)` : null,
           stoppade ? `${stoppade} stoppade` : null
         ].filter(Boolean).join(", ") + ".",
         en: [
           `${skickade} sent`,
-          vantar ? `${vantar} waiting for the sending window (weekdays 08–16)` : null,
+          vantar ? `${vantar} in the queue (weekdays from 08:00)` : null,
           stoppade ? `${stoppade} stopped` : null
         ].filter(Boolean).join(", ") + "."
       }),

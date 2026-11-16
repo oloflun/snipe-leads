@@ -73,7 +73,7 @@ from ..leads.signatur import normalisera as normalisera_signatur
 from ..leads.sni import SNI_NAMN, beskriv_kod
 from ..leads.onboarding_state import REQUIRED_KINDS, get_onboarding_state
 from ..leads import korning as iris_korning
-from ..leads import listvy, omprova, utkaststatus
+from ..leads import listvy, omprova, sandplan, utkaststatus
 from ..leads.profil import las_kundtext, sakerstall_profil, slå_ihop, som_icp
 from ..jobs import bakgrund
 from . import dubbelstart
@@ -590,7 +590,11 @@ async def list_prospects(
             logger.exception("Kunde inte läsa utkastjobben för %s.", tenant_id)
             return {}
 
-    prospects, kopplade, lagen, statuslogg, i_research, far_se_webb, utkastjobb = await asyncio.gather(
+    # Sändtiden ur köns plan (leads/sandplan.py, 2026-11-16): "skickas 08:00"
+    # om vart och ett av tusentals godkända utkast var inte sant med ett
+    # dagstak. for_kund fäller aldrig listan (tom plan vid fel).
+    nu = datetime.now(timezone.utc)
+    prospects, kopplade, lagen, statuslogg, i_research, far_se_webb, utkastjobb, plan = await asyncio.gather(
         storage.list_prospects(
             tenant_id, limit=sida, offset=offset, kolumner=listvy.LISTKOLUMNER if lista else None
         ),
@@ -600,6 +604,7 @@ async def list_prospects(
         _i_research(),
         webbpool.far_se(storage, tenant_id),
         _utkastjobb(),
+        sandplan.for_kund(storage, tenant_id, now=nu),
     )
     fler, nasta = len(prospects) == sida, offset + len(prospects)
     # Arkiverade (107) är dolda; `?arkiverade=1` listar just dem, så att de
@@ -622,7 +627,7 @@ async def list_prospects(
     )
     # Utkaststatusen per lead (app/leads/utkaststatus.py): EN fråga för hela
     # tenanten, samma härledning som körningsvyn och lådan läser.
-    utkast = utkaststatus.per_prospekt(lagen, [p["id"] for p in prospects])
+    utkast = utkaststatus.per_prospekt(lagen, [p["id"] for p in prospects], now=nu, plan=plan)
     # Senaste händelse (Leads Suite): EN läsning av statusloggen, grupperad
     # här, i stället för en fråga per prospekt.
     senast: dict[str, str] = {}
@@ -796,7 +801,8 @@ async def senaste_utkast(
     if not prospect:
         raise HTTPException(status_code=404, detail="Prospektet finns inte.")
     lage = (await storage.utkast_lagen(tenant_id, med_text=True, prospect_id=prospect_id)).get(prospect_id)
-    status = utkaststatus.harled(lage)
+    nu = datetime.now(timezone.utc)
+    status = utkaststatus.harled(lage, now=nu, plan=await sandplan.for_kund(storage, tenant_id, now=nu))
     if not lage or not lage.get("body"):
         return {"utkast": None, "thread_id": (lage or {}).get("thread_id"), **status}
     settings = await storage.get_agent_settings(tenant_id, agent_type="leads")
@@ -1602,10 +1608,11 @@ async def _schemalagda_utskick(storage, tenant_id: str) -> list[dict]:
     try:
         lagen = await storage.utkast_lagen(tenant_id)
         nu = datetime.now(timezone.utc)
+        plan = await sandplan.for_kund(storage, tenant_id, now=nu)
         godkanda = {
             pid: (lage, harlett)
             for pid, lage in lagen.items()
-            if (harlett := utkaststatus.harled(lage, now=nu))["utkast_status"] == "godkant"
+            if (harlett := utkaststatus.harled(lage, now=nu, plan=plan))["utkast_status"] == "godkant"
         }
         if not godkanda:
             return []
@@ -2004,6 +2011,8 @@ async def _korningens_leads(request: Request, tenant: dict, job_id: str) -> tupl
     jobb = [j for j in ((rad.get("korning") or {}).get("jobs") or []) if j.get("prospect_id")]
     # EN fråga för alla körningens leads, med texten (utkastet visas vid klick).
     lagen = await storage.utkast_lagen(tenant_id, med_text=True)
+    nu = datetime.now(timezone.utc)
+    plan = await sandplan.for_kund(storage, tenant_id, now=nu)
     leads: list[dict] = []
     sedda: set[str] = set()
     for j in jobb:
@@ -2021,7 +2030,7 @@ async def _korningens_leads(request: Request, tenant: dict, job_id: str) -> tupl
             # ett klart lead vars utkast aldrig skrevs, och "Skriv utkast"
             # researchade om det bara för att fälla det igen.
             continue
-        harlett = utkaststatus.harled(lage)
+        harlett = utkaststatus.harled(lage, now=nu, plan=plan)
         post = {
             "prospect_id": pid,
             "company_name": prospect.get("company_name") or j.get("company_name"),
@@ -2274,7 +2283,7 @@ async def update_queue_item_text(
 #: Granskarens besked per utfall (Godkänn och skicka).
 _UTFALL_TEXT = {
     "sent": "Skickat.",
-    "requeued": "Godkänt. Mejlet skickas när sändfönstret öppnar (vardagar 08–16).",
+    "requeued": "Godkänt. Mejlet skickas i tur och ordning från kön, vardagar från 08:00.",
     "blocked": "Stoppat av en sändspärr",
     "awaiting_review": "Inte skickat, behöver granskas",
     "redan_hanterad": "Utkastet är redan hanterat.",

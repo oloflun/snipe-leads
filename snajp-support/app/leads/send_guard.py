@@ -58,9 +58,12 @@ UPPVARMNING_TAK_PER_DAG = 20
 #: Sju dagars fönster, så att en helg inte nollställer kurvan.
 UPPTRAPPNING_STEG = 5
 UPPTRAPPNING_FONSTER_DAGAR = 7
-#: Tak per dag och tenant oavsett historik. Femtio kalla mejl om dagen från
-#: en avsändare är vad mottagarfilter tar emot utan att reagera på volymen.
-TAK_PER_DAG = 50
+#: Tak per dag och tenant oavsett historik. 100 sedan 2026-11-16 (Sebbe: "100
+#: är takt per dag, börja med de äldre utskicken"; förut 50). Upptrappningen
+#: ovan gäller fortfarande, så taket nås fem mejl om dagen i taget och aldrig
+#: med ett hopp: hoppet var det som skickade 600 mejl i skräpposten i oktober.
+#: Mejlen sprids dessutom över morgonen, ett i minuten (scheduler.TAKT_SEKUNDER).
+TAK_PER_DAG = 100
 
 #: Leveransstoppet (regel 5e, Sebbe 2026-10-24). Studsar och klagomål kommer
 #: från Resends webhook (api/sending_domains_api.py). Över gränserna står ALLA
@@ -421,39 +424,52 @@ def _regel_5_volymtak(*, avsandare, utskick, historik, nu) -> GuardBeslut | None
                 f"Karenstiden är {KARENS_DAGAR_PER_FORETAG} dagar per företag.",
             )
 
+    return kundens_volymgrind(historik)
+
+
+def dagens_tak(historik: TenantHistorik) -> int:
+    """Hur många mejl kunden får skicka i dag (regel 5c och 5d)."""
+    # 5c. Domänuppvärmning de första två veckorna.
+    if historik.tenant_alder_dagar < UPPVARMNING_DAGAR:
+        return UPPVARMNING_TAK_PER_DAG
+    # 5d. Flack upptrappning efter uppvärmningen (Sebbe 2026-10-24): fem fler
+    # per dag än den största dagsvolymen senaste sju dagarna, lägst golvet och
+    # högst TAK_PER_DAG.
+    return min(TAK_PER_DAG, max(UPPVARMNING_TAK_PER_DAG, historik.storsta_dagsvolym + UPPTRAPPNING_STEG))
+
+
+def kundens_volymgrind(historik: TenantHistorik) -> GuardBeslut | None:
+    """Regel 5e, 5c och 5d: de delar av regel 5 som gäller hela kunden och
+    inte ett enskilt mejl. Säger de nej, säger de nej till varje mejl i kön,
+    och sändaren (scheduler.process_godkanda) prövar dem därför en gång per
+    kund och varv i stället för per köpost (2026-11-16: 3 868 köposter
+    prövades förut var för sig, varje minut). Gäller också Skicka nu (direkt),
+    precis som 5b: domänens rykte skyddas mot volymen, inte mot klockslaget.
+    """
     # 5e. Leveransstopp, före volymtaken: under ett stopp går inget ut, hur
     # lite som än skickats i dag. Gäller också Skicka nu.
     stopp = _leveransstopp(historik.leverans)
     if stopp:
         return GuardBeslut(KOLA_OM, "5_leveransstopp", stopp)
 
-    # 5c. Domänuppvärmning de första två veckorna.
-    if historik.tenant_alder_dagar < UPPVARMNING_DAGAR:
-        if historik.skickade_idag >= UPPVARMNING_TAK_PER_DAG:
-            return GuardBeslut(
-                KOLA_OM,
-                "5_volymtak",
-                f"Dagens tak är nått ({historik.skickade_idag} av "
-                f"{UPPVARMNING_TAK_PER_DAG}). Avsändardomänen är {historik.tenant_alder_dagar} "
-                f"dagar gammal och värms upp i {UPPVARMNING_DAGAR} dagar.",
-            )
+    tak = dagens_tak(historik)
+    if historik.skickade_idag < tak:
         return None
-
-    # 5d. Flack upptrappning efter uppvärmningen (Sebbe 2026-10-24): fem fler
-    # per dag än den största dagsvolymen senaste sju dagarna, lägst golvet och
-    # högst TAK_PER_DAG. Gäller också Skicka nu (direkt), precis som 5b och
-    # 5c: domänens rykte skyddas mot volymen, inte mot klockslaget.
-    tak = min(TAK_PER_DAG, max(UPPVARMNING_TAK_PER_DAG, historik.storsta_dagsvolym + UPPTRAPPNING_STEG))
-    if historik.skickade_idag >= tak:
+    if historik.tenant_alder_dagar < UPPVARMNING_DAGAR:
         return GuardBeslut(
             KOLA_OM,
             "5_volymtak",
-            f"Dagens tak är nått ({historik.skickade_idag} av {tak}). Volymen "
-            f"trappas upp med högst {UPPTRAPPNING_STEG} om dagen, till som mest "
-            f"{TAK_PER_DAG}. Resten av kön skickas kommande dagar.",
+            f"Dagens tak är nått ({historik.skickade_idag} av "
+            f"{UPPVARMNING_TAK_PER_DAG}). Avsändardomänen är {historik.tenant_alder_dagar} "
+            f"dagar gammal och värms upp i {UPPVARMNING_DAGAR} dagar.",
         )
-
-    return None
+    return GuardBeslut(
+        KOLA_OM,
+        "5_volymtak",
+        f"Dagens tak är nått ({historik.skickade_idag} av {tak}). Volymen "
+        f"trappas upp med högst {UPPTRAPPNING_STEG} om dagen, till som mest "
+        f"{TAK_PER_DAG}. Resten av kön skickas kommande dagar, äldst först.",
+    )
 
 
 def _procent(andel: float) -> str:

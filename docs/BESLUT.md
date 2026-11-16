@@ -9,6 +9,73 @@ möjligt), vad det betyder i koden.
 
 ---
 
+## 2026-11-16 (Sebbe) — 100 utskick om dagen, äldst först, ett i minuten från 08:00
+
+**Beslut.** Sebbe bad först om att "utskicken man gör inte ligger väntandes
+till måndagar 08:00 … Utskicken ska hanteras 08:00 varje vardag och gå ut
+varje dag 08:00. Så alla körningar jag gör ikväll ska skickas ut imorgon 08:00
+automatiskt". Det som höll kvar utskicken var inte veckodagen utan dagstaket
+på 50 och kön bakom det. Tillfrågad om taket och ordningen svarade Sebbe:
+"100 är takt per dag, börja med de äldre utskicken. Se till att inget hamnar i
+skräpposten, alltid hög kvalitet." Och: "du får godkännelse för allt som
+krävs." Valen nedan gjordes i arbetet.
+
+**Resonemanget.** Läst ur development (en spegel av main) 2026-11-16 07:30,
+bara antal: sändaren skickade redan 08:00 varje vardag, men högst dagens tak,
+50 sedan 11-11 (20, 25 … 50 med upptrappningen). Bakom taket stod 3 868
+godkända utkast i kö, det äldsta köat 10-26, och kön skickas äldst först.
+Kvällens körningar hamnade alltså ungefär 77 vardagar bak, medan listan sa
+"Godkänt – skickas 08:00" om vartenda ett, och efter en helg "mån 08:00". Två
+saker till syntes: dagens 50 gick ut inom samma minut 08:00, och sändaren
+prövade varje köpost var för sig varje minut dygnet runt, med runt tio
+databasfrågor per post (sändspärrarna, textputsen, en skrivning). Med 3 868
+poster blev det tiotusentals frågor i minuten i samma process som svarar
+sidorna. Det växte med antalet godkända utkast, och det kan vara en del av
+laggandet 11-15.
+
+**I koden, val för val.**
+
+- **Taket är 100** (`send_guard.TAK_PER_DAG`). Upptrappningen står kvar, fem
+  fler om dagen än den största dagsvolymen senaste veckan, så taket nås på
+  ungefär tio sändardagar (55, 60 … 100) och aldrig med ett hopp. Det var
+  hoppet 20 → 40 → 80 → 160 i oktober som skickade 600 mejl i skräpposten.
+  Valet följer Sebbes "se till att inget hamnar i skräpposten". Vill vi upp
+  till 100 direkt är det en konstant, `UPPTRAPPNING_STEG`.
+- **Äldst först** som förut (`list_due_send_queue`, scheduled_at och sedan
+  created_at), enligt Sebbes svar.
+- **Ett mejl i minuten per kund**, med start 08:00 (`scheduler.TAKT_SEKUNDER`,
+  ett per varv i `process_godkanda`). Hundra kallmejl samma sekund är ett
+  maskinmönster som mottagarnas filter reagerar på oavsett text. Dagens 100
+  är ute ungefär 09:40. Takten gäller också Godkänn och skicka, så att hundra
+  godkännanden i listan inte heller blir hundra mejl på en minut. Det första
+  går direkt, och resten står kvar som godkända och tas i tur och ordning.
+  Skicka nu ur Skickat har ingen takt, för där har en människa valt det
+  enskilda mejlet och tiden. Taket gäller där som förut.
+- **Sändaren gör inget när inget kan gå ut** (`scheduler.sandfonster_oppet`):
+  kväll, natt, helg och helgdag läses kön inte alls. Inom fönstret prövas
+  kundens egna spärrar (takten, dagens tak, leveransstoppet) en gång per kund
+  och varv (`send_guard.kundens_volymgrind`, `scheduler.kundens_historik`), i
+  stället för en gång per köpost. De säger samma sak om varje mejl i kön.
+  Efter 16 går bara svar i trådar där leadet svarat (`trad_svarad_at` i
+  förfallolistan). En stoppad post (karens, suppression) släpper fram nästa,
+  högst 25 per varv. Utfallet per mejl är detsamma som förut, och alla sex
+  spärrar körs fortfarande på varje mejl som skickas.
+- **Listan visar när varje utkast går ut** (`app/leads/sandplan.py`).
+  Sändtiden är köns plan: äldst först, ett i minuten, dagens tak med
+  upptrappningen, bara vardagar. "Skickas 08:00" om alla blev sant för ingen.
+  Längre fram än en vecka visas datumet (`lib/leads/utkast.ts:sandtid`).
+  Texterna om att godkända "skickas när sändfönstret öppnar" säger nu att de
+  skickas i tur och ordning från kön. Planen är en uppskattning: ett stoppat
+  utkast eller ett svar emellan flyttar resten en plats.
+
+**Kvar.** Kön är 3 868 utkast. Med upptrappningen till 100 tar den ungefär
+åtta veckor att beta av, och nya godkännanden hamnar sist. Utkasten från 10-26
+är tre veckor gamla när de går. Hela ändringen gäller i main först när
+release-PR:en (oloflun/snipe-leads#44) är mergad. Development skickar inget
+(spegeln, `utskick_bara_i_main`).
+
+---
+
 ## 2026-11-15 (Sebbe) — Antalet leads och körningar får inte märkas i sidan
 
 **Beslut.** Sebbe: "Nu när vi har 4400 utkast på snajp leads så börjar sidan

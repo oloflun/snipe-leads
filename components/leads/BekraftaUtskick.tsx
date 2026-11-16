@@ -22,8 +22,8 @@ const TEXT: Record<Bekraftelsetyp, { rubrik: (n: number) => Localized; knapp: (n
     rubrik: (n) => ({ sv: `${n} mejl godkänns och skickas till:`, en: `${n} ${n === 1 ? "email is" : "emails are"} approved and sent to:` }),
     knapp: (n) => ({ sv: `Skicka ${n} mejl`, en: `Send ${n} ${n === 1 ? "email" : "emails"}` }),
     forklaring: {
-      sv: "Varje mejl går genom sändspärrarna; utanför vardagar 08–16 skickas det när fönstret öppnar.",
-      en: "Every email passes the send guards; outside weekdays 08–16 it goes out when the window opens."
+      sv: "Varje mejl går genom sändspärrarna och skickas i tur och ordning från kön, ett i minuten, vardagar från 08:00.",
+      en: "Every email passes the send guards and goes out in turn from the queue, one a minute, weekdays from 08:00."
     }
   },
   avvisa: {

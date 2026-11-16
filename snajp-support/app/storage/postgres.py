@@ -1160,10 +1160,23 @@ class PostgresStorage:
                 # Äldst först: under ett dagstak (uppvärmningen, regel 5c) tog
                 # en osorterad fråga godtyckliga poster, och samma utkast kunde
                 # förbigås i dagar (main: köade 2026-10-08, ej skickade 10-20).
-                "select * from send_queue where tenant_id = $1 and status = 'queued' and scheduled_at <= $2"
-                " order by scheduled_at, created_at",
+                # trad_svarad_at (2026-11-16): sändaren hoppar över kallmejlen
+                # när bara trådsvar kan gå ut, utan ett trådupplägg per post.
+                "select q.*, t.last_inbound_at as trad_svarad_at from send_queue q"
+                " left join outreach_threads t on t.id = q.thread_id"
+                " where q.tenant_id = $1 and q.status = 'queued' and q.scheduled_at <= $2"
+                " order by q.scheduled_at, q.created_at",
                 tenant_id,
                 now,
+            )
+        return [_row(r) for r in records]
+
+    async def godkand_ko_ordning(self, tenant_id: str) -> list[dict[str, Any]]:
+        async with self._scoped(tenant_id) as conn:
+            records = await conn.fetch(
+                "select id, scheduled_at from send_queue where tenant_id = $1 and status = 'queued'"
+                " and gate_checks->>'approved_by' = 'human' order by scheduled_at, created_at",
+                tenant_id,
             )
         return [_row(r) for r in records]
 

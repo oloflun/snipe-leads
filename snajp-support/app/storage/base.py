@@ -505,7 +505,13 @@ class Storage(Protocol):
     # -- Leads: send_queue-schemaläggaren (Del J, Fas C-E) -------------------
 
     async def list_due_send_queue(self, tenant_id: str, now: Any) -> list[dict[str, Any]]:
-        """status='queued' och scheduled_at <= now, äldst först."""
+        """status='queued' och scheduled_at <= now, äldst först. Varje post bär
+        `trad_svarad_at` (trådens last_inbound_at)."""
+        ...
+
+    async def godkand_ko_ordning(self, tenant_id: str) -> list[dict[str, Any]]:
+        """De köade utkast en människa godkänt (`id`, `scheduled_at`), i den
+        ordning sändaren tar dem: äldst först (leads/sandplan.py)."""
         ...
 
     async def update_send_queue_status(

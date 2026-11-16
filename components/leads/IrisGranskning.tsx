@@ -415,8 +415,8 @@ export function IrisGranskning({
           utfall = "skickat";
         } else if (svar?.utfall === "requeued") {
           setUtfall({
-            sv: `Godkänt. Mejlet till ${mottagare} skickas när sändfönstret öppnar (vardagar 08–16).`,
-            en: `Approved. The email to ${mottagare} goes out when the sending window opens (weekdays 08–16).`
+            sv: `Godkänt. Mejlet till ${mottagare} skickas i tur och ordning från kön (vardagar från 08:00).`,
+            en: `Approved. The email to ${mottagare} goes out in turn from the queue (weekdays from 08:00).`
           });
           utfall = "vantar";
         } else {
@@ -467,7 +467,7 @@ export function IrisGranskning({
         const [skickat, vantar, ej] = [antal("skickat"), antal("vantar"), antal("stoppat") + antal("fel")];
         const delar = [
           skickat ? { sv: `${skickat} skickade`, en: `${skickat} sent` } : null,
-          vantar ? { sv: `${vantar} väntar på sändfönstret`, en: `${vantar} waiting for the sending window` } : null
+          vantar ? { sv: `${vantar} står i kön`, en: `${vantar} in the queue` } : null
         ].filter((d): d is Localized => d !== null);
         const sammanfattning: Localized = {
           sv: delar.map((d) => d.sv).join(", ") || "Inget skickat",
