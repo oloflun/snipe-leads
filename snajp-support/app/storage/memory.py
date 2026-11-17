@@ -3442,6 +3442,26 @@ class MemoryStorage:
             }
         )
 
+    # -- Gallring (migration 119) -------------------------------------------
+    #
+    # Minneslagret gallrar inte: gallringen ÄR databasfunktionen gallra_alla,
+    # och en efterbildning här hade testat en annan implementation än den som
+    # raderar i drift. Den riktiga prövas mot Postgres i tests/db/test_gallring.py.
+
+    async def gallra_dygnet(self, *, tak: int) -> dict[str, Any]:
+        return {"status": "ingen_databas"}
+
+    async def list_gallringslogg(
+        self, *, tenant_id: str | None = None, limit: int = 50
+    ) -> list[dict[str, Any]]:
+        return []
+
+    async def list_gallringspolicyer(self) -> list[dict[str, Any]]:
+        return []
+
+    async def list_gallringskorningar(self, *, limit: int = 14) -> list[dict[str, Any]]:
+        return []
+
     # -- Kundregister (migration 053) ---------------------------------------
     #
     # Samma normalisering som Postgres-sidan, via normalisera_kunddata i

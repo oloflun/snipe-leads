@@ -4759,6 +4759,62 @@ class PostgresStorage:
                 run_id,
             )
 
+    # -- Gallring (migration 119) -------------------------------------------
+    #
+    # Oskopade anslutningar: gallra_alla går över alla kunder med policy och
+    # är säkerhetsdefinierad; loggtabellerna har en läspolicy för snajp_app
+    # (119). Läsvägarna anropas bara bakom require_master_key.
+
+    async def gallra_dygnet(self, *, tak: int) -> dict[str, Any]:
+        async with self.pool.acquire() as conn:
+            # Ingen tidsgräns på 60 s här: en kund med lång historik kan ta
+            # längre, och hela körningen är EN transaktion (dygnsspärren och
+            # raderingarna går tillbaka tillsammans om något faller).
+            svar = await conn.fetchval(
+                "select public.gallra_alla($1, 'schemalagd')", tak, timeout=900
+            )
+        return json.loads(svar) if isinstance(svar, str) else (svar or {})
+
+    async def list_gallringslogg(
+        self, *, tenant_id: str | None = None, limit: int = 50
+    ) -> list[dict[str, Any]]:
+        async with self.pool.acquire() as conn:
+            records = await conn.fetch(
+                """
+                select g.*, t.slug as tenant_slug
+                  from ss_gallringslogg g
+                  left join ss_tenants t on t.id = g.tenant_id
+                 where ($1::uuid is null or g.tenant_id = $1)
+                 order by g.kord_at desc, g.id desc
+                 limit $2
+                """,
+                tenant_id,
+                limit,
+            )
+        return [_avkoda_jsonb(_row(r), "antal") for r in records]
+
+    async def list_gallringspolicyer(self) -> list[dict[str, Any]]:
+        async with self.pool.acquire() as conn:
+            records = await conn.fetch(
+                """
+                select t.id as tenant_id, t.slug as tenant_slug,
+                       p.dagar, p.beslutad_av, p.beslutad_at,
+                       (select max(g.kord_at) from ss_gallringslogg g
+                         where g.tenant_id = t.id and not g.torrkorning) as senast_kord_at
+                  from ss_tenants t
+                  left join ss_gallringspolicy p on p.tenant_id = t.id
+                 order by t.slug
+                """
+            )
+        return [_row(r) for r in records]
+
+    async def list_gallringskorningar(self, *, limit: int = 14) -> list[dict[str, Any]]:
+        async with self.pool.acquire() as conn:
+            records = await conn.fetch(
+                "select * from ss_gallringskorning order by dag desc limit $1", limit
+            )
+        return [_row(r) for r in records]
+
     # -- Kundregister (migration 053) ---------------------------------------
     #
     # Oskopade anslutningar av samma skäl som adminläsningarna ovan: RLS-

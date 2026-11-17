@@ -50,6 +50,61 @@ jobs:
         working-directory: snajp-support
         run: pytest
 
+  databas:
+    # Raderingslogik får inte gå ut otestad, och minneslagret som resten av
+    # sviten kör mot gallrar inte. Det här jobbet reser HELA migrationskedjan
+    # från noll mot en tom Postgres (samma huvudversion som driften, 17, med
+    # pgvector som 002 kräver), på samma sätt som scripts/lokal_stack.py gör
+    # lokalt, och kör databastesterna mot den. Databasen är syntetisk och dör
+    # med jobbet; inga hemligheter, ingen riktig miljö.
+    name: databastester (Postgres 17, hela migrationskedjan)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # Jobbet läser bara koden; tokenen får inte mer än så.
+    permissions:
+      contents: read
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_PASSWORD: localdev
+          POSTGRES_DB: railway
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      # Lösenorden är lokal_stack.py:s öppna engångsvärden, inga hemligheter.
+      LOKAL_DSN: postgresql://postgres:localdev@127.0.0.1:5432/railway
+      GALLRING_TEST_DSN: postgresql://postgres:localdev@127.0.0.1:5432/railway
+      GALLRING_TEST_APP_DSN: postgresql://snajp_app:localapp@127.0.0.1:5432/railway
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: snajp-support/requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r snajp-support/requirements.txt psycopg2-binary
+
+      - name: Res migrationskedjan från noll
+        # lokal_stack.kor_kedjan: railway_migrate.planned() i ordning
+        # (railway/000_auth_compat.sql först), approllernas lösenord och
+        # NULLIF-kontrollen av tenant-policyerna. Faller på första migrationen
+        # som inte går att applicera och säger vilken.
+        run: |
+          python -c "import sys; sys.path.insert(0, 'scripts'); import lokal_stack; sys.exit(1 if lokal_stack.kor_kedjan() else 0)"
+
+      - name: Gallringen mot databasen
+        working-directory: snajp-support
+        run: pytest tests/db/test_gallring.py -v -rs -s
+
   invariants:
     name: Architecture invariants
     runs-on: ubuntu-latest

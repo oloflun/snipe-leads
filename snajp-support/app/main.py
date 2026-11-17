@@ -19,6 +19,7 @@ import asyncio
 from .api import (
     admin,
     admin_flytt,
+    admin_gallring,
     admin_konvertera,
     admin_ombedom,
     admin_utkastsvep,
@@ -366,6 +367,15 @@ async def lifespan(app: FastAPI):
 
         trial_task = asyncio.create_task(run_trial_paminnare(app.state))
 
+    # Gallringen: raderar kunddata äldre än kundens beslutade period, högst en
+    # gång per dygn, aldrig i en spegel. AV som standard (GALLRING_AKTIV).
+    # Se app/jobs/gallring.py och migration 119.
+    gallring_task = None
+    if settings.gallring_aktiv:
+        from .jobs.gallring import run_gallring
+
+        gallring_task = asyncio.create_task(run_gallring(app.state))
+
     # Vertex-tokenen hämtas och hålls färsk utanför händelseloopen (H7): utan
     # det blockerade det första kundanropet efter varje deploy, och sedan ett
     # i timmen, hela api:t medan tokenen förnyades. Se agent/llm.py.
@@ -382,7 +392,7 @@ async def lifespan(app: FastAPI):
     # ett pågående steg ska hinna ta emot avbrottet; Railway ger processen 30.
     uppgifter = [
         t
-        for t in (poller_task, send_scheduler_task, stadare_task, trial_task, vertex_task,
+        for t in (poller_task, send_scheduler_task, stadare_task, trial_task, gallring_task, vertex_task,
                   *chat_worker_tasks, *leads_worker_tasks)
         if t is not None
     ]
@@ -453,6 +463,8 @@ app.include_router(admin_profil.router)
 # Kundregistret — fliken Kunder & Data. Egen modul av samma skäl som profilen,
 # se docstringen i api/admin_kunddata.py.
 app.include_router(admin_kunddata.router)
+# Gallringens insyn (läsning, master-grindad) — se docstringen i admin_gallring.py.
+app.include_router(admin_gallring.router)
 app.include_router(admin_konvertera.router)
 # Ombedömning av sparade Iris-leads efter regelskärpningen 2026-10-06; se
 # docstringen i api/admin_ombedom.py.

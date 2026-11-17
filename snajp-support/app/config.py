@@ -371,6 +371,21 @@ class Settings(BaseSettings):
     # 0 stänger av den. Svepet är idempotent (unik logg per arbetsyta och
     # typ), så intervallet styr bara hur snabbt en ny kandidat upptäcks.
     trial_paminnelse_sekunder: int = 6 * 3600
+
+    # Gallringen (app/jobs/gallring.py, migration 119). AV som standard: en
+    # körning raderar kunddata, och den slås på av ägaren i main när varje
+    # kund har en beslutad policy (scripts/gallra.py --policyns-period).
+    # Kunder utan policy gallras aldrig, och i en spegel (development) gör
+    # körningen ingenting — spegeln får main:s raderingar genom synken.
+    gallring_aktiv: bool = False
+    # Högst så här många rader ändras hos EN kund per körning. Är urvalet
+    # större görs ingenting hos kunden och plattformsadmin larmas; ett
+    # felaktigt policyvärde ska ge ett larm, inte en tom kund.
+    gallring_tak: int = 5000
+    # Körningen görs högst en gång per svenskt dygn (dygnsspärren i
+    # databasen), tidigast den här timmen. Loopen tittar en gång i timmen.
+    gallring_timme: int = 3
+    gallring_kontroll_sekunder: int = 3600
     # Fas R2 (bd snipe-cku): semantisk svarscache. "off" (default): cachen
     # rörs aldrig — varken lookup eller store, inte ens ett embedding-anrop.
     # "shadow": lookup+store körs, men en TRÄFF ändrar inget i svaret, bara
