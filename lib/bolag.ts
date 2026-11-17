@@ -40,8 +40,18 @@ export const BOLAG = {
   namn: "Snajp",
   orgnr: "[XXXXXX-XXXX]",
   postadress: "[Gatuadress, postnummer, ort]",
-  /** Sätts när integritetspolicyn granskats av jurist och publicerats skarpt. */
-  policyUppdaterad: "[DATUM]"
+  /**
+   * När varje juridisk sida senast ändrades i sak (ÅÅÅÅ-MM-DD), visat som
+   * "Senast uppdaterad" under rubriken. En platshållare renderas inte. Datumet
+   * säger när texten ändrades, inte att den är juristgranskad; det är den inte.
+   * Uppdatera datumet i samma ändring som sidans text.
+   */
+  uppdaterad: {
+    integritetspolicy: "2026-11-17",
+    cookies: "2026-11-17",
+    villkor: "[DATUM]",
+    angerratt: "[DATUM]"
+  }
 } as const;
 
 /** Adressen för dataskyddsärenden. Ska ligga på snajp.se, inte på Gmail. */

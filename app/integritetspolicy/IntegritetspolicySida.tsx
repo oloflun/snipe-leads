@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { JuridiskSida } from "@/components/marketing/JuridiskSida";
 import { KONTAKT_MEJL } from "@/components/marketing/copy";
-import { bolagsraden, dataskyddKontakt, utanPlatshallare, UNDERLEVERANTORER } from "@/lib/bolag";
+import { BOLAG, bolagsraden, dataskyddKontakt, utanPlatshallare, UNDERLEVERANTORER } from "@/lib/bolag";
 import { useLocale, type Localized } from "@/lib/i18n";
 
 /**
@@ -33,6 +33,10 @@ const T = {
     sv: "är personuppgiftsansvarig för behandlingen av personuppgifter som sker när du besöker snajp.se, registrerar ett konto eller på annat sätt är i kontakt med oss.",
     en: "is the data controller for the processing of personal data that takes place when you visit snajp.se, register an account or are otherwise in contact with us."
   },
+  ansvarigBitrade: {
+    sv: "När ett företag använder Snajp för sin kundtjänst eller sina utskick är det företaget som är personuppgiftsansvarigt för de uppgifterna, och Snajp är personuppgiftsbiträde. Det gäller till exempel ett mejl du fått från ett företag som använder Snajp, och chatten på ett sådant företags webbplats.",
+    en: "When a company uses Snajp for its customer service or its outreach, that company is the data controller for that data, and Snajp is a data processor. This applies, for example, to an email you have received from a company that uses Snajp, and to the chat on such a company's website."
+  },
   kontakt: { sv: "Kontakt i dataskyddsfrågor:", en: "Contact for data protection matters:" },
   konto: { sv: "Kontouppgifter", en: "Account details" },
   kontoText: {
@@ -48,6 +52,11 @@ const T = {
   utskickText: {
     sv: "Om vi kontaktar er som potentiell kund använder vi allmänt tillgängliga företagsuppgifter. Rättslig grund: berättigat intresse. Du kan alltid avregistrera dig via länken i mejlet, och avregistreringen gäller omedelbart och för alla framtida utskick.",
     en: "If we contact you as a potential customer, we use publicly available company information. Legal basis: legitimate interest. You can always unsubscribe through the link in the email, and the unsubscribe applies immediately and to all future mailings."
+  },
+  demolank: { sv: "Demolänken i utskicken", en: "The demo link in our mailings" },
+  demolankText: {
+    sv: "Våra utskick kan innehålla en länk till en demo som är unik för varje mottagare. Följer du den registrerar vi när länken öppnades och vilken webbläsare som öppnade den, och, om demon ligger på snajp.se, när du första gången skrollar eller klickar där. Registreringen innehåller ingen IP-adress. Ändamålet är att se om mottagaren har tittat på demon och att skilja en människa från e-postskydd som öppnar länkar automatiskt. Rättslig grund: berättigat intresse, samma som för utskicken. Du kan invända mot registreringen, och du kan se demon utan att registreras genom att gå direkt till snajp.se/demo. Skickar ett företag som använder Snajp samma sorts länk är det företaget som är personuppgiftsansvarigt för registreringen. Vad som sparas i webbläsaren står på",
+    en: "Our mailings may contain a link to a demo that is unique to each recipient. If you follow it, we record when the link was opened and which browser opened it, and, if the demo is on snajp.se, when you first scroll or click there. The record contains no IP address. The purpose is to see whether the recipient has looked at the demo and to tell a person apart from email security filters that open links automatically. Legal basis: legitimate interest, the same as for the mailings. You can object to the recording, and you can see the demo without being recorded by going directly to snajp.se/demo. If a company that uses Snajp sends the same kind of link, that company is the data controller for the recording. What is stored in the browser is set out on the"
   },
   foretagsRubrik: { sv: "Företagsuppgifter", en: "Company information" },
   foretagsText: {
@@ -75,6 +84,14 @@ const T = {
     sv: "Leverantören behandlar texten för vår räkning och enligt avtal. Vilka leverantörer det gäller, och vad respektive avtal säger om hur uppgifterna får användas, står nedan.",
     en: "The provider processes the text on our behalf and under contract. Which providers this concerns, and what each contract says about how the data may be used, is set out below."
   },
+  assistent: {
+    sv: "En AI-assistent läser och besvarar meddelanden i chatten på snajp.se och i supportmejl som skickas med Snajp, också hos de företag som använder Snajp. I chatten står det \"AI-assistent\" i huvudet. Ett mejlsvar som skickas utan att en människa har granskat det har en rad om att en AI-assistent har skrivit det; ett svar som en människa har godkänt har ingen sådan rad.",
+    en: "An AI assistant reads and answers messages in the chat on snajp.se and in support emails sent with Snajp, including at the companies that use Snajp. In the chat, the header says \"AI assistant\". An email reply sent without review by a person carries a line saying that an AI assistant wrote it; a reply that a person has approved carries no such line."
+  },
+  manniska: {
+    sv: "Vill du prata med en människa, skriv det i chatten eller i ett svar på mejlet, så tar en människa över. Du kan också skriva direkt till",
+    en: "If you want to talk to a person, say so in the chat or in a reply to the email, and a person will take over. You can also write directly to"
+  },
   foljande: {
     sv: "Vi använder följande underleverantörer för att driva tjänsten:",
     en: "We use the following sub-processors to run the service:"
@@ -89,17 +106,58 @@ const T = {
     sv: ", räknat från den senaste behandlingen, och därefter gallras de. Samma tid gäller samtliga kategorier ovan. Gallringen är automatiserad och loggas. Kontakta oss om du vill veta vad som gäller just ditt ärende.",
     en: ", counted from the most recent processing, after which it is deleted. The same period applies to all the categories above. Deletion is automated and logged. Contact us if you want to know what applies to your particular case."
   },
-  ratt1: {
-    sv: "Du har rätt att begära tillgång till, rättelse av och radering av dina uppgifter, samt att invända mot behandling som sker med stöd av berättigat intresse. Kontakta oss på",
-    en: "You have the right to request access to, rectification of and erasure of your data, and to object to processing based on legitimate interest. Contact us at"
+  rattIntro: {
+    sv: "Du har följande rättigheter när vi behandlar uppgifter om dig:",
+    en: "You have the following rights when we process data about you:"
   },
-  ratt2: {
-    sv: ". Du har också rätt att klaga till Integritetsskyddsmyndigheten,",
-    en: ". You also have the right to lodge a complaint with the Swedish Authority for Privacy Protection (Integritetsskyddsmyndigheten),"
+  rattTillgang: {
+    sv: "Tillgång: att få veta vilka uppgifter vi har om dig och få en kopia av dem.",
+    en: "Access: to find out what data we hold about you and to receive a copy of it."
   },
+  rattRattelse: {
+    sv: "Rättelse: att få felaktiga uppgifter rättade och ofullständiga kompletterade.",
+    en: "Rectification: to have inaccurate data corrected and incomplete data completed."
+  },
+  rattRadering: {
+    sv: "Radering: att få uppgifterna raderade, till exempel när vi inte längre behöver dem eller när du invänt och vi saknar skäl att fortsätta.",
+    en: "Erasure: to have the data erased, for example when we no longer need it or when you have objected and we have no grounds to continue."
+  },
+  rattBegransning: {
+    sv: "Begränsning: att vi tills vidare bara lagrar uppgifterna och inte använder dem, till exempel medan vi prövar om de stämmer eller prövar din invändning.",
+    en: "Restriction: that for the time being we only store the data and do not use it, for example while we check whether it is accurate or consider your objection."
+  },
+  rattPortabilitet: {
+    sv: "Dataportabilitet: att få ut de uppgifter du själv har lämnat till oss, till exempel dina kontouppgifter, i ett maskinläsbart format, eller få dem överförda till någon annan.",
+    en: "Data portability: to receive the data you have provided to us yourself, for example your account details, in a machine-readable format, or to have it transferred to someone else."
+  },
+  rattInvandning: {
+    sv: "Invändning: att invända mot behandling som grundas på berättigat intresse. Invänder du mot direktmarknadsföring, som våra utskick, slutar vi alltid. Det enklaste är avregistreringslänken i mejlet.",
+    en: "Objection: to object to processing based on legitimate interest. If you object to direct marketing, such as our mailings, we always stop. The simplest way is the unsubscribe link in the email."
+  },
+  rattAutomatiserat: {
+    sv: "Automatiserade beslut: att inte bli föremål för ett beslut som enbart grundas på automatiserad behandling, om beslutet har rättsliga följder för dig eller på liknande sätt påverkar dig i betydande grad. Vi fattar inga sådana beslut om dig.",
+    en: "Automated decisions: not to be subject to a decision based solely on automated processing, if the decision has legal effects for you or similarly significantly affects you. We make no such decisions about you."
+  },
+  rattSamtycke: {
+    sv: "Vi behandlar inga av uppgifterna på den här sidan med stöd av samtycke. Ber vi dig någon gång om samtycke kan du återkalla det när som helst.",
+    en: "We do not process any of the data on this page on the basis of consent. If we ever ask for your consent, you can withdraw it at any time."
+  },
+  rattHur: {
+    sv: "Skriv till oss på",
+    en: "Write to us at"
+  },
+  rattHur2: {
+    sv: "för att använda dina rättigheter. Gäller det uppgifter som ett företag behandlar med hjälp av Snajp är det företaget som är personuppgiftsansvarigt; vänd dig i första hand dit.",
+    en: "to exercise your rights. If it concerns data that a company processes with the help of Snajp, that company is the data controller; contact it first."
+  },
+  rattImy: {
+    sv: "Du har också rätt att klaga hos Integritetsskyddsmyndigheten (IMY):",
+    en: "You also have the right to lodge a complaint with the Swedish Authority for Privacy Protection (Integritetsskyddsmyndigheten, IMY):"
+  },
+  uppdaterad: { sv: "Senast uppdaterad:", en: "Last updated:" },
   cookieText: {
-    sv: "Snajp.se sätter en enda cookie, och den är strikt nödvändig. Läs mer på",
-    en: "Snajp.se sets a single cookie, and it is strictly necessary. Read more on the"
+    sv: "Vilka kakor och vilken lagring i webbläsaren snajp.se använder, och varför, står på",
+    en: "Which cookies and which browser storage snajp.se uses, and why, is set out on the"
   },
   cookieLank: { sv: "cookiesidan", en: "cookie page" }
 } satisfies Record<string, Localized>;
@@ -109,7 +167,11 @@ export function IntegritetspolicySida() {
   const kontakt = dataskyddKontakt(KONTAKT_MEJL);
 
   return (
-    <JuridiskSida rubrik={text(T.rubrik)} ingress={text(T.ingress)}>
+    <JuridiskSida
+      rubrik={text(T.rubrik)}
+      ingress={text(T.ingress)}
+      uppdaterad={{ etikett: text(T.uppdaterad), datum: BOLAG.uppdaterad.integritetspolicy }}
+    >
       {/* Innehållsförteckning. Inline och inte i marginalen: JuridiskSida
           sätter 68 tecken och delas med villkors- och cookiesidan, så en
           sidokolumn hade byggts om för tre sidor för att tjäna en. Länkarna
@@ -138,6 +200,7 @@ export function IntegritetspolicySida() {
       <p>
         {bolagsraden(", ")} {text(T.ansvarigText)}
       </p>
+      <p>{text(T.ansvarigBitrade)}</p>
       <p>
         {text(T.kontakt)} <a href={`mailto:${kontakt}`}>{kontakt}</a>
       </p>
@@ -152,6 +215,11 @@ export function IntegritetspolicySida() {
 
       <h3>{text(T.utskick)}</h3>
       <p>{text(T.utskickText)}</p>
+
+      <h3 id="demolank">{text(T.demolank)}</h3>
+      <p>
+        {text(T.demolankText)} <Link href="/cookies#demolank">{text(T.cookieLank)}</Link>.
+      </p>
 
       <h2 id="kallor">{text(T.kallor)}</h2>
       <p>
@@ -175,6 +243,10 @@ export function IntegritetspolicySida() {
           är den ena texten på hela sajten som inte får vara optimistisk.
           Se docs/JURIDIK_ATGARDER.md, P0.1c. */}
       <p>{text(T.modell2)}</p>
+      <p>{text(T.assistent)}</p>
+      <p>
+        {text(T.manniska)} <a href={`mailto:${kontakt}`}>{kontakt}</a>.
+      </p>
 
       <h2 id="underleverantorer">{text(T.underleverantorer)}</h2>
       <p>{text(T.foljande)}</p>
@@ -204,9 +276,22 @@ export function IntegritetspolicySida() {
       </p>
 
       <h2 id="rattigheter">{text(T.rattigheter)}</h2>
+      <p>{text(T.rattIntro)}</p>
+      <ul>
+        <li>{text(T.rattTillgang)}</li>
+        <li>{text(T.rattRattelse)}</li>
+        <li>{text(T.rattRadering)}</li>
+        <li>{text(T.rattBegransning)}</li>
+        <li>{text(T.rattPortabilitet)}</li>
+        <li>{text(T.rattInvandning)}</li>
+        <li>{text(T.rattAutomatiserat)}</li>
+      </ul>
+      <p>{text(T.rattSamtycke)}</p>
       <p>
-        {text(T.ratt1)} <a href={`mailto:${kontakt}`}>{kontakt}</a>
-        {text(T.ratt2)} <a href="https://imy.se">imy.se</a>.
+        {text(T.rattHur)} <a href={`mailto:${kontakt}`}>{kontakt}</a> {text(T.rattHur2)}
+      </p>
+      <p>
+        {text(T.rattImy)} <a href="https://www.imy.se">imy.se</a>.
       </p>
 
       <h2 id="cookies">{text(T.cookies)}</h2>
