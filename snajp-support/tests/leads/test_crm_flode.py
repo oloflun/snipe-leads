@@ -107,7 +107,7 @@ async def test_utkast_lagen_valjer_det_vantande_utkastet_och_senaste_koposten():
 
 async def _med_prospekt(storage: MemoryStorage, **prospekt) -> tuple[str, str, str]:
     item_id, thread_id, message_id = _seed(storage, scheduled_at=WITHIN_WINDOW_UTC)
-    p = await storage.create_prospect(TENANT, company_name="Kund AB", contact_email="vd@kund.se", origin="manual")
+    p = await storage.create_prospect(TENANT, company_name="Kund AB", contact_email="info@kund.se", origin="manual")
     p.update(prospekt)
     storage.outreach_threads[TENANT][thread_id]["prospect_id"] = p["id"]
     return item_id, thread_id, p["id"]
