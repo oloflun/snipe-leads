@@ -1,88 +1,101 @@
 #!/usr/bin/env python
-"""Lägg upp en ny kund — allt som går att göra maskinellt, i ett anrop.
+"""Lägg upp en ny NAMNGIVEN kund mot Railway-driften. Torrkörning som standard.
 
-    python scripts/onboard_tenant.py --slug bolaget --name "Bolaget AB" --env preview
+    python scripts/onboard_tenant.py --slug bolaget --name "Bolaget AB"            # visar planen
+    python scripts/onboard_tenant.py --slug bolaget --name "Bolaget AB" --apply    # development
+    python scripts/onboard_tenant.py --slug bolaget --name "Bolaget AB" \\
+        --env main --jag-menar-produktion --apply
 
-Före det här skriptet var rutinen elva manuella steg (TENANTS.md), och **två av
-dem hade ingen kod alls**: ingenting i kodbasen skrev `workspaces.slug` eller
-`ss_tenant_id`, och `scripts/keys.py --push` var i praktiken en no-op eftersom
-nyckellistan inte innehöll några Vercel-nycklar. Följden var att en ny kund
-kunde se helt korrekt ut i koden och ändå möta 409 eller 503 i drift.
+## Vad skriptet gör, och mot vad
 
-Vad som INTE automatiseras, med flit: research av kundens sajt, kunskapsbasens
-innehåll, logotypen och den okulära besiktningen. De kräver ögon, och ett
-skript som låtsas göra dem hade producerat en kund som ser klar ut men svarar
-fel. Skriptet skriver ut dem som checklista i stället.
+Utan `--apply` skrivs ingenting: inget anrop mot backenden, ingen fil, ingen
+variabel. Skriptet visar planen och de steg som kräver en människa.
 
-Idempotent: `POST /api/keys` upsertar tenanten, workspace-skrivningen är en
-upsert på slug, och filgenereringen hoppar över filer som redan finns.
+Med `--apply`:
+
+  1. Tenant + API-nyckel: `POST /api/keys` mot miljöns backend
+     (`RAILWAY_<ENV>_API_URL`, masternyckeln `RAILWAY_<ENV>_MASTER_API_KEY` ur
+     `.env.deploy`), med `kraver_avtal: true` så att kunden inte får någon
+     trafik förrän avtalet är registrerat (INV-AVTAL-001). Upsert på slug.
+  2. Nyckeln sparas som `RAILWAY_<ENV>_KEY_<SLUG>` i `.env.deploy` och sätts som
+     `SNAJP_KEY_<SLUG>` på Railway-tjänsten `web` i samma miljö, följt av en
+     redeploy och en kontroll mot `/api/kb` med den nya nyckeln. Samma väg som
+     `scripts/railway_tenantnyckel.py`, med dess hjälpfunktioner.
+     `--utan-web` hoppar över Railway-delen (nyckeln sparas ändå).
+  3. Configfilen `lib/tenants/<slug>.ts`, registrerad i `lib/tenants/index.ts`.
+  4. KB-stubben `snajp-support/app/tenants/<slug>_kb.py`, registrerad i
+     `TENANTS`.
+
+## Vad skriptet med flit INTE gör
+
+* **Kopplar ingen arbetsyta.** Den gamla versionen skrev `workspaces` direkt
+  i den gamla databasen. I dag kopplas en kund som registrerar sig själv
+  automatiskt till en egen `kund-<8>`-tenant (`lib/snajp/provisionering.ts`,
+  `link_workspace_tenant`, migration 061), och den funktionen tar bara
+  `kund-`-slugar. Att koppla en kunds arbetsyta till en NAMNGIVEN tenant har
+  inget skript i dag; `railway_link_admin_workspace.py` kopplar bara
+  plattformsadminens egen arbetsyta. Skriptet skriver ut det som ett manuellt
+  steg i stället för att gissa vilken arbetsyta som är kundens.
+* Research av kundens sajt, kunskapsbasens innehåll, logotypen och den okulära
+  besiktningen. De kräver ögon och skrivs ut som checklista.
+* De juridiska stegen (docs/pilot_onboarding.md, "Avtal och dataskydd före
+  första trafik"). De skrivs ut i ordning.
+
+Läckagespärr: rånyckeln går från HTTP-svaret till `.env.deploy` och Railway.
+Den skrivs aldrig ut, bara namn och längd.
 """
 
 from __future__ import annotations
 
 import argparse
 import json
-import os
 import re
-import subprocess
 import sys
 import urllib.error
 import urllib.request
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-FRONTEND_ENV = ROOT / ".env.local"
-BACKEND_ENV = ROOT / "snajp-support" / ".env"
-DEPLOY_ENV = ROOT / ".env.deploy"
 
 TENANTS_DIR = ROOT / "lib" / "tenants"
 KB_DIR = ROOT / "snajp-support" / "app" / "tenants"
 
-#: Vilken miljö kunden läggs upp i. Backend-URL och Vercel-scope följer med.
-ENVIRONMENTS = {
-    "production": {
-        "vercel_scopes": ("production",),
-        "backend_env_key": "SNAJP_SUPPORT_URL",
-    },
-    "preview": {
-        # Vercel har både "preview" och "development" som scope. En nyckel som
-        # bara finns i preview saknas när någon kör `vercel dev` lokalt, och det
-        # felet ser ut som en kodbugg. Sätt båda.
-        "vercel_scopes": ("preview", "development"),
-        "backend_env_key": "SNAJP_SUPPORT_URL_PREVIEW",
-    },
-}
+#: Railway-miljöerna, samma namn som railway_provision.ENVIRONMENTS och de
+#: andra Railway-skripten. `development` speglar produktionen och bär riktig
+#: kunddata (CLAUDE.md), så den är ingen sandlåda.
+MILJOER = ("development", "main")
 
-
-# --- Hjälpare som återanvänds ur keys.py --------------------------------
+# --- Hjälpare som återanvänds ------------------------------------------------
 #
 # Importeras hellre än kopieras: guard_gitignored() är en säkerhetsspärr, och
 # två kopior av en säkerhetsspärr blir förr eller senare en som glömdes bort.
 
 sys.path.insert(0, str(ROOT / "scripts"))
-from keys import guard_gitignored, read_env, vercel_env_set  # noqa: E402
+from keys import guard_gitignored  # noqa: E402
+from railway_provision import (  # noqa: E402
+    deploy,
+    env_read,
+    env_set,
+    envs_by_name,
+    services_by_name,
+    set_vars,
+    state,
+)
 
 
 def slugify(name: str) -> str:
     """Samma regel som backendens _slugify i app/api/keys.py.
 
     Måste stämma, annars skapar backenden en tenant med en annan slug än den
-    configfilen och workspace-raden pekar på — och felet syns först som en 409
-    långt senare.
+    configfilen pekar på — och felet syns först som en 409 långt senare.
     """
     lowered = name.lower().replace("å", "a").replace("ä", "a").replace("ö", "o")
     return re.sub(r"[^a-z0-9]+", "-", lowered).strip("-") or "tenant"
 
 
-def env_value(name: str, *paths: Path) -> str:
-    """Läser en variabel ur miljön först, sedan ur env-filerna i tur och ordning."""
-    if os.environ.get(name):
-        return os.environ[name]
-    for path in paths:
-        value = read_env(path).get(name, "")
-        if value:
-            return value
-    return ""
+def nyckelnamn(slug: str) -> str:
+    """`SNAJP_KEY_<SLUG>` — samma härledning som lib/tenants/*.ts och railway_tenant_keys.py."""
+    return f"SNAJP_KEY_{slug.upper().replace('-', '_')}"
 
 
 # --- Steg 1: tenant + API-nyckel ----------------------------------------
@@ -92,7 +105,7 @@ def create_tenant_and_key(backend_url: str, master_key: str, slug: str, name: st
     """POST /api/keys upsertar tenanten OCH skapar nyckeln i samma anrop.
 
     Rånyckeln returneras en enda gång och visas aldrig igen — den går direkt
-    vidare till Vercel och skrivs aldrig ut.
+    vidare till .env.deploy och Railway och skrivs aldrig ut.
     """
     # kraver_avtal uttryckligen: en riktig kund får ingen trafik förrän
     # biträdesavtalet är registrerat (INV-AVTAL-001). Gäller bara en ny
@@ -113,46 +126,25 @@ def create_tenant_and_key(backend_url: str, master_key: str, slug: str, name: st
     except urllib.error.URLError as error:
         sys.exit(
             f"AVBRYTER: nådde inte backenden på {backend_url} ({error.reason}). "
-            "På Renders gratisplan tar en kallstart ~1 minut — försök igen."
-        )
-
-
-# --- Steg 2: workspace-kopplingen ---------------------------------------
-
-
-def link_workspace(supabase_url: str, service_key: str, slug: str, name: str, tenant_id: str) -> str:
-    """Sätter workspaces.slug + ss_tenant_id.
-
-    DEN HÄR SAKNADES HELT. Ingen kodrad i repot skrev de två kolumnerna — enda
-    exemplet var hårdkodat i migration 007. Utan dem kastar requireSnajpTenant()
-    409 "Arbetsytan är inte kopplad till någon kund ännu".
-    """
-    base = f"{supabase_url.rstrip('/')}/rest/v1/workspaces"
-    headers = {
-        "apikey": service_key,
-        "Authorization": f"Bearer {service_key}",
-        "Content-Type": "application/json",
-        # merge-duplicates: kör skriptet om utan att skapa en andra arbetsyta.
-        "Prefer": "resolution=merge-duplicates,return=representation",
-    }
-    body = json.dumps(
-        [{"name": name, "slug": slug, "ss_tenant_id": tenant_id, "products": ["support", "leads"]}]
-    ).encode()
-    request = urllib.request.Request(
-        f"{base}?on_conflict=slug", data=body, headers=headers, method="POST"
-    )
-    try:
-        with urllib.request.urlopen(request, timeout=60) as response:
-            rows = json.loads(response.read())
-            return rows[0]["id"] if rows else "(okänt id)"
-    except urllib.error.HTTPError as error:
-        sys.exit(
-            f"AVBRYTER: Supabase svarade {error.code} på workspaces-upserten — "
-            f"{error.read().decode(errors='replace')[:300]}"
+            "Kontrollera att api-tjänsten i Railway-miljön är uppe och försök igen."
         )
 
 
 # --- Steg 3 och 4: filerna ----------------------------------------------
+#
+# Läses och skrivs som bytes: Path.write_text på Windows gör om varje \n till
+# \r\n, och en omskriven index.ts hade blivit en diff över hela filen.
+
+
+def _las(path: Path) -> tuple[str, str]:
+    """Texten med \\n som radslut, och filens eget radslut att skriva tillbaka med."""
+    raw = path.read_bytes().decode("utf-8")
+    radslut = "\r\n" if "\r\n" in raw else "\n"
+    return raw.replace("\r\n", "\n"), radslut
+
+
+def _skriv(path: Path, text: str, radslut: str = "\n") -> None:
+    path.write_bytes(text.replace("\n", radslut).encode("utf-8"))
 
 
 def write_tenant_config(slug: str, name: str) -> Path | None:
@@ -162,7 +154,8 @@ def write_tenant_config(slug: str, name: str) -> Path | None:
         return None
 
     var = re.sub(r"[^a-z0-9]", "", slug)
-    target.write_text(
+    _skriv(
+        target,
         f'''import type {{ Tenant }} from "./types";
 
 /**
@@ -183,7 +176,7 @@ export const {var}: Tenant = {{
   name: "{name}",
   tagline: "TODO",
   website: "https://TODO",
-  supportKeyEnv: "SNAJP_KEY_{slug.upper().replace("-", "_")}",
+  supportKeyEnv: "{nyckelnamn(slug)}",
 
   logo: {{
     src: "/tenants/{slug}/logo.png",
@@ -217,23 +210,26 @@ export const {var}: Tenant = {{
   supportPrompts: ["TODO", "TODO", "TODO"]
 }};
 ''',
-        encoding="utf-8",
     )
 
     index = TENANTS_DIR / "index.ts"
-    text = index.read_text(encoding="utf-8")
+    text, radslut = _las(index)
     if f'from "./{slug}"' not in text:
-        text = text.replace(
-            'import { livrustning } from "./livrustning";',
-            f'import {{ livrustning }} from "./livrustning";\nimport {{ {var} }} from "./{slug}";',
-            1,
-        )
-        text = text.replace(
-            "const tenants: Record<string, Tenant> = {\n  livrustning\n};",
-            f"const tenants: Record<string, Tenant> = {{\n  livrustning,\n  {var}\n}};",
-            1,
-        )
-        index.write_text(text, encoding="utf-8")
+        import_ankare = 'import { livrustning } from "./livrustning";'
+        # Registret har fått kommentarer och fler kunder sedan skriptet skrevs;
+        # därför ankras raden på dictens öppning och inte på hela innehållet.
+        register_ankare = "const tenants: Record<string, Tenant> = {\n"
+        if import_ankare in text and register_ankare in text:
+            text = text.replace(
+                import_ankare, f'{import_ankare}\nimport {{ {var} }} from "./{slug}";', 1
+            )
+            text = text.replace(register_ankare, f"{register_ankare}  {var},\n", 1)
+            _skriv(index, text, radslut)
+        else:
+            print(
+                f"  VARNING: hittade inte ankarraderna i lib/tenants/index.ts. "
+                f"Registrera {var} där för hand."
+            )
     return target
 
 
@@ -248,7 +244,8 @@ def write_kb_module(slug: str, name: str) -> Path | None:
     if target.exists():
         return None
 
-    target.write_text(
+    _skriv(
+        target,
         f'''"""Kunskapsbas för {name}.
 
 TODO: skriv artiklarna som svar på FAKTISKA kundfrågor, inte som kopierad
@@ -267,66 +264,141 @@ Två regler som kostat oss förut:
     # {{"title": "...", "content": "...", "category": "..."}},
 ]
 ''',
-        encoding="utf-8",
     )
 
     init = KB_DIR / "__init__.py"
-    text = init.read_text(encoding="utf-8")
+    text, radslut = _las(init)
     if f"{module}_kb" not in text:
-        text = text.replace(
-            "TENANTS: dict[str, dict] = {",
-            f'from .{module}_kb import {module.upper()}_KB\n\nTENANTS: dict[str, dict] = {{\n'
-            f'    "{slug}": {{"name": "{name}", "articles": {module.upper()}_KB}},',
-            1,
-        )
-        init.write_text(text, encoding="utf-8")
+        ankare = "TENANTS: dict[str, dict] = {"
+        if ankare in text:
+            text = text.replace(
+                ankare,
+                f'from .{module}_kb import {module.upper()}_KB\n\n{ankare}\n'
+                f'    "{slug}": {{"name": "{name}", "articles": {module.upper()}_KB}},',
+                1,
+            )
+            _skriv(init, text, radslut)
+        else:
+            print(f"  VARNING: hittade inte TENANTS i {init.name}. Registrera {slug} för hand.")
     return target
+
+
+# --- Utskrifterna ------------------------------------------------------------
+
+
+def manuella_steg(slug: str, env: str) -> str:
+    """Det som kräver ögon eller uppgifter skriptet inte har."""
+    prefix = f"RAILWAY_{env.upper()}"
+    return f"""
+Kvar, och det kräver ögon (TENANTS.md steg 1 och 7):
+
+  1. Research kundens sajt — varje sida, inte bara startsidan. Policysidor
+     ligger ofta bara i sidfoten och innehåller det kunden glömmer nämna.
+  2. Kunskapsbasen: kör scripts/pilot_kb_utkast.py (docs/pilot_onboarding.md)
+     och skicka in de godkända artiklarna med --apply. Nyckeln står som
+     {prefix}_KEY_{slug.upper().replace('-', '_')} i .env.deploy; skriptet läser
+     SNAJP_PILOT_TENANT_KEY. Motstridiga uppgifter kodas som eskalering.
+  3. Logotyp till public/tenants/{slug}/logo.png — och TITTA på den mot båda
+     bakgrunderna innan du sätter logo.background.
+  4. Ersätt varje TODO i lib/tenants/{slug}.ts, committa till development och
+     pusha. Configfilen når web först med en deploy av koden.
+  5. Arbetsytan kopplas INTE av det här skriptet. Ska kunden logga in måste
+     en arbetsyta bära sluggen {slug!r}: link_workspace_tenant (migration 061)
+     tar bara kund-<8>-slugar, och scripts/railway_link_admin_workspace.py
+     kopplar bara plattformsadminens egen arbetsyta. Det finns inget skript
+     för en kunds arbetsyta i dag; fråga Anton innan något kopplas för hand.
+  6. Rendera /chat/{slug} på webben i miljön {env} och läs sidan.
+     Statuskoder räcker inte."""
+
+
+def juridiska_steg(slug: str, env: str) -> str:
+    """Stegen i docs/pilot_onboarding.md, "Avtal och dataskydd före första trafik"."""
+    db_env = f"railway-{env}"
+    prod = " --jag-menar-produktion" if env == "main" else ""
+    return f"""
+Avtal och dataskydd före första trafik — i den här ordningen, se
+docs/pilot_onboarding.md ("Avtal och dataskydd före första trafik").
+Ingen riktig kundtrafik innan alla sju är gjorda.
+
+  1. Personuppgiftsbiträdesavtalet undertecknat, med Bilaga 3 ifylld
+     (docs/pub-avtal.md, granskat av jurist).
+  2. Kundens org.nr och postadress i kundregistret (företagsnamnet är
+     tenantens namn): admin › Kunder & Data › kunden, eller
+     python scripts/fyll_kundregister.py --slug {slug} --env {env}{prod} \\
+         --orgnr ... --foretagsadress ... --apply
+  3. Avtalsdatumet: avtalsgrinden är redan på (kraver_avtal: true ovan).
+     En människa som sett avtalet sätter Avtal signerat (datum) i
+     admin › Kunder & Data › kunden. Skriptet kan med flit inte sätta det.
+  4. Art. 13-texten: skicka docs/kundmall_informationstext.md till kunden,
+     som lägger in den på sin kontaktsida och i sin integritetspolicy. Sätt
+     sedan policy_url (Kunder & Data, eller fyll_kundregister.py --policy-url).
+  5. Gallringsperioden, beslutad med kunden och angiven i integritetspolicyn:
+     python scripts/gallra.py --env {db_env} --tenant {slug} --satt-policy <dagar> --beslutad-av "<namn>"
+  6. Autonominivån per ärendekategori genomgången med kunden (/settings/regler).
+  7. Varje kanal och integration kunden slår på står i det undertecknade avtalet."""
 
 
 # --- Huvudflödet ---------------------------------------------------------
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description="Lägg upp en ny kund.")
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description="Lägg upp en ny namngiven kund i Railway-driften.")
     parser.add_argument("--name", required=True, help='Kundens namn, t.ex. "Bolaget AB"')
     parser.add_argument("--slug", help="Subdomän. Härleds ur namnet om den utelämnas.")
     parser.add_argument(
-        "--env", choices=sorted(ENVIRONMENTS), default="preview",
-        help="Miljö att lägga upp kunden i (default: preview)",
+        "--env", choices=MILJOER, default="development",
+        help="Railway-miljö (default: development, som speglar produktionen).",
     )
+    parser.add_argument("--apply", action="store_true", help="Skriv på riktigt. Utan flaggan visas planen.")
+    parser.add_argument("--jag-menar-produktion", action="store_true")
     parser.add_argument(
-        "--skip-vercel", action="store_true",
-        help="Skapa tenant och filer, men rör inte Vercel.",
+        "--utan-web", action="store_true",
+        help="Sätt inte SNAJP_KEY_<SLUG> på Railway-tjänsten web (nyckeln sparas ändå i .env.deploy).",
     )
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     slug = args.slug or slugify(args.name)
     if slug != slugify(slug):
         sys.exit(f"AVBRYTER: {slug!r} är inte en giltig slug (a-z, 0-9, bindestreck).")
+    if args.env == "main" and not args.jag_menar_produktion:
+        sys.exit("Vägrar mot main utan --jag-menar-produktion.")
 
     # Säkerhetsspärren först: en rånyckel ska aldrig kunna hamna i en fil som
     # går att committa.
     guard_gitignored()
 
-    config = ENVIRONMENTS[args.env]
-    backend_url = env_value(config["backend_env_key"], DEPLOY_ENV, FRONTEND_ENV)
-    if not backend_url:
-        sys.exit(
-            f"AVBRYTER: {config['backend_env_key']} är inte satt. Lägg den i "
-            f".env.deploy — det är backend-URL:en för miljön {args.env!r}."
-        )
-    master_key = env_value("SNAJP_MASTER_API_KEY", DEPLOY_ENV, BACKEND_ENV, FRONTEND_ENV)
-    if not master_key:
-        sys.exit("AVBRYTER: SNAJP_MASTER_API_KEY saknas. Hämta den från Render-tjänsten.")
+    store = env_read()
+    prefix = f"RAILWAY_{args.env.upper()}"
+    api_url = store.get(f"{prefix}_API_URL", "").rstrip("/")
+    master = store.get(f"{prefix}_MASTER_API_KEY")
+    if not api_url or not master:
+        sys.exit(f"AVBRYTER: {prefix}_API_URL / {prefix}_MASTER_API_KEY saknas i .env.deploy.")
 
-    supabase_url = env_value("NEXT_PUBLIC_SUPABASE_URL", DEPLOY_ENV, FRONTEND_ENV)
-    service_key = env_value("SUPABASE_SERVICE_ROLE_KEY", DEPLOY_ENV, FRONTEND_ENV)
+    env_var = nyckelnamn(slug)
+    lagrad = f"{prefix}_KEY_{slug.upper().replace('-', '_')}"
 
-    print(f"Lägger upp {args.name!r} som {slug!r} i {args.env}.\n")
+    print(f"Lägger upp {args.name!r} som {slug!r} i Railway-miljön {args.env} ({api_url}).\n")
 
-    result = create_tenant_and_key(backend_url, master_key, slug, args.name)
-    api_key = result["api_key"]
-    tenant_id = result["tenant_id"]
+    if not args.apply:
+        print("TORRKÖRNING — ingenting skrivs. Med --apply:")
+        print(f"  1. POST {api_url}/api/keys  (tenant {slug}, kraver_avtal: true)")
+        print(f"  2. nyckeln sparas som {lagrad} i .env.deploy")
+        if args.utan_web:
+            print(f"     {env_var} sätts INTE på web (--utan-web)")
+        else:
+            print(f"     och sätts som {env_var} på web ({args.env}) + redeploy + kontroll mot /api/kb")
+        print(f"  3. lib/tenants/{slug}.ts + registrering i index.ts")
+        print(f"  4. snajp-support/app/tenants/{slug.replace('-', '_')}_kb.py + registrering i TENANTS")
+        print(manuella_steg(slug, args.env))
+        print(juridiska_steg(slug, args.env))
+        print("\nInget gjort. Kör med --apply.")
+        return 0
+
+    result = create_tenant_and_key(api_url, master, slug, args.name)
+    api_key = result.get("api_key")
+    tenant_id = result.get("tenant_id")
+    if not api_key or not tenant_id:
+        sys.exit(f"AVBRYTER: /api/keys gav inget nyckelfält. Svarsnycklar: {sorted(result)}")
     print(f"  tenant   {tenant_id} ({result.get('tenant_slug', slug)})")
     print(f"  nyckel   {result.get('key_prefix', '?')}… (visas aldrig igen)")
     if result.get("kraver_avtal", True):
@@ -338,42 +410,33 @@ def main() -> None:
     else:
         print("  avtal    grinden AV för den här tenanten (fanns redan, rördes inte).")
 
-    if supabase_url and service_key:
-        workspace_id = link_workspace(supabase_url, service_key, slug, args.name, tenant_id)
-        print(f"  workspace {workspace_id} kopplad till tenanten")
+    env_set(lagrad, api_key)
+
+    if args.utan_web:
+        print(f"  web      överhoppad (--utan-web). {env_var} är inte satt på web.")
     else:
-        print("  workspace ÖVERHOPPAD — NEXT_PUBLIC_SUPABASE_URL/SERVICE_ROLE saknas")
+        project = state()
+        env_id = envs_by_name(project).get(args.env)
+        web = services_by_name(project).get("web")
+        if not env_id or not web:
+            sys.exit(f"AVBRYTER: miljön {args.env} eller tjänsten web finns inte i Railway-projektet.")
+        set_vars(web["id"], env_id, {env_var: api_key})
+        # Variabeln når inte den körande processen utan en ny deploy.
+        deploy(web["id"], env_id)
+        print(f"  web      ({args.env}) redeployar med {env_var}")
+        from railway_tenantnyckel import verifiera
+
+        verifiera(api_url, api_key)
 
     created = write_tenant_config(slug, args.name)
     print(f"  config   {'skapad: ' + created.relative_to(ROOT).as_posix() if created else 'fanns redan'}")
     kb = write_kb_module(slug, args.name)
     print(f"  kb       {'skapad: ' + kb.relative_to(ROOT).as_posix() if kb else 'fanns redan'}")
 
-    env_name = f"SNAJP_KEY_{slug.upper().replace('-', '_')}"
-    if args.skip_vercel:
-        print(f"  vercel   överhoppad (--skip-vercel). Sätt {env_name} själv.")
-    else:
-        for scope in config["vercel_scopes"]:
-            ok = vercel_env_set(env_name, api_key, scope)
-            print(f"  vercel   {env_name} -> {scope}: {'OK' if ok else 'MISSLYCKADES'}")
-
-    print(
-        f"""
-Kvar, och det kräver ögon (TENANTS.md steg 1 och 7):
-
-  1. Research kundens sajt — varje sida, inte bara startsidan. Policysidor
-     ligger ofta bara i sidfoten och innehåller det kunden glömmer nämna.
-  2. Fyll {slug}_kb.py med svar på faktiska kundfrågor. Motstridiga uppgifter
-     kodas som eskalering, aldrig som ett svar.
-  3. Logotyp till public/tenants/{slug}/logo.png — och TITTA på den mot båda
-     bakgrunderna innan du sätter logo.background.
-  4. Ersätt varje TODO i lib/tenants/{slug}.ts.
-  5. Seeda kunskapsbasen: cd snajp-support && python -m app.scripts.seed_kb {slug}
-  6. Deploya om så nyckeln får effekt — env-ändringar slår inte igenom på
-     befintliga deployments.
-  7. Rendera /chat/{slug} och läs sidan. Statuskoder räcker inte."""
-    )
+    print(manuella_steg(slug, args.env))
+    print(juridiska_steg(slug, args.env))
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
