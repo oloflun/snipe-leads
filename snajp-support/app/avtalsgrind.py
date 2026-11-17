@@ -14,8 +14,10 @@ någon kundtext går till modelleverantören. Det är samma princip som
 
 Två befintliga fält, ingen ny sanning:
 
-  * `ss_tenants.kraver_avtal` (migration 070) — opt-in per tenant, så att
-    befintliga kunder utan registrerat avtalsdatum inte stängs av retroaktivt.
+  * `ss_tenants.kraver_avtal` (migration 070) — per tenant. Opt-in från
+    början, så att befintliga kunder utan registrerat avtalsdatum inte stängs
+    av retroaktivt; standard för NYA tenants sedan migration 118
+    (INV-AVTAL-001). Plattformsadmin sätter den i Kunder & Data.
   * `ss_customer_details.avtal_signerat` (migration 053) — datumet ÄR
     statusen, registreras av admin i fliken Kunder & Data.
 
@@ -58,6 +60,12 @@ _cache: dict[str, tuple[bool, float]] = {}
 def nollstall_cache() -> None:
     """Bara för tester. Utan den läcker en testfil sitt avgörande in i nästa."""
     _cache.clear()
+
+
+def glom(tenant_id: str) -> None:
+    """Glömmer EN tenants avgörande. Anropas när plattformsadmin slår på eller
+    av grinden, så att ändringen gäller direkt i den processen."""
+    _cache.pop(tenant_id, None)
 
 
 async def avtal_saknas(storage, tenant_id: str) -> bool:

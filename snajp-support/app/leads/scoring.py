@@ -388,7 +388,9 @@ def _kriterium_kontakt(prospect: "Prospect") -> Kriterium:
             "Ingen publik kontaktadress hittad — prospektet går inte att nå.",
         )
 
-    if prospect.epost_ar_personlig:
+    # Namnformen och inte sidfotsavgörandet (2026-11-17): rangordningen ska
+    # inte flyttas av att anna@ nu får den fullständiga foten.
+    if prospect.epost_bar_namnform:
         # DELVIS, inte träff. En personlig adress är nåbar, men sämre att
         # inleda med: den utlöser GDPR art. 14-informationsplikt (send_guard
         # regel 4), och mejlet måste då bära ett stycke juridik som gör det

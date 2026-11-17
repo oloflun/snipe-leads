@@ -114,7 +114,21 @@ class Storage(Protocol):
 
     # -- Tenants (administrativa; kräver master-nyckel i API-lagret) --------
 
-    async def create_tenant(self, *, slug: str, name: str) -> dict[str, Any]: ...
+    async def create_tenant(
+        self, *, slug: str, name: str, kraver_avtal: bool | None = None
+    ) -> dict[str, Any]:
+        """Upsert på slug. `kraver_avtal` gäller bara en NY tenant: None ger
+        databasens standard (true sedan migration 118, INV-AVTAL-001), false
+        anges bara för test-, demo- och interna tenants. En befintlig tenants
+        flagga rörs aldrig härifrån."""
+        ...
+
+    async def set_tenant_kraver_avtal(
+        self, tenant_id: str, *, kraver_avtal: bool
+    ) -> dict[str, Any] | None:
+        """Plattformsadmins avtalsgrind per kund (Kunder & Data). None när
+        tenanten inte finns."""
+        ...
 
     async def get_tenant(self, tenant_id: str) -> dict[str, Any] | None: ...
 
@@ -356,9 +370,16 @@ class Storage(Protocol):
         query: str,
         embedding: list[float] | None = None,
         limit: int = 3,
-    ) -> list[dict[str, Any]]: ...
+    ) -> list[dict[str, Any]]:
+        """Agentens sökning. Lämnar aldrig tillbaka en artikel vars
+        `giltig_till` har passerat (svensk dag); utan giltig_till gäller den
+        tills vidare. Träffarna bär `source_url` (migration 117)."""
+        ...
 
-    async def list_kb(self, tenant_id: str) -> list[dict[str, Any]]: ...
+    async def list_kb(self, tenant_id: str) -> list[dict[str, Any]]:
+        """Portalens lista: ALLA artiklar, även utgångna, med `source_url` och
+        `giltig_till`, så att kunden ser vad som gått ut och kan byta ut det."""
+        ...
 
     async def add_kb_article(
         self,
@@ -368,6 +389,8 @@ class Storage(Protocol):
         content: str,
         category: str,
         embedding: list[float] | None = None,
+        source_url: str | None = None,
+        giltig_till: date | None = None,
     ) -> dict[str, Any]: ...
 
     async def delete_kb_article(self, tenant_id: str, artikel_id: str) -> bool:

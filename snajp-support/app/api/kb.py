@@ -88,6 +88,8 @@ async def add_kb_articles(
                 content=article.content,
                 category=article.category,
                 embedding=embedding,
+                source_url=article.source_url,
+                giltig_till=article.giltig_till,
             )
         )
     if created:

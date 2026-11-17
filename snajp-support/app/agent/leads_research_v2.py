@@ -129,8 +129,8 @@ _RESEARCH_V2_UPPGIFT = (
     "\"okänt\" och uppgiften hör hemma i missing_information. Ett \"ja\" "
     "eller \"nej\" utan ordagrant citat räknas som okänt av koden.\n\n"
     # Svarslängden är en kostnad, men beläggen är grundningens RÅVARA:
-    # evidence + likely_pains + trigger_events blir build_permitted_facts,
-    # och 5-fixturemätningen 2026-09-02 visade att en hård cap på evidence
+    # evidence (bara de ordagrant verifierade citaten sedan 2026-11-16) blir
+    # build_permitted_facts, och 5-fixturemätningen 2026-09-02 visade att en hård cap på evidence
     # (max 3 korta citat) fällde 2/5 utkast i grundningsgrinden →
     # reparationscykeln (+2 anrop, +15,7k tokens per fällt lead) kostade
     # mer än hela bantningen sparade. Därför stramas BARA resonemangs-
@@ -721,22 +721,6 @@ async def _research_v2(
             "Kontaktsidan hittades men innehöll ingen verifierbar kontaktperson eller adress."
         )
 
-    # Samma belägg-urval som V1: citat + pains + triggers — ALDRIG hela
-    # skrapet (se resonemanget i leads_agent.run_research_step).
-    research_evidence = [
-        str(item)
-        for item in (
-            *(fynd.get("evidence") or []),
-            *(fynd.get("likely_pains") or []),
-            *(fynd.get("trigger_events") or []),
-            # De mätta webbsignalerna är belagda fakta — utkastet får nämna
-            # "startsidan saknar mobilanpassning" (grundningsgrinden släpper
-            # bara igenom det som står här).
-            *(webbfakta.get("rader") or []),
-        )
-        if str(item).strip()
-    ]
-
     escalated_steps = [s.skill for s in trace.steps if s.escalated]
 
     # Utkastets råvara: citat som ORDAGRANT står på bolagets egna sidor.
@@ -761,6 +745,24 @@ async def _research_v2(
             )
         )
     )
+    # Grundningsgrindens belägg (build_permitted_facts): BARA det som bevisligen
+    # står i hämtat material, alltså de ordagrant verifierade citaten (även ur
+    # registerfakta, som ligger i materialet) och de uppmätta webbsignalerna.
+    # Förut stod modellens overifierade evidence, likely_pains och
+    # trigger_events här, och varje tal eller namn i dem blev tillåtet i
+    # mejlet: ett tal researchmodellen hittade på godkändes av grinden
+    # (Antons beställning 2026-11-16). Pains och triggers når fortfarande
+    # utkaststeget som underlag för HUR mejlet skrivs, via researchvyn.
+    research_evidence = [
+        str(item)
+        for item in (
+            *citat,
+            # De mätta webbsignalerna är belagda fakta — utkastet får nämna
+            # "startsidan saknar mobilanpassning".
+            *(webbfakta.get("rader") or []),
+        )
+        if str(item).strip()
+    ]
     vald_produkt = _vald_produkt(fynd, produkter)
 
     latency_ms = int((time.monotonic() - started) * 1000)
@@ -1525,6 +1527,28 @@ async def run_outreach_draft_v2(
     elif not body.strip():
         await _request_human_handoff_impl(context, "Playbooken producerade ingen brödtext.")
     else:
+        facts = build_permitted_facts(
+            context_pack=context_pack,
+            research_evidence=research_evidence,
+            # Villkorens siffror är kundens egna och får stå i mejlet.
+            # Struktur B:s korta utfall är kundens text likaså ("40–50 nya
+            # företag i veckan"), och frågan bygger på det. Kundens ämnesrader
+            # likaså: raden väljs efter grinden nedan och prövas sedan med
+            # samma fakta ("Support 24/7 för dina kunder" är kundens egen).
+            offer_summary="\n".join(
+                d
+                for d in (
+                    offer_summary,
+                    erbjudande.villkor if erbjudande else "",
+                    kort_utfall,
+                    *(erbjudande.amnen if erbjudande else ()),
+                )
+                if d
+            ),
+            brief=brief,
+            tenant_name=tenant_name,
+            company_name=company_name,
+        )
         subject, body, grounding = await _run_grounding_cycle(
             ledger,
             trace,
@@ -1533,19 +1557,7 @@ async def run_outreach_draft_v2(
             base=base,
             tenant_name=tenant_name,
             instruktioner=lager,
-            facts=build_permitted_facts(
-                context_pack=context_pack,
-                research_evidence=research_evidence,
-                # Villkorens siffror är kundens egna och får stå i mejlet.
-                # Struktur B:s korta utfall är kundens text likaså ("40–50 nya
-                # företag i veckan"), och frågan bygger på det.
-                offer_summary="\n".join(
-                    d for d in (offer_summary, erbjudande.villkor if erbjudande else "", kort_utfall) if d
-                ),
-                brief=brief,
-                tenant_name=tenant_name,
-                company_name=company_name,
-            ),
+            facts=facts,
         )
         escalated_steps = [s.skill for i, s in enumerate(trace.steps) if s.escalated and i not in valfria_brott]
         # Reparationen kan ha skrivit om hälsningen; samma regel igen.
@@ -1567,6 +1579,28 @@ async def run_outreach_draft_v2(
             if villkor:
                 body = erbjudanden.behall_upp_till(body, villkor)
 
+        # INV-GROUND-001 på den EXAKTA text som köas (Antons beställning
+        # 2026-11-16): tilltalet, bolagsnamnet, ämnesraden ur kundens lista och
+        # "upp till" ändras ovan EFTER grinden, och ämnesraden prövades aldrig.
+        # Samma fakta och samma två kontroller som cykeln, men ingen ny
+        # reparationsrunda (exakt en, INV-GROUND-001): kvarstår något går
+        # utkastet till en människa, aldrig till kön.
+        koad_amne = subject or "En fråga om era kunder"
+        if grounding["ok"]:
+            from ..leads.gissnings_gate import check_gissningar
+            from ..leads.grounding_gate import check_grounding
+
+            slutverdikt = check_grounding(f"{koad_amne}\n\n{body}", facts)
+            slutgissningar = check_gissningar(f"{koad_amne}\n\n{body}")
+            if not slutverdikt.ok or slutgissningar:
+                grounding = {
+                    **grounding,
+                    "ok": False,
+                    "efter_grinden": True,
+                    "unsupported_after": slutverdikt.as_report(),
+                    "gissningar_after": list(slutgissningar),
+                }
+
         if not grounding["ok"]:
             await _request_human_handoff_impl(context, stoppskal_grundning(grounding))
         elif escalated_steps:
@@ -1578,7 +1612,7 @@ async def run_outreach_draft_v2(
             queue_result = json.loads(
                 await _queue_outreach_draft_impl(
                     context,
-                    subject=subject or "En fråga om era kunder",
+                    subject=koad_amne,
                     body=body,
                     language_state=language_state,
                     humanizer_variant=last_humanizer_variant(trace.skills_used),

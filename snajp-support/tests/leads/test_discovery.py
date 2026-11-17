@@ -212,6 +212,9 @@ class _FakeSettings:
     def active_llm_key(self) -> str:
         return self.gemini_api_key
 
+    def har_riktig_kunddata(self) -> bool:  # INV-DATA-004: AI Studio bara lokalt
+        return False
+
 
 class _AlltidTimeout:
     """Ersätter httpx.AsyncClient — post() timar ut varje gång, som Gemini

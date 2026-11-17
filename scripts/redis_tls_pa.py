@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 """Slå på TLS för Redis Cloud-databasen och byt REDIS_URL till rediss:// — i ett svep.
 
+INAKTUELLT SEDAN 2026-11-17. KÖR INTE. Jobbkön ligger nu på Railways egen Redis
+(docs/BESLUT.md, 2026-11-17). Skriptet byter bara testmiljöns adress och skulle
+peka den tillbaka mot Redis Cloud.
+
     python scripts/redis_tls_pa.py                # visa läget, ändra ingenting
     python scripts/redis_tls_pa.py --apply        # gör båda stegen
 

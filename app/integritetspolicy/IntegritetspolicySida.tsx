@@ -11,8 +11,8 @@ import { useLocale, type Localized } from "@/lib/i18n";
  * som ska granskas innan publicering står i page.tsx. Den engelska texten är
  * en översättning av den svenska, inte en egen lydelse.
  *
- * Underleverantörernas ändamål och region kommer ur lib/bolag.ts och är än så
- * länge bara svenska.
+ * Underleverantörernas ändamål och region kommer ur lib/bolag.ts, på svenska
+ * och engelska.
  */
 const T = {
   rubrik: { sv: "Integritetspolicy", en: "Privacy policy" },
@@ -186,8 +186,8 @@ export function IntegritetspolicySida() {
             publicera vår egen att-göra-lista är något annat. */}
         {UNDERLEVERANTORER.map((leverantor) => (
           <li key={leverantor.namn}>
-            <strong>{leverantor.namn}</strong> — {leverantor.andamal}
-            {utanPlatshallare(leverantor.region) ? ` ${leverantor.region}` : null}
+            <strong>{leverantor.namn}</strong> — {text(leverantor.andamal)}
+            {utanPlatshallare(text(leverantor.region)) ? ` ${text(leverantor.region)}` : null}
           </li>
         ))}
       </ul>

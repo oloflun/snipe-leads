@@ -130,6 +130,12 @@ _TEXTER: dict[str, dict[str, tuple[str, ...]]] = {
 NYCKLAR = tuple(_TEXTER["sv"])
 
 
+def alla(sprak: str) -> str:
+    """Varje fast text på språket, en variant per rad. Citatläget räknar dem
+    som citerbara: de är våra egna meningar, inte modellens."""
+    return "\n".join(variant for varianter in _TEXTER[sprak].values() for variant in varianter)
+
+
 def text(nyckel: str, sprak: str | None) -> str:
     """En slumpad variant av den fasta texten på kundens språk.
 

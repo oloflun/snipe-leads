@@ -40,7 +40,7 @@ async def _godkant_utkast(storage: MemoryStorage) -> tuple[str, str]:
     item_id, thread_id, _ = _seed(storage, autonomy="draft", scheduled_at=WITHIN_WINDOW_UTC)
     storage.outreach_messages[TENANT] = [m for m in storage.outreach_messages[TENANT] if m["thread_id"] != "historik"]
     storage.send_queue[TENANT][-1]["status"] = "awaiting_review"
-    prospekt = await storage.create_prospect(TENANT, company_name="Svarsbolaget AB", contact_email="prospect@example.se")
+    prospekt = await storage.create_prospect(TENANT, company_name="Svarsbolaget AB", contact_email="info@example.se")
     storage.outreach_threads[TENANT][thread_id]["prospect_id"] = prospekt["id"]
     return item_id, prospekt["id"]
 

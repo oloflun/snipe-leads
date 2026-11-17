@@ -69,6 +69,7 @@ from ..redisnycklar import nyckel
 import hashlib
 import logging
 import math
+import re
 import struct
 import time
 from dataclasses import dataclass, replace
@@ -113,6 +114,31 @@ def normalisera_fraga(text: str) -> str:
     sortens gissning, som duger för fulltextsökning men INTE för en nyckel
     som avgör om två kunder får exakt samma svar)."""
     return " ".join((text or "").strip().lower().split())
+
+
+_ORD = re.compile(r"[^\W_]+")
+
+
+def _nyckelord(fraga_norm: str) -> frozenset[str]:
+    """Det som skiljer en fråga från en annan: varje tal och varje ord på
+    minst fyra tecken. Småorden ("hur", "är", "på") bär inte ämnet."""
+    return frozenset(o for o in _ORD.findall(fraga_norm) if o.isdigit() or len(o) >= 4)
+
+
+def samma_fraga(ny: str, sparad: str) -> bool:
+    """Handlar de två frågorna om samma sak?
+
+    Likheten 0,9 räcker inte: "garanti på elektroder" och "garanti på
+    batteriet" ligger nära varandra som vektorer men har olika svar, och ett
+    sparat svar som serveras till fel fråga är en hopblandning ingen grind
+    ser (2026-11-16). Ett sparat svar serveras därför bara när nyckelorden är
+    desamma. En post utan sparad fråga räknas aldrig som samma.
+
+    # ponytail: ingen böjningshantering, så "garantin" och "garanti" är olika
+    # frågor och ger en miss. En miss kostar en vanlig körning; en falsk träff
+    # kostar ett fel svar.
+    """
+    return bool(sparad) and _nyckelord(ny) == _nyckelord(sparad)
 
 
 def lookup_behorig(*, history: list, attachments: list, fakta: list, message: str) -> bool:
@@ -297,9 +323,10 @@ class RedisSvarscache:
                 "SORTBY",
                 "avstand",
                 "RETURN",
-                "3",
+                "4",
                 "svar",
                 "kategori",
+                "fraga_norm",
                 "avstand",
                 "DIALECT",
                 "2",
@@ -350,13 +377,16 @@ class RedisSvarscache:
                 svar_text = svar_text.decode("utf-8")
             if isinstance(kategori, bytes):
                 kategori = kategori.decode("utf-8")
+            fraga = data.get("fraga_norm") or data.get(b"fraga_norm") or ""
+            if isinstance(fraga, bytes):
+                fraga = fraga.decode("utf-8")
             likhet = 1.0 - float(avstand)
             return CachePost(
                 tenant=tenant,
                 kbv=kbv,
                 cfgv=cfgv,
                 vektor=(),
-                fraga_norm="",
+                fraga_norm=fraga,
                 svar=svar_text or "",
                 kategori=kategori or "ovrigt",
                 likhet=likhet,
@@ -461,6 +491,8 @@ async def forbered(
         return CacheKontext(behorig=False, fraga_norm=fraga_norm)
 
     traff = await hamta_cache().lookup(tenant=tenant_id, kbv=kbv, cfgv=cfgv, vektor=vektor)
+    if traff and not samma_fraga(fraga_norm, traff.fraga_norm):
+        traff = None
     return CacheKontext(behorig=True, fraga_norm=fraga_norm, vektor=vektor, traff=traff)
 
 

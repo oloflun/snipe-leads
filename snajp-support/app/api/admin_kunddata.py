@@ -32,6 +32,7 @@ import re
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
+from .. import avtalsgrind
 from ..storage.base import KUNDDATA_FALT
 from .deps import kraev_uuid, require_master_key
 from .schemas import KontaktRequest, KunddataRequest
@@ -90,6 +91,9 @@ async def hamta_kunddata(request: Request, tenant_id: str) -> dict:
                 "id": str(tenant["id"]),
                 "slug": tenant.get("slug"),
                 "name": tenant.get("name"),
+                # Avtalsgrinden (070/118). Bredvid avtalsdatumet så att vyn
+                # kan visa när kundens trafik är stoppad.
+                "kraver_avtal": bool(tenant.get("kraver_avtal")),
             },
             "falt": falt,
             "kontakter": await storage.list_customer_contacts(tenant_id),
@@ -107,24 +111,37 @@ async def spara_kunddata(
     storage = request.app.state.storage
 
     falt = {namn: varde for namn, varde in payload.model_dump().items() if varde is not None}
-    if not falt:
+    # Avtalsgrinden bor på ss_tenants, inte i registerraden.
+    kraver_avtal = falt.pop("kraver_avtal", None)
+    if not falt and kraver_avtal is None:
         return {"sparat": []}
 
-    try:
-        rad = await storage.upsert_customer_details(tenant_id, falt)
-    except ValueError as fel:
-        # normalisera_kunddata fäller t.ex. ett datum som inte parsar. 422 med
-        # fältnamnet i texten — inte 500 ur en asyncpg-typkonvertering.
-        raise HTTPException(status_code=422, detail=str(fel)) from fel
+    rad = None
+    if falt:
+        try:
+            rad = await storage.upsert_customer_details(tenant_id, falt)
+        except ValueError as fel:
+            # normalisera_kunddata fäller t.ex. ett datum som inte parsar. 422 med
+            # fältnamnet i texten — inte 500 ur en asyncpg-typkonvertering.
+            raise HTTPException(status_code=422, detail=str(fel)) from fel
+
+    sparat = sorted(falt)
+    if kraver_avtal is not None:
+        await storage.set_tenant_kraver_avtal(tenant_id, kraver_avtal=kraver_avtal)
+        sparat = sorted([*sparat, "kraver_avtal"])
+    if kraver_avtal is not None or "avtal_signerat" in falt:
+        # Ändringen ska gälla direkt i den här processen, inte efter
+        # grindens 60-sekunderscache.
+        avtalsgrind.glom(tenant_id)
 
     await storage.log_platform_event(
         level="info",
         source="admin.kunddata",
-        message=f"Kunduppgifter ändrade: {', '.join(sorted(falt))}.",
+        message=f"Kunduppgifter ändrade: {', '.join(sparat)}.",
         tenant_id=tenant_id,
-        detail={"falt": sorted(falt)},
+        detail={"falt": sparat},
     )
-    return {"sparat": sorted(falt), "detaljer": rad}
+    return {"sparat": sparat, "detaljer": rad}
 
 
 @router.post("/tenants/{tenant_id}/kontakter")

@@ -229,6 +229,25 @@ async def test_jev_bortval_av_later_kandidaten_ga_vidare(monkeypatch):
     assert skugga["beslut"] == "vidare"
 
 
+async def test_jev_maskerar_personnummer_fore_typesafe():
+    # Dataskyddsgenomgången 2026-11-17: texten till TypeSafe (inkorgsklassningen
+    # och leadstriagen) ska inte bära personnummer, i något av formaten.
+    from app.leads import jev
+
+    text = (
+        "Hej, mitt personnummer är 850101-1236 och min sambos 198112189876.\n"
+        "Maila anna@bolag.se eller ring 031-123 45 67.\n"
+        "Ordernummer 55123\n© 2011 Bolaget AB"
+    )
+    ut = jev._utan_personuppgifter(text)
+    assert "850101-1236" not in ut and "198112189876" not in ut
+    assert "8501" not in ut and "811218" not in ut, "inga rester av numret"
+    assert ut.count("[personnummer]") == 2
+    assert "[e-post]" in ut and "anna@bolag.se" not in ut
+    assert "[telefon]" in ut and "031-123 45 67" not in ut
+    assert "Ordernummer 55123" in ut and "© 2011 Bolaget AB" in ut
+
+
 async def test_korningens_profil_bar_jev_bortval(monkeypatch):
     from app.api import leads as leads_api
 

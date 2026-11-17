@@ -325,6 +325,28 @@ def _resolve_base_url(settings: Settings) -> str | None:
     return None  # OpenAI SDK-default
 
 
+#: INV-DATA-004. Loggas och bärs av felet när reservvägen vägrar.
+AI_STUDIO_VAGRAN = (
+    "Google AI Studio vägrades: processen kan nå riktig kunddata och "
+    "servicekontot (GOOGLE_SERVICE_ACCOUNT_JSON) saknas. AI Studio får inte bära "
+    "kunddata. Sätt servicekontot, så går anropet via Vertex AI i EU."
+)
+
+
+def ai_studio_vagras(settings: Settings) -> bool:
+    """Sant när reservvägen till AI Studio inte får bära anropet (INV-DATA-004).
+
+    Uppstartskontrollen (`llm_provider_fault`) fäller gemini utan servicekonto,
+    men sidovagnarna och sökningen läser servicekontot oavsett LLM_PROVIDER, och
+    en ingång utanför lifespan (skript, worker) passerar aldrig uppstarten. Därför
+    står spärren också här, i varje gren som annars hade ringt AI Studio.
+    """
+    if settings.har_riktig_kunddata():
+        logger.error("Dataskyddsspärr: %s", AI_STUDIO_VAGRAN)
+        return True
+    return False
+
+
 def _gemini_key_and_url(settings: Settings) -> tuple[str, str]:
     """Nyckel + bas-URL för Gemini-sidovagnarna (embeddings, vision).
 
@@ -332,6 +354,8 @@ def _gemini_key_and_url(settings: Settings) -> tuple[str, str]:
     """
     if settings.google_service_account_json:
         return _vertex_token(settings), _vertex_base_url(settings)
+    if ai_studio_vagras(settings):
+        raise ForbjudenProviderIMiljon(AI_STUDIO_VAGRAN)
     key = settings.embedding_api_key or settings.gemini_api_key
     return key, _GEMINI_BASE_URL
 
@@ -517,7 +541,8 @@ def get_embedding_client() -> AsyncOpenAI | None:
             return _embedding_client
 
     key = settings.embedding_api_key or settings.gemini_api_key
-    if not _looks_real(key):
+    # None är den befintliga "ingen klient"-vägen: KB-sökningen går på fulltext.
+    if not _looks_real(key) or ai_studio_vagras(settings):
         return None
 
     with _clients_lock:
@@ -552,7 +577,9 @@ def get_vision_client() -> AsyncOpenAI | None:
             return _vision_client
 
     key = settings.embedding_api_key or settings.gemini_api_key
-    if not _looks_real(key):
+    # None är den befintliga "ingen klient"-vägen: agent/vision.py ber agenten
+    # eskalera, kvittoflödena säger att bildläsningen saknas.
+    if not _looks_real(key) or ai_studio_vagras(settings):
         return None
 
     with _clients_lock:

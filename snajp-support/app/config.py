@@ -1,5 +1,6 @@
 """Central konfiguration för Snajp-Support-tjänsten."""
 
+import json
 from functools import lru_cache
 from pathlib import Path
 
@@ -693,30 +694,64 @@ class Settings(BaseSettings):
             )
 
         if self.llm_provider == "deepseek" and self.har_riktig_kunddata():
-            # Skälet formuleras efter VAD som fällde, inte som en generisk
-            # rad. Meddelandet är det enda någon läser när en deploy dör
-            # 23:01, och "miljön ''" besvarar inte frågan varför.
-            if self.aktiv_miljo() in MILJOER_MED_KUNDDATA:
-                varfor = (
-                    f"Miljön '{self.aktiv_miljo()}' bär eller speglar riktig kunddata."
-                )
-            else:
-                varfor = (
-                    f"Miljönamnet är okänt, men DATABASE_URL pekar på en databas "
-                    f"som inte kör på den här maskinen ({_vard_ur_dsn(self.database_url)}). "
-                    f"En process som kan öppna en fjärrdatabas kan nå riktiga "
-                    f"personuppgifter, oavsett vilken värd den kör på — det var "
-                    f"precis så den bortglömda Render-stacken kunde köra DeepSeek "
-                    f"mot skarp data utan att någon spärr sa ifrån."
-                )
             return (
-                f"LLM_PROVIDER=deepseek är inte tillåtet här. {varfor} DeepSeek "
+                f"LLM_PROVIDER=deepseek är inte tillåtet här. {self._varfor_riktig_data()} DeepSeek "
                 f"behandlar prompten i Kina, och vi har varken SCC, "
                 f"överföringsbedömning eller PUB-villkor på plats. "
                 f"Sätt en tillåten provider (openai eller gemini) med rätt nyckel, "
                 f"eller stäng av tjänsten om den inte ska köra alls."
             )
+
+        # INV-DATA-004: utan läsbart servicekonto faller Gemini tillbaka på
+        # Google AI Studio (GEMINI_API_KEY) — ingen EU-bunden behandling, och
+        # på gratisnivån får Google använda innehållet. Samma gräns och samma
+        # skäl att krascha som DeepSeek-spärren ovan.
+        if self.llm_provider == "gemini" and self.har_riktig_kunddata() and not self.servicekonto_lasbart():
+            if self.google_service_account_json:
+                vad = (
+                    "GOOGLE_SERVICE_ACCOUNT_JSON är satt men går inte att läsa "
+                    "(JSON, project_id, client_email eller private_key saknas)."
+                )
+            else:
+                vad = "GOOGLE_SERVICE_ACCOUNT_JSON saknas."
+            return (
+                f"LLM_PROVIDER=gemini utan servicekonto är inte tillåtet här. {vad} "
+                f"{self._varfor_riktig_data()} Utan servicekontot går chatt, "
+                f"bildbeskrivning, embeddings och sökning till Google AI Studio "
+                f"med GEMINI_API_KEY, och AI Studio får inte bära kunddata: "
+                f"behandlingen är inte bunden till EU, och på gratisnivån får "
+                f"Google använda innehållet. Sätt GOOGLE_SERVICE_ACCOUNT_JSON till "
+                f"servicekontots hela JSON-fil (python scripts/keys.py --key "
+                f"GOOGLE_SERVICE_ACCOUNT_JSON) och deploya om."
+            )
         return None
+
+    def _varfor_riktig_data(self) -> str:
+        """Skälet formuleras efter VAD som gjorde datan riktig, inte som en
+        generisk rad. Meddelandet är det enda någon läser när en deploy dör
+        23:01, och "miljön ''" besvarar inte frågan varför."""
+        if self.aktiv_miljo() in MILJOER_MED_KUNDDATA:
+            return f"Miljön '{self.aktiv_miljo()}' bär eller speglar riktig kunddata."
+        return (
+            f"Miljönamnet är okänt, men DATABASE_URL pekar på en databas "
+            f"som inte kör på den här maskinen ({_vard_ur_dsn(self.database_url)}). "
+            f"En process som kan öppna en fjärrdatabas kan nå riktiga "
+            f"personuppgifter, oavsett vilken värd den kör på — det var "
+            f"precis så den bortglömda Render-stacken kunde köra DeepSeek "
+            f"mot skarp data utan att någon spärr sa ifrån."
+        )
+
+    def servicekonto_lasbart(self) -> bool:
+        """Om GOOGLE_SERVICE_ACCOUNT_JSON går att använda mot Vertex: JSON med
+        de fält som `agent/llm.py` och google-auth läser. Ringer aldrig Google."""
+        try:
+            info = json.loads(self.google_service_account_json or "")
+        except ValueError:
+            return False
+        return isinstance(info, dict) and all(
+            isinstance(info.get(falt), str) and info.get(falt)
+            for falt in ("project_id", "client_email", "private_key")
+        )
 
     def master_key_fault(self) -> str | None:
         """Varför masternyckeln inte duger här, eller None.

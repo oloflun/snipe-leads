@@ -81,6 +81,19 @@ const FALT: { nyckel: string; etikett: Localized; typ: "text" | "date"; brett?: 
   { nyckel: "avtal_signerat", etikett: { sv: "Avtal signerat", en: "Contract signed" }, typ: "date" }
 ];
 
+// Avtalsgrinden (migration 070, standard för nya kunder sedan 118). Hör till
+// tenanten, inte registerraden, men står här bredvid avtalsdatumet eftersom
+// de två tillsammans avgör om kundens trafik släpps fram.
+const AVTALSGRIND: Localized = {
+  sv: "Kräv signerat avtal innan trafik släpps fram",
+  en: "Require a signed contract before traffic is let through"
+};
+const TRAFIK_STOPPAD: Localized = { sv: "Trafiken är stoppad", en: "Traffic is stopped" };
+const TRAFIK_STOPPAD_SKAL: Localized = {
+  sv: "Chatt, inkommande mejl och kanaler vägras tills ett datum står i Avtal signerat.",
+  en: "Chat, inbound email and channels are refused until Contract signed has a date."
+};
+
 const KALLETIKETT: Record<string, Localized> = {
   manuell: { sv: "Manuellt ifylld", en: "Entered manually" },
   onboarding: { sv: "Auto: onboardingen", en: "Auto: onboarding" },
@@ -213,6 +226,10 @@ export function Kunddata({ data }: Readonly<{ data: Data }>) {
     Object.fromEntries(FALT.map((f) => [f.nyckel, data.falt[f.nyckel]?.varde ?? ""]))
   );
   const [varden, setVarden] = useState(utgangslage);
+  const [kraverAvtalFran] = useState(Boolean(data.tenant.kraver_avtal));
+  const [kraverAvtal, setKraverAvtal] = useState(kraverAvtalFran);
+  // Det SPARADE läget, inte rutans: varningen säger vad som gäller i drift.
+  const trafikStoppad = Boolean(data.tenant.kraver_avtal) && !data.falt.avtal_signerat?.varde;
   const [sparar, setSparar] = useState(false);
   const [kvitto, setKvitto] = useState<Localized | null>(null);
   const [fel, setFel] = useState<Localized | null>(null);
@@ -222,9 +239,10 @@ export function Kunddata({ data }: Readonly<{ data: Data }>) {
   const [laggerTill, setLaggerTill] = useState(false);
 
   function sparaUppgifter() {
-    const andrade = Object.fromEntries(
+    const andrade: Parameters<typeof sparaKunddata>[1] = Object.fromEntries(
       Object.entries(varden).filter(([nyckel, varde]) => varde !== utgangslage[nyckel])
     );
+    if (kraverAvtal !== kraverAvtalFran) andrade.kraver_avtal = kraverAvtal;
     if (Object.keys(andrade).length === 0) {
       setKvitto(ADMIN.ingetAndrat);
       return;
@@ -332,6 +350,26 @@ export function Kunddata({ data }: Readonly<{ data: Data }>) {
             </label>
           ))}
         </div>
+
+        <label className={`mt-4 flex items-center gap-2.5 ${etikett}`}>
+          <input
+            type="checkbox"
+            name="kraver_avtal"
+            checked={kraverAvtal}
+            onChange={(e) => {
+              setKraverAvtal(e.target.checked);
+              setKvitto(null);
+            }}
+            className="focus-ring h-4 w-4"
+          />
+          {text(AVTALSGRIND)}
+        </label>
+        {trafikStoppad ? (
+          <p role="status" className="mt-2.5 flex flex-wrap items-baseline gap-x-2 gap-y-1 text-[0.9375rem] text-danger">
+            <Badge tone="danger">{text(TRAFIK_STOPPAD)}</Badge>
+            {text(TRAFIK_STOPPAD_SKAL)}
+          </p>
+        ) : null}
 
         <div className="mt-4 flex flex-wrap items-center gap-3">
           <button

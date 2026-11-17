@@ -186,7 +186,9 @@ def tolka_svar(data: dict[str, Any], kb_articles: list[dict[str, Any]]) -> dict[
     category = data.get("kategori") or data.get("category") or "ovrigt"
     if category not in CATEGORIES:
         category = "ovrigt"
-    beslut = tolka_beslut(data)
+    # Mejlvägen har inget uppslag i kundens system att pröva KUND: mot, så
+    # bara KB-ID:n som aldrig gavs fäller här (INV-GROUND-002).
+    beslut = tolka_beslut(data, frozenset(kb_kartan(kb_articles)) | {"KUND:"})
     # Driftregeln (2026-10-06): bara ESKALERA går till en människa. DELVIS
     # är en kunskapslucka — utkastet svarar på det som har källa och erbjuder
     # en kollega, och går den vanliga utkastvägen.

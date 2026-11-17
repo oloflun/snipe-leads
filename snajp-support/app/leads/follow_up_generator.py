@@ -548,13 +548,27 @@ async def _en_uppfoljning(
         # nätet i kod, samma igenkänning som fyndet iris_hon.
         body = _HON_FORST.sub(lambda m: f"{m.group(1)}Den", body)
 
+    if erbjudande:
+        # En rad ur kundens lista som tråden inte redan burit, i mejlets
+        # tilltal; och villkorens "upp till" står kvar. FÖRE faktagrinden
+        # (Antons beställning 2026-11-16): det som köas ska vara exakt det som
+        # grindats. Ämnesraderna är kundens egen text och står därför i
+        # faktaunderlaget nedan ("Support 24/7 för dina kunder" fälldes förut
+        # på 24 och 7, och valdes därför efter grinden utan kontroll).
+        anvanda = {str(m.get("subject") or "").strip().casefold() for m in meddelanden}
+        rader = [r for r in erbjudande.amnen if r.casefold() not in anvanda and erbjudanden.till_ni(r).casefold() not in anvanda]
+        subject = erbjudanden.valj_amne(
+            rader, f"{tenant_id}:{prospect_id or thread_id}:uppf{sekvens}", du=stil.namngiven(body)
+        ) or subject
+        body = erbjudanden.behall_upp_till(body, erbjudande.villkor)
+
     # INV-GROUND-001 gäller uppföljningar precis som första mejlet. Villkorens
     # siffror är kundens egna och får stå i mejlet, liksom lägesbeskrivningen
     # och researchens belägg om bolaget.
     facts = build_permitted_facts(
         context_pack=context_pack,
         research_evidence=tuple(sparad.get("research_evidence") or ()),
-        offer_summary=f"{produkttext}\n{villkor}" if erbjudande else produkttext,
+        offer_summary="\n".join([produkttext, str(villkor or ""), *erbjudande.amnen]) if erbjudande else produkttext,
         brief=str(prospekt.get("lagesbeskrivning") or ""),
         tenant_name=tenant_name,
         company_name=company_name,
@@ -562,17 +576,6 @@ async def _en_uppfoljning(
     verdict = check_grounding(f"{subject}\n\n{body}", facts)
     gissningar = check_gissningar(f"{subject}\n\n{body}")
     eskalerade = [s.skill for s in trace.steps if s.escalated]
-    if erbjudande:
-        # Efter faktagrinden, som i första mejlet: ämnesraden är kundens egen
-        # text ("Support 24/7 för dina kunder" fälldes på 24 och 7). En rad ur
-        # listan som tråden inte redan burit, i mejlets tilltal; och villkorens
-        # "upp till" står kvar.
-        anvanda = {str(m.get("subject") or "").strip().casefold() for m in meddelanden}
-        rader = [r for r in erbjudande.amnen if r.casefold() not in anvanda and erbjudanden.till_ni(r).casefold() not in anvanda]
-        subject = erbjudanden.valj_amne(
-            rader, f"{tenant_id}:{prospect_id or thread_id}:uppf{sekvens}", du=stil.namngiven(body)
-        ) or subject
-        body = erbjudanden.behall_upp_till(body, erbjudande.villkor)
 
     utfall: dict[str, Any] = {
         "thread_id": thread_id,

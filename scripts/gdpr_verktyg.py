@@ -11,10 +11,21 @@ from __future__ import annotations
 import os
 import sys
 from pathlib import Path
+from urllib.parse import urlsplit
 
 ROOT = Path(__file__).resolve().parent.parent
 DEPLOY_ENV = ROOT / ".env.deploy"
 BACKEND_ENV = ROOT / "snajp-support" / ".env"
+
+#: Dagens miljöer. `railway-development` är en spegel av main med riktig
+#: kunddata (CLAUDE.md), inte en testmiljö.
+DAGENS_MILJOER = ("railway-main", "railway-development")
+
+#: Den gamla stacken (Supabase). Namnen står kvar för att en lokal stack
+#: (scripts/lokal_stack.py sätter DATABASE_URL mot 127.0.0.1) når sin databas
+#: den vägen. Mot en fjärrvärd vägras de: där är det den döda Supabase-databasen.
+GAMLA_STACKEN = ("production", "preview")
+_LOKALA_VARDAR = {"localhost", "127.0.0.1", "::1", "host.docker.internal"}
 
 ENVIRONMENTS = {
     "production": {"url_key": "DATABASE_URL", "env_files": [BACKEND_ENV, DEPLOY_ENV]},
@@ -52,7 +63,7 @@ def dsn_for(env: str) -> str:
     """DSN:en för en miljö. Skriver ALDRIG ut lösenordet — se läckagespärren i
     CLAUDE.md; en `print(dsn)` under felsökning läcker lika mycket som ett echo."""
     if env not in ENVIRONMENTS:
-        sys.exit(f"AVBRYTER: okänd miljö '{env}'. Välj: {', '.join(ENVIRONMENTS)}")
+        sys.exit(f"AVBRYTER: okänd miljö '{env}'. Välj: {', '.join(DAGENS_MILJOER)}")
     cfg = ENVIRONMENTS[env]
 
     prefix = cfg.get("railway_prefix")
@@ -60,6 +71,12 @@ def dsn_for(env: str) -> str:
         varde = env_value(cfg["url_key"], *cfg["env_files"])
         if not varde:
             sys.exit(f"AVBRYTER: {cfg['url_key']} saknas. Lägg den i .env.deploy.")
+        if env in GAMLA_STACKEN and urlsplit(varde).hostname not in _LOKALA_VARDAR:
+            # Värden skrivs inte ut: DSN:en bär lösenordet.
+            sys.exit(
+                f"AVBRYTER: '{env}' är den gamla Supabase-stacken och godtas bara mot en "
+                f"lokal databas. Välj {' eller '.join(DAGENS_MILJOER)}."
+            )
         return varde
 
     delar = {

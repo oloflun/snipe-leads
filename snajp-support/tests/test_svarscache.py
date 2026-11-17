@@ -388,3 +388,44 @@ def test_tolka_traff_hanterar_redis_py_8_dictform():
     platt = [1, b"ns:svarscache:abc", [b"avstand", b"0.02", b"svar", b"Platt svar", b"kategori", b"ovrigt"]]
     platt_post = cache._tolka_traff(platt, tenant="t", kbv="v1", cfgv="v1")
     assert platt_post is not None and platt_post.svar == "Platt svar"
+
+
+# --- Samma fråga: likheten räcker inte (2026-11-16) --------------------------
+
+
+def test_samma_fraga_kraver_samma_nyckelord():
+    samma = svarscache.samma_fraga
+    assert samma("hur lång är garantin på elektroder?", "hur lång är garantin på elektroder")
+    # Småord och ordföljd avgör inte ämnet.
+    assert samma("garantin på elektroder, hur lång är den?", "hur lång är garantin på elektroder")
+    # Ett annat föremål eller ett annat tal är en annan fråga, hur nära
+    # vektorerna än ligger.
+    assert not samma("hur lång är garantin på batteriet?", "hur lång är garantin på elektroder?")
+    assert not samma("levererar ni inom 2 dagar?", "levererar ni inom 5 dagar?")
+    # En post utan sparad fråga (äldre poster) serveras aldrig.
+    assert not samma("hur lång är garantin?", "")
+
+
+@pytest.mark.anyio
+async def test_forbered_serverar_inte_ett_svar_pa_en_annan_fraga(monkeypatch):
+    """Vektorn träffar (likhet 1,0) men frågan gäller något annat: miss."""
+
+    async def _samma_vektor(_text):
+        return [1.0, 0.0, 0.0]
+
+    monkeypatch.setattr("app.agent.embeddings.embed_text", _samma_vektor)
+    svarscache.konfigurera(None)
+    await svarscache.spara(
+        TENANT_A, kbv="1", cfgv="1:1", vektor=[1.0, 0.0, 0.0],
+        fraga_norm="hur lång är garantin på elektroder?", svar="1 år.", kategori="garanti",
+    )
+
+    async def _forbered(fraga):
+        return await svarscache.forbered(
+            TENANT_A, history=[], attachments=[], fakta=[], message=fraga, kbv="1", cfgv="1:1"
+        )
+
+    assert (await _forbered("Hur lång är garantin på elektroder?")).traff is not None
+    annan = await _forbered("Hur lång är garantin på batteriet?")
+    assert annan.behorig is True and annan.traff is None
+    svarscache.konfigurera(None)

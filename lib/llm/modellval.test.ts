@@ -80,6 +80,21 @@ test("trasig service account-JSON faller vidare till GEMINI_API_KEY", () => {
   assert.equal(val?.provider, "gemini");
 });
 
+// INV-DATA-004: AI Studio bär aldrig kunddata — ingen EU-bindning, och på
+// gratisnivån får Google använda innehållet.
+for (const env of [
+  { RAILWAY_ENVIRONMENT_NAME: "main" },
+  { ENVIRONMENT: "development" },
+  { DATABASE_URL: "postgres://u:p@db.railway.internal:5432/x" }
+]) {
+  test(`AI Studio spärras där data är riktig (${Object.keys(env)[0]})`, () => {
+    assert.equal(valjModell({ ...env, GEMINI_API_KEY: NYCKEL }), null);
+    assert.equal(valjModell({ ...env, GOOGLE_SERVICE_ACCOUNT_JSON: "{inte json", GEMINI_API_KEY: NYCKEL }), null);
+    // Med ett läsbart servicekonto är ingenting ändrat: Vertex som förut.
+    assert.equal(valjModell({ ...env, GOOGLE_SERVICE_ACCOUNT_JSON: SA_JSON, GEMINI_API_KEY: NYCKEL })?.provider, "vertex");
+  });
+}
+
 test("platshållare räknas inte som nyckel", () => {
   assert.equal(valjModell({ OPENAI_API_KEY: "sk-...", GEMINI_API_KEY: "din-gemini-nyckel-har-xxxxxxxx" }), null);
 });

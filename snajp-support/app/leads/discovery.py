@@ -501,6 +501,12 @@ async def _gemini_med_sokning(prompt: str) -> str:
         headers: dict[str, str] = {"Authorization": f"Bearer {token}"}
         params: dict[str, str] = {}
     else:
+        from ..agent.llm import AI_STUDIO_VAGRAN, ai_studio_vagras
+
+        # INV-DATA-004: AI Studio bär aldrig kunddata. DiscoveryError är den
+        # befintliga vägen för en sökning som inte kunde köra.
+        if ai_studio_vagras(settings):
+            raise DiscoveryError(AI_STUDIO_VAGRAN)
         nyckel = settings.gemini_api_key or settings.active_llm_key()
         if not nyckel or len(nyckel) < 20:
             raise DiscoveryError("Ingen Gemini-nyckel — sokningen kan inte kora.")

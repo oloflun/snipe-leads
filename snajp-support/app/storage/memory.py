@@ -285,7 +285,9 @@ class MemoryStorage:
 
     # -- Tenants ------------------------------------------------------------
 
-    async def create_tenant(self, *, slug: str, name: str) -> dict[str, Any]:
+    async def create_tenant(
+        self, *, slug: str, name: str, kraver_avtal: bool | None = None
+    ) -> dict[str, Any]:
         for tenant in self.tenants.values():
             if tenant["slug"] == slug:
                 return tenant
@@ -294,6 +296,8 @@ class MemoryStorage:
             "slug": slug,
             "name": name,
             "active": True,
+            # Speglar kolumnens standard sedan migration 118 (INV-AVTAL-001).
+            "kraver_avtal": True if kraver_avtal is None else kraver_avtal,
             "created_at": _now(),
         }
         self.tenants[tenant["id"]] = tenant
@@ -317,6 +321,15 @@ class MemoryStorage:
             if overlagd.get(nyckel) is None:
                 overlagd[nyckel] = detaljer.get(falt)
         return overlagd
+
+    async def set_tenant_kraver_avtal(
+        self, tenant_id: str, *, kraver_avtal: bool
+    ) -> dict[str, Any] | None:
+        tenant = self.tenants.get(tenant_id)
+        if tenant is None:
+            return None
+        tenant["kraver_avtal"] = kraver_avtal
+        return dict(tenant)
 
     async def set_tenant_active(self, tenant_id: str, *, active: bool) -> dict[str, Any] | None:
         tenant = self.tenants.get(tenant_id)
@@ -702,8 +715,16 @@ class MemoryStorage:
         query_tokens = _expand_query(_tokenize(query))
         if not query_tokens:
             return []
+        # Migration 117: en utgången artikel är inte underlag längre. Svensk
+        # dag, samma som Postgres-vägen; artikeln gäller hela sin sista dag.
+        from zoneinfo import ZoneInfo
+
+        idag = datetime.now(ZoneInfo("Europe/Stockholm")).date()
         scored = []
         for article in self.kb.get(tenant_id, []):
+            giltig_till = article.get("giltig_till")
+            if giltig_till and date.fromisoformat(str(giltig_till)) < idag:
+                continue
             overlap = len(query_tokens & article["tokens"])
             title_overlap = len(query_tokens & article["title_tokens"])
             if overlap:
@@ -712,7 +733,8 @@ class MemoryStorage:
         scored.sort(key=lambda pair: pair[0], reverse=True)
         return [
             {"id": a["id"], "title": a["title"], "content": a["content"],
-             "category": a["category"], "similarity": round(score, 2)}
+             "category": a["category"], "source_url": a.get("source_url"),
+             "similarity": round(score, 2)}
             for score, a in scored[:limit]
             # Tröskeln var 0.2. Sedan svaret måste komma ur ärendets fack
             # (article_in_category) kostar en svag träff inget: den kan bara
@@ -725,7 +747,8 @@ class MemoryStorage:
     async def list_kb(self, tenant_id: str) -> list[dict[str, Any]]:
         return [
             {"id": a["id"], "title": a["title"], "content": a["content"],
-             "category": a["category"], "created_at": a["created_at"]}
+             "category": a["category"], "source_url": a.get("source_url"),
+             "giltig_till": a.get("giltig_till"), "created_at": a["created_at"]}
             for a in self.kb.get(tenant_id, [])
         ]
 
@@ -737,11 +760,19 @@ class MemoryStorage:
         content: str,
         category: str,
         embedding: list[float] | None = None,
+        source_url: str | None = None,
+        giltig_till: date | None = None,
     ) -> dict[str, Any]:
         row = _kb_row(tenant_id, {"title": title, "content": content, "category": category})
         row["embedding"] = embedding
+        row["source_url"] = source_url
+        # ISO-sträng, samma form som Postgres-vägens _row ger för en date-kolumn.
+        row["giltig_till"] = str(giltig_till) if giltig_till else None
         self.kb.setdefault(tenant_id, []).append(row)
-        return {"id": row["id"], "title": title, "category": category}
+        return {
+            "id": row["id"], "title": title, "category": category,
+            "source_url": source_url, "giltig_till": row["giltig_till"],
+        }
 
     async def delete_kb_article(self, tenant_id: str, artikel_id: str) -> bool:
         artiklar = self.kb.get(tenant_id, [])

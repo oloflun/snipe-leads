@@ -292,17 +292,48 @@ class PostgresStorage:
 
     # -- Tenants ------------------------------------------------------------
 
-    async def create_tenant(self, *, slug: str, name: str) -> dict[str, Any]:
+    async def create_tenant(
+        self, *, slug: str, name: str, kraver_avtal: bool | None = None
+    ) -> dict[str, Any]:
         # Administrativ operation — körs utan tenant-kontext (kräver master-nyckel i API-lagret).
+        #
+        # kraver_avtal: None utelämnar kolumnen så att databasens standard
+        # gäller (true sedan migration 118). Upserten skriver bara name, så en
+        # befintlig tenants avtalsgrind ändras aldrig av ett omtag.
+        async with self.pool.acquire() as conn:
+            if kraver_avtal is None:
+                record = await conn.fetchrow(
+                    """
+                    insert into ss_tenants (slug, name) values ($1, $2)
+                    on conflict (slug) do update set name = excluded.name
+                    returning *
+                    """,
+                    slug,
+                    name,
+                )
+            else:
+                record = await conn.fetchrow(
+                    """
+                    insert into ss_tenants (slug, name, kraver_avtal) values ($1, $2, $3)
+                    on conflict (slug) do update set name = excluded.name
+                    returning *
+                    """,
+                    slug,
+                    name,
+                    kraver_avtal,
+                )
+        return _row(record)
+
+    async def set_tenant_kraver_avtal(
+        self, tenant_id: str, *, kraver_avtal: bool
+    ) -> dict[str, Any] | None:
+        # Samma väg och samma policy (ss_tenants_admin_write, 029) som
+        # set_tenant_active: oskopad, bakom require_master_key.
         async with self.pool.acquire() as conn:
             record = await conn.fetchrow(
-                """
-                insert into ss_tenants (slug, name) values ($1, $2)
-                on conflict (slug) do update set name = excluded.name
-                returning *
-                """,
-                slug,
-                name,
+                "update ss_tenants set kraver_avtal = $2 where id = $1 returning *",
+                tenant_id,
+                kraver_avtal,
             )
         return _row(record)
 
@@ -934,10 +965,14 @@ class PostgresStorage:
         await conn.execute("set local ivfflat.probes = 10")
         records = await conn.fetch(
             """
-            select id, title, content, category,
+            select id, title, content, category, source_url,
                    1 - (embedding <=> $2::vector) as similarity
             from ss_knowledge_base
             where tenant_id = $1 and embedding is not null
+              -- Migration 117: utgångna artiklar är inte underlag. Svensk dag;
+              -- artikeln gäller hela sin sista dag.
+              and (giltig_till is null
+                   or giltig_till >= (now() at time zone 'Europe/Stockholm')::date)
             order by embedding <=> $2::vector
             limit $3
             """,
@@ -974,12 +1009,15 @@ class PostgresStorage:
                 ), ' | '
               ) as expr
             )
-            select k.id, k.title, k.content, k.category,
+            select k.id, k.title, k.content, k.category, k.source_url,
                    ts_rank(k.search_tsv, to_tsquery('swedish', q.expr)) as rank
             from ss_knowledge_base k, q
             where k.tenant_id = $1
               and q.expr <> ''
               and k.search_tsv @@ to_tsquery('swedish', q.expr)
+              -- Samma giltighetsfilter som vektorvägen (migration 117).
+              and (k.giltig_till is null
+                   or k.giltig_till >= (now() at time zone 'Europe/Stockholm')::date)
             order by rank desc
             limit $3
             """,
@@ -989,7 +1027,8 @@ class PostgresStorage:
         )
         return [
             {"id": str(r["id"]), "title": r["title"], "content": r["content"],
-             "category": r["category"], "similarity": round(float(r["rank"]), 2)}
+             "category": r["category"], "source_url": r["source_url"],
+             "similarity": round(float(r["rank"]), 2)}
             for r in records
         ]
 
@@ -997,7 +1036,7 @@ class PostgresStorage:
         async with self._scoped(tenant_id) as conn:
             records = await conn.fetch(
                 """
-                select id, title, content, category, created_at
+                select id, title, content, category, source_url, giltig_till, created_at
                 from ss_knowledge_base where tenant_id = $1 order by created_at
                 """,
                 tenant_id,
@@ -1012,18 +1051,27 @@ class PostgresStorage:
         content: str,
         category: str,
         embedding: list[float] | None = None,
+        source_url: str | None = None,
+        giltig_till: date | None = None,
     ) -> dict[str, Any]:
+        # asyncpg kräver ett date-objekt för en date-kolumn, aldrig en sträng.
+        if isinstance(giltig_till, str):
+            giltig_till = date.fromisoformat(giltig_till)
         async with self._scoped(tenant_id) as conn:
             record = await conn.fetchrow(
                 """
-                insert into ss_knowledge_base (tenant_id, title, content, category, embedding)
-                values ($1, $2, $3, $4, $5) returning id, title, category
+                insert into ss_knowledge_base
+                  (tenant_id, title, content, category, embedding, source_url, giltig_till)
+                values ($1, $2, $3, $4, $5, $6, $7)
+                returning id, title, category, source_url, giltig_till
                 """,
                 tenant_id,
                 title,
                 content,
                 category,
                 embedding,
+                source_url,
+                giltig_till,
             )
         return _row(record)
 

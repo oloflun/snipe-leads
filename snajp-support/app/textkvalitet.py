@@ -341,7 +341,18 @@ def _verifiera_korrektur(original: str, korrigerad: str) -> bool:
     for namn in SKYDDADE_NAMN:
         if original.count(namn) != korrigerad.count(namn):
             return False
-    return True
+    # Och ingenting får TILLKOMMA (2026-11-16). Korrekturen körs efter
+    # faktagrindarna, så ett tal, en frist, en länk, ett nummer eller ett
+    # superlativ som den lägger till har ingen grind sett. Samma grind som
+    # supportsvaren på strikt nivå, med originalet som enda källa. Det
+    # originalet självt inte håller (ett oifyllt mallfält) räknas inte mot
+    # korrekturen.
+    from .agent.support_faktagrind import Kalla, kontrollera
+
+    kalla = [Kalla("ORIGINAL", original)]
+    return set(kontrollera(korrigerad, niva="strikt", kallor=kalla).ostodda) <= set(
+        kontrollera(original, niva="strikt", kallor=kalla).ostodda
+    )
 
 
 _KORREKTUR_PROMPT = """Du är korrekturläsare. Rätta ENBART språket i texten nedan:
