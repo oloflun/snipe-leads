@@ -1005,6 +1005,28 @@ kundmejl dit i stället för till Vertex AI i EU.
 Test: snajp-support/tests/invariants/test_inv_data_004.py
 Införd: 2026-11-17 · Upphävs endast genom waiver
 
+### INV-DATA-005 — Gallringen tar bara det beslutade, aldrig spärrlistan eller bokföringen
+Gallringen är databasfunktionerna `gallra_tenant` och `gallra_alla` (migration 119);
+appens kod raderar aldrig själv. En kund utan rad i `ss_gallringspolicy` gallras
+aldrig, och ingen migration skriver en policy: perioden sätts av ägaren med
+`scripts/gallra.py --policyns-period`. `suppressions` raderas aldrig (kopplingen till
+en kontakt nollas före kontaktens radering, annars tar kaskaden spärren med sig),
+och `bk_underlag`/`bk_verifikat`/`kvitto_mejl_lasta` rörs aldrig. Agentloggarnas
+promptar och svar nollas, raderna står kvar. Den schemalagda körningen
+(`app/jobs/gallring.py`) är AV som standard (`GALLRING_AKTIV`), görs högst en gång
+per svenskt dygn (dygnsspärren `ss_gallringskorning` i samma transaktion), aldrig i en
+spegel (jobbet och `gallra_alla` vägrar båda när `mirror_meta` finns), och gör
+ingenting hos en kund vars urval överstiger taket (`GALLRING_TAK`) utan larmar. Varje
+körning loggas per kund i `ss_gallringslogg`, läsbar via `GET /api/admin/gallring`.
+Varför: integritetspolicyn lovar 24 månader från senaste behandlingen i alla
+kategorier, automatiserat och loggat (GDPR art. 5.1 e), men 048 gallrade bara
+supportmejl och ingen körning var schemalagd. Raderingslogik som går fel tömmer en
+kund eller tar bort skyddet för den som avregistrerat sig; därför prövas den mot en
+riktig Postgres med hela migrationskedjan: snajp-support/tests/db/test_gallring.py
+i CI-jobbet `databastester` (.github/workflows/verify.yml).
+Test: snajp-support/tests/invariants/test_inv_data_005.py
+Införd: 2026-11-18 · Upphävs endast genom waiver
+
 ## Roadmap
 
 Ids this plan will introduce, in the order `Genomförandeordning` builds them. Not yet enforced by CI.

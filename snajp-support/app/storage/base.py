@@ -1775,6 +1775,34 @@ class Storage(Protocol):
         detail: dict[str, Any] | None = None,
     ) -> None: ...
 
+    # -- Gallring (migration 119, app/jobs/gallring.py) ---------------------
+    #
+    # Raderingen görs av databasfunktionen gallra_alla, aldrig av appens egna
+    # frågor: urvalet, ordningen och taket ska finnas på ETT ställe, och det
+    # stället är testat mot en riktig Postgres (tests/db/test_gallring.py).
+
+    async def gallra_dygnet(self, *, tak: int) -> dict[str, Any]:
+        """Den schemalagda gallringen: alla kunder med beslutad policy, högst
+        en gång per svenskt dygn, aldrig i en spegel. Svaret är gallra_alla:s
+        {status, dag, kunder}. Minneslagret gallrar inte ({status: 'ingen_databas'})."""
+        ...
+
+    async def list_gallringslogg(
+        self, *, tenant_id: str | None = None, limit: int = 50
+    ) -> list[dict[str, Any]]:
+        """Gallringsloggen, nyast först, med kundens slug."""
+        ...
+
+    async def list_gallringspolicyer(self) -> list[dict[str, Any]]:
+        """Varje kund med sin beslutade period (dagar, beslutad_av,
+        beslutad_at; null om ingen policy) och senaste skarpa körning."""
+        ...
+
+    async def list_gallringskorningar(self, *, limit: int = 14) -> list[dict[str, Any]]:
+        """Dygnsspärrens rader, nyast först: när den schemalagda körningen
+        startade, blev klar och vad den gjorde."""
+        ...
+
     # -- Kundregister (migration 053, kräver master-nyckel) -----------------
     #
     # Samma åtkomstmodell som admin-läsningarna ovan: metoderna anropas
