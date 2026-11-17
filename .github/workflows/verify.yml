@@ -60,6 +60,9 @@ jobs:
     name: databastester (Postgres 17, hela migrationskedjan)
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    # Jobbet läser bara koden; tokenen får inte mer än så.
+    permissions:
+      contents: read
     services:
       postgres:
         image: pgvector/pgvector:pg17
