@@ -4,7 +4,8 @@ import { CookiesSida } from "./CookiesSida";
 
 export const metadata: Metadata = {
   title: "Cookies — Snajp",
-  description: "Snajp.se använder en enda cookie, och den är strikt nödvändig. Ingen analys, ingen marknadsföring.",
+  description:
+    "Vilka kakor och vilken lagring snajp.se använder, och hur demolänken i utskicken registrerar klick och besök. Inga analys- eller marknadsföringskakor.",
   alternates: { canonical: "/cookies" }
 };
 
@@ -21,6 +22,13 @@ export const metadata: Metadata = {
  * bort rutor utan att läsa, vilket är precis det beteende en riktig banner
  * behöver. Läggs analys- eller marknadsföringscookies till måste den här
  * sidan och en banner finnas INNAN cookien sätts, inte efteråt.
+ *
+ * ÖPPET (kartläggningen 2026-11-17): demolänkens registrering
+ * (components/demo/DemoBesok.tsx, app/prova/[token]/route.ts), service workerns
+ * cache (components/InstalleraApp.tsx, public/sw.js) och CRM-demons
+ * localStorage, som skrivs när demon öppnas, är inte uppenbart nödvändiga för
+ * en tjänst besökaren begärt. Om de kräver samtycke är ägarens och juristens
+ * fråga. Sidan beskriver dem som de är; beteendet är inte ändrat.
  */
 export default async function Page() {
   await notFoundOnTenant();

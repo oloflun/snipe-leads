@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Logo } from "@/components/Logo";
 import { Sidfot } from "@/components/marketing/Sidfot";
-import { utanPlatshallare, BOLAG } from "@/lib/bolag";
+import { utanPlatshallare } from "@/lib/bolag";
 
 /**
  * Skalet runt de tre juridiska sidorna: integritetspolicy, villkor, cookies.
@@ -27,8 +27,16 @@ import { utanPlatshallare, BOLAG } from "@/lib/bolag";
 export function JuridiskSida({
   rubrik,
   ingress,
+  uppdaterad,
   children
-}: Readonly<{ rubrik: string; ingress?: string; children: React.ReactNode }>) {
+}: Readonly<{
+  rubrik: string;
+  ingress?: string;
+  /** Sidans datum ur BOLAG.uppdaterad och etiketten på läsarens språk. */
+  uppdaterad?: { etikett: string; datum: string };
+  children: React.ReactNode;
+}>) {
+  const datum = uppdaterad ? utanPlatshallare(uppdaterad.datum) : null;
   return (
     <div className="min-h-screen bg-paper text-ink">
       <header className="border-b border-ink/10">
@@ -49,11 +57,13 @@ export function JuridiskSida({
         {/* Renderas bara med ett riktigt datum. Stod som "Senast uppdaterad:
             [DATUM]" på alla tre sidorna, vilket är sämre än ingen rad alls:
             en läsare som ska bedöma om dokumentet är aktuellt får då veta att
-            vi inte vet. Sätts `policyUppdaterad` i lib/bolag.ts kommer raden
-            tillbaka av sig själv. */}
-        {utanPlatshallare(BOLAG.policyUppdaterad) ? (
+            vi inte vet. Datumet är per sida (`BOLAG.uppdaterad` i
+            lib/bolag.ts), så att en ändring i policyn inte ger villkoren ett
+            datum de inte förtjänar. Etiketten kommer från sidan, på läsarens
+            språk. */}
+        {uppdaterad && datum ? (
           <p className="mt-4 text-[0.875rem] text-ink-subtle">
-            Senast uppdaterad: {BOLAG.policyUppdaterad}
+            {uppdaterad.etikett} {datum}
           </p>
         ) : null}
         {ingress ? (
