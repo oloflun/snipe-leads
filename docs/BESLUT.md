@@ -9,6 +9,27 @@ möjligt), vad det betyder i koden.
 
 ---
 
+## 2026-11-18 (Anton) — Extern övervakning, säkerhetskontakt och Dependabot
+
+**Beslut.** Fyra luckor som en genomgång mot ISO 27001 visade fylls: en
+schemalagd övervakning av produktionen som larmar via ett GitHub-ärende, en
+kontaktväg för säkerhetsrapporter (`SECURITY.md`, `security.txt`), veckovisa
+beroendeuppdateringar via Dependabot, och minsta möjliga rättigheter i de nya
+arbetsflödena. Beställt av Anton genom genomgången; resonemanget nedan är
+beställningens, inte hans egna ord.
+
+**Resonemanget.** Tjänstens interna larm är troligen inte aktiva (sändvägens
+variabler saknas i driften) och ingen extern övervakning fanns. Går
+produktionen ner, eller faller den tillbaka till minnesläge för jobbkön eller
+lagringen eller till simuleringsläge, får ingen veta det förrän en kund hör av
+sig. Repot är publikt, Actions är gratis här och ägaren får mejl när ett
+ärende skapas, så ett ärende är den billigaste larmvägen som redan når fram.
+
+**I koden.** `.github/workflows/overvakning.yml` (var 15:e minut,
+etiketten `driftlarm`, kända begränsningar i filens huvud),
+`.github/dependabot.yml`, `SECURITY.md`, `public/.well-known/security.txt`.
+Svarstiden för en säkerhetsrapport är inte beslutad och står som `[FYLL]`.
+
 ## 2026-11-17 (Anton) — Jobbkön flyttas till Railways egen Redis
 
 **Beslut.** Jobbkön flyttas från Redis Cloud till Railways egen Redis, i
