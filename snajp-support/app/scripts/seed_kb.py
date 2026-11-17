@@ -51,8 +51,10 @@ async def ensure_default_kb(storage, *, embeddings: list[list[float] | None] | N
 async def ensure_public_demo_kb(storage, *, embeddings: list[list[float] | None] | None = None) -> int:
     """G8: seedar den publika demons EGEN, isolerade tenant + KB (om tom).
     Ingen relation till DEFAULT_TENANT_ID/Nordlys Handel."""
+    # kraver_avtal false: demons data är påhittad, ingen kunds
+    # personuppgifter. Gäller bara om tenanten saknas (migration 011 skapar den).
     tenant = await storage.create_tenant(
-        slug=PUBLIC_DEMO_TENANT_SLUG, name=PUBLIC_DEMO_TENANT_NAME
+        slug=PUBLIC_DEMO_TENANT_SLUG, name=PUBLIC_DEMO_TENANT_NAME, kraver_avtal=False
     )
     if await storage.list_kb(tenant["id"]):
         return 0

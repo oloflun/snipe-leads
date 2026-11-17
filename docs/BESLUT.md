@@ -9,6 +9,215 @@ möjligt), vad det betyder i koden.
 
 ---
 
+## 2026-11-17 (Anton) — Jobbkön flyttas till Railways egen Redis
+
+**Beslut.** Jobbkön flyttas från Redis Cloud till Railways egen Redis, i
+stället för att Redis Cloud uppgraderas. Antons ord: "Ja, flytta", som svar på
+frågan om jobbkön skulle flyttas till Railways egen Redis i stället för att han
+uppgraderar Redis Cloud.
+
+**Resonemanget.** Skälen kommer ur dataskyddsgenomgången samma dag, inte ur
+Antons egna ord utöver beslutet. Redis Cloud-databasen låg på gratisplanen,
+som saknar stöd för krypterad anslutning, så TLS gick inte att slå på enligt
+beslutet "Gör alla fyra" tidigare samma kväll. Alternativet var en betald
+plan. Flytten tar bort trafiken över publikt nät, tar bort en leverantör ur
+kedjan när den gamla databasen är raderad, och skiljer miljöerna åt:
+produktionen och testmiljön delade tidigare samma databas. Ingen ny leverantör
+tillkommer, eftersom Railway redan är underbiträde och all behandling där sker
+i Amsterdam.
+
+**I driften.** Testmiljön använder sin befintliga Redis-tjänst hos Railway. I
+produktionen skapades en ny Redis-tjänst hos Railway med samma uppsättning som
+testmiljöns: lösenord, egen volym, Amsterdam, ingen publik adress. Api-tjänsten
+i båda miljöerna når Redis över Railways privata nätverk. Uppstartsloggen i
+båda miljöerna visar att jobbkön, svarscachen, chattströmmen och leadsströmmen
+kör mot Redis, och hälsokontrollen svarar ok. Pågående jobb och cache i den
+gamla databasen följde inte med; jobben lever högst en timme och cachen byggs
+upp igen. `lib/bolag.ts` för Redis Cloud som "avvecklas".
+`scripts/redis_tls_pa.py` är inaktuellt och får inte köras.
+
+**Kvar.** Den gamla Redis Cloud-databasen har kvar cache och arbetsminne tills
+livslängden gått ut eller databasen raderas. Att radera den och säga upp kontot
+är Antons beslut och inte gjort. Den gamla adressen ligger i en reservvariabel
+på api-tjänsten, så att bytet går att backa; den tas bort när flytten fått gå
+några dagar. Bedömningen av tiden då trafiken gick okrypterat är Antons
+(`INCIDENT_RESPONSE.md`, 2026-08-29).
+
+---
+
+## 2026-11-17 (Claude (agent), inom Antons uppdrag 2026-11-17 om EU-compliance; ändringarna är ocommittade tills Anton godkänt) — En mottagaradress är personlig om den inte är en känd funktionsadress
+
+**Beslut.** En mottagaradress räknas som personlig när lokaldelen inte är en
+känd funktionsadress. Förut krävdes en punkt eller ett bindestreck, så
+`anna@bolaget.se` och `andersson@bolaget.se` fick den korta foten utan
+information enligt art. 14 och utan krav på länk till avsändarens
+integritetspolicy. Nu får de den fullständiga foten. Funktionsadresser (info@,
+kontakt@ och de övriga i listan) får fortfarande den korta foten enligt
+beslutet 2026-10-24. `vd@` och `ceo@` räknas som personliga.
+
+**Resonemanget.** Funktionens egen docstring säger principen: att flagga en
+funktionsadress för mycket kostar ett stycke text, att missa en personlig
+adress kostar ett regelbrott. Därför avgörs frågan av en lista över kända
+funktionsadresser och inte av hur lokaldelen ser ut. `vd@` och `ceo@` når en
+enskild, utpekbar person och är därför personliga. Poängsättningen av
+kontaktvägen och rollkopplingsflaggan behåller det gamla avgörandet, så
+rangordningen av leads ändras inte. Utkastens låsta facit
+(INV-LEADS-UTKAST-002) är orört och dess tester går gröna.
+
+**Följd att känna till.** Sidfoten byggs om i sändögonblicket, så redan
+godkända, köade utkast till namnadresser får den fullständiga foten. En kund
+som saknar `policy_url` i kundregistret får sådana utskick stoppade av
+spärrens regel 2, med besked, tills `policy_url` är ifylld.
+
+**I koden.** `snajp-support/app/leads/sources/base.py` (listan
+`FUNKTIONSADRESSER` och den nya egenskapen `epost_bar_namnform`, som
+poängsättningen och rollkopplingen använder), avdelningsorden i
+`snajp-support/app/leads/discovery.py` (`AVDELNINGSORD`). Test:
+`snajp-support/tests/leads/test_personlig_adress.py`. Inte committat eller
+driftsatt.
+
+---
+
+## 2026-11-17 (Anton) — Kundmejl går inte till TypeSafe
+
+**Beslut.** Kundernas kundmejl skickas inte längre till TypeSafe (modellen
+Jev). Antons ord: "Gör alla fyra", som svar på frågan om kundmejl till
+TypeSafe skulle stängas av, hemlighetsskanning slås på, Redis få TLS och
+säkerhetskopior slås på.
+
+**Resonemanget.** Skälen kommer ur dataskyddsgenomgången samma dag, inte ur
+Antons egna ord utöver beslutet. TypeSafe var aldrig godkänd som
+underbiträde och saknades i alla underbiträdesförteckningar. Leverantören
+behandlar i USA utan anslutning till Data Privacy Framework. Dess avtal ger
+en tidsobegränsad rätt att härleda och använda telemetri ur kunddata. Beslutet
+2026-09-30 i `snajp-support/app/leads/jev.py` sa redan att Jev aldrig ser
+kundmejl.
+
+**I driften.** Inkorgsklassningen via Jev är avstängd (`INKORG_JEV` av) i main
+och development sedan 2026-11-17 20:54 UTC. Nya deployer kom upp och
+hälsokontrollerna svarar ok. Inkorgen sorteras nu bara av kodreglerna. Jev
+används fortfarande i leadsdelen, där den får prospekts publika
+bolagsuppgifter och sidutdrag utan e-postadresser, telefonnummer och
+personnummer. TypeSafe-posten i `lib/bolag.ts` säger detsamma.
+
+**Kvar.** Kundmejltext som skickades före avstängningen ligger kvar hos
+TypeSafe enligt deras villkor; radering och bekräftelse är inte begärda.
+Bedömning av anmälningsplikt och underrättelse till berörda kunder är Antons
+(`INCIDENT_RESPONSE.md`, 2026-11-17). Beslut om leadsdelen återstår
+(`docs/pub-avtal.md`, Bilaga 3). Slås inkorgsklassningen på igen ska
+underbiträdeslistan ändras först.
+
+---
+
+## 2026-11-17 (Claude (agent), inom Antons uppdrag 2026-11-17 om EU-compliance; ändringarna är ocommittade tills Anton godkänt) — Google AI Studio får inte bära kunddata
+
+**Beslut.** Där data är riktig vägrar tjänsten starta med gemini utan ett
+läsbart servicekonto för Vertex AI, och varje reservväg till Google AI Studio
+vägrar själv (INV-DATA-004). Servicekontot i main och development är
+kontrollerat och klarar spärren.
+
+**Resonemanget.** AI Studio har ingen EU-bunden behandling, och på
+gratisnivån får Google använda innehållet. Nyckeln var satt i båda miljöerna,
+så ett saknat servicekonto hade tyst skickat kundmejl dit. Gränsen och skälet
+är desamma som för DeepSeek-spärren: en felaktig konfiguration ska dö
+högljutt, inte tyst skicka kunddata vidare. Att ta tillbaka AI Studio i drift
+är ett avtalsbeslut, inte ett kodbeslut.
+
+**I koden.** `snajp-support/app/config.py`, `snajp-support/app/agent/llm.py`,
+`snajp-support/app/leads/discovery.py`, `lib/llm/modellval.ts`. Spärr:
+INV-DATA-004, test i `snajp-support/tests/invariants/test_inv_data_004.py`.
+
+---
+
+## 2026-11-17 (Claude (agent), inom Antons uppdrag 2026-11-17 om EU-compliance; ändringarna är ocommittade tills Anton godkänt) — Avtalsgrinden är standard för kunder som läggs upp manuellt
+
+**Beslut.** En ny kund som skapas utan uttryckligt värde får avtalsgrinden på:
+ingen trafik på chatt, inkommande mejl och kanaler förrän ett avtalsdatum är
+registrerat. Befintliga kunder behåller sitt värde. Test-, demo- och interna
+konton anger av uttryckligen. Plattformsadmin slår på och av grinden i Kunder
+& Data, där det också syns när en kunds trafik är stoppad.
+
+**Resonemanget.** Snajp är personuppgiftsbiträde och får enligt GDPR art. 28
+inte behandla en kunds personuppgifter utan biträdesavtal. Som opt-in berodde
+skyddet på att någon kom ihåg en SQL-sats, och bara piloten hade den satt.
+Migrationen ändrar bara standardvärdet, ingen rad, så ingen levande trafik
+stängs av vid deploy.
+
+**Öppen fråga till Anton.** Självregistrerade kunder och testarbetsytor skapas
+med grinden av, så att provflödet fungerar som i dag. Det betyder att en
+självregistrerad kund fortfarande kan koppla en riktig inkorg utan avtal. Två
+vägar: (a) låt registreringen ingå avtalet genom att villkoren och
+biträdesavtalet godkänns där, och registrera datumet automatiskt, eller (b)
+slå på grinden även för dem och registrera avtalet för hand. (a) kräver ett
+juristgranskat biträdesavtal.
+
+**I koden.** Migration `118_avtalsgrind_standard.sql` (ingen `update`).
+`POST /api/keys` tar det valfria fältet `kraver_avtal`. Adminvyn:
+`components/admin/Kunddata.tsx`, `lib/actions/kunddata.ts`,
+`snajp-support/app/api/admin_kunddata.py`. Undantaget för provflödet:
+`lib/snajp/testtenant.ts`, `scripts/koppla_testytor.py`. Spärr: INV-AVTAL-001,
+test i `snajp-support/tests/invariants/test_inv_avtal_001.py`. Adminvyn är
+inte granskad i en webbläsare, och migrationen är inte körd.
+
+---
+
+## 2026-11-17 (Claude (agent), inom Antons uppdrag 2026-11-17 om EU-compliance; ändringarna är ocommittade tills Anton godkänt) — AI-upplysningen garanteras av koden, inte av modellen
+
+**Beslut.** Chatten visar "AI-assistent" i huvudet, också i kundernas
+inbäddade widget. Ett supportmejl som går ut utan mänsklig granskning får en
+fast rad efter signaturen om att en AI-assistent skrev svaret och hur kunden
+når en människa. Ett svar som en människa godkänt får ingen rad. Den som i ett
+mejl ber om en människa eskaleras av koden.
+
+**Resonemanget.** AI-förordningen (EU 2024/1689) art. 50.1 gäller sedan
+2026-08-02: den som interagerar med ett AI-system ska få veta det, om det inte
+är uppenbart. Systemprompten förbjöd agenten att utge sig för att vara
+människa, men sade också att den inte behövde inleda med att den är en AI. En
+upplysning som hänger på modellens goda vilja är ingen upplysning. Ett
+granskat svar är människans svar och får därför ingen rad. Raden lovar en
+människa till den som ber om en, och ett löfte i ett mejl ska hållas av kod:
+inkommande mejl prövas därför mot samma regel som chatten redan använder.
+Leadsagentens utskick är inte ändrade. Om art. 50 gäller autonoma första mejl
+och uppföljningar är en fråga för juristen.
+
+**I koden.** `components/snajp/SupportChat.tsx` (huvudet).
+`snajp-support/app/email_pipeline/processor.py`: `AI_UPPLYSNING`,
+`med_ai_upplysning` och eskaleringen via `support_regler.ber_om_manniska`.
+Spärr: INV-AI-001, test i `snajp-support/tests/invariants/test_inv_ai_001.py`.
+Mejlvägen skriver alltid svenska i dag; den engelska raden finns men används
+inte än. Chattens huvud är inte granskat i en webbläsare.
+
+---
+
+## 2026-11-17 (Claude (agent), inom Antons uppdrag 2026-11-17 om EU-compliance; ändringarna är ocommittade tills Anton godkänt) — Jev får inte se personnummer, och /villkor säger vad utskicksspärren faktiskt kontrollerar
+
+**Beslut.** Två rättningar ur dataskyddsgenomgången inför första betalande kund:
+
+1. Texten som går till TypeSafe (Jev) maskerar nu personnummer och
+   samordningsnummer, utöver e-post och telefon.
+2. Avsnittet om utskick i `/villkor` beskriver spärren som den är: den kräver
+   företagsnamn och avregistreringslänk, och vid en personlig adress även
+   art. 14-information och policylänk. Organisationsnummer och postadress tas
+   med i sidfoten när Kunden har angett dem, och Kunden ansvarar för att ange dem.
+
+**Resonemanget.** Jev klassar inkorgen (ämnesrad och upp till 1 500 tecken
+kundmejl) och triagerar leads. Kundmejl bär ibland personnummer, och
+supportagenten maskerade dem redan före sitt modellanrop medan Jev-vägen bara
+tog bort e-post och telefon. Telefonmönstret åt dessutom slutet av ett
+personnummer ("850101-1236" blev "85[telefon]") och lämnade födelsedatumet
+kvar, så maskeringen körs före telefonmönstret. Villkoren lovade sedan Antons
+beslut 2026-10-10 (org.nr och postadress stoppar aldrig ett utskick) en
+kontroll som koden inte gör; en villkorstext som påstår mer än koden gör är ett
+löfte till kunden som bryts.
+
+**I koden.** `snajp-support/app/leads/jev.py:_utan_personuppgifter` anropar
+`app/moderation/maskering.maskera_personnummer` (ingen ny regex), test i
+`tests/leads/test_automation.py`. `app/villkor/VillkorSida.tsx`, posten
+`utskick`, svenska och engelska. Spärren är oförändrad
+(`app/leads/send_guard.py`, regel 1 och 2).
+
+---
+
 ## 2026-11-16 (Anton) — Agenterna svarar bara med det som går att belägga, annars lämnar de över
 
 **Beslut.** Anton, först: "Djupdyk i NVIDIA/auto-ontology och inkorporera det

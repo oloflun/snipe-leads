@@ -67,7 +67,9 @@ def skapa_tenant(api_url: str, master: str, slug: str, namn: str) -> tuple[str, 
     """
     req = urllib.request.Request(
         f"{api_url}/api/keys",
-        data=json.dumps({"tenant_name": namn, "slug": slug}).encode(),
+        # Testarbetsytor får avtalsgrinden av, samma värde som
+        # lib/snajp/testtenant.ts ger dem (INV-AVTAL-001, BESLUT 2026-11-17).
+        data=json.dumps({"tenant_name": namn, "slug": slug, "kraver_avtal": False}).encode(),
         headers={
             "X-API-Key": master,
             "Content-Type": "application/json",

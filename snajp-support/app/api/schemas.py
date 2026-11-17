@@ -46,6 +46,11 @@ class TriageRequest(BaseModel):
 class CreateKeyRequest(BaseModel):
     tenant_name: str = Field(..., min_length=2, max_length=80)
     slug: str | None = Field(default=None, min_length=2, max_length=80, pattern=r"^[a-z0-9-]+$")
+    #: Avtalsgrinden för en NY tenant. Utelämnad = databasens standard (true
+    #: sedan migration 118, INV-AVTAL-001). false bara för test-, demo- och
+    #: interna tenants vars data inte är en kunds personuppgifter. Påverkar
+    #: aldrig en tenant som redan finns.
+    kraver_avtal: bool | None = None
 
 
 class KbArticle(BaseModel):
@@ -706,6 +711,9 @@ class KunddataRequest(BaseModel):
     policy_url: str | None = Field(default=None, max_length=500)
     kund_sedan: str | None = Field(default=None, max_length=10)
     avtal_signerat: str | None = Field(default=None, max_length=10)
+    #: Avtalsgrinden (ss_tenants.kraver_avtal, migration 070/118). Hör till
+    #: tenanten, inte registerraden: API-vägen skriver den separat.
+    kraver_avtal: bool | None = None
 
 
 class KontaktRequest(BaseModel):

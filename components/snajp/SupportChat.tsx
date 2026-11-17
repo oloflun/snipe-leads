@@ -1026,9 +1026,14 @@ export function SupportChat({
               )}
             />
           </span>
+          {/* AI-upplysningen (AI-förordningen art. 50.1) står i huvudet och
+              inte i menyn: huvudet syns före och under hela samtalet, också i
+              kundernas inbäddade widget. Kod, aldrig modellens ord. */}
           <p className="text-sm font-semibold">
             Snajp Support
-            <span className="ml-2 font-normal text-ink-subtle">{statusLabel}</span>
+            <span className="ml-2 font-normal text-ink-subtle">
+              {text({ sv: "AI-assistent", en: "AI assistant" })} · {statusLabel}
+            </span>
           </p>
         </div>
         <div className="flex items-center gap-3">

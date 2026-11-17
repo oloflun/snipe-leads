@@ -33,8 +33,12 @@ async def create_key(
     request: Request, payload: CreateKeyRequest, tenant: dict = Depends(require_master_key)
 ) -> dict:
     storage = request.app.state.storage
+    # kraver_avtal utelämnad = avtalsgrinden på (INV-AVTAL-001); bara den som
+    # skapar en test-, demo- eller intern tenant skickar false.
     new_tenant = await storage.create_tenant(
-        slug=payload.slug or _slugify(payload.tenant_name), name=payload.tenant_name
+        slug=payload.slug or _slugify(payload.tenant_name),
+        name=payload.tenant_name,
+        kraver_avtal=payload.kraver_avtal,
     )
     # En testarbetsyta ska ha en fungerande agent från första minuten.
     #
@@ -68,5 +72,8 @@ async def create_key(
         "tenant_slug": new_tenant["slug"],
         "key_prefix": record["key_prefix"],
         "kb_seeded": kb_seeded,
+        # Så att skriptet som skapade kunden kan säga om trafiken väntar på
+        # ett registrerat avtal (scripts/onboard_tenant.py).
+        "kraver_avtal": bool(new_tenant.get("kraver_avtal")),
         "note": "Spara nyckeln nu — den visas aldrig igen.",
     }

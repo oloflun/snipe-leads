@@ -112,7 +112,13 @@ def forbered(miljo: Miljo, antal: int, kb_fil: Path, behall: bool = False) -> No
             svar = klient.post(
                 miljo.api + "/api/keys",
                 headers={"X-API-Key": miljo.master},
-                json={"tenant_name": f"Evalkund {stampel}-{nr}", "slug": f"eval-{stampel}-{nr}"},
+                # kraver_avtal false: evalkundernas data är syntetisk, ingen
+                # kunds personuppgifter, och grinden hade stoppat sviten.
+                json={
+                    "tenant_name": f"Evalkund {stampel}-{nr}",
+                    "slug": f"eval-{stampel}-{nr}",
+                    "kraver_avtal": False,
+                },
             )
             svar.raise_for_status()
             kropp = svar.json()
@@ -145,7 +151,11 @@ def forbered_kvitto(miljo: Miljo) -> None:
         sys.exit("Masternyckeln för miljön saknas i .env.deploy.")
     stampel = datetime.now(timezone.utc).strftime("%m%d%H%M")
     with httpx.Client(timeout=120, headers={"X-API-Key": miljo.master}) as klient:
-        svar = klient.post(miljo.api + "/api/keys", json={"tenant_name": KVITTOBOLAG, "slug": f"eval-{stampel}-kvitto"})
+        # kraver_avtal false: syntetisk evaldata, ingen kunds personuppgifter.
+        svar = klient.post(
+            miljo.api + "/api/keys",
+            json={"tenant_name": KVITTOBOLAG, "slug": f"eval-{stampel}-kvitto", "kraver_avtal": False},
+        )
         svar.raise_for_status()
         kropp = svar.json()
         orgnr = klient.put(

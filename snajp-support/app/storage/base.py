@@ -114,7 +114,21 @@ class Storage(Protocol):
 
     # -- Tenants (administrativa; kräver master-nyckel i API-lagret) --------
 
-    async def create_tenant(self, *, slug: str, name: str) -> dict[str, Any]: ...
+    async def create_tenant(
+        self, *, slug: str, name: str, kraver_avtal: bool | None = None
+    ) -> dict[str, Any]:
+        """Upsert på slug. `kraver_avtal` gäller bara en NY tenant: None ger
+        databasens standard (true sedan migration 118, INV-AVTAL-001), false
+        anges bara för test-, demo- och interna tenants. En befintlig tenants
+        flagga rörs aldrig härifrån."""
+        ...
+
+    async def set_tenant_kraver_avtal(
+        self, tenant_id: str, *, kraver_avtal: bool
+    ) -> dict[str, Any] | None:
+        """Plattformsadmins avtalsgrind per kund (Kunder & Data). None när
+        tenanten inte finns."""
+        ...
 
     async def get_tenant(self, tenant_id: str) -> dict[str, Any] | None: ...
 

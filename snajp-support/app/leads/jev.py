@@ -44,6 +44,7 @@ from typing import Any
 import httpx
 
 from ..config import get_settings
+from ..moderation.maskering import maskera_personnummer
 from ..tls import ssl_kontext
 
 logger = logging.getLogger("snajp-support.leads.jev")
@@ -74,7 +75,9 @@ def aktiv() -> bool:
 
 
 def _utan_personuppgifter(text: str) -> str:
-    return _TELEFON.sub("[telefon]", _EPOST.sub("[e-post]", text or ""))
+    # Personnummer före telefon: telefonmönstret äter annars "0101-1236" ur
+    # "850101-1236" och lämnar födelsedatumet kvar.
+    return _TELEFON.sub("[telefon]", maskera_personnummer(_EPOST.sub("[e-post]", text or "")))
 
 
 def _rader(utdrag: str) -> list[str]:

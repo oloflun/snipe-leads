@@ -956,6 +956,55 @@ Referens: `docs/UTKASTKEDJAN-REFERENS-2026-10-16.md`.
 Test: snajp-support/tests/leads/test_utkastfacit_2026_10_16.py
 Införd: 2026-10-16 · Upphävs endast genom waiver
 
+### INV-AI-001 — Ett supportsvar som skickas utan mänsklig granskning bär en kodskriven AI-upplysning
+`app/email_pipeline/processor.process_email` lägger `AI_UPPLYSNING` sist i varje
+autosvar (`med_ai_upplysning`, efter signaturen, aldrig dubblerad) innan
+`skicka_supportsvar` anropas, och det sparade utkastet bär samma text. Ett
+utkast som en människa godkänner, och ett autosvar vars sändning föll och
+därför blev ett granskat utkast, får ingen rad. Upplysningen lovar att den
+som svarar och ber om en människa får en: `ber_om_manniska` på kundens text
+(utan citerade upplysningar) eskalerar i kod. Chatten visar "AI-assistent" i
+huvudet i `components/snajp/SupportChat.tsx`, också i den inbäddade widgeten.
+Varför: AI-förordningen (EU 2024/1689) art. 50.1, tillämplig från 2026-08-02.
+Systemprompten förbjuder agenten att utge sig för att vara människa, men en
+upplysning som hänger på modellens goda vilja är ingen upplysning.
+Test: snajp-support/tests/invariants/test_inv_ai_001.py
+Införd: 2026-11-17 · Upphävs endast genom waiver
+
+### INV-AVTAL-001 — En ny tenant kräver signerat avtal om inget annat sägs
+`ss_tenants.kraver_avtal` har standardvärdet true (migration 118), och migrationen
+som vände standarden rör inga befintliga rader. En tenant som skapas utan värde
+(`create_tenant`, `POST /api/keys`) får grinden på, och `app/avtalsgrind.py`
+vägrar dess publika ytor tills `ss_customer_details.avtal_signerat` bär ett datum.
+false anges uttryckligen bara för test-, demo- och interna tenants. Undantag tills
+Anton beslutat annat (BESLUT 2026-11-17): självregistrerade kunder och
+testarbetsytor (`lib/snajp/testtenant.ts`, `scripts/koppla_testytor.py`) skapas med
+false, så att provflödet fungerar som före 118. Plattformsadmin
+sätter flaggan i Kunder & Data (`PUT /api/admin/tenants/{id}/kunddata`).
+Varför: Snajp är personuppgiftsbiträde och får enligt GDPR art. 28 inte behandla en
+kunds personuppgifter utan biträdesavtal. Som opt-in (070) fick en ny kund trafik
+om ingen kom ihåg att slå på flaggan med SQL.
+Test: snajp-support/tests/invariants/test_inv_avtal_001.py
+Införd: 2026-11-17 · Upphävs endast genom waiver
+
+### INV-DATA-004 — Google AI Studio bär aldrig kunddata
+Där `Settings.har_riktig_kunddata()` är sann (känt kunddatamiljönamn eller en
+databas utanför loopback, samma gräns som DeepSeek-spärren) fäller
+`Settings.llm_provider_fault()` uppstarten i `app/main.py` när `LLM_PROVIDER=gemini`
+och `GOOGLE_SERVICE_ACCOUNT_JSON` saknas eller inte går att läsa. Varje gren som
+annars ringer AI Studio (`generativelanguage.googleapis.com`, `GEMINI_API_KEY`)
+vägrar dessutom själv via `agent/llm.ai_studio_vagras`: chattklienten kastar
+`ForbjudenProviderIMiljon`, bild- och embeddingsklienten blir None (befintlig
+"ingen klient"-väg), den grundade sökningen kastar `DiscoveryError`. Email Studio
+(`lib/llm/modellval.ts`) väljer aldrig AI Studio där `harRiktigKunddata` är sann.
+Lokalt och i testsviten fungerar AI Studio som förut.
+Varför: AI Studio ger ingen EU-bunden behandling, och på gratisnivån får Google
+använda innehållet med mänsklig granskning. GEMINI_API_KEY är satt i main och
+development, så ett servicekonto som saknas eller är trasigt hade tyst skickat
+kundmejl dit i stället för till Vertex AI i EU.
+Test: snajp-support/tests/invariants/test_inv_data_004.py
+Införd: 2026-11-17 · Upphävs endast genom waiver
+
 ## Roadmap
 
 Ids this plan will introduce, in the order `Genomförandeordning` builds them. Not yet enforced by CI.

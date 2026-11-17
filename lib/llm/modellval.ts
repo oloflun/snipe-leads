@@ -17,7 +17,8 @@
  *      från AI Studio 2026-09, och backenden gick över till Vertex samma dag
  *      (HANDOFF-2026-09-12-VERTEX-AI.md). Samma variabel som backenden läser.
  *   3. GEMINI_API_KEY — AI Studio. Numera gratisnivån, 20 anrop per dygn:
- *      kvar som reserv, inte som drift.
+ *      kvar som reserv, inte som drift, och bara där ingen riktig kunddata
+ *      finns (INV-DATA-004).
  *   4. DEEPSEEK_API_KEY — bara där ingen riktig kunddata finns, se nedan.
  *
  * Saknas alla simulerar routen och säger det i svaret.
@@ -182,7 +183,10 @@ export function valjModell(env: Miljo): Modellval | null {
   }
 
   const geminiKey = env.GEMINI_API_KEY || "";
-  if (dugerSomNyckel(geminiKey)) {
+  // INV-DATA-004: AI Studio bär aldrig kunddata — behandlingen är inte bunden
+  // till EU, och på gratisnivån får Google använda innehållet. Där data är
+  // riktig simulerar routen hellre än att tyst skicka utkasten dit.
+  if (dugerSomNyckel(geminiKey) && !harRiktigKunddata(env)) {
     return { provider: "gemini", apiKey: geminiKey, baseURL: GEMINI_BASE_URL, namn: geminiModell(env, "gemini-2.5-flash") };
   }
 

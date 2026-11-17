@@ -73,7 +73,10 @@ def _seed(storage: MemoryStorage, *, scheduled_at, language_state="sv", humanize
         "id": thread_id,
         "language_state": language_state,
         "last_inbound_at": last_inbound_at,
-        "prospect_email": "prospect@example.se",
+        # En funktionsadress: GODKAND_BRODTEXT har den korta foten, och
+        # sedan 2026-11-17 är varje lokaldel utanför funktionslistan personlig
+        # (prospect@ hade krävt art. 14-foten i regel 4).
+        "prospect_email": "info@example.se",
     }
     storage.outreach_messages.setdefault(TENANT, []).append(
         {
@@ -115,7 +118,7 @@ async def test_sends_and_marks_message_and_queue_item_when_gates_pass(monkeypatc
     assert outcome == "sent"
     assert provider.sent == [
         {
-            "to": "prospect@example.se",
+            "to": "info@example.se",
             "subject": "En idé till er",
             "body": GODKAND_BRODTEXT,
         }
@@ -154,7 +157,7 @@ async def test_levererande_provider_lagger_kopia_i_skickat(monkeypatch):
 
     assert outcome == "sent"
     assert anrop == [
-        {"tenant_id": TENANT, "till": "prospect@example.se", "amne": "En idé till er", "fran": "hej@snajp.se"}
+        {"tenant_id": TENANT, "till": "info@example.se", "amne": "En idé till er", "fran": "hej@snajp.se"}
     ]
 
 
@@ -319,7 +322,7 @@ async def test_send_guard_blockerar_avregistrerad_mottagare():
     skälet till att kontrollen sker i sändningsögonblicket."""
     storage = MemoryStorage()
     item_id, thread_id, _ = _seed(storage, scheduled_at=WITHIN_WINDOW_UTC)
-    await storage.add_suppression(TENANT, email="Prospect@Example.se", reason="klickade avregistrera")
+    await storage.add_suppression(TENANT, email="Info@Example.se", reason="klickade avregistrera")
     provider = _FakeSendProvider()
 
     outcome = await process_due_item(
@@ -340,7 +343,7 @@ async def test_send_guard_blockerar_kundens_egen_kund():
     storage = MemoryStorage()
     item_id, thread_id, _ = _seed(storage, scheduled_at=WITHIN_WINDOW_UTC)
     await storage.find_or_create_customer(
-        TENANT, email="prospect@example.se", phone=None, name=None
+        TENANT, email="info@example.se", phone=None, name=None
     )
     provider = _FakeSendProvider()
 

@@ -285,7 +285,9 @@ class MemoryStorage:
 
     # -- Tenants ------------------------------------------------------------
 
-    async def create_tenant(self, *, slug: str, name: str) -> dict[str, Any]:
+    async def create_tenant(
+        self, *, slug: str, name: str, kraver_avtal: bool | None = None
+    ) -> dict[str, Any]:
         for tenant in self.tenants.values():
             if tenant["slug"] == slug:
                 return tenant
@@ -294,6 +296,8 @@ class MemoryStorage:
             "slug": slug,
             "name": name,
             "active": True,
+            # Speglar kolumnens standard sedan migration 118 (INV-AVTAL-001).
+            "kraver_avtal": True if kraver_avtal is None else kraver_avtal,
             "created_at": _now(),
         }
         self.tenants[tenant["id"]] = tenant
@@ -317,6 +321,15 @@ class MemoryStorage:
             if overlagd.get(nyckel) is None:
                 overlagd[nyckel] = detaljer.get(falt)
         return overlagd
+
+    async def set_tenant_kraver_avtal(
+        self, tenant_id: str, *, kraver_avtal: bool
+    ) -> dict[str, Any] | None:
+        tenant = self.tenants.get(tenant_id)
+        if tenant is None:
+            return None
+        tenant["kraver_avtal"] = kraver_avtal
+        return dict(tenant)
 
     async def set_tenant_active(self, tenant_id: str, *, active: bool) -> dict[str, Any] | None:
         tenant = self.tenants.get(tenant_id)

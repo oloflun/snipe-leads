@@ -94,7 +94,10 @@ def create_tenant_and_key(backend_url: str, master_key: str, slug: str, name: st
     Rånyckeln returneras en enda gång och visas aldrig igen — den går direkt
     vidare till Vercel och skrivs aldrig ut.
     """
-    payload = json.dumps({"tenant_name": name, "slug": slug}).encode()
+    # kraver_avtal uttryckligen: en riktig kund får ingen trafik förrän
+    # biträdesavtalet är registrerat (INV-AVTAL-001). Gäller bara en ny
+    # tenant; ett omtag ändrar aldrig en befintlig kunds grind.
+    payload = json.dumps({"tenant_name": name, "slug": slug, "kraver_avtal": True}).encode()
     request = urllib.request.Request(
         f"{backend_url.rstrip('/')}/api/keys",
         data=payload,
@@ -326,6 +329,14 @@ def main() -> None:
     tenant_id = result["tenant_id"]
     print(f"  tenant   {tenant_id} ({result.get('tenant_slug', slug)})")
     print(f"  nyckel   {result.get('key_prefix', '?')}… (visas aldrig igen)")
+    if result.get("kraver_avtal", True):
+        print(
+            "  avtal    grinden PÅ: chatt, inkommande mejl och kanaler vägras tills "
+            "biträdesavtalet är registrerat.\n"
+            "           Nästa steg: admin › Kunder & Data › kunden › Avtal signerat (datum)."
+        )
+    else:
+        print("  avtal    grinden AV för den här tenanten (fanns redan, rördes inte).")
 
     if supabase_url and service_key:
         workspace_id = link_workspace(supabase_url, service_key, slug, args.name, tenant_id)

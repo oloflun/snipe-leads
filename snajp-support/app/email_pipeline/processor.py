@@ -35,6 +35,44 @@ _SIGNATURE = "\n\nVänliga hälsningar,\n{avsandare}"
 #: tenantrad förväntar sig.
 _STANDARD_AVSANDARE = "Snajp Support"
 
+#: AI-upplysningen på autosvar (INV-AI-001, AI-förordningen art. 50.1). Kod,
+#: inte modell: en upplysning som hänger på promptens goda vilja är ingen.
+#: Bara mejl som går ut UTAN mänsklig granskning får den; ett godkänt utkast
+#: är människans svar. Den svenska raden ger kunden just de ord som
+#: support_regler.ber_om_manniska känner igen; därför tvättas raden bort ur
+#: ett inkommande svar som citerar den (_utan_upplysning) innan regexen körs.
+AI_UPPLYSNING = {
+    "sv": (
+        "Det här svaret är skrivet av en AI-assistent. Vill du hellre ha svar "
+        "från en människa? Svara på mejlet och skriv att du vill prata med en "
+        "medarbetare, så tar en av oss över."
+    ),
+    "en": (
+        "This reply was written by an AI assistant. Would you rather hear from "
+        "a person? Reply to this email and ask for a member of our team, and "
+        "one of us will take over."
+    ),
+}
+
+
+def med_ai_upplysning(content: str, sprak: str | None = "sv") -> str:
+    """Lägg AI-upplysningen sist, efter signaturen, utan att röra den.
+    Bär texten redan en upplysning (på något språk) läggs ingen till."""
+    if any(rad in content for rad in AI_UPPLYSNING.values()):
+        return content
+    rad = AI_UPPLYSNING["en" if sprak == "en" else "sv"]
+    return f"{content.rstrip()}\n\n{rad}"
+
+
+def _utan_upplysning(text: str) -> str:
+    """Kundens text utan citerade AI-upplysningar. Citattecken och
+    radbrytningar från kundens mejlklient tas bort först, så att en
+    ombruten och "> "-citerad rad också känns igen."""
+    platt = " ".join(re.sub(r"(?m)^[ \t>]+", "", text or "").split())
+    for rad in AI_UPPLYSNING.values():
+        platt = platt.replace(rad, " ")
+    return platt
+
 
 def _wrap_reply(body: str, recipient_name: str | None, avsandare: str = _STANDARD_AVSANDARE) -> str:
     """Lägg på exakt en hälsning och en signatur från AVSÄNDARENS företag.
@@ -623,6 +661,15 @@ async def process_email(
             must_escalate = True
             escalation_reason = "Ingen träff i kunskapsbasen — grundningsregeln kräver att en människa tar ärendet."
 
+        # En uttrycklig begäran om en människa eskalerar i kod, samma regex
+        # som chatten (INV-ESC-001). Det är löftet i AI-upplysningen ovan.
+        if not must_escalate:
+            from ..agent.support_regler import ber_om_manniska
+
+            if ber_om_manniska(_utan_upplysning(email.get("body_text") or "")):
+                must_escalate = True
+                escalation_reason = "Kunden bad om att få prata med en människa."
+
         if must_escalate or rule == "escalate":
             reason = escalation_reason or f"Regeln för facket {CATEGORY_LABELS[triage['category']]} kräver mänsklig granskning."
             body = _ESCALATION_BODY if must_escalate and articles else (
@@ -711,6 +758,14 @@ async def process_email(
             and faktadom.ok
         )
         if auto_ok:
+            # Ingen människa läser det här svaret före utskick: upplysningen
+            # läggs på i kod (INV-AI-001). Svenska, för mejlvägen skriver alltid
+            # svenska (textkvalitet.SPRAKREGLER, hälsningen och signaturen).
+            # Det sparade utkastet bär samma text som det skickade, så ett
+            # omtag dubblerar varken raden eller idempotensnyckeln. `content`
+            # själv rörs inte: faller sändningen blir det ett utkast som en
+            # människa granskar, och då är svaret hennes.
+            autosvar = med_ai_upplysning(content, "sv")
             # Sändningen sker FÖRE varje statusskrivning, samma kontrakt som
             # godkännandevägen (api/drafts.py). Misslyckas den degraderar
             # ärendet till ett vanligt utkast i granskningskön — fail mot
@@ -718,7 +773,7 @@ async def process_email(
             from .sender import SandningsFel, skicka_supportsvar
 
             try:
-                sandnotering = await skicka_supportsvar(email, content=content, tenant_id=tenant_id, storage=storage)
+                sandnotering = await skicka_supportsvar(email, content=autosvar, tenant_id=tenant_id, storage=storage)
             except SandningsFel as fel:
                 await storage.log_decision(
                     tenant_id, email_id=email_id, event="auto_send_failed",
@@ -729,11 +784,11 @@ async def process_email(
         if auto_ok:
             draft = await storage.create_draft(
                 tenant_id, email_id=email_id, ticket_id=ticket["id"],
-                content=content, status="auto_sent", auto=True, confidence=confidence,
+                content=autosvar, status="auto_sent", auto=True, confidence=confidence,
             )
             await storage.save_message(
                 tenant_id, conversation_id=ticket["conversation_id"],
-                direction="outbound", content=content,
+                direction="outbound", content=autosvar,
             )
             await storage.update_ticket(tenant_id, ticket["id"], status="resolved")
             await storage.update_email(tenant_id, email_id, status="auto_sent")
