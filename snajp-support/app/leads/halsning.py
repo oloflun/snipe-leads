@@ -27,6 +27,9 @@ _BOLAGSFORM = re.compile(
     re.IGNORECASE,
 )
 
+#: Längre än så är inget bolagsnamn; det blir då ett tilltal utan namn.
+_MAX_BOLAGSNAMN = 200
+
 #: Ett namnled: bokstäver, eventuellt bindestreck eller apostrof. Siffror,
 #: @ och skiljetecken betyder att "namnet" är något annat (en adress, en rubrik).
 _NAMNLED = re.compile(r"^[A-Za-zÅÄÖåäöÉéÜü][A-Za-zÅÄÖåäöÉéÜü'’-]*$")
@@ -117,6 +120,11 @@ def snyggt_bolagsnamn(bolag: str | None) -> str | None:
     läsbar form ("Hortlax Rör"). Ett namn i blandat skiftläge lämnas som
     bolaget själv skriver det."""
     namn = " ".join(str(bolag or "").split())
+    # Inget riktigt bolagsnamn är så här långt. Slingan nedan tar bort en
+    # bolagsform i taget och kör uttrycken på hela namnet varje varv, så ett
+    # namn på tiotusentals tecken tog minuter (kodskanningen 2026-11-17).
+    if len(namn) > _MAX_BOLAGSNAMN:
+        return None
     forra = None
     while namn != forra:
         forra = namn

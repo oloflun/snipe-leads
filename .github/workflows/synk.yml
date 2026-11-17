@@ -21,6 +21,11 @@ concurrency:
   group: synk
   cancel-in-progress: false
 
+# GITHUB_TOKEN behövs bara för checkout. Databaserna nås med ENV_DEPLOY, och
+# upload-artifact använder körningens egen token, inte GITHUB_TOKEN.
+permissions:
+  contents: read
+
 jobs:
   synk:
     runs-on: ubuntu-latest

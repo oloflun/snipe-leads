@@ -153,7 +153,9 @@ def med_signatur(brodtext: str, sig: dict[str, str], *, halsning: str | None = N
 #: Lösare än _HANGANDE_HALSNING (som speglar leads_agent och måste hållas lik).
 _AVSLUTNING = re.compile(
     r"\n[ \t]*(?:(?:med\s+)?(?:vänliga|bästa|varma)\s+hälsningar|hälsningar|mvh|vänligen|"
-    r"best\s+regards|kind\s+regards|regards|best\s+wishes|best|cheers)[ \t]*[,!.]?[ \t]*$",
+    # "[ \t]*(?:[,!.][ \t]*)?" och inte "[ \t]*[,!.]?[ \t]*": två blankstegsled
+    # i rad gav kvadratisk tid på en lång rad (kodskanningen 2026-11-17).
+    r"best\s+regards|kind\s+regards|regards|best\s+wishes|best|cheers)[ \t]*(?:[,!.][ \t]*)?$",
     re.IGNORECASE,
 )
 

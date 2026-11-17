@@ -48,6 +48,20 @@ async def test_demo_session_cookie_persists_across_requests():
 
 
 @pytest.mark.anyio
+async def test_en_sessionscookie_som_inte_ar_ett_uuid_ersatts():
+    """Cookien skrivs tillbaka och blir nyckel i processminnets tak. Ett
+    värde som servern inte själv gett (godtycklig text, godtycklig längd)
+    byts mot ett nytt i stället för att speglas (kodskanningen 2026-11-17)."""
+    async with app.router.lifespan_context(app):
+        async with _client() as client:
+            client.cookies.set("snajp_demo_session", "x" * 3000)
+            response = await client.post("/api/demo/chat", json={"message": "Hej"})
+            nytt = response.cookies.get("snajp_demo_session")
+            assert nytt and nytt != "x" * 3000
+            assert len(nytt) == 36
+
+
+@pytest.mark.anyio
 async def test_session_rate_limit_returns_429_once_exceeded():
     async with app.router.lifespan_context(app):
         async with _client() as client:

@@ -60,6 +60,30 @@ test("blockerad lagring kastar inte, och id:t är stabilt så länge sidan lever
   });
 });
 
+test("utan randomUUID (osäker kontext) kommer id:t ändå ur kryptografisk slump, inte Math.random", () => {
+  // Id:t läser tillbaka samtalet, så det får inte gå att gissa.
+  const mathRandom = Math.random;
+  Object.defineProperty(crypto, "randomUUID", {
+    configurable: true,
+    value: () => {
+      throw new TypeError("randomUUID kräver säker kontext");
+    }
+  });
+  Math.random = () => 0.5;
+  try {
+    medFonster({ sessionStorage: minneslagring() }, () => {
+      const forsta = sessionsId("snajp.demo.session.osaker.1");
+      const andra = sessionsId("snajp.demo.session.osaker.2");
+      assert.match(forsta, /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
+      assert.notEqual(forsta, andra);
+    });
+  } finally {
+    // Egenskapen lades på instansen; den riktiga sitter kvar på prototypen.
+    delete (crypto as unknown as { randomUUID?: unknown }).randomUUID;
+    Math.random = mathRandom;
+  }
+});
+
 test("lagring som kastar vid skrivning (full kvot) ger ändå ett stabilt id", () => {
   const full = {
     sessionStorage: {

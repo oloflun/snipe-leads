@@ -39,7 +39,23 @@ _ABBREVIATIONS = frozenset(
 )
 
 # Meningsslut: skiljetecken + blanksteg + versal/siffra.
-_BOUNDARY_RE = re.compile(r"([.!?…]+)(\s+)(?=[A-ZÅÄÖ0-9])")
+# Uttrycket matchar varje skiljeteckensrad med de blanksteg som följer (även
+# inga), och villkoren prövas i split_sentences. Förut stod blanktecknet och
+# versalen i uttrycket, och en lång rad skiljetecken utan dem prövades då på
+# nytt från varje position: kvadratisk tid (kodskanningen 2026-11-17). Samma
+# gränser som förut: \s+ kunde bara lyckas med hela blankstegsraden.
+_BOUNDARY_RE = re.compile(r"([.!?…]+)(\s*)")
+_MENINGSSTART = re.compile(r"[A-ZÅÄÖ0-9]")
+
+
+def _sista_ordet(text: str, slut: int) -> str:
+    """Ordet som slutar vid `slut`: tecknen efter sista blanktecken, ( eller [.
+    Samma som re.split(r"[\\s(\\[]", text[:slut])[-1], men utan att dela hela
+    texten fram till varje gräns (det var kvadratiskt)."""
+    start = slut
+    while start > 0 and not (text[start - 1].isspace() or text[start - 1] in "(["):
+        start -= 1
+    return text[start:slut]
 
 
 class SegmentShapeError(RuntimeError):
@@ -65,13 +81,16 @@ def split_sentences(text: str) -> list[tuple[int, int]]:
 
     cuts: list[int] = [0]
     for match in _BOUNDARY_RE.finditer(text):
+        # En gräns kräver blanksteg och sedan versal eller siffra.
+        if not match.group(2) or not _MENINGSSTART.match(text, match.end()):
+            continue
         # Ordet före skiljetecknet — är det en förkortning är det ingen gräns.
-        head = text[: match.start()]
-        last_word = re.split(r"[\s(\[]", head)[-1].rstrip(".").lower()
+        last_word = _sista_ordet(text, match.start()).rstrip(".").lower()
         if last_word in _ABBREVIATIONS:
             continue
         # Inte mellan siffror (decimaltal, ordningstal: "3.5", "den 1. maj").
-        if head[-1:].isdigit() and text[match.end() : match.end() + 1].isdigit():
+        fore = text[match.start() - 1 : match.start()] if match.start() else ""
+        if fore.isdigit() and text[match.end() : match.end() + 1].isdigit():
             continue
         # Gränsen läggs EFTER blanktecknet, så blanktecknet tillhör det
         # föregående segmentet och ingenting hamnar mellan två segment.

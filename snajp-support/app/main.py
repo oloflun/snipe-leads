@@ -629,7 +629,10 @@ async def health_ready(response: Response) -> dict:
         await app.state.storage.get_channel_config(DEFAULT_TENANT_ID, "web")
     except Exception as error:  # noqa: BLE001 — readiness får aldrig kasta
         storage_ok = False
-        warnings.append(f"Lagringen svarar inte: {error}")
+        # Feltexten kan bära värdnamn och användarnamn, och den här vägen är
+        # öppen utan nyckel: texten till loggen, bara typen i svaret.
+        logger.warning("/health/ready: lagringen svarar inte: %s", error)
+        warnings.append(f"Lagringen svarar inte ({type(error).__name__}).")
         response.status_code = 503
 
     return {
