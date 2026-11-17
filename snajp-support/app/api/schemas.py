@@ -2,9 +2,10 @@
 
 from typing import Literal
 
-from datetime import datetime
+from datetime import date, datetime
+from urllib.parse import urlparse
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class Attachment(BaseModel):
@@ -51,6 +52,27 @@ class KbArticle(BaseModel):
     title: str = Field(..., min_length=3, max_length=200)
     content: str = Field(..., min_length=10, max_length=8000)
     category: str = "ovrigt"
+    #: Migration 117: var artikeln kommer ifrån (webbskanningens `source_url`
+    #: tappades förut vid sparandet) och hur länge den gäller. Efter
+    #: `giltig_till` lämnar sökningen inte längre ut artikeln till agenten,
+    #: men portalens lista visar den så att kunden kan byta ut den.
+    source_url: str | None = Field(default=None, max_length=2048)
+    giltig_till: date | None = None
+
+    @field_validator("source_url")
+    @classmethod
+    def _bara_http(cls, varde: str | None) -> str | None:
+        if varde is None:
+            return None
+        varde = varde.strip()
+        if not varde:
+            return None
+        delar = urlparse(varde)
+        if delar.scheme.lower() not in ("http", "https") or not delar.netloc or any(
+            tecken.isspace() for tecken in varde
+        ):
+            raise ValueError("source_url måste vara en http- eller https-adress")
+        return varde
 
 
 class ContextDocRequest(BaseModel):
@@ -289,7 +311,7 @@ class SupportConfigRequest(BaseModel):
 
     eskalering: SupportEskaleringRequest | None = None
     tonlage: Literal["standard", "formell", "personlig", "kortfattad"] | None = None
-    faktakontroll: Literal["tillatande", "forsiktig", "strikt"] | None = None
+    faktakontroll: Literal["tillatande", "forsiktig", "strikt", "ordagrant"] | None = None
     #: Kundskriven text. Taket verkställs här OCH i support_regler.normalisera.
     amnesomrade: str | None = Field(default=None, max_length=600)
     #: Svarsspråk (bd snipe-xtr): kundens språk eller alltid svenska.

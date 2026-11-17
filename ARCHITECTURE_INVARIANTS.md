@@ -333,6 +333,64 @@ uppfunnen för att den lät bra, och mejlet var på väg ut i Snajps namn.
 Test: snajp-support/tests/agent/test_grounding_cycle.py
 Införd: 2026-08-14 · Upphävs endast genom waiver
 
+### INV-GROUND-002 — Varje uppgift i ett supportsvar står i EN namngiven källa av rätt slag
+`app/agent/support_faktagrind.kontrollera` tar namngivna källor (`Kalla`: ID,
+text, slag) och prövar varje kontaktuppgift och varje tal källa för källa,
+aldrig mot en hopslagen textmassa. Kundens egen text (`KUNDTEXT`) bär ekon
+(ordernummer, kundens egen adress) men aldrig ett pris, en procentsats, en
+frist eller en webbadress. En frist binds till sin tidsenhet. På `strikt` måste
+företagsuppgifterna i en mening stå i en och samma källa. Domen bär belägget
+per uppgift (`Faktadom.belagg`), och det sparas i körningens `faktagrind`.
+`support_agent.tolka_beslut` räknar en fråga som obesvarad när modellen
+hänvisar till ett käll-ID den aldrig fick: beslutet blir DELVIS.
+Varför: underlaget var en enda sträng där kundens fråga ingick. "Ni har väl
+90 dagars öppet köp?" gjorde 90 dagar till ett tillåtet tal, tvärt emot
+grundprompten avsnitt 3, och källistan modellen lämnade lästes aldrig.
+Mönstret är NVIDIA/auto-ontologys (`retrieval/interactive/kb_coverage.py`):
+modellen pekar ut, koden slår upp, och bara det som finns räknas.
+Test: snajp-support/tests/agent/test_kallbunden_faktagrind.py
+Införd: 2026-11-16 · Upphävs endast genom waiver
+
+### INV-GROUND-003 — I citatläget går ingen av modellens egna sakmeningar ut
+Med `faktakontroll: ordagrant` bygger KOD svaret
+(`app/agent/support_faktagrind.grinda`, som anropar `citatsvar` och sedan
+dömer exakt den byggda texten): kvar blir hälsningen (bara
+hälsningsord och ett känt namn), agentens frågor och de meningar som står
+ordagrant i en källa, skrivna som de står i källan. Kundens egen text citeras
+aldrig, och språkputsen körs inte. `kontrollera(niva="ordagrant")` dömer sedan
+den exakta text som ska ut: en mening som varken är en hälsning, en fråga
+eller ett citat fäller svaret. Finns inget citat och ingen fråga kvar efter en
+reparationsrunda går den fasta osäkerhetstexten ut och en kollega erbjuds. På
+ett annat språk än svenska finns inget att citera: en kollega tar ärendet.
+Mejlvägen dömer bara (`kontrollera`): på den här nivån går varje utkast som
+inte redan är rena citat till granskning. Grindens detaljer (belägg, det som
+fälldes) sparas i körningens steglogg under `detalj`, som `utan_stegtexter`
+tar bort när stegloggen lämnas ut till chattbubblan.
+Varför: de lägre nivåerna prövar det som går att känna igen i en text (nummer,
+adresser, tal, löftesord). "Du kan returnera utan kvitto" bär inget av det, och
+en omskrivning kan alltid ändra innebörden: ett struket "inte", ett struket
+villkor. Det enda som går att lova är att meningen är kundens egen.
+Taket är känt: att RÄTT mening valdes går inte att bevisa i kod.
+Test: snajp-support/tests/agent/test_citatlage.py
+Införd: 2026-11-16 · Upphävs endast genom waiver
+
+### INV-GROUND-004 — Det modellen själv skrev är aldrig ett belägg, och det som köas är det som grindats
+Iris `research_evidence`, alltså det `build_permitted_facts` gör till tillåtna
+tal och namn, bär bara det som bevisligen står i hämtat material: citat som
+`bedomning.verifierade_belagg` funnit ordagrant, och de uppmätta
+webbsignalerna (`leads_research_v2`, `leads_agent`, `sparad_research.las`).
+Modellens `likely_pains`, `trigger_events` och overifierade `evidence` når
+utkaststeget som underlag för hur mejlet skrivs, men gör inget tillåtet.
+`run_outreach_draft_v2` kör `check_grounding` och `check_gissningar` på den
+exakta ämnesraden och brödtexten som köas, efter att tilltal, bolagsnamn och
+ämnesrad satts; uppföljningarna sätter dem före grinden. En språkkorrektur
+(`textkvalitet._verifiera_korrektur`) som lägger till ett tal, en länk, ett
+kundnamn eller ett superlativ förkastas, och originalet behålls.
+Varför: grinden godkände varje tal researchmodellen själv hade skrivit, och
+texten ändrades efter grinden på tre ställen utan ny kontroll.
+Test: snajp-support/tests/agent/test_iris_grindhal.py
+Införd: 2026-11-16 · Upphävs endast genom waiver
+
 ### INV-AUDIT-001 — Varje körning identifierar alla tre instruktionslagren
 `app/agentcore/overlays.pack_version()` bygger
 `<manifest_hash[:12]>+<overlay_hash[:8]>+<global_hash[:8]>:<playbook>` och är

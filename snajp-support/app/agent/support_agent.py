@@ -290,27 +290,56 @@ def _med_rubriker(text: str, karta: dict[str, str]) -> str:
 BESLUT = ("SVARA", "MOTFRÅGA", "DELVIS", "ESKALERA")
 
 
-def tolka_beslut(utkast: dict[str, Any]) -> dict[str, Any]:
+def _okanda_kallor(angivna: Any, giltiga: frozenset[str] | None) -> list[str]:
+    """Käll-ID:n modellen hänvisar till som den aldrig fick. `giltiga` är
+    körningens KB-ID:n, plus "KUND:" när ett uppslag i kundens system gav data.
+    Utan mängd (`None`) prövas ingenting.
+
+    # ponytail: bara riktiga ID-former prövas. En fri text i fältet ("allmän
+    # kunskap") släpps förbi här; uppgifterna i svaret prövar faktagrinden.
+    """
+    if giltiga is None or not isinstance(angivna, list):
+        return []
+    okanda: list[str] = []
+    for kalla in map(str, angivna):
+        # int() gör "KB-014" och "KB-14" till samma ID.
+        angett = [f"KB-{int(m.group(1))}" for m in _KB_ID.finditer(kalla)]
+        if "KUND:" in kalla:
+            angett.append("KUND:")
+        if any(k not in giltiga for k in angett):
+            okanda.append(kalla.strip())
+    return okanda
+
+
+def tolka_beslut(utkast: dict[str, Any], giltiga: frozenset[str] | None = None) -> dict[str, Any]:
     """Utkaststegets avsnitt 11-fält, tolerant lästa. Kastar aldrig.
 
     `obesvarade` är frågorna modellen själv markerat som saknar_underlag eller
     eskalerad — grundprompten 4.4: en kollega återkommer om dem, alltså är
     ärendet DELVIS även när modellen skrev SVARA i beslutsfältet.
+
+    Med `giltiga` räknas också en fråga som "besvarats" med en källa som inte
+    finns (INV-GROUND-002). Grundprompten avsnitt 11 kräver att `källor` bara
+    bär ID:n som fanns i underlaget, och hittills kontrollerade ingen det.
     """
     beslut = str(utkast.get("beslut") or "").strip().upper().replace("MOTFRAGA", "MOTFRÅGA")
     fragor = utkast.get("kundens_frågor") or utkast.get("kundens_fragor") or []
     obesvarade: list[str] = []
+    okanda_kallor: list[str] = []
     if isinstance(fragor, list):
         for fraga in fragor:
             if not isinstance(fraga, dict):
                 continue
             status = str(fraga.get("status") or "").strip().lower()
-            if status in ("saknar_underlag", "eskalerad"):
+            okanda = _okanda_kallor(fraga.get("källor") or fraga.get("kallor"), giltiga)
+            okanda_kallor += okanda
+            if status in ("saknar_underlag", "eskalerad") or okanda:
                 obesvarade.append(_text(fraga.get("fråga") or fraga.get("fraga")).strip())
     if beslut == "SVARA" and obesvarade:
         beslut = "DELVIS"
     return {
         "beslut": beslut if beslut in BESLUT else None,
+        "okanda_kallor": okanda_kallor,
         "obesvarade": [f for f in obesvarade if f],
         "brådskande": utkast.get("brådskande") is True or utkast.get("bradskande") is True,
         "intern_notering": _text(utkast.get("intern_notering")).strip(),
@@ -664,15 +693,21 @@ def _faktakallor(
     subject: str,
     message: str,
     conversation_block: str,
-) -> list[str]:
+) -> list[support_faktagrind.Kalla]:
     """Faktagrindens underlag: kunskapsbasens träffar plus det KUNDEN och en
     MEDARBETARE sagt i samtalet. Agentens egna tidigare repliker ingår inte —
-    då hade en uppgift agenten hittat på i tur 2 blivit "stödd" i tur 3."""
-    kallor = [f"{a.get('title') or ''}\n{a.get('content') or ''}" for a in articles]
-    kallor += [subject or "", message or ""]
+    då hade en uppgift agenten hittat på i tur 2 blivit "stödd" i tur 3.
+
+    Varje källa är namngiven (INV-GROUND-002). KB-n följer `_kb_block`, och
+    kundens text är ett eget slag som inte får bära villkor."""
+    kundtext = support_faktagrind.kundtext
+    kallor = support_faktagrind.kb_kallor(articles)
+    kallor += [kundtext(subject), kundtext(message)]
     for rad in (conversation_block or "").splitlines():
-        if rad.startswith(("Kunden:", "Kollegan:")):
-            kallor.append(rad.split(":", 1)[1])
+        if rad.startswith("Kunden:"):
+            kallor.append(kundtext(rad.split(":", 1)[1]))
+        elif rad.startswith("Kollegan:"):
+            kallor.append(support_faktagrind.Kalla("KOLLEGA", rad.split(":", 1)[1], "kollega"))
     return kallor
 
 
@@ -1761,6 +1796,17 @@ async def run_support_agent(
         "bara en gång. Följ driftregeln sist i grundprompten: ESKALERA bara för "
         "ämnena i 6.3, aldrig för en vanlig kunskapslucka."
     )
+    niva = installningar["faktakontroll"]
+    citatlage = support_faktagrind.bygger_svar(niva)
+    if citatlage:
+        # Citatläget: koden släpper bara igenom meningar som står ordagrant i
+        # en källa (support_faktagrind.citatsvar). Be om dem direkt.
+        uppgift += (
+            " CITATLÄGE: återge varje sakuppgift med kunskapsbasens EXAKTA mening, "
+            "ord för ord och en mening per rad. Skriv inga egna sakpåståenden och "
+            "skriv inte om meningarna: allt utom en hälsning, de återgivna "
+            "meningarna och frågor till kunden stryks innan svaret skickas."
+        )
     uppgift += sprakrad
     if underlag:
         uppgift += integrationsuppslag.UTKAST_TILLAGG
@@ -1896,7 +1942,11 @@ async def run_support_agent(
     # det markerat som saknar_underlag gör beslutet till DELVIS (4.4). Aldrig
     # åt andra hållet — ett SVARA tar inte bort en överlämning koden beslutat.
     # Avgränsningen ("utanför ämnet", kundens val "erbjud") rörs inte.
-    utkastbeslut = tolka_beslut(draft)
+    # En källhänvisning till något modellen aldrig fick gör frågan obesvarad
+    # (INV-GROUND-002): beslutet blir DELVIS och en kollega erbjuds.
+    utkastbeslut = tolka_beslut(
+        draft, frozenset(kb_kartan(articles)) | ({"KUND:"} if underlag.kallor else set())
+    )
     # Researchen bedömde frågan som oklar, men utkastet hittade svaret och
     # besvarade den (uppgiften säger "besvara direkt om underlaget täcker
     # frågan"). Då är det ett besvarat ärende, inte en misslyckad runda —
@@ -2045,7 +2095,8 @@ async def run_support_agent(
     # Bara på svenska (bd snipe-xtr). Skillen är snajp:humanizer-SVENSKA: på
     # ett annat språk hade den översatt tillbaka till svenska, alltså ångrat
     # det enda utkaststeget just gjort. Där är utkastet sista handen.
-    humanized = {"final_reply": current_draft} if not ar_svenska else await steg(
+    # I citatläget putsas ingenting: en omskriven mening är inget citat längre.
+    humanized = {"final_reply": current_draft} if not ar_svenska or citatlage else await steg(
         steps["snajp:humanizer-svenska"],
         ledger,
         trace,
@@ -2115,63 +2166,81 @@ async def run_support_agent(
             and (arligt_utanfor_kb or utkastbeslut["beslut"] == "DELVIS" or identitetsfraga)
         )
     )
-    faktagrind: dict[str, Any] = {"niva": installningar["faktakontroll"], "ok": True}
+    faktagrind: dict[str, Any] = {"niva": niva, "ok": True}
+    if utkastbeslut["okanda_kallor"]:
+        faktagrind["okanda_kallor"] = utkastbeslut["okanda_kallor"][:10]
     if reply and not abuse.ska_eskalera:
+        Kalla = support_faktagrind.Kalla
         kallor = _faktakallor(
             articles, subject=subject, message=message, conversation_block=conversation_block
         )
         if kris:
             # Krissvaret får hänvisa till 112 (allmän kunskap, inte en
             # företagsuppgift) utan att grinden stryker numret.
-            kallor.append("Vid akut fara: ring 112.")
+            kallor.append(Kalla("KRIS", "Vid akut fara: ring 112.", support_faktagrind.FAST))
         # Lyckade svar ur kundens system (bd snipe-36u) är stöd precis som
         # kunskapsbasen — annars fälls ett korrekt återgivet leveransdatum.
-        kallor += underlag.kallor
+        kallor += [Kalla(f"KUND:{i}", k, "system") for i, k in enumerate(underlag.kallor, 1)]
         # Arbetsytans siffror är vår egen kördata: ett korrekt återgivet
         # nyckeltal ska inte strykas som ostött.
         if sifferblock:
-            kallor.append(sifferblock)
-        dom = support_faktagrind.kontrollera(
-            reply, niva=installningar["faktakontroll"], kallor=kallor, tenant_namn=tenant_namn
+            kallor.append(Kalla("ARBETSYTA", sifferblock, "kordata"))
+        # Hela nivån i ett anrop (support_faktagrind.grinda): i citatläget
+        # (INV-GROUND-003) bygger grinden svaret av källans meningar och
+        # dömer sedan exakt den texten.
+        grinda = partial(
+            support_faktagrind.grinda,
+            niva=niva,
+            kallor=kallor,
+            tenant_namn=tenant_namn,
+            svenska=ar_svenska,
+            kundnamn=customer_name or "",
         )
-        if not dom.ok:
-            faktagrind.update(ok=False, ostodda=list(dom.ostodda), reparerad=False)
-            logger.warning(
-                "Faktagrinden fällde supportsvaret (tenant %s): %s", tenant_id, dom.ostodda
-            )
-            rattning = await steg_hel(
-                steps["snajp:humanizer-svenska" if ar_svenska else "cs:draft-response"],
-                ledger,
-                trace,
-                task=(
-                    "Texten innehåller uppgifter som INTE finns i kunskapsbasen: "
-                    + "; ".join(dom.ostodda)
-                    + ". Skriv om texten så att de uppgifterna stryks. Där de "
-                    "behövdes: säg rakt ut att du inte har den uppgiften. Hitta inte "
-                    "på något nytt och ändra inget annat. Ren text, ingen markdown. "
+        utfall = grinda(reply)
+        if citatlage:
+            faktagrind["strukna"] = utfall.strukna
+        if not utfall.dom.ok:
+            ostodda = list(utfall.dom.ostodda)
+            faktagrind.update(ok=False, ostodda=ostodda, reparerad=False)
+            logger.warning("Faktagrinden fällde supportsvaret (tenant %s): %s", tenant_id, ostodda)
+            # En reparationsrunda. I citatläget på ett annat språk än svenska
+            # finns inget att citera, så där är rundan meningslös.
+            omutfall = None
+            if ar_svenska or not citatlage:
+                puts = ar_svenska and not citatlage
+                rattning = await steg_hel(
+                    steps["snajp:humanizer-svenska" if puts else "cs:draft-response"],
+                    ledger,
+                    trace,
+                    task=support_faktagrind.reparationsuppgift(niva, ostodda)
                     + (
                         "Returnera JSON: final_reply (svenska)."
-                        if ar_svenska
+                        if puts
                         else f"Skriv på {sprak_namn}. Returnera JSON med fältet final_reply: "
                         f"EN sträng med hela den rättade texten, inte skillens "
                         f"mallformat (To/Re/Notes)."
-                    )
-                ),
-                case_context=f"{case_context}\n\n## Kunskapsbas\n{kb_block}{systemblock}\n\n## Text att rätta\n{reply}",
-            )
-            kandidat = strip_dangling_sign_off(
-                slutlig_text(strip_markdown(_textfalt(rattning, "final_reply")).strip())
-            )
-            if kandidat and support_faktagrind.kontrollera(
-                kandidat, niva=installningar["faktakontroll"], kallor=kallor, tenant_namn=tenant_namn
-            ).ok:
-                reply = kandidat
+                    ),
+                    case_context=f"{case_context}\n\n## Kunskapsbas\n{kb_block}{systemblock}\n\n## Text att rätta\n{reply}",
+                )
+                kandidat = strip_markdown(_textfalt(rattning, "final_reply")).strip()
+                omutfall = grinda(
+                    kandidat if citatlage else strip_dangling_sign_off(slutlig_text(kandidat))
+                )
+            if omutfall and omutfall.dom.ok:
+                utfall = omutfall
                 faktagrind.update(ok=True, reparerad=True)
-            elif escalated:
-                reply = support_texter.text("overlamningssvar", svar_sprak)
             else:
-                reply = support_texter.text("osakerhet", svar_sprak)
-                erbjod_manniska = True
+                # Den fasta texten bär inga uppgifter att belägga.
+                utfall = None
+                if escalated:
+                    reply = support_texter.text("overlamningssvar", svar_sprak)
+                else:
+                    reply = support_texter.text("osakerhet", svar_sprak)
+                    erbjod_manniska = True
+        if utfall:
+            reply = utfall.text
+        # Belägget per uppgift: vilken källa som bär vad i svaret kunden får.
+        faktagrind["belagg"] = utfall.dom.belagg_json() if utfall else []
 
     # Modellens eskaleringsbedömning lämnade över ett samtal koden tänkt
     # besvara eller fråga i. Löftet om en människa läggs på i KOD — det får
@@ -2456,6 +2525,20 @@ async def run_support_agent(
                 "katalogfel": underlag.katalogfel,
             }
         )
+    # Faktagrindens hela utfall hör hemma i körningen (agent_runs), där det
+    # finns kvar och bara admin läser det: vilken källa som bar vad, vad som
+    # ströks och vad som fälldes. Pseudo-steg av samma skäl som ovan, med
+    # leadskedjans namn (grind:faktagrind). Allt utöver själva utfallet ligger
+    # under `detalj`, som `utan_stegtexter` tar bort när stegloggen lämnas ut:
+    # jobbsvaret pollas av den anonyma chattbubblan.
+    utfallet = {k: v for k, v in faktagrind.items() if k in ("niva", "ok", "reparerad")}
+    steglogg.append(
+        {
+            "step": "grind:faktagrind",
+            **utfallet,
+            "detalj": {k: v for k, v in faktagrind.items() if k not in utfallet},
+        }
+    )
     run = await storage.log_agent_run(
         tenant_id,
         agent_type="support",
@@ -2496,7 +2579,8 @@ async def run_support_agent(
         # medarbetarens svar.
         "overlamnad": escalated or bool(gastlage),
         "svarslage": svarslage,
-        "faktagrind": faktagrind,
+        # Bara utfallet; detaljerna ligger i körningens steglogg (se ovan).
+        "faktagrind": utfallet,
         "sprak": svar_sprak,
         "kb_sources": [{"title": a["title"], "similarity": a["similarity"]} for a in articles],
         "returning_customer": len(history) > 0,

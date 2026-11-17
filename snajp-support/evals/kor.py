@@ -237,6 +237,9 @@ def _kor_support(miljo: Miljo, fall: dict[str, Any], nr: int) -> dict[str, Any]:
             "reply": res.get("reply"), "escalated": res.get("escalated"), "overlamnad": res.get("overlamnad"),
             "escalation_code": res.get("escalation_code"), "category": res.get("category"),
             "svarslage": res.get("svarslage"), "steg": _steg(res),
+            # Åt sökträffen: vad sökningen hämtade, och om faktagrinden höll.
+            # None om miljön inte lämnar ut fälten.
+            "kb_sources": res.get("kb_sources"), "faktagrind": res.get("faktagrind"),
         },
     }
 
@@ -324,6 +327,7 @@ def kor(miljo: Miljo, agent: str, etikett: str, urval: int | None, samtidiga: in
         fall = [f for f in fall if f.get("kor_live", True)][:urval]
     rubrik = json.loads((HAR / "iris_rubrik.json").read_text(encoding="utf-8")) if agent == "iris" else {}
     korare = {"support": _kor_support, "iris": _kor_iris, "kvitto": _kor_kvitto}[agent]
+    kb = json.loads((HAR / "kb" / "livrustning.json").read_text(encoding="utf-8")) if agent == "support" else []
 
     def ett(arg: tuple[int, dict[str, Any]]) -> dict[str, Any]:
         nr, f = arg
@@ -341,6 +345,8 @@ def kor(miljo: Miljo, agent: str, etikett: str, urval: int | None, samtidiga: in
             kriterier = {k: False for k in kriterier}
         if agent == "iris":
             utfall["upplysning"] = {"signal": bedomning.iris_signal(f, utfall["svar"])}
+        if agent == "support":
+            utfall["upplysning"] = {"soktraff": bedomning.soktraff(f, utfall["svar"], kb)}
         print(f"  {'ok ' if all(kriterier.values()) else 'NEJ'} {f['id']:<34} {utfall['latens_s']:>6.1f} s"
               + (f"  ({utfall['fel'][:60]})" if utfall["fel"] else ""), flush=True)
         return {"id": f["id"], "typ": f.get("typ"), "kriterier": kriterier, **utfall}
@@ -368,7 +374,9 @@ def kor(miljo: Miljo, agent: str, etikett: str, urval: int | None, samtidiga: in
     if agent == "iris":
         rapport["signal_andel"] = round(sum(bool((r.get("upplysning") or {}).get("signal")) for r in rader) / len(rader), 3)
     if agent == "support":
-        forsok = [s["forsok"] for r in rader for s in r["svar"].get("steg") or [] if s["skill"] == "cs:ticket-triage"]
+        sokta = [u for r in rader if (u := (r.get("upplysning") or {}).get("soktraff")) is not None]
+        rapport["soktraff_andel"] = round(sum(sokta) / len(sokta), 3) if sokta else None
+        forsok =[s["forsok"] for r in rader for s in r["svar"].get("steg") or [] if s["skill"] == "cs:ticket-triage"]
         rapport["triage_omforsok_andel"] = round(sum(1 for f in forsok if (f or 1) > 1) / len(forsok), 3) if forsok else None
     UT.mkdir(parents=True, exist_ok=True)
     (UT / f"{etikett}-{agent}.json").write_text(json.dumps(rapport, ensure_ascii=False, indent=1), encoding="utf-8")

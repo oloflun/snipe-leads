@@ -97,7 +97,7 @@ TONLAGEN: dict[str, str] = {
 #: Faktakontrollens nivåer (se support_faktagrind.py för vad varje nivå
 #: kontrollerar). Ebbots tre nivåer, men verkställda i kod mot kunskapsbasen
 #: i stället för av en andra modell.
-FAKTAKONTROLL = ("tillatande", "forsiktig", "strikt")
+FAKTAKONTROLL = ("tillatande", "forsiktig", "strikt", "ordagrant")
 
 #: Svarsspråket. "kundens" = samma språk som kundens meddelande (Ebbots
 #: "same as user"); "svenska" = alltid svenska, oavsett vad kunden skriver.

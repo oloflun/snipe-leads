@@ -356,9 +356,16 @@ class Storage(Protocol):
         query: str,
         embedding: list[float] | None = None,
         limit: int = 3,
-    ) -> list[dict[str, Any]]: ...
+    ) -> list[dict[str, Any]]:
+        """Agentens sökning. Lämnar aldrig tillbaka en artikel vars
+        `giltig_till` har passerat (svensk dag); utan giltig_till gäller den
+        tills vidare. Träffarna bär `source_url` (migration 117)."""
+        ...
 
-    async def list_kb(self, tenant_id: str) -> list[dict[str, Any]]: ...
+    async def list_kb(self, tenant_id: str) -> list[dict[str, Any]]:
+        """Portalens lista: ALLA artiklar, även utgångna, med `source_url` och
+        `giltig_till`, så att kunden ser vad som gått ut och kan byta ut det."""
+        ...
 
     async def add_kb_article(
         self,
@@ -368,6 +375,8 @@ class Storage(Protocol):
         content: str,
         category: str,
         embedding: list[float] | None = None,
+        source_url: str | None = None,
+        giltig_till: date | None = None,
     ) -> dict[str, Any]: ...
 
     async def delete_kb_article(self, tenant_id: str, artikel_id: str) -> bool:

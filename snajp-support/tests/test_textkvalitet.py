@@ -132,6 +132,18 @@ def test_verifiering_faller_andrad_siffra():
     assert not _verifiera_korrektur("Priset är 1 495 kr.", "Priset är 1 595 kr.")
 
 
+def test_verifiering_faller_det_som_tillkommer():
+    """Korrekturen körs efter faktagrindarna: det den lägger till har ingen
+    grind sett. Ett tal, en länk eller ett superlativ som inte stod i
+    originalet fäller den, en ren språkrättning gör det inte."""
+    original = "Vi hjälper byggföretag att svra snabbare på kundfrågor. Har du 15 minuter nästa vecka?"
+    rattad = original.replace("svra", "svara")
+    assert _verifiera_korrektur(original, rattad)
+    assert not _verifiera_korrektur(original, rattad.replace("snabbare", "40 procent snabbare"))
+    assert not _verifiera_korrektur(original, rattad.replace("snabbare", "snabbast"))
+    assert not _verifiera_korrektur(original, rattad.replace("kundfrågor.", "kundfrågor, se www.exempel.se."))
+
+
 def test_verifiering_faller_andrat_produktnamn():
     assert not _verifiera_korrektur("Iris hittar era leads.", "Irris hittar era leads.")
 

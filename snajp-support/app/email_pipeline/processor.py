@@ -226,8 +226,18 @@ async def _faktakontroll(
         )["faktakontroll"]
     except Exception:  # noqa: BLE001 — standardnivån hellre än ingen kontroll
         niva = "forsiktig"
-    kallor = [f"{a.get('title') or ''}\n{a.get('content') or ''}" for a in articles]
-    kallor += [email.get("subject") or "", email.get("body_text") or "", profil or ""]
+    # Namngivna källor (INV-GROUND-002): kundens eget mejl får bära ett eko,
+    # aldrig ett pris, en procentsats, en frist eller en webbadress.
+    # Mejlvägen DÖMER bara (kontrollera), den bygger inte om utkastet som
+    # chatten gör i citatläget (support_faktagrind.grinda). På nivån ordagrant
+    # fälls därför varje utkast som inte redan är rena citat och går till
+    # granskning. Det är valt: ett mejl har hälsning och signatur runt sig
+    # och en språkkorrektur efter sig, och ett byggt mejl är en egen uppgift.
+    kallor = support_faktagrind.kb_kallor(articles) + [
+        support_faktagrind.kundtext(email.get("subject")),
+        support_faktagrind.kundtext(email.get("body_text")),
+        support_faktagrind.Kalla("PROFIL", profil or "", "profil"),
+    ]
     return support_faktagrind.kontrollera(
         utkast, niva=niva, kallor=kallor, tenant_namn=avsandare
     )
@@ -625,8 +635,27 @@ async def process_email(
             # gäller fortfarande utan KB-träffar (ingen källa = inget delsvar)
             # och när modellen inte gav något utkast. Utkastet går ALLTID till
             # granskning här, aldrig ut automatiskt.
+            # Delsvaret går genom samma faktagrind som ett vanligt utkast
+            # (2026-11-16). Det granskas visserligen av en människa, men den
+            # som granskar ska inte behöva hitta en påhittad uppgift själv:
+            # håller det inte används den fasta texten, och det ostödda står
+            # i beslutsloggen.
             if articles and triage.get("beslut") in ("DELVIS", "ESKALERA") and triage.get("draft_body"):
-                body = triage["draft_body"]
+                delsvar = await _faktakontroll(
+                    storage, tenant_id, triage["draft_body"],
+                    articles=articles, email=email, profil=profil, avsandare=avsandare,
+                )
+                if delsvar.ok:
+                    body = triage["draft_body"]
+                else:
+                    await storage.log_decision(
+                        tenant_id, email_id=email_id, event="faktagrind",
+                        detail={
+                            "note": "Delsvaret innehöll uppgifter som inte står i "
+                            "underlaget. Den fasta texten används i stället.",
+                            "ostodda": list(delsvar.ostodda)[:10],
+                        },
+                    )
             content = _wrap_reply(body, email["from_name"], avsandare)
             await storage.update_ticket(
                 tenant_id, ticket["id"], status="escalated", priority="high",

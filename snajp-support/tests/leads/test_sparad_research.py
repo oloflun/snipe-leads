@@ -110,7 +110,10 @@ async def test_aldre_korning_utan_post_ger_bara_verifierade_citat():
     assert u["citat"] == ["personlig rådgivning genom hela processen"]
     assert u["motivering"] == "Säljer båtar till privatpersoner."
     assert u["uppfyllda_kriterier"] == ["Har kundtjänst"]
-    assert "Många kundfrågor" in u["research_evidence"]
+    # Grindens belägg är bara verifierade citat (2026-11-16); modellens pain
+    # och dess overifierade citat står kvar som underlag, aldrig som fakta.
+    assert u["research_evidence"] == ["personlig rådgivning genom hela processen"]
+    assert u["likely_pains"] == ["Många kundfrågor"]
 
 
 async def test_utan_research_finns_inget_underlag():

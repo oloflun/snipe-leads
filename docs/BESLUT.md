@@ -9,6 +9,66 @@ möjligt), vad det betyder i koden.
 
 ---
 
+## 2026-11-16 (Anton) — Agenterna svarar bara med det som går att belägga, annars lämnar de över
+
+**Beslut.** Anton, först: "Djupdyk i NVIDIA/auto-ontology och inkorporera det
+mot vår nuvarande kunskapsbas för att förbättra träffsäkerheten samt
+säkerställa att agenterna fysiskt inte kan hallucinera eller blanda ihop
+information." Sedan, om det som återstod: "det måste gå att lita på den till
+hundra procent, är den inte hundra procent säker måste den eskalera, men kom
+ihåg att målet är alltid hantera ärenden så långt som möjligt på egen hand …
+men då behöver vi ha fakta att luta oss mot, samt ett tydligt och enkelt sätt
+att förklara hur det fungerar mot kund." De enskilda valen nedan gjordes i
+arbetet. Inget är pushat; nivån Ordagrant är inte standard förrän den är mätt.
+
+**Resonemanget.** Auto-ontology är en text-till-SQL-stack över
+relationsdatabaser. Vår kunskapsbas är fritext per kund, så stacken passar
+inte, och den hade skickat kundtext till en ny leverantör utan avtal. Det som
+gick att föra över är dess mönster: modellen pekar ut och koden slår upp
+ordagrant, värden prövas mot källan, kopior hålls isär, och utan belägg vägrar
+systemet. Hundra procent går bara att lova om det som sägs är kundens egen
+text: en omskrivning kan alltid ändra innebörden (ett struket "inte", ett
+struket villkor), och ingen kod kan gå i god för en fri formulering.
+
+**I koden, val för val.**
+
+- **Namngivna källor** (INV-GROUND-002). Varje kontaktuppgift och varje tal
+  prövas källa för källa, och körningen sparar vilken källa som bär vad.
+  Kundens egen text får upprepas men bär aldrig ett pris, en procentsats, en
+  frist eller en webbadress. "8 år" bär inte "8 månader". En källhänvisning
+  till en artikel modellen aldrig fick gör frågan obesvarad.
+- **Nivån Ordagrant** (INV-GROUND-003). Svaret byggs av kod: hälsningen,
+  agentens frågor och meningar ord för ord ur en källa. Valet att bygga i kod
+  och inte pröva modellens text: det enda sättet att slippa en lista över
+  tillåtna ord, där varje öppet ord är ett hål. Valet att lämna över svar på
+  andra språk: en översättning är en ny formulering, och Antons regel är att
+  det som inte är säkert lämnas över. Valet att inte göra nivån till standard:
+  den är inte mätt mot riktig modell, och den ändrar hur varje svar ser ut.
+- **Iris** (INV-GROUND-004). Bara ordagrant verifierade citat och uppmätta
+  webbsignaler gör ett tal eller ett namn tillåtet. Den exakta text som köas
+  grindas, också ämnesraden. Två tester som låste fast hålet är ändrade;
+  utkastens facit är orört.
+- **Språkkorrekturen kan inte lägga till något.** Den körs efter grindarna
+  (leadskön, supportmejlen), så en korrektur som tillför ett tal, en länk, ett
+  kundnamn eller ett superlativ förkastas.
+- **Kunskapsbasens artiklar har källa och giltighetstid** (migration 117). En
+  utgången artikel används inte i svar men ligger kvar i listan. Valet att
+  inte bygga en redigeringsväg eller ett fält i portalen nu: ändringen i
+  portalen går inte att granska visuellt på den här maskinen i dag.
+- **Svarscachen** serverar ett sparat svar bara när frågans nyckelord är
+  desamma, inte bara när vektorerna ligger nära.
+- **Mejlets delsvar** går genom faktagrinden innan en människa granskar det.
+- **Evalsviten mäter sökträffen**: om sökningen hämtade artikeln som bär
+  svaret. Det talet är taket för hur mycket agenten kan klara själv.
+- **Kundförklaringen** står i `docs/SA-FUNGERAR-FAKTAKONTROLLEN.md`, och
+  nivåernas beskrivning i portalen säger samma sak.
+
+**Kvar, och varför.** Att rätt mening valdes går inte att bevisa i kod.
+Vektorerna i kunskapsbasen är inte ifyllda (kräver en körning mot en delad
+miljö). Portalen visar inte källa, giltighetstid eller belägg än.
+
+---
+
 ## 2026-11-16 (Sebbe) — 100 utskick om dagen, äldst först, ett i minuten från 08:00
 
 **Beslut.** Sebbe bad först om att "utskicken man gör inte ligger väntandes
