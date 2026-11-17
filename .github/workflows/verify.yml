@@ -29,6 +29,10 @@ on:
       # commit pushas till båda grenarna. Det är avsiktligt betalt.
       - railway-main
 
+# Jobben läser bara koden (checkout och git fetch); ingenting skrivs tillbaka.
+permissions:
+  contents: read
+
 jobs:
   python-tests:
     name: pytest (snajp-support)

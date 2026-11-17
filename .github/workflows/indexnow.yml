@@ -13,6 +13,10 @@ on:
     paths: ["app/**", "components/**", "lib/**", "public/**"]
   workflow_dispatch:
 
+# Bara checkout; anmälan går till IndexNow, inte till GitHub.
+permissions:
+  contents: read
+
 jobs:
   anmal:
     runs-on: ubuntu-latest
