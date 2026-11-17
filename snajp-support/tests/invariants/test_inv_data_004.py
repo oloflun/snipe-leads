@@ -16,6 +16,7 @@ testsviten fungerar AI Studio som förut.
 from __future__ import annotations
 
 import json
+from urllib.parse import urlsplit
 
 import pytest
 
@@ -124,8 +125,9 @@ def test_med_servicekonto_gar_alla_klienter_mot_vertex(miljo):
         GOOGLE_SERVICE_ACCOUNT_JSON=_SA_JSON,
     )
     for klient in (llm.get_llm_client(), llm.get_vision_client(), llm.get_embedding_client()):
-        assert "europe-west1-aiplatform.googleapis.com" in str(klient.base_url)
-        assert "generativelanguage" not in str(klient.base_url)
+        # Värdnamnet jämförs exakt: en delsträngskontroll godkänner också en
+        # adress som bara bär namnet någonstans i sökvägen.
+        assert urlsplit(str(klient.base_url)).hostname == "europe-west1-aiplatform.googleapis.com"
 
 
 # -- (c) Lokal data -> AI Studio tillåtet som förut -----------------------------

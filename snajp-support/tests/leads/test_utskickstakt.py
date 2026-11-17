@@ -41,7 +41,7 @@ def _godkanda(storage: MemoryStorage, antal: int, *, start: datetime, svarat: bo
     for i in range(antal):
         item_id, thread_id, _ = _seed(storage, scheduled_at=start + timedelta(minutes=i))
         trad = storage.outreach_threads[TENANT][thread_id]
-        trad["prospect_email"] = f"vd@bolag{i}.se"
+        trad["prospect_email"] = f"info@bolag{i}.se"
         if svarat:
             trad["last_inbound_at"] = start - timedelta(days=1)
         post = next(p for p in storage.send_queue[TENANT] if p["id"] == item_id)
@@ -91,7 +91,7 @@ async def test_aldst_forst_ett_mejl_per_varv(monkeypatch):
     monkeypatch.setattr(scheduler, "datetime", _Klocka(WITHIN_WINDOW_UTC + timedelta(seconds=60)))
     assert [r["outcome"] for r in await process_godkanda(storage, provider)] == ["sent"]
     assert [_status(storage, i) for i in ids] == ["sent", "sent", "queued"]
-    assert [m["to"] for m in provider.sent] == ["vd@bolag0.se", "vd@bolag1.se"]
+    assert [m["to"] for m in provider.sent] == ["info@bolag0.se", "info@bolag1.se"]
 
 
 async def test_utanfor_fonstret_lases_inte_kon(monkeypatch):
@@ -143,7 +143,7 @@ async def test_nadd_tak_provar_ingen_kopost(monkeypatch):
 async def test_ett_stoppat_utkast_slapper_fram_nasta(monkeypatch):
     storage, provider = MemoryStorage(), _FakeSendProvider()
     ids = _godkanda(storage, 2, start=WITHIN_WINDOW_UTC - timedelta(days=3))
-    await storage.add_suppression(TENANT, email="vd@bolag0.se", reason="avregistrerad")
+    await storage.add_suppression(TENANT, email="info@bolag0.se", reason="avregistrerad")
 
     monkeypatch.setattr(scheduler, "datetime", _Klocka(WITHIN_WINDOW_UTC))
     utfall = [r["outcome"] for r in await process_godkanda(storage, provider)]
@@ -157,7 +157,7 @@ async def test_efter_16_gar_bara_svar_i_trad(monkeypatch):
     svar = _godkanda(storage, 1, start=WITHIN_WINDOW_UTC - timedelta(days=2), svarat=True)
     storage.outreach_threads[TENANT][
         next(p for p in storage.send_queue[TENANT] if p["id"] == svar[0])["thread_id"]
-    ]["prospect_email"] = "vd@svarade.se"
+    ]["prospect_email"] = "info@svarade.se"
 
     halv_fem = datetime(2026, 8, 12, 14, 30, tzinfo=timezone.utc)  # 16:30 CEST
     monkeypatch.setattr(scheduler, "datetime", _Klocka(halv_fem))
