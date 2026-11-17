@@ -18,7 +18,7 @@ import uuid
 from contextlib import asynccontextmanager
 from datetime import date
 from decimal import Decimal
-from typing import Any
+from typing import Any, Sequence
 
 import asyncpg
 
@@ -76,6 +76,29 @@ _PROSPEKT_PROFILFALT = frozenset(
         # (2026-10-18). Spårningen är flyttloggen och plattformshändelsen.
     }
 )
+
+#: Kolumnerna en projektion av prospects får be om (list_prospects(kolumner=)).
+#: ALLOWLIST av samma skäl som profilfälten ovan: namnen sätts in i SQL:en.
+_PROSPEKT_LASKOLUMNER = frozenset(
+    {
+        "id", "tenant_id", "company_name", "contact_name", "contact_email", "language_state",
+        "status", "created_at", "icp_fit", "qualified", "disqualifiers", "score_breakdown",
+        "score_total", "foretagsnyckel", "origin", "motivering", "niva", "profil_version",
+        "jev", "lagesbeskrivning", "signaler", "webbrevision", "arkiverad_at", "synk_andrad_at",
+    }
+    | _PROSPEKT_PROFILFALT
+)
+
+
+def _prospektkolumner(kolumner: Sequence[str] | None) -> str:
+    """`*` utan projektion, annars de begärda kolumnerna (alltid med id).
+    En okänd kolumn är ett programmeringsfel och fäller anropet."""
+    if kolumner is None:
+        return "*"
+    okanda = [k for k in kolumner if k not in _PROSPEKT_LASKOLUMNER]
+    if okanda:
+        raise ValueError(f"Okända prospektkolumner: {okanda}")
+    return ", ".join(dict.fromkeys(("id", *kolumner)))
 
 
 async def _init_connection(conn: asyncpg.Connection) -> None:
@@ -1137,10 +1160,23 @@ class PostgresStorage:
                 # Äldst först: under ett dagstak (uppvärmningen, regel 5c) tog
                 # en osorterad fråga godtyckliga poster, och samma utkast kunde
                 # förbigås i dagar (main: köade 2026-10-08, ej skickade 10-20).
-                "select * from send_queue where tenant_id = $1 and status = 'queued' and scheduled_at <= $2"
-                " order by scheduled_at, created_at",
+                # trad_svarad_at (2026-11-16): sändaren hoppar över kallmejlen
+                # när bara trådsvar kan gå ut, utan ett trådupplägg per post.
+                "select q.*, t.last_inbound_at as trad_svarad_at from send_queue q"
+                " left join outreach_threads t on t.id = q.thread_id"
+                " where q.tenant_id = $1 and q.status = 'queued' and q.scheduled_at <= $2"
+                " order by q.scheduled_at, q.created_at",
                 tenant_id,
                 now,
+            )
+        return [_row(r) for r in records]
+
+    async def godkand_ko_ordning(self, tenant_id: str) -> list[dict[str, Any]]:
+        async with self._scoped(tenant_id) as conn:
+            records = await conn.fetch(
+                "select id, scheduled_at from send_queue where tenant_id = $1 and status = 'queued'"
+                " and gate_checks->>'approved_by' = 'human' order by scheduled_at, created_at",
+                tenant_id,
             )
         return [_row(r) for r in records]
 
@@ -1506,51 +1542,170 @@ class PostgresStorage:
             )
         return str(offer_id)
 
+    #: Trådarnas utfall (erbjudande_utfall, struktur_utfall). Härledningen står
+    #: i base.py. Statuslistan speglar memory.SVARSSTATUS; klassen ur
+    #: statusloggen speglar svar.py (meeting = positivt, lost = negativt,
+    #: suppressed = avregistrering, replied = fråga/invändning).
+    _TRADUTFALL = """
+        with tradar as (
+          select o.name as nyckel, t.struktur,
+            exists (select 1 from outreach_messages m
+                    where m.tenant_id = t.tenant_id and m.thread_id = t.id
+                      and m.direction = 'outbound') as utkast,
+            exists (select 1 from outreach_messages m
+                    where m.tenant_id = t.tenant_id and m.thread_id = t.id
+                      and m.direction = 'outbound' and m.sent_at is not null) as skickat,
+            coalesce(t.svarsklass, (
+              select case l.till when 'meeting' then 'positivt' when 'lost' then 'negativt'
+                                 when 'suppressed' then 'avregistrering' else 'fraga' end
+                from prospect_status_logg l
+               where l.tenant_id = t.tenant_id and l.prospect_id = t.prospect_id
+                 and l.created_at >= t.created_at and l.kalla = 'kod'
+                 and l.till in ('replied', 'meeting', 'lost', 'suppressed')
+               order by l.created_at desc limit 1
+            )) as klass,
+            exists (select 1 from prospect_status_logg l
+                    where l.tenant_id = t.tenant_id and l.prospect_id = t.prospect_id
+                      and l.created_at >= t.created_at and l.kalla = 'kod'
+                      and l.till = 'meeting') as positivt,
+            (exists (select 1 from lead_samtal s
+                     where s.tenant_id = t.tenant_id and s.prospect_id = t.prospect_id
+                       and s.utfall = 'mote')
+             or exists (select 1 from prospect_status_logg l
+                        where l.tenant_id = t.tenant_id and l.prospect_id = t.prospect_id
+                          and l.created_at >= t.created_at
+                          and (l.till = 'won' or (l.till = 'meeting' and l.kalla = 'manuell')))
+            ) as mote,
+            exists (select 1 from ss_demolankar d join ss_demolank_handelser h on h.token = d.token
+                    where d.tenant_id = t.tenant_id and d.thread_id = t.id
+                      and (h.typ = 'besok' or not h.skanner)) as klick,
+            exists (select 1 from ss_demolankar d join ss_demolank_handelser h on h.token = d.token
+                    where d.tenant_id = t.tenant_id and d.thread_id = t.id
+                      and h.typ = 'besok') as besok
+          from outreach_threads t
+          left join offers o on o.id = t.offer_id
+          where t.tenant_id = $1
+        )
+        select {grupp} as nyckel,
+               count(*) filter (where utkast) as utkast,
+               count(*) filter (where skickat) as skickade,
+               count(*) filter (where skickat and klass is not null) as svar,
+               count(*) filter (where skickat and positivt) as positiva,
+               count(*) filter (where skickat and mote) as moten,
+               count(*) filter (where skickat and klass = 'positivt') as ja,
+               count(*) filter (where skickat and klass in ('negativt', 'avregistrering')) as nej,
+               count(*) filter (where skickat and klass = 'aterkom') as kanske,
+               count(*) filter (where skickat and klass in ('fraga', 'invandning')) as fragor,
+               count(*) filter (where skickat and klick) as klick,
+               count(*) filter (where skickat and besok) as besok
+        from tradar
+        where {grupp} is not null
+        group by {grupp}
+    """
+
     async def erbjudande_utfall(self, tenant_id: str) -> list[dict[str, Any]]:
-        # Härledningen står i base.py. Statuslistan speglar memory.SVARSSTATUS.
+        async with self._scoped(tenant_id) as conn:
+            records = await conn.fetch(self._TRADUTFALL.format(grupp="nyckel"), tenant_id)
+        return [_row(r) for r in records]
+
+    async def struktur_utfall(self, tenant_id: str) -> list[dict[str, Any]]:
+        async with self._scoped(tenant_id) as conn:
+            records = await conn.fetch(self._TRADUTFALL.format(grupp="struktur"), tenant_id)
+        return [_row(r) for r in records]
+
+    async def satt_svarsklass(self, tenant_id: str, thread_id: str, klass: str) -> None:
+        async with self._scoped(tenant_id) as conn:
+            await conn.execute(
+                "update outreach_threads set svarsklass = $3, svarsklass_at = now() "
+                "where tenant_id = $1 and id = $2",
+                tenant_id,
+                thread_id,
+                klass,
+            )
+
+    async def satt_trad_struktur(self, tenant_id: str, thread_id: str, struktur: str) -> None:
+        async with self._scoped(tenant_id) as conn:
+            await conn.execute(
+                "update outreach_threads set struktur = $3 "
+                "where tenant_id = $1 and id = $2 and struktur is null",
+                tenant_id,
+                thread_id,
+                struktur,
+            )
+
+    async def demolanktoken(self, tenant_id: str, *, thread_id: str, mal_url: str) -> str:
+        from ..leads.demolank import ny_token
+
+        async with self._scoped(tenant_id) as conn:
+            # `do update` av samma skäl som avregistreringstoken: en
+            # `do nothing`-konflikt returnerar ingen rad.
+            return await conn.fetchval(
+                """
+                insert into ss_demolankar (token, tenant_id, thread_id, mal_url)
+                values ($1, $2, $3, $4)
+                on conflict (tenant_id, thread_id)
+                do update set mal_url = excluded.mal_url
+                returning token
+                """,
+                ny_token(),
+                tenant_id,
+                thread_id,
+                mal_url,
+            )
+
+    async def registrera_demolank(
+        self, token: str, *, typ: str, user_agent: str | None = None
+    ) -> str | None:
+        async with self.pool.acquire() as conn:
+            if typ == "klick":
+                return await conn.fetchval("select public.demolank_klick($1, $2)", token, user_agent or "")
+            return "ok" if await conn.fetchval("select public.demolank_besok($1)", token) else None
+
+    async def demobesok(self, tenant_id: str, *, limit: int = 200) -> list[dict[str, Any]]:
         async with self._scoped(tenant_id) as conn:
             records = await conn.fetch(
                 """
-                with tradar as (
-                  select o.name as nyckel,
-                    exists (select 1 from outreach_messages m
-                            where m.tenant_id = t.tenant_id and m.thread_id = t.id
-                              and m.direction = 'outbound') as utkast,
-                    exists (select 1 from outreach_messages m
-                            where m.tenant_id = t.tenant_id and m.thread_id = t.id
-                              and m.direction = 'outbound' and m.sent_at is not null) as skickat,
-                    exists (select 1 from prospect_status_logg l
-                            where l.tenant_id = t.tenant_id and l.prospect_id = t.prospect_id
-                              and l.created_at >= t.created_at and l.kalla = 'kod'
-                              and l.till in ('replied', 'meeting', 'lost', 'suppressed')) as svar,
-                    exists (select 1 from prospect_status_logg l
-                            where l.tenant_id = t.tenant_id and l.prospect_id = t.prospect_id
-                              and l.created_at >= t.created_at and l.kalla = 'kod'
-                              and l.till = 'meeting') as positivt,
-                    (exists (select 1 from lead_samtal s
-                             where s.tenant_id = t.tenant_id and s.prospect_id = t.prospect_id
-                               and s.utfall = 'mote')
-                     or exists (select 1 from prospect_status_logg l
-                                where l.tenant_id = t.tenant_id and l.prospect_id = t.prospect_id
-                                  and l.created_at >= t.created_at
-                                  and (l.till = 'won' or (l.till = 'meeting' and l.kalla = 'manuell')))
-                    ) as mote
-                  from outreach_threads t
-                  join offers o on o.id = t.offer_id
-                  where t.tenant_id = $1
-                )
-                select nyckel,
-                       count(*) filter (where utkast) as utkast,
-                       count(*) filter (where skickat) as skickade,
-                       count(*) filter (where skickat and svar) as svar,
-                       count(*) filter (where skickat and positivt) as positiva,
-                       count(*) filter (where skickat and mote) as moten
-                from tradar
-                group by nyckel
+                select t.prospect_id, p.company_name as foretag, p.contact_name as kontakt,
+                       o.name as erbjudande, t.struktur,
+                       count(*) filter (where h.typ = 'klick' and not h.skanner) as klick,
+                       count(*) filter (where h.typ = 'klick' and h.skanner) as skanner_klick,
+                       min(h.created_at) filter (where h.typ = 'klick') as forsta_klick,
+                       max(h.created_at) filter (where h.typ = 'klick') as senaste_klick,
+                       count(*) filter (where h.typ = 'besok') as besok,
+                       min(h.created_at) filter (where h.typ = 'besok') as forsta_besok,
+                       max(h.created_at) filter (where h.typ = 'besok') as senaste_besok
+                  from ss_demolankar d
+                  join ss_demolank_handelser h on h.token = d.token
+                  join outreach_threads t on t.id = d.thread_id and t.tenant_id = d.tenant_id
+                  left join prospects p on p.id = t.prospect_id
+                  left join offers o on o.id = t.offer_id
+                 where d.tenant_id = $1
+                 group by t.id, t.prospect_id, p.company_name, p.contact_name, o.name, t.struktur
+                 order by max(h.created_at) desc
+                 limit $2
+                """,
+                tenant_id,
+                limit,
+            )
+        return [_row(r) for r in records]
+
+    async def demolank_totalt(self, tenant_id: str) -> dict[str, int]:
+        async with self._scoped(tenant_id) as conn:
+            record = await conn.fetchrow(
+                """
+                select count(*) as lankar,
+                       count(*) filter (where exists (
+                         select 1 from ss_demolank_handelser h where h.token = d.token
+                            and (h.typ = 'besok' or not h.skanner))) as klickade,
+                       count(*) filter (where exists (
+                         select 1 from ss_demolank_handelser h where h.token = d.token
+                            and h.typ = 'besok')) as besokta
+                  from ss_demolankar d
+                 where d.tenant_id = $1
                 """,
                 tenant_id,
             )
-        return [_row(r) for r in records]
+        return {k: int(record[k] or 0) for k in ("lankar", "klickade", "besokta")}
 
     async def find_outreach_thread(
         self, tenant_id: str, *, prospect_id: str
@@ -2139,12 +2294,20 @@ class PostgresStorage:
             )
         return [_avkoda_prospekt(_row(r)) for r in records]
 
-    async def list_prospects(self, tenant_id: str, *, limit: int = 500, offset: int = 0) -> list[dict[str, Any]]:
+    async def list_prospects(
+        self,
+        tenant_id: str,
+        *,
+        limit: int = 500,
+        offset: int = 0,
+        kolumner: Sequence[str] | None = None,
+    ) -> list[dict[str, Any]]:
+        urval = _prospektkolumner(kolumner)
         async with self._scoped(tenant_id) as conn:
             # id som andra nyckel: lika created_at (en flytt skapar hundratals
             # samma sekund) får en fast ordning, annars glider sidorna.
             records = await conn.fetch(
-                "select * from prospects where tenant_id = $1 order by created_at desc, id limit $2 offset $3",
+                f"select {urval} from prospects where tenant_id = $1 order by created_at desc, id limit $2 offset $3",
                 tenant_id,
                 limit,
                 offset,
@@ -2688,6 +2851,24 @@ class PostgresStorage:
           from leads_job_ledger
          where tenant_id = $1 and scope in ('batch', 'lista')
     """
+    #: Körningslistans form (app/leads/listvy.py:korning_sammandrag): som den
+    #: lätta raden, men trattens och barnjobbens listor ersatta av sina antal.
+    #: De var 98 % av listans 2,8 MB för 100 körningar (development 2026-11-15)
+    #: och visas bara i den utfällda raden, som hämtar körningen för sig.
+    _KORNING_SQL_SAMMANDRAG = """
+        select job_id, status, scope, is_test, created_at, updated_at, completed_at,
+               error,
+               korning - 'kandidater' - 'webbpool' - 'listspar' - 'utslag' - 'rapporterade'
+                       - 'tratt' - 'jobs'
+                 || jsonb_build_object(
+                      'tratt_antal', case when jsonb_typeof(korning -> 'tratt') = 'array'
+                                          then jsonb_array_length(korning -> 'tratt') else 0 end,
+                      'jobs_antal', case when jsonb_typeof(korning -> 'jobs') = 'array'
+                                         then jsonb_array_length(korning -> 'jobs') else 0 end
+                    ) as korning
+          from leads_job_ledger
+         where tenant_id = $1 and scope in ('batch', 'lista')
+    """
 
     async def list_prospekt_i_research(self, tenant_id: str) -> set[str]:
         async with self._scoped(tenant_id) as conn:
@@ -2723,8 +2904,15 @@ class PostgresStorage:
         arbetsminne: bool = False,
         status: str | None = None,
         utom: str | None = None,
+        sammandrag: bool = False,
     ) -> list[dict[str, Any]]:
-        sql = self._KORNING_SQL if arbetsminne else self._KORNING_SQL_LATT
+        sql = (
+            self._KORNING_SQL
+            if arbetsminne
+            else self._KORNING_SQL_SAMMANDRAG
+            if sammandrag
+            else self._KORNING_SQL_LATT
+        )
         sql += " and ($3::text is null or status = $3) and ($4::text is null or job_id <> $4)"
         async with self._scoped(tenant_id) as conn:
             records = await conn.fetch(
@@ -3979,6 +4167,24 @@ class PostgresStorage:
                 limit,
             )
         return [_row(r) for r in records]
+
+    async def antal_skickade(self, tenant_id: str, *, sedan: Any) -> dict[str, int]:
+        async with self._scoped(tenant_id) as conn:
+            rad = await conn.fetchrow(
+                """
+                select count(*)::int as skickat,
+                       (count(*) filter (where t.last_inbound_at >= m.sent_at))::int as svarat
+                  from outreach_messages m
+                  join outreach_threads t on t.id = m.thread_id and t.tenant_id = m.tenant_id
+                 where m.tenant_id = $1
+                   and m.direction = 'outbound'
+                   and m.sent_at is not null
+                   and m.sent_at >= $2
+                """,
+                tenant_id,
+                sedan,
+            )
+        return {"skickat": int(rad["skickat"] or 0), "svarat": int(rad["svarat"] or 0)}
 
     async def list_konversationer(self, tenant_id: str, thread_ids: list[str]) -> list[dict[str, Any]]:
         if not thread_ids:

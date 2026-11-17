@@ -14,7 +14,7 @@ Bokföringsdelen (`bk_*`) följer i stället dubbel bokföring som referens­ark
 
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Any, Protocol
+from typing import Any, Protocol, Sequence
 
 #: Kundregistrets skrivbara fält (migration 053). Listan bor HÄR och läses av
 #: båda lagringarna och av API-schemat — tre kopior av en fältlista blir förr
@@ -505,7 +505,13 @@ class Storage(Protocol):
     # -- Leads: send_queue-schemaläggaren (Del J, Fas C-E) -------------------
 
     async def list_due_send_queue(self, tenant_id: str, now: Any) -> list[dict[str, Any]]:
-        """status='queued' och scheduled_at <= now, äldst först."""
+        """status='queued' och scheduled_at <= now, äldst först. Varje post bär
+        `trad_svarad_at` (trådens last_inbound_at)."""
+        ...
+
+    async def godkand_ko_ordning(self, tenant_id: str) -> list[dict[str, Any]]:
+        """De köade utkast en människa godkänt (`id`, `scheduled_at`), i den
+        ordning sändaren tar dem: äldst först (leads/sandplan.py)."""
         ...
 
     async def update_send_queue_status(
@@ -542,6 +548,13 @@ class Storage(Protocol):
         """Skickade leadsmejl (outbound, sent_at satt) över alla trådar, senast
         först, med bolag och mottagare — fliken Skickat i Iris-leads
         (Sebbe 2026-10-07). `last_inbound_at` säger om bolaget svarat."""
+        ...
+
+    async def antal_skickade(self, tenant_id: str, *, sedan: Any) -> dict[str, int]:
+        """{skickat, svarat}: skickade leadsmejl sedan `sedan`, och hur många
+        av dem vars tråd fått svar efter utskicket — samma regel som `svarat`
+        i Skickat (list_skickade), men räknat i databasen och utan tak.
+        Översiktens nyckeltal läste förut hela Skickat-listan (3 MB) för två tal."""
         ...
 
     async def list_konversationer(self, tenant_id: str, thread_ids: list[str]) -> list[dict[str, Any]]:
@@ -877,6 +890,7 @@ class Storage(Protocol):
         arbetsminne: bool = False,
         status: str | None = None,
         utom: str | None = None,
+        sammandrag: bool = False,
     ) -> list[dict[str, Any]]:
         """Tenantens körningar (liggarens batch- och listrader), nyast
         först: job_id, status, scope, is_test, created_at, updated_at,
@@ -887,7 +901,11 @@ class Storage(Protocol):
         `korning` är UTAN motorns arbetsminne (kandidater, webbpool, listspar,
         utslag, rapporterade) om inte `arbetsminne=True`: i en körning på 200
         var det flera MB per rad, och att läsa det för varje lista låste API:t
-        (main 2026-11-07). `status` och `utom` (ett job_id) filtrerar i frågan."""
+        (main 2026-11-07). `status` och `utom` (ett job_id) filtrerar i frågan.
+
+        `sammandrag=True` (körningslistan i vyerna): dessutom utan `tratt` och
+        `jobs`, med `tratt_antal` och `jobs_antal` i stället
+        (app/leads/listvy.py:korning_sammandrag)."""
         ...
 
     async def get_sidcache(self, tenant_id: str, url: str) -> dict[str, Any] | None:
@@ -1190,7 +1208,55 @@ class Storage(Protocol):
         med källan 'kod' till replied/meeting/lost/suppressed (statusloggen,
         migration 086), och 'meeting' med 'kod' är just klassen positivt. Ett
         möte är ett samtalsutfall 'mote' (lead_samtal), en manuell flytt till
-        'meeting' eller status 'won'. Bara loggrader från trådens start räknas."""
+        'meeting' eller status 'won'. Bara loggrader från trådens start räknas.
+
+        Sedan 2026-11-15 (migration 116) även svarsklasserna och demolänken:
+        `ja` (positivt), `nej` (negativt, avregistrering), `kanske`
+        (aterkom), `fragor` (fraga, invandning), `klick` (ett klick som inte
+        ser ut som en skanner, eller ett besök) och `besok` (mottagarens
+        interaktion på demosidan). Klassen är `outreach_threads.svarsklass`,
+        och för svar från före kolumnen den klass statusloggen bär."""
+        ...
+
+    async def struktur_utfall(self, tenant_id: str) -> list[dict[str, Any]]:
+        """Samma räkning som `erbjudande_utfall`, grupperad på trådens
+        utkaststruktur (`outreach_threads.struktur`, "a"/"b"). Trådar utan
+        struktur (från före strukturvalet) räknas inte."""
+        ...
+
+    async def satt_svarsklass(self, tenant_id: str, thread_id: str, klass: str) -> None:
+        """Sparar prospektsvarets klass på tråden (app/leads/svar.py). Senaste
+        meningsfulla svaret vinner; anroparen skickar aldrig 'autosvar'."""
+        ...
+
+    async def satt_trad_struktur(self, tenant_id: str, thread_id: str, struktur: str) -> None:
+        """Trådens utkaststruktur, satt av första mejlet. Skriver bara över ett
+        tomt värde: ett omskrivet första mejl ska inte byta arm."""
+        ...
+
+    async def demolanktoken(self, tenant_id: str, *, thread_id: str, mal_url: str) -> str:
+        """Demolänkens ogenomskinliga token för tråden (app/leads/demolank.py).
+        Idempotent per tråd, så att uppföljningar och omskrivna utkast bär
+        samma länk; `mal_url` uppdateras om kunden bytt demolänk."""
+        ...
+
+    async def registrera_demolank(
+        self, token: str, *, typ: str, user_agent: str | None = None
+    ) -> str | None:
+        """Loggar ett klick ('klick') eller besök ('besok') på en demolänk, som
+        Next-routen app/prova/[token] gör via SQL-funktionerna i migration 116.
+        Returnerar mål-URL:en (klick) eller "ok" (besök), None för okänd token."""
+        ...
+
+    async def demobesok(self, tenant_id: str, *, limit: int = 200) -> list[dict[str, Any]]:
+        """Trådar vars demolänk klickats eller besökts, senast aktiva först:
+        prospect_id, foretag, kontakt, erbjudande (nyckel), struktur, klick,
+        forsta_klick, senaste_klick, besok, forsta_besok, senaste_besok,
+        skanner_klick (klick märkta som skanner)."""
+        ...
+
+    async def demolank_totalt(self, tenant_id: str) -> dict[str, int]:
+        """{lankar, klickade, besokta}: trådar med demolänk, med klick, med besök."""
         ...
 
     # -- Leads: proveniensregister (Fas B, INV-DATA-001, research-verktygets allowlist) --
@@ -1215,7 +1281,18 @@ class Storage(Protocol):
         """Exakt de här prospekten, oavsett ålder (list_prospects tar bara de nyaste)."""
         ...
 
-    async def list_prospects(self, tenant_id: str, *, limit: int = 500, offset: int = 0) -> list[dict[str, Any]]: ...
+    async def list_prospects(
+        self,
+        tenant_id: str,
+        *,
+        limit: int = 500,
+        offset: int = 0,
+        kolumner: Sequence[str] | None = None,
+    ) -> list[dict[str, Any]]:
+        """En sida prospekt, nyast först. `kolumner` = bara de kolumnerna (id
+        följer alltid med): listorna ska inte läsa researchen de inte visar
+        (app/leads/listvy.py). Utan den: hela raden."""
+        ...
 
     async def arkivera_prospekt(
         self, tenant_id: str, prospect_ids: list[str], *, arkivera: bool

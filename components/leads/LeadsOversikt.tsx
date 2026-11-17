@@ -78,6 +78,10 @@ const T = {
 
 const PERIOD = 4;
 
+/** Stabilt tomt urval: ett nytt `[]` vid varje rendering sorterade om hela
+ *  Iris-listan i tabellen varje gång översikten ritades (2026-11-15). */
+const INGA_EXEMPEL: SuiteProspekt[] = [];
+
 const kort = "rounded-card border border-ink/12 bg-paper p-4 sm:p-5";
 
 /**
@@ -211,7 +215,7 @@ export function LeadsOversikt({
   demo = false,
   crmOppen = false,
   valdId = null,
-  exempel = [],
+  exempel = INGA_EXEMPEL,
   onValjLead,
   onOppnaKorningar
 }: Readonly<{
@@ -262,12 +266,12 @@ export function LeadsOversikt({
     {
       etikett: text(T.utkastVantar),
       varde: fmt(antalUtkast),
-      // Godkända utkast som väntar på sändfönstret (vardagar 08–16) syntes
+      // Godkända utkast som står i kön (vardagar från 08:00) syntes
       // förut ingenstans: de är inte "att godkänna" och inte skickade än.
       notis: antalLeads?.godkanda
         ? text({
-            sv: `${antalLeads.godkanda} godkända väntar på sändfönstret`,
-            en: `${antalLeads.godkanda} approved, waiting for the sending window`
+            sv: `${antalLeads.godkanda} godkända står i kön`,
+            en: `${antalLeads.godkanda} approved, in the queue`
           })
         : text(T.vantarPaDig)
     },

@@ -80,8 +80,11 @@ development men rörs inte — inget läser den längre.
 `main` direkt (se `DEPLOY.md`s main-avsnitt). Release = PR `development` →
 `main`; grenskyddet kräver code owner-review från `oloflun` (Anton), så
 mergen är alltid hans handgrepp — det ERSÄTTER inte §8.1a: varje release
-mot produktion kräver fortfarande Antons uttryckliga ord. Kör migrationer
-mot main (torrkörning först) INNAN mergen när releasen bär nya.
+mot produktion kräver fortfarande Antons uttryckliga ord. Migrationerna mot
+main körs av `.github/workflows/migrera.yml` när release-PR:en mergas
+(PR:ens kontroll `releasens migrationer` visar vilka releasen bär och
+fäller PR:en om development har okörda). De går fortfarande att köra för
+hand före mergen, torrkörning först.
 **⛔ `railway-main` är pensionerad** — pusha aldrig till den; den gamla
 tvåstegskedjan i äldre dokument/handoffs ska inte följas. De döda GitHub
 Actions-kedjorna (`deploy-production.yml`, `deploy-development.yml`) är
@@ -89,7 +92,11 @@ borttagna 2026-08-29 — de gav bara falska gröna signaler mot den gamla
 stacken.
 
 Levande dev-miljö: `https://web-development-6c85.up.railway.app`
-Migrationer: `python scripts/railway_migrate.py --env development --apply`
+Migrationer körs av sig själva sedan 2026-11-16: en push till `development`
+som rör `supabase/migrations/` kör kedjan mot development
+(`.github/workflows/migrera.yml`). Kontrollera att jobbet `migrera` blev
+grönt. Migrationer ska vara additiva och idempotenta, så att schemat får
+ligga före koden. För hand: `python scripts/railway_migrate.py --env development --apply`
 
 **Skriv ALDRIG till Supabase.** Grenen `development` i Supabase är död —
 `MIGRATIONS_FAILED` sedan 15 augusti, ett fel på Supabases sida, och beslutet

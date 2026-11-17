@@ -27,6 +27,8 @@ from .send_guard import KOLA_OM as SG_KOLA_OM
 from .send_guard import SKICKA as SG_SKICKA
 from .send_guard import (
     LEVERANS_FONSTER_DAGAR,
+    SENAST_TIMME,
+    TIDIGAST_TIMME,
     UPPTRAPPNING_FONSTER_DAGAR,
     Avsandare,
     GuardBeslut,
@@ -35,11 +37,13 @@ from .send_guard import (
     Utskick,
     check_send_guard,
     foretagsnyckel,
+    kundens_volymgrind,
 )
 from .send_provider import SandningAvvisad, SendProvider, get_send_provider
 from .signatur import HALSNING, med_aktuell_signatur
 from .signatur import bygg_html as bygg_signatur_html
 from .signatur import normalisera as normalisera_signatur
+from .timing_gate import STOCKHOLM, check_cold_outreach_gate, is_blocked_day
 
 logger = logging.getLogger("snajp-support.leads-scheduler")
 
@@ -57,6 +61,36 @@ async def _outbound_sent_count(storage: Storage, tenant_id: str, thread_id: str)
         1
         for message in thread_messages
         if message.get("direction") == "outbound" and message.get("sent_at")
+    )
+
+
+async def _kundens_volym(storage, tenant_id: str, tenant: dict, *, now) -> dict:
+    """Den del av historiken som gäller hela kunden: underlaget för regel 5
+    (send_guard.kundens_volymgrind). Ett ställe, så att sändarens prövning per
+    kund och spärrens prövning per mejl läser exakt samma tal."""
+    dygnets_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    return {
+        "skickade_totalt": await storage.count_sent_outreach(tenant_id),
+        "skickade_idag": await storage.count_sent_outreach(tenant_id, since=dygnets_start),
+        "tenant_alder_dagar": _alder_i_dagar(tenant.get("created_at"), now),
+        # Underlaget för upptrappningstaket (regel 5d): största dagsvolymen i
+        # upptrappningsfönstret. Sju dagar, samma som send_guard-konstanten.
+        "storsta_dagsvolym": await storage.storsta_dagsvolym(tenant_id, dagar=UPPTRAPPNING_FONSTER_DAGAR),
+        # Studsar och klagomål ur Resends webhook (regel 5e).
+        "leverans": Leveransutfall(**await storage.leveransutfall(tenant_id, dagar=LEVERANS_FONSTER_DAGAR)),
+    }
+
+
+async def kundens_historik(storage, tenant_id: str, *, now) -> TenantHistorik:
+    """Historiken utan det som gäller ett enskilt mejl (karens, suppression,
+    kundregister): nog för `kundens_volymgrind` och `dagens_tak`."""
+    tenant = await storage.get_tenant(tenant_id) or {}
+    return TenantHistorik(
+        **await _kundens_volym(storage, tenant_id, tenant, now=now),
+        senaste_kontakt_med_foretaget=None,
+        suppressions=frozenset(),
+        tidigare_kontaktade=frozenset(),
+        egna_kunder=frozenset(),
     )
 
 
@@ -123,7 +157,6 @@ async def _kor_send_guard(storage, tenant_id: str, thread: dict, message: dict, 
             )
 
     tenant = await storage.get_tenant(tenant_id) or {}
-    dygnets_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
     nyckel = thread.get("foretagsnyckel") or foretagsnyckel(
         orgnr=thread.get("prospect_orgnr"),
         epost=thread.get("prospect_email"),
@@ -131,18 +164,7 @@ async def _kor_send_guard(storage, tenant_id: str, thread: dict, message: dict, 
     )
 
     historik = TenantHistorik(
-        skickade_totalt=await storage.count_sent_outreach(tenant_id),
-        skickade_idag=await storage.count_sent_outreach(tenant_id, since=dygnets_start),
-        tenant_alder_dagar=_alder_i_dagar(tenant.get("created_at"), now),
-        # Underlaget för upptrappningstaket (regel 5d): största dagsvolymen i
-        # upptrappningsfönstret. Sju dagar, samma som send_guard-konstanten.
-        storsta_dagsvolym=await storage.storsta_dagsvolym(
-            tenant_id, dagar=UPPTRAPPNING_FONSTER_DAGAR
-        ),
-        # Studsar och klagomål ur Resends webhook (regel 5e).
-        leverans=Leveransutfall(
-            **await storage.leveransutfall(tenant_id, dagar=LEVERANS_FONSTER_DAGAR)
-        ),
+        **await _kundens_volym(storage, tenant_id, tenant, now=now),
         # Leadets egen tråd räknas inte: 90-dagarsspärren gäller ett NYTT
         # kallmejl, inte uppföljningen eller svaret i samma samtal.
         senaste_kontakt_med_foretaget=await storage.last_contact_with_company(
@@ -262,12 +284,20 @@ async def _fot_vid_godkannande(storage: Storage, tenant_id: str, item: dict) -> 
     # signatur byts mot den aktuella (Sebbe 2026-10-12: mejlet gick annars
     # ut med gamla blocket som rå text och loggan ensam längst ner). Före
     # foten, som alltid är sist.
-    sig = normalisera_signatur(
-        (await storage.get_agent_settings(tenant_id, agent_type="leads")).get("signatur")
-    )
+    installningar = await storage.get_agent_settings(tenant_id, agent_type="leads")
+    sig = normalisera_signatur(installningar.get("signatur"))
     if sig:
         sprak = "en" if thread.get("language_state") == "en_confirmed" else "sv"
         ny = med_aktuell_signatur(ny, sig, halsning=HALSNING[sprak])
+    # Demolänken (Anton 2026-11-15) även på utkast skrivna innan den fanns,
+    # eller där en omskrivning i granskningen strök raden. Idempotent; aldrig
+    # i ett svar till någon som redan svarat (svar.py).
+    if not thread.get("last_inbound_at"):
+        from . import demolank
+
+        ny = await demolank.lagg_till(
+            storage, tenant_id, item["thread_id"], ny, sprak=sprak_h, installningar=installningar
+        )
     # Alltid, inte bara när foten saknas: lagstadgad_fot byter en föråldrad
     # fot (byggd innan kundregistret fylldes, utan policyrad) mot den
     # aktuella. Idempotent — samma underlag ger samma text.
@@ -373,8 +403,14 @@ async def _process_due_item(
     now: datetime,
     godkant: dict | None = None,
     direkt: bool = False,
+    takt: bool = False,
 ) -> str:
     """Returnerar 'sent' | 'requeued' | 'blocked' | 'awaiting_review' | 'sandfel'.
+
+    `takt` (Godkänn och skicka, 2026-11-16): har kunden skickat för mindre än
+    TAKT_SEKUNDER sedan står utkastet kvar som godkänt, och sändaren tar det i
+    tur och ordning. Prövas sist, när alla spärrar sagt ja, så att ett stopp
+    eller ett nått tak alltid är det granskaren får höra.
 
     'sandfel': mejltjänsten tog inte emot utskicket just nu. Posten står kvar
     som köad och prövas igen efter en paus (se MAX_SANDFORSOK).
@@ -467,6 +503,12 @@ async def _process_due_item(
                 "awaiting_review": "awaiting_review",
                 "queued": "requeued",
             }[status]
+        if takt and await for_tatt(storage, tenant_id, now=now):
+            await satt_status(
+                status="queued",
+                gate_checks={"decision": decision.reason, "send_guard_regel": "takt", "send_guard_skal": TAKT_SKAL},
+            )
+            return "requeued"
 
         # HTML-delen renderas ur den GRANSKADE texten i sändögonblicket —
         # signaturens logotyp finns bara där (app/leads/signatur.py). Mjukt
@@ -709,7 +751,7 @@ async def skicka_godkant(
         # räkningen av sändfel.
         utfall = await _process_due_item(
             storage, tenant_id, {**item, "status": "queued", "gate_checks": godkant},
-            provider, now=now, godkant=godkant, direkt=direkt,
+            provider, now=now, godkant=godkant, direkt=direkt, takt=not direkt,
         )
     efter = await storage.get_send_queue_item(tenant_id, item_id) or {}
     gc = efter.get("gate_checks") or {}
@@ -722,6 +764,40 @@ async def skicka_godkant(
         else gc.get("send_guard_skal") or gc.get("held") or gc.get("decision")
     )
     return utfall, (None if utfall == "sent" else skal)
+
+
+#: Minsta tid mellan två utskick från samma kund (Sebbe 2026-11-16: "se till
+#: att inget hamnar i skräpposten"). Hundra kallmejl samma sekund är ett
+#: maskinmönster som mottagarnas filter reagerar på oavsett text; ett i
+#: minuten är en människas takt. Gäller sändaren och Godkänn och skicka, så
+#: att hundra godkännanden i listan inte heller blir hundra mejl på en gång.
+#: Skicka nu gäller inte: där har en människa valt det enskilda mejlet och
+#: tiden. Under varvtiden (60 s) med marginal, så att varje varv får skicka.
+TAKT_SEKUNDER = 45
+
+#: Högst så här många köposter prövas per kund och varv. Stoppade poster
+#: (karens, suppression) släpper fram nästa, men ett varv ska aldrig bli en
+#: genomläsning av hela kön.
+PROVADE_PER_VARV = 25
+
+TAKT_SKAL = (
+    "Mejlen går ut ett i taget, ungefär ett i minuten, så att mottagarnas "
+    "filter inte reagerar på volymen. Utkastet står kvar som godkänt och skickas "
+    "i tur och ordning från kön."
+)
+
+
+def sandfonster_oppet(now: datetime) -> bool:
+    """Kan ett godkänt utkast gå ut nu? Vardag (inte helgdag) mellan
+    TIDIGAST_TIMME och SENAST_TIMME svensk tid, regel 5a. Kallmejl stänger
+    redan 16 (tidsgrinden); svar i en tråd där leadet svarat går till 17."""
+    lokal = now.astimezone(STOCKHOLM)
+    return not is_blocked_day(lokal) and TIDIGAST_TIMME <= lokal.hour < SENAST_TIMME
+
+
+async def for_tatt(storage: Storage, tenant_id: str, *, now: datetime) -> bool:
+    """Skickade kunden ett mejl för mindre än TAKT_SEKUNDER sedan?"""
+    return await storage.count_sent_outreach(tenant_id, since=now - timedelta(seconds=TAKT_SEKUNDER)) > 0
 
 
 def _efter(tidpunkt, seedad: str) -> bool:
@@ -762,7 +838,16 @@ async def process_godkanda(storage: Storage, provider: SendProvider) -> list[dic
         return []
     seedad = str((spegel or {}).get("seeded_at") or "")
     results: list[dict] = []
+    # Stängt fönster (kväll, natt, helg, helgdag): inget kan gå ut, och ingen
+    # köpost behöver läsas. Förut prövades varje post var för sig varje minut,
+    # dygnet runt: 3 868 godkända utkast blev ~40 000 databasfrågor i minuten
+    # i samma process som svarar sidorna (uppmätt 2026-11-16).
+    if not sandfonster_oppet(now):
+        return results
+    # Kallmejl 08–16 (tidsgrinden), svar i en tråd där leadet svarat till 17.
+    kallt_oppet = check_cold_outreach_gate(now).allowed
     for tenant in await storage.list_tenants():
+        kandidater: list[tuple[dict, dict]] = []
         for item in await storage.list_due_send_queue(tenant["id"], now):
             godkant = godkannande(item)
             if not godkant:
@@ -772,6 +857,27 @@ async def process_godkanda(storage: Storage, provider: SendProvider) -> list[dic
                     continue
             elif not (_efter(godkant.get("godkand_at"), seedad) or _efter(item.get("created_at"), seedad)):
                 continue
+            if not kallt_oppet and not item.get("trad_svarad_at"):
+                continue
+            paus_till = nasta_forsok(_grindar(item))
+            if paus_till is not None and now < paus_till:
+                continue
+            kandidater.append((item, godkant))
+        if not kandidater:
+            continue
+        # Kundens egna spärrar en gång per varv, inte per köpost: takten (ett
+        # mejl i taget), dagens tak och leveransstoppet säger samma sak om
+        # varje mejl i kön.
+        if await for_tatt(storage, tenant["id"], now=now):
+            continue
+        vantan = kundens_volymgrind(await kundens_historik(storage, tenant["id"], now=now))
+        if vantan is not None:
+            continue
+        # Äldst först (list_due_send_queue), ett mejl per kund och varv: med
+        # varvet på en minut sprids dagens utskick över morgonen i stället
+        # för att gå ut samma sekund 08:00. En post som stoppas (karens,
+        # suppression, språk) släpper fram nästa; högst PROVADE_PER_VARV.
+        for item, godkant in kandidater[:PROVADE_PER_VARV]:
             try:
                 # Samma textputs som klickvägen (skicka_godkant): ett utkast
                 # godkänt FÖRE en regeländring och skickat av fönstret EFTER
@@ -783,6 +889,10 @@ async def process_godkanda(storage: Storage, provider: SendProvider) -> list[dic
                 logger.exception("Godkänt utkast %s misslyckades oväntat", item.get("id"))
                 outcome = "error"
             results.append({"tenant": tenant.get("slug"), "item_id": item.get("id"), "outcome": outcome})
+            # Skickat: nästa mejl nästa varv. Sändfel: mejltjänsten svarar
+            # inte, och nästa post hade fått samma svar.
+            if outcome in ("sent", "sandfel"):
+                break
     return results
 
 

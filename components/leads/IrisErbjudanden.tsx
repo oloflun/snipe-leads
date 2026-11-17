@@ -36,9 +36,41 @@ type Arm = {
   svar: number;
   positiva: number;
   moten: number;
+  /** Svarens klass (app/leads/svar.py): ja = positivt, nej = negativt eller avregistrering. */
+  ja?: number;
+  nej?: number;
+  kanske?: number;
+  fragor?: number;
+  /** Demolänken (app/prova/[token]): klick kan vara e-postskydd, besök är en människa. */
+  klick?: number;
+  besok?: number;
   svarsfrekvens: number | null;
   positiv_andel: number | null;
+  ja_andel?: number | null;
+  nej_andel?: number | null;
+  kanske_andel?: number | null;
+  klick_andel?: number | null;
+  besok_andel?: number | null;
   lage: "leder" | "for_tidigt";
+};
+type Demo = string | Record<string, string> | null;
+type Besokare = {
+  prospect_id: string;
+  foretag: string;
+  kontakt: string | null;
+  erbjudande: string | null;
+  struktur: "a" | "b" | null;
+  klick: number;
+  forsta_klick: string | null;
+  senaste_klick: string | null;
+  besok: number;
+  forsta_besok: string | null;
+  senaste_besok: string | null;
+  skanner_misstankt: boolean;
+};
+type Besokssvar = {
+  besokare: Besokare[];
+  totalt: { lankar: number; klickade: number; besokta: number };
 };
 type Form = "rak" | "fraga";
 type Svar = {
@@ -47,7 +79,15 @@ type Svar = {
   aktiva: { nyckel: string; vikt: number }[];
   villkor: Record<string, string | Record<string, string>>;
   egna: Record<string, { namn: string; form: Form }>;
-  resultat: { armar: Arm[]; ledare: string | null; min_skickade: number };
+  demo?: Demo;
+  resultat: {
+    armar: Arm[];
+    ledare: string | null;
+    min_skickade: number;
+    strukturer?: Arm[];
+    struktur_ledare?: string | null;
+    struktur_p_varde?: number | null;
+  };
 };
 /** Villkoren per produktnamn; nyckeln "" när kunden saknar produkter (en text för alla). */
 type Rad = {
@@ -61,6 +101,7 @@ type Rad = {
 };
 
 const VILLKOR_MAX = 600;
+const URL_MAX = 300;
 const NAMN_MAX = 60;
 const ALLA = "";
 
@@ -154,13 +195,79 @@ const T = {
     sv: "Erbjudandena kunde inte hämtas, så inget kan sparas här just nu:",
     en: "The offers could not be loaded, so nothing can be saved here right now:"
   },
-  forsokIgen: { sv: "Försök igen", en: "Try again" }
+  forsokIgen: { sv: "Försök igen", en: "Try again" },
+  demoRubrik: { sv: "Demolänk", en: "Demo link" },
+  demoOm: {
+    sv: "Läggs sist i varje utkast, en rad under texten: ”Länk till vår demo, där du kan se hur det fungerar och testa mot ert företag:”. Varje mottagare får en egen spårad länk, så att ni ser vilka som klickat och vilka som faktiskt besökt demon. Tomt fält = ingen demolänk.",
+    en: "Added last in every draft, one line below the text: “Here is a link to our demo, where you can see how it works and test it on your company:”. Every recipient gets their own tracked link, so you can see who clicked and who actually visited the demo. Empty field = no demo link."
+  },
+  demoAlla: { sv: "Demons adress", en: "Demo address" },
+  demoFor: { sv: "Demons adress för", en: "Demo address for" },
+  demoTomt: { sv: "Tomt = ingen demolänk i mejl om den produkten.", en: "Empty = no demo link in emails about that product." },
+  ja: { sv: "Ja", en: "Yes" },
+  nej: { sv: "Nej", en: "No" },
+  kanske: { sv: "Kanske/Återkom", en: "Maybe/Later" },
+  klick: { sv: "Klickade demolänken", en: "Clicked the demo link" },
+  besok: { sv: "Besökte demon", en: "Visited the demo" },
+  avSvar: { sv: "av svaren", en: "of replies" },
+  avSkickade: { sv: "av skickade", en: "of sent" },
+  strukturRubrik: { sv: "Utkastens struktur A/B", en: "Draft structure A/B" },
+  strukturOm: {
+    sv: "Samma mått för de två strukturerna i första mejlet. Ledare utses först när skillnaden håller statistiskt.",
+    en: "The same measures for the two structures of the first email. A leader is named only when the difference holds statistically."
+  },
+  struktur: { sv: "Struktur", en: "Structure" },
+  strukturA: { sv: "A, utförlig", en: "A, detailed" },
+  strukturB: { sv: "B, kort fråga", en: "B, short question" },
+  pVarde: { sv: "p-värde", en: "p-value" },
+  ingenStruktur: { sv: "Inga skickade mejl med känd struktur än.", en: "No sent emails with a known structure yet." },
+  besokRubrik: { sv: "Vilka har besökt demon", en: "Who has visited the demo" },
+  besokOm: {
+    sv: "Besökt betyder att någon skrollat eller klickat i demon. Bara klick kan vara mottagarens e-postskydd, som öppnar länkar innan mejlet visas.",
+    en: "Visited means someone scrolled or clicked in the demo. A click alone may be the recipient's email security, which opens links before the email is shown."
+  },
+  besokTomt: { sv: "Ingen har klickat på en demolänk än.", en: "Nobody has clicked a demo link yet." },
+  besokFel: { sv: "Besöken kunde inte hämtas:", en: "The visits could not be loaded:" },
+  foretag: { sv: "Företag", en: "Company" },
+  kontakt: { sv: "Kontakt", en: "Contact" },
+  strukturErbjudande: { sv: "Struktur / erbjudande", en: "Structure / offer" },
+  senastKlick: { sv: "Senaste klick", en: "Latest click" },
+  lage: { sv: "Läge", en: "Status" },
+  besokt: { sv: "Besökt", en: "Visited" },
+  baraKlick: { sv: "Bara klick (kan vara e-postskydd)", en: "Click only (may be email security)" },
+  skanner: { sv: "troligen e-postskydd", en: "likely email security" },
+  totalt: { sv: "Spårade länkar", en: "Tracked links" },
+  klickade: { sv: "klickade", en: "clicked" },
+  besokta: { sv: "besökta", en: "visited" },
+  visaFler: { sv: "Visa alla", en: "Show all" }
 } satisfies Record<string, Localized>;
 
 const falt = "focus-ring w-full rounded-input border border-ink/15 bg-paper px-3 py-2.5 text-[16px] leading-6";
 
-function procent(andel: number | null): string {
-  return andel === null ? "–" : `${Math.round(andel * 100)} %`;
+function procent(andel: number | null | undefined): string {
+  return andel === null || andel === undefined ? "–" : `${Math.round(andel * 100)} %`;
+}
+
+/** Demons adress per fältnyckel (produkt, eller "" för alla), ur det sparade värdet. */
+function demofaltAv(svar: Svar): Record<string, string> {
+  const sparat = svar.demo ?? null;
+  return Object.fromEntries(
+    faltnycklar(svar).map((p) => {
+      if (typeof sparat === "string") return [p, sparat];
+      const traff = Object.entries(sparat ?? {}).find(([n]) => n.toLowerCase() === p.toLowerCase());
+      return [p, traff?.[1] ?? ""];
+    })
+  );
+}
+
+/** Det som skickas: en text för alla, eller ifyllda adresser per produkt. */
+function demoAttSpara(svar: Svar, falt: Record<string, string>): Demo {
+  if (!svar.produkter.length) return (falt[ALLA] ?? "").trim();
+  return Object.fromEntries(
+    Object.entries(falt)
+      .map(([p, v]) => [p, v.trim()] as const)
+      .filter(([, v]) => v)
+  );
 }
 
 /** Fälten per erbjudande: ett per produkt, eller ett för alla när produkter saknas. */
@@ -189,6 +296,7 @@ export function IrisErbjudanden() {
   const { text } = useLocale();
   const [data, setData] = useState<Svar | null>(null);
   const [rader, setRader] = useState<Rad[]>([]);
+  const [demofalt, setDemofalt] = useState<Record<string, string>>({});
   const [laddfel, setLaddfel] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [fel, setFel] = useState<string | null>(null);
@@ -201,6 +309,7 @@ export function IrisErbjudanden() {
       .then((svar) => {
         setData(svar);
         setRader(radernaAv(svar));
+        setDemofalt(demofaltAv(svar));
       })
       .catch((orsak) => setLaddfel(felmeddelande(orsak)));
   }, []);
@@ -279,11 +388,13 @@ export function IrisErbjudanden() {
           ),
           egna: Object.fromEntries(
             rader.filter((r) => r.egen).map((r) => [r.nyckel, { namn: r.namn.trim(), form: r.form }])
-          )
+          ),
+          demo: demoAttSpara(data, demofalt)
         })
       });
       setData(svar);
       setRader(radernaAv(svar));
+      setDemofalt(demofaltAv(svar));
       setStatus(text(T.sparat));
     } catch (orsak) {
       setFel(felmeddelande(orsak));
@@ -401,26 +512,7 @@ export function IrisErbjudanden() {
                 ) : null}
               </div>
               {arm && arm.utkast > 0 ? (
-                <p className={cn(meta, "flex flex-wrap gap-x-4 gap-y-1")}>
-                  <span>
-                    {text(T.utkast)} {arm.utkast}
-                  </span>
-                  <span>
-                    {text(T.skickade)} {arm.skickade}
-                  </span>
-                  <span>
-                    {text(T.svar)} {arm.svar} ({procent(arm.svarsfrekvens)})
-                  </span>
-                  <span>
-                    {text(T.positiva)} {arm.positiva} ({procent(arm.positiv_andel)})
-                  </span>
-                  <span>
-                    {text(T.moten)} {arm.moten}
-                  </span>
-                  <span className={arm.lage === "leder" ? "font-semibold text-ink" : undefined}>
-                    {arm.lage === "leder" ? text(T.leder) : text(T.tidigt)}
-                  </span>
-                </p>
+                <Matt arm={arm} />
               ) : rad.pa ? (
                 <p className={meta}>{text(T.inget)}</p>
               ) : null}
@@ -442,6 +534,34 @@ export function IrisErbjudanden() {
           );
         })}
       </ol>
+
+      <section aria-labelledby="iris-demolank-rubrik" className="grid gap-3">
+        <div>
+          <h3 id="iris-demolank-rubrik" className="text-[1rem] font-semibold text-ink">
+            {text(T.demoRubrik)}
+          </h3>
+          <p className="mt-1 max-w-[62ch] text-[0.9375rem] leading-6 text-ink-muted">{text(T.demoOm)}</p>
+        </div>
+        {perProdukt ? <p className={meta}>{text(T.demoTomt)}</p> : null}
+        {faltnycklar(data).map((produkt) => (
+          <label key={produkt || "alla"} className="grid max-w-xl gap-1">
+            <span className={etikett}>{produkt ? `${text(T.demoFor)} ${produkt}` : text(T.demoAlla)}</span>
+            <input
+              type="url"
+              inputMode="url"
+              value={demofalt[produkt] ?? ""}
+              maxLength={URL_MAX}
+              placeholder="https://www.snajp.se/demo"
+              onChange={(e) => {
+                const varde = e.target.value;
+                setDemofalt((forra) => ({ ...forra, [produkt]: varde }));
+                setStatus("");
+              }}
+              className={falt}
+            />
+          </label>
+        ))}
+      </section>
 
       <div className="flex flex-wrap items-center gap-x-4 gap-y-3">
         <button
@@ -465,6 +585,245 @@ export function IrisErbjudanden() {
           </p>
         ) : null}
       </div>
+
+      <Strukturer resultat={data.resultat} />
+      <DemoBesokare />
+    </section>
+  );
+}
+
+/** Måtten för en arm, på en rad. */
+function Matt({ arm }: Readonly<{ arm: Arm }>) {
+  const { text } = useLocale();
+  const avSvar = (andel: number | null | undefined) => `${procent(andel)} ${text(T.avSvar)}`;
+  const avSkickade = (andel: number | null | undefined) => `${procent(andel)} ${text(T.avSkickade)}`;
+  return (
+    <p className={cn(meta, "flex flex-wrap gap-x-4 gap-y-1")}>
+      <span>
+        {text(T.utkast)} {arm.utkast}
+      </span>
+      <span>
+        {text(T.skickade)} {arm.skickade}
+      </span>
+      <span>
+        {text(T.svar)} {arm.svar} ({procent(arm.svarsfrekvens)})
+      </span>
+      <span>
+        {text(T.ja)} {arm.ja ?? 0} ({avSvar(arm.ja_andel)})
+      </span>
+      <span>
+        {text(T.nej)} {arm.nej ?? 0} ({avSvar(arm.nej_andel)})
+      </span>
+      <span>
+        {text(T.kanske)} {arm.kanske ?? 0} ({avSvar(arm.kanske_andel)})
+      </span>
+      <span>
+        {text(T.klick)} {arm.klick ?? 0} ({avSkickade(arm.klick_andel)})
+      </span>
+      <span>
+        {text(T.besok)} {arm.besok ?? 0} ({avSkickade(arm.besok_andel)})
+      </span>
+      <span>
+        {text(T.positiva)} {arm.positiva} ({procent(arm.positiv_andel)})
+      </span>
+      <span>
+        {text(T.moten)} {arm.moten}
+      </span>
+      <span className={arm.lage === "leder" ? "font-semibold text-ink" : undefined}>
+        {arm.lage === "leder" ? text(T.leder) : text(T.tidigt)}
+      </span>
+    </p>
+  );
+}
+
+const STRUKTURNAMN: Record<string, Localized> = { a: T.strukturA, b: T.strukturB };
+
+const STRUKTURKOLUMNER: { nyckel: string; rubrik: Localized; varde: (s: Arm) => string }[] = [
+  { nyckel: "skickade", rubrik: T.skickade, varde: (s) => String(s.skickade) },
+  { nyckel: "svar", rubrik: T.svar, varde: (s) => `${s.svar} (${procent(s.svarsfrekvens)})` },
+  { nyckel: "ja", rubrik: T.ja, varde: (s) => `${s.ja ?? 0} (${procent(s.ja_andel)})` },
+  { nyckel: "nej", rubrik: T.nej, varde: (s) => `${s.nej ?? 0} (${procent(s.nej_andel)})` },
+  { nyckel: "kanske", rubrik: T.kanske, varde: (s) => `${s.kanske ?? 0} (${procent(s.kanske_andel)})` },
+  { nyckel: "klick", rubrik: T.klick, varde: (s) => `${s.klick ?? 0} (${procent(s.klick_andel)})` },
+  { nyckel: "besok", rubrik: T.besok, varde: (s) => `${s.besok ?? 0} (${procent(s.besok_andel)})` },
+  { nyckel: "moten", rubrik: T.moten, varde: (s) => String(s.moten) }
+];
+
+const cell = "py-2 pr-3";
+
+/** Utkastens struktur A/B (app/leads/utkaststruktur.py), med samma mått som armarna. */
+function Strukturer({ resultat }: Readonly<{ resultat: Svar["resultat"] }>) {
+  const { text } = useLocale();
+  const strukturer = resultat.strukturer ?? [];
+  const skickat = strukturer.some((s) => s.skickade > 0);
+  return (
+    <section aria-labelledby="iris-struktur-rubrik" className="grid gap-3">
+      <div>
+        <h3 id="iris-struktur-rubrik" className="text-[1rem] font-semibold text-ink">
+          {text(T.strukturRubrik)}
+        </h3>
+        <p className="mt-1 max-w-[62ch] text-[0.9375rem] leading-6 text-ink-muted">{text(T.strukturOm)}</p>
+      </div>
+      {skickat ? (
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[40rem] border-collapse text-left text-[0.9375rem]">
+            <thead>
+              <tr className="border-b border-ink/15">
+                <th scope="col" className={cn(etikett, cell)}>
+                  {text(T.struktur)}
+                </th>
+                {STRUKTURKOLUMNER.map((k) => (
+                  <th key={k.nyckel} scope="col" className={cn(etikett, cell)}>
+                    {text(k.rubrik)}
+                  </th>
+                ))}
+                <th scope="col" className={cn(etikett, cell)}>
+                  {text(T.lage)}
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {strukturer.map((s) => (
+                <tr key={s.nyckel} className="border-b border-ink/10">
+                  <th scope="row" className={cn(cell, "font-medium text-ink")}>
+                    {STRUKTURNAMN[s.nyckel] ? text(STRUKTURNAMN[s.nyckel]) : s.namn}
+                  </th>
+                  {STRUKTURKOLUMNER.map((k) => (
+                    <td key={k.nyckel} className={cn(cell, "tabular-nums text-ink-muted")}>
+                      {k.varde(s)}
+                    </td>
+                  ))}
+                  <td className={cn(cell, s.lage === "leder" ? "font-semibold text-ink" : "text-ink-muted")}>
+                    {s.lage === "leder" ? text(T.leder) : text(T.tidigt)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {typeof resultat.struktur_p_varde === "number" ? (
+            <p className={cn(meta, "mt-2")}>
+              {text(T.pVarde)} {resultat.struktur_p_varde}
+            </p>
+          ) : null}
+        </div>
+      ) : (
+        <p className={meta}>{text(T.ingenStruktur)}</p>
+      )}
+    </section>
+  );
+}
+
+const SYNLIGA_BESOKARE = 25;
+
+/** Vilka som klickat på demolänken och vilka som faktiskt besökt demon. */
+function DemoBesokare() {
+  const { text, locale } = useLocale();
+  const [svar, setSvar] = useState<Besokssvar | null>(null);
+  const [fel, setFel] = useState<string | null>(null);
+  const [alla, setAlla] = useState(false);
+
+  useEffect(() => {
+    leadsAnrop<Besokssvar>("/leads/demobesok")
+      .then(setSvar)
+      .catch((orsak) => setFel(felmeddelande(orsak)));
+  }, []);
+
+  const datum = (iso: string | null) => {
+    if (!iso) return "–";
+    try {
+      return new Intl.DateTimeFormat(locale === "en" ? "en-GB" : "sv-SE", {
+        dateStyle: "short",
+        timeStyle: "short"
+      }).format(new Date(iso));
+    } catch {
+      return iso;
+    }
+  };
+
+  const besokare = svar?.besokare ?? [];
+  const synliga = alla ? besokare : besokare.slice(0, SYNLIGA_BESOKARE);
+
+  return (
+    <section aria-labelledby="iris-demobesok-rubrik" className="grid gap-3">
+      <div>
+        <h3 id="iris-demobesok-rubrik" className="text-[1rem] font-semibold text-ink">
+          {text(T.besokRubrik)}
+        </h3>
+        <p className="mt-1 max-w-[62ch] text-[0.9375rem] leading-6 text-ink-muted">{text(T.besokOm)}</p>
+        {svar ? (
+          <p className={cn(meta, "mt-1")}>
+            {text(T.totalt)} {svar.totalt.lankar}, {svar.totalt.klickade} {text(T.klickade)},{" "}
+            {svar.totalt.besokta} {text(T.besokta)}
+          </p>
+        ) : null}
+      </div>
+      {fel ? (
+        <p role="alert" className="max-w-[62ch] text-[0.9375rem] text-danger">
+          {text(T.besokFel)} {fel}
+        </p>
+      ) : svar === null ? (
+        <div className="h-24 animate-pulse rounded-card bg-ink/[0.055]" aria-busy="true" />
+      ) : besokare.length === 0 ? (
+        <p className={meta}>{text(T.besokTomt)}</p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[40rem] border-collapse text-left text-[0.9375rem]">
+            <thead>
+              <tr className="border-b border-ink/15">
+                <th scope="col" className={cn(etikett, cell)}>
+                  {text(T.foretag)}
+                </th>
+                <th scope="col" className={cn(etikett, cell)}>
+                  {text(T.kontakt)}
+                </th>
+                <th scope="col" className={cn(etikett, cell)}>
+                  {text(T.strukturErbjudande)}
+                </th>
+                <th scope="col" className={cn(etikett, cell)}>
+                  {text(T.senastKlick)}
+                </th>
+                <th scope="col" className={cn(etikett, cell)}>
+                  {text(T.lage)}
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {synliga.map((b) => (
+                <tr key={b.prospect_id} className="border-b border-ink/10 align-top">
+                  <th scope="row" className={cn(cell, "font-medium text-ink")}>
+                    {b.foretag}
+                  </th>
+                  <td className={cn(cell, "text-ink-muted")}>{b.kontakt ?? "–"}</td>
+                  <td className={cn(cell, "text-ink-muted")}>
+                    {b.struktur ? b.struktur.toUpperCase() : "–"}
+                    {b.erbjudande ? ` / ${b.erbjudande}` : ""}
+                  </td>
+                  <td className={cn(cell, "tabular-nums text-ink-muted")}>
+                    {datum(b.senaste_klick)} ({b.klick})
+                  </td>
+                  <td className={cell}>
+                    {b.besok > 0 ? (
+                      <span className="font-semibold text-ink">
+                        {text(T.besokt)} {datum(b.senaste_besok)}
+                      </span>
+                    ) : (
+                      <span className="text-ink-muted">
+                        {text(T.baraKlick)}
+                        {b.skanner_misstankt ? `, ${text(T.skanner)}` : ""}
+                      </span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {!alla && besokare.length > SYNLIGA_BESOKARE ? (
+            <button type="button" onClick={() => setAlla(true)} className={cn(btnSecondary, btnLiten, "mt-3")}>
+              {text(T.visaFler)} ({besokare.length})
+            </button>
+          ) : null}
+        </div>
+      )}
     </section>
   );
 }

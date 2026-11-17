@@ -212,11 +212,11 @@ export function KorningensUtkast({ jobId }: Readonly<{ jobId: string }>) {
       setBesked({
         sv: [
           `${skickade} skickade`,
-          vantar ? `${vantar} skickas när sändfönstret öppnar (vardagar 08–16)` : null
+          vantar ? `${vantar} skickas i tur och ordning från kön (vardagar från 08:00)` : null
         ]
           .filter(Boolean)
           .join(", ") + ".",
-        en: [`${skickade} sent`, vantar ? `${vantar} go out when the sending window opens (weekdays 08–16)` : null]
+        en: [`${skickade} sent`, vantar ? `${vantar} go out in turn from the queue (weekdays from 08:00)` : null]
           .filter(Boolean)
           .join(", ") + "."
       });
@@ -250,8 +250,8 @@ export function KorningensUtkast({ jobId }: Readonly<{ jobId: string }>) {
         setBesked({ sv: `Skickat till ${mottagare}.`, en: `Sent to ${mottagare}.` });
       } else if (data.utfall === "requeued") {
         setBesked({
-          sv: `Godkänt. Mejlet till ${mottagare} skickas när sändfönstret öppnar (vardagar 08–16).`,
-          en: `Approved. The email to ${mottagare} goes out when the sending window opens (weekdays 08–16).`
+          sv: `Godkänt. Mejlet till ${mottagare} skickas i tur och ordning från kön (vardagar från 08:00).`,
+          en: `Approved. The email to ${mottagare} goes out in turn from the queue (weekdays from 08:00).`
         });
       } else {
         const skal = data.besked?.split(": ").slice(1).join(": ");
@@ -507,8 +507,8 @@ export function KorningensUtkast({ jobId }: Readonly<{ jobId: string }>) {
                         </button>
                         <span className={meta}>
                           {text({
-                            sv: "Går genom sändspärrarna; utanför vardagar 08–16 skickas det när fönstret öppnar.",
-                            en: "Passes the send guards; outside weekdays 08–16 it goes out when the window opens."
+                            sv: "Går genom sändspärrarna och skickas i tur och ordning från kön, vardagar från 08:00.",
+                            en: "Passes the send guards and goes out in turn from the queue, weekdays from 08:00."
                           })}
                         </span>
                       </div>

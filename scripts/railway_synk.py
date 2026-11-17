@@ -23,6 +23,16 @@ dem) synkas aldrig.
 * Provkörningar och rader hos en kund som bara finns i en av miljöerna rörs
   aldrig.
 
+## Development före main (Anton 2026-11-16)
+
+En migration körs i development vid pushen och i main först vid releasen
+(.github/workflows/migrera.yml). Synken körs ändå: development får ligga
+före main. Raderna jämförs då på de kolumner båda miljöerna har, en rad som
+skrivs över behåller sina värden i developments egna kolumner, och en ny rad
+får kolumnernas standardvärden. Main före development, en kolumn som bara
+finns i main eller en gemensam kolumn med olika typ stoppar synken som förut.
+Första synken (som skriver till main) kräver fortfarande samma schema.
+
 ## Utskicken
 
 Development skickar inget i det här läget (`mirror_meta.lage = 'envags'`,
@@ -142,26 +152,86 @@ def nyckelvillkor(cur, tabell: str, kolumner: list[str]) -> tuple[str, str]:
     return f"{kolumn} = %s::{typ}", f"{kolumn} = any(%s::{typ}[])"
 
 
-def rader(cur, tabell: str, kolumner: list[str], tenants: list[str]) -> dict[str, dict]:
+def schemalage(dev: set[str], main: set[str]) -> tuple[list[str], list[str]]:
+    """Ren funktion: (migrationer bara i development, migrationer bara i main).
+
+    Development får ligga FÖRE main (Anton 2026-11-16, docs/BESLUT.md): en
+    migration körs i development vid pushen och i main först vid releasen, och
+    kravet på exakt samma version stoppade synken hela den tiden (sex dagar
+    2026-11-10 till 16). Main före development går inte: då finns kolumner i
+    main som spegeln inte kan ta emot.
+
+    Jämförelsen görs mot den högsta versionen i varje miljö, som den gamla
+    spärren (max(version)), och inte som mängder: developments liggare bär
+    äldre poster under namn som sedan bytts (056, 066, 092), och de är inget
+    schema som skiljer. Den verkliga säkerheten är kolumnkontrollen per
+    tabell (jamfor_kolumner)."""
+    if not dev or not main:
+        return sorted(dev), sorted(main)
+    hogst_dev, hogst_main = max(dev), max(main)
+    return sorted(v for v in dev if v > hogst_main), sorted(v for v in main if v > hogst_dev)
+
+
+def tabellkolumner(cur, tabell: str) -> dict[str, tuple[str, bool]]:
+    """Kolumn → (typ, genererad), i tabellens ordning. Tom när tabellen saknas."""
+    cur.execute("select to_regclass('public.' || %s) is not null", (tabell,))
+    if not cur.fetchone()[0]:
+        return {}
+    cur.execute(
+        "select attname, format_type(atttypid, atttypmod), attgenerated <> '' from pg_attribute "
+        "where attrelid = ('public.' || %s)::regclass and attnum > 0 and not attisdropped order by attnum",
+        (tabell,),
+    )
+    return {namn: (typ, bool(genererad)) for namn, typ, genererad in cur.fetchall()}
+
+
+def jamfor_kolumner(
+    dev: dict[str, tuple[str, bool]], main: dict[str, tuple[str, bool]]
+) -> tuple[list[str], list[str], list[str]]:
+    """Ren funktion: (kolumner bara i development, bara i main, gemensamma
+    med olika typ). Development före main ger bara den första listan."""
+    bara_dev = [k for k in dev if k not in main]
+    bara_main = [k for k in main if k not in dev]
+    olika = [k for k in dev if k in main and dev[k][0] != main[k][0]]
+    return bara_dev, bara_main, olika
+
+
+def rader(
+    cur, tabell: str, kolumner: list[str], tenants: list[str], utan: list[str] | None = None
+) -> dict[str, dict]:
     """Nyckel → {andrad, hash, pmid} för de rader som får synkas. Själva raden
     hämtas först när den skrivs (skriv): alla körningar med spår på en gång
     tog slut på minnet 2026-10-17. Saknas synk_andrad_at (migration 111 inte
-    körd, bara i torrkörning) blir tiden null."""
+    körd, bara i torrkörning) blir tiden null.
+
+    `utan` är kolumner som bara finns i den här miljön (development före
+    main): de hålls utanför jämförelsen, annars hade varje rad sett ändrad ut
+    och skrivits om vid varje synk."""
     cur.execute("select to_regclass('public.' || %s) is not null", (tabell,))
     if not cur.fetchone()[0]:
-        return {}  # bara i torrkörning: skrivning kräver samma schema (kontrollera)
+        return {}  # tabellen finns bara i den andra miljön: inget att jämföra
     cur.execute(
         "select exists (select 1 from information_schema.columns where table_schema = 'public' "
         "and table_name = %s and column_name = 'synk_andrad_at')", (tabell,),
     )
     andrad = "x.synk_andrad_at" if cur.fetchone()[0] else "null::timestamptz"
-    cur.execute(
-        f"""select {nyckeluttryck(kolumner)}, {andrad},
-                   md5((to_jsonb(x) - 'synk_andrad_at')::text), to_jsonb(x)->>'provider_message_id'
-              from public.{tabell} x
-             where x.tenant_id = any(%s::uuid[]) and not coalesce(({SYNK[tabell]}), false)""",
-        (tenants,),
-    )
+    if utan:
+        cur.execute(
+            f"""select {nyckeluttryck(kolumner)}, {andrad},
+                       md5(((to_jsonb(x) - 'synk_andrad_at') - %s::text[])::text),
+                       to_jsonb(x)->>'provider_message_id'
+                  from public.{tabell} x
+                 where x.tenant_id = any(%s::uuid[]) and not coalesce(({SYNK[tabell]}), false)""",
+            (list(utan), tenants),
+        )
+    else:
+        cur.execute(
+            f"""select {nyckeluttryck(kolumner)}, {andrad},
+                       md5((to_jsonb(x) - 'synk_andrad_at')::text), to_jsonb(x)->>'provider_message_id'
+                  from public.{tabell} x
+                 where x.tenant_id = any(%s::uuid[]) and not coalesce(({SYNK[tabell]}), false)""",
+            (tenants,),
+        )
     return {k: {"andrad": a, "hash": h, "pmid": pm} for k, a, h, pm in cur.fetchall()}
 
 
@@ -200,22 +270,31 @@ PARTI = 100
 
 
 def skriv(
-    kalla, cur, tabell: str, kolumner: list[str], nycklar: list[str], radera: list[str], *, ersatt_krockar: bool = False,
+    kalla, cur, tabell: str, kolumner: list[str], nycklar: list[str], radera: list[str], *,
+    ersatt_krockar: bool = False, egna: list[str] | None = None,
 ) -> list[str]:
     """Raderar och skriver i replica-läge, ett parti om PARTI rader åt gången
     (en savepoint per parti, per rad bara när partiet faller). Returnerar
-    felen."""
+    felen.
+
+    `egna` är målets egna kolumner, de som källan saknar (development före
+    main, 2026-11-16). En rad som redan finns i målet behåller sina värden i
+    dem, och en ny rad får kolumnernas standardvärden. Utan `egna` är
+    skrivningen exakt den gamla: hela raden, alla kolumner."""
     fel: list[str] = []
     nyckel = nyckeluttryck(kolumner)
     en, flera = nyckelvillkor(cur, tabell, kolumner)
     # Genererade kolumner (prospects.foretagsnyckel) räknas fram av målet och
     # får inte skrivas; 855 prospekt föll på det 2026-10-17.
     cur.execute(
-        "select string_agg(quote_ident(attname), ', ' order by attnum) from pg_attribute "
+        "select array_agg(attname::text order by attnum) from pg_attribute "
         "where attrelid = ('public.' || %s)::regclass and attnum > 0 and not attisdropped and attgenerated = ''",
         (tabell,),
     )
-    kol = cur.fetchone()[0]
+    skrivbara = list(cur.fetchone()[0] or [])
+    kol = ", ".join(_citera(k) for k in skrivbara)
+    egna = [k for k in (egna or []) if k in skrivbara]
+    gemensamma = ", ".join(_citera(k) for k in skrivbara if k not in egna)
     for i in range(0, len(radera), PARTI):
         cur.execute(f"delete from public.{tabell} x where {flera}", (radera[i:i + PARTI],))
     for i in range(0, len(nycklar), PARTI):
@@ -226,40 +305,83 @@ def skriv(
         parti = kalla.fetchall()
         if not parti:
             continue
-        # Hela partiet i två anrop (2026-10-30): synken körs från GitHub mot
-        # Railway, och fyra rundresor per rad var det mesta av tiden. Faller
-        # partiet (en trasig rad) görs det om rad för rad nedan, så att felet
-        # pekar ut raden och resten skrivs som förut.
-        cur.execute("savepoint parti")
-        try:
-            cur.execute(f"delete from public.{tabell} x where {flera}", ([k for k, _ in parti],))
-            cur.execute(
-                f"insert into public.{tabell} ({kol}) select {kol} "
-                f"from jsonb_populate_recordset(null::public.{tabell}, %s::jsonb)",
-                ("[" + ",".join(rad for _, rad in parti) + "]",),
-            )
-            cur.execute("release savepoint parti")
+        if not egna:
+            _skriv_parti(cur, tabell, kolumner, kol, en, flera, parti, fel, ersatt_krockar)
             continue
-        except psycopg2.Error:
-            cur.execute("rollback to savepoint parti")
-        for k, rad in parti:
-            cur.execute("savepoint rad")
-            try:
-                cur.execute(f"delete from public.{tabell} x where {en}", (k,))
-                cur.execute(
-                    f"insert into public.{tabell} ({kol}) select {kol} from jsonb_populate_record(null::public.{tabell}, %s::jsonb)",
-                    (rad,),
-                )
-                cur.execute("release savepoint rad")
-            except psycopg2.Error as e:
-                cur.execute("rollback to savepoint rad")
-                # 23505 = unique_violation. Felkoden och inte psycopg2.errors:
-                # INV-DATA-003 laddar skriptet med en psycopg2-stubbe utan
-                # undermoduler.
-                krock = getattr(e, "pgcode", None) == "23505"
-                if not (krock and ersatt_krockar and _ersatt_krock(cur, tabell, kolumner, kol, en, k, rad, e)):
-                    fel.append(f"{tabell} {k}: {str(e).splitlines()[0]}")
+        # Målets egna värden läses innan raden tas bort, och läggs ovanpå
+        # källans rad i databasen (jsonb, så att tal och tider inte tolkas om
+        # på vägen genom Python).
+        par = ", ".join(f"{_sqltext(k)}, x.{_citera(k)}" for k in egna)
+        cur.execute(
+            f"select {nyckel}, ((%s::jsonb -> ({nyckel})) || jsonb_build_object({par}))::text "
+            f"from public.{tabell} x where {flera}",
+            ("{" + ",".join(f"{_jsontext(k)}:{rad}" for k, rad in parti) + "}", [k for k, _ in parti]),
+        )
+        sammanslagna = dict(cur.fetchall())
+        befintliga = [(k, sammanslagna[k]) for k, _ in parti if k in sammanslagna]
+        nya = [(k, rad) for k, rad in parti if k not in sammanslagna]
+        if befintliga:
+            _skriv_parti(cur, tabell, kolumner, kol, en, flera, befintliga, fel, ersatt_krockar)
+        if nya:
+            # Bara de gemensamma kolumnerna: målets egna får sina standardvärden.
+            _skriv_parti(cur, tabell, kolumner, gemensamma, en, flera, nya, fel, ersatt_krockar)
     return fel
+
+
+def _citera(namn: str) -> str:
+    """Kolumnnamnet som SQL-identifierare (samma som quote_ident för namn
+    med specialtecken; alltid citerat här)."""
+    return '"' + namn.replace('"', '""') + '"'
+
+
+def _sqltext(text: str) -> str:
+    return "'" + text.replace("'", "''") + "'"
+
+
+def _jsontext(text: str) -> str:
+    import json
+
+    return json.dumps(text)
+
+
+def _skriv_parti(
+    cur, tabell: str, kolumner: list[str], kol: str, en: str, flera: str,
+    parti: list[tuple[str, str]], fel: list[str], ersatt_krockar: bool,
+) -> None:
+    """Ett parti (nyckel, radens JSON) in i målet med kolumnlistan `kol`."""
+    # Hela partiet i två anrop (2026-10-30): synken körs från GitHub mot
+    # Railway, och fyra rundresor per rad var det mesta av tiden. Faller
+    # partiet (en trasig rad) görs det om rad för rad nedan, så att felet
+    # pekar ut raden och resten skrivs som förut.
+    cur.execute("savepoint parti")
+    try:
+        cur.execute(f"delete from public.{tabell} x where {flera}", ([k for k, _ in parti],))
+        cur.execute(
+            f"insert into public.{tabell} ({kol}) select {kol} "
+            f"from jsonb_populate_recordset(null::public.{tabell}, %s::jsonb)",
+            ("[" + ",".join(rad for _, rad in parti) + "]",),
+        )
+        cur.execute("release savepoint parti")
+        return
+    except psycopg2.Error:
+        cur.execute("rollback to savepoint parti")
+    for k, rad in parti:
+        cur.execute("savepoint rad")
+        try:
+            cur.execute(f"delete from public.{tabell} x where {en}", (k,))
+            cur.execute(
+                f"insert into public.{tabell} ({kol}) select {kol} from jsonb_populate_record(null::public.{tabell}, %s::jsonb)",
+                (rad,),
+            )
+            cur.execute("release savepoint rad")
+        except psycopg2.Error as e:
+            cur.execute("rollback to savepoint rad")
+            # 23505 = unique_violation. Felkoden och inte psycopg2.errors:
+            # INV-DATA-003 laddar skriptet med en psycopg2-stubbe utan
+            # undermoduler.
+            krock = getattr(e, "pgcode", None) == "23505"
+            if not (krock and ersatt_krockar and _ersatt_krock(cur, tabell, kolumner, kol, en, k, rad, e)):
+                fel.append(f"{tabell} {k}: {str(e).splitlines()[0]}")
 
 
 def _ersatt_krock(cur, tabell: str, kolumner: list[str], kol: str, en: str, k: str, rad: str, e) -> bool:
@@ -314,9 +436,11 @@ def kopiera_tabeller(cur, schema: str) -> None:
         cur.execute(f"create table {schema}.{t} as table public.{t}")
 
 
-def kontrollera(dc, mc, *, skriver: bool) -> None:
-    """Spärrarna: rätt databaser, samma schema, synkens infrastruktur på plats.
-    En torrkörning varnar för schema och infrastruktur i stället för att avbryta."""
+def kontrollera(dc, mc, *, skriver: bool, forsta: bool = False) -> list[str]:
+    """Spärrarna: rätt databaser, ett schema som går att spegla, synkens
+    infrastruktur på plats. En torrkörning varnar för schema och infrastruktur
+    i stället för att avbryta. Returnerar migrationerna development ligger
+    före main med (tom lista = samma schema)."""
     dc.execute("select to_regclass('public.mirror_meta') is not null")
     if not dc.fetchone()[0]:
         sys.exit("AVBRYT: development saknar mirror_meta. Fel databas?")
@@ -330,16 +454,24 @@ def kontrollera(dc, mc, *, skriver: bool) -> None:
             sys.exit("AVBRYT: main-databasen har en spegelmarkör. Det är inte main.")
     versioner = []
     for c in (dc, mc):
-        c.execute("select max(version) from supabase_migrations.schema_migrations")
-        versioner.append(c.fetchone()[0])
+        c.execute("select version from supabase_migrations.schema_migrations")
+        versioner.append({r[0] for r in c.fetchall()})
+    fore, efter = schemalage(versioner[0], versioner[1])
     stopp = sys.exit if skriver else (lambda text: print("VARNING:", text.removeprefix("AVBRYT: ")))
-    if versioner[0] != versioner[1]:
-        stopp(f"AVBRYT: schemaversionerna skiljer sig (development={versioner[0]}, main={versioner[1]}). "
-                 "Kör railway_migrate.py mot den som ligger efter.")
+    if efter:
+        stopp(f"AVBRYT: main har migrationer som development saknar ({', '.join(efter)}). "
+              "Kör railway_migrate.py mot development.")
+    if fore and forsta:
+        stopp(f"AVBRYT: första synken skriver till main och kräver samma schema, men development ligger "
+              f"före med {', '.join(fore)}. Kör railway_migrate.py mot main.")
+    elif fore:
+        print(f"development ligger {len(fore)} migration(er) före main ({', '.join(fore)}): "
+              "de gemensamma kolumnerna synkas, developments egna står kvar.")
     for c, namn in ((dc, DEV), (mc, MAIN)):
         c.execute("select to_regclass('public.synk_raderingar') is not null")
         if not c.fetchone()[0]:
             stopp(f"AVBRYT: {namn} saknar synk_raderingar (migration 111).")
+    return fore
 
 
 def main() -> int:
@@ -352,7 +484,7 @@ def main() -> int:
     dev = psycopg2.connect(dsn(env, DEV), connect_timeout=20)
     mn = psycopg2.connect(dsn(env, MAIN), connect_timeout=20)
     dc, mc = dev.cursor(), mn.cursor()
-    kontrollera(dc, mc, skriver=args.apply)
+    kontrollera(dc, mc, skriver=args.apply, forsta=args.forsta)
 
     if args.apply:
         dc.execute("alter table public.mirror_meta add column if not exists lage text")
@@ -383,11 +515,34 @@ def main() -> int:
     dc.execute("select provider_message_id from public.ss_emails where provider_message_id is not null")
     mejl_dev = {r[0] for r in dc.fetchall()}
 
+    # Kolumnerna per tabell i båda miljöerna (2026-11-16): development får ha
+    # egna kolumner (en migration som inte nått main än). Main får inte ha
+    # kolumner som development saknar, och en gemensam kolumn ska ha samma typ:
+    # annars går raden inte att spegla, och det sägs före första skrivningen.
+    stopp = sys.exit if args.apply else (lambda text: print("VARNING:", text.removeprefix("AVBRYT: ")))
+    egna: dict[str, list[str]] = {}
+    for t in SYNK:
+        dk, mk = tabellkolumner(dc, t), tabellkolumner(mc, t)
+        if not dk or not mk:
+            continue
+        bara_dev, bara_main, olika = jamfor_kolumner(dk, mk)
+        if bara_main:
+            stopp(f"AVBRYT: {t} har kolumner i main som development saknar ({', '.join(bara_main)}). "
+                  "Kör railway_migrate.py mot development.")
+        if olika:
+            stopp(f"AVBRYT: {t} har kolumner med olika typ i development och main ({', '.join(olika)}).")
+        if bara_dev and forsta:
+            stopp(f"AVBRYT: första synken kräver samma kolumner, men {t} har egna i development "
+                  f"({', '.join(bara_dev)}).")
+        if bara_dev:
+            egna[t] = bara_dev
+            print(f"{t}: developments egna kolumner hålls utanför synken ({', '.join(bara_dev)})")
+
     planer: dict[str, tuple[list[str], dict]] = {}
     print(f"{'tabell':26} {'→ main':>7} {'→ dev':>7} {'rad main':>9} {'rad dev':>8}")
     for t in SYNK:
         kol = pk(dc, t)
-        d, m = rader(dc, t, kol, gemensamma), rader(mc, t, kol, gemensamma)
+        d, m = rader(dc, t, kol, gemensamma, utan=egna.get(t)), rader(mc, t, kol, gemensamma)
         plan = planera(d, m, raderingar(mc, t), forsta=forsta)
         if t == "ss_emails":
             plan["till_dev"] = [k for k in plan["till_dev"] if not (m[k]["pmid"] in mejl_dev and k not in d)]
@@ -412,7 +567,7 @@ def main() -> int:
     for t, (kol, plan) in planer.items():
         fel += skriv(dc, mc, t, kol, plan["till_main"], plan["radera_main"])
         # Main är sanningen: en krock i development på ett unikt index ger vika.
-        fel += skriv(mc, dc, t, kol, plan["till_dev"], plan["radera_dev"], ersatt_krockar=True)
+        fel += skriv(mc, dc, t, kol, plan["till_dev"], plan["radera_dev"], ersatt_krockar=True, egna=egna.get(t))
         print(f"skrivet: {t}", flush=True)
     if forsta:
         # Köade utkast godkända i development skickas av main från och med nu

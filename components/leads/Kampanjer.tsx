@@ -80,8 +80,8 @@ const T = {
   hoppade: { sv: "Hoppades över", en: "Skipped" },
   skicka: (n: number): Localized => ({ sv: `Godkänn och skicka ${n}`, en: `Approve and send ${n}` }),
   skickat: (n: number, v: number): Localized => ({
-    sv: `${n} skickade${v ? `, ${v} skickas när sändfönstret öppnar (vardagar 08–16)` : ""}.`,
-    en: `${n} sent${v ? `, ${v} go out when the sending window opens (weekdays 08–16)` : ""}.`
+    sv: `${n} skickade${v ? `, ${v} skickas i tur och ordning från kön (vardagar från 08:00)` : ""}.`,
+    en: `${n} sent${v ? `, ${v} go out in turn from the queue (weekdays from 08:00)` : ""}.`
   }),
   hamtaFel: { sv: "Kampanjerna kunde inte hämtas:", en: "The campaigns could not be loaded:" },
   forsokIgen: { sv: "Försök igen", en: "Try again" }

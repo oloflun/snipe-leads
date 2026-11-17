@@ -57,14 +57,22 @@ export function kanSkickas(p: Utkastfalt): boolean {
 /** Utkast som saknas eller avvisats: Skapa utkast skriver ett nytt. */
 export const UTAN_UTKAST: ReadonlySet<string> = new Set(["saknas", "avvisat"]);
 
-/** "08:00" i dag, annars "tors 08:00" — svensk tid, som sändfönstret. */
-export function sandtid(iso: string, locale: Locale): string {
+/** Sändtiden ur köns plan (backend: leads/sandplan.py) längre fram än så här
+ *  visas som ett datum: "tors 08:14" säger inget om en tid flera veckor bort. */
+const VECKA_MS = 6 * 24 * 60 * 60 * 1000;
+
+/** "08:00" i dag, "tors 08:00" inom en vecka, annars "18 dec." — svensk tid,
+ *  som sändfönstret. `nu` för testerna. */
+export function sandtid(iso: string, locale: Locale, nu: Date = new Date()): string {
   const nar = new Date(iso);
   if (Number.isNaN(nar.getTime())) return "";
   const lokal = locale === "en" ? "en-GB" : "sv-SE";
   const dag = (d: Date) => d.toLocaleDateString(lokal, { timeZone: "Europe/Stockholm" });
   const klocka = nar.toLocaleTimeString(lokal, { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Stockholm" });
-  if (dag(nar) === dag(new Date())) return klocka;
+  if (dag(nar) === dag(nu)) return klocka;
+  if (nar.getTime() - nu.getTime() > VECKA_MS) {
+    return nar.toLocaleDateString(lokal, { day: "numeric", month: "short", timeZone: "Europe/Stockholm" });
+  }
   return `${nar.toLocaleDateString(lokal, { weekday: "short", timeZone: "Europe/Stockholm" })} ${klocka}`;
 }
 

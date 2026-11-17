@@ -55,8 +55,9 @@ omlagda via `deploymentTriggerUpdate` till grenen `main` direkt**.
 **Releaseflödet är nu:** allt arbete på `development` (deployar sig själv),
 release till produktion = PR `development` → `main` som Anton (`oloflun`)
 godkänner och mergar — mergen deployar `web` + `api` i main-miljön utan
-mellansteg. Kör migrationer mot main (torrkörning först) INNAN mergen när
-releasen bär nya.
+mellansteg. Migrationerna mot main körs av `.github/workflows/migrera.yml`
+när PR:en mergas (se "Migrationer körs mot Railway" nedan); de går
+fortfarande att köra för hand före mergen, torrkörning först.
 
 > ## ⛔ `railway-main` är pensionerad
 >
@@ -87,6 +88,26 @@ python scripts/railway.py q \
 identiteter" längst ned i den här filen.
 
 ### Migrationer körs mot Railway
+
+**Av sig själva sedan 2026-11-16** (`.github/workflows/migrera.yml`):
+
+- En push till `development` eller `main` som rör `supabase/migrations/`
+  kör kedjan mot den miljön. Jobbet tar under en minut och Railways bygge
+  flera, så schemat ligger före koden. Det är en ordning och ingen grind:
+  Railway väntar inte på GitHub Actions. Kontrollera att jobbet `migrera`
+  blev grönt.
+- En PR mot `main` får kontrollen `releasens migrationer`, som visar vad
+  releasen bär och fäller PR:en om development har okörda migrationer.
+- För hand under Actions › migrera › Run workflow (torrkörning eller körning).
+
+Skälet: 2026-11-10 kördes migration 115 i development men inte i main, och
+synken mellan miljöerna (`synk.yml`) stod röd i sex dagar, eftersom den vägrar
+när schemaversionerna skiljer sig. Sedan samma dag får development ligga
+före main i synken (`scripts/railway_synk.py`, "Development före main"): en
+migration som väntar på nästa release stoppar den inte längre. Main före
+development stoppar den fortfarande.
+
+Samma skript för hand:
 
 ```bash
 python scripts/railway_migrate.py --env development --apply

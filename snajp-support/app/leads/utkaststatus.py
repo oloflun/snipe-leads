@@ -19,7 +19,7 @@ per anrop.
 |---|---|
 | `saknas` | inget utkast |
 | `vantar` | väntar på granskarens ja (`awaiting_review`) |
-| `godkant` | godkänt av en människa, skickas när sändfönstret öppnar |
+| `godkant` | godkänt av en människa, skickas i tur och ordning från kön (leads/sandplan.py) |
 | `koad` | köat utan mänskligt godkännande (äldre utkast; se scripts/koade_utkast_till_granskning.py) |
 | `skickat` | ett mejl har gått ut |
 | `avvisat` | utkastet avvisades eller ersattes, inget skickat |
@@ -79,8 +79,14 @@ def nasta_sandtid(scheduled_at: Any, *, now: datetime) -> str | None:
     return None
 
 
-def harled(lage: dict[str, Any] | None, *, now: datetime | None = None) -> dict[str, Any]:
+def harled(
+    lage: dict[str, Any] | None, *, now: datetime | None = None, plan: dict[str, str] | None = None
+) -> dict[str, Any]:
     """Utkaststatusen för ETT lead, ur dess rad i `storage.utkast_lagen`.
+
+    `plan` (leads/sandplan.py, 2026-11-16): när varje godkänt utkast går ut
+    enligt kön. Utan plan, eller för ett utkast utanför den, är
+    `skickas_tidigast` nästa öppna sändfönster.
 
     Returnerar `utkast_status`, `utkast_skal` (sändspärrens eller
     granskningens skäl), `queue_item_id` (köposten ett godkännande eller en
@@ -104,12 +110,14 @@ def harled(lage: dict[str, Any] | None, *, now: datetime | None = None) -> dict[
     if ko == "awaiting_review":
         ut.update(utkast_status="vantar", queue_item_id=lage.get("queue_item_id"), utkast_skal=skal)
     elif ko == "queued":
+        planerad = (plan or {}).get(str(lage.get("queue_item_id")))
         ut.update(
             utkast_status="godkant" if grind.get("approved_by") == "human" else "koad",
             queue_item_id=lage.get("queue_item_id"),
             # Mejltjänsten tog inte emot det senaste försöket (scheduler.py).
             utkast_skal=grind.get("sandfel_skal"),
-            skickas_tidigast=nasta_sandtid(lage.get("scheduled_at"), now=now or datetime.now(timezone.utc)),
+            skickas_tidigast=planerad
+            or nasta_sandtid(lage.get("scheduled_at"), now=now or datetime.now(timezone.utc)),
         )
     elif lage.get("skickat_at") or ko == "sent":
         ut["utkast_status"] = "skickat"
@@ -133,10 +141,12 @@ def harled(lage: dict[str, Any] | None, *, now: datetime | None = None) -> dict[
     return ut
 
 
-def per_prospekt(lagen: dict[str, dict[str, Any]], prospect_ids, *, now: datetime | None = None) -> dict[str, dict[str, Any]]:
+def per_prospekt(
+    lagen: dict[str, dict[str, Any]], prospect_ids, *, now: datetime | None = None, plan: dict[str, str] | None = None
+) -> dict[str, dict[str, Any]]:
     """`harled` för varje prospekt-id; ett lead utan tråd blir `saknas`."""
     nu = now or datetime.now(timezone.utc)
-    return {str(pid): harled(lagen.get(str(pid)), now=nu) for pid in prospect_ids}
+    return {str(pid): harled(lagen.get(str(pid)), now=nu, plan=plan) for pid in prospect_ids}
 
 
 def med_utkastjobb(ut: dict[str, Any], jobb: dict[str, Any] | None) -> dict[str, Any]:

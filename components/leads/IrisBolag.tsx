@@ -137,8 +137,8 @@ const T = {
   exempelutkast: { sv: "Exempelutkast.", en: "Example draft." },
   stodrad: { sv: "Stödrad", en: "Supporting line" },
   godkant: {
-    sv: "Godkänt. Mejlet skickas när sändfönstret öppnar (vardagar 08–16).",
-    en: "Approved. The email goes out when the sending window opens (weekdays 08–16)."
+    sv: "Godkänt. Mejlet skickas i tur och ordning från kön (vardagar från 08:00).",
+    en: "Approved. The email goes out in turn from the queue (weekdays from 08:00)."
   },
   skickatNu: { sv: "Skickat.", en: "Sent." },
   godkanner: { sv: "Godkänner…", en: "Approving…" },

@@ -277,11 +277,14 @@ async def test_utfallet_harleds_ur_tradarnas_lage():
     await trad_med("pilot", skickat=True, status="meeting", kalla="manuell")  # flyttad för hand
 
     rader = {r["nyckel"]: r for r in await storage.erbjudande_utfall(TENANT)}
+    noll = dict.fromkeys(("kanske", "fragor", "klick", "besok"), 0)
+    # Klassen ur statusloggen för svar från före svarsklass-kolumnen (116):
+    # meeting = Ja, lost = Nej.
     assert rader["gratis_prov"] == {"nyckel": "gratis_prov", "utkast": 4, "skickade": 3, "svar": 2,
-                                      "positiva": 1, "moten": 0}
+                                      "positiva": 1, "moten": 0, "ja": 1, "nej": 1, **noll}
     # Ett mötesutfall och en manuell flytt till möte är möten, inte svar.
     assert rader["pilot"] == {"nyckel": "pilot", "utkast": 2, "skickade": 2, "svar": 0,
-                                  "positiva": 0, "moten": 2}
+                                  "positiva": 0, "moten": 2, "ja": 0, "nej": 0, **noll}
 
 
 # -- Faktagrinden mot villkoren -------------------------------------------

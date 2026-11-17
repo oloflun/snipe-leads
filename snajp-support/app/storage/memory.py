@@ -13,7 +13,7 @@ import unicodedata
 import uuid
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
-from typing import Any
+from typing import Any, Sequence
 
 from ..config import (
     DEFAULT_TENANT_ID,
@@ -172,6 +172,8 @@ class MemoryStorage:
         self.suppressions: dict[str, list[dict[str, Any]]] = {}
         # tenant -> adress -> token. Speglar ss_avregistreringslankar.
         self.avregistreringslankar: dict[str, dict[str, str]] = {}
+        #: Demolänkarna (migration 116): token -> {tenant_id, thread_id, mal_url, handelser}.
+        self.demolankar: dict[str, dict[str, Any]] = {}
         self.outreach_threads: dict[str, dict[str, dict[str, Any]]] = {}
         self.outreach_messages: dict[str, list[dict[str, Any]]] = {}
         # Agentens föreslagna lärdomar (migration 051). Skrivs av support-
@@ -800,14 +802,27 @@ class MemoryStorage:
         return max(docs, key=lambda d: d["version"])
 
     async def list_due_send_queue(self, tenant_id: str, now) -> list[dict[str, Any]]:
+        # trad_svarad_at speglar Postgres-joinen mot outreach_threads.
+        tradar = self.outreach_threads.get(tenant_id, {})
         return sorted(
             (
-                item
+                {**item, "trad_svarad_at": (tradar.get(item.get("thread_id")) or {}).get("last_inbound_at")}
                 for item in self.send_queue.get(tenant_id, [])
                 if item["status"] == "queued" and item["scheduled_at"] <= now
             ),
             key=lambda item: item["scheduled_at"],
         )
+
+    async def godkand_ko_ordning(self, tenant_id: str) -> list[dict[str, Any]]:
+        def godkand(item: dict[str, Any]) -> bool:
+            gc = item.get("gate_checks") or {}
+            if isinstance(gc, str):
+                gc = json.loads(gc)
+            return gc.get("approved_by") == "human"
+
+        poster = [i for i in self.send_queue.get(tenant_id, []) if i["status"] == "queued" and godkand(i)]
+        poster.sort(key=lambda i: (str(i.get("scheduled_at") or ""), str(i.get("created_at") or "")))
+        return [{"id": i["id"], "scheduled_at": i.get("scheduled_at")} for i in poster]
 
     async def update_send_queue_status(
         self, tenant_id: str, item_id: str, *, status: str, gate_checks: dict[str, Any]
@@ -1106,34 +1121,141 @@ class MemoryStorage:
         thread["offer_id"] = offer["id"]
         return offer["id"]
 
-    async def erbjudande_utfall(self, tenant_id: str) -> list[dict[str, Any]]:
-        namn = {o["id"]: o["name"] for o in self.offers if o["tenant_id"] == tenant_id}
+    #: Klassen ur statusloggen för svar från före svarsklass-kolumnen (speglar
+    #: postgres._TRADUTFALL och svar.py).
+    _KLASS_UR_STATUS = {"meeting": "positivt", "lost": "negativt", "suppressed": "avregistrering", "replied": "fraga"}
+    _UTFALLSFALT = (
+        "utkast", "skickade", "svar", "positiva", "moten", "ja", "nej", "kanske", "fragor", "klick", "besok",
+    )
+
+    def _tradutfall(self, tenant_id: str, grupp) -> list[dict[str, Any]]:
         meddelanden = self.outreach_messages.get(tenant_id, [])
         logg = [r for r in self.prospect_status_logg if r["tenant_id"] == tenant_id]
         moten = {
             r["prospect_id"] for r in self.lead_samtal if r["tenant_id"] == tenant_id and r["utfall"] == "mote"
         }
+        lankar = {d["thread_id"]: d for d in self.demolankar.values() if d["tenant_id"] == tenant_id}
         rader: dict[str, dict[str, int]] = {}
         for thread in self.outreach_threads.get(tenant_id, {}).values():
-            nyckel = namn.get(thread.get("offer_id"))
+            nyckel = grupp(thread)
             if nyckel is None:
                 continue
-            rad = rader.setdefault(nyckel, dict.fromkeys(("utkast", "skickade", "svar", "positiva", "moten"), 0))
+            rad = rader.setdefault(nyckel, dict.fromkeys(self._UTFALLSFALT, 0))
             ut = [m for m in meddelanden if m["thread_id"] == thread["id"] and m["direction"] == "outbound"]
             rad["utkast"] += bool(ut)
             if not any(m.get("sent_at") for m in ut):
                 continue
             rad["skickade"] += 1
-            egna = [
-                r for r in logg
-                if r["prospect_id"] == thread["prospect_id"] and str(r["created_at"]) >= str(thread["created_at"])
-            ]
-            rad["svar"] += any(r["kalla"] == "kod" and r["till"] in SVARSSTATUS for r in egna)
+            egna = sorted(
+                (
+                    r for r in logg
+                    if r["prospect_id"] == thread["prospect_id"] and str(r["created_at"]) >= str(thread["created_at"])
+                ),
+                key=lambda r: str(r["created_at"]),
+            )
+            ur_status = [r["till"] for r in egna if r["kalla"] == "kod" and r["till"] in SVARSSTATUS]
+            klass = thread.get("svarsklass") or (self._KLASS_UR_STATUS[ur_status[-1]] if ur_status else None)
+            rad["svar"] += klass is not None
             rad["positiva"] += any(r["kalla"] == "kod" and r["till"] == "meeting" for r in egna)
             rad["moten"] += thread["prospect_id"] in moten or any(
                 r["till"] == "won" or (r["till"] == "meeting" and r["kalla"] == "manuell") for r in egna
             )
+            rad["ja"] += klass == "positivt"
+            rad["nej"] += klass in ("negativt", "avregistrering")
+            rad["kanske"] += klass == "aterkom"
+            rad["fragor"] += klass in ("fraga", "invandning")
+            handelser = (lankar.get(thread["id"]) or {}).get("handelser") or []
+            rad["klick"] += any(h["typ"] == "besok" or not h["skanner"] for h in handelser)
+            rad["besok"] += any(h["typ"] == "besok" for h in handelser)
         return [{"nyckel": k, **v} for k, v in rader.items()]
+
+    async def erbjudande_utfall(self, tenant_id: str) -> list[dict[str, Any]]:
+        namn = {o["id"]: o["name"] for o in self.offers if o["tenant_id"] == tenant_id}
+        return self._tradutfall(tenant_id, lambda t: namn.get(t.get("offer_id")))
+
+    async def struktur_utfall(self, tenant_id: str) -> list[dict[str, Any]]:
+        return self._tradutfall(tenant_id, lambda t: t.get("struktur"))
+
+    async def satt_svarsklass(self, tenant_id: str, thread_id: str, klass: str) -> None:
+        thread = self.outreach_threads.get(tenant_id, {}).get(thread_id)
+        if thread is not None:
+            thread["svarsklass"] = klass
+            thread["svarsklass_at"] = _now()
+
+    async def satt_trad_struktur(self, tenant_id: str, thread_id: str, struktur: str) -> None:
+        thread = self.outreach_threads.get(tenant_id, {}).get(thread_id)
+        if thread is not None and not thread.get("struktur"):
+            thread["struktur"] = struktur
+
+    async def demolanktoken(self, tenant_id: str, *, thread_id: str, mal_url: str) -> str:
+        from ..leads.demolank import ny_token
+
+        befintlig = next(
+            (d for d in self.demolankar.values() if d["tenant_id"] == tenant_id and d["thread_id"] == thread_id), None
+        )
+        if befintlig:
+            befintlig["mal_url"] = mal_url
+            return befintlig["token"]
+        token = ny_token()
+        self.demolankar[token] = {
+            "token": token, "tenant_id": tenant_id, "thread_id": thread_id, "mal_url": mal_url,
+            "created_at": _now(), "handelser": [],
+        }
+        return token
+
+    async def registrera_demolank(
+        self, token: str, *, typ: str, user_agent: str | None = None
+    ) -> str | None:
+        lank = self.demolankar.get(token)
+        if lank is None:
+            return None
+        ua = (user_agent or "")[:300]
+        from ..leads.demolank import ser_ut_som_skanner
+
+        lank["handelser"].append({
+            "typ": typ, "skanner": typ == "klick" and ser_ut_som_skanner(ua), "user_agent": ua or None,
+            "created_at": _now(),
+        })
+        return lank["mal_url"] if typ == "klick" else "ok"
+
+    async def demobesok(self, tenant_id: str, *, limit: int = 200) -> list[dict[str, Any]]:
+        namn = {o["id"]: o["name"] for o in self.offers if o["tenant_id"] == tenant_id}
+        prospekt = {p["id"]: p for p in self.prospects.get(tenant_id, [])}
+        ut = []
+        for d in self.demolankar.values():
+            if d["tenant_id"] != tenant_id or not d["handelser"]:
+                continue
+            thread = self.outreach_threads.get(tenant_id, {}).get(d["thread_id"]) or {}
+            p = prospekt.get(thread.get("prospect_id")) or {}
+            klick = [h for h in d["handelser"] if h["typ"] == "klick"]
+            besok = [h for h in d["handelser"] if h["typ"] == "besok"]
+            ut.append({
+                "prospect_id": thread.get("prospect_id"),
+                "foretag": p.get("company_name"),
+                "kontakt": p.get("contact_name"),
+                "erbjudande": namn.get(thread.get("offer_id")),
+                "struktur": thread.get("struktur"),
+                "klick": sum(not h["skanner"] for h in klick),
+                "skanner_klick": sum(h["skanner"] for h in klick),
+                "forsta_klick": min((h["created_at"] for h in klick), default=None),
+                "senaste_klick": max((h["created_at"] for h in klick), default=None),
+                "besok": len(besok),
+                "forsta_besok": min((h["created_at"] for h in besok), default=None),
+                "senaste_besok": max((h["created_at"] for h in besok), default=None),
+                "_senast": max(h["created_at"] for h in d["handelser"]),
+            })
+        ut.sort(key=lambda r: r["_senast"], reverse=True)
+        for r in ut:
+            r.pop("_senast")
+        return ut[:limit]
+
+    async def demolank_totalt(self, tenant_id: str) -> dict[str, int]:
+        egna = [d for d in self.demolankar.values() if d["tenant_id"] == tenant_id]
+        return {
+            "lankar": len(egna),
+            "klickade": sum(any(h["typ"] == "besok" or not h["skanner"] for h in d["handelser"]) for d in egna),
+            "besokta": sum(any(h["typ"] == "besok" for h in d["handelser"]) for d in egna),
+        }
 
     async def record_inbound_reply(
         self, tenant_id: str, *, thread_id: str, body: str
@@ -1492,10 +1614,23 @@ class MemoryStorage:
         valda = {str(i) for i in prospect_ids}
         return [p for p in self.prospects.get(tenant_id, []) if str(p["id"]) in valda]
 
-    async def list_prospects(self, tenant_id: str, *, limit: int = 500, offset: int = 0) -> list[dict[str, Any]]:
-        return sorted(
+    async def list_prospects(
+        self,
+        tenant_id: str,
+        *,
+        limit: int = 500,
+        offset: int = 0,
+        kolumner: Sequence[str] | None = None,
+    ) -> list[dict[str, Any]]:
+        sida = sorted(
             self.prospects.get(tenant_id, []), key=lambda p: p["created_at"], reverse=True
         )[offset : offset + limit]
+        if kolumner is None:
+            return sida
+        # Som Postgres: bara de begärda kolumnerna (och id), så att en vy som
+        # läser ett fält projektionen saknar fäller i sviten, inte i drift.
+        falt = dict.fromkeys(("id", *kolumner))
+        return [{k: p.get(k) for k in falt} for p in sida]
 
     async def arkivera_prospekt(
         self, tenant_id: str, prospect_ids: list[str], *, arkivera: bool
@@ -1935,7 +2070,10 @@ class MemoryStorage:
         arbetsminne: bool = False,
         status: str | None = None,
         utom: str | None = None,
+        sammandrag: bool = False,
     ) -> list[dict[str, Any]]:
+        from ..leads.listvy import korning_sammandrag
+
         rader = [
             r for r in self.leads_job_ledger.values()
             if r["tenant_id"] == tenant_id and r["scope"] in ("batch", "lista")
@@ -1948,7 +2086,12 @@ class MemoryStorage:
         rader.reverse()
         rader.sort(key=lambda r: r["created_at"], reverse=True)
         ut = [self._korningsrad(r) for r in rader[:limit]]
-        return ut if arbetsminne else [self._latt(r) for r in ut]
+        if arbetsminne:
+            return ut
+        latta = [self._latt(r) for r in ut]
+        if sammandrag:
+            return [{**r, "korning": korning_sammandrag(r.get("korning"))} for r in latta]
+        return latta
 
     async def get_sidcache(self, tenant_id: str, url: str) -> dict[str, Any] | None:
         rad = self.__dict__.setdefault("sidcache", {}).get((tenant_id, url))
@@ -2906,6 +3049,26 @@ class MemoryStorage:
             )
         rader.sort(key=lambda r: str(r["sent_at"]), reverse=True)
         return rader[:limit]
+
+    async def antal_skickade(self, tenant_id: str, *, sedan: Any) -> dict[str, int]:
+        def tid(v: Any) -> datetime | None:
+            if v is None:
+                return None
+            t = v if isinstance(v, datetime) else datetime.fromisoformat(str(v))
+            return t if t.tzinfo else t.replace(tzinfo=timezone.utc)
+
+        grans = tid(sedan)
+        trådar = self.outreach_threads.get(tenant_id, {})
+        skickat = svarat = 0
+        for m in self.outreach_messages.get(tenant_id, []):
+            ut = tid(m.get("sent_at")) if m["direction"] == "outbound" else None
+            if ut is None or (grans is not None and ut < grans):
+                continue
+            skickat += 1
+            inn = tid((trådar.get(m["thread_id"]) or {}).get("last_inbound_at"))
+            if inn is not None and inn >= ut:
+                svarat += 1
+        return {"skickat": skickat, "svarat": svarat}
 
     async def list_konversationer(self, tenant_id: str, thread_ids: list[str]) -> list[dict[str, Any]]:
         trådar = set(thread_ids)

@@ -267,12 +267,19 @@ _SUPERLATIV = re.compile(
 _KOLONLISTA = re.compile(r"(?<!\d):\s(?!\d)[^.?!\n]*(?:,|\soch\s|\ssamt\s)")
 
 
+#: Demoraden (app/leads/demolank.py): kodens rad med den spårade länken.
+_DEMORAD = re.compile(r"^[^\n]*/prova/[A-Za-z0-9_-]{6,}[ \t]*$\n?", re.MULTILINE)
+
+
 def _brodtext(text: str) -> str:
     """Mejlet utan kodens tillägg: allt från foten och från signaturens
-    hälsning och nedåt bort. Används när en köad text ska jämföras."""
+    hälsning och nedåt bort, och demoraden. Används när en köad text ska
+    jämföras. Utan det sista hade demoraden varit "sista meningen" i varje
+    köat utkast (2026-11-15), och kontrollen mot samma uppmaning tystnat."""
     text = _FOT.split(text or "", maxsplit=1)[0]
     traff = re.search(r"^\s*Vänliga hälsningar,\s*$", text, re.MULTILINE)
-    return text[: traff.start()] if traff else text
+    text = text[: traff.start()] if traff else text
+    return _DEMORAD.sub("", text)
 
 
 def _meningar(text: str) -> list[str]:

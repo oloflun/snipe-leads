@@ -13,6 +13,7 @@ en vanlig Context-instans i stället för att gå via verktygsprotokollet.
 """
 
 import json
+import logging
 from datetime import datetime, timezone
 
 from agents import RunContextWrapper, function_tool
@@ -124,6 +125,9 @@ async def _queue_outreach_draft_impl(
     #: A-formens ordtak (erbjudanden.ORDTAK, Anton 2026-11-06), samma tak som
     #: kedjans stilgrind prövade; None = stilkontrollens eget.
     ordtak: int | None = None,
+    #: Demolänken (app/leads/demolank.py) i utkastet. False bara för svar i
+    #: ett levande samtal (app/leads/svar.py).
+    demolank: bool = True,
 ) -> str:
     # Textkvalitetslagret (app/textkvalitet.py): sista efterkontrollen innan
     # texten kan nå en kund. Platshållare ("[förnamn]") kontrolleras på
@@ -216,6 +220,29 @@ async def _queue_outreach_draft_impl(
     signatur = normalisera_signatur(agent_settings.get("signatur"))
     if signatur:
         finalized_body = med_signatur(finalized_body, signatur, halsning=HALSNING[sprak])
+
+    # Demolänken (Anton 2026-11-15, app/leads/demolank.py): kodens rad efter
+    # brödtexten och före hälsningsfrasen, efter kvalitets- och stilkontrollen
+    # (den är kodens text) och före foten. Aldrig i ett svar i ett levande
+    # samtal (svar.py skickar demolank=False).
+    if demolank:
+        from ..leads import demolank as demo
+
+        finalized_body = await demo.lagg_till(
+            outreach.storage,
+            outreach.tenant_id,
+            outreach.thread_id,
+            finalized_body,
+            sprak=sprak,
+            installningar=agent_settings,
+        )
+    # Utkastets struktur A/B på tråden (migration 116), satt av första mejlet:
+    # mätningen per struktur läser den. Uppföljningar har sequence_index > 0.
+    if stilkontroll and outreach.sequence_index == 0 and not kampanj_id:
+        try:
+            await outreach.storage.satt_trad_struktur(outreach.tenant_id, outreach.thread_id, struktur)
+        except Exception:  # noqa: BLE001 — mätningen får inte fälla köningen
+            logging.getLogger("snajp-support.leads").exception("Kunde inte spara strukturen för tråd %s", outreach.thread_id)
 
     finalized_body = await _med_lagstadgad_fot(outreach, finalized_body)
 

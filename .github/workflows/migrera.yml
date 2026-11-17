@@ -1,0 +1,151 @@
+# Migrationerna körs av sig själva (Anton 2026-11-16, docs/BESLUT.md).
+#
+# Förut var `python scripts/railway_migrate.py --env <miljö> --apply` ett
+# handgrepp som gick att glömma. 2026-11-10 kördes migration 115 i development
+# men inte i main, och synken mellan miljöerna (synk.yml) stod röd i sex dagar
+# utan att någon såg det: den vägrade när schemaversionerna skilde sig.
+# (Synken tål sedan 2026-11-16 att development ligger före main.)
+#
+# Tre lägen:
+#
+# 1. PUSH till development eller main som rör migrationskatalogen: kedjan körs
+#    mot samma miljö som grenen deployar till. Railway bygger på samma push
+#    och tar flera minuter; det här jobbet tar under en, så schemat ligger
+#    före koden. Det är en ordning, ingen grind: Railway väntar inte på
+#    GitHub Actions (se kommentaren i verify.yml). Fäller en migration blir
+#    jobbet rött, och varje migration rullas tillbaka för sig (railway_migrate).
+#    För main är pushen Antons merge av release-PR:en, alltså hans ord.
+# 2. PULL REQUEST mot main: en kontroll som inte ändrar något. Den visar vilka
+#    migrationer releasen bär, och fäller PR:en om development själv har
+#    okörda migrationer. Development är en spegel av produktionen, så en
+#    migration som gått där är provad mot samma schema som main har.
+# 3. FÖR HAND (workflow_dispatch): torrkörning eller körning mot vald miljö.
+#
+# Migrationer ska vara additiva och idempotenta (create … if not exists,
+# add column if not exists), så att schemat får ligga före koden.
+#
+# Hemligheten ENV_DEPLOY är innehållet i .env.deploy, samma som synk.yml
+# använder; den skrivs aldrig ut. Skriptet skriver bara migrationernas namn.
+name: migrera
+
+on:
+  push:
+    branches:
+      - development
+      - main
+    paths:
+      - "supabase/migrations/**"
+      - "railway/000_auth_compat.sql"
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      miljo:
+        description: "Miljö"
+        type: choice
+        options:
+          - development
+          - main
+        default: development
+      apply:
+        description: "Kör migrationerna (annars torrkörning)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  kor:
+    name: kör migrationerna
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # En körning i taget per miljö; en väntande körning avbryts aldrig mitt i.
+    concurrency:
+      group: migrera-${{ github.event_name == 'push' && github.ref_name || inputs.miljo }}
+      cancel-in-progress: false
+    env:
+      MILJO: ${{ github.event_name == 'push' && github.ref_name || inputs.miljo }}
+      APPLY: ${{ github.event_name == 'push' || inputs.apply }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install psycopg2-binary
+      - name: Skriv .env.deploy ur hemligheten
+        run: printf '%s\n' "$ENV_DEPLOY" > .env.deploy
+        env:
+          ENV_DEPLOY: ${{ secrets.ENV_DEPLOY }}
+      - name: Visa vad som väntar
+        shell: bash
+        run: |
+          set -o pipefail
+          python scripts/railway_migrate.py --env "$MILJO" | tee fore.log
+      - name: Kör migrationerna
+        if: env.APPLY == 'true'
+        shell: bash
+        run: |
+          set -o pipefail
+          python scripts/railway_migrate.py --env "$MILJO" --apply | tee kort.log
+      - name: Kontrollera att inget väntar
+        if: env.APPLY == 'true'
+        shell: bash
+        run: |
+          set -o pipefail
+          python scripts/railway_migrate.py --env "$MILJO" | tee efter.log
+          if grep -q "skulle köras" efter.log; then
+            echo "::error::Migrationer väntar fortfarande i $MILJO efter körningen."
+            exit 1
+          fi
+      - name: Sammanfattning
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "### Migrationer, $MILJO"
+            if [ "$APPLY" = "true" ] && [ -f kort.log ]; then
+              echo "Körda:"
+              grep -E "^  [+!] " kort.log | sed 's/^  /- /' || true
+              grep -qE "^  [+!] " kort.log || echo "- inga, schemat var redan aktuellt"
+            elif [ -f fore.log ]; then
+              echo "Torrkörning. Väntar:"
+              grep "skulle köras" fore.log | sed 's/^  + /- /' || true
+              grep -q "skulle köras" fore.log || echo "- inga"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  granska:
+    name: releasens migrationer
+    # Bara PR:er från repots egna grenar: en PR från en fork har inga hemligheter.
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install psycopg2-binary
+      - name: Skriv .env.deploy ur hemligheten
+        run: printf '%s\n' "$ENV_DEPLOY" > .env.deploy
+        env:
+          ENV_DEPLOY: ${{ secrets.ENV_DEPLOY }}
+      - name: Vad väntar i development och main
+        shell: bash
+        run: |
+          set -o pipefail
+          python scripts/railway_migrate.py --env development | tee development.log
+          python scripts/railway_migrate.py --env main | tee main.log
+          {
+            echo "### Releasens migrationer"
+            echo "Körs mot main när PR:en mergas:"
+            grep "skulle köras" main.log | sed 's/^  + /- /' || true
+            grep -q "skulle köras" main.log || echo "- inga, schemat är redan aktuellt"
+          } >> "$GITHUB_STEP_SUMMARY"
+          if grep -q "skulle köras" development.log; then
+            echo "::error::Development har okörda migrationer. De ska ha gått där innan releasen når main."
+            exit 1
+          fi

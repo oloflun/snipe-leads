@@ -28,6 +28,10 @@ const iso = (timmar: number) => new Date(nu - timmar * 36e5).toISOString();
 const imorgon = new Date(nu + 864e5);
 imorgon.setUTCHours(6, 0, 0, 0);
 
+/** Köns plan (2026-11-16): ett godkänt utkast långt bak i kön visar datumet. */
+const omFemVeckor = new Date(nu + 35 * 864e5);
+omFemVeckor.setUTCHours(7, 12, 0, 0);
+
 const PROSPEKT = [
   { id: "p1", company_name: "Provbygget AB", status: "contacted", niva: "A", score_total: 82, ort: "Umeå", origin: "iris", created_at: iso(30), utkast_status: "skickat" },
   { id: "p2", company_name: "Exempelrör Norr AB", status: "replied", niva: "B", score_total: 71, ort: "Luleå", origin: "iris", created_at: iso(28), utkast_status: "skickat" },
@@ -57,6 +61,7 @@ const SIGNATURINSTALLNING = {
 const M2 = `Hej Anna,\n\nTvå nya montörer på kort tid. Då brukar frågan snart bli var nästa uppdrag kommer ifrån.\n\nHör av dig om du vill se ett exempel.\n\n${SIGNATUR}`;
 const M3 = `Hej,\n\nEn kort fråga om er nya verkstad.\n\n${SIGNATUR}`;
 
+/** Ordnade som API:t ger dem: de schemalagda efter sändtid, närmast först. */
 const SKICKAT = [
   {
     id: "ko-q4",
@@ -69,6 +74,24 @@ const SKICKAT = [
     company_name: "Fiktiva Fönster AB",
     contact_name: null,
     prospect_email: "info@fonster.example",
+    svarat: false,
+    status: "ready"
+  },
+  {
+    id: "ko-q12",
+    subject: "Kakel i nya lokalen",
+    body: `Hej,
+
+Ett godkänt utkast långt bak i kön.
+
+${SIGNATUR}`,
+    sent_at: null,
+    schemalagt: true,
+    skickas_tidigast: omFemVeckor.toISOString(),
+    prospect_id: "p12",
+    company_name: "Kölagda Kakel AB",
+    contact_name: null,
+    prospect_email: "info@kolagda.example",
     svarat: false,
     status: "ready"
   },
@@ -135,6 +158,8 @@ function installeraFetch() {
   window.fetch = (input, init) => {
     const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
     if (!url.includes("/api/snajp-support/")) return riktig(input, init);
+    // Nyckeltalen räknas av servern sedan 2026-11-15 (GET /leads/skickat/antal).
+    if (url.includes("/leads/skickat/antal")) return svar({ dagar: 28, skickat: 3, svarat: 2 });
     if (url.includes("/leads/skickat")) return svar({ skickat: SKICKAT, signatur: SIGNATURINSTALLNING });
     if (url.includes("/leads/provmejl/mottagare")) return svar({ mottagare: ["support@snajp.example", "faktura@snajp.example"] });
     if (url.includes("/leads/provmejl")) return svar({ till: "support@snajp.example", saknar_fot: true });

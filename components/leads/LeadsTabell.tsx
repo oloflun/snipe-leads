@@ -1,10 +1,11 @@
 "use client";
 
 import { X } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { EjAktiverad } from "@/components/EjAktiverad";
 import { Badge, Cell, SkeletonRows, Tabell, Tomt, btnPrimary, btnSecondary, etikett, btnLiten, faltDiskret, faltTatt, chip, chipAktiv, chipInaktiv, chiplista, meta, rubrikPanel, tabellRad } from "@/components/ui";
 import { useSmal } from "@/components/leads/smal";
+import { Sidvaljare, tillListansTopp, useBredSkarm, useSida, useSidaFor } from "@/components/leads/sidindelning";
 import { SkickatLista, type SkickatRad } from "@/components/leads/SkickatLista";
 import type { Signatur } from "@/components/leads/IrisGranskning";
 import { useRadrorelse } from "@/components/leads/useRadrorelse";
@@ -15,8 +16,8 @@ import { felmeddelande } from "@/lib/http/json";
 import { useLocale, type Localized } from "@/lib/i18n";
 import {
   LeadsFel,
-  allaProspekt,
   datumFormat,
+  listansProspekt,
   kontaktvagAv,
   leadsAnrop,
   poangAv,
@@ -140,8 +141,8 @@ const TYPER: LeadTyp[] = ["iris", "lista", "import", "inkorg"];
 const FORE_UTSKICK = new Set(["researching", "new", "ready"]);
 const REMSA = ["researching", "new", "ready"] as const;
 
-/** Skickade mejl de senaste fyra veckorna: samma fönster som nyckeltalen. */
-const FYRA_VECKOR_MS = 28 * 24 * 3600 * 1000;
+/** Skickade mejl de senaste fyra veckorna: nyckeltalens fönster. */
+const FYRA_VECKOR_DAGAR = 28;
 
 /** Skapa utkast-anropets tak (ProcessaOmRequest): större urval delas upp. */
 const PROCESSA_TAK = 200;
@@ -256,9 +257,18 @@ function senast(p: SuiteProspekt): string {
   return p.senaste_handelse_at ?? p.created_at ?? "";
 }
 
+/** Nyast först. ISO-tiderna jämförs som text: samma ordning som
+ *  localeCompare gav, men utan kollationeringen, som var den dyra delen när
+ *  tusentals rader sorterades om vid varje hämtning (2026-11-15). */
 function nyast(a: SuiteProspekt, b: SuiteProspekt): number {
-  return senast(b).localeCompare(senast(a));
+  const x = senast(a);
+  const y = senast(b);
+  return x < y ? 1 : x > y ? -1 : 0;
 }
+
+/** Ett stabilt tomt urval: `exempel = []` som standardvärde gav en ny array
+ *  vid varje rendering, och då sorterades hela listan om vid varje klick. */
+const INGA_EXEMPEL: SuiteProspekt[] = [];
 
 /**
  * Nyaste överst (Sebbe 2026-10-29): "Alla de nyaste utskicken ska vara högst
@@ -299,7 +309,7 @@ const DEMO_TIDER = { start: 1200, klara: [5000, 8500] };
 export function LeadsTabell({
   onValj,
   valdId = null,
-  exempel = [],
+  exempel = INGA_EXEMPEL,
   demo = false,
   flyttbar = false,
   korningPagar = false,
@@ -366,13 +376,17 @@ export function LeadsTabell({
   const [visaArkiverade, setVisaArkiverade] = useState(false);
   const [arkiverade, setArkiverade] = useState<SuiteProspekt[] | null>(null);
   const [arkiveradeFel, setArkiveradeFel] = useState<string | null>(null);
-  // Skickat (Sebbe 2026-10-07): varje leadsmejl som gått ut. Hämtas direkt:
-  // nyckeltalen räknas ur samma lista som Skickat visar. Sedan 2026-10-08
-  // visas den här, bredvid Ny (och fortfarande under Inkorg › Skickat).
+  // Skickat (Sebbe 2026-10-07): varje leadsmejl som gått ut, sedan 2026-10-08
+  // här bredvid Ny (och fortfarande under Inkorg › Skickat). Listan hämtas
+  // först när Skickat öppnas (2026-11-15): den bär varje mejls text, 3,2 MB
+  // hos den största kunden, och hämtades förut vid varje besök på Leads bara
+  // för nyckeltalen. De räknas nu av servern med samma regel
+  // (GET /leads/skickat/antal).
   const [visaSkickat, setVisaSkickat] = useState(false);
   const [skickat, setSkickat] = useState<SkickatRad[] | null>(null);
   const [skickatSignatur, setSkickatSignatur] = useState<Signatur | null>(null);
   const [skickatFel, setSkickatFel] = useState<string | null>(null);
+  const [skickatAntal, setSkickatAntal] = useState<{ skickat: number; svarat: number } | null>(null);
   const hamtaSkickat = useCallback(async () => {
     if (demo) {
       setSkickat([]);
@@ -388,9 +402,22 @@ export function LeadsTabell({
       setSkickat((nu) => nu ?? []);
     }
   }, [demo]);
+  const hamtaSkickatAntal = useCallback(async () => {
+    if (demo) return;
+    try {
+      const svar = await leadsAnrop<{ skickat?: number; svarat?: number }>(`/leads/skickat/antal?dagar=${FYRA_VECKOR_DAGAR}`);
+      setSkickatAntal({ skickat: svar.skickat ?? 0, svarat: svar.svarat ?? 0 });
+    } catch {
+      // Nyckeltalen visar ett streck; listan och resten av sidan står kvar.
+    }
+  }, [demo]);
   useEffect(() => {
-    void hamtaSkickat();
-  }, [hamtaSkickat]);
+    void hamtaSkickatAntal();
+  }, [hamtaSkickatAntal]);
+  const skickatLaddat = skickat !== null;
+  useEffect(() => {
+    if ((visaSkickat || demo) && !skickatLaddat) void hamtaSkickat();
+  }, [visaSkickat, demo, skickatLaddat, hamtaSkickat]);
   const [bortvaldaFel, setBortvaldaFel] = useState<string | null>(null);
   const [vyNamn, setVyNamn] = useState("");
   const [sparar, setSparar] = useState(false);
@@ -408,7 +435,7 @@ export function LeadsTabell({
     }
     try {
       const [p, u, v] = await Promise.allSettled([
-        allaProspekt<SuiteProspekt>(leadsAnrop).then((prospects) => ({ prospects })),
+        listansProspekt<SuiteProspekt>(leadsAnrop).then((prospects) => ({ prospects })),
         leadsAnrop<{ uppgifter?: Uppgift[] }>("/leads/uppgifter?oppna=1"),
         leadsAnrop<{ vyer?: Vy[] }>("/leads/vyer")
       ]);
@@ -502,7 +529,7 @@ export function LeadsTabell({
   const hamtaLeads = useCallback(async () => {
     if (demo) return;
     try {
-      setProspekt(await allaProspekt<SuiteProspekt>(leadsAnrop));
+      setProspekt(await listansProspekt<SuiteProspekt>(leadsAnrop));
     } catch {
       // Nästa varv försöker igen; ett tillfälligt fel är ingen nyhet.
     }
@@ -554,7 +581,7 @@ export function LeadsTabell({
       }
       sattFel(null);
       try {
-        satt([...(await allaProspekt<SuiteProspekt>(leadsAnrop, `${vilka}=1`))].sort(nyast));
+        satt([...(await listansProspekt<SuiteProspekt>(leadsAnrop, `${vilka}=1`))].sort(nyast));
       } catch (orsak) {
         sattFel(felmeddelande(orsak));
         satt((nu) => nu ?? []);
@@ -571,13 +598,15 @@ export function LeadsTabell({
   useEffect(() => {
     const uppdatera = () => {
       void hamta();
-      void hamtaSkickat();
+      void hamtaSkickatAntal();
+      // Skickat-listan bara om den redan hämtats; annars hämtas den när den öppnas.
+      if (skickatLaddat) void hamtaSkickat();
       if (harBortvalda) void hamtaUndan("bortvalda");
       if (harArkiverade) void hamtaUndan("arkiverade");
     };
     window.addEventListener(LEADS_UPPDATERADE, uppdatera);
     return () => window.removeEventListener(LEADS_UPPDATERADE, uppdatera);
-  }, [hamta, hamtaSkickat, hamtaUndan, harBortvalda, harArkiverade]);
+  }, [hamta, hamtaSkickat, hamtaSkickatAntal, hamtaUndan, harBortvalda, harArkiverade, skickatLaddat]);
 
   const nastaUppgift = useMemo(() => {
     // Backenden sorterar förfallodatum stigande med null sist: första öppna per prospekt vinner.
@@ -666,25 +695,35 @@ export function LeadsTabell({
 
   useEffect(() => {
     if (prospekt === null) return;
-    // Skickade och svar de senaste fyra veckorna, ur samma lista som Inkorg ›
-    // Skickat — nyckeltalet och listan kan inte säga olika saker. Demon har
-    // ingen utskickslogg och räknar alla sina exempel.
-    const grans = Date.now() - FYRA_VECKOR_MS;
-    const fonster = skickatVisat
-      ? demo
-        ? skickatVisat
-        : skickatVisat.filter((r) => r.sent_at && new Date(r.sent_at).getTime() >= grans)
-      : null;
+    // Skickade och svar de senaste fyra veckorna, med samma regel som Inkorg ›
+    // Skickat (svarat = tråden fick svar efter utskicket), räknade av servern
+    // (GET /leads/skickat/antal) i stället för ur hela listan. Demon har ingen
+    // utskickslogg och räknar alla sina exempel.
+    const demotal = demo && skickatVisat ? { skickat: skickatVisat.length, svarat: skickatVisat.filter((r) => r.svarat).length } : null;
+    const tal = demo ? demotal : skickatAntal;
     onAntal?.({
       alla: urval.length,
       nya: urval.filter((p) => p.status === "new").length,
-      skickat: fonster ? fonster.length : null,
-      svarat: fonster ? fonster.filter((r) => r.svarat).length : null,
+      skickat: tal ? tal.skickat : null,
+      svarat: tal ? tal.svarat : null,
       godkanda: allaRader.filter((p) => p.utkast_status === "godkant").length
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [prospekt, allaRader, urval, skickatVisat]);
-  const synliga = useMemo(() => urval.filter((p) => matchar(p, filter)), [urval, filter]);
+  }, [prospekt, allaRader, urval, skickatVisat, skickatAntal]);
+  // Sökfältet skriver direkt; filtreringen av tusentals rader får komma ett
+  // ögonblick efter (useDeferredValue), så att inget tangenttryck väntar på den.
+  const filterFordrojt = useDeferredValue(filter);
+  const synliga = useMemo(() => urval.filter((p) => matchar(p, filterFordrojt)), [urval, filterFordrojt]);
+  // En sida i taget i sidan (components/leads/sidindelning.tsx). Ett nytt
+  // filter eller en annan vy börjar om på första sidan.
+  const bred = useBredSkarm();
+  const sidor = useSida(synliga.length, `${JSON.stringify(rensat(filterFordrojt))}|${visaBortvalda}|${visaArkiverade}|${visaSkickat}`);
+  const sidansRader = useMemo(() => synliga.slice(sidor.fran, sidor.till), [synliga, sidor.fran, sidor.till]);
+  const synligaIds = useMemo(() => synliga.map((p) => p.id), [synliga]);
+  useSidaFor(valdId, synligaIds, sidor.setSida);
+  // Bortvalda och arkiverade: samma sidindelning för den undanvy som är öppen.
+  const undanAntal = (visaBortvalda ? bortvalda : visaArkiverade ? arkiverade : null)?.length ?? 0;
+  const undanSidor = useSida(undanAntal, visaBortvalda ? "bortvalda" : "arkiverade");
   const harWebb = synliga.some((p) => typeof p.webbrevision?.modernitet === "number");
   const harUtkast = synliga.some((p) => Boolean(p.utkast_status));
   const harUppgift = synliga.some((p) => nastaUppgift.has(p.id));
@@ -887,8 +926,8 @@ export function LeadsTabell({
         return godkanda
           ? {
               text: text({
-                sv: `De ${godkanda} markerade utkasten är redan godkända och skickas när sändfönstret öppnar (vardagar 08–16).`,
-                en: `The ${godkanda} selected drafts are already approved and go out when the sending window opens (weekdays 08–16).`
+                sv: `De ${godkanda} markerade utkasten är redan godkända och skickas i tur och ordning från kön (vardagar från 08:00).`,
+                en: `The ${godkanda} selected drafts are already approved and go out in turn from the queue (weekdays from 08:00).`
               }),
               fel: false
             }
@@ -951,7 +990,7 @@ export function LeadsTabell({
         text: text({
           sv: [
             `${skickade} skickade`,
-            vantar + godkanda ? `${vantar + godkanda} skickas när sändfönstret öppnar (vardagar 08–16)` : null,
+            vantar + godkanda ? `${vantar + godkanda} skickas i tur och ordning från kön (vardagar från 08:00)` : null,
             flyttade.length ? `${flyttade.length} flyttades över från provkörningen` : null,
             orgnrHamtade ? `org.nr hämtades från ${orgnrHamtade} ${orgnrHamtade === 1 ? "bolags" : "bolagens"} webbplats` : null,
             antalStopp + kvarProv ? `${antalStopp + kvarProv} skickades inte` : null,
@@ -959,7 +998,7 @@ export function LeadsTabell({
           ].filter(Boolean).join(", ") + ".",
           en: [
             `${skickade} sent`,
-            vantar + godkanda ? `${vantar + godkanda} go out when the sending window opens (weekdays 08–16)` : null,
+            vantar + godkanda ? `${vantar + godkanda} go out in turn from the queue (weekdays from 08:00)` : null,
             flyttade.length ? `${flyttade.length} moved over from the test run` : null,
             orgnrHamtade ? `company number found on ${orgnrHamtade} ${orgnrHamtade === 1 ? "company's" : "companies'"} website` : null,
             antalStopp + kvarProv ? `${antalStopp + kvarProv} were not sent` : null,
@@ -1443,7 +1482,7 @@ export function LeadsTabell({
         <>
           <div className="mt-4">{verktygsrad(v.rader, v.lage)}</div>
           <ul className="mt-3 divide-y divide-ink/10">
-            {v.rader.map((p) => (
+            {v.rader.slice(undanSidor.fran, undanSidor.till).map((p) => (
               <li key={p.id} className="flex items-start gap-3 py-2.5">
                 {kryss(p, "mt-1 shrink-0")}
                 <div className="min-w-0 flex-1">
@@ -1467,6 +1506,15 @@ export function LeadsTabell({
               </li>
             ))}
           </ul>
+          <Sidvaljare
+            className="mt-3"
+            antal={v.rader.length}
+            sida={undanSidor.sida}
+            antalSidor={undanSidor.antalSidor}
+            fran={undanSidor.fran}
+            till={undanSidor.till}
+            onSida={undanSidor.setSida}
+          />
         </>
       )}
     </section>
@@ -1774,7 +1822,11 @@ export function LeadsTabell({
         <Tomt>{urval.length === 0 ? text(T.allaKontaktade) : text(T.ingaTraffar)}</Tomt>
       ) : (
         <>
-          <div className={smal ? "hidden" : "hidden lg:block"}>
+          {/* Tabellen från lg, annars korten — EN av dem i sidan, och en sida
+              i taget (2026-11-15). Förut stod alla rader två gånger, den ena
+              varianten dold med CSS. */}
+          {!smal && bred ? (
+          <div>
             <Tabell
               ariaLabel={text(T.tabell)}
               // Typ står inte som kolumn sedan Utkast kom in (2026-10-08): med den
@@ -1801,7 +1853,7 @@ export function LeadsTabell({
                 ...(harUppgift ? [{ rubrik: text(T.kolUppgift), bredd: "11%" }] : [])
               ]}
             >
-              {synliga.map((p) => (
+              {sidansRader.map((p) => (
                 <tr key={p.id} data-rad-id={p.id} className={cn(tabellRad, "align-top", p.id === valdId && "bg-ochre/10")}>
                   {p.origin !== "example" || demo ? (
                     <Cell>{kryss(p)}</Cell>
@@ -1827,9 +1879,9 @@ export function LeadsTabell({
               ))}
             </Tabell>
           </div>
-
-          <ul className={cn("space-y-3", !smal && "lg:hidden")} aria-label={text(T.tabell)}>
-            {synliga.map((p) => (
+          ) : (
+          <ul className="space-y-3" aria-label={text(T.tabell)}>
+            {sidansRader.map((p) => (
               <li
                 key={p.id}
                 data-rad-id={p.id}
@@ -1856,6 +1908,18 @@ export function LeadsTabell({
               </li>
             ))}
           </ul>
+          )}
+          <Sidvaljare
+            antal={synliga.length}
+            sida={sidor.sida}
+            antalSidor={sidor.antalSidor}
+            fran={sidor.fran}
+            till={sidor.till}
+            onSida={(s) => {
+              sidor.setSida(s);
+              tillListansTopp(listref.current);
+            }}
+          />
         </>
       )}
 

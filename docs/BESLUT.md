@@ -9,6 +9,268 @@ möjligt), vad det betyder i koden.
 
 ---
 
+## 2026-11-16 (Sebbe) — 100 utskick om dagen, äldst först, ett i minuten från 08:00
+
+**Beslut.** Sebbe bad först om att "utskicken man gör inte ligger väntandes
+till måndagar 08:00 … Utskicken ska hanteras 08:00 varje vardag och gå ut
+varje dag 08:00. Så alla körningar jag gör ikväll ska skickas ut imorgon 08:00
+automatiskt". Det som höll kvar utskicken var inte veckodagen utan dagstaket
+på 50 och kön bakom det. Tillfrågad om taket och ordningen svarade Sebbe:
+"100 är takt per dag, börja med de äldre utskicken. Se till att inget hamnar i
+skräpposten, alltid hög kvalitet." Och: "du får godkännelse för allt som
+krävs." Valen nedan gjordes i arbetet.
+
+**Resonemanget.** Läst ur development (en spegel av main) 2026-11-16 07:30,
+bara antal: sändaren skickade redan 08:00 varje vardag, men högst dagens tak,
+50 sedan 11-11 (20, 25 … 50 med upptrappningen). Bakom taket stod 3 868
+godkända utkast i kö, det äldsta köat 10-26, och kön skickas äldst först.
+Kvällens körningar hamnade alltså ungefär 77 vardagar bak, medan listan sa
+"Godkänt – skickas 08:00" om vartenda ett, och efter en helg "mån 08:00". Två
+saker till syntes: dagens 50 gick ut inom samma minut 08:00, och sändaren
+prövade varje köpost var för sig varje minut dygnet runt, med runt tio
+databasfrågor per post (sändspärrarna, textputsen, en skrivning). Med 3 868
+poster blev det tiotusentals frågor i minuten i samma process som svarar
+sidorna. Det växte med antalet godkända utkast, och det kan vara en del av
+laggandet 11-15.
+
+**I koden, val för val.**
+
+- **Taket är 100** (`send_guard.TAK_PER_DAG`). Upptrappningen står kvar, fem
+  fler om dagen än den största dagsvolymen senaste veckan, så taket nås på
+  ungefär tio sändardagar (55, 60 … 100) och aldrig med ett hopp. Det var
+  hoppet 20 → 40 → 80 → 160 i oktober som skickade 600 mejl i skräpposten.
+  Valet följer Sebbes "se till att inget hamnar i skräpposten". Vill vi upp
+  till 100 direkt är det en konstant, `UPPTRAPPNING_STEG`.
+- **Äldst först** som förut (`list_due_send_queue`, scheduled_at och sedan
+  created_at), enligt Sebbes svar.
+- **Ett mejl i minuten per kund**, med start 08:00 (`scheduler.TAKT_SEKUNDER`,
+  ett per varv i `process_godkanda`). Hundra kallmejl samma sekund är ett
+  maskinmönster som mottagarnas filter reagerar på oavsett text. Dagens 100
+  är ute ungefär 09:40. Takten gäller också Godkänn och skicka, så att hundra
+  godkännanden i listan inte heller blir hundra mejl på en minut. Det första
+  går direkt, och resten står kvar som godkända och tas i tur och ordning.
+  Skicka nu ur Skickat har ingen takt, för där har en människa valt det
+  enskilda mejlet och tiden. Taket gäller där som förut.
+- **Sändaren gör inget när inget kan gå ut** (`scheduler.sandfonster_oppet`):
+  kväll, natt, helg och helgdag läses kön inte alls. Inom fönstret prövas
+  kundens egna spärrar (takten, dagens tak, leveransstoppet) en gång per kund
+  och varv (`send_guard.kundens_volymgrind`, `scheduler.kundens_historik`), i
+  stället för en gång per köpost. De säger samma sak om varje mejl i kön.
+  Efter 16 går bara svar i trådar där leadet svarat (`trad_svarad_at` i
+  förfallolistan). En stoppad post (karens, suppression) släpper fram nästa,
+  högst 25 per varv. Utfallet per mejl är detsamma som förut, och alla sex
+  spärrar körs fortfarande på varje mejl som skickas.
+- **Listan visar när varje utkast går ut** (`app/leads/sandplan.py`).
+  Sändtiden är köns plan: äldst först, ett i minuten, dagens tak med
+  upptrappningen, bara vardagar. "Skickas 08:00" om alla blev sant för ingen.
+  Längre fram än en vecka visas datumet (`lib/leads/utkast.ts:sandtid`).
+  Texterna om att godkända "skickas när sändfönstret öppnar" säger nu att de
+  skickas i tur och ordning från kön. Planen är en uppskattning: ett stoppat
+  utkast eller ett svar emellan flyttar resten en plats.
+
+**Kvar.** Kön är 3 868 utkast. Med upptrappningen till 100 tar den ungefär
+åtta veckor att beta av, och nya godkännanden hamnar sist. Utkasten från 10-26
+är tre veckor gamla när de går. Hela ändringen gäller i main först när
+release-PR:en (oloflun/snipe-leads#44) är mergad. Development skickar inget
+(spegeln, `utskick_bara_i_main`).
+
+---
+
+## 2026-11-15 (Sebbe) — Antalet leads och körningar får inte märkas i sidan
+
+**Beslut.** Sebbe: "Nu när vi har 4400 utkast på snajp leads så börjar sidan
+gå långsamt och det laggar mer och mer … Du ska lösa uppgiften och problemet
+så att antalet leads körningar inte påverkar hemsidans upplevelse. Det får
+inte lagga, hacka eller gå långsamt oavsett." Och: "Du får godkännelse för att
+göra allt som krävs." De enskilda valen nedan gjordes i arbetet.
+
+**Resonemanget.** Mätt hos den största kunden i development (5 615 prospekt,
+3 126 synliga leads, 1 937 godkända utkast som väntar): servern svarade i
+rimlig tid per anrop, men sidorna hämtade och ritade allt. Iris-listan var
+9,6 MB i sex anrop efter varandra (~3,5 s), Översiktens munkdiagram hämtade
+samma 9,6 MB för att räkna, körningslistan var 2,8 MB för 100 körningar (98 %
+trattens bortvalda bolag och barnjobben), och Skickat (3,2 MB, varje mejls
+text) hämtades vid varje besök på Leads för två nyckeltal. I webbläsaren stod
+varje lead två gånger (tabellen och korten, den ena dold) och radrörelsen läste
+stilen för varje rad efter varje rendering. Med samma mängd syntetiska leads
+tog ett klick i en kryssruta 4,7 s och ett tangenttryck i sökfältet 3,7 s
+(utvecklingsläge). Allt det växer med antalet leads och körningar; det var
+därför det blev sämre för varje körning.
+
+**I koden, val för val.**
+
+- **Listläget** (`GET /leads/prospects?lista=1`, `app/leads/listvy.py`): bara
+  det tabellen visar per rad, upp till 5 000 rader per anrop. Researchen läses
+  inte ens ur databasen. Lådan hämtar den fulla raden som förut.
+- **Iris-listan, Skickat och undanvyerna visar 100 rader per sida**
+  (`components/leads/sidindelning.tsx`). Valet: sidor och inte en lång lista
+  med "Visa fler", eftersom det är det enda som håller sidan lika snabb hur
+  många leads det än blir. Filtren, Markera alla och massåtgärderna gäller
+  fortfarande hela urvalet; en länk till ett lead öppnar sidan där det står.
+- **Tabell eller kort**, aldrig båda i sidan.
+- **Fördelningen räknas på servern** (`GET /leads/prospects/fordelning`), med
+  samma synlighetsregel som listan (`listvy.synliga`, en regel på ett ställe).
+- **Körningslistan är ett sammandrag**: `tratt_antal` och `jobs_antal` i
+  stället för listorna. Den utfällda raden hämtar körningen själv. `?detalj=1`
+  ger det gamla svaret.
+- **Skickat hämtas när det öppnas**; nyckeltalen kommer från
+  `GET /leads/skickat/antal`, med samma regel för svarat och utan listans tak
+  på 500 (talet kan därför bli högre än förut, och är då det riktiga).
+- **Radrörelsen läser stil bara för rader som animeras**, och sorteringen
+  jämför tidsstämplar som text i stället för med `localeCompare`.
+
+Efter (samma syntetiska mängd): klicket 170 ms, tangenttrycket 82 ms, sidan
+3 254 DOM-noder i stället för 99 901.
+
+**Kvar, inte gjort.** Körningarna går i samma process som API:t (leads- och
+chattarbetarna i `app/main.py`). En körning som gör tungt arbete i
+händelseloopen kan därför fortfarande göra varje sida trög medan den pågår.
+Det gick inte att mäta i dag: Railway-tokenen är död, så loopvaktens loggar
+("står still") går inte att läsa. Med en ny token: läs loopvakten under en
+körning, och flytta arbetarna till en egen tjänst om den visar stopp.
+
+---
+
+## 2026-11-16 (Anton) — Synken körs även när development ligger före main
+
+**Beslut.** På frågan om synken ska få köra när development ligger före main
+i schemat svarade Anton "Ja, bygg det". Det avgör den öppna punkten i
+beslutet nedan: migrationer går fortfarande till main först vid releasen, och
+det är synken som tål skillnaden.
+
+**Resonemanget.** Alternativet var att skicka additiva migrationer till main
+direkt efter development. Det hade ändrat produktionens schema utan en
+release och utan Antons ord. Att låta synken tåla skillnaden rör bara
+development, som är spegeln.
+
+**Agentens val i bygget.**
+
+- **Det räckte inte att släppa på versionsspärren.** Synken jämför rader med
+  en kontrollsumma över alla kolumner och skriver om hela raden. Med en egen
+  kolumn i development hade varje rad sett ändrad ut vid varje synk, och
+  kolumnens värden hade nollats. Raderna jämförs därför på de gemensamma
+  kolumnerna, en rad som skrivs över behåller developments egna värden, och
+  en ny rad får kolumnernas standardvärden.
+- **Spärren jämför den högsta versionen, inte mängden.** Developments liggare
+  bär tre äldre poster under namn som sedan bytts (056, 066, 092). En
+  mängdjämförelse hade sagt "tre migrationer före" för alltid och kunnat
+  stoppa synken åt andra hållet.
+- **Det som inte går att spegla stoppar som förut:** main före development,
+  en kolumn som bara finns i main, och en gemensam kolumn med olika typ.
+  Första synken, som skriver till main, kräver fortfarande samma schema.
+- **Samma schema ger exakt den gamla skrivningen.** Den nya vägen går bara
+  när development faktiskt har egna kolumner.
+
+**I koden.** `scripts/railway_synk.py` (`schemalage`, `tabellkolumner`,
+`jamfor_kolumner`, `rader(utan=…)`, `skriv(egna=…)`),
+`tests/test_railway_synk.py`. Provat mot de riktiga databaserna med en
+provkolumn i development i en transaktion som rullades tillbaka.
+
+---
+
+## 2026-11-16 (Anton) — Migrationerna körs av sig själva
+
+**Beslut.** Anton, efter att demolänken gått live i development: "Ja, kör
+migrationerna. Finns det något sätt att automatisera även det?" Migration 115
+och 116 kördes mot main samma kväll, och migrationerna körs sedan av ett
+arbetsflöde i stället för för hand.
+
+**Resonemanget (agentens val inom frågan).**
+
+- **Det glömda handgreppet hade redan kostat.** Migration 115 kördes i
+  development 2026-11-10 men inte i main, och synken mellan miljöerna
+  (`synk.yml`) stod röd i sex dagar, för den vägrar när schemaversionerna
+  skiljer sig. Ingen såg det.
+- **GitHub Actions och inte ett steg i Railways deploy.** Repot har redan
+  hemligheten (`ENV_DEPLOY`, samma som synken), och skriptet är detsamma som
+  körs för hand. Ett steg i Railways deploy hade krävt att migrationerna och
+  ett superuser-lösenord låg i api-tjänstens avbild.
+- **Development: vid pushen.** Railways bygge tar flera minuter och jobbet
+  under en, så schemat ligger före koden. Det är en ordning och ingen grind,
+  eftersom Railway inte väntar på GitHub Actions.
+- **Main: vid mergen av release-PR:en, inte tidigare.** Mergen är Antons
+  handgrepp (grenskyddet), så hans ord gäller fortfarande för varje ändring
+  av produktionens schema. PR:en får en kontroll som visar vad releasen bär
+  och fäller den om development har okörda migrationer: development är en
+  spegel av produktionen, så en migration som gått där är provad.
+- **Migrationer ska vara additiva och idempotenta**, så att schemat får ligga
+  före koden. Det var redan praxis; nu är det ett krav.
+
+**I koden.** `.github/workflows/migrera.yml`, `DEPLOY.md` ("Migrationer körs
+mot Railway") och `CLAUDE.md`. Main-delen börjar gälla först när
+arbetsflödet självt nått main med nästa release.
+
+**Öppet.** Synken stannar fortfarande så länge en migration bara finns i
+development. Anton avgör om additiva migrationer ska gå till main direkt
+efter att de gått i development (synken hålls då vid liv, men produktionens
+schema ändras utan en release), eller som nu först vid mergen.
+*Avgjort samma dag: synken tål att development ligger före, se beslutet ovan.*
+
+---
+
+## 2026-11-15 (Anton) — Demolänk i varje utkast, spårning av besök, och A/B-mätning av Ja, Nej, Kanske och klick
+
+**Beslut.** Anton: "Updatera alla mailutskick i utkorgen samt alla olika
+erbjudanden oavsett A eller B så att de innehåller en länk till demon, med en
+fras som till exempel: länk till vår demo, där ni kan se hur det
+fungerar/testa mot ert företag, ett snäpp ned från resten av texten. Jag vill
+även att du kollar upp och gör så att vi kan se vilka som faktiskt besökt
+länken, hitta på ett bra system för detta, eller en befintlig lösning som vi
+kan implementera. Se även till att lösa mätning för A/B på totala svar, andel
+Ja, Nej, Kanske/Återkom och andel som klickat på länken i de olika utkasten."
+
+**Resonemanget (agentens val inom beställningen).**
+
+- **Raden skrivs av kod, inte av modellen.** Samma skäl som signaturen och
+  foten: en URL i modellens text fälls av faktagrinden, och en rad som bara
+  brukar komma med gör mätningen tyst fel. Raden står i ett eget stycke efter
+  mejlets sista mening och före hälsningsfrasen.
+- **Eget spårningssystem i stället för en färdig tjänst.** Mejlen går ut över
+  SMTP med ren text i grunden, så en mejltjänsts klickspårning
+  (Resend, Postmark, Mailgun) går inte att slå på, och den hade skrivit om
+  länken till en tredjepartsdomän, vilket är en spamsignal i kalla mejl.
+  Länken är `{sajten}/prova/<token>`, en token per tråd, på samma domän som
+  avsändarens webbplats och med samma mönster som avregistreringslänken (046).
+- **Klick och besök är två saker.** E-postskydd (Safe Links, Proofpoint,
+  Mimecast) klickar på länkar i inkommande mejl innan mottagaren ser dem. Ett
+  klick loggas vid vidarebefordringen och märks som skanner när user agent
+  eller tiden (inom två minuter från utskicket) tyder på det. Ett besök loggas
+  först när mottagaren scrollar eller klickar på demosidan. "Besökt" betyder
+  alltså en människa, och det är det listan "Vilka har besökt demon" visar.
+- **Kanske/Återkom är en egen svarsklass (`aterkom`).** Förut föll "inte nu,
+  hör av er i vår" under fråga eller negativt. Köade uppföljningar ställs in
+  och kunden aviseras: när man återkommer är en människas beslut.
+- **Svarsklassen sparas på tråden.** Förut härleddes svar och positiva ur
+  statusloggen. Äldre svar räknas fortfarande därifrån (möte = Ja, förlorad
+  och avregistrerad = Nej, svarat = fråga), så mätningen börjar inte om.
+- **A/B mäts i två dimensioner:** per erbjudande (som förut) och per
+  utkaststruktur A/B, som nu sparas på tråden. Trådar från före strukturvalet
+  2026-11-05 räknas inte i strukturjämförelsen, eftersom de bara kan vara A
+  och hade gett A ett försprång i tid.
+- **Inget i svar till den som redan svarat.** Ett svar i ett levande samtal
+  bär ingen demolänk.
+
+**I koden.** `app/leads/demolank.py` (raden, kundens val, bytet av en naken
+demoadress mot "länken nedan"), `leads_tools._queue_outreach_draft_impl` och
+`scheduler._fot_vid_godkannande` (raden läggs på vid köningen och vid
+godkännandet), `svar.py` (klassen `aterkom`, `satt_svarsklass`),
+`erbjudanden.sammanstall` och `storage.erbjudande_utfall`/`struktur_utfall`
+(Ja, Nej, Kanske, frågor, klick och besök per arm), migration 116
+(`outreach_threads.svarsklass`/`struktur`, `ss_demolankar`,
+`ss_demolank_handelser`, `demolank_klick`, `demolank_besok`),
+`app/prova/[token]/route.ts` och `components/demo/DemoBesok.tsx` (Next),
+`GET /api/leads/demobesok` och fliken Leads › Erbjudanden (demolänken,
+mätningen och besökslistan), `scripts/demolank_i_utkorgen.py` (raden på
+utkasten som redan ligger i kön). Kundens demolänk står i
+`settings.erbjudanden.demo`; utan den ändras ingenting.
+
+**Öppet.** Synlighet: mätningen och besökslistan visas för kunden själv, om
+kundens egna trådar. Dataskydd: klicket knyts till en namngiven mottagare, så
+integritetspolicyn och utskicksfotens ändamålsrad bör nämna att länkar i
+utskicken mäts (se `docs/JURIDIK_ATGARDER.md`). Anton avgör.
+
+---
+
 ## 2026-11-10 (Sebbe) — Stabilitetsarbetet, fas 2 till 4: mät först, och låt mätningen välja ändringen
 
 **Beslut.** Sebbe: "kör klart alla faser och allting du ska göra, du får
