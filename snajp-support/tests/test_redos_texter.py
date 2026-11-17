@@ -42,10 +42,23 @@ def test_meningsdelningen_ar_linjar_pa_langa_skiljeteckensrader():
     assert _tid(lambda: text_delta.split_sentences("a" + "!" * N + "a")) < GRANS_SEKUNDER
 
 
+def test_meningsdelningen_ar_linjar_pa_manga_korta_meningar():
+    """Förkortningskontrollen delade förut hela texten fram till varje gräns."""
+    assert _tid(lambda: text_delta.split_sentences("A. " * N)) < GRANS_SEKUNDER
+
+
 def test_meningsdelningen_delar_som_forut():
     text = "Hej!!! Vi ses. Tack?! Bra"
     spans = text_delta.split_sentences(text)
     assert [text[a:b] for a, b in spans] == ["Hej!!! ", "Vi ses. ", "Tack?! ", "Bra"]
+    text = "Se t.ex. Bilaga 2. Pris 3. 5 kr (inkl. Moms). Klart!x Nej. nej. Ja"
+    spans = text_delta.split_sentences(text)
+    assert [text[a:b] for a, b in spans] == [
+        "Se t.ex. Bilaga 2. ",
+        "Pris 3. 5 kr (inkl. Moms). ",
+        "Klart!x Nej. nej. ",
+        "Ja",
+    ]
 
 
 def test_anonym_halsning_ar_linjar():
