@@ -22,7 +22,7 @@ openai-agents>=0.22.0,<0.23
 # Golvet är nu det vi FAKTISKT kört sviten på. Taket följer SDK:ns eget: 4.0
 # är där openai själv säger att saker går sönder.
 openai>=3.3,<4
-asyncpg>=0.29
+asyncpg>=0.32.0
 pydantic>=2.8
 pydantic-settings>=2.4
 python-dotenv>=1.0
