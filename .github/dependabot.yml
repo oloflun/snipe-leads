@@ -1,0 +1,99 @@
+# Automatiska beroendeuppdateringar (ISO 27001-genomgången 2026-11-18).
+#
+# Veckovis, måndag morgon, mot development (allt arbete går dit, aldrig till
+# main). Mindre uppdateringar (minor + patch) samlas i en pull request per
+# ekosystem och katalog; majoruppdateringar kommer var för sig, eftersom de är
+# beslut som någon ska fatta. Säkerhetsuppdateringar följer samma grupper.
+#
+# Repots bumpgrind (INV-SKILL-006, scripts/check_vendor_bump.py i verify.yml)
+# gäller bara agent-core/skills/**. Där finns inga manifest, så Dependabots
+# pull requests berörs inte av grinden. De går genom samma Verify som allt
+# annat (invarianter, pytest, docker-smoke, type-check) och mergas för hand.
+#
+# Inte med: marknad/video (fristående Remotion-projekt som aldrig byggs i
+# tjänsterna, se .dockerignore).
+version: 2
+
+updates:
+  # Webben (Next.js, Railway-tjänsten web) och agentsajten (support-webb/,
+  # Railway-tjänsten support).
+  - package-ecosystem: npm
+    directories:
+      - "/"
+      - "/support-webb"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Europe/Stockholm
+    target-branch: development
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: "chore(beroenden)"
+    groups:
+      npm-mindre:
+        applies-to: version-updates
+        update-types: [minor, patch]
+      npm-sakerhet:
+        applies-to: security-updates
+        update-types: [minor, patch]
+
+  # Backenden (snajp-support/requirements.txt) och driftskripten
+  # (scripts/requirements-scripts.txt). Taken i requirements.txt (t.ex.
+  # openai-agents <0.23) är medvetna: Dependabot föreslår inget utanför dem
+  # utan att ändra raden, och en sådan pull request är ett beslut.
+  - package-ecosystem: pip
+    directories:
+      - "/snajp-support"
+      - "/scripts"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Europe/Stockholm
+    target-branch: development
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: "chore(beroenden)"
+    groups:
+      pip-mindre:
+        applies-to: version-updates
+        update-types: [minor, patch]
+      pip-sakerhet:
+        applies-to: security-updates
+        update-types: [minor, patch]
+
+  # Actions som workflows använder (actions/checkout, setup-python …).
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Europe/Stockholm
+    target-branch: development
+    open-pull-requests-limit: 2
+    commit-message:
+      prefix: "chore(beroenden)"
+    groups:
+      actions:
+        patterns: ["*"]
+
+  # api-tjänstens image. Python-versionen (3.12) hänger ihop med CI
+  # (setup-python 3.12) och med docker-smoke i verify.yml, som hämtar just
+  # python:3.12-slim från en spegel. Ett byte av minorversion är därför ett
+  # beslut för alla tre ställena samtidigt och föreslås inte här.
+  - package-ecosystem: docker
+    directory: "/snajp-support"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Europe/Stockholm
+    target-branch: development
+    open-pull-requests-limit: 1
+    commit-message:
+      prefix: "chore(beroenden)"
+    ignore:
+      - dependency-name: "*python"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]

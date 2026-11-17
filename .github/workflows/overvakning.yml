@@ -1,0 +1,230 @@
+# Extern övervakning av produktionen (ISO 27001-genomgången 2026-11-18).
+#
+# Var 15:e minut hämtar workflown produktionens publika adresser och jämför
+# svaren med det friska läget:
+#
+#   * webbens startsida svarar HTTP 200;
+#   * backendens /health svarar 200 med status=ok, mode=live (inte
+#     simulation), storage=postgres (inte memory) och jobs=redis (inte memory),
+#     se health() i snajp-support/app/main.py;
+#   * backendens /health/ready svarar 200 (503 = lagringen svarar inte) med
+#     status=ok och degraded=false.
+#
+# Vid avvikelse skapas ett ärende med etiketten `driftlarm`. Finns redan ett
+# öppet sådant ärende kommenteras det i stället, och bara när avvikelsen är en
+# annan än förra gången eller sex timmar gått sedan senaste larmkommentaren
+# (ingen ärende- eller mejlflod). När kontrollen åter är frisk kommenteras och
+# stängs ärendet. GitHub mejlar repots ägare när ärendet skapas.
+#
+# Workflown läser bara publika adresser och behöver inga hemligheter: den
+# inbyggda GITHUB_TOKEN med issues: write räcker. Ärendets text bär bara
+# statuskoder och de kända fälten ovan (sanerade), aldrig svarskroppar.
+#
+# Provkörning utan att något är nere: starta manuellt med `simulera_fel`
+#   gh workflow run overvakning.yml -R oloflun/snipe-leads -f simulera_fel=true
+# Ett ärende skapas (eller kommenteras). Nästa vanliga körning, schemalagd
+# eller manuell utan flaggan, ser det friska läget och stänger ärendet.
+#
+# KÄNDA BEGRÄNSNINGAR
+#   * GitHubs schemalagda körningar är inte punktliga. De kan fördröjas många
+#     minuter vid hög last, och ibland hoppas en körning över helt. Det här är
+#     en grov kontroll, inte en övervakning med minutgaranti.
+#   * Schemalagda workflows i ett publikt repo stängs av automatiskt efter 60
+#     dagar utan aktivitet i repot. GitHub mejlar då ägaren; slå på igen under
+#     Actions › övervakning › Enable workflow.
+#   * Schemat körs från standardgrenen (development). Workflowfilen måste alltså
+#     finnas där för att schemat och den manuella starten ska fungera.
+#   * Larmet når den som bevakar repot via GitHubs e-post. Ingen sms- eller
+#     jourkedja finns.
+#   * Kontrollen ser bara det hälsokontrollen säger. Ett fel bakom inloggning,
+#     i en enskild kunds kanal eller i utskicken syns inte här.
+#
+# Minut 7, 22, 37 och 52 krockar inte med synk.yml (var tionde minut från :00).
+name: övervakning
+
+on:
+  schedule:
+    - cron: "7,22,37,52 * * * *"
+  workflow_dispatch:
+    inputs:
+      simulera_fel:
+        description: "Simulera ett fel, så att larmkedjan kan provas utan att något är nere"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: overvakning
+  cancel-in-progress: false
+
+env:
+  # Produktionens publika adresser (DEPLOY.md: www.snajp.se är produktionens
+  # domän mot Railway-tjänsten web, API-URL:en står i miljötabellen).
+  WEBB_URL: https://www.snajp.se/
+  API_HALSA_URL: https://api-production-d7695.up.railway.app/health
+  API_REDO_URL: https://api-production-d7695.up.railway.app/health/ready
+  ETIKETT: driftlarm
+
+jobs:
+  kontrollera:
+    name: Kontrollera produktionen
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Hämta adresserna och jämför med det friska läget
+        id: kontroll
+        shell: bash
+        env:
+          SIMULERA_FEL: ${{ github.event_name == 'workflow_dispatch' && inputs.simulera_fel || false }}
+        run: |
+          set -uo pipefail
+          AVVIKELSER="$RUNNER_TEMP/avvikelser.txt"
+          KROPP="$RUNNER_TEMP/svar.json"
+
+          # Fältvärden hamnar i ett publikt ärende: bara korta, enkla värden
+          # skrivs ut, allt annat ersätts.
+          sanera() {
+            if [[ -z "$1" ]]; then printf '(saknas)';
+            elif [[ "$1" =~ ^[A-Za-z0-9._-]{1,32}$ ]]; then printf '%s' "$1";
+            else printf '(oväntat värde)'; fi
+          }
+
+          # Skriver statuskoden på stdout och kroppen till $KROPP. Två omförsök
+          # vid nätverksfel och tillfälliga HTTP-fel (5xx, 429), 20 s per försök.
+          hamta() {
+            local kod
+            kod=$(curl -sS -L --max-redirs 3 -o "$KROPP" -w '%{http_code}' \
+              --connect-timeout 10 --max-time 20 \
+              --retry 2 --retry-delay 10 --retry-all-errors "$1" 2>/dev/null) || kod="000"
+            printf '%s' "$kod"
+          }
+
+          falt() {
+            jq -r --arg f "$1" 'if has($f) then (.[$f] | tostring) else "" end' "$KROPP" 2>/dev/null || true
+          }
+
+          kontrollera() {
+            : > "$AVVIKELSER"
+            local kod v
+
+            kod=$(hamta "$WEBB_URL")
+            [[ "$kod" == "200" ]] || echo "Webbens startsida $WEBB_URL svarade HTTP $kod (väntat 200)." >> "$AVVIKELSER"
+
+            kod=$(hamta "$API_HALSA_URL")
+            if [[ "$kod" != "200" ]]; then
+              echo "Hälsokontrollen $API_HALSA_URL svarade HTTP $kod (väntat 200)." >> "$AVVIKELSER"
+            elif ! jq -e 'type == "object"' "$KROPP" >/dev/null 2>&1; then
+              echo "Hälsokontrollen $API_HALSA_URL svarade inte med JSON." >> "$AVVIKELSER"
+            else
+              for par in status=ok mode=live storage=postgres jobs=redis; do
+                v=$(falt "${par%%=*}")
+                [[ "$v" == "${par#*=}" ]] || echo "Hälsokontrollen $API_HALSA_URL: fältet ${par%%=*} är $(sanera "$v") (väntat ${par#*=})." >> "$AVVIKELSER"
+              done
+            fi
+
+            kod=$(hamta "$API_REDO_URL")
+            if [[ "$kod" != "200" ]]; then
+              echo "Beredskapskontrollen $API_REDO_URL svarade HTTP $kod (väntat 200; 503 betyder att lagringen inte svarar)." >> "$AVVIKELSER"
+            elif ! jq -e 'type == "object"' "$KROPP" >/dev/null 2>&1; then
+              echo "Beredskapskontrollen $API_REDO_URL svarade inte med JSON." >> "$AVVIKELSER"
+            else
+              for par in status=ok degraded=false; do
+                v=$(falt "${par%%=*}")
+                [[ "$v" == "${par#*=}" ]] || echo "Beredskapskontrollen $API_REDO_URL: fältet ${par%%=*} är $(sanera "$v") (väntat ${par#*=})." >> "$AVVIKELSER"
+              done
+            fi
+
+            if [[ "$SIMULERA_FEL" == "true" ]]; then
+              echo "SIMULERAT FEL: manuell provkörning med simulera_fel. Inget är nere." >> "$AVVIKELSER"
+            fi
+            [[ ! -s "$AVVIKELSER" ]]
+          }
+
+          # Tre försök med en halv minut emellan, så att en omstart under en
+          # deploy inte larmar. Ett enda friskt försök räcker.
+          frisk=false
+          for forsok in 1 2 3; do
+            if kontrollera; then frisk=true; break; fi
+            echo "Försök $forsok avvek:"; cat "$AVVIKELSER"
+            [[ "$SIMULERA_FEL" == "true" ]] && break
+            [[ $forsok -lt 3 ]] && sleep 30
+          done
+          rm -f "$KROPP"
+
+          echo "frisk=$frisk" >> "$GITHUB_OUTPUT"
+          if [[ "$frisk" == "true" ]]; then echo "Produktionen är i det friska läget."; fi
+
+      - name: Larma (skapa eller kommentera ärendet)
+        if: steps.kontroll.outputs.frisk != 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          SIMULERA_FEL: ${{ github.event_name == 'workflow_dispatch' && inputs.simulera_fel || false }}
+        run: |
+          set -euo pipefail
+          AVVIKELSER="$RUNNER_TEMP/avvikelser.txt"
+          KORNING="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          RUTIN="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/blob/development/INCIDENT_RESPONSE.md"
+          NU="$(TZ=Europe/Stockholm date '+%Y-%m-%d %H:%M %Z') ($(date -u '+%Y-%m-%d %H:%M UTC'))"
+          SIGNATUR="$(sort "$AVVIKELSER" | sha256sum | cut -c1-12)"
+
+          if ! gh label list --limit 200 --json name --jq '.[].name' | grep -qx "$ETIKETT"; then
+            gh label create "$ETIKETT" --color B60205 \
+              --description "Övervakningen: produktionen avviker från det friska läget"
+          fi
+
+          {
+            echo "**Produktionen avviker från det friska läget.**"
+            echo
+            echo "- Upptäckt: $NU"
+            echo "- Körning: $KORNING"
+            echo
+            echo "Avvikelser:"
+            sed 's/^/- /' "$AVVIKELSER"
+            echo
+            echo "Friskt läge: webbens startsida svarar 200; \`/health\` svarar 200 med status=ok, mode=live, storage=postgres och jobs=redis; \`/health/ready\` svarar 200 med status=ok och degraded=false."
+            echo
+            echo "Följ incidentrutinen i [INCIDENT_RESPONSE.md]($RUTIN): skriv ned när avvikelsen upptäcktes och vad som syns, och låt Anton bedöma om den berör personuppgifter. Ärendet stängs av övervakningen när kontrollen åter är frisk."
+            echo
+            echo "<!-- driftlarm-signatur: $SIGNATUR -->"
+          } > "$RUNNER_TEMP/text.md"
+
+          nummer="$(gh issue list --label "$ETIKETT" --state open --limit 1 --json number --jq '.[0].number // empty')"
+          if [[ -z "$nummer" ]]; then
+            titel="Driftlarm: produktionen avviker från det friska läget"
+            [[ "$SIMULERA_FEL" == "true" ]] && titel="$titel (simulerat prov)"
+            gh issue create --title "$titel" --label "$ETIKETT" --body-file "$RUNNER_TEMP/text.md"
+            exit 0
+          fi
+
+          # Kommentera bara om avvikelsen ändrats eller sex timmar gått sedan
+          # senaste larmtexten i ärendet.
+          senaste="$(gh issue view "$nummer" --json body,createdAt,comments --jq '
+            [{body: .body, createdAt: .createdAt}] + [.comments[] | {body, createdAt}]
+            | map(select(.body | contains("driftlarm-signatur"))) | last')"
+          forra_signatur="$(jq -r '.body' <<<"$senaste" | grep -o 'driftlarm-signatur: [0-9a-f]*' | cut -d' ' -f2 || true)"
+          forra_tid="$(date -d "$(jq -r '.createdAt' <<<"$senaste")" +%s 2>/dev/null || echo 0)"
+          if [[ "$forra_signatur" != "$SIGNATUR" || $(( $(date +%s) - forra_tid )) -ge 21600 ]]; then
+            gh issue comment "$nummer" --body-file "$RUNNER_TEMP/text.md"
+          else
+            echo "Samma avvikelse som i ärende #$nummer för mindre än sex timmar sedan; ingen ny kommentar."
+          fi
+
+      - name: Stäng ett öppet larm när kontrollen åter är frisk
+        if: steps.kontroll.outputs.frisk == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          nummer="$(gh issue list --label "$ETIKETT" --state open --limit 1 --json number --jq '.[0].number // empty')"
+          if [[ -z "$nummer" ]]; then echo "Inget öppet driftlarm."; exit 0; fi
+          NU="$(TZ=Europe/Stockholm date '+%Y-%m-%d %H:%M %Z') ($(date -u '+%Y-%m-%d %H:%M UTC'))"
+          KORNING="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          gh issue close "$nummer" --reason completed \
+            --comment "Åter i det friska läget $NU. Körning: $KORNING. Anteckna orsak och åtgärd enligt INCIDENT_RESPONSE.md om händelsen behöver dokumenteras."

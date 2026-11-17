@@ -1,0 +1,8 @@
+# Snajp: report security issues privately. See the policy for what to include.
+# Snajp: rapportera säkerhetsbrister privat. Se policyn för vad rapporten bör innehålla.
+Contact: https://github.com/oloflun/snipe-leads/security/advisories/new
+Contact: mailto:kontakt@snajp.se
+Expires: 2027-11-17T23:00:00.000Z
+Preferred-Languages: sv, en
+Canonical: https://www.snajp.se/.well-known/security.txt
+Policy: https://github.com/oloflun/snipe-leads/blob/development/SECURITY.md
