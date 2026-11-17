@@ -354,7 +354,9 @@ _DU_TILL_NI = {"du": "ni", "dig": "er", "din": "er", "ditt": "ert", "dina": "era
 _DU_ORD = re.compile(r"\b(du|dig|din|ditt|dina)\b", re.IGNORECASE)
 _I_NAMN_FORE = re.compile(r"\b[A-ZÅÄÖÉ][\wåäöé&.-]*\s+$")
 _I_NAMN_EFTER = re.compile(r"\s+[A-ZÅÄÖÉ]")
-_ANONYM_HALSNING = re.compile(r"^\s*(hej|hejsan|god dag|hallå)\s*[,!]?\s*$", re.IGNORECASE)
+# "\s*(?:[,!]\s*)?" och inte "\s*[,!]?\s*": två blankstegsled i rad kunde dela
+# en lång blankstegsrad på kvadratiskt många sätt (kodskanningen 2026-11-17).
+_ANONYM_HALSNING = re.compile(r"^\s*(hej|hejsan|god dag|hallå)\s*(?:[,!]\s*)?$", re.IGNORECASE)
 _NAMNGIVEN_HALSNING = re.compile(r"^\s*(hej|hejsan|hallå)\s+([A-ZÅÄÖÉ][\wåäöé-]*(?:\s+[A-ZÅÄÖÉ][\wåäöé-]*)?)\s*[,!]\s*$", re.IGNORECASE)
 
 

@@ -39,7 +39,11 @@ _ABBREVIATIONS = frozenset(
 )
 
 # Meningsslut: skiljetecken + blanksteg + versal/siffra.
-_BOUNDARY_RE = re.compile(r"([.!?…]+)(\s+)(?=[A-ZÅÄÖ0-9])")
+# Lookbehinden: en gräns börjar bara där skiljetecknen börjar. Utan den
+# prövades varje position i en lång rad skiljetecken på nytt (kvadratisk tid,
+# kodskanningen 2026-11-17). Samma träffar som förut: den vänstraste träffen
+# började alltid vid radens första tecken.
+_BOUNDARY_RE = re.compile(r"(?<![.!?…])([.!?…]+)(\s+)(?=[A-ZÅÄÖ0-9])")
 
 
 class SegmentShapeError(RuntimeError):

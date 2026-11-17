@@ -113,7 +113,12 @@ def _pronomen(fore: str) -> tuple[int, str]:
         return len(pa.group(1)), ""
     ord_ = re.findall(r"[\wåäöÅÄÖ]+", fore[-40:])
     sista = ord_[-1].lower() if ord_ else ""
-    if not fore.strip() or re.search(r"[.!?:\n]\s*$", fore):
+    # Slutar texten med ett skiljetecken eller en radbrytning, följt av bara
+    # blanksteg? Avgjort med rstrip i stället för r"[.!?:\n]\s*$", som prövade
+    # varje radbrytning i en lång rad på nytt (kvadratisk tid, kodskanningen
+    # 2026-11-17). Samma utslag: rstrip tar samma blanksteg som \s.
+    utan_slut = fore.rstrip()
+    if not utan_slut or utan_slut[-1] in ".!?:" or "\n" in fore[len(utan_slut):]:
         return 0, "Ni"
     if sista == "som":
         return 0, "ert" if len(ord_) > 1 and ord_[-2].lower() in _ETT_ORD else "ni"

@@ -216,7 +216,10 @@ def putsa(text: str) -> tuple[str, list[Anmarkning]]:
     # Blankstegsstädning. Mellanslag före skiljetecken är aldrig korrekt
     # svenska — vanligaste resterna efter platshållarstädningen ("Hej ,").
     text = text.replace(" ", " ")
-    text = re.sub(r"[ \t]+([,.!?;:])", r"\1", text)
+    # Lookbehinden låter matchningen börja bara där blankstegen börjar. Utan
+    # den prövades varje position i en lång blankstegsrad på nytt, och tiden
+    # växte i kvadrat med radens längd (kodskanningen 2026-11-17).
+    text = re.sub(r"(?<![ \t])[ \t]+([,.!?;:])", r"\1", text)
     text = re.sub(r"[ \t]{2,}", " ", text)
     text = re.sub(r"\n{3,}", "\n\n", text)
     # "Hej ,"-fallet när namnet försvunnit: "Hej," är en korrekt hälsning.
