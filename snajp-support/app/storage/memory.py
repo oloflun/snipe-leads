@@ -172,6 +172,10 @@ class MemoryStorage:
         # Avregistreringar, tenant-skopade. Motsvarar public.suppressions med
         # tenant_id från migration 030.
         self.suppressions: dict[str, list[dict[str, Any]]] = {}
+        # Begränsning av behandling (GDPR art. 18), GLOBAL som
+        # public.behandlingsbegransningar (migration 124). Seedas i tester;
+        # i drift skrivs den bara av scripts/gdpr_radera.py.
+        self.behandlingsbegransningar: list[dict[str, Any]] = []
         # tenant -> adress -> token. Speglar ss_avregistreringslankar.
         self.avregistreringslankar: dict[str, dict[str, str]] = {}
         #: Demolänkarna (migration 116): token -> {tenant_id, thread_id, mal_url, handelser}.
@@ -975,6 +979,15 @@ class MemoryStorage:
         return {
             str(rad["email"]).strip().casefold()
             for rad in self.suppressions.get(tenant_id, [])
+        }
+
+    async def list_begransade(self, tenant_id: str) -> set[str]:
+        # Global, som behandlingsbegransningar (migration 124): tenant_id
+        # påverkar inte svaret.
+        return {
+            str(rad["email"]).strip().casefold()
+            for rad in self.behandlingsbegransningar
+            if rad.get("havd_at") is None
         }
 
     async def avregistreringstoken(self, tenant_id: str, *, email: str) -> str:

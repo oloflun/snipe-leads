@@ -1,0 +1,185 @@
+{
+  "beskrivning": "Vitlista för scripts/licenser.py --kontrollera (ISO 27001 A.5.32). Ett undantag gäller ett paket i ett ekosystem, en version ('1.2.3', '*' eller '>=1,<2') och exakt den licens som granskades. godkant_av tomt = obeslutad: grinden släpper igenom paketet men förteckningen visar att beslut saknas.",
+  "undantag": [
+    {
+      "ekosystem": "npm",
+      "paket": "@img/sharp-libvips-darwin-arm64",
+      "version": ">=1,<2",
+      "licens": "LGPL-3.0-or-later",
+      "motivering": "obeslutad, kräver Antons godkännande",
+      "godkant_av": "",
+      "datum": "2026-11-18",
+      "bedomning": "libvips (LGPL-3.0-or-later) levereras som förbyggt delat bibliotek som sharp länkar dynamiskt; Next.js använder sharp för bildoptimering. LGPL kräver då att biblioteket går att byta ut och att licenstexten följer med, inte att vår kod öppnas. Plattformspaketen är valfria: bara det som passar driftens plattform (Linux) installeras. Föreslås godkänd."
+    },
+    {
+      "ekosystem": "npm",
+      "paket": "@img/sharp-libvips-darwin-x64",
+      "version": ">=1,<2",
+      "licens": "LGPL-3.0-or-later",
+      "motivering": "obeslutad, kräver Antons godkännande",
+      "godkant_av": "",
+      "datum": "2026-11-18",
+      "bedomning": "libvips (LGPL-3.0-or-later) levereras som förbyggt delat bibliotek som sharp länkar dynamiskt; Next.js använder sharp för bildoptimering. LGPL kräver då att biblioteket går att byta ut och att licenstexten följer med, inte att vår kod öppnas. Plattformspaketen är valfria: bara det som passar driftens plattform (Linux) installeras. Föreslås godkänd."
+    },
+    {
+      "ekosystem": "npm",
+      "paket": "@img/sharp-libvips-linux-arm",
+      "version": ">=1,<2",
+      "licens": "LGPL-3.0-or-later",
+      "motivering": "obeslutad, kräver Antons godkännande",
+      "godkant_av": "",
+      "datum": "2026-11-18",
+      "bedomning": "libvips (LGPL-3.0-or-later) levereras som förbyggt delat bibliotek som sharp länkar dynamiskt; Next.js använder sharp för bildoptimering. LGPL kräver då att biblioteket går att byta ut och att licenstexten följer med, inte att vår kod öppnas. Plattformspaketen är valfria: bara det som passar driftens plattform (Linux) installeras. Föreslås godkänd."
+    },
+    {
+      "ekosystem": "npm",
+      "paket": "@img/sharp-libvips-linux-arm64",
+      "version": ">=1,<2",
+      "licens": "LGPL-3.0-or-later",
+      "motivering": "obeslutad, kräver Antons godkännande",
+      "godkant_av": "",
+      "datum": "2026-11-18",
+      "bedomning": "libvips (LGPL-3.0-or-later) levereras som förbyggt delat bibliotek som sharp länkar dynamiskt; Next.js använder sharp för bildoptimering. LGPL kräver då att biblioteket går att byta ut och att licenstexten följer med, inte att vår kod öppnas. Plattformspaketen är valfria: bara det som passar driftens plattform (Linux) installeras. Föreslås godkänd."
+    },
+    {
+      "ekosystem": "npm",
+      "paket": "@img/sharp-libvips-linux-ppc64",
+      "version": ">=1,<2",
+      "licens": "LGPL-3.0-or-later",
+      "motivering": "obeslutad, kräver Antons godkännande",
+      "godkant_av": "",
+      "datum": "2026-11-18",
+      "bedomning": "libvips (LGPL-3.0-or-later) levereras som förbyggt delat bibliotek som sharp länkar dynamiskt; Next.js använder sharp för bildoptimering. LGPL kräver då att biblioteket går att byta ut och att licenstexten följer med, inte att vår kod öppnas. Plattformspaketen är valfria: bara det som passar driftens plattform (Linux) installeras. Föreslås godkänd."
+    },
+    {
+      "ekosystem": "npm",
+      "paket": "@img/sharp-libvips-linux-riscv64",
+      "version": ">=1,<2",
+      "licens": "LGPL-3.0-or-later",
+      "motivering": "obeslutad, kräver Antons godkännande",
+      "godkant_av": "",
+      "datum": "2026-11-18",
+      "bedomning": "libvips (LGPL-3.0-or-later) levereras som förbyggt delat bibliotek som sharp länkar dynamiskt; Next.js använder sharp för bildoptimering. LGPL kräver då att biblioteket går att byta ut och att licenstexten följer med, inte att vår kod öppnas. Plattformspaketen är valfria: bara det som passar driftens plattform (Linux) installeras. Föreslås godkänd."
+    },
+    {
+      "ekosystem": "npm",
+      "paket": "@img/sharp-libvips-linux-s390x",
+      "version": ">=1,<2",
+      "licens": "LGPL-3.0-or-later",
+      "motivering": "obeslutad, kräver Antons godkännande",
+      "godkant_av": "",
+      "datum": "2026-11-18",
+      "bedomning": "libvips (LGPL-3.0-or-later) levereras som förbyggt delat bibliotek som sharp länkar dynamiskt; Next.js använder sharp för bildoptimering. LGPL kräver då att biblioteket går att byta ut och att licenstexten följer med, inte att vår kod öppnas. Plattformspaketen är valfria: bara det som passar driftens plattform (Linux) installeras. Föreslås godkänd."
+    },
+    {
+      "ekosystem": "npm",
+      "paket": "@img/sharp-libvips-linux-x64",
+      "version": ">=1,<2",
+      "licens": "LGPL-3.0-or-later",
+      "motivering": "obeslutad, kräver Antons godkännande",
+      "godkant_av": "",
+      "datum": "2026-11-18",
+      "bedomning": "libvips (LGPL-3.0-or-later) levereras som förbyggt delat bibliotek som sharp länkar dynamiskt; Next.js använder sharp för bildoptimering. LGPL kräver då att biblioteket går att byta ut och att licenstexten följer med, inte att vår kod öppnas. Plattformspaketen är valfria: bara det som passar driftens plattform (Linux) installeras. Föreslås godkänd."
+    },
+    {
+      "ekosystem": "npm",
+      "paket": "@img/sharp-libvips-linuxmusl-arm64",
+      "version": ">=1,<2",
+      "licens": "LGPL-3.0-or-later",
+      "motivering": "obeslutad, kräver Antons godkännande",
+      "godkant_av": "",
+      "datum": "2026-11-18",
+      "bedomning": "libvips (LGPL-3.0-or-later) levereras som förbyggt delat bibliotek som sharp länkar dynamiskt; Next.js använder sharp för bildoptimering. LGPL kräver då att biblioteket går att byta ut och att licenstexten följer med, inte att vår kod öppnas. Plattformspaketen är valfria: bara det som passar driftens plattform (Linux) installeras. Föreslås godkänd."
+    },
+    {
+      "ekosystem": "npm",
+      "paket": "@img/sharp-libvips-linuxmusl-x64",
+      "version": ">=1,<2",
+      "licens": "LGPL-3.0-or-later",
+      "motivering": "obeslutad, kräver Antons godkännande",
+      "godkant_av": "",
+      "datum": "2026-11-18",
+      "bedomning": "libvips (LGPL-3.0-or-later) levereras som förbyggt delat bibliotek som sharp länkar dynamiskt; Next.js använder sharp för bildoptimering. LGPL kräver då att biblioteket går att byta ut och att licenstexten följer med, inte att vår kod öppnas. Plattformspaketen är valfria: bara det som passar driftens plattform (Linux) installeras. Föreslås godkänd."
+    },
+    {
+      "ekosystem": "npm",
+      "paket": "@img/sharp-wasm32",
+      "version": ">=0.35,<1",
+      "licens": "Apache-2.0 AND LGPL-3.0-or-later AND MIT",
+      "motivering": "obeslutad, kräver Antons godkännande",
+      "godkant_av": "",
+      "datum": "2026-11-18",
+      "bedomning": "Samma libvips som ovan, inbyggt i ett valfritt plattformspaket (Windows respektive WebAssembly) som inte installeras i driften. Föreslås godkänd."
+    },
+    {
+      "ekosystem": "npm",
+      "paket": "@img/sharp-win32-arm64",
+      "version": ">=0.35,<1",
+      "licens": "Apache-2.0 AND LGPL-3.0-or-later",
+      "motivering": "obeslutad, kräver Antons godkännande",
+      "godkant_av": "",
+      "datum": "2026-11-18",
+      "bedomning": "Samma libvips som ovan, inbyggt i ett valfritt plattformspaket (Windows respektive WebAssembly) som inte installeras i driften. Föreslås godkänd."
+    },
+    {
+      "ekosystem": "npm",
+      "paket": "@img/sharp-win32-ia32",
+      "version": ">=0.35,<1",
+      "licens": "Apache-2.0 AND LGPL-3.0-or-later",
+      "motivering": "obeslutad, kräver Antons godkännande",
+      "godkant_av": "",
+      "datum": "2026-11-18",
+      "bedomning": "Samma libvips som ovan, inbyggt i ett valfritt plattformspaket (Windows respektive WebAssembly) som inte installeras i driften. Föreslås godkänd."
+    },
+    {
+      "ekosystem": "npm",
+      "paket": "@img/sharp-win32-x64",
+      "version": ">=0.35,<1",
+      "licens": "Apache-2.0 AND LGPL-3.0-or-later",
+      "motivering": "obeslutad, kräver Antons godkännande",
+      "godkant_av": "",
+      "datum": "2026-11-18",
+      "bedomning": "Samma libvips som ovan, inbyggt i ett valfritt plattformspaket (Windows respektive WebAssembly) som inte installeras i driften. Föreslås godkänd."
+    },
+    {
+      "ekosystem": "npm",
+      "paket": "gsap",
+      "version": ">=3,<4",
+      "licens": "Standard 'no charge' license: https://gsap.com/standard-license.",
+      "motivering": "obeslutad, kräver Antons godkännande",
+      "godkant_av": "",
+      "datum": "2026-11-18",
+      "bedomning": "Ingen öppen källkodslicens utan GreenSocks egna avgiftsfria standardlicens (proprietär). Villkoren behöver läsas mot hur Snajp använder biblioteket (animationer på webbplatsen) innan beslut."
+    },
+    {
+      "ekosystem": "pip",
+      "paket": "certifi",
+      "version": ">=2024",
+      "licens": "MPL-2.0",
+      "motivering": "obeslutad, kräver Antons godkännande",
+      "godkant_av": "",
+      "datum": "2026-11-18",
+      "bedomning": "MPL-2.0 är filbaserad copyleft: bara ändringar i certifis egna filer måste delas. Vi använder paketet oförändrat (CA-certifikaten via httpx/requests). Föreslås godkänd."
+    },
+    {
+      "ekosystem": "pip",
+      "paket": "tqdm",
+      "version": ">=4,<5",
+      "licens": "MPL-2.0 AND MIT",
+      "motivering": "obeslutad, kräver Antons godkännande",
+      "godkant_av": "",
+      "datum": "2026-11-18",
+      "bedomning": "Transitivt beroende (förloppsindikator), används oförändrat. MPL-2.0 är filbaserad copyleft och påverkar inte vår kod. Föreslås godkänd."
+    },
+    {
+      "ekosystem": "pip",
+      "paket": "psycopg2-binary",
+      "version": ">=2.9,<3",
+      "licens": "LGPL",
+      "motivering": "obeslutad, kräver Antons godkännande",
+      "godkant_av": "",
+      "datum": "2026-11-18",
+      "bedomning": "LGPL-3.0 med undantag (OpenSSL), importeras som oförändrat bibliotek. Används bara av driftskripten i scripts/ och CI:s databasjobb, aldrig i den deployade containern. Föreslås godkänd."
+    }
+  ]
+}

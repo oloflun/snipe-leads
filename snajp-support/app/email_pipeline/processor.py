@@ -536,6 +536,30 @@ async def process_email(
         )
         return {"action": "att_hantera"}
 
+    # Begränsad behandling (GDPR art. 18, migration 124): mejlet är sparat,
+    # men varken klassning, Jev, triage eller AI-utkast får röra det. Det går
+    # till Att hantera, där en människa läser det. Går listan inte att läsa
+    # gäller samma sak: hellre ett mejl för mycket hos en människa än ett
+    # behandlat mot personens begäran.
+    fran = str(email.get("from_email") or "").strip().casefold()
+    if fran:
+        try:
+            begransad = fran in await storage.list_begransade(tenant_id)
+            okand = False
+        except Exception:  # noqa: BLE001
+            logger.exception("Kunde inte läsa behandlingsbegränsningarna för %s", tenant_id)
+            begransad, okand = True, True
+        if begransad:
+            await storage.update_email(tenant_id, email_id, status="att_hantera")
+            await storage.log_decision(
+                tenant_id, email_id=email_id, event="begransad_behandling",
+                detail={"note": "Begränsningarna kunde inte läsas — till Att hantera, ingen AI."
+                        if okand else
+                        "Avsändaren har begärt begränsning av behandlingen (art. 18) — "
+                        "till Att hantera, ingen AI."},
+            )
+            return {"action": "att_hantera"}
+
     # Klassningen (migration 084, plan del D): support, lead eller ej
     # relaterat, FÖRE avtalsgrinden och triagen. Kodregler och Jev kostar
     # ingen modellbudget; bara support går vidare till LLM-triagen.

@@ -767,6 +767,13 @@ class Storage(Protocol):
         """Skrivs av avregistreringslänken. Ska gälla omedelbart."""
         ...
 
+    async def list_begransade(self, tenant_id: str) -> set[str]:
+        """Adresser med en aktiv begränsning av behandlingen (GDPR art. 18,
+        migration 124). Gäller ALLA kunder: begäran gäller personen.
+        `tenant_id` skopar bara anslutningen. Skrivs aldrig härifrån, bara av
+        scripts/gdpr_radera.py --begransa."""
+        ...
+
     async def avregistreringstoken(self, tenant_id: str, *, email: str) -> str:
         """Den ogenomskinliga token som gör avregistreringslänken klickbar.
 

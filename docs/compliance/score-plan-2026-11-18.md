@@ -31,7 +31,7 @@ den är gjord i den här omgången (PR mot `development`, se sist).
 | Ramverk | Uppfyllt | Delvis | Saknas | Ej tillämpligt | Okänt |
 |---|---|---|---|---|---|
 | GDPR (19) | 0 → **0** | 17 → **17** | 1 → **1** | 1 → 1 | – |
-| ISO 27001 (119) | 0 → **3** | 74 → **72** | 25 → **24** | 8 → 8 | 12 → 12 |
+| ISO 27001 (119) | 0 → **3** | 74 → **72** → **73** | 25 → **24** → **23** | 8 → 8 | 12 → 12 |
 | ISO 42001 (70) | 1 → **5** | 53 → **51** | 16 → **14** | 0 → 0 | 0 → 0 |
 
 Flyttade krav:
@@ -80,13 +80,13 @@ A.8.10), och KVITTO_MODEL gör att kvittostegen kan stanna på en prövad modell
 | DS-3 | saknas | b | Utbildning hållen och kvitterad | Material finns | – |
 | DS-4 | delvis | c | Juristgranskning, kundens beslut om DPIA | – | – |
 | DS-5 | delvis | b | Incidentposterna bedömda, övning hållen | Övervakningens schema bör utredas | Fyndet dokumenterat |
-| LBT-1 | delvis | b | Lagringstider beslutade | Åtkomstkolumn per datamängd | – |
+| LBT-1 | delvis | b | Lagringstider beslutade | Åtkomstkolumn per datamängd | **Ja**: `datamangder.md` (alla 97 tabeller, roller, RLS, gallring i dag, föreslagen lagringstid) |
 | LBT-2 | delvis | c | Juristgranskning av intresseavvägningen | – | – |
 | LBT-3 | delvis | b, c | Merge av PR 72, gallring påslagen, org.nr, jurist | – | – |
 | PR-1 | delvis | b | Rutinen signerad, loggen upplagd, `integritet@` | Provkörning av skriptet | **Ja**: provkört mot hela schemat i CI |
 | PR-2 | delvis | b | Rutinen signerad | – | – |
 | PR-3 | delvis | b | Rutinen, radering av gamla stacken | Provkörning av `--radera` | **Ja**: i CI, med kontroll av spärrlistan och grannraden |
-| PR-4 | delvis | b | Merge av PR 72, spärrmarkering, rutin | Teknisk spärrmarkering går att bygga, men når inte drift utan merge | – |
+| PR-4 | delvis | b | Merge av PR 72 och denna, rutin | Teknisk spärrmarkering går att bygga, men når inte drift utan merge | **Ja**: migration 124, `gdpr_radera.py --begransa/--hav-begransning`, spärr i sändningen och inkorgen, provkört i CI |
 | PR-5 | delvis | b | Merge av PR 72, rutin | Provkörning av `--export` | **Ja**: i CI |
 | PR-6 | delvis | b | Rutin för invändning mot annan behandling | – | – |
 | PR-7 | delvis | b, c | Merge av PR 72, jurist | – | – |
@@ -98,7 +98,7 @@ A.8.10), och KVITTO_MODEL gör att kvittostegen kan stanna på en prövad modell
 | Krav | Status | Klass | Vad som krävs | Agentens del | Gjort |
 |---|---|---|---|---|---|
 | 4.1 | delvis | b | Beslutad kontextbeskrivning | Utkast i P07 | – |
-| 4.2 | delvis | b | Intressentlista beslutad | Kan sammanställas | – |
+| 4.2 | delvis | b | Intressentlista beslutad | Kan sammanställas | **Ja**: utkast `intressenter.md` |
 | 4.3 | saknas | b | Beslut e | – | – |
 | 4.4 | saknas | b | Beslutat ledningssystem | – | – |
 | 5.1 | delvis | b | Skrivet åtagande | – | – |
@@ -132,8 +132,8 @@ A.8.10), och KVITTO_MODEL gör att kvittostegen kan stanna på en prövad modell
 | A.5.2 | delvis | b | Beslut a | – | – |
 | A.5.3 | delvis | b | Kompenserande kontroll för två personer; grenskydd kräver betald plan | – | Fynd: grenskyddet på main gäller inte längre |
 | A.5.4 | saknas | b | Godkänd policy | – | – |
-| A.5.5 | delvis | b | Kontaktlista IMY, CERT-SE, polis | Listan går att skriva, men vem som ringer är ett beslut | – |
-| A.5.6 | saknas | b | Prenumeration på CERT-SE m.fl. med mottagare | Ett bevakningsflöde går att bygga; vem som läser är ägarens | – |
+| A.5.5 | delvis | b | Kontaktlista IMY, CERT-SE, polis | Listan går att skriva, men vem som ringer är ett beslut | **Ja**: utkast `myndighetskontakter.md`, "vem kontaktar" tom |
+| A.5.6 | saknas → **delvis** | b | Prenumeration på CERT-SE m.fl. med mottagare | Ett bevakningsflöde går att bygga; vem som läser är ägarens | **Ja**: `sakerhetsbevakning.yml` (CERT-SE och GitHubs advisories för stacken, ärende vid träff, reserv och dödmanskontroll). Mottagare obeslutad |
 | A.5.7 | delvis | b | Rutin för att läsa larmen | – | Dependabot-läget uppdaterat (2 höga, ingen rättning finns) |
 | **A.5.8** | delvis | **a** | Fast säkerhetsfråga i varje arbete | PR-mall och CI-grind | **Uppfyllt** (INV-PROC-001) |
 | A.5.9 | delvis | b | Datorer, telefoner och konton med ägare | Driftens tillgångar | **Ja**: `drift-och-tillgangar.md` §1–2 |
@@ -159,12 +159,12 @@ A.8.10), och KVITTO_MODEL gör att kvittostegen kan stanna på en prövad modell
 | A.5.29 | saknas | b | Kontinuitetsplan | – | – |
 | A.5.30 | saknas | b | Railway Pro, RTO/RPO | – | – |
 | A.5.31 | delvis | b, c | Godkänd G01, signerat PUB | – | – |
-| A.5.32 | delvis | b | Avtal med allabolag och hitta | Licensförteckning över beroenden | – |
+| A.5.32 | delvis | b | Avtal med allabolag och hitta; beslut om de obeslutade licenserna | Licensförteckning över beroenden | **Ja**: `scripts/licenser.py`, `licenser.md`, CI-jobbet `licenser` med vitlista (18 poster obeslutade) |
 | A.5.33 | delvis | b | Lagringstider för egna register | – | – |
 | A.5.34 | delvis | b | Som GDPR | – | – |
 | A.5.35 | saknas | c | Oberoende granskning | – | – |
 | A.5.36 | saknas | b | Godkända policyer | – | – |
-| A.5.37 | delvis | b | Rutin för säkerhetskopiering (kräver kopior) | `AUTH.md` inaktuell | – |
+| A.5.37 | delvis | b | Rutin för säkerhetskopiering (kräver kopior) | `AUTH.md` inaktuell | **Ja**: `AUTH.md` skriven om mot koden (Auth.js, nycklar, roller) |
 
 ### A.6 Personal
 
@@ -198,7 +198,7 @@ A.8.10), och KVITTO_MODEL gör att kvittostegen kan stanna på en prövad modell
 | A.8.6 | delvis | b | Kapacitetsövervakning, repliker | – | – |
 | A.8.7 | okänt | b | Antivirus på datorerna | – | – |
 | A.8.8 | delvis | b | Patchtider, kodskanning (kräver betald plan) | – | Läget uppdaterat |
-| A.8.9 | delvis | b | Logg över Railway-ändringar | Baslinjen i bevis | – |
+| A.8.9 | delvis | b | Logg över Railway-ändringar; rutin för när baslinjen körs | Baslinjen i bevis | **Ja**: `scripts/railway_baslinje.py` (`--skriv`, `--jamfor`), `railway-baslinje.json` |
 | A.8.10 | delvis | b | Gallring påslagen | Raderingen provkörd | **Ja** (CI) |
 | A.8.11 | delvis | b | Merge av PR 72 | – | – |
 | A.8.12 | delvis | b | Synkflytten, mönster för lösenord | – | Läget uppdaterat |
@@ -207,7 +207,7 @@ A.8.10), och KVITTO_MODEL gör att kvittostegen kan stanna på en prövad modell
 | A.8.15 | delvis | b | Gallring av `agent_runs`; åtkomstloggen i `main` (merge) | Loggningen beskriven med belägg; åtkomstlogg för admin (PR 85); kvittotexten ur `agent_runs` (PR 83) | **Ja** (`drift-och-tillgangar.md` §5) |
 | A.8.16 | delvis | b | Internlarmets variabler; extern pingtjänst | Orsaken utredd, reserv och dödmanskontroll | **Ja** (PR 84) |
 | A.8.17 | okänt | b | Tidssynk på datorerna | – | – |
-| A.8.18 | delvis | b | Vem som har Railway-token och psql | Verktygslistan | – |
+| A.8.18 | delvis | b | Vem som har Railway-token och psql; beslutad behörighet | Verktygslistan | **Ja**: `privilegierade-verktyg.md` (vägar, skript per grupp, förslag) |
 | A.8.19 | delvis | b | Regler för programvara på datorerna | – | – |
 | A.8.20 | delvis | b | Stäng Postgres publika proxy (Railway) | – | – |
 | A.8.21 | delvis | b | HSTS i drift kräver merge till main | HSTS-raden kan skrivas | – (inte gjort: når inte drift utan merge) |
@@ -230,7 +230,7 @@ A.8.10), och KVITTO_MODEL gör att kvittostegen kan stanna på en prövad modell
 | Krav | Status | Klass | Vad som krävs | Agentens del | Gjort |
 |---|---|---|---|---|---|
 | 4.1 | delvis | b | Beslutad AI-kontext | Systembladen | Ja |
-| 4.2 | delvis | b | Intressentregister | – | – |
+| 4.2 | delvis | b | Intressentregister beslutat | Sammanställning | **Ja**: utkast `intressenter.md` (AI-kraven ingår) |
 | 4.3 | saknas | b | Beslut e | – | – |
 | 4.4 | saknas | b | Beslutat AI-ledningssystem | – | – |
 | 5.1 | delvis | b | Åtagande | – | – |
@@ -264,7 +264,7 @@ A.8.10), och KVITTO_MODEL gör att kvittostegen kan stanna på en prövad modell
 | A.3.2 | delvis | b | Roller | – | – |
 | A.3.3 | saknas | b | Skydd för den som anmäler (P28) | Anmälningsväg | **Delvis** (`ai-oro.yml`) |
 | **A.4.2** | delvis | **a** | Förteckning per system och livscykelsteg | Systembladen | **Uppfyllt** |
-| A.4.3 | delvis | b | Lagringstider per datamängd | Data in och ut per system | Ja |
+| A.4.3 | delvis | b | Lagringstider per datamängd | Data in och ut per system; förslag per tabell | Ja (`datamangder.md`) |
 | A.4.4 | delvis | b | Godkännande per modell, ersättare för 2.5 | Version och plats per steg | Ja |
 | **A.4.5** | delvis | **a** | Beräkningsresurser dokumenterade | Systembladen, tillgångsförteckningen | **Uppfyllt** |
 | A.4.6 | saknas | b | Systemägare utsedda | – | – |
@@ -328,3 +328,27 @@ beviset för A.8.29 och för provkörningen av rättighetsskriptet.
 internlarmets variabler och översyn av åtkomsten. Gapen är mindre och skrivna så i matriserna
 ("ändr. 11-18d"). A.8.15 blir uppfyllt när release-PR:en med migration 123 är mergad och
 `agent_runs` har en beslutad gallring.
+
+## Agentens delar av ägarens krav (2026-11-18, sen kväll)
+
+Allt som återstår kräver Anton. Här är de delar agenten kunde bygga så att det som återstår
+är ett beslut eller en signatur. Grenen `compliance/agentdelar-2026-11-18`, en PR mot `development`.
+
+| Krav | Byggt | Belägg | Kvar för Anton |
+|---|---|---|---|
+| GDPR LBT-1 (och ISO 42001 A.4.3, ISO 27001 A.5.33) | Förteckning över alla 97 tabeller i 12 datamängder: innehåll, roller och RLS ur migrationerna, vem som ser vad, vad som gallras i dag, föreslagen lagringstid | `datamangder.md` | Besluta lagringstiderna; fynden om breda rättigheter (`snajp_web`, `auth.users`) |
+| GDPR PR-4 | Spärrmarkering för begränsning av behandling: tabell `behandlingsbegransningar` (migration 124, additiv, approllerna läser men skriver inte), `gdpr_radera.py --begransa SKÄL` och `--hav-begransning SKÄL` (bekräftelse), sändningsspärren blockerar utskick till adressen hos alla kunder, inkommande mejl går till Att hantera utan AI. Spärren stoppar också när listan inte går att läsa | `tests/test_behandlingsbegransning.py`; `tests/db/test_gdpr_radera_db.py` i jobbet `databas`; `tests/test_gdpr_radera.py` körs nu i CI | Signera rutinen; merga releasen till `main`. Research och utkast som redan finns stoppas inte av koden: skriptet uppmanar handläggaren att arkivera berörda leads |
+| ISO 27001 4.2, ISO 42001 4.2 | Intressenter, deras krav, hur Snajp möter dem och vad som är öppet | `intressenter.md` (utkast) | Besluta listan och översynen |
+| A.5.5 | Kontaktlista: IMY, CERT-SE, polisen, kunden, leverantörernas kanaler | `myndighetskontakter.md` (utkast) | Vem kontaktar; kontrollera uppgifterna mot källan; leverantörernas säkerhetskontakter |
+| A.5.6 | Schemalagd bevakning av CERT-SE och GitHubs advisories för paketen i stacken, ärende med etiketten `sakerhetsbevakning` vid träff, dedup, två scheman, reserv efter Verify och synk, dödmanskontroll (`sakerhetsbevakning-tyst`) | `.github/workflows/sakerhetsbevakning.yml`, `.github/sakerhetsbevakning.json`, `scripts/sakerhetsbevakning.py`, `tests/test_sakerhetsbevakning.py` | Vem läser ärendena och inom vilken tid |
+| A.5.32 | Licensförteckning över npm (web, support-webb) och pip (backend, skript), CI-jobb som fäller på copyleft och okända licenser utanför vitlistan | `scripts/licenser.py`, `licenser.md`, `licenser-vitlista.json`, jobbet `licenser` i `verify.yml` | Godkänna eller avvisa de 18 obeslutade posterna (sharp/libvips LGPL, gsap egen licens, certifi och tqdm MPL, psycopg2-binary LGPL); avtal med allabolag och hitta |
+| A.5.37 | `AUTH.md` beskriver nu det som körs: Auth.js med scrypt och JWT, återställning via token, roller, backendens nycklar | `AUTH.md` | Rutinen för säkerhetskopiering (kräver kopior) |
+| A.8.9 | Konfigurationsbaslinje för Railway: per miljö och tjänst källa, gren, bygge, start, region, repliker, hälsokontroll, domäner, TCP-proxy, volymer och variabelnamn; värden bara för en vitlista av ofarliga namn. `--jamfor` visar avvikelser | `scripts/railway_baslinje.py`, `railway-baslinje.json`, `tests/test_railway_baslinje.py` | Rutin: `--jamfor` före och `--skriv` efter varje ändring. Ändrade hemligheter syns inte (inga värden sparas) |
+| A.8.18 | Förteckning över åtkomstvägarna (ägarrollen, Railway-API, GitHub, master-nyckeln m.fl.) och skripten per grupp, med förslag om vem som får köra vad | `privilegierade-verktyg.md` | Besluta förslaget; belägga medlemmarna i Railway och Google Cloud |
+
+**Statusändring:** en. ISO 27001 **A.5.6 saknas → delvis**: bevakningen körs från
+standardgrenen och är alltså igång när PR:en är mergad, men ingen är utsedd att läsa ärendena.
+Inget krav blir uppfyllt: varje rad ovan väntar på ett beslut eller en merge till `main`.
+
+**Poäng före och efter:** GDPR 0/17/1 → 0/17/1. ISO 27001 3/72/24 → **3/73/23**.
+ISO 42001 5/51/14 → 5/51/14 (uppfyllt/delvis/saknas).
