@@ -243,3 +243,91 @@ async def test_inbaddningsanropet_gar_till_sin_region(miljo, monkeypatch):
 @pytest.fixture
 def anyio_backend():
     return "asyncio"
+
+
+# -- Utkastets egen region (VERTEX_UTKAST_REGION) ----------------------------------
+
+
+class _Stopp(Exception):
+    pass
+
+
+class _Klient:
+    """Fejkklient som minns vilken region den hämtades för och vilken modell
+    som anropades, och sedan stoppar steget."""
+
+    def __init__(self, region, logg):
+        self.region, self.logg = region, logg
+        self.chat = self
+        self.completions = self
+
+    async def create(self, **kwargs):
+        self.logg.append(("anrop", self.region, kwargs.get("model")))
+        raise _Stopp()
+
+
+async def _kor_steg(model_setting, monkeypatch):
+    from app.agent import step_runner
+    from app.agentcore.packs import RunLedger
+
+    logg: list = []
+
+    def hamta(region=None):
+        return _Klient(region, logg)
+
+    monkeypatch.setattr(step_runner, "get_llm_client", hamta)
+
+    class _Steg:
+        skill = "test:steg"
+        requires: tuple[str, ...] = ()
+        overlay_names: tuple[str, ...] = ()
+        thinking = None
+        temperature = None
+
+        def render(self) -> str:
+            return "Testskillens text."
+
+    steg = _Steg()
+    steg.model_setting = model_setting
+    with pytest.raises(_Stopp):
+        await step_runner.run_step(steg, RunLedger(), step_runner.RunTrace(), task="testa", case_context="test")
+    return [r for r in logg if r[0] == "anrop"]
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("falt", ["leads_draft_model", "leads_humanizer_model"])
+async def test_utkaststegen_gar_till_utkastregionen(miljo, monkeypatch, falt):
+    """Text i `eu`, utkast och humanizer kvar på gemini-2.5-flash i europe-west1."""
+    miljo(LLM_PROVIDER="gemini", MODEL="gemini-3.5-flash-lite", ENVIRONMENT="lokal",
+          GOOGLE_SERVICE_ACCOUNT_JSON=_SA_JSON, GOOGLE_CLOUD_REGION="eu", VERTEX_RESERVREGIONER="",
+          LEADS_DRAFT_MODEL="gemini-2.5-flash", LEADS_HUMANIZER_MODEL="gemini-2.5-flash",
+          VERTEX_UTKAST_REGION="europe-west1")
+    anrop = await _kor_steg(falt, monkeypatch)
+    assert anrop and all(r[1] == "europe-west1" for r in anrop)
+    assert all(r[2].endswith("gemini-2.5-flash") for r in anrop)
+
+
+@pytest.mark.anyio
+async def test_ovriga_steg_stannar_i_huvudregionen(miljo, monkeypatch):
+    miljo(LLM_PROVIDER="gemini", MODEL="gemini-3.5-flash-lite", ENVIRONMENT="lokal",
+          GOOGLE_SERVICE_ACCOUNT_JSON=_SA_JSON, GOOGLE_CLOUD_REGION="eu", VERTEX_RESERVREGIONER="",
+          VERTEX_UTKAST_REGION="europe-west1")
+    anrop = await _kor_steg(None, monkeypatch)
+    assert anrop and all(r[1] is None for r in anrop)
+
+
+@pytest.mark.anyio
+async def test_utan_utkastregion_galler_huvudregionen(miljo, monkeypatch):
+    """Osatt VERTEX_UTKAST_REGION är beteendet före ändringen."""
+    miljo(LLM_PROVIDER="gemini", MODEL="gemini-3.5-flash-lite", ENVIRONMENT="lokal",
+          GOOGLE_SERVICE_ACCOUNT_JSON=_SA_JSON, GOOGLE_CLOUD_REGION="eu", VERTEX_RESERVREGIONER="",
+          VERTEX_UTKAST_REGION="")
+    assert get_settings().utkastregion() == "eu"
+    anrop = await _kor_steg("leads_draft_model", monkeypatch)
+    assert anrop and all(r[1] is None for r in anrop)
+
+
+def test_utkastregionen_ar_osatt_som_standard():
+    s = Settings(_env_file=None, llm_provider="gemini")
+    assert s.vertex_utkast_region == ""
+    assert s.utkastregion() == "europe-west1"

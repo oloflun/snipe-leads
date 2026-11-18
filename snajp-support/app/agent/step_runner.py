@@ -142,6 +142,9 @@ SYSTEM_FOG = "\n\n"
 #: visar samma tal som anropet får.
 STANDARD_TEMPERATUR = 0.3
 
+#: Stegen (via `model_setting`) som går till VERTEX_UTKAST_REGION när den är satt.
+UTKASTSTEGENS_FALT = frozenset({"leads_draft_model", "leads_humanizer_model"})
+
 
 def bygg_systemprompt(
     step: PlaybookStep, lager: Instruktionslager, roll: str
@@ -494,6 +497,18 @@ async def run_step(
     if step.model_setting:
         effective_model = getattr(settings, step.model_setting, "") or settings.model
 
+    # Utkastets och humanizerns egen Vertex-region (VERTEX_UTKAST_REGION,
+    # 2026-11-18), så att de kan ligga kvar på en modell som saknas i
+    # huvudregionen. Osatt = huvudregionen, som förut.
+    utkastregion: str | None = None
+    if (
+        step.model_setting in UTKASTSTEGENS_FALT
+        and _uses_vertex(settings)
+        and (settings.vertex_utkast_region or "").strip()
+    ):
+        utkastregion = settings.utkastregion()
+        client = get_llm_client(region=utkastregion)
+
     if settings.llm_provider == "deepseek":
         extra = thinking_kwargs(effective_mode)
     elif settings.llm_provider == "gemini":
@@ -598,7 +613,9 @@ async def run_step(
                 # en full region går inte över av att vänta, en annan har
                 # oftast plats. Kort paus när regionen byts.
                 if talamod_429 and _uses_vertex(settings):
-                    regioner = vertex_regioner(settings)
+                    # Ett utkaststeg med egen region byter inte: modellen
+                    # finns kanske inte i reservregionerna (2.5 saknas i `eu`).
+                    regioner = [utkastregion] if utkastregion else vertex_regioner(settings)
                     if len(regioner) > 1:
                         client = get_llm_client(region=regioner[vanta_forsok % len(regioner)])
                         if vanta_forsok < len(regioner):
