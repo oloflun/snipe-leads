@@ -1,3 +1,5 @@
+import type { Localized } from "@/lib/i18n";
+
 /**
  * Teamet på /vart-team.
  *
@@ -9,13 +11,14 @@
  * på just den sida som ska svara på frågan "vem köper vi av", är sämre än en
  * tom ruta. Uppgifterna nedan är därför inhämtade och inte uträknade.
  *
- * ## Titeln är "Grundare" på båda, med flit
+ * ## Titeln är "Grundare" på båda, ansvaret står under den
  *
- * Ingen funktionsuppdelning i vd, teknikchef eller säljansvarig. Det finns
- * inget i kodbasen som belägger en sådan uppdelning, och en titel som ser
- * proffsig ut men inte stämmer är precis den sortens detalj en köpare
- * kontrollerar. Två grundare i ett litet bolag som gör allting tillsammans
- * är dessutom sant, vilket är den bättre egenskapen hos en titel.
+ * Fram till 2026-11-17 fanns ingen funktionsuppdelning, med flit: inget i
+ * kodbasen belade en, och en titel som ser proffsig ut men inte stämmer är
+ * precis den sortens detalj en köpare kontrollerar. Sedan 2026-11-17 är
+ * uppdelningen bestämd (Sebbe, docs/BESLUT.md): Sebastian är marknadsansvarig
+ * och Anton tekniskt ansvarig. Den står i `ansvar`, på raden under titeln;
+ * titeln är fortfarande "Grundare" på båda.
  *
  * ## Bioraderna beskriver ARBETE, inte bakgrund
  *
@@ -27,14 +30,11 @@
  * i `snajp-support/app`, `components`, `lib` och `db` (förut `supabase`), alltså backend,
  * gränssnitt och schema.
  *
- * FORMULERINGEN UNDVIKER "ansvarar för" med flit. Titlarna är neutrala just
- * för att ingen funktionsuppdelning är bestämd, och en biorad som delar upp
- * ansvaret hade återinfört uppdelningen genom bakdörren. "Har byggt" är ett
- * påstående om vad som gjorts; "ansvarar för" är ett påstående om en
- * organisation som inte finns.
- *
  * Tom sträng är fortfarande giltig och betyder "utelämnas" — kortet renderar
  * då utan biorad, och utkastnotisen bryr sig inte om fältet.
+ *
+ * BÅDA BIORADERNA ÄR TOMMA sedan 2026-11-17 (Sebbe): korten på /vart-team
+ * står med namn och titel. Resonemanget ovan gäller om de skrivs tillbaka.
  *
  * ## Mejladresserna står INTE här
  *
@@ -52,6 +52,8 @@ export type Teammedlem = {
   id: string;
   namn: string;
   roll: string;
+  /** Raden under titeln: vad personen ansvarar för. Se resonemanget ovan. */
+  ansvar: Localized;
   /** Tom sträng = utelämnas. Se resonemanget ovan. */
   bio: string;
   /** Sökväg under /public, eller null för initialbubbla. */
@@ -63,18 +65,16 @@ export const TEAM: Teammedlem[] = [
     id: "sebastian-bergman",
     namn: "Sebastian Bergman",
     roll: "Grundare",
-    bio:
-      "Har byggt det mesta av plattformen: agenternas backend, databasen och " +
-      "gränssnittet kunderna arbetar i.",
+    ansvar: { sv: "Marknadsansvarig", en: "Head of Marketing" },
+    bio: "",
     foto: null
   },
   {
     id: "anton-lundin",
     namn: "Anton Lundin",
     roll: "Grundare",
-    bio:
-      "Har byggt agenternas färdighetsregister — spelböckerna som avgör vad de " +
-      "kan och hur de resonerar.",
+    ansvar: { sv: "Tekniskt ansvarig", en: "Head of Technology" },
+    bio: "",
     foto: null
   }
 ];

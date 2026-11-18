@@ -274,7 +274,7 @@ function InkorgYta({ locale, kompakt = false }: Readonly<{ locale: Locale; kompa
       <div className="p-4 sm:p-5">
         <p className="text-[0.875rem] font-semibold text-ink">{ARENDE_HLR}</p>
         <p className="mt-0.5 text-[0.6875rem] text-ink-subtle">
-          <T text={UI.fran} locale={locale} /> Maria Ek &lt;maria.ek@exempel.se&gt;
+          <T text={UI.fran} locale={locale} />{" "}Maria Ek &lt;maria.ek@exempel.se&gt;
         </p>
         <p className="mt-2 border-l border-ink/15 pl-3 text-[0.75rem] leading-[1.55] text-ink-muted">
           {MARIA_MEJL}

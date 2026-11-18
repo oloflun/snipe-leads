@@ -981,10 +981,10 @@ html.lenis {
     0 calc(18px + 16px * var(--lyft)) calc(48px + 24px * var(--lyft)) -18px oklch(var(--ink) / calc(0.55 + 0.15 * var(--lyft)));
 }
 
-.landing .svav-flyt,
-.landing .svav-lut {
-  will-change: transform;
-}
+/* .svav-flyt och .svav-lut bär INGET will-change (Sebbe 2026-11-17). Med det låste
+   webbläsaren ytan som en färdigritad bild, och på en position mellan två bildpunkter
+   samplades texten om och blev grumlig. Rörelsen går på hela bildpunkter
+   (useLandingMotion, svav), så ytan målas om när den flyttats en pixel, inte oftare. */
 
 /* Låga bärbara skärmar (1280 × 680, 1366 × 650): ytorna krymper en aning, så att
    texten under dem står kvar inom första skärmen. */

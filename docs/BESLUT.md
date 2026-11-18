@@ -726,6 +726,26 @@ etiketten `driftlarm`, kända begränsningar i filens huvud),
 `.github/dependabot.yml`, `SECURITY.md`, `public/.well-known/security.txt`.
 Svarstiden för en säkerhetsrapport är inte beslutad och står som `[FYLL]`.
 
+---
+
+## 2026-11-17 (Sebbe) — Teamsidan: ansvar under titeln, inga bioradar
+
+**Beslut.** På /vart-team står Sebastian Bergman som Grundare med raden
+"Marknadsansvarig" under, och Anton Lundin som Grundare med "Tekniskt
+ansvarig". Bioraderna om vad var och en byggt är borttagna. Supportchattens
+kunskapsbas säger samma sak.
+
+**Resonemang.** Sebbes beställning, ordagrant: "Skriv under medgrundare under
+Sebastian: Marknadsansvarig. Skriv under Anton: Tekniskt ansvarig", och att
+bioraderna skulle bort. Något skäl utöver det gavs inte. Det ersätter
+resonemanget i `lib/team.ts` från 2026-08-25 om att ingen
+funktionsuppdelning var bestämd: nu är den det.
+
+**I koden.** `lib/team.ts` (fältet `ansvar`, tomma `bio`),
+`app/vart-team/page.tsx`, `snajp-support/app/tenants/snajp_kb.py`.
+
+---
+
 ## 2026-11-17 (Anton) — Jobbkön flyttas till Railways egen Redis
 
 **Beslut.** Jobbkön flyttas från Redis Cloud till Railways egen Redis, i

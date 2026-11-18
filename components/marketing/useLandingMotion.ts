@@ -497,7 +497,7 @@ function setup(G: Gsap, rootEl: HTMLElement, fullDoor: boolean, lenis: Lenis): (
     }
     // --------------------------------------- hjältens ytor (data-mo="svav", Startsida.tsx)
     // Glider in på fjädern en i taget när rubriken skrivits en bit, skriver sitt utkast när de
-    // landat, svävar sedan några pixlar i vila (F-045) och lutar sig mot pekaren.
+    // landat, svävar sedan några pixlar i vila (F-045) och lyfts när pekaren står på dem.
     function svav(figurer: HTMLElement[]) {
       if (!figurer.length) return;
       const text = figurer.map((f) => $("[data-svav-text]", f)).filter(Boolean) as HTMLElement[];
@@ -512,7 +512,8 @@ function setup(G: Gsap, rootEl: HTMLElement, fullDoor: boolean, lenis: Lenis): (
         startad = true;
         figurer.forEach((f, i) => {
           const tl = gsap.timeline({ delay: fordrojning + i * SVAV_GAP });
-          tl.to(f, { x: 0, ease: ARRIVAL.ease, duration: ARRIVAL.duration, force3D: true }, 0)
+          // clearProps: ytan står utan transform när den landat, som rutorna i caseEntry.
+          tl.to(f, { x: 0, ease: ARRIVAL.ease, duration: ARRIVAL.duration, force3D: true, clearProps: "transform" }, 0)
             .to(f, { opacity: 1, duration: 0.35, ease: "power1.out" }, 0)
             .call(() => { landad[i] = true; f.dispatchEvent(new Event("case:landed")); }, [], SVAV_TEXT);
           const t = $("[data-svav-text]", f);
@@ -525,15 +526,17 @@ function setup(G: Gsap, rootEl: HTMLElement, fullDoor: boolean, lenis: Lenis): (
       cleanups.push(() => h1?.removeEventListener("hero:type", onType));
       timers.push(window.setTimeout(() => kom(0), SVAV_FAILSAFE_MS));
 
-      // Vilan: några pixlar och en halv grad över 4,6–5,8 s, i olika takt. Tonar ut medan
-      // man skrollar och står still när hjälten är utanför skärmen.
+      // Vilan: några pixlar i höjdled över 4,6–5,3 s, i olika takt. Tonar ut medan man
+      // skrollar och står still när hjälten är utanför skärmen.
+      // SKARP TEXT (Sebbe 2026-11-17): bara höjdled, och bara på hela bildpunkter. Den halva
+      // gradens lutning och y på bråkdels pixlar gjorde att webbläsaren ritade om ytans text
+      // som en snedställd, omsamplad bild, och den såg grumlig ut. Värdet skrivs bara när det
+      // ändrats, så att ytan målas om en gång per bildpunkt och inte varje bildruta.
+      const hel = (v: number) => { const d = devicePixelRatio || 1; return Math.round(v * d) / d; };
       const hero = $("[data-mo=\"hero\"]");
       const lager = figurer.map((f, i) => {
         const flyt = $(".svav-flyt", f);
-        return flyt && {
-          y: gsap.quickSetter(flyt, "y", "px"), r: gsap.quickSetter(flyt, "rotation", "deg"),
-          fas: i * 1.9, periodY: 4.6 + i * 0.7, periodR: 5.8 - i * 0.6, styrka: 0
-        };
+        return flyt && { y: gsap.quickSetter(flyt, "y", "px"), sist: 0, fas: i * 1.9, periodY: 4.6 + i * 0.7, styrka: 0 };
       });
       // Om hjälten syns avgörs av en utlösare, inte av en mätning per bildruta: en läsning
       // av layouten efter att rörelsen skrivit stilar tvingar fram en omräkning varje gång.
@@ -550,33 +553,28 @@ function setup(G: Gsap, rootEl: HTMLElement, fullDoor: boolean, lenis: Lenis): (
         lager.forEach((l, i) => {
           if (!l) return;
           l.styrka += ((landad[i] ? lugn : 0) - l.styrka) * 0.04;
-          l.y(Math.sin((tid / l.periodY) * Math.PI * 2 + l.fas) * 6 * l.styrka);
-          l.r(Math.sin((tid / l.periodR) * Math.PI * 2 + l.fas) * 0.45 * l.styrka);
+          const y = hel(Math.sin((tid / l.periodY) * Math.PI * 2 + l.fas) * 6 * l.styrka);
+          if (y !== l.sist) { l.y(y); l.sist = y; }
         });
       };
       gsap.ticker.add(vila);
       cleanups.push(() => gsap.ticker.remove(vila));
 
-      // Hovringen, bara med mus: ytan lutar sig mot pekaren, lyfts och skuggan djupnar (--lyft).
+      // Hovringen, bara med mus: ytan lyfts och skuggan djupnar (--lyft). Ingen lutning mot
+      // pekaren och ingen förstoring (Sebbe 2026-11-17): båda ritade om texten som en
+      // uppskalad bild, och det är just när pekaren står på ytan som någon läser den.
+      // Lyftet landar på hela bildpunkter (snap), så att texten står skarp även lyft.
       if (!matchMedia("(hover: hover) and (pointer: fine)").matches) return;
       for (const f of figurer) {
         const lut = $(".svav-lut", f);
         const yta = $(".hem-yta", f);
         if (!lut || !yta) continue;
-        gsap.set(lut, { transformPerspective: 900 });
-        const rx = gsap.quickTo(lut, "rotationX", { duration: 0.7, ease: "power3.out" });
-        const ry = gsap.quickTo(lut, "rotationY", { duration: 0.7, ease: "power3.out" });
-        const in_ = () => { gsap.to(lut, { y: -8, scale: 1.02, duration: 0.6, ease: "power3.out" }); gsap.to(yta, { "--lyft": 1, duration: 0.6, ease: "power3.out" }); };
-        const rör = (e: PointerEvent) => {
-          const b = yta.getBoundingClientRect();
-          ry(((e.clientX - b.left) / b.width - 0.5) * 7);
-          rx(-((e.clientY - b.top) / b.height - 0.5) * 5);
-        };
-        const ut = () => { rx(0); ry(0); gsap.to(lut, { y: 0, scale: 1, duration: 0.8, ease: "power3.out" }); gsap.to(yta, { "--lyft": 0, duration: 0.8, ease: "power3.out" }); };
+        const snap = () => ({ y: 1 / (devicePixelRatio || 1) });
+        const in_ = () => { gsap.to(lut, { y: -8, snap: snap(), duration: 0.6, ease: "power3.out", overwrite: "auto" }); gsap.to(yta, { "--lyft": 1, duration: 0.6, ease: "power3.out", overwrite: "auto" }); };
+        const ut = () => { gsap.to(lut, { y: 0, snap: snap(), duration: 0.8, ease: "power3.out", overwrite: "auto", clearProps: "transform" }); gsap.to(yta, { "--lyft": 0, duration: 0.8, ease: "power3.out", overwrite: "auto" }); };
         yta.addEventListener("pointerenter", in_);
-        yta.addEventListener("pointermove", rör);
         yta.addEventListener("pointerleave", ut);
-        cleanups.push(() => { yta.removeEventListener("pointerenter", in_); yta.removeEventListener("pointermove", rör); yta.removeEventListener("pointerleave", ut); });
+        cleanups.push(() => { yta.removeEventListener("pointerenter", in_); yta.removeEventListener("pointerleave", ut); });
       }
     }
     function plate(el: HTMLElement) {

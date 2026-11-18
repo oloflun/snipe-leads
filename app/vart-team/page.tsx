@@ -108,6 +108,9 @@ export default async function Page() {
                 {medlem.namn}
               </h3>
               <p className="mt-1 text-[0.9375rem] font-medium text-mineral">{medlem.roll}</p>
+              {/* Ansvaret under titeln (Sebbe 2026-11-17). Sidan är svensk rakt
+                  igenom, som varforSnajp ovan; den engelska raden finns i TEAM. */}
+              <p className="mt-0.5 text-[0.9375rem] text-ink-muted">{medlem.ansvar.sv}</p>
               {/* Tom bio UTELÄMNAS. Ett tomt <p> hade lämnat ett glapp under
                   rollen som ser ut som en text som inte laddat. */}
               {medlem.bio ? (
