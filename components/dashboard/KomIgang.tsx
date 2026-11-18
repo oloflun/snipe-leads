@@ -3,7 +3,7 @@
 import { Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useArbetsvag } from "@/components/AppShell";
-import { useWebbplatsskanning, vard } from "@/components/settings/WebbplatsForslag";
+import { skanningsfel, useWebbplatsskanning, vard } from "@/components/settings/WebbplatsForslag";
 import { btnPrimary, btnSecondary, rubrikPanel, rubrikSektion } from "@/components/ui";
 import { useLocale, type Localized } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
@@ -57,7 +57,7 @@ const SUPPORT: Steg[] = [
       sv: "Supportagenten svarar ur kunskapsbasen. Lägg in villkor, priser och era vanligaste frågor.",
       en: "The support agent answers from the knowledge base. Add terms, prices and your most common questions."
     },
-    knapp: { sv: "Till kunskapsbasen", en: "Open the knowledge base" },
+    knapp: { sv: "Kunskapsbasen", en: "Knowledge base" },
     href: "/settings/kunskapsbas"
   },
   {
@@ -67,7 +67,7 @@ const SUPPORT: Steg[] = [
       sv: "Ställ en fråga i testchatten och se hur agenten svarar innan någon kund gör det.",
       en: "Ask a question in the test chat and see how the agent answers before a customer does."
     },
-    knapp: { sv: "Till Kundtjänst", en: "Open Customer service" },
+    knapp: { sv: "Kundtjänst", en: "Customer service" },
     href: "/dashboard/support"
   }
 ];
@@ -80,7 +80,7 @@ const LEADS: Steg[] = [
       sv: "Det ni skrev i uppstarten ligger som utkast. Justera branscher, orter och storlek.",
       en: "What you entered during setup is saved as a draft. Adjust industries, towns and size."
     },
-    knapp: { sv: "Till målgruppen", en: "Open the target group" },
+    knapp: { sv: "Målgruppen", en: "Target group" },
     href: "/settings/leads"
   },
   {
@@ -90,7 +90,7 @@ const LEADS: Steg[] = [
       sv: "Iris letar bolag i målgruppen och skriver utkast. Inget skickas förrän ni själva slår på utskicken.",
       en: "Iris looks for companies in the target group and writes drafts. Nothing is sent until you switch sending on yourselves."
     },
-    knapp: { sv: "Till Leads", en: "Open Leads" },
+    knapp: { sv: "Leads", en: "Leads" },
     href: "/dashboard/leads"
   }
 ];
@@ -102,7 +102,7 @@ const ROST: Steg = {
     sv: "Ett utkast till röstdokument finns redan. Läs igenom det och ändra tonen så att den blir er.",
     en: "A draft voice document is already there. Read it through and change the tone until it is yours."
   },
-  knapp: { sv: "Till röstdokumentet", en: "Open the voice document" },
+  knapp: { sv: "Röstdokumentet", en: "Voice document" },
   href: "/settings/soul"
 };
 
@@ -148,7 +148,7 @@ export function KomIgang({ iris, support }: Readonly<{ iris: boolean; support: b
               ) : null}
               {s.id === "kunskapsbas" && skanning?.status === "fel" ? (
                 <p className="mt-2 text-[0.875rem] font-medium text-danger">
-                  {fyll(text(T.skanningFel), { sajt, fel: skanning.fel ?? "" })}
+                  {fyll(text(T.skanningFel), { sajt, fel: text(skanningsfel(skanning.fel)) })}
                 </p>
               ) : null}
             </div>
@@ -156,7 +156,9 @@ export function KomIgang({ iris, support }: Readonly<{ iris: boolean; support: b
               href={vag(s.href)}
               className={cn(
                 s.id === "kunskapsbas" && vantande > 0 ? btnPrimary : btnSecondary,
-                "shrink-0 self-start sm:self-center"
+                // Hel bredd på mobil: rubriken säger redan vad steget är, knappen
+                // vart det leder, och den ska aldrig brytas på två rader.
+                "w-full shrink-0 whitespace-nowrap sm:w-auto sm:self-center"
               )}
             >
               {s.id === "kunskapsbas" && vantande > 0 ? text(T.granska) : text(s.knapp)}

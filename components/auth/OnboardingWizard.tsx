@@ -295,7 +295,7 @@ const T = {
     en: "when a new lead arrives or when the support agent hands a case over to a human. Nothing else."
   },
   tillbaka: { sv: "Tillbaka", en: "Back" },
-  oppnaMed: { sv: "Öppna arbetsytan med", en: "Open the workspace with" },
+  oppnaMed: { sv: "Öppna arbetsytan med", en: "Open workspace with" },
   valtPaket: { sv: "valt paket", en: "the chosen plan" },
   laggerUpp: { sv: "Lägger upp er arbetsyta", en: "Setting up your workspace" },
   laggerUppText: {
@@ -926,7 +926,9 @@ export function OnboardingWizard({
               <p className="mt-4 max-w-[62ch] text-[15px] leading-[1.65] text-ink-muted">
                 {text(T.intro3)}
               </p>
-              <div className="mt-8 grid grid-cols-12 gap-y-6 md:gap-x-8">
+              {/* gap-x-3 redan på mobil: anställda minst och högst står där i halv bredd
+                  bredvid varandra och smälte annars ihop till ett fält (uppmätt 2026-11-18). */}
+              <div className="mt-8 grid grid-cols-12 gap-x-3 gap-y-6 md:gap-x-8">
                 <Falt
                   id="branscher"
                   label={text(T.branscher)}
@@ -1092,16 +1094,20 @@ export function OnboardingWizard({
 
               <p className="mt-4 text-[14px] leading-6 text-ink-muted">
                 {text(T.exklMoms)} {text(T.osakra)}{" "}
-                <a
-                  href="/demo"
-                  target="_blank"
-                  rel="noopener"
-                  className="focus-ring inline-flex items-center gap-1 rounded-input font-medium text-ink underline underline-offset-4 hover:text-warning"
-                >
-                  {text(T.utforska)}
-                  <ExternalLink className="h-3.5 w-3.5" aria-hidden />
-                </a>
-                {". "}
+                {/* Länken och punkten hålls ihop: punkten hamnade annars först
+                    på nästa rad på smala skärmar (uppmätt 2026-11-18). */}
+                <span className="whitespace-nowrap">
+                  <a
+                    href="/demo"
+                    target="_blank"
+                    rel="noopener"
+                    className="focus-ring inline-flex items-center gap-1 rounded-input font-medium text-ink underline underline-offset-4 hover:text-warning"
+                  >
+                    {text(T.utforska)}
+                    <ExternalLink className="h-3.5 w-3.5" aria-hidden />
+                  </a>
+                  .
+                </span>{" "}
                 {text(T.nyFlik)}
               </p>
 
@@ -1215,7 +1221,7 @@ export function OnboardingWizard({
                   </button>
                   <button
                     type="submit"
-                    className="focus-ring inline-flex min-h-12 items-center gap-2 rounded-input bg-ink px-7 text-[0.9375rem] font-semibold text-paper transition-colors hover:bg-ink2"
+                    className="focus-ring inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-input bg-ink px-4 text-[0.875rem] font-semibold text-paper transition-colors hover:bg-ink2 sm:w-auto sm:px-7 sm:text-[0.9375rem]"
                   >
                     {text(T.oppnaMed)} {valtPaket?.namn ?? text(T.valtPaket)}
                   </button>
@@ -1362,7 +1368,14 @@ function Falt({
         {label}
       </label>
       {rader ? (
-        <textarea {...gemensamt} rows={rader} className={cn(ruta, "py-3 leading-[1.6]")} />
+        // Växer med texten där webbläsaren kan (field-sizing), med `rader` som
+        // minsta höjd: en fast höjd klippte beskrivningen mitt i en rad på 320 px.
+        <textarea
+          {...gemensamt}
+          rows={rader}
+          style={{ minHeight: `calc(${rader} * 1.6em + 1.5rem + 2px)` }}
+          className={cn(ruta, "py-3 leading-[1.6] [field-sizing:content]")}
+        />
       ) : (
         <input
           {...gemensamt}

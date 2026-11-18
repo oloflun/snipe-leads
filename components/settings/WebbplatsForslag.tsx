@@ -49,6 +49,31 @@ const POLL_MS = 4000;
 /** Server- och skanningstext kommer på svenska; samma text i båda halvorna. */
 const ord = (s: string): Localized => ({ sv: s, en: s });
 
+/**
+ * Backendens skanningsfel (snajp-support/app/api/kb.py) kommer på svenska.
+ * De kända får sitt engelska par här, så att ett engelskt gränssnitt inte
+ * visar en svensk mening (uppmätt 2026-11-18). Ett okänt fel visas som det är.
+ */
+const SKANNINGSFEL: Localized[] = [
+  { sv: "Webbplatsen hittades inte.", en: "The website could not be found." },
+  { sv: "Adressen går inte att läsa.", en: "The address cannot be read." },
+  {
+    sv: "Ange er egen webbplats. Register, annonsplattformar och exempeldomäner skannas inte.",
+    en: "Enter your own website. Registers, ad platforms and example domains are not scanned."
+  },
+  {
+    sv: "Sidorna lästes, men utkasten gick inte att skriva. Försök igen om en stund.",
+    en: "The pages were read, but the drafts could not be written. Try again in a while."
+  },
+  { sv: "Skanningen avbröts. Försök igen om en stund.", en: "The scan was interrupted. Try again in a while." },
+  { sv: "Skanningen avbröts. Försök igen.", en: "The scan was interrupted. Try again." }
+];
+
+export function skanningsfel(fel: string | null): Localized {
+  const sv = fel ?? "";
+  return SKANNINGSFEL.find((par) => par.sv === sv) ?? { sv, en: sv };
+}
+
 /** Värdnamnet, utan protokoll och www, för en läsbar rad. */
 export function vard(url: string): string {
   try {
@@ -252,7 +277,9 @@ export function WebbplatsForslag({ onAndrat }: Readonly<{ onAndrat: () => void }
           <p className="text-[0.9375rem] font-medium text-danger">
             {text(T.felRubrik)}: {sajt}
           </p>
-          {skanning.fel ? <p className="mt-1 text-[0.9375rem] text-ink-muted">{skanning.fel}</p> : null}
+          {skanning.fel ? (
+            <p className="mt-1 text-[0.9375rem] text-ink-muted">{text(skanningsfel(skanning.fel))}</p>
+          ) : null}
           <button
             type="button"
             disabled={upptagen !== null}
