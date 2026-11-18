@@ -380,3 +380,29 @@ den är i `main`.
 
 **Poäng före och efter:** GDPR 0/17/1 → 0/17/1. ISO 27001 3/73/23 → 3/73/23. ISO 42001
 5/51/14 → 5/51/14 (uppfyllt/delvis/saknas).
+
+## Kväll 2026-11-18 (h): tvåstegsverifieringen provad i `development`
+
+PR 93 provad end-to-end i Railway-miljön `development` (spegel av produktionen) med ett
+syntetiskt konto (`@example.com`) som fick adminrätt i `platform_admins` 18:54:21 UTC och miste
+den 18:58:37 UTC. Webbläsaren gick bara till `/settings/tvafaktor` och inloggningssidan. Nyckel,
+lösenord och återställningskoder lämnade aldrig webbläsaren och ett lokalt relä på `127.0.0.1`.
+
+| Steg | Utfall |
+|---|---|
+| Inrullning | Fel kod vägrades ("Koden stämmer inte"), rätt kod (RFC 6238 ur den manuella nyckeln) godtogs, tio återställningskoder visades en gång |
+| Inloggning med lösenord | Andra steget visades, ingen session efter bara lösenordet |
+| Andra steget | Fel kod vägrades utan session; rätt app-kod släppte in |
+| Återställningskod | Släppte in i en ny inloggning (oanvända 10 → 9); samma kod en gång till vägrades |
+| Avstängning | Fel kod vägrades; giltig kod stängde av ("Tvåstegsverifieringen är avstängd.") |
+| Återställning | Kontot ur `platform_admins`; 0 rader i `tvafaktor` och `tvafaktor_aterstallningskoder` (SQL); utloggad, webbläsaren stängd |
+| Web-loggen | Fem `CredentialsSignin` (tre för "andra steget krävs", två för vägrade koder), inget "permission denied", inga fel från tvåfaktorns actions |
+| `audit_logs` | Tvåfaktorflödet skriver inte där (migration 123 loggar master-nyckeln och kundbesök). En rad (`master`, `GET /api/admin/tenants`) kom från en omdirigering till `/admin` innan provet, eftersom webbläsaren redan var inloggad |
+
+**Statusändring:** ingen. Provet visar att koden fungerar i en driftlik miljö; kraven förblir
+delvis av skälen i (g). Kvar för Anton: tvånget, egen inrullning efter releasen, `main`.
+Om inloggning, avstängning och inrullning ska stå i `audit_logs` är ett eget beslut (i dag
+bara web-loggen).
+
+**Poäng före och efter:** GDPR 0/17/1 → 0/17/1. ISO 27001 3/73/23 → 3/73/23. ISO 42001
+5/51/14 → 5/51/14 (uppfyllt/delvis/saknas).
