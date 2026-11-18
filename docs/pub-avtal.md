@@ -9,8 +9,8 @@
 > söka fram.
 >
 > Faktaunderlag: nulägesinventeringen 2026-11-17
-> (`docs/compliance-lokalt/nulage-inventering.md`) och Railways driftuppgifter
-> samma dag (`docs/compliance-lokalt/bevis/`). Mappen är undantagen från git
+> (`docs/compliance/nulage-inventering.md`) och Railways driftuppgifter
+> samma dag (`docs/compliance/bevis/`). Mappen är undantagen från git
 > lokalt och finns inte i repot. Bilaga 2 tar bara upp skydd som
 > inventeringen belägger.
 

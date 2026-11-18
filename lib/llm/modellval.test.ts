@@ -10,6 +10,8 @@ import assert from "node:assert/strict";
 import { generateKeyPairSync } from "node:crypto";
 import {
   arLoopback,
+  dataskyddsvarning,
+  EU_REGIONER,
   harRiktigKunddata,
   lasServiceAccount,
   valjModell,
@@ -154,4 +156,36 @@ test("vertexBaseUrl speglar llm.py", () => {
     vertexBaseUrl("proj", "europe-west1"),
     "https://europe-west1-aiplatform.googleapis.com/v1beta1/projects/proj/locations/europe-west1/endpoints/openapi/"
   );
+});
+
+// INV-DATA-006: där data är riktig går Email Studio bara till Vertex i EU.
+const RIKTIG = { RAILWAY_ENVIRONMENT_NAME: "main", DATABASE_URL: "postgresql://u:p@db.exempel.se:5432/railway" };
+
+test("riktig data: Vertex före OpenAI, och OpenAI aldrig", () => {
+  const val = valjModell({ ...RIKTIG, OPENAI_API_KEY: NYCKEL, GOOGLE_SERVICE_ACCOUNT_JSON: SA_JSON });
+  assert.equal(val?.provider, "vertex");
+  assert.equal(valjModell({ ...RIKTIG, OPENAI_API_KEY: NYCKEL }), null);
+  assert.ok(dataskyddsvarning({ ...RIKTIG, OPENAI_API_KEY: NYCKEL })?.includes("OPENAI_API_KEY"));
+});
+
+test("riktig data: driftens konfiguration (ingen region satt) går till europe-west1", () => {
+  const val = valjModell({ ...RIKTIG, GOOGLE_SERVICE_ACCOUNT_JSON: SA_JSON });
+  assert.ok(val && val.provider === "vertex");
+  assert.equal(val.region, "europe-west1");
+  assert.equal(dataskyddsvarning({ ...RIKTIG, GOOGLE_SERVICE_ACCOUNT_JSON: SA_JSON }), null);
+});
+
+test("riktig data: en region utanför EU väljs aldrig", () => {
+  for (const region of ["us-central1", "global", "europe-west2"]) {
+    const env = { ...RIKTIG, GOOGLE_SERVICE_ACCOUNT_JSON: SA_JSON, GOOGLE_CLOUD_REGION: region };
+    assert.equal(valjModell(env), null, region);
+    assert.ok(dataskyddsvarning(env)?.includes(region));
+  }
+  assert.ok(EU_REGIONER.includes("europe-west1") && !(EU_REGIONER as readonly string[]).includes("global"));
+});
+
+test("lokalt: OpenAI vinner och vilken region som helst går, som förut", () => {
+  assert.equal(valjModell({ OPENAI_API_KEY: NYCKEL, GOOGLE_SERVICE_ACCOUNT_JSON: SA_JSON })?.provider, "openai");
+  const val = valjModell({ GOOGLE_SERVICE_ACCOUNT_JSON: SA_JSON, GOOGLE_CLOUD_REGION: "us-central1" });
+  assert.ok(val && val.provider === "vertex" && val.region === "us-central1");
 });

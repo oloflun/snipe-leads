@@ -3,6 +3,7 @@
 import json
 from functools import lru_cache
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from pydantic import AliasChoices, Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -74,6 +75,51 @@ MILJOER_MED_KUNDDATA = ("main", "production", "prod", "development", "dev")
 # nyckel i `active_llm_key` och en bas-URL i `agent/llm._resolve_base_url` —
 # annars är den inte stödd, den ser bara stödd ut.
 KANDA_PROVIDERS = ("openai", "deepseek", "gemini")
+
+#: INV-DATA-006. Vertex-regioner i EU:s medlemsstater. Där data är riktig
+#: vägrar tjänsten starta, och klienten vägrar byggas, med en region som inte
+#: står här. Listan är kort med flit; varje post är en region i ett EU-land som
+#: Google anger för generativ AI på Vertex:
+#:
+#:   europe-west1       Belgien. Standardregionen (google_cloud_region).
+#:   europe-west4       Nederländerna. Reservregion vid 429.
+#:   europe-north1      Finland. Reservregion vid 429.
+#:   europe-west3       Tyskland (Frankfurt).
+#:   europe-west8       Italien (Milano).
+#:   europe-west9       Frankrike (Paris).
+#:   europe-southwest1  Spanien (Madrid).
+#:
+#: Står ALDRIG med: `global` och multiregionen `us` (behandling var som helst),
+#: europe-west2 (London) och europe-west6 (Zürich), som inte ligger i EU.
+#: EU-multiregionen `eu` saknas för att koden inte kan använda den: dess värd är
+#: aiplatform.eu.rep.googleapis.com, medan koden bygger
+#: `{region}-aiplatform.googleapis.com`. Läggs till i samma ändring som gör det.
+VERTEX_EU_REGIONER = (
+    "europe-west1",
+    "europe-west4",
+    "europe-north1",
+    "europe-west3",
+    "europe-west8",
+    "europe-west9",
+    "europe-southwest1",
+)
+
+#: Värdarna som LLM_BASE_URL får peka på där data är riktig: Vertex regionala
+#: EU-värdar, och inget annat.
+VERTEX_EU_VARDAR = tuple(f"{r}-aiplatform.googleapis.com" for r in VERTEX_EU_REGIONER)
+
+
+def ar_eu_region(region: str) -> bool:
+    """Om regionen står på `VERTEX_EU_REGIONER`."""
+    return (region or "").strip() in VERTEX_EU_REGIONER
+
+
+def bas_url_tillaten(url: str) -> bool:
+    """Om en bas-URL går till en Vertex-värd i EU, över https. Värdnamnet
+    jämförs exakt: en delsträngskontroll hade godkänt
+    `europe-west1-aiplatform.googleapis.com.exempel.se`."""
+    delar = urlsplit((url or "").strip())
+    return delar.scheme == "https" and (delar.hostname or "") in VERTEX_EU_VARDAR
 
 
 #: Värdnamn som betyder "databasen kör på den här maskinen". Bara de här räknas
@@ -163,7 +209,9 @@ class Settings(BaseSettings):
     #
     # SE `llm_provider_fault` NEDAN INNAN DU ÄNDRAR DEFAULTEN. DeepSeek är
     # tillåten bara mot syntetisk data; i main och development vägrar tjänsten
-    # starta med den. Beslutet är dokumenterat i CLAUDE.md.
+    # starta med den. Beslutet är dokumenterat i CLAUDE.md. Detsamma gäller
+    # OpenAI sedan 2026-11-18 (INV-DATA-006): defaulten står kvar för lokal
+    # körning och testsviten, men en riktig miljö måste sätta gemini.
     llm_provider: str = "openai"
     llm_base_url: str = ""  # tom => härleds från provider (se agent/llm.py)
     openai_api_key: str = ""
@@ -571,7 +619,7 @@ class Settings(BaseSettings):
     # DEFAULT filesystem i ALL miljö. DB-spegeln är en granskningspost över vilken
     # text en agent_runs-rad producerades ur, inte en uppdateringskanal: kan DB:n
     # leverera text containern inte har på disk är git bara källa till sanning i
-    # intentionen. render.yaml ska aldrig sätta SKILL_SOURCE.
+    # intentionen. Ingen driftkonfiguration ska sätta SKILL_SOURCE (INV-DEPLOY-001).
     skill_source: str = "filesystem"
 
     @model_validator(mode="after")
@@ -713,9 +761,49 @@ class Settings(BaseSettings):
                 f"LLM_PROVIDER=deepseek är inte tillåtet här. {self._varfor_riktig_data()} DeepSeek "
                 f"behandlar prompten i Kina, och vi har varken SCC, "
                 f"överföringsbedömning eller PUB-villkor på plats. "
-                f"Sätt en tillåten provider (openai eller gemini) med rätt nyckel, "
+                f"Sätt LLM_PROVIDER=gemini med GOOGLE_SERVICE_ACCOUNT_JSON (Vertex AI i EU), "
                 f"eller stäng av tjänsten om den inte ska köra alls."
             )
+
+        # INV-DATA-006: OpenAI står inte i underbiträdesförteckningen och är
+        # inte godkänt för kunddata (leverantörsgranskningen 2026-11-17).
+        # `openai` är också standardvärdet, så en riktig miljö som glömt
+        # LLM_PROVIDER fångas här i stället för att tyst skicka till USA.
+        if self.llm_provider == "openai" and self.har_riktig_kunddata():
+            return (
+                f"LLM_PROVIDER=openai är inte tillåtet här (det är också "
+                f"standardvärdet när variabeln saknas). {self._varfor_riktig_data()} "
+                f"OpenAI behandlar prompten i USA, står inte i "
+                f"underbiträdesförteckningen och har varken PUB-villkor eller "
+                f"överföringsbedömning. Att släppa in OpenAI i drift är ett "
+                f"avtalsbeslut, inte ett kodbeslut. Sätt LLM_PROVIDER=gemini med "
+                f"GOOGLE_SERVICE_ACCOUNT_JSON (Vertex AI i EU) och deploya om."
+            )
+
+        # INV-DATA-006: behandlingen stannar i EU. En region eller bas-URL som
+        # pekar ut ur EU hade annars flyttat varje kundmejl utan att något
+        # larmade. Läser värdena som de står, och ett osatt värde betyder
+        # kodens standardvärde, som står på listan.
+        if self.har_riktig_kunddata():
+            utanfor = [r for r in self.vertex_regioner() if not ar_eu_region(r)]
+            if utanfor:
+                return (
+                    f"Vertex-regionen {', '.join(utanfor)} ligger inte i EU "
+                    f"(GOOGLE_CLOUD_REGION={self.google_cloud_region!r}, "
+                    f"VERTEX_RESERVREGIONER={self.vertex_reservregioner!r}). "
+                    f"{self._varfor_riktig_data()} Kunddata får bara behandlas i EU. "
+                    f"Tillåtna regioner: {', '.join(VERTEX_EU_REGIONER)}. Rätta "
+                    f"variabeln, eller ta bort den så gäller standardvärdet, och "
+                    f"deploya om."
+                )
+            if self.llm_base_url and not bas_url_tillaten(self.llm_base_url):
+                return (
+                    f"LLM_BASE_URL pekar på {urlsplit(self.llm_base_url).hostname or 'en okänd värd'}, "
+                    f"som inte är en Vertex-värd i EU. {self._varfor_riktig_data()} "
+                    f"LLM_BASE_URL går före all regionlogik, så chatten hade gått "
+                    f"dit. Ta bort variabeln (koden härleder adressen ur "
+                    f"GOOGLE_CLOUD_REGION) och deploya om."
+                )
 
         # INV-DATA-004: utan läsbart servicekonto faller Gemini tillbaka på
         # Google AI Studio (GEMINI_API_KEY) — ingen EU-bunden behandling, och
@@ -755,6 +843,11 @@ class Settings(BaseSettings):
             f"precis så den bortglömda Render-stacken kunde köra DeepSeek "
             f"mot skarp data utan att någon spärr sa ifrån."
         )
+
+    def vertex_regioner(self) -> list[str]:
+        """Huvudregionen följd av reservregionerna, utan dubbletter."""
+        reserv = [r.strip() for r in (self.vertex_reservregioner or "").split(",") if r.strip()]
+        return list(dict.fromkeys([self.google_cloud_region, *reserv]))
 
     def servicekonto_lasbart(self) -> bool:
         """Om GOOGLE_SERVICE_ACCOUNT_JSON går att använda mot Vertex: JSON med

@@ -186,10 +186,10 @@ ställer är arbete du lämpar över. Innan du ber om något:
    ett API eller en MCP som gör samma sak. Att ett moment står beskrivet som
    "gör detta i dashboarden" betyder inte att det måste göras där.
 2. **Installera verktyget själv** om tjänsten redan används i projektet.
-   Supabase CLI (`npx supabase`), Vercel CLI, Render REST API, `gh` — alla
+   Supabase CLI (`npx supabase`), Vercel CLI, Railways API, `gh` — alla
    används här och får installeras och konfigureras utan att fråga.
 3. **Bygg ett skript i stället för en instruktion.** `scripts/keys.py`,
-   `scripts/onboard_tenant.py` och `scripts/verify_render.py` är mönstret: det
+   `scripts/onboard_tenant.py` och `scripts/verify_railway.py` är mönstret: det
    som annars blivit en punktlista i ett dokument blir ett kommando som går att
    köra om, verifiera och falsifiera.
 4. **Fråga bara om du inte kan lösa det själv** — och säg då exakt varför, inte

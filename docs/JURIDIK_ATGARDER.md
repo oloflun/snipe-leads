@@ -30,7 +30,7 @@ Allvar: **B** blockerar första kund, **F** bör vara gjort före första kund,
 | Avtalsgrind: en kund med krav på avtal får ingen trafik utan registrerat avtalsdatum | `snajp-support/app/avtalsgrind.py`; migration 070. Av som standard, se B3 |
 | Testmiljön skickar inga utskick | Spegelläget, BESLUT 2026-11-16 |
 | Synken går bara från produktion till testmiljö | BESLUT 2026-10-17 |
-| Hemlighetsskanning och push-skydd är påslagna i GitHub. Inga larm vid första kontrollen | Påslaget 2026-11-17. Skanningen känner igen leverantörers nyckelformat, inte vanliga lösenord (se akut punkt 1) |
+| Repot är privat (Antons beslut 2026-11-18). Varje ny commit skannas efter hemligheter med gitleaks i CI, eftersom GitHubs egen skanning inte finns för privata repon på gratisplanen | `docs/BESLUT.md` 2026-11-18; jobbet `hemligheter` i `.github/workflows/verify.yml`. Gamla lösenord i historiken ska ändå bytas (akut punkt 1) |
 | Kundmejl går inte längre till TypeSafe (Jev). Inkorgen sorteras bara av kodreglerna | BESLUT 2026-11-17; `INKORG_JEV` av i båda miljöerna sedan 2026-11-17, nya deployer uppe och hälsokontrollerna ok. Kvar: begära radering av det som redan skickats; Jev används fortfarande i leadsdelen |
 | Jobbkön (Redis) går inte längre över publikt nät. Den ligger på Railways egen Redis, nådd över det privata nätverket, med var sin databas för produktion och testmiljö | BESLUT 2026-11-17; flyttad samma kväll, uppstartsloggen i båda miljöerna visar jobbkö, svarscache, chattström och leadsström mot Redis, hälsokontrollen ok. Kvar: akut punkt 4 |
 
@@ -71,7 +71,7 @@ Allvar: **B** blockerar första kund, **F** bör vara gjort före första kund,
 | 18 | Raderingsverktyget täcker inte tabeller tillkomna efter augusti och har aldrig provkörts | `scripts/gdpr_radera.py` | Utöka och torrkör mot den lokala stacken | A |
 | 19 | Ingen dokumenterad backup- och återställningsrutin | Inget belägg | Välj väg enligt akut punkt 4b; agenten dokumenterar och provar | Ä, sedan A |
 | 20 | Senare säkerhetshändelser saknas i incidentloggen | `INCIDENT_RESPONSE.md` (uppdaterad 2026-11-17, inte committad) | Bedöm posterna | Ä |
-| 21 | Ingen hemlighetsskanning i CI, och Actions-hemligheterna är bredare än de behöver | `.github/workflows/verify.yml` | Lägg till skanning; smalna av hemligheterna | A, Ä roterar |
+| 21 | Actions-hemligheterna är bredare än de behöver, och gratisplanens 2 000 Actions-minuter räcker inte om synken går var tionde minut. Grenskyddet på `main` gäller inte för privata repon på gratisplanen | `.github/workflows/synk.yml`; `docs/compliance/synkflytt-plan.md` | Flytta synken till Railway och smalna av hemligheterna; GitHub Pro om grenskyddet ska tillbaka | A, Ä beslutar |
 
 ### Kan vänta
 
@@ -105,8 +105,6 @@ Allvar: **B** blockerar första kund, **F** bör vara gjort före första kund,
 
 - **`gdpr_radera.py` körd skarpt.** Skriptet raderar data, och det finns
   ingen begäran att uppfylla. Sökläget kan köras när som helst.
-- **Repots synlighet.** Den påverkar grenskyddet och Actions-minuterna och
-  är ditt beslut.
 - **Inga andra ändringar i driftmiljöerna** i compliance-arbetet 2026-11-17
   än de du sa ja till samma kväll: inkorgsklassningen via Jev avstängd i båda
   miljöerna, hemlighetsskanningen påslagen och jobbkön flyttad till

@@ -1,0 +1,27 @@
+Unika hemlighetslika värden i historiken: 16
+
+== Lösenord i klartext (tilldelning): 8 unika värden
+   id f39dac6c  längd  16  först 2026-10-01  sist 2026-10-01  commits  1  filer: snajp-support/tests/test_skickatkopia.py
+   id 06e3d813  längd  11  först 2026-09-15  sist 2026-09-15  commits  2  filer: scripts/railway_agentsajt.py, scripts/railway_bokforing.py
+   id 7739b51f  längd  12  först 2026-09-08  sist 2026-09-08  commits  1  filer: scripts/qa_kundresa.mjs
+   id 720cd7d9  längd  12  först 2026-08-27  sist 2026-08-27  commits  1  filer: snajp-support/tests/leads/test_send_provider.py
+   id bd95f2b9  längd   8  först 2026-08-19  sist 2026-08-19  commits  1  filer: scripts/lokal_stack.py
+   id 8ba36f55  längd   8  först 2026-08-19  sist 2026-08-19  commits  1  filer: scripts/lokal_stack.py
+   id a827d6f4  längd  12  först 2026-08-19  sist 2026-08-19  commits  1  filer: scripts/lokal_stack.py
+   id 1948ff33  längd  15  först 2026-07-20  sist 2026-07-20  commits  1  filer: scripts/test-auth-flow.mjs
+
+== Databas-URL med lösenord: 5 unika värden
+   id 033e887d  längd   7  först 2026-11-09  sist 2026-11-09  commits  1  filer: snajp-support/tests/test_uppstart_och_tidsgranser.py
+   id c4a13854  längd  10  först 2026-08-29  sist 2026-08-29  commits  1  filer: snajp-support/tests/invariants/test_inv_redis_001.py
+   id 7c576e58  längd   9  först 2026-08-29  sist 2026-08-29  commits  1  filer: snajp-support/tests/invariants/test_inv_redis_001.py
+   id 8ba36f55  längd   8  först 2026-08-19  sist 2026-08-19  commits  1  filer: handoffs/2026-08-19-adminytan-och-railway/HANDOFF.md
+   id e9501a25  längd   8  först 2026-08-19  sist 2026-08-19  commits  1  filer: scripts/lokal_stack.py
+
+== Privat nyckel (PEM): 1 unika värden
+   id 8bcac790  längd  31  först 2026-09-12  sist 2026-09-14  commits  2  filer: snajp-support/tests/agent/test_vertex_modellnamn.py, snajp-support/tests/test_dataskydd_provider.py
+
+== OpenAI-nyckel: 1 unika värden
+   id df74aa31  längd  36  först 2026-09-14  sist 2026-09-14  commits  1  filer: snajp-support/tests/agent/test_vertex_modellnamn.py
+
+== Hemlighet i klartext (tilldelning): 1 unika värden
+   id bbe596a4  längd  38  först 2026-08-27  sist 2026-08-27  commits  1  filer: snajp-support/tests/test_masternyckel_vakt.py

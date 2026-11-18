@@ -247,7 +247,7 @@ och kastar `SkillIntegrityError` vid avvikelse — ingen fallback till
 filsystemet. Verifieringen sker per fil INNE i `registry._read_skill_file`,
 alltså före varje `parts.append` i `load_full_skill`, aldrig efter
 konkateneringen. `settings.skill_source` defaultar till `"filesystem"` i all
-miljö och `render.yaml` sätter aldrig `SKILL_SOURCE` (INV-DEPLOY-001).
+miljö och ingen driftkonfiguration sätter `SKILL_SOURCE` (INV-DEPLOY-001).
 Varför: spegeln finns för att kunna svara på "vilken text producerade den här
 `agent_runs`-raden?". En spegel som tyst kan leverera annan text än manifestet
 säger besvarar inte frågan — den ljuger om den, vilket är sämre än att inte
@@ -423,11 +423,17 @@ Test: tests/invariants/test_inv_skill_006.py
 Införd: 2026-08-14 · Upphävs endast genom waiver
 
 ### INV-DEPLOY-001 — Skill-registret finns i den byggda containern
-`render.yaml` sätter `rootDir: .` (repo-roten) och `Dockerfile` COPY:ar både
-`snajp-support/app` och `agent-core` med bevarat katalogdjup under `/srv`.
-`.dockerignore` är en allowlist som uttryckligen släpper igenom `agent-core`.
-`render.yaml` sätter aldrig `SKILL_SOURCE` — produktionen läser skills från
+`scripts/railway_provision.py` sätter api-tjänstens `rootDirectory="/"`
+(repo-roten) och `dockerfilePath="snajp-support/Dockerfile"`, och `Dockerfile`
+COPY:ar både `snajp-support/app` och `agent-core` med bevarat katalogdjup under
+`/srv`. `snajp-support/Dockerfile.dockerignore` är en allowlist som uttryckligen
+släpper igenom `agent-core`. Inget skript i `scripts/` och inget arbetsflöde i
+`.github/workflows/` sätter `SKILL_SOURCE` — produktionen läser skills från
 filsystemet, aldrig från DB-spegeln.
+Anpassad 2026-11-18: regeln stod tidigare mot Render-blueprinten `render.yaml`,
+som togs bort när Render avvecklades (docs/BESLUT.md). Skyddet är detsamma och
+gäller nu filen som styr Railway; att varje miljö har en utskriven gren vaktas
+av INV-DEPLOY-002.
 Varför: med `rootDir: snajp-support` låg `agent-core/` utanför Dockers
 byggkontext och kunde inte COPY:as ens avsiktligt. Felet var osynligt tills
 det inte var det: agentimporterna är uppskjutna in i request-handlers, så
@@ -436,7 +442,7 @@ på det första riktiga agentanropet, som `UnknownSkillError`. Dessutom
 maskerad av att `is_simulation()` kortsluter före playbook-importen, vilket
 betyder att felet utlöstes av att man satte `DEEPSEEK_API_KEY` för att gå live.
 Test: tests/invariants/test_inv_deploy_001.py
-Införd: 2026-08-14 · Upphävs endast genom waiver
+Införd: 2026-08-14 · Anpassad: 2026-11-18 · Upphävs endast genom waiver
 
 ### INV-API-001 — Svar tolkas aldrig som JSON utan kontroll; långsam route sätter `maxDuration`
 Varje `await <svar>.json()` under `app/`, `lib/` och `components/` går via
@@ -1025,6 +1031,46 @@ kund eller tar bort skyddet för den som avregistrerat sig; därför prövas den
 riktig Postgres med hela migrationskedjan: snajp-support/tests/db/test_gallring.py
 i CI-jobbet `databastester` (.github/workflows/verify.yml).
 Test: snajp-support/tests/invariants/test_inv_data_005.py
+Införd: 2026-11-18 · Upphävs endast genom waiver
+
+### INV-DATA-006 — Där data är riktig går modellanropen bara till Vertex AI i en EU-region
+Där `Settings.har_riktig_kunddata()` är sann fäller `Settings.llm_provider_fault()`
+uppstarten i `app/main.py` när (a) `LLM_PROVIDER=openai`, också som standardvärde
+när variabeln saknas, (b) `GOOGLE_CLOUD_REGION` eller någon post i
+`VERTEX_RESERVREGIONER` inte står på `config.VERTEX_EU_REGIONER`, eller (c)
+`LLM_BASE_URL` är satt och inte går över https till en värd i
+`config.VERTEX_EU_VARDAR`. Klientbygget vägrar själv: `agent/llm.vertex_region`
+kastar `ForbjudenProviderIMiljon` för en region utanför listan (chattklienten,
+reservregionklienterna vid 429, bild- och inbäddningsklienten), inbäddningen
+(`embeddings._vertex_predict`) går samma väg, den grundade sökningen kastar
+`DiscoveryError`, och `_resolve_base_url` vägrar en bas-URL utanför listan. Email
+Studio (`lib/llm/modellval.ts`) väljer aldrig OpenAI och aldrig Vertex utanför
+`EU_REGIONER` där `harRiktigKunddata` är sann, och routen loggar varför. Lokalt
+och i testsviten fungerar allt som förut. Att släppa in OpenAI i drift är ett
+avtalsbeslut, inte ett kodbeslut.
+Varför: regionerna och bas-URL:en lästes ur miljön utan kontroll, så en felaktig
+variabel (`global`, `us-central1`) hade tyst flyttat behandlingen av kundmejl ur
+EU. OpenAI var tillåtet med riktig kunddata och är standardvärdet för
+`LLM_PROVIDER`, men står inte i underbiträdesförteckningen (dataskyddsbedömningen
+av Gemini 2026-11-18, A3 till A5).
+Test: snajp-support/tests/invariants/test_inv_data_006.py
+Införd: 2026-11-18 · Upphävs endast genom waiver
+
+### INV-DATA-007 — Kundtext lämnar huset maskerad, och sökgrundningen stannar i leadssökningen
+Personnummer maskeras med `moderation/maskering.maskera_personnummer` där texten
+lämnar systemet: i uppsägningsklassaren (`agent/retention_classifier.
+classify_cancellation_risk`) och i `agent/embeddings.embed_text`, före cachen och
+före anropet, så att varje inbäddning (kundtext och kunskapsbas, skrivning och
+läsning) går genom samma maskering. Text utan personnummer går ut oförändrad.
+Googles sökverktyg (`google_search` och dess alias) konfigureras bara i
+`leads/discovery._gemini_med_sokning`, som bara anropas från `hitta_bolag` och
+`sla_upp_webbplats`; deras indata står uppräknade i testet, discovery importerar
+inga moduler som bär kundmejl, och webbdelen använder inte verktyget alls.
+Varför: klassaren och inbäddningarna skickade personnummer omaskerade till
+Google trots att DPIA:n och policyn säger att de maskeras. Sökgrundningens
+frågor sparas hos Google i upp till tre dygn och det går inte att stänga av, så
+ingen kundmejltext får nå dit (dataskyddsbedömningen 2026-11-18, A1, A2, A6).
+Test: snajp-support/tests/invariants/test_inv_data_007.py
 Införd: 2026-11-18 · Upphävs endast genom waiver
 
 ## Roadmap

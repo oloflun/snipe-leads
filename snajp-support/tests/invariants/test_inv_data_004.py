@@ -157,8 +157,9 @@ def test_chattklienten_vagrar_ai_studio(miljo):
 
 
 def test_sidovagnarna_vagrar_ai_studio(miljo):
-    """Sidovagnarna läser servicekontot oavsett LLM_PROVIDER. Med openai som
-    chattprovider passerar uppstarten, så spärren måste sitta i reservvägen."""
+    """Sidovagnarna läser servicekontot oavsett LLM_PROVIDER, och en ingång
+    utanför lifespan passerar aldrig uppstarten (som sedan INV-DATA-006 också
+    vägrar openai), så spärren måste sitta i reservvägen."""
     miljo(LLM_PROVIDER="openai", MODEL="gpt-4o-mini", OPENAI_API_KEY=_NYCKEL, ENVIRONMENT="main", GEMINI_API_KEY=_NYCKEL)
     assert llm.get_vision_client() is None
     assert llm.get_embedding_client() is None

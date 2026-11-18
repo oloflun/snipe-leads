@@ -95,6 +95,120 @@ startades inte. Anton beslutade att den ska startas automatiskt.
 `supabase/migrations/20261118090000_120_arbetsytans_namn.sql`,
 `scripts/qa_ny_kund.mjs`.
 
+## 2026-11-18 (Anton) — Repot är privat, och det som följer av det
+
+**Beslut.** Repot `oloflun/snipe-leads` är privat sedan 2026-11-18 (Antons
+beslut: "Repot ska vara privat och är ändrat till det nu, anpassa övriga beslut
+efter det").
+
+**Resonemanget.** Repot var publikt, och plattformsadminens lösenord låg i den
+publika historiken. Dataskyddsgenomgången höll därför utkasten som beskriver
+öppna brister utanför repot. Med ett privat repo kan de ligga där de hör hemma.
+
+**Vad som ändrats till följd av beslutet (Claude (agent), samma dag):**
+- Utkasten som hölls utanför repot är committade: `docs/pub-avtal.md`,
+  DPIA:n, intresseavvägningen, incidentloggen och `docs/JURIDIK_ATGARDER.md`.
+  Compliance-underlaget (ramverkskörningar, policyer, rutiner, brev, utredningar
+  och bevis) ligger i `docs/compliance/`. Görs repot publikt igen ska den mappen
+  flyttas ut först: den beskriver brister i detalj, och policytexterna bygger
+  på AGPL-licensierade mallar ur Comp AI.
+- GitHubs hemlighetsskanning, push-skydd och kodskanning finns inte för
+  privata repon på gratisplanen och är avstängda. I stället skannar jobbet
+  `hemligheter` i `verify.yml` varje ny commit med gitleaks. Dependabot
+  fungerar som förut.
+- Grenskyddet på `main` gäller inte längre (det kräver betald plan för privata
+  repon). Kravet på kodägarens godkännande är alltså inte tekniskt framtvingat.
+  Regeln står kvar: release till `main` är Antons handgrepp.
+- Gratisplanen ger 2 000 Actions-minuter i månaden. Övervakningen går därför
+  en gång i timmen i stället för var 15:e minut. Synken (`synk.yml`, var tionde
+  minut) skulle ensam ta mer än kvoten om GitHub körde den som schemalagt; det
+  talar för att flytta den till Railway enligt `docs/compliance/synkflytt-plan.md`.
+  När kvoten är slut stannar alla workflows, även migrationerna.
+
+**Kvar trots beslutet.** Lösenordet som låg i den publika historiken ska fortfarande
+bytas: historiken kan redan vara kopierad.
+
+---
+
+## 2026-11-18 (Claude (agent), inom Antons uppdrag 2026-11-17 om EU-compliance) — Modellanropen maskeras och hålls i EU i koden
+
+**Beslut.** Fem brister som dataskyddsbedömningen av Gemini på Vertex AI pekade
+ut stängs i kod: personnummer maskeras också före uppsägningsklassaren och före
+varje inbäddning; tjänsten vägrar starta där data är riktig om en Vertex-region
+inte ligger i EU, om `LLM_BASE_URL` pekar någon annanstans än Vertex i EU, eller
+om `LLM_PROVIDER` är `openai`; Email Studio väljer aldrig OpenAI eller en region
+utanför EU där data är riktig; och ett test håller Googles sökgrundning kvar i
+leadssökningen. Invarianterna INV-DATA-006 och INV-DATA-007.
+
+**Resonemanget.** Bedömningen fann att DPIA:n och integritetspolicyn lovar att
+personnummer maskeras, men två vägar skickade dem omaskerade till Google:
+klassaren fick hela meddelandet och inbäddningarna räknades på omaskerad
+kundtext. Maskeringen sitter nu där texten lämnar huset, ett ställe per väg,
+så att en ny anropare inte kan glömma den. Inbäddningarna maskeras i
+`embed_text`, som både skrivning och läsning går genom; text utan personnummer
+går ut oförändrad, så kunskapsbasens vektorer och svarscachen påverkas inte
+(svarscachen tar dessutom bara emot frågor utan personnummer). Regionerna och
+bas-URL:en lästes ur miljön utan kontroll: en felaktig variabel hade tyst
+flyttat behandlingen ur EU, och det skulle ingen märka. Spärren är samma sort
+som DeepSeek-spärren: den kraschar hellre än varnar, och bara där data är
+riktig. OpenAI står inte i underbiträdesförteckningen och leverantörsgranskningen
+säger "inte för kunddata"; att släppa in det i drift är ett avtalsbeslut.
+Driften använder inte OpenAI i dag (`LLM_PROVIDER=gemini` i api i båda miljöerna,
+ingen `OPENAI_API_KEY`, `GOOGLE_CLOUD_REGION`, `VERTEX_RESERVREGIONER` eller
+`LLM_BASE_URL` i någon tjänst enligt konfigurationsutdraget 2026-11-17), så
+ingenting ändras vid deploy. Sökgrundningens frågor sparas hos Google i tre
+dygn utan möjlighet att stänga av; i dag får den bara målgrupp, kriterier och
+bolagsnamn, och testet hindrar att det ändras utan att någon tar ställning.
+
+**I koden.** `snajp-support/app/config.py` (`VERTEX_EU_REGIONER`,
+`bas_url_tillaten`, `Settings.llm_provider_fault`, `Settings.vertex_regioner`),
+`app/agent/llm.py` (`vertex_region`, `_resolve_base_url`),
+`app/agent/embeddings.py`, `app/agent/retention_classifier.py`,
+`app/leads/discovery.py`, `lib/llm/modellval.ts` (`EU_REGIONER`,
+`dataskyddsvarning`), `app/api/email-studio/route.ts`. Inte gjort här:
+modellbytet från Gemini 2.5 (ägarens beslut), cachen i Google Cloud och ett
+servicekonto per miljö (ägarens hand), fler maskeringstyper.
+
+## 2026-11-18 (Claude (agent), inom Antons uppdrag om EU-compliance; ändringarna väntar på Antons granskning) — Render-koden tas bort ur repot
+
+**Beslut.** Allt i repot som kan skriva till, deploya till eller hålla liv i
+den avvecklade Render-stacken tas bort: skrivvägen i `scripts/keys.py`
+(Render-pushen och det den anropade), driftkontrollen `scripts/verify_render.py`
+och blueprinten `snajp-support/render.yaml`. Samtidigt tas `keys.py`:s
+skrivväg mot appens Vercel-projekt bort (push och pull), som bara tjänade samma
+döda stack. Invarianten INV-DEPLOY-001 stod mot blueprinten och skyddar nu
+samma sak, byggkontexten för api, mot filen som styr Railway.
+
+**Resonemanget.** En undersökning 2026-11-18 visade att Render inte fyller
+någon funktion: ingenting i koden, hos Railway eller i DNS pekar dit, och
+loggarna visar ingen kundtrafik. Koden låg ändå kvar och var farlig. Ett enda
+kommando kunde skriva backend-hemligheter och DeepSeek som leverantör till
+båda Render-tjänsterna och starta en deploy, alltså återinföra den
+tredjelandsöverföring som spärrades 2026-08-24. Blueprinten sa själv att en
+blueprint som ligger kvar är en tjänst som kan återuppstå. Kod som inte
+behövs och som kan göra skada tas bort i stället för att märkas som vilande.
+
+**Läget hos leverantörerna.** Båda Render-tjänsterna är suspenderade sedan
+2026-11-17 23:46 UTC. Det gamla Vercel-projektet `snajp` är pausat 2026-11-18,
+med inloggningsskydd och avstängda förhandsdeployer. Apex-omdirigeringen
+(Vercel-projektet `snajp-apex`) berörs inte.
+
+**I koden.** `scripts/keys.py` (Render- och Vercel-vägarna borta, övriga
+kommandon oförändrade), `scripts/verify_render.py` och `snajp-support/render.yaml`
+borttagna, `tests/invariants/test_inv_deploy_001.py` och posten i
+`ARCHITECTURE_INVARIANTS.md` anpassade, nytt test
+`tests/invariants/test_render_avvecklad.py` som fäller om Render-koden kommer
+tillbaka. Instruktioner om Render i `DEPLOY.md`, `DEPLOY_KEYS.md`, `RAILWAY.md`,
+`AUTH.md` och `snajp-support/README.md` är ersatta med en mening om att stacken
+är avvecklad.
+
+**Kvar hos ägaren.** Radera båda Render-tjänsterna (de är bara suspenderade)
+och ta bort Renders åtkomst till repot (GitHub-appen). Rotera de hemligheter
+som legat hos Render. Återkalla Render-API-nyckeln och ta sedan bort raderna
+`RENDER_API_KEY` och `PREVIEW_RENDER_SERVICE_ID` ur `.env.deploy`. Begär en
+raderingsbekräftelse från Render för tjänsterna, loggarna och
+miljövariablerna.
+
 ## 2026-11-18 (Anton) — Extern övervakning, säkerhetskontakt och Dependabot
 
 **Beslut.** Fyra luckor som en genomgång mot ISO 27001 visade fylls: en

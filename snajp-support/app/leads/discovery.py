@@ -487,12 +487,17 @@ async def _gemini_med_sokning(prompt: str) -> str:
 
     # Vertex AI: bearer-token + annan endpoint; AI Studio: ?key= query-param.
     if settings.google_service_account_json:
-        from ..agent.llm import _vertex_token, _vertex_base_url
+        from ..agent.llm import ForbjudenProviderIMiljon, _vertex_token, vertex_region
         import json as _json
+
+        # INV-DATA-006: en region utanför EU vägras innan något lämnar huset.
+        try:
+            region = vertex_region(settings)
+        except ForbjudenProviderIMiljon as fel:
+            raise DiscoveryError(str(fel)) from fel
         token = _vertex_token(settings)
         info = _json.loads(settings.google_service_account_json)
         project = info["project_id"]
-        region = settings.google_cloud_region
         url = (
             f"https://{region}-aiplatform.googleapis.com/v1beta1/"
             f"projects/{project}/locations/{region}/"

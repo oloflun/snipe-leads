@@ -8,6 +8,7 @@ ensam)."""
 import json
 
 from ..config import get_settings
+from ..moderation.maskering import maskera_personnummer
 from .llm import get_llm_client, tankande_kwargs
 
 CANCELLATION_RISK_THRESHOLD = 0.6
@@ -37,11 +38,13 @@ async def classify_cancellation_risk(message: str) -> tuple[float, float]:
     """Returnerar (uppsägningsavsikt, missnöje). Ett anropsfel eskalerar
     hellre än att tyst anta lågrisk — se anroparen (support_playbook)."""
     settings = get_settings()
+    # INV-DATA-007: maskeras här, där texten lämnar huset, så att varje
+    # anropare får det. Klassaren behöver inte numret för att bedöma avsikt.
     response = await get_llm_client().chat.completions.create(
         model=settings.model,
         response_format={"type": "json_object"},
         temperature=0.0,
-        messages=[{"role": "user", "content": _PROMPT.format(message=message)}],
+        messages=[{"role": "user", "content": _PROMPT.format(message=maskera_personnummer(message))}],
         **tankande_kwargs(),
     )
     data = json.loads(response.choices[0].message.content or "{}")
