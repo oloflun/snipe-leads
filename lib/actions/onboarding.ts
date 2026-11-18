@@ -1,6 +1,7 @@
 "use server";
 
 import type { BusinessContextInsert } from "@/lib/database.types";
+import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { formateraOrgnr, orgnrFel } from "@/lib/orgnr";
 
@@ -635,5 +636,12 @@ export async function saveBusinessContext(input: OnboardingInput): Promise<Onboa
     await startaWebbplatsskanning(tenantNyckel, webbplats);
   }
 
+  // Routerns cache töms före omdirigeringen. En kund som avbröt onboardingen
+  // och loggade in igen har /dashboard i cachen som "skicka till /onboarding"
+  // (från inloggningen), och webbläsaren följde den utan att fråga servern:
+  // efter inskickningen visades ett tomt steg 1 i stället för översikten.
+  // Uppmätt i development 2026-11-18: POST svarade redirect /dashboard, och
+  // navigeringen gick /dashboard → /onboarding utan någon serverförfrågan.
+  revalidatePath("/", "layout");
   redirect("/dashboard");
 }
