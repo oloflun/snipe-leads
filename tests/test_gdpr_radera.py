@@ -1,6 +1,6 @@
 """Rättighetsverktyget (scripts/gdpr_radera.py) mot schemat i migrationerna.
 
-Ingen databas: testerna läser supabase/migrations/*.sql och skriptets
+Ingen databas: testerna läser db/migrations/*.sql och skriptets
 tabellförteckning. Det de fångar är att verktyget halkar efter schemat — det
 hände en gång (ingen ändring 2026-08-25 → 2026-11-17 medan ringlistan,
 listorna, säljlistan, demolänkarna och kundregistret tillkom).
@@ -20,7 +20,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
-MIGRATIONER = ROOT / "supabase" / "migrations"
+MIGRATIONER = ROOT / "db" / "migrations"
 
 sys.path.insert(0, str(SCRIPTS))  # gdpr_radera importerar gdpr_verktyg som toppmodul
 _spec = importlib.util.spec_from_file_location("gdpr_radera", SCRIPTS / "gdpr_radera.py")

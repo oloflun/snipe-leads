@@ -115,7 +115,7 @@ kundens** — se de sex spärrarna i `snajp-support/app/leads/send_guard.py`.
 |---|---|
 | **Ändamål** | Läsa av kvitton och föreslå kontering |
 | **Kategorier av uppgifter** | Det som står på underlaget: motpart, belopp, datum. Kan innehålla personnamn |
-| **Särskilt** | **Originalfilen lagras inte.** Bara en sha256-summa sparas — se `supabase/migrations/045_bookkeeping.sql`. En fil vi inte har kan inte läcka och behöver ingen gallring |
+| **Särskilt** | **Originalfilen lagras inte.** Bara en sha256-summa sparas — se `db/migrations/045_bookkeeping.sql`. En fil vi inte har kan inte läcka och behöver ingen gallring |
 | **Var i systemet** | `bk_underlag` |
 
 ---

@@ -114,7 +114,7 @@ Använd alltid principerna: "The email should read like it came from someone who
 - Analyzer Sub-Agent: Betyg + konkreta förbättringar bundna till marketingskills-principer.
 
 **Miljö & Data:**
-- Next.js + Supabase.
+- Next.js + Postgres.
 - Ladda användarpreferenser (ton, språk, längd, bransch). Anpassa därefter.
 - Kontext: draft-email + lead-info (företag, roll, nyhet/LinkedIn-sammanfattning, signaler).
 

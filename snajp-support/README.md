@@ -68,7 +68,7 @@ Tjänsten är multi-tenant: varje kundföretag (tenant) är helt isolerat.
 - **Isolering:** all data (kunder, ärenden, meddelanden, KB, metrics, jobb) bär
   `tenant_id` och filtreras i varje query. I Postgres-läget sätts dessutom
   `app.tenant_id` per transaktion så RLS-policyerna i
-  `supabase/migrations/003_snajp_multitenant.sql` verkställs (försvar-på-djupet).
+  `db/migrations/003_snajp_multitenant.sql` verkställs (försvar-på-djupet).
   Samma kund-e-post hos två tenants blir två separata kundposter.
 - **Migrationen `003_snajp_multitenant.sql` körs manuellt** (efter 002):
   `ss_tenants`, `tenant_id` på alla kunddatatabeller (backfyllt till default-

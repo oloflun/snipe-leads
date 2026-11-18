@@ -98,7 +98,7 @@ mejl, kanaler, utskick) innan alla sju är gjorda.
    Gör: det finns ingen admin-yta eller API som sätter `ss_tenants.kraver_avtal`;
    den sätts med SQL, som migration 070 gjorde för Livrustning:
    `update ss_tenants set kraver_avtal = true where slug = '<slug>';`
-   Lägg den helst som en ny additiv migration i `supabase/migrations/` så att
+   Lägg den helst som en ny additiv migration i `db/migrations/` så att
    `.github/workflows/migrera.yml` kör den mot Railway, aldrig mot Supabase.
    Avtalsdatumet sätts av en människa som sett avtalet: samma datavy i
    Kunder & Data, fältet Avtal signerat (`ss_customer_details.avtal_signerat`).

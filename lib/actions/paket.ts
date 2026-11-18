@@ -44,7 +44,7 @@ function felText(error: unknown): string {
   if (saknarMigration(error)) {
     return (
       "Paketet kan inte bytas: databasfunktionen från migration 080 " +
-      "(supabase/migrations/20261001090000_080_paket_admin.sql) finns inte i " +
+      "(db/migrations/20261001090000_080_paket_admin.sql) finns inte i " +
       "den här miljön. Kör `python scripts/railway_migrate.py --env development " +
       "--apply` (eller --env main) och ladda om sidan."
     );

@@ -5,7 +5,6 @@ import MicrosoftEntraID from "next-auth/providers/microsoft-entra-id";
 
 import { hasDatabase, sql, sqlAsUser } from "@/lib/db";
 import { verifyPassword } from "@/lib/password";
-import { hasSupabaseAuthEnv, supabaseAuth } from "@/lib/supabase-auth";
 
 /**
  * Auth.js (NextAuth v5) ersätter Supabase Auth.
@@ -108,24 +107,8 @@ const providers = [
         return null;
       }
 
-      // Supabase-stacken: låt GoTrue verifiera lösenordet (bcrypt). auth.users
-      // rörs aldrig direkt här — det är hela poängen med adaptern.
-      if (hasSupabaseAuthEnv()) {
-        const { data, error } = await supabaseAuth().auth.signInWithPassword({
-          email,
-          password
-        });
-        if (error || !data.user) {
-          return null;
-        }
-        return {
-          id: data.user.id,
-          email: data.user.email ?? email,
-          name: (data.user.user_metadata?.full_name as string | undefined) ?? null
-        };
-      }
-
-      // Railway: direkt SQL mot replikerad auth.users (scrypt).
+      // Direkt SQL mot auth.users (scrypt). GoTrue-adaptern från
+      // Supabase-tiden är borttagen 2026-11-18 (docs/BESLUT.md).
       const user = await findUserByEmail(email);
       // Verifiera ALLTID, även när kontot saknas: ett tidigt `return null`
       // gör svarstiden till ett orakel för vilka adresser som finns.

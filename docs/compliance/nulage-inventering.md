@@ -85,7 +85,7 @@ Kolumner:
 | Anthropic | Bara benchmarkskript mot syntetiska fixtures | Nej i drift | Nej | `scripts/benchmark_leads_kedja.py:1-31` |
 | OpenAI | Konfigurerad men "inte i drift" | Nej i drift (ej verifierat) | Ja i bolag.ts | `lib/bolag.ts:135-140`; `lib/llm/modellval.ts` (OpenAI först i ordningen om en nyckel sätts) |
 | DeepSeek | Spärrad i varje miljö med riktig data | Nej (spärr) | Ja (CLAUDE.md) | `config.py:609-700`; `lib/llm/modellval.ts:189-197` |
-| Stripe | Borttaget; manuell fakturering | – | – | `supabase/migrations/20260921110000_076_stripe_bort.sql:1-15` |
+| Stripe | Borttaget; manuell fakturering | – | – | `db/migrations/20260921110000_076_stripe_bort.sql:1-15` |
 | Sentry/felspårning, analys | **Finns inte** | – | – | `docs/BESLUT.md:390`; `docs/stabilitet-2026-11/SLUTRAPPORT.md:164`; cookiesidan säger "inga analyscookies" |
 
 ### 2.3 Integrationer som kunden själv slår på (kundens egna konton)
@@ -154,7 +154,7 @@ Detta är mottagare på kundens instruktion, inte Snajps underbiträden. De bör
 | Kryptering i transit | `ssl_kontext()` för utgående HTTPS; Resend och Vertex över HTTPS | `snajp-support/app/tls.py:19` | **Redis utan TLS** (senaste belägg); Postgres-TLS mot Railway inte verifierad |
 | Kryptering i vila | Kundintegrationsnycklar krypteras med Fernet (`INTEGRATION_NYCKEL`) | `config.py:529`; `integrationer/hemligheter.py`; GOALS.md:255-262 | **Kundnycklarna i klartext i development** (BESLUT rad 390, 433-434; SLUTRAPPORT rad 166). Diskkryptering hos Railway inte dokumenterad |
 | Spårbarhet och loggning | `X-Request-Id` i svar, logg och `platform_events`; `agent_runs` med steglogg; `ss_decision_log` | `app/sparning.py`; BESLUT rad 485-486; `dpia_supportagenten.md:131-133` | Fulla promptar med persondata i `agent_runs` (`agentcore/insyn.py:75-85`) utan gallring. Ingen åtkomstlogg för admin hittad |
-| Gallring | SQL-funktion och skript med torrkörning | `supabase/migrations/048_gallring.sql`; `scripts/gallra.py` | Ingen policy satt, inget schema, bara `ss_emails` (se 3) |
+| Gallring | SQL-funktion och skript med torrkörning | `db/migrations/048_gallring.sql`; `scripts/gallra.py` | Ingen policy satt, inget schema, bara `ss_emails` (se 3) |
 | Registerutdrag och radering | Sök, utdrag och radering per adress; spärrlistan behålls | `scripts/gdpr_radera.py:58-67, 185-212`; `scripts/gdpr_verktyg.py` | **Inte uppdaterat sedan 2026-08-25** (`1dbc5cd3`). Täcker inte senare tabeller med persondata: t.ex. ringlistan och samtal (107), listor och CRM (060, 082, 098, 110), demolänkar (116), kundminne (052), kvitton (063), kampanjer (114). Aldrig kört skarpt. Miljönamnen `production`/`preview` är från gamla stacken (`gdpr_verktyg.py:20-25`). Kopior i Redis, development-spegeln och gamla Supabase nås inte |
 | Avregistrering och suppression | Tokenlänk → `avregistrera_via_token` (security definer); gäller hela tenanten; kontrolleras i sändögonblicket | `app/avregistrera/[token]/page.tsx:37-54`; `send_guard.py:288-329`; migrationer 046 och 049; skarpt klickad (JURIDIK rad 27) | – |
 | Sändspärrar | 6 regler: suppression, avsändarnamn, opt-out- och policylänk, art. 14, volym, karens, kontorstid, leveransstopp, granskning av de 3 första | `send_guard.py:172-192`, konstanter `:48-93` | Regel 1 kräver bara namn (org.nr och adress valfria) |

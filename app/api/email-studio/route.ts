@@ -296,10 +296,9 @@ Använd alltid principerna: "The email should read like it came from someone who
 - Analyzer Sub-Agent: Betyg + konkreta förbättringar bundna till marketingskills-principer.
 
 **Miljö & Data:**
-- Next.js + Supabase + LangChain.
-- Ladda användarpreferenser från Supabase (ton: professional/friendly/direct, språk: främst svenska, längd: short/medium, branschfokus, value-prop). Anpassa allt därefter.
-- Spara varje interaktion + preferensuppdateringar till Supabase för långsiktig kontext.
-- Registrering: Endast email + magic link (Supabase Auth). Omedelbar tillgång till Email Studio utan extra verifikation.
+- Next.js + Postgres.
+- Ladda användarpreferenser ur databasen (ton: professional/friendly/direct, språk: främst svenska, längd: short/medium, branschfokus, value-prop). Anpassa allt därefter.
+- Spara varje interaktion + preferensuppdateringar i databasen för långsiktig kontext.
 - Kontext som skickas med: draft-email + lead-info (företag, roll, nyhet/LinkedIn-sammanfattning, signaler från plattformen).
 
 **Kvalitetskontroller & Compliance (alltid):**

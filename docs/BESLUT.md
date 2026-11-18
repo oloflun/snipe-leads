@@ -48,6 +48,35 @@ development för att pröva lite igen. Detaljer och siffror per fall:
 
 ---
 
+## 2026-11-18 — Supabase-spåret tas bort helt (Anton)
+
+**Beslut.** "Ta bort supabase-spåret som ligger kvar helt." Migrationerna
+flyttas från `supabase/migrations/` till `db/migrations/`. Raderat: edge
+functions, `supabase/config.toml` och `schema.sql`, GoTrue-adaptern
+`lib/supabase-auth.ts` med sina grenar i inloggning, registrering och demo,
+`@supabase/supabase-js`, Supabase-MCP:n i `.mcp.json`, nyckeln
+`PREVIEW_POSTGRES_URL` och skripten som bara talade med Supabase
+(provisionering, schema, speglingen `supabase_seed_dev.py`, flytten därifrån,
+preview-grenens anslutning). Supabase-appen på GitHub kopplas bort från repot,
+så att kontrollen Supabase Preview inte körs på PR:erna längre.
+
+**Resonemanget.** Supabase Preview på release-PR:en var röd, för att den
+körde mot en Supabase-gren som varit död sedan augusti och som vi enligt
+`MIGRATIONS-PENDING.md` inte rör. Allt körs på Railway sedan dess, och det
+som låg kvar var bara spår som kunde lura någon att tro att Supabase
+fortfarande var en väg: en katalog med Supabase-namn, en auth-gren som
+aktiverades om en gammal variabel råkade vara satt, och skript som skrev dit.
+
+**Vad som lever kvar med flit.** Liggaren `supabase_migrations.schema_migrations`
+och `auth`-schemat (`railway/000_auth_compat.sql`) är namn i Railway-databasen.
+Att döpa om dem kräver en migration mot main och ändrar inget i beteendet.
+Supabase står kvar som underbiträde i `lib/bolag.ts` ("avvecklas") tills
+projektet hos Supabase är raderat: där ligger fortfarande gammal data, och
+det är ett juridiskt påstående, inte kod. Sessionsloggar, handoffs, planer
+och `email-studio/kopior` är historik och är inte omskrivna.
+
+---
+
 ## 2026-11-18 — utkasten i development tillbaka på gemini-2.5-flash i europe-west1 efter mätningen (Claude (agent), på Antons uppdrag)
 
 **Beslut.** Iris utkast och humanizer i development går tillbaka till

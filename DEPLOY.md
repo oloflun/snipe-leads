@@ -91,7 +91,7 @@ identiteter" längst ned i den här filen.
 
 **Av sig själva sedan 2026-11-16** (`.github/workflows/migrera.yml`):
 
-- En push till `development` eller `main` som rör `supabase/migrations/`
+- En push till `development` eller `main` som rör `db/migrations/`
   kör kedjan mot den miljön. Jobbet tar under en minut och Railways bygge
   flera, så schemat ligger före koden. Det är en ordning och ingen grind:
   Railway väntar inte på GitHub Actions. Kontrollera att jobbet `migrera`
@@ -185,7 +185,7 @@ har riktningen vänts.
 
 ## Migrationskedjan är självbärande sedan `000_base_schema.sql`
 
-`supabase/migrations/000_base_schema.sql` innehåller dashboardens grundtabeller
+`db/migrations/000_base_schema.sql` innehåller dashboardens grundtabeller
 (`workspaces`, `profiles`, `business_contexts` …). Den finns för att kedjan inte
 var självbärande: `001` och framåt förutsätter att `workspaces` finns, men den
 skapades bara av `supabase/schema.sql` — som ingen migrationsmekanism kör.
@@ -660,7 +660,7 @@ Uppmätt i produktionen före fixen:
 
     totalt: 30    tidsstämplade: 30    repo-numrerade: 0
 
-Branching-workflowen läser `supabase/migrations/` från git-grenen, ser
+Branching-workflowen läser `db/migrations/` från git-grenen, ser
 versionerna `000`–`029`, hittar ingen av dem i `schema_migrations` och försöker
 applicera **alla trettio**. De faller direkt, eftersom tabellerna och policyerna
 redan finns.
@@ -677,7 +677,7 @@ kontrollera efteråt:
 
 ```sql
 select count(*) from supabase_migrations.schema_migrations where version ~ '^[0-9]{1,3}$';
--- ska vara lika många som antalet filer i supabase/migrations/
+-- ska vara lika många som antalet filer i db/migrations/
 ```
 
 ## Spegling main → development och Flytta till main (plan del E, 2026-10-02)

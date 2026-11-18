@@ -9,7 +9,7 @@
 # kommer ur tjänstens variabler vid körning.
 #
 # Layouten under /srv speglar repot, eftersom railway_migrate räknar
-# REPO_ROOT = Path(__file__).parents[1] och hittar supabase/migrations därifrån.
+# REPO_ROOT = Path(__file__).parents[1] och hittar db/migrations därifrån.
 #
 # Befintliga tjänster påverkas inte: ingen av dem bygger med den här filen, och
 # rotens .dockerignore och snajp-support/Dockerfile är orörda.
@@ -21,7 +21,7 @@ RUN pip install --no-cache-dir "psycopg2-binary==2.9.10"
 
 COPY scripts/railway_drift.py scripts/railway_synk.py scripts/railway_migrate.py scripts/railway_provision.py scripts/railway.py ./scripts/
 COPY railway/000_auth_compat.sql ./railway/000_auth_compat.sql
-COPY supabase/migrations ./supabase/migrations
+COPY db/migrations ./db/migrations
 
 ENV PYTHONUTF8=1
 ENV LANG=C.UTF-8

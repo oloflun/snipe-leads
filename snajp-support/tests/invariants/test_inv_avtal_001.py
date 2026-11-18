@@ -27,7 +27,7 @@ from app.storage.memory import MemoryStorage
 
 pytestmark = pytest.mark.anyio
 
-MIGRATIONER = Path(__file__).resolve().parents[3] / "supabase" / "migrations"
+MIGRATIONER = Path(__file__).resolve().parents[3] / "db" / "migrations"
 
 #: `add column ... kraver_avtal boolean ... default X` eller
 #: `alter column kraver_avtal set default X`.

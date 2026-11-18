@@ -37,7 +37,7 @@ on:
       - development
       - main
     paths:
-      - "supabase/migrations/**"
+      - "db/migrations/**"
       - "railway/000_auth_compat.sql"
   pull_request:
     branches:

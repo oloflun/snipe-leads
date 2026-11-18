@@ -165,7 +165,7 @@ Varianterna, ärligt bedömda:
 ## 4. Migrationerna
 
 ### I dag
-- Push till `development`/`main` som rör `supabase/migrations/**` eller `railway/000_auth_compat.sql` kör kedjan mot samma miljö [V migrera.yml:32-38, 58-100].
+- Push till `development`/`main` som rör `db/migrations/**` eller `railway/000_auth_compat.sql` kör kedjan mot samma miljö [V migrera.yml:32-38, 58-100].
 - PR mot `main` får kontrollen `releasens migrationer`: läser båda liggarna, listar vad main skulle få och fäller PR:en om development har okörda [V migrera.yml:119-153].
 - Migrationerna kör SQL inne i databasen. Persondata passerar inte GitHub, utom möjligen i felmeddelanden [V railway_migrate.py:136-140, felet kapas till 400 tecken]. Men workflowen bär superlösenorden och kräver båda portarna.
 
@@ -180,7 +180,7 @@ Varianterna, ärligt bedömda:
 3. **Förkommando på tjänsten `migrera`** i stället för startkommando: ger samma sak men med Railways "deployen fortsätter inte"-semantik [W8]. Ett val i bygget.
 
 ### PR-kontrollen "releasens migrationer"
-- **Vad releasen bär** kan räknas ur git utan databas: filer i `supabase/migrations/` som finns i PR:ens gren men inte i `main`. Det ersätter main-liggarens lista [A: att main aldrig fått en migration utanför git; liggarregeln i DEPLOY.md:713-724 talar för det].
+- **Vad releasen bär** kan räknas ur git utan databas: filer i `db/migrations/` som finns i PR:ens gren men inte i `main`. Det ersätter main-liggarens lista [A: att main aldrig fått en migration utanför git; liggarregeln i DEPLOY.md:713-724 talar för det].
 - **"Development har okörda"** kräver developments liggare. Förslag: en ny endpoint `GET /api/drift/schema` i api som returnerar de körda versionerna (bara filnamn, ingen persondata), skyddad av en egen smal nyckel `SCHEMA_LASNYCKEL`. GitHub anropar developments och mains api över HTTPS. Api-rollen `snajp_app` behöver `select` på `supabase_migrations.schema_migrations` (en additiv migration).
 - Förlust: ingen funktionell. Kontrollen blir en HTTPS-fråga i stället för en databasanslutning. Torrkörningen "vad väntar" för hand (workflow_dispatch) ersätts av samma endpoint eller av tjänstens logg.
 
@@ -241,7 +241,7 @@ Varje steg: **vad**, **typ** (Kod / Railway / Ägare), **verifiering**, **backni
 - Backning: `drop role synk_las` (additivt, inget annat beror på rollen).
 
 **Steg 4. Avbild för driftjobben** — Kod
-- Ny `railway/Dockerfile.drift` med `python:3.12-slim` (samma ECR-spegel som api [V snajp-support/Dockerfile:4]), `pip install psycopg2-binary`, och `COPY scripts/railway_synk.py scripts/railway_migrate.py scripts/railway_provision.py scripts/railway.py`, `supabase/migrations/`, `railway/000_auth_compat.sql`. Egen allowlist `railway/Dockerfile.drift.dockerignore` (BuildKit läser `<Dockerfile>.dockerignore` först [V .dockerignore:3-5]). `docs/` utesluts redan av rotens ignorefil [V .dockerignore], så `supabase/` och `scripts/` måste släppas in uttryckligen.
+- Ny `railway/Dockerfile.drift` med `python:3.12-slim` (samma ECR-spegel som api [V snajp-support/Dockerfile:4]), `pip install psycopg2-binary`, och `COPY scripts/railway_synk.py scripts/railway_migrate.py scripts/railway_provision.py scripts/railway.py`, `db/migrations/`, `railway/000_auth_compat.sql`. Egen allowlist `railway/Dockerfile.drift.dockerignore` (BuildKit läser `<Dockerfile>.dockerignore` först [V .dockerignore:3-5]). `docs/` utesluts redan av rotens ignorefil [V .dockerignore], så `supabase/` och `scripts/` måste släppas in uttryckligen.
 - Inga hemligheter i avbilden.
 - Test: `verify.yml` får ett byggsteg för avbilden (som docker-smoke för api).
 - Verifiering: avbilden bygger i CI; `python scripts/railway_synk.py --help` går i containern.
@@ -266,7 +266,7 @@ Varje steg: **vad**, **typ** (Kod / Railway / Ägare), **verifiering**, **backni
 - Backning: återställ `schedule`.
 
 **Steg 8. Tjänsten `migrera` per miljö** — Railway + Kod
-- En tjänst `migrera` i development (gren `development`) och en i main (gren `main`), avbild `railway/Dockerfile.drift`, Amsterdam, ingen domän, omstart `NEVER`, `watchPatterns: ["supabase/migrations/**", "railway/000_auth_compat.sql"]` [W9].
+- En tjänst `migrera` i development (gren `development`) och en i main (gren `main`), avbild `railway/Dockerfile.drift`, Amsterdam, ingen domän, omstart `NEVER`, `watchPatterns: ["db/migrations/**", "railway/000_auth_compat.sql"]` [W9].
 - Variabel: `SYNK_<MILJÖ>_PG_URL`-motsvarighet med superanvändaren över privat nät, `postgres:${{Postgres.POSTGRES_PASSWORD}}@${{Postgres.RAILWAY_PRIVATE_DOMAIN}}:5432/railway` [W6]. Kod: `railway_migrate.dsn` läser den (samma ändring som steg 2).
 - Startkommando: `python scripts/railway_migrate.py --env <miljö> --apply && python scripts/railway_migrate.py --env <miljö>` (kontrollen efteråt som i workflowen [V migrera.yml:93-100]).
 - Ordning: development först. Låt `migrera.yml` gå kvar parallellt; kedjan är idempotent [V railway_migrate.py:106-113], så två körningar efter varandra är ofarliga. Samtidiga körningar kan krocka [A]; lägg samma rådgivande lås i `railway_migrate.py`.

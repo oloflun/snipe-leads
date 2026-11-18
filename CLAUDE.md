@@ -93,21 +93,19 @@ stacken.
 
 Levande dev-miljö: `https://web-development-6c85.up.railway.app`
 Migrationer körs av sig själva sedan 2026-11-16: en push till `development`
-som rör `supabase/migrations/` kör kedjan mot development
+som rör `db/migrations/` kör kedjan mot development
 (`.github/workflows/migrera.yml`). Kontrollera att jobbet `migrera` blev
 grönt. Migrationer ska vara additiva och idempotenta, så att schemat får
 ligga före koden. För hand: `python scripts/railway_migrate.py --env development --apply`
 
-**Skriv ALDRIG till Supabase.** Grenen `development` i Supabase är död —
-`MIGRATIONS_FAILED` sedan 15 augusti, ett fel på Supabases sida, och beslutet
-i `MIGRATIONS-PENDING.md` är att lämna den som den är. Använd inte
-`mcp__supabase-snipra__apply_migration`, `rebase_branch`, `reset_branch`,
-`create_branch` eller något annat skrivande Supabase-MCP-anrop — de
-skrivläsande verktygen (`list_tables`, `get_advisors`, `execute_sql` för
-läsning) är okej, men varje mutation ska gå till Railway via
-`scripts/railway_migrate.py`, aldrig till Supabase. En SQL-fil i
-`supabase/migrations/` är källkod som konsumeras av det Railway-skriptet —
-katalognamnet är historiskt, inte en instruktion att köra den mot Supabase.
+**Supabase är borttaget ur repot (Antons beslut 2026-11-18).** Migrationerna
+ligger i `db/migrations/` och körs bara mot Railway via
+`scripts/railway_migrate.py`. Edge functions, `supabase/config.toml`,
+GoTrue-adaptern (`lib/supabase-auth.ts`), `@supabase/supabase-js`, Supabase-MCP:n
+och skripten mot Supabase är raderade. Bygg inte in något av det igen och skriv
+aldrig till Supabase. Två namn lever kvar med flit, för att de är namn i
+databasen och inte i Supabase: liggaren `supabase_migrations.schema_migrations`
+och `auth`-schemat från `railway/000_auth_compat.sql`.
 
 **Development-databasen är en SPEGEL av produktionen** — Railway-miljön
 `development` bär en spegelmarkör, så att en ändring går att utvärdera med allt
@@ -299,7 +297,7 @@ ställer är arbete du lämpar över. Innan du ber om något:
    ett API eller en MCP som gör samma sak. Att ett moment står beskrivet som
    "gör detta i dashboarden" betyder inte att det måste göras där.
 2. **Installera verktyget själv** om tjänsten redan används i projektet.
-   Supabase CLI (`npx supabase`), Vercel CLI, Railways API, `gh` — alla
+   Railways API och CLI, `gh` — alla
    används här och får installeras och konfigureras utan att fråga.
 3. **Bygg ett skript i stället för en instruktion.** `scripts/keys.py`,
    `scripts/onboard_tenant.py` och `scripts/verify_railway.py` är mönstret: det

@@ -10,7 +10,7 @@
 !scripts/railway_provision.py
 !scripts/railway.py
 !railway/000_auth_compat.sql
-!supabase/migrations
+!db/migrations
 
 # Skräp inuti de tillåtna katalogerna (sista matchning vinner).
 **/__pycache__

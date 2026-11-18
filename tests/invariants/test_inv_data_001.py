@@ -24,13 +24,13 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 SEED = ROOT / "scripts" / "railway_seed_dev.py"
-SUPABASE_SEED = ROOT / "scripts" / "supabase_seed_dev.py"
 SCRIPTS = ROOT / "scripts"
 
 #: Speglingsskript som ÄR granskade och bär alla spärrar. Varje fil här
 #: kontrolleras av test_vaktad_spegel_bar_alla_sparrar nedan — listan är
-#: alltså inte ett undantag utan en skärpning.
-VAKTADE_SPEGLAR = (SEED, SUPABASE_SEED)
+#: alltså inte ett undantag utan en skärpning. Supabase-speglingen
+#: (supabase_seed_dev.py) togs bort med resten av Supabase-spåret 2026-11-18.
+VAKTADE_SPEGLAR = (SEED,)
 
 #: Trippelciterad rå sträng: mönstret innehåller både ' och ", och varje
 #: annan citering kräver escaping som är lätt att få fel.
