@@ -115,6 +115,9 @@ def test_stallena_dar_kundtext_nar_modellen_ar_kanda():
         "triage.py": "maskera_personnummer(body)",
         "support_agent.py": "maskera_personnummer(message)",
         "demo_agent.py": "maskera_personnummer(message)",
+        # INV-DATA-007 (2026-11-18): klassaren och varje inbäddning.
+        "retention_classifier.py": "maskera_personnummer(message)",
+        "embeddings.py": "maskera_personnummer(text)",
     }
     saknas = [
         namn

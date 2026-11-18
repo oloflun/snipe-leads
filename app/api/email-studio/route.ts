@@ -2,7 +2,7 @@
 import { generateText } from 'ai';
 import { createOpenAI } from '@ai-sdk/openai';
 import { getWorkspaceContext } from '@/lib/workspace';
-import { valjModell, type Modellval } from '@/lib/llm/modellval';
+import { dataskyddsvarning, valjModell, type Modellval } from '@/lib/llm/modellval';
 import { hamtaVertexToken } from '@/lib/llm/vertex';
 import { kanForsokasOm, klassaModellfel, statuskod, type Modellfelklass } from '@/lib/llm/kvotfel';
 import { DIREKT_OMSKRIVNING, exempelresultat, finnExempelbolag } from '@/lib/demo/iris-exempel';
@@ -57,6 +57,14 @@ async function byggSprakmodell(val: Modellval) {
  * operatör, så det sägs i loggen — utan innehållet, som bär privatnyckeln.
  */
 function varnaOmTrasigServiceAccount(val: Modellval | null) {
+  // INV-DATA-006: en region utanför EU eller en OpenAI-nyckel där data är
+  // riktig hoppas över i modellval.ts. Det sägs här, i stället för det
+  // missvisande "går inte att läsa" nedan.
+  const dataskydd = dataskyddsvarning(process.env);
+  if (dataskydd) {
+    console.error(`[email-studio:dataskydd] ${dataskydd}`);
+    return;
+  }
   if (process.env.GOOGLE_SERVICE_ACCOUNT_JSON && val?.provider !== "vertex" && val?.provider !== "openai") {
     console.error(
       "[email-studio:vertex-konfig] GOOGLE_SERVICE_ACCOUNT_JSON är satt men går inte att läsa " +

@@ -12,7 +12,9 @@
  * ## Ordningen (avsiktlig)
  *
  *   1. OPENAI_API_KEY — vinner när den finns, så att ett byte tillbaka inte
- *      kräver en kodändring.
+ *      kräver en kodändring. BARA där ingen riktig kunddata finns
+ *      (INV-DATA-006): där data är riktig börjar ordningen på Vertex, och
+ *      Vertex väljs bara i en EU-region (`EU_REGIONER`).
  *   2. GOOGLE_SERVICE_ACCOUNT_JSON — Vertex AI. Google tog bort Cloud-krediterna
  *      från AI Studio 2026-09, och backenden gick över till Vertex samma dag
  *      (HANDOFF-2026-09-12-VERTEX-AI.md). Samma variabel som backenden läser.
@@ -162,20 +164,70 @@ function geminiModell(env: Miljo, standard: string): string {
   return model.toLowerCase().startsWith("gemini") ? model : standard;
 }
 
+/**
+ * Ordagrant `VERTEX_EU_REGIONER` i snajp-support/app/config.py, där varje post
+ * är motiverad. Aldrig `global`, `us` eller regioner utanför EU (London, Zürich).
+ */
+export const EU_REGIONER = [
+  "europe-west1",
+  "europe-west4",
+  "europe-north1",
+  "europe-west3",
+  "europe-west8",
+  "europe-west9",
+  "europe-southwest1"
+] as const;
+
+function region(env: Miljo): string {
+  return (env.GOOGLE_CLOUD_REGION || "").trim() || STANDARDREGION;
+}
+
+function arEuRegion(r: string): boolean {
+  return (EU_REGIONER as readonly string[]).includes(r);
+}
+
+/**
+ * INV-DATA-006. Varför valjModell hoppar över en leverantör som är
+ * konfigurerad, eller null. Routen loggar det: en spärr som tyst ger
+ * simuleringsläge hade sett ut som en saknad nyckel.
+ */
+export function dataskyddsvarning(env: Miljo): string | null {
+  if (!harRiktigKunddata(env)) return null;
+  if (lasServiceAccount(env.GOOGLE_SERVICE_ACCOUNT_JSON) && !arEuRegion(region(env))) {
+    return (
+      `GOOGLE_CLOUD_REGION=${region(env)} ligger inte i EU, och miljön bär riktig kunddata, ` +
+      `så Vertex AI används inte. Tillåtna regioner: ${EU_REGIONER.join(", ")}. ` +
+      `Rätta variabeln eller ta bort den (standard ${STANDARDREGION}) och deploya om.`
+    );
+  }
+  if (dugerSomNyckel(env.OPENAI_API_KEY)) {
+    return (
+      "OPENAI_API_KEY ignoreras: miljön bär riktig kunddata, och OpenAI står inte i " +
+      "underbiträdesförteckningen. Att släppa in OpenAI i drift är ett avtalsbeslut, " +
+      "inte ett kodbeslut. Ta bort variabeln."
+    );
+  }
+  return null;
+}
+
 export function valjModell(env: Miljo): Modellval | null {
+  // INV-DATA-006: där data är riktig väljs aldrig OpenAI (behandling i USA,
+  // inte godkänt för kunddata), och Vertex bara i en EU-region. Lokalt är
+  // ordningen den gamla.
+  const riktig = harRiktigKunddata(env);
   const openaiKey = env.OPENAI_API_KEY || "";
-  if (dugerSomNyckel(openaiKey)) {
+  if (dugerSomNyckel(openaiKey) && !riktig) {
     return { provider: "openai", apiKey: openaiKey, namn: env.EMAIL_STUDIO_MODEL || "gpt-4o-mini" };
   }
 
   const serviceAccount = lasServiceAccount(env.GOOGLE_SERVICE_ACCOUNT_JSON);
-  if (serviceAccount) {
-    const region = (env.GOOGLE_CLOUD_REGION || "").trim() || STANDARDREGION;
+  if (serviceAccount && (!riktig || arEuRegion(region(env)))) {
+    const valdRegion = region(env);
     return {
       provider: "vertex",
       serviceAccount,
-      region,
-      baseURL: vertexBaseUrl(serviceAccount.project_id, region),
+      region: valdRegion,
+      baseURL: vertexBaseUrl(serviceAccount.project_id, valdRegion),
       // Backendens modell i båda miljöerna sedan 2026-09-12 — med publisher,
       // eftersom routen anropar openapi-endpointen (se vertexModellnamn).
       namn: vertexModellnamn(geminiModell(env, "gemini-2.5-flash"))

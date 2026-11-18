@@ -28,6 +28,7 @@ import logging
 
 from ..cache.embeddingcache import hamta_cache
 from ..config import get_settings
+from ..moderation.maskering import maskera_personnummer
 from .llm import get_embedding_client
 
 logger = logging.getLogger(__name__)
@@ -40,9 +41,24 @@ async def embed_text(text: str) -> list[float] | None:
     embeddingcache.py`) om samma text redan embeddats. Kroken gäller VARJE
     anropare — KB-sökningen (`_sok_kb` i support_agent.py) OCH den
     semantiska svarscachen (`app/cache/svarscache.forbered`) delar alltså
-    samma cache, utan att någon av dem behöver veta om den."""
+    samma cache, utan att någon av dem behöver veta om den.
+
+    Personnummer maskeras FÖRST (INV-DATA-007), före cachen och före anropet:
+    det här är det enda stället där text lämnar huset för en inbäddning, så
+    varje anropare (KB-sökningen, svarscachen, triagen, mejlflödet, agentens
+    sökverktyg) får det utan att behöva komma ihåg det. Följder:
+
+      * Text utan personnummer går ut tecken för tecken som förut, alltså
+        samma vektor och samma cachenyckel. Det gäller kunskapsbasens
+        artiklar, som inte är kundtext.
+      * Skrivning och läsning går genom samma funktion, så frågan och de
+        lagrade vektorerna maskeras lika.
+      * Cachen nycklas på den maskerade texten: inget personnummer i
+        nyckeln, och två frågor som bara skiljer sig i numret delar vektor.
+    """
     global _har_klagat
 
+    text = maskera_personnummer(text)
     cache = hamta_cache()
     cachad = await cache.get(text)
     if cachad is not None:
@@ -88,10 +104,10 @@ async def _vertex_predict(settings, text: str) -> list[float]:
 
     import httpx
 
-    from .llm import _vertex_token
+    from .llm import _vertex_token, vertex_region
 
     projekt = json.loads(settings.google_service_account_json)["project_id"]
-    region = settings.google_cloud_region
+    region = vertex_region(settings)  # INV-DATA-006: vägrar en region utanför EU
     url = (
         f"https://{region}-aiplatform.googleapis.com/v1/projects/{projekt}/locations/{region}"
         f"/publishers/google/models/{settings.embedding_model}:predict"

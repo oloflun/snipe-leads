@@ -9,6 +9,45 @@ möjligt), vad det betyder i koden.
 
 ---
 
+## 2026-11-18 (Claude (agent), inom Antons uppdrag 2026-11-17 om EU-compliance) — Modellanropen maskeras och hålls i EU i koden
+
+**Beslut.** Fem brister som dataskyddsbedömningen av Gemini på Vertex AI pekade
+ut stängs i kod: personnummer maskeras också före uppsägningsklassaren och före
+varje inbäddning; tjänsten vägrar starta där data är riktig om en Vertex-region
+inte ligger i EU, om `LLM_BASE_URL` pekar någon annanstans än Vertex i EU, eller
+om `LLM_PROVIDER` är `openai`; Email Studio väljer aldrig OpenAI eller en region
+utanför EU där data är riktig; och ett test håller Googles sökgrundning kvar i
+leadssökningen. Invarianterna INV-DATA-006 och INV-DATA-007.
+
+**Resonemanget.** Bedömningen fann att DPIA:n och integritetspolicyn lovar att
+personnummer maskeras, men två vägar skickade dem omaskerade till Google:
+klassaren fick hela meddelandet och inbäddningarna räknades på omaskerad
+kundtext. Maskeringen sitter nu där texten lämnar huset, ett ställe per väg,
+så att en ny anropare inte kan glömma den. Inbäddningarna maskeras i
+`embed_text`, som både skrivning och läsning går genom; text utan personnummer
+går ut oförändrad, så kunskapsbasens vektorer och svarscachen påverkas inte
+(svarscachen tar dessutom bara emot frågor utan personnummer). Regionerna och
+bas-URL:en lästes ur miljön utan kontroll: en felaktig variabel hade tyst
+flyttat behandlingen ur EU, och det skulle ingen märka. Spärren är samma sort
+som DeepSeek-spärren: den kraschar hellre än varnar, och bara där data är
+riktig. OpenAI står inte i underbiträdesförteckningen och leverantörsgranskningen
+säger "inte för kunddata"; att släppa in det i drift är ett avtalsbeslut.
+Driften använder inte OpenAI i dag (`LLM_PROVIDER=gemini` i api i båda miljöerna,
+ingen `OPENAI_API_KEY`, `GOOGLE_CLOUD_REGION`, `VERTEX_RESERVREGIONER` eller
+`LLM_BASE_URL` i någon tjänst enligt konfigurationsutdraget 2026-11-17), så
+ingenting ändras vid deploy. Sökgrundningens frågor sparas hos Google i tre
+dygn utan möjlighet att stänga av; i dag får den bara målgrupp, kriterier och
+bolagsnamn, och testet hindrar att det ändras utan att någon tar ställning.
+
+**I koden.** `snajp-support/app/config.py` (`VERTEX_EU_REGIONER`,
+`bas_url_tillaten`, `Settings.llm_provider_fault`, `Settings.vertex_regioner`),
+`app/agent/llm.py` (`vertex_region`, `_resolve_base_url`),
+`app/agent/embeddings.py`, `app/agent/retention_classifier.py`,
+`app/leads/discovery.py`, `lib/llm/modellval.ts` (`EU_REGIONER`,
+`dataskyddsvarning`), `app/api/email-studio/route.ts`. Inte gjort här:
+modellbytet från Gemini 2.5 (ägarens beslut), cachen i Google Cloud och ett
+servicekonto per miljö (ägarens hand), fler maskeringstyper.
+
 ## 2026-11-18 (Anton) — Extern övervakning, säkerhetskontakt och Dependabot
 
 **Beslut.** Fyra luckor som en genomgång mot ISO 27001 visade fylls: en

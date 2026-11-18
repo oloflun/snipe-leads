@@ -37,9 +37,13 @@ def test_railway_variabeln_racker_ensam():
     assert fel is not None
 
 
-def test_openai_ar_alltid_tillaten():
-    for miljo in ("main", "development", "", "lokal"):
+def test_openai_tillaten_bara_mot_syntetisk_data():
+    """OpenAI är inte godkänt för kunddata (INV-DATA-006, 2026-11-18): samma
+    gräns som DeepSeek. Lokalt och i testsviten som förut."""
+    for miljo in ("", "lokal"):
         assert _settings(llm_provider="openai", environment=miljo).llm_provider_fault() is None
+    for miljo in ("main", "development"):
+        assert _settings(llm_provider="openai", environment=miljo).llm_provider_fault() is not None
 
 
 def test_gemini_ar_tillaten_och_far_ratt_nyckel_och_endpoint():
@@ -120,14 +124,15 @@ def test_modell_fran_fel_provider_faller_uppstarten():
 
 
 def test_ratt_modell_for_providern_gar_igenom():
-    for provider, nyckel, modell in (
-        ("gemini", "gemini_api_key", "gemini-3.6-flash"),
-        ("openai", "openai_api_key", "gpt-4o-mini"),
+    for provider, nyckel, modell, miljo in (
+        ("gemini", "gemini_api_key", "gemini-3.6-flash", "main"),
+        # OpenAI bara mot syntetisk data sedan 2026-11-18 (INV-DATA-006).
+        ("openai", "openai_api_key", "gpt-4o-mini", "lokal"),
     ):
         # Gemini i main kräver servicekontot (INV-DATA-004).
         sa = {"google_service_account_json": _FAKE_SA_JSON} if provider == "gemini" else {}
         s = _settings(
-            llm_provider=provider, environment="main", model=modell, **{nyckel: "k" * 40}, **sa
+            llm_provider=provider, environment=miljo, model=modell, **{nyckel: "k" * 40}, **sa
         )
         assert s.llm_provider_fault() is None, f"{provider}/{modell}"
 
