@@ -9,6 +9,35 @@ möjligt), vad det betyder i koden.
 
 ---
 
+## 2026-11-18 — provbyte i development (Claude (agent), inom Antons uppdrag om EU-compliance) — inte gjort: bildmodellen klarade inte grinden
+
+**Beslut.** Variablerna i `modellbyte-underlag.md` avsnitt 6.1 sattes **inte**
+i Railway-miljön `development`. Development kör gemini-2.5-flash i
+europe-west1 som förut. Inget i miljön `main` är rört.
+
+**Resonemanget.** Uppdraget var att göra provbytet bara om två villkor höll:
+kvoten i `eu` (under cirka 5 % 429) och att bildmodellen klarar
+webbkalibreringens grind på 85 %. Kvoten höll: ingen regional kvot finns för
+3.x i `eu`, och 0 av 60 samtidiga anrop per modell fick 429. Bildmodellen
+klarade inte grinden. På ett urval om 30 av facitets 58 sajter, med samma
+skärmbilder för alla modeller, fick gemini-3.8-flash 80 % (strängare än facit:
+fem bra sajter blev dåliga) och gemini-3.5-flash-lite 83 %; dagens
+gemini-2.5-flash fick 83 % och 87 % i två körningar. En bildmodell måste sättas
+vid bytet, eftersom bildklienten anropas i samma region som resten och 2.5
+saknas i `eu`, så bytet kan inte göras med bildmodellen kvar på 2.5. I
+kvittoavläsningen läste 3.8-flash foton bäst men rättade ett avsiktligt
+felsummerat kvitto (793 blev 798), och 3.5-flash-lite läste foton sämst.
+Att sänka grinden eller räkna bort ett fall för att få igenom bytet är
+ägarens beslut, inte agentens.
+
+**Nästa steg.** Kalibrera 3.5-flash-lite och 3.8-flash mot alla 58 sajter
+(omkring 60 ScrapeGraph-krediter till) och välj bildmodell utifrån det, eller
+låt Anton avgöra på urvalet. Siffrorna står i `modellbyte-underlag.md` avsnitt
+3.5 och 3.6. Mätningen kostade omkring 13 kr i Vertex och 50
+ScrapeGraph-krediter.
+
+---
+
 ## 2026-11-18 (Claude (agent), inom Antons uppdrag om EU-compliance; ändringarna väntar på Antons granskning) — Bytet från Gemini 2.5 förbereds så att det blir en ändring av variabler
 
 **Beslut.** Koden förbereds för gemini-3.x utan att någon modell byts:

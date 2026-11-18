@@ -17,7 +17,7 @@ modeller:
 |---|---|---|---|
 | Chatten, mejltriagen, klassare, research, Jev, leadssökningen, profilen | `MODEL` | **gemini-3.5-flash-lite** | Samma kvalitet som i dag inom bruset (support 47/50 mot 48/50, triage 47/50 mot 45/50, golden 6/7 mot 6/7), snabbare (median 4,7 s mot 8,2 s per chatt) och nästan samma pris (+9 % per chatt) |
 | Iris utkast och humanizer | `LEADS_DRAFT_MODEL`, `LEADS_HUMANIZER_MODEL` | **gemini-3.8-flash** | Bäst mot utkastfacitets grind: 10/10 utan stilfynd mot 7/10 i dag, 9/10 godkända mot 5/10. Kostar ungefär +50 % per utkast till nyår och ungefär tre gånger dagens från 2027-01-01 |
-| Bildbeskrivning, kvitton, webbrevisionens bildbedömning | `VISION_MODEL` | gemini-3.8-flash, **efter mätning** | Inte mätt (avsnitt 8). Kvittosviten och kalibreringen mot webbfacit (`scripts/kalibrera_webbrevision.py`, grind 85 %) måste köras i development först |
+| Bildbeskrivning, kvitton, webbrevisionens bildbedömning | `VISION_MODEL` | **Öppen** (avsnitt 3.6) | Mätt 2026-11-18: ingen kandidat klarar webbgrinden på 85 % i urvalet (3.8-flash 80 %, 3.5-flash-lite 83 %, dagens 2.5-flash 83–87 %). 3.8 läser kvittofoton bäst men rättade ett avsiktligt felsummerat kvitto; 3.5-flash-lite läser kvittofoton sämst |
 | Inbäddningar | `VERTEX_INBADDNING_REGION` | gemini-embedding-001 i europe-west1, som i dag | Saknas i `eu`; står inte på pensionslistan |
 
 **Inte gemini-3.8-flash i chatten:** svaren är bäst (49/50) men medianen är
@@ -251,6 +251,114 @@ Agenten läste 25 av utkasten (alla tio från 3.8-flash, sex från
   3.5-flash skrivreglerna i 9/10. Ämnesrader med liten första bokstav finns
   hos alla modeller, också dagens 2.5-flash.
 
+### 3.5 Kvoten i `eu`, kontrollerad 2026-11-18 (efter PR #74)
+
+**Kvotlistan.** Servicekontot (`snajp-vertex`) får läsa Service Usage API
+(`consumerQuotaMetrics` för `aiplatform.googleapis.com`, 398 metriker); Cloud
+Quotas API är inte aktiverat i projektet (403). Det finns ingen regional kvot
+för gemini-3.5-flash-lite eller gemini-3.8-flash i `eu`. De enda posterna för
+modellerna är globala: 50 M inmatade tokens per minut och 5 000 M per dygn per
+basmodell (`*-qcd`), standardvärdet. **Bedömning:** Standard PayGo för 3.x går
+på Googles delade kapacitet (dynamisk kvot), så ett 429 beror på kapaciteten i
+`eu` just då, inte på en projektgräns som går att läsa av. Därför gjordes
+också ett lasttest.
+
+**Lasttestet.** Korta syntetiska supportfrågor (inga kunddata), alla samtidigt,
+mot `aiplatform.eu.rep.googleapis.com` med samma OpenAI-kompatibla ändpunkt och
+tankenivå som koden (MINIMAL för 3.5-flash-lite, LOW för 3.8-flash):
+
+| Modell | Samtidiga anrop | 429 | Median | 90:e percentil | Max |
+|---|---|---|---|---|---|
+| gemini-3.5-flash-lite | 20 | 0 % | 1,3 s | 1,4 s | 1,5 s |
+| gemini-3.5-flash-lite | 40 | 0 % | 0,9 s | 1,0 s | 1,1 s |
+| gemini-3.8-flash | 20 | 0 % | 10,2 s | 26,5 s | 27,4 s |
+| gemini-3.8-flash | 40 | 0 % | 4,6 s | 11,3 s | 12,7 s |
+
+Kvoten håller: 0 av 60 anrop per modell fick 429. 3.8-flash är fortfarande
+långsam och ojämn under samtidig last (avsnitt 3.3), vilket talar för att
+hålla den borta från chatten.
+
+### 3.6 Bildmodellen (`VISION_MODEL`), mätt 2026-11-18
+
+Två mätningar, lokalt, med repots egna fixturer. Ingen kunddata, ingen
+driftsatt miljö och ingen databas. Mätskripten ligger inte i repot (de är
+tunna skal kring produktionens funktioner, beskrivna nedan).
+
+**Webbplatsbedömningen mot webbfacit.** Samma kedja som
+`scripts/kalibrera_webbrevision.py` (webbsignal, platshållare,
+`webbrevision.revidera`) och samma räkning: rätt sammanslaget (akut+dålig mot
+bra+mycket bra), grind 85 % och ingen akut sajt på bra. Det fanns inga sparade
+skärmbilder, så mätningen gjordes på ett **urval om 30 av facitets 58 sajter**
+(jämnt fördelat över nivåerna i facitets ordning). Skärmbilden, PageSpeed och
+sidmätningen hämtades en gång och sparades, och varje modell bedömde exakt
+samma bilder (stealth-omtaget vid skymd ruta fick därför ingen ny bild för
+kandidaterna; det inträffade inte för baslinjen). 50 ScrapeGraph-krediter.
+
+| | 2.5-flash, `europe-west1` (i dag) | 3.8-flash, `eu` | 3.5-flash-lite, `eu` |
+|---|---|---|---|
+| Rätt sammanslaget, körning 1 | 25/30 (83 %) | 24/30 (80 %) | 25/30 (83 %) |
+| Rätt sammanslaget, körning 2 | 26/30 (87 %) | 24/30 (80 %) | 25/30 (83 %) |
+| Exakt rätt nivå | 16–17/30 | 16/30 | 19/30 |
+| Akut på bra | 0 | 0 | 0 |
+| Grinden (85 %) | underkänd / godkänd | **underkänd** | **underkänd** |
+| Median per bildbedömd sajt | 16 s (ur cache) | 8,6 s | 1,2 s |
+
+Felen:
+
+- **Alla tre:** sagobetong.se står som avvecklad i facit men svarar nu 503 och
+  blir akut i koden, före bildmodellen. Det är facit som åldrats, inte
+  modellen. Räknat utan den: 2.5-flash 25–26/29 (86–90 %), 3.8-flash 24/29
+  (83 %), 3.5-flash-lite 25/29 (86 %).
+- **3.8-flash** är systematiskt strängare: fem sajter som facit kallar bra
+  (kaminbutiken, bovikmarin, svenskparkering, bjorkmansmaleri,
+  hunnebosjomack) fick 4–5, alltså dålig. Samma utfall i båda körningarna.
+  I drift skulle de hamna i webbpoolen som dåliga sajter (regel 20), en
+  felaktig lead till webbyråerna.
+- **3.5-flash-lite** gör samma två fel som dagens modell på bra-sidan, sätter
+  renovering-goteborg (dålig) på bra som 2.5-flash, och gav ett oläsbart svar
+  två gånger på carauto.se (nivå okänd).
+
+**Kvittoavläsningen.** Kvittosvitens 40 syntetiska kvitton
+(`evals/kvitto.json`) skickas av evalkörningen som PDF med textlager, och då
+används aldrig bildmodellen. För att mäta den renderades kvittotexterna som
+bilder i två varianter, *skärmdump* (skarp PNG) och *foto* (nedskalad, lutad
+2,5°, oskarp, JPEG kvalitet 55 på grå bakgrund), och lästes av produktionens
+`kvitton.hanterare._las_bild` med produktionens `BILDPROMPT`. Avskriften
+lästes sedan av den deterministiska tolken (`tolka_deterministiskt`), och
+fälten (brutto eller utländskt belopp, momssats, datum) jämfördes med samma
+tolk på originaltexten. Det mäter bara bildsteget; agentsteget (`MODEL`)
+prövas inte här.
+
+| | 2.5-flash (i dag) | 3.8-flash | 3.5-flash-lite |
+|---|---|---|---|
+| Skärmdump: kvitton med alla fält rätt | 40/40 | 40/40 | 39/40 |
+| Foto: kvitton med alla fält rätt | 36/40 | **38/40** | 31/40 |
+| Foto: fält rätt | 94/98 | 96/98 | 89/98 |
+| Latens, median foto | 3,1 s | 5,7 s | 1,0 s |
+| Kostnad för 80 bilder | 1,58 kr | 3,51 kr | 0,79 kr |
+
+- **2.5-flash** tappade totalbeloppet i fyra foton (tolken fann inget belopp,
+  fallet hade gått till granskning).
+- **3.8-flash** läste bäst, men i `nara-dubblett-drivmedel-793` står
+  "Totalt 793,00" medan raden och momsen summerar till 798,00 (avsiktligt i
+  sviten). 3.8 skrev 798,00 på båda raderna: den rättade kvittot i stället för
+  att skriva av det, trots att prompten säger ordagrant. Det är det farligaste
+  felet av alla i mätningen, eftersom det ser rätt ut.
+- **3.5-flash-lite** tappar kolumnerna i foton: belopp och rubriker hamnar på
+  var sin rad, och tolken tar fel belopp (2 140 kr blev 428 kr, 2 375 kr blev
+  1 900 kr) eller inget alls. En LLM-tolk efter avskriften kan rädda en del,
+  det mättes inte.
+
+**Bedömning.** Ingen kandidat klarar webbgrinden som skriptet räknar den, och
+urvalet är för litet för att skilja dem åt (skillnaden mellan 3.5-flash-lite
+och dagens modell är ett fall). 3.5-flash-lite är närmast dagens nivå på
+webben, 3.8-flash bäst på kvitton men med ett rättat belopp. En bildmodell
+behövs ändå, eftersom bildklienten anropas i `GOOGLE_CLOUD_REGION` och 2.5
+saknas i `eu`. Det avgörande nästa steget är kalibreringen på alla 58 sajter
+för 3.5-flash-lite och 3.8-flash (omkring 60 ScrapeGraph-krediter till, med
+skärmbilderna från urvalet återanvända), och ett beslut om vilken svaghet som
+väger tyngst: fel webbnivå eller fel kvittobelopp.
+
 ## 4. Kostnad per månad vid dagens volym
 
 **Volymen repot känner till.** Leads: 58 körningar på 14 dygn drog 165 M
@@ -344,7 +452,9 @@ så ett felskrivet värde ger en misslyckad deploy, inte tyst fel behandling.
 2. **Ägaren:** kontrollera kvoten för gemini-3.x i `eu` i Google Cloud-konsolen
    (IAM och administration > Kvoter, filter "generate_content" och regionen
    `eu`). Mätningen fick 429 för gemini-3.5-flash i `eu` och långa väntetider
-   för 3.8 (avsnitt 3.3).
+   för 3.8 (avsnitt 3.3). *Gjort 2026-11-18 (avsnitt 3.5): ingen regional
+   kvot finns för 3.x i `eu` (delad kapacitet), och 0 av 60 samtidiga anrop
+   per modell fick 429.*
 3. **development:** sätt variablerna i 6.1 på `api` och `web` i miljön
    `development` (Railway). En deploy startar av sig själv. Kontrollera att
    båda tjänsterna startar (`/health/ready` på api).
@@ -390,8 +500,10 @@ blir då ett byte till en annan 3.x-modell.
 - **Researchen, Jev och leadssökningen** (grundad Google-sökning). Ingen av
   dem har en låst svit som går att köra utan nätverk mot riktiga sajter.
   Sökningen provades med ett anrop per modell (avsnitt 2.4).
-- **Kvittohanteraren och bildmodellen.** Kvittosviten (`evals/kvitto.json`)
-  går bara genom en miljös uppladdning; den kördes inte.
+- **Kvittohanteraren och bildmodellen.** Bildsteget och webbplatsbedömningen
+  mättes 2026-11-18 (avsnitt 3.6), på ett urval om 30 av 58 facitsajter.
+  Kvittosvitens hela kedja (uppladdning, agent, status) kördes inte: den går
+  bara genom en miljös uppladdning, och provbytet i development gjordes inte.
 - **Email Studio.** Bara att anropet tar den nya tankeformen (test).
 - **Spridningen.** Varje mätning kördes en gång per kandidat. Golden-svitens
   sju fall gav 7/7 och 6/7 för samma modell i två körningar samma dag, så en
