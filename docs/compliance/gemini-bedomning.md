@@ -209,7 +209,7 @@ Upplägg enligt EDPB:s rekommendationer 01/2020 om kompletterande åtgärder (ve
 ## 7. Det som inte gick att belägga
 
 1. **Om `europe-west1` och `europe-north1` räknas som "supported EU single-region endpoints" för Gemini 2.5.** Googles tabell har kolumner för EU-multiregionen och för `europe-west4`, inte för Belgien eller Finland, och för `europe-west4` är rutan för Gemini 2.5 tom. Platssidan säger "Endpoints don't guarantee data residency or in-region ML processing". Rimligast läsning är att anropet behandlas i EU-multiregionen, men det står inte uttryckligen för just dessa regioner. **Fråga Google** eller gå över till `eu`-endpointen.
-2. **Om Gemini 2.5 fortfarande svarar i `europe-west1`.** Pensionsdatumet 20 oktober 2026 har passerat; `BESLUT.md` 2026-10-21 säger att europe-west1 "har kvar 2.5". Ej kontrollerat i dag (ingen inloggning). På platssidan gick tillgänglighetsrutorna för EU-regionerna inte att läsa.
+2. **Om Gemini 2.5 fortfarande svarar i `europe-west1`.** Pensionsdatumet 20 oktober 2026 har passerat; `BESLUT.md` 2026-10-21 säger att europe-west1 "har kvar 2.5". Ej kontrollerat i dag (ingen inloggning). På platssidan gick tillgänglighetsrutorna för EU-regionerna inte att läsa. *Tillägg samma dag:* kontrollerat med servicekontot, 2.5-flash svarar i europe-west1, -west3, -west4 och -north1, och ingen av ersättarna finns där (de finns i `eu`, 3.5-flash även i europe-west3). Se `modellbyte-underlag.md` avsnitt 2.2.
 3. **Vilken modell och region som faktiskt står i Railway.** Miljövariabler lästes inte.
 4. **Om cachen redan är avstängd.** Kräver konsolen.
 5. **Avtalspart.** Aktuell version av Googles sida om avtalsenhet gick inte att läsa; Google Cloud EMEA Limited bygger på en arkiverad version från januari 2025.
