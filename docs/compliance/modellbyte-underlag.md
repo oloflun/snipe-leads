@@ -621,12 +621,124 @@ webbpoolens mottagare, som är riktiga kunder (`WEBBPOOL_FORDELNING=1`).
 Email Studio kräver en inloggad arbetsyta; det dokumenterade testkontot fanns
 inte längre, så ett nytt skapades genom Skapa konto (Railway-vägen skickar
 inget mejl). Kvittosviten kördes inte: den skapar en ny evalkund per körning
-och skriver nyckeln i `.env.deploy`, och bildmodellen är oförändrad.
+och skriver nyckeln i `.env.deploy`, och bildmodellen är oförändrad. (Den
+kördes på kvällen med en tillfällig env-fil, nedan.)
 
 Kvar för ägaren: om utkasten ska ligga kvar på 2.5-flash i europe-west1 (dör
-när Google stänger 2.5), gå till 3.5-flash-lite i `eu` (7/10 godkända lokalt,
-avsnitt 3.2, inte prövat i development) eller till 3.8-flash med Provisioned
-Throughput i `eu`.
+när Google stänger 2.5), gå till 3.5-flash-lite i `eu` (prövat i development
+samma kväll, nedan) eller till 3.8-flash med Provisioned Throughput i `eu`.
+
+#### Utkasten på 3.5-flash-lite i `eu`, prövat 2026-11-18 kväll
+
+**Gjort.** På `api` och `web` i development sattes `LEADS_DRAFT_MODEL` och
+`LEADS_HUMANIZER_MODEL` = `gemini-3.5-flash-lite` och `VERTEX_UTKAST_REGION` =
+`eu` (deploy `e3ad5b15` api, `99f52fba` web, båda SUCCESS, "Application
+startup complete" utan `llm_provider_fault`). Samma prov som för 3.8: de
+första 11 fallen ur `evals/iris_utkast.json`, tre samtidiga jobb, mot två nya
+syntetiska evalkunder (`eval-11181430-iris1/2`, affärskontext ur sviten,
+`.example`-prospekt) genom `POST /api/leads/outreach/draft`. Nycklarna stannade
+i processen; `.env.deploy` ändrades inte. Direkt efteråt kördes samma 11 fall
+på gemini-2.5-flash i europe-west1 (deploy `63a6393a` api, `6d4e0db7` web,
+evalkunder `eval-11181433-iris1/2`), så att båda modellerna mättes samma
+kväll under samma last. Stilgrinden är facitets (INV-LEADS-UTKAST-002:
+`stilkontroll.kontrollera` med facitets tillåtna fynd, och `amne_fynd`).
+
+| | 3.5-flash-lite, `eu` | 2.5-flash, europe-west1 (samma kväll) | 2.5-flash, eftermiddagen (6 fall) |
+|---|---|---|---|
+| Levererade utkast (inget tekniskt fel) | **11 av 11** | 9 av 11 (två 503 från Vertex) | 6 av 6 |
+| Köade | 10 | 8 | 5 |
+| Godkända av `bedom_iris` | 4 | **7** | 3 |
+| Utan fynd i stilgrinden | 5 | 6 (6 av 9 levererade) | 5 |
+| Latens, levererade | 6,5–40 s, median 16,5 s | 11,6–84 s, median 22 s | 8–21 s |
+| Vertex-anrop i api-loggen | 87 × 200, 2 × 429 (omförsökta) i `eu` | 71 × 200, 4 × 429, 5 × 503 i europe-west1 | 35 × 200 |
+
+Per fall (`stilfynd`, och om fallet godkändes av `bedom_iris`):
+
+| Fall | 3.5-flash-lite | 2.5-flash, kvällen | 2.5-flash, eftermiddagen |
+|---|---|---|---|
+| vvs-borlange-bergvarme | inga fynd · godkänd | fel (503) | inga fynd |
+| bygg-umea-altan-fastpris | `slentrian_ingang` | fel (503) | inga fynd · godkänd |
+| ehandel-boras-norge-finland | `slentrian_ingang` | inga fynd · godkänd | inga fynd · godkänd |
+| redovisning-vasteras-kundportal | inga fynd · godkänd | inga fynd · godkänd | inga fynd |
+| tandvard-uppsala-kvallsoppet | inga fynd | `uppraknad_ingang` | `uppraknad_ingang` |
+| fastighet-norrkoping-nya-foreningar | inga fynd · godkänd | inga fynd · godkänd | inga fynd · godkänd |
+| logistik-jonkoping-terminal-torsvik | `slentrian_ingang` | inga fynd · godkänd | – |
+| restaurang-visby-julbord | `slentrian_ingang` | inga fynd · godkänd | – |
+| trafikskola-gavle-intensivkurs | `slentrian_ingang` | `generell_ingang`, `uppraknad_ingang` | – |
+| it-karlstad-helpdesk-abonnemang | inga fynd · godkänd | inga fynd · godkänd | – |
+| restaurang-kalmar-catering-planer | `slentrian_ingang`, `uppraknad_ingang` | `uppraknad_ingang` · godkänd | – |
+
+Svaren: `docs/stabilitet-2026-11/eval/modellbyte-dev-2026-11-18-iris-35lite.json`
+och `…-iris-25flash.json`.
+
+**Grinden och beslutet.** Grinden för att låta bytet stå kvar var inga
+tekniska fel och stilgrinden i nivå med 2.5, högst ett fall sämre. Det
+tekniska höll: 3.5-flash-lite levererade alla 11, medan 2.5-flash samma kväll
+föll på 503 i två. Stilgrinden höll bara i den grova räkningen (5 mot 6 utan
+fynd). Räknat per fall, där båda modellerna skrev ett utkast någon gång under
+dagen, är lite sämre i fyra fall och bättre i ett (tandvården), och av 2.5-flashs 15 levererade utkast
+den här dagen hade inget `slentrian_ingang`, mot sex av lites elva. Felet är
+alltså systematiskt, inte brus: lite inleder med "När …"-meningar om
+kundernas frågor, det ingångsmönster facitet fäller. Agenten läste alla elva
+lite-utkast: två börjar med liten bokstav efter hälsningen ("ni installerar
+…", "när nya elever …"), ett skriver "Vår Supportagent", ett beskriver bolaget
+i stället för en ingång, och i trafikskolans utkast hamnade månadsavgiften i
+fel bisats ("lämnar över till en människa när den inte säkert kan svara mot en
+fast månadsavgift"). `bedom_iris` godkände 4 mot 7. Med en tolkning som
+räknar 2.5:s två serverfel som stilfel hade lite klarat grinden; agenten
+bedömde att stilgrinden ska mäta stilen och inte kapaciteten, och **backade**.
+
+**Läget efter provet.** `LEADS_DRAFT_MODEL` och `LEADS_HUMANIZER_MODEL` =
+`gemini-2.5-flash`, `VERTEX_UTKAST_REGION` = `europe-west1` på `api` och `web`
+i development, som före provet. Deployerna `63a6393a` (api) och `6d4e0db7`
+(web) är SUCCESS, startloggen visar "Application startup complete" utan
+`llm_provider_fault`, och `/health/ready` svarar 200 (commit `d9d79ba`). Main är
+inte rörd.
+
+**Det ägaren behöver veta.** Också 2.5-flash i europe-west1 gav 503 och 429
+den här kvällen och tappade två av elva utkast, så backningen är inte gratis.
+3.5-flash-lite är snabbare och stabilare i `eu` men skriver sämre ingångar.
+En väg som inte prövats i development är blandningen i avsnitt 3.2
+(3.5-flash-lite för utkastet och 3.8-flash för humanizern, 10/10 utan
+stilfynd lokalt), men 3.8 i `eu` föll på kapacitet i eftermiddagens prov.
+
+#### Kvittosviten mot development, 2026-11-18 kväll
+
+`python -m evals.kor kor --env development --agent kvitto --env-fil <tillfällig fil>`,
+40 fall, tre samtidiga. Env-filen var en tillfällig kopia med bara api-adressen
+och masternyckeln, så den riktiga `.env.deploy` är orörd (kontrollsumman
+jämförd före och efter). Sviten skapade en ny syntetisk evalkund,
+`eval-11181437-kvitto` (Evalbolaget AB, svitens org.nr). Svitens underlag är
+text-PDF:er: kvittohanterarens agent och dess andra kontroll kör `MODEL`, alltså
+gemini-3.5-flash-lite i `eu`. Bildmodellen (2.5-flash i europe-west1) prövas
+inte av sviten och är oförändrad.
+
+| | 2026-11-10, allt på 2.5-flash (`efter-kvitto.json`) | 2026-11-18, `MODEL` = 3.5-flash-lite i `eu` |
+|---|---|---|
+| Godkända | **37/40** (före ändringen den dagen: 35/40) | 30/40 |
+| status / belopp / fält | 95 % / 97,5 % / 97,5 % | 82,5 % / 92,5 % / 95 % |
+| Tekniska fel | 0 | 0 |
+| Latens p50 / p95 | 20,9 / 37,9 s | **7,2 / 8,6 s** |
+
+Tio fall föll, nio av dem godkända på 2.5. Sju går till granskning fast de ska
+vara klara (tågbiljett, hotell, järnhandel, telefonifaktura, ett av
+dubblettfallen och två kundfakturor), oftast utan någon angiven brist: lite
+är försiktigare, det säkra hållet, men en människa får mer att granska. De
+övriga tre gäller fälten: en kundfaktura utan org.nr lästes som kostnad utan
+motpart (går till granskning), en förfallen faktura saknar momssatsen (lite
+lämnade momsen tom på tre underlag; i två av dem läste 2.5 den), och **en
+obetald kundfaktura bokfördes som klar med det egna bolaget som motpart** i
+stället för kunden. Det sista är det enda felet som går förbi
+granskningen. Två fall som 2.5 fällde klarar lite (restaurangen,
+verktygslagret). Svaren: `docs/stabilitet-2026-11/eval/modellbyte-dev-2026-11-18-kvitto.json`.
+
+Kvittohanteraren i development har kört på 3.5-flash-lite sedan provbytet
+(`MODEL`). Ingen variabel ändrades för den här mätningen; om kvittostegen ska
+få en egen modell är ägarens beslut.
+
+Kostnad för kvällens prov: omkring 15 kr i Vertex (uppskattat ur
+`tokens_in`, 1,6 M för lite och 1,45 M för 2.5, plus utdata och kvittosviten).
+Inga mejl, inga godkända utkast, inga riktiga kunders arbetsytor.
 
 ## 7. Risker
 
@@ -646,10 +758,15 @@ Throughput i `eu`.
 - **Researchen, Jev och leadssökningen** (grundad Google-sökning). Ingen av
   dem har en låst svit som går att köra utan nätverk mot riktiga sajter.
   Sökningen provades med ett anrop per modell (avsnitt 2.4).
-- **Kvittohanteraren och bildmodellen.** Bildsteget mättes 2026-11-18
+- **Bildmodellen i kvittohanteraren.** Bildsteget mättes 2026-11-18
   (avsnitt 3.6) och webbplatsbedömningen på alla 58 facitsajter (3.7).
-  Kvittosvitens hela kedja (uppladdning, agent, status) kördes inte; i
-  development ligger bildmodellen kvar på 2.5-flash, så den prövar inget nytt.
+  Kvittosvitens hela kedja (uppladdning, agent, status) kördes mot
+  development samma kväll (avsnitt 6.4, 30/40 mot 37/40 på 2.5), men sviten
+  består av text-PDF:er och prövar textmodellen (`MODEL`), inte bildmodellen.
+  Fotograferade kvitton genom hela kedjan i development är inte mätta.
+- **Spridningen i Iris-provet i development.** Elva fall per modell, en
+  körning var. 2.5-flash gav 5/6 och 6/11 utan stilfynd i två körningar samma
+  dag (de två 503-felen inräknade i den andra).
 - **Email Studio.** Två anrop i development (avsnitt 6.4); ingen svit finns.
 - **Spridningen.** Varje mätning kördes en gång per kandidat. Golden-svitens
   sju fall gav 7/7 och 6/7 för samma modell i två körningar samma dag, så en
@@ -658,5 +775,5 @@ Throughput i `eu`.
   triage, bara för leads (avsnitt 4).
 - **Ingen mätning gjordes mot main**, och ingen kunddata användes. Mätningarna
   i avsnitt 3 kördes lokalt mot MemoryStorage med repots fixturer. Mot
-  development kördes supportsviten hela och Iris-sviten i urval (avsnitt
-  6.4), bara mot syntetiska kunder; kvittosviten kördes inte.
+  development kördes supportsviten och kvittosviten hela och Iris-sviten i
+  urval om elva fall (avsnitt 6.4), bara mot syntetiska kunder.
