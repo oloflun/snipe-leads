@@ -371,18 +371,22 @@ export function WebbplatsForslag({ onAndrat }: Readonly<{ onAndrat: () => void }
                         href={f.source_url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className={cn(meta, "focus-ring mt-1 inline-flex items-center gap-1 rounded-input underline underline-offset-4 hover:text-ink")}
+                        className={cn(meta, "focus-ring mt-1 inline-flex max-w-full items-center gap-1 rounded-input hover:text-ink")}
                       >
-                        {text(T.kalla)}: {vard(f.source_url)}
-                        {(() => {
-                          try {
-                            const sokvag = new URL(f.source_url).pathname;
-                            return sokvag !== "/" ? sokvag : "";
-                          } catch {
-                            return "";
-                          }
-                        })()}
-                        <ExternalLink className="h-3 w-3" aria-hidden />
+                        {/* En rad, avkortad: en lång sökväg bröt länken över två
+                            rader med ikonen ensam till höger (375 px, 2026-11-18). */}
+                        <span className="truncate underline underline-offset-4">
+                          {text(T.kalla)}: {vard(f.source_url)}
+                          {(() => {
+                            try {
+                              const sokvag = new URL(f.source_url).pathname;
+                              return sokvag !== "/" ? sokvag : "";
+                            } catch {
+                              return "";
+                            }
+                          })()}
+                        </span>
+                        <ExternalLink className="h-3 w-3 shrink-0" aria-hidden />
                       </a>
                     ) : null}
                   </div>
