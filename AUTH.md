@@ -68,8 +68,63 @@ kundens nyckel ur sessionens arbetsyta och skickar anropet vidare
   (`"logg":"inloggningsspärr"`) med maskerad adress och IP, aldrig lösenordet.
   Ett fel mot databasen släpper igenom försöket och loggas (fail open: en deploy
   som hinner före migrationen ska inte låsa ute alla).
-- **Ingen tvåfaktor** finns i appen (A.8.5, öppet i
-  `docs/compliance/ramverk/iso27001/matris.md`).
+- **Tvåstegsverifiering (TOTP)** finns för plattformsadmin sedan migration 128
+  (2026-11-18), valfri. Se avsnittet nedan.
+
+### Tvåstegsverifiering för plattformsadmin
+
+Valfri. En plattformsadmin slår på den under Inställningar › Plattformen ›
+Tvåstegsverifiering (`/admin/installningar/tvafaktor`,
+`components/settings/Tvafaktor.tsx`, `lib/actions/tvafaktor.ts`).
+
+- **Inrullning:** en ny hemlighet (160 bitar, base32) visas som QR-kod
+  (`otpauth://`, SHA-1, sex siffror, 30 sekunder) och som manuell nyckel. En kod
+  ur appen bekräftar; först då är tvåfaktorn på. Samtidigt skapas tio
+  engångskoder för återställning (`ABCDE-FGHJK`), som visas en gång och lagras
+  som HMAC-SHA256.
+- **Inloggning:** `authorize` i `lib/auth.ts` (ordningen i
+  `lib/auth/inloggningssteg.ts`). Efter ett rätt lösenord svarar servern
+  `tvafaktor_kravs` och formuläret frågar efter koden; adressen, lösenordet och
+  koden prövas sedan i samma anrop. En kod ur appen eller en oanvänd
+  återställningskod godtas. Ett tidssteg (±1 steg för klockfel) och en
+  återställningskod förbrukas atomiskt i databasen och godtas aldrig igen.
+- **Spärren täcker andra steget:** en fel eller redan använd kod räknas som ett
+  misslyckat inloggningsförsök i samma räknare som lösenordet (5 per adress,
+  20 per IP på 15 minuter), och räknaren nollställs först när båda stegen gått
+  igenom. Andra steget nås bara med rätt lösenord, så det avslöjar inte vilka
+  konton som har tvåfaktor.
+- **Avstängning:** kräver en giltig kod (ur appen eller en återställningskod),
+  under samma spärr. Databasen vägrar dessutom själv om ingen kod godkänts de
+  senaste två minuterna.
+- **Google och Microsoft:** ett konto med aktiv tvåfaktor nekas OAuth-inloggning
+  (`signIn`-callbacken) och loggar in med lösenord och kod.
+- **Lagring:** `tvafaktor` och `tvafaktor_aterstallningskoder` (migration 128),
+  nådda bara genom security definer-funktionerna `tvafaktor_*`; approllerna har
+  ingen rättighet på tabellerna. Hemligheten är krypterad med AES-256-GCM och
+  kontots id som AAD. Nyckeln härleds med HKDF-SHA256 ur `AUTH_SECRET` med ett
+  eget info-värde (`snajp/tvafaktor/totp-hemlighet/v1`; återställningskodernas
+  HMAC-nyckel har `snajp/tvafaktor/aterstallningskod/v1`). Ingen ny
+  miljövariabel. Skälet till `AUTH_SECRET` står i `lib/auth/tvafaktor-krypto.ts`.
+- **Byts `AUTH_SECRET`** går de lagrade hemligheterna och återställningskoderna
+  inte längre att använda: varje plattformsadmin med tvåfaktor måste rullas in
+  på nytt. Ta bort raden som ägarrollen (`postgres`), låt personen logga in med
+  bara lösenordet och slå på tvåfaktorn igen:
+
+  ```sql
+  delete from public.tvafaktor
+   where user_id = (select id from auth.users where lower(email) = lower('adressen@exempel.se'));
+  ```
+
+  Samma rad är vägen tillbaka för en admin som tappat både telefonen och
+  återställningskoderna. Den körs aldrig av en agent utan ägarens uppdrag.
+- **Tvånget** är av: `TVAFAKTOR_KRAVS_FOR_PLATTFORMSADMIN = false` i
+  `lib/auth/tvafaktor-krypto.ts`. Att slå på det är Antons beslut. Med `true` har
+  en plattformsadmin utan aktiv tvåfaktor ingen adminrätt (`getPlatformAdmin()`
+  svarar null, alltså layouten, API-proxyn och varje admin-action), skickas
+  efter inloggningen till `/settings/tvafaktor` och når bara inrullningen.
+- Ett uppslagsfel mot tvåfaktortabellen vid inloggningen kastar (fail closed).
+  Undantaget är en databas där migration 128 ännu inte körts: då kan ingen ha
+  tvåfaktor, och inloggningen går som förut.
 
 ### Registrering och arbetsyta
 
@@ -178,7 +233,7 @@ Plattformsadminens id skickas med i `X-Snajp-Admin` från webben och prövas mot
 
 | Variabel | Tjänst | Saknas den |
 |---|---|---|
-| `AUTH_SECRET` | `web` | Ingen kan logga in; skyddade sidor stängda |
+| `AUTH_SECRET` | `web` | Ingen kan logga in; skyddade sidor stängda. Byts den måste plattformsadmin med tvåfaktor rullas in på nytt (se Tvåstegsverifiering) |
 | `DATABASE_URL` | `web` | Inloggningen svarar att den inte är konfigurerad |
 | `NEXT_PUBLIC_SITE_URL` / `SITE_URL` | `web` | Återställningslänkar och OAuth-callback pekar fel |
 | `RESEND_API_KEY` | `web` | Glömt lösenord går inte |
@@ -201,6 +256,15 @@ Automatiskt:
   väntetid, fönster och att approllerna inte når tabellen (CI-jobbet `databas`).
 - `lib/auth/inloggningsregler.test.ts`: nycklar, klient-IP och loggmaskering
   (`node --test lib/auth/inloggningsregler.test.ts`, Node 22 eller senare).
+- `snajp-support/tests/db/test_tvafaktor.py`: tvåfaktorns lagring (bara
+  plattformsadmin rullar in, steg och återställningskod förbrukas en gång också
+  vid samtidiga anrop, avstängning kräver en nyss godkänd kod, approllerna når
+  inte tabellerna) (CI-jobbet `databas`).
+- `lib/auth/totp.test.ts` (RFC 6238:s testvektorer, fönster, återspelning),
+  `lib/auth/tvafaktor-krypto.test.ts` (krypteringen åt båda hållen, fel nyckel
+  och fel konto, återställningskoderna, tvånget av) och
+  `lib/auth/inloggningssteg.test.ts` (rätt kod, fel kod, återställningskod,
+  spärren som täcker andra steget): `node --test lib/auth/*.test.ts`.
 
 Manuellt, mot en lokal stack (`python scripts/lokal_stack.py --apply`, aldrig
 mot development-spegeln):
@@ -208,3 +272,7 @@ mot development-spegeln):
 2. Logga ut och in igen med lösenord.
 3. Glömt lösenordet → länken i mejlet → nytt lösenord → inloggad.
 4. Ett fel lösenord ger "Fel e-postadress eller lösenord." oavsett om kontot finns.
+5. Som plattformsadmin: Inställningar › Tvåstegsverifiering → skanna QR-koden →
+   koden → spara återställningskoderna. Logga ut och in: efter lösenordet frågar
+   sidan efter koden. Fel kod ger beskedet om fel kod; en återställningskod
+   fungerar en gång. Stäng av med en kod.

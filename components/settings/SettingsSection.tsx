@@ -2,7 +2,7 @@ import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
 import { SettingsView } from "@/components/WorkspaceViews";
 import { resolveDashboardState } from "@/lib/data/dashboard";
-import { getPlatformAdmin } from "@/lib/auth/admin";
+import { getPlatformAdmin, getPlatformAdminUtanTvafaktorkrav } from "@/lib/auth/admin";
 import {
   productForSettingsSection,
   sektionDoldIDemo,
@@ -44,7 +44,15 @@ export async function SettingsSection({ slug = [] }: Readonly<{ slug?: string[] 
   // flit: en admin-sida har ingen produkt, så entitlement säger ingenting om
   // den, och en kund som gissar adressen ska mötas av 404 och inte av en sida
   // som råkar rendera för att inget villkor träffade.
-  if (sektionKraverAdmin(section) && !(await getPlatformAdmin())) {
+  //
+  // Tvåstegsverifieringen grindas på `platform_admins` OAVSETT tvåfaktorkravet:
+  // med tvånget påslaget har en admin utan tvåfaktor ingen annan adminrätt,
+  // men inrullningen måste gå att nå, också på /settings/tvafaktor.
+  if (section === "tvafaktor") {
+    if (!(await getPlatformAdminUtanTvafaktorkrav())) {
+      notFound();
+    }
+  } else if (sektionKraverAdmin(section) && !(await getPlatformAdmin())) {
     notFound();
   }
 

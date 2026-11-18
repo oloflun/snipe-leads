@@ -9,6 +9,42 @@ möjligt), vad det betyder i koden.
 
 ---
 
+## 2026-11-18 natt — valfri tvåstegsverifiering (TOTP) för plattformsadmin (Claude (agent), på Antons uppdrag)
+
+**Beslut.** Plattformsadmin kan slå på tvåstegsverifiering med en autentiseringsapp (TOTP,
+RFC 6238), med tio engångskoder för återställning. Den är valfri. Tvånget är en flagga i koden,
+`TVAFAKTOR_KRAVS_FOR_PLATTFORMSADMIN = false`; att slå på det är Antons beslut. Ersätter
+punkt (2) i beslutet nedan ("tvåfaktor byggs inte i den här omgången").
+
+**Resonemanget.** Anton beställde TOTP med krav på krypterad hemlighet, hashade
+återställningskoder, avstängning bara med giltig kod, inloggningsspärren över andra steget och
+ingen ny Railway-variabel. Skälet som stoppade förra omgången, en ny nyckel i Railway, löstes
+genom att härleda krypteringsnyckeln med HKDF ur `AUTH_SECRET` med egna info-värden. `AUTH_SECRET`
+valdes framför `SNAJP_MASTER_API_KEY` eftersom den bara finns på `web`, som är den enda tjänst
+som läser hemligheten, och redan är roten till inloggningens förtroende; master-nyckeln finns
+också på `api` och är en åtkomstnyckel. Priset: byts `AUTH_SECRET` måste varje admin med
+tvåfaktor rullas in på nytt (`AUTH.md`). Andra steget sitter i `authorize`, så det gäller också
+direkta anrop till Auth.js, och en fel kod räknas i samma spärr som ett fel lösenord. Räknaren
+nollställs först när båda stegen gått igenom, annars hade den som har lösenordet kunnat
+nollställa den mellan gissningarna. Databasen ser aldrig hemligheten i klartext men förbrukar
+tidssteg och återställningskoder atomiskt (återspelning, samtidiga inloggningar) och vägrar
+avstängning utan en nyss godkänd kod. Google- och Microsoft-inloggning nekas för konton med
+tvåfaktor, eftersom de annars hade gått runt andra steget. Valfritt och inte tvingande: ett
+tvång låser ute en admin som tappar telefonen och koderna, och det är ett beslut om drift och
+risk som ägaren ska fatta.
+
+**Vad det betyder i koden.** `db/migrations/20261118180000_128_tvafaktor.sql`;
+`lib/auth/totp.ts`, `lib/auth/tvafaktor-krypto.ts` (nyckeln, flaggan), `lib/auth/tvafaktor.ts`,
+`lib/auth/inloggningssteg.ts`, `authorize` och `signIn` i `lib/auth.ts`,
+`lib/actions/tvafaktor.ts`, `components/settings/Tvafaktor.tsx`, andra steget i
+`components/auth/LoginForm.tsx`, `getPlatformAdmin()` i `lib/auth/admin.ts` (tvånget). Ny
+dependency `uqr` (MIT, inga beroenden) för QR-koden. Tester: `lib/auth/totp.test.ts`,
+`lib/auth/tvafaktor-krypto.test.ts`, `lib/auth/inloggningssteg.test.ts`,
+`snajp-support/tests/db/test_tvafaktor.py` (CI-jobbet `databas`). `AUTH.md`, matrisen (A.8.5,
+A.5.17), poängplanen.
+
+---
+
 ## 2026-11-18 natt — demon märks genom en smal funktion, inte en update-rätt (Claude (agent), på Antons uppdrag)
 
 **Beslut.** `startDemo` märker arbetsytan `is_demo` genom security definer-funktionen
@@ -61,6 +97,8 @@ Priset: en migration som lägger till en tabell webben ska nå måste ge rättig
 ---
 
 ## 2026-11-18 natt — spärr mot upprepade inloggningsförsök, tvåfaktor uppskjuten (Claude (agent), på Antons uppdrag)
+
+*Punkt (2) ersatt samma natt: valfri TOTP för plattformsadmin byggd, se ovan.*
 
 **Beslut.** (1) Lösenordsinloggning och begäran om lösenordsåterställning spärras
 tillfälligt efter upprepade försök, per e-postadress och per klient-IP (migration 125,

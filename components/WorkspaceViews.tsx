@@ -27,6 +27,7 @@ import { Inkorgar } from "@/components/settings/Inkorgar";
 import { NotisSettings } from "@/components/settings/NotisSettings";
 import { TemaSettings } from "@/components/settings/TemaSettings";
 import { PlanSettings } from "@/components/settings/PlanSettings";
+import { Tvafaktor } from "@/components/settings/Tvafaktor";
 // Kvar ur mock-data: BARA `workflowSteps`, som är AssistantViews stegkedja —
 // en beskrivning av hur agenten arbetar, inte kunddata som utger sig för att
 // vara kundens. Allt annat härifrån (companies, contacts, emailVariants,
@@ -83,7 +84,8 @@ const SETTINGS_TITLAR: Record<SettingsSectionKey, Localized> = {
   notiser: { sv: "Notiser", en: "Notifications" },
   tema: { sv: "Tema", en: "Theme" },
   addons: { sv: "Tillägg", en: "Add-ons" },
-  agentinstruktioner: { sv: "Globala agentinstruktioner", en: "Global agent instructions" }
+  agentinstruktioner: { sv: "Globala agentinstruktioner", en: "Global agent instructions" },
+  tvafaktor: { sv: "Tvåstegsverifiering", en: "Two-step verification" }
 };
 
 const SETTINGS_BESKRIVNINGAR: Partial<Record<SettingsSectionKey, Localized>> = {
@@ -94,7 +96,8 @@ const SETTINGS_BESKRIVNINGAR: Partial<Record<SettingsSectionKey, Localized>> = {
   agentinstruktioner: {
     sv: "Reglerna varje agent läser först, för varje kund. Policy och säkerhet. Ton och röst hör hemma hos kunden.",
     en: "The rules every agent reads first, for every customer. Policy and security. Tone and voice belong to the customer."
-  }
+  },
+  tvafaktor: { sv: "Gäller bara ditt konto.", en: "Applies only to your account." }
 };
 
 const T = {
@@ -341,6 +344,8 @@ export function SettingsView({
           {/* Plattformens egen sida. Grinden står i SettingsSection, på servern —
               att posten inte renderas i menyn är inte en grind. */}
           {section === "agentinstruktioner" ? <Agentinstruktioner /> : null}
+          {/* Grindad på platform_admins i SettingsSection (också med tvånget påslaget). */}
+          {section === "tvafaktor" ? <Tvafaktor /> : null}
         </div>
       </div>
     </PageShell>

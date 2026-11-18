@@ -11,7 +11,7 @@ import {
   signInWithPassword,
   signUpWithPassword
 } from "@/lib/actions/auth";
-import { SPARRKOD } from "@/lib/auth/sparrkod";
+import { SPARRKOD, TVAFAKTOR_FEL, TVAFAKTOR_KRAVS } from "@/lib/auth/sparrkod";
 import { useLocale, type Localized } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
@@ -62,6 +62,24 @@ const T = {
     en: "Too many attempts. Wait a few minutes and try again."
   },
   inloggningFel: { sv: "Inloggningen misslyckades.", en: "Sign-in failed." },
+  // Andra steget (lib/auth.ts:authorize, migration 128). Visas bara efter ett
+  // rätt lösenord.
+  tvaRubrik: { sv: "Tvåstegsverifiering", en: "Two-step verification" },
+  tvaPanel: {
+    sv: "Ange koden ur din autentiseringsapp för att slutföra inloggningen.",
+    en: "Enter the code from your authenticator app to finish signing in."
+  },
+  tvaKod: { sv: "Kod", en: "Code" },
+  tvaHint: {
+    sv: "Sex siffror ur appen, eller en av dina återställningskoder.",
+    en: "Six digits from the app, or one of your recovery codes."
+  },
+  tvaTom: { sv: "Fyll i koden.", en: "Enter the code." },
+  tvaFel: {
+    sv: "Koden stämmer inte, eller har redan använts. Försök med nästa kod ur appen.",
+    en: "The code is not correct, or has already been used. Try the next code from the app."
+  },
+  tvaVerifiera: { sv: "Verifiera och logga in", en: "Verify and sign in" },
   oauthFel: { sv: "Inloggningen kunde inte startas.", en: "Sign-in could not be started." },
   felNamn: { sv: "Fyll i ditt namn.", en: "Enter your name." },
   felEpost: { sv: "Fyll i en e-postadress, till exempel du@bolag.se.", en: "Enter an email address, for example you@company.com." },
@@ -116,7 +134,7 @@ const T = {
   tillStartsidan: { sv: "Snajp, till startsidan", en: "Snajp, back to home" }
 } satisfies Record<string, Localized>;
 
-type FaltId = "namn" | "epost" | "losenord";
+type FaltId = "namn" | "epost" | "losenord" | "kod";
 
 /** Serverns egna besked kommer på ett språk; samma text i båda halvorna. */
 function besked(varde: string | undefined, reserv: Localized): Localized {
@@ -126,6 +144,7 @@ function besked(varde: string | undefined, reserv: Localized): Localized {
 /** Ett serverbesked med en känd kod skrivs här, på sidans språk. */
 function svarsfel(result: { error?: string; kod?: string }, reserv: Localized): Localized {
   if (result.kod === SPARRKOD) return T.forMangaForsok;
+  if (result.kod === TVAFAKTOR_FEL) return T.tvaFel;
   return besked(result.error, reserv);
 }
 
@@ -143,6 +162,11 @@ export function LoginSida({ oauth }: Readonly<{ oauth: OAuthUtbud }>) {
   const [password, setPassword] = useState("");
   const [visaLosenord, setVisaLosenord] = useState(false);
   const [fullName, setFullName] = useState("");
+  // Andra steget: lösenordet stämde och kontot har tvåstegsverifiering.
+  // Adress och lösenord står kvar i formulärets tillstånd och skickas om
+  // tillsammans med koden; servern prövar båda stegen i samma anrop.
+  const [tvaSteg, setTvaSteg] = useState(false);
+  const [tvaKod, setTvaKod] = useState("");
   const [faltFel, setFaltFel] = useState<Partial<Record<FaltId, Localized>>>({});
   const [message, setMessage] = useState<Localized | null>(null);
   // Callbacken skickar hit ?error= när verifieringslänken inte gick att växla in.
@@ -161,6 +185,8 @@ export function LoginSida({ oauth }: Readonly<{ oauth: OAuthUtbud }>) {
     setError(null);
     setMessage(null);
     setFaltFel({});
+    setTvaSteg(false);
+    setTvaKod("");
   }
 
   function andra(id: FaltId, satt: (v: string) => void) {
@@ -178,6 +204,22 @@ export function LoginSida({ oauth }: Readonly<{ oauth: OAuthUtbud }>) {
     // Egen kontroll i stället för webbläsarens: besked på sidans språk, vid
     // fältet, och alla på en gång.
     const fel: Partial<Record<FaltId, Localized>> = {};
+    if (tvaSteg) {
+      if (!tvaKod.trim()) {
+        setFaltFel({ kod: T.tvaTom });
+        document.getElementById("login-kod")?.focus();
+        return;
+      }
+      setFaltFel({});
+      startTransition(async () => {
+        const result = await signInWithPassword(email.trim(), password, nextPath, tvaKod.trim());
+        if (!result.success) {
+          setTvaKod("");
+          setError(svarsfel(result, T.inloggningFel));
+        }
+      });
+      return;
+    }
     if (mode === "signup" && !fullName.trim()) fel.namn = T.felNamn;
     if (!EPOST.test(email.trim())) fel.epost = T.felEpost;
     if (mode !== "reset") {
@@ -205,6 +247,12 @@ export function LoginSida({ oauth }: Readonly<{ oauth: OAuthUtbud }>) {
         return;
       }
       const result = await signInWithPassword(email.trim(), password, nextPath);
+      if (result.kod === TVAFAKTOR_KRAVS) {
+        setTvaSteg(true);
+        // Fältet finns först efter nästa rendering.
+        setTimeout(() => document.getElementById("login-kod")?.focus(), 0);
+        return;
+      }
       if (!result.success) setError(svarsfel(result, T.inloggningFel));
     });
   }
@@ -224,9 +272,14 @@ export function LoginSida({ oauth }: Readonly<{ oauth: OAuthUtbud }>) {
     });
   }
 
-  const rubrik = mode === "signup" ? T.skapaKonto : mode === "reset" ? T.aterstall : T.loggaIn;
-  const panelText =
-    mode === "signup" ? T.panelSkapa : mode === "reset" ? T.panelAterstall : T.panelLoggaIn;
+  const rubrik = tvaSteg ? T.tvaRubrik : mode === "signup" ? T.skapaKonto : mode === "reset" ? T.aterstall : T.loggaIn;
+  const panelText = tvaSteg
+    ? T.tvaPanel
+    : mode === "signup"
+      ? T.panelSkapa
+      : mode === "reset"
+        ? T.panelAterstall
+        : T.panelLoggaIn;
   const oauthVal = (
     [
       ["google", T.google, oauth.google],
@@ -274,7 +327,7 @@ export function LoginSida({ oauth }: Readonly<{ oauth: OAuthUtbud }>) {
           <form className="w-full max-w-md" onSubmit={handleSubmit} noValidate>
             {/* Flikraden döljs i återställningsläget: det är ett sidospår, och
                 vägen tillbaka är länken under knappen. */}
-            {mode === "reset" ? null : (
+            {mode === "reset" || tvaSteg ? null : (
               <div className={fliklista} role="tablist" aria-label={text(T.lagen)}>
                 {(
                   [
@@ -296,6 +349,20 @@ export function LoginSida({ oauth }: Readonly<{ oauth: OAuthUtbud }>) {
               </div>
             )}
 
+            {tvaSteg ? (
+              <div className="grid gap-5">
+                <Falt
+                  id="kod"
+                  label={text(T.tvaKod)}
+                  value={tvaKod}
+                  onChange={andra("kod", setTvaKod)}
+                  placeholder="123456"
+                  hint={text(T.tvaHint)}
+                  fel={faltFel.kod ? text(faltFel.kod) : null}
+                  autoComplete="one-time-code"
+                />
+              </div>
+            ) : (
             <div className="mt-8 grid gap-5">
               {mode === "signup" ? (
                 <Falt
@@ -343,8 +410,9 @@ export function LoginSida({ oauth }: Readonly<{ oauth: OAuthUtbud }>) {
                 />
               )}
             </div>
+            )}
 
-            {mode === "login" ? (
+            {mode === "login" && !tvaSteg ? (
               <button
                 type="button"
                 onClick={() => bytLage("reset")}
@@ -370,14 +438,16 @@ export function LoginSida({ oauth }: Readonly<{ oauth: OAuthUtbud }>) {
             <button type="submit" disabled={isPending} className={cn(btnPrimary, "mt-6 min-h-12 w-full text-[0.9375rem]")}>
               {isPending
                 ? text(T.bearbetar)
-                : mode === "signup"
+                : tvaSteg
+                  ? text(T.tvaVerifiera)
+                  : mode === "signup"
                   ? text(T.skapaKonto)
                   : mode === "reset"
                     ? text(T.skickaAterstall)
                     : text(T.loggaIn)}
             </button>
 
-            {mode !== "reset" && oauthVal.length > 0 ? (
+            {mode !== "reset" && !tvaSteg && oauthVal.length > 0 ? (
               <>
                 <div className="mt-6 flex items-center gap-4" aria-hidden>
                   <span className="h-px flex-1 bg-ink/15" />
@@ -401,7 +471,7 @@ export function LoginSida({ oauth }: Readonly<{ oauth: OAuthUtbud }>) {
             ) : null}
 
             <div className="mt-8 grid gap-2 border-t border-ink/15 pt-5 text-[0.875rem] text-ink-muted">
-              {mode === "reset" ? (
+              {mode === "reset" || tvaSteg ? (
                 <button
                   type="button"
                   onClick={() => bytLage("login")}
