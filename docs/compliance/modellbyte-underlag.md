@@ -1,9 +1,11 @@
 # Bytet från Gemini 2.5: underlag för ägarens beslut
 
 Underlag 2026-11-18, framtaget av Claude (agent) inom Antons uppdrag om
-EU-compliance. **Ingen modell är bytt.** Produktionen och testmiljön kör
-`gemini-2.5-flash` i Vertex `europe-west1` som förut. Koden är förberedd så att
-bytet blir en ändring av variabler (avsnitt 5), och avsnitt 6 säger exakt vilka.
+EU-compliance. **Produktionen (`main`) är orörd** och kör `gemini-2.5-flash` i
+Vertex `europe-west1` som förut. **Testmiljön (`development`) kör sedan
+2026-11-18 provbytet** i avsnitt 6.4: textmodellerna i `eu`, bildmodellen och
+inbäddningarna kvar i `europe-west1`. Koden är förberedd så att bytet blir en
+ändring av variabler (avsnitt 5), och avsnitt 6 säger exakt vilka.
 
 Läsanvisning: **Fakta** har källa (URL med hämtdatum, fil, eller en mätning i
 avsnitt 3). **Bedömning** är agentens.
@@ -17,7 +19,7 @@ modeller:
 |---|---|---|---|
 | Chatten, mejltriagen, klassare, research, Jev, leadssökningen, profilen | `MODEL` | **gemini-3.5-flash-lite** | Samma kvalitet som i dag inom bruset (support 47/50 mot 48/50, triage 47/50 mot 45/50, golden 6/7 mot 6/7), snabbare (median 4,7 s mot 8,2 s per chatt) och nästan samma pris (+9 % per chatt) |
 | Iris utkast och humanizer | `LEADS_DRAFT_MODEL`, `LEADS_HUMANIZER_MODEL` | **gemini-3.8-flash** | Bäst mot utkastfacitets grind: 10/10 utan stilfynd mot 7/10 i dag, 9/10 godkända mot 5/10. Kostar ungefär +50 % per utkast till nyår och ungefär tre gånger dagens från 2027-01-01 |
-| Bildbeskrivning, kvitton, webbrevisionens bildbedömning | `VISION_MODEL` | **Öppen** (avsnitt 3.6) | Mätt 2026-11-18: ingen kandidat klarar webbgrinden på 85 % i urvalet (3.8-flash 80 %, 3.5-flash-lite 83 %, dagens 2.5-flash 83–87 %). 3.8 läser kvittofoton bäst men rättade ett avsiktligt felsummerat kvitto; 3.5-flash-lite läser kvittofoton sämst |
+| Bildbeskrivning, kvitton, webbrevisionens bildbedömning | `VISION_MODEL`, `VERTEX_BILD_REGION` | **gemini-2.5-flash i europe-west1, som i dag, tills vidare** (avsnitt 3.6 och 3.7) | Full kalibrering mot alla 58 facitsajter 2026-11-18: ingen modell klarar grinden på 85 %, inte heller dagens (2.5-flash 81 %, 3.8-flash 81 %, 3.5-flash-lite 79 % med en akut sajt på bra). 3.8 läser kvittofoton bäst men rättade ett avsiktligt felsummerat kvitto. Bildmodellen hålls kvar med en egen region (PR #76) tills ägaren väljer; 2.5 kan stängas av Google när som helst |
 | Inbäddningar | `VERTEX_INBADDNING_REGION` | gemini-embedding-001 i europe-west1, som i dag | Saknas i `eu`; står inte på pensionslistan |
 
 **Inte gemini-3.8-flash i chatten:** svaren är bäst (49/50) men medianen är
@@ -359,6 +361,63 @@ för 3.5-flash-lite och 3.8-flash (omkring 60 ScrapeGraph-krediter till, med
 skärmbilderna från urvalet återanvända), och ett beslut om vilken svaghet som
 väger tyngst: fel webbnivå eller fel kvittobelopp.
 
+### 3.7 Full webbkalibrering, alla 58 facitsajter (2026-11-18)
+
+Samma kedja och räkning som 3.6 (`scripts/kalibrera_webbrevision.py`: rätt
+sammanslaget, grind 85 % och ingen akut sajt på bra), nu på **alla 58 sajter**
+i `tests/leads/fixtures/webbfacit_2026-10-08.json`. Varken grinden eller facit
+är ändrade. Urvalets 30 sajter återanvände sina sparade skärmbilder; de övriga
+hämtades en gång under baslinjens körning (2.5-flash) och sparades, och
+3.8-flash och 3.5-flash-lite bedömde exakt samma bilder utan nya hämtningar.
+Stealth-omtaget vid skymd ruta hämtades därför bara där baslinjen begärde det.
+Kostnad: 57 ScrapeGraph-krediter (tak 70) och omkring 10 kr i Vertex (tak 50).
+
+| | 2.5-flash, `europe-west1` (i dag) | 3.8-flash, `eu` | 3.5-flash-lite, `eu` |
+|---|---|---|---|
+| Rätt sammanslaget, alla 58 | 47/58 (81,0 %) | 47/58 (81,0 %) | 46/58 (79,3 %) |
+| Rätt sammanslaget, utan sagobetong.se | 47/57 (82,5 %) | 47/57 (82,5 %) | 46/57 (80,7 %) |
+| Exakt rätt nivå (alla 58) | 36 | 36 | 39 |
+| Akut på bra | 0 | 0 | **1** (alvegardens.se) |
+| Grinden (85 %), med och utan sagobetong | underkänd | underkänd | underkänd (också på akut på bra) |
+| Bra kallad dålig/akut | 4 | **9** | 4 |
+| Dålig kallad bra | 5 | **0** | 4 (plus akut på bra) |
+| Ingen nivå (oläsbart svar eller ingen bild) | 1 | 1 | 2 |
+| Median per bildbedömd sajt | 16,9 s | 8,0 s | 1,3 s |
+| Vertex-kostnad för körningen | 4,08 kr | 2,59 kr | 0,59 kr |
+
+sagobetong.se står som avvecklad i facit men svarar 503 och blir akut i koden
+före bildmodellen, i alla tre. Det är facit som åldrats; räknat utan den
+ändras inget utfall.
+
+**Felen per modell.**
+
+- **2.5-flash** felar åt båda håll: fem dåliga sajter blev bra
+  (renovering-goteborg, plums, goteborgsmaklarna, nikitek, kungstensglas) och
+  fyra bra blev dåliga eller akuta (kaminbutiken, bjorkmansmaleri, wigson,
+  ak-centralen som akut), driftteknik fick ingen nivå.
+- **3.8-flash** felar bara åt det stränga hållet: nio sajter som facit kallar
+  bra blev dåliga (kaminbutiken, bjorkmansmaleri, bovikmarin, svenskparkering,
+  hunnebosjomack, vigab, bjorlandamarin, futurenautic, wigson). Ingen dålig
+  sajt blev bra. I drift hade de nio hamnat i webbpoolen som dåliga sajter
+  (regel 20), en falsk lead till webbyråerna, men ingen dålig sajt hade
+  missats.
+- **3.5-flash-lite** gör samma blandade fel som dagens modell och sätter en
+  akut sajt (alvegardens.se) på bra, vilket grinden underkänner för sig.
+
+**Bedömning.** Grinden på 85 % klaras inte av någon modell på hela facit,
+inte heller av den som kör i dag; urvalet i 3.6 (83–87 % för 2.5-flash) var
+alltså gynnsamt. Mellan modellerna är skillnaden i träffar ett fall. Det som
+skiljer är felens riktning: 3.8 är jämnt för sträng, 2.5 och 3.5-flash-lite
+felar åt båda håll, och 3.5-flash-lite gör det enda fel grinden räknar som
+allvarligast. Som bildmodell efter 2.5 är 3.8-flash därför den rimligaste
+kandidaten för webbedömningen, med en kalibrering av prompten mot den stränga
+sidan (bra-sajterna). Det och kvittofelet i 3.6 är ägarens val; grinden och
+facit är inte ändrade. Tills dess ligger bildmodellen kvar på 2.5-flash i
+europe-west1 med `VERTEX_BILD_REGION` (avsnitt 6.4).
+
+Mätskript (ej i repot, tunna skal kring produktionens funktioner): samma som i
+3.6 med en kreditspärr som läser ScrapeGraph-saldot före varje ny skärmbild.
+
 ## 4. Kostnad per månad vid dagens volym
 
 **Volymen repot känner till.** Leads: 58 körningar på 14 dygn drog 165 M
@@ -430,10 +489,11 @@ avsnitt 1; byt modellnamnen om ägaren väljer annat.
 | Variabel | Tjänst | I dag (osatt = kodens standard) | Efter bytet |
 |---|---|---|---|
 | `GOOGLE_CLOUD_REGION` | api, web | osatt (`europe-west1`) | `eu` |
-| `VERTEX_RESERVREGIONER` | api | osatt (`europe-west4,europe-north1`) | `eu` (ingen reserv: kandidaterna finns inte i reservregionerna) |
+| `VERTEX_RESERVREGIONER` | api | osatt (`europe-west4,europe-north1`) | tom (ingen reserv: kandidaterna finns inte i reservregionerna, inte heller i europe-west3; en tom lista betyder att 429 väntas ut i huvudregionen, `step_runner.py`) |
 | `VERTEX_INBADDNING_REGION` | api | osatt (= regionen) | `europe-west1` (inbäddningsmodellen saknas i `eu`; samma modell som i dag) |
+| `VERTEX_BILD_REGION` | api | osatt (= regionen) | `europe-west1` så länge `VISION_MODEL` är gemini-2.5-flash (PR #76); tom om bildmodellen blir en 3.x-modell |
 | `MODEL` | api, web | `gemini-2.5-flash` | `gemini-3.5-flash-lite` (web: Email Studio) |
-| `VISION_MODEL` | api | osatt (`gemini-2.5-flash`) | måste sättas, eftersom bildmodellen anropas i `GOOGLE_CLOUD_REGION` där 2.5 saknas: `gemini-3.8-flash` efter kvittosviten och webbkalibreringen i development (avsnitt 1) |
+| `VISION_MODEL` | api | osatt (`gemini-2.5-flash`) | `gemini-2.5-flash` med `VERTEX_BILD_REGION=europe-west1` tills ägaren valt bildmodell (avsnitt 3.7); därefter den valda 3.x-modellen |
 | `LEADS_DRAFT_MODEL`, `LEADS_HUMANIZER_MODEL` | api | osatta (ärver `MODEL`) | `gemini-3.8-flash` (eller osatta, då ärver de 3.5-flash-lite, avsnitt 1) |
 | `IRIS_PROFIL_MODEL` | api | osatt (ärver `MODEL`) | oförändrad |
 | `GEMINI_REASONING_EFFORT` | api | osatt (`none`) | oförändrad; koden översätter `none` per modell |
@@ -482,6 +542,49 @@ inbäddningsmodellen och dess region är desamma.
 Efter att Google stängt 2.5 finns ingen väg tillbaka till 2.5; backningen
 blir då ett byte till en annan 3.x-modell.
 
+### 6.4 Provbytet i development, gjort 2026-11-18
+
+Efter att PR #76 (`VERTEX_BILD_REGION`) deployats i development (api-deploy
+`9c890642`, "Application startup complete") sattes på `api` och `web` i
+miljön `development`, aldrig i `main`:
+
+| Variabel | Värde |
+|---|---|
+| `GOOGLE_CLOUD_REGION` | `eu` |
+| `VERTEX_RESERVREGIONER` | tom |
+| `VERTEX_INBADDNING_REGION` | `europe-west1` |
+| `VERTEX_BILD_REGION` | `europe-west1` |
+| `VISION_MODEL` | `gemini-2.5-flash` |
+| `MODEL` | `gemini-3.5-flash-lite` |
+| `LEADS_DRAFT_MODEL`, `LEADS_HUMANIZER_MODEL` | `gemini-3.8-flash` |
+
+`web` läser bara `MODEL` och `GOOGLE_CLOUD_REGION`; resten är satta där för
+att de två tjänsterna ska bära samma värden. Utkasten fick 3.8-flash eftersom
+underlaget visar att 3.5-flash-lite brister där (6/10 utan stilfynd mot 7/10
+i dag, 3.8 10/10, avsnitt 3.2).
+
+**Kontrollen.** Deployerna `e3d7a4f0` (api) och `011553ce` (web) blev
+SUCCESS. Api:ns startlogg: "riktig agent aktiv (provider=gemini,
+modell=gemini-3.5-flash-lite)" och "Application startup complete", utan
+`llm_provider_fault`. Två syntetiska supportfrågor genom `POST /api/chat` mot
+demotenanten (Nordlys Handel, syntetisk) med demonyckeln, `is_test`, kanal
+web och en påhittad sessionsadress:
+
+- En textfråga om leveranstider: klar på 7,2 s (10,7 s före bytet), rätt
+  kategori, ingen eskalering. Loggen: chattanropen till
+  `aiplatform.eu.rep.googleapis.com/.../locations/eu/...` (200) och
+  inbäddningarna till `europe-west1-aiplatform.googleapis.com/.../gemini-embedding-001:predict` (200).
+- En fråga med en syntetisk bild (en ritad PNG): klar på 10,6 s, kategori
+  retur_reklamation. Bildbeskrivningen gick till
+  `europe-west1-aiplatform.googleapis.com/.../locations/europe-west1/...` (200),
+  resten till `eu`. Svaret hade ett stavfel ("behandlla"), att följa i
+  mätningen i 6.2 punkt 4.
+
+Inga fel om modell eller region i api-loggen. Inga mejl skickades, inga
+utkast godkändes och ingen leadskörning startades; Iris-utkasten med 3.8 och
+den grundade leadssökningen med 3.5-flash-lite är alltså inte prövade i
+development än (6.2 punkt 4).
+
 ## 7. Risker
 
 | Risk | Bedömning | Motåtgärd |
@@ -500,15 +603,17 @@ blir då ett byte till en annan 3.x-modell.
 - **Researchen, Jev och leadssökningen** (grundad Google-sökning). Ingen av
   dem har en låst svit som går att köra utan nätverk mot riktiga sajter.
   Sökningen provades med ett anrop per modell (avsnitt 2.4).
-- **Kvittohanteraren och bildmodellen.** Bildsteget och webbplatsbedömningen
-  mättes 2026-11-18 (avsnitt 3.6), på ett urval om 30 av 58 facitsajter.
-  Kvittosvitens hela kedja (uppladdning, agent, status) kördes inte: den går
-  bara genom en miljös uppladdning, och provbytet i development gjordes inte.
+- **Kvittohanteraren och bildmodellen.** Bildsteget mättes 2026-11-18
+  (avsnitt 3.6) och webbplatsbedömningen på alla 58 facitsajter (3.7).
+  Kvittosvitens hela kedja (uppladdning, agent, status) kördes inte; i
+  development ligger bildmodellen kvar på 2.5-flash, så den prövar inget nytt.
 - **Email Studio.** Bara att anropet tar den nya tankeformen (test).
 - **Spridningen.** Varje mätning kördes en gång per kandidat. Golden-svitens
   sju fall gav 7/7 och 6/7 för samma modell i två körningar samma dag, så en
   skillnad på ett eller två fall är inom bruset.
 - **Volymen i supporten.** Repot har ingen uppmätt månadsvolym för chatt och
   triage, bara för leads (avsnitt 4).
-- **Ingen mätning gjordes mot development eller main**, och ingen kunddata
-  användes. Allt kördes lokalt mot MemoryStorage med repots fixturer.
+- **Ingen mätning gjordes mot main**, och ingen kunddata användes. Mätningarna
+  i avsnitt 3 kördes lokalt mot MemoryStorage med repots fixturer; mot
+  development gjordes bara de två syntetiska anropen i 6.4, inte evalsviterna
+  i 6.2 punkt 4.
