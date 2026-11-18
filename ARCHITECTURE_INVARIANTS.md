@@ -1038,7 +1038,10 @@ Där `Settings.har_riktig_kunddata()` är sann fäller `Settings.llm_provider_fa
 uppstarten i `app/main.py` när (a) `LLM_PROVIDER=openai`, också som standardvärde
 när variabeln saknas, (b) `GOOGLE_CLOUD_REGION`, `VERTEX_INBADDNING_REGION`,
 `VERTEX_BILD_REGION` (bildklienten, sedan 2026-11-18), `VERTEX_UTKAST_REGION`
-(Iris utkast och humanizer, sedan 2026-11-18) eller
+(Iris utkast och humanizer, sedan 2026-11-18), `VERTEX_KVITTO_REGION`
+(kvittohanterarens agent och kontrolläsning, `agent/llm.get_kvitto_client`,
+sedan 2026-11-18; modellen väljs med `KVITTO_MODEL`, och båda tomma ger MODEL i
+huvudregionen) eller
 någon post i `VERTEX_RESERVREGIONER` inte står på `config.VERTEX_EU_REGIONER`
 (EU-regionerna och, sedan 2026-11-18, EU-multiregionen `eu` med värden
 `aiplatform.eu.rep.googleapis.com` via `config.vertex_vard`; aldrig `us` eller
@@ -1097,6 +1100,19 @@ produktionen, och en tjänst kan kopieras mellan miljöer med ett klick: en
 felkopplad variabel ska stoppa synken, inte vända den. Under flytten körs två
 synkar samtidigt, och låset gör att bara en skriver.
 Test: snajp-support/tests/invariants/test_inv_data_008.py
+Införd: 2026-11-18 · Upphävs endast genom waiver
+
+### INV-PROC-001 — Varje PR mot development besvarar säkerhets- och AI-frågan
+`.github/pull_request_template.md` har avsnitten "Säkerhet och dataskydd" och
+"AI-påverkan". Arbetsflödet `.github/workflows/pr-granskning.yml` kör
+`scripts/pr_granskning.py` när en PR öppnas, uppdateras eller redigeras, och
+fäller den om något av avsnitten saknas eller saknar ett ikryssat svar. Botar
+och PR:er mot andra grenar än development (release-PR:er mot main) är undantagna.
+Varför: säkerhet och AI-påverkan prövades bara när någon kom ihåg det. ISO 27001
+A.5.8 kräver att informationssäkerhet ingår i varje arbete, och ISO 42001
+A.6.1.3 att ändringar av modell och prompt prövas
+(docs/compliance/score-plan-2026-11-18.md).
+Test: tests/invariants/test_inv_proc_001.py
 Införd: 2026-11-18 · Upphävs endast genom waiver
 
 ## Roadmap

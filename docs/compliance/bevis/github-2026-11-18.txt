@@ -1,0 +1,42 @@
+Hämtat 2026-11-18 (kväll) med gh api, read-only. Inga hemligheter.
+repo: oloflun/snipe-leads
+
+Repot
+   visibility = private
+   default_branch = development
+   allow_forking = true
+
+Medarbetare med åtkomst (repos/.../collaborators)
+   oloflun                admin
+   bergmansebastian2002   write
+
+Grenskydd (repos/.../branches/main/protection)
+   403 "Upgrade to GitHub Pro or make this repository public to enable this feature."
+   => grenskyddet och code owner-kravet på main tillämpas inte sedan repot blev privat
+      på gratisplanen. .github/CODEOWNERS finns kvar men tvingar inget.
+
+Säkerhetsfunktioner
+   dependabot/alerts (öppna): 2, båda höga (picomatch, GHSA-fc5q-39xc-vjpf, ingen rättad version;
+      bedömning i release-PR 72 punkt 6)
+   code-scanning/alerts: 403 "Code scanning is not enabled for this repository"
+      (kräver GitHub Advanced Security i privat repo)
+   secret-scanning/alerts: 404 "Secret scanning is disabled on this repository"
+      (ersatt av gitleaks på nya commits i CI-jobbet `hemligheter`, .github/workflows/verify.yml)
+   private-vulnerability-reporting: 404
+
+Installerade GitHub-appar
+   Kan inte listas med agentens token (403). Release-PR 72 punkt 1 anger att appen Supabase
+   fortfarande har åtkomst till repot.
+
+Arbetsflöden (actions/workflows, state)
+   IndexNow efter release, migrera, övervakning, synk, Verify, Dependabot Updates,
+   Dependency Graph, CodeQL: alla active
+
+Verify på push till development (senaste 100 körningarna av alla arbetsflöden, filtrerat på Verify)
+   95 körningar, 93 lyckade
+
+övervakning.yml (actions/workflows/overvakning.yml/runs)
+   3 körningar totalt: 2026-11-17T23:39Z (manuell, simulerat fel), en manuell,
+   och 1 schemalagd 2026-11-18T04:44Z. Inga misslyckade.
+   Schemat ("7 * * * *") har alltså inte gett någon körning efter 04:44 UTC.
+   Ärenden med etiketten driftlarm: #53 (skapat 2026-11-17T23:39Z, stängt 23:41Z).

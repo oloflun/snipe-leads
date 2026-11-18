@@ -478,12 +478,14 @@ def _anvandning(result: Any) -> tuple[int, int]:
 async def _kor_modellen(
     system: str, anvandare: str, ctx: ResearchKontext, trace: RunTrace
 ) -> dict[str, Any] | None:
-    from ..agent.llm import get_agent_model
+    from ..agent.llm import get_kvitto_agent_model
 
+    # KVITTO_MODEL och VERTEX_KVITTO_REGION (2026-11-18); osatta = MODEL i
+    # huvudregionen, som förut.
     agent = Agent[ResearchKontext](
         name="Snajp-Kvittohanterare",
         instructions=system,
-        model=get_agent_model(),
+        model=get_kvitto_agent_model(),
         tools=VERKTYG,
         model_settings=ModelSettings(temperature=0),
     )
@@ -529,6 +531,7 @@ async def _kor_modellen(
             attempts=forsok,
             escalated=rat is None,
             escalation_reason=None if rat is not None else "svaret gick inte att läsa som JSON",
+            model=get_settings().kvittomodell(),
             latency_ms=int((time.monotonic() - start) * 1000),
             tokens_in=tokens_in,
             tokens_out=tokens_out,
@@ -543,12 +546,12 @@ async def _kor_modellen(
 async def _kontrollas(system: str, anvandare: str, trace: RunTrace) -> dict[str, Any] | None:
     """Den andra, oberoende genomgången (produktkrav 2026-09-14). Ett anrop i
     JSON-läge, utan verktyg, bara kärnfälten."""
-    from ..agent.llm import get_llm_client
+    from ..agent.llm import get_kvitto_client
 
-    settings = get_settings()
+    modell = get_settings().kvittomodell()
     start = time.monotonic()
-    svar = await get_llm_client().chat.completions.create(
-        model=settings.model,
+    svar = await get_kvitto_client().chat.completions.create(
+        model=modell,
         response_format={"type": "json_object"},
         temperature=0,
         messages=[{"role": "system", "content": system}, {"role": "user", "content": anvandare}],
@@ -562,7 +565,7 @@ async def _kontrollas(system: str, anvandare: str, trace: RunTrace) -> dict[str,
             attempts=1,
             escalated=False,
             escalation_reason=None,
-            model=settings.model,
+            model=modell,
             latency_ms=int((time.monotonic() - start) * 1000),
             tokens_in=getattr(usage, "prompt_tokens", 0) or 0 if usage else 0,
             tokens_out=getattr(usage, "completion_tokens", 0) or 0 if usage else 0,
