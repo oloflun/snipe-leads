@@ -261,3 +261,23 @@ async def test_webbens_satser_gar_att_kora_som_snajp_web():
     finally:
         await web.close()
     assert not fel, "webbens frågor saknar rättigheter som snajp_web:\n" + "\n".join(fel)
+
+
+@pytest.mark.anyio
+async def test_explain_fäller_en_saknad_rattighet():
+    # Kontrollprovet: utan det kunde testet ovan vara grönt för att EXPLAIN inte
+    # prövar något. Varje sats här SKA vägras.
+    web = await _anslut(WEB_DSN)
+    try:
+        for sats, antal in (
+            ("select key_hash from public.ss_api_keys", 0),  # tabell utan rättighet
+            ("update public.workspaces set name = $1", 1),  # kolumn utan update-rätt
+            ("select active from public.ss_tenants", 0),  # kolumn utan läsrätt
+            ("update auth.users set email = $1", 1),  # e-posten får webben inte ändra
+            ("select public.ensure_workspace_for_user($1::uuid, $2::text)", 2),  # funktion utan EXECUTE
+        ):
+            with pytest.raises(asyncpg.InsufficientPrivilegeError):
+                async with web.transaction():
+                    await web.fetch("explain " + sats, *([None] * antal))
+    finally:
+        await web.close()

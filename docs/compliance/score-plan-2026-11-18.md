@@ -142,7 +142,7 @@ A.8.10), och KVITTO_MODEL gör att kvittostegen kan stanna på en prövad modell
 | A.5.12 | delvis | b | Godkänd G02 | – | – |
 | A.5.13 | delvis | b | Godkänd G02 | – | – |
 | A.5.14 | delvis | b | Synkflytten (Railway) | Koden finns (PR 71) | – |
-| A.5.15 | delvis | b | Regler för leverantörskonton | RLS verifierat i CI | **Ja** (gap om RLS-verifiering minskat) |
+| A.5.15 | delvis | b | Regler för leverantörskonton | RLS verifierat i CI; minsta rättighet för `snajp_web` | **Ja** (gap om RLS-verifiering minskat; PR 91, migration 126) |
 | A.5.16 | delvis | b | Personliga konton i stället för delade | – | – |
 | A.5.17 | delvis | b | Lösenordsbyte, lösenordshanterare | – | – |
 | A.5.18 | delvis | b | Förteckning och översyn | GitHub-delen belagd | **Ja** (`bevis/github-2026-11-18.txt`) |
@@ -191,10 +191,10 @@ A.8.10), och KVITTO_MODEL gör att kvittostegen kan stanna på en prövad modell
 | Krav | Status | Klass | Vad som krävs | Agentens del | Gjort |
 |---|---|---|---|---|---|
 | A.8.1 | okänt | b | Enhetslista | – | – |
-| A.8.2 | delvis | b | Lösenordsbyte, admins listade | GitHub-admins belagda | Ja |
-| A.8.3 | delvis | b | Minimerad spegel | RLS verifierat i CI | **Ja** |
+| A.8.2 | delvis | b | Lösenordsbyte, admins listade | GitHub-admins belagda; webbens roll smalnad av | Ja (PR 91) |
+| A.8.3 | delvis | b | Minimerad spegel, merge till `main` | RLS verifierat i CI; `auth.users` stängd för PUBLIC, `snajp_web` minsta rättighet | **Ja** (PR 91) |
 | A.8.4 | delvis | b | Grenskydd (betald plan), koppla bort Supabase-appen | Åtkomsten belagd | **Ja** (repot privat; nytt gap: grenskyddet) |
-| A.8.5 | delvis | b | Tvåfaktor på konton; spärr i appen | – | – |
+| A.8.5 | delvis | b | Tvåfaktor på konton och i appen; merge till `main` | Spärr mot upprepade försök | **Ja** (PR 90, migration 125). TOTP inte byggd |
 | A.8.6 | delvis | b | Kapacitetsövervakning, repliker | – | – |
 | A.8.7 | okänt | b | Antivirus på datorerna | – | – |
 | A.8.8 | delvis | b | Patchtider, kodskanning (kräver betald plan) | – | Läget uppdaterat |
@@ -352,3 +352,17 @@ Inget krav blir uppfyllt: varje rad ovan väntar på ett beslut eller en merge t
 
 **Poäng före och efter:** GDPR 0/17/1 → 0/17/1. ISO 27001 3/72/24 → **3/73/23**.
 ISO 42001 5/51/14 → 5/51/14 (uppfyllt/delvis/saknas).
+
+## Natt 2026-11-18 (f): inloggningsspärr och webbens databasrättigheter
+
+| PR | Krav | Byggt | Belägg | Kvar för Anton |
+|---|---|---|---|---|
+| 90 | A.8.5 | Spärr mot upprepade lösenordsinloggningar och återställningsbegäranden, per adress (5 på 15 min, 3 på 60 min) och per IP (20 resp. 10), väntetid 1, 5, 15, 60 min. Avslöjar inte om kontot finns; spärrade försök loggas utan lösenord. TOTP för plattformsadmin inte byggd (för stort i samma veva, `docs/BESLUT.md`) | Migration 125; `lib/auth/inloggningsregler.ts`; `snajp-support/tests/db/test_inloggningsforsok.py` i jobbet `databas`; `AUTH.md` | Besluta tvåfaktor (krav och tvång); merge till `main` |
+| 91 | A.5.15, A.8.2, A.8.3 | `snajp_web` från LIUR på 97 tabeller (och automatiskt på nya) till det webbens 67 SQL-satser gör: 13 tabeller, kolumnvis där det går. `auth.users` inte längre läsbar för PUBLIC; `snajp_app` läser bara `id, email` | Migration 126; `snajp-support/tests/db/test_snajp_web_rattigheter.py` (exakt lista, nya tabeller, `auth.users`, varje webbsats som `snajp_web` med EXPLAIN, kontrollprov); `datamangder.md` §1 och fynd 3 | Merge till `main`; åtkomstgranskningen |
+
+**Statusändring:** ingen. Koden ligger i `development` och räknas som testmiljö
+(statusreglerna), och varje krav har en del som är ägarens (tvåfaktor på konton, regler för
+leverantörskonton, listan över admins, minimerad spegel).
+
+**Poäng före och efter:** GDPR 0/17/1 → 0/17/1. ISO 27001 3/73/23 → 3/73/23. ISO 42001
+5/51/14 → 5/51/14 (uppfyllt/delvis/saknas).
