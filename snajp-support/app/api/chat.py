@@ -174,7 +174,7 @@ async def hantera_strom_jobb(app_state, payload: dict[str, Any]) -> None:
     återupptagning — run_support_agent får då `aterta` och hoppar över
     create_ticket/save_message för det inkommande meddelandet i stället för
     att skapa ett andra ärende av samma chattmeddelande (INV-JOB-001).
-    Klockan för 300-sekundersgränsen (app/jobs/store.py JOB_TIMEOUT_SECONDS)
+    Klockan för tidsgränsen (app/jobs/store.py JOB_TIMEOUT_SECONDS)
     flyttas BARA i det fallet — annars hade tid som redan gått åt i det
     avbrutna första försöket ätit upp återupptagningens egen tidsbudget.
     """

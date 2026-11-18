@@ -706,6 +706,48 @@ async def test_vertex_429_far_korta_omtag_i_chatten():
     assert ut.get("category") == "betalning"
 
 
+class _Fel503(Exception):
+    status_code = 503
+    response = None
+
+
+@pytest.mark.anyio
+async def test_vertex_503_far_samma_omtag_som_429():
+    """2026-11-19: gemini-3.8-flash i `eu` svarar 503 när den delade
+    kapaciteten är full. Det är samma läge som DSQ-429 och får samma omtag."""
+    from app.agent import step_runner
+    from app.agent.support_playbook import SUPPORT_V1
+    from app.agentcore.packs import RunLedger
+
+    forsok = {"n": 0}
+    llm = _LLM()
+
+    async def skapa(**kwargs):
+        forsok["n"] += 1
+        if forsok["n"] <= 2:
+            raise _Fel503("Service Unavailable")
+        return await llm.create(**kwargs)
+
+    klient = type("K", (), {})()
+    klient.chat = type("C", (), {})()
+    klient.chat.completions = type("X", (), {"create": staticmethod(skapa)})()
+    vantat: list[float] = []
+
+    async def sov(sekunder):
+        vantat.append(sekunder)
+
+    with patch.object(step_runner, "get_llm_client", return_value=klient), patch.object(
+        step_runner, "_uses_vertex", return_value=True
+    ), patch.object(step_runner.asyncio, "sleep", new=sov):
+        ut = await step_runner.run_step(
+            SUPPORT_V1.steps[0], RunLedger(satisfied={"context_pack"}), step_runner.RunTrace(),
+            task="Klassa.", case_context="## Ärendet\nHej",
+        )
+    assert forsok["n"] == 3
+    assert vantat == [3.0, 8.0]
+    assert ut.get("category") == "betalning"
+
+
 @pytest.mark.anyio
 async def test_429_utan_vertex_kastas_som_forut():
     from app.agent import step_runner
