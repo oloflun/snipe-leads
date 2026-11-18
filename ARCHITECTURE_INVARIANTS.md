@@ -1073,6 +1073,27 @@ ingen kundmejltext får nå dit (dataskyddsbedömningen 2026-11-18, A1, A2, A6).
 Test: snajp-support/tests/invariants/test_inv_data_007.py
 Införd: 2026-11-18 · Upphävs endast genom waiver
 
+### INV-DATA-008 — Synken skriver bara till development, och hos Railway kan den inte skriva till main
+Efter första synken skriver `scripts/railway_synk.py` bara till development: main
+öppnas skrivskyddat, och replica-läget sätts på main bara i första synken
+(`replikamal`). Inne hos Railway (anslutningarna ur `SYNK_MAIN_PG_URL` och
+`SYNK_DEVELOPMENT_PG_URL`) avbryter `kontrollera_anslutningar` före första frågan
+när miljön inte är main, när båda sidor är samma databas, när developments värd
+ligger på `railway.internal`, när sträckan saknar `sslmode=require` och vid
+`--forsta`; `main_kan_skriva` avbryter om main-anslutningen får ändra någon tabell.
+Main läses då som `synk_las` (migration 122: utan inloggning och lösenord tills
+ägaren slår på dem i main, bara `select`, `default_transaction_read_only`). Med
+`--apply` tar synken ett rådgivande lås på development (`ta_las`), och utfallet
+skrivs bara till en databas vars markör säger development (`skriv_utfall`).
+Startkommandot `scripts/railway_drift.py` kör synken bara i Railway-miljön main.
+Varför: synken flyttar från GitHub Actions till Railway-miljön main
+(docs/compliance/synkflytt-plan.md). Där är `postgres.railway.internal`
+produktionen, och en tjänst kan kopieras mellan miljöer med ett klick: en
+felkopplad variabel ska stoppa synken, inte vända den. Under flytten körs två
+synkar samtidigt, och låset gör att bara en skriver.
+Test: snajp-support/tests/invariants/test_inv_data_008.py
+Införd: 2026-11-18 · Upphävs endast genom waiver
+
 ## Roadmap
 
 Ids this plan will introduce, in the order `Genomförandeordning` builds them. Not yet enforced by CI.
