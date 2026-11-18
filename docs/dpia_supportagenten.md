@@ -481,7 +481,11 @@ sak för stegen. Gallringen i migration 048 rör inte tabellen. Fram till
 2026-11-10 lämnades samma stegtexter ut i jobbsvaret (se incidentloggen).
 
 **Befintliga skydd:** stegtexterna lämnas inte längre ut till kunden
-(`api/stegtexter.py`). RLS per kund.
+(`api/stegtexter.py`). RLS per kund. Sedan 2026-11-18 sparar den äldre
+bokföringsytan inte kvittots text i `agent_runs`, varken i `input_text` eller
+i stegloggen: bara längd, sha256 och underlagets id
+(`app/api/bookkeeping.py:kvittotext_for_logg`, test
+`tests/bookkeeping/test_kvittotext_logg.py`). Övriga agenter loggar som förut.
 
 **Föreslagen åtgärd:** gallra `agent_runs` efter en kort, beslutad period, och
 överväg att spara bara metadata efter en vecka (Anton beslutar perioden, agent
