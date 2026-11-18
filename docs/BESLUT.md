@@ -18,8 +18,10 @@ functions, `supabase/config.toml` och `schema.sql`, GoTrue-adaptern
 `@supabase/supabase-js`, Supabase-MCP:n i `.mcp.json`, nyckeln
 `PREVIEW_POSTGRES_URL` och skripten som bara talade med Supabase
 (provisionering, schema, speglingen `supabase_seed_dev.py`, flytten därifrån,
-preview-grenens anslutning). Supabase-appen på GitHub kopplas bort från repot,
-så att kontrollen Supabase Preview inte körs på PR:erna längre.
+preview-grenens anslutning). Utan katalogen `supabase/` går kontrollen
+Supabase Preview igenom (grön på release-PR:en direkt efter pushen). Appen
+Supabase är fortfarande installerad på repot hos GitHub och kan kopplas bort
+där (github.com/settings/installations); det kräver Antons inloggning.
 
 **Resonemanget.** Supabase Preview på release-PR:en var röd, för att den
 körde mot en Supabase-gren som varit död sedan augusti och som vi enligt
