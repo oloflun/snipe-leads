@@ -3,8 +3,10 @@
 Underlag 2026-11-18, framtaget av Claude (agent) inom Antons uppdrag om
 EU-compliance. **Produktionen (`main`) är orörd** och kör `gemini-2.5-flash` i
 Vertex `europe-west1` som förut. **Testmiljön (`development`) kör sedan
-2026-11-18 provbytet** i avsnitt 6.4: textmodellerna i `eu`, bildmodellen och
-inbäddningarna kvar i `europe-west1`. Koden är förberedd så att bytet blir en
+2026-11-18 provbytet** i avsnitt 6.4: chatten och resten av texten på
+gemini-3.5-flash-lite i `eu`; bildmodellen, inbäddningarna och, efter
+mätningen samma dag, Iris utkast och humanizer kvar på gemini-2.5-flash i
+`europe-west1`. Koden är förberedd så att bytet blir en
 ändring av variabler (avsnitt 5), och avsnitt 6 säger exakt vilka.
 
 Läsanvisning: **Fakta** har källa (URL med hämtdatum, fil, eller en mätning i
@@ -492,6 +494,7 @@ avsnitt 1; byt modellnamnen om ägaren väljer annat.
 | `VERTEX_RESERVREGIONER` | api | osatt (`europe-west4,europe-north1`) | tom (ingen reserv: kandidaterna finns inte i reservregionerna, inte heller i europe-west3; en tom lista betyder att 429 väntas ut i huvudregionen, `step_runner.py`) |
 | `VERTEX_INBADDNING_REGION` | api | osatt (= regionen) | `europe-west1` (inbäddningsmodellen saknas i `eu`; samma modell som i dag) |
 | `VERTEX_BILD_REGION` | api | osatt (= regionen) | `europe-west1` så länge `VISION_MODEL` är gemini-2.5-flash (PR #76); tom om bildmodellen blir en 3.x-modell |
+| `VERTEX_UTKAST_REGION` | api | osatt (= regionen) | `europe-west1` om utkasten ligger kvar på gemini-2.5-flash (PR #78, avsnitt 6.4); tom om de går på en modell som finns i `eu` |
 | `MODEL` | api, web | `gemini-2.5-flash` | `gemini-3.5-flash-lite` (web: Email Studio) |
 | `VISION_MODEL` | api | osatt (`gemini-2.5-flash`) | `gemini-2.5-flash` med `VERTEX_BILD_REGION=europe-west1` tills ägaren valt bildmodell (avsnitt 3.7); därefter den valda 3.x-modellen |
 | `LEADS_DRAFT_MODEL`, `LEADS_HUMANIZER_MODEL` | api | osatta (ärver `MODEL`) | `gemini-3.8-flash` (eller osatta, då ärver de 3.5-flash-lite, avsnitt 1) |
@@ -582,8 +585,48 @@ web och en påhittad sessionsadress:
 
 Inga fel om modell eller region i api-loggen. Inga mejl skickades, inga
 utkast godkändes och ingen leadskörning startades; Iris-utkasten med 3.8 och
-den grundade leadssökningen med 3.5-flash-lite är alltså inte prövade i
-development än (6.2 punkt 4).
+den grundade leadssökningen med 3.5-flash-lite prövades i omgången nedan.
+
+#### Mätningen i development samma eftermiddag (6.2 punkt 4)
+
+Bara syntetiska kunder: evalkunder (`eval-…`, påhittade bolag med
+`.example`-adresser), demotenanten Nordlys och ett nytt testkonto. Inga mejl,
+inga godkända utkast, inga riktiga kunders arbetsytor. Kostnad omkring 25 kr i
+Vertex (uppskattad ur tokens och listpris).
+
+| Prov | Utfall | Latens |
+|---|---|---|
+| Iris-utkast, gemini-3.8-flash i `eu`, 11 fall ur `evals/iris_utkast.json` (1 ensamt, 10 med tre samtidiga) | **4 av 11 levererade**, alla fyra godkända av `bedom_iris` och utan fynd i facitets stilgrind (INV-LEADS-UTKAST-002). **7 av 11 föll**: 503 Service Unavailable, 429, `APITimeoutError` efter 120 s och jobb som slog i femminutersgränsen | 161–277 s för de levererade (i dag 23 s); humanizern ensam 50–160 s |
+| Samma, efter backningen nedan: gemini-2.5-flash i europe-west1, 6 fall, tre samtidiga | 6 av 6 utan tekniskt fel, 5 köade, 3 godkända, 5 utan stilfynd (samma nivå som 2.5 i 3.2 och i evalkörningen 2026-11-10, 24/33) | 8–21 s |
+| Support, hela sviten (50 fall), `python -m evals.kor kor --agent support`, 3.5-flash-lite | **48/50** (2026-11-10 med 2.5-flash: 47/50), 0 tekniska fel, fakta, format och inga_fel 100 % | p50 5,9 s, p95 8,1 s (8,0 / 14,7 s) |
+| Grundad leadssökning, 3.5-flash-lite i `eu`, högst 5 bolag | Anropen gick till `aiplatform.eu.rep.googleapis.com/…/locations/eu/…:generateContent`, 200, `thinkingConfig: {thinkingLevel: MINIMAL}` godtogs, svaret var tolkbar JSON: 3–5 bolag per sökning, alla med sökfrågor (`webSearchQueries`). Två av fem webbadresser i Borlänge-provet var fel bolag; dagens 2.5-flash gav samtidigt en katalogsida. Existensgrinden står kvar efter sökningen | 3–4 s per anrop |
+| Email Studio, `POST /api/email-studio` som inloggad testanvändare, 3.5-flash-lite i `eu` | 200, `simulated: false`, `reasoningEffort: "minimal"` godtogs; inga `[email-studio:modellfel]` i web-loggen | 1,4–1,6 s |
+
+**Utkasten backades.** 3.8-flash i `eu` klarar inte utkasten under ens tre
+samtidiga jobb, och utkastet är en kärnfunktion. Kvaliteten i de utkast som
+kom fram är densamma som i 3.4 (bra nivå, men samma avslutning i nästan alla
+och ingångar som beskriver bolaget). Eftersom 2.5 saknas i `eu` fick utkasten
+och humanizern en egen region, `VERTEX_UTKAST_REGION` (PR #78, mergad med
+merge-commit `e051575`, testerna i `test_modellbyte_gemini3.py` och
+`test_inv_data_006.py`). Satt på `api` och `web` i development:
+`LEADS_DRAFT_MODEL` och `LEADS_HUMANIZER_MODEL` = `gemini-2.5-flash`,
+`VERTEX_UTKAST_REGION` = `europe-west1`. Api-loggen visar därefter
+utkastanropen till europe-west1 (35 anrop, alla 200) och övriga steg till `eu`.
+
+**Så görs provet.** Leadssökningen kördes i processen på agentens maskin, med
+samma kod (`discovery.hitta_bolag`), servicekonto, modell och region som
+development, men utan registret, annonskällorna, platshållarkollen och
+webbpoolen. En körning i development hade skickat bolagen vidare till
+webbpoolens mottagare, som är riktiga kunder (`WEBBPOOL_FORDELNING=1`).
+Email Studio kräver en inloggad arbetsyta; det dokumenterade testkontot fanns
+inte längre, så ett nytt skapades genom Skapa konto (Railway-vägen skickar
+inget mejl). Kvittosviten kördes inte: den skapar en ny evalkund per körning
+och skriver nyckeln i `.env.deploy`, och bildmodellen är oförändrad.
+
+Kvar för ägaren: om utkasten ska ligga kvar på 2.5-flash i europe-west1 (dör
+när Google stänger 2.5), gå till 3.5-flash-lite i `eu` (7/10 godkända lokalt,
+avsnitt 3.2, inte prövat i development) eller till 3.8-flash med Provisioned
+Throughput i `eu`.
 
 ## 7. Risker
 
@@ -607,13 +650,13 @@ development än (6.2 punkt 4).
   (avsnitt 3.6) och webbplatsbedömningen på alla 58 facitsajter (3.7).
   Kvittosvitens hela kedja (uppladdning, agent, status) kördes inte; i
   development ligger bildmodellen kvar på 2.5-flash, så den prövar inget nytt.
-- **Email Studio.** Bara att anropet tar den nya tankeformen (test).
+- **Email Studio.** Två anrop i development (avsnitt 6.4); ingen svit finns.
 - **Spridningen.** Varje mätning kördes en gång per kandidat. Golden-svitens
   sju fall gav 7/7 och 6/7 för samma modell i två körningar samma dag, så en
   skillnad på ett eller två fall är inom bruset.
 - **Volymen i supporten.** Repot har ingen uppmätt månadsvolym för chatt och
   triage, bara för leads (avsnitt 4).
 - **Ingen mätning gjordes mot main**, och ingen kunddata användes. Mätningarna
-  i avsnitt 3 kördes lokalt mot MemoryStorage med repots fixturer; mot
-  development gjordes bara de två syntetiska anropen i 6.4, inte evalsviterna
-  i 6.2 punkt 4.
+  i avsnitt 3 kördes lokalt mot MemoryStorage med repots fixturer. Mot
+  development kördes supportsviten hela och Iris-sviten i urval (avsnitt
+  6.4), bara mot syntetiska kunder; kvittosviten kördes inte.
