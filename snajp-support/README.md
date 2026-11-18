@@ -53,7 +53,7 @@ och bildbilagor noteras i text istället för att analyseras.
    `aws-0-eu-west-1.pooler.supabase.com`, se `.env.example`).
 4. Seeda kunskapsbasen: `docker compose run --rm api python -m app.scripts.seed_kb`
    (beräknar embeddings om `EMBEDDING_API_KEY` är satt).
-5. Starta om tjänsten (`docker compose restart`, eller redeploy på Render).
+5. Starta om tjänsten (`docker compose restart`).
 
 ## Multi-tenant
 
@@ -135,17 +135,10 @@ docker compose run --rm api python -m pytest tests -q
 
 Testerna kör i simuleringsläge och kräver inga nycklar.
 
-## Deploy (Render)
+## Deploy (Railway)
 
-Backenden auto-deployas från GitHub via `render.yaml` (Blueprint):
-
-1. Skapa en Blueprint i Render och peka på repot → Render läser `snajp-support/render.yaml`.
-2. Sätt secrets i dashboarden: `DEEPSEEK_API_KEY`, `SNAJP_MASTER_API_KEY`,
-   `SNAJP_DEMO_API_KEY` (och valfritt `DATABASE_URL`, `EMBEDDING_API_KEY`).
-3. Notera tjänstens URL, t.ex. `https://snajp-support.onrender.com`.
-4. På Vercel: sätt `SNAJP_SUPPORT_URL` = Render-URL:en och `SNAJP_INTERNAL_API_KEY`
-   = samma värde som `SNAJP_DEMO_API_KEY`. Frontenden pratar då med Render-backenden.
-
-Free-tier spinner ner vid inaktivitet → första anropet efter idle tar ~30–60 s (cold
-start). Health-probes: `/health/live`, `/health/ready`. `docker-compose.yml` (API + Redis)
-finns kvar för lokal körning.
+Backenden körs som tjänsten `api` på Railway och deployas av en push till
+`development` respektive en release till `main`; se `DEPLOY.md` och `RAILWAY.md`.
+Render (och blueprinten `render.yaml`) är avvecklat och borttaget ur repot
+2026-11-18. Health-probes: `/health/live`, `/health/ready`. `docker-compose.yml`
+(API + Redis) finns kvar för lokal körning.

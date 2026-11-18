@@ -48,6 +48,46 @@ bolagsnamn, och testet hindrar att det ändras utan att någon tar ställning.
 modellbytet från Gemini 2.5 (ägarens beslut), cachen i Google Cloud och ett
 servicekonto per miljö (ägarens hand), fler maskeringstyper.
 
+## 2026-11-18 (Claude (agent), inom Antons uppdrag om EU-compliance; ändringarna väntar på Antons granskning) — Render-koden tas bort ur repot
+
+**Beslut.** Allt i repot som kan skriva till, deploya till eller hålla liv i
+den avvecklade Render-stacken tas bort: skrivvägen i `scripts/keys.py`
+(Render-pushen och det den anropade), driftkontrollen `scripts/verify_render.py`
+och blueprinten `snajp-support/render.yaml`. Samtidigt tas `keys.py`:s
+skrivväg mot appens Vercel-projekt bort (push och pull), som bara tjänade samma
+döda stack. Invarianten INV-DEPLOY-001 stod mot blueprinten och skyddar nu
+samma sak, byggkontexten för api, mot filen som styr Railway.
+
+**Resonemanget.** En undersökning 2026-11-18 visade att Render inte fyller
+någon funktion: ingenting i koden, hos Railway eller i DNS pekar dit, och
+loggarna visar ingen kundtrafik. Koden låg ändå kvar och var farlig. Ett enda
+kommando kunde skriva backend-hemligheter och DeepSeek som leverantör till
+båda Render-tjänsterna och starta en deploy, alltså återinföra den
+tredjelandsöverföring som spärrades 2026-08-24. Blueprinten sa själv att en
+blueprint som ligger kvar är en tjänst som kan återuppstå. Kod som inte
+behövs och som kan göra skada tas bort i stället för att märkas som vilande.
+
+**Läget hos leverantörerna.** Båda Render-tjänsterna är suspenderade sedan
+2026-11-17 23:46 UTC. Det gamla Vercel-projektet `snajp` är pausat 2026-11-18,
+med inloggningsskydd och avstängda förhandsdeployer. Apex-omdirigeringen
+(Vercel-projektet `snajp-apex`) berörs inte.
+
+**I koden.** `scripts/keys.py` (Render- och Vercel-vägarna borta, övriga
+kommandon oförändrade), `scripts/verify_render.py` och `snajp-support/render.yaml`
+borttagna, `tests/invariants/test_inv_deploy_001.py` och posten i
+`ARCHITECTURE_INVARIANTS.md` anpassade, nytt test
+`tests/invariants/test_render_avvecklad.py` som fäller om Render-koden kommer
+tillbaka. Instruktioner om Render i `DEPLOY.md`, `DEPLOY_KEYS.md`, `RAILWAY.md`,
+`AUTH.md` och `snajp-support/README.md` är ersatta med en mening om att stacken
+är avvecklad.
+
+**Kvar hos ägaren.** Radera båda Render-tjänsterna (de är bara suspenderade)
+och ta bort Renders åtkomst till repot (GitHub-appen). Rotera de hemligheter
+som legat hos Render. Återkalla Render-API-nyckeln och ta sedan bort raderna
+`RENDER_API_KEY` och `PREVIEW_RENDER_SERVICE_ID` ur `.env.deploy`. Begär en
+raderingsbekräftelse från Render för tjänsterna, loggarna och
+miljövariablerna.
+
 ## 2026-11-18 (Anton) — Extern övervakning, säkerhetskontakt och Dependabot
 
 **Beslut.** Fyra luckor som en genomgång mot ISO 27001 visade fylls: en

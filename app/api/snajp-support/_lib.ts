@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
 import { getTenant } from "@/lib/tenants";
 
-// Tunn proxy mot den headless Snajp-Support-backenden (FastAPI, hostas på Render).
+// Tunn proxy mot den headless Snajp-Support-backenden (FastAPI, Railway-tjänsten `api`).
 // Webbläsaren träffar bara Next-appen; den interna API-nyckeln sätts server-side.
-// SNAJP_SUPPORT_URL sätts på Vercel till Render-URL:en; lokalt defaultar den till 8000.
+// SNAJP_SUPPORT_URL sätts på Railway-tjänsten `web` (scripts/railway_provision.py);
+// lokalt defaultar den till 8000.
 
 export const SNAJP_SUPPORT_URL = process.env.SNAJP_SUPPORT_URL ?? "http://127.0.0.1:8000";
 export const SNAJP_INTERNAL_API_KEY =
