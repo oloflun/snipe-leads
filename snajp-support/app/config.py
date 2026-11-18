@@ -279,6 +279,12 @@ class Settings(BaseSettings):
     #: gemini-2.5-flash i europe-west1 medan resten av texten stannar i `eu`.
     #: Bara EU-regioner, som ovan.
     vertex_utkast_region: str = ""
+    #: Regionen för kvittohanterarens modellanrop (KVITTO_MODEL ovan; agenten
+    #: och kontrolläsningen i kvitton/hanterare.py). Tom = samma som
+    #: GOOGLE_CLOUD_REGION. Finns av samma skäl som VERTEX_UTKAST_REGION:
+    #: kvittostegen ska kunna ligga kvar på gemini-2.5-flash i europe-west1
+    #: medan MODEL går till `eu`. Bara EU-regioner, som ovan (INV-DATA-006).
+    vertex_kvitto_region: str = ""
     model: str = "gpt-4o-mini"
     embedding_model: str = "gemini-embedding-001"
     #: MÅSTE stämma med kolumnen `ss_knowledge_base.embedding`, som är
@@ -430,6 +436,14 @@ class Settings(BaseSettings):
     # ändrad affärskontext, så en starkare modell kostar nästan inget. Tom =
     # ärv MODEL.
     iris_profil_model: str = ""
+    # Kvittohanterarens EGEN modell (app/kvitton/hanterare.py: agenten och den
+    # andra, oberoende kontrolläsningen). Tom = ärv MODEL, beteendet före
+    # 2026-11-18. Finns för modellbytet: kvittosviten mot development gav
+    # 30/40 på 3.5-flash-lite mot 37/40 på 2.5-flash, med en obetald
+    # kundfaktura bokförd som klar (modellbyte-underlag.md avsnitt 6.4), så
+    # kvittostegen ska kunna ligga kvar på en annan modell än MODEL. Sätts
+    # inte i någon miljö utan ägarens beslut.
+    kvitto_model: str = ""
     # Jev-kaskaden (app/leads/jev.py): "off" | "skugga" (loggar Jevs beslut
     # bredvid LLM-bedömningen, fäller inget) | "pa" (fäller uppenbara missar
     # före researchanropet). Nyckeln bor i Railways variabellager.
@@ -812,6 +826,7 @@ class Settings(BaseSettings):
             ("leads_draft_model", self.llm_provider),
             ("leads_humanizer_model", self.llm_provider),
             ("iris_profil_model", self.llm_provider),
+            ("kvitto_model", self.llm_provider),
             ("vision_model", "gemini"),
         ):
             varde = getattr(self, falt)
@@ -855,7 +870,13 @@ class Settings(BaseSettings):
             utanfor = [
                 r
                 for r in dict.fromkeys(
-                    [*self.vertex_regioner(), self.inbaddningsregion(), self.bildregion(), self.utkastregion()]
+                    [
+                        *self.vertex_regioner(),
+                        self.inbaddningsregion(),
+                        self.bildregion(),
+                        self.utkastregion(),
+                        self.kvittoregion(),
+                    ]
                 )
                 if not ar_eu_region(r)
             ]
@@ -866,7 +887,8 @@ class Settings(BaseSettings):
                     f"VERTEX_RESERVREGIONER={self.vertex_reservregioner!r}, "
                     f"VERTEX_INBADDNING_REGION={self.vertex_inbaddning_region!r}, "
                     f"VERTEX_BILD_REGION={self.vertex_bild_region!r}, "
-                    f"VERTEX_UTKAST_REGION={self.vertex_utkast_region!r}). "
+                    f"VERTEX_UTKAST_REGION={self.vertex_utkast_region!r}, "
+                    f"VERTEX_KVITTO_REGION={self.vertex_kvitto_region!r}). "
                     f"{self._varfor_riktig_data()} Kunddata får bara behandlas i EU. "
                     f"Tillåtna regioner: {', '.join(VERTEX_EU_REGIONER)}. Rätta "
                     f"variabeln, eller ta bort den så gäller standardvärdet, och "
@@ -939,6 +961,15 @@ class Settings(BaseSettings):
         """Regionen för Iris utkast och humanizer: VERTEX_UTKAST_REGION,
         annars huvudregionen (se fältet)."""
         return (self.vertex_utkast_region or "").strip() or self.google_cloud_region
+
+    def kvittoregion(self) -> str:
+        """Regionen för kvittohanterarens modellanrop: VERTEX_KVITTO_REGION,
+        annars huvudregionen (se fältet)."""
+        return (self.vertex_kvitto_region or "").strip() or self.google_cloud_region
+
+    def kvittomodell(self) -> str:
+        """Kvittohanterarens modell: KVITTO_MODEL, annars MODEL (se fältet)."""
+        return (self.kvitto_model or "").strip() or self.model
 
     def servicekonto_lasbart(self) -> bool:
         """Om GOOGLE_SERVICE_ACCOUNT_JSON går att använda mot Vertex: JSON med

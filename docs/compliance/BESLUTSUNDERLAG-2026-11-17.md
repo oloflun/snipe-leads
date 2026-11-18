@@ -2,6 +2,10 @@
 
 Datum: 2026-11-17. Mappen `docs/compliance/` är undantagen från git lokalt, eftersom repot är publikt.
 
+## Läget 2026-11-18 kväll, efter genomgången utan ägaren
+
+`score-plan-2026-11-18.md` klassar varje öppet krav som (a) agenten, (b) Anton eller (c) extern part, och genomför (a). Uppfyllt: GDPR 0 → 0, ISO 27001 0 → 3 (7.5.3, A.5.8, A.8.29), ISO 42001 1 → 5 (7.5.3, A.4.2, A.4.5, A.6.2.3). Nya fynd: grenskyddet på `main` och kodskanningen gäller inte sedan repot blev privat på gratisplanen, och övervakningens schema har gett en enda körning.
+
 ## Läget 2026-11-18
 
 Matriserna i `ramverk/` är omgjorda med samma regler som i går. Kod som bara kör i testmiljön (mergat till `development`, release-PR 60 väntar på din merge) räknas som delvis. Osignerade utkast räknas som delvis. Inget krav blev uppfyllt i dag.

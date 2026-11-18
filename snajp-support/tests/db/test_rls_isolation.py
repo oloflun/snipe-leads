@@ -1,7 +1,7 @@
 """INV-SEC-001, plan Verifiering ('Isolering (G1/G2): ... direkt mot
 databasen ... Måste ge noll rader, inte filtrerade rader'). Kör mot en
-riktig databas — hoppas över utan DATABASE_URL (samma mönster som CI utan
-en riktig Postgres-instans skulle behöva).
+riktig databas — hoppas över utan DATABASE_URL. I CI körs det i jobbet
+`databastester` (.github/workflows/verify.yml) mot hela migrationskedjan.
 
 Manuellt verifierat en gång direkt mot produktions-Supabase 2026-08-07 via
 en transaktion som rullades tillbaka (ingen data lämnades kvar): som
@@ -30,17 +30,23 @@ async def test_snajp_app_role_cannot_read_another_tenants_ticket_by_direct_id():
     tenant B — och kräver noll rader. Rör aldrig riktig data."""
     conn = await asyncpg.connect(DATABASE_URL)
     try:
-        tenants = await conn.fetch("select id, slug from ss_tenants order by slug limit 2")
-        if len(tenants) < 2:
-            pytest.skip("Kräver minst två tenants i databasen för ett meningsfullt test.")
-        tenant_a, tenant_b = tenants[0]["id"], tenants[1]["id"]
-
         customer_id = str(uuid.uuid4())
         ticket_id = str(uuid.uuid4())
 
         tx = conn.transaction()
         await tx.start()
         try:
+            # Två egna kunder i samma transaktion som rullas tillbaka, så att
+            # testet går mot en tom databas också: CI-jobbet `databastester`
+            # reser kedjan från noll och har inga kunder (2026-11-18). Förut
+            # hoppades testet över där, och RLS prövades aldrig i CI.
+            tenant_a, tenant_b = uuid.uuid4(), uuid.uuid4()
+            for tid in (tenant_a, tenant_b):
+                await conn.execute(
+                    "insert into ss_tenants (id, slug, name) values ($1, $2, $3)",
+                    tid, f"rls-{tid.hex[:12]}", "RLS-isoleringstest",
+                )
+
             # Scopa till tenant A INNAN seedningen. Utan den här raden kan
             # testet bara köras som en roll med BYPASSRLS — alltså precis den
             # roll vars frånvaro testet finns för att bevisa. Kört som

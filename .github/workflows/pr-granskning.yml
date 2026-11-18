@@ -1,0 +1,28 @@
+# INV-PROC-001: varje PR mot development besvarar säkerhets- och AI-frågan
+# ur .github/pull_request_template.md (ISO 27001 A.5.8, ISO 42001 A.6.1.3;
+# docs/compliance/score-plan-2026-11-18.md).
+#
+# Ett eget litet arbetsflöde, inte ett steg i Verify: det ska köras om när
+# beskrivningen redigeras (`edited`), och då ska inte hela Verify köras om.
+# Inget installeras; skriptet använder bara standardbiblioteket.
+name: pr-granskning
+
+on:
+  pull_request:
+    types: [opened, edited, reopened, synchronize]
+
+permissions:
+  contents: read
+
+jobs:
+  fragan:
+    name: säkerhets- och AI-frågan besvarad
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: INV-PROC-001
+        if: github.event_name == 'pull_request'
+        run: python3 scripts/pr_granskning.py

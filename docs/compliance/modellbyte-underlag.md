@@ -735,6 +735,9 @@ verktygslagret). Svaren: `docs/stabilitet-2026-11/eval/modellbyte-dev-2026-11-18
 Kvittohanteraren i development har kört på 3.5-flash-lite sedan provbytet
 (`MODEL`). Ingen variabel ändrades för den här mätningen; om kvittostegen ska
 få en egen modell är ägarens beslut.
+Sedan 2026-11-18 natt finns variablerna för det (`KVITTO_MODEL`,
+`VERTEX_KVITTO_REGION`, `config.py`, INV-DATA-006); tomma ger `MODEL` i
+huvudregionen, och de är inte satta i någon miljö.
 
 Kostnad för kvällens prov: omkring 15 kr i Vertex (uppskattat ur
 `tokens_in`, 1,6 M för lite och 1,45 M för 2.5, plus utdata och kvittosviten).
