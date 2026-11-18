@@ -332,7 +332,7 @@ internlarmets variabler och översyn av åtkomsten. Gapen är mindre och skrivna
 ## Agentens delar av ägarens krav (2026-11-18, sen kväll)
 
 Allt som återstår kräver Anton. Här är de delar agenten kunde bygga så att det som återstår
-är ett beslut eller en signatur. Grenen `compliance/agentdelar-2026-11-18`, en PR mot `development`.
+är ett beslut eller en signatur. Grenen `compliance/agentdelar-2026-11-18`, PR 86 mot `development`.
 
 | Krav | Byggt | Belägg | Kvar för Anton |
 |---|---|---|---|
