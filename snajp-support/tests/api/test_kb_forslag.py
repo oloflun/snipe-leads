@@ -74,6 +74,13 @@ def test_titelnyckel_bortser_fran_skiftlage_och_skiljetecken():
     assert titelnyckel("") == ""
 
 
+def test_titelnyckel_slar_ihop_nara_dubbletter():
+    # Uppmätt i development 2026-11-18: båda kom som egna förslag ur snajp.se.
+    assert titelnyckel("Priser för Snajp-tjänster") == titelnyckel("Priser för Snajps tjänster")
+    assert titelnyckel("Retur och byte") == titelnyckel("Byte och retur")
+    assert titelnyckel("Priser") != titelnyckel("Leveranstider")
+
+
 def test_nya_forslag_hoppar_over_det_som_redan_finns():
     nya, redan = nya_forslag(_utkast("Öppettider", "Retur", "retur", "Priser"), ["öppettider"])
     assert [f["title"] for f in nya] == ["Retur", "Priser"]

@@ -129,11 +129,22 @@ async def ta_bort_kb_artikel(
 SKANNING_HANGER_MINUTER = 30
 
 
+#: Småord som inte skiljer två rubriker åt.
+_SMAORD = frozenset({"och", "för", "av", "på", "i", "om", "med", "till", "en", "ett", "the", "of", "and", "for"})
+
+
 def titelnyckel(titel: str) -> str:
-    """Rubriken utan skiftläge, skiljetecken och extra blanksteg. Två utkast
-    med samma nyckel är samma artikel för kunden."""
+    """Rubriken som en jämförelsenyckel. Två utkast med samma nyckel är samma
+    artikel för kunden.
+
+    Skiftläge, skiljetecken, småord och ordföljd räknas inte, och ett
+    genitiv-s tas bort, så att "Priser för Snajp-tjänster" och "Priser för
+    Snajps tjänster" blir samma. Uppmätt i development 2026-11-18: skanningen
+    av snajp.se gav båda som egna förslag.
+    """
     ord_ = re.findall(r"[0-9a-zåäöéü]+", (titel or "").casefold())
-    return " ".join(ord_)
+    rensade = {o[:-1] if len(o) > 4 and o.endswith("s") else o for o in ord_ if o not in _SMAORD}
+    return " ".join(sorted(rensade))
 
 
 def nya_forslag(utkast: list[dict], befintliga_titlar: Iterable[str]) -> tuple[list[dict], int]:
