@@ -529,7 +529,7 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
                       mot paper och duger aldrig som 13px text — se DESIGN.md
                       om uppmätt kontrast. */}
                   <Link
-                    href="/login"
+                    href="/login?mode=signup"
                     className="focus-ring ml-auto inline-flex min-h-8 items-center rounded-input bg-ink px-3 py-1 text-[13px] font-semibold text-paper transition-colors hover:bg-ink2"
                   >
                     {text({

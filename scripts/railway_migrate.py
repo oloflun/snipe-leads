@@ -16,6 +16,7 @@ i liggaren var en av de åtta infrastrukturfällorna.
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from pathlib import Path
 
@@ -51,20 +52,47 @@ def _has_sql(sql: str) -> bool:
     return False
 
 
+#: Rådgivande lås: två kedjor mot samma databas (Actions och tjänsten
+#: `migrera` hos Railway under flytten) väntar på varandra i stället för att
+#: köra samma migration samtidigt. Den andra ser sedan allt som redan kört.
+LAS = "snajp:railway_migrate"
+
+
 def dsn(env: dict[str, str], environment: str = "main") -> str:
     """Superuser-DSN (postgres-rollen) för migrationer, per miljö.
 
     Miljöprefixet (RAILWAY_MAIN_*, RAILWAY_DEVELOPMENT_*) är det som gör att
     `--env development` inte kan råka köra mot main-databasen. Faller tillbaka
     på de gamla omiljöade namnen bara för main, som redan kör med dem.
+
+    Ett värde som saknas i .env.deploy läses ur miljön (2026-11-18): Actions
+    sätter de smala hemligheterna som miljövariabler i stället för att skriva
+    hela .env.deploy. Filen går före, så en utvecklardator beter sig som förut.
     """
+    def hamta(nyckel: str) -> str | None:
+        return env.get(nyckel) or os.environ.get(nyckel) or None
+
     p = f"RAILWAY_{environment.upper()}_"
-    pw = env.get(f"{p}PG_PASSWORD") or (env.get("RAILWAY_PG_PASSWORD") if environment == "main" else None)
-    host = env.get(f"{p}PG_HOST") or (env.get("RAILWAY_PG_HOST") if environment == "main" else None)
-    port = env.get(f"{p}PG_PORT") or (env.get("RAILWAY_PG_PORT") if environment == "main" else None)
+    pw = hamta(f"{p}PG_PASSWORD") or (hamta("RAILWAY_PG_PASSWORD") if environment == "main" else None)
+    host = hamta(f"{p}PG_HOST") or (hamta("RAILWAY_PG_HOST") if environment == "main" else None)
+    port = hamta(f"{p}PG_PORT") or (hamta("RAILWAY_PG_PORT") if environment == "main" else None)
     if not (pw and host and port):
-        sys.exit(f"Saknar RAILWAY_{environment.upper()}_PG_{{PASSWORD,HOST,PORT}} i .env.deploy")
+        sys.exit(f"Saknar RAILWAY_{environment.upper()}_PG_{{PASSWORD,HOST,PORT}} i .env.deploy eller miljön")
     return f"postgresql://postgres:{pw}@{host}:{port}/railway"
+
+
+def anslutning(environment: str) -> str:
+    """Anslutningen för --env. Inne hos Railway (tjänsten `migrera`, en per
+    miljö) är det MIGRERA_PG_URL över miljöns privata nät, och den gäller bara
+    i sin egen miljö: RAILWAY_ENVIRONMENT_NAME måste vara --env. Annars som
+    förut (dsn)."""
+    url = os.environ.get("MIGRERA_PG_URL", "").strip()
+    if not url:
+        return dsn(env_read(), environment)
+    miljo = os.environ.get("RAILWAY_ENVIRONMENT_NAME", "").strip()
+    if miljo != environment:
+        sys.exit(f"AVBRYT: MIGRERA_PG_URL hör till Railway-miljön {miljo or '(okänd)'}, men --env är {environment}.")
+    return url
 
 
 def planned() -> list[tuple[str, Path]]:
@@ -83,9 +111,17 @@ def main() -> int:
     args = ap.parse_args()
 
     print(f"miljö: {args.env}")
-    conn = psycopg2.connect(dsn(env_read(), args.env), connect_timeout=20)
+    if args.reset and os.environ.get("MIGRERA_PG_URL"):
+        sys.exit("AVBRYT: --reset körs aldrig från tjänsten hos Railway.")
+    conn = psycopg2.connect(anslutning(args.env), connect_timeout=20)
     conn.autocommit = False
     cur = conn.cursor()
+
+    if args.apply:
+        # Sessionslås: hålls över varje commit nedan och släpps när
+        # anslutningen stängs.
+        cur.execute("select pg_advisory_lock(hashtext(%s))", (LAS,))
+        conn.commit()
 
     if args.reset:
         if not args.apply:

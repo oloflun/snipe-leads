@@ -43,7 +43,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -61,15 +61,18 @@ jobs:
             INTERVALL="${BAS}..${TOPP}"
           fi
           echo "Skannar ${INTERVALL}"
-          /tmp/gitleaks detect --source . --no-banner --redact --log-opts="${INTERVALL}"
+          # --verbose visar fil, rad, regel och commit per träff, så att en
+          # träff går att åtgärda utan att köra om skanningen lokalt. Värdena
+          # är fortfarande maskerade (--redact).
+          /tmp/gitleaks detect --source . --config .gitleaks.toml --no-banner --redact --verbose --log-opts="${INTERVALL}"
 
   python-tests:
     name: pytest (snajp-support)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
           cache: pip
@@ -115,9 +118,9 @@ jobs:
       GALLRING_TEST_DSN: postgresql://postgres:localdev@127.0.0.1:5432/railway
       GALLRING_TEST_APP_DSN: postgresql://snajp_app:localapp@127.0.0.1:5432/railway
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
           cache: pip
@@ -142,7 +145,7 @@ jobs:
     name: Architecture invariants
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           # INV-SKILL-006 nedan kör `git diff origin/<bas>...HEAD`. Tre punkter
           # betyder "sedan den gemensamma förfadern", vilket kräver att basen
@@ -161,7 +164,7 @@ jobs:
           # och den gissningen blir fel exakt när den behöver stämma.
           fetch-depth: 0
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
           cache: pip
@@ -190,7 +193,7 @@ jobs:
     name: agent-core laddas i den byggda imagen
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Hämta basimagen från en spegel
         # public.ecr.aws svarar 429 "Data limit exceeded" på GitHubs delade
@@ -225,13 +228,36 @@ jobs:
           assert len(SUPPORT_V1.steps) > 0
           print('agent-core OK i containern')"
 
+      - name: Driftavbilden (synk och migrationer hos Railway)
+        # railway/Dockerfile.drift, docs/compliance/synkflytt-plan.md steg 4.
+        # Ingen databas och inga hemligheter: avbilden ska bygga, skripten ska
+        # gå att starta, kedjan ska finnas på disk, och startkommandot ska
+        # vägra utan jobb och i fel miljö.
+        run: |
+          set -eu
+          docker build -f railway/Dockerfile.drift -t snajp-drift .
+          docker run --rm snajp-drift python scripts/railway_synk.py --help
+          docker run --rm snajp-drift python scripts/railway_migrate.py --help
+          docker run --rm snajp-drift python -c "
+          import sys; sys.path.insert(0, 'scripts')
+          import railway_migrate as rm
+          p = rm.planned()
+          assert p[0][1].is_file() and len(p) > 100, len(p)
+          assert any(v.endswith('_122_synk_lasroll') for v, _ in p)
+          print(len(p), 'migrationer i avbilden')"
+          if docker run --rm snajp-drift; then echo "::error::startkommandot utan jobb kördes"; exit 1; fi
+          if docker run --rm -e RAILWAY_ENVIRONMENT_NAME=development snajp-drift python scripts/railway_drift.py synk; then
+            echo "::error::synken startade i development"; exit 1
+          fi
+          echo "driftavbilden OK"
+
   type-check:
     name: npm run type-check
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 20
           cache: npm

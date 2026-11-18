@@ -732,9 +732,21 @@ class KbArticleRequest(BaseModel):
 
 class KbSkannaRequest(BaseModel):
     """Kundens egen webbplats, som skannas till artikelutkast (app/kb_skanning.py).
-    Ingenting sparas av skanningen — utkasten godkänns och går via POST /api/kb."""
+    Skanningen skriver aldrig i kunskapsbasen. Med `spara` sparas utkasten som
+    förslag (migration 121) som kunden lägger till eller avvisar; utan den
+    finns de bara i jobbsvaret."""
 
     webbplats: str = Field(..., min_length=4, max_length=300)
+    spara: bool = False
+    #: Vem som startade skanningen. Onboardingen startar den åt kunden.
+    startad_av: Literal["onboarding", "kund"] = "kund"
+
+
+class KbForslagBeslutRequest(BaseModel):
+    """Kundens beslut om ett eller flera utkast ur webbplatsskanningen."""
+
+    ids: list[str] = Field(..., min_length=1, max_length=50)
+    beslut: Literal["lagg_till", "avvisa"]
 
 
 class KbExtraheraRequest(BaseModel):

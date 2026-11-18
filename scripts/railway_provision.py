@@ -341,7 +341,7 @@ def provision(env_name: str, branch: str, apply: bool) -> None:
     }
     # snipe-u70: LLM_PROVIDER/MODEL skrevs tidigare OVILLKORLIGT här, VARJE
     # körning — även mot en redan provisionerad miljö. Mot main eller
-    # development sätter "deepseek" den förbjudna providern (se CLAUDE.md,
+    # development satte "deepseek" den förbjudna providern (se CLAUDE.md,
     # Settings.llm_provider_fault) och tjänsten vägrar starta. Samma felklass
     # som scripts/keys.py:FIXED (kommentaren där pekar hit): predikatet är
     # satt/osatt, INTE looks_placeholder — ett providernamn är kort per
@@ -349,8 +349,14 @@ def provision(env_name: str, branch: str, apply: bool) -> None:
     # över ett redan valt värde också. De två raderna är bara ett startvärde
     # för en NY miljö som saknar provider helt; en befintlig miljös val rörs
     # aldrig.
+    #
+    # Startvärdet är gemini (Vertex AI i EU) sedan 2026-11-18, inte deepseek:
+    # uppstartsspärren vägrar ändå DeepSeek där data är riktig (CLAUDE.md,
+    # "DeepSeek får inte se kunddata"), och ett startvärde ska inte peka på en
+    # leverantör som är förbjuden i varje miljö skriptet provisionerar.
+    # gemini-2.5-flash är samma namn som config.vision_model.
     befintliga = read_vars(api["id"], env_id)
-    for namn, startvarde in (("LLM_PROVIDER", "deepseek"), ("MODEL", "deepseek-v4-flash")):
+    for namn, startvarde in (("LLM_PROVIDER", "gemini"), ("MODEL", "gemini-2.5-flash")):
         if not befintliga.get(namn, "").strip():
             api_vars[namn] = startvarde
     set_vars(api["id"], env_id, api_vars)

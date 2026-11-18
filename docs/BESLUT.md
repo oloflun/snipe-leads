@@ -47,6 +47,123 @@ skickade `reasoningEffort: "minimal"` och hade fallit på varje anrop med 3.8.
 `lib/llm/modellval.test.ts`. Mätverktyget: `scripts/mat_modellbyte.py`.
 INV-DATA-006 nämner `eu` och inbäddningsregionen.
 
+## 2026-11-18 (Claude (agent), inom Antons uppdrag om synkflytten; väntar på Antons granskning) — Koden för att flytta synken till Railway, utan ändring i driften
+
+**Beslut.** Kodstegen i `docs/compliance/synkflytt-plan.md` (smala hemligheter,
+synkskriptet, läsrollen, driftavbilden) är byggda så att de kan ligga i
+`development` och `main` utan att något i driften ändras. Själva flytten
+(upplägg A, planens steg 0) är fortfarande Antons beslut. Handgreppen står i
+`docs/compliance/synkflytt-runbook.md`.
+
+**Resonemanget.** Synken var tionde minut ryms inte i gratisplanens 2 000
+Actions-minuter (posten nedan), och planen kräver att koden finns i `main`
+innan tjänsterna kan byggas där. Varje del är därför avstängd tills ägaren
+slår på den:
+- `synk.yml` och `migrera.yml` läser sex smala hemligheter och faller tillbaka
+  på `ENV_DEPLOY` så länge de inte finns.
+- Migration 122 skapar `synk_las` utan inloggning och utan lösenord. I
+  development, där den körs vid pushen, går det inte att logga in som rollen.
+- Synkskriptet beter sig som förut när det körs från Actions. Det tar nu ett
+  rådgivande lås, som alltid är ledigt där eftersom Actions kör en synk åt
+  gången. Det skriver också senaste försök och utfall i developments
+  `mirror_meta`, och det sätter inte längre replica-läge på main utanför
+  första synken, där main ändå är skrivskyddad. Spärrarna för körning hos
+  Railway (INV-DATA-008) gäller bara när `SYNK_*_PG_URL` är satta.
+- `scripts/railway_provision.py` föreslår `gemini` i stället för `deepseek` som
+  startvärde för en ny miljö utan leverantör. Uppstartsspärren vägrar ändå
+  DeepSeek där data är riktig, och ett startvärde ska inte peka dit.
+
+**Inte byggt.** Planens steg 9 (PR-kontrollen över HTTPS) kräver en ny nyckel
+i båda miljöerna. Steg 10 (insyn i panelen och larm) ändrar vad development
+visar. Båda väntar på beslut.
+
+---
+## 2026-11-18 (Anton) — Webbplatsskanningen startas av onboardingen och kompletterar
+
+**Beslut.** Anton, på frågan om guidens löfte att agenterna läser sajten:
+"Se till att scanningen startas automatiskt, och att den kompletterar, inte
+skriver över kundens egna uppgifter."
+
+**Resonemanget.** Guiden lovade att agenterna läser webbplatsen, men
+kunskapsbasen var tom efter onboardingen: skanningen (`app/kb_skanning.py`)
+fanns, men inget startade den och ingenting av den sparades.
+
+**I koden.**
+- Onboardingen startar skanningen åt kunden när paketet har supportagenten
+  (`lib/snajp/webbplatsskanning.ts`, anropad från `lib/actions/onboarding.ts`).
+  Inloggningsvägen startar den aldrig: en ny hämtning är tillägget Synkad
+  kunskapsbas, inte uppsättningen (`docs/pilot_onboarding.md`).
+- Skanningen skriver FÖRSLAG, aldrig artiklar (migration 121,
+  `ss_kb_forslag`). Ett förslag blir en ny artikel först när kunden lägger
+  till det, genom samma väg som en handskriven artikel. Kundens egna artiklar,
+  affärskontext, målgrupp och röstdokument rörs aldrig.
+- "Kompletterar" är mekaniskt: ett utkast med samma rubrik som en artikel
+  kunden har föreslås inte, ett avvisat utkast kommer inte tillbaka vid nästa
+  skanning, och två klick blir aldrig två artiklar (`nya_forslag` i
+  `app/api/kb.py`, låst av `tests/api/test_kb_forslag.py`).
+- Förloppet och utfallet sparas (`ss_kb_skanningar`) och syns i Översikt ›
+  Kom igång och överst i Kunskapsbas, även efter en omladdning. En skanning
+  som inte kunde starta sparas med skälet. En skanning i taget.
+
+**Agentens val, som Anton kan ändra.** Förslagen läggs inte in automatiskt.
+Kunden lägger till dem, ett i taget eller alla på en gång. Skälet är
+skanningsmodulens egen regel, att utkasten godkänns av en människa: en siffra
+som inte står i källsidan sänker utkastets säkerhet, och agenten citerar det
+som står i basen. Vill Anton att förslagen läggs in direkt är det en ändring i
+`_spara_utfall`.
+
+## 2026-11-18 (agenten, på Antons uppdrag) — Onboardingen efter den visuella genomgången
+
+Anton beställde en genomgång av hela onboardingen, sida för sida, och att
+bristerna skulle rättas tills varje steg håller för en professionell kund.
+Besluten nedan är agentens, fattade under genomgången. Anton har inte godkänt
+dem var för sig och kan ändra dem.
+
+**Beslut 1: onboardingen frågar efter företagets namn.** Arbetsytan hette
+"<kontots namn> workspace" (signup-triggern), och backendens kundnamn tas ur
+arbetsytans namn. Uppmätt i den lokala stacken: en nyss upplagd kund hette
+"Anna Testsson workspace" i `ss_tenants`, och det namnet står i sidfoten på
+varje utskick. Namnet sätts genom en RPC (migration 120), eftersom
+`workspaces` har radskydd utan uppdateringsregel och en vanlig UPDATE träffar
+noll rader utan att fela.
+
+**Beslut 2: fliken "Prova demo" på inloggningen är en länk till /demo.**
+Fliken kunde bara svara med ett fel, eftersom mejlvägen för åtkomstlänken
+aldrig kopplades (`requestDemoAccess`). Demon är öppen på /demo. Funktionen
+ligger kvar i `lib/actions/auth.ts`, oanvänd, tills någon bestämmer om
+åtkomstlänken ska byggas.
+
+**Beslut 3: `/login?mode=signup` öppnar läget Skapa konto**, och de två
+länkar som betyder "kom igång" pekar dit (demobannern i AppShell,
+DemoKorning). Förut landade en ny kund under rubriken "Välkommen tillbaka".
+
+**Beslut 4: Google- och Microsoft-knapparna visas bara när de är
+konfigurerade** (`AUTH_GOOGLE_ID`, `AUTH_MICROSOFT_ENTRA_ID_ID`). En knapp som
+alltid svarar "inte konfigurerad än" är sämre än ingen.
+
+**Beslut 5: en arbetsyta utan aktivitet får en startruta överst på
+översikten** (`components/dashboard/KomIgang.tsx`). Anton tog bort hälsningen
+ur översikten 2026-10-07 och det beslutet står kvar: rutan visas bara medan
+arbetsytan saknar körningar, och försvinner av sig själv. Skälet är att den
+nya kunden annars landar på en statistiksida utan statistik, utan något som
+säger vad nästa steg är. Varje rad leder till en sida som redan finns.
+
+**Beslut 6: guiden validerar själv.** Formulären har `noValidate`. Alla fel
+i ett steg visas på en gång vid sitt fält, webbadresser utan protokoll
+godtas (webbläsarens `type="url"` nekade dem, trots att servern tar emot
+dem), och postnumret ska ha fem siffror ("abc" gick igenom till fakturan).
+
+**Öppet för Anton (besvarat samma dag, se posten ovan).** Guiden säger att
+"agenterna läser er webbplats och lär sig resten själva", men skanningen
+startades inte. Anton beslutade att den ska startas automatiskt.
+
+**I koden.** `components/auth/OnboardingWizard.tsx`,
+`components/auth/LoginForm.tsx` (`LoginSida`), `app/login/page.tsx`,
+`lib/actions/onboarding.ts`, `components/dashboard/KomIgang.tsx`,
+`components/dashboard/Aktivitet.tsx`,
+`supabase/migrations/20261118090000_120_arbetsytans_namn.sql`,
+`scripts/qa_ny_kund.mjs`.
+
 ## 2026-11-18 (Anton) — Repot är privat, och det som följer av det
 
 **Beslut.** Repot `oloflun/snipe-leads` är privat sedan 2026-11-18 (Antons

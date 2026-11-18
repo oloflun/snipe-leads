@@ -75,7 +75,7 @@ export function DemoKorning() {
               {text({ sv: "Kör exempelkörningen", en: "Run the example" })}
             </button>
             <Link
-              href="/login"
+              href="/login?mode=signup"
               className="focus-ring text-[0.9375rem] font-medium underline underline-offset-4 hover:text-ochre"
             >
               {text({ sv: "Kör mot er egen målgrupp med ett konto", en: "Run against your own target group with an account" })}

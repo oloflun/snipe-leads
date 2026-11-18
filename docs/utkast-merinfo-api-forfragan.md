@@ -1,7 +1,6 @@
 # Utkast — förfrågan till Merinfo om företagsdata via API
 
-> Ej skickat. Mottagare: Informationsgruppen/Merinfo, kontaktvägen på
-> merinfo.se/data-via-api-eller-fil (adressen är inte verifierad, slå upp den där).
+> Ej skickat. Mottagare: info@merinfo.se (Merinfo Sverige AB / Informationsgruppen; adressen hittad via sökning, merinfo.se blockerar automatisk hämtning).
 > Underlag: plans/2026-10-01-leads-suite-och-korningar.md, beslut 1 och del B.
 
 **Ämne:** Förfrågan om företagsdata via API – Snajp (B2B-prospektering)
@@ -48,6 +47,6 @@ Jag ser hellre en licensierad lösning än att hämta från webben, så ett
 prisförslag eller ett kort samtal skulle hjälpa mycket.
 
 Vänliga hälsningar
-Anton [EFTERNAMN]
+Anton Lundin
 Snajp
-kontakt@snajp.se · [TELEFON]
+kontakt@snajp.se

@@ -24,8 +24,11 @@
 # Migrationer ska vara additiva och idempotenta (create … if not exists,
 # add column if not exists), så att schemat får ligga före koden.
 #
-# Hemligheten ENV_DEPLOY är innehållet i .env.deploy, samma som synk.yml
-# använder; den skrivs aldrig ut. Skriptet skriver bara migrationernas namn.
+# Anslutningarna (2026-11-18, synkflytt-plan.md, smala hemligheter): jobbet
+# `kör migrationerna` läser bara de tre repo-hemligheterna RAILWAY_<MILJÖ>_PG_
+# {PASSWORD,HOST,PORT} för sin egen miljö, och `releasens migrationer` alla sex.
+# Saknas de skrivs .env.deploy ur den breda hemligheten ENV_DEPLOY som förut.
+# Inget skrivs ut; skriptet skriver bara migrationernas namn.
 name: migrera
 
 on:
@@ -70,15 +73,35 @@ jobs:
       MILJO: ${{ github.event_name == 'push' && github.ref_name || inputs.miljo }}
       APPLY: ${{ github.event_name == 'push' || inputs.apply }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
       - run: pip install psycopg2-binary
-      - name: Skriv .env.deploy ur hemligheten
-        run: printf '%s\n' "$ENV_DEPLOY" > .env.deploy
+      # Bara den egna miljöns tre hemligheter: uttrycket ger den andra
+      # miljöns namn en tom sträng, så `--env development` kan aldrig få
+      # mains värden. De går till stegen nedan via GITHUB_ENV (maskerade i
+      # loggen); inget av stegen efter det här kör en tredjepartsaction.
+      - name: Anslutningen (smala hemligheter, annars ENV_DEPLOY)
+        shell: bash
         env:
           ENV_DEPLOY: ${{ secrets.ENV_DEPLOY }}
+          PG_PASSWORD: ${{ env.MILJO == 'main' && secrets.RAILWAY_MAIN_PG_PASSWORD || env.MILJO == 'development' && secrets.RAILWAY_DEVELOPMENT_PG_PASSWORD || '' }}
+          PG_HOST: ${{ env.MILJO == 'main' && secrets.RAILWAY_MAIN_PG_HOST || env.MILJO == 'development' && secrets.RAILWAY_DEVELOPMENT_PG_HOST || '' }}
+          PG_PORT: ${{ env.MILJO == 'main' && secrets.RAILWAY_MAIN_PG_PORT || env.MILJO == 'development' && secrets.RAILWAY_DEVELOPMENT_PG_PORT || '' }}
+        run: |
+          if [ -n "$PG_PASSWORD" ] && [ -n "$PG_HOST" ] && [ -n "$PG_PORT" ]; then
+            P="RAILWAY_${MILJO^^}_PG"
+            {
+              echo "${P}_PASSWORD=$PG_PASSWORD"
+              echo "${P}_HOST=$PG_HOST"
+              echo "${P}_PORT=$PG_PORT"
+            } >> "$GITHUB_ENV"
+            echo "Anslutningen ($MILJO): de smala hemligheterna."
+          else
+            printf '%s\n' "$ENV_DEPLOY" > .env.deploy
+            echo "Anslutningen ($MILJO): ENV_DEPLOY (de smala hemligheterna saknas)."
+          fi
       - name: Visa vad som väntar
         shell: bash
         run: |
@@ -124,19 +147,31 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
       - run: pip install psycopg2-binary
-      - name: Skriv .env.deploy ur hemligheten
-        run: printf '%s\n' "$ENV_DEPLOY" > .env.deploy
-        env:
-          ENV_DEPLOY: ${{ secrets.ENV_DEPLOY }}
       - name: Vad väntar i development och main
         shell: bash
+        env:
+          ENV_DEPLOY: ${{ secrets.ENV_DEPLOY }}
+          RAILWAY_MAIN_PG_PASSWORD: ${{ secrets.RAILWAY_MAIN_PG_PASSWORD }}
+          RAILWAY_MAIN_PG_HOST: ${{ secrets.RAILWAY_MAIN_PG_HOST }}
+          RAILWAY_MAIN_PG_PORT: ${{ secrets.RAILWAY_MAIN_PG_PORT }}
+          RAILWAY_DEVELOPMENT_PG_PASSWORD: ${{ secrets.RAILWAY_DEVELOPMENT_PG_PASSWORD }}
+          RAILWAY_DEVELOPMENT_PG_HOST: ${{ secrets.RAILWAY_DEVELOPMENT_PG_HOST }}
+          RAILWAY_DEVELOPMENT_PG_PORT: ${{ secrets.RAILWAY_DEVELOPMENT_PG_PORT }}
         run: |
           set -o pipefail
+          if [ -n "$RAILWAY_MAIN_PG_PASSWORD" ] && [ -n "$RAILWAY_MAIN_PG_HOST" ] && [ -n "$RAILWAY_MAIN_PG_PORT" ] \
+            && [ -n "$RAILWAY_DEVELOPMENT_PG_PASSWORD" ] && [ -n "$RAILWAY_DEVELOPMENT_PG_HOST" ] && [ -n "$RAILWAY_DEVELOPMENT_PG_PORT" ]; then
+            echo "Anslutningarna: de smala hemligheterna."
+          else
+            echo "Anslutningarna: ENV_DEPLOY (de smala hemligheterna saknas)."
+            printf '%s\n' "$ENV_DEPLOY" > .env.deploy
+          fi
+          unset ENV_DEPLOY
           python scripts/railway_migrate.py --env development | tee development.log
           python scripts/railway_migrate.py --env main | tee main.log
           {
