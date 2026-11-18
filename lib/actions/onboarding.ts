@@ -577,12 +577,23 @@ export async function saveBusinessContext(input: OnboardingInput): Promise<Onboa
          * Standardinställningarna skriver bara tomma fält, så inget kunden
          * redan ändrat skrivs över.
          */
-        const { requireSnajpTenant } = await import("@/lib/snajp/tenant");
+        //
+        // Nyckeln hämtas direkt och inte via requireSnajpTenant(): den läser
+        // arbetsytans kontext genom React-cachen, som delas med renderingen av
+        // omdirigeringen nedan. Med den vägen visade sidan ett tomt steg 1
+        // efter inskickningen i stället för översikten (uppmätt 2026-11-18).
+        const nycklar = await sqlAsUser<{ nyckel: string | null }>(
+          user.id,
+          "select public.tenant_api_key_for_current_workspace() as nyckel"
+        );
+        const apiKey = nycklar[0]?.nyckel;
+        if (!apiKey) {
+          throw new Error(`arbetsytan pekar på ${workspace.slug} men saknar sparad nyckel`);
+        }
         const { fyllStandardinstallningar } = await import("@/lib/snajp/provisionering");
-        const tenant = await requireSnajpTenant();
-        tenantNyckel = tenant.apiKey;
+        tenantNyckel = apiKey;
         await fyllStandardinstallningar(
-          tenant.apiKey,
+          apiKey,
           workspace,
           {
             product: payload.product,
