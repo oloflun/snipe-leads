@@ -105,7 +105,7 @@ async def test_fonstret_borjar_om_och_ett_dygn_nollstaller_nivan():
 
         # Hög nivå, men ett dygn utan försök: nästa spärr är åter en minut.
         await agare.execute(
-            "update public.inloggningsforsok set sparrniva = 3, senast = now() - interval '25 hours',"
+            "update public.inloggningsforsok set sparrniva = 3, forsok = 0, senast = now() - interval '25 hours',"
             " fonster_borjan = now() where nyckel = $1",
             n,
         )
