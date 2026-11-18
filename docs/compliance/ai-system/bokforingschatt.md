@@ -94,13 +94,19 @@ Railway-tjänsten `api`. Gemini 2.5 är pensionerad enligt Google (`README.md`).
 - **B in:** kvittots text eller bild (`underlag.py:107-135`). Ingen maskering.
   Filen sparas inte, bara fält och sha256 (`underlag.py:3-9`).
 - **Loggat i `agent_runs`:** A: frågan och svaret, högst 4 000 tecken vardera,
-  plus grindens utfall (`app/api/kvitton.py:766-785`). B: kvittots text, högst
-  4 000 tecken, fälten och stegloggen (`app/api/bookkeeping.py:229-239`);
-  chatten som A (`bookkeeping.py:542-552`).
+  plus grindens utfall (`app/api/kvitton.py:766-785`). B: sedan 2026-11-18
+  inte kvittots text, bara dess längd, en kort sha256 och underlagets id
+  (`kvittotext_for_logg` i `app/api/bookkeeping.py`), fälten och stegloggen
+  utan text (`as_log(verbose=False)`: mätvärden och lagrens hashar). Chatten
+  loggar kundens fråga och svaret, högst 4 000 tecken vardera; texten ur ett
+  bifogat underlag går till modellen men står i loggen bara som längd, hash
+  och id. Test: `tests/bookkeeping/test_kvittotext_logg.py`. Före 2026-11-18
+  sparades upp till 4 000 tecken kvittotext i `input_text` och hela texten i
+  stegloggen; de raderna nollas av gallringen när den slås på (migration 119).
 - **Lagringstid:** inte beslutad.
 - Integritetsnotisen säger att mejlens text inte sparas (`kvitto_agent.py:36-42`,
   visad i `components/kvitton/Integritetsnotis.tsx`). Det gäller mejl; i B
-  sparas kvittots text i `agent_runs.input_text` enligt ovan.
+  sparas sedan 2026-11-18 inte heller kvittots text, se ovan.
 
 ## 5. Mänsklig översyn
 
