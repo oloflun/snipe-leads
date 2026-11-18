@@ -117,10 +117,15 @@ const T = {
   avvisa: { sv: "Avvisa", en: "Dismiss" },
   kalla: { sv: "Källa", en: "Source" },
   kontrollera: { sv: "Kontrollera", en: "Check" },
-  tillagda: { sv: "{n} tillagda i kunskapsbasen.", en: "{n} added to the knowledge base." },
+  tillagdEtt: { sv: "Förslaget lades till i kunskapsbasen.", en: "The suggestion was added to the knowledge base." },
+  tillagda: { sv: "{n} förslag lades till i kunskapsbasen.", en: "{n} suggestions were added to the knowledge base." },
+  fannsRedanEtt: {
+    sv: "Ett förslag fanns redan med samma rubrik och lades inte till.",
+    en: "One suggestion already existed with the same title and was not added."
+  },
   fannsRedan: {
-    sv: "{n} fanns redan med samma rubrik och lades inte till.",
-    en: "{n} already existed with the same title and were not added."
+    sv: "{n} förslag fanns redan med samma rubrik och lades inte till.",
+    en: "{n} suggestions already existed with the same title and were not added."
   },
   hamtaFel: { sv: "Kunde inte hämta förslagen: {fel}", en: "Could not load the suggestions: {fel}" }
 } satisfies Record<string, Localized>;
@@ -157,8 +162,8 @@ export function WebbplatsForslag({ onAndrat }: Readonly<{ onAndrat: () => void }
       const redan = kropp?.fanns_redan?.length ?? 0;
       if (beslut === "lagg_till") {
         const delar = [
-          tillagda ? fyll(text(T.tillagda), { n: tillagda }) : "",
-          redan ? fyll(text(T.fannsRedan), { n: redan }) : ""
+          tillagda === 1 ? text(T.tillagdEtt) : tillagda ? fyll(text(T.tillagda), { n: tillagda }) : "",
+          redan === 1 ? text(T.fannsRedanEtt) : redan ? fyll(text(T.fannsRedan), { n: redan }) : ""
         ].filter(Boolean);
         if (delar.length) setBesked(ord(delar.join(" ")));
         if (tillagda) onAndrat();
@@ -219,6 +224,19 @@ export function WebbplatsForslag({ onAndrat }: Readonly<{ onAndrat: () => void }
       {fel ? (
         <p role="alert" className="mt-2 text-[0.9375rem] text-danger">
           {fyll(text(T.hamtaFel), { fel })}
+        </p>
+      ) : null}
+
+      {/* Överst, under rubriken: listan kan vara lång, och ett besked längst
+          ner syntes inte på mobilen (uppmätt i development 2026-11-18). */}
+      {besked ? (
+        <p role="status" className="mt-2 text-[0.9375rem] font-medium text-moss">
+          {text(besked)}
+        </p>
+      ) : null}
+      {atgardsfel ? (
+        <p role="alert" className="mt-2 break-words text-[0.9375rem] text-danger">
+          {text(atgardsfel)}
         </p>
       ) : null}
 
@@ -318,16 +336,6 @@ export function WebbplatsForslag({ onAndrat }: Readonly<{ onAndrat: () => void }
         </>
       ) : null}
 
-      {besked ? (
-        <p role="status" className="mt-4 text-[0.9375rem] text-moss">
-          {text(besked)}
-        </p>
-      ) : null}
-      {atgardsfel ? (
-        <p role="alert" className="mt-4 break-words text-[0.9375rem] text-danger">
-          {text(atgardsfel)}
-        </p>
-      ) : null}
     </section>
   );
 }
