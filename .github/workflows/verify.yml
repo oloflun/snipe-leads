@@ -66,6 +66,32 @@ jobs:
           # är fortfarande maskerade (--redact).
           /tmp/gitleaks detect --source . --config .gitleaks.toml --no-banner --redact --verbose --log-opts="${INTERVALL}"
 
+  # Dödmanskontrollen för övervakningen (2026-11-18). GitHub hoppar över de
+  # flesta schemalagda körningarna i det här repot (se overvakning.yml), så
+  # kontrollen sitter i CI, som körs på varje push och PR oberoende av schemat.
+  # Har övervakningen inte gått klart på tre timmar öppnas ett ärende med
+  # etiketten overvakning-tyst. Jobbet fäller aldrig CI: det larmar.
+  overvakning-dodman:
+    name: dödmanskontroll för övervakningen
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    # Bara när tokenen får skriva ärenden: push, och PR inifrån repot.
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+    permissions:
+      contents: read
+      actions: read
+      issues: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Har övervakningen gått de senaste tre timmarna?
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: bash scripts/overvakning_dodman.sh
+
   python-tests:
     name: pytest (snajp-support)
     runs-on: ubuntu-latest
