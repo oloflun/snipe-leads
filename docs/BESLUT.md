@@ -9,6 +9,39 @@ möjligt), vad det betyder i koden.
 
 ---
 
+## 2026-11-18 — utkasten i development tillbaka på gemini-2.5-flash i europe-west1 efter mätningen (Claude (agent), på Antons uppdrag)
+
+**Beslut.** Iris utkast och humanizer i development går tillbaka till
+gemini-2.5-flash i europe-west1 (`LEADS_DRAFT_MODEL`, `LEADS_HUMANIZER_MODEL`,
+ny `VERTEX_UTKAST_REGION`, PR #78). Chatten, triagen, leadssökningen, Email
+Studio och övriga textsteg ligger kvar på gemini-3.5-flash-lite i `eu`. Main är
+inte rörd.
+
+**Resonemanget.** Antons uppdrag: pröva det som inte prövats i development,
+bara mot syntetiska kunder, och backa en variabel till dagens värde om en
+kärnfunktion inte fungerar. Utkasten på gemini-3.8-flash i `eu` föll i 7 av 11
+fall (503, 429, svar över 120 s, jobb över femminutersgränsen) redan med tre
+samtidiga jobb, och de som kom fram tog 161–277 s mot 23 s i dag. Kvaliteten
+var bra, men det spelar ingen roll när de flesta utkast inte blir av. 2.5
+saknas i `eu`, så utkasten behövde en egen region i koden för att kunna backas
+till just dagens värde. Efter backningen: 6 av 6 utan fel, 8–21 s.
+3.5-flash-lite höll i resten: supporten 48/50 (i dag 47/50) på 5,9 s i median,
+leadssökningen och Email Studio svarade 200 med de nya tankeinställningarna.
+
+**Öppet för ägaren.** Vilken modell utkasten ska ha när 2.5 stängs:
+3.5-flash-lite i `eu` (billigast, 7/10 lokalt, inte prövat i development) eller
+3.8-flash med reserverad kapacitet (Provisioned Throughput) i `eu`.
+
+**Backa.** Ta bort `LEADS_DRAFT_MODEL`, `LEADS_HUMANIZER_MODEL` och
+`VERTEX_UTKAST_REGION` på `api` och `web` i development; då ärver utkasten
+`MODEL` i `eu`. Detaljer: `modellbyte-underlag.md` avsnitt 6.4.
+
+**I koden.** `config.py` (`vertex_utkast_region`, `utkastregion`, kontrollen i
+`llm_provider_fault`), `agent/step_runner.py` (`UTKASTSTEGENS_FALT`).
+INV-DATA-006 nämner variabeln.
+
+---
+
 ## 2026-11-18 — provbytet i development gjort, textmodellerna till `eu`, bildmodellen kvar (Claude (agent), på Antons uppdrag)
 
 **Beslut.** Development kör sedan 2026-11-18 gemini-3.5-flash-lite (`MODEL`)
