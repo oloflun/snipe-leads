@@ -374,7 +374,7 @@ def test_prospektets_faltlista_ar_riktiga_kolumner():
 
     sql = "\n".join(
         p.read_text(encoding="utf-8")
-        for p in (Path(__file__).resolve().parents[3] / "supabase" / "migrations").glob("*.sql")
+        for p in (Path(__file__).resolve().parents[3] / "db" / "migrations").glob("*.sql")
     )
     sql = re.sub(r"--[^\n]*", "", sql)  # kommentarer räknas inte
     for falt in _PROSPEKT_PROFILFALT:

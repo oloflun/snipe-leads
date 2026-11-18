@@ -35,7 +35,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[3]
 SKRIPT = ROOT / "scripts"
-MIGRATION = ROOT / "supabase" / "migrations" / "20261118110000_122_synk_lasroll.sql"
+MIGRATION = ROOT / "db" / "migrations" / "20261118110000_122_synk_lasroll.sql"
 
 MAIN_PRIVAT = "postgresql://synk_las:x@postgres.railway.internal:5432/railway"
 DEV_PROXY = "postgresql://postgres:y@dev.proxy.rlwy.net:41234/railway?sslmode=require"

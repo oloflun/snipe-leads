@@ -61,7 +61,7 @@ function saknarMigration(error: unknown): boolean {
 }
 
 const MIGRATION_SAKNAS_TEXT =
-  "Tilläggen kan inte läsas eller sparas: databasfunktionerna från migration 063 (supabase/migrations/063_workspace_addons_admin.sql) finns inte i den här miljön. Kör `python scripts/railway_migrate.py --env development --apply` (eller --env main) och ladda om sidan.";
+  "Tilläggen kan inte läsas eller sparas: databasfunktionerna från migration 063 (db/migrations/063_workspace_addons_admin.sql) finns inte i den här miljön. Kör `python scripts/railway_migrate.py --env development --apply` (eller --env main) och ladda om sidan.";
 
 /** Svenskt besked för ett fel som annars är en rå Postgres-mening. */
 function felText(error: unknown): string {

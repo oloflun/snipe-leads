@@ -4,7 +4,7 @@ Tabellstrukturen speglar referensarkitekturen (jawwad-ali/ai-customer-support-ag
 utökad med tenants: varje kunddatarad bär tenant_id och alla metoder tar tenant_id
 som första parameter, så att varje kundföretag är helt isolerat. Två implementationer:
 
-- PostgresStorage: Supabase Postgres + pgvector; sätter dessutom app.tenant_id per
+- PostgresStorage: Postgres (Railway) + pgvector; sätter dessutom app.tenant_id per
   transaktion så RLS-policyerna i 003_snajp_multitenant.sql verkställs.
 - MemoryStorage: in-memory med samma gränssnitt (graceful degradation utan databas).
 

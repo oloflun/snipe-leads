@@ -1,4 +1,4 @@
-"""Postgres-lagring mot Supabase (multi-tenant, pgvector + svensk fulltext-fallback).
+"""Postgres-lagring mot Railway-Postgres (multi-tenant, pgvector + svensk fulltext-fallback).
 
 Varje operation körs i en transaktion som först sätter app.tenant_id via
 set_config — då verkställs RLS-policyerna från 003_snajp_multitenant.sql —

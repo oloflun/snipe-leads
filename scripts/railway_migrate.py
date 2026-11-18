@@ -5,7 +5,7 @@
     python scripts/railway_migrate.py --apply
 
 Ordningen är: railway/000_auth_compat.sql först (bygger auth-schemat och
-rollerna som Supabase annars tillhandahåller), sedan supabase/migrations/*.sql
+rollerna som Supabase annars tillhandahåller), sedan db/migrations/*.sql
 i filnamnsordning — OFÖRÄNDRADE. Att kedjan går att resa från noll är hela
 poängen med 000_base_schema.sql, och det här skriptet är testet av det.
 
@@ -27,7 +27,7 @@ from railway_provision import env_read  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 COMPAT = REPO_ROOT / "railway" / "000_auth_compat.sql"
-MIGRATIONS = REPO_ROOT / "supabase" / "migrations"
+MIGRATIONS = REPO_ROOT / "db" / "migrations"
 
 LEDGER = """
 create schema if not exists supabase_migrations;

@@ -8,13 +8,10 @@
     "start": "next start",
     "type-check": "tsc --noEmit",
     "test": "node --test \"lib/**/*.test.ts\"",
-    "provision:supabase": "node scripts/provision-supabase.mjs",
-    "apply:schema": "node scripts/apply-schema.mjs",
     "bundle:skills": "node scripts/bundle-marketing-skills.mjs"
   },
   "dependencies": {
     "@ai-sdk/openai": "^4.0.118",
-    "@supabase/supabase-js": "^2.119.0",
     "ai": "^7.0.173",
     "lucide-react": "^0.468.0",
     "next": "16.4.6",

@@ -13,7 +13,7 @@ import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
-MIGRATIONER = ROOT / "supabase" / "migrations"
+MIGRATIONER = ROOT / "db" / "migrations"
 APP = ROOT / "snajp-support" / "app"
 
 

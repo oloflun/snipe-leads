@@ -12,7 +12,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-MIGRATIONS = Path(__file__).resolve().parents[1] / "supabase" / "migrations"
+MIGRATIONS = Path(__file__).resolve().parents[1] / "db" / "migrations"
 
 # Skrivna utan vakten, rättade av 20260919100000_068_rls_nullif_vakt.sql.
 RATTADE_AV_068 = {

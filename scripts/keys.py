@@ -113,27 +113,6 @@ KEYS = [
         generated=True,
     ),
     Key(
-        "PREVIEW_POSTGRES_URL",
-        [DEPLOY_ENV],
-        "Postgres-anslutning till Supabase-grenen development, som postgres-rollen. "
-        "Krävs BARA av scripts/supabase_seed_dev.py (speglingen produktion → "
-        "development). Utan den är development-databasen en fryst ögonblicksbild: "
-        "konton som skapats i produktionen efteråt kan inte logga in där, och "
-        "/admin svarar 404 eftersom platform_admins saknar raden. "
-        "OBS: snajp_app- och snajp_web-rollerna DUGER INTE — de saknar "
-        "        OBS: snajp_app- och snajp_web-rollerna DUGER INTE — de saknar "
-        "rättigheter på auth-schemat, och auth.users är just det som måste kopieras.",
-        required=False,
-        where=(
-            "Supabase → snipra → Branches → development → Database → Reset password, "
-            "sedan: python scripts/set_preview_postgres_url.py"
-        ),
-        # generated=True: värdet klistras aldrig in rått här. Det egna kommandot
-        # verifierar anslutningen och bygger DSN:en, så en felstavning fångas
-        # innan den skrivs — samma resonemang som SNAJP_SKILL_UNLOCK_KEY.
-        generated=True,
-    ),
-    Key(
         "TYPESAFE_API_KEY",
         [BACKEND_ENV],
         "Jev (TypeSafe jev-1.13.0) — Iris förbedömning och klassning av leads "
@@ -549,29 +528,17 @@ def cmd_set_railway_token() -> None:
 
 
 def cmd_set_railway_db() -> None:
-    """Railway-motsvarigheten till --set-preview-db. Samma delegering, samma skäl."""
+    """Delegerar till set_railway_postgres_url.py — ingen kopierad logik.
+
+    Skillen (api-key-setup) vill ha EN ingång per projekt, och det är den här
+    filen. Verifieringen mot databasen bor i det dedikerade skriptet; två kopior
+    av den logiken hade glidit isär. Samma tolk används med flit — annars kan
+    psycopg2 saknas i den som startar.
+    """
     skript = Path(__file__).resolve().parent / "set_railway_postgres_url.py"
     if not skript.exists():
         sys.exit(f"Hittar inte {skript.name}.")
     raise SystemExit(subprocess.call([sys.executable, str(skript), "--env", "development"]))
-
-
-def cmd_set_preview_db() -> None:
-    """Delegerar till set_preview_postgres_url.py — ingen kopierad logik.
-
-    Skillen (api-key-setup) vill ha EN ingång per projekt, och det är den här
-    filen. Men verifieringen mot databasen, valet av sessionsläge framför
-    transaktionsläge, och kontrollen att rollen faktiskt får läsa auth.users
-    bor i det dedikerade skriptet. Två kopior av den logiken hade glidit isär
-    på exakt den punkt där det kostar mest: en anslutning som ser giltig ut men
-    fäller speglingen halvvägs.
-
-    Samma tolk används med flit — annars kan psycopg2 saknas i den som startar.
-    """
-    skript = Path(__file__).resolve().parent / "set_preview_postgres_url.py"
-    if not skript.exists():
-        sys.exit(f"Hittar inte {skript.name}.")
-    raise SystemExit(subprocess.call([sys.executable, str(skript)]))
 
 
 def main() -> None:
@@ -583,11 +550,6 @@ def main() -> None:
         "--key",
         metavar="NAMN",
         help="sätt EN nyckel i stället för att gå igenom alla (t.ex. DEEPSEEK_API_KEY)",
-    )
-    parser.add_argument(
-        "--set-preview-db",
-        action="store_true",
-        help="sätt PREVIEW_POSTGRES_URL (lösenord via getpass, verifieras mot databasen)",
     )
     parser.add_argument(
         "--set-railway-db",
@@ -620,9 +582,7 @@ def main() -> None:
 
     if args.check:
         sys.exit(0 if cmd_check() else 1)
-    if args.set_preview_db:
-        cmd_set_preview_db()
-    elif args.set_railway_db:
+    if args.set_railway_db:
         cmd_set_railway_db()
     elif args.set_railway_token:
         cmd_set_railway_token()

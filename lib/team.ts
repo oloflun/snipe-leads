@@ -24,7 +24,7 @@
  * De säger vad var och en faktiskt har byggt, och det går att kontrollera i
  * git-loggen: Anton står för 423 av 424 filändringar i `agent-core`, alltså
  * färdighetsregistret som styr vad agenterna kan; Sebastian har tyngdpunkten
- * i `snajp-support/app`, `components`, `lib` och `supabase`, alltså backend,
+ * i `snajp-support/app`, `components`, `lib` och `db` (förut `supabase`), alltså backend,
  * gränssnitt och schema.
  *
  * FORMULERINGEN UNDVIKER "ansvarar för" med flit. Titlarna är neutrala just

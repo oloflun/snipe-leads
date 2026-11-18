@@ -17,7 +17,7 @@ skriver ut antal per tabell. Utan `--apply` ändras ingenting; körningen loggas
 
 Spärrlistan (suppressions) och bokföringsunderlaget (bk_underlag) rörs aldrig.
 Agentloggarnas promptar och svar nollas, raderna står kvar. Se filhuvudet i
-supabase/migrations/20261117120000_119_gallring_alla_kategorier.sql.
+db/migrations/20261117120000_119_gallring_alla_kategorier.sql.
 
 ## Varför ett skript bredvid den schemalagda körningen
 

@@ -189,7 +189,7 @@ Börja i development. Main tas efter nästa release.
    `"environmentId":"<DEV>"` och `"branch":"development"`.
 2. Konfigurera den:
    ```
-   python scripts/railway.py q 'mutation($sid:String!,$eid:String!,$in:ServiceInstanceUpdateInput!){ serviceInstanceUpdate(serviceId:$sid, environmentId:$eid, input:$in) }' '{"sid":"<MIGRERA>","eid":"<DEV>","in":{"rootDirectory":"/","dockerfilePath":"railway/Dockerfile.drift","startCommand":"python scripts/railway_drift.py migrera","restartPolicyType":"NEVER","watchPatterns":["supabase/migrations/**","railway/000_auth_compat.sql"]}}'
+   python scripts/railway.py q 'mutation($sid:String!,$eid:String!,$in:ServiceInstanceUpdateInput!){ serviceInstanceUpdate(serviceId:$sid, environmentId:$eid, input:$in) }' '{"sid":"<MIGRERA>","eid":"<DEV>","in":{"rootDirectory":"/","dockerfilePath":"railway/Dockerfile.drift","startCommand":"python scripts/railway_drift.py migrera","restartPolicyType":"NEVER","watchPatterns":["db/migrations/**","railway/000_auth_compat.sql"]}}'
    ```
 3. Variabel på tjänsten, över miljöns privata nät, med referensen:
    `MIGRERA_PG_URL = postgresql://postgres:${{Postgres.POSTGRES_PASSWORD}}@${{Postgres.RAILWAY_PRIVATE_DOMAIN}}:5432/railway`.
@@ -204,7 +204,7 @@ Börja i development. Main tas efter nästa release.
 - Loggen visar `miljö: development` och `= <version>` för varje migration,
   ingen rad med `skulle köras`.
 - Sätt sedan `MIGRERA_APPLY=1` (variabel). Vid nästa push som rör
-  `supabase/migrations/` visar loggen `+ <version>`, eller `=` om
+  `db/migrations/` visar loggen `+ <version>`, eller `=` om
   `migrera.yml` hann före. Båda körningarna håller samma rådgivande lås
   (`railway_migrate.LAS`) och väntar på varandra. Kontrollen efteråt ska inte
   hitta något som `skulle köras`.

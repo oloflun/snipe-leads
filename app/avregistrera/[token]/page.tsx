@@ -29,7 +29,7 @@ export const metadata: Metadata = {
  *
  * Mottagaren har inget konto hos oss och ska inte behöva skaffa ett för att
  * slippa våra mejl. Token är ogenomskinlig — se
- * supabase/migrations/046_avregistreringslankar.sql för varför adressen inte
+ * db/migrations/046_avregistreringslankar.sql för varför adressen inte
  * ligger i länken.
  *
  * ## Varför inlösen sker i en SQL-funktion

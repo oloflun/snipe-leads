@@ -1,5 +1,5 @@
 # För framtida deploy — lokalt på Windows utan Docker körs tjänsten med uvicorn
-# och degraderar gracefully (in-memory jobb + Supabase/in-memory-lagring).
+# och degraderar gracefully (in-memory jobb + Postgres/in-memory-lagring).
 services:
   api:
     build: .

@@ -11,7 +11,7 @@ LoginForm → lib/actions/auth.ts → Supabase Auth
 ```
 
 Profil och workspace skapas av triggern `on_auth_user_created`
-(`supabase/migrations/006_auth_selfheal.sql`). Triggern sväljer sina egna fel:
+(`db/migrations/006_auth_selfheal.sql`). Triggern sväljer sina egna fel:
 en trasig trigger får aldrig blockera en registrering. Saknas profilen ändå
 skapas den vid nästa inloggning eller callback via RPC:n
 `ensure_workspace_for_current_user`.

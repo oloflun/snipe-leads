@@ -145,7 +145,7 @@ det är den skillnaden som ska bedömas.
 - Bilder lagras inte efter att de beskrivits
   ([`vision.py`](../snajp-support/app/agent/vision.py)).
 - Bokföringsagentens originalfiler lagras aldrig, bara en sha256-summa
-  ([045](../supabase/migrations/045_bookkeeping.sql)).
+  ([045](../db/migrations/045_bookkeeping.sql)).
 - Personnummer och samordningsnummer maskeras före anropet till Vertex
   (`moderation/maskering.py`, `agent/support_agent.py:1215-1220`).
 - Kundmejl går inte till TypeSafe sedan 2026-11-17 (R7).
@@ -309,7 +309,7 @@ eller Resend. Onboardingen lämnar inte ut mallen
 lovar något annat (art. 5.1 a och 13.2 a).
 
 **Befintliga skydd:** gallringsmekanismen finns
-([048](../supabase/migrations/048_gallring.sql), [`gallra.py`](../scripts/gallra.py)),
+([048](../db/migrations/048_gallring.sql), [`gallra.py`](../scripts/gallra.py)),
 med torrkörning som standard.
 
 **Brister:**

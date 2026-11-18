@@ -269,7 +269,7 @@ export function IntegritetspolicySida() {
       <p>
         {/* Retentionsperioden är beslutad: 24 månader, samma tid för samtliga
             kategorier. Se P1.1 i docs/JURIDIK_ATGARDER.md och
-            gallringsfunktionen i supabase/migrations/048_gallring.sql —
+            gallringsfunktionen i db/migrations/048_gallring.sql —
             gallringsjobbets period ska stämma med talet som står här. */}
         {text(T.lagring1)} <strong>{text(T.manader)}</strong>
         {text(T.lagring2)}
