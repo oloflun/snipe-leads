@@ -691,8 +691,17 @@ def _klipp(text: str, langd: int) -> str:
     return text if len(text) <= langd else text[: langd - 1].rstrip() + "…"
 
 
-def _sanera_artikel(ra: dict, kallsidor: dict[str, Sida]) -> tuple[dict | None, str]:
-    """Modellens förslag -> artikel som klarar KbArticle, eller (None, skäl)."""
+def _sanera_artikel(
+    ra: dict, kallsidor: dict[str, Sida], webbplatstext: str = ""
+) -> tuple[dict | None, str]:
+    """Modellens förslag -> artikel som klarar KbArticle, eller (None, skäl).
+
+    `webbplatstext` är alla skannade sidors text. Ett tal som saknas på
+    källsidan men står på en annan sida av samma webbplats är inte påhittat:
+    modellen har bara angett fel sida som källa. Genomgången 2026-11-18
+    varnade för "50, 70" i ett förslag som angav /support-pa-svenska, medan
+    "50–70 %" stod på /support.
+    """
     if not isinstance(ra, dict):
         return None, "inte ett objekt"
     kalla = str(ra.get("source_url") or "").strip()
@@ -713,11 +722,11 @@ def _sanera_artikel(ra: dict, kallsidor: dict[str, Sida]) -> tuple[dict | None, 
         konfidens = max(0.0, min(1.0, float(ra.get("confidence", 0.5))))
     except (TypeError, ValueError):
         konfidens = 0.5
-    obelagda = obelagda_siffror(innehall, sida.text)
+    obelagda = obelagda_siffror(innehall, f"{sida.text}\n{webbplatstext}")
     if obelagda:
         konfidens = min(konfidens, 0.3)
         varningar.append(
-            f"Siffrorna {', '.join(obelagda)} står inte i källsidan. Kontrollera eller stryk dem."
+            f"Siffrorna {', '.join(obelagda)} står inte på webbplatsen. Kontrollera eller stryk dem."
         )
     return {
         "title": titel,
@@ -885,6 +894,7 @@ async def utkast_med_llm(genomsokning: Genomsokning, bolagsnamn: str, anropa: Ll
         utkast.ej_utkastade.extend(d.sida.url for d in batch)
     system = SYSTEMPROMPT.format(namn=bolagsnamn or "bolaget", kategorier=", ".join(CATEGORIES))
     sedda_titlar: set[str] = set()
+    webbplatstext = "\n".join(s.text for s in genomsokning.sidor)
 
     for batch in batcher[:MAX_LLM_ANROP]:
         utkast.anrop += 1
@@ -897,7 +907,7 @@ async def utkast_med_llm(genomsokning: Genomsokning, bolagsnamn: str, anropa: Ll
             continue
         kallsidor = {d.sida.url: d.sida for d in batch}
         for ra in data.get("artiklar") or []:
-            artikel, skal = _sanera_artikel(ra, kallsidor)
+            artikel, skal = _sanera_artikel(ra, kallsidor, webbplatstext)
             if artikel is None:
                 utkast.kasserade.append({"title": str((ra or {}).get("title", ""))[:120], "skal": skal})
                 continue

@@ -424,6 +424,26 @@ def test_listnumrering_ar_ingen_sakuppgift():
     assert pk.obelagda_siffror("Returer tas emot inom 14.", kalla) == ["14"]
 
 
+def test_tal_pa_annan_sida_av_webbplatsen_ar_belagt():
+    """Genomgången 2026-11-18: förslaget angav /support-pa-svenska som källa,
+    men "50–70 %" stod på /support. Talet är inte påhittat, alltså ingen
+    varning; ett tal som inte står någonstans på webbplatsen varnas fortfarande."""
+    from app.kb_skanning import Sida, _sanera_artikel
+
+    kalla = Sida(url="https://exempel.se/a", titel="A", h1="A", text="Agenten svarar dygnet runt.")
+    ra = {
+        "title": "Vad gör agenten?",
+        "content": "Agenten tar bort 50–70 % av det repetitiva jobbet.",
+        "category": "ovrigt",
+        "source_url": "https://exempel.se/a",
+        "confidence": 0.8,
+    }
+    artikel, _ = _sanera_artikel(ra, {kalla.url: kalla}, "Vi tar bort 50–70 % av jobbet.")
+    assert artikel["varningar"] == []
+    artikel, _ = _sanera_artikel(ra, {kalla.url: kalla}, "Inga tal här.")
+    assert artikel["varningar"] == ["Siffrorna 50, 70 står inte på webbplatsen. Kontrollera eller stryk dem."]
+
+
 def _llm_genomsokning() -> pk.Genomsokning:
     return pk.Genomsokning(
         webbplats=SAJT,

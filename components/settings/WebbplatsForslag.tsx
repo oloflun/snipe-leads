@@ -98,8 +98,8 @@ export function klartext(markdown: string): string {
  */
 const VARNINGAR: { monster: RegExp; en: (m: RegExpMatchArray) => string }[] = [
   {
-    monster: /^Siffrorna (.+) står inte i källsidan(?:\.| \u2014) [Kk]ontrollera eller stryk(?: dem)?\.$/,
-    en: (m) => `The figures ${m[1]} do not appear on the source page. Check or remove them.`
+    monster: /^Siffrorna (.+) står inte (?:i källsidan|på webbplatsen)(?:\.| \u2014) [Kk]ontrollera eller stryk(?: dem)?\.$/,
+    en: (m) => `The figures ${m[1]} do not appear on the website. Check or remove them.`
   },
   {
     monster: /^Modellen föreslog kategorin (.+), som inte finns(?:\. Den ändrades| \u2014 ändrad) till (.+)\.$/,
