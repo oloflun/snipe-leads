@@ -41,7 +41,7 @@ Alla konton som når kod, driften eller kunddata, och alla nycklar och lösenord
 
 ## Spärr och återställning
 
-- Spärr efter upprepade felaktiga inloggningar är inte belagd i koden. Ska utredas och vid behov byggas: fem försök på 15 minuter, spärr i 30 minuter. [FYLL: datum], ansvarig agent.
+- Spärr efter upprepade felaktiga inloggningar finns sedan 2026-11-18 (migration 125, `AUTH.md`): fem misslyckade försök per adress eller 20 per IP på 15 minuter, och tre återställningsbegäranden per adress eller tio per IP på en timme, ger en spärr på 1 minut som stiger till 5, 15 och 60 minuter vid nya spärrar samma dygn. (Utkastet föreslog 30 minuter direkt; stigande väntetid valdes för att en användare som skrivit fel ska komma in snart igen medan en gissningsattack bromsas allt mer.)
 - `AUTH.md` ("Glömt lösenord") beskriver återställningen i den gamla Supabase-stacken. Hur den fungerar på Railway, och om länken är tidsbegränsad, är inte belagt. Ska kontrolleras, [FYLL: datum], ansvarig agent. Kravet är en tidsbegränsad länk till kontots adress och samma svar oavsett om adressen finns.
 
 ## Servicekonton och nycklar

@@ -121,6 +121,16 @@ inte är konfigurerad.
 | Läsroll (`viewer`) | `profiles.role`, via inbjudan | Läser arbetsytan, skriver ingenting: `proxyAsTenant` vägrar skrivande anrop och server actions frågar `arLasare()` (`lib/auth/lasroll.ts`) |
 | Plattformsadmin | `platform_admins` (migration 020, 037) | `/admin` och kundbesök i alla kunders arbetsytor (`lib/auth/admin.ts`). Uppslaget är fail-closed: ett fel betyder inte admin |
 
+### Databasrollen `snajp_web`
+
+Webben ansluter till Postgres som `snajp_web` (`nobypassrls`). Sedan migration 126
+(2026-11-18) har rollen bara det webbens egen SQL gör, 13 tabeller och på flera av dem bara
+vissa kolumner, och ingen rättighet på tabeller som skapas senare. `auth.users` läses av
+`snajp_web` (inloggningen) och, för `id` och `email`, av `snajp_app`; ingen annan roll når
+den. En ny fråga i webben mot en tabell utanför listan kräver en grant i en ny migration och
+en rad i `TILLATET` i `snajp-support/tests/db/test_snajp_web_rattigheter.py`, som annars
+fäller i CI. Listan och kartläggningen: `docs/compliance/datamangder.md` §1.
+
 ### Plattformsadmin
 
 `platform_admins` är skild från `profiles.role` med flit: annars blir varje
@@ -175,6 +185,8 @@ Automatiskt:
 - `tests/invariants/test_inv_sec_010.py`: anonyma API-rutter bara enligt allowlistan.
 - `tests/invariants/test_inv_auth_001.py`: auth-invarianten.
 - `snajp-support/tests/db/test_adminlogg.py`: åtkomstloggen (CI-jobbet `databas`).
+- `snajp-support/tests/db/test_snajp_web_rattigheter.py`: webbens databasroll har exakt
+  listans rättigheter, och varje SQL-sats i webben går att köra som `snajp_web` (CI-jobbet `databas`).
 - `snajp-support/tests/db/test_inloggningsforsok.py`: spärrens trösklar, stigande
   väntetid, fönster och att approllerna inte når tabellen (CI-jobbet `databas`).
 - `lib/auth/inloggningsregler.test.ts`: nycklar, klient-IP och loggmaskering

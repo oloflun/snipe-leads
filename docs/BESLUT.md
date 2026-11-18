@@ -9,6 +9,33 @@ möjligt), vad det betyder i koden.
 
 ---
 
+## 2026-11-18 natt — webbens databasroll får bara det webben gör (Claude (agent), på Antons uppdrag)
+
+**Beslut.** Rollen `snajp_web` har sedan migration 126 bara de rättigheter webbens egen SQL
+behöver: 13 tabeller, på flera av dem bara vissa kolumner, och ingen rättighet på tabeller
+som skapas senare. `auth.users` är inte längre läsbar för PUBLIC; `snajp_app` läser bara
+`id` och `email`. Ersätter formen i migration 030 ("breda grants, RLS som grind").
+
+**Resonemanget.** Anton bad om minskningen (ISO 27001 A.8.2, A.8.3, A.5.15) men varnade för
+att en för snäv rättighet bryter webben. 030 valde breda rättigheter för att likna Supabases
+`authenticated`; det skälet föll när Supabase Auth togs bort, och kvar blev en roll som kunde
+läsa kundens support- och leadsdata så fort en fråga satte `app.tenant_id`, och en
+`auth.users` som varje roll kunde läsa. Kartläggningen visade att webben gör lite direkt mot
+databasen (23 filer, 67 satser) och att resten går via api:t med kundens nyckel, så
+minskningen gick att göra säkert. Skyddet mot att bryta webben är att CI kör varje sats ur
+webbens källkod som `snajp_web` med EXPLAIN, som prövar rättigheterna utan att köra något;
+skyddet mot att det breddas igen är att samma test jämför rollens rättigheter med en exakt
+lista. `startDemo` behåller update-rätten på `workspaces.is_demo` trots att uppdateringen
+redan i dag påverkar noll rader (ingen update-policy, ingen användaridentitet): att ta bort
+rätten hade gjort satsen till ett fel och stoppat demon. Felet i sig är ett eget ärende.
+Priset: en migration som lägger till en tabell webben ska nå måste ge rättigheten uttryckligen.
+
+**Vad det betyder i koden.** `db/migrations/20261118160000_126_snajp_web_minsta_rattighet.sql`;
+`snajp-support/tests/db/test_snajp_web_rattigheter.py` (listan `TILLATET`); `AUTH.md`
+(Databasrollen); `docs/compliance/datamangder.md` §1 och fynd 3.
+
+---
+
 ## 2026-11-18 natt — spärr mot upprepade inloggningsförsök, tvåfaktor uppskjuten (Claude (agent), på Antons uppdrag)
 
 **Beslut.** (1) Lösenordsinloggning och begäran om lösenordsåterställning spärras
