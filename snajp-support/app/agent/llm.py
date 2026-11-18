@@ -650,7 +650,9 @@ def get_vision_client() -> AsyncOpenAI | None:
             _vision_client = _med_vertex_modellnamn(
                 AsyncOpenAI(
                     api_key=_vertex_token(settings),
-                    base_url=_vertex_base_url(settings),
+                    # VERTEX_BILD_REGION: bildmodellen kan ligga kvar i en
+                    # region där textmodellen inte finns (modellbytet 2026-11-18).
+                    base_url=_vertex_base_url(settings, settings.bildregion()),
                     timeout=_tidsgrans(settings),
                 )
             )

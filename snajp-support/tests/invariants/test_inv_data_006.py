@@ -118,6 +118,35 @@ def test_inbaddningsregionen_utanfor_eu_faller_uppstarten(kwargs, region):
     assert fel is not None and "VERTEX_INBADDNING_REGION" in fel
 
 
+@pytest.mark.parametrize("kwargs", _RIKTIG)
+@pytest.mark.parametrize("region", ["us", "global", "us-central1", "europe-west2"])
+def test_bildregionen_utanfor_eu_faller_uppstarten(kwargs, region):
+    """VERTEX_BILD_REGION (2026-11-18): bildklienten har en egen region och
+    omfattas av samma lista som de andra."""
+    fel = _vertex(vertex_bild_region=region, **kwargs).llm_provider_fault()
+    assert fel is not None and "VERTEX_BILD_REGION" in fel and region in fel
+
+
+@pytest.mark.parametrize("kwargs", _RIKTIG)
+def test_bildregionen_i_eu_godtas(kwargs):
+    s = _vertex(google_cloud_region="eu", vertex_reservregioner="eu",
+                vertex_inbaddning_region="europe-west1", vertex_bild_region="europe-west1", **kwargs)
+    assert s.llm_provider_fault() is None
+
+
+@pytest.mark.parametrize("kwargs", _LOKAL)
+def test_bildregionen_utanfor_eu_gar_lokalt(kwargs):
+    assert _vertex(vertex_bild_region="us-central1", **kwargs).llm_provider_fault() is None
+
+
+def test_bildklienten_vagrar_region_utanfor_eu(miljo):
+    """Klientbygget vägrar själv, också om uppstartskontrollen aldrig kördes."""
+    miljo(LLM_PROVIDER="gemini", MODEL="gemini-2.5-flash", ENVIRONMENT="main",
+          GOOGLE_SERVICE_ACCOUNT_JSON=_SA_JSON, VERTEX_BILD_REGION="us-central1")
+    with pytest.raises(llm.ForbjudenProviderIMiljon, match="EU"):
+        llm.get_vision_client()
+
+
 # -- (a) Regionen ---------------------------------------------------------------
 
 
