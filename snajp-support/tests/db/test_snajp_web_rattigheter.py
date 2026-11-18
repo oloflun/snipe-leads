@@ -42,14 +42,15 @@ ROOT = Path(__file__).resolve().parents[3]
 _LOKALA = {"localhost", "127.0.0.1", "::1"}
 
 #: (schema.tabell) → rättigheter. "select" = hela tabellen;
-#: "update(a,b)" = bara de kolumnerna. Källa: migration 126.
+#: "update(a,b)" = bara de kolumnerna. Källa: migration 126; 127 tog bort
+#: "update(is_demo)" på workspaces (demon markeras genom markera_demoarbetsyta()).
 TILLATET: dict[str, set[str]] = {
     "auth.users": {
         "select",
         "insert(email,email_confirmed_at,encrypted_password,raw_user_meta_data)",
         "update(encrypted_password,updated_at)",
     },
-    "public.workspaces": {"select", "update(is_demo)"},
+    "public.workspaces": {"select"},
     "public.profiles": {"select"},
     "public.platform_admins": {"select"},
     "public.password_reset_tokens": {"select", "insert", "delete", "update(used_at)"},
@@ -272,6 +273,7 @@ async def test_explain_fäller_en_saknad_rattighet():
         for sats, antal in (
             ("select key_hash from public.ss_api_keys", 0),  # tabell utan rättighet
             ("update public.workspaces set name = $1", 1),  # kolumn utan update-rätt
+            ("update public.workspaces set is_demo = $1", 1),  # borta sedan 127
             ("select active from public.ss_tenants", 0),  # kolumn utan läsrätt
             ("update auth.users set email = $1", 1),  # e-posten får webben inte ändra
             ("select public.ensure_workspace_for_user($1::uuid, $2::text)", 2),  # funktion utan EXECUTE

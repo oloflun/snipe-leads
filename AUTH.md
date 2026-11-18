@@ -86,7 +86,13 @@ Det är ett medvetet val i koden (kommentaren i `signUpWithPassword`), inte en
 verifiering som görs någon annanstans.
 
 **Demo:** `startDemo` skapar ett konto med slumpad adress `demo-<uuid>@snajp.se`
-och slumpat lösenord och markerar arbetsytan `is_demo`.
+och slumpat lösenord och markerar arbetsytan `is_demo` genom
+`markera_demoarbetsyta()` (migration 127), med användarens identitet satt
+(`sqlAsUser`). Funktionen märker bara den inloggades egen, nyss skapade och
+tomma arbetsyta, och bara för ett demokonto yngre än tio minuter. Går
+märkningen inte igenom startar ingen demo. Före 127 träffade uppdateringen
+noll rader (ingen update-policy, ingen identitet) och varje demo fick fullt
+löptak.
 
 ### Glömt lösenord
 
@@ -125,7 +131,8 @@ inte är konfigurerad.
 
 Webben ansluter till Postgres som `snajp_web` (`nobypassrls`). Sedan migration 126
 (2026-11-18) har rollen bara det webbens egen SQL gör, 13 tabeller och på flera av dem bara
-vissa kolumner, och ingen rättighet på tabeller som skapas senare. `auth.users` läses av
+vissa kolumner, och ingen rättighet på tabeller som skapas senare. Migration 127 tog bort
+update-rätten på `workspaces.is_demo`; demon märks genom en funktion i stället. `auth.users` läses av
 `snajp_web` (inloggningen) och, för `id` och `email`, av `snajp_app`; ingen annan roll når
 den. En ny fråga i webben mot en tabell utanför listan kräver en grant i en ny migration och
 en rad i `TILLATET` i `snajp-support/tests/db/test_snajp_web_rattigheter.py`, som annars
@@ -187,6 +194,9 @@ Automatiskt:
 - `snajp-support/tests/db/test_adminlogg.py`: åtkomstloggen (CI-jobbet `databas`).
 - `snajp-support/tests/db/test_snajp_web_rattigheter.py`: webbens databasroll har exakt
   listans rättigheter, och varje SQL-sats i webben går att köra som `snajp_web` (CI-jobbet `databas`).
+- `snajp-support/tests/db/test_demo_markering.py`: demon märks `is_demo` med
+  identiteten satt, och funktionen vägrar allt annat än den nya demons egen yta
+  (CI-jobbet `databas`).
 - `snajp-support/tests/db/test_inloggningsforsok.py`: spärrens trösklar, stigande
   väntetid, fönster och att approllerna inte når tabellen (CI-jobbet `databas`).
 - `lib/auth/inloggningsregler.test.ts`: nycklar, klient-IP och loggmaskering

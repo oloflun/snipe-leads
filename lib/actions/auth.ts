@@ -10,7 +10,7 @@ import { headers } from "next/headers";
 import { auth, ensureWorkspace, signIn, signOut as authSignOut } from "@/lib/auth";
 import { arSparrad, registreraForsok } from "@/lib/auth/inloggningsforsok";
 import { SPARRKOD } from "@/lib/auth/sparrkod";
-import { sql } from "@/lib/db";
+import { sql, sqlAsUser } from "@/lib/db";
 import { hashPassword } from "@/lib/password";
 
 export type AuthActionResult = {
@@ -217,12 +217,20 @@ export async function startDemo(): Promise<AuthActionResult> {
       [email, await hashPassword(password)]
     );
     // Triggern skapade workspacen med is_demo=false; markera den här.
-    await sql(
-      `update public.workspaces set is_demo = true
-       from public.profiles p where workspaces.id = p.workspace_id and p.id = $1`,
-      [rows[0].id]
-    );
+    //
+    // Med användarens identitet och genom funktionen (migration 127), inte
+    // med en UPDATE via `sql()`: workspaces saknar update-policy med flit, och
+    // utan identitet träffade satsen noll rader utan att kasta. Varje demo
+    // fick då fullt löptak. Funktionen svarar false om inget markerades, och
+    // då startar ingen demo: en omärkt demo är ett fullt konto.
+    const demoId = rows[0].id;
+    const markerad = await sqlAsUser<{ ok: boolean }>(demoId, "select public.markera_demoarbetsyta() as ok");
+    if (!markerad[0]?.ok) {
+      console.error("startDemo: arbetsytan gick inte att märka is_demo");
+      return { success: false, error: "Demo kunde inte startas. Försök igen." };
+    }
   } catch (error) {
+    console.error("startDemo:", (error as Error).message);
     return { success: false, error: "Demo kunde inte startas. Försök igen." };
   }
 
