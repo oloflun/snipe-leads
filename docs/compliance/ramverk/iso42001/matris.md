@@ -1,7 +1,7 @@
 # ISO 42001-matris för Snajp
 
 Ramverk: Comp AI, ISO 42001 version 1.0.0, id `frk_68cc0e2a21184ed168ab2eea`, seed-data i `trycompai/comp` commit `712ee1b3`. 70 krav, 76 kontroller, 21 policyer, 61 uppgifter.
-Gjord 2026-11-17, endast läsning. Senaste genomgång: 2026-11-18 (tredje, kväll). Nästa: [FYLL: datum].
+Gjord 2026-11-17, endast läsning. Senaste genomgång: 2026-11-18 (tredje, kväll; A.2.3 och A.6.2.5 ändrade i (i)). Nästa: [FYLL: datum].
 
 **Tillägg 2026-11-18, tredje genomgången.** "ändr. 11-18c" markerar rader ändrade i kvällens genomgång (`../../score-plan-2026-11-18.md`). Nya källor: systembladen i `../../ai-system/` (ett per AI-system, underlag och inte godkända), `../../drift-och-tillgangar.md` och `../../bevis/github-2026-11-18.txt`. Repot är privat sedan 2026-11-18; release-PR 60 är ersatt av release-PR 72.
 Syfte: en sann bild av hur Snajp styr sin AI-användning inför första betalande kund. Snajp ska inte certifieras nu. EU:s AI-förordning täcks inte av ramverket; den står i `ai-forordningen.md`.
@@ -96,7 +96,7 @@ Syfte: en sann bild av hur Snajp styr sin AI-användning inför första betaland
 | Krav | Kontroll(er) | Policy · uppgifter | Status | Bevis | Gap | Vem |
 |---|---|---|---|---|---|---|
 | **A.2.2** AI Policy | AI Policy, U | P27 · Public Policies | **delvis** | Beslutade regler finns, men spridda: DeepSeek får inte se kunddata (`CLAUDE.md`, spärr i `snajp-support/app/config.py:609-700`), leadsreglerna 1–22 (`CLAUDE.md`), belägg eller överlämning (BESLUT 101-158) | Ingen samlad AI-policy. P27 samlar dem som utkast | Ä |
-| **A.2.3** Alignment with other organizational policies | AI Policy Alignment…, U | P27 · AI Policy Alignment Review | **saknas** | inget belägg | Ingen genomgång mot G01–G06 och P07–P26 | A, Ä |
+| **A.2.3** Alignment with other organizational policies | AI Policy Alignment…, U | P27 · AI Policy Alignment Review | **delvis** · ändr. 11-18i, var saknas | Genomgång av P27 mot alla 27 andra policyer, som utkast: var de möts, 6 krockar, 19 glapp och inaktuella fakta i 13 policyer, med föreslagen ändring per policy och samlat (`../../ai-system/policy-samstammighet.md`). Påståendena om läget är kontrollerade mot kod, CI och `../../railway-baslinje.json` | Utkast; gäller först när P27 är godkänd. Ingen policy är godkänd, så det finns inget beslutat att stämma av mot. Två krockar kräver beslut i sak: P27:s omfång (tre av sju AI-system) och AI-kodverktygen, som läser testmiljöns kunddata men inte är godkända enligt P27 avsnitt 6 | Ä |
 | **A.2.4** Review of the AI policy | AI Policy Review, U | P27 · AI Policy Review | **saknas** | inget belägg | Ingen policy att se över; intervall förslås i P27 | Ä |
 
 ## A.3 Internal organization
@@ -134,7 +134,7 @@ Syfte: en sann bild av hur Snajp styr sin AI-användning inför första betaland
 | **A.6.2.2** AI system requirements and specification | AI System Requirements and Specification, U | P27 · AI System Requirements and Specification | **delvis** · ändr. 11-18c | Syfte, avsedd användning, grindar och översyn per system (`../../ai-system/*.md` avsnitt 1, 2, 5); krav som invarianter och leadsregler | Kraven är beskrivna, inte godkända | Ä |
 | **A.6.2.3** Documentation of AI system design and development | AI System D&D Documentation | P20 · AI Design and Development Documentation | **uppfyllt** · ändr. 11-18c, var delvis | Design steg för steg med kod- och invariantreferenser för varje AI-system, också supportagenten, Jev, kvitto-assistenten i chatten och den äldre bokföringsytan som saknade det, och kända begränsningar samlade per system (`../../ai-system/*.md` avsnitt 2 och 7); Iris kedja även i `docs/UTKASTKEDJAN-REFERENS-2026-10-16.md` | Kvar, men inte krav för status: ägarens granskning | A |
 | **A.6.2.4** AI system verification and validation | AI System V&V, U | P27, P20 · AI Verification & Validation Report | **delvis** | Evalsviter med mekanisk bedömning och 33–50 fall (Evals; Slutrapport rad 30-41); facit för Iris (AI-inv. 927-957); webbfacit 85 % | Ingen godkänd gräns för när en ändring får gå till main. Jev i inkorgen saknar svit. Ordagrant inte mätt (BESLUT 134-135) | A, Ä |
-| **A.6.2.5** AI system deployment | AI System Deployment, U | P27, P19 · Code Changes | **delvis** · ändr. 11-18c | Release till `main` via PR är Antons handgrepp (`CLAUDE.md`); modellbyten via miljövariabel med beslut | Code owner-kravet på `main` tillämpas inte längre sedan repot blev privat (`../../bevis/github-2026-11-18.txt`). Ingen driftsättningsplan med AI-krav. Miljövariabler som byter AI-beteende ändras utan logg | Ä |
+| **A.6.2.5** AI system deployment | AI System Deployment, U | P27, P19 · Code Changes | **delvis** · ändr. 11-18c | Release till `main` via PR är Antons handgrepp (`CLAUDE.md`); modellbyten via miljövariabel med beslut | Code owner-kravet på `main` tillämpas inte längre sedan repot blev privat (`../../bevis/github-2026-11-18.txt`). Ingen driftsättningsplan med AI-krav. Miljövariabler som byter AI-beteende ändras utan logg; en ändring syns dock i `scripts/railway_baslinje.py --jamfor`, som visar `INKORG_JEV`, `IRIS_JEV`, `LLM_PROVIDER` och `*_MODEL` per miljö (0 avvikelser 2026-11-18 19:10 UTC, ändr. 11-18i). Ingen rutin säger när den körs | Ä |
 | **A.6.2.6** AI system operation and monitoring | AI System Operation and Monitoring, U | P27, P25 · AI System Operation & Monitoring Plan, Monitoring & Alerting | **delvis** · ändr. 11-18c | Kreditslut larmas (AI-inv. 508-550); leveransstopp vid studs och klagomål; jobbens tillstånd i liggaren; driftövervakning av hälsokontrollerna (`overvakning.yml`) | Övervakningens schema gav en enda schemalagd körning (`../../bevis/github-2026-11-18.txt`); GitHub tappar schemalagda körningar i repot. Sedan PR 84 körs den också efter varje Verify och synk, och en dödmanskontroll i CI larmar efter tre timmar utan körning. Internlarmets variabler saknas i drift. Ingen mätning av svarens kvalitet i produktion | Ä, A |
 | **A.6.2.7** AI system technical documentation | AI System Technical Documentation, U | P27 · AI System Technical Documentation (Model Card) | **delvis** · ändr. 11-18c | Teknisk dokumentation per system: syfte, modeller, data, översyn, mätresultat och begränsningar (`../../ai-system/*.md`); kundförklaringen av faktakontrollen | Inte anpassad och inte lämnad till kund eller tillsyn: vad som lämnas ut är ägarens val. Inte granskad | Ä |
 | **A.6.2.8** AI system recording of event logs | AI System Event Logging, U | P27, P25 · AI System Event Logging Configuration | **uppfyllt** · ändr. 11-18 | Varje körning loggas med alla tre instruktionslagren (AI-inv. 394-404, test `tests/agentcore/test_overlays.py`); anrop utanför stegmotorn, också Jev, loggas (`insyn.py:56-86`); beslut i `ss_decision_log` (`email_pipeline/processor.py:716-719, 743-750`) | Kravet är uppfyllt för loggningen. Lagringstid och åtkomst saknas: `agent_runs` sparar fulla prompter utan gallring (DPIA R10). Gallringen som anonymiserar dem är byggd (PR 48) men avslagen och inte i `main`. Det hör till G02 och P25 | A, Ä |
@@ -178,13 +178,15 @@ Syfte: en sann bild av hur Snajp styr sin AI-användning inför första betaland
 
 ## Summering
 
-| Status | 2026-11-17 | 2026-11-18 | 2026-11-18 kväll | Krav 2026-11-18 kväll |
-|---|---|---|---|---|
-| Uppfyllt | 1 | 1 | 5 | 7.5.3, A.4.2, A.4.5, A.6.2.3, A.6.2.8 |
-| Delvis | 53 | 53 | 51 | 4.1, 4.2, 5.1, 6.1.1, 6.1.2, 6.1.3, 6.1.4, 6.2, 6.3, 7.1, 7.4, 7.5.1, 7.5.2, 8.1, 8.2, 8.3, 8.4, 9.1, 10.1, 10.2, A.2.2, A.3.2, A.3.3, A.4.3, A.4.4, A.5.2–A.5.5, A.6.1.2, A.6.1.3, A.6.2.2, A.6.2.4–A.6.2.7, A.7.2–A.7.6, A.8.2–A.8.5, A.9.2–A.9.4, A.10.2–A.10.4 |
-| Saknas | 16 | 16 | 14 | 4.3, 4.4, 5.2, 5.3, 7.2, 7.3, 9.2.1, 9.2.2, 9.3.1, 9.3.2, 9.3.3, A.2.3, A.2.4, A.4.6 |
-| Ej tillämpligt | 0 | 0 | 0 | – |
-| Okänt | 0 | 0 | 0 | – |
+| Status | 2026-11-17 | 2026-11-18 | 2026-11-18 kväll | 2026-11-18 (i) | Krav 2026-11-18 (i) |
+|---|---|---|---|---|---|
+| Uppfyllt | 1 | 1 | 5 | 5 | 7.5.3, A.4.2, A.4.5, A.6.2.3, A.6.2.8 |
+| Delvis | 53 | 53 | 51 | 52 | 4.1, 4.2, 5.1, 6.1.1, 6.1.2, 6.1.3, 6.1.4, 6.2, 6.3, 7.1, 7.4, 7.5.1, 7.5.2, 8.1, 8.2, 8.3, 8.4, 9.1, 10.1, 10.2, A.2.2, A.2.3, A.3.2, A.3.3, A.4.3, A.4.4, A.5.2–A.5.5, A.6.1.2, A.6.1.3, A.6.2.2, A.6.2.4–A.6.2.7, A.7.2–A.7.6, A.8.2–A.8.5, A.9.2–A.9.4, A.10.2–A.10.4 |
+| Saknas | 16 | 16 | 14 | 13 | 4.3, 4.4, 5.2, 5.3, 7.2, 7.3, 9.2.1, 9.2.2, 9.3.1, 9.3.2, 9.3.3, A.2.4, A.4.6 |
+| Ej tillämpligt | 0 | 0 | 0 | 0 | – |
+| Okänt | 0 | 0 | 0 | 0 | – |
+
+**Förändring 2026-11-18 (i)** ("ändr. 11-18i", `../../score-plan-2026-11-18.md` avsnittet "Uttömt 2026-11-18"): delvis 51 → 52, saknas 14 → 13. A.2.3 gick från saknas till delvis: genomgången av P27 mot de övriga policyerna finns som utkast (`../../ai-system/policy-samstammighet.md`). Gapet i A.6.2.5 är mindre: baslinjejämförelsen visar AI-variablerna per miljö. Inget blev uppfyllt.
 
 **Förändring 2026-11-18 sen kväll** ("ändr. 11-18e", `../../score-plan-2026-11-18.md` sist): ingen statusändring. 4.2 har ett intressentregister i utkast (`../../intressenter.md`) och A.4.3 en förteckning per tabell med föreslagna lagringstider (`../../datamangder.md`).
 
