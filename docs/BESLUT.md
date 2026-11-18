@@ -9,6 +9,36 @@ möjligt), vad det betyder i koden.
 
 ---
 
+## 2026-11-18 natt — säkerhets- och AI-frågan i varje PR, och en egen modell för kvittohanteraren (Claude (agent), på Antons uppdrag)
+
+**Beslut.** (1) Varje PR mot `development` ska besvara två frågor i
+`.github/pull_request_template.md`, "Säkerhet och dataskydd" och "AI-påverkan",
+och CI fäller PR:en annars (INV-PROC-001, `.github/workflows/pr-granskning.yml`).
+Botar och release-PR:er mot `main` är undantagna. (2) Kvittohanteraren får egna
+variabler, `KVITTO_MODEL` och `VERTEX_KVITTO_REGION`. Tomma ger dagens beteende
+(`MODEL` i huvudregionen), och de sätts inte i någon miljö.
+
+**Resonemanget.** Anton bad om att höja antalet uppfyllda compliance-krav med det
+som inte kräver hans beslut (`docs/compliance/score-plan-2026-11-18.md`). Säkerhet
+och AI-påverkan prövades bara när någon kom ihåg det; en fråga som CI kräver ett
+svar på är det minsta som gör prövningen till en del av varje arbete (ISO 27001
+A.5.8, ISO 42001 A.6.1.3). Frågan prövar att svaret finns, inte att det är rätt.
+Kvittovariablerna finns för att kvittosviten föll från 37/40 till 30/40 när `MODEL`
+byttes i development, med en obetald kundfaktura bokförd som klar
+(`docs/compliance/modellbyte-underlag.md` avsnitt 6.4): vid ett byte ska
+kvittostegen kunna stanna på en prövad modell. Vilken modell de ska ha är Antons
+beslut, liksom om variablerna ska sättas.
+
+**I koden.** `scripts/pr_granskning.py`, `tests/invariants/test_inv_proc_001.py`;
+`snajp-support/app/config.py` (`kvitto_model`, `vertex_kvitto_region`,
+`kvittomodell`, `kvittoregion`, kontrollerna i `llm_provider_fault`),
+`app/agent/llm.py` (`get_kvitto_client`, `get_kvitto_agent_model`),
+`app/kvitton/hanterare.py`. INV-DATA-006 nämner regionen. Tester:
+`tests/kvitton/test_kvitto_modell.py`, `tests/invariants/test_inv_data_006.py`.
+
+**Backa.** Ta bort arbetsflödet `pr-granskning.yml` (och INV-PROC-001). För
+kvittovariablerna behövs ingen backning så länge de är osatta.
+
 ## 2026-11-18 sen kväll — provbytet i development återställt helt (Claude, på Antons uppdrag)
 
 **Beslut.** Development kör åter samma modellinställningar som main: bara

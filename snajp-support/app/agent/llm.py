@@ -681,6 +681,26 @@ def get_agent_model():
     return OpenAIChatCompletionsModel(model=settings.model, openai_client=get_llm_client())
 
 
+def get_kvitto_client() -> AsyncOpenAI:
+    """Klienten för kvittohanterarens modellanrop (KVITTO_MODEL,
+    VERTEX_KVITTO_REGION, 2026-11-18). Utan VERTEX_KVITTO_REGION, eller utan
+    Vertex, är det den vanliga chattklienten, alltså beteendet före
+    variablerna. En region utanför EU vägras av `vertex_region` i
+    klientbygget och av uppstartskontrollen (INV-DATA-006)."""
+    settings = get_settings()
+    if _uses_vertex(settings) and (settings.vertex_kvitto_region or "").strip():
+        return get_llm_client(region=settings.kvittoregion())
+    return get_llm_client()
+
+
+def get_kvitto_agent_model():
+    """Agents SDK-modellen för kvittohanteraren: `settings.kvittomodell()`
+    (KVITTO_MODEL, annars MODEL) på `get_kvitto_client()`."""
+    from agents import OpenAIChatCompletionsModel
+
+    return OpenAIChatCompletionsModel(model=get_settings().kvittomodell(), openai_client=get_kvitto_client())
+
+
 def configure_agents_sdk() -> None:
     """Kör en gång i live-läge: stäng av tracing (annars nås OpenAI:s trace-backend
     med fel nyckel). Modell-routningen sköts av get_agent_model()."""

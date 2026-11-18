@@ -1,0 +1,55 @@
+name: Oro eller fel i AI-användningen
+description: Anmäl ett fel, en skada eller en oro om hur Snajps AI-system används eller beter sig (ISO 42001 A.3.3).
+title: "AI-oro: "
+labels: ["ai-oro"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Den här mallen är vägen för den som arbetar med Snajp att anmäla oro om AI-användningen: ett felaktigt eller skadligt svar, ett utkast som gått ut fel, en modell eller leverantör som används utan beslut, data som når en modell den inte borde nå. Ärendet syns för alla med åtkomst till repot. Ägaren läser och bedömer det.
+
+        **Skriv inga personuppgifter, kundmejl eller hemligheter här.** Hänvisa till ärende-id, körnings-id (`agent_runs`) eller tidpunkt i stället.
+  - type: dropdown
+    id: system
+    attributes:
+      label: Vilket AI-system gäller det?
+      options:
+        - Supportagenten
+        - Iris (leads)
+        - Jev
+        - Kvittohanteraren
+        - Webbrevisionen
+        - Email Studio
+        - AI-kodverktyg i utvecklingen
+        - Annat eller vet inte
+    validations:
+      required: true
+  - type: dropdown
+    id: miljo
+    attributes:
+      label: Var hände det?
+      options:
+        - main (produktionen)
+        - development
+        - lokalt
+        - vet inte
+    validations:
+      required: true
+  - type: textarea
+    id: vad
+    attributes:
+      label: Vad hände, eller vad oroar dig?
+      description: Utan personuppgifter. Id eller tidpunkt räcker för att hitta körningen.
+    validations:
+      required: true
+  - type: textarea
+    id: folj
+    attributes:
+      label: Vem kan ha påverkats, och hur?
+      description: Till exempel en kunds kund som fick ett felaktigt svar, eller ett prospekt som fick ett mejl. Inga namn.
+  - type: checkboxes
+    id: persondata
+    attributes:
+      label: Personuppgifter
+      options:
+        - label: Det kan röra en personuppgiftsincident. Då gäller också INCIDENT_RESPONSE.md (72 timmar).

@@ -18,6 +18,7 @@ avrunda bort dem.
 
 from __future__ import annotations
 
+import hashlib
 import json as _json
 import logging
 from datetime import date
@@ -116,6 +117,27 @@ def _underlag_ut(rad: dict[str, Any]) -> dict[str, Any]:
         "brutto": kr(rad.get("brutto")),
         "momssats": kr(rad.get("momssats")),
     }
+
+
+def kvittotext_for_logg(text: str, *, underlag_id: str | None = None, vad: str = "kvittotext") -> str:
+    """Det enda `agent_runs` får veta om kvittots text: längd och hash.
+
+    Fram till 2026-11-18 sparades upp till 4 000 tecken av den avlästa texten
+    i `agent_runs.input_text`, och hela användarmeddelandet (samma text) i
+    stegloggen. Kvittot bär namn, adresser, kortnummer och ibland personnummer,
+    och `agent_runs` gallras först när ägaren beslutat en period (DPIA R10).
+    Ingen felsökning har behövt texten: fälten står i `bk_underlag`, och en
+    avläsning som gick fel prövas om med filen, inte med loggen.
+
+    Längden säger om textlagret var tomt eller trunkerat, hashen om två
+    körningar läste samma text, och underlagets id knyter raden till fälten.
+    Ingen del av texten följer med, inte heller maskerad.
+    """
+    digest = hashlib.sha256(text.encode("utf-8")).hexdigest()[:16]
+    delar = [f"{vad} ej sparad", f"{len(text)} tecken", f"sha256 {digest}"]
+    if underlag_id:
+        delar.append(f"underlag {underlag_id}")
+    return "[" + ", ".join(delar) + "]"
 
 
 async def ta_emot_underlag(
@@ -231,9 +253,12 @@ async def ta_emot_underlag(
         agent_type=AGENT_TYPE,
         pack_version=pack_version("bokforing/v1"),
         skills_used=avlasning.trace.skills_used,
-        input_text=text[:4000],
+        # Längd och hash, aldrig texten; stegloggen utan text av samma skäl
+        # (verbose=False behåller mätvärden och lagrens hashar). Se
+        # kvittotext_for_logg och tests/bookkeeping/test_kvittotext_logg.py.
+        input_text=kvittotext_for_logg(text, underlag_id=str(underlag.get("id") or "")),
         output_text=str(avlasning.falt),
-        step_log=avlasning.trace.as_log(),
+        step_log=avlasning.trace.as_log(verbose=False),
         tokens_in=avlasning.trace.total_tokens_in,
         tokens_out=avlasning.trace.total_tokens_out,
         latency_ms=sum(s.latency_ms for s in avlasning.trace.steps),
@@ -424,7 +449,9 @@ async def chatt(
 
     `input_text` bär kundens fråga, `output_text` svaret. Filens innehåll når
     aldrig loggen: den läses i minnet av `ta_emot_underlag`, som skriver fälten
-    och kastar bytesen.
+    och kastar bytesen. Texten ur ett bifogat underlag går till modellen men
+    inte till loggen; där står bara längd, hash och underlagets id
+    (`kvittotext_for_logg`).
 
     ## Vad som händer när beloppsgrinden fäller
 
@@ -475,6 +502,10 @@ async def chatt(
 
     if not meddelande and bilaga is None:
         raise HTTPException(status_code=422, detail="Skriv en fråga eller bifoga ett underlag.")
+
+    # Kundens egen fråga, innan underlagets text läggs till. Det är den som
+    # loggas; texten ur underlaget går till modellen men aldrig till agent_runs.
+    fraga = meddelande
 
     # Bilagan blir en del av FRÅGAN, inte ett separat svar. Kunden som släpper
     # ett kvitto utan att skriva något frågar i praktiken "vad blev det här?",
@@ -544,7 +575,19 @@ async def chatt(
         agent_type=AGENT_TYPE,
         pack_version=pack_version("bokforing/v1"),
         skills_used=[],
-        input_text=meddelande[:4000],
+        input_text=(
+            fraga[:4000]
+            + (
+                (" " if fraga else "")
+                + kvittotext_for_logg(
+                    str(bilaga.get("text") or ""),
+                    underlag_id=str((bilaga.get("underlag") or {}).get("id") or ""),
+                    vad="utdrag ur underlaget",
+                )
+                if bilaga is not None
+                else ""
+            )
+        ),
         output_text=svar["reply"][:4000],
         step_log=[
             {
