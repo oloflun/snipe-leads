@@ -9,7 +9,51 @@ möjligt), vad det betyder i koden.
 
 ---
 
+## 2026-11-18 — provbytet i development gjort, textmodellerna till `eu`, bildmodellen kvar (Claude (agent), på Antons uppdrag)
+
+**Beslut.** Development kör sedan 2026-11-18 gemini-3.5-flash-lite (`MODEL`)
+och gemini-3.8-flash för utkast och humanizer i Vertex-multiregionen `eu`,
+utan reservregion. Bildmodellen (gemini-2.5-flash) och inbäddningarna
+(gemini-embedding-001) ligger kvar i europe-west1, med den nya inställningen
+`VERTEX_BILD_REGION` (PR #76) och `VERTEX_INBADDNING_REGION`. Miljön `main` är
+inte rörd. Ersätter posten nedan om att provbytet inte gjordes.
+
+**Resonemanget.** Anton bad om provbytet med bildmodellen oförändrad, så att
+textmodellerna kan prövas medan bildvalet är öppet. Det krävde en egen region
+för bildklienten, eftersom 2.5 saknas i `eu`. Utkasten fick 3.8-flash, som
+underlaget rekommenderar: 3.5-flash-lite brister där (6/10 utan stilfynd mot
+7/10 i dag, 3.8 10/10). Reservregionerna är tomma, eftersom ingen av
+modellerna finns i de vanliga EU-regionerna eller i europe-west3; koden väntar
+då ut ett 429 i `eu`.
+
+Den fulla webbkalibreringen mot alla 58 facitsajter visade att ingen modell
+klarar grinden på 85 %, inte heller dagens: 2.5-flash 81 %, 3.8-flash 81 %,
+3.5-flash-lite 79 % med en akut sajt på bra (utan den inaktuella
+sagobetong.se: 82,5, 82,5 och 80,7 %). 3.8 felar bara åt det stränga hållet
+(nio bra sajter blev dåliga), de andra två åt båda håll. Grinden och facit är
+inte ändrade. Vilken bildmodell som ska ersätta 2.5, och om grinden eller
+prompten ska ses över, är ägarens beslut (`modellbyte-underlag.md` avsnitt 3.7).
+
+**Kontrollen.** Deployerna lyckades, startloggen var utan
+`llm_provider_fault`, och två syntetiska supportfrågor mot demotenanten gick
+igenom: text till `eu`, inbäddningar och bildbeskrivning till europe-west1,
+alla 200. Inga mejl, inga godkända utkast, ingen leadskörning. Kostnad:
+57 ScrapeGraph-krediter och omkring 10 kr i Vertex.
+
+**Backa.** Ta bort variablerna i `modellbyte-underlag.md` avsnitt 6.4 på `api`
+och `web` i development; standardvärdena ger gemini-2.5-flash i europe-west1
+så länge Google låter 2.5 svara.
+
+**I koden.** `config.py` (`vertex_bild_region`, `bildregion`, kontrollen i
+`llm_provider_fault`), `agent/llm.py:get_vision_client`. INV-DATA-006 nämner
+`VERTEX_BILD_REGION`. Tester: `tests/invariants/test_inv_data_006.py`,
+`tests/agent/test_modellbyte_gemini3.py`.
+
+---
+
 ## 2026-11-18 — provbyte i development (Claude (agent), inom Antons uppdrag om EU-compliance) — inte gjort: bildmodellen klarade inte grinden
+
+*Ersatt samma dag av posten ovan: provbytet gjordes med bildmodellen kvar på 2.5-flash.*
 
 **Beslut.** Variablerna i `modellbyte-underlag.md` avsnitt 6.1 sattes **inte**
 i Railway-miljön `development`. Development kör gemini-2.5-flash i
