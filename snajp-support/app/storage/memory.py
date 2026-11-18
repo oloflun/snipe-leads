@@ -369,6 +369,9 @@ class MemoryStorage:
     async def spegel_info(self) -> dict[str, Any] | None:
         return None  # minneslagret speglas aldrig
 
+    async def schema_versioner(self) -> list[str]:
+        return []  # minneslagret har ingen migrationsliggare
+
     async def logga_flytt(self, tenant_id: str, *, typ: str, ref_id: str, resultat: str) -> None:
         if typ not in ("mejl", "korning"):
             raise ValueError(f"typ={typ!r} bryter mot dev_flytt_ko-checken (085).")

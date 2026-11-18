@@ -207,4 +207,11 @@ async def run_leads_stadare(app_state: Any) -> None:
             raise
         except Exception:  # noqa: BLE001 — städaren får aldrig dö
             logger.exception("Oväntat fel i leads-städaren — fortsätter nästa varv.")
+        # Synkvakten (runbookens steg 11): larmar i development när synken
+        # main → development stått still i mer än en timme. Utanför städarens
+        # try, så att ett fel i städningen inte tystar larmet; vakten tittar
+        # själv högst var femte minut och kastar aldrig.
+        from . import synkvakt
+
+        await synkvakt.vakta(app_state.storage)
         await asyncio.sleep(min(VACKNING_SEKUNDER, intervall))

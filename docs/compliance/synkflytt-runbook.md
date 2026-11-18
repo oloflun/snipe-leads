@@ -15,17 +15,17 @@ Uppdraget räknar ett steg längre än planen. Tabellen visar vilka steg som hö
 
 | Här | Planen | Vad | Typ | Läge |
 |---|---|---|---|---|
-| 2 | 1 | Smala hemligheter i GitHub | Kod + ägare | Koden klar; ägarens del: steg 2b nedan |
+| 2 | 1 | Smala hemligheter i GitHub | Kod + ägare | Koden klar; ägarens del: steg 2b nedan (agenten fick inte skriva hemligheterna 2026-11-19) |
 | 3 | 2 | Synkskriptet: miljövariabler, spärrar, lås, utfall | Kod | Klar |
-| 4 | 3 | Läsrollen `synk_las` (migration 122) | Kod | Klar |
+| 4 | 3 | Läsrollen `synk_las` (migration 122) | Kod | Klar; i main först med releasen |
 | 5 | 4 | Driftavbilden `railway/Dockerfile.drift` | Kod | Klar |
-| 6 | 5 | Tjänsten `synk` i main, torrkörning | Railway + ägare | Nedan |
-| 7 | 6 | Parallellkörning med skrivning, minst 24 h | Railway | Nedan |
-| 8 | 7 | Stäng av GitHub-synken | Kod | Nedan |
-| 9 | 8 | Tjänsten `migrera` per miljö | Railway | Nedan |
-| 10 | 9 | PR-kontrollen utan databas | Kod | **Inte byggd** (kräver ny nyckel i båda miljöerna) |
-| 11 | 10 | Insyn i panelen och larm | Kod | **Inte byggd** (synken skriver utfallet; panelen visar det inte än) |
-| 12 | 11 | Stäng produktionens publika port | Ägare | Nedan |
+| 6 | 5 | Tjänsten `synk` i main, torrkörning | Railway + ägare | Väntar på releasen (migration 122 i main) |
+| 7 | 6 | Parallellkörning med skrivning, minst 24 h | Railway | Efter steg 6 |
+| 8 | 7 | Stäng av GitHub-synken | Kod | Efter steg 7 |
+| 9 | 8 | Tjänsten `migrera` per miljö | Railway | **development: körs sedan 2026-11-19** (`MIGRERA_APPLY=1`); main efter releasen |
+| 10 | 9 | PR-kontrollen utan databas | Kod + ägare | Koden klar 2026-11-19 (`scripts/releasens_migrationer.py`, `GET /api/drift/schema`, migration 129); ägaren sätter `SCHEMA_LASNYCKEL`, se steg 10b |
+| 11 | 10 | Insyn i panelen och larm | Kod | Klar 2026-11-19 |
+| 12 | 11 | Stäng produktionens publika port | Ägare | Nedan; provisioneringens vakt är klar 2026-11-19 |
 | 13 | 12 | Ta bort `ENV_DEPLOY` och rotera | Ägare | Nedan |
 | 14 | 13 | Dokumenten | Kod (dokument) | Nedan |
 
@@ -212,6 +212,34 @@ Börja i development. Main tas efter nästa release.
 **Main:** gör samma sak efter nästa release, med `<MAIN>` och `"branch":"main"`.
 
 **Backning:** ta bort tjänsterna. `migrera.yml` finns kvar och bär kedjan.
+
+---
+
+## Steg 10b. Nyckeln för PR-kontrollen utan databas
+
+Koden finns från 2026-11-19. Den slås på när samma värde ligger i tre ställen:
+`api` i development, `api` i main och GitHub-hemligheten `SCHEMA_LASNYCKEL`.
+Utan hemligheten i GitHub går kontrollen som förut, över databasportarna.
+
+**Kommandon** (Git Bash i repo-roten; värdet skapas i skalet, går via stdin och
+skrivs aldrig ut):
+```bash
+v="$(python -c 'import secrets; print(secrets.token_urlsafe(32))')"
+for e in development main; do
+  printf '%s' "$v" | railway variable set SCHEMA_LASNYCKEL --stdin --service api --environment "$e" --json >/dev/null
+done
+printf '%s' "$v" | gh secret set SCHEMA_LASNYCKEL -R oloflun/snipe-leads
+unset v
+```
+Main svarar på endpointen först efter releasen (koden och migration 129).
+
+**Verifiering:** `curl -s -o /dev/null -w '%{http_code}' https://api-development-5cc3.up.railway.app/api/drift/schema`
+ger 401 (nyckeln satt, ingen nyckel i anropet) i stället för 404. Nästa PR mot
+`main` visar steget "Vad väntar i development och main (över HTTPS)" och inget
+steg som installerar psycopg2.
+
+**Backning:** `gh secret delete SCHEMA_LASNYCKEL -R oloflun/snipe-leads`.
+Kontrollen går då tillbaka till databasvägen.
 
 ---
 

@@ -134,6 +134,10 @@ _NYCKEL_TTL_S = 30.0
 #: last_used_at skrivs högst så här ofta per nyckel.
 _SENAST_ANVAND_S = 300.0
 
+#: mirror_meta-kolumner som synken skapar själv och som därför kan saknas i en
+#: äldre spegel (se spegel_info). Ordningen är svarets ordning.
+_SPEGEL_VALFRIA = ("lage", "synkad_at", "senaste_forsok_at", "senaste_utfall", "senaste_antal")
+
 
 def _row(record: asyncpg.Record | None) -> dict[str, Any] | None:
     if record is None:
@@ -4663,21 +4667,49 @@ class PostgresStorage:
     # därifrån — inte i RLS, som per definition inte kan uttrycka
     # "alla tenants".
 
+    async def schema_versioner(self) -> list[str]:
+        # Bara filnamn ur liggaren (migration 129 ger snajp_app läsrätt).
+        async with self.pool.acquire() as conn:
+            if not await conn.fetchval("select to_regclass('supabase_migrations.schema_migrations') is not null"):
+                return []
+            rader = await conn.fetch("select version from supabase_migrations.schema_migrations")
+        return [r["version"] for r in rader]
+
     async def spegel_info(self) -> dict[str, Any] | None:
         async with self.pool.acquire() as conn:
             finns = await conn.fetchval("select to_regclass('public.mirror_meta') is not null")
             if not finns:
                 return None
-            # lage/synkad_at sätts av scripts/railway_synk.py (tvåvägssynken).
-            har_lage = await conn.fetchval(
-                "select exists (select 1 from information_schema.columns "
-                "where table_schema = 'public' and table_name = 'mirror_meta' and column_name = 'lage')"
-            )
+            # Kolumnerna utöver environment/seeded_at skapas av synken själv
+            # (scripts/railway_synk.py): lage/synkad_at vid första lyckade
+            # synken, senaste_forsok_at/senaste_utfall/senaste_antal av
+            # skriv_utfall (synkflytt-planen § 3 Insyn). En äldre spegel saknar
+            # dem, så bara de som finns läses. Namnen kommer ur listan nedan,
+            # aldrig ur databasen, och kan därför sättas in i frågan.
+            finns_kol = {
+                r["column_name"]
+                for r in await conn.fetch(
+                    "select column_name from information_schema.columns "
+                    "where table_schema = 'public' and table_name = 'mirror_meta'"
+                )
+            }
+            valfria = [k for k in _SPEGEL_VALFRIA if k in finns_kol]
             rad = await conn.fetchrow(
-                "select environment, seeded_at" + (", lage, synkad_at" if har_lage else "")
+                "select " + ", ".join(["environment", "seeded_at", *valfria])
                 + " from public.mirror_meta limit 1"
             )
-        return _row(rad) if rad else None
+        if not rad:
+            return None
+        data = _row(rad)
+        # jsonb kommer som text (poolen har ingen jsonb-kodek); antal per
+        # tabell och åtgärd, inga nycklar eller värden.
+        antal = data.get("senaste_antal")
+        if isinstance(antal, str):
+            try:
+                data["senaste_antal"] = json.loads(antal)
+            except ValueError:
+                data["senaste_antal"] = None
+        return data
 
     async def logga_flytt(self, tenant_id: str, *, typ: str, ref_id: str, resultat: str) -> None:
         async with self._scoped(tenant_id) as conn:

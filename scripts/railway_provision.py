@@ -303,8 +303,16 @@ def provision(env_name: str, branch: str, apply: bool) -> None:
     # TCP-proxy: migrationskedjan och speglingen körs UTIFRÅN, inte inne i
     # containern. Utan den finns ingen väg in till en databas som bara har ett
     # privat värdnamn.
+    #
+    # Utom i main (synkflytten steg 11, 2026-11-19): produktionens port ska
+    # vara stängd när synken och migrationerna körs hos Railway. Saknas mains
+    # värd i .env.deploy betyder det att porten är stängd med flit, och en ny
+    # --apply får inte öppna den igen. Öppna den för hand och dokumentera det
+    # (synkflytt-runbook.md, steg 12, backning).
     store = env_read()
-    if not store.get(f"RAILWAY_{env_name.upper()}_PG_HOST"):
+    if env_name == "main" and not store.get("RAILWAY_MAIN_PG_HOST"):
+        print("    ingen TCP-proxy för main: porten hålls stängd (synkflytt-runbook.md steg 12)")
+    elif not store.get(f"RAILWAY_{env_name.upper()}_PG_HOST"):
         # En klonad miljö ärver källans proxy-konfiguration, så en proxy kan redan
         # finnas. Läs den i så fall i stället för att skapa en till (som failar).
         existing = gql(

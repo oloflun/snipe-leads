@@ -173,7 +173,18 @@ class Storage(Protocol):
         """Markören spegelskriptet sätter (scripts/railway_seed_dev.py,
         tabellen public.mirror_meta): {environment, seeded_at} i en spegel,
         None i main och i minneslagret. admin_flytt.importera vägrar i en
-        spegel; panelen Flytta till main renderas bara i en."""
+        spegel; panelen Flytta till main renderas bara i en.
+
+        När synken (scripts/railway_synk.py) har skapat kolumnerna följer
+        också lage, synkad_at (senaste lyckade synk), senaste_forsok_at,
+        senaste_utfall ('ok', 'hoppade:<n>', 'avbruten: <skäl>', 'fel: <typ>')
+        och senaste_antal (dict tabell → åtgärd → antal) med. Saknas en
+        kolumn saknas nyckeln. Tider är ISO-strängar."""
+        ...
+
+    async def schema_versioner(self) -> list[str]:
+        """Migrationsliggarens versioner (supabase_migrations.schema_migrations),
+        för GET /api/drift/schema. Bara filnamn; tom lista utan liggare."""
         ...
 
     async def logga_flytt(self, tenant_id: str, *, typ: str, ref_id: str, resultat: str) -> None:

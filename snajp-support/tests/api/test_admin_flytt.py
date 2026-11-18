@@ -54,6 +54,42 @@ def test_avsandarsidan_ar_bara_for_masternyckeln(client):
     assert svar.json()["nyckel_konfigurerad"] is True
 
 
+def test_status_visar_synkens_utfall_och_alder(client, monkeypatch):
+    """Runbookens steg 11: panelen får senaste försök, utfall och antal ur
+    spegeln, plus åldern sedan senaste lyckade synk och om den är försenad."""
+    from datetime import datetime, timedelta, timezone
+
+    nu = datetime.now(timezone.utc)
+    spegel = {
+        "environment": "development", "seeded_at": None, "lage": "envags",
+        "synkad_at": (nu - timedelta(minutes=95)).isoformat(),
+        "senaste_forsok_at": (nu - timedelta(minutes=4)).isoformat(),
+        "senaste_utfall": "avbruten: development-databasens markör säger inte 'development'.",
+        "senaste_antal": {},
+    }
+
+    async def _spegel():
+        return spegel
+
+    monkeypatch.setattr(app.state.storage, "spegel_info", _spegel, raising=False)
+    svar = client.get("/api/admin/flytt/status", headers=_master(client)).json()
+    assert svar["spegel"]["senaste_utfall"] == spegel["senaste_utfall"]
+    assert svar["spegel"]["senaste_forsok_at"] == spegel["senaste_forsok_at"]
+    assert svar["spegel"]["senaste_antal"] == {}
+    assert svar["synk_alder_min"] in (95, 96)
+    assert svar["synk_forsenad"] is True
+
+    spegel["synkad_at"] = (nu - timedelta(minutes=8)).isoformat()
+    spegel["senaste_utfall"] = "ok"
+    svar = client.get("/api/admin/flytt/status", headers=_master(client)).json()
+    assert svar["synk_alder_min"] in (8, 9) and svar["synk_forsenad"] is False
+
+
+def test_status_utan_spegel_har_okand_alder(client):
+    svar = client.get("/api/admin/flytt/status", headers=_master(client)).json()
+    assert svar["synk_alder_min"] is None and svar["synk_forsenad"] is False
+
+
 def test_importera_vagrar_utan_och_med_fel_signatur(client):
     paket = {"version": 1, "fran": "development", "tenant_id": DEFAULT_TENANT_ID, "tenant_slug": "x", "typ": "mejl", "poster": []}
     kropp = json.dumps(paket, ensure_ascii=False, sort_keys=True, separators=(",", ":"))

@@ -11,19 +11,18 @@ import { cn } from "@/lib/utils";
  *
  * Renderas BARA i development (en spegel) och bara för plattformsadmin: det
  * är den enda vägen från testmiljön till produktionen, och den ska synas som
- * exakt det. Raden "Nästa spegling" säger rakt ut att allt oflyttat försvinner
- * då. Varje flytt får ett kvitto per rad ur mottagarens svar.
+ * exakt det. Synken går bara main → development (INV-DATA-008): det som skapas
+ * här når aldrig main av sig självt. Varje flytt får ett kvitto per rad ur
+ * mottagarens svar.
  */
 
 const T = {
   rubrik: { sv: "Flytta till main", en: "Move to main" },
   forklaring: {
-    sv: "Development speglas från main varje natt. Det som ska sparas till den riktiga miljön måste flyttas hit innan dess.",
-    en: "Development is mirrored from main every night. Anything to keep in the live environment must be moved before then."
+    sv: "Synken kopierar mains rader hit löpande, och mains version vinner när samma rad ändrats på båda håll. Det som skapats här stannar men når aldrig main av sig självt: flytta det som ska finnas i den riktiga miljön.",
+    en: "The sync copies rows from main here continuously, and main's version wins when the same row changed in both. What you create here stays but never reaches main by itself: move what should exist in the live environment."
   },
-  nastaSpegling: { sv: "Nästa spegling", en: "Next mirror" },
-  forsvinner: { sv: "Allt oflyttat försvinner då.", en: "Everything not moved disappears then." },
-  senastSpeglad: { sv: "senast speglad", en: "last mirrored" },
+  speglingSkapad: { sv: "Spegeln skapad", en: "Mirror created" },
   mejl: { sv: "Supportmejl", en: "Support email" },
   korningar: { sv: "Leadskörningar", en: "Lead runs" },
   korningarForklaring: {
@@ -48,8 +47,22 @@ const T = {
   redan: { sv: "redan flyttad", en: "already moved" },
   kompletterad: { sv: "kompletterad (det som saknades följde med)", en: "backfilled (missing parts moved)" },
   fel: { sv: "fel", en: "error" },
-  test: { sv: "test", en: "test" }
+  test: { sv: "test", en: "test" },
+  synk: { sv: "Synken från main", en: "Sync from main" },
+  senastForsok: { sv: "Senaste försök", en: "Last attempt" },
+  aldrigLyckad: { sv: "Ingen lyckad synk registrerad.", en: "No successful sync recorded." },
+  lyckad: { sv: "lyckad", en: "succeeded" },
+  avbruten: { sv: "avbruten", en: "aborted" }
 } satisfies Record<string, Localized>;
+
+/** Antal ändrade rader i senaste synken (tabell → åtgärd → antal). */
+function summaAntal(antal: Record<string, Record<string, number>> | null | undefined): number {
+  if (!antal) return 0;
+  return Object.values(antal).reduce(
+    (summa, perAtgard) => summa + Object.values(perAtgard ?? {}).reduce((s, n) => s + (Number(n) || 0), 0),
+    0
+  );
+}
 
 const RESULTAT: Record<string, Localized> = {
   importerad: T.importerad,
@@ -124,14 +137,68 @@ export function FlyttTillMain({ slug }: Readonly<{ slug: string }>) {
 
   const konfigurerad = status.mal_konfigurerat && status.nyckel_konfigurerad;
 
+  // Synkens insyn (runbookens steg 11). Visas när synken skrivit något i
+  // spegeln; en äldre spegel utan synkkolumner visar bara raden ovan.
+  const spegel = status.spegel;
+  const synkVisas = Boolean(spegel && ("synkad_at" in spegel || "senaste_forsok_at" in spegel));
+  const alder = status.synk_alder_min ?? null;
+  const forsenad = Boolean(status.synk_forsenad);
+  const sedan = (min: number) => {
+    if (min < 120) return text({ sv: `${min} min sedan`, en: `${min} min ago` });
+    if (min < 2880) {
+      const timmar = Math.floor(min / 60);
+      return text({ sv: `${timmar} timmar sedan`, en: `${timmar} hours ago` });
+    }
+    const dagar = Math.floor(min / 1440);
+    return text({ sv: `${dagar} dagar sedan`, en: `${dagar} days ago` });
+  };
+  const utfall = spegel?.senaste_utfall ?? null;
+  const hoppade = utfall ? /^hoppade:(\d+)$/.exec(utfall) : null;
+  const utfallOk = utfall === "ok" || (hoppade !== null && Number(hoppade[1]) === 0);
+  const utfallText = (() => {
+    if (!utfall) return "–";
+    if (utfall === "ok") return text(T.lyckad);
+    if (hoppade) return text({ sv: `${hoppade[1]} rader hoppades över`, en: `${hoppade[1]} rows skipped` });
+    if (utfall.startsWith("avbruten:")) return `${text(T.avbruten)}: ${utfall.slice("avbruten:".length).trim()}`;
+    if (utfall.startsWith("fel:")) return `${text(T.fel)}: ${utfall.slice("fel:".length).trim()}`;
+    return utfall;
+  })();
+  const andrade = summaAntal(spegel?.senaste_antal);
+
   return (
     <div className="mt-3 border-t border-ink/10 pt-3">
       <p className="px-1 text-[13px] font-semibold">{text(T.rubrik)}</p>
       <p className="mt-1 px-1 text-[12px] leading-5 text-ink-subtle">{text(T.forklaring)}</p>
-      <p className="mt-1 px-1 text-[12px] text-ink-muted">
-        {text(T.nastaSpegling)}: {status.nasta_spegling}. {text(T.forsvinner)}
-        {status.spegel?.seeded_at ? ` (${text(T.senastSpeglad)} ${nar(status.spegel.seeded_at)})` : ""}
-      </p>
+      {status.spegel?.seeded_at ? (
+        <p className="mt-1 px-1 text-[12px] text-ink-muted">
+          {text(T.speglingSkapad)} {nar(status.spegel.seeded_at)}.
+        </p>
+      ) : null}
+      {synkVisas ? (
+        <div className="mt-2 px-1 text-[12px] leading-5">
+          <p className="font-medium text-ink-muted">{text(T.synk)}</p>
+          {forsenad && alder !== null ? (
+            <p role="alert" className="font-medium text-danger">
+              {text({
+                sv: `Försenad: senaste lyckade synk för ${sedan(alder)}.`,
+                en: `Delayed: last successful sync ${sedan(alder)}.`
+              })}
+            </p>
+          ) : (
+            <p className="text-ink-muted">
+              {alder !== null
+                ? text({ sv: `Senast lyckad för ${sedan(alder)}.`, en: `Last successful ${sedan(alder)}.` })
+                : text(T.aldrigLyckad)}
+            </p>
+          )}
+          {spegel?.senaste_forsok_at || utfall ? (
+            <p className={utfallOk ? "text-ink-subtle" : "text-warning"}>
+              {text(T.senastForsok)} {nar(spegel?.senaste_forsok_at ?? null)}: {utfallText}
+              {andrade > 0 ? text({ sv: ` (${andrade} rader ändrade)`, en: ` (${andrade} rows changed)` }) : ""}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
       {!konfigurerad ? <p className="mt-2 px-1 text-[12px] text-danger">{text(T.ejKonfigurerad)}</p> : null}
 
       <p className="mt-3 px-1 text-[12px] font-medium text-ink-muted">{text(T.mejl)}</p>

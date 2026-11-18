@@ -9,6 +9,36 @@ möjligt), vad det betyder i koden.
 
 ---
 
+## 2026-11-19 — Synkflytten verkställs i development; mains steg väntar på releasen (Claude (agent), på Antons uppdrag "verkställ synkflytten")
+
+**Beslut.**
+1. Tjänsten `migrera` körs hos Railway i miljön development (gren `development`,
+   `railway/Dockerfile.drift`, `MIGRERA_APPLY=1`, `MIGRERA_PG_URL` som referens till
+   Postgres-tjänstens egna variabler över det privata nätet). `migrera.yml` går kvar
+   parallellt; båda tar samma rådgivande lås.
+2. PR-kontrollen "releasens migrationer" kan läsa liggarna över HTTPS
+   (`GET /api/drift/schema`, nyckeln `SCHEMA_LASNYCKEL`, migration 129 ger `snajp_app`
+   läsrätt på liggaren). Utan nyckeln i GitHub går kontrollen som förut.
+3. `scripts/railway_provision.py` skapar inte längre en TCP-proxy för main när
+   `RAILWAY_MAIN_PG_HOST` saknas, så att en stängd produktionsport inte öppnas igen av
+   nästa `--apply`.
+4. `scripts/railway.py` går genom Railways inloggade CLI (`railway api`, variablerna via
+   stdin) när `RAILWAY_TOKEN` saknas eller avvisas.
+
+**Resonemanget.** Anton bad om att synkflytten skulle verkställas. Allt som går att göra
+utan att ändra produktionen är gjort. Synktjänsten i main kräver migration 122 (rollen
+`synk_las`) i mains databas, och den körs när release-PR:en mergas, som är Antons
+handgrepp. Att köra den eller andra migrationer mot main före mergen, eller att skriva
+databashemligheter till GitHub, stoppades av agentens behörighetsgrind och görs därför
+av Anton (runbookens steg 2b och 6). Tokenen i `.env.deploy` svarade "Not Authorized"
+2026-11-19; CLI-reserven gör att skripten fungerar tills Anton byter den.
+
+**I koden.** `scripts/railway.py`, `scripts/releasens_migrationer.py`,
+`snajp-support/app/api/drift.py`, `db/migrations/20261119090000_129_schema_lasvag.sql`,
+`.github/workflows/migrera.yml`, `scripts/railway_provision.py`,
+`tests/test_synkflytt_steg_9_11.py`. Läget per steg står i
+`docs/compliance/synkflytt-runbook.md`.
+
 ## 2026-11-18 kväll — HSTS i appen, utan underdomäner (Claude (agent), på Antons uppdrag)
 
 **Beslut.** Webben skickar `Strict-Transport-Security: max-age=63072000` på alla

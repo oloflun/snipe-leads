@@ -583,6 +583,11 @@ class Settings(BaseSettings):
     flytt_nyckel: str = Field("", validation_alias=AliasChoices("FLYTT_NYCKEL", "flytt_nyckel"))
     flytt_mal_url: str = Field("", validation_alias=AliasChoices("FLYTT_MAL_URL", "flytt_mal_url"))
 
+    # Synkflytten steg 9 (app/api/drift.py): PR-kontrollen läser liggarens
+    # versioner över HTTPS med den här smala nyckeln i stället för att ansluta
+    # till databasen. Tomt = endpointen svarar 404.
+    schema_lasnyckel: str = Field("", validation_alias=AliasChoices("SCHEMA_LASNYCKEL", "schema_lasnyckel"))
+
     # SMTP-uppgifterna för snajpsupport@gmail.com. ETT konto för HELA
     # plattformen — det här är prioriterade mejl till OSS, inte kundutskick,
     # och har ingenting med per-tenant-avsändare att göra (se

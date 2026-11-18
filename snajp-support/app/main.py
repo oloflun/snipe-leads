@@ -32,6 +32,7 @@ from .api import (
     chattar,
     demo,
     drafts,
+    drift,
     inbox,
     integrationer,
     kanaler,
@@ -457,6 +458,8 @@ app.include_router(sending_domains_api.router)
 app.include_router(admin.router)
 app.include_router(admin_flytt.router)
 app.include_router(admin_flytt.mottag)
+# Synkflytten steg 9: liggarens versioner för PR-kontrollen, egen smal nyckel.
+app.include_router(drift.router)
 # Skrivytan mot agentprofilen. Egen modul, samma prefix och samma master-nyckel —
 # se docstringen i api/admin_profil.py för varför läsning och skrivning är skilda åt.
 app.include_router(admin_profil.router)

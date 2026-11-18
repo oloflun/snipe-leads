@@ -146,13 +146,27 @@ jobs:
     if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    env:
+      SCHEMA_LASNYCKEL: ${{ secrets.SCHEMA_LASNYCKEL }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
+      # Synkflytten steg 9: med SCHEMA_LASNYCKEL frågas api:erna över HTTPS och
+      # ingen databas nås härifrån. Utan nyckeln går kontrollen som förut.
+      - name: Vad väntar i development och main (över HTTPS)
+        id: https
+        if: env.SCHEMA_LASNYCKEL != ''
+        shell: bash
+        env:
+          DEV_API_URL: https://api-development-5cc3.up.railway.app
+          MAIN_API_URL: https://api-production-d7695.up.railway.app
+        run: python scripts/releasens_migrationer.py
       - run: pip install psycopg2-binary
+        if: steps.https.outcome == 'skipped'
       - name: Vad väntar i development och main
+        if: steps.https.outcome == 'skipped'
         shell: bash
         env:
           ENV_DEPLOY: ${{ secrets.ENV_DEPLOY }}

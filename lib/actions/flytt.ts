@@ -26,8 +26,24 @@ export type FlyttKandidater = {
 };
 
 export type FlyttStatus = {
-  spegel: { environment: string; seeded_at: string | null } | null;
-  nasta_spegling: string;
+  /**
+   * Spegelmarkören (mirror_meta). Synkfälten finns när synken
+   * (scripts/railway_synk.py) har skapat kolumnerna; en äldre spegel saknar dem.
+   * senaste_utfall: "ok", "hoppade:<n>", "avbruten: <skäl>" eller "fel: <typ>".
+   */
+  spegel: {
+    environment: string;
+    seeded_at: string | null;
+    lage?: string | null;
+    synkad_at?: string | null;
+    senaste_forsok_at?: string | null;
+    senaste_utfall?: string | null;
+    senaste_antal?: Record<string, Record<string, number>> | null;
+  } | null;
+  /** Minuter sedan senaste lyckade synk; null = okänt (runbookens steg 11). */
+  synk_alder_min?: number | null;
+  /** Senaste lyckade synk äldre än 60 minuter, samma gräns som api:ts larm. */
+  synk_forsenad?: boolean;
   mal_konfigurerat: boolean;
   nyckel_konfigurerad: boolean;
 };
