@@ -2,7 +2,7 @@
 
 Multi-tenant: varje jobb märks med tenant_id vid skapandet och API-lagret
 verifierar ägarskap vid polling. Redis används om REDIS_URL är satt; annars
-in-memory med TTL. Jobb som fastnat längre än 5 minuter auto-failas.
+in-memory med TTL. Jobb som fastnat längre än 10 minuter auto-failas.
 """
 
 import json
@@ -12,7 +12,10 @@ from typing import Any
 
 from ..redisnycklar import nyckel
 
-JOB_TIMEOUT_SECONDS = 300
+# 600 s sedan 2026-11-19 (300 förut): Iris-utkasten på gemini-3.8-flash tog
+# 161–277 s i provet 2026-11-18 och föll på den gamla gränsen. Chattens steg
+# har egna, kortare gränser (llm_timeout_chatt_s) och berörs inte i praktiken.
+JOB_TIMEOUT_SECONDS = 600
 JOB_TTL_SECONDS = 3600
 
 #: Fält som `get()` alltid skriver ut explicit (och som därför inte ska
@@ -46,7 +49,7 @@ class MemoryJobStore:
                 "started", job["created"]
             ) > JOB_TIMEOUT_SECONDS:
                 job["status"] = "failed"
-                job["error"] = "Tidsgräns överskriden (5 min)."
+                job["error"] = "Tidsgräns överskriden (10 min)."
 
     async def create(self, *, tenant_id: str | None = None, status: str = "processing") -> str:
         self._sweep()
@@ -163,8 +166,8 @@ class RedisJobStore:
         if job.get("status") == "processing" and time.time() - job.get(
             "started", job.get("created", 0)
         ) > JOB_TIMEOUT_SECONDS:
-            await self.fail(job_id, "Tidsgräns överskriden (5 min).")
-            job.update(status="failed", error="Tidsgräns överskriden (5 min).")
+            await self.fail(job_id, "Tidsgräns överskriden (10 min).")
+            job.update(status="failed", error="Tidsgräns överskriden (10 min).")
         return {
             "status": job["status"],
             "result": job.get("result"),
