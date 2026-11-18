@@ -101,7 +101,7 @@ Registrerade: kundens användare och plattformsadmin.
 |---|---|---|---|---|---|
 | `auth.users` (schemat `auth`, inte `public`) | E-post, lösenordshash, namn i `raw_user_meta_data` | L (se fynd 3.1) | L; I och U bara på kolumnerna i 126; ingen RLS | Nej. Konton raderas för hand (`scripts/admin_cleanup.py`) | Kontots livstid; raderas 3 månader efter avslutat avtal. Skäl: efterfrågor och fakturering kort efter avslut |
 | `profiles` | Namn, roll, arbetsyta | L, oskopad (074) | arbetsyta (L) | Nej (119 lämnar den) | Som `auth.users` |
-| `workspaces` | Arbetsytans namn, paket, provperiod. Ingen person | L, oskopad (064, 065) | arbetsyta (L); U bara `is_demo` (126) | Nej | Avtalets löptid + 3 månader |
+| `workspaces` | Arbetsytans namn, paket, provperiod. Ingen person | L, oskopad (064, 065) | arbetsyta (L) (126). U på `is_demo` återtagen i 127: demon märks genom `markera_demoarbetsyta()` | Nej | Avtalets löptid + 3 månader |
 | `workspace_invites` | Inbjuden e-post, inbjudare | – | arbetsyta (L, I och R för ägaren, migration 032) | Nej. Raderas när en inbjudan dras tillbaka (`lib/actions/team.ts:165`) | Accepterade: radera vid acceptans. Oaccepterade: 30 dagar. Skäl: behövs bara tills inbjudan används |
 | `workspace_tenant_keys` | Kundens api-nyckel i klartext, ingen person | LIU-grant, ingen policy (0 rader) | – (126) | Nej | Så länge arbetsytan finns |
 | `password_reset_tokens` | Konto-id, tokenhash | LIU-grant, ingen policy (0 rader) | alla (LIR; U bara `used_at`, 126) | Delvis, se avsnitt 2 | 24 timmar efter `expires_at`. Skäl: tokenen är värdelös efter giltighetstiden |

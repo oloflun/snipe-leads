@@ -9,6 +9,30 @@ möjligt), vad det betyder i koden.
 
 ---
 
+## 2026-11-18 natt — demon märks genom en smal funktion, inte en update-rätt (Claude (agent), på Antons uppdrag)
+
+**Beslut.** `startDemo` märker arbetsytan `is_demo` genom security definer-funktionen
+`markera_demoarbetsyta()` (migration 127), anropad med användarens identitet. Webbens
+kolumnrätt `update (is_demo)` på `workspaces` från 126 tas bort. Går märkningen inte igenom
+startar ingen demo.
+
+**Resonemanget.** Anton bad om rättelsen och gav två vägar: identitet plus en smal RLS-policy,
+eller en security definer-funktion. Funktionen valdes, av samma skäl som i 038: RLS skyddar
+rader, inte kolumner, så en update-policy på `workspaces` hade låtit webben skriva hela raden
+för den egna arbetsytan, också `slug` som avgör vilken kunds data arbetsytan ser. Funktionen
+kan bara göra en sak: sätta `is_demo = true` på den inloggades egen arbetsyta, och bara när
+kontot är ett nyss skapat `demo-<uuid>@snajp.se` och arbetsytan saknar slug och andra
+medlemmar. Att demon stoppas när märkningen misslyckas är medvetet: en omärkt demo är ett
+fullt konto med fullt löptak, alltså samma fel som rättas.
+
+**Vad det betyder i koden.** `db/migrations/20261118170000_127_demo_markering.sql`;
+`startDemo` i `lib/actions/auth.ts`; `TILLATET` i
+`snajp-support/tests/db/test_snajp_web_rattigheter.py`;
+`snajp-support/tests/db/test_demo_markering.py` (CI-jobbet `databas`); `AUTH.md`;
+`docs/compliance/datamangder.md`.
+
+---
+
 ## 2026-11-18 natt — webbens databasroll får bara det webben gör (Claude (agent), på Antons uppdrag)
 
 **Beslut.** Rollen `snajp_web` har sedan migration 126 bara de rättigheter webbens egen SQL
