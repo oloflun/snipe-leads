@@ -43,7 +43,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -67,9 +67,9 @@ jobs:
     name: pytest (snajp-support)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
           cache: pip
@@ -115,9 +115,9 @@ jobs:
       GALLRING_TEST_DSN: postgresql://postgres:localdev@127.0.0.1:5432/railway
       GALLRING_TEST_APP_DSN: postgresql://snajp_app:localapp@127.0.0.1:5432/railway
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
           cache: pip
@@ -142,7 +142,7 @@ jobs:
     name: Architecture invariants
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           # INV-SKILL-006 nedan kör `git diff origin/<bas>...HEAD`. Tre punkter
           # betyder "sedan den gemensamma förfadern", vilket kräver att basen
@@ -161,7 +161,7 @@ jobs:
           # och den gissningen blir fel exakt när den behöver stämma.
           fetch-depth: 0
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
           cache: pip
@@ -190,7 +190,7 @@ jobs:
     name: agent-core laddas i den byggda imagen
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Hämta basimagen från en spegel
         # public.ecr.aws svarar 429 "Data limit exceeded" på GitHubs delade
@@ -229,9 +229,9 @@ jobs:
     name: npm run type-check
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 20
           cache: npm
