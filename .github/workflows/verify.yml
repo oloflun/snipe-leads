@@ -61,7 +61,7 @@ jobs:
             INTERVALL="${BAS}..${TOPP}"
           fi
           echo "Skannar ${INTERVALL}"
-          /tmp/gitleaks detect --source . --no-banner --redact --log-opts="${INTERVALL}"
+          /tmp/gitleaks detect --source . --config .gitleaks.toml --no-banner --redact --verbose --log-opts="${INTERVALL}"
 
   python-tests:
     name: pytest (snajp-support)
