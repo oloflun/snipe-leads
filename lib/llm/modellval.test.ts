@@ -13,6 +13,7 @@ import {
   dataskyddsvarning,
   EU_REGIONER,
   harRiktigKunddata,
+  lagstaTankande,
   lasServiceAccount,
   valjModell,
   vertexBaseUrl,
@@ -182,6 +183,27 @@ test("riktig data: en region utanför EU väljs aldrig", () => {
     assert.ok(dataskyddsvarning(env)?.includes(region));
   }
   assert.ok(EU_REGIONER.includes("europe-west1") && !(EU_REGIONER as readonly string[]).includes("global"));
+});
+
+test("riktig data: EU-multiregionen väljs, med sin egen värd och gemini-3.x", () => {
+  // Gemini 3.x finns i EU bara i `eu` och (3.5-flash) europe-west3 (2026-11-18).
+  const env = { ...RIKTIG, GOOGLE_SERVICE_ACCOUNT_JSON: SA_JSON, GOOGLE_CLOUD_REGION: "eu", MODEL: "gemini-3.8-flash" };
+  const val = valjModell(env);
+  assert.ok(val && val.provider === "vertex");
+  assert.equal(
+    val.baseURL,
+    "https://aiplatform.eu.rep.googleapis.com/v1beta1/projects/test-proj/locations/eu/endpoints/openapi/"
+  );
+  assert.equal(val.namn, "google/gemini-3.8-flash");
+  assert.equal(dataskyddsvarning(env), null);
+  assert.ok(!(EU_REGIONER as readonly string[]).includes("us"));
+});
+
+test("lägsta tänkandet per modell: 3.8-flash avvisar minimal", () => {
+  assert.equal(lagstaTankande("google/gemini-3.8-flash"), "low");
+  assert.equal(lagstaTankande("gemini-3.8-flash"), "low");
+  assert.equal(lagstaTankande("google/gemini-3.5-flash"), "minimal");
+  assert.equal(lagstaTankande("google/gemini-2.5-flash"), "minimal");
 });
 
 test("lokalt: OpenAI vinner och vilken region som helst går, som förut", () => {

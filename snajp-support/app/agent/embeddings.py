@@ -104,12 +104,19 @@ async def _vertex_predict(settings, text: str) -> list[float]:
 
     import httpx
 
+    from ..config import vertex_vard
     from .llm import _vertex_token, vertex_region
 
     projekt = json.loads(settings.google_service_account_json)["project_id"]
-    region = vertex_region(settings)  # INV-DATA-006: vägrar en region utanför EU
+    # INV-DATA-006: vägrar en region utanför EU. Egen region sedan 2026-11-18
+    # (VERTEX_INBADDNING_REGION), så att vektorerna kommer ur samma modell när
+    # språkmodellen flyttar till en region som saknar gemini-embedding-001.
+    region = vertex_region(
+        settings,
+        (getattr(settings, "vertex_inbaddning_region", "") or "").strip() or settings.google_cloud_region,
+    )
     url = (
-        f"https://{region}-aiplatform.googleapis.com/v1/projects/{projekt}/locations/{region}"
+        f"https://{vertex_vard(region)}/v1/projects/{projekt}/locations/{region}"
         f"/publishers/google/models/{settings.embedding_model}:predict"
     )
     async with httpx.AsyncClient(timeout=30.0) as klient:

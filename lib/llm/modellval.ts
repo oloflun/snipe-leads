@@ -130,10 +130,19 @@ export function lasServiceAccount(json: string | undefined): ServiceAccount | nu
   };
 }
 
+/**
+ * Spegel av `vertex_vard` i config.py: EU-multiregionen har värden
+ * `aiplatform.eu.rep.googleapis.com`, regionerna `{region}-aiplatform…`.
+ */
+export function vertexVard(region: string): string {
+  const r = (region || "").trim();
+  return r === "eu" ? `aiplatform.${r}.rep.googleapis.com` : `${r}-aiplatform.googleapis.com`;
+}
+
 /** Spegel av `_vertex_base_url` i llm.py. */
 export function vertexBaseUrl(projekt: string, region: string): string {
   return (
-    `https://${region}-aiplatform.googleapis.com/v1beta1/` +
+    `https://${vertexVard(region)}/v1beta1/` +
     `projects/${projekt}/locations/${region}/endpoints/openapi/`
   );
 }
@@ -159,6 +168,17 @@ export function vertexModellnamn(namn: string): string {
   return `google/${rent}`;
 }
 
+/**
+ * Lägsta `reasoningEffort` modellen tar. Vertex avvisar "none"; "minimal" är
+ * lägst för gemini-2.5 och gemini-3.5, men gemini-3.8-flash svarar 400
+ * "Thinking level is unsupported: THINKING_LEVEL_MINIMAL" och tar lägst "low"
+ * (uppmätt 2026-11-18, spegel av `lagsta_tankniva` i snajp-support/app/agent/llm.py).
+ */
+export function lagstaTankande(namn: string): "minimal" | "low" {
+  const rent = (namn || "").trim().toLowerCase().split("/").pop() || "";
+  return rent.startsWith("gemini-3.8-flash") ? "low" : "minimal";
+}
+
 function geminiModell(env: Miljo, standard: string): string {
   const model = (env.MODEL || "").trim();
   return model.toLowerCase().startsWith("gemini") ? model : standard;
@@ -167,6 +187,7 @@ function geminiModell(env: Miljo, standard: string): string {
 /**
  * Ordagrant `VERTEX_EU_REGIONER` i snajp-support/app/config.py, där varje post
  * är motiverad. Aldrig `global`, `us` eller regioner utanför EU (London, Zürich).
+ * `eu` är EU-multiregionen, där gemini-3.x finns (2026-11-18).
  */
 export const EU_REGIONER = [
   "europe-west1",
@@ -175,7 +196,8 @@ export const EU_REGIONER = [
   "europe-west3",
   "europe-west8",
   "europe-west9",
-  "europe-southwest1"
+  "europe-southwest1",
+  "eu"
 ] as const;
 
 function region(env: Miljo): string {

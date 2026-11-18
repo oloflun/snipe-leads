@@ -9,6 +9,44 @@ möjligt), vad det betyder i koden.
 
 ---
 
+## 2026-11-18 (Claude (agent), inom Antons uppdrag om EU-compliance; ändringarna väntar på Antons granskning) — Bytet från Gemini 2.5 förbereds så att det blir en ändring av variabler
+
+**Beslut.** Koden förbereds för gemini-3.x utan att någon modell byts:
+EU-multiregionen `eu` står på listan över tillåtna Vertex-regioner (med sin
+egen värd, `aiplatform.eu.rep.googleapis.com`), inbäddningarna får en egen
+region (`VERTEX_INBADDNING_REGION`), tänkandet skickas i den form gemini-3.x
+tar, och uppstartskontrollen mot fel modellfamilj gäller också
+stegmodellerna och bildmodellen. Standardvärdena (`gemini-2.5-flash`,
+`europe-west1`) och alla värden i drift är orörda. Vilken modell som ska
+användas är ägarens beslut; underlaget är
+`docs/compliance/modellbyte-underlag.md`.
+
+**Resonemanget.** Google anger 20 oktober 2026 som pensionsdatum för
+gemini-2.5-pro, -flash och -flash-lite. Uppmätt mot projektets Vertex
+2026-11-18 finns ingen av ersättarna i `europe-west1`, `europe-west4` eller
+`europe-north1`: gemini-3.8-flash och gemini-3.5-flash-lite svarar bara i `eu`,
+gemini-3.5-flash i `eu` och `europe-west3`. Utan `eu` på listan hade bytet till
+3.8 krävt en kodändring, och listans egen kommentar sade att den skulle läggas
+till i samma ändring som gör värden möjlig. `eu` är en EU-multiregion, där
+Google anger att behandlingen stannar inom EU, och dataskyddsbedömningen
+(`gemini-bedomning.md` avsnitt 7) föreslår själv att gå över till den.
+`gemini-embedding-001` saknas i `eu`; med en egen region kommer
+kunskapsbasens vektorer ur samma modell före och efter bytet. Tankebudgeten
+är avvecklad för gemini-3.x: budget 0 gav ett anrop mot gemini-3.8-flash som
+hängde i 90 sekunder, och 3.8 avvisar nivån MINIMAL med 400. Email Studio
+skickade `reasoningEffort: "minimal"` och hade fallit på varje anrop med 3.8.
+
+**I koden.** `config.py` (`VERTEX_EU_REGIONER`, `vertex_vard`,
+`vertex_inbaddning_region`, `inbaddningsregion`, kontrollen av stegmodellerna i
+`llm_provider_fault`), `agent/llm.py` (`gemini_tank_kwargs` med modell,
+`lagsta_tankniva`), `agent/step_runner.py`, `agent/embeddings.py`,
+`leads/discovery.py` (`_sokningens_tankande`), `leads/profil.py`,
+`lib/llm/modellval.ts` (`vertexVard`, `lagstaTankande`, `eu` i `EU_REGIONER`),
+`app/api/email-studio/route.ts`. Tester:
+`tests/agent/test_modellbyte_gemini3.py`, `tests/invariants/test_inv_data_006.py`,
+`lib/llm/modellval.test.ts`. Mätverktyget: `scripts/mat_modellbyte.py`.
+INV-DATA-006 nämner `eu` och inbäddningsregionen.
+
 ## 2026-11-18 (Claude (agent), inom Antons uppdrag om synkflytten; väntar på Antons granskning) — Koden för att flytta synken till Railway, utan ändring i driften
 
 **Beslut.** Kodstegen i `docs/compliance/synkflytt-plan.md` (smala hemligheter,

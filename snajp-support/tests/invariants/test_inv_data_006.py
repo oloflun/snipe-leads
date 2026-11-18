@@ -91,8 +91,31 @@ def test_listan_bar_driftens_regioner_och_aldrig_global():
     standard = _settings()
     for region in [standard.google_cloud_region, *standard.vertex_reservregioner.split(",")]:
         assert region in VERTEX_EU_REGIONER, f"standardvärdet {region} står inte på EU-listan"
-    for utanfor in ("global", "us", "us-central1", "europe-west2", "europe-west6", "eu"):
+    for utanfor in ("global", "us", "us-central1", "europe-west2", "europe-west6"):
         assert utanfor not in VERTEX_EU_REGIONER
+
+
+def test_eu_multiregionen_star_med_sin_egen_vard():
+    """`eu` (2026-11-18): gemini-3.x finns i EU bara där och i europe-west3.
+    Den har en egen värd; `us` har det inte och står aldrig med."""
+    from app.config import VERTEX_EU_VARDAR, bas_url_tillaten, vertex_vard
+
+    assert "eu" in VERTEX_EU_REGIONER
+    assert vertex_vard("eu") == "aiplatform.eu.rep.googleapis.com"
+    assert "aiplatform.eu.rep.googleapis.com" in VERTEX_EU_VARDAR
+    assert "aiplatform.us.rep.googleapis.com" not in VERTEX_EU_VARDAR
+    assert "eu-aiplatform.googleapis.com" not in VERTEX_EU_VARDAR
+    assert bas_url_tillaten("https://aiplatform.eu.rep.googleapis.com/v1beta1/projects/p/locations/eu/endpoints/openapi/")
+    assert not bas_url_tillaten("https://aiplatform.us.rep.googleapis.com/v1beta1/")
+    for kwargs in _RIKTIG:
+        assert _vertex(google_cloud_region="eu", vertex_reservregioner="eu", **kwargs).llm_provider_fault() is None
+
+
+@pytest.mark.parametrize("kwargs", _RIKTIG)
+@pytest.mark.parametrize("region", ["us", "global", "us-central1", "europe-west2"])
+def test_inbaddningsregionen_utanfor_eu_faller_uppstarten(kwargs, region):
+    fel = _vertex(vertex_inbaddning_region=region, **kwargs).llm_provider_fault()
+    assert fel is not None and "VERTEX_INBADDNING_REGION" in fel
 
 
 # -- (a) Regionen ---------------------------------------------------------------

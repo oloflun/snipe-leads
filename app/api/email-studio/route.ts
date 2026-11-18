@@ -2,7 +2,7 @@
 import { generateText } from 'ai';
 import { createOpenAI } from '@ai-sdk/openai';
 import { getWorkspaceContext } from '@/lib/workspace';
-import { dataskyddsvarning, valjModell, type Modellval } from '@/lib/llm/modellval';
+import { dataskyddsvarning, lagstaTankande, valjModell, type Modellval } from '@/lib/llm/modellval';
 import { hamtaVertexToken } from '@/lib/llm/vertex';
 import { kanForsokasOm, klassaModellfel, statuskod, type Modellfelklass } from '@/lib/llm/kvotfel';
 import { DIREKT_OMSKRIVNING, exempelresultat, finnExempelbolag } from '@/lib/demo/iris-exempel';
@@ -411,6 +411,7 @@ async function generateMedForsok(opts: {
   model: Parameters<typeof generateText>[0]["model"];
   system: string;
   prompt: string;
+  tankande: "minimal" | "low";
 }): Promise<string> {
   let sista: unknown;
   for (let forsok = 0; forsok < 3; forsok++) {
@@ -445,7 +446,8 @@ async function generateMedForsok(opts: {
         // "none" AVVISAS av Vertex-kompatlagret (uppmätt 2026-09-15, 400:
         // "Expected ... one of: 'high', 'low', 'max', 'medium', 'minimal'");
         // "minimal" är lägsta accepterade och gav 200 i samma mätning.
-        providerOptions: { openai: { reasoningEffort: "minimal" } }
+        // gemini-3.8-flash avvisar "minimal" (2026-11-18): lagstaTankande.
+        providerOptions: { openai: { reasoningEffort: opts.tankande } }
       });
       return text;
     } catch (error) {
@@ -628,7 +630,8 @@ export async function POST(request: NextRequest) {
       // som helst, inte bli en 500 utan kropp.
       model: await byggSprakmodell(modell),
       system: EMAIL_STUDIO_SYSTEM_PROMPT,
-      prompt: userPrompt
+      prompt: userPrompt,
+      tankande: lagstaTankande(modell.namn)
     });
   } catch (error: any) {
     /**

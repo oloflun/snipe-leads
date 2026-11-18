@@ -88,12 +88,18 @@ KANDA_PROVIDERS = ("openai", "deepseek", "gemini")
 #:   europe-west8       Italien (Milano).
 #:   europe-west9       Frankrike (Paris).
 #:   europe-southwest1  Spanien (Madrid).
+#:   eu                 EU-multiregionen. Google: "multi-region endpoints let you
+#:                      ensure that machine learning processing of Customer Data
+#:                      by the service stays within a specific jurisdictional
+#:                      boundary" (Vertex, Deployment and endpoint locations,
+#:                      hämtad 2026-11-18). Värden är aiplatform.eu.rep.googleapis.com
+#:                      (`vertex_vard`). Gemini 3.x finns i EU bara här och,
+#:                      för gemini-3.5-flash, i europe-west3 (uppmätt 2026-11-18,
+#:                      docs/compliance/modellbyte-underlag.md). Ingen miljö
+#:                      använder den förrän ägaren sätter GOOGLE_CLOUD_REGION=eu.
 #:
 #: Står ALDRIG med: `global` och multiregionen `us` (behandling var som helst),
 #: europe-west2 (London) och europe-west6 (Zürich), som inte ligger i EU.
-#: EU-multiregionen `eu` saknas för att koden inte kan använda den: dess värd är
-#: aiplatform.eu.rep.googleapis.com, medan koden bygger
-#: `{region}-aiplatform.googleapis.com`. Läggs till i samma ändring som gör det.
 VERTEX_EU_REGIONER = (
     "europe-west1",
     "europe-west4",
@@ -102,11 +108,28 @@ VERTEX_EU_REGIONER = (
     "europe-west8",
     "europe-west9",
     "europe-southwest1",
+    "eu",
 )
 
-#: Värdarna som LLM_BASE_URL får peka på där data är riktig: Vertex regionala
-#: EU-värdar, och inget annat.
-VERTEX_EU_VARDAR = tuple(f"{r}-aiplatform.googleapis.com" for r in VERTEX_EU_REGIONER)
+#: Multiregionerna har en egen värd ({multiregion}.rep), regionerna
+#: `{region}-aiplatform`. Bara EU-multiregionen används här.
+_VERTEX_MULTIREGIONER = ("eu",)
+
+
+def vertex_vard(region: str) -> str:
+    """Vertex-värden för en region: `aiplatform.eu.rep.googleapis.com` för
+    EU-multiregionen, annars `{region}-aiplatform.googleapis.com`. Sökvägen är
+    densamma (`.../locations/{region}/...`). Varje anropsställe bygger sin URL
+    härifrån, så att en ny region inte kräver fyra ändringar."""
+    region = (region or "").strip()
+    if region in _VERTEX_MULTIREGIONER:
+        return f"aiplatform.{region}.rep.googleapis.com"
+    return f"{region}-aiplatform.googleapis.com"
+
+
+#: Värdarna som LLM_BASE_URL får peka på där data är riktig: Vertex värdar för
+#: EU-regionerna ovan, och inget annat.
+VERTEX_EU_VARDAR = tuple(vertex_vard(r) for r in VERTEX_EU_REGIONER)
 
 
 def ar_eu_region(region: str) -> bool:
@@ -233,6 +256,13 @@ class Settings(BaseSettings):
     #: europe-west1 i flera minuter medan ett litet anrop gick igenom i alla
     #: tre. Bara EU-regioner: data lämnar aldrig EU. Komma emellan.
     vertex_reservregioner: str = "europe-west4,europe-north1"
+    #: Regionen för inbäddningarna (`embeddings._vertex_predict`). Tom = samma
+    #: som GOOGLE_CLOUD_REGION, beteendet före 2026-11-18. Finns för
+    #: modellbytet: gemini-3.x ligger i multiregionen `eu`, men
+    #: gemini-embedding-001 svarar 404 där och 200 i europe-west1 och
+    #: europe-west3 (uppmätt 2026-11-18). Kunskapsbasens vektorer ska komma ur
+    #: samma modell före och efter bytet. Bara EU-regioner, som ovan.
+    vertex_inbaddning_region: str = ""
     model: str = "gpt-4o-mini"
     embedding_model: str = "gemini-embedding-001"
     #: MÅSTE stämma med kolumnen `ss_knowledge_base.embedding`, som är
@@ -286,8 +316,10 @@ class Settings(BaseSettings):
     #   faktagrind; blind parvis dom i båda ordningarna 1–1, två oavgjorda;
     #   ~0,53 -> ~0,26 kr/lead, 292 -> 66 s.
     #
-    # "none" = tankebudget 0 (se llm.gemini_tank_kwargs — Vertex avvisar
-    # reasoning_effort="none"). Steg med thinking="enabled" behåller sitt
+    # "none" = tankebudget 0 på gemini-2.5 (se llm.gemini_tank_kwargs — Vertex
+    # avvisar reasoning_effort="none"). På gemini-3.x, där tankebudgeten är
+    # avvecklad, blir "none" den lägsta tankenivå modellen tar (MINIMAL, LOW för
+    # gemini-3.8-flash), uppmätt 2026-11-18. Steg med thinking="enabled" behåller sitt
     # tänkande: eskaleringsbedömningen och kvittoavläsningen. Tom sträng ger
     # leverantörens default; "minimal"/"low"/"medium"/"high" går som
     # reasoning_effort.
@@ -756,6 +788,25 @@ class Settings(BaseSettings):
                 f"variabeln och låt koden välja default."
             )
 
+        # Stegmodellerna går genom samma klient som MODEL, och bildmodellen
+        # alltid till Gemini (get_vision_client). Ett namn från fel leverantör
+        # ger 404 först i det steget, alltså hos en kund, så det fälls här av
+        # samma skäl som MODEL (2026-11-18, inför bytet från gemini-2.5).
+        for falt, vantad in (
+            ("leads_draft_model", self.llm_provider),
+            ("leads_humanizer_model", self.llm_provider),
+            ("iris_profil_model", self.llm_provider),
+            ("vision_model", "gemini"),
+        ):
+            varde = getattr(self, falt)
+            faltets_provider = provider_for_model(varde)
+            if faltets_provider is not None and faltets_provider != vantad:
+                return (
+                    f"{falt.upper()}={varde!r} är en {faltets_provider}-modell, men "
+                    f"anropet går till {vantad}. Svaret blir 404 i varje sådant "
+                    f"steg. Sätt en {vantad}-modell, eller ta bort variabeln."
+                )
+
         if self.llm_provider == "deepseek" and self.har_riktig_kunddata():
             return (
                 f"LLM_PROVIDER=deepseek är inte tillåtet här. {self._varfor_riktig_data()} DeepSeek "
@@ -785,12 +836,17 @@ class Settings(BaseSettings):
         # larmade. Läser värdena som de står, och ett osatt värde betyder
         # kodens standardvärde, som står på listan.
         if self.har_riktig_kunddata():
-            utanfor = [r for r in self.vertex_regioner() if not ar_eu_region(r)]
+            utanfor = [
+                r
+                for r in dict.fromkeys([*self.vertex_regioner(), self.inbaddningsregion()])
+                if not ar_eu_region(r)
+            ]
             if utanfor:
                 return (
                     f"Vertex-regionen {', '.join(utanfor)} ligger inte i EU "
                     f"(GOOGLE_CLOUD_REGION={self.google_cloud_region!r}, "
-                    f"VERTEX_RESERVREGIONER={self.vertex_reservregioner!r}). "
+                    f"VERTEX_RESERVREGIONER={self.vertex_reservregioner!r}, "
+                    f"VERTEX_INBADDNING_REGION={self.vertex_inbaddning_region!r}). "
                     f"{self._varfor_riktig_data()} Kunddata får bara behandlas i EU. "
                     f"Tillåtna regioner: {', '.join(VERTEX_EU_REGIONER)}. Rätta "
                     f"variabeln, eller ta bort den så gäller standardvärdet, och "
@@ -848,6 +904,11 @@ class Settings(BaseSettings):
         """Huvudregionen följd av reservregionerna, utan dubbletter."""
         reserv = [r.strip() for r in (self.vertex_reservregioner or "").split(",") if r.strip()]
         return list(dict.fromkeys([self.google_cloud_region, *reserv]))
+
+    def inbaddningsregion(self) -> str:
+        """Regionen för inbäddningarna: VERTEX_INBADDNING_REGION, annars
+        huvudregionen (se fältet)."""
+        return (self.vertex_inbaddning_region or "").strip() or self.google_cloud_region
 
     def servicekonto_lasbart(self) -> bool:
         """Om GOOGLE_SERVICE_ACCOUNT_JSON går att använda mot Vertex: JSON med

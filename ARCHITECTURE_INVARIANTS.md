@@ -1036,8 +1036,11 @@ Införd: 2026-11-18 · Upphävs endast genom waiver
 ### INV-DATA-006 — Där data är riktig går modellanropen bara till Vertex AI i en EU-region
 Där `Settings.har_riktig_kunddata()` är sann fäller `Settings.llm_provider_fault()`
 uppstarten i `app/main.py` när (a) `LLM_PROVIDER=openai`, också som standardvärde
-när variabeln saknas, (b) `GOOGLE_CLOUD_REGION` eller någon post i
-`VERTEX_RESERVREGIONER` inte står på `config.VERTEX_EU_REGIONER`, eller (c)
+när variabeln saknas, (b) `GOOGLE_CLOUD_REGION`, `VERTEX_INBADDNING_REGION` eller
+någon post i `VERTEX_RESERVREGIONER` inte står på `config.VERTEX_EU_REGIONER`
+(EU-regionerna och, sedan 2026-11-18, EU-multiregionen `eu` med värden
+`aiplatform.eu.rep.googleapis.com` via `config.vertex_vard`; aldrig `us` eller
+`global`), eller (c)
 `LLM_BASE_URL` är satt och inte går över https till en värd i
 `config.VERTEX_EU_VARDAR`. Klientbygget vägrar själv: `agent/llm.vertex_region`
 kastar `ForbjudenProviderIMiljon` för en region utanför listan (chattklienten,
