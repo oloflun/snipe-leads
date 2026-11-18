@@ -1,8 +1,10 @@
 "use client";
 
+import { Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useArbetsvag } from "@/components/AppShell";
-import { btnSecondary, rubrikPanel, rubrikSektion } from "@/components/ui";
+import { useWebbplatsskanning, vard } from "@/components/settings/WebbplatsForslag";
+import { btnPrimary, btnSecondary, rubrikPanel, rubrikSektion } from "@/components/ui";
 import { useLocale, type Localized } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
@@ -30,8 +32,22 @@ const T = {
   ingress: {
     sv: "Arbetsytan är upplagd. De här stegen tar er till det första svaret och det första leadet.",
     en: "Your workspace is set up. These steps take you to the first reply and the first lead."
-  }
+  },
+  skanningPagar: {
+    sv: "Vi läser {sajt} nu och skriver förslag till kunskapsbasen.",
+    en: "We are reading {sajt} now and writing suggestions for the knowledge base."
+  },
+  skanningForslag: {
+    sv: "{n} förslag från {sajt} väntar på er.",
+    en: "{n} suggestions from {sajt} are waiting for you."
+  },
+  skanningFel: { sv: "{sajt} gick inte att läsa: {fel}", en: "{sajt} could not be read: {fel}" },
+  granska: { sv: "Granska förslagen", en: "Review the suggestions" }
 } satisfies Record<string, Localized>;
+
+function fyll(mall: string, varden: Record<string, string | number>): string {
+  return mall.replace(/\{(\w+)\}/g, (_, nyckel: string) => String(varden[nyckel] ?? ""));
+}
 
 const SUPPORT: Steg[] = [
   {
@@ -94,6 +110,12 @@ export function KomIgang({ iris, support }: Readonly<{ iris: boolean; support: b
   const { text } = useLocale();
   const vag = useArbetsvag();
   const steg = [...(support ? SUPPORT : []), ...(iris ? LEADS : []), ROST];
+  // Skanningen som onboardingen startade (lib/snajp/webbplatsskanning.ts).
+  // Förloppet syns på kunskapsbassteget, där kunden landar efter guiden.
+  const { lage } = useWebbplatsskanning(support);
+  const skanning = lage?.skanning ?? null;
+  const vantande = lage?.forslag.length ?? 0;
+  const sajt = skanning ? vard(skanning.webbplats) : "";
 
   return (
     <section aria-labelledby="kom-igang" className="rounded-card border border-ink/15 bg-paper p-5 sm:p-6">
@@ -113,9 +135,31 @@ export function KomIgang({ iris, support }: Readonly<{ iris: boolean; support: b
             <div className="min-w-0 flex-1">
               <h3 className={rubrikPanel}>{text(s.rubrik)}</h3>
               <p className="mt-1 max-w-[62ch] text-[0.9375rem] leading-6 text-ink-muted">{text(s.text)}</p>
+              {s.id === "kunskapsbas" && skanning?.status === "pagar" ? (
+                <p role="status" className="mt-2 flex items-center gap-2 text-[0.875rem] font-medium text-ink">
+                  <Loader2 className="h-4 w-4 shrink-0 animate-spin text-warning" aria-hidden />
+                  {fyll(text(T.skanningPagar), { sajt })}
+                </p>
+              ) : null}
+              {s.id === "kunskapsbas" && vantande > 0 ? (
+                <p className="mt-2 text-[0.875rem] font-medium text-ink">
+                  {fyll(text(T.skanningForslag), { n: vantande, sajt })}
+                </p>
+              ) : null}
+              {s.id === "kunskapsbas" && skanning?.status === "fel" ? (
+                <p className="mt-2 text-[0.875rem] font-medium text-danger">
+                  {fyll(text(T.skanningFel), { sajt, fel: skanning.fel ?? "" })}
+                </p>
+              ) : null}
             </div>
-            <Link href={vag(s.href)} className={cn(btnSecondary, "shrink-0 self-start sm:self-center")}>
-              {text(s.knapp)}
+            <Link
+              href={vag(s.href)}
+              className={cn(
+                s.id === "kunskapsbas" && vantande > 0 ? btnPrimary : btnSecondary,
+                "shrink-0 self-start sm:self-center"
+              )}
+            >
+              {s.id === "kunskapsbas" && vantande > 0 ? text(T.granska) : text(s.knapp)}
             </Link>
           </li>
         ))}

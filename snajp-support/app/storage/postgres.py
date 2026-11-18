@@ -149,6 +149,17 @@ def _row(record: asyncpg.Record | None) -> dict[str, Any] | None:
     return data
 
 
+def _forslag_rad(record: asyncpg.Record) -> dict[str, Any]:
+    """Ett utkast ur ss_kb_forslag. `varningar` är jsonb, som asyncpg lämnar
+    som text utan en registrerad kodare."""
+    rad = _row(record)
+    if isinstance(rad.get("varningar"), str):
+        rad["varningar"] = json.loads(rad["varningar"])
+    if rad.get("confidence") is not None:
+        rad["confidence"] = round(float(rad["confidence"]), 2)
+    return rad
+
+
 #: RRF-konstanten. 60 är standarden (Elasticsearch, OpenSearch, Qdrant) och
 #: fungerar utan korpus-specifik tuning — poängen 1/(k+rang) gör att en
 #: förstaplats väger tungt utan att ensam dominera en artikel som rankar
@@ -1101,6 +1112,123 @@ class PostgresStorage:
                 limit,
             )
         return [_row(r) for r in records]
+
+    # -- Webbplatsskanningens utfall (migration 121) ---------------------------
+
+    async def skapa_kb_skanning(
+        self, tenant_id: str, *, webbplats: str, startad_av: str, status: str = "pagar", fel: str | None = None
+    ) -> dict[str, Any]:
+        async with self._scoped(tenant_id) as conn:
+            record = await conn.fetchrow(
+                """
+                insert into ss_kb_skanningar (tenant_id, webbplats, startad_av, status, fel, klar_at)
+                values ($1, $2, $3, $4, $5, case when $4 = 'pagar' then null else now() end)
+                returning *
+                """,
+                tenant_id, webbplats, startad_av, status, fel,
+            )
+        return _row(record)
+
+    async def avsluta_kb_skanning(
+        self,
+        tenant_id: str,
+        skanning_id: str,
+        *,
+        status: str,
+        sidor: int | None = None,
+        lasbara_sidor: int | None = None,
+        forslag: int = 0,
+        redan_fanns: int = 0,
+        fel: str | None = None,
+    ) -> None:
+        async with self._scoped(tenant_id) as conn:
+            await conn.execute(
+                """
+                update ss_kb_skanningar
+                   set status = $3, sidor = $4, lasbara_sidor = $5, forslag = $6,
+                       redan_fanns = $7, fel = $8, klar_at = now()
+                 where tenant_id = $1 and id = $2::uuid
+                """,
+                tenant_id, str(skanning_id), status, sidor, lasbara_sidor, forslag, redan_fanns, fel,
+            )
+
+    async def senaste_kb_skanning(self, tenant_id: str) -> dict[str, Any] | None:
+        async with self._scoped(tenant_id) as conn:
+            record = await conn.fetchrow(
+                "select * from ss_kb_skanningar where tenant_id = $1 order by startad_at desc limit 1",
+                tenant_id,
+            )
+        return _row(record)
+
+    async def list_kb_forslag(self, tenant_id: str, *, status: str | None = None) -> list[dict[str, Any]]:
+        async with self._scoped(tenant_id) as conn:
+            records = await conn.fetch(
+                """
+                select * from ss_kb_forslag
+                 where tenant_id = $1 and ($2::text is null or status = $2)
+                 order by created_at, id
+                """,
+                tenant_id, status,
+            )
+        return [_forslag_rad(r) for r in records]
+
+    async def add_kb_forslag(
+        self, tenant_id: str, skanning_id: str, forslag: list[dict[str, Any]]
+    ) -> int:
+        if not forslag:
+            return 0
+        async with self._scoped(tenant_id) as conn:
+            await conn.executemany(
+                """
+                insert into ss_kb_forslag
+                  (tenant_id, skanning_id, title, content, category, source_url, confidence, varningar)
+                values ($1, $2::uuid, $3, $4, $5, $6, $7, $8::jsonb)
+                """,
+                [
+                    (
+                        tenant_id, str(skanning_id), f["title"], f["content"], f["category"],
+                        f.get("source_url"), f.get("confidence"), json.dumps(list(f.get("varningar") or [])),
+                    )
+                    for f in forslag
+                ],
+            )
+        return len(forslag)
+
+    async def besluta_kb_forslag(
+        self, tenant_id: str, forslag_id: str, *, status: str, artikel_id: str | None = None
+    ) -> dict[str, Any] | None:
+        try:
+            uuid.UUID(str(forslag_id))
+        except ValueError:
+            return None
+        async with self._scoped(tenant_id) as conn:
+            record = await conn.fetchrow(
+                """
+                update ss_kb_forslag
+                   set status = $3, artikel_id = $4::uuid, beslutad_at = now()
+                 where tenant_id = $1 and id = $2::uuid and status = 'vantar'
+                returning *
+                """,
+                tenant_id, str(forslag_id), status, artikel_id,
+            )
+        return _forslag_rad(record) if record else None
+
+    async def satt_kb_forslag_artikel(self, tenant_id: str, forslag_id: str, artikel_id: str) -> None:
+        async with self._scoped(tenant_id) as conn:
+            await conn.execute(
+                "update ss_kb_forslag set artikel_id = $3::uuid where tenant_id = $1 and id = $2::uuid",
+                tenant_id, str(forslag_id), str(artikel_id),
+            )
+
+    async def angra_kb_forslag(self, tenant_id: str, forslag_id: str) -> None:
+        async with self._scoped(tenant_id) as conn:
+            await conn.execute(
+                """
+                update ss_kb_forslag set status = 'vantar', artikel_id = null, beslutad_at = null
+                 where tenant_id = $1 and id = $2::uuid
+                """,
+                tenant_id, str(forslag_id),
+            )
 
     async def satt_kb_vektor(self, tenant_id: str, artikel_id: str, embedding: list[float]) -> None:
         async with self._scoped(tenant_id) as conn:

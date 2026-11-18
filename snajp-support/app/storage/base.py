@@ -406,6 +406,62 @@ class Storage(Protocol):
 
     async def satt_kb_vektor(self, tenant_id: str, artikel_id: str, embedding: list[float]) -> None: ...
 
+    # -- Webbplatsskanningens utfall (migration 121) --------------------------
+    #
+    # Skanningen (app/kb_skanning.py) skriver aldrig i kunskapsbasen. Den sparar
+    # utkast här, och ett utkast blir en artikel först när kunden lägger till
+    # det, genom add_kb_article. Kundens egna artiklar rörs alltså aldrig.
+
+    async def skapa_kb_skanning(
+        self, tenant_id: str, *, webbplats: str, startad_av: str, status: str = "pagar", fel: str | None = None
+    ) -> dict[str, Any]:
+        """En ny skanning. `status="fel"` med `fel` för en som inte kunde starta."""
+        ...
+
+    async def avsluta_kb_skanning(
+        self,
+        tenant_id: str,
+        skanning_id: str,
+        *,
+        status: str,
+        sidor: int | None = None,
+        lasbara_sidor: int | None = None,
+        forslag: int = 0,
+        redan_fanns: int = 0,
+        fel: str | None = None,
+    ) -> None: ...
+
+    async def senaste_kb_skanning(self, tenant_id: str) -> dict[str, Any] | None:
+        """Den senast startade skanningen, eller None om ingen finns."""
+        ...
+
+    async def list_kb_forslag(self, tenant_id: str, *, status: str | None = None) -> list[dict[str, Any]]:
+        """Utkasten, äldst först. Utan `status` alla, oavsett beslut."""
+        ...
+
+    async def add_kb_forslag(
+        self, tenant_id: str, skanning_id: str, forslag: list[dict[str, Any]]
+    ) -> int:
+        """Sparar utkasten (title, content, category, source_url, confidence,
+        varningar) som väntande. Returnerar antalet sparade."""
+        ...
+
+    async def besluta_kb_forslag(
+        self, tenant_id: str, forslag_id: str, *, status: str, artikel_id: str | None = None
+    ) -> dict[str, Any] | None:
+        """Flyttar ett VÄNTANDE utkast till `tillagd` eller `avvisad` och
+        returnerar det. None om det inte finns eller redan är beslutat, så att
+        två klick aldrig blir två artiklar."""
+        ...
+
+    async def satt_kb_forslag_artikel(self, tenant_id: str, forslag_id: str, artikel_id: str) -> None:
+        """Pekar ett tillagt utkast på artikeln det blev."""
+        ...
+
+    async def angra_kb_forslag(self, tenant_id: str, forslag_id: str) -> None:
+        """Lägger tillbaka ett utkast som väntande, när artikeln inte gick att spara."""
+        ...
+
     # -- Agentens föreslagna lärdomar (självlärning, 2026-08-26) -------------
     #
     # Supportens cs:kb-article och leads _fanga_kunskap RÄKNADE UT lärdomar på

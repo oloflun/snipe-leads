@@ -387,7 +387,7 @@ export async function saveBusinessContext(input: OnboardingInput): Promise<Onboa
    * kundnamn tas ur arbetsytans namn (lib/snajp/provisionering.ts) och står i
    * sidfoten på varje utskick.
    *
-   * Genom en RPC (migration 119), som paketbytet nedan: `workspaces` har
+   * Genom en RPC (migration 120), som paketbytet nedan: `workspaces` har
    * radskydd utan uppdateringsregel, så en vanlig UPDATE träffar noll rader
    * utan att fela. Fäller inte onboardingen: saknas funktionen i en miljö där
    * migrationen inte hunnit köras står signup-namnet kvar, och felet loggas.
@@ -462,6 +462,8 @@ export async function saveBusinessContext(input: OnboardingInput): Promise<Onboa
    * Villkorad på att slug är tom: en workspace som redan pekar på en kund rörs
    * aldrig härifrån, hur rutan än kryssas.
    */
+  /** Arbetsytans nyckel när den kopplades just nu. Webbplatsskanningen startas med den. */
+  let tenantNyckel: string | null = null;
   if (input.testkund) {
     try {
       // EGEN tenant per testarbetsyta, skapad i drift.
@@ -484,6 +486,7 @@ export async function saveBusinessContext(input: OnboardingInput): Promise<Onboa
       if (!kopplad[0]?.ok) {
         throw new Error("link_test_tenant nekade kopplingen (arbetsytan hade redan en kund?).");
       }
+      tenantNyckel = tenant.apiKey;
     } catch (error) {
       // Kopplingen får inte fälla onboardingen. Affärskontexten är sparad, och
       // en okopplad testyta ger ett ärligt 409 med instruktion — att slänga
@@ -550,6 +553,7 @@ export async function saveBusinessContext(input: OnboardingInput): Promise<Onboa
         // lanseringshandoffens beställning 2026-09-20. Fail-soft: se
         // lib/snajp/kundregister.ts. Sluggen kommer ur provisioneringen,
         // aldrig ur klienten.
+        tenantNyckel = kopplad?.apiKey ?? null;
         if (kopplad?.slug) {
           const { registreraKunduppgifter } = await import("@/lib/snajp/kundregister");
           await registreraKunduppgifter(kopplad.slug, {
@@ -567,6 +571,20 @@ export async function saveBusinessContext(input: OnboardingInput): Promise<Onboa
     } catch (error) {
       console.error("[onboarding] kunde inte koppla arbetsytans tenant:", error);
     }
+  }
+
+  /**
+   * Webbplatsskanningen startas åt kunden (Antons beställning 2026-11-18), så
+   * att kunskapsbasen inte är tom när arbetsytan öppnas. Den skriver förslag,
+   * aldrig artiklar: kunden lägger till dem, och en rubrik kunden redan har
+   * föreslås inte. Bara med supportagenten i paketet, som är den som svarar
+   * ur kunskapsbasen, och bara när arbetsytan just fick sin egen nyckel.
+   */
+  const { PRODUKTER_FOR_PAKET } = await import("@/lib/pricing");
+  const medSupport = paket ? PRODUKTER_FOR_PAKET[paket].includes("support") : true;
+  if (tenantNyckel && medSupport) {
+    const { startaWebbplatsskanning } = await import("@/lib/snajp/webbplatsskanning");
+    await startaWebbplatsskanning(tenantNyckel, webbplats);
   }
 
   redirect("/dashboard");

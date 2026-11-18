@@ -83,7 +83,7 @@ try {
   // steget kräver villkorskryss — se OnboardingWizard.
   for (const [etikett, varde] of [
     // Företagets namn krävs sedan 2026-11-18: det blir arbetsytans och
-    // backend-kundens namn (migration 119).
+    // backend-kundens namn (migration 120).
     ["Företagets namn", `Nykund ${STAMP} AB`],
     ["Webbplats", `https://nykund-${STAMP}.example.se`],
     ["Vad ni säljer", PRODUKT],

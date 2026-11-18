@@ -1,4 +1,4 @@
--- 119: arbetsytan får företagets namn i onboardingen.
+-- 120: arbetsytan får företagets namn i onboardingen.
 --
 -- ## Felet
 --

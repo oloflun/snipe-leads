@@ -9,6 +9,7 @@ import { Rad, Radlista, btnPrimary, btnSecondary } from "@/components/ui";
 import { felmeddelande, readJsonBody } from "@/lib/http/json";
 import { cn } from "@/lib/utils";
 import { useLocale, type Localized } from "@/lib/i18n";
+import { WebbplatsForslag } from "@/components/settings/WebbplatsForslag";
 
 const ord = (s: string): Localized => ({ sv: s, en: s });
 
@@ -321,6 +322,9 @@ export function KunskapsbasPanel() {
 
   return (
     <div className="grid gap-8">
+      {/* Förslagen ur webbplatsskanningen som onboardingen startade. */}
+      <WebbplatsForslag onAndrat={() => void ladda()} />
+
       <section>
         <div className="rounded-card border border-dashed border-ink/25 bg-paper2/40 p-6 text-center">
           <FileText className="mx-auto h-6 w-6 text-ink-subtle" aria-hidden />

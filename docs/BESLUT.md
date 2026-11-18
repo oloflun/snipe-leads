@@ -9,6 +9,40 @@ möjligt), vad det betyder i koden.
 
 ---
 
+## 2026-11-18 (Anton) — Webbplatsskanningen startas av onboardingen och kompletterar
+
+**Beslut.** Anton, på frågan om guidens löfte att agenterna läser sajten:
+"Se till att scanningen startas automatiskt, och att den kompletterar, inte
+skriver över kundens egna uppgifter."
+
+**Resonemanget.** Guiden lovade att agenterna läser webbplatsen, men
+kunskapsbasen var tom efter onboardingen: skanningen (`app/kb_skanning.py`)
+fanns, men inget startade den och ingenting av den sparades.
+
+**I koden.**
+- Onboardingen startar skanningen åt kunden när paketet har supportagenten
+  (`lib/snajp/webbplatsskanning.ts`, anropad från `lib/actions/onboarding.ts`).
+  Inloggningsvägen startar den aldrig: en ny hämtning är tillägget Synkad
+  kunskapsbas, inte uppsättningen (`docs/pilot_onboarding.md`).
+- Skanningen skriver FÖRSLAG, aldrig artiklar (migration 121,
+  `ss_kb_forslag`). Ett förslag blir en ny artikel först när kunden lägger
+  till det, genom samma väg som en handskriven artikel. Kundens egna artiklar,
+  affärskontext, målgrupp och röstdokument rörs aldrig.
+- "Kompletterar" är mekaniskt: ett utkast med samma rubrik som en artikel
+  kunden har föreslås inte, ett avvisat utkast kommer inte tillbaka vid nästa
+  skanning, och två klick blir aldrig två artiklar (`nya_forslag` i
+  `app/api/kb.py`, låst av `tests/api/test_kb_forslag.py`).
+- Förloppet och utfallet sparas (`ss_kb_skanningar`) och syns i Översikt ›
+  Kom igång och överst i Kunskapsbas, även efter en omladdning. En skanning
+  som inte kunde starta sparas med skälet. En skanning i taget.
+
+**Agentens val, som Anton kan ändra.** Förslagen läggs inte in automatiskt.
+Kunden lägger till dem, ett i taget eller alla på en gång. Skälet är
+skanningsmodulens egen regel, att utkasten godkänns av en människa: en siffra
+som inte står i källsidan sänker utkastets säkerhet, och agenten citerar det
+som står i basen. Vill Anton att förslagen läggs in direkt är det en ändring i
+`_spara_utfall`.
+
 ## 2026-11-18 (agenten, på Antons uppdrag) — Onboardingen efter den visuella genomgången
 
 Anton beställde en genomgång av hela onboardingen, sida för sida, och att
@@ -20,7 +54,7 @@ dem var för sig och kan ändra dem.
 "<kontots namn> workspace" (signup-triggern), och backendens kundnamn tas ur
 arbetsytans namn. Uppmätt i den lokala stacken: en nyss upplagd kund hette
 "Anna Testsson workspace" i `ss_tenants`, och det namnet står i sidfoten på
-varje utskick. Namnet sätts genom en RPC (migration 119), eftersom
+varje utskick. Namnet sätts genom en RPC (migration 120), eftersom
 `workspaces` har radskydd utan uppdateringsregel och en vanlig UPDATE träffar
 noll rader utan att fela.
 
@@ -50,18 +84,15 @@ i ett steg visas på en gång vid sitt fält, webbadresser utan protokoll
 godtas (webbläsarens `type="url"` nekade dem, trots att servern tar emot
 dem), och postnumret ska ha fem siffror ("abc" gick igenom till fakturan).
 
-**Öppet för Anton.** Guiden säger att "agenterna läser er webbplats och lär
-sig resten själva". Kunskapsbasen är tom efter onboardingen, och skanningen
-av kundens sajt (`POST /api/kb/skanna`) startas inte av guiden och har ingen
-knapp i gränssnittet. Texten är orörd. Antingen startas skanningen vid
-onboardingen, som `docs/pilot_onboarding.md` planerar, eller så skrivs
-löftet om.
+**Öppet för Anton (besvarat samma dag, se posten ovan).** Guiden säger att
+"agenterna läser er webbplats och lär sig resten själva", men skanningen
+startades inte. Anton beslutade att den ska startas automatiskt.
 
 **I koden.** `components/auth/OnboardingWizard.tsx`,
 `components/auth/LoginForm.tsx` (`LoginSida`), `app/login/page.tsx`,
 `lib/actions/onboarding.ts`, `components/dashboard/KomIgang.tsx`,
 `components/dashboard/Aktivitet.tsx`,
-`supabase/migrations/20261118090000_119_arbetsytans_namn.sql`,
+`supabase/migrations/20261118090000_120_arbetsytans_namn.sql`,
 `scripts/qa_ny_kund.mjs`.
 
 ## 2026-11-18 (Anton) — Extern övervakning, säkerhetskontakt och Dependabot

@@ -160,6 +160,8 @@ class MemoryStorage:
         self.metrics: list[dict[str, Any]] = []
         self.api_keys: dict[str, dict[str, Any]] = {}
         self.kb: dict[str, list[dict[str, Any]]] = {}
+        self.kb_skanningar: dict[str, list[dict[str, Any]]] = {}
+        self.kb_forslag: dict[str, list[dict[str, Any]]] = {}
         self.channel_overrides: dict[tuple[str, str], dict[str, Any]] = {}
         self.taxonomy_overrides: dict[str, tuple[str, ...]] = {}
         self.context_docs: dict[str, list[dict[str, Any]]] = {}
@@ -785,6 +787,80 @@ class MemoryStorage:
             {"id": a["id"], "title": a["title"], "content": a["content"]}
             for a in self.kb.get(tenant_id, []) if a.get("embedding") is None
         ][:limit]
+
+    # -- Webbplatsskanningens utfall (migration 121) ---------------------------
+
+    async def skapa_kb_skanning(
+        self, tenant_id: str, *, webbplats: str, startad_av: str, status: str = "pagar", fel: str | None = None
+    ) -> dict[str, Any]:
+        nu = datetime.now(timezone.utc).isoformat()
+        rad = {
+            "id": str(uuid.uuid4()), "tenant_id": tenant_id, "webbplats": webbplats,
+            "status": status, "startad_av": startad_av, "sidor": None, "lasbara_sidor": None,
+            "forslag": 0, "redan_fanns": 0, "fel": fel, "startad_at": nu,
+            "klar_at": nu if status != "pagar" else None,
+        }
+        self.kb_skanningar.setdefault(tenant_id, []).append(rad)
+        return dict(rad)
+
+    async def avsluta_kb_skanning(
+        self,
+        tenant_id: str,
+        skanning_id: str,
+        *,
+        status: str,
+        sidor: int | None = None,
+        lasbara_sidor: int | None = None,
+        forslag: int = 0,
+        redan_fanns: int = 0,
+        fel: str | None = None,
+    ) -> None:
+        for rad in self.kb_skanningar.get(tenant_id, []):
+            if rad["id"] == str(skanning_id):
+                rad.update(
+                    status=status, sidor=sidor, lasbara_sidor=lasbara_sidor, forslag=forslag,
+                    redan_fanns=redan_fanns, fel=fel, klar_at=datetime.now(timezone.utc).isoformat(),
+                )
+
+    async def senaste_kb_skanning(self, tenant_id: str) -> dict[str, Any] | None:
+        rader = self.kb_skanningar.get(tenant_id, [])
+        return dict(rader[-1]) if rader else None
+
+    async def list_kb_forslag(self, tenant_id: str, *, status: str | None = None) -> list[dict[str, Any]]:
+        return [dict(f) for f in self.kb_forslag.get(tenant_id, []) if status is None or f["status"] == status]
+
+    async def add_kb_forslag(
+        self, tenant_id: str, skanning_id: str, forslag: list[dict[str, Any]]
+    ) -> int:
+        nu = datetime.now(timezone.utc).isoformat()
+        for f in forslag:
+            self.kb_forslag.setdefault(tenant_id, []).append({
+                "id": str(uuid.uuid4()), "tenant_id": tenant_id, "skanning_id": str(skanning_id),
+                "title": f["title"], "content": f["content"], "category": f["category"],
+                "source_url": f.get("source_url"), "confidence": f.get("confidence"),
+                "varningar": list(f.get("varningar") or []), "status": "vantar",
+                "artikel_id": None, "created_at": nu, "beslutad_at": None,
+            })
+        return len(forslag)
+
+    async def besluta_kb_forslag(
+        self, tenant_id: str, forslag_id: str, *, status: str, artikel_id: str | None = None
+    ) -> dict[str, Any] | None:
+        for f in self.kb_forslag.get(tenant_id, []):
+            if f["id"] == str(forslag_id) and f["status"] == "vantar":
+                f.update(status=status, artikel_id=artikel_id, beslutad_at=datetime.now(timezone.utc).isoformat())
+                return dict(f)
+        return None
+
+    async def satt_kb_forslag_artikel(self, tenant_id: str, forslag_id: str, artikel_id: str) -> None:
+        for f in self.kb_forslag.get(tenant_id, []):
+            if f["id"] == str(forslag_id):
+                f["artikel_id"] = str(artikel_id)
+
+    async def angra_kb_forslag(self, tenant_id: str, forslag_id: str) -> None:
+        for f in self.kb_forslag.get(tenant_id, []):
+            if f["id"] == str(forslag_id):
+                f.update(status="vantar", artikel_id=None, beslutad_at=None)
 
     async def satt_kb_vektor(self, tenant_id: str, artikel_id: str, embedding: list[float]) -> None:
         for a in self.kb.get(tenant_id, []):
