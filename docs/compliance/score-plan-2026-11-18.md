@@ -144,7 +144,7 @@ A.8.10), och KVITTO_MODEL gör att kvittostegen kan stanna på en prövad modell
 | A.5.14 | delvis | b | Synkflytten (Railway) | Koden finns (PR 71) | – |
 | A.5.15 | delvis | b | Regler för leverantörskonton | RLS verifierat i CI; minsta rättighet för `snajp_web` | **Ja** (gap om RLS-verifiering minskat; PR 91, migration 126) |
 | A.5.16 | delvis | b | Personliga konton i stället för delade | – | – |
-| A.5.17 | delvis | b | Lösenordsbyte, lösenordshanterare | – | – |
+| A.5.17 | delvis | b | Lösenordsbyte, lösenordshanterare | Tvåfaktorhemligheten krypterad, återställningskoder hashade | **Ja** (PR 93, migration 128) |
 | A.5.18 | delvis | b | Förteckning och översyn | GitHub-delen belagd | **Ja** (`bevis/github-2026-11-18.txt`) |
 | A.5.19 | delvis | b | Policy och beslut f | – | – |
 | A.5.20 | delvis | b, c | DPA:er, breven skickade | – | – |
@@ -194,7 +194,7 @@ A.8.10), och KVITTO_MODEL gör att kvittostegen kan stanna på en prövad modell
 | A.8.2 | delvis | b | Lösenordsbyte, admins listade | GitHub-admins belagda; webbens roll smalnad av | Ja (PR 91) |
 | A.8.3 | delvis | b | Minimerad spegel, merge till `main` | RLS verifierat i CI; `auth.users` stängd för PUBLIC, `snajp_web` minsta rättighet | **Ja** (PR 91) |
 | A.8.4 | delvis | b | Grenskydd (betald plan), koppla bort Supabase-appen | Åtkomsten belagd | **Ja** (repot privat; nytt gap: grenskyddet) |
-| A.8.5 | delvis | b | Tvåfaktor på konton och i appen; merge till `main` | Spärr mot upprepade försök | **Ja** (PR 90, migration 125). TOTP inte byggd |
+| A.8.5 | delvis | b | Beslut om tvång, tvåfaktor på leverantörskonton; merge till `main` | Spärr mot upprepade försök; valfri TOTP för plattformsadmin | **Ja** (PR 90, migration 125; PR 93, migration 128) |
 | A.8.6 | delvis | b | Kapacitetsövervakning, repliker | – | – |
 | A.8.7 | okänt | b | Antivirus på datorerna | – | – |
 | A.8.8 | delvis | b | Patchtider, kodskanning (kräver betald plan) | – | Läget uppdaterat |
@@ -363,6 +363,20 @@ ISO 42001 5/51/14 → 5/51/14 (uppfyllt/delvis/saknas).
 **Statusändring:** ingen. Koden ligger i `development` och räknas som testmiljö
 (statusreglerna), och varje krav har en del som är ägarens (tvåfaktor på konton, regler för
 leverantörskonton, listan över admins, minimerad spegel).
+
+**Poäng före och efter:** GDPR 0/17/1 → 0/17/1. ISO 27001 3/73/23 → 3/73/23. ISO 42001
+5/51/14 → 5/51/14 (uppfyllt/delvis/saknas).
+
+## Natt 2026-11-18 (g): demofelet och tvåstegsverifiering
+
+| PR | Krav | Byggt | Belägg | Kvar för Anton |
+|---|---|---|---|---|
+| 92 | A.8.2 (minsta rättighet) | `startDemo` märker arbetsytan `is_demo` genom `markera_demoarbetsyta()` med användarens identitet; webbens update-rätt på `workspaces.is_demo` borttagen | Migration 127; `snajp-support/tests/db/test_demo_markering.py` och `TILLATET` i `test_snajp_web_rattigheter.py` (jobbet `databas`) | – |
+| 93 | A.8.5, A.5.17 | Valfri TOTP för plattformsadmin: QR och manuell nyckel, tio engångskoder (hashade), andra steget i `authorize` under samma spärr som lösenordet, återspelningsskydd, avstängning bara med giltig kod, hemligheten krypterad (AES-256-GCM, HKDF ur `AUTH_SECRET`), OAuth nekas för konton med tvåfaktor. Tvånget är en flagga, av | Migration 128; `lib/auth/totp.test.ts` (RFC 6238), `tvafaktor-krypto.test.ts`, `inloggningssteg.test.ts`; `snajp-support/tests/db/test_tvafaktor.py` (jobbet `databas`); lokal genomgång av adminytan och hela tvåfaktorflödet; `AUTH.md` | Besluta tvånget för plattformsadmin (`TVAFAKTOR_KRAVS_FOR_PLATTFORMSADMIN`); slå på tvåfaktor på det egna adminkontot efter releasen; merge till `main` |
+
+**Statusändring:** ingen. A.8.5 kräver också tvåfaktor på leverantörskontona och ett beslut
+om tvånget, A.5.17 lösenordsbyte och lösenordshanterare, och koden räknas som testmiljö tills
+den är i `main`.
 
 **Poäng före och efter:** GDPR 0/17/1 → 0/17/1. ISO 27001 3/73/23 → 3/73/23. ISO 42001
 5/51/14 → 5/51/14 (uppfyllt/delvis/saknas).

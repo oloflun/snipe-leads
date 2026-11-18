@@ -9,7 +9,7 @@ import { headers } from "next/headers";
 
 import { auth, ensureWorkspace, signIn, signOut as authSignOut } from "@/lib/auth";
 import { arSparrad, registreraForsok } from "@/lib/auth/inloggningsforsok";
-import { SPARRKOD } from "@/lib/auth/sparrkod";
+import { SPARRKOD, TVAFAKTOR_FEL, TVAFAKTOR_KRAVS } from "@/lib/auth/sparrkod";
 import { sql, sqlAsUser } from "@/lib/db";
 import { hashPassword } from "@/lib/password";
 
@@ -20,9 +20,12 @@ export type AuthActionResult = {
   /**
    * Maskinläsbar orsak, för besked som formuläret visar på sidans språk.
    * `for_manga_forsok`: spärren mot upprepade försök (lib/auth/inloggningsregler.ts).
+   * `tvafaktor_kravs` / `tvafaktor_fel`: andra steget (lib/auth/tvafaktor.ts).
    */
-  kod?: typeof SPARRKOD;
+  kod?: typeof SPARRKOD | typeof TVAFAKTOR_KRAVS | typeof TVAFAKTOR_FEL;
 };
+
+const KANDA_KODER = new Set<string>([SPARRKOD, TVAFAKTOR_KRAVS, TVAFAKTOR_FEL]);
 
 // De svenska felmeddelandena är skrivna FÖR ANVÄNDAREN och överlever bytet av
 // auth-leverantör med flit. Supabase svarade på engelska med utvecklartexter;
@@ -70,7 +73,9 @@ const MIN_PASSWORD_LENGTH = 8;
 export async function signInWithPassword(
   email: string,
   password: string,
-  nextPath = "/dashboard"
+  nextPath = "/dashboard",
+  /** Andra steget: en TOTP-kod eller en återställningskod. Bara när kontot kräver det. */
+  totp?: string
 ): Promise<AuthActionResult> {
   // Utan databas finns ingen att logga in. Det här är en tydlig konfig-felsträng
   // i stället för en generisk 500 "This page couldn't load" som inte säger något
@@ -84,12 +89,12 @@ export async function signInWithPassword(
   }
 
   try {
-    await signIn("credentials", { email, password, redirect: false });
+    await signIn("credentials", { email, password, totp: totp ?? "", redirect: false });
   } catch (error) {
-    // Spärren (lib/auth.ts:authorize). Beskedet skrivs i formuläret på sidans
-    // språk; servern skickar bara koden.
-    if (error instanceof CredentialsSignin && error.code === SPARRKOD) {
-      return { success: false, kod: SPARRKOD };
+    // Spärren och andra steget (lib/auth.ts:authorize). Beskedet skrivs i
+    // formuläret på sidans språk; servern skickar bara koden.
+    if (error instanceof CredentialsSignin && KANDA_KODER.has(error.code)) {
+      return { success: false, kod: error.code as AuthActionResult["kod"] };
     }
     if (error instanceof AuthError) {
       return { success: false, error: authErrorMessage(error.type) };
@@ -154,8 +159,13 @@ async function startsidaFor(userId: string | null, nextPath: string): Promise<st
   if (!userId || nextPath !== "/dashboard") {
     return nextPath;
   }
-  const { isPlatformAdmin } = await import("@/lib/auth/admin");
-  return (await isPlatformAdmin(userId)) ? "/admin" : nextPath;
+  const { isPlatformAdmin, saknarKravdTvafaktor } = await import("@/lib/auth/admin");
+  if (!(await isPlatformAdmin(userId))) {
+    return nextPath;
+  }
+  // Med tvånget påslaget (TVAFAKTOR_KRAVS_FOR_PLATTFORMSADMIN) har en admin
+  // utan tvåfaktor ingen adminrätt förrän inrullningen är gjord.
+  return (await saknarKravdTvafaktor(userId)) ? "/settings/tvafaktor" : "/admin";
 }
 
 export async function signUpWithPassword(

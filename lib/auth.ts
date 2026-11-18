@@ -4,7 +4,9 @@ import Google from "next-auth/providers/google";
 import MicrosoftEntraID from "next-auth/providers/microsoft-entra-id";
 
 import { arSparrad, nollstallEpost, registreraForsok } from "@/lib/auth/inloggningsforsok";
-import { SPARRKOD } from "@/lib/auth/sparrkod";
+import { SPARRKOD, TVAFAKTOR_FEL, TVAFAKTOR_KRAVS } from "@/lib/auth/sparrkod";
+import { loggaIn } from "@/lib/auth/inloggningssteg";
+import { lasTvafaktor, provaOchForbruka } from "@/lib/auth/tvafaktor";
 import { hasDatabase, sql, sqlAsUser } from "@/lib/db";
 import { verifyPassword } from "@/lib/password";
 
@@ -15,6 +17,16 @@ import { verifyPassword } from "@/lib/password";
  */
 export class ForMangaForsok extends CredentialsSignin {
   code = SPARRKOD;
+}
+
+/** Lösenordet stämde och kontot har tvåstegsverifiering: koden behövs. */
+export class TvafaktorKravs extends CredentialsSignin {
+  code = TVAFAKTOR_KRAVS;
+}
+
+/** Koden i andra steget var fel eller redan använd. */
+export class TvafaktorFel extends CredentialsSignin {
+  code = TVAFAKTOR_FEL;
 }
 
 /**
@@ -110,10 +122,11 @@ export async function ensureWorkspace(userId: string): Promise<void> {
 
 const providers = [
   Credentials({
-    credentials: { email: {}, password: {} },
+    credentials: { email: {}, password: {}, totp: {} },
     async authorize(credentials, request) {
       const email = String(credentials?.email ?? "");
       const password = String(credentials?.password ?? "");
+      const kod = String(credentials?.totp ?? "").trim();
       if (!email || !password) {
         return null;
       }
@@ -123,28 +136,47 @@ const providers = [
       // som postar direkt till /api/auth/callback/credentials. Ett spärrat
       // försök prövar aldrig lösenordet, och spärren räknas likadant för en
       // adress utan konto: beskedet avslöjar inte vilka adresser som finns.
+      //
+      // Andra steget, tvåstegsverifiering (migration 128), gäller bara konton
+      // som aktiverat den och omfattas av SAMMA spärr: en fel eller redan
+      // använd kod räknas som ett misslyckat försök på adressen och IP:t, och
+      // räknaren nollställs först när båda stegen gått igenom. Ordningen och
+      // reglerna står i lib/auth/inloggningssteg.ts (testad utan databas).
       const headers = request?.headers ?? null;
-      if (await arSparrad("inloggning", email, headers)) {
-        throw new ForMangaForsok();
-      }
+      let user: UserRow | null = null;
+      const utfall = await loggaIn(kod, {
+        arSparrad: async () => Boolean(await arSparrad("inloggning", email, headers)),
+        // Direkt SQL mot auth.users (scrypt). GoTrue-adaptern från
+        // Supabase-tiden är borttagen 2026-11-18 (docs/BESLUT.md).
+        hittaKonto: async () => {
+          user = await findUserByEmail(email);
+          return user ? { id: user.id, losenordshash: user.encrypted_password } : null;
+        },
+        // Verifiera ALLTID, även när kontot saknas: ett tidigt `return null`
+        // gör svarstiden till ett orakel för vilka adresser som finns.
+        provaLosenord: (hash) => verifyPassword(password, hash),
+        registreraMisslyckat: async () => Boolean(await registreraForsok("inloggning", email, headers)),
+        nollstall: () => nollstallEpost("inloggning", email),
+        // Ett uppslagsfel kastar (fail closed, lib/auth/tvafaktor.ts).
+        lasTvafaktor,
+        provaKod: provaOchForbruka
+      });
 
-      // Direkt SQL mot auth.users (scrypt). GoTrue-adaptern från
-      // Supabase-tiden är borttagen 2026-11-18 (docs/BESLUT.md).
-      const user = await findUserByEmail(email);
-      // Verifiera ALLTID, även när kontot saknas: ett tidigt `return null`
-      // gör svarstiden till ett orakel för vilka adresser som finns.
-      const ok = await verifyPassword(password, user?.encrypted_password ?? null);
-      if (!ok || !user) {
-        if (await registreraForsok("inloggning", email, headers)) {
+      switch (utfall.typ) {
+        case "sparrad":
           throw new ForMangaForsok();
-        }
-        return null;
+        case "tvafaktor_kravs":
+          throw new TvafaktorKravs();
+        case "tvafaktor_fel":
+          throw new TvafaktorFel();
+        case "fel":
+          return null;
       }
-      await nollstallEpost("inloggning", email);
+      const rad = user as UserRow | null;
       return {
-        id: user.id,
-        email: user.email,
-        name: (user.raw_user_meta_data?.full_name as string | undefined) ?? null
+        id: utfall.konto.id,
+        email: rad?.email ?? email,
+        name: (rad?.raw_user_meta_data?.full_name as string | undefined) ?? null
       };
     }
   }),
@@ -163,6 +195,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         return true;
       }
       const row = await upsertOAuthUser(user.email, user.name ?? null);
+      // Ett konto med tvåstegsverifiering loggar in med lösenord och kod. Google
+      // och Microsoft hade annars varit en väg runt andra steget.
+      if ((await lasTvafaktor(row.id))?.aktiv) {
+        return false;
+      }
       user.id = row.id;
       return true;
     },
