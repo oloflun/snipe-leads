@@ -47,7 +47,14 @@ from functools import lru_cache
 
 from openai import AsyncOpenAI
 
-from ..config import VERTEX_EU_REGIONER, Settings, ar_eu_region, bas_url_tillaten, get_settings
+from ..config import (
+    VERTEX_EU_REGIONER,
+    Settings,
+    ar_eu_region,
+    bas_url_tillaten,
+    get_settings,
+    vertex_vard,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -212,7 +219,7 @@ def _vertex_base_url(settings: Settings, region: str | None = None) -> str:
     project = info["project_id"]
     region = vertex_region(settings, region)
     return (
-        f"https://{region}-aiplatform.googleapis.com/v1beta1/"
+        f"https://{vertex_vard(region)}/v1beta1/"
         f"projects/{project}/locations/{region}/endpoints/openapi/"
     )
 
@@ -421,7 +428,38 @@ GEMINI_REASONING_EFFORT = ("none", "minimal", "low", "medium", "high")
 TANKANDE_AV = {"extra_body": {"extra_body": {"google": {"thinking_config": {"thinking_budget": 0}}}}}
 
 
-def gemini_tank_kwargs(mode: str | None, effort: str) -> dict:
+#: Gemini 3.x och senare: tankebudgeten är avvecklad ("The thinking_budget
+#: parameter is deprecated for Gemini 3 and later models", Vertex, Thinking,
+#: hämtad 2026-11-18) och tänkandet styrs med en nivå. Uppmätt 2026-11-18 mot
+#: Vertex (eu, europe-west3): gemini-3.5-flash och -flash-lite tar MINIMAL (0
+#: tänktokens); gemini-3.8-flash svarar 400 "Thinking level is unsupported:
+#: THINKING_LEVEL_MINIMAL" och tar lägst LOW; tankebudget 0 på 3.8 gav ett
+#: anrop som hängde i 90 s av två. "none" blir därför modellens lägsta nivå.
+_UTAN_MINIMAL = ("gemini-3.8-flash",)
+
+
+def _gemini_generation(modell: str | None) -> int:
+    """Huvudversionen i ett gemini-namn (`gemini-3.5-flash` -> 3), 0 om okänd."""
+    namn = (modell or "").strip().lower().rsplit("/", 1)[-1]
+    if not namn.startswith("gemini-"):
+        return 0
+    huvud = namn.removeprefix("gemini-").split(".", 1)[0].split("-", 1)[0]
+    return int(huvud) if huvud.isdigit() else 0
+
+
+def lagsta_tankniva(modell: str | None) -> str:
+    """Den lägsta tankenivå en gemini-3.x-modell tar: MINIMAL, eller LOW för
+    modeller som avvisar MINIMAL."""
+    namn = (modell or "").strip().lower().rsplit("/", 1)[-1]
+    return "LOW" if namn.startswith(_UTAN_MINIMAL) else "MINIMAL"
+
+
+def _tankniva(niva: str) -> dict:
+    """Samma nästlade form som TANKANDE_AV (Vertex godtar den)."""
+    return {"extra_body": {"extra_body": {"google": {"thinking_config": {"thinking_level": niva}}}}}
+
+
+def gemini_tank_kwargs(mode: str | None, effort: str, modell: str | None = None) -> dict:
     """Geminis tänkande. "none" = av (tankebudget 0), övriga värden skickas som
     OpenAI-kompatibilitetens `reasoning_effort`.
 
@@ -430,17 +468,29 @@ def gemini_tank_kwargs(mode: str | None, effort: str) -> dict:
     default — eskaleringsbedömningen ska inte strypas av en kostnadsflagga.
     Ett okänt värde skickas inte: ett felstavat env-värde ska inte ge 400 på
     varje agentanrop.
+
+    `modell` (2026-11-18): på gemini-3.x blir "none" modellens lägsta
+    tankenivå i stället för tankebudget 0, och "minimal" blir LOW på en modell
+    som avvisar MINIMAL. Utan modell, eller på gemini-2.5, gäller det gamla.
     """
     if not effort or mode == "enabled" or effort not in GEMINI_REASONING_EFFORT:
         return {}
+    if _gemini_generation(modell) >= 3:
+        lagst = lagsta_tankniva(modell)
+        if effort == "none":
+            return _tankniva(lagst)
+        if effort == "minimal" and lagst != "MINIMAL":
+            return {"reasoning_effort": lagst.lower()}
+        return {"reasoning_effort": effort}
     if effort == "none":
         return TANKANDE_AV
     return {"reasoning_effort": effort}
 
 
-def tankande_kwargs() -> dict:
+def tankande_kwargs(modell: str | None = None) -> dict:
     """För småanropen UTANFÖR stegmotorn (klassificerare, sammanfattningar,
-    bildbeskrivning): samma inställning som stegen, bara på Gemini.
+    bildbeskrivning): samma inställning som stegen, bara på Gemini. Utan
+    `modell` gäller huvudmodellen (MODEL), som de anropen använder.
 
     Uppmätt i development 2026-09-19: uppsägningsklassificeraren tänkte i
     snitt 408 tokens för att skriva 30 — tänkandet var nästan hela anropets
@@ -448,7 +498,9 @@ def tankande_kwargs() -> dict:
     settings = get_settings()
     if settings.llm_provider != "gemini":
         return {}
-    return gemini_tank_kwargs(None, settings.gemini_reasoning_effort.strip().lower())
+    return gemini_tank_kwargs(
+        None, settings.gemini_reasoning_effort.strip().lower(), modell or settings.model
+    )
 
 
 # --- Klienterna ---------------------------------------------------------------
@@ -563,7 +615,7 @@ def get_embedding_client() -> AsyncOpenAI | None:
                 return _embedding_client
             _embedding_client = AsyncOpenAI(
                 api_key=_vertex_token(settings),
-                base_url=_vertex_base_url(settings),
+                base_url=_vertex_base_url(settings, settings.inbaddningsregion()),
                 timeout=_tidsgrans(settings),
             )
             return _embedding_client

@@ -484,10 +484,22 @@ async def run_step(
     # Steget vinner över den globala defaulten om det deklarerar en egen
     # thinking-nivå (t.ex. cs:customer-escalation, se support_playbook.py).
     effective_mode = step.thinking if step.thinking is not None else settings.thinking_mode
+
+    # Per-steg-modellval: steget kan peka ut ett Settings-fält (t.ex.
+    # leads_draft_model) vars värde ersätter huvudmodellen för just det här
+    # anropet. Tomt fält = ärv settings.model — beteendet före 2026-09-02.
+    # Valt före tänkandet sedan 2026-11-18: gemini-3.x styr tänkandet med en
+    # nivå i stället för en budget, och nivån beror på modellen.
+    effective_model = settings.model
+    if step.model_setting:
+        effective_model = getattr(settings, step.model_setting, "") or settings.model
+
     if settings.llm_provider == "deepseek":
         extra = thinking_kwargs(effective_mode)
     elif settings.llm_provider == "gemini":
-        extra = gemini_tank_kwargs(step.thinking, settings.gemini_reasoning_effort.strip().lower())
+        extra = gemini_tank_kwargs(
+            step.thinking, settings.gemini_reasoning_effort.strip().lower(), effective_model
+        )
     else:
         extra = {}
 
@@ -502,12 +514,6 @@ async def run_step(
     # omtag med exponentiell backoff — se get_llm_client i agent/llm.py.
     effective_temperature = step.temperature if step.temperature is not None else STANDARD_TEMPERATUR
 
-    # Per-steg-modellval: steget kan peka ut ett Settings-fält (t.ex.
-    # leads_draft_model) vars värde ersätter huvudmodellen för just det här
-    # anropet. Tomt fält = ärv settings.model — beteendet före 2026-09-02.
-    effective_model = settings.model
-    if step.model_setting:
-        effective_model = getattr(settings, step.model_setting, "") or settings.model
     # Pro-modellerna kan inte stänga av tänkandet: tankebudget 0 ger 400.
     # Utkastet körs på gemini-2.5-pro sedan 2026-10-15 (Antons krav på nivån
     # i varje mejl), så där tänker modellen lite i stället för inte alls.
