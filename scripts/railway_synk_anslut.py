@@ -5,7 +5,7 @@
     python scripts/railway_synk_anslut.py --apply    # nytt lösenord för synk_las + tjänstens variabler
     python scripts/railway_synk_anslut.py --stang    # synk_las kan inte längre logga in (backning)
 
-docs/compliance/synkflytt-runbook.md, steg 6. Förutsätter att migration 120
+docs/compliance/synkflytt-runbook.md, steg 6. Förutsätter att migration 122
 (rollen synk_las) har körts i main, att tjänsten `synk` finns i miljön main,
 och att .env.deploy har RAILWAY_MAIN_PG_* och RAILWAY_DEVELOPMENT_PG_* (mains
 port är fortfarande öppen när det här körs).
@@ -81,7 +81,7 @@ def main() -> int:
     cur.execute("select rolcanlogin from pg_roles where rolname = %s", (ROLL,))
     rad = cur.fetchone()
     if not rad:
-        sys.exit(f"AVBRYT: rollen {ROLL} saknas i main. Migration 120 har inte körts där (release).")
+        sys.exit(f"AVBRYT: rollen {ROLL} saknas i main. Migration 122 har inte körts där (release).")
     print(f"{ROLL} i main: {'kan logga in' if rad[0] else 'utan inloggning'}")
 
     project = state()

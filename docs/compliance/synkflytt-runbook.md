@@ -17,7 +17,7 @@ Uppdraget räknar ett steg längre än planen. Tabellen visar vilka steg som hö
 |---|---|---|---|---|
 | 2 | 1 | Smala hemligheter i GitHub | Kod + ägare | Koden klar; ägarens del: steg 2b nedan |
 | 3 | 2 | Synkskriptet: miljövariabler, spärrar, lås, utfall | Kod | Klar |
-| 4 | 3 | Läsrollen `synk_las` (migration 120) | Kod | Klar |
+| 4 | 3 | Läsrollen `synk_las` (migration 122) | Kod | Klar |
 | 5 | 4 | Driftavbilden `railway/Dockerfile.drift` | Kod | Klar |
 | 6 | 5 | Tjänsten `synk` i main, torrkörning | Railway + ägare | Nedan |
 | 7 | 6 | Parallellkörning med skrivning, minst 24 h | Railway | Nedan |
@@ -89,9 +89,9 @@ går då tillbaka till `ENV_DEPLOY`.
 
 **Förutsättningar:**
 - PR:en `compliance/synkflytt` har nått `main` i en release. Där körde
-  `migrera.yml` migration 120. Kontrollera det:
+  `migrera.yml` migration 122. Kontrollera det:
   `python scripts/railway_migrate.py --env main` ska visa
-  `= 20261118090000_120_synk_lasroll`.
+  `= 20261118110000_122_synk_lasroll`.
 - Tjänsten byggs från grenen `main`, eftersom avbilden och skriptet måste finnas där.
 
 **Kommandon:**

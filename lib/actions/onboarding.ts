@@ -12,6 +12,13 @@ import { formateraOrgnr, orgnrFel } from "@/lib/orgnr";
  * components/auth/OnboardingWizard.tsx.
  */
 export type OnboardingInput = {
+  /**
+   * Företagets namn. Blir arbetsytans namn och därmed kundens namn i
+   * backenden, som står i sidfoten på varje utskick. Utan fältet hette
+   * arbetsytan "<kontots namn> workspace" (signup-triggern), och det var det
+   * namnet mottagarna fick se (uppmätt 2026-11-18).
+   */
+  foretag: string;
   orgnr: string;
   webbplats: string;
   produkt: string;
@@ -120,6 +127,27 @@ function normaliseraWebbplats(rå: string): string {
   return /^https?:\/\//i.test(text) ? text : `https://${text}`;
 }
 
+/**
+ * En adress som går att slå upp: en punkt i värdnamnet och inga mellanslag.
+ * Mer än så prövas inte här. Att sajten svarar visar sig när agenten läser den.
+ */
+function arWebbadress(adress: string): boolean {
+  try {
+    const { hostname } = new URL(adress);
+    return hostname.includes(".") && !hostname.endsWith(".");
+  } catch {
+    return false;
+  }
+}
+
+/** "41101" och "411 01" → "411 01". Allt annat → null. */
+function postnummer(rå: string): string | null {
+  const siffror = (rå ?? "").replace(/\s/g, "");
+  return /^\d{5}$/.test(siffror) ? `${siffror.slice(0, 3)} ${siffror.slice(3)}` : null;
+}
+
+const EPOST = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 /** "Göteborg, Mölndal" → ["Göteborg", "Mölndal"]. Taket är backendens (25). */
 function kommalista(rå: string | undefined): string[] {
   return (rå ?? "")
@@ -186,11 +214,22 @@ export async function saveBusinessContext(input: OnboardingInput): Promise<Onboa
     return { success: false, error: orgnrProblem };
   }
 
+  const foretag = (input.foretag ?? "").replace(/\s+/g, " ").trim();
+  if (foretag.length < 2 || foretag.length > 80) {
+    return { success: false, error: "Fyll i företagets namn." };
+  }
+
   const webbplats = normaliseraWebbplats(input.webbplats);
   if (!webbplats) {
     return {
       success: false,
       error: "Fyll i webbplatsen. Det är den agenterna läser för att förstå er."
+    };
+  }
+  if (!arWebbadress(webbplats)) {
+    return {
+      success: false,
+      error: "Webbadressen går inte att läsa. Skriv den som exempel.se."
     };
   }
 
@@ -241,7 +280,7 @@ export async function saveBusinessContext(input: OnboardingInput): Promise<Onboa
   if (!kontaktNamn) {
     return { success: false, error: "Fyll i vem som är kontaktperson hos er." };
   }
-  if (!kontaktMejl.includes("@")) {
+  if (!EPOST.test(kontaktMejl)) {
     return { success: false, error: "Fyll i kontaktpersonens e-postadress." };
   }
   const kontaktRoll = (input.kontaktRoll ?? "").trim();
@@ -261,13 +300,18 @@ export async function saveBusinessContext(input: OnboardingInput): Promise<Onboa
   // testarbetsytor av samma skäl som organisationsnumret — ett obligatoriskt
   // fält utan riktigt bolag bakom fylls med påhitt.
   const faktGata = (input.faktureringsadress?.gata ?? "").trim();
-  const faktPostnr = (input.faktureringsadress?.postnummer ?? "").trim();
+  const faktPostnrRa = (input.faktureringsadress?.postnummer ?? "").trim();
+  const faktPostnr = postnummer(faktPostnrRa);
   const faktOrt = (input.faktureringsadress?.ort ?? "").trim();
-  if (!input.testkund && (!faktGata || !faktPostnr || !faktOrt)) {
+  if (!input.testkund && (!faktGata || !faktPostnrRa || !faktOrt)) {
     return {
       success: false,
-      error: "Fyll i faktureringsadressen — dit går fakturan efter gratisperioden."
+      error: "Fyll i faktureringsadressen. Dit går fakturan efter gratisperioden."
     };
+  }
+  // "abc" gick igenom som postnummer till 2026-11-18 och hamnade på fakturan.
+  if (!input.testkund && !faktPostnr) {
+    return { success: false, error: "Postnumret ska ha fem siffror." };
   }
   const faktureringsadress =
     faktGata && faktPostnr && faktOrt ? `${faktGata}, ${faktPostnr} ${faktOrt}` : null;
@@ -288,6 +332,8 @@ export async function saveBusinessContext(input: OnboardingInput): Promise<Onboa
   const payload: BusinessContextInsert = {
     workspace_id: profile.workspace_id,
     product: [
+      // "Vårt", som branschraden nedan: säljarens namn, inte ett målfilter.
+      `Vårt företag: ${foretag}`,
       input.testkund
         ? "Organisationsnummer: — (TESTARBETSYTA, inget riktigt bolag)"
         : `Organisationsnummer: ${formateraOrgnr(input.orgnr)}`,
@@ -334,6 +380,22 @@ export async function saveBusinessContext(input: OnboardingInput): Promise<Onboa
     await sparaBusinessContext(user.id, payload);
   } catch (error) {
     return { success: false, error: (error as Error).message };
+  }
+
+  /**
+   * Arbetsytan får företagets namn, FÖRE tenanten skapas nedan: backendens
+   * kundnamn tas ur arbetsytans namn (lib/snajp/provisionering.ts) och står i
+   * sidfoten på varje utskick.
+   *
+   * Genom en RPC (migration 120), som paketbytet nedan: `workspaces` har
+   * radskydd utan uppdateringsregel, så en vanlig UPDATE träffar noll rader
+   * utan att fela. Fäller inte onboardingen: saknas funktionen i en miljö där
+   * migrationen inte hunnit köras står signup-namnet kvar, och felet loggas.
+   */
+  try {
+    await sqlAsUser(user.id, "select public.set_workspace_name($1)", [foretag]);
+  } catch (error) {
+    console.error("[onboarding] kunde inte sätta arbetsytans namn:", error);
   }
 
   /**
@@ -400,6 +462,8 @@ export async function saveBusinessContext(input: OnboardingInput): Promise<Onboa
    * Villkorad på att slug är tom: en workspace som redan pekar på en kund rörs
    * aldrig härifrån, hur rutan än kryssas.
    */
+  /** Arbetsytans nyckel när den kopplades just nu. Webbplatsskanningen startas med den. */
+  let tenantNyckel: string | null = null;
   if (input.testkund) {
     try {
       // EGEN tenant per testarbetsyta, skapad i drift.
@@ -422,6 +486,7 @@ export async function saveBusinessContext(input: OnboardingInput): Promise<Onboa
       if (!kopplad[0]?.ok) {
         throw new Error("link_test_tenant nekade kopplingen (arbetsytan hade redan en kund?).");
       }
+      tenantNyckel = tenant.apiKey;
     } catch (error) {
       // Kopplingen får inte fälla onboardingen. Affärskontexten är sparad, och
       // en okopplad testyta ger ett ärligt 409 med instruktion — att slänga
@@ -488,6 +553,7 @@ export async function saveBusinessContext(input: OnboardingInput): Promise<Onboa
         // lanseringshandoffens beställning 2026-09-20. Fail-soft: se
         // lib/snajp/kundregister.ts. Sluggen kommer ur provisioneringen,
         // aldrig ur klienten.
+        tenantNyckel = kopplad?.apiKey ?? null;
         if (kopplad?.slug) {
           const { registreraKunduppgifter } = await import("@/lib/snajp/kundregister");
           await registreraKunduppgifter(kopplad.slug, {
@@ -505,6 +571,20 @@ export async function saveBusinessContext(input: OnboardingInput): Promise<Onboa
     } catch (error) {
       console.error("[onboarding] kunde inte koppla arbetsytans tenant:", error);
     }
+  }
+
+  /**
+   * Webbplatsskanningen startas åt kunden (Antons beställning 2026-11-18), så
+   * att kunskapsbasen inte är tom när arbetsytan öppnas. Den skriver förslag,
+   * aldrig artiklar: kunden lägger till dem, och en rubrik kunden redan har
+   * föreslås inte. Bara med supportagenten i paketet, som är den som svarar
+   * ur kunskapsbasen, och bara när arbetsytan just fick sin egen nyckel.
+   */
+  const { PRODUKTER_FOR_PAKET } = await import("@/lib/pricing");
+  const medSupport = paket ? PRODUKTER_FOR_PAKET[paket].includes("support") : true;
+  if (tenantNyckel && medSupport) {
+    const { startaWebbplatsskanning } = await import("@/lib/snajp/webbplatsskanning");
+    await startaWebbplatsskanning(tenantNyckel, webbplats);
   }
 
   redirect("/dashboard");

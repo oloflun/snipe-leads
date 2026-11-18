@@ -73,8 +73,8 @@ jobs:
       MILJO: ${{ github.event_name == 'push' && github.ref_name || inputs.miljo }}
       APPLY: ${{ github.event_name == 'push' || inputs.apply }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
       - run: pip install psycopg2-binary
@@ -147,8 +147,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
       - run: pip install psycopg2-binary

@@ -1081,7 +1081,7 @@ Efter första synken skriver `scripts/railway_synk.py` bara till development: ma
 när miljön inte är main, när båda sidor är samma databas, när developments värd
 ligger på `railway.internal`, när sträckan saknar `sslmode=require` och vid
 `--forsta`; `main_kan_skriva` avbryter om main-anslutningen får ändra någon tabell.
-Main läses då som `synk_las` (migration 120: utan inloggning och lösenord tills
+Main läses då som `synk_las` (migration 122: utan inloggning och lösenord tills
 ägaren slår på dem i main, bara `select`, `default_transaction_read_only`). Med
 `--apply` tar synken ett rådgivande lås på development (`ta_las`), och utfallet
 skrivs bara till en databas vars markör säger development (`skriv_utfall`).

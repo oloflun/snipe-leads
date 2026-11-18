@@ -1,4 +1,4 @@
--- 120: en roll som bara får läsa, för synken hos Railway.
+-- 122: en roll som bara får läsa, för synken hos Railway.
 --
 -- docs/compliance/synkflytt-plan.md, upplägg A: synken flyttar från GitHub
 -- Actions till en cron-tjänst i Railway-miljön main. Den läser produktionen

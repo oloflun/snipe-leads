@@ -64,7 +64,7 @@ förut: .env.deploy, och för värden som saknas där miljövariablerna
 RAILWAY_<MILJÖ>_PG_* (Actions smala hemligheter).
 
 Inne hos Railway (tjänsten `synk` i miljön main, upplägg A) läses de ur
-SYNK_MAIN_PG_URL (läsrollen synk_las över mains privata nät, migration 120)
+SYNK_MAIN_PG_URL (läsrollen synk_las över mains privata nät, migration 122)
 och SYNK_DEVELOPMENT_PG_URL (developments publika port, med TLS). Då gäller
 spärrarna i kontrollera_anslutningar och main_kan_skriva före första
 frågan: fel miljö, samma databas på båda sidor, developments värd på mains
@@ -544,7 +544,7 @@ def kontrollera_anslutningar(main_url: str, dev_url: str, *, railway: bool, fors
 def main_kan_skriva(mc) -> bool:
     """True om main-anslutningen är superanvändare eller får ändra någon
     tabell i public. Hos Railway ska den vara läsrollen synk_las (migration
-    120), så att riktningen gäller även om koden ändras."""
+    122), så att riktningen gäller även om koden ändras."""
     mc.execute(
         """select (select rolsuper from pg_roles where rolname = current_user)
                   or coalesce(bool_or(has_table_privilege(c.oid, 'INSERT, UPDATE, DELETE, TRUNCATE')), false)
@@ -620,7 +620,7 @@ def main() -> int:
     mn = psycopg2.connect(main_url, connect_timeout=20)
     dc, mc = dev.cursor(), mn.cursor()
     if railway and main_kan_skriva(mc):
-        sys.exit("AVBRYT: main-anslutningen kan skriva. Hos Railway läser synken main som synk_las (migration 120).")
+        sys.exit("AVBRYT: main-anslutningen kan skriva. Hos Railway läser synken main som synk_las (migration 122).")
     if args.apply and not ta_las(dc):
         print("En annan synk pågår (låset är taget). Den här körningen gör ingenting.")
         return 0
