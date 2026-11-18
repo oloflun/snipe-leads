@@ -1,11 +1,15 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { AuthError } from "next-auth";
+import { AuthError, CredentialsSignin } from "next-auth";
 
 import { randomBytes, randomUUID } from "node:crypto";
 
+import { headers } from "next/headers";
+
 import { auth, ensureWorkspace, signIn, signOut as authSignOut } from "@/lib/auth";
+import { arSparrad, registreraForsok } from "@/lib/auth/inloggningsforsok";
+import { SPARRKOD } from "@/lib/auth/sparrkod";
 import { sql } from "@/lib/db";
 import { hashPassword } from "@/lib/password";
 
@@ -13,6 +17,11 @@ export type AuthActionResult = {
   success: boolean;
   error?: string;
   message?: string;
+  /**
+   * Maskinläsbar orsak, för besked som formuläret visar på sidans språk.
+   * `for_manga_forsok`: spärren mot upprepade försök (lib/auth/inloggningsregler.ts).
+   */
+  kod?: typeof SPARRKOD;
 };
 
 // De svenska felmeddelandena är skrivna FÖR ANVÄNDAREN och överlever bytet av
@@ -77,6 +86,11 @@ export async function signInWithPassword(
   try {
     await signIn("credentials", { email, password, redirect: false });
   } catch (error) {
+    // Spärren (lib/auth.ts:authorize). Beskedet skrivs i formuläret på sidans
+    // språk; servern skickar bara koden.
+    if (error instanceof CredentialsSignin && error.code === SPARRKOD) {
+      return { success: false, kod: SPARRKOD };
+    }
     if (error instanceof AuthError) {
       return { success: false, error: authErrorMessage(error.type) };
     }
@@ -255,6 +269,18 @@ export async function requestPasswordReset(email: string): Promise<AuthActionRes
       error:
         "Återställning via mail är inte konfigurerad i den här miljön. Kontakta support så återställs lösenordet manuellt."
     };
+  }
+
+  // Spärren mot upprepade begäranden (lib/auth/inloggningsregler.ts): varje
+  // begäran räknas, före uppslaget, och likadant för en adress utan konto. Ett
+  // spärrat besked avslöjar alltså inte om adressen finns, och ingen token och
+  // inget mejl skapas.
+  const inkommande = await headers();
+  if (
+    (await arSparrad("aterstallning", email, inkommande)) ||
+    (await registreraForsok("aterstallning", email, inkommande))
+  ) {
+    return { success: false, kod: SPARRKOD };
   }
 
   const userId = await anvandarId(email);
