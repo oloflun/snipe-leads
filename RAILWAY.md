@@ -12,9 +12,10 @@ Projekt `brave-passion`. Varje miljö har **egna** `api`, `web` och `Postgres`.
 | `main` | `railway-main` | `web-production-1fe2c.up.railway.app` | `api-production-d7695.up.railway.app` |
 | `development` | `railway-development` | `web-development-6c85.up.railway.app` | `api-development-5cc3.up.railway.app` |
 
-Push till grenen deployar miljön. `main` och `development` (de riktiga grenarna)
-rörs INTE — de håller Vercel/Render vid liv så de två stackarna går att jämföra
-mot varandra.
+Push till grenen deployar miljön. (Inaktuellt: sedan 2026-08-27 respektive
+2026-09-15 deployar `development` och `main` direkt från sina egna grenar, se
+[`DEPLOY.md`](DEPLOY.md). Vercel och Render är avvecklade; Render-koden togs bort
+ur repot 2026-11-18.)
 
 Grenen bärs av **deployment-triggern**, som är miljöspecifik. `serviceConnect`
 sätter tjänstens default-gren och gäller alla miljöer — fel verktyg här, och

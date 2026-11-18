@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Railway-klient: GraphQL v2, token ur .env.deploy.
 
-Samma mönster som scripts/verify_render.py — ett kommando som går att köra om
-och falsifiera, i stället för en punktlista i ett dokument.
+Ett kommando som går att köra om och falsifiera, i stället för en punktlista i
+ett dokument (samma mönster som scripts/verify_railway.py).
 
 Leakage-spärr: token läses ur .env.deploy (gitignorerad) och skrivs aldrig ut.
 

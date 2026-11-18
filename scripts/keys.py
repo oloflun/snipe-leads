@@ -2,9 +2,11 @@
 
     python "C:\\Users\\Anton L\\snipe-leads\\scripts\\keys.py"          # sätt + verifiera
     python .../scripts/keys.py --check                                  # bara verifiera
-    python .../scripts/keys.py --pull                                   # hämta från Vercel
-    python .../scripts/keys.py --push                                   # skicka till Vercel
+    python .../scripts/keys.py --push-railway                           # skicka till Railway + verifiera
     python .../scripts/keys.py --new-unlock-key                         # generera skill-låsnyckeln
+
+Render och appens Vercel-projekt är avvecklade. Skrivvägarna dit (Render-pushen
+och Vercels push och pull) togs bort 2026-11-18, se docs/BESLUT.md.
 
 Sökvägar löses ur __file__, aldrig ur cwd — skriptet kan köras varifrån som
 helst. Värden läses med getpass (syns aldrig, hamnar aldrig i shell-historiken)
@@ -20,7 +22,6 @@ import getpass
 import hashlib
 import json
 import secrets
-import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -106,7 +107,7 @@ KEYS = [
         [BACKEND_ENV],
         "Avsiktlighetsgrind för agent-core/skills/ — INTE en säkerhetsmekanism. "
         "Krävs för att regenerera manifestet eller publicera skills till DB:n. "
-        "Bara på den här maskinen; aldrig i Render/Vercel/CI.",
+        "Bara på den här maskinen; aldrig i CI.",
         required=False,
         where="genereras lokalt: python scripts/keys.py --new-unlock-key",
         generated=True,
@@ -383,145 +384,6 @@ def cmd_new_unlock_key() -> None:
     print("\nCOMMITTA agent-core/.unlock-hash. Nyckeln själv committas aldrig.")
 
 
-def cmd_pull() -> None:
-    """Hämtar env från Vercel till .env.local (om de finns där)."""
-    guard_gitignored()
-    print("Hämtar från Vercel ...")
-    result = subprocess.run(
-        ["vercel", "env", "pull", str(FRONTEND_ENV), "--yes"],
-        cwd=ROOT,
-        capture_output=True,
-        text=True,
-    )
-    print(result.stdout or result.stderr)
-    if result.returncode != 0:
-        sys.exit("Kunde inte hämta. Kör `vercel login` först, eller sätt nycklarna med --set.")
-    cmd_check()
-
-
-def _vercel() -> str:
-    """Sökvägen till Vercel CLI:t.
-
-    På Windows är `vercel` en .cmd-shim, och subprocess utan shell=True hittar
-    inte den — den faller på `FileNotFoundError: [WinError 2]`, som inte med ett
-    ord nämner vilket program som saknades. shutil.which löser upp shimmen på
-    alla tre plattformarna; shell=True hade fungerat men skickar argumenten
-    genom en kommandotolk, och ett av argumenten här är en hemlighet.
-    """
-    found = shutil.which("vercel")
-    if not found:
-        sys.exit(
-            "AVBRYTER: hittar inte Vercel CLI:t i PATH. Installera med "
-            "`npm i -g vercel` och logga in med `vercel login`."
-        )
-    return found
-
-
-def _shared_environments(name: str, environment: str) -> set[str]:
-    """Vilka ANDRA miljöer samma variabelpost gäller för.
-
-    Vercel lagrar en variabel som gäller flera miljöer som EN post. `env rm`
-    tar bort posten, inte målet — så att sätta ett preview-värde på en delad
-    variabel raderar produktionens. Tom mängd = säkert att skriva över.
-
-    Läser `vercel env ls` och matchar radens miljökolumn. Misslyckas
-    uppslaget returneras tomt: spärren ska inte blockera arbete när CLI:t
-    krånglar, den ska fånga det kända fallet.
-    """
-    result = subprocess.run(
-        [_vercel(), "env", "ls"], cwd=ROOT, capture_output=True, text=True
-    )
-    if result.returncode != 0:
-        return set()
-
-    kanda = {"production", "preview", "development"}
-    for line in result.stdout.splitlines():
-        delar = line.split()
-        if not delar or delar[0] != name:
-            continue
-        miljoer = {d.strip(",").lower() for d in delar[1:]} & kanda
-        # Avgörande: bedöm PER RAD. En delad post renderas som EN rad med flera
-        # miljöer ("Production, Preview"); två separata poster blir två rader
-        # med en miljö var. Att unionera över rader hade gjort det senare —
-        # som är helt säkert — omöjligt att skriva till.
-        if environment in miljoer and len(miljoer) > 1:
-            return miljoer - {environment}
-    return set()
-
-
-def vercel_env_set(name: str, value: str, environment: str) -> bool:
-    """Sätter EN variabel i ETT Vercel-scope. Returnerar True vid lyckat.
-
-    Bruten ur cmd_push() för att onboard_tenant.py sätter per-kund-nycklar och
-    behöver exakt samma sekvens. Två kopior hade glidit isär, och den här
-    hanterar hemligheter.
-
-    `rm` före `add` för att Vercel inte skriver över ett befintligt värde — en
-    ren `add` på en variabel som redan finns misslyckas tyst nog för att se ut
-    som att den lyckades. Felet ignoreras med flit: variabeln finns oftast inte.
-    """
-    delade = _shared_environments(name, environment)
-    if delade:
-        sys.exit(
-            f"AVBRYTER: {name} är EN post som gäller {', '.join(sorted(delade | {environment}))}.\n"
-            f"`vercel env rm {name} {environment}` tar då bort HELA posten, inte bara "
-            f"{environment} — och de andra miljöerna tappar variabeln utan förvarning.\n"
-            f"Det hände skarpt 2026-08-15: SNAJP_SUPPORT_URL och SNAJP_INTERNAL_API_KEY "
-            f"försvann ur Production när preview-värdena sattes.\n"
-            f"Ta bort posten manuellt och lägg till en per miljö först."
-        )
-
-    subprocess.run(
-        [_vercel(), "env", "rm", name, environment, "--yes"],
-        cwd=ROOT,
-        capture_output=True,
-        text=True,
-    )
-    result = subprocess.run(
-        [_vercel(), "env", "add", name, environment],
-        cwd=ROOT,
-        input=value + "\n",
-        capture_output=True,
-        text=True,
-    )
-    return result.returncode == 0
-
-
-def cmd_push() -> None:
-    """Skickar lokala nycklar till Vercel så deployen fungerar.
-
-    Bara nycklar som faktiskt konsumeras av Next-appen (FRONTEND_ENV bland
-    dess `files`) är relevanta här. I dagens uppsättning är DEEPSEEK_API_KEY,
-    SCRAPEGRAPHAI_API_KEY och GEMINI_API_KEY rena backend/Render-hemligheter
-    — de hör inte hemma i Vercel-projektet och pushas därför inte dit.
-    """
-    vercel_keys = [key for key in KEYS if FRONTEND_ENV in key.files]
-    if not vercel_keys:
-        print(
-            "Inga nycklar är markerade som Vercel-relevanta just nu — alla är "
-            "backend/Render-hemligheter. Se tabellen i DEPLOY_KEYS.md för hur de "
-            "sätts i Render-dashboarden i stället."
-        )
-        return
-
-    print("Skickar till Vercel (production + preview). Befintliga värden skrivs över.\n")
-    for key in vercel_keys:
-        value = read_env(key.files[0]).get(key.name, "")
-        if not value or looks_placeholder(value):
-            print(f"  {key.name}: hoppar över (saknas lokalt)")
-            continue
-        for environment in ("production", "preview"):
-            ok = vercel_env_set(key.name, value, environment)
-            print(f"  {key.name} -> vercel {environment}: {'OK' if ok else 'FEL'}")
-
-    print(
-        "\nBackend (Render) sätts separat — Render CLI:t kan inte skriva env utan "
-        "en API-token:\n"
-        "  Dashboard -> snajp-support -> Environment -> Add Environment Variable\n"
-        "  DEEPSEEK_API_KEY, SCRAPEGRAPHAI_API_KEY, LLM_PROVIDER=deepseek, MODEL=deepseek-v4-flash"
-    )
-
-
 #: Nycklar som backend-tjänsten behöver, oavsett värd. Master- och demo-
 #: nycklarna står INTE här: de är miljöspecifika med flit och sätts av
 #: railway_provision.py, som slumpar en egen per miljö.
@@ -533,16 +395,9 @@ BACKEND_KEYS = (
     "SNAJP_SKILL_UNLOCK_KEY",
 )
 
-#: Bakåtkompatibelt namn — railway-vägen hette så innan Render fick en
-#: skrivväg och listan blev delad.
+#: Bakåtkompatibelt namn från tiden då listan delades med en andra värd.
+#: Railway är den enda värden sedan Render-vägen togs bort 2026-11-18.
 RAILWAY_BACKEND_KEYS = BACKEND_KEYS
-
-#: Render har ingen Blueprint (se verify_render.py), alltså inget filbaserat
-#: sätt att nå tjänsterna. Id:na är sanningen och står i DEPLOY.md.
-RENDER_SERVICES = {
-    "snajp-support": ("srv-d9k99ktg1s2s73fl0v6g", "https://snajp-support.onrender.com"),
-    "snajp-support-dev": ("srv-da0dopojo6nc73ea3b6g", "https://snajp-support-dev.onrender.com"),
-}
 
 
 def cmd_push_railway() -> None:
@@ -685,138 +540,6 @@ def cmd_push_jev(env_name: str, lage: str) -> None:
           "GET /api/leads/jev/statistik svarar med lage=" + lage + ".")
 
 
-def cmd_push_render() -> None:
-    """Skicka backend-nycklarna till BÅDA Render-tjänsterna och verifiera.
-
-    Fram till nu skrev `--push` bara ut en instruktion om att göra det för hand
-    i dashboarden. En instruktion är inte en åtgärd: den kördes på produktionen
-    men inte på previewen, och skillnaden syntes först som att modellen svarade
-    konstigt i preview.
-
-    Endpointen är den PER NYCKEL — `PUT /v1/services/{id}/env-vars/{namn}`.
-    Listvarianten utan nyckelnamn ERSÄTTER hela miljön, alltså även
-    DATABASE_URL och båda API-nycklarna, och en push av en DeepSeek-nyckel
-    hade tagit ner tjänsten den skulle laga.
-    """
-    sys.path.insert(0, str(Path(__file__).resolve().parent))
-    import json
-    import time
-    import urllib.error
-    import urllib.request
-
-    from verify_render import API, api_key
-
-    token = api_key()
-    backend = read_env(BACKEND_ENV)
-
-    payload = {}
-    for name in BACKEND_KEYS:
-        value = backend.get(name, "")
-        if not value:
-            print(f"  {name}: saknas lokalt — hoppar över")
-            continue
-        fault = key_fault(value, name)
-        if fault:
-            sys.exit(f"AVBRYTER: {name} {fault}. Sätt om den med `python scripts/keys.py` först.")
-        payload[name] = value
-    # LLM_PROVIDER och MODEL är inga hemligheter, men de är en följd av att ha
-    # en DeepSeek-nyckel: utan dem går tjänsten mot OpenAI med DeepSeeks nyckel.
-    payload.update(FIXED[BACKEND_ENV])
-    if not payload:
-        sys.exit("Inga nycklar att skicka.")
-    print(f"skickar: {', '.join(sorted(payload))}")   # namn, aldrig värden
-
-    def anrop(method: str, path: str, body: dict) -> tuple[int, dict]:
-        request = urllib.request.Request(
-            f"{API}{path}",
-            method=method,
-            data=json.dumps(body).encode("utf-8") if body is not None else None,
-            headers={
-                "Authorization": f"Bearer {token}",
-                "Content-Type": "application/json",
-                "Accept": "application/json",
-            },
-        )
-        try:
-            with urllib.request.urlopen(request, timeout=60) as response:
-                text = response.read().decode("utf-8") or "{}"
-                return response.status, json.loads(text)
-        except urllib.error.HTTPError as error:
-            return error.code, {"fel": error.read().decode()[:160]}
-        except Exception as error:  # nätverk, inte HTTP — ska inte se ut som avslag
-            return -1, {"fel": str(error)[:160]}
-
-    def nuvarande(service_id: str) -> dict[str, str]:
-        """Vad tjänsten redan har. Sidan kommer som {envVar: {key, value}}."""
-        status, svar = anrop("GET", f"/services/{service_id}/env-vars?limit=100", None)
-        if not 0 < status < 300 or not isinstance(svar, list):
-            return {}
-        ut = {}
-        for rad in svar:
-            post = rad.get("envVar", rad) if isinstance(rad, dict) else {}
-            if post.get("key") is not None:
-                ut[post["key"]] = post.get("value") or ""
-        return ut
-
-    misslyckades = False
-    for service_name, (service_id, _url) in RENDER_SERVICES.items():
-        print()
-        print(f"{service_name}:")
-        redan = nuvarande(service_id)
-        andrade = 0
-        for name in sorted(payload):
-            if redan.get(name) == payload[name]:
-                print(f"  {name} -> oförändrad")
-                continue
-            status, svar = anrop("PUT", f"/services/{service_id}/env-vars/{name}", {"value": payload[name]})
-            if 0 < status < 300:
-                print(f"  {name} -> satt")
-                andrade += 1
-            else:
-                print(f"  {name} -> FEL {status} {svar.get('fel', '')}")
-                misslyckades = True
-
-        # Ingen omdeploy när ingenting ändrats. Produktionen ligger bakom den
-        # här slingan, och en kallstart är ett verkligt avbrott för den kund som
-        # råkar skriva just då — att betala det för en no-op är fel pris.
-        if not andrade:
-            print("  deploy: hoppar över, inget ändrades")
-            continue
-        # Render deployar om av sig själv när en variabel ändras, men bara när
-        # autoDeploy är på — och den har varit avslagen på previewen förr.
-        status, svar = anrop("POST", f"/services/{service_id}/deploys", {})
-        if 0 < status < 300:
-            print(f"  deploy: {svar.get('id', status)}")
-        else:
-            print(f"  deploy: {status} — starta den för hand i dashboarden")
-            misslyckades = True
-
-    # Samma verifiering som Railway-vägen, och av samma skäl: att API:t tog
-    # emot variabeln bevisar bara att den är satt. Att /health/ready går från
-    # simulation till live bevisar att nyckeln går att använda.
-    print()
-    print("Verifierar mot /health/ready (Render kallstartar — det tar en stund):")
-    for service_name, (_service_id, url) in RENDER_SERVICES.items():
-        mode = None
-        for _ in range(30):
-            try:
-                with urllib.request.urlopen(f"{url}/health/ready", timeout=30) as response:
-                    mode = json.load(response).get("mode")
-            except Exception:
-                mode = None
-            if mode == "live":
-                break
-            time.sleep(10)
-        print(f"  {service_name}: mode={mode}")
-        if mode != "live":
-            misslyckades = True
-
-    if misslyckades:
-        sys.exit("Minst en tjänst gick inte till live-läge. Se /health/ready för skälet.")
-    print()
-    print("Båda Render-tjänsterna kör med riktig modell.")
-
-
 def cmd_set_railway_token() -> None:
     """Railway-tokenen. Samma delegering och samma skal som ovriga."""
     skript = Path(__file__).resolve().parent / "set_railway_token.py"
@@ -854,12 +577,8 @@ def cmd_set_preview_db() -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Nyckelhantering för snipra/snajp.")
     parser.add_argument("--check", action="store_true", help="verifiera utan att ändra")
-    parser.add_argument("--pull", action="store_true", help="hämta från Vercel")
-    parser.add_argument("--push", action="store_true", help="skicka till Vercel")
     parser.add_argument("--push-railway", action="store_true",
                         help="skicka backend-nycklarna till BÅDA Railway-miljöerna och verifiera")
-    parser.add_argument("--push-render", action="store_true",
-                        help="skicka backend-nycklarna till BÅDA Render-tjänsterna och verifiera")
     parser.add_argument(
         "--key",
         metavar="NAMN",
@@ -909,16 +628,10 @@ def main() -> None:
         cmd_set_railway_token()
     elif args.new_unlock_key:
         cmd_new_unlock_key()
-    elif args.pull:
-        cmd_pull()
     elif args.push_railway:
         cmd_push_railway()
     elif args.push_jev:
         cmd_push_jev(args.push_jev, args.jev_lage)
-    elif args.push_render:
-        cmd_push_render()
-    elif args.push:
-        cmd_push()
     else:
         cmd_set(args.key)
 

@@ -571,7 +571,7 @@ class Settings(BaseSettings):
     # DEFAULT filesystem i ALL miljö. DB-spegeln är en granskningspost över vilken
     # text en agent_runs-rad producerades ur, inte en uppdateringskanal: kan DB:n
     # leverera text containern inte har på disk är git bara källa till sanning i
-    # intentionen. render.yaml ska aldrig sätta SKILL_SOURCE.
+    # intentionen. Ingen driftkonfiguration ska sätta SKILL_SOURCE (INV-DEPLOY-001).
     skill_source: str = "filesystem"
 
     @model_validator(mode="after")

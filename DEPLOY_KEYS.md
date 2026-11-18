@@ -35,8 +35,10 @@ gitignorerade.
 | --- | --- |
 | `keys.py` | Frågar efter nycklarna, skriver till `snajp-support/.env`, verifierar |
 | `keys.py --check` | Verifierar bara (visar längd + fyra sista tecken, aldrig värdet) |
-| `keys.py --pull` | Hämtar env från Vercel till `.env.local` (Email Studio-relaterat, se nedan) |
-| `keys.py --push` | Skickar Vercel-relevanta nycklar dit. I dag är alla tre backend/Render-hemligheter, så den har inget att skicka — se Render-tabellen nedan. |
+| `keys.py --push-railway` | Skickar backend-nycklarna till `api` i båda Railway-miljöerna och verifierar mot `/health/ready` |
+
+`--pull`, `--push` (Vercel) och `--push-render` togs bort 2026-11-18: Render och
+appens Vercel-projekt är avvecklade, se `docs/BESLUT.md`.
 
 **Du behöver bara `DEEPSEEK_API_KEY` för att komma igång.** Den driver alla
 agentkörningar. De andra två är valfria och låser bara upp delfunktioner —

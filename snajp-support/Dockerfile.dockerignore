@@ -1,4 +1,4 @@
-# Byggkontexten är repo-ROTEN (render.yaml rootDir: .), eftersom agent-core/
+# Byggkontexten är repo-ROTEN (railway_provision.py rootDirectory="/"), eftersom agent-core/
 # ligger utanför snajp-support/ och Docker inte kan COPY:a utanför kontexten.
 #
 # Utan den här filen skickas node_modules/, .next/, .git/, .shots/ och docs/
