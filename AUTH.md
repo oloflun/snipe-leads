@@ -28,8 +28,9 @@ var den ena av två orsaker till att registrering med privat mail inte gick.
 - Redirect URLs: `http://localhost:3000/auth/callback`,
   `https://snajp.vercel.app/auth/callback`, samt varje kundsubdomän.
 
-**Vercel → Environment Variables.** `NEXT_PUBLIC_SITE_URL` måste vara satt i
-Production och Preview. Saknas den pekar verifieringslänkarna på localhost.
+**`NEXT_PUBLIC_SITE_URL`** sätts av `scripts/railway_provision.py` på `web` i
+varje Railway-miljö. Saknas den pekar verifieringslänkarna på localhost. Vercel
+är avvecklat (se `DEPLOY.md`); sätt den inte där.
 
 ## Automatiskt test
 

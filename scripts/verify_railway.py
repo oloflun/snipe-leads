@@ -3,8 +3,7 @@
 
     python scripts/verify_railway.py
 
-Samma roll som scripts/verify_render.py fyller för Render, och av samma skäl:
-de fält som styr driften (gren, byggkontext, roll, radsäkerhet, korskoppling)
+Skälet: de fält som styr driften (gren, byggkontext, roll, radsäkerhet, korskoppling)
 syns inte i någon diff. Sanningen ligger i Railways databas och i Postgres, så
 den måste frågas ut.
 

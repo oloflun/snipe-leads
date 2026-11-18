@@ -247,7 +247,7 @@ och kastar `SkillIntegrityError` vid avvikelse — ingen fallback till
 filsystemet. Verifieringen sker per fil INNE i `registry._read_skill_file`,
 alltså före varje `parts.append` i `load_full_skill`, aldrig efter
 konkateneringen. `settings.skill_source` defaultar till `"filesystem"` i all
-miljö och `render.yaml` sätter aldrig `SKILL_SOURCE` (INV-DEPLOY-001).
+miljö och ingen driftkonfiguration sätter `SKILL_SOURCE` (INV-DEPLOY-001).
 Varför: spegeln finns för att kunna svara på "vilken text producerade den här
 `agent_runs`-raden?". En spegel som tyst kan leverera annan text än manifestet
 säger besvarar inte frågan — den ljuger om den, vilket är sämre än att inte
@@ -423,11 +423,17 @@ Test: tests/invariants/test_inv_skill_006.py
 Införd: 2026-08-14 · Upphävs endast genom waiver
 
 ### INV-DEPLOY-001 — Skill-registret finns i den byggda containern
-`render.yaml` sätter `rootDir: .` (repo-roten) och `Dockerfile` COPY:ar både
-`snajp-support/app` och `agent-core` med bevarat katalogdjup under `/srv`.
-`.dockerignore` är en allowlist som uttryckligen släpper igenom `agent-core`.
-`render.yaml` sätter aldrig `SKILL_SOURCE` — produktionen läser skills från
+`scripts/railway_provision.py` sätter api-tjänstens `rootDirectory="/"`
+(repo-roten) och `dockerfilePath="snajp-support/Dockerfile"`, och `Dockerfile`
+COPY:ar både `snajp-support/app` och `agent-core` med bevarat katalogdjup under
+`/srv`. `snajp-support/Dockerfile.dockerignore` är en allowlist som uttryckligen
+släpper igenom `agent-core`. Inget skript i `scripts/` och inget arbetsflöde i
+`.github/workflows/` sätter `SKILL_SOURCE` — produktionen läser skills från
 filsystemet, aldrig från DB-spegeln.
+Anpassad 2026-11-18: regeln stod tidigare mot Render-blueprinten `render.yaml`,
+som togs bort när Render avvecklades (docs/BESLUT.md). Skyddet är detsamma och
+gäller nu filen som styr Railway; att varje miljö har en utskriven gren vaktas
+av INV-DEPLOY-002.
 Varför: med `rootDir: snajp-support` låg `agent-core/` utanför Dockers
 byggkontext och kunde inte COPY:as ens avsiktligt. Felet var osynligt tills
 det inte var det: agentimporterna är uppskjutna in i request-handlers, så
@@ -436,7 +442,7 @@ på det första riktiga agentanropet, som `UnknownSkillError`. Dessutom
 maskerad av att `is_simulation()` kortsluter före playbook-importen, vilket
 betyder att felet utlöstes av att man satte `DEEPSEEK_API_KEY` för att gå live.
 Test: tests/invariants/test_inv_deploy_001.py
-Införd: 2026-08-14 · Upphävs endast genom waiver
+Införd: 2026-08-14 · Anpassad: 2026-11-18 · Upphävs endast genom waiver
 
 ### INV-API-001 — Svar tolkas aldrig som JSON utan kontroll; långsam route sätter `maxDuration`
 Varje `await <svar>.json()` under `app/`, `lib/` och `components/` går via

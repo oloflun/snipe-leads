@@ -5,9 +5,9 @@
     python scripts/railway_provision.py --apply           # båda miljöerna
     python scripts/railway_provision.py --apply --env development
 
-Kör om den hur många gånger som helst. Motsvarigheten till render.yaml, fast
-som ett kommando som faktiskt går att verifiera i stället för en blueprint som
-visade sig inte existera.
+Kör om den hur många gånger som helst. Ett kommando som faktiskt går att
+verifiera, i stället för en blueprint som visade sig inte existera (Render-
+blueprinten, borttagen med resten av Render 2026-11-18).
 
 Hemligheter läses ur .env.deploy och skrivs ALDRIG ut — varken till terminalen
 eller till loggen. Nya hemligheter skrivs tillbaka till .env.deploy.
