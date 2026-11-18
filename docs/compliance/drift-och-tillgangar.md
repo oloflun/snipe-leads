@@ -90,21 +90,41 @@ Belägg för att CI körs: 95 körningar av Verify på `development`, 93 lyckade
 |---|---|---|
 | Ett id per HTTP-anrop (`X-Request-Id`) på varje loggrad, i svaret och i felposten | `snajp-support/app/sparning.py:1-20` | Som Railways loggar |
 | Fel och händelser | Tabellen `platform_events` (`sparning.py`) | Inte beslutad |
-| Varje AI-körning med instruktionslager, indata och utdata | `agent_runs` (INV, se `ai-system/README.md`) | Inte beslutad; gallringen är byggd men avslagen |
+| Varje AI-körning med instruktionslager, indata och utdata | `agent_runs` (INV, se `ai-system/README.md`); den äldre bokföringsytan sparar sedan 2026-11-18 bara kvittotextens längd och hash (PR 83) | Inte beslutad; gallringen är byggd men avslagen |
+| Plattformsadminens och master-nyckelns åtkomst | `audit_logs` (migration 123), se nedan | 365 dagar, gallras automatiskt |
 | Supportens beslut per mejl | `ss_decision_log` | Inte beslutad |
 | Tjänsternas loggar | Railway | Beror på planen: 3 dagar (Free), 7 dagar (Trial och Hobby), 30 dagar (Pro), enligt https://docs.railway.com/guides/logs, avsnittet "Log retention". Kontots plan är lägre än Pro (`BESLUTSUNDERLAG-2026-11-17.md` A4); exakt plan är inte belagd |
 
-Tabellen `audit_logs` finns i schemat men skrivs inte av någon kod (sökning i `lib/`, `app/`
-och `snajp-support/app/` 2026-11-18). Det finns alltså ingen åtkomstlogg för plattformsadmin.
+**Åtkomstloggen för admin** (från 2026-11-18 natt, i `development`, migration 123). Fram till
+dess skrev ingen kod i `audit_logs`. Nu skrivs en rad per åtkomst:
+
+| Väg | Var loggen skrivs | Vem | Åtgärd |
+|---|---|---|---|
+| Varje anrop med master-nyckeln (`/api/admin/*`, `/api/keys`): adminytan i Next och provisioneringen av nya kunder | `deps.require_master_key` → `snajp-support/app/api/adminlogg.py` → `logga_adminatkomst` | Plattformsadminens id ur `X-Snajp-Admin`, som Next sätter ur sessionen (`app/api/snajp-support/_lib.ts`) och databasen prövar mot `platform_admins`. Annars "master-nyckel" | `las` (GET) eller `andra` |
+| Kundbesök: admin öppnar en kunds arbetsyta (`lib/actions/vy.ts`) | `log_admin_impersonation` (042, utökad i 123) | Plattformsadmin, prövad i databasen | `oppna` |
+
+Raden bär kund (`tenant_id`), ruttens mall (`resurs`, t.ex. `/api/admin/tenants/{tenant_id}/kunddata`),
+ett id ur sökvägen och anropets `X-Request-Id`. Den bär aldrig frågesträng, kropp, svar eller
+nyckel. Approllerna `snajp_app` och `snajp_web` får inte skriva, ändra eller radera i tabellen;
+bara de två säkerhetsdefinierade funktionerna skriver. Raderna gallras efter 365 dagar vid varje
+skrivning, oberoende av `GALLRING_AKTIV`. Invariant: INV-SEC-013. Test:
+`tests/invariants/test_inv_sec_013.py` och `snajp-support/tests/db/test_adminlogg.py` (jobbet
+`databas`). Begränsningar: läsningar under ett kundbesök loggas som besöket, inte per anrop, och
+om skrivningen faller går anropet igenom med en varning i api:ts logg.
 
 **Övervakning.** `.github/workflows/overvakning.yml` hämtar produktionens startsida, `/health`
 och `/health/ready` och skapar ett ärende med etiketten `driftlarm` vid avvikelse.
-Larmkedjan är provad (ärende 53). **Schemat har gett en enda schemalagd körning
-(2026-11-18 04:44 UTC)** trots att det är satt till en gång i timmen
-(`bevis/github-2026-11-18.txt`). Övervakningen fungerar alltså inte som avsett i dag.
-Orsaken är inte utredd; GitHubs schemalagda körningar är inte garanterade
-(kommentaren i arbetsflödet). Internlarmets variabler (`INTERNLARM_SMTP_*`) är inte satta i
-någon miljö.
+Larmkedjan är provad (ärende 53). Schemat gav en enda schemalagd körning
+(2026-11-18 04:44 UTC) av omkring 60 förväntade (`bevis/github-2026-11-18.txt`). **Orsaken
+(utredd 2026-11-18 natt):** GitHubs schemaläggare tappar de flesta schemalagda körningar i det
+här repot: `synk.yml` (var tionde minut) fick 32 schemalagda körningar 2026-11-10–18, ungefär
+fyra om dygnet, före och efter att repot blev privat. Syntax, standardgren, privat repo och
+Actions-minuter är uteslutna (kommentaren i arbetsflödet). Från PR 84 körs övervakningen på två
+scheman, efter varje körning av Verify och synk (`workflow_run`), och en dödmanskontroll i
+`verify.yml` (`scripts/overvakning_dodman.sh`) öppnar ett ärende med etiketten
+`overvakning-tyst` när övervakningen inte gått på tre timmar. Utan push, PR eller synk kan båda
+utebli; en extern pingtjänst är det som löser det. Internlarmets variabler (`INTERNLARM_SMTP_*`)
+är inte satta i någon miljö.
 
 ## 6. Tester som verifierar åtkomst och radering mot databasen
 

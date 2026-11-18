@@ -167,7 +167,8 @@ jobs:
         working-directory: snajp-support
         run: pytest tests/db/test_gallring.py -v -rs -s
 
-      - name: Tenantisoleringen (RLS) och rättighetsskriptet mot databasen
+      - name: Tenantisoleringen (RLS), rättighetsskriptet och åtkomstloggen mot databasen
+        # test_adminlogg.py: migration 123, INV-SEC-013 (2026-11-18).
         # INV-SEC-001 som snajp_app mot det migrerade schemat, och en
         # provkörning av scripts/gdpr_radera.py (sök, registerutdrag och
         # radering) med en syntetisk person. Ett överhoppat test räknas som
@@ -177,7 +178,7 @@ jobs:
           DATABASE_URL: postgresql://postgres:localdev@127.0.0.1:5432/railway
         run: |
           set -o pipefail
-          pytest tests/db/test_rls_isolation.py tests/db/test_gdpr_radera_db.py -v -rs | tee /tmp/db-ut.txt
+          pytest tests/db/test_rls_isolation.py tests/db/test_gdpr_radera_db.py tests/db/test_adminlogg.py -v -rs | tee /tmp/db-ut.txt
           if grep -qE "[0-9]+ skipped" /tmp/db-ut.txt; then echo "::error::ett databastest hoppades över"; exit 1; fi
 
   invariants:
