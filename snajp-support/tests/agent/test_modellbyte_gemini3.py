@@ -57,6 +57,8 @@ def test_standardvardena_ar_ororda():
     assert s.google_cloud_region == "europe-west1"
     assert s.vertex_reservregioner == "europe-west4,europe-north1"
     assert s.inbaddningsregion() == "europe-west1"
+    assert s.vertex_bild_region == ""
+    assert s.bildregion() == "europe-west1"
     assert s.gemini_reasoning_effort == "none"
 
 
@@ -166,6 +168,38 @@ def test_inbaddningen_har_egen_region(miljo):
     assert get_settings().inbaddningsregion() == "europe-west1"
     assert urlsplit(str(llm.get_embedding_client().base_url)).hostname == "europe-west1-aiplatform.googleapis.com"
     assert urlsplit(str(llm.get_llm_client().base_url)).hostname == "aiplatform.eu.rep.googleapis.com"
+
+
+def test_bildklienten_har_egen_region(miljo):
+    """VERTEX_BILD_REGION (2026-11-18): textmodellen i `eu`, bildmodellen kvar
+    på gemini-2.5-flash i europe-west1, där den finns."""
+    miljo(LLM_PROVIDER="gemini", MODEL="gemini-3.5-flash-lite", VISION_MODEL="gemini-2.5-flash",
+          ENVIRONMENT="main", GOOGLE_SERVICE_ACCOUNT_JSON=_SA_JSON, GOOGLE_CLOUD_REGION="eu",
+          VERTEX_RESERVREGIONER="eu", VERTEX_INBADDNING_REGION="europe-west1", VERTEX_BILD_REGION="europe-west1")
+    assert get_settings().llm_provider_fault() is None
+    assert get_settings().bildregion() == "europe-west1"
+    bild = str(llm.get_vision_client().base_url)
+    assert urlsplit(bild).hostname == "europe-west1-aiplatform.googleapis.com"
+    assert "/locations/europe-west1/endpoints/openapi/" in bild
+    assert urlsplit(str(llm.get_llm_client().base_url)).hostname == "aiplatform.eu.rep.googleapis.com"
+    assert urlsplit(str(llm.get_embedding_client().base_url)).hostname == "europe-west1-aiplatform.googleapis.com"
+
+
+def test_bildklienten_foljer_huvudregionen_utan_variabeln(miljo):
+    """Tom VERTEX_BILD_REGION är dagens beteende: bilden går dit texten går."""
+    miljo(LLM_PROVIDER="gemini", MODEL="gemini-3.8-flash", ENVIRONMENT="main",
+          GOOGLE_SERVICE_ACCOUNT_JSON=_SA_JSON, GOOGLE_CLOUD_REGION="eu", VERTEX_RESERVREGIONER="eu",
+          VERTEX_BILD_REGION="")
+    assert get_settings().bildregion() == "eu"
+    assert urlsplit(str(llm.get_vision_client().base_url)).hostname == "aiplatform.eu.rep.googleapis.com"
+
+
+def test_bildregionen_rubbar_inte_text_eller_inbaddning(miljo):
+    miljo(LLM_PROVIDER="gemini", MODEL="gemini-2.5-flash", ENVIRONMENT="main",
+          GOOGLE_SERVICE_ACCOUNT_JSON=_SA_JSON, VERTEX_BILD_REGION="europe-west3")
+    assert urlsplit(str(llm.get_vision_client().base_url)).hostname == "europe-west3-aiplatform.googleapis.com"
+    assert urlsplit(str(llm.get_llm_client().base_url)).hostname == "europe-west1-aiplatform.googleapis.com"
+    assert urlsplit(str(llm.get_embedding_client().base_url)).hostname == "europe-west1-aiplatform.googleapis.com"
 
 
 @pytest.mark.anyio

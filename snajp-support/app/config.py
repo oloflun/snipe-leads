@@ -263,6 +263,14 @@ class Settings(BaseSettings):
     #: europe-west3 (uppmätt 2026-11-18). Kunskapsbasens vektorer ska komma ur
     #: samma modell före och efter bytet. Bara EU-regioner, som ovan.
     vertex_inbaddning_region: str = ""
+    #: Regionen för bildanropen (`agent.llm.get_vision_client`: bildbeskrivning,
+    #: kvitton, bokföringsunderlag och webbrevisionens bildbedömning). Tom =
+    #: samma som GOOGLE_CLOUD_REGION, beteendet före 2026-11-18. Finns för
+    #: modellbytet: textmodellerna kan gå till `eu` medan bildmodellen ligger
+    #: kvar på gemini-2.5-flash i europe-west1, eftersom ingen 3.x-modell
+    #: klarade webbkalibreringens grind (modellbyte-underlag.md avsnitt 3.6).
+    #: Bara EU-regioner, som ovan.
+    vertex_bild_region: str = ""
     model: str = "gpt-4o-mini"
     embedding_model: str = "gemini-embedding-001"
     #: MÅSTE stämma med kolumnen `ss_knowledge_base.embedding`, som är
@@ -838,7 +846,7 @@ class Settings(BaseSettings):
         if self.har_riktig_kunddata():
             utanfor = [
                 r
-                for r in dict.fromkeys([*self.vertex_regioner(), self.inbaddningsregion()])
+                for r in dict.fromkeys([*self.vertex_regioner(), self.inbaddningsregion(), self.bildregion()])
                 if not ar_eu_region(r)
             ]
             if utanfor:
@@ -846,7 +854,8 @@ class Settings(BaseSettings):
                     f"Vertex-regionen {', '.join(utanfor)} ligger inte i EU "
                     f"(GOOGLE_CLOUD_REGION={self.google_cloud_region!r}, "
                     f"VERTEX_RESERVREGIONER={self.vertex_reservregioner!r}, "
-                    f"VERTEX_INBADDNING_REGION={self.vertex_inbaddning_region!r}). "
+                    f"VERTEX_INBADDNING_REGION={self.vertex_inbaddning_region!r}, "
+                    f"VERTEX_BILD_REGION={self.vertex_bild_region!r}). "
                     f"{self._varfor_riktig_data()} Kunddata får bara behandlas i EU. "
                     f"Tillåtna regioner: {', '.join(VERTEX_EU_REGIONER)}. Rätta "
                     f"variabeln, eller ta bort den så gäller standardvärdet, och "
@@ -909,6 +918,11 @@ class Settings(BaseSettings):
         """Regionen för inbäddningarna: VERTEX_INBADDNING_REGION, annars
         huvudregionen (se fältet)."""
         return (self.vertex_inbaddning_region or "").strip() or self.google_cloud_region
+
+    def bildregion(self) -> str:
+        """Regionen för bildanropen: VERTEX_BILD_REGION, annars huvudregionen
+        (se fältet)."""
+        return (self.vertex_bild_region or "").strip() or self.google_cloud_region
 
     def servicekonto_lasbart(self) -> bool:
         """Om GOOGLE_SERVICE_ACCOUNT_JSON går att använda mot Vertex: JSON med
