@@ -4,6 +4,7 @@ import { Loader2, ShieldAlert } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { EjAktiverad, arEjAktiverad } from "@/components/EjAktiverad";
 import { useDashboard } from "@/components/dashboard/DashboardContext";
+import { KomIgang } from "@/components/dashboard/KomIgang";
 import {
   Aktivitetsgraf,
   Andelsring,
@@ -669,9 +670,15 @@ export function Aktivitet({ demo = false }: Readonly<{ demo?: boolean }>) {
   const harIris = Boolean(it && it.veckor.some((v) => (v.bestallt ?? 0) > 0));
   const harSupport = Boolean(st && st.veckor.some((v) => (v.korningar ?? 0) + (v.korningar_test ?? 0) > 0));
   const kolumn = cn(kort, "relative min-w-0 thin-scrollbar xl:max-h-[40rem] xl:overflow-y-auto");
+  // En arbetsyta utan aktivitet får veta vad nästa steg är (KomIgang). Allt
+  // ska vara laddat och felfritt först: annars blinkar rutan förbi hos en kund
+  // som har körningar, medan svaren är på väg.
+  const nyArbetsyta =
+    !demo && irisLaddad && supportLaddad && !irisFel && !supportFel && !harIris && !harSupport && (korningar?.length ?? 0) === 0;
 
   return (
     <div className="flex min-w-0 flex-col gap-6">
+      {nyArbetsyta ? <KomIgang iris={iris} support={support} /> : null}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {kpier.map((k) => (
           <KpiKort key={k.id} kpi={k} perioden={perioden} />

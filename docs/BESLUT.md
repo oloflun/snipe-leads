@@ -9,6 +9,61 @@ möjligt), vad det betyder i koden.
 
 ---
 
+## 2026-11-18 (agenten, på Antons uppdrag) — Onboardingen efter den visuella genomgången
+
+Anton beställde en genomgång av hela onboardingen, sida för sida, och att
+bristerna skulle rättas tills varje steg håller för en professionell kund.
+Besluten nedan är agentens, fattade under genomgången. Anton har inte godkänt
+dem var för sig och kan ändra dem.
+
+**Beslut 1: onboardingen frågar efter företagets namn.** Arbetsytan hette
+"<kontots namn> workspace" (signup-triggern), och backendens kundnamn tas ur
+arbetsytans namn. Uppmätt i den lokala stacken: en nyss upplagd kund hette
+"Anna Testsson workspace" i `ss_tenants`, och det namnet står i sidfoten på
+varje utskick. Namnet sätts genom en RPC (migration 119), eftersom
+`workspaces` har radskydd utan uppdateringsregel och en vanlig UPDATE träffar
+noll rader utan att fela.
+
+**Beslut 2: fliken "Prova demo" på inloggningen är en länk till /demo.**
+Fliken kunde bara svara med ett fel, eftersom mejlvägen för åtkomstlänken
+aldrig kopplades (`requestDemoAccess`). Demon är öppen på /demo. Funktionen
+ligger kvar i `lib/actions/auth.ts`, oanvänd, tills någon bestämmer om
+åtkomstlänken ska byggas.
+
+**Beslut 3: `/login?mode=signup` öppnar läget Skapa konto**, och de två
+länkar som betyder "kom igång" pekar dit (demobannern i AppShell,
+DemoKorning). Förut landade en ny kund under rubriken "Välkommen tillbaka".
+
+**Beslut 4: Google- och Microsoft-knapparna visas bara när de är
+konfigurerade** (`AUTH_GOOGLE_ID`, `AUTH_MICROSOFT_ENTRA_ID_ID`). En knapp som
+alltid svarar "inte konfigurerad än" är sämre än ingen.
+
+**Beslut 5: en arbetsyta utan aktivitet får en startruta överst på
+översikten** (`components/dashboard/KomIgang.tsx`). Anton tog bort hälsningen
+ur översikten 2026-10-07 och det beslutet står kvar: rutan visas bara medan
+arbetsytan saknar körningar, och försvinner av sig själv. Skälet är att den
+nya kunden annars landar på en statistiksida utan statistik, utan något som
+säger vad nästa steg är. Varje rad leder till en sida som redan finns.
+
+**Beslut 6: guiden validerar själv.** Formulären har `noValidate`. Alla fel
+i ett steg visas på en gång vid sitt fält, webbadresser utan protokoll
+godtas (webbläsarens `type="url"` nekade dem, trots att servern tar emot
+dem), och postnumret ska ha fem siffror ("abc" gick igenom till fakturan).
+
+**Öppet för Anton.** Guiden säger att "agenterna läser er webbplats och lär
+sig resten själva". Kunskapsbasen är tom efter onboardingen, och skanningen
+av kundens sajt (`POST /api/kb/skanna`) startas inte av guiden och har ingen
+knapp i gränssnittet. Texten är orörd. Antingen startas skanningen vid
+onboardingen, som `docs/pilot_onboarding.md` planerar, eller så skrivs
+löftet om.
+
+**I koden.** `components/auth/OnboardingWizard.tsx`,
+`components/auth/LoginForm.tsx` (`LoginSida`), `app/login/page.tsx`,
+`lib/actions/onboarding.ts`, `components/dashboard/KomIgang.tsx`,
+`components/dashboard/Aktivitet.tsx`,
+`supabase/migrations/20261118090000_119_arbetsytans_namn.sql`,
+`scripts/qa_ny_kund.mjs`.
+
 ## 2026-11-18 (Anton) — Extern övervakning, säkerhetskontakt och Dependabot
 
 **Beslut.** Fyra luckor som en genomgång mot ISO 27001 visade fylls: en
