@@ -34,6 +34,35 @@ permissions:
   contents: read
 
 jobs:
+  # Hemlighetsskanning i CI (2026-11-18). GitHubs egen hemlighetsskanning och
+  # push-skydd stängdes av när repot blev privat: gratisplanen har dem bara för
+  # publika repon. gitleaks skannar BARA de nya commitarna i en PR eller push,
+  # inte historiken: historiken bär kända gamla lösenord (bytas av ägaren) och
+  # skulle annars fälla varje körning. Värden maskeras i utskriften (--redact).
+  hemligheter:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: gitleaks på nya commits
+        env:
+          BAS: ${{ github.event.pull_request.base.sha || github.event.before }}
+          TOPP: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -eu
+          curl -sSfL -o /tmp/gl.tgz https://github.com/gitleaks/gitleaks/releases/download/v8.18.4/gitleaks_8.18.4_linux_x64.tar.gz
+          tar -xzf /tmp/gl.tgz -C /tmp gitleaks
+          if [ -z "${BAS}" ] || [ "${BAS}" = "0000000000000000000000000000000000000000" ]; then
+            INTERVALL="${TOPP}~1..${TOPP}"
+          else
+            INTERVALL="${BAS}..${TOPP}"
+          fi
+          echo "Skannar ${INTERVALL}"
+          /tmp/gitleaks detect --source . --no-banner --redact --log-opts="${INTERVALL}"
+
   python-tests:
     name: pytest (snajp-support)
     runs-on: ubuntu-latest

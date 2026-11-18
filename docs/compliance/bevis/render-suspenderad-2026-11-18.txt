@@ -1,0 +1,9 @@
+FÖRE:
+   snajp-support-dev    suspended=not_suspended autoDeploy=yes gren=development uppdaterad=2026-11-17T23:40:11.898583Z
+   snajp-support        suspended=not_suspended autoDeploy=yes gren=main uppdaterad=2026-08-24T23:28:55.422638Z
+suspenderar snajp-support-dev: HTTP 202
+suspenderar snajp-support: HTTP 202
+EFTER:
+   snajp-support-dev    suspended=suspended autoDeploy=yes gren=development uppdaterad=2026-11-17T23:46:03.868701Z
+   snajp-support        suspended=suspended autoDeploy=yes gren=main uppdaterad=2026-11-17T23:46:04.870969Z
+2026-11-17T23:46:05Z

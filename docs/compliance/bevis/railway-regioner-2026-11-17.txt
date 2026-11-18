@@ -1,0 +1,16 @@
+Railway-regioner, projekt brave-passion (Snajp). Hämtat 2026-11-17T20:16Z, read-only via Railway GraphQL.
+projekt: brave-passion
+miljö: development
+   tjänst web        status=SUCCESS region=ams x1
+   tjänst api        status=SUCCESS region=ams x1
+   tjänst Postgres   status=SUCCESS region=ams x1
+   tjänst Redis      status=SUCCESS region=ams x1
+   tjänst support    status=SUCCESS region=ams x1
+   volym  redis-volume (Redis) region=ams
+   volym  postgres-volume-BM7I (Postgres) region=ams
+miljö: main
+   tjänst api        status=SUCCESS region=ams x1
+   tjänst web        status=SUCCESS region=ams x1
+   tjänst Postgres   status=SUCCESS region=ams x1
+   tjänst support    status=SUCCESS region=ams x1
+   volym  postgres-volume (Postgres) region=ams

@@ -1,0 +1,245 @@
+# ISO 27001-matris för Snajp
+
+Ramverk: Comp AI, ISO 27001 version 2022, id `frk_681ecc34e85064efdbb76993`, seed-data i `trycompai/comp` commit `712ee1b3`. 119 krav, 27 kontroller, 26 policyer, 24 uppgifter.
+Gjord 2026-11-17, endast läsning. Senaste genomgång: 2026-11-18 (andra). Nästa: [FYLL: datum].
+Syfte: täcka säkerhetskraven i GDPR art. 32 med en erkänd struktur inför första betalande kund. Snajp ska inte certifieras nu.
+
+**Statusregler (samma som `../gdpr/matris.md`).** *Uppfyllt* kräver belägg som finns i dag. Ett ogranskat utkast, ett skript som aldrig körts eller ett löfte utan mekanism är *delvis*. *Saknas* betyder att inget belägg finns. *Ej tillämpligt* kräver ett konkret skäl och går vidare till `soa.md`. *Okänt* betyder att underlaget inte räcker för en bedömning; raden säger vilken uppgift som behövs från ägaren.
+
+**Gruppering.** Som ramverket: klausul 4–10 (namn "Context", "Leadership", "Planning", "Support", "Operation", "Performance", "Improvement") och bilaga A.5 (Organizational), A.6 (People), A.7 (Physical), A.8 (Technological).
+
+**Kontroller.** Ramverket kopplar tre paraplykontroller till nästan alla 119 krav: *Risk Management* (RM), *Legal, Regulatory & IP Compliance* (LEG) och *Internal Audit & Management Review* (IA). De står som förkortningar. Paraplyets policyer och uppgifter upprepas inte per rad: RM → P09, G05; LEG → G01 och uppgiften *Legal Proof of Company Registration*; IA → P10 och uppgiften *Internal Security Audit*. Där ramverket bara har paraplyet anger raden ändå den policy i den här mappen som täcker kravet, märkt "(egen koppling)".
+
+**Policyer.** G01–G06 = `../gdpr/policyer/01–06` (delade med GDPR). P07–P26 = `policyer/07–26` här. Uppgifterna står i `uppgifter.md`.
+
+**Hänvisningar.** "Inv." = `../../nulage-inventering.md`. "BU A1" = avsnitt i `../../BESLUTSUNDERLAG-2026-11-17.md`. "Lev." = `../../leverantorsgranskning.md`. "JA #n" = punkt n i `docs/JURIDIK_ATGARDER.md` (2026-11-17). "bevis/konf", "bevis/backup", "bevis/region", "bevis/historik" = filerna i `../../bevis/` daterade 2026-11-17. Övriga sökvägar är relativa till repots rot. Vem: **Ä** = ägaren (Anton), **A** = agent.
+
+**Tillägg 2026-11-18.** "bevis/konf-efter" och "bevis/region-efter" = `../../bevis/railway-konfiguration-2026-11-17-efter.txt` och `railway-regioner-2026-11-17-efter.txt` (hämtade 2026-11-17 21:08 UTC, efter flytten av jobbkön). "PR n" = pull request n i repot. "Underlag" = `../../underlag/` (osignerade utkast). "GitHub-API" = repots säkerhetsinställningar och larm, lästa 2026-11-18. Tre nivåer av belägg: *i drift* (`main`, eller GitHub-inställningar som gäller repot), *i testmiljön* (mergat till `development`, release-PR 60 väntar på ägarens merge) och *utkast*. Kod i testmiljön räknas som delvis, om inte kravet bara gäller att ett tekniskt skydd finns i koden.
+
+**Markering.** Status-cellen säger "ändr. 11-18" där bevis eller gap ändrats 2026-11-18, och "var X" där statusen ändrats.
+
+---
+
+## Klausul 4: Context of the organization
+
+| Krav | Kontroll(er) | Policy · uppgifter | Status | Bevis | Gap | Vem |
+|---|---|---|---|---|---|---|
+| **4.1** Understanding the organization and its context | RM, LEG | P07 (egen koppling) | **delvis** | Inv. §1–7 och BU beskriver bolaget, driften och bristerna | Ingen beslutad kontextbeskrivning för säkerhetsarbetet (interna och externa förhållanden). Förslag i P07 | A, Ä |
+| **4.2** Needs & expectations of interested parties | RM, LEG | P07, G01 | **delvis** | Kunder (`docs/pilotavtal.md`, `docs/pub-avtal.md`, utkast), registrerade (`docs/registerforteckning.md`), IMY (`INCIDENT_RESPONSE.md:43-58`), leverantörer (Lev.) | Ingen samlad lista över intressenter och deras säkerhetskrav | A, Ä |
+| **4.3** Determining the scope of the ISMS | Policy Compliance, RM, LEG | P07 | **saknas** · ändr. 11-18 | inget beslutat. Beslutsutkast Underlag `beslut/e-omfattning-ledningssystem.md` | Omfånget är inte beslutat; utkastet osignerat. Statusen höjs inte för ett förslag, som för P07 2026-11-17 | Ä |
+| **4.4** Information security management system | Policy Compliance, RM, LEG | P07, P08 | **saknas** · ändr. 11-18 | inget belägg. Den här mappen, `../gdpr/` och Underlag är första steget | Inget beslutat ledningssystem: inga godkända policyer, ingen riskmetod, ingen uppföljning | Ä |
+
+## Klausul 5: Leadership
+
+| Krav | Kontroll(er) | Policy · uppgifter | Status | Bevis | Gap | Vem |
+|---|---|---|---|---|---|---|
+| **5.1** Leadership and commitment | RM, LEG, IA | P07 | **delvis** · ändr. 11-18 | Anton fattar och skriver säkerhetsbeslut i `docs/BESLUT.md` (t.ex. DeepSeek-spärren, webbplatsbedömningen som hemlig). Anton beslutade 2026-11-17 om A2 och A3 (genomförda) och hemlighetsskanningen i A1 (BU, läget kväll 2026-11-17) | Inget skrivet åtagande för informationssäkerhet. A1 (lösenord, repots synlighet) och A4 (säkerhetskopior) obeslutade | Ä |
+| **5.2** Information-security policy | Policy Compliance, RM, LEG, IA | P07 | **saknas** | Bara utkast (P07, G05) | Ingen godkänd informationssäkerhetspolicy | Ä |
+| **5.3** Roles, responsibilities and authorities | RM, LEG, IA | P07, G01 | **delvis** · ändr. 11-18 | Anton bedömer incidenter (`INCIDENT_RESPONSE.md:12-20`); Anton är ensam code owner (`.github/CODEOWNERS`). Beslutsutkast om roller: Underlag `beslut/a-ansvarig-dataskydd-informationssakerhet.md` | Utkastet osignerat; Sebbes ställning och Antons ersättare är [FYLL] | Ä |
+
+## Klausul 6: Planning
+
+| Krav | Kontroll(er) | Policy · uppgifter | Status | Bevis | Gap | Vem |
+|---|---|---|---|---|---|---|
+| **6.1.1** Actions to address risks and opportunities | RM, LEG, IA | P09 | **delvis** | Prioriterad gaplista (Inv. §7); BU | Ingen metod som knyter riskerna till mål och åtgärder | A, Ä |
+| **6.1.2** Information-security risk assessment | RM, LEG, IA | P09 | **delvis** | Riskregister i `import.json` här och i `../gdpr/import.json`; DPIA R1–R13 (`docs/dpia_supportagenten.md`) | Metod och acceptansnivå inte beslutade. Riskerna inte godkända | Ä |
+| **6.1.3** Information-security risk treatment | RM, LEG, IA | P09, `soa.md` | **delvis** | `soa.md` (utkast); behandling per risk i `import.json` | SoA och behandlingsplan inte beslutade. Restrisker inte accepterade | Ä |
+
+## Klausul 7: Support
+
+| Krav | Kontroll(er) | Policy · uppgifter | Status | Bevis | Gap | Vem |
+|---|---|---|---|---|---|---|
+| **7.1** Resources | RM, LEG, IA | P07 | **delvis** | Två personer; betalda drifttjänster (Vertex, Railway; Inv. §2) | Ingen tid eller budget avsatt för säkerhetsarbetet: [FYLL: timmar per månad] | Ä |
+| **7.2** Competence | RM, LEG, IA | G05 | **saknas** · ändr. 11-18 | inget belägg. Utbildningsmaterial som utkast (Underlag `utbildning/genomgang.md`) | Inga kompetenskrav och ingen förteckning över kompetens | Ä |
+| **7.3** Awareness | RM, LEG, IA | G05 | **saknas** · ändr. 11-18 | Ingen utbildning genomförd (`../gdpr/uppgifter.md` nr 5). Material och kvittens som utkast (Underlag `utbildning/`) | Genomgång och kvittenser saknas. Statusen höjs inte för material som inte använts | Ä och Sebbe |
+| **7.4** Communication | RM, LEG, IA | G03, P07 | **delvis** | Underrättelse till kund vid incident (`INCIDENT_RESPONSE.md:60-71`) | Ingen plan för vad som kommuniceras om säkerhet, till vem och hur | Ä |
+| **7.5.1** Documented information, general | RM, LEG, IA | P08 | **delvis** | `DEPLOY.md`, `AUTH.md`, `ARCHITECTURE_INVARIANTS.md`, `INCIDENT_RESPONSE.md`, `docs/BESLUT.md` | Det standarden kräver (omfång, policy, SoA, riskbedömning, revision) finns bara som utkast | A, Ä |
+| **7.5.2** Creating and updating | RM, LEG, IA | P08 | **delvis** | Git ger historik för repots dokument; BESLUT.md är daterad | `docs/compliance/` är undantagen från git och saknar versionshistorik. Policyerna saknar godkännande. `AUTH.md` beskriver det gamla Supabase-flödet (Inv. §7 #28) | A, Ä |
+| **7.5.3** Control of documented information | RM, LEG, IA | P08, G02 | **delvis** | Känsliga utkast hålls utanför git (G02 rad 37) | Repot är publikt: incidentloggen med öppna brister och tidigare lösenord är läsbara för alla (BU A1). Ingen åtkomststyrning eller lagringsplats för styrdokumenten | Ä |
+
+## Klausul 8: Operation
+
+| Krav | Kontroll(er) | Policy · uppgifter | Status | Bevis | Gap | Vem |
+|---|---|---|---|---|---|---|
+| **8.1** Operational planning and control | RM, LEG, IA | P19, P21 | **delvis** | Driftrutiner i `DEPLOY.md`; migrationer via `.github/workflows/migrera.yml` | Driften är inte planerad utifrån riskbehandlingen. Ändringar i Railway-variabler görs utan logg (A.8.9) | A |
+| **8.2** Risk assessment (operational) | RM, LEG, IA | P09 | **saknas** | inget belägg | Ingen riskbedömning med fastställt intervall eller utlösare | Ä |
+| **8.3** Risk treatment (operational) | RM, LEG, IA | P09 | **saknas** | inget belägg | Ingen godkänd behandlingsplan att genomföra | Ä |
+
+## Klausul 9: Performance evaluation
+
+| Krav | Kontroll(er) | Policy · uppgifter | Status | Bevis | Gap | Vem |
+|---|---|---|---|---|---|---|
+| **9.1.1** Monitoring, measurement, analysis | RM, LEG, IA | P07, P10 | **saknas** | inget belägg | Inga mått bestämda eller mätta | Ä |
+| **9.1.2** Evaluation of compliance | RM, LEG, IA | G01, P10 | **delvis** | Första genomgång: `../gdpr/matris.md` och den här matrisen | Ingen återkommande utvärdering. Intervall [FYLL] | Ä |
+| **9.2** Internal audit | RM, LEG, IA | P10 | **saknas** | inget belägg | Ingen internrevision. Oberoende är svårt med två personer (se P10) | Ä |
+| **9.3** Management review | RM, LEG, IA | P10, P07 | **saknas** | inget belägg | Ingen ledningens genomgång | Ä |
+
+## Klausul 10: Improvement
+
+| Krav | Kontroll(er) | Policy · uppgifter | Status | Bevis | Gap | Vem |
+|---|---|---|---|---|---|---|
+| **10.1** Nonconformity and corrective action | RM, LEG, IA | G03, P10 | **delvis** · ändr. 11-18 | Incidentloggen har åtgärdskolumn (`INCIDENT_RESPONSE.md:83-91`); gaplistor (Inv. §7). Åtgärder genomförda 2026-11-17 efter avvikelserna A2 och A3 (BU) | Ingen post bedömd eller stängd. Ingen orsaksanalys, t.ex. av hur `INKORG_JEV=auto` kom att sättas | Ä |
+| **10.2** Continual improvement | RM, LEG, IA | P07 | **delvis** | Ändringar efter händelser står i BESLUT.md (t.ex. leveransstopp efter skräpposten, `INCIDENT_RESPONSE.md:88`) | Förbättringarna sker från fall till fall, inte enligt en plan | Ä |
+
+---
+
+## A.5 Organizational controls
+
+| Krav | Kontroll(er) | Policy · uppgifter | Status | Bevis | Gap | Vem |
+|---|---|---|---|---|---|---|
+| **A.5.1** Policies for information security | Policy Compliance, RM, LEG, IA | P07, P08 · Encryption at Rest, Separation of Environments | **saknas** | 26 utkast, inga godkända | Anton godkänner policyerna och de kommuniceras till Sebbe | Ä |
+| **A.5.2** Roles and responsibilities | RM, LEG | P07 (egen koppling) | **delvis** | Som 5.3 | Som 5.3 | Ä |
+| **A.5.3** Segregation of duties | RM, LEG, IA | P11, P19 (egen koppling) | **delvis** | `main` kräver code owner-granskning (`.github/CODEOWNERS`; PR #43, #44) | `development` deployas utan granskning och bär produktionsdata (`DEPLOY.md:155-174`). Båda har full adminåtkomst. Två personer kräver kompenserande kontroller | Ä |
+| **A.5.4** Management responsibilities | RM, LEG, IA | P07 (egen koppling) | **saknas** | Regler finns bara för AI-kodverktyg (`CLAUDE.md`) | Inga krav ställda på människorna, eftersom ingen policy är godkänd | Ä |
+| **A.5.5** Contact with authorities | RM, LEG, IA | G01, G03 | **delvis** | IMY-anmälan beskriven (`INCIDENT_RESPONSE.md:43-58`) | Ingen kontaktlista för IMY, CERT-SE och polis. Förfrågningsloggen saknas (G01 rad 51) | Ä |
+| **A.5.6** Contact with special interest groups | RM, LEG, IA | P09 (egen koppling) | **saknas** | inget belägg | Ingen bevakning, t.ex. CERT-SE:s utskick | Ä |
+| **A.5.7** Threat intelligence | RM, LEG, IA | P09 | **delvis** · ändr. 11-18, var saknas | Sårbarheter i beroenden bevakas: Dependabot-larm mot GitHubs databas över säkerhetsmeddelanden är påslagna och ger larm (68 öppna 2026-11-18, GitHub-API) | Bara beroenden bevakas. Inga leverantörsmeddelanden (Railway, Google, GitHub) eller CERT-SE. Ingen läser larmen enligt en rutin: Gemini 2.5 passerade Googles pensionsdatum 2026-10-20 utan att det fångades (`../../gemini-bedomning.md`) | Ä |
+| **A.5.8** Information security in project management | RM, LEG, IA | P20 (egen koppling) | **delvis** | Säkerhetsinvarianter skrivs när funktioner byggs (`ARCHITECTURE_INVARIANTS.md`, INV-SEC-001–012); grinda webbplatsbedömningen i samma commit (`CLAUDE.md`) | Ingen fast säkerhetsfråga i planeringen av varje arbete | A |
+| **A.5.9** Inventory of information and assets | RM, LEG, IA | G02, P17 (egen koppling) · Device List | **delvis** | Data: `docs/registerforteckning.md`; tjänster: `../../leverantorer.json`; driftresurser: bevis/region | Ingen förteckning över datorer, telefoner och konton med ägare | Ä |
+| **A.5.10** Acceptable use | RM, LEG, IA | P13 (egen koppling) | **delvis** | Testmiljöns sekretessregler (`DEPLOY.md:166-174`); "Läckagespärr" (`CLAUDE.md`) | Reglerna skrivna för agenter och testmiljön. Regler för människor och datorer finns bara som utkast (P13) | Ä |
+| **A.5.11** Return of assets | RM, LEG, IA | P15 (egen koppling) | **saknas** | inget belägg | Ingen avslutsrutin. Den som slutar har lokala kopior av `.env.deploy` och kan ha kunddata på sin dator | Ä |
+| **A.5.12** Classification of information | RM, LEG, IA | G02 (egen koppling) | **delvis** | Fyra nivåer i G02 (utkast) | Inte godkänd | Ä |
+| **A.5.13** Labelling of information | RM, LEG, IA | G02 (egen koppling) | **delvis** | Klassning efter plats (G02 rad 32-38) | Inte godkänd | Ä |
+| **A.5.14** Information transfer | RM, LEG, IA | P24, G02 (egen koppling) | **delvis** · ändr. 11-18 | Utgående HTTPS (`snajp-support/app/tls.py:19`); DPA hos flera leverantörer (Lev.). I drift sedan 2026-11-17: jobbkön på Railways egen Redis över privat nät i båda miljöerna (bevis/konf-efter rad 118, 269); kundmejl går inte till TypeSafe (`INKORG_JEV = off`, rad 95, 248) | Produktionsdata via GitHub-runners (`.github/workflows/synk.yml:34-44`); plan i `../../synkflytt-plan.md`, inte genomförd. Jev får fortfarande leadsdata | Ä |
+| **A.5.15** Access control | RM, LEG, IA | P11 (egen koppling) | **delvis** | RLS och approll utan BYPASSRLS (INV-SEC-001); admin fail-closed (Inv. §4) | Inga regler för åtkomst till leverantörskonton. RLS bara verifierat mot den gamla databasen (JA #23) | Ä, A |
+| **A.5.16** Identity management | RM, LEG, IA | P11, P12 (egen koppling) | **delvis** | Personliga inloggningar i appen (`lib/password.ts`) | Delade identiteter: plattformsadmin är det delade kontot `snajpsupport@gmail.com` (`AUTH.md:134-136`); agentsajten har en gemensam inloggning (`DEPLOY.md:559`); samma Vertex-servicekonto i alla miljöer (JA #14) | Ä |
+| **A.5.17** Authentication information | RM, LEG, IA | P12 (egen koppling) · 2FA, Secure Secrets | **delvis** · ändr. 11-18 | `scripts/keys.py` läser med getpass och skriver bara till gitignorerade filer; `.env*` gitignorerat (`.gitignore:63`); test mot reservlösenord (`tests/invariants/test_inga_reservlosenord.py`) | Plattformsadminens lösenord ligger i publik historik och är inte bytt (BU A1). Åtta lösenord i historiken (bevis/historik). Hemlighetsskanning med push-skydd påslagen (GitHub-API), men den känner bara leverantörers nyckelformat, inte vanliga lösenord. Lösenordshanterare okänd | Ä |
+| **A.5.18** Access rights | RM, LEG, IA | P11 (egen koppling) · Access Review Log | **delvis** | Plattformsadmin ges bara via SQL, tabellen saknar skrivpolicyer (`AUTH.md:118-125`) | Ingen förteckning över vem som har åtkomst till GitHub, Railway, Google Cloud, Redis Cloud, Resend och Loopia. Ingen översyn | Ä |
+| **A.5.19** Information security in supplier relationships | Supplier & Third-Party Security, RM, LEG, IA | G06, P26 | **delvis** · ändr. 11-18 | Granskning av 15 leverantörer (Lev., 2026-11-17); `../../leverantorer.json`. TypeSafe får inte längre kundmejl (bevis/konf-efter rad 95, 248). Beslutsutkast om godkännande av ny leverantör eller modell (Underlag `beslut/f-…`) | Policyn och godkännandebeslutet osignerade. TypeSafe röd och får fortfarande leadsdata; GitHub gul/röd (Lev. tabell) | Ä |
+| **A.5.20** Security within supplier agreements | Supplier & Third-Party Security, RM, LEG, IA | G06, P26 | **delvis** · ändr. 11-18 | DPA gäller automatiskt hos Google och Resend (Lev. §1, 5). Brev till Railway, TypeSafe och ScrapeGraphAI som utkast (Underlag `brev/`) | Railways DPA osignerad (JA #6). ScrapeGraphAI och GitHub Free utan DPA (JA #10, #11). Breven inte skickade. Inga säkerhetsklausuler utöver DPA:erna | Ä |
+| **A.5.21** ICT supply chain | Supplier & Third-Party Security, RM, LEG, IA | P26, P22 | **delvis** · ändr. 11-18 | Leverantörernas underbiträden granskade (Lev.); grind för vendorade skills (`.github/workflows/verify.yml:91-99`). Dependabot-larm påslagna för repot (GitHub-API); veckovisa uppdaterings-PR för npm, pip, Actions och Docker i testmiljöns gren (`.github/dependabot.yml`, PR 50) | 68 öppna Dependabot-larm 2026-11-18: 10 kritiska, 28 höga, 27 medel, 3 låga. Basimagen hämtas från speglar (`verify.yml:107-118`) | A |
+| **A.5.22** Monitoring and change of supplier services | Supplier & Third-Party Security, RM, LEG, IA | G06, P26 | **delvis** · ändr. 11-18 | Första granskningen gjord; Gemini-bedömningen 2026-11-17 (`../../gemini-bedomning.md`) | Ingen återkommande granskning eller bevakning av villkorsändringar. Gemini 2.5 passerade Googles pensionsdatum 2026-10-20 utan att det fångades; modellen svarar ännu | Ä |
+| **A.5.23** Use of cloud services | RM, LEG, IA | P26, G06 (egen koppling) | **delvis** · ändr. 11-18 | Alla Railway-tjänster i Amsterdam (bevis/region-efter). Gamla stacken stängd i drift: Render-tjänsterna suspenderade 2026-11-17 (`../../render-suspenderad-2026-11-18.txt`); gamla Vercel-projektet pausat med inloggningsskydd och avstängda förhandsdeployer (`../../bevis/vercel-snajp-stangt-2026-11-18.txt`); `keep-backend-awake.yml` borttagen i standardgrenen (PR 45) | Ingen exitplan. Railways DPA osignerad. Render och Vercel är pausade, inte raderade; Render-nyckelns rotering inte belagd. Ett annat Vercel-projekt leder fortfarande sajtens apexdomän vidare till www (samma bevisfil), så Vercel är inte helt avvecklat. Supabase-projektet inte raderat (JA #15). Redis Cloud-databasen inte raderad | Ä |
+| **A.5.24** Incident management planning | RM, LEG, IA | G03 (egen koppling) · Incident Response | **delvis** · ändr. 11-18 | `INCIDENT_RESPONSE.md:12-77`. Driftlarm som ärenden med länk till rutinen (`overvakning.yml`, PR 50); övningsprotokoll som utkast (Underlag `rutiner/c-incidentovning.md`) | Rutinen aldrig provad i en övning. Den gäller personuppgifter, inte andra säkerhetshändelser (driftstopp, intrång utan persondata) | Ä |
+| **A.5.25** Assessment of security events | RM, LEG, IA | G03 (egen koppling) | **saknas** | Sju poster, alla "ej bedömd" (`INCIDENT_RESPONSE.md:85-91`) | Inga bedömningar gjorda | Ä |
+| **A.5.26** Response to incidents | RM, LEG, IA | G03 (egen koppling) | **delvis** · ändr. 11-18 | Lösenorden togs ur filerna; promptläckan rättad (commit `62ea7d56`); leveransstopp (`INCIDENT_RESPONSE.md:88-90`). 2026-11-17: TypeSafe stoppad för kundmejl, jobbkön flyttad från Redis Cloud, Render suspenderad (bevis/konf-efter; `../../render-suspenderad-2026-11-18.txt`); `/health/ready` lämnar inte ut drivrutinens feltext (PR 49, testmiljön) | Lösenordet inte bytt. Render-nyckelns rotering inte belagd. Raderingsbegäran till TypeSafe inte skickad | Ä |
+| **A.5.27** Learning from incidents | RM, LEG, IA | G03 (egen koppling) | **delvis** | Kravet på ändring efter incident (`INCIDENT_RESPONSE.md:73-77`); kodändringar efter skräpposten | Ingen genomgång dokumenterad | Ä |
+| **A.5.28** Collection of evidence | RM, LEG, IA | G03, P25 (egen koppling) | **saknas** | inget belägg | Ingen rutin för att säkra loggar innan de försvinner. Railways loggtid okänd | Ä |
+| **A.5.29** Security during disruption | RM, LEG, IA | P18 (egen koppling) | **saknas** | inget belägg | Ingen plan för säkerheten vid avbrott | Ä |
+| **A.5.30** ICT readiness for business continuity | RM, LEG, IA | P18 (egen koppling) | **saknas** · ändr. 11-18 | Inga säkerhetskopior (bevis/backup). Beslutsutkast om mål och prov (Underlag `beslut/g-sakerhetskopiering-aterstallning.md`) | Inga beslutade mål för återställning (RTO, RPO), ingen kopia, ingen övning. Railway kräver Pro-planen för kopior (BU A4) | Ä |
+| **A.5.31** Legal and contractual requirements | RM, LEG, IA | G01 | **delvis** | Tabell över skyldigheter (G01 rad 33-41) | Inte godkänd. Kundernas avtalskrav saknas (inget signerat PUB, JA #7) | Ä |
+| **A.5.32** Intellectual property rights | RM, LEG, IA | G01, P16 | **delvis** | AGPL-noteringen för Comp AI (`../gdpr/LASMIG.md` rad 18); vendorade skills spåras (INV-SKILL-005, 006) | Ingen licensförteckning över beroenden. Allabolag och hitta hämtas utan avtal (JA #25) | A, Ä |
+| **A.5.33** Protection of records | RM, LEG, IA | G01, P08 | **delvis** | Git-historik; BESLUT.md | Inga lagringstider för egna register (incidenter, beslut, revisioner). Publikt repo (7.5.3) | Ä |
+| **A.5.34** Privacy and protection of PII | RM, LEG, IA | G04, G02 | **delvis** · ändr. 11-18 | `../gdpr/matris.md` 2026-11-18: 17 krav delvis, 1 saknas, 1 ej tillämpligt | Som GDPR-matrisen | Ä |
+| **A.5.35** Independent review | RM, LEG, IA | P10 | **saknas** | inget belägg | Ingen oberoende granskning. Juristgranskning inte bokad (JA #7) | Ä |
+| **A.5.36** Compliance with policies and standards | Policy Compliance, RM, LEG, IA | G01, P07, P08, G05 | **saknas** | inget belägg | Inga godkända policyer att mäta mot | Ä |
+| **A.5.37** Documented operating procedures | RM, LEG, IA | P19, P21 (egen koppling) | **delvis** | `DEPLOY.md` (deploy, migrationer, DNS), `INCIDENT_RESPONSE.md`, skript med torrkörning (t.ex. `scripts/railway_migrate.py`) | Ingen rutin för säkerhetskopiering och återställning. `AUTH.md` inaktuell | A |
+
+## A.6 People controls
+
+| Krav | Kontroll(er) | Policy · uppgifter | Status | Bevis | Gap | Vem |
+|---|---|---|---|---|---|---|
+| **A.6.1** Screening | Human Resources Security, RM, LEG, IA | P15 (ramverket har ingen policy) · Employee Verification | **saknas** | inget belägg | Ingen dokumenterad kontroll. För Anton och Sebbe föreslås ett undantag (P15); kravet gäller nästa person | Ä |
+| **A.6.2** Terms and conditions of employment | Acceptable Use, Business Continuity & ICT Readiness, Human Resources Security, RM, LEG, IA | P13, P15, P16 | **okänt** | – | Kräver uppgift från ägaren: Sebbes avtalsform (anställd, uppdragstagare, delägare) och om avtalet har villkor om säkerhet och sekretess | Ä |
+| **A.6.3** Awareness, education and training | Human Resources Security, RM, LEG, IA | G05 · Employee Performance Evaluations | **saknas** | inget belägg | Ingen genomgång eller kvittens | Ä |
+| **A.6.4** Disciplinary process | Human Resources Security, RM, LEG | P16 | **okänt** | – | Kräver uppgift: om Sebbes avtal reglerar följden av brott mot säkerhetsreglerna | Ä |
+| **A.6.5** Responsibilities after termination | Human Resources Security, RM, LEG, IA | P15 | **okänt** | – | Kräver uppgift: om sekretessen i Sebbes avtal gäller efter avslut | Ä |
+| **A.6.6** Confidentiality agreements | Human Resources Security, RM, LEG, IA | P15, P24 | **okänt** | – | Kräver uppgift: om sekretessavtal finns med Sebbe och med andra som sett kunddata | Ä |
+| **A.6.7** Remote working | Human Resources Security, RM, LEG, IA | P14, P13 | **delvis** | Testmiljöns sekretessregler gäller allt arbete (`DEPLOY.md:166-174`) | Allt arbete sker på distans på egna datorer. Inga regler för plats, nätverk och skärm | Ä |
+| **A.6.8** Security event reporting | Human Resources Security, RM, LEG, IA | G03 | **delvis** · ändr. 11-18 | Rapportera till Anton (`INCIDENT_RESPONSE.md:18-20`; G03 rad 25). I testmiljön: `SECURITY.md` och `security.txt` för externa rapportörer (PR 50) | Ingen kontaktlista utanför det publika repot (G03 rad 41). `security.txt` inte i drift förrän PR 60. GitHubs privata sårbarhetsrapportering avslagen (GitHub-API). Svarstiden i `SECURITY.md` är [FYLL] | Ä |
+
+## A.7 Physical controls
+
+All drift ligger hos molnleverantörer (Railway i Amsterdam, Google Cloud i EU; bevis/region-efter, Lev.). Jobbkön ligger sedan 2026-11-17 på Railways egen Redis, inte längre hos Redis Cloud. Snajp har inga lokaler, inget serverrum och inga egna servrar. Arbetet sker på egna bärbara datorer, hemma eller på annan plats. Kontrollerna om lokaler är därför ej tillämpliga; leverantörernas fysiska skydd följs upp under A.5.19–A.5.23 (Railway SOC 2 Type II, Redis SOC 2 och ISO 27001, Google ISO 27001; Lev. §1, 3, 4). Kontrollerna om utrustning gäller datorerna och är tillämpliga.
+
+| Krav | Kontroll(er) | Policy · uppgifter | Status | Bevis | Gap | Vem |
+|---|---|---|---|---|---|---|
+| **A.7.1** Physical security perimeters | RM, LEG, IA | P17 | **ej tillämpligt** | Inga egna lokaler; drift hos leverantörer (bevis/region) | Skälet ska beslutas i SoA. Leverantörernas perimeter följs upp under A.5.19 | Ä |
+| **A.7.2** Physical entry | Physical & Environmental Security, RM, LEG, IA | P17 | **ej tillämpligt** | Som A.7.1 | Som A.7.1 | Ä |
+| **A.7.3** Securing offices, rooms and facilities | Physical & Environmental Security, RM, LEG, IA | P17 | **ej tillämpligt** | Inget kontor. Hemarbete täcks av A.6.7, A.7.7 och A.7.9 | Som A.7.1 | Ä |
+| **A.7.4** Physical security monitoring | Physical & Environmental Security, RM, LEG, IA | P17 | **ej tillämpligt** | Som A.7.1 | Som A.7.1 | Ä |
+| **A.7.5** Physical and environmental threats | Physical & Environmental Security, RM, LEG, IA | P17 | **ej tillämpligt** | Inga egna anläggningar. Datorernas risk (stöld, brand hemma) täcks av A.7.9 och säkerhetskopiorna (A.8.13) | Som A.7.1 | Ä |
+| **A.7.6** Working in secure areas | Physical & Environmental Security, RM, LEG, IA | P17 | **ej tillämpligt** | Inga säkra områden | Som A.7.1 | Ä |
+| **A.7.7** Clear desk and clear screen | Physical & Environmental Security, RM, LEG, IA | P13, P17 | **okänt** | – | Kräver uppgift: skärmlås på datorerna (tid) och om arbete sker där andra ser skärmen | Ä |
+| **A.7.8** Equipment siting and protection | Physical & Environmental Security, RM, LEG, IA | P17 | **okänt** | – | Kräver uppgift: var datorerna står och förvaras när de inte används | Ä |
+| **A.7.9** Security of assets off-premises | Physical & Environmental Security, RM, LEG, IA | P14, P17 | **okänt** | – | Kräver uppgift: diskkryptering och hur datorerna skyddas på resa | Ä |
+| **A.7.10** Storage media | Physical & Environmental Security, RM, LEG, IA | P17, P13 | **okänt** | – | Kräver uppgift: om USB-minnen eller externa diskar används, och om databasdumpar eller `.env.deploy` finns lokalt | Ä |
+| **A.7.11** Supporting utilities | Physical & Environmental Security, RM, LEG, IA | P17 | **ej tillämpligt** | Ström och kyla för driften sköts av leverantörerna; datorerna har batteri | Som A.7.1 | Ä |
+| **A.7.12** Cabling security | Physical & Environmental Security, RM, LEG, IA | P17 | **ej tillämpligt** | Ingen egen kabeldragning | Som A.7.1 | Ä |
+| **A.7.13** Equipment maintenance | Physical & Environmental Security, RM, LEG, IA | P17 | **okänt** | – | Kräver uppgift: hur service och reparation av datorerna går till (lämnas disken ut?) | Ä |
+| **A.7.14** Secure disposal or re-use of equipment | Physical & Environmental Security, RM, LEG, IA | P17 | **saknas** | inget belägg | Ingen rutin för att radera datorer och telefoner före byte eller försäljning | Ä |
+
+## A.8 Technological controls
+
+| Krav | Kontroll(er) | Policy · uppgifter | Status | Bevis | Gap | Vem |
+|---|---|---|---|---|---|---|
+| **A.8.1** User endpoint devices | Asset Inventory, Endpoint Protection, RM, LEG, IA | P13, P14 · Device List, Secure Devices | **okänt** | – | Kräver uppgift: lista över datorer och telefoner, diskkryptering, skärmlås, automatiska uppdateringar, antivirus | Ä |
+| **A.8.2** Privileged access rights | Access Rights, RM, LEG, IA | P11 · Access Review Log, Employee Access | **delvis** | Plattformsadmin bara via SQL (`AUTH.md:118-125`); approll utan BYPASSRLS (INV-SEC-001) | Plattformsadminens lösenord exponerat (BU A1). Ingen lista över admins i GitHub, Railway och Google Cloud | Ä |
+| **A.8.3** Information access restriction | Access Rights, Encryption Key Management, RM, LEG, IA | P11, P23 | **delvis** | Tenant kommer aldrig från modellen (INV-SEC-002); RLS (INV-SEC-001); webbplatsbedömningen grindad (`CLAUDE.md`; `snajp-support/app/api/admin_listor.py`) | RLS inte verifierat mot Railway (JA #23). All produktionsdata finns också i testmiljön (JA #16) | A, Ä |
+| **A.8.4** Access to source code | Change management, RM, LEG, IA | P19 · Code Changes | **delvis** | Grenskydd och code owner på `main` (Inv. §4) | Repot är publikt, så vem som helst läser koden (BU A1). `development` saknar grenskydd. Vem som har skrivrätt är inte förtecknat | Ä |
+| **A.8.5** Secure authentication | Credential Management, RM, LEG, IA | P12 · 2FA, Secure Secrets | **delvis** | Lösenord hashas med scrypt (`lib/password.ts:13-40`); inloggning via Google och Entra möjlig (`lib/auth.ts`) | Ingen tvåfaktor i appen. Tvåfaktor på leverantörskontona okänd. Ingen spärr efter misslyckade inloggningar belagd | Ä, A |
+| **A.8.6** Capacity management | Resource Capacity Management, RM, LEG, IA | P18 · App Availability | **delvis** | Hastighetsbegränsning (`snajp-support/app/api/rate_limit.py`); tokenbudget (bevis/konf rad 98, 237); kreditslut hanteras (INV-QUOTA-001) | En replik per tjänst (bevis/region). Ingen kapacitetsövervakning | A |
+| **A.8.7** Protection against malware | Endpoint Protection, RM, LEG, IA | P13 · Secure Devices | **okänt** | – | Kräver uppgift: antivirus och uppdateringar på datorerna | Ä |
+| **A.8.8** Technical vulnerabilities | Vulnerability Management, RM, LEG, IA | P22, P20 · Separation of Environments | **delvis** · ändr. 11-18, var saknas | Påslaget för repot (GitHub-API 2026-11-18): Dependabot-larm och säkerhetsuppdateringar, kodskanning med CodeQL, hemlighetsskanning med push-skydd. `.github/dependabot.yml` i testmiljöns gren (PR 50). Kodskanningens verkliga larm rättade (PR 49, `../../kodskanning-triage.md`) | Öppna larm 2026-11-18: Dependabot 10 kritiska, 28 höga, 27 medel, 3 låga; kodskanning 44 (39 höga, 5 medel), de flesta bedömda som falska men inte avfärdade. Inga beslutade tidsgränser för patchning (P22 utkast) | Ä, A |
+| **A.8.9** Configuration management | Endpoint Protection, RM, LEG, IA | P21 | **delvis** · ändr. 11-18 | Konfiguration i kod med uppstartsspärrar (`snajp-support/app/config.py:609-736`); export av driftkonfigurationen före och efter ändringarna 2026-11-17 (bevis/konf, bevis/konf-efter); `INKORG_JEV = off` i båda miljöerna (bevis/konf-efter rad 95, 248) | Ingen baslinje. Railway-variabler ändras för hand utan logg; vem som satte `INKORG_JEV=auto` är fortfarande okänt. Reservvariabeln `REDIS_URL_FORE_FLYTT` ligger kvar | Ä, A |
+| **A.8.10** Information deletion | Data Masking, Data Privacy, RM, LEG, IA | G02, P24 · Data Masking, Public Policies | **delvis** · ändr. 11-18 | `scripts/gallra.py`; `scripts/gdpr_radera.py`, utökat till dagens tabeller (PR 45). I testmiljön: gallring över alla kategorier med databastester i CI (PR 48, INV-DATA-005), avslagen | Ingen gallring körs: period inte beslutad, `GALLRING_AKTIV` av, inte i `main` (JA #8). Radering aldrig provad (JA #18). Supabase, Render och Redis Cloud inte raderade (JA #15) | Ä, A |
+| **A.8.11** Data masking | Data Masking, Data Privacy, RM, LEG, IA | G02, P20 · Data Masking | **delvis** · ändr. 11-18 | Personnummer maskeras före Vertex (`snajp-support/app/moderation/maskering.py`); adresser bort före Jev (`snajp-support/app/leads/jev.py:63-77`); personnummer också före TypeSafe (PR 45, testmiljön) | Hälsouppgifter i löptext maskeras inte (DPIA R1). Maskering före inbäddningar byggs i en PR som inte är mergad. Testmiljön är omaskerad | A |
+| **A.8.12** Data leakage prevention | Data Masking, Data Privacy, RM, LEG, IA | G02, P24 | **delvis** · ändr. 11-18 | Webbplatsbedömningen grindad; listrader utan bedömning (`snajp-support/app/api/admin_listor.py:LISTRADSFALT`); test mot reservlösenord. Hemlighetsskanning med push-skydd stoppar leverantörsnycklar vid push, 0 öppna larm (GitHub-API) | Publikt repo; synkloggen sparas som artefakt i GitHub i 14 dagar (`synk.yml:45-50`). Skanningen känner inte igen vanliga lösenord (mönster utanför leverantörsformat avslagna) | A, Ä |
+| **A.8.13** Information backup | Disaster Recovery Planning, RM, LEG, IA | P18 · Planning, Backup Restoration Test | **saknas** · ändr. 11-18 | Railways API: inga scheman och inga kopior på någon volym (bevis/backup). Beslutsutkast (Underlag `beslut/g-…`) | Produktionsdatabasen kan inte återställas. Railway kräver Pro-planen för både schemalagda och manuella kopior (BU A4); planen inte uppgraderad | Ä |
+| **A.8.14** Redundancy | Disaster Recovery Planning, Resource Capacity Management, RM, LEG, IA | P18 · App Availability | **saknas** | En replik per tjänst i en region (bevis/region) | Inga tillgänglighetskrav satta, ingen redundans | Ä |
+| **A.8.15** Logging | Security Incident Management, Security Monitoring & Detection, RM, LEG, IA | P25 · Monitoring & Alerting | **delvis** | `X-Request-Id` och `platform_events` (`snajp-support/app/sparning.py`); `agent_runs`; `ss_decision_log` (Inv. §4) | Ingen åtkomstlogg för admin. Railways loggtid okänd. `agent_runs` sparar fulla promptar utan gallring | A, Ä |
+| **A.8.16** Monitoring activities | Security Incident Management, Security Monitoring & Detection, Utility Tool monitoring, RM, LEG, IA | P25 · Monitoring & Alerting | **delvis** · ändr. 11-18, var saknas | I drift: `.github/workflows/overvakning.yml` (PR 50, i standardgrenen) hämtar webben och api:ts hälsokontroller i produktionen och skapar ett ärende med etiketten `driftlarm` vid avvikelse. Larmkedjan provad: ärende 53 skapat av ett simulerat fel 2026-11-17 23:39 UTC och stängt 23:41 UTC. Leveransstopp vid studs och klagomål (`send_guard.py:68-79`) | Ser driftfel, inte intrång eller missbruk. Schemat har gett en schemalagd körning under natten (04:44 UTC 2026-11-18) i stället för var 15:e minut. Internlarmets `INTERNLARM_SMTP_*` saknas fortfarande i api i båda miljöerna. Ingen felspårning (Inv. §2.2) | Ä, A |
+| **A.8.17** Clock synchronization | Utility Tool monitoring, RM, LEG, IA | P25 · Utility Monitoring | **okänt** | – | Kräver uppgift: tidssynk på datorerna (standard i Windows och macOS, men inte kontrollerat). Railway-värdarna sköts av leverantören utan belägg | Ä |
+| **A.8.18** Privileged utility programs | Utility Tool monitoring, RM, LEG, IA | P25, P21 · Utility Monitoring | **delvis** | Skript som skriver mot driften kräver `--apply` och har torrkörning (`scripts/railway_migrate.py`, `scripts/redis_tls_pa.py`) | Ingen lista över verktyg med full åtkomst (Railway CLI, psql, Railway-token) och vem som använder dem | A |
+| **A.8.19** Software on operational systems | Endpoint Protection, RM, LEG, IA | P21, P13 | **delvis** | Driften byggs bara ur repot (`snajp-support/Dockerfile`; `verify.yml:120-138`) | Inga regler för programvara på datorerna, som når driften | A, Ä |
+| **A.8.20** Networks security | Secure Data Transfer, RM, LEG, IA | P23 · TLS / HTTPS | **delvis** · ändr. 11-18 | Apparna når databasen och, sedan 2026-11-17, jobbkön via Railways privata nät; ingen `REDIS_URL` pekar utanför det (bevis/konf-efter rad 57, 118, 269, 323) | Postgres har fortfarande en publik TCP-proxy i `main` och i `development` (bevis/konf-efter rad 229-231 och 75-77), och synken ansluter från GitHubs runners (`synk.yml:34-44`) | Ä |
+| **A.8.21** Security of network services | Network Security, Secure Data Transfer, RM, LEG, IA | P20, P23 · TLS / HTTPS, Production Firewall & No-Public-Access Controls | **delvis** · ändr. 11-18 | Publika adresser är `https://` (bevis/konf rad 161, 176). Redis går inte längre över internet | Ingen SSL Labs-mätning. Appen sätter ingen HSTS (`next.config.ts:37-66`) | A, Ä |
+| **A.8.22** Segregation of networks | Network Security, Business Continuity & ICT Readiness, RM, LEG, IA | P20 · Production Firewall, Separation of Environments | **delvis** · ändr. 11-18 | Två Railway-miljöer med egna interna nät (bevis/region-efter). Egen Redis-tjänst per miljö sedan 2026-11-17 (bevis/konf-efter) | Synken förbinder miljöerna över Postgres publika proxy | Ä |
+| **A.8.23** Web filtering | Network Security, Business Continuity & ICT Readiness, RM, LEG, IA | P13, P20 | **delvis** | Appens utgående trafik allowlistas (INV-SEC-005; `snajp-support/app/leads/hamtvakt.py`) | Webbskydd på datorerna okänt | Ä |
+| **A.8.24** Use of cryptography | Encryption Key Management, Secure Data Transfer, Business Continuity & ICT Readiness, RM, LEG, IA | P23 · Encryption at Rest, Secure Secrets, TLS / HTTPS | **delvis** · ändr. 11-18 | Kundnycklar krypteras med Fernet i produktionen (Inv. §4); scrypt för lösenord; HTTPS utgående | Ingen nyckelrotation. Kundnycklar i klartext i testmiljön (JA #16). Railways kryptering i vila bara enligt DPA (Lev. §3). Redis-trafiken går sedan 2026-11-17 över Railways privata nät, inte över internet; TLS är inte påslaget där, och det är inte belagt om nätet krypterar | Ä, A |
+| **A.8.25** Secure development life cycle | Change management, Secure SDLC Integration, Vulnerability Management, Business Continuity & ICT Readiness, RM, LEG, IA | P20, P19 · Code Changes, Sanitized Inputs | **delvis** · ändr. 11-18 | CI med tester och invarianter (`verify.yml:33-153`); PR med code owner till `main`. Kodskanning med CodeQL körs på PR (analyser på PR 60, GitHub-API); Dependabot påslaget; workflows med minsta rättigheter (PR 49) | Railway deployar på push utan att vänta på CI (`verify.yml:21-26`). Öppna kritiska och höga larm (A.8.8) blockerar inte release | A, Ä |
+| **A.8.26** Application security requirements | Secure SDLC Integration, Business Continuity & ICT Readiness, RM, LEG, IA | P20 · Sanitized Inputs | **delvis** · ändr. 11-18 | Krav som invarianter (INV-SEC-001–012, INV-GROUND-001–004); validering med Pydantic i API:t (`snajp-support/requirements.txt`). I testmiljön: `/health/ready` lämnar inte ut drivrutinens feltext, sessions-id med säker slump, demons sessionscookie godtar bara UUID (PR 49) | Inga krav på tvåfaktor eller på vad publika agentytor får lämna ut. Promptläckan 2026-11-10 visar luckan (`INCIDENT_RESPONSE.md:90`). Rättningarna inte i drift förrän PR 60 | A |
+| **A.8.27** Secure architecture and engineering | Encryption Key Management, Endpoint Protection, Network Security, Secure SDLC Integration, Vulnerability Management, Business Continuity & ICT Readiness, RM, LEG, IA | P20, P23 | **delvis** · ändr. 11-18 | `ARCHITECTURE_INVARIANTS.md` med tester i `tests/invariants` som körs i CI. Redis inte längre delad mellan miljöerna (bevis/konf-efter) | RLS-verifiering mot driften saknas. Publik databasproxy bryter mot separationen | A, Ä |
+| **A.8.28** Secure coding | Secure SDLC Integration, Vulnerability Management, Business Continuity & ICT Readiness, RM, LEG, IA | P20 · Sanitized Inputs | **delvis** · ändr. 11-18 | Opålitlig text aldrig i instruktionsposition (INV-SEC-003, 009, 012); modellen kan inte skicka (INV-SEC-004). Statisk analys med CodeQL; långsamma reguljära uttryck rättade med tidstester (PR 49) | Lösenord och nycklar har committats i skript och tester (bevis/historik, 16 värden). 44 öppna kodskanningslarm, inte avfärdade eller rättade | A |
+| **A.8.29** Security testing in development | Change management, Business Continuity & ICT Readiness, RM, LEG, IA | P20, P19 · Code Changes | **delvis** · ändr. 11-18 | Invarianttester; RLS-test (`snajp-support/tests/db/test_rls_isolation.py`); CodeQL på PR. I testmiljöns gren: CI-jobbet `databastester` reser migrationskedjan i Postgres och kör gallringstesterna (PR 48) | RLS-testet hoppas över utan databas (Inv. §4) och ingår inte i det nya databasjobbet. Inget penetrationstest | A, Ä |
+| **A.8.30** Outsourced development | Business Continuity & ICT Readiness, RM, LEG, IA | P20, P15 | **delvis** | AI-kodverktyg styrs av `CLAUDE.md` och invarianterna; `main` granskas av Anton | Sebbes avtalsform okänd. AI-kodverktyg läser testmiljöns kunddata (JA #28) | Ä |
+| **A.8.31** Separation of environments | Change management, Business Continuity & ICT Readiness, RM, LEG, IA | P19, P21 · Separation of Environments | **delvis** · ändr. 11-18 | Separata Railway-miljöer (bevis/region-efter); egen Redis per miljö sedan 2026-11-17 (bevis/konf-efter); lokal stack mot tom databas (`scripts/lokal_stack.py`) | `development` speglar produktionens persondata (`DEPLOY.md:155-174`) och delar Vertex-konto med `main` (JA #14). Utskick från `development` tillåtna (Inv. §6.3 p. 6) | Ä |
+| **A.8.32** Change management | Change management, Standard Operating Procedures (SOPs), Business Continuity & ICT Readiness, RM, LEG, IA | P19 · Code Changes | **delvis** | PR #43 och #44 till `main` med granskning; migrationer med kontroll i PR (`migrera.yml`) | `development` ändras utan granskning trots produktionsdata. Ändringar i Railway-variabler loggas inte | Ä |
+| **A.8.33** Test information | Business Continuity & ICT Readiness, RM, LEG, IA | G02, P24 | **delvis** | Sekretessregler för spegeln (`DEPLOY.md:166-174`) | Produktionens persondata används oförändrad som testdata. Kundnycklar i klartext (JA #16) | Ä |
+| **A.8.34** Protection during audit testing | Business Continuity & ICT Readiness, RM, LEG, IA | P10 | **delvis** | Granskningarna 2026-11-17 gjordes med läsrättighet (rubrikerna i `../../bevis/`); torrkörning först (`CLAUDE.md`) | Ingen skriven regel för hur revisioner och tester får nå driften | A |
+
+---
+
+## Summering
+
+| Status | 2026-11-17 | 2026-11-18 | Krav 2026-11-18 |
+|---|---|---|---|
+| Uppfyllt | 0 | 0 | – |
+| Delvis | 71 | 74 | 4.1, 4.2, 5.1, 5.3, 6.1.1, 6.1.2, 6.1.3, 7.1, 7.4, 7.5.1, 7.5.2, 7.5.3, 8.1, 9.1.2, 10.1, 10.2, A.5.2, A.5.3, A.5.5, A.5.7, A.5.8, A.5.9, A.5.10, A.5.12–A.5.24, A.5.26, A.5.27, A.5.31–A.5.34, A.5.37, A.6.7, A.6.8, A.8.2–A.8.6, A.8.8–A.8.12, A.8.15, A.8.16, A.8.18–A.8.34 |
+| Saknas | 28 | 25 | 4.3, 4.4, 5.2, 7.2, 7.3, 8.2, 8.3, 9.1.1, 9.2, 9.3, A.5.1, A.5.4, A.5.6, A.5.11, A.5.25, A.5.28, A.5.29, A.5.30, A.5.35, A.5.36, A.6.1, A.6.3, A.7.14, A.8.13, A.8.14 |
+| Ej tillämpligt | 8 | 8 | A.7.1–A.7.6, A.7.11, A.7.12 |
+| Okänt | 12 | 12 | A.6.2, A.6.4, A.6.5, A.6.6, A.7.7–A.7.10, A.7.13, A.8.1, A.8.7, A.8.17 |
+
+**Förändring 2026-11-18:** delvis 71 → 74, saknas 28 → 25, uppfyllt 0 → 0. Tre krav gick från saknas till delvis: A.5.7 (Dependabot bevakar beroenden), A.8.8 (skanningen påslagen) och A.8.16 (driftövervakningen med provad larmkedja). Inget av dem blir uppfyllt: det finns 10 kritiska och 28 höga öppna beroendelarm, och övervakningen ser bara driftfel. Bevis eller gap ändrades också i 4.3, 4.4, 5.1, 5.3, 7.2, 7.3, 10.1, A.5.14, A.5.17, A.5.19–A.5.24, A.5.26, A.5.30, A.5.34, A.6.8, A.8.9–A.8.13, A.8.20–A.8.22, A.8.24–A.8.29 och A.8.31, utan att statusen ändrades. Totalt 37 krav markerade "ändr. 11-18".
+
+Ingenting är uppfyllt. Skälet är detsamma som för GDPR: det mesta finns i någon form, men inget är beslutat, provat eller belagt hela vägen. De tekniska skydden i koden (invarianterna, tenantisoleringen, maskeringen) är starkare än det runt omkring: konton, datorer, säkerhetskopior och övervakning.
+
+### Tio åtgärder som flyttar flest krav till uppfyllt
+
+1. **Anton beslutar ledningssystemet:** omfånget och informationssäkerhetspolicyn (P07), riskmetoden och riskregistret (P09), SoA (`soa.md`), och godkänner de 26 policyerna. Flyttar 4.3, 4.4, 5.1, 5.2, 5.3, 6.1.2, 6.1.3, A.5.1, A.5.2, A.5.4, A.5.12, A.5.13 och, efter första mätningen, A.5.36. Ä.
+2. **Konton och åtkomst:** en förteckning över alla konton och vem som har vad, tvåfaktor på alla leverantörskonton, personliga konton i stället för de delade (plattformsadmin, agentsajten, Vertex), en lösenordshanterare, och första åtkomstgranskningen. Flyttar A.5.15–A.5.18, A.8.2, A.8.5 och uppgifterna 2FA, Employee Access och Access Review Log. Ä.
+3. **De akuta fynden A1–A4:** byt plattformsadminens och de andra exponerade lösenorden, slå på hemlighetsskanning och push-skydd, besluta repots synlighet, slå på TLS mot Redis, stäng TypeSafe för kundmejl. Flyttar A.5.14, A.5.17, A.5.26, 7.5.3 och en stor del av A.8.24. Ä, A på ja. *Läge 2026-11-18: TypeSafe stoppad, jobbkön på Railways privata nät och skanningen påslagen. Kvar: lösenorden och repots synlighet.*
+4. **Säkerhetskopior och kontinuitet:** schemalagda kopior av produktionsvolymen, ett återställningsprov mot en tom volym, mål för RTO och RPO, och en sida kontinuitetsplan (P18). Flyttar A.8.13, A.5.29, A.5.30, och A.8.14 genom ett beslut om tillgänglighetsnivå. Ä, A provar. *Läge 2026-11-18: kräver Railway Pro; beslutsutkastet `beslut/g-…` finns.*
+5. **Datorerna:** en enhetslista och skärmbilder på diskkryptering, skärmlås, uppdateringar och antivirus för varje dator (P13, P14, P17). Flyttar A.8.1, A.8.7, A.7.7–A.7.10, A.7.13, A.7.14, A.5.9, A.6.7 och uppgifterna Device List och Secure Devices. Ä och Sebbe.
+6. **Sebbes avtal:** skriftligt avtal med sekretess som gäller efter avslut, säkerhetsregler och följder vid brott, plus en avslutsrutin som roterar alla nycklar. Flyttar A.6.2, A.6.4, A.6.5, A.6.6, A.5.11, A.8.30, och A.6.1 genom undantaget i P15. Ä.
+7. **Sårbarheter och utvecklingskedjan:** Dependabot, CodeQL och hemlighetsskanning i CI, och deploy först när CI är grön (P20, P22). Flyttar A.8.8, A.8.25, A.8.28, A.8.29 och A.5.21. A, Ä ger ja. *Läge 2026-11-18: verktygen påslagna. Kvar: åtgärda 10 kritiska och 28 höga beroendelarm, avfärda de falska kodskanningslarmen med motivering, besluta patchtider, låta CI grinda deployen.*
+8. **Miljöer och nät:** flytta synken till Railway och stäng Postgres publika proxy, egen Redis för `development`, minimera spegeln (JA #11, #16). Flyttar A.8.20, A.8.22, A.8.31, A.8.33, A.8.3 och A.8.12. Ä beslutar, A bygger. *Läge 2026-11-18: egen Redis per miljö klar. Synken och proxyn kvar (`../../synkflytt-plan.md`).*
+9. **Övervakning och loggar:** sätt larmvariablerna i `main`, lägg till en upptidskontroll och felspårning, dokumentera Railways loggtid och en rutin för att säkra loggar (P25). Flyttar A.8.15, A.8.16, A.5.28 och uppgiften Monitoring & Alerting. Ä, A. *Läge 2026-11-18: upptidskontrollen finns och larmkedjan är provad, men schemat går glest. Larmvariablerna, felspårningen och loggrutinen kvar.*
+10. **En gemensam genomgång för båda:** utbildning med kvittens (G05), skrivbordsövning av incidentrutinen, bedömning av de sju incidentposterna, och första ledningens genomgång (P10). Flyttar 7.2, 7.3, A.6.3, A.5.24, A.5.25, A.5.27, 10.1 och 9.3. Ä.
+
+Internrevision (9.2) och oberoende granskning (A.5.35) kräver en tredje person. P10 föreslår en extern granskare före första revisionen.
+
+### Uppgifter jag behöver från ägaren
+
+1. **Tvåfaktor:** påslagen för Anton och Sebbe på GitHub, Railway, Google Cloud, Redis Cloud, Resend, Loopia och Gmail-kontot `snajpsupport@gmail.com`? Metod (app, nyckel, sms)?
+2. **Konton och åtkomst:** vem har vilken roll i GitHub (admin, skrivrätt), Railway (ägare, medlem), Google Cloud (IAM), Redis Cloud, Resend, Loopia, ScrapeGraphAI, TypeSafe? Vilka personer känner lösenordet till plattformsadmin och agentsajten?
+3. **GitHub-plan och repots synlighet:** Free eller Team, och ska repot vara privat (BU A1)?
+4. **Datorer:** antal och typ per person (operativsystem), diskkryptering (BitLocker/FileVault), skärmlås efter hur många minuter, automatiska uppdateringar, antivirus. Används datorerna av andra i hushållet?
+5. **Telefoner:** når någon av er GitHub, Railway eller kundmejl från telefonen? PIN, kryptering, fjärradering?
+6. **Lösenordshanterare:** används en, och vilken? Var ligger `.env.deploy` och andra hemligheter lokalt?
+7. **Sebbe:** avtalsform (anställd, uppdragstagare, delägare), skriftligt avtal, sekretessklausul, gäller den efter avslut?
+8. **Andra med åtkomst:** har någon annan (tidigare medhjälpare, konsult, kund) haft åtkomst till kod, driften eller kunddata?
+9. **Lagringsmedier och service:** USB-minnen, externa diskar, lokala databasdumpar? Hur hanteras en dator som lämnas på reparation eller säljs?
+10. **Var ni arbetar:** hemma, kontorshotell, kaféer, resor? Offentligt wifi?
+11. **Resurser:** hur många timmar i månaden kan läggas på säkerhetsarbetet, och finns budget för extern granskning och betald GitHub-plan?
+12. **Railway:** vem har ändrat `INKORG_JEV` till `auto`, och används Postgres publika TCP-proxy till något annat än synken?

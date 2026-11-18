@@ -1,397 +1,113 @@
 # Juridik — vad som är gjort och vad som är kvar
 
-Motsvarar implementeringsplanen i `GDPR-Integritet-Rapport-Snajp.md`.
-Statusen här är sanningen; planen är avsikten.
+Statusen här är sanningen. Planer och beslut beskriver avsikten; den här
+filen säger vad som faktiskt gäller.
 
-Uppdaterad 2026-08-24.
+Uppdaterad 2026-11-17, efter en nulägesinventering och en granskning av 15
+leverantörers villkor ur officiella källor samma dag. Texten från 2026-08-24
+finns i git-historiken.
 
----
-
-## Klart i kod, och verifierat
-
-Verifierat betyder **prövat mot en körande miljö**, inte "testerna är gröna".
-Den här sessionen har tre gånger sett en grön hälsokontroll ovanpå ett trasigt
-system, så skillnaden står här med flit.
-
-| Punkt | Vad som byggdes | Hur det bevisades |
-|---|---|---|
-| **P0.1** | Startspärr: DeepSeek får inte köras i miljöer med kunddata. `Settings.llm_provider_fault()`, enforcad i `app/main.py` och `agent/llm.py` | Deployen till development föll med `CRITICAL Startvägran:` i loggen |
-| **P0.1 (2)** | Okända providernamn fäller uppstarten i stället för att tyst degradera till simuleringsläge | Regressionstest + felet reproducerat skarpt |
-| **P0.1 (3)** | Ett modellnamn från fel provider fäller uppstarten | Felet reproducerat skarpt: `404 models/deepseek-v4-flash is not found` medan hälsokontrollen sa `live` |
-| **P0.3** | `/integritetspolicy`, `/villkor`, `/cookies` med delat skal | Lästa i webbläsaren, lokalt och på development |
-| **P0.4** | `components/marketing/Sidfot.tsx` — bolagsidentifikation och juridiska länkar | Renderad, länkarna verifierade |
-| **P0.5** | Dataskyddstexten säger nu att mejltexten bearbetas av en AI-leverantör | Läst i webbläsaren |
-| **P1.1** | Gallringsmekanism: [`048_gallring.sql`](../supabase/migrations/048_gallring.sql) + [`gallra.py`](../scripts/gallra.py) | Migrationen körd i development, tabell och funktion verifierade i katalogen |
-| **P1.2** | [`gdpr_radera.py`](../scripts/gdpr_radera.py) — sök, registerutdrag, radering per adress | Skriptet finns; ej kört skarpt (raderar data) |
-| **P1.3** | Art. 14-sidfoten byggs i **kod**, inte av modellen: [`utskicksfot.py`](../snajp-support/app/leads/utskicksfot.py) | Test kör `send_guard` på det foten producerar |
-| **P1.3 (2)** | Avregistreringslänken fungerar hela vägen | **Klickad skarpt på development:** token → sida → server action → `avregistrerad`, och `redan_avregistrerad` vid andra klicket. Testraderna städade |
-| **P1.4** | Åtkomstskyddet mätt, och indexeringsluckan stängd | Se nedan |
-| **P1.5** | [`INCIDENT_RESPONSE.md`](../INCIDENT_RESPONSE.md) | — |
-| **P2** | [Registerförteckning](registerforteckning.md), [DPIA](dpia_supportagenten.md), [intresseavvägning](intresseavvagning_kallmejl.md) | Utkast, ska läsas av jurist |
-
-### P1.4 i detalj — mätt, inte antaget
-
-Oinloggad mot `web-development-6c85.up.railway.app`:
-
-```
-/                           200   (marknadssidan — ska vara publik)
-/dashboard                  307 -> /login
-/settings                   307 -> /login
-/admin/kunder               404   (fail-closed)
-/api/snajp-support/tickets  401
-```
-
-**Kunddata är alltså inte nåbar utan inloggning.** Appens egen grind håller,
-och det är den substantiella frågan.
-
-Men Vercels SSO skyddade en sak till, och den ersättningen saknades: dev-miljön
-hade **ingen robots.txt alls och ingen `X-Robots-Tag`**. En fullständig spegel
-av säljsajten — med en inloggning som leder till riktig kunddata — låg fritt
-indexerbar. Åtgärdat med [`app/robots.ts`](../app/robots.ts) och en
-`noindex`-tagg i [`app/layout.tsx`](../app/layout.tsx), båda styrda av
-[`lib/miljo.ts`](../lib/miljo.ts). De hör ihop: robots.txt hindrar ny
-indexering, `noindex` tar bort det som redan hunnit in.
-
-Båda riktningarna är provade: okänd miljö ger `Disallow: /` och
-`noindex, nofollow`; `RAILWAY_ENVIRONMENT_NAME=main` ger `Allow: /` och ingen
-noindex-tagg. Den andra riktningen är den farliga — en spärr som råkar
-av-indexera produktionen vore värre än den lucka den lagar.
-
-### Buggar som hittades genom att köra skarpt
-
-Två fel som inget test fångade, eftersom båda krävde riktig data:
-
-1. **`avregistrera_via_token` reste ett undantag** för en tenant utan
-   arbetsyta. Mottagaren hade fått "Något gick fel" och stått kvar i
-   utskickslistan.
-2. **`add_suppression` skrev tyst noll rader** i samma läge — en
-   `insert ... select` utan träffar. Ingen krasch, ingen avregistrering.
-   Kommentaren på plats påstod att en saknad arbetsyta vore "ett riktigt fel";
-   den var värre än så, den var ingenting alls.
-
-Båda rättade i [`049`](../supabase/migrations/049_avregistrering_utan_arbetsyta.sql).
-`suppressions.workspace_id` är nullbar sedan dess — skyddet läses via
-`tenant_id`, så en NULL döljer raden i dashboarden men inte för spärren.
+Allvar: **B** blockerar första kund, **F** bör vara gjort före första kund,
+**V** kan vänta. Vem: **Ä** ägaren (Anton), **A** agent (kod eller dokument).
 
 ---
 
-## Kvar — kräver dig
+## Klart och verifierat
 
-### P0.1c · Gemini-nyckeln ligger på gratisnivån  🔴 BLOCKERANDE
+| Punkt | Belägg |
+|---|---|
+| DeepSeek får inte köras där data är riktig. Uppstarten fälls | `Settings.llm_provider_fault()`, `app/main.py`, `lib/llm/modellval.ts`; prövat skarpt 2026-08-24 |
+| Gemini på gratisnivå i chatten är borta. Chatten går via Vertex AI på ett betalt Google Cloud-projekt | `HANDOFF-2026-09-12-VERTEX-AI.md`; `snajp-support/app/agent/llm.py`; BESLUT 2026-10-21 |
+| Googles och Railways regioner är belagda: Vertex behandlar inom EU, Railway kör alla tjänster och volymer i Amsterdam | Leverantörsgranskning och Railways regionlista 2026-11-17 |
+| Underbiträdesförteckningen stämmer med driften på tre spårade ställen | `lib/bolag.ts`, `docs/pilotavtal.md` Bilaga 1, `docs/registerforteckning.md` (2026-11-17). Utkastet `docs/pub-avtal.md` Bilaga 3 är ifyllt men inte committat |
+| De juridiska sidorna finns på svenska och engelska, och platshållare renderas aldrig | `app/integritetspolicy/`, `app/villkor/`, `app/cookies/`; INV-COPY-001; `lib/bolag.ts:utanPlatshallare` |
+| Publik kontaktadress på egen domän (kontakt@snajp.se) | `components/marketing/copy.ts` |
+| Art. 14-foten byggs i kod, och avregistreringen fungerar hela vägen | `snajp-support/app/leads/utskicksfot.py`; migration 049; klickad skarpt 2026-08-24 |
+| Testmiljön indexeras inte | `app/robots.ts`, `lib/miljo.ts` |
+| Personnummer maskeras innan text går till språkmodellen | `snajp-support/app/moderation/maskering.py`. Samma maskering före Jev är byggd 2026-11-17 men inte committad |
+| Villkoren lägger ansvaret för autonominivån på kunden och beskriver utskicksspärren som den är | `app/villkor/VillkorSida.tsx` (spärrtexten rättad 2026-11-17, inte committad) |
+| Textmall till kunden för art. 13-information | `docs/kundmall_informationstext.md` |
+| Avtalsgrind: en kund med krav på avtal får ingen trafik utan registrerat avtalsdatum | `snajp-support/app/avtalsgrind.py`; migration 070. Av som standard, se B3 |
+| Testmiljön skickar inga utskick | Spegelläget, BESLUT 2026-11-16 |
+| Synken går bara från produktion till testmiljö | BESLUT 2026-10-17 |
+| Repot är privat (Antons beslut 2026-11-18). Varje ny commit skannas efter hemligheter med gitleaks i CI, eftersom GitHubs egen skanning inte finns för privata repon på gratisplanen | `docs/BESLUT.md` 2026-11-18; jobbet `hemligheter` i `.github/workflows/verify.yml`. Gamla lösenord i historiken ska ändå bytas (akut punkt 1) |
+| Kundmejl går inte längre till TypeSafe (Jev). Inkorgen sorteras bara av kodreglerna | BESLUT 2026-11-17; `INKORG_JEV` av i båda miljöerna sedan 2026-11-17, nya deployer uppe och hälsokontrollerna ok. Kvar: begära radering av det som redan skickats; Jev används fortfarande i leadsdelen |
+| Jobbkön (Redis) går inte längre över publikt nät. Den ligger på Railways egen Redis, nådd över det privata nätverket, med var sin databas för produktion och testmiljö | BESLUT 2026-11-17; flyttad samma kväll, uppstartsloggen i båda miljöerna visar jobbkö, svarscache, chattström och leadsström mot Redis, hälsokontrollen ok. Kvar: akut punkt 4 |
 
-**AVGJORD 2026-08-24 kväll. Inga indicier kvar — Google svarar rakt ut.**
+---
 
-Hela felet ur produktionsloggen:
+## Kvar som kräver ägaren
 
-```
-quotaId:     GenerateRequestsPerDayPerProjectPerModel-FreeTier
-quotaMetric: generativelanguage.googleapis.com/generate_content_free_tier_requests
-quotaValue:  20
-model:       gemini-3.6-flash
-status:      RESOURCE_EXHAUSTED
-```
+### Akut
 
-`FreeTier` i kvot-id:t, och **tjugo anrop per dygn** per projekt och modell.
-Det stämmer med vad kodbasen själv säger om nyckeln ("vald för gratisnivån",
-se `config.py` och `scripts/keys.py`).
+| # | Punkt | Belägg | Nästa handgrepp | Vem |
+|---|---|---|---|---|
+| 1 | Plattformsadminens lösenord ska bytas, liksom andra lösenord som kan ha exponerats. Hemlighetsskanningen hittar inte vanliga lösenord i historiken | BESLUT ("ska bytas") | Byt lösenorden | Ä |
+| 4 | Den gamla Redis Cloud-databasen finns kvar med cache och arbetsminne, och reservvariabeln med den gamla adressen ligger kvar på api-tjänsten | Flytten 2026-11-17 (Klart ovan) | Radera databasen och säg upp kontot (ditt beslut); ta bort reservvariabeln när flytten gått några dagar | Ä, sedan A |
+| 4b | Produktionsdatabasen har ingen säkerhetskopia. Gick inte att slå på 2026-11-17: Railway kräver Pro-planen för säkerhetskopior av volymer, och kontot ligger på en lägre plan | Försök 2026-11-17 | Välj väg: (a) Railway Pro med dagliga, veckovisa och månatliga kopior, eller (b) ett eget schemalagt jobb som dumpar databasen till en lagringsplats i EU. Valet är ditt | Ä, sedan A |
 
-Dagens handfull demo-anrop åt upp hela dygnsransonen för BÅDA miljöerna,
-eftersom de delar nyckel.
+### Blockerar första kund
 
-**Två följder, båda allvarliga.**
+| # | Punkt | Belägg | Nästa handgrepp | Vem |
+|---|---|---|---|---|
+| 5 | Bolagsform och bolagsuppgifter saknas. En enskild firmas org.nr är ditt personnummer | `lib/bolag.ts` | Besluta enskild firma eller AB; fyll i org.nr, postadress och integritet@ | Ä, sedan A |
+| 6 | Railways DPA gäller inte förrän den är signerad. Backupernas plats är ej belagd | Leverantörsgranskning 2026-11-17 | Signera via DocuSign-länken i Railways compliance-dokumentation; begär besked om backupplats | Ä |
+| 7 | Inget juristgranskat avtal. PUB-avtalet är ett utkast, `/villkor` saknar pris, ansvarsbegränsning och uppsägning, och DPIA och intresseavvägning är ogranskade. Sidorna ser färdiga ut | `docs/pub-avtal.md` (frågorna överst), `app/villkor/VillkorSida.tsx` | Boka jurist | Ä |
+| 8 | Integritetspolicyn lovar 24 månaders automatisk gallring. Inget gallringsjobb körs, och mekanismen täcker bara supportmejl | `app/integritetspolicy/IntegritetspolicySida.tsx`; `scripts/gallra.py`; migration 048 | Bekräfta 24 månader; agenten bygger jobbet och utökar det till leads och agentloggar | Ä, sedan A |
+| 9 | Avtalsgrinden är av som standard, så en ny kund får trafik utan signerat avtal | Migration 070. Grinden som standard för manuellt upplagda kunder (INV-AVTAL-001) är byggd 2026-11-17, inte committad | Granska och godkänn ändringen | Ä, sedan A |
+| 10 | Leverantörernas avtal är inte på plats fullt ut: ScrapeGraphAI saknar DPA, Resend lagrar mejlinnehåll i USA | Leverantörsgranskning 2026-11-17 | ScrapeGraphAI: betald plan och begärd DPA. Resend: godkänn USA-lagringen, ladda ned signerad DPA, gör TIA. Redis Cloud: används inte sedan flytten 2026-11-17; försvinner ur kedjan när databasen är raderad (akut punkt 4) | Ä |
+| 11 | Synken via GitHub Actions bär produktionens persondata. Kontot har Free-planen och omfattas inte av GitHubs DPA, och körmaskinernas region anges inte | Leverantörsgranskning 2026-11-17 | Besluta flytt till en schemalagd tjänst hos Railway i Amsterdam | Ä, sedan A |
 
-*Juridiskt:* gratisnivån tillåter Google att använda det som skickas in för att
-förbättra sina produkter, inklusive mänsklig granskning. Riktiga kundmejl går
-dit sedan produktionen lagades i kväll. Det är en behandling vi varken har
-avtalat om eller informerat kunden om — och till skillnad från DeepSeek-läget,
-där grunden saknades för en överföring, har vi här aktivt lämnat bort
-innehållet.
+### Före första kund
 
-*Operativt:* produktionen kommer att svara 429 under all verklig belastning.
-En agent som slår i kvoten mitt i en arbetsdag är ingen produkt.
+| # | Punkt | Belägg | Nästa handgrepp | Vem |
+|---|---|---|---|---|
+| 12 | Ingen kodstyrd AI-upplysning i drift i chatten och i automatiska mejlsvar (AI-förordningen art. 50) | `snajp-support/app/agent/support_systemprompt.py`. AI-upplysningen (INV-AI-001) är byggd 2026-11-17, inte committad | Granska och godkänn ändringen | Ä, sedan A |
+| 13 | Reservvägen till Google AI Studio finns kvar i drift och får inte användas för kunddata | `snajp-support/app/agent/llm.py`. Spärren (INV-DATA-004) är byggd 2026-11-17, inte committad; servicekontot i båda miljöerna klarar den. BESLUT 2026-11-17 | Granska och godkänn ändringen | Ä, sedan A |
+| 14 | Samma Vertex-servicekonto i alla miljöer | `HANDOFF-2026-09-12-VERTEX-AI.md` | Skapa ett servicekonto per miljö | Ä |
+| 15 | Gamla stacken: Render-tjänsterna lever, Render-nyckeln är inte roterad, det gamla Supabase-projektet bär historiska uppgifter, två incidentposter från 2026-08-24 är obedömda | `INCIDENT_RESPONSE.md` | Stäng Render och rotera nyckeln; radera Supabase-projektet och begär raderingsbekräftelse; bedöm posterna | Ä |
+| 16 | Testmiljön är en fullständig kopia av produktionens persondata, och dess skydd motsvarar inte produktionens fullt ut | `CLAUDE.md` (spegeln); BESLUT | Besluta minimering eller pseudonymisering | Ä, sedan A |
+| 17 | Kallmejl: org.nr saknas i foten (e-handelslagen), förnamnsadresser räknas som funktionsadresser, och demolänkens spårning per mottagare nämns inte i policyn | `snajp-support/app/leads/send_guard.py`; `app/cookies/CookiesSida.tsx`. Förnamnsadresserna: byggd 2026-11-17, inte committad. Allt som inte är en känd funktionsadress räknas som personligt och får art. 14-foten (`leads/sources/base.py`, `tests/leads/test_personlig_adress.py`). En kund utan `policy_url` får då utskick till namnadresser stoppade tills den är ifylld | Besluta de tre punkterna | Ä, sedan A |
+| 18 | Raderingsverktyget täcker inte tabeller tillkomna efter augusti och har aldrig provkörts | `scripts/gdpr_radera.py` | Utöka och torrkör mot den lokala stacken | A |
+| 19 | Ingen dokumenterad backup- och återställningsrutin | Inget belägg | Välj väg enligt akut punkt 4b; agenten dokumenterar och provar | Ä, sedan A |
+| 20 | Senare säkerhetshändelser saknas i incidentloggen | `INCIDENT_RESPONSE.md` (uppdaterad 2026-11-17, inte committad) | Bedöm posterna | Ä |
+| 21 | Actions-hemligheterna är bredare än de behöver, och gratisplanens 2 000 Actions-minuter räcker inte om synken går var tionde minut. Grenskyddet på `main` gäller inte för privata repon på gratisplanen | `.github/workflows/synk.yml`; `docs/compliance/synkflytt-plan.md` | Flytta synken till Railway och smalna av hemligheterna; GitHub Pro om grenskyddet ska tillbaka | A, Ä beslutar |
 
-**Dessutom: `GEMINI_API_KEY` är SAMMA nyckel i main och development.** Alltså
-samma kvot. Dev-trafik bränner produktionens tak, och en provkörning i dev kan
-ta ner produktionen. Repot varnar redan för precis det här mönstret — se
-`PER_ENV_SECRETS` i `scripts/railway_provision.py`, där kommentaren kallar en
-delad hemlighet "tyst korskoppling". `GEMINI_API_KEY` står inte med i den
-listan och borde göra det.
+### Kan vänta
 
-**Åtgärd, i ordning:**
-
-1. Bekräfta nivån i Google Cloud-konsolen.
-2. Aktivera fakturering på Google-projektet, eller byt provider. Betald nivå
-   respektive Vertex AI ger normalt ett åtagande om att innehållet inte
-   används för produktförbättring — gratisnivån gör det inte.
-3. Skaffa en EGEN nyckel per miljö. Samma nyckel i två miljöer är en
-   korskoppling oavsett vad den kostar.
-4. Teckna DPA med Google för den nivån, och fastställ dataregion och
-   överföringsmekanism (DPF eller SCC).
-
-Växlingen till en annan provider är ett kommando när nyckeln finns:
-
-```bash
-python scripts/llm_provider.py --satt openai --apply
-```
-
-Tills detta är löst säger `/integritetspolicy` **inte** att leverantören "inte
-tränar på texten". Det påståendet togs bort, och det ska inte skrivas tillbaka
-förrän avtalet säger det.
-
-**PAUSEN HÄVDES, UTAN ATT ÅTGÄRDSLISTAN NEDAN GENOMFÖRDES (upptäckt 2026-08-26).**
-`main` sattes till simuleringsläge 2026-08-24 23:5x av just det skälet som står
-ovan. Mätt igen 2026-08-26: **både `main` och `development` svarar `mode: live`.**
-`GEMINI_API_KEY` delas fortfarande mellan miljöerna. Kvoten är fortfarande
-FreeTier (`GenerateRequestsPerMinutePerProjectPerModel-FreeTier`, 6 anrop/minut
-— en betald nivå har inte den kvotklassen). Ingen av de fyra åtgärderna nedan
-(bekräfta nivå, aktivera fakturering/byt provider, egen nyckel per miljö, DPA)
-är genomförd. Vem som körde om `--satt gemini` och när är inte känt — bara att
-det skedde mellan 24:e kvällen och 26:e. Riktiga kundmejl går just nu till
-gratisnivån igen. Spårat som `snipe-a1c`, flaggat till Anton direkt.
-
-```bash
-python scripts/llm_provider.py --env main --pausa --apply
-```
-
-pausar igen, om det beslutet tas innan åtgärdslistan är klar.
-
-`GEMINI_API_KEY` är orörd — den driver även embeddings och bildbeskrivning,
-som inte är chattanrop och inte omfattas av dygnskvoten.
-
-Fyll i `region` för Google i [`lib/bolag.ts`](../lib/bolag.ts) och i
-[registerförteckningen](registerforteckning.md) när svaret finns.
-
-### P0.1d · Produktionen svarade kunder med regelmotorn  ✅ ÅTGÄRDAD
-
-Produktionen körde `mode: simulation` — riktiga kunder fick den deterministiska
-regelmotorns svar i stället för agentens, medan `/health/ready` rapporterade
-`status: ok`.
-
-**Rättat med en kirurgisk hotfix**, inte med en full merge. Produktionen
-deployar från grenen `railway-main` (inte `main`, som är den döda
-Vercel-grenen — se [`RAILWAY.md`](../RAILWAY.md)), och den låg 37 commits efter
-`development`. Att skicka alla 37 för att laga en tom nyckel hade varit fel
-växling.
-
-Hotfixen är `78c900e` på `railway-main`, 39 rader i två filer:
-
-- `active_llm_key` blir en uppslagskarta med `gemini` i. Fallbacken till en tom
-  sträng är **behållen med flit** — den gör att en felkonfiguration syns som
-  simuleringsläge i stället för att tyst gå till fel leverantör.
-- `_resolve_base_url` pekar `gemini` på Geminis endpoint.
-- `gpt`-defaulten skrivs om till vision-sidovagnens modellnamn när providern är
-  gemini.
-
-745 tester gröna på produktionsgrenen med patchen. Railway-variablerna står på
-`LLM_PROVIDER=gemini`, `MODEL=gemini-3.6-flash`.
-
-**Det som INTE följde med** och som kommer med nästa riktiga deploy:
-uppstartsspärrarna mot okänd provider och fel modellfamilj, de juridiska
-sidorna, avregistreringskedjan, gallringen. Produktionen bär alltså i dag
-rättningen men inte skydden.
-
-Rullas tillbaka med `git revert 78c900e` på `railway-main`.
-
-### P0.2b · Den gamla Render-stacken lever och kör DeepSeek  🔴 AKUT
-
-**Uppmätt 2026-08-24, inte antaget.** `CLAUDE.md` beskriver Vercel + Render +
-Supabase som den gamla, döda stacken. Render-delen är inte död:
-
-| Tjänst | Gren | Status | Startlogg |
+| # | Punkt | Nästa handgrepp | Vem |
 |---|---|---|---|
-| `snajp-support` | `main` | Live, ej suspenderad | `provider=deepseek, modell=deepseek-v4-flash` |
-| `snajp-support-dev` | `development` | Live, ej suspenderad | `provider=deepseek, modell=deepseek-v4-flash` |
+| 22 | Kanaler och CRM som kunden slår på saknas i PUB-avtalet (blir B när en kund aktiverar en kanal) | Text i avtalet | A, sedan jurist |
+| 23 | Radnivåsäkerheten är bara verifierad mot den gamla databasen | Kör testet mot den lokala stacken | A |
+| 24 | Klausulen om Snajps egen användning av bolagsdata är preliminär | Juristfråga | Ä |
+| 25 | Allabolag och hitta hämtas utan avtal | API-förfrågan | Ä |
+| 26 | Död kod med DeepSeek som standard i `lib/agent/llm.ts` | Ta bort | A |
+| 27 | NextAuth och Supabase Auth parallellt | Städa till en väg | A |
+| 28 | AI-kodverktyg läser testmiljöns kunddata | Besluta policy | Ä |
+| 29 | Widgetens supportadress och interna larm går via Gmail | Byt till egen domän när integritet@ finns | Ä, sedan A |
+| 30 | Vägval för Comp AI | Välj väg | Ä |
 
-Båda svarar `{"storage":"postgres","mode":"live"}`, alltså kopplade till en
-riktig databas med en fungerande DeepSeek-nyckel. Båda har `autoDeploy: yes`
-— **varje push till `main` eller `development` deployar dit**, inklusive
-dagens.
+---
 
-Ingen Postgres finns i Render-kontot, så databasen är någon annanstans. Vilken
-går inte att läsa ur API:t, och jag gissar inte.
+## Löpande
 
-Ingen trafik och ingen inkorgspollning syns i loggarna de senaste tre dygnen.
-Det är svagt bevis — request-loggar kan saknas på gratisplanen — så läs det som
-"ingen aktivitet upptäckt", inte "ingen aktivitet skedde".
-
-Notera: `snajp-support` (main) varnar **inte** för att IMAP saknas, vilket
-`snajp-support-dev` gör. IMAP-uppgifter är alltså konfigurerade där.
-
-**Följden för dataskyddsarbetet:** DeepSeek-överföringen som stoppades på
-Railway i dag var aldrig stoppad överallt. Den här ytan fanns inte i någon
-dokumentation, i registerförteckningen eller i min egen bedömning.
-
-**Vad jag har gjort:**
-
-`snajp-support/render.yaml` deklarerade `LLM_PROVIDER: deepseek` för BÅDA
-tjänsterna. Det var källan — en blueprint-synk hade återställt providern även
-om någon ändrat den i dashboarden. DeepSeek är borttagen därifrån, och
-blueprinten deklarerar nu ingen provider alls: utan providernyckel startar
-tjänsten i simuleringsläge, vilket är det enda säkra viloläget för en stack
-ingen använder.
-
-**DEEPSEEK-FLÖDET ÄR STOPPAT** (2026-08-24 23:29). `DEEPSEEK_API_KEY` är
-blankad på båda tjänsterna, och båda rapporterar nu `mode: simulation`.
-Bekräftat i uppstartsloggen, inte bara i hälsokontrollen:
-
-```
-snajp-support      LLM-nyckel saknas/platshållare — SIMULERINGSLÄGE aktivt.
-snajp-support-dev  LLM-nyckel saknas/platshållare — SIMULERINGSLÄGE aktivt.
-```
-
-Dev-tjänsten fällde dessförinnan på uppstartsspärren, som namngav orsaken:
-`DATABASE_URL pekar på en databas som inte kör på den här maskinen
-(aws-1-eu-west-1.pooler.supabase.com)`.
-
-**Det svaret krymper incidenten.** Render-stacken pratade med den GAMLA
-Supabase-databasen, inte med Railway-databasen där dagens kunder ligger. Hur
-mycket riktig persondata den bär är fortfarande en fråga för bedömningen —
-Supabase-grenen står enligt `CLAUDE.md` i `MIGRATIONS_FAILED` — men det är en
-annan och mindre fråga än "produktionens kunddata gick till Kina".
-
-**Vad jag INTE kunde göra:**
-
-*Stänga av tjänsterna.* Render-verktyget har varken suspend eller delete —
-det finns bara i dashboarden. Tjänsterna lever alltså vidare, men i
-simuleringsläge.
-
-*Städa `LLM_PROVIDER` på produktionstjänsten.* Skrivningen stoppades av
-behörighetskontrollen. Den är kosmetisk: med tom nyckel går tjänsten till
-simulering oavsett vad providern heter.
-
-**Åtgärd, i tur och ordning:**
-
-1. Blanka `DEEPSEEK_API_KEY` på båda tjänsterna. Stoppar flödet snabbast.
-2. Suspendera eller radera tjänsterna. Suspendering är reversibel och räcker.
-3. Raderas de ska `snajp-support/render.yaml` bort också — en blueprint som
-   ligger kvar är en tjänst som kan återuppstå.
-4. Bedöm enligt [`INCIDENT_RESPONSE.md`](../INCIDENT_RESPONSE.md) om någon
-   kunddata faktiskt passerade. Frågan att besvara först: vilken databas pekar
-   deras `DATABASE_URL` på?
-
-**Notera att koden redan hindrar en ÅTERKOMST.** `snajp-support-dev` deployar
-från `development` och vägrar numera starta — bekräftat i loggen 23:01. Men
-Render låter, precis som Railway, den gamla deployen ligga kvar när den nya
-faller. Det som snurrar just nu snurrar vidare tills någon rör det.
-
-**Spärren i koden är däremot lagad.** `har_riktig_kunddata()` grindade på
-miljönamnet, med motiveringen att Railway alltid sätter
-`RAILWAY_ENVIRONMENT_NAME`. Sant, och ändå fel: det antog att Railway är den
-enda värden. På Render var miljönamnet tomt, alltså läste spärren det som
-utveckling och släppte igenom.
-
-Regeln keyar nu på **databasen** i stället: en fjärrdatabas betyder riktig
-data, oavsett vem som kör processen. Loopback (`127.0.0.1`, `localhost`) är
-undantaget, eftersom `scripts/lokal_stack.py` kör där och den stacken är tom.
-Sju regressionstester, och `snajp-support-dev` kommer att vägra starta nästa
-gång den deployar från `development`.
-
-### P0.2 · Rotera den läckta Render-nyckeln
-
-Nycklar och lösenord är undantaget i `CLAUDE.md` — jag rör dem inte.
-
-1. Rotera nyckeln i Render.
-2. Uppdatera `.env.deploy`.
-3. **Bedöm om nyckeln gav åtkomst till persondata.** Om ja: kör
-   [`INCIDENT_RESPONSE.md`](../INCIDENT_RESPONSE.md) punkt 2–6. Posten ligger
-   redan i incidentloggen där.
-
-### P0.3b · Fyll i bolagsuppgifterna
-
-[`lib/bolag.ts`](../lib/bolag.ts) bär platshållare. Jag gissar inte ett
-organisationsnummer — ett påhittat org.nr kan tillhöra ett annat bolag, och
-jag känner inte ens till den registrerade firman.
-
-Fyll i: `namn`, `orgnr`, `postadress`, `policyUppdaterad`, `DATASKYDD_MEJL`,
-och `region` för Google och Railway i `UNDERLEVERANTORER`.
-
-Så länge de är platshållare visar sidfoten en gul varningsruta på varje publik
-sida. Den försvinner av sig själv när fälten är ifyllda.
-
-### P0.3c · Låt en jurist läsa texterna
-
-Gäller de tre sidorna plus [DPIA:n](dpia_supportagenten.md) och
-[intresseavvägningen](intresseavvagning_kallmejl.md). Varje juridisk sida
-visar en gul "Förstautkast"-ruta tills någon tar bort den i
-`JuridiskSida.tsx`. Ta inte bort den innan — särskilt inte
-ansvarsbegränsningen i `/villkor`, som står tom med flit.
-
-### P0.3d · Skaffa en riktig kontaktadress
-
-`Snajpsupport@gmail.com` duger som svarsadress men inte som ett företags enda
-officiella kontaktväg på en B2B-säljsida, och inte alls som adressen dit en
-registrerad skickar sin begäran. Sätt upp `integritet@snajp.se` och lägg den i
-`DATASKYDD_MEJL`.
-
-DNS går att automatisera med [`scripts/loopia_dns.py`](../scripts/loopia_dns.py),
-men själva brevlådan kräver ett konto hos en mejlleverantör.
-
-### P1.1b · Besluta retentionsperioden
-
-Mekanismen finns, talet gör det inte — och ska inte gissas. Vanligt: 24–36
-månader efter senaste aktivitet på ärendet. Ingen kund har någon policy satt
-i dag, alltså gallras ingenting.
-
-```bash
-python scripts/gallra.py --env railway-main --tenant <slug> --satt-policy 730 --beslutad-av "Anton"
-python scripts/gallra.py --env railway-main          # torrkörning, granska siffrorna
-python scripts/gallra.py --env railway-main --apply  # först när de stämmer
-```
-
-Fyll därefter i perioden i `/integritetspolicy` (bär en platshållare), i
-[registerförteckningen](registerforteckning.md) och i PUB-avtalet.
-
-### P1.2 · Redis Cloud och Resend är underbiträden sedan 2026-08-29
-
-Två nya tjänster behandlar kunddata och ska in i hela kedjan (bolag.ts har
-redan raderna, med platshållarregioner som håller varningsrutan uppe):
-
-**Redis Cloud** (databasen "Snajp-Chat-Data", jobbkö/cache i `development`):
-pågående chatt- och leadsjobb, inklusive agentens svar till kunden, ligger där
-med TTL 1 h. Kommande cache/arbetsminne (Redis-planen,
-`plans/2026-08-29-redis-agentarkitektur.md`) bär TTL 14–30 d respektive 72 h.
-
-1. Kör `python scripts/redis_kontroll.py` — den skriver region och TLS-status
-   och FALLER om databasen inte ligger i EU. Grönt här = region bekräftad.
-2. Kör `python scripts/redis_tls_pa.py --apply` — den slår på TLS via
-   kontonivå-API:t OCH byter `REDIS_URL` till `rediss://` i samma svep
-   (de två stegen hör ihop: TLS på utan URL-byte tappar anslutningen).
-   I dag går trafiken okrypterad. Verifierat 2026-08-29: region
-   `europe-west1` (EU, grönt), TLS AV. Agentens eget försök stoppades av
-   auto-läge-klassificeraren — kommandot är därför ditt.
-3. Teckna Redis standard-DPA i kontot (Account → Legal/Privacy) — kräver dig.
-4. Fyll i regionen i `lib/bolag.ts` och i registerförteckningens rader.
-
-**Resend** (sändvägen, `EMAIL_PROVIDER=resend` sedan 2026-08-29): utgående
-kundmejl passerar deras API. US-bolag — DPA, region och DPF/SCC-status ska
-bekräftas och in i `lib/bolag.ts` + registerförteckningen. Kräver dig.
-
-### P2 · Löpande
-
-- **DPIA och intresseavvägning** — utkast finns, ska granskas och beslutas.
-  DPIA:ns R1 är blockerad av P0.1c.
-- **Kundens ansvar för autonominivån** in i villkoren (DPIA R4).
-- **Textmall till kunden** för deras egen artikel 13-information (DPIA R5).
-- **Maskering av personnummermönster** före modellanropet — utred (DPIA R1).
-- **NextAuth/Supabase Auth-hybriden** — färre parallella auth-vägar.
-- **Cookiebanner** — behövs inte i dag. Bygg den inte i förväg för en cookie
-  som inte kräver den.
-
-**Utloggningsknappen är klar** — finns i både `AppShell` och `AdminShell`.
+- Underbiträdena står på fyra ställen: `lib/bolag.ts`, `docs/pub-avtal.md`
+  Bilaga 3, `docs/pilotavtal.md` Bilaga 1 och `docs/registerforteckning.md`.
+  En ny leverantör läggs in på alla fyra i samma ändring.
+- Leverantörerna meddelar nya underbiträden i förväg: Google 30 dagar, Resend
+  14, TypeSafe 15, Redis 5. Läs aviseringarna och uppdatera listorna.
+- Varje nytt beslut skrivs i `docs/BESLUT.md`, varje säkerhetshändelse i
+  `INCIDENT_RESPONSE.md`.
 
 ---
 
 ## Inte gjort, och varför
 
-- **PUB-avtalet** (`PUB-avtal-mall-Snajp.md`) — filen finns inte i repot, så
-  jag har inte kunnat skriva mot den. Villkorssidan, registerförteckningen och
-  DPIA:n refererar till avtalet; texten måste skrivas separat.
-- **Engelska versioner av de juridiska sidorna** — medvetet utelämnade. Två
-  språkversioner av ett avtal är två lydelser, och den dag de säger olika
-  saker är frågan vilken som gäller.
-- **`supabase/functions/generate-outreach`** — planen pekade ut den för
-  art. 14-sidfoten. Den returnerar konserverad exempeltext på den döda
-  Supabase-stacken; en juridisk sidfot i en attrapp hade sett ut som en åtgärd
-  utan att vara en. Den riktiga vägen är `snajp-support/app/leads/`.
-- **`gdpr_radera.py` körd skarpt** — skriptet raderar data, och det finns
-  ingen begäran att uppfylla. Sökläget är ofarligt och kan köras när som helst.
+- **`gdpr_radera.py` körd skarpt.** Skriptet raderar data, och det finns
+  ingen begäran att uppfylla. Sökläget kan köras när som helst.
+- **Inga andra ändringar i driftmiljöerna** i compliance-arbetet 2026-11-17
+  än de du sa ja till samma kväll: inkorgsklassningen via Jev avstängd i båda
+  miljöerna, hemlighetsskanningen påslagen och jobbkön flyttad till
+  Railways egen Redis (ny Redis-tjänst i produktionen, jobbköns adress bytt
+  i båda miljöerna). Säkerhetskopior gick inte att slå på (akut punkt 4b).
+- **Ingen Comp AI-installation.** Den väntar på vägvalet (punkt 30).
