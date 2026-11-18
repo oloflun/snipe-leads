@@ -32,7 +32,7 @@ den är gjord i den här omgången (PR mot `development`, se sist).
 |---|---|---|---|---|---|
 | GDPR (19) | 0 → **0** | 17 → **17** | 1 → **1** | 1 → 1 | – |
 | ISO 27001 (119) | 0 → **3** | 74 → **72** → **73** | 25 → **24** → **23** | 8 → 8 | 12 → 12 |
-| ISO 42001 (70) | 1 → **5** | 53 → **51** | 16 → **14** | 0 → 0 | 0 → 0 |
+| ISO 42001 (70) | 1 → **5** | 53 → **51** → **52** | 16 → **14** → **13** | 0 → 0 | 0 → 0 |
 
 Flyttade krav:
 
@@ -48,6 +48,7 @@ Flyttade krav:
 | ISO 42001 | **A.6.2.3** Design- och utvecklingsdokumentation | delvis → uppfyllt | Design steg för steg med kod- och invariantreferenser för alla AI-system, också supportagenten och Jev som saknade det: `ai-system/*.md` avsnitt 2 och 7 |
 | ISO 42001 | **A.3.3** Anmälan av oro | saknas → delvis | Ärendemallen `.github/ISSUE_TEMPLATE/ai-oro.yml` ger den som arbetar i Snajp en väg att anmäla AI-fel och oro. P28 (skydd för den som anmäler) är osignerad |
 | ISO 42001 | **A.5.5** Samhällspåverkan | saknas → delvis | Bedömningsutkast `ai-system/samhallspaverkan.md`; inte beslutat |
+| ISO 42001 | **A.2.3** AI-policyns samstämmighet | saknas → delvis | Genomgång av P27 mot alla 27 andra policyer, utkast som gäller när P27 är godkänd: `ai-system/policy-samstammighet.md` (6 krockar, 19 glapp, förslag per policy). Se "Uttömt 2026-11-18" |
 
 Inget GDPR-krav flyttade. Alla 18 öppna GDPR-krav hänger på ett beslut, en signatur, en
 merge till `main` eller en juristgranskning. Agentens bidrag där är belägg som minskar
@@ -132,7 +133,7 @@ A.8.10), och KVITTO_MODEL gör att kvittostegen kan stanna på en prövad modell
 | A.5.2 | delvis | b | Beslut a | – | – |
 | A.5.3 | delvis | b | Kompenserande kontroll för två personer; grenskydd kräver betald plan | – | Fynd: grenskyddet på main gäller inte längre |
 | A.5.4 | saknas | b | Godkänd policy | – | – |
-| A.5.5 | delvis | b | Kontaktlista IMY, CERT-SE, polis | Listan går att skriva, men vem som ringer är ett beslut | **Ja**: utkast `myndighetskontakter.md`, "vem kontaktar" tom |
+| A.5.5 | delvis | b | Kontaktlista IMY, CERT-SE, polis | Listan går att skriva, men vem som ringer är ett beslut | **Ja**: utkast `myndighetskontakter.md`, "vem kontaktar" tom; myndigheterna kontrollerade mot källan 2026-11-18 (CERT-SE:s nummer var fel) |
 | A.5.6 | saknas → **delvis** | b | Prenumeration på CERT-SE m.fl. med mottagare | Ett bevakningsflöde går att bygga; vem som läser är ägarens | **Ja**: `sakerhetsbevakning.yml` (CERT-SE och GitHubs advisories för stacken, ärende vid träff, reserv och dödmanskontroll). Mottagare obeslutad |
 | A.5.7 | delvis | b | Rutin för att läsa larmen | – | Dependabot-läget uppdaterat (2 höga, ingen rättning finns) |
 | **A.5.8** | delvis | **a** | Fast säkerhetsfråga i varje arbete | PR-mall och CI-grind | **Uppfyllt** (INV-PROC-001) |
@@ -198,10 +199,10 @@ A.8.10), och KVITTO_MODEL gör att kvittostegen kan stanna på en prövad modell
 | A.8.6 | delvis | b | Kapacitetsövervakning, repliker | – | – |
 | A.8.7 | okänt | b | Antivirus på datorerna | – | – |
 | A.8.8 | delvis | b | Patchtider, kodskanning (kräver betald plan) | – | Läget uppdaterat |
-| A.8.9 | delvis | b | Logg över Railway-ändringar; rutin för när baslinjen körs | Baslinjen i bevis | **Ja**: `scripts/railway_baslinje.py` (`--skriv`, `--jamfor`), `railway-baslinje.json` |
+| A.8.9 | delvis | b | Logg över Railway-ändringar; rutin för när baslinjen körs | Baslinjen i bevis | **Ja**: `scripts/railway_baslinje.py` (`--skriv`, `--jamfor`), `railway-baslinje.json`; `--jamfor` 2026-11-18 19:10 UTC: 0 avvikelser |
 | A.8.10 | delvis | b | Gallring påslagen | Raderingen provkörd | **Ja** (CI) |
 | A.8.11 | delvis | b | Merge av PR 72 | – | – |
-| A.8.12 | delvis | b | Synkflytten, mönster för lösenord | – | Läget uppdaterat |
+| A.8.12 | delvis | b | Synkflytten, mönster för lösenord | Synkloggens innehåll (P20) | Läget uppdaterat; synkloggen granskad i koden (se Uttömt) |
 | A.8.13 | saknas | b | Railway Pro | – | – |
 | A.8.14 | saknas | b | Tillgänglighetskrav | – | – |
 | A.8.15 | delvis | b | Gallring av `agent_runs`; åtkomstloggen i `main` (merge) | Loggningen beskriven med belägg; åtkomstlogg för admin (PR 85); kvittotexten ur `agent_runs` (PR 83) | **Ja** (`drift-och-tillgangar.md` §5) |
@@ -210,10 +211,10 @@ A.8.10), och KVITTO_MODEL gör att kvittostegen kan stanna på en prövad modell
 | A.8.18 | delvis | b | Vem som har Railway-token och psql; beslutad behörighet | Verktygslistan | **Ja**: `privilegierade-verktyg.md` (vägar, skript per grupp, förslag) |
 | A.8.19 | delvis | b | Regler för programvara på datorerna | – | – |
 | A.8.20 | delvis | b | Stäng Postgres publika proxy (Railway) | – | – |
-| A.8.21 | delvis | b | HSTS i drift kräver merge till main | HSTS-raden kan skrivas | – (inte gjort: når inte drift utan merge) |
+| A.8.21 | delvis | b | HSTS i drift kräver merge till main | HSTS-raden och mätningen | **Ja**: TLS och HSTS mätta (`bevis/tls-2026-11-18.txt`); HSTS i `next.config.ts`, i `development` |
 | A.8.22 | delvis | b | Synkflytten | – | – |
 | A.8.23 | delvis | b | Webbskydd på datorerna | – | – |
-| A.8.24 | delvis | b | Nyckelrotation, spegelns nycklar | – | – |
+| A.8.24 | delvis | b | Nyckelrotation, spegelns nycklar | TLS-versioner mätta | **Ja**: TLS 1.0 och 1.1 vägras, 1.2 och 1.3 tas emot på alla publika adresser |
 | A.8.25 | delvis | b | Deploy först när CI är grön (Railway), grenskydd | – | – |
 | A.8.26 | delvis | b | Merge av PR 72 | – | – |
 | A.8.27 | delvis | b | Stäng publika proxyn | RLS i CI | Ja |
@@ -259,7 +260,7 @@ A.8.10), och KVITTO_MODEL gör att kvittostegen kan stanna på en prövad modell
 | 10.1 | delvis | b | Förbättringslogg | – | – |
 | 10.2 | delvis | b | AI-fel i incidentloggen, uppföljning | Ärendemallen | Ja |
 | A.2.2 | delvis | b | Godkänd P27 | – | – |
-| A.2.3 | saknas | b | Genomgång mot övriga policyer, men policyerna är osignerade | Genomgången kan skrivas när P27 är godkänd | – |
+| A.2.3 | saknas → **delvis** | b | Godkänd P27 och beslut om förslagen; genomgången upprepad mot de godkända versionerna | Genomgången som utkast | **Ja**: `ai-system/policy-samstammighet.md` |
 | A.2.4 | saknas | b | Policy att se över | – | – |
 | A.3.2 | delvis | b | Roller | – | – |
 | A.3.3 | saknas | b | Skydd för den som anmäler (P28) | Anmälningsväg | **Delvis** (`ai-oro.yml`) |
@@ -277,7 +278,7 @@ A.8.10), och KVITTO_MODEL gör att kvittostegen kan stanna på en prövad modell
 | A.6.2.2 | delvis | b | Godkända krav | Krav beskrivna per system | Ja |
 | **A.6.2.3** | delvis | **a** | Designdokumentation för alla system | Systembladen | **Uppfyllt** |
 | A.6.2.4 | delvis | b | Godkänd releasegräns per agent | – | – |
-| A.6.2.5 | delvis | b | Driftsättningsplan; grenskydd | – | Fynd: code owner tvingar inte längre |
+| A.6.2.5 | delvis | b | Driftsättningsplan; grenskydd | Upptäckt av ändrade AI-variabler | Fynd: code owner tvingar inte längre. Gap minskat: baslinjen visar `INKORG_JEV`, `IRIS_JEV`, `LLM_PROVIDER`, `*_MODEL` per miljö, 0 avvikelser 2026-11-18 |
 | A.6.2.6 | delvis | b | Internlarm, kvalitetsmätning i drift | – | Fynd: schemat körs inte |
 | A.6.2.7 | delvis | b | Dokumentationen anpassad och lämnad till kund och tillsyn: vad som lämnas ut är ägarens val | Teknisk dokumentation per system | Ja (gap minskat) |
 | A.7.2 | delvis | b | Beslutad process; Livrustnings godkännande | – | – |
@@ -406,3 +407,125 @@ bara web-loggen).
 
 **Poäng före och efter:** GDPR 0/17/1 → 0/17/1. ISO 27001 3/73/23 → 3/73/23. ISO 42001
 5/51/14 → 5/51/14 (uppfyllt/delvis/saknas).
+
+## Uttömt 2026-11-18
+
+Sista genomgången. Varje rad ovan där kolumnen "Agentens del" har innehåll eller klassen
+är b eller c lästes med frågan: finns det arbete en agent kan göra nu, utan Antons
+beslut, som minskar gapet med verkligt belägg (inte ytterligare en policytext utan
+förankring)? Tidsram cirka 45 minuter. Gränserna för omgången: ingen ändring i `main`,
+ingen skrivning till Supabase, inga Railway-variabler, inga kunddata, inga mejl.
+
+### Gjort i omgången
+
+| Krav | Gjort | Belägg |
+|---|---|---|
+| ISO 42001 **A.2.3** | Genomgången av P27 mot G01–G06, P07–P26 och P28: var de möts, 6 krockar, 19 glapp, inaktuella fakta i 13 policyer, förslag per policy och samlat. Påståendena om läget kontrollerade mot kod, CI och baslinjen. Utkast som gäller när P27 är godkänd | `ai-system/policy-samstammighet.md`; matrisen A.2.3 **saknas → delvis**; uppgift 20 `in_progress` |
+| ISO 27001 A.8.21, A.8.24 | TLS-versioner och HSTS mätta på webb, api och agentsajt i båda miljöerna, `www.snajp.se` och `snajp.se`. TLS 1.0 och 1.1 vägras överallt. HSTS saknades på allt som Railway serverar; rubriken läggs nu på av appen (`next.config.ts`, två år, utan `includeSubDomains`) | `bevis/tls-2026-11-18.txt`; i `development` efter deployen, i `main` med releasen |
+| ISO 27001 A.8.9, ISO 42001 A.6.2.5, 6.3 | `railway_baslinje.py --jamfor` kört mot driften: 0 avvikelser sedan 16:21 UTC. Baslinjen visar AI-variablerna per miljö, så ett obeslutat byte av modell eller leverantör syns vid nästa jämförelse | Körningen 2026-11-18 19:10 UTC (bara läsning) |
+| ISO 27001 A.5.5 | IMY:s, CERT-SE:s och polisens uppgifter kontrollerade mot deras egna sidor. CERT-SE:s nummer i utkastet var fel (rätt: 010-382 80 00) | `myndighetskontakter.md`, kolumnen "Kontrollerad" |
+| ISO 27001 A.8.12 (P20) | Synkloggen, som sparas som artefakt i 14 dagar, granskad i koden: den skriver tabellnamn, primärnyckel och första raden av ett Postgres-fel, aldrig radinnehåll (`scripts/railway_synk.py` rad 414, 456, 745). Ingen synkad tabell har e-post som primärnyckel. Kvar: en felrad av typen "invalid input syntax" kan bära ett enskilt värde | Koden; artefakterna lästes inte (kunddata) |
+
+Prövat och lagt ner: att visa `LEADS_DAILY_TOKEN_BUDGET` i baslinjen. Namnet innehåller
+`TOKEN`, och skriptets spärr mot hemlighetsnamn (`_ALDRIG`) ska inte luckras upp för det.
+
+**Statusändring:** en. ISO 42001 A.2.3 saknas → delvis.
+
+**Poäng före och efter:** GDPR 0/17/1 → 0/17/1. ISO 27001 3/73/23 → 3/73/23. ISO 42001
+5/51/14 → **5/52/13** (uppfyllt/delvis/saknas).
+
+### Det som inte gick, per rad
+
+"Ä" = kräver Anton. "Ext." = kräver en extern part. Raderna är grupperade där skälet är
+detsamma; varje krav står utskrivet.
+
+**GDPR**
+
+| Krav | Varför återstoden inte är agentens |
+|---|---|
+| AG-1, AG-4 | Ä: beslut a och b signeras; `integritet@` är en ny brevlåda i ett konto bara Anton når |
+| AG-2 | Ä: DPA:erna signeras (Railway via DocuSign, ScrapeGraph med betald plan); raderingsbegäran till TypeSafe är ett mejl i Snajps namn. Ext.: PUB med kund |
+| DS-1, LBT-3, PR-4, PR-5, PR-7 | Ä: merge av release-PR 72 till `main`. Agenten rör inte `main`. LBT-3 och PR-7 dessutom Ext. (jurist) |
+| DS-2 | Ä: gallringsperioden beslutas, och `GALLRING_AKTIV` är en Railway-variabel; Redis Cloud raderas i ett konto; spegelns minimering är ett beslut (JA #16) |
+| DS-3 | Ä: utbildningen hålls och kvitteras av Anton och Sebbe. Materialet finns |
+| DS-4, LBT-2 | Ext.: juristgranskning; DS-4 också kundens beslut om DPIA |
+| DS-5 | Ä: incidentposterna bedöms av incidentledaren (G03, roller); övningen kräver deltagarna |
+| LBT-1 | Ä: lagringstiderna beslutas. Förslaget per tabell finns (`datamangder.md`) |
+| PR-1, PR-2, PR-3, PR-6 | Ä: rutinerna signeras, begäransloggens plats beslutas, `integritet@` skapas; PR-3 också radering av Supabase och Render, som inte går att ångra. Skriptens provkörningar finns redan i CI |
+
+**ISO 27001, klausul 4–10**
+
+| Krav | Varför |
+|---|---|
+| 4.1, 4.2, 4.3, 4.4, 5.1, 5.2, 5.3 | Ä: beslutad kontext, intressentlista, omfång (beslut e), ledningssystem, åtagande, P07 och beslut a. Utkasten finns |
+| 6.1.1, 6.1.2, 6.1.3, 8.1, 8.2, 8.3 | Ä: riskmetod, acceptansnivå, SoA och behandlingsplan. Riskutkasten finns; att räkna om dem till P09:s skala hjälper först när skalan är beslutad |
+| 7.1, 7.2, 7.3, 7.4, 7.5.1, 7.5.2 | Ä: tid och budget, kompetenskrav, genomgång, kommunikationsplan, godkännande av dokumenten |
+| 9.1.1, 9.1.2 | Ä: måtten och intervallen beslutas. Mätningen finns |
+| 9.2 | Ext.: internrevision av en tredje person (P10) |
+| 9.3, 10.1, 10.2 | Ä: ledningens genomgång, bedömda incidentposter, förbättringsplan |
+
+**ISO 27001, A.5–A.8**
+
+| Krav | Varför |
+|---|---|
+| A.5.1, A.5.2, A.5.4, A.5.10, A.5.12, A.5.13, A.5.36 | Ä: policyerna och beslut a godkänns |
+| A.5.3, A.8.4, A.8.8, A.8.25, A.8.28 | Ä: grenskydd, kodskanning och hemlighetsskanning kräver betald GitHub-plan eller ett beslut om kompenserande kontroll; "deploy först när CI är grön" är en Railway-inställning. A.8.28 också lösenordsbyte |
+| A.5.5 | Ä: vem som kontaktar. Ext.: leverantörernas säkerhetskontakter bekräftas av leverantörerna eller i Antons konton |
+| A.5.6 | Ä: vem läser bevakningens ärenden och inom vilken tid |
+| A.5.7, A.5.21 | Ä: patchtider beslutas; de två picomatch-larmen avfärdas eller accepteras (ingen rättning finns uppströms) |
+| A.5.9, A.8.1, A.8.7, A.8.17, A.8.19, A.8.23, A.7.7–A.7.10, A.7.13, A.7.14 | Ä och Sebbe: bara de kan kontrollera sina datorer och telefoner (kryptering, skärmlås, antivirus, tidssynk, programvara, kassering) |
+| A.5.11, A.5.16, A.5.17, A.5.18, A.8.2, A.8.5 | Ä: lösenordsbyte, lösenordshanterare, personliga konton och tvåfaktor hos leverantörerna görs i kontona; tvånget för plattformsadmin är ett beslut. Koden (spärr, TOTP) finns |
+| A.5.14, A.8.12, A.8.22 | Ä: synkflytten kräver Railway-variabler och att den publika proxyn stängs |
+| A.5.15, A.8.18, A.8.34 | Ä: reglerna för leverantörskonton, privilegierade verktyg och revisioners åtkomst beslutas. Förslagen finns |
+| A.5.19, A.5.20, A.5.22, A.5.23 | Ä: policy och beslut f, DPA:er, brev till leverantörer, exitplan, radering av gamla stacken. Ext.: leverantörernas svar |
+| A.5.24, A.5.25, A.5.26, A.5.27 | Ä: övningen hålls, incidentposterna bedöms, lösenord byts, genomgången skrivs av den som bedömt |
+| A.5.28 | Ä: rutin för att säkra loggar beslutas. Loggtiden är belagd |
+| A.5.29, A.5.30, A.5.37, A.8.6, A.8.13, A.8.14 | Ä: Railway Pro (betald plan) ger säkerhetskopior och repliker; RTO, RPO och tillgänglighetskrav beslutas |
+| A.5.31, A.5.34 | Ä: G01 signeras. Ext.: PUB med kund |
+| A.5.32 | Ä: de 18 obeslutade licenserna; avtal med allabolag och hitta. Licensgrinden finns |
+| A.5.33 | Ä: lagringstider för egna register |
+| A.5.35 | Ext.: oberoende granskning |
+| A.6.1–A.6.6 | Ä: Sebbes avtal (sekretess, följder), kontroll eller beslutat undantag, genomgång och kvittens |
+| A.6.7 | Ä: regler för distansarbete beslutas |
+| A.6.8 | Ä: privat sårbarhetsrapportering är en repoinställning; svarstiden i `SECURITY.md` är ett åtagande; merge av PR 72 |
+| A.8.3, A.8.31, A.8.33 | Ä: minimerad eller pseudonymiserad spegel (JA #16), egna Vertex-konton per miljö |
+| A.8.9 | Ä: rutinen för när baslinjen körs. Jämförelsen är körd |
+| A.8.10 | Ä: `GALLRING_AKTIV` och perioden |
+| A.8.11, A.8.26 | Ä: merge av PR 72 |
+| A.8.15 | Ä: gallring av `agent_runs` beslutas; adminloggen når drift med releasen |
+| A.8.16 | Ä: `INTERNLARM_SMTP_*` är Railway-variabler; en extern pingtjänst kräver ett konto |
+| A.8.20, A.8.27 | Ä: Postgres publika proxy stängs i Railway (efter synkflytten) |
+| A.8.21 | Ä: HSTS når `main` med releasen. En SSL Labs-rapport görs av den externa tjänsten och tillför bara certifikatkedja och chifferlista |
+| A.8.24 | Ä: nyckelrotation (hemligheterna hanteras av Anton). Kryptering av kundnycklarna i testmiljön skriver i kunddata, utanför omgångens gränser |
+| A.8.30 | Ä: Sebbes avtal; om AI-kodverktygen ska läsa spegeln (krock 2 i `ai-system/policy-samstammighet.md`) |
+| A.8.32 | Ä: en andra granskare före merge; för två personer är det Sebbe. Baslinjen ersätter delvis en ändringslogg |
+
+**ISO 42001**
+
+| Krav | Varför |
+|---|---|
+| 4.1, 4.2, 4.3, 4.4, 5.1, 5.2, 5.3, A.2.2, A.3.2, A.4.6 | Ä: kontext, intressenter, omfång, ledningssystem, åtagande, P27 och rollerna. Utkasten finns |
+| A.2.3 | Ä: P27 godkänd, beslut om förslagen (krock 1 och 2 är beslut i sak), ny genomgång mot godkända versioner |
+| A.2.4 | Ä: en godkänd policy att se över |
+| 6.1.1, 6.1.2, 6.1.3, 8.2, 8.3 | Ä: riskkriterier, metod, behandlingsplan, SoA |
+| 6.1.4, 8.4, A.5.2, A.5.4, A.5.5 | Ä: processen och bedömningarna godkänns. A.5.4: att mäta skevhet mot små bolag kräver ett beslutat mått, och mätning på verkliga leads är kunddata |
+| A.5.3 | Ext.: juristgranskning |
+| 6.2, A.6.1.2, A.9.3 | Ä: AI-mål med mått. Förslag i P27 |
+| 6.3, A.4.4, A.10.3 | Ä: beslut f signeras; ersättare för Gemini 2.5 väljs. Mätunderlaget finns |
+| 7.1, 7.2, 7.3, 7.4, 7.5.1, 7.5.2 | Ä: resurser, kompetens, genomgång, kommunikationsplan, godkännande |
+| 8.1, A.7.5, A.7.6, A.8.2 | Ä: merge av PR 72; beslut f |
+| 9.1, A.6.2.6 | Ä: internlarmets variabler; mätning av AI-kvalitet i drift läser kundernas utfall och kräver beslutade mått |
+| 9.2.1, 9.2.2 | Ext.: internrevision av en tredje person |
+| 9.3.1–9.3.3, 10.1 | Ä: ledningens genomgång, förbättringslogg |
+| 10.2, A.8.4 | Ä: AI-incidenter i G03 (förslag i `ai-system/policy-samstammighet.md`, G03); incidentloggen förs av incidentledaren |
+| A.3.3 | Ä: P28 signeras; en väg utanför repot och en extern kontakt utses |
+| A.4.3 | Ä: lagringstider |
+| A.6.1.3, A.6.2.4 | Ä: en lägsta evalnivå som grind för release. En svit för Jev i inkorgen skulle skicka data till TypeSafe, som inte är godkänd |
+| A.6.2.2, A.6.2.7, A.9.2, A.9.4 | Ä: kraven, dokumentationen till kund, proceduren för egen AI-användning och förbjudna användningar i villkoren beslutas. Underlaget finns i systembladen |
+| A.6.2.5 | Ä: driftsättningsplan och grenskydd (GitHub-plan). Upptäckten av ändrade AI-variabler finns |
+| A.7.2 | Ext.: Livrustnings godkännande av kunskapsbasen i evalsviten. Ä: processen |
+| A.7.3 | Ä och Ext.: avtal med allabolag och hitta |
+| A.7.4 | Ä: kvalitetskrav per system |
+| A.8.3 | Ä: en väg för AI-fel på sajten är publikt innehåll i Snajps namn |
+| A.8.5 | Ä: beslutad lista över rapportering |
+| A.10.2, A.10.4 | Ä: ansvarsfördelning och villkor (Ext.: jurist); process för kundernas förväntningar |

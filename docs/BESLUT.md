@@ -9,6 +9,22 @@ möjligt), vad det betyder i koden.
 
 ---
 
+## 2026-11-18 kväll — HSTS i appen, utan underdomäner (Claude (agent), på Antons uppdrag)
+
+**Beslut.** Webben skickar `Strict-Transport-Security: max-age=63072000` på alla
+sökvägar (`next.config.ts`, `headers()`), utan `includeSubDomains` och utan `preload`.
+
+**Resonemanget.** P23 säger att HSTS ska läggas till om Railways kant inte sätter den.
+Mätningen 2026-11-18 visade att den saknas på allt Railway serverar, också
+`www.snajp.se` (`docs/compliance/bevis/tls-2026-11-18.txt`). Rubriken binder bara värden
+som skickar den. `includeSubDomains` skulle på `snajp.se` binda alla underdomäner, också
+sådana som inte går via appen, och det är ett eget beslut för Anton; `preload` går inte
+att ångra snabbt. Två år är det vanliga värdet och samma som Vercel redan skickar för
+`snajp.se`.
+
+**I koden.** Gäller i `development` efter deployen och i `main` med nästa release. Mät
+med `curl -sI https://web-development-6c85.up.railway.app/ | grep -i strict`.
+
 ## 2026-11-18 natt — valfri tvåstegsverifiering (TOTP) för plattformsadmin (Claude (agent), på Antons uppdrag)
 
 **Beslut.** Plattformsadmin kan slå på tvåstegsverifiering med en autentiseringsapp (TOTP,

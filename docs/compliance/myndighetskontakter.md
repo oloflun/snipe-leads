@@ -14,9 +14,9 @@ som "verifieras".
 
 | Vem | När | Hur | Vem kontaktar | Kontrollerad |
 |---|---|---|---|---|
-| **IMY** (Integritetsskyddsmyndigheten) | Personuppgiftsincident där Snajp är personuppgiftsansvarig (leadsdelen, egna konton): anmälan inom 72 timmar om den inte är osannolik att medföra risk (art. 33, `INCIDENT_RESPONSE.md`). Är Snajp biträde underrättas kunden, som anmäler | E-tjänsten för anmälan av personuppgiftsincident på imy.se. Växel 08-657 61 00, imy@imy.se | | inte kontrollerad |
-| **CERT-SE** (MSB) | It-incident som kan beröra andra (intrång, skadlig kod, läckta nycklar som används), eller när vi behöver råd. Frivilligt för Snajp, som inte omfattas av NIS-reglerna såvitt känt (inte bedömt) | cert@cert.se, 010-240 40 40 (dygnet runt), cert.se | | inte kontrollerad |
-| **Polisen** | Brott: dataintrång, utpressning, bedrägeri. Anmälan behövs ofta också för försäkring | 114 14; 112 vid pågående brott. Anmälan på polisen.se | | inte kontrollerad |
+| **IMY** (Integritetsskyddsmyndigheten) | Personuppgiftsincident där Snajp är personuppgiftsansvarig (leadsdelen, egna konton): anmälan inom 72 timmar om den inte är osannolik att medföra risk (art. 33, `INCIDENT_RESPONSE.md`). Är Snajp biträde underrättas kunden, som anmäler | E-tjänsten för anmälan av personuppgiftsincident på imy.se. Växel 08-657 61 00, imy@imy.se. E-tjänsten: imy.se › Verksamhet › Utföra ärenden › Anmäla personuppgiftsincident | | 2026-11-18, imy.se/om-oss/kontakta-oss (agenten) |
+| **CERT-SE** (MSB) | It-incident som kan beröra andra (intrång, skadlig kod, läckta nycklar som används), eller när vi behöver råd. Frivilligt för Snajp, som inte omfattas av NIS-reglerna såvitt känt (inte bedömt) | cert@cert.se, 010-382 80 00, bemannat dygnet runt alla dagar (cert.se/kontakt). Utkastet hade 010-240 40 40, som var fel | | 2026-11-18, cert.se/kontakt (agenten) |
+| **Polisen** | Brott: dataintrång, utpressning, bedrägeri. Anmälan behövs ofta också för försäkring | 114 14; 112 vid pågående brott och akut fara. Många brott kan anmälas i polisens e-tjänster på polisen.se | | 2026-11-18, polisen.se/kontakt (agenten) |
 | **Kundens kontakt** | Varje incident som rör en kunds data (Snajp är biträde): underrättelse utan onödigt dröjsmål enligt PUB-avtalet | Kundregistret (`ss_customer_details`), avtalet | | – |
 
 ## 2. Leverantörer: driftstörning och säkerhetsincident
