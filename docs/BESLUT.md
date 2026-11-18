@@ -9,6 +9,31 @@ möjligt), vad det betyder i koden.
 
 ---
 
+## 2026-11-18 sen kväll — provbytet i development återställt helt (Claude, på Antons uppdrag)
+
+**Beslut.** Development kör åter samma modellinställningar som main: bara
+`MODEL=gemini-2.5-flash` på `api`, inga regionvariabler och inga stegmodeller.
+Variablerna från provbytet (`GOOGLE_CLOUD_REGION=eu`, `VERTEX_RESERVREGIONER`,
+`VERTEX_INBADDNING_REGION`, `VERTEX_BILD_REGION`, `VERTEX_UTKAST_REGION`,
+`VISION_MODEL`, `LEADS_DRAFT_MODEL`, `LEADS_HUMANIZER_MODEL` och `MODEL` på `web`)
+är borttagna. Koden från PR #74, #76 och #78 ligger kvar och är overksam när
+variablerna saknas.
+
+**Resonemanget.** Kvittosviten föll från 37/40 till 30/40 när kvittohanteraren
+gick på gemini-3.5-flash-lite (den följer `MODEL`), och ett av felen tar sig
+förbi granskningen: en obetald kundfaktura bokades som klar med det egna bolaget
+som motpart. Development speglar produktionen, så ett fel som bokför fel ska inte
+stå kvar i en miljö med riktiga kunders data medan bytet ändå inte kan
+genomföras: utkasten och bildmodellen saknar en godkänd ersättare i `eu`.
+Mätningarna är gjorda och dokumenterade (modellbyte-underlag.md 3.5–3.7, 6.4,
+8); provbytet har gett det det kunde ge. Supporten var bättre på lite (48/50 mot
+47/50), så ett framtida byte bör ge kvittohanteraren en egen modell.
+
+**Öppet för Anton.** Ersättare för gemini-2.5 till utkast och bilder, och om
+kvittohanteraren ska få en egen modellvariabel.
+
+---
+
 ## 2026-11-18 kväll — utkasten på gemini-3.5-flash-lite prövade i development och backade; kvittosviten körd (Claude (agent), på Antons uppdrag)
 
 **Beslut.** Iris utkast och humanizer i development ligger kvar på
