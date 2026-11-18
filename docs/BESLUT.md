@@ -9,6 +9,70 @@ möjligt), vad det betyder i koden.
 
 ---
 
+## 2026-11-18 sen kväll — provbytet i development återställt helt (Claude, på Antons uppdrag)
+
+**Beslut.** Development kör åter samma modellinställningar som main: bara
+`MODEL=gemini-2.5-flash` på `api`, inga regionvariabler och inga stegmodeller.
+Variablerna från provbytet (`GOOGLE_CLOUD_REGION=eu`, `VERTEX_RESERVREGIONER`,
+`VERTEX_INBADDNING_REGION`, `VERTEX_BILD_REGION`, `VERTEX_UTKAST_REGION`,
+`VISION_MODEL`, `LEADS_DRAFT_MODEL`, `LEADS_HUMANIZER_MODEL` och `MODEL` på `web`)
+är borttagna. Koden från PR #74, #76 och #78 ligger kvar och är overksam när
+variablerna saknas.
+
+**Resonemanget.** Kvittosviten föll från 37/40 till 30/40 när kvittohanteraren
+gick på gemini-3.5-flash-lite (den följer `MODEL`), och ett av felen tar sig
+förbi granskningen: en obetald kundfaktura bokades som klar med det egna bolaget
+som motpart. Development speglar produktionen, så ett fel som bokför fel ska inte
+stå kvar i en miljö med riktiga kunders data medan bytet ändå inte kan
+genomföras: utkasten och bildmodellen saknar en godkänd ersättare i `eu`.
+Mätningarna är gjorda och dokumenterade (modellbyte-underlag.md 3.5–3.7, 6.4,
+8); provbytet har gett det det kunde ge. Supporten var bättre på lite (48/50 mot
+47/50), så ett framtida byte bör ge kvittohanteraren en egen modell.
+
+**Öppet för Anton.** Ersättare för gemini-2.5 till utkast och bilder, och om
+kvittohanteraren ska få en egen modellvariabel.
+
+---
+
+## 2026-11-18 kväll — utkasten på gemini-3.5-flash-lite prövade i development och backade; kvittosviten körd (Claude (agent), på Antons uppdrag)
+
+**Beslut.** Iris utkast och humanizer i development ligger kvar på
+gemini-2.5-flash i europe-west1 (`LEADS_DRAFT_MODEL`, `LEADS_HUMANIZER_MODEL`,
+`VERTEX_UTKAST_REGION=europe-west1`). 3.5-flash-lite i `eu` prövades och
+backades samma kväll. Inga andra variabler ändrades; main är inte rörd.
+
+**Resonemanget.** Antons grind: inga tekniska fel, och stilgrinden
+(INV-LEADS-UTKAST-002) i nivå med 2.5, högst ett fall sämre. Samma 11 fall ur
+`evals/iris_utkast.json` kördes på båda modellerna samma kväll, mot nya
+syntetiska evalkunder. 3.5-flash-lite levererade alla 11 utan fel, på 6,5–40 s
+(2.5-flash: 9 av 11, två föll på 503 i europe-west1, 11,6–84 s). Stilen höll
+inte: lite hade facitets `slentrian_ingang` ("När …"-ingångar) i sex av elva
+utkast, 2.5-flash i inget av sina 15 levererade utkast den dagen. Per fall är
+lite sämre i fyra och bättre i ett; `bedom_iris` godkände 4 mot 7. Bara om
+2.5:s två serverfel räknas som stilfel blir skillnaden ett fall (5 mot 6), och
+agenten bedömde att stilgrinden ska mäta stilen, inte kapaciteten. Att
+backningen inte är gratis står i underlaget: 2.5 i europe-west1 tappade två
+utkast på 503 samma kväll.
+
+**Kvittosviten.** 30/40 mot 37/40 med allt på 2.5 (2026-11-10), 0 tekniska
+fel, p50 7,2 s mot 20,9 s. Sviten är text-PDF:er, så den mäter `MODEL`
+(3.5-flash-lite i `eu` sedan provbytet), inte bildmodellen. Lite skickar sju
+underlag till granskning som ska vara klara, och bokförde en obetald
+kundfaktura som klar med det egna bolaget som motpart. Körd med en tillfällig
+env-fil och en ny evalkund (`eval-11181437-kvitto`); `.env.deploy` är orörd.
+
+**Öppet för ägaren.** Vilken modell utkasten ska ha när 2.5 stängs (lite
+skriver sämre ingångar, 3.8 i `eu` saknar kapacitet utan Provisioned
+Throughput), och om kvittohanteraren ska ha en egen modell i stället för
+`MODEL`. Kostnad för kvällens prov: omkring 15 kr i Vertex.
+
+**Backa/byta.** Sätt `LEADS_DRAFT_MODEL`, `LEADS_HUMANIZER_MODEL` =
+`gemini-3.5-flash-lite` och `VERTEX_UTKAST_REGION` = `eu` på `api` och `web` i
+development för att pröva lite igen. Detaljer och siffror per fall:
+`modellbyte-underlag.md` avsnitt 6.4.
+
+---
+
 ## 2026-11-18 — Supabase-spåret tas bort helt (Anton)
 
 **Beslut.** "Ta bort supabase-spåret som ligger kvar helt." Migrationerna

@@ -1,0 +1,596 @@
+[
+ {
+  "id": "vvs-borlange-bergvarme",
+  "typ": "tydlig-signal",
+  "godkand": false,
+  "kriterier": {
+   "levererat": false,
+   "inga_pahitt": false,
+   "skrivregler": false
+  },
+  "stilgrind_ok": false,
+  "stilfynd": [
+   "tomt"
+  ],
+  "amnesfynd": [
+   "tomt"
+  ],
+  "signal": false,
+  "fel": "Körningen kunde inte slutföras på grund av ett fel hos oss. Felet är loggat — kör om den, och hör av dig om det upprepas.",
+  "latens_s": 33.88,
+  "svar": {
+   "subject": null,
+   "body": null,
+   "queued": null,
+   "escalated": null,
+   "escalation_reason": null,
+   "tokens_in": null,
+   "steg": []
+  }
+ },
+ {
+  "id": "bygg-umea-altan-fastpris",
+  "typ": "tydlig-signal",
+  "godkand": false,
+  "kriterier": {
+   "levererat": false,
+   "inga_pahitt": false,
+   "skrivregler": false
+  },
+  "stilgrind_ok": false,
+  "stilfynd": [
+   "tomt"
+  ],
+  "amnesfynd": [
+   "tomt"
+  ],
+  "signal": false,
+  "fel": "Körningen kunde inte slutföras på grund av ett fel hos oss. Felet är loggat — kör om den, och hör av dig om det upprepas.",
+  "latens_s": 54.32,
+  "svar": {
+   "subject": null,
+   "body": null,
+   "queued": null,
+   "escalated": null,
+   "escalation_reason": null,
+   "tokens_in": null,
+   "steg": []
+  }
+ },
+ {
+  "id": "ehandel-boras-norge-finland",
+  "typ": "tydlig-signal",
+  "godkand": true,
+  "kriterier": {
+   "levererat": true,
+   "inga_pahitt": true,
+   "skrivregler": true
+  },
+  "stilgrind_ok": true,
+  "stilfynd": [],
+  "amnesfynd": [],
+  "signal": true,
+  "fel": null,
+  "latens_s": 83.81,
+  "svar": {
+   "subject": "tull och frakt till grannländer",
+   "body": "Hej,\n\nEra kunder i Norge och Finland har många frågor om tull, fraktkostnad och leveranstid. Vår AI-supportagent svarar direkt på era kunders frågor i mejl och chatt, dygnet runt och utifrån ert eget material.\n\nVill ni veta mer om hur det fungerar bokar vi gärna en genomgång.",
+   "queued": true,
+   "escalated": false,
+   "escalation_reason": null,
+   "tokens_in": 121757,
+   "steg": [
+    {
+     "skill": "sa:draft-outreach",
+     "ms": 5410,
+     "forsok": 2
+    },
+    {
+     "skill": "sa:draft-outreach",
+     "ms": 62308,
+     "forsok": 1
+    },
+    {
+     "skill": "snajp:humanizer-svenska",
+     "ms": 1466,
+     "forsok": 1
+    },
+    {
+     "skill": "mk:copy-editing",
+     "ms": 1591,
+     "forsok": 1
+    },
+    {
+     "skill": "snajp:humanizer-svenska",
+     "ms": 10980,
+     "forsok": 1
+    }
+   ]
+  }
+ },
+ {
+  "id": "redovisning-vasteras-kundportal",
+  "typ": "tydlig-signal",
+  "godkand": true,
+  "kriterier": {
+   "levererat": true,
+   "inga_pahitt": true,
+   "skrivregler": true
+  },
+  "stilgrind_ok": true,
+  "stilfynd": [],
+  "amnesfynd": [],
+  "signal": true,
+  "fel": null,
+  "latens_s": 37.64,
+  "svar": {
+   "subject": "bokföringsfrågor i portalen",
+   "body": "Hej,\n\nNi hjälper småföretag och enskilda näringsidkare med digital bokföring via er kundportal, och era kunder frågar ofta om inloggning och underlag. Vår Supportagent svarar på de frågorna direkt via mejl, dygnet runt och utifrån era egna instruktioner.\n\nVill ni veta mer om hur det fungerar, svara på mejlet så bokar vi en genomgång.",
+   "queued": true,
+   "escalated": false,
+   "escalation_reason": null,
+   "tokens_in": 103035,
+   "steg": [
+    {
+     "skill": "sa:draft-outreach",
+     "ms": 27399,
+     "forsok": 2
+    },
+    {
+     "skill": "sa:draft-outreach",
+     "ms": 6945,
+     "forsok": 2
+    },
+    {
+     "skill": "snajp:humanizer-svenska",
+     "ms": 1506,
+     "forsok": 1
+    }
+   ]
+  }
+ },
+ {
+  "id": "tandvard-uppsala-kvallsoppet",
+  "typ": "tydlig-signal",
+  "godkand": false,
+  "kriterier": {
+   "levererat": true,
+   "inga_pahitt": false,
+   "skrivregler": true
+  },
+  "stilgrind_ok": false,
+  "stilfynd": [
+   "uppraknad_ingang"
+  ],
+  "amnesfynd": [],
+  "signal": false,
+  "fel": null,
+  "latens_s": 45.03,
+  "svar": {
+   "subject": "frågor om tider och bokning",
+   "body": "Hej,\n\nEra patienter mejlar ofta om ombokning, avbokningsregler och vad en undersökning kostar. Vår supportagent svarar på de frågorna direkt, dygnet runt och utifrån er egen information.\n\nVill ni veta mer, svara på mejlet så bokar vi en genomgång.",
+   "queued": true,
+   "escalated": false,
+   "escalation_reason": null,
+   "tokens_in": 224578,
+   "steg": [
+    {
+     "skill": "sa:draft-outreach",
+     "ms": 8156,
+     "forsok": 2
+    },
+    {
+     "skill": "sa:draft-outreach",
+     "ms": 3678,
+     "forsok": 2
+    },
+    {
+     "skill": "sa:draft-outreach",
+     "ms": 18631,
+     "forsok": 1
+    },
+    {
+     "skill": "snajp:humanizer-svenska",
+     "ms": 1214,
+     "forsok": 1
+    },
+    {
+     "skill": "sa:draft-outreach",
+     "ms": 3524,
+     "forsok": 1
+    },
+    {
+     "skill": "snajp:humanizer-svenska",
+     "ms": 1227,
+     "forsok": 1
+    },
+    {
+     "skill": "sa:draft-outreach",
+     "ms": 4193,
+     "forsok": 1
+    },
+    {
+     "skill": "snajp:humanizer-svenska",
+     "ms": 1349,
+     "forsok": 1
+    },
+    {
+     "skill": "mk:copy-editing",
+     "ms": 1227,
+     "forsok": 1
+    }
+   ]
+  }
+ },
+ {
+  "id": "fastighet-norrkoping-nya-foreningar",
+  "typ": "tydlig-signal",
+  "godkand": true,
+  "kriterier": {
+   "levererat": true,
+   "inga_pahitt": true,
+   "skrivregler": true
+  },
+  "stilgrind_ok": true,
+  "stilfynd": [],
+  "amnesfynd": [],
+  "signal": true,
+  "fel": null,
+  "latens_s": 18.71,
+  "svar": {
+   "subject": "frågor om förvaltning",
+   "body": "Hej,\n\nEra boende i bostadsrättsföreningarna ni förvaltar har ofta frågor om felanmälan, andrahandsuthyrning och överlåtelser. Vår AI-supportagent svarar på de frågorna direkt, dygnet runt och utifrån er egen information.\n\nVill ni veta mer, svara på mejlet så bokar vi en genomgång.",
+   "queued": true,
+   "escalated": false,
+   "escalation_reason": null,
+   "tokens_in": 187894,
+   "steg": [
+    {
+     "skill": "sa:draft-outreach",
+     "ms": 3641,
+     "forsok": 1
+    },
+    {
+     "skill": "sa:draft-outreach",
+     "ms": 1923,
+     "forsok": 1
+    },
+    {
+     "skill": "sa:draft-outreach",
+     "ms": 1970,
+     "forsok": 1
+    },
+    {
+     "skill": "snajp:humanizer-svenska",
+     "ms": 1172,
+     "forsok": 1
+    },
+    {
+     "skill": "sa:draft-outreach",
+     "ms": 1736,
+     "forsok": 1
+    },
+    {
+     "skill": "snajp:humanizer-svenska",
+     "ms": 1116,
+     "forsok": 1
+    },
+    {
+     "skill": "sa:draft-outreach",
+     "ms": 3886,
+     "forsok": 2
+    },
+    {
+     "skill": "snajp:humanizer-svenska",
+     "ms": 1284,
+     "forsok": 1
+    }
+   ]
+  }
+ },
+ {
+  "id": "logistik-jonkoping-terminal-torsvik",
+  "typ": "tydlig-signal",
+  "godkand": true,
+  "kriterier": {
+   "levererat": true,
+   "inga_pahitt": true,
+   "skrivregler": true
+  },
+  "stilgrind_ok": true,
+  "stilfynd": [],
+  "amnesfynd": [],
+  "signal": true,
+  "fel": null,
+  "latens_s": 22.58,
+  "svar": {
+   "subject": "Frågor om bokning och spårning",
+   "body": "Hej,\n\nEra kunder som lämnar och hämtar gods på terminalen har många frågor om bokning, spårning och hämttider. Vår AI-supportagent svarar på de frågorna direkt, dygnet runt och utifrån er egen kunskapsbas.\n\nAgenten lämnar över ärendet till en människa hos Vätterfrakt Logistik när den inte säkert kan svara. Tjänsten har en fast månadsavgift. Vill ni veta mer, svara på mejlet så bokar vi en genomgång.",
+   "queued": true,
+   "escalated": false,
+   "escalation_reason": null,
+   "tokens_in": 187835,
+   "steg": [
+    {
+     "skill": "sa:draft-outreach",
+     "ms": 3769,
+     "forsok": 1
+    },
+    {
+     "skill": "sa:draft-outreach",
+     "ms": 1863,
+     "forsok": 1
+    },
+    {
+     "skill": "sa:draft-outreach",
+     "ms": 2498,
+     "forsok": 1
+    },
+    {
+     "skill": "snajp:humanizer-svenska",
+     "ms": 1682,
+     "forsok": 1
+    },
+    {
+     "skill": "sa:draft-outreach",
+     "ms": 4820,
+     "forsok": 2
+    },
+    {
+     "skill": "snajp:humanizer-svenska",
+     "ms": 1484,
+     "forsok": 1
+    },
+    {
+     "skill": "sa:draft-outreach",
+     "ms": 2811,
+     "forsok": 1
+    },
+    {
+     "skill": "snajp:humanizer-svenska",
+     "ms": 1466,
+     "forsok": 1
+    }
+   ]
+  }
+ },
+ {
+  "id": "restaurang-visby-julbord",
+  "typ": "tydlig-signal",
+  "godkand": true,
+  "kriterier": {
+   "levererat": true,
+   "inga_pahitt": true,
+   "skrivregler": true
+  },
+  "stilgrind_ok": true,
+  "stilfynd": [],
+  "amnesfynd": [],
+  "signal": true,
+  "fel": null,
+  "latens_s": 17.09,
+  "svar": {
+   "subject": "frågor inför julbord",
+   "body": "Hej,\n\nEra gäster som bokar julbord har många frågor om allergier, menyn och antal platser. Vår AI-supportagent svarar direkt på de frågorna via mejl och chatt, utifrån er egen information.\n\nVill ni veta mer kan ni svara på mejlet, så bokar vi en genomgång.",
+   "queued": true,
+   "escalated": false,
+   "escalation_reason": null,
+   "tokens_in": 145455,
+   "steg": [
+    {
+     "skill": "sa:draft-outreach",
+     "ms": 2248,
+     "forsok": 1
+    },
+    {
+     "skill": "sa:draft-outreach",
+     "ms": 2054,
+     "forsok": 1
+    },
+    {
+     "skill": "sa:draft-outreach",
+     "ms": 5043,
+     "forsok": 2
+    },
+    {
+     "skill": "snajp:humanizer-svenska",
+     "ms": 2535,
+     "forsok": 1
+    },
+    {
+     "skill": "sa:draft-outreach",
+     "ms": 2167,
+     "forsok": 1
+    },
+    {
+     "skill": "snajp:humanizer-svenska",
+     "ms": 1097,
+     "forsok": 1
+    }
+   ]
+  }
+ },
+ {
+  "id": "trafikskola-gavle-intensivkurs",
+  "typ": "tydlig-signal",
+  "godkand": false,
+  "kriterier": {
+   "levererat": false,
+   "inga_pahitt": true,
+   "skrivregler": false
+  },
+  "stilgrind_ok": false,
+  "stilfynd": [
+   "generell_ingang",
+   "uppraknad_ingang"
+  ],
+  "amnesfynd": [],
+  "signal": false,
+  "fel": null,
+  "latens_s": 22.05,
+  "svar": {
+   "subject": "elevernas frågor om körkort",
+   "body": "Hej,\n\nEra elever har många frågor om pris, handledarkurs och hur man bokar riskutbildningen. Vår AI-supportagent svarar på de frågorna direkt via mejl och chatt, dygnet runt och utifrån Bomhusvikens Trafikskolas egen kunskapsbas.\n\nAgenten kostar en fast månadsavgift. Vill ni veta mer, svara på mejlet så bokar vi en genomgång.",
+   "queued": false,
+   "escalated": true,
+   "escalation_reason": "Utdatakontraktet brast i sa:draft-outreach — utkastet köas inte.",
+   "tokens_in": 187492,
+   "steg": [
+    {
+     "skill": "sa:draft-outreach",
+     "ms": 4395,
+     "forsok": 2
+    },
+    {
+     "skill": "sa:draft-outreach",
+     "ms": 1827,
+     "forsok": 1
+    },
+    {
+     "skill": "sa:draft-outreach",
+     "ms": 4082,
+     "forsok": 1
+    },
+    {
+     "skill": "snajp:humanizer-svenska",
+     "ms": 1960,
+     "forsok": 1
+    },
+    {
+     "skill": "sa:draft-outreach",
+     "ms": 2133,
+     "forsok": 1
+    },
+    {
+     "skill": "snajp:humanizer-svenska",
+     "ms": 1362,
+     "forsok": 1
+    },
+    {
+     "skill": "sa:draft-outreach",
+     "ms": 3421,
+     "forsok": 1
+    },
+    {
+     "skill": "snajp:humanizer-svenska",
+     "ms": 1320,
+     "forsok": 1
+    }
+   ]
+  }
+ },
+ {
+  "id": "it-karlstad-helpdesk-abonnemang",
+  "typ": "tydlig-signal",
+  "godkand": true,
+  "kriterier": {
+   "levererat": true,
+   "inga_pahitt": true,
+   "skrivregler": true
+  },
+  "stilgrind_ok": true,
+  "stilfynd": [],
+  "amnesfynd": [],
+  "signal": true,
+  "fel": null,
+  "latens_s": 11.55,
+  "svar": {
+   "subject": "IT-support för era kunder",
+   "body": "Hej,\n\nEra kunders användare mejlar er helpdesk med frågor om IT-support. Vår AI-supportagent svarar direkt på de frågorna på svenska, utifrån er egen kunskapsbas, och lämnar över ärendet till er när den inte säkert kan svara.\n\nDen som vill veta mer svarar på mejlet, så bokar vi en genomgång.",
+   "queued": true,
+   "escalated": false,
+   "escalation_reason": null,
+   "tokens_in": 82968,
+   "steg": [
+    {
+     "skill": "sa:draft-outreach",
+     "ms": 2290,
+     "forsok": 1
+    },
+    {
+     "skill": "sa:draft-outreach",
+     "ms": 3017,
+     "forsok": 1
+    },
+    {
+     "skill": "sa:draft-outreach",
+     "ms": 2724,
+     "forsok": 1
+    },
+    {
+     "skill": "snajp:humanizer-svenska",
+     "ms": 1512,
+     "forsok": 1
+    }
+   ]
+  }
+ },
+ {
+  "id": "restaurang-kalmar-catering-planer",
+  "typ": "svag-signal",
+  "godkand": true,
+  "kriterier": {
+   "levererat": true,
+   "inga_pahitt": true,
+   "skrivregler": true
+  },
+  "stilgrind_ok": false,
+  "stilfynd": [
+   "uppraknad_ingang"
+  ],
+  "amnesfynd": [],
+  "signal": true,
+  "fel": null,
+  "latens_s": 21.32,
+  "svar": {
+   "subject": "frågor om bokning",
+   "body": "Hej,\n\nEra gäster mejlar ofta om bordsbokning, allergier och större sällskap. Vår AI-supportagent svarar på de frågorna direkt, dygnet runt och utifrån er egen information.\n\nEvalbolaget erbjuder tjänsten till en fast månadsavgift. Vill ni veta mer, svara på mejlet så bokar vi en genomgång.",
+   "queued": true,
+   "escalated": false,
+   "escalation_reason": null,
+   "tokens_in": 208187,
+   "steg": [
+    {
+     "skill": "sa:draft-outreach",
+     "ms": 5644,
+     "forsok": 2
+    },
+    {
+     "skill": "sa:draft-outreach",
+     "ms": 2145,
+     "forsok": 1
+    },
+    {
+     "skill": "sa:draft-outreach",
+     "ms": 1912,
+     "forsok": 1
+    },
+    {
+     "skill": "snajp:humanizer-svenska",
+     "ms": 1446,
+     "forsok": 1
+    },
+    {
+     "skill": "sa:draft-outreach",
+     "ms": 1697,
+     "forsok": 1
+    },
+    {
+     "skill": "snajp:humanizer-svenska",
+     "ms": 1224,
+     "forsok": 1
+    },
+    {
+     "skill": "sa:draft-outreach",
+     "ms": 3525,
+     "forsok": 2
+    },
+    {
+     "skill": "snajp:humanizer-svenska",
+     "ms": 1615,
+     "forsok": 1
+    }
+   ]
+  }
+ }
+]
