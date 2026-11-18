@@ -1,10 +1,21 @@
-import NextAuth, { type DefaultSession } from "next-auth";
+import NextAuth, { CredentialsSignin, type DefaultSession } from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import Google from "next-auth/providers/google";
 import MicrosoftEntraID from "next-auth/providers/microsoft-entra-id";
 
+import { arSparrad, nollstallEpost, registreraForsok } from "@/lib/auth/inloggningsforsok";
+import { SPARRKOD } from "@/lib/auth/sparrkod";
 import { hasDatabase, sql, sqlAsUser } from "@/lib/db";
 import { verifyPassword } from "@/lib/password";
+
+/**
+ * Inloggningen är tillfälligt spärrad (för många försök). Koden hamnar i
+ * `?code=` när någon postar direkt till Auth.js, och läses av
+ * `signInWithPassword`; den säger bara "vänta", aldrig om kontot finns.
+ */
+export class ForMangaForsok extends CredentialsSignin {
+  code = SPARRKOD;
+}
 
 /**
  * Auth.js (NextAuth v5) ersätter Supabase Auth.
@@ -100,11 +111,21 @@ export async function ensureWorkspace(userId: string): Promise<void> {
 const providers = [
   Credentials({
     credentials: { email: {}, password: {} },
-    async authorize(credentials) {
+    async authorize(credentials, request) {
       const email = String(credentials?.email ?? "");
       const password = String(credentials?.password ?? "");
       if (!email || !password) {
         return null;
+      }
+
+      // Spärren mot upprepade försök (migration 125, lib/auth/inloggningsregler.ts).
+      // Den sitter HÄR och inte i server actionen, så att den också gäller den
+      // som postar direkt till /api/auth/callback/credentials. Ett spärrat
+      // försök prövar aldrig lösenordet, och spärren räknas likadant för en
+      // adress utan konto: beskedet avslöjar inte vilka adresser som finns.
+      const headers = request?.headers ?? null;
+      if (await arSparrad("inloggning", email, headers)) {
+        throw new ForMangaForsok();
       }
 
       // Direkt SQL mot auth.users (scrypt). GoTrue-adaptern från
@@ -114,8 +135,12 @@ const providers = [
       // gör svarstiden till ett orakel för vilka adresser som finns.
       const ok = await verifyPassword(password, user?.encrypted_password ?? null);
       if (!ok || !user) {
+        if (await registreraForsok("inloggning", email, headers)) {
+          throw new ForMangaForsok();
+        }
         return null;
       }
+      await nollstallEpost("inloggning", email);
       return {
         id: user.id,
         email: user.email,

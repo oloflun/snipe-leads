@@ -46,8 +46,30 @@ kundens nyckel ur sessionens arbetsyta och skickar anropet vidare
 - **API-rutterna** under `app/api/` täcks inte av proxyn med flit; varje rutt
   kontrollerar sessionen själv (`proxyAsTenant`). Anonyma rutter står i
   allowlistan för INV-SEC-010 (`tests/invariants/test_inv_sec_010.py`).
-- **Ingen tvåfaktor och ingen spärr mot upprepade inloggningsförsök** finns i
-  appen (A.8.5, öppet i `docs/compliance/ramverk/iso27001/matris.md`).
+- **Spärr mot upprepade försök** (migration 125, `lib/auth/inloggningsregler.ts`,
+  2026-11-18). Räknas per e-postadress och per klient-IP, likadant för en adress
+  med och utan konto:
+
+  | Handling | Per adress | Per IP | Fönster |
+  |---|---|---|---|
+  | Misslyckad lösenordsinloggning | 5 | 20 | 15 minuter |
+  | Begäran om lösenordsåterställning (varje begäran räknas) | 3 | 10 | 60 minuter |
+
+  Når en nyckel tröskeln spärras den i 1 minut, sedan 5, 15 och 60 minuter för
+  varje ny spärr inom ett dygn. Ett spärrat inloggningsförsök prövar aldrig
+  lösenordet; en spärrad återställning skapar ingen token och skickar inget mejl.
+  Beskedet är "För många försök" på sidans språk (`for_manga_forsok`), samma för
+  alla adresser. En lyckad inloggning nollställer adressens räknare, inte IP:ts.
+  Spärren sitter i `authorize` (`lib/auth.ts`) och gäller därför också den som
+  postar direkt till `/api/auth/callback/credentials`. Nycklarna är HMAC med
+  `AUTH_SECRET`, aldrig adress eller IP i klartext; tabellen nås bara genom
+  funktionerna (security definer) och gallras efter ett dygn utan försök. Varje
+  spärrat försök och varje ny spärr loggas i web-loggen som JSON
+  (`"logg":"inloggningsspärr"`) med maskerad adress och IP, aldrig lösenordet.
+  Ett fel mot databasen släpper igenom försöket och loggas (fail open: en deploy
+  som hinner före migrationen ska inte låsa ute alla).
+- **Ingen tvåfaktor** finns i appen (A.8.5, öppet i
+  `docs/compliance/ramverk/iso27001/matris.md`).
 
 ### Registrering och arbetsyta
 
@@ -153,6 +175,10 @@ Automatiskt:
 - `tests/invariants/test_inv_sec_010.py`: anonyma API-rutter bara enligt allowlistan.
 - `tests/invariants/test_inv_auth_001.py`: auth-invarianten.
 - `snajp-support/tests/db/test_adminlogg.py`: åtkomstloggen (CI-jobbet `databas`).
+- `snajp-support/tests/db/test_inloggningsforsok.py`: spärrens trösklar, stigande
+  väntetid, fönster och att approllerna inte når tabellen (CI-jobbet `databas`).
+- `lib/auth/inloggningsregler.test.ts`: nycklar, klient-IP och loggmaskering
+  (`node --test lib/auth/inloggningsregler.test.ts`, Node 22 eller senare).
 
 Manuellt, mot en lokal stack (`python scripts/lokal_stack.py --apply`, aldrig
 mot development-spegeln):

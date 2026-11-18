@@ -11,6 +11,7 @@ import {
   signInWithPassword,
   signUpWithPassword
 } from "@/lib/actions/auth";
+import { SPARRKOD } from "@/lib/auth/sparrkod";
 import { useLocale, type Localized } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
@@ -54,6 +55,12 @@ const T = {
     en: "If the address has an account with us, we have sent a reset link. Check your inbox, and the spam folder."
   },
   nagotFel: { sv: "Något gick fel. Försök igen.", en: "Something went wrong. Try again." },
+  // Spärren mot upprepade försök (lib/auth/inloggningsregler.ts). Samma besked
+  // för en adress med och utan konto.
+  forMangaForsok: {
+    sv: "För många försök. Vänta några minuter och försök igen.",
+    en: "Too many attempts. Wait a few minutes and try again."
+  },
   inloggningFel: { sv: "Inloggningen misslyckades.", en: "Sign-in failed." },
   oauthFel: { sv: "Inloggningen kunde inte startas.", en: "Sign-in could not be started." },
   felNamn: { sv: "Fyll i ditt namn.", en: "Enter your name." },
@@ -116,6 +123,12 @@ function besked(varde: string | undefined, reserv: Localized): Localized {
   return varde ? { sv: varde, en: varde } : reserv;
 }
 
+/** Ett serverbesked med en känd kod skrivs här, på sidans språk. */
+function svarsfel(result: { error?: string; kod?: string }, reserv: Localized): Localized {
+  if (result.kod === SPARRKOD) return T.forMangaForsok;
+  return besked(result.error, reserv);
+}
+
 export function LoginSida({ oauth }: Readonly<{ oauth: OAuthUtbud }>) {
   const { text } = useLocale();
   const searchParams = useSearchParams();
@@ -135,7 +148,11 @@ export function LoginSida({ oauth }: Readonly<{ oauth: OAuthUtbud }>) {
   // Callbacken skickar hit ?error= när verifieringslänken inte gick att växla in.
   // Utan detta landade användaren på en tom inloggningssida utan förklaring.
   const [error, setError] = useState<Localized | null>(
-    searchParams.get("error") === "auth_callback_failed" ? T.lankFel : null
+    searchParams.get("error") === "auth_callback_failed"
+      ? T.lankFel
+      : searchParams.get("code") === SPARRKOD
+        ? T.forMangaForsok
+        : null
   );
   const [isPending, startTransition] = useTransition();
 
@@ -178,7 +195,7 @@ export function LoginSida({ oauth }: Readonly<{ oauth: OAuthUtbud }>) {
       if (mode === "reset") {
         const result = await requestPasswordReset(email.trim());
         if (result.success) setMessage(besked(result.message, T.aterstallSkickad));
-        else setError(besked(result.error, T.nagotFel));
+        else setError(svarsfel(result, T.nagotFel));
         return;
       }
       if (mode === "signup") {
@@ -188,7 +205,7 @@ export function LoginSida({ oauth }: Readonly<{ oauth: OAuthUtbud }>) {
         return;
       }
       const result = await signInWithPassword(email.trim(), password, nextPath);
-      if (!result.success) setError(besked(result.error, T.inloggningFel));
+      if (!result.success) setError(svarsfel(result, T.inloggningFel));
     });
   }
 

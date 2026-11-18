@@ -9,6 +9,39 @@ möjligt), vad det betyder i koden.
 
 ---
 
+## 2026-11-18 natt — spärr mot upprepade inloggningsförsök, tvåfaktor uppskjuten (Claude (agent), på Antons uppdrag)
+
+**Beslut.** (1) Lösenordsinloggning och begäran om lösenordsåterställning spärras
+tillfälligt efter upprepade försök, per e-postadress och per klient-IP (migration 125,
+`lib/auth/inloggningsregler.ts`): inloggning 5 misslyckade per adress eller 20 per IP på
+15 minuter, återställning 3 per adress eller 10 per IP på en timme. Spärren är 1, 5, 15
+och sedan 60 minuter för varje ny spärr inom ett dygn. Tillståndet ligger i Postgres. (2)
+Tvåfaktor (TOTP) för plattformsadmin byggs inte i den här omgången.
+
+**Resonemanget.** Anton bad om spärren (ISO 27001 A.8.5) med kravet att den inte får
+avslöja om ett konto finns. Därför räknas adressen likadant med och utan konto, beskedet
+är detsamma för alla, och ett spärrat försök prövar aldrig lösenordet. IP-tröskeln är
+högre än adressens eftersom ett kontor delar IP bakom NAT; utan IP-gränsen hade en
+angripare kunnat pröva ett lösenord mot många adresser. Postgres i stället för Redis:
+webben har ingen Redis-anslutning, men har redan Postgres, och spärren behöver vara
+atomisk mellan webbens repliker, vilket upserten ger. Nycklarna är HMAC med `AUTH_SECRET`
+så att tabellen inte blir en lista över adresser som prövats. Spärren släpper igenom vid
+databasfel (fail open) och loggar det: när databasen är nere går inloggningen ändå inte,
+och en deploy som hinner före migrationen hade annars låst ute alla. Tvåfaktor kräver
+lagring av krypterade hemligheter, en ny nyckel i Railway (som agenten inte får ändra),
+ett inrullningsflöde med QR-kod och ett andra inloggningssteg; det är för stort för att
+göras tryggt i samma veva, och Anton har inte beslutat om tvånget.
+
+**Vad det betyder i koden.** `db/migrations/20261118150000_125_inloggningsforsok.sql`
+(tabellen nås bara genom funktionerna); `lib/auth/inloggningsregler.ts`,
+`lib/auth/inloggningsforsok.ts`; `authorize` i `lib/auth.ts` (gäller också direkta
+anrop till `/api/auth/callback/credentials`); `requestPasswordReset` i
+`lib/actions/auth.ts`; beskedet på båda språken i `components/auth/LoginForm.tsx`.
+Tester: `snajp-support/tests/db/test_inloggningsforsok.py` (CI-jobbet `databas`),
+`lib/auth/inloggningsregler.test.ts`.
+
+---
+
 ## 2026-11-18 sen kväll — begränsning av behandling som spärrmarkering, licensgrind med obeslutade undantag (Claude (agent), på Antons uppdrag)
 
 **Beslut.** (1) Begränsning av behandling (GDPR art. 18) är en markering per e-postadress
