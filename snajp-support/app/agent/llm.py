@@ -47,7 +47,7 @@ from functools import lru_cache
 
 from openai import AsyncOpenAI
 
-from ..config import Settings, get_settings
+from ..config import VERTEX_EU_REGIONER, Settings, ar_eu_region, bas_url_tillaten, get_settings
 
 logger = logging.getLogger(__name__)
 
@@ -182,15 +182,35 @@ async def varm_vertex_token(settings: Settings) -> None:
 
 def vertex_regioner(settings: Settings) -> list[str]:
     """Huvudregionen följd av reservregionerna (bara EU, se config)."""
-    reserv = [r.strip() for r in (settings.vertex_reservregioner or "").split(",") if r.strip()]
-    return list(dict.fromkeys([settings.google_cloud_region, *reserv]))
+    return settings.vertex_regioner()
+
+
+def vertex_region(settings: Settings, region: str | None = None) -> str:
+    """Regionen ett Vertex-anrop ska gå till, eller ForbjudenProviderIMiljon.
+
+    INV-DATA-006. Uppstartskontrollen läser de konfigurerade regionerna, men en
+    region kan också skickas in vid anropet (reservregionen vid 429), och en
+    ingång utanför lifespan passerar aldrig uppstarten. Varje väg som bygger en
+    Vertex-adress (chattklienterna, inbäddningen, den grundade sökningen) går
+    därför hit först. Lokalt och i testsviten släpps varje region igenom.
+    """
+    region = region or settings.google_cloud_region
+    if settings.har_riktig_kunddata() and not ar_eu_region(region):
+        fel = (
+            f"Vertex-regionen {region!r} ligger inte i EU, och processen kan nå "
+            f"riktig kunddata. Anropet görs inte. Tillåtna regioner: "
+            f"{', '.join(VERTEX_EU_REGIONER)} (GOOGLE_CLOUD_REGION, VERTEX_RESERVREGIONER)."
+        )
+        logger.error("Dataskyddsspärr: %s", fel)
+        raise ForbjudenProviderIMiljon(fel)
+    return region
 
 
 def _vertex_base_url(settings: Settings, region: str | None = None) -> str:
     """OpenAI-kompatibla Vertex AI-endpointen."""
     info = json.loads(settings.google_service_account_json)
     project = info["project_id"]
-    region = region or settings.google_cloud_region
+    region = vertex_region(settings, region)
     return (
         f"https://{region}-aiplatform.googleapis.com/v1beta1/"
         f"projects/{project}/locations/{region}/endpoints/openapi/"
@@ -315,6 +335,14 @@ def _resolve_base_url(settings: Settings) -> str | None:
     se `Settings.active_llm_key` för hela historien.
     """
     if settings.llm_base_url:
+        # INV-DATA-006: bas-URL:en går före all regionlogik. Där data är
+        # riktig får den bara peka på en Vertex-värd i EU; lokalt (en lokal
+        # modell, en proxy) fungerar den som förut.
+        if settings.har_riktig_kunddata() and not bas_url_tillaten(settings.llm_base_url):
+            raise ForbjudenProviderIMiljon(
+                "LLM_BASE_URL pekar inte på en Vertex-värd i EU, och processen kan "
+                "nå riktig kunddata. Ta bort variabeln."
+            )
         return settings.llm_base_url
     if settings.llm_provider == "deepseek":
         return _DEEPSEEK_BASE_URL
