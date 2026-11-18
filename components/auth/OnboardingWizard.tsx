@@ -83,7 +83,9 @@ const STEG = [
 const PLACEHOLDER = {
   foretag: { sv: "Exempelbolaget AB", en: "Example Company AB" },
   orgnr: "556824-9022",
-  webbplats: "exempel.se",
+  // Svensk domän även på engelska (kunderna är svenska bolag), men inte ett
+  // svenskt ord i det engelska gränssnittet (2026-11-18).
+  webbplats: { sv: "exempel.se", en: "example.se" },
   produkt: {
     sv: "Utbildning i hjärt-lungräddning och första hjälpen för arbetsplatser",
     en: "CPR and first aid training for workplaces"
@@ -137,7 +139,7 @@ const T = {
   },
   felWebbadress: {
     sv: "Adressen går inte att läsa. Skriv den som exempel.se.",
-    en: "The address cannot be read. Write it as example.com."
+    en: "The address cannot be read. Write it as example.se."
   },
   felProdukt: {
     sv: "Skriv en rad om vad ni säljer. Det är det agenterna ska sälja.",
@@ -731,7 +733,7 @@ export function OnboardingWizard({
                   value={webbplats}
                   onChange={andra("webbplats", setWebbplats)}
                   onBlur={vidBlurWebbplats}
-                  placeholder={PLACEHOLDER.webbplats}
+                  placeholder={text(PLACEHOLDER.webbplats)}
                   fel={fel("webbplats")}
                   inputMode="url"
                   autoComplete="url"

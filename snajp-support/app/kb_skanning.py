@@ -658,8 +658,12 @@ def _siffror(text: str) -> set[str]:
 #: Numreringen i en lista ("1. **Urvalet:**", eller "2) " först på en rad) är
 #: ingen sakuppgift. Den visades som "Siffrorna 1, 3, 4 står inte i
 #: källsidan" i genomgången 2026-11-18. Strikt med flit: bara radstart eller
-#: fetstil efter, så att "returer inom 14." i slutet av en mening prövas.
-_LISTNUMMER = re.compile(r"(?m)^[ \t]*\d{1,2}[.)][ \t]+|(?<!\S)\d{1,2}\.[ \t]+(?=\*\*)")
+#: fetstil före eller efter ("1. **Urvalet:**" och "**1. Urvalet:**", den
+#: senare var den som låg kvar i omprövningen), så att "returer inom 14." i
+#: slutet av en mening prövas.
+_LISTNUMMER = re.compile(
+    r"(?m)^[ \t]*\d{1,2}[.)][ \t]+|(?<!\S)\d{1,2}\.[ \t]+(?=\*\*)|(?<=\*\*)\d{1,2}[.)][ \t]+"
+)
 
 
 def obelagda_siffror(innehall: str, kalltext: str) -> list[str]:

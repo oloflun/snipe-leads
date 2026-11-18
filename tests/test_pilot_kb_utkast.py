@@ -420,6 +420,7 @@ def test_listnumrering_ar_ingen_sakuppgift():
     kalla = "Urvalet, researchen och utkastet."
     assert pk.obelagda_siffror("Tre steg: 1. **Urvalet:** a 2. **Researchen:** b", kalla) == []
     assert pk.obelagda_siffror("Steg:\n1. Urvalet\n2) Researchen", kalla) == []
+    assert pk.obelagda_siffror("Fyra steg: **1. Urvalet:** a **2. Researchen:** b", kalla) == []
     assert pk.obelagda_siffror("Returer tas emot inom 14.", kalla) == ["14"]
 
 
