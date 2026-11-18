@@ -39,6 +39,41 @@ av Anton (runbookens steg 2b och 6). Tokenen i `.env.deploy` svarade "Not Author
 `tests/test_synkflytt_steg_9_11.py`. Läget per steg står i
 `docs/compliance/synkflytt-runbook.md`.
 
+## 2026-11-19 — gemini-3.8-flash i alla steg, i `eu` (Anton)
+
+**Beslut.** Byt från gemini-2.5-flash till gemini-3.8-flash i EU-multiregionen
+`eu`: chatten, triagen, Iris utkast och humanizer, leadssökningen, Jev,
+bildmodellen (webbedömningen och kvittofoton) och kvittohanteraren.
+Inbäddningarna ligger kvar på gemini-embedding-001 i europe-west1 (den finns
+inte i `eu`). Ersätter rekommendationen i `docs/compliance/modellbyte-underlag.md`
+avsnitt 1 (3.5-flash-lite för chatten) och backningen 2026-11-18.
+
+**Resonemanget (Antons ord).** "Byt till 3.8 Flash, det är bättre att vi får fler
+leads än färre och träffsäkerhet i svar är viktigare än kostnadsbesparingar när
+vi väl har kunder." Underlaget stöder det: 3.8 var bäst i support (49/50),
+triage (49/50), utkast (9/10 godkända, 10/10 utan stilfynd) och kvittofoton
+(38/40), och i webbedömningen felar den bara åt det stränga hållet (ingen dålig
+sajt kallad bra), alltså fler leads till webbpoolen snarare än färre.
+
+**Det som följer med beslutet.**
+- **Kostnaden.** Ungefär 1,5 gånger dagens per utkast och 2,8 gånger per chatt
+  till 2026-12-31; priset dubblas 2027-01-01. Räknat på dagens volym: leads
+  ~2 150 kr/mån till nyår, ~4 300 kr därefter (i dag ~1 440 kr).
+- **Kapaciteten.** 3.8 i `eu` går på Googles delade kapacitet och gav 503, 429
+  och långa svarstider i provet 2026-11-18. Därför i samma ändring: 503 får
+  samma omtag som 429 (`step_runner.py`), jobbens tidsgräns är 600 s
+  (`jobs/store.py`, var 300) och chattens stegsgräns sätts till 60 s
+  (`LLM_TIMEOUT_CHATT_S`, avsnitt 6.1 i underlaget). Provisioned Throughput
+  (fast månadskostnad) köps inte nu: en GSU i `eu` kostar omkring 31 000 kr i
+  månaden på en månads bindning och bär 675 tokens i sekunden, mindre än ett
+  enda utkast i taget; utkasten hade spillt över till den delade kapaciteten
+  ändå.
+- **Kvittofoton.** 3.8 rättade ett avsiktligt felsummerat kvitto i mätningen
+  (underlaget 3.6). Kvittosviten körs mot development efter bytet; faller den
+  får kvittostegen en egen modell med `KVITTO_MODEL`.
+- **main** följer med nästa release (koden för `eu` och 3.8 finns bara i
+  development) och samma variabler på `api` och `web` i main.
+
 ## 2026-11-18 kväll — HSTS i appen, utan underdomäner (Claude (agent), på Antons uppdrag)
 
 **Beslut.** Webben skickar `Strict-Transport-Security: max-age=63072000` på alla

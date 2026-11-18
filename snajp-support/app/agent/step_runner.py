@@ -583,8 +583,13 @@ async def run_step(
                     "LLM-steget %s svarade inte inom %.0f s; försöker en gång till.",
                     step.skill, chattgrans,
                 )
-            except Exception as fel:  # noqa: BLE001 — bara 429 särbehandlas
-                ar_429 = getattr(fel, "status_code", None) == 429
+            except Exception as fel:  # noqa: BLE001 — bara 429 och 503 särbehandlas
+                # 503 räknas som 429 sedan 2026-11-19: gemini-3.8-flash i `eu`
+                # (delad kapacitet) svarar 503 Service Unavailable när den är
+                # full, och i provet 2026-11-18 föll utkast på 503 som hade
+                # gått igenom med samma tålamod som 429 får
+                # (docs/compliance/modellbyte-underlag.md avsnitt 6.4).
+                ar_429 = getattr(fel, "status_code", None) in (429, 503)
                 # KREDITSLUT är inte transient: "prepayment credits are
                 # depleted" går inte över av 60 sekunders tålamod, det går
                 # över av att en människa betalar. Att vänta här hade bara
