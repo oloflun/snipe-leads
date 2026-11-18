@@ -9,4 +9,4 @@
 #
 # Upptäckt 2026-08-18: varken railway_seed_dev.py eller supabase_seed_dev.py
 # gick att köra, eftersom psycopg2 aldrig deklarerats någonstans.
-psycopg2-binary>=2.9
+psycopg2-binary>=2.9.13
