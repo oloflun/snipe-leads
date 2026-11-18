@@ -78,6 +78,12 @@ async def require_master_key(
     tenant = await require_api_key(request, x_api_key)
     if not tenant["master"]:
         raise HTTPException(status_code=403, detail="Kräver master-nyckel.")
+    # Åtkomstloggen (migration 123): varje godkänt master-anrop ger en rad i
+    # audit_logs. Här och bara här, så att ingen admin-endpoint kan glömmas
+    # (INV-SEC-013). Kastar aldrig.
+    from .adminlogg import logga_masteranrop
+
+    await logga_masteranrop(request)
     return tenant
 
 
