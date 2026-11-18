@@ -1115,6 +1115,21 @@ A.6.1.3 att ändringar av modell och prompt prövas
 Test: tests/invariants/test_inv_proc_001.py
 Införd: 2026-11-18 · Upphävs endast genom waiver
 
+### INV-SEC-013 — Varje admin- och master-endpoint skriver i åtkomstloggen
+Varje route under `/api/admin` och `/api/keys` har `deps.require_master_key` i
+sitt beroendeträd, och `require_master_key` anropar
+`app/api/adminlogg.logga_masteranrop`, som skriver en rad i `audit_logs` genom
+databasfunktionen `logga_adminatkomst` (migration 123): vem (plattformsadmin ur
+`X-Snajp-Admin`, prövad mot `platform_admins`, annars "master-nyckel"), när,
+åtgärd, kund och ruttens mall. Aldrig frågesträng, kropp, svar eller nyckel.
+Kundbesöket (`log_admin_impersonation`) skriver i samma logg. Approllerna får
+inte ändra eller radera i tabellen, och raderna gallras efter 365 dagar.
+Enda undantaget är flyttmottagningen (HMAC mellan miljöerna).
+Varför: ingen kod skrev i `audit_logs`, så ingen admins åtkomst till kunddata
+gick att granska i efterhand (ISO 27001 A.8.15, A.5.15–A.5.18; GDPR art. 32).
+Test: tests/invariants/test_inv_sec_013.py
+Införd: 2026-11-18 · Upphävs endast genom waiver
+
 ## Roadmap
 
 Ids this plan will introduce, in the order `Genomförandeordning` builds them. Not yet enforced by CI.

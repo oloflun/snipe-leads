@@ -1831,6 +1831,24 @@ class Storage(Protocol):
         detail: dict[str, Any] | None = None,
     ) -> None: ...
 
+    # -- Åtkomstloggen (migration 123, app/api/adminlogg.py) ----------------
+
+    async def logga_adminatkomst(
+        self,
+        *,
+        kanal: str,
+        admin_user_id: str | None,
+        tenant_id: str | None,
+        metod: str | None,
+        resurs: str,
+        entity_id: str | None = None,
+        request_id: str | None = None,
+    ) -> None:
+        """En rad i audit_logs genom databasfunktionen logga_adminatkomst, som
+        också gallrar rader äldre än 365 dagar. Inget innehåll, bara vem, när,
+        åtgärd, kund och resurs."""
+        ...
+
     # -- Gallring (migration 119, app/jobs/gallring.py) ---------------------
     #
     # Raderingen görs av databasfunktionen gallra_alla, aldrig av appens egna

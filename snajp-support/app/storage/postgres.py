@@ -4887,6 +4887,36 @@ class PostgresStorage:
                 run_id,
             )
 
+    # -- Åtkomstloggen (migration 123) --------------------------------------
+    #
+    # Oskopad anslutning: master-anropen har ingen tenant-kontext, och
+    # funktionen är säkerhetsdefinierad (snajp_app får inte skriva i
+    # audit_logs direkt).
+
+    async def logga_adminatkomst(
+        self,
+        *,
+        kanal: str,
+        admin_user_id: str | None,
+        tenant_id: str | None,
+        metod: str | None,
+        resurs: str,
+        entity_id: str | None = None,
+        request_id: str | None = None,
+    ) -> None:
+        async with self.pool.acquire() as conn:
+            await conn.execute(
+                "select public.logga_adminatkomst($1, $2::uuid, $3::uuid, $4, $5, $6::uuid, $7)",
+                kanal,
+                admin_user_id,
+                tenant_id,
+                metod,
+                resurs,
+                entity_id,
+                request_id,
+                timeout=5,
+            )
+
     # -- Gallring (migration 119) -------------------------------------------
     #
     # Oskopade anslutningar: gallra_alla går över alla kunder med policy och

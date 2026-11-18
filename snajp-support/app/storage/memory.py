@@ -200,6 +200,8 @@ class MemoryStorage:
         self.prospects: dict[str, list[dict[str, Any]]] = {}
         self.prospect_sources: dict[str, list[dict[str, Any]]] = {}
         self.agent_runs: dict[str, list[dict[str, Any]]] = {}
+        #: Åtkomstloggen (audit_logs, migration 123): en post per master-anrop.
+        self.adminlogg: list[dict[str, Any]] = []
         #: prompt_lager (migration 101): {hash: text}, global som tabellen.
         self.prompt_lager: dict[str, str] = {}
         # Leads-jobbens liggare (INV-JOB-002, migration 059). Nycklad på
@@ -3514,6 +3516,37 @@ class MemoryStorage:
                 "message": message,
                 "detail": detail or {},
                 "run_id": run_id,
+                "created_at": _now(),
+            }
+        )
+
+    # -- Åtkomstloggen (migration 123) --------------------------------------
+    #
+    # Samma fält som funktionen skriver; gallringen och kontrollen mot
+    # platform_admins prövas mot Postgres (tests/db/test_adminlogg.py).
+
+    async def logga_adminatkomst(
+        self,
+        *,
+        kanal: str,
+        admin_user_id: str | None,
+        tenant_id: str | None,
+        metod: str | None,
+        resurs: str,
+        entity_id: str | None = None,
+        request_id: str | None = None,
+    ) -> None:
+        if kanal not in ("master", "kundbesok"):
+            raise ValueError(f"okänd kanal {kanal!r}")
+        self.adminlogg.append(
+            {
+                "kanal": kanal,
+                "admin_user_id": admin_user_id,
+                "tenant_id": tenant_id,
+                "metod": metod,
+                "resurs": resurs,
+                "entity_id": entity_id,
+                "request_id": request_id,
                 "created_at": _now(),
             }
         )

@@ -60,8 +60,9 @@ A.8.10), och KVITTO_MODEL gör att kvittostegen kan stanna på en prövad modell
   avstängda; gitleaks i CI ersätter den senare för nya commits. Berör A.5.3, A.8.4, A.8.8,
   A.8.25, A.8.28, A.8.32 och ISO 42001 A.6.2.5.
 - **Övervakningen har gett en enda schemalagd körning** (2026-11-18 04:44 UTC) trots
-  timschema. Berör A.8.16 och ISO 42001 9.1, A.6.2.6.
+  timschema. Berör A.8.16 och ISO 42001 9.1, A.6.2.6. *Åtgärdat i PR 84, se sist.*
 - `audit_logs` finns i schemat men skrivs inte av någon kod: ingen åtkomstlogg för admin.
+  *Åtgärdat i PR 85, se sist.*
 - Systembladen visar att `main` saknar INV-DATA-006/007 och maskeringen före Jev och
   inbäddningarna (de ligger i release-PR 72).
 
@@ -203,8 +204,8 @@ A.8.10), och KVITTO_MODEL gör att kvittostegen kan stanna på en prövad modell
 | A.8.12 | delvis | b | Synkflytten, mönster för lösenord | – | Läget uppdaterat |
 | A.8.13 | saknas | b | Railway Pro | – | – |
 | A.8.14 | saknas | b | Tillgänglighetskrav | – | – |
-| A.8.15 | delvis | b | Gallring av `agent_runs`, åtkomstlogg för admin | Loggningen beskriven med belägg | **Ja** (`drift-och-tillgangar.md` §5) |
-| A.8.16 | delvis | b | Internlarmets variabler; ett schema som körs | Fyndet belagt | Ja (fynd) |
+| A.8.15 | delvis | b | Gallring av `agent_runs`; åtkomstloggen i `main` (merge) | Loggningen beskriven med belägg; åtkomstlogg för admin (PR 85); kvittotexten ur `agent_runs` (PR 83) | **Ja** (`drift-och-tillgangar.md` §5) |
+| A.8.16 | delvis | b | Internlarmets variabler; extern pingtjänst | Orsaken utredd, reserv och dödmanskontroll | **Ja** (PR 84) |
 | A.8.17 | okänt | b | Tidssynk på datorerna | – | – |
 | A.8.18 | delvis | b | Vem som har Railway-token och psql | Verktygslistan | – |
 | A.8.19 | delvis | b | Regler för programvara på datorerna | – | – |
@@ -301,8 +302,9 @@ A.8.10), och KVITTO_MODEL gör att kvittostegen kan stanna på en prövad modell
 2. **Merga release-PR 72**: tar bort gapet "inte i drift" i ungefär 20 krav.
 3. **GitHub-plan:** gratisplanen i ett privat repo saknar grenskydd, kodskanning och
    hemlighetsskanning. Antingen en betald plan eller ett beslut om kompenserande kontroll.
-4. **Övervakningens schema:** kontrollera varför `overvakning.yml` inte körs varje timme,
-   och sätt `INTERNLARM_SMTP_*`.
+4. **Övervakningen:** orsaken är utredd och reserven byggd (PR 84). Kvar för ägaren: sätt
+   `INTERNLARM_SMTP_*`, och välj om en extern pingtjänst ska väcka övervakningen när
+   ingen push, PR eller synk sker.
 5. Resten enligt `BESLUTSUNDERLAG-2026-11-17.md` (enhetslistan, konton och tvåfaktor,
    utbildning, incidentövning, Railway Pro, leverantörerna, juristen).
 
@@ -310,3 +312,19 @@ A.8.10), och KVITTO_MODEL gör att kvittostegen kan stanna på en prövad modell
 
 PR mot `development` från grenen `compliance/score-2026-11-18`. CI-jobbet `databas` är
 beviset för A.8.29 och för provkörningen av rättighetsskriptet.
+
+## Natt 2026-11-18: de tre fynden åtgärdade
+
+| PR | Fynd | Vad som gjordes | Belägg |
+|---|---|---|---|
+| 83 | Kvittotext i `agent_runs` | Den äldre bokföringsytan sparar bara längd, sha256 och underlagets id, och stegloggen utan text | `tests/bookkeeping/test_kvittotext_logg.py`; `ai-system/bokforingschatt.md` §4; DPIA R10 |
+| 84 | Övervakningens schema | Orsak: GitHubs schemaläggare tappar schemalagda körningar i repot (synk.yml cirka 4 av 144 om dygnet), inte syntax, privat repo eller minuter. Två scheman på mindre belastade minuter, reserv efter Verify och synk, dödmanskontroll i `verify.yml` | `.github/workflows/overvakning.yml` (kommentaren), `scripts/overvakning_dodman.sh` |
+| 85 | Ingen åtkomstlogg för admin | En rad i `audit_logs` per master-nyckelanrop och kundbesök (vem, när, åtgärd, kund, resurs; inget innehåll), skrivskyddad för approllerna, gallras efter 365 dagar | Migration 123; INV-SEC-013; `tests/db/test_adminlogg.py` i jobbet `databas`; `drift-och-tillgangar.md` §5 |
+
+**Poäng före och efter:** oförändrad. GDPR 0/17/1, ISO 27001 3/72/24, ISO 42001 5/51/14
+(uppfyllt/delvis/saknas). Koden ligger i `development` och räknas därför som testmiljö
+(statusreglerna), och de berörda kraven (A.8.15, A.8.16, A.5.15, A.5.18, DS-2, DS-5, ISO 42001
+9.1 och A.6.2.6) hänger dessutom på ägarens del: gallringsperioden för `agent_runs`,
+internlarmets variabler och översyn av åtkomsten. Gapen är mindre och skrivna så i matriserna
+("ändr. 11-18d"). A.8.15 blir uppfyllt när release-PR:en med migration 123 är mergad och
+`agent_runs` har en beslutad gallring.

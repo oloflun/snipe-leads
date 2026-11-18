@@ -9,6 +9,50 @@ möjligt), vad det betyder i koden.
 
 ---
 
+## 2026-11-18 natt — åtkomstlogg för admin, ingen kvittotext i agent_runs, övervakningens reserv (Claude (agent), på Antons uppdrag)
+
+**Beslut.** (1) Varje anrop med master-nyckeln och varje kundbesök skriver en rad i
+`audit_logs`: vem, när, åtgärd, kund och ruttens mall, aldrig innehåll eller nycklar
+(migration 123, INV-SEC-013). Raderna sparas i **365 dagar** och gallras automatiskt,
+oberoende av kunddatans gallring. Approllerna får inte ändra eller radera dem. (2) Den
+äldre bokföringsytan sparar inte kvittots text i `agent_runs`, bara längd, sha256 och
+underlagets id (PR 83). (3) Övervakningen körs på två scheman, efter varje Verify och
+synk, och en dödmanskontroll i CI larmar när den inte gått på tre timmar (PR 84).
+
+**Resonemanget.** Anton bad om att åtgärda de tre fynden ur poängplanen
+(`docs/compliance/score-plan-2026-11-18.md`) utan att han behöver göra något. (1)
+Plattformsadmin läser och ändrar alla kunders data, och utan logg går det inte att svara
+på vem som gjorde vad (ISO 27001 A.8.15, A.5.15–A.5.18, GDPR art. 32). Loggen sitter i
+beroendet `require_master_key`, inte per endpoint, så att nästa admin-endpoint inte kan
+glömmas. Den skrivs genom en säkerhetsdefinierad funktion, så att appen som loggas inte
+kan skriva om loggen. Ett admin-id godtas bara om det står i `platform_admins`. 365 dagar
+är en teknisk utgångspunkt: en säkerhetslogg ska ha en egen, bestämd lagringstid och inte
+följa kunddatans period, som ännu inte är beslutad. Faller skrivningen går anropet igenom
+med en varning, för en adminyta som låses av en loggstörning stoppar den som ska rätta
+störningen. Läsningar under ett kundbesök loggas som besöket, inte per anrop. (2) Ingen
+felsökning har behövt kvittotexten: fälten står i `bk_underlag`. Texten bär namn,
+kortnummer och ibland personnummer, och `agent_runs` gallras inte förrän perioden är
+beslutad (DPIA R10). (3) Schemat gav en körning av omkring 60. Orsaken är GitHubs
+schemaläggare, som tappar de flesta schemalagda körningar i repot (synk.yml cirka 4 av 144
+om dygnet, före och efter att repot blev privat). Det går inte att rätta i repot, så
+övervakningen får en reserv som inte är ett schema, och tystnaden larmar.
+
+**I koden.** Migration `db/migrations/20261118130000_123_adminlogg.sql`;
+`snajp-support/app/api/adminlogg.py`, `deps.require_master_key`, `logga_adminatkomst` i
+lagringarna; `app/api/snajp-support/_lib.ts` (`X-Snajp-Admin`). Tester:
+`tests/invariants/test_inv_sec_013.py`, `snajp-support/tests/db/test_adminlogg.py`.
+`app/api/bookkeeping.py:kvittotext_for_logg`, `tests/bookkeeping/test_kvittotext_logg.py`.
+`.github/workflows/overvakning.yml`, `scripts/overvakning_dodman.sh`, jobbet
+`overvakning-dodman` i `verify.yml`.
+
+**Öppet för Anton.** Om 365 dagar är rätt lagringstid för åtkomstloggen. Om en extern
+pingtjänst ska väcka övervakningen när inget annat händer i repot. Releasen till `main`.
+
+**Backa.** (1) Ta bort anropet i `require_master_key`; migrationen kan stå kvar. (2) Återställ
+`input_text` i `bookkeeping.py`. (3) Ta bort `workflow_run` och jobbet `overvakning-dodman`.
+
+---
+
 ## 2026-11-18 natt — säkerhets- och AI-frågan i varje PR, och en egen modell för kvittohanteraren (Claude (agent), på Antons uppdrag)
 
 **Beslut.** (1) Varje PR mot `development` ska besvara två frågor i
