@@ -9,6 +9,37 @@ möjligt), vad det betyder i koden.
 
 ---
 
+## 2026-11-18 (Claude (agent), inom Antons uppdrag om synkflytten; väntar på Antons granskning) — Koden för att flytta synken till Railway, utan ändring i driften
+
+**Beslut.** Kodstegen i `docs/compliance/synkflytt-plan.md` (smala hemligheter,
+synkskriptet, läsrollen, driftavbilden) är byggda så att de kan ligga i
+`development` och `main` utan att något i driften ändras. Själva flytten
+(upplägg A, planens steg 0) är fortfarande Antons beslut. Handgreppen står i
+`docs/compliance/synkflytt-runbook.md`.
+
+**Resonemanget.** Synken var tionde minut ryms inte i gratisplanens 2 000
+Actions-minuter (posten nedan), och planen kräver att koden finns i `main`
+innan tjänsterna kan byggas där. Varje del är därför avstängd tills ägaren
+slår på den:
+- `synk.yml` och `migrera.yml` läser sex smala hemligheter och faller tillbaka
+  på `ENV_DEPLOY` så länge de inte finns.
+- Migration 122 skapar `synk_las` utan inloggning och utan lösenord. I
+  development, där den körs vid pushen, går det inte att logga in som rollen.
+- Synkskriptet beter sig som förut när det körs från Actions. Det tar nu ett
+  rådgivande lås, som alltid är ledigt där eftersom Actions kör en synk åt
+  gången. Det skriver också senaste försök och utfall i developments
+  `mirror_meta`, och det sätter inte längre replica-läge på main utanför
+  första synken, där main ändå är skrivskyddad. Spärrarna för körning hos
+  Railway (INV-DATA-008) gäller bara när `SYNK_*_PG_URL` är satta.
+- `scripts/railway_provision.py` föreslår `gemini` i stället för `deepseek` som
+  startvärde för en ny miljö utan leverantör. Uppstartsspärren vägrar ändå
+  DeepSeek där data är riktig, och ett startvärde ska inte peka dit.
+
+**Inte byggt.** Planens steg 9 (PR-kontrollen över HTTPS) kräver en ny nyckel
+i båda miljöerna. Steg 10 (insyn i panelen och larm) ändrar vad development
+visar. Båda väntar på beslut.
+
+---
 ## 2026-11-18 (Anton) — Webbplatsskanningen startas av onboardingen och kompletterar
 
 **Beslut.** Anton, på frågan om guidens löfte att agenterna läser sajten:

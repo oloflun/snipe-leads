@@ -56,13 +56,36 @@ Replica-läge på målet: främmande nycklar och triggrar är av, så den kopier
 raderingar. Varje rad skrivs som radera + infoga ur radens JSON
 (jsonb_populate_record), med en savepoint per rad: en rad som krockar med ett
 unikt villkor rapporteras och hoppas över, resten går igenom.
+
+## Var den körs (docs/compliance/synkflytt-plan.md, 2026-11-18)
+
+Från GitHub Actions (synk.yml) eller en utvecklardator läses anslutningarna som
+förut: .env.deploy, och för värden som saknas där miljövariablerna
+RAILWAY_<MILJÖ>_PG_* (Actions smala hemligheter).
+
+Inne hos Railway (tjänsten `synk` i miljön main, upplägg A) läses de ur
+SYNK_MAIN_PG_URL (läsrollen synk_las över mains privata nät, migration 122)
+och SYNK_DEVELOPMENT_PG_URL (developments publika port, med TLS). Då gäller
+spärrarna i kontrollera_anslutningar och main_kan_skriva före första
+frågan: fel miljö, samma databas på båda sidor, developments värd på mains
+privata nät (där pekar postgres.railway.internal på produktionen), sträcka
+utan TLS, --forsta, eller en main-anslutning som kan skriva.
+
+Med --apply tar synken ett rådgivande lås på development (LAS): två synkar
+skriver aldrig samtidigt, och den som inte får låset avslutar utan att göra
+något. Försök och utfall skrivs i developments mirror_meta (senaste_forsok_at,
+senaste_utfall, senaste_antal: bara tid, utfall och antal per tabell), även när
+körningen avbryts, så att flödet går att följa.
 """
 from __future__ import annotations
 
 import argparse
+import json
+import os
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
+from urllib.parse import parse_qs, urlsplit
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
@@ -73,6 +96,13 @@ from railway_migrate import dsn  # noqa: E402
 from railway_provision import env_read  # noqa: E402
 
 DEV, MAIN = "development", "main"
+
+#: Anslutningarna inne hos Railway (tjänsten synk i miljön main). Inget
+#: RAILWAY_-prefix: Railway sätter egna variabler med det prefixet.
+URL_MAIN, URL_DEV = "SYNK_MAIN_PG_URL", "SYNK_DEVELOPMENT_PG_URL"
+
+#: Rådgivande lås på development: en synk åt gången, oavsett var den körs.
+LAS = "snajp:railway_synk"
 
 _TEST_PROSPEKT = "select id from public.prospects where origin in ('test', 'example')"
 _TEST_TRADAR = (
@@ -474,16 +504,141 @@ def kontrollera(dc, mc, *, skriver: bool, forsta: bool = False) -> list[str]:
     return fore
 
 
+# -- Var synken körs, låset och utfallet (2026-11-18) ------------------------------
+
+
+def anslutningar() -> tuple[str, str, bool]:
+    """(main, development, hos Railway). Hos Railway ur SYNK_*_PG_URL, annars
+    som förut ur .env.deploy med miljövariablerna som reserv (dsn)."""
+    main_url = os.environ.get(URL_MAIN, "").strip()
+    dev_url = os.environ.get(URL_DEV, "").strip()
+    if main_url or dev_url:
+        if not (main_url and dev_url):
+            sys.exit(f"AVBRYT: bara en av {URL_MAIN} och {URL_DEV} är satt. Sätt båda eller ingen.")
+        return main_url, dev_url, True
+    env = env_read()
+    return dsn(env, MAIN), dsn(env, DEV), False
+
+
+def kontrollera_anslutningar(main_url: str, dev_url: str, *, railway: bool, forsta: bool, miljo: str | None) -> None:
+    """Ren funktion: spärrarna före första frågan. `miljo` är
+    RAILWAY_ENVIRONMENT_NAME (None utanför Railway)."""
+    m, d = urlsplit(main_url), urlsplit(dev_url)
+    if (m.hostname, m.port or 5432, m.path) == (d.hostname, d.port or 5432, d.path):
+        sys.exit("AVBRYT: main och development pekar på samma databas.")
+    if miljo is not None and miljo != MAIN:
+        # Tjänsten kopierad till en annan miljö: där betyder anslutningarna
+        # något annat än de gör i main.
+        sys.exit(f"AVBRYT: synken hos Railway körs bara i miljön main, inte i {miljo or '(tom)'}.")
+    if not railway:
+        return
+    if forsta:
+        sys.exit("AVBRYT: --forsta skriver till main och körs aldrig från tjänsten hos Railway.")
+    if (d.hostname or "").endswith(".railway.internal"):
+        sys.exit("AVBRYT: developments värd ligger på railway.internal. Inom miljön main är det mains "
+                 "egna nät (postgres.railway.internal är produktionen). Använd developments publika port.")
+    if parse_qs(d.query).get("sslmode", [""])[0] not in ("require", "verify-ca", "verify-full"):
+        sys.exit(f"AVBRYT: {URL_DEV} går över en publik port och ska kräva TLS (sslmode=require).")
+
+
+def main_kan_skriva(mc) -> bool:
+    """True om main-anslutningen är superanvändare eller får ändra någon
+    tabell i public. Hos Railway ska den vara läsrollen synk_las (migration
+    122), så att riktningen gäller även om koden ändras."""
+    mc.execute(
+        """select (select rolsuper from pg_roles where rolname = current_user)
+                  or coalesce(bool_or(has_table_privilege(c.oid, 'INSERT, UPDATE, DELETE, TRUNCATE')), false)
+             from pg_class c join pg_namespace n on n.oid = c.relnamespace
+            where n.nspname = 'public' and c.relkind in ('r', 'p')"""
+    )
+    return bool(mc.fetchone()[0])
+
+
+def ta_las(dc) -> bool:
+    """Rådgivande sessionslås på development. False = en annan synk pågår.
+    Låset släpps när anslutningen stängs (processens slut)."""
+    dc.execute("select pg_try_advisory_lock(hashtext(%s))", (LAS,))
+    return bool(dc.fetchone()[0])
+
+
+def replikamal(dc, mc, *, forsta: bool) -> tuple:
+    """Anslutningarna som får replica-läge. Main bara i första synken: annars
+    skrivs main inte, och läsrollen får inte sätta parametern."""
+    return (dc, mc) if forsta else (dc,)
+
+
+def antal_per_tabell(planer: dict[str, tuple[list[str], dict]]) -> dict[str, dict[str, int]]:
+    """Ren funktion: antal per tabell och åtgärd, bara det som inte är noll.
+    Inga nycklar, inga värden."""
+    return {
+        t: {k: len(v) for k, v in plan.items() if v}
+        for t, (_, plan) in planer.items() if any(plan.values())
+    }
+
+
+def skriv_utfall(dev, utfall: str, antal: dict | None = None) -> None:
+    """Senaste försök och utfall i developments mirror_meta, i en egen
+    transaktion. Skriver bara där markören säger development (en felkopplad
+    databas rörs inte), och ett fel här fäller aldrig synken."""
+    try:
+        dev.rollback()
+        cur = dev.cursor()
+        cur.execute("select to_regclass('public.mirror_meta') is not null")
+        if not cur.fetchone()[0]:
+            return
+        cur.execute("select count(*) from public.mirror_meta where environment = %s", (DEV,))
+        if cur.fetchone()[0] != 1:
+            return
+        cur.execute("alter table public.mirror_meta add column if not exists senaste_forsok_at timestamptz")
+        cur.execute("alter table public.mirror_meta add column if not exists senaste_utfall text")
+        cur.execute("alter table public.mirror_meta add column if not exists senaste_antal jsonb")
+        cur.execute(
+            "update public.mirror_meta set senaste_forsok_at = now(), senaste_utfall = %s, "
+            "senaste_antal = %s::jsonb where environment = %s",
+            (utfall[:500], json.dumps(antal or {}, ensure_ascii=False), DEV),
+        )
+        dev.commit()
+    except psycopg2.Error as e:
+        print("VARNING: synkens utfall kunde inte skrivas:", str(e).splitlines()[0] if str(e) else type(e).__name__)
+        try:
+            dev.rollback()
+        except psycopg2.Error:
+            pass
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--apply", action="store_true")
     ap.add_argument("--forsta", action="store_true", help="första synken: development vinner varje konflikt")
     args = ap.parse_args()
 
-    env = env_read()
-    dev = psycopg2.connect(dsn(env, DEV), connect_timeout=20)
-    mn = psycopg2.connect(dsn(env, MAIN), connect_timeout=20)
+    main_url, dev_url, railway = anslutningar()
+    kontrollera_anslutningar(main_url, dev_url, railway=railway, forsta=args.forsta,
+                             miljo=os.environ.get("RAILWAY_ENVIRONMENT_NAME"))
+    print(f"anslutningar: {'miljövariabler (Railway)' if railway else '.env.deploy / Actions-hemligheter'}")
+    dev = psycopg2.connect(dev_url, connect_timeout=20)
+    mn = psycopg2.connect(main_url, connect_timeout=20)
     dc, mc = dev.cursor(), mn.cursor()
+    if railway and main_kan_skriva(mc):
+        sys.exit("AVBRYT: main-anslutningen kan skriva. Hos Railway läser synken main som synk_las (migration 122).")
+    if args.apply and not ta_las(dc):
+        print("En annan synk pågår (låset är taget). Den här körningen gör ingenting.")
+        return 0
+    if not args.apply:
+        return synka(args, dev, mn, dc, mc)
+    try:
+        return synka(args, dev, mn, dc, mc)
+    except SystemExit as e:
+        if isinstance(e.code, str):
+            skriv_utfall(dev, "avbruten: " + e.code.removeprefix("AVBRYT: "))
+        raise
+    except Exception as e:
+        # Bara felets typ och kod: felets text kan bära radvärden.
+        skriv_utfall(dev, f"fel: {type(e).__name__} {getattr(e, 'pgcode', '') or ''}".strip())
+        raise
+
+
+def synka(args, dev, mn, dc, mc) -> int:
     kontrollera(dc, mc, skriver=args.apply, forsta=args.forsta)
 
     if args.apply:
@@ -562,7 +717,7 @@ def main() -> int:
         print(f"kopia sparad i schemat synk_kopia_{stampel} i båda databaserna")
 
     fel: list[str] = []
-    for c in (dc, mc):
+    for c in replikamal(dc, mc, forsta=forsta):
         c.execute("set session_replication_role = replica")
     for t, (kol, plan) in planer.items():
         fel += skriv(dc, mc, t, kol, plan["till_main"], plan["radera_main"])
@@ -581,13 +736,14 @@ def main() -> int:
                 (gemensamma,),
             )
             print(f"godkand_i → main på {c.rowcount} köade utkast i {'development' if c is dc else 'main'}")
-    for c in (dc, mc):
+    for c in replikamal(dc, mc, forsta=forsta):
         c.execute("set session_replication_role = origin")
     dc.execute("update public.mirror_meta set lage = 'envags', synkad_at = now()")
     mn.commit()
     dev.commit()
     for f in fel:
         print("HOPPAD:", f)
+    skriv_utfall(dev, f"hoppade:{len(fel)}" if fel else "ok", antal_per_tabell(planer))
     print(f"\nSynk klar. {len(fel)} rader hoppades över.")
     return 1 if fel else 0
 
