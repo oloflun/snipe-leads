@@ -271,6 +271,14 @@ class Settings(BaseSettings):
     #: klarade webbkalibreringens grind (modellbyte-underlag.md avsnitt 3.6).
     #: Bara EU-regioner, som ovan.
     vertex_bild_region: str = ""
+    #: Regionen för Iris utkast och humanizer (stegen med `model_setting`
+    #: leads_draft_model / leads_humanizer_model i step_runner). Tom = samma
+    #: som GOOGLE_CLOUD_REGION. Finns för modellbytet (2026-11-18): i
+    #: development föll fem av elva utkast på gemini-3.8-flash i `eu` (503,
+    #: 429 och svar på över 120 s), och utkasten ska då kunna gå tillbaka till
+    #: gemini-2.5-flash i europe-west1 medan resten av texten stannar i `eu`.
+    #: Bara EU-regioner, som ovan.
+    vertex_utkast_region: str = ""
     model: str = "gpt-4o-mini"
     embedding_model: str = "gemini-embedding-001"
     #: MÅSTE stämma med kolumnen `ss_knowledge_base.embedding`, som är
@@ -846,7 +854,9 @@ class Settings(BaseSettings):
         if self.har_riktig_kunddata():
             utanfor = [
                 r
-                for r in dict.fromkeys([*self.vertex_regioner(), self.inbaddningsregion(), self.bildregion()])
+                for r in dict.fromkeys(
+                    [*self.vertex_regioner(), self.inbaddningsregion(), self.bildregion(), self.utkastregion()]
+                )
                 if not ar_eu_region(r)
             ]
             if utanfor:
@@ -855,7 +865,8 @@ class Settings(BaseSettings):
                     f"(GOOGLE_CLOUD_REGION={self.google_cloud_region!r}, "
                     f"VERTEX_RESERVREGIONER={self.vertex_reservregioner!r}, "
                     f"VERTEX_INBADDNING_REGION={self.vertex_inbaddning_region!r}, "
-                    f"VERTEX_BILD_REGION={self.vertex_bild_region!r}). "
+                    f"VERTEX_BILD_REGION={self.vertex_bild_region!r}, "
+                    f"VERTEX_UTKAST_REGION={self.vertex_utkast_region!r}). "
                     f"{self._varfor_riktig_data()} Kunddata får bara behandlas i EU. "
                     f"Tillåtna regioner: {', '.join(VERTEX_EU_REGIONER)}. Rätta "
                     f"variabeln, eller ta bort den så gäller standardvärdet, och "
@@ -923,6 +934,11 @@ class Settings(BaseSettings):
         """Regionen för bildanropen: VERTEX_BILD_REGION, annars huvudregionen
         (se fältet)."""
         return (self.vertex_bild_region or "").strip() or self.google_cloud_region
+
+    def utkastregion(self) -> str:
+        """Regionen för Iris utkast och humanizer: VERTEX_UTKAST_REGION,
+        annars huvudregionen (se fältet)."""
+        return (self.vertex_utkast_region or "").strip() or self.google_cloud_region
 
     def servicekonto_lasbart(self) -> bool:
         """Om GOOGLE_SERVICE_ACCOUNT_JSON går att använda mot Vertex: JSON med
