@@ -81,7 +81,9 @@ Belägg för att CI körs: 95 körningar av Verify på `development`, 93 lyckade
 - Railway deployar på push utan att vänta på CI (`verify.yml`, kommentaren under `railway-main`).
 - Ingen granskning krävs före merge, varken till `development` eller, sedan repot blev privat, till `main` (avsnitt 3).
 - Ändringar i Railway-variabler loggas inte någonstans. Konfigurationen exporteras för hand
-  (`bevis/railway-konfiguration-*.txt`).
+  (`bevis/railway-konfiguration-*.txt`). Sedan 2026-11-18 finns en baslinje att jämföra mot:
+  `python scripts/railway_baslinje.py --jamfor` visar avvikelser mot `railway-baslinje.json`
+  (namn och icke-hemliga inställningar, aldrig hemliga värden). Den körs inte automatiskt.
 - Kodskanningen (CodeQL) och GitHubs hemlighetsskanning är avstängda sedan repot blev privat.
 
 ## 5. Loggning och övervakning

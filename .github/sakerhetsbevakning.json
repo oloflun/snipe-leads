@@ -1,0 +1,68 @@
+{
+  "beskrivning": "Stacken som säkerhetsbevakningen (.github/workflows/sakerhetsbevakning.yml, scripts/sakerhetsbevakning.py) letar efter. Härledd ur repot 2026-11-18: package.json (dependencies), package-lock.json (@auth/core under next-auth), snajp-support/requirements.txt (körberoenden, inte testberoenden), snajp-support/Dockerfile och railway/Dockerfile.drift (python:3.12-slim, Debian), verify.yml (Postgres 17, Node 20 i CI). Lägg till ett sökord eller ett paket här när stacken växer; flödet behöver inte röras.",
+  "versionskallor": {
+    "npm": "package-lock.json",
+    "pip": "snajp-support/requirements.txt"
+  },
+  "certse": {
+    "flode": "https://www.cert.se/feed/rss.xml",
+    "sokord": [
+      "Next.js",
+      "React",
+      "Node.js",
+      "npm",
+      "Auth.js",
+      "NextAuth",
+      "PostgreSQL",
+      "Postgres",
+      "Redis",
+      "Python",
+      "PyPI",
+      "FastAPI",
+      "Uvicorn",
+      "Starlette",
+      "Pydantic",
+      "Debian",
+      "Railway",
+      "GitHub",
+      "Google Cloud",
+      "Vertex",
+      "Gemini",
+      "OpenAI"
+    ]
+  },
+  "github": {
+    "typer": ["reviewed", "malware"],
+    "paket": [
+      {"ekosystem": "npm", "namn": "next", "kalla": "package.json"},
+      {"ekosystem": "npm", "namn": "react", "kalla": "package.json"},
+      {"ekosystem": "npm", "namn": "react-dom", "kalla": "package.json"},
+      {"ekosystem": "npm", "namn": "next-auth", "kalla": "package.json"},
+      {"ekosystem": "npm", "namn": "@auth/core", "kalla": "package-lock.json (via next-auth)"},
+      {"ekosystem": "npm", "namn": "pg", "kalla": "package.json"},
+      {"ekosystem": "npm", "namn": "ai", "kalla": "package.json"},
+      {"ekosystem": "npm", "namn": "@ai-sdk/openai", "kalla": "package.json"},
+      {"ekosystem": "npm", "namn": "recharts", "kalla": "package.json"},
+      {"ekosystem": "npm", "namn": "lucide-react", "kalla": "package.json"},
+      {"ekosystem": "npm", "namn": "gsap", "kalla": "package.json"},
+      {"ekosystem": "npm", "namn": "lenis", "kalla": "package.json"},
+      {"ekosystem": "pip", "namn": "fastapi", "kalla": "snajp-support/requirements.txt"},
+      {"ekosystem": "pip", "namn": "starlette", "kalla": "transitivt via fastapi"},
+      {"ekosystem": "pip", "namn": "uvicorn", "kalla": "snajp-support/requirements.txt"},
+      {"ekosystem": "pip", "namn": "openai-agents", "kalla": "snajp-support/requirements.txt"},
+      {"ekosystem": "pip", "namn": "openai", "kalla": "snajp-support/requirements.txt"},
+      {"ekosystem": "pip", "namn": "asyncpg", "kalla": "snajp-support/requirements.txt"},
+      {"ekosystem": "pip", "namn": "pydantic", "kalla": "snajp-support/requirements.txt"},
+      {"ekosystem": "pip", "namn": "pydantic-settings", "kalla": "snajp-support/requirements.txt"},
+      {"ekosystem": "pip", "namn": "python-dotenv", "kalla": "snajp-support/requirements.txt"},
+      {"ekosystem": "pip", "namn": "scrapegraph-py", "kalla": "snajp-support/requirements.txt"},
+      {"ekosystem": "pip", "namn": "pypdf", "kalla": "snajp-support/requirements.txt"},
+      {"ekosystem": "pip", "namn": "redis", "kalla": "snajp-support/requirements.txt"},
+      {"ekosystem": "pip", "namn": "google-auth", "kalla": "snajp-support/requirements.txt"},
+      {"ekosystem": "pip", "namn": "jmespath", "kalla": "snajp-support/requirements.txt"},
+      {"ekosystem": "pip", "namn": "mcp", "kalla": "snajp-support/requirements.txt"},
+      {"ekosystem": "pip", "namn": "pyjwt", "kalla": "snajp-support/requirements.txt"},
+      {"ekosystem": "pip", "namn": "cryptography", "kalla": "snajp-support/requirements.txt"}
+    ]
+  }
+}

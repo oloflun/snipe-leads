@@ -9,6 +9,36 @@ möjligt), vad det betyder i koden.
 
 ---
 
+## 2026-11-18 sen kväll — begränsning av behandling som spärrmarkering, licensgrind med obeslutade undantag (Claude (agent), på Antons uppdrag)
+
+**Beslut.** (1) Begränsning av behandling (GDPR art. 18) är en markering per e-postadress
+i tabellen `behandlingsbegransningar` (migration 124), **global över alla kunder**, satt
+och hävd bara med `scripts/gdpr_radera.py --begransa` / `--hav-begransning`. En aktiv
+markering blockerar utskick till adressen och skickar inkommande mejl till Att hantera
+utan AI. Kan listan inte läsas stoppar spärren (utskicket köas om, mejlet går till en
+människa). Markeringen **behålls vid radering** och en hävning lämnar raden kvar. (2)
+Licensgrinden i CI godtar 18 copyleft- eller okända licenser som står i vitlistan som
+**obeslutade**, så att CI är grön tills Anton beslutat.
+
+**Resonemanget.** Anton bad om agentens delar av de krav som väntar på honom
+(`docs/compliance/score-plan-2026-11-18.md`, sist). (1) Begäran gäller personen, inte en
+kunds lista, och rättighetsskriptet söker och raderar redan över alla kunder, så
+markeringen följer samma gräns. En spärr som släpper igenom när den inte kan prövas är
+ingen spärr. En radering ska inte tyst häva en begränsning, och raden är belägget för att
+begäran hanterades (art. 18.3: personen informeras före hävning). Approllerna får bara
+läsa: en markering som appen kan ta bort skyddar inte mot appen. Befintliga utkast och
+research stoppas inte i koden; det hade krävt ingrepp på många ställen, och skriptet ber i
+stället handläggaren arkivera berörda leads. (2) Att fälla CI på de licenser som redan
+används hade stoppat allt arbete för ett beslut som är Antons; att godta dem tyst hade
+dolt beslutet. Vitlistan visar dem som obeslutade med agentens bedömning bredvid.
+
+**Vad det betyder i koden.** `db/migrations/20261118140000_124_behandlingsbegransning.sql`;
+`Storage.list_begransade`; `leads/scheduler.py` (`_kor_send_guard`, regel
+`begransad_behandling`); `email_pipeline/processor.py` (`process_email`);
+`scripts/gdpr_radera.py`; `scripts/licenser.py` och `docs/compliance/licenser-vitlista.json`.
+
+---
+
 ## 2026-11-18 natt — åtkomstlogg för admin, ingen kvittotext i agent_runs, övervakningens reserv (Claude (agent), på Antons uppdrag)
 
 **Beslut.** (1) Varje anrop med master-nyckeln och varje kundbesök skriver en rad i

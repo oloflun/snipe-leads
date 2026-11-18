@@ -179,3 +179,92 @@ async def test_skriptet_soker_lamnar_ut_och_raderar_mot_hela_schemat():
         # Raderna står kvar under testets egen kund: databasen är syntetisk
         # och dör med CI-jobbet, och tenant-nycklarna saknar kaskad.
         await conn.close()
+
+
+APP_DSN = os.environ.get("GALLRING_TEST_APP_DSN", "")
+
+
+async def _aktiva(conn, epost: str) -> list:
+    return await conn.fetch(
+        "select id, skal, havd_at, havd_skal from behandlingsbegransningar where lower(email) = lower($1)",
+        epost,
+    )
+
+
+@pytest.mark.anyio
+@pytest.mark.skipif(not APP_DSN, reason="Kräver GALLRING_TEST_APP_DSN (approllen snajp_app).")
+async def test_begransning_av_behandling_mot_hela_schemat():
+    """PR-4 (art. 18, migration 124): skriptet sätter och häver markeringen,
+    approllen kan läsa den men inte ändra den, och appens egen läsväg
+    (PostgresStorage.list_begransade) ser bara aktiva rader."""
+    from app.storage.postgres import PostgresStorage
+
+    conn = await _anslut()
+    tid = uuid.uuid4()
+    person = f"begr.{tid.hex[:8]}@example.com"
+    try:
+        await conn.execute(
+            "insert into ss_tenants (id, slug, name) values ($1, $2, 'Begränsningstest')",
+            tid, f"begr-{tid.hex[:12]}",
+        )
+        utan_skal = _kor(person, "--begransa", "  ")
+        assert utan_skal.returncode != 0
+        assert await _aktiva(conn, person) == []
+
+        satt = _kor(person.upper(), "--begransa", "Riktigheten prövas")
+        assert satt.returncode == 0, satt.stderr + satt.stdout
+        assert "Begränsning satt" in satt.stdout
+        [rad] = await _aktiva(conn, person)
+        assert rad["havd_at"] is None and rad["skal"] == "Riktigheten prövas"
+
+        # En andra begäran är ingen ny rad, och sökningen visar markeringen.
+        igen = _kor(person, "--begransa", "Igen")
+        assert igen.returncode == 0 and "redan aktiv" in igen.stdout
+        assert len(await _aktiva(conn, person)) == 1
+        assert "AKTIV sedan" in _kor(person).stdout
+
+        # Approllen läser men skriver inte; webbrollen har samma rättigheter.
+        pool = await asyncpg.create_pool(APP_DSN, min_size=1, max_size=1)
+        try:
+            assert person in await PostgresStorage(pool).list_begransade(str(tid))
+            async with pool.acquire() as app:
+                with pytest.raises(asyncpg.InsufficientPrivilegeError):
+                    await app.execute(
+                        "insert into behandlingsbegransningar (email, skal) values ('x@example.com', 'x')"
+                    )
+                with pytest.raises(asyncpg.InsufficientPrivilegeError):
+                    await app.execute("update behandlingsbegransningar set havd_at = now()")
+        finally:
+            await pool.close()
+        for roll in ("snajp_app", "snajp_web"):
+            assert await conn.fetchval(
+                "select has_table_privilege($1, 'public.behandlingsbegransningar', 'select')", roll
+            ), roll
+            for ratt in ("insert", "update", "delete"):
+                assert not await conn.fetchval(
+                    "select has_table_privilege($1, 'public.behandlingsbegransningar', $2)", roll, ratt
+                ), (roll, ratt)
+
+        # Hävningen kräver bekräftelse; raden står kvar som belägg.
+        fel = _kor(person, "--hav-begransning", "Klar", stdin="nagon.annan@example.com\n")
+        assert fel.returncode != 0
+        assert (await _aktiva(conn, person))[0]["havd_at"] is None
+
+        hav = _kor(person, "--hav-begransning", "Prövningen klar", stdin=f"{person}\n")
+        assert hav.returncode == 0, hav.stderr + hav.stdout
+        [rad] = await _aktiva(conn, person)
+        assert rad["havd_at"] is not None and rad["havd_skal"] == "Prövningen klar"
+
+        pool = await asyncpg.create_pool(APP_DSN, min_size=1, max_size=1)
+        try:
+            assert person not in await PostgresStorage(pool).list_begransade(str(tid))
+        finally:
+            await pool.close()
+
+        # En ny begränsning efter en hävd går att sätta, och --radera behåller båda raderna.
+        assert _kor(person, "--begransa", "Ny begäran").returncode == 0
+        radering = _kor(person, "--radera", stdin=f"{person}\n")
+        assert radering.returncode == 0, radering.stderr + radering.stdout
+        assert len(await _aktiva(conn, person)) == 2
+    finally:
+        await conn.close()

@@ -5,6 +5,8 @@
     python scripts/gdpr_radera.py --env railway-main --epost anna@exempel.se --export
     python scripts/gdpr_radera.py --env railway-main --epost anna@exempel.se --export --fritext
     python scripts/gdpr_radera.py --env railway-main --epost anna@exempel.se --radera
+    python scripts/gdpr_radera.py --env railway-main --epost anna@exempel.se --begransa "Riktigheten prövas"
+    python scripts/gdpr_radera.py --env railway-main --epost anna@exempel.se --hav-begransning "Prövningen klar"
 
 Miljön är `railway-main` (produktionen). `railway-development` är en spegel
 av main och ska inte vara målet för en begäran — se KOPIOR_SOM_INTE_NAS.
@@ -27,6 +29,19 @@ samma princip som redan gäller i CLAUDE.md.
    loggar, mejltexter). Den är dyr och ger falska träffar, därför ett val.
 3. `--radera`: raderar. Kräver att man skrivit adressen en gång till, för
    hand — se `_bekrafta`.
+
+## Begränsning av behandling (art. 18)
+
+`--begransa SKÄL` sätter en spärrmarkering i `behandlingsbegransningar`
+(migration 124). Uppgifterna ligger kvar, men så länge markeringen är aktiv
+stoppar sändningsspärren varje utskick till adressen hos alla kunder, och ett
+inkommande mejl från adressen går till Att hantera utan klassning, Jev eller
+AI-utkast. `--hav-begransning SKÄL` hävs den; det kräver bekräftelse, för
+art. 18.3 kräver att personen informerats innan begränsningen hävs. Raden
+står kvar med tid och skäl som belägg för att begäran hanterats, och den
+behålls också vid `--radera` (BEHALLS): en radering ska inte tyst häva en
+begränsning. Markeringen synkas inte till development-spegeln; skriptet
+påminner om att köra samma kommando där.
 
 ## Vad som INTE raderas, och varför
 
@@ -101,6 +116,8 @@ BEHALLS = [
     ("suppressions", "email", "Spärrlistan — raderas den kontaktas personen igen."),
     ("bk_underlag", "position(lower(%s) in lower(coalesce(mejl_avsandare, ''))) > 0",
      "Kvitto inläst från mejl. Kundens bokföringsunderlag (7 år, BFL 7 kap. 2 §) — begäran går till kunden."),
+    ("behandlingsbegransningar", "email",
+     "Begränsning av behandlingen (art. 18). Hävs med --hav-begransning, raderas inte."),
 ]
 
 #: Försvinner i kaskaden när raden i föräldern (tredje fältet) raderas. De
@@ -281,16 +298,61 @@ def _skriv_kopior() -> None:
         print(f"  - {rad}")
 
 
-def _bekrafta(epost: str) -> None:
+def _bekrafta(epost: str, atgard: str = "radering") -> None:
     """Adressen skrivs en gång till, för hand.
 
     Inte en `--force`-flagga: en flagga sitter kvar i shell-historiken och
     körs om av misstag. Att skriva adressen igen tvingar fram att man tittar
     på VILKEN adress som raderas, vilket är det enda felet som inte går att
     ångra här."""
-    svar = input(f"Skriv adressen igen för att bekräfta radering ({epost}): ").strip()
+    svar = input(f"Skriv adressen igen för att bekräfta {atgard} ({epost}): ").strip()
     if svar.lower() != epost.lower():
-        sys.exit("AVBRYTER: adresserna stämmer inte överens. Ingenting raderades.")
+        sys.exit("AVBRYTER: adresserna stämmer inte överens. Ingenting ändrades.")
+
+
+def _aktiv_begransning(cur, epost: str):
+    """(id, skäl, begärd) för den aktiva begränsningen, None om ingen finns.
+    Saknas tabellen (migration 124 inte körd) är det ett fel: då går varken
+    att sätta eller pröva markeringen."""
+    cur.execute(
+        "select id, skal, begard_at from behandlingsbegransningar "
+        "where lower(email) = lower(%s) and havd_at is null",
+        (epost,),
+    )
+    return cur.fetchone()
+
+
+def _begransning(cur, args) -> int:
+    """--begransa och --hav-begransning. Rör inga andra tabeller."""
+    aktiv = _aktiv_begransning(cur, args.epost)
+    if args.begransa:
+        if aktiv:
+            print(f"\nBegränsningen är redan aktiv sedan {aktiv[2]:%Y-%m-%d} ({aktiv[1]}). Ingen ändring.")
+            return 0
+        cur.execute(
+            "insert into behandlingsbegransningar (email, skal) values (lower(%s), %s) returning id",
+            (args.epost.strip(), args.begransa.strip()),
+        )
+        print(f"\nBegränsning satt ({cur.fetchone()[0]}). Från och med nu:")
+        print("  - inga utskick till adressen, hos någon kund (sändningsspärren);")
+        print("  - inkommande mejl från adressen går till Att hantera utan AI.")
+        print("Uppgifterna ligger kvar oförändrade. Utkast och research som redan finns rörs inte;")
+        print("arkivera berörda leads i kundens vy om de inte ska ligga kvar som aktiva.")
+    else:
+        if not aktiv:
+            print("\nIngen aktiv begränsning för adressen. Ingen ändring.")
+            return 0
+        print("\nArt. 18.3: den registrerade ska ha informerats innan begränsningen hävs.")
+        _bekrafta(args.epost, "hävning av begränsningen")
+        cur.execute(
+            "update behandlingsbegransningar set havd_at = now(), havd_skal = %s where id = %s",
+            (args.hav_begransning.strip(), aktiv[0]),
+        )
+        print(f"Begränsningen hävd ({aktiv[0]}). Raden står kvar som belägg.")
+    if args.env == "railway-main":
+        print("Påminnelse: markeringen synkas inte till development-spegeln. Kör samma "
+              "kommando med --env railway-development.")
+    return 0
 
 
 def main() -> int:
@@ -303,8 +365,16 @@ def main() -> int:
     parser.add_argument("--epost", required=True)
     parser.add_argument("--export", action="store_true", help="Skriv ut allt som JSON.")
     parser.add_argument("--fritext", action="store_true", help="Sök också adressen i löptext (dyrt).")
-    parser.add_argument("--radera", action="store_true", help="Radera. Kräver bekräftelse.")
+    lage = parser.add_mutually_exclusive_group()
+    lage.add_argument("--radera", action="store_true", help="Radera. Kräver bekräftelse.")
+    lage.add_argument("--begransa", metavar="SKÄL",
+                      help="Begränsa behandlingen (art. 18): stoppar utskick och automatisk behandling.")
+    lage.add_argument("--hav-begransning", metavar="SKÄL",
+                      help="Häv en aktiv begränsning. Kräver bekräftelse.")
     args = parser.parse_args()
+    for flagga in ("begransa", "hav_begransning"):
+        if getattr(args, flagga) is not None and not getattr(args, flagga).strip():
+            parser.error("ett skäl krävs")
 
     with psycopg2.connect(dsn_for(args.env)) as conn, conn.cursor() as cur:
         fynd = _sok(cur, args.epost)
@@ -337,6 +407,14 @@ def main() -> int:
                 "skriptet raderar då mindre än det rapporterar."
             )
 
+        try:
+            aktiv = _aktiv_begransning(cur, args.epost)
+            print("\n  Begränsning av behandlingen (art. 18): "
+                  + (f"AKTIV sedan {aktiv[2]:%Y-%m-%d} ({aktiv[1]})" if aktiv else "ingen aktiv"))
+        except psycopg2.errors.UndefinedTable:
+            cur.connection.rollback()
+            print("\n  Begränsning av behandlingen (art. 18): okänd (migration 124 saknas i miljön)")
+
         print("\n  Söks inte automatiskt, men hör till svaret:")
         for tabell, beskrivning in NAMNS_MANUELLT:
             print(f"    {tabell:<26} {beskrivning}")
@@ -356,6 +434,9 @@ def main() -> int:
                 utdrag["fritext_kraver_manuellt_beslut"] = fritext
             print("\n--- REGISTERUTDRAG (JSON) ---")
             print(json.dumps(utdrag, indent=2, ensure_ascii=False, default=str))
+
+        if args.begransa is not None or args.hav_begransning is not None:
+            return _begransning(cur, args)
 
         if not args.radera:
             print("\nIngenting raderades. Lägg till --radera för att göra det.")

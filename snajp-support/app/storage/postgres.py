@@ -1393,6 +1393,15 @@ class PostgresStorage:
             )
         return {str(r["email"]).strip().casefold() for r in records}
 
+    async def list_begransade(self, tenant_id: str) -> set[str]:
+        # Global tabell (migration 124): policyn släpper igenom alla rader,
+        # skopningen av anslutningen påverkar inte svaret.
+        async with self._scoped(tenant_id) as conn:
+            records = await conn.fetch(
+                "select email from behandlingsbegransningar where havd_at is null"
+            )
+        return {str(r["email"]).strip().casefold() for r in records}
+
     async def add_suppression(self, tenant_id: str, *, email: str, reason: str) -> None:
         adress = str(email or "").strip().casefold()
         if not adress:
