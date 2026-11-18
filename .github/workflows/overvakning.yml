@@ -39,12 +39,14 @@
 #   * Kontrollen ser bara det hälsokontrollen säger. Ett fel bakom inloggning,
 #     i en enskild kunds kanal eller i utskicken syns inte här.
 #
-# Minut 7, 22, 37 och 52 krockar inte med synk.yml (var tionde minut från :00).
+# En gång i timmen, minut 7 (krockar inte med synk.yml). Glesare sedan repot blev
+# privat 2026-11-18: gratisplanen ger 2 000 Actions-minuter i månaden, och var
+# 15:e minut hade ensamt dragit ungefär 2 900.
 name: övervakning
 
 on:
   schedule:
-    - cron: "7,22,37,52 * * * *"
+    - cron: "7 * * * *"
   workflow_dispatch:
     inputs:
       simulera_fel:

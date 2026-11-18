@@ -9,6 +9,41 @@ möjligt), vad det betyder i koden.
 
 ---
 
+## 2026-11-18 (Anton) — Repot är privat, och det som följer av det
+
+**Beslut.** Repot `oloflun/snipe-leads` är privat sedan 2026-11-18 (Antons
+beslut: "Repot ska vara privat och är ändrat till det nu, anpassa övriga beslut
+efter det").
+
+**Resonemanget.** Repot var publikt, och plattformsadminens lösenord låg i den
+publika historiken. Dataskyddsgenomgången höll därför utkasten som beskriver
+öppna brister utanför repot. Med ett privat repo kan de ligga där de hör hemma.
+
+**Vad som ändrats till följd av beslutet (Claude (agent), samma dag):**
+- Utkasten som hölls utanför repot är committade: `docs/pub-avtal.md`,
+  DPIA:n, intresseavvägningen, incidentloggen och `docs/JURIDIK_ATGARDER.md`.
+  Compliance-underlaget (ramverkskörningar, policyer, rutiner, brev, utredningar
+  och bevis) ligger i `docs/compliance/`. Görs repot publikt igen ska den mappen
+  flyttas ut först: den beskriver brister i detalj, och policytexterna bygger
+  på AGPL-licensierade mallar ur Comp AI.
+- GitHubs hemlighetsskanning, push-skydd och kodskanning finns inte för
+  privata repon på gratisplanen och är avstängda. I stället skannar jobbet
+  `hemligheter` i `verify.yml` varje ny commit med gitleaks. Dependabot
+  fungerar som förut.
+- Grenskyddet på `main` gäller inte längre (det kräver betald plan för privata
+  repon). Kravet på kodägarens godkännande är alltså inte tekniskt framtvingat.
+  Regeln står kvar: release till `main` är Antons handgrepp.
+- Gratisplanen ger 2 000 Actions-minuter i månaden. Övervakningen går därför
+  en gång i timmen i stället för var 15:e minut. Synken (`synk.yml`, var tionde
+  minut) skulle ensam ta mer än kvoten om GitHub körde den som schemalagt; det
+  talar för att flytta den till Railway enligt `docs/compliance/synkflytt-plan.md`.
+  När kvoten är slut stannar alla workflows, även migrationerna.
+
+**Kvar trots beslutet.** Lösenordet som låg i den publika historiken ska fortfarande
+bytas: historiken kan redan vara kopierad.
+
+---
+
 ## 2026-11-18 (Claude (agent), inom Antons uppdrag 2026-11-17 om EU-compliance) — Modellanropen maskeras och hålls i EU i koden
 
 **Beslut.** Fem brister som dataskyddsbedömningen av Gemini på Vertex AI pekade

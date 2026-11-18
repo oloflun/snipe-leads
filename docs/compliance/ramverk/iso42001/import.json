@@ -1,0 +1,932 @@
+{
+  "framework": {
+    "name": "ISO 42001",
+    "id": "frk_68cc0e2a21184ed168ab2eea",
+    "version": "1.0.0",
+    "source": "trycompai/comp",
+    "commit": "712ee1b3d722ca1b4f09eb4e5b67cd3bde8713ed"
+  },
+  "organization": "Snajp (enskild firma)",
+  "generated": "2026-11-17",
+  "note": "Utkast för senare inläsning via Comp AI:s API. Sökvägar i policies är relativa till docs/compliance/ramverk/iso42001/, i tasks.evidenceFiles relativa till repots rot. 19 av 21 policyer och 15 av 61 uppgifter delas med ../gdpr/import.json och ../iso27001/import.json (samma templateId); läs in dem en gång. iso42001Gap säger vad ISO 42001 kräver utöver den delade texten. Riskskala 1–5 med motsvarande Comp-enum. Vendors finns i ../gdpr/import.json och upprepas inte.",
+  "policies": [
+    {
+      "name": "AI Policy Control Framework",
+      "templateId": "frk_pt_68cc576eab0b1748940253fa",
+      "status": "draft",
+      "statusNote": "UTKAST 2026-11-17, inte godkänd",
+      "approver": "Anton",
+      "path": "policyer/27-ai-policy-control-framework.md"
+    },
+    {
+      "name": "Sanctions & Disciplinary",
+      "templateId": "frk_pt_685e45f736049f188c3439b4",
+      "status": "draft",
+      "statusNote": "UTKAST 2026-11-17, inte godkänd",
+      "approver": "Anton",
+      "path": "policyer/28-sanctions-disciplinary.md"
+    },
+    {
+      "name": "Compliance & Regulatory Monitoring",
+      "templateId": "frk_pt_685e4010bde64520b9abaf1d",
+      "status": "draft",
+      "statusNote": "UTKAST 2026-11-17, inte godkänd. Delas; texten oförändrad",
+      "approver": "Anton",
+      "path": "../gdpr/policyer/01-compliance-regulatory-monitoring.md",
+      "sharedWith": "GDPR, ISO 27001",
+      "iso42001Gap": "AI-förordningen saknas i tabellen över skyldigheter (art. 4, 50; se ai-forordningen.md)."
+    },
+    {
+      "name": "Data Classification & Handling",
+      "templateId": "frk_pt_685e40d46e7b1123022bf3e8",
+      "status": "draft",
+      "statusNote": "UTKAST 2026-11-17, inte godkänd. Delas; texten oförändrad",
+      "approver": "Anton",
+      "path": "../gdpr/policyer/02-data-classification-handling.md",
+      "sharedWith": "GDPR, ISO 27001",
+      "iso42001Gap": "Lagringstid och åtkomst för agent_runs med fulla prompter (A.6.2.8); data som AI-systemen använder i drift och utveckling (A.7)."
+    },
+    {
+      "name": "Incident Response & Breach Notification",
+      "templateId": "frk_pt_685e43e23b78127274355980",
+      "status": "draft",
+      "statusNote": "UTKAST 2026-11-17, inte godkänd. Delas; texten oförändrad",
+      "approver": "Anton",
+      "path": "../gdpr/policyer/03-incident-response-breach-notification.md",
+      "sharedWith": "GDPR, ISO 27001",
+      "iso42001Gap": "AI-incidenter utan persondata (fel autosvar, påhittat utkast) och hur användare informeras (10.2, A.8.4)."
+    },
+    {
+      "name": "Privacy & Data-Subject Rights",
+      "templateId": "frk_pt_685e410082a807a0274b4531",
+      "status": "draft",
+      "statusNote": "UTKAST 2026-11-17, inte godkänd. Delas; texten oförändrad",
+      "approver": "Anton",
+      "path": "../gdpr/policyer/04-privacy-data-subject-rights.md",
+      "sharedWith": "GDPR, ISO 27001",
+      "iso42001Gap": "Information om att AI används, mot kundens kunder och prospekt (A.8.2)."
+    },
+    {
+      "name": "Security & Privacy Awareness Training",
+      "templateId": "frk_pt_685e458a49e1eff0af54e3d2",
+      "status": "draft",
+      "statusNote": "UTKAST 2026-11-17, inte godkänd. Delas; texten oförändrad",
+      "approver": "Anton",
+      "path": "../gdpr/policyer/05-security-privacy-awareness-training.md",
+      "sharedWith": "GDPR, ISO 27001",
+      "iso42001Gap": "AI-kunnighet enligt AI-förordningen art. 4 och genomgång av P27 (7.2, 7.3)."
+    },
+    {
+      "name": "Vendor & Third-Party Risk",
+      "templateId": "frk_pt_685e462046667f75a50a2c3e",
+      "status": "draft",
+      "statusNote": "UTKAST 2026-11-17, inte godkänd. Delas; texten oförändrad",
+      "approver": "Anton",
+      "path": "../gdpr/policyer/06-vendor-third-party-risk.md",
+      "sharedWith": "GDPR, ISO 27001",
+      "iso42001Gap": "Godkännande av ny modell och modelleverantör före kunddata (P27 avsnitt 6); AI-klausuler (A.10.3)."
+    },
+    {
+      "name": "Information Security & Privacy Governance",
+      "templateId": "frk_pt_685e3f7b4ebcb27b60c51434",
+      "status": "draft",
+      "statusNote": "UTKAST 2026-11-17, inte godkänd. Delas; texten oförändrad",
+      "approver": "Anton",
+      "path": "../iso27001/policyer/07-information-security-privacy-governance.md",
+      "sharedWith": "ISO 27001",
+      "iso42001Gap": "Omfånget för AI-ledningssystemet och AI-rollerna (4.3, 5.3); ledningens genomgång av AI (9.3)."
+    },
+    {
+      "name": "Risk Management",
+      "templateId": "frk_pt_685e3fc75bd72cd0745dc5d1",
+      "status": "draft",
+      "statusNote": "UTKAST 2026-11-17, inte godkänd. Delas; texten oförändrad",
+      "approver": "Anton",
+      "path": "../iso27001/policyer/09-risk-management.md",
+      "sharedWith": "ISO 27001",
+      "iso42001Gap": "AI-riskkriterier, konsekvensbedömning per AI-system och SoA för bilaga A i ISO 42001 (6.1.2-6.1.4)."
+    },
+    {
+      "name": "Access Control & Least Privilege",
+      "templateId": "frk_pt_685e42188e2df1c285cca159",
+      "status": "draft",
+      "statusNote": "UTKAST 2026-11-17, inte godkänd. Delas; texten oförändrad",
+      "approver": "Anton",
+      "path": "../iso27001/policyer/11-access-control-least-privilege.md",
+      "sharedWith": "ISO 27001",
+      "iso42001Gap": "Vem som får ändra miljövariabler som slår på modeller och leverantörer (INKORG_JEV, MODEL)."
+    },
+    {
+      "name": "Authentication & Password",
+      "templateId": "frk_pt_685e42445c99797321ef051a",
+      "status": "draft",
+      "statusNote": "UTKAST 2026-11-17, inte godkänd. Delas; texten oförändrad",
+      "approver": "Anton",
+      "path": "../iso27001/policyer/12-authentication-password.md",
+      "sharedWith": "ISO 27001",
+      "iso42001Gap": "Inget utöver ISO 27001."
+    },
+    {
+      "name": "Acceptable Use & Workstation Security",
+      "templateId": "frk_pt_685e453cad89de25e5aebf4a",
+      "status": "draft",
+      "statusNote": "UTKAST 2026-11-17, inte godkänd. Delas; texten oförändrad",
+      "approver": "Anton",
+      "path": "../iso27001/policyer/13-acceptable-use-workstation-security.md",
+      "sharedWith": "ISO 27001",
+      "iso42001Gap": "Regler för AI-kodverktyg som läser kod och development-spegeln (A.9.2)."
+    },
+    {
+      "name": "Remote Access & BYOD",
+      "templateId": "frk_pt_685e426ccbb0de15a90cf446",
+      "status": "draft",
+      "statusNote": "UTKAST 2026-11-17, inte godkänd. Delas; texten oförändrad",
+      "approver": "Anton",
+      "path": "../iso27001/policyer/14-remote-access-byod.md",
+      "sharedWith": "ISO 27001",
+      "iso42001Gap": "Inget utöver ISO 27001."
+    },
+    {
+      "name": "Background Screening & On/Off-boarding",
+      "templateId": "frk_pt_685e45c938ad29ad775a2344",
+      "status": "draft",
+      "statusNote": "UTKAST 2026-11-17, inte godkänd. Delas; texten oförändrad",
+      "approver": "Anton",
+      "path": "../iso27001/policyer/15-background-screening-on-off-boarding.md",
+      "sharedWith": "ISO 27001",
+      "iso42001Gap": "Kompetens och roll i AI-arbetet vid start (A.4.6, 7.2)."
+    },
+    {
+      "name": "Backup, Business Continuity & Disaster Recovery",
+      "templateId": "frk_pt_685e44939f827e6a9f736fd4",
+      "status": "draft",
+      "statusNote": "UTKAST 2026-11-17, inte godkänd. Delas; texten oförändrad",
+      "approver": "Anton",
+      "path": "../iso27001/policyer/18-backup-business-continuity-disaster-recovery.md",
+      "sharedWith": "ISO 27001",
+      "iso42001Gap": "AI-systemen i kontinuitetsplanen: vad som händer när Vertex inte svarar (uppgiften Planning)."
+    },
+    {
+      "name": "Change & Release Management",
+      "templateId": "frk_pt_685e42c38c3267d391674ce3",
+      "status": "draft",
+      "statusNote": "UTKAST 2026-11-17, inte godkänd. Delas; texten oförändrad",
+      "approver": "Anton",
+      "path": "../iso27001/policyer/19-change-release-management.md",
+      "sharedWith": "ISO 27001",
+      "iso42001Gap": "Ändring av modell, prompt eller data kräver evalkörning före och efter och en rad i BESLUT.md (6.3, A.6.2.5)."
+    },
+    {
+      "name": "Secure Software Development Lifecycle ",
+      "templateId": "frk_pt_685e4319a5bb1d2d411975e6",
+      "status": "draft",
+      "statusNote": "UTKAST 2026-11-17, inte godkänd. Delas; texten oförändrad",
+      "approver": "Anton",
+      "path": "../iso27001/policyer/20-secure-software-development-lifecycle.md",
+      "sharedWith": "ISO 27001",
+      "iso42001Gap": "Evalsviten som releasegrind för AI-ändringar (A.6.2.4)."
+    },
+    {
+      "name": "Secure Configuration & Hardening",
+      "templateId": "frk_pt_685e42a3bbd08ad14de297f0",
+      "status": "draft",
+      "statusNote": "UTKAST 2026-11-17, inte godkänd. Delas; texten oförändrad",
+      "approver": "Anton",
+      "path": "../iso27001/policyer/21-secure-configuration-hardening.md",
+      "sharedWith": "ISO 27001",
+      "iso42001Gap": "Baslinje för AI-variablerna per miljö och spärr mot oavsiktligt påslagna leverantörer."
+    },
+    {
+      "name": "Information Sharing & Transfer",
+      "templateId": "frk_pt_685e46557bc14fbddea6468a",
+      "status": "draft",
+      "statusNote": "UTKAST 2026-11-17, inte godkänd. Delas; texten oförändrad",
+      "approver": "Anton",
+      "path": "../iso27001/policyer/24-information-sharing-transfer.md",
+      "sharedWith": "ISO 27001",
+      "iso42001Gap": "Kundmejltext till Jev i USA (BU A2)."
+    },
+    {
+      "name": "Logging, Monitoring & Audit",
+      "templateId": "frk_pt_685e43997555c7ab39983c21",
+      "status": "draft",
+      "statusNote": "UTKAST 2026-11-17, inte godkänd. Delas; texten oförändrad",
+      "approver": "Anton",
+      "path": "../iso27001/policyer/25-logging-monitoring-audit.md",
+      "sharedWith": "ISO 27001",
+      "iso42001Gap": "Bevakning av AI-kvalitet i drift: fällda autosvar, stoppade utkast, avvikelser (A.6.2.6, 9.1)."
+    }
+  ],
+  "tasks": [
+    {
+      "name": "Access Review Log",
+      "templateId": "frk_tt_68e805457c2dcc784e72e3cc",
+      "status": "in_progress",
+      "sharedWith": "ISO 27001",
+      "evidenceFiles": [
+        "docs/compliance/underlag/rutiner/d-atkomstgenomgang.md"
+      ],
+      "comment": "Som ISO 27001: rutinen som utkast.",
+      "changed": "2026-11-18"
+    },
+    {
+      "name": "App Availability",
+      "templateId": "frk_tt_68406d2e86acc048d1774ea6",
+      "status": "todo",
+      "sharedWith": "GDPR, ISO 27001",
+      "evidenceFiles": [
+        "docs/compliance/bevis/railway-regioner-2026-11-17.txt"
+      ],
+      "comment": "Som ISO 27001. Tillägg: beräkningsresurser för AI (A.4.5); Jev körs i USA, sedan 2026-11-17 bara för leads.",
+      "changed": "2026-11-18"
+    },
+    {
+      "name": "Backup Restoration Test",
+      "templateId": "frk_tt_68e52b269db179c434734766",
+      "status": "todo",
+      "sharedWith": "ISO 27001",
+      "evidenceFiles": [],
+      "comment": "Som ISO 27001; Railway kräver Pro-planen.",
+      "changed": "2026-11-18"
+    },
+    {
+      "name": "Code Changes",
+      "templateId": "frk_tt_68406d64f09f13271c14dd01",
+      "status": "in_progress",
+      "sharedWith": "ISO 27001",
+      "evidenceFiles": [
+        ".github/CODEOWNERS",
+        "docs/BESLUT.md"
+      ],
+      "comment": "Tillägg: AI-ändringar ska granskas för risk, etik och efterlevnad. Modellbyten mäts (BESLUT 1647-1664) men ingen AI-granskning i PR."
+    },
+    {
+      "name": "Employee Access",
+      "templateId": "frk_tt_68406ca292d9fffb264991b9",
+      "status": "in_progress",
+      "sharedWith": "ISO 27001",
+      "evidenceFiles": [
+        "docs/compliance/underlag/rutiner/d-atkomstgenomgang.md"
+      ],
+      "comment": "Tillägg: rollbeskrivningar ska nämna AI-ledningssystemet (P27 avsnitt 5). Kontoförteckningen som mall.",
+      "changed": "2026-11-18"
+    },
+    {
+      "name": "Employee Verification",
+      "templateId": "frk_tt_68406951bd282273ebe286cc",
+      "status": "todo",
+      "sharedWith": "ISO 27001",
+      "evidenceFiles": [],
+      "comment": "Tillägg: A.4.6, kompetens hos dem som arbetar med AI-systemen."
+    },
+    {
+      "name": "Encryption at Rest",
+      "templateId": "frk_tt_68e52b26bf0e656af9e4e9c3",
+      "status": "todo",
+      "sharedWith": "GDPR, ISO 27001",
+      "evidenceFiles": [],
+      "comment": "Som ISO 27001."
+    },
+    {
+      "name": "Incident Response",
+      "templateId": "frk_tt_68406b4f40c87c12ae0479ce",
+      "status": "in_progress",
+      "sharedWith": "GDPR, ISO 27001",
+      "evidenceFiles": [
+        "INCIDENT_RESPONSE.md",
+        "ARCHITECTURE_INVARIANTS.md"
+      ],
+      "comment": "Tillägg: AI-avvikelser blir invarianter men förs inte in i incidentloggen; AI-incidenter till användare (A.8.4)."
+    },
+    {
+      "name": "Monitoring & Alerting",
+      "templateId": "frk_tt_68406af04a4acb93083413b9",
+      "status": "in_progress",
+      "sharedWith": "GDPR, ISO 27001",
+      "evidenceFiles": [
+        ".github/workflows/overvakning.yml"
+      ],
+      "comment": "Driftövervakning med provad larmkedja finns; AI-specifik bevakning saknas; internlarmen saknar variabler i drift.",
+      "changed": "2026-11-18"
+    },
+    {
+      "name": "Planning",
+      "templateId": "frk_tt_68406e7abae2a9b16c2cc197",
+      "status": "todo",
+      "sharedWith": "ISO 27001",
+      "evidenceFiles": [],
+      "comment": "Tillägg: AI-systemen i kontinuitetsplanen."
+    },
+    {
+      "name": "Production Firewall & No-Public-Access Controls",
+      "templateId": "frk_tt_68fa2a852e70f757188f0c39",
+      "status": "in_progress",
+      "sharedWith": "ISO 27001",
+      "evidenceFiles": [],
+      "comment": "Som ISO 27001: Redis på privat nät, Postgres publika proxy kvar.",
+      "changed": "2026-11-18"
+    },
+    {
+      "name": "Public Policies",
+      "templateId": "frk_tt_6840791cac0a7b780dbaf932",
+      "status": "in_progress",
+      "sharedWith": "GDPR, ISO 27001",
+      "evidenceFiles": [
+        "app/villkor/VillkorSida.tsx"
+      ],
+      "comment": "Tillägg: intressenters rättigheter. AI-upplysningen (INV-AI-001) och policyns AI-avsnitt mergade till development, inte i main förrän PR 60.",
+      "changed": "2026-11-18"
+    },
+    {
+      "name": "Sanitized Inputs",
+      "templateId": "frk_tt_68406eedf0f0ddd220ea19c2",
+      "status": "in_progress",
+      "sharedWith": "ISO 27001",
+      "evidenceFiles": [
+        "ARCHITECTURE_INVARIANTS.md"
+      ],
+      "comment": "Som ISO 27001; opålitlig text ramas in före modellanrop."
+    },
+    {
+      "name": "Secure Devices",
+      "templateId": "frk_tt_6840796f77d8a0dff53f947a",
+      "status": "in_progress",
+      "sharedWith": "ISO 27001",
+      "evidenceFiles": [
+        "docs/compliance/underlag/rutiner/e-enheter.md"
+      ],
+      "comment": "Som ISO 27001: mall som utkast.",
+      "changed": "2026-11-18"
+    },
+    {
+      "name": "Separation of Environments",
+      "templateId": "frk_tt_68e52a484cad0014de7a628f",
+      "status": "in_progress",
+      "sharedWith": "ISO 27001",
+      "evidenceFiles": [],
+      "comment": "Som ISO 27001; egen Redis per miljö, men samma Vertex-servicekonto i båda miljöerna.",
+      "changed": "2026-11-18"
+    },
+    {
+      "name": "AIMS Scope Statement",
+      "templateId": "frk_tt_69ea915ebae9e6858fa4fa07",
+      "status": "in_progress",
+      "evidenceFiles": [
+        "docs/compliance/ramverk/iso42001/policyer/27-ai-policy-control-framework.md",
+        "docs/compliance/underlag/beslut/e-omfattning-ledningssystem.md"
+      ],
+      "comment": "Förslag i P27 avsnitt 1 och beslutsutkast e; inte signerat.",
+      "changed": "2026-11-18"
+    },
+    {
+      "name": "AIMS Manual",
+      "templateId": "frk_tt_69ea915f44950702d9f7733c",
+      "status": "todo",
+      "evidenceFiles": [],
+      "comment": "Förslag: P27 och matris.md räcker för två personer."
+    },
+    {
+      "name": "AI Leadership Commitment Record",
+      "templateId": "frk_tt_69ea9161097ef7eb142b70ff",
+      "status": "todo",
+      "evidenceFiles": [],
+      "comment": "Inget daterat godkännande av AI-policy och mål."
+    },
+    {
+      "name": "AI Policy Review",
+      "templateId": "frk_tt_69ea9163eb166db383bb2140",
+      "status": "todo",
+      "evidenceFiles": [],
+      "comment": "Policyn är utkast."
+    },
+    {
+      "name": "AI Policy Alignment Review",
+      "templateId": "frk_tt_69ea916227fbbb6a722126b6",
+      "status": "todo",
+      "evidenceFiles": [],
+      "comment": "Kopplingarna i P27 avsnitt 10; genomgången saknas."
+    },
+    {
+      "name": "AI MS Roles & Responsibilities Assignment",
+      "templateId": "frk_tt_68cc2ce9cb0d2a4774975ace",
+      "status": "in_progress",
+      "evidenceFiles": [
+        "docs/compliance/underlag/beslut/a-ansvarig-dataskydd-informationssakerhet.md"
+      ],
+      "comment": "Rolltabell i P27 med två öppna rader; beslutsutkast a med systemägare [FYLL].",
+      "changed": "2026-11-18"
+    },
+    {
+      "name": "AI MS Resource Allocation Record",
+      "templateId": "frk_tt_68cc30fbbeabb8a4c2f56082",
+      "status": "todo",
+      "evidenceFiles": [],
+      "comment": "Inga avsatta resurser."
+    },
+    {
+      "name": "AI Objectives Register",
+      "templateId": "frk_tt_68cc2fa423533e602e4dee25",
+      "status": "todo",
+      "evidenceFiles": [
+        "docs/stabilitet-2026-11/SLUTRAPPORT.md"
+      ],
+      "comment": "Produktmål finns; inga AI-mål med ansvarig."
+    },
+    {
+      "name": "AI MS Communication Plan",
+      "templateId": "frk_tt_68cc327ff5d3130a1b42420b",
+      "status": "todo",
+      "evidenceFiles": [],
+      "comment": "Ingen samlad plan."
+    },
+    {
+      "name": "AIMS Documented Information Index",
+      "templateId": "frk_tt_69ea916a881ab0d59e67c930",
+      "status": "todo",
+      "evidenceFiles": [],
+      "comment": "Inget register över styrdokument."
+    },
+    {
+      "name": "AI MS Operational Control Procedure",
+      "templateId": "frk_tt_68cc395b90e179fe3209b795",
+      "status": "in_progress",
+      "evidenceFiles": [
+        "snajp-support/app/email_pipeline/processor.py",
+        "docs/compliance/underlag/beslut/f-godkannande-ny-leverantor-modell.md"
+      ],
+      "comment": "Kriterier i kod; beslutsutkast f om godkännande av ny modell eller leverantör; Jev stoppad för kundmejl i drift; AI Studio-spärren i development. Ingen signerad procedur.",
+      "changed": "2026-11-18"
+    },
+    {
+      "name": "AI MS Internal Audit Program",
+      "templateId": "frk_tt_68cc4190caf0b458effcee6e",
+      "status": "todo",
+      "evidenceFiles": [],
+      "comment": "Inget program."
+    },
+    {
+      "name": "AI Internal Audit Reports",
+      "templateId": "frk_tt_68cc41ad7cbd2839c0bc7104",
+      "status": "todo",
+      "evidenceFiles": [],
+      "comment": "matris.md är en genomgång, inte en revision."
+    },
+    {
+      "name": "AI Management Review Minutes",
+      "templateId": "frk_tt_69ea917c23d26cfe23eb8fca",
+      "status": "todo",
+      "evidenceFiles": [],
+      "comment": "Ingen genomgång."
+    },
+    {
+      "name": "AI MS Continual Improvement Log",
+      "templateId": "frk_tt_68cc459ed57b70a4cb631e72",
+      "status": "todo",
+      "evidenceFiles": [
+        "docs/BESLUT.md"
+      ],
+      "comment": "BESLUT.md täcker agenterna, inte ledningssystemet."
+    },
+    {
+      "name": "AI Context Register",
+      "templateId": "frk_tt_68cc25658bacb2ccff56adf9",
+      "status": "todo",
+      "evidenceFiles": [
+        "docs/compliance/ramverk/iso42001/ai-forordningen.md"
+      ],
+      "comment": "Roller och syften bedömda i utkast."
+    },
+    {
+      "name": "AI Risk and Opportunity Register",
+      "templateId": "frk_tt_69ea9164c6574221a69e1107",
+      "status": "todo",
+      "evidenceFiles": [],
+      "comment": "Inget register för ledningssystemet."
+    },
+    {
+      "name": "AI Risk Assessment Execution (Log)",
+      "templateId": "frk_tt_68cc39efd7916e240451cae5",
+      "status": "in_progress",
+      "evidenceFiles": [
+        "docs/dpia_supportagenten.md",
+        "docs/compliance/ramverk/iso42001/import.json"
+      ],
+      "comment": "Åtta AI-risker här och DPIA R1-R13; inte godkända."
+    },
+    {
+      "name": "AI Risk Treatment Implementation Record",
+      "templateId": "frk_tt_68cc3f427e309607f1ad5ba4",
+      "status": "todo",
+      "evidenceFiles": [
+        "ARCHITECTURE_INVARIANTS.md"
+      ],
+      "comment": "Åtgärder med tester; ingen plan att följa upp mot."
+    },
+    {
+      "name": "AI System Impact Assessment Procedure",
+      "templateId": "frk_tt_68cc2f30b51920e5515465e6",
+      "status": "todo",
+      "evidenceFiles": [],
+      "comment": "Förslag i P27 avsnitt 8."
+    },
+    {
+      "name": "AI Impact Assessment Log",
+      "templateId": "frk_tt_68cc3ffab3fb703917f51e19",
+      "status": "in_progress",
+      "evidenceFiles": [
+        "docs/dpia_supportagenten.md",
+        "docs/intresseavvagning_kallmejl.md"
+      ],
+      "comment": "DPIA och intresseavvägning (utkast); Jev saknas."
+    },
+    {
+      "name": "AI Societal Impact Assessment",
+      "templateId": "frk_tt_69ea9165056eb451ccc79c0f",
+      "status": "todo",
+      "evidenceFiles": [],
+      "comment": "Ingen bedömning."
+    },
+    {
+      "name": "Responsible AI Development Objectives",
+      "templateId": "frk_tt_69ea916b05b146a8a544c406",
+      "status": "todo",
+      "evidenceFiles": [
+        "docs/BESLUT.md"
+      ],
+      "comment": "Antons krav 2026-11-16; mått och godkännande saknas."
+    },
+    {
+      "name": "AI System Requirements and Specification",
+      "templateId": "frk_tt_69ea916c7b0b9487da3dbe78",
+      "status": "todo",
+      "evidenceFiles": [
+        "ARCHITECTURE_INVARIANTS.md"
+      ],
+      "comment": "Krav som invarianter; inget kravdokument per system."
+    },
+    {
+      "name": "AI Design and Development Documentation",
+      "templateId": "frk_tt_69ea916e273fdb8732d89fc6",
+      "status": "in_progress",
+      "evidenceFiles": [
+        "docs/UTKASTKEDJAN-REFERENS-2026-10-16.md"
+      ],
+      "comment": "Iris dokumenterad; support och Jev saknas."
+    },
+    {
+      "name": "AI Verification & Validation Report",
+      "templateId": "frk_tt_69ea916f42193436fb7b55de",
+      "status": "in_progress",
+      "evidenceFiles": [
+        "snajp-support/evals/README.md",
+        "docs/stabilitet-2026-11/SLUTRAPPORT.md"
+      ],
+      "comment": "Före- och efterkörning 2026-11-10; saknar godkännare. Kan stängas med Antons underskrift."
+    },
+    {
+      "name": "AI System Technical Documentation (Model Card)",
+      "templateId": "frk_tt_69ea917139f2541637597cc4",
+      "status": "todo",
+      "evidenceFiles": [
+        "docs/SA-FUNGERAR-FAKTAKONTROLLEN.md"
+      ],
+      "comment": "Inga modellkort."
+    },
+    {
+      "name": "AI System Event Logging Configuration",
+      "templateId": "frk_tt_69ea91725a27f56747512056",
+      "status": "in_progress",
+      "evidenceFiles": [
+        "ARCHITECTURE_INVARIANTS.md",
+        "snajp-support/app/agentcore/insyn.py"
+      ],
+      "comment": "Loggningen finns (INV-AUDIT-001); lagringstid och åtkomst saknas."
+    },
+    {
+      "name": "AI System Operation & Monitoring Plan",
+      "templateId": "frk_tt_69ea917069457debb719152e",
+      "status": "todo",
+      "evidenceFiles": [],
+      "comment": "Driftövervakning av tillgängligheten finns; ingen bevakning av AI-kvalitet i drift.",
+      "changed": "2026-11-18"
+    },
+    {
+      "name": "AI System Change Log",
+      "templateId": "frk_tt_68cc301a8fd914534ab95b11",
+      "status": "in_progress",
+      "evidenceFiles": [
+        "docs/BESLUT.md",
+        "docs/compliance/bevis/railway-konfiguration-2026-11-17-efter.txt"
+      ],
+      "comment": "BESLUT.md och pack_version; INKORG_JEV-ändringen 2026-11-17 dokumenterad i beslutsunderlaget och konfigurationsexporten; ingen löpande logg över miljövariabler.",
+      "changed": "2026-11-18"
+    },
+    {
+      "name": "AI Tooling Inventory",
+      "templateId": "frk_tt_69ea9167679a59212c7db16f",
+      "status": "todo",
+      "evidenceFiles": [
+        "agent-core/manifest.json"
+      ],
+      "comment": "Ingen förteckning med licens och godkännande."
+    },
+    {
+      "name": "AI Data Resource Register",
+      "templateId": "frk_tt_69ea9166fd0793a689981939",
+      "status": "todo",
+      "evidenceFiles": [
+        "docs/registerforteckning.md"
+      ],
+      "comment": "Inget register per AI-system."
+    },
+    {
+      "name": "AI Data Acquisition Record",
+      "templateId": "frk_tt_69ea9173e73c9a96895468c8",
+      "status": "in_progress",
+      "evidenceFiles": [
+        "ARCHITECTURE_INVARIANTS.md"
+      ],
+      "comment": "Källa, datum och grund per prospektfaktum (INV-DATA-001); avtal med allabolag och hitta saknas."
+    },
+    {
+      "name": "AI Data Quality Assessment",
+      "templateId": "frk_tt_69ea9174fe7e40c0405cd057",
+      "status": "todo",
+      "evidenceFiles": [],
+      "comment": "Webbfacit och existensgrind; inga kvalitetskrav per system."
+    },
+    {
+      "name": "AI Data Provenance Record",
+      "templateId": "frk_tt_69ea9175640d0bbbddde05a7",
+      "status": "in_progress",
+      "evidenceFiles": [
+        "ARCHITECTURE_INVARIANTS.md"
+      ],
+      "comment": "Leads fullt; KB-källa (migration 117) inte belagd i main."
+    },
+    {
+      "name": "AI Data Preparation Record",
+      "templateId": "frk_tt_69ea91761c04c37d4f867908",
+      "status": "todo",
+      "evidenceFiles": [
+        "snajp-support/app/moderation/maskering.py"
+      ],
+      "comment": "Maskering (också före Jev i development) och inramning finns; maskering före inbäddningar inte mergad; ingen förberedelsebeskrivning.",
+      "changed": "2026-11-18"
+    },
+    {
+      "name": "Intended Use Statement",
+      "templateId": "frk_tt_69ea91773112b091b458de8d",
+      "status": "todo",
+      "evidenceFiles": [],
+      "comment": "Förslag i P27 avsnitt 4."
+    },
+    {
+      "name": "Responsible AI Use Procedure",
+      "templateId": "frk_tt_69ea9178aaa6c6a7058c0fcf",
+      "status": "todo",
+      "evidenceFiles": [
+        "snajp-support/app/leads/autonomy.py"
+      ],
+      "comment": "Autonomiregler finns; Snajps egen AI-användning saknas."
+    },
+    {
+      "name": "Responsible AI Use Objectives",
+      "templateId": "frk_tt_69ea91794c21fc8f347cdddd",
+      "status": "todo",
+      "evidenceFiles": [],
+      "comment": "Inga mål nedskrivna."
+    },
+    {
+      "name": "Stakeholder Register / Interested Parties Log",
+      "templateId": "frk_tt_68cc27431d1266e3c77d7c0f",
+      "status": "todo",
+      "evidenceFiles": [],
+      "comment": "Intressenterna beskrivna var för sig."
+    },
+    {
+      "name": "AI Supplier Register",
+      "templateId": "frk_tt_69ea917b78c7fc9f3c659a90",
+      "status": "in_progress",
+      "evidenceFiles": [
+        "docs/compliance/leverantorsgranskning.md",
+        "docs/compliance/gemini-bedomning.md"
+      ],
+      "comment": "Vertex och TypeSafe granskade; TypeSafe röd, får inte längre kundmejl men leadsdata; Gemini 2.5 har passerat pensionsdatumet 2026-10-20; inga AI-klausuler.",
+      "changed": "2026-11-18"
+    },
+    {
+      "name": "AI Third-Party Responsibility Matrix",
+      "templateId": "frk_tt_69ea917abdbda1fa183386d2",
+      "status": "todo",
+      "evidenceFiles": [
+        "app/villkor/VillkorSida.tsx"
+      ],
+      "comment": "Kundens ansvar i villkoren; ingen matris."
+    },
+    {
+      "name": "Contact Information",
+      "templateId": "frk_tt_68406a514e90bb6e32e0b107",
+      "status": "in_progress",
+      "evidenceFiles": [],
+      "comment": "kontakt@snajp.se publik; SECURITY.md och security.txt i development (PR 50); klagomål loggas inte.",
+      "changed": "2026-11-18"
+    },
+    {
+      "name": "AI Awareness Program",
+      "templateId": "frk_tt_69ea91684c77e2310a928a7a",
+      "status": "in_progress",
+      "evidenceFiles": [
+        "docs/compliance/underlag/utbildning/genomgang.md",
+        "docs/compliance/underlag/utbildning/kvittens.md"
+      ],
+      "comment": "Material och kvittens som utkast; ingen genomgång hållen.",
+      "changed": "2026-11-18"
+    },
+    {
+      "name": "AI Competence Record",
+      "templateId": "frk_tt_69ea916984bd6ff9ec7fd09b",
+      "status": "todo",
+      "evidenceFiles": [],
+      "comment": "Ingen kompetensmatris."
+    },
+    {
+      "name": "Employee Descriptions",
+      "templateId": "frk_tt_684069a3a0dd8322b2ac3f03",
+      "status": "in_review",
+      "evidenceFiles": [],
+      "comment": "Inga anställda; förslag not_relevant för samtalet tills någon anställs."
+    }
+  ],
+  "risks": [
+    {
+      "title": "Modell eller modelleverantör slås på för kunddata utan beslut",
+      "description": "INKORG_JEV=auto i main skickar kundmejltext till TypeSafe i USA, mot Antons beslut 2026-09-30. Ingen godkännandeprocess fanns.",
+      "category": "governance",
+      "likelihood": 5,
+      "likelihoodEnum": "very_likely",
+      "likelihoodRationale": "Har redan hänt; en miljövariabel räcker.",
+      "impact": 4,
+      "impactEnum": "major",
+      "impactRationale": "Kunddata till ett land utan DPF och med telemetrilicens.",
+      "treatmentType": "mitigate",
+      "treatment": "INKORG_JEV=off; godkännandeprocess och kodspärr enligt P27 avsnitt 6.",
+      "owner": "Anton",
+      "status": "pending",
+      "controls": [
+        "A.10.3",
+        "8.1",
+        "6.3"
+      ],
+      "evidence": "BESLUTSUNDERLAG A2; leverantorsgranskning §7",
+      "statusNote": "Jev stoppad för kundmejl i drift; AI Studio-spärr i development; godkännandebeslut f som utkast. EU-grindar för modellanrop i en PR som inte är mergad.",
+      "changed": "2026-11-18"
+    },
+    {
+      "title": "Felaktigt autosvar går ut i kundens namn",
+      "description": "Ett svar i en kategori med automatiskt svar bär en uppgift som inte stämmer.",
+      "category": "technology",
+      "likelihood": 2,
+      "likelihoodEnum": "unlikely",
+      "likelihoodRationale": "Faktagrind, säkerhetsgräns och textkvalitet måste alla hålla (processor.py:752-759).",
+      "impact": 4,
+      "impactEnum": "major",
+      "impactRationale": "Felaktigt löfte till kundens kund.",
+      "treatmentType": "mitigate",
+      "treatment": "Mät Ordagrant; logga fällda autosvar och läs av månadsvis.",
+      "owner": "Anton",
+      "status": "open",
+      "controls": [
+        "A.6.2.4",
+        "A.6.2.6"
+      ],
+      "evidence": "ARCHITECTURE_INVARIANTS.md INV-GROUND-002, -003"
+    },
+    {
+      "title": "AI-upplysningen saknas i drift",
+      "description": "INV-AI-001 är byggd men ocommittad; chatt och autosvar saknar kodstyrd upplysning i main.",
+      "category": "regulatory",
+      "likelihood": 4,
+      "likelihoodEnum": "likely",
+      "likelihoodRationale": "Gäller tills ändringen driftsätts.",
+      "impact": 3,
+      "impactEnum": "moderate",
+      "impactRationale": "Brott mot AI-förordningen art. 50.1.",
+      "treatmentType": "mitigate",
+      "treatment": "Granska och driftsätt INV-AI-001.",
+      "owner": "Anton",
+      "status": "pending",
+      "controls": [
+        "A.8.2"
+      ],
+      "evidence": "ARCHITECTURE_INVARIANTS.md:959-972; ai-forordningen.md",
+      "statusNote": "Byggd (INV-AI-001, PR 45), kör i development, inte i main förrän PR 60.",
+      "changed": "2026-11-18"
+    },
+    {
+      "title": "Autonoma kallmejl utan AI-upplysning",
+      "description": "Iris kan skicka första mejl och svar i tråd utan granskning; ingen upplysning. Om art. 50 gäller är oklart.",
+      "category": "regulatory",
+      "likelihood": 3,
+      "likelihoodEnum": "possible",
+      "likelihoodRationale": "Rättsläget oklart.",
+      "impact": 3,
+      "impactEnum": "moderate",
+      "impactRationale": "Sanktion och förtroende.",
+      "treatmentType": "mitigate",
+      "treatment": "Juristens bedömning; rad i foten om den krävs.",
+      "owner": "Anton",
+      "status": "open",
+      "controls": [
+        "A.8.2",
+        "A.9.4"
+      ],
+      "evidence": "ai-forordningen.md §3.2"
+    },
+    {
+      "title": "Kunden använder supportagenten för högriskändamål",
+      "description": "En kund inom kredit, försäkring eller anställning använder agenten för beslut om personer.",
+      "category": "regulatory",
+      "likelihood": 2,
+      "likelihoodEnum": "unlikely",
+      "likelihoodRationale": "Inga sådana kunder kända.",
+      "impact": 5,
+      "impactEnum": "severe",
+      "impactRationale": "Systemet blir högrisk; ansvarsfrågan oklar.",
+      "treatmentType": "mitigate",
+      "treatment": "Förbjudna användningar i villkoren (P27 avsnitt 4).",
+      "owner": "Anton",
+      "status": "open",
+      "controls": [
+        "A.9.4",
+        "A.10.2"
+      ],
+      "evidence": "ai-forordningen.md §3.1"
+    },
+    {
+      "title": "Ingen AI-kunnighet dokumenterad",
+      "description": "Art. 4 gäller sedan 2025-02-02; ingen åtgärd för Anton och Sebbe.",
+      "category": "regulatory",
+      "likelihood": 4,
+      "likelihoodEnum": "likely",
+      "likelihoodRationale": "Kravet gäller redan.",
+      "impact": 2,
+      "impactEnum": "minor",
+      "impactRationale": "Låg sanktionsrisk men krav vid kundgranskning.",
+      "treatmentType": "mitigate",
+      "treatment": "Genomgång med kvittens (P27 avsnitt 8).",
+      "owner": "Anton",
+      "status": "open",
+      "controls": [
+        "7.2",
+        "7.3"
+      ],
+      "evidence": "matris.md 7.2",
+      "statusNote": "Utbildningsmaterial som utkast; ingen genomgång hållen.",
+      "changed": "2026-11-18"
+    },
+    {
+      "title": "Ändring av modell eller prompt försämrar kvaliteten utan att märkas",
+      "description": "Ingen releasegrind kräver grön evalsvit; ingen bevakning i drift.",
+      "category": "technology",
+      "likelihood": 3,
+      "likelihoodEnum": "possible",
+      "likelihoodRationale": "Evalsviten körs men är inte obligatorisk.",
+      "impact": 3,
+      "impactEnum": "moderate",
+      "impactRationale": "Sämre svar och utkast tills någon märker det.",
+      "treatmentType": "mitigate",
+      "treatment": "Lägsta nivå per agent som releasegrind; månatlig avläsning.",
+      "owner": "Anton",
+      "status": "open",
+      "controls": [
+        "A.6.2.4",
+        "A.6.2.5",
+        "9.1"
+      ],
+      "evidence": "snajp-support/evals/README.md"
+    },
+    {
+      "title": "Fulla prompter med persondata sparas utan gallring",
+      "description": "agent_runs sparar användarmeddelanden med kunddata utan lagringstid.",
+      "category": "technology",
+      "likelihood": 4,
+      "likelihoodEnum": "likely",
+      "likelihoodRationale": "Sker vid varje körning.",
+      "impact": 3,
+      "impactEnum": "moderate",
+      "impactRationale": "Överlagring och större skada vid intrång.",
+      "treatmentType": "mitigate",
+      "treatment": "Lagringstid och gallring (G02, DPIA R10).",
+      "owner": "Anton",
+      "status": "pending",
+      "controls": [
+        "A.6.2.8"
+      ],
+      "evidence": "dpia_supportagenten.md R10",
+      "statusNote": "Gallringen anonymiserar agent_runs (PR 48), men är avslagen och inte i main.",
+      "changed": "2026-11-18"
+    }
+  ],
+  "updated": "2026-11-18"
+}

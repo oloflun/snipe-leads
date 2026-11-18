@@ -1,0 +1,323 @@
+Driftkonfiguration utan hemligheter EFTER kvällens ändringar, projekt brave-passion. Hämtat 2026-11-17T21:08Z, read-only.
+projekt: brave-passion
+
+[development / web] 31 variabler
+   AUTH_SECRET: satt
+   AUTH_TRUST_HOST -> (satt)
+   DATABASE_URL -> postgresql://postgres.railway.internal:5432
+   DEEPSEEK_API_KEY: satt
+   GOOGLE_SERVICE_ACCOUNT_JSON: satt
+   NEXT_PUBLIC_SITE_URL -> https://web-development-6c85.up.railway.app
+   RAILWAY_ENVIRONMENT: satt
+   RAILWAY_ENVIRONMENT_ID: satt
+   RAILWAY_ENVIRONMENT_NAME = development
+   RAILWAY_PRIVATE_DOMAIN: satt
+   RAILWAY_PROJECT_ID: satt
+   RAILWAY_PROJECT_NAME: satt
+   RAILWAY_PUBLIC_DOMAIN: satt
+   RAILWAY_SERVICE_API_URL -> api-development-5cc3.up.railway.app
+   RAILWAY_SERVICE_ID: satt
+   RAILWAY_SERVICE_NAME: satt
+   RAILWAY_SERVICE_SUPPORT_URL -> support-development.up.railway.app
+   RAILWAY_SERVICE_WEB_URL -> web-development-6c85.up.railway.app
+   RAILWAY_STATIC_URL -> web-development-6c85.up.railway.app
+   RESEND_API_KEY: satt
+   SITE_URL -> https://web-development-6c85.up.railway.app
+   SMTP_FROM: satt
+   SMTP_FROM_NAME: satt
+   SNAJP_INTERNAL_API_KEY: satt
+   SNAJP_KEY_LIVRUSTNING: satt
+   SNAJP_KEY_SNAJP: satt
+   SNAJP_KEY_TESTKUND: satt
+   SNAJP_MASTER_API_KEY: satt
+   SNAJP_SUPPORT_INTERNAL_URL -> http://snipe-leads.railway.internal:8080
+   SNAJP_SUPPORT_URL -> https://api-development-5cc3.up.railway.app
+   SUPPORT_EXTERN_URL -> https://support-development.up.railway.app
+
+[development / Redis] 20 variabler
+   RAILWAY_ENVIRONMENT: satt
+   RAILWAY_ENVIRONMENT_ID: satt
+   RAILWAY_ENVIRONMENT_NAME = development
+   RAILWAY_PRIVATE_DOMAIN: satt
+   RAILWAY_PROJECT_ID: satt
+   RAILWAY_PROJECT_NAME: satt
+   RAILWAY_SERVICE_API_URL -> api-development-5cc3.up.railway.app
+   RAILWAY_SERVICE_ID: satt
+   RAILWAY_SERVICE_NAME: satt
+   RAILWAY_SERVICE_SUPPORT_URL -> support-development.up.railway.app
+   RAILWAY_SERVICE_WEB_URL -> web-development-6c85.up.railway.app
+   RAILWAY_VOLUME_ID: satt
+   RAILWAY_VOLUME_MOUNT_PATH: satt
+   RAILWAY_VOLUME_NAME: satt
+   REDISHOST: satt
+   REDISPASSWORD: satt
+   REDISPORT: satt
+   REDISUSER: satt
+   REDIS_PASSWORD: satt
+   REDIS_URL -> redis://redis.railway.internal:6379
+
+[development / Postgres] 22 variabler
+   PGDATA: satt
+   POSTGRES_DB: satt
+   POSTGRES_PASSWORD: satt
+   POSTGRES_USER: satt
+   RAILWAY_ENVIRONMENT: satt
+   RAILWAY_ENVIRONMENT_ID: satt
+   RAILWAY_ENVIRONMENT_NAME = development
+   RAILWAY_PRIVATE_DOMAIN: satt
+   RAILWAY_PROJECT_ID: satt
+   RAILWAY_PROJECT_NAME: satt
+   RAILWAY_SERVICE_API_URL -> api-development-5cc3.up.railway.app
+   RAILWAY_SERVICE_ID: satt
+   RAILWAY_SERVICE_NAME: satt
+   RAILWAY_SERVICE_SUPPORT_URL -> support-development.up.railway.app
+   RAILWAY_SERVICE_WEB_URL -> web-development-6c85.up.railway.app
+   RAILWAY_TCP_APPLICATION_PORT: satt
+   RAILWAY_TCP_PROXY_DOMAIN: satt
+   RAILWAY_TCP_PROXY_PORT: satt
+   RAILWAY_VOLUME_ID: satt
+   RAILWAY_VOLUME_MOUNT_PATH: satt
+   RAILWAY_VOLUME_NAME: satt
+   SSL_CERT_DAYS: satt
+
+[development / api] 50 variabler
+   AUTO_SEND_MIN_CONFIDENCE: satt
+   DATABASE_URL -> postgresql://postgres.railway.internal:5432
+   DEEPSEEK_API_KEY: satt
+   EMAIL_PROVIDER = resend
+   FLYTT_MAL_URL -> https://api-production-d7695.up.railway.app
+   FLYTT_NYCKEL: satt
+   GEMINI_API_KEY: satt
+   GOOGLE_SERVICE_ACCOUNT_JSON: satt
+   IMAP_FOLDER: satt
+   IMAP_PASSWORD_SNAJP: satt
+   INBOX_POLL_SECONDS: satt
+   INKORG_JEV = off
+   INTEGRATION_NYCKEL: satt
+   IRIS_JEV: satt
+   LEADS_DAILY_TOKEN_BUDGET: satt
+   LEADS_MERINFO: satt
+   LEADS_PIPELINE: satt
+   LEADS_WORKERS: satt
+   LLM_PROVIDER = gemini
+   MODEL = gemini-2.5-flash
+   PUBLIC_BASE_URL -> https://web-development-6c85.up.railway.app
+   RAILWAY_ENVIRONMENT: satt
+   RAILWAY_ENVIRONMENT_ID: satt
+   RAILWAY_ENVIRONMENT_NAME = development
+   RAILWAY_PRIVATE_DOMAIN: satt
+   RAILWAY_PROJECT_ID: satt
+   RAILWAY_PROJECT_NAME: satt
+   RAILWAY_PUBLIC_DOMAIN: satt
+   RAILWAY_SERVICE_API_URL -> api-development-5cc3.up.railway.app
+   RAILWAY_SERVICE_ID: satt
+   RAILWAY_SERVICE_NAME: satt
+   RAILWAY_SERVICE_SUPPORT_URL -> support-development.up.railway.app
+   RAILWAY_SERVICE_WEB_URL -> web-development-6c85.up.railway.app
+   RAILWAY_STATIC_URL -> api-development-5cc3.up.railway.app
+   REDIS_URL -> redis://redis.railway.internal:6379
+   REDIS_URL_FORE_FLYTT: satt
+   RESEND_API_KEY: satt
+   RESEND_WEBHOOK_SECRET: satt
+   SCRAPEGRAPHAI_API_KEY: satt
+   SEMANTIC_CACHE: satt
+   SMTP_FROM: satt
+   SMTP_FROM_NAME: satt
+   SNAJP_DEMO_API_KEY: satt
+   SNAJP_MASTER_API_KEY: satt
+   SNAJP_SKILL_UNLOCK_KEY: satt
+   SUPPORT_BUDGET_LIVRUSTNING: satt
+   TYPESAFE_API_KEY: satt
+   WEBBPOOL_FORDELNING: satt
+   WEBBPOOL_INSPIRATION: satt
+   WEBBPOOL_MOTTAGARE: satt
+
+[development / support] 19 variabler
+   AGENTSAJT_EPOST: satt
+   AGENTSAJT_LOSEN: satt
+   AGENTSAJT_SSO_SECRET: satt
+   RAILWAY_ENVIRONMENT: satt
+   RAILWAY_ENVIRONMENT_ID: satt
+   RAILWAY_ENVIRONMENT_NAME = development
+   RAILWAY_PRIVATE_DOMAIN: satt
+   RAILWAY_PROJECT_ID: satt
+   RAILWAY_PROJECT_NAME: satt
+   RAILWAY_PUBLIC_DOMAIN: satt
+   RAILWAY_SERVICE_API_URL -> api-development-5cc3.up.railway.app
+   RAILWAY_SERVICE_ID: satt
+   RAILWAY_SERVICE_NAME: satt
+   RAILWAY_SERVICE_SUPPORT_URL -> support-development.up.railway.app
+   RAILWAY_SERVICE_WEB_URL -> web-development-6c85.up.railway.app
+   RAILWAY_STATIC_URL -> support-development.up.railway.app
+   SNAJP_AGENT_API_KEY: satt
+   SNAJP_SUPPORT_TILLATNA: satt
+   SNAJP_SUPPORT_URL -> https://api-development-5cc3.up.railway.app
+
+[development / Redis-main] 10 variabler
+   RAILWAY_ENVIRONMENT: satt
+   RAILWAY_ENVIRONMENT_ID: satt
+   RAILWAY_ENVIRONMENT_NAME = development
+   RAILWAY_PROJECT_ID: satt
+   RAILWAY_PROJECT_NAME: satt
+   RAILWAY_SERVICE_API_URL -> api-development-5cc3.up.railway.app
+   RAILWAY_SERVICE_ID: satt
+   RAILWAY_SERVICE_NAME: satt
+   RAILWAY_SERVICE_SUPPORT_URL -> support-development.up.railway.app
+   RAILWAY_SERVICE_WEB_URL -> web-development-6c85.up.railway.app
+
+[main / web] 31 variabler
+   AUTH_SECRET: satt
+   AUTH_TRUST_HOST -> (satt)
+   DATABASE_URL -> postgresql://postgres.railway.internal:5432
+   DEEPSEEK_API_KEY: satt
+   GOOGLE_SERVICE_ACCOUNT_JSON: satt
+   NEXT_PUBLIC_SITE_URL -> https://www.snajp.se
+   RAILWAY_ENVIRONMENT: satt
+   RAILWAY_ENVIRONMENT_ID: satt
+   RAILWAY_ENVIRONMENT_NAME = main
+   RAILWAY_PRIVATE_DOMAIN: satt
+   RAILWAY_PROJECT_ID: satt
+   RAILWAY_PROJECT_NAME: satt
+   RAILWAY_PUBLIC_DOMAIN: satt
+   RAILWAY_SERVICE_API_URL -> api-production-d7695.up.railway.app
+   RAILWAY_SERVICE_ID: satt
+   RAILWAY_SERVICE_NAME: satt
+   RAILWAY_SERVICE_SUPPORT_URL -> support-main.up.railway.app
+   RAILWAY_SERVICE_WEB_URL -> www.snajp.se
+   RAILWAY_STATIC_URL -> www.snajp.se
+   RESEND_API_KEY: satt
+   SITE_URL -> https://www.snajp.se
+   SMTP_FROM: satt
+   SMTP_FROM_NAME: satt
+   SNAJP_INTERNAL_API_KEY: satt
+   SNAJP_KEY_LIVRUSTNING: satt
+   SNAJP_KEY_SNAJP: satt
+   SNAJP_KEY_TESTKUND: satt
+   SNAJP_MASTER_API_KEY: satt
+   SNAJP_SUPPORT_INTERNAL_URL -> http://snipe-leads.railway.internal:8080
+   SNAJP_SUPPORT_URL -> https://api-production-d7695.up.railway.app
+   SUPPORT_EXTERN_URL -> https://support-main.up.railway.app
+
+[main / Redis] 10 variabler
+   RAILWAY_ENVIRONMENT: satt
+   RAILWAY_ENVIRONMENT_ID: satt
+   RAILWAY_ENVIRONMENT_NAME = main
+   RAILWAY_PROJECT_ID: satt
+   RAILWAY_PROJECT_NAME: satt
+   RAILWAY_SERVICE_API_URL -> api-production-d7695.up.railway.app
+   RAILWAY_SERVICE_ID: satt
+   RAILWAY_SERVICE_NAME: satt
+   RAILWAY_SERVICE_SUPPORT_URL -> support-main.up.railway.app
+   RAILWAY_SERVICE_WEB_URL -> www.snajp.se
+
+[main / Postgres] 22 variabler
+   PGDATA: satt
+   POSTGRES_DB: satt
+   POSTGRES_PASSWORD: satt
+   POSTGRES_USER: satt
+   RAILWAY_ENVIRONMENT: satt
+   RAILWAY_ENVIRONMENT_ID: satt
+   RAILWAY_ENVIRONMENT_NAME = main
+   RAILWAY_PRIVATE_DOMAIN: satt
+   RAILWAY_PROJECT_ID: satt
+   RAILWAY_PROJECT_NAME: satt
+   RAILWAY_SERVICE_API_URL -> api-production-d7695.up.railway.app
+   RAILWAY_SERVICE_ID: satt
+   RAILWAY_SERVICE_NAME: satt
+   RAILWAY_SERVICE_SUPPORT_URL -> support-main.up.railway.app
+   RAILWAY_SERVICE_WEB_URL -> www.snajp.se
+   RAILWAY_TCP_APPLICATION_PORT: satt
+   RAILWAY_TCP_PROXY_DOMAIN: satt
+   RAILWAY_TCP_PROXY_PORT: satt
+   RAILWAY_VOLUME_ID: satt
+   RAILWAY_VOLUME_MOUNT_PATH: satt
+   RAILWAY_VOLUME_NAME: satt
+   SSL_CERT_DAYS: satt
+
+[main / api] 43 variabler
+   AUTO_SEND_MIN_CONFIDENCE: satt
+   DATABASE_URL -> postgresql://postgres.railway.internal:5432
+   DEEPSEEK_API_KEY: satt
+   EMAIL_PROVIDER = resend
+   FLYTT_NYCKEL: satt
+   GEMINI_API_KEY: satt
+   GOOGLE_SERVICE_ACCOUNT_JSON: satt
+   IMAP_FOLDER: satt
+   IMAP_PASSWORD_SNAJP: satt
+   INBOX_POLL_SECONDS: satt
+   INKORG_JEV = off
+   INTEGRATION_NYCKEL: satt
+   LEADS_DAILY_TOKEN_BUDGET: satt
+   LEADS_PIPELINE: satt
+   LEADS_REGISTER: satt
+   LLM_PROVIDER = gemini
+   MODEL = gemini-2.5-flash
+   PUBLIC_BASE_URL -> https://web-production-1fe2c.up.railway.app
+   RAILWAY_ENVIRONMENT: satt
+   RAILWAY_ENVIRONMENT_ID: satt
+   RAILWAY_ENVIRONMENT_NAME = main
+   RAILWAY_PRIVATE_DOMAIN: satt
+   RAILWAY_PROJECT_ID: satt
+   RAILWAY_PROJECT_NAME: satt
+   RAILWAY_PUBLIC_DOMAIN: satt
+   RAILWAY_SERVICE_API_URL -> api-production-d7695.up.railway.app
+   RAILWAY_SERVICE_ID: satt
+   RAILWAY_SERVICE_NAME: satt
+   RAILWAY_SERVICE_SUPPORT_URL -> support-main.up.railway.app
+   RAILWAY_SERVICE_WEB_URL -> www.snajp.se
+   RAILWAY_STATIC_URL -> api-production-d7695.up.railway.app
+   REDIS_URL -> redis://redis-main.railway.internal:6379
+   REDIS_URL_FORE_FLYTT: satt
+   RESEND_API_KEY: satt
+   RESEND_WEBHOOK_SECRET: satt
+   SCRAPEGRAPHAI_API_KEY: satt
+   SEMANTIC_CACHE: satt
+   SMTP_FROM: satt
+   SMTP_FROM_NAME: satt
+   SNAJP_DEMO_API_KEY: satt
+   SNAJP_MASTER_API_KEY: satt
+   SNAJP_SKILL_UNLOCK_KEY: satt
+   TYPESAFE_API_KEY: satt
+
+[main / support] 19 variabler
+   AGENTSAJT_EPOST: satt
+   AGENTSAJT_LOSEN: satt
+   AGENTSAJT_SSO_SECRET: satt
+   RAILWAY_ENVIRONMENT: satt
+   RAILWAY_ENVIRONMENT_ID: satt
+   RAILWAY_ENVIRONMENT_NAME = main
+   RAILWAY_PRIVATE_DOMAIN: satt
+   RAILWAY_PROJECT_ID: satt
+   RAILWAY_PROJECT_NAME: satt
+   RAILWAY_PUBLIC_DOMAIN: satt
+   RAILWAY_SERVICE_API_URL -> api-production-d7695.up.railway.app
+   RAILWAY_SERVICE_ID: satt
+   RAILWAY_SERVICE_NAME: satt
+   RAILWAY_SERVICE_SUPPORT_URL -> support-main.up.railway.app
+   RAILWAY_SERVICE_WEB_URL -> www.snajp.se
+   RAILWAY_STATIC_URL -> support-main.up.railway.app
+   SNAJP_AGENT_API_KEY: satt
+   SNAJP_SUPPORT_TILLATNA: satt
+   SNAJP_SUPPORT_URL -> https://api-production-d7695.up.railway.app
+
+[main / Redis-main] 20 variabler
+   RAILWAY_ENVIRONMENT: satt
+   RAILWAY_ENVIRONMENT_ID: satt
+   RAILWAY_ENVIRONMENT_NAME = main
+   RAILWAY_PRIVATE_DOMAIN: satt
+   RAILWAY_PROJECT_ID: satt
+   RAILWAY_PROJECT_NAME: satt
+   RAILWAY_SERVICE_API_URL -> api-production-d7695.up.railway.app
+   RAILWAY_SERVICE_ID: satt
+   RAILWAY_SERVICE_NAME: satt
+   RAILWAY_SERVICE_SUPPORT_URL -> support-main.up.railway.app
+   RAILWAY_SERVICE_WEB_URL -> www.snajp.se
+   RAILWAY_VOLUME_ID: satt
+   RAILWAY_VOLUME_MOUNT_PATH: satt
+   RAILWAY_VOLUME_NAME: satt
+   REDISHOST: satt
+   REDISPASSWORD: satt
+   REDISPORT: satt
+   REDISUSER: satt
+   REDIS_PASSWORD: satt
+   REDIS_URL -> redis://redis-main.railway.internal:6379

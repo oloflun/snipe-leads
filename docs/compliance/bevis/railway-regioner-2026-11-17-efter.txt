@@ -1,0 +1,18 @@
+Regioner EFTER flytten av jobbkön. Hämtat 2026-11-17T21:08Z, read-only.
+projekt: brave-passion
+miljö: development
+   tjänst web        status=SUCCESS region=ams x1
+   tjänst api        status=SUCCESS region=ams x1
+   tjänst Postgres   status=SUCCESS region=ams x1
+   tjänst Redis      status=SUCCESS region=ams x1
+   tjänst support    status=SUCCESS region=ams x1
+   volym  redis-volume (Redis) region=ams
+   volym  postgres-volume-BM7I (Postgres) region=ams
+miljö: main
+   tjänst Redis-main status=SUCCESS region=ams x1
+   tjänst api        status=SUCCESS region=ams x1
+   tjänst web        status=SUCCESS region=ams x1
+   tjänst Postgres   status=SUCCESS region=ams x1
+   tjänst support    status=SUCCESS region=ams x1
+   volym  postgres-volume (Postgres) region=ams
+   volym  redis-main-volume (Redis-main) region=ams
