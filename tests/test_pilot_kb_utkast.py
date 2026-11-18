@@ -414,6 +414,15 @@ def test_obelagda_siffror():
     assert pk.obelagda_siffror("30 dagars öppet köp", "14 dagars ångerrätt") == ["30"]
 
 
+def test_listnumrering_ar_ingen_sakuppgift():
+    """Genomgången 2026-11-18: "Siffrorna 1, 3, 4 står inte i källsidan" för en
+    numrerad lista. Numreringen räknas inte; ett tal i slutet av en mening gör det."""
+    kalla = "Urvalet, researchen och utkastet."
+    assert pk.obelagda_siffror("Tre steg: 1. **Urvalet:** a 2. **Researchen:** b", kalla) == []
+    assert pk.obelagda_siffror("Steg:\n1. Urvalet\n2) Researchen", kalla) == []
+    assert pk.obelagda_siffror("Returer tas emot inom 14.", kalla) == ["14"]
+
+
 def _llm_genomsokning() -> pk.Genomsokning:
     return pk.Genomsokning(
         webbplats=SAJT,

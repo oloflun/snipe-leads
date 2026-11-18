@@ -655,13 +655,21 @@ def _siffror(text: str) -> set[str]:
     return set(re.findall(r"\d+", _TUSENTAL.sub("", text or "")))
 
 
+#: Numreringen i en lista ("1. **Urvalet:**", eller "2) " först på en rad) är
+#: ingen sakuppgift. Den visades som "Siffrorna 1, 3, 4 står inte i
+#: källsidan" i genomgången 2026-11-18. Strikt med flit: bara radstart eller
+#: fetstil efter, så att "returer inom 14." i slutet av en mening prövas.
+_LISTNUMMER = re.compile(r"(?m)^[ \t]*\d{1,2}[.)][ \t]+|(?<!\S)\d{1,2}\.[ \t]+(?=\*\*)")
+
+
 def obelagda_siffror(innehall: str, kalltext: str) -> list[str]:
     """Tal i artikeln som inte står i källsidan. "1 499 kr" och "1499 kr" räknas lika.
 
     En billig kontroll av den dyraste felsorten: ett påhittat pris eller en
     påhittad returfrist ser exakt lika trovärdig ut som en riktig.
     """
-    return sorted(_siffror(innehall) - _siffror(kalltext), key=lambda s: (len(s), s))
+    utan_numrering = _LISTNUMMER.sub("", innehall or "")
+    return sorted(_siffror(utan_numrering) - _siffror(kalltext), key=lambda s: (len(s), s))
 
 
 @dataclass
@@ -695,7 +703,7 @@ def _sanera_artikel(ra: dict, kallsidor: dict[str, Sida]) -> tuple[dict | None, 
     varningar: list[str] = []
     if kategori not in CATEGORIES:
         ny = kategori_for(sida.url, titel)
-        varningar.append(f"Modellen föreslog kategorin {kategori!r}, som inte finns — ändrad till {ny}.")
+        varningar.append(f"Modellen föreslog kategorin {kategori!r}, som inte finns. Den ändrades till {ny}.")
         kategori = ny
     try:
         konfidens = max(0.0, min(1.0, float(ra.get("confidence", 0.5))))
@@ -705,7 +713,7 @@ def _sanera_artikel(ra: dict, kallsidor: dict[str, Sida]) -> tuple[dict | None, 
     if obelagda:
         konfidens = min(konfidens, 0.3)
         varningar.append(
-            f"Siffrorna {', '.join(obelagda)} står inte i källsidan — kontrollera eller stryk."
+            f"Siffrorna {', '.join(obelagda)} står inte i källsidan. Kontrollera eller stryk dem."
         )
     return {
         "title": titel,

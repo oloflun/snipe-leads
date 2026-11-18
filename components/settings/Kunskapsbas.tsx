@@ -361,7 +361,7 @@ export function KunskapsbasPanel() {
           <input
             value={rubrik}
             onChange={(e) => setRubrik(e.target.value)}
-            placeholder={loc.text({ sv: "Rubrik — t.ex. Ångerrätt och returer", en: "Title, e.g. Returns and cancellations" })}
+            placeholder={loc.text({ sv: "Rubrik, t.ex. Ångerrätt och returer", en: "Title, e.g. Returns and cancellations" })}
             className="w-full rounded-input border border-ink/15 bg-paper px-3 py-2 text-[15px] focus-ring"
           />
           <textarea

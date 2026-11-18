@@ -74,6 +74,55 @@ export function skanningsfel(fel: string | null): Localized {
   return SKANNINGSFEL.find((par) => par.sv === sv) ?? { sv, en: sv };
 }
 
+/**
+ * Förslagets text som löptext i förhandsvisningen. Artikeln sparas som
+ * markdown (agenten läser den så), men raden visade fetstilsstjärnor och
+ * listtecken rakt av: "**Vilka uppgifter behandlas:** * **Kontouppgifter:**"
+ * (genomgången 2026-11-18).
+ */
+export function klartext(markdown: string): string {
+  return markdown
+    .replace(/^#{1,6}\s+/gm, "")
+    .replace(/(\*\*|__)(.+?)\1/g, "$2")
+    .replace(/^[ \t]*[*-][ \t]+/gm, "· ")
+    .replace(/(?<=\s)\*[ \t]+(?=\S)/g, "· ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/**
+ * Skanningens varningar kommer på svenska från backenden
+ * (snajp-support/app/kb_skanning.py). De tre kända får ett engelskt par,
+ * med talen och kategorierna inflyttade. Båda formerna av siffervarningen
+ * matchas, eftersom förslag från före 2026-11-18 bär den äldre.
+ */
+const VARNINGAR: { monster: RegExp; en: (m: RegExpMatchArray) => string }[] = [
+  {
+    monster: /^Siffrorna (.+) står inte i källsidan(?:\.| \u2014) [Kk]ontrollera eller stryk(?: dem)?\.$/,
+    en: (m) => `The figures ${m[1]} do not appear on the source page. Check or remove them.`
+  },
+  {
+    monster: /^Modellen föreslog kategorin (.+), som inte finns(?:\. Den ändrades| \u2014 ändrad) till (.+)\.$/,
+    en: (m) => `The model suggested the category ${m[1]}, which does not exist. It was changed to ${m[2]}.`
+  },
+  {
+    monster: /^Simulerat utkast: sidtexten rakt av, ingen sammanfattning\.$/,
+    en: () => "Simulated draft: the page text as is, no summary."
+  }
+];
+
+export function varning(sv: string): Localized {
+  for (const { monster, en } of VARNINGAR) {
+    const traff = sv.match(monster);
+    if (traff) {
+      // Äldre förslag bär tankstreck; samma mening skrivs om till dagens form.
+      const ny = sv.replace(/ \u2014 ([a-zåäö])/, (_, forsta: string) => `. ${forsta.toUpperCase()}`);
+      return { sv: ny, en: en(traff) };
+    }
+  }
+  return { sv, en: sv };
+}
+
 /** Värdnamnet, utan protokoll och www, för en läsbar rad. */
 export function vard(url: string): string {
   try {
@@ -310,11 +359,11 @@ export function WebbplatsForslag({ onAndrat }: Readonly<{ onAndrat: () => void }
                   <div className="min-w-0">
                     <p className="text-[0.9375rem] font-medium">{f.title}</p>
                     <p className="mt-1 line-clamp-3 max-w-[80ch] text-[0.875rem] leading-6 text-ink-muted">
-                      {f.content}
+                      {klartext(f.content)}
                     </p>
                     {f.varningar.length ? (
                       <p className="mt-1 max-w-[80ch] text-[0.8125rem] leading-5 text-warning">
-                        {text(T.kontrollera)}: {f.varningar.join(" ")}
+                        {text(T.kontrollera)}: {f.varningar.map((v) => text(varning(v))).join(" ")}
                       </p>
                     ) : null}
                     {f.source_url ? (

@@ -20,7 +20,14 @@ sys.path.insert(0, str(ROOT / "scripts"))
 sys.path.insert(0, str(ROOT / "snajp-support"))
 
 import lagg_pa_utskicksfot as skript  # noqa: E402
-from app.leads.send_guard import SKICKA, Avsandare, TenantHistorik, Utskick, check_send_guard  # noqa: E402
+from app.leads.send_guard import (  # noqa: E402
+    SKICKA,
+    Avsandare,
+    Leveransutfall,
+    TenantHistorik,
+    Utskick,
+    check_send_guard,
+)
 
 KUND = {
     "namn": "Exempelbolaget AB",
@@ -46,6 +53,10 @@ def _dom(brodtext: str, *, personlig: bool):
             skickade_totalt=50,
             skickade_idag=0,
             tenant_alder_dagar=400,
+            # Regel 5d och 5e kom efter testet; en upptrappad tenant utan
+            # studsar, så att bara foten och signaturen prövas här.
+            storsta_dagsvolym=50,
+            leverans=Leveransutfall(skickade=0, studsade=0, klagomal=0),
             senaste_kontakt_med_foretaget=None,
             suppressions=frozenset(),
             tidigare_kontaktade=frozenset(),
