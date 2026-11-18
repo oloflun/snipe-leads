@@ -1,6 +1,6 @@
 # Extern övervakning av produktionen (ISO 27001-genomgången 2026-11-18).
 #
-# Var 15:e minut hämtar workflown produktionens publika adresser och jämför
+# Varje körning (schema och reserv, se SCHEMAT nedan) hämtar produktionens publika adresser och jämför
 # svaren med det friska läget:
 #
 #   * webbens startsida svarar HTTP 200;
@@ -39,14 +39,52 @@
 #   * Kontrollen ser bara det hälsokontrollen säger. Ett fel bakom inloggning,
 #     i en enskild kunds kanal eller i utskicken syns inte här.
 #
-# En gång i timmen, minut 7 (krockar inte med synk.yml). Glesare sedan repot blev
-# privat 2026-11-18: gratisplanen ger 2 000 Actions-minuter i månaden, och var
-# 15:e minut hade ensamt dragit ungefär 2 900.
+# SCHEMAT OCH VARFÖR DET INTE RÄCKER (utrett 2026-11-18)
+#
+# Mellan 2026-11-17 23:32 UTC (filen in, var 15:e minut) och 2026-11-18 15:48
+# UTC gav schemat EN körning (04:44 UTC). Efter bytet till "7 * * * *" kl.
+# 09:27 UTC kom ingen alls på sex förväntade. Orsaken är GitHubs schemaläggare,
+# inte filen:
+#   * Syntaxen är giltig och flödet är aktivt (actions/workflows: state
+#     active), på standardgrenen development.
+#   * Inte repot som blev privat: synk.yml gick schemalagt 12:19 UTC, efter
+#     bytet. Inte Actions-minuterna: push- och PR-körningar går samtidigt, och
+#     slut på minuter stoppar ALLA körningar i ett privat repo.
+#   * Samma tapp i alla schemalagda flöden, före och efter bytet: synk.yml
+#     ("*/10", 144 om dygnet) fick 32 schemalagda körningar 2026-11-10–18,
+#     ungefär fyra om dygnet. GitHubs dokumentation: "The schedule event can be
+#     delayed during periods of high loads ... High load times include the
+#     start of every hour. If the load is sufficiently high enough, some
+#     queued jobs may be dropped."
+#     (docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#schedule)
+#
+# Det går inte att rätta i repot. Det som görs här:
+#   1. Två scheman på mindre belastade minuter (23 varje timme, 41 var tredje),
+#      så att ett tappat schema inte ensamt avgör.
+#   2. En reserv som inte är ett schema: flödet körs också när Verify eller
+#      synk har gått klart (workflow_run). Varje push och PR, och varje
+#      synkkörning, kontrollerar alltså också produktionen.
+#   3. En dödmanskontroll (scripts/overvakning_dodman.sh) i verify.yml: har
+#      övervakningen inte gått klart på tre timmar öppnas ett ärende med
+#      etiketten `overvakning-tyst`. Det här flödet stänger ärendet när det går.
+# Kvar som begränsning: utan push, PR eller synk på ett dygn kan både
+# övervakningen och dödmanskontrollen utebli. En extern pingtjänst eller ett
+# betalt schema utanför GitHub är det som löser det, och det är ägarens val.
+#
+# Minuter: gratisplanen i ett privat repo ger 2 000 i månaden. Om varje schema
+# gick vore det cirka 32 körningar om dygnet, ungefär 1 000 minuter i månaden;
+# i praktiken går en bråkdel.
 name: övervakning
 
 on:
   schedule:
-    - cron: "7 * * * *"
+    - cron: "23 * * * *"
+    - cron: "41 */3 * * *"
+  # Reserven: körs när CI eller synken gått klart, oavsett utfall och gren.
+  # Kontrollen läser produktionen, inte koden i den körningen.
+  workflow_run:
+    workflows: ["Verify", "synk"]
+    types: [completed]
   workflow_dispatch:
     inputs:
       simulera_fel:
@@ -57,6 +95,7 @@ on:
 permissions:
   contents: read
   issues: write
+  actions: read
 
 concurrency:
   group: overvakning
@@ -76,6 +115,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
       - name: Hämta adresserna och jämför med det friska läget
         id: kontroll
         shell: bash
@@ -230,3 +273,13 @@ jobs:
           KORNING="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
           gh issue close "$nummer" --reason completed \
             --comment "Åter i det friska läget $NU. Körning: $KORNING. Anteckna orsak och åtgärd enligt INCIDENT_RESPONSE.md om händelsen behöver dokumenteras."
+
+      - name: Stäng dödmanskontrollens ärende (övervakningen går)
+        # Körningen i sig är beviset; ett öppet `overvakning-tyst` stängs.
+        if: always()
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          LAGE: stang
+        run: bash scripts/overvakning_dodman.sh

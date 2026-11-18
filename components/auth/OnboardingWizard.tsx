@@ -1065,7 +1065,9 @@ export function OnboardingWizard({
                             {text(T.popularast)}
                           </span>
                         ) : null}
-                        <span className="ml-auto text-[0.9375rem] tabular-nums text-ink-muted">
+                        {/* Egen rad på mobil: på 375 px bröts bara Supports pris
+                            ned, högerställt, och paketen lästes olika (2026-11-18). */}
+                        <span className="basis-full text-[0.9375rem] tabular-nums text-ink-muted sm:ml-auto sm:basis-auto">
                           {p.prisPerManad === null
                             ? text(T.prisVidKontakt)
                             : `${text(T.fran)} ${p.prisPerManad.toLocaleString("sv-SE")} ${text(T.krManad)}`}
