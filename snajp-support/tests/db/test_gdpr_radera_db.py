@@ -223,7 +223,7 @@ async def test_begransning_av_behandling_mot_hela_schemat():
         assert len(await _aktiva(conn, person)) == 1
         assert "AKTIV sedan" in _kor(person).stdout
 
-        # Approllen läser men skriver inte; webbrollen har samma rättigheter.
+        # Approllen läser men skriver inte.
         pool = await asyncpg.create_pool(APP_DSN, min_size=1, max_size=1)
         try:
             assert person in await PostgresStorage(pool).list_begransade(str(tid))
@@ -236,10 +236,15 @@ async def test_begransning_av_behandling_mot_hela_schemat():
                     await app.execute("update behandlingsbegransningar set havd_at = now()")
         finally:
             await pool.close()
+        # api:t läser listan (sändningsspärren). Webben läser den inte, och har
+        # sedan migration 126 ingen rättighet alls på tabellen (minsta rättighet).
+        assert await conn.fetchval(
+            "select has_table_privilege('snajp_app', 'public.behandlingsbegransningar', 'select')"
+        )
+        assert not await conn.fetchval(
+            "select has_table_privilege('snajp_web', 'public.behandlingsbegransningar', 'select')"
+        )
         for roll in ("snajp_app", "snajp_web"):
-            assert await conn.fetchval(
-                "select has_table_privilege($1, 'public.behandlingsbegransningar', 'select')", roll
-            ), roll
             for ratt in ("insert", "update", "delete"):
                 assert not await conn.fetchval(
                     "select has_table_privilege($1, 'public.behandlingsbegransningar', $2)", roll, ratt

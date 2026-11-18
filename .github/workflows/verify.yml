@@ -225,6 +225,9 @@ jobs:
         # test_adminlogg.py: migration 123, INV-SEC-013 (2026-11-18).
         # test_inloggningsforsok.py: migration 125, spärren mot upprepade
         # inloggningsförsök (ISO 27001 A.8.5, 2026-11-18).
+        # test_snajp_web_rattigheter.py: migration 126, webbens roll har exakt
+        # listans rättigheter, och varje SQL-sats i webben går att köra som
+        # snajp_web (EXPLAIN) (A.8.2, A.8.3, A.5.15).
         # INV-SEC-001 som snajp_app mot det migrerade schemat, och en
         # provkörning av scripts/gdpr_radera.py (sök, registerutdrag och
         # radering, och från migration 124 begränsning av behandlingen enligt
@@ -236,7 +239,7 @@ jobs:
           DATABASE_URL: postgresql://postgres:localdev@127.0.0.1:5432/railway
         run: |
           set -o pipefail
-          pytest tests/db/test_rls_isolation.py tests/db/test_gdpr_radera_db.py tests/db/test_adminlogg.py tests/db/test_inloggningsforsok.py -v -rs | tee /tmp/db-ut.txt
+          pytest tests/db/test_rls_isolation.py tests/db/test_gdpr_radera_db.py tests/db/test_adminlogg.py tests/db/test_inloggningsforsok.py tests/db/test_snajp_web_rattigheter.py -v -rs | tee /tmp/db-ut.txt
           if grep -qE "[0-9]+ skipped" /tmp/db-ut.txt; then echo "::error::ett databastest hoppades över"; exit 1; fi
 
   invariants:
