@@ -567,6 +567,43 @@ export async function saveBusinessContext(input: OnboardingInput): Promise<Onboa
             }
           });
         }
+      } else if (workspace?.slug) {
+        /**
+         * Arbetsytan har redan en kund i backenden, fast onboardingen inte var
+         * klar: ett anrop genom proxyn kopplar den (`requireSnajpTenant()`),
+         * till exempel från en annan flik. Uppmätt i development 2026-11-18:
+         * då hoppades standardinställningarna, kundregistret och
+         * webbplatsskanningen över. De körs nu mot den befintliga nyckeln.
+         * Standardinställningarna skriver bara tomma fält, så inget kunden
+         * redan ändrat skrivs över.
+         */
+        const { requireSnajpTenant } = await import("@/lib/snajp/tenant");
+        const { fyllStandardinstallningar } = await import("@/lib/snajp/provisionering");
+        const tenant = await requireSnajpTenant();
+        tenantNyckel = tenant.apiKey;
+        await fyllStandardinstallningar(
+          tenant.apiKey,
+          workspace,
+          {
+            product: payload.product,
+            target_audience: payload.target_audience,
+            offer: payload.offer,
+            cta: payload.cta
+          },
+          malgrupp,
+          erbjudanden
+        );
+        const { registreraKunduppgifter } = await import("@/lib/snajp/kundregister");
+        await registreraKunduppgifter(workspace.slug, {
+          orgnr: formateraOrgnr(input.orgnr),
+          faktureringsadress,
+          kontakt: {
+            namn: kontaktNamn,
+            roll: kontaktRoll || null,
+            mejl: kontaktMejl,
+            telefon: kontaktTelefon || null
+          }
+        });
       }
     } catch (error) {
       console.error("[onboarding] kunde inte koppla arbetsytans tenant:", error);
