@@ -61,7 +61,10 @@ jobs:
             INTERVALL="${BAS}..${TOPP}"
           fi
           echo "Skannar ${INTERVALL}"
-          /tmp/gitleaks detect --source . --no-banner --redact --log-opts="${INTERVALL}"
+          # --verbose visar fil, rad, regel och commit per träff, så att en
+          # träff går att åtgärda utan att köra om skanningen lokalt. Värdena
+          # är fortfarande maskerade (--redact).
+          /tmp/gitleaks detect --source . --no-banner --redact --verbose --log-opts="${INTERVALL}"
 
   python-tests:
     name: pytest (snajp-support)
