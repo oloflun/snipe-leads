@@ -1,5 +1,3 @@
-import type { Localized } from "@/lib/i18n";
-
 /**
  * Teamet på /vart-team.
  *
@@ -11,14 +9,15 @@ import type { Localized } from "@/lib/i18n";
  * på just den sida som ska svara på frågan "vem köper vi av", är sämre än en
  * tom ruta. Uppgifterna nedan är därför inhämtade och inte uträknade.
  *
- * ## Titeln är "Grundare" på båda, ansvaret står under den
+ * ## Titeln är en rad: "Grundare" och befattningen
  *
  * Fram till 2026-11-17 fanns ingen funktionsuppdelning, med flit: inget i
  * kodbasen belade en, och en titel som ser proffsig ut men inte stämmer är
- * precis den sortens detalj en köpare kontrollerar. Sedan 2026-11-17 är
- * uppdelningen bestämd (Sebbe, docs/BESLUT.md): Sebastian är marknadsansvarig
- * och Anton tekniskt ansvarig. Den står i `ansvar`, på raden under titeln;
- * titeln är fortfarande "Grundare" på båda.
+ * precis den sortens detalj en köpare kontrollerar. 2026-11-17 bestämdes
+ * uppdelningen (Sebastian marknadsansvarig, Anton tekniskt ansvarig) och stod
+ * på en egen rad under "Grundare". Sedan 2026-11-19 (Sebbe, docs/BESLUT.md)
+ * är titeln en enda rad: "Grundare & VD" och "Grundare & Teknikchef". Båda
+ * har ordet grundare, så att ingen av dem läses som anställd hos den andra.
  *
  * ## Bioraderna beskriver ARBETE, inte bakgrund
  *
@@ -44,7 +43,10 @@ import type { Localized } from "@/lib/i18n";
  * (KONTAKT_MEJL i components/marketing/copy.ts).
  *
  * Foton: lägg dem i public/images/team/ och peka `foto` dit. Saknas fotot
- * ritas en initialbubbla i stället — aldrig en trasig bildikon.
+ * ritas en initialbubbla i stället — aldrig en trasig bildikon. Sedan
+ * 2026-11-19 har båda foto: kvadratiska, 800 px, beskurna så att huvudena
+ * blir lika stora, och med bakgrunden ljusmatchad till samma neutrala grå så
+ * att korten ser tagna i samma ljus ut.
  */
 
 export type Teammedlem = {
@@ -52,8 +54,6 @@ export type Teammedlem = {
   id: string;
   namn: string;
   roll: string;
-  /** Raden under titeln: vad personen ansvarar för. Se resonemanget ovan. */
-  ansvar: Localized;
   /** Tom sträng = utelämnas. Se resonemanget ovan. */
   bio: string;
   /** Sökväg under /public, eller null för initialbubbla. */
@@ -64,18 +64,16 @@ export const TEAM: Teammedlem[] = [
   {
     id: "sebastian-bergman",
     namn: "Sebastian Bergman",
-    roll: "Grundare",
-    ansvar: { sv: "Marknadsansvarig", en: "Head of Marketing" },
+    roll: "Grundare & VD",
     bio: "",
-    foto: null
+    foto: "/images/team/sebastian-bergman.webp"
   },
   {
     id: "anton-lundin",
     namn: "Anton Lundin",
-    roll: "Grundare",
-    ansvar: { sv: "Tekniskt ansvarig", en: "Head of Technology" },
+    roll: "Grundare & Teknikchef",
     bio: "",
-    foto: null
+    foto: "/images/team/anton-lundin.webp"
   }
 ];
 

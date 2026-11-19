@@ -9,6 +9,24 @@ möjligt), vad det betyder i koden.
 
 ---
 
+## 2026-11-19 — Titlarna på Vårt team: "Grundare & VD" och "Grundare & Teknikchef" (Sebbe)
+
+**Beslut.** Sebastian Bergmans titel på /vart-team är "Grundare & VD" och Anton
+Lundins "Grundare & Teknikchef", på en rad. Raden under titeln
+("Marknadsansvarig", "Tekniskt ansvarig", beslutet 2026-11-17) tas bort.
+Kunskapsbasens text om vilka som står bakom Snajp följer med.
+
+**Resonemanget.** Sebbe ville att titlarna säger vilken befattning var och en har,
+och jämförde förhandsbilder med och utan CMO/CTO och med "medgrundare". Valet blev
+"Grundare" följt av befattningen på båda: "medgrundare" bredvid ett kort som bara
+säger VD läses som att den ene är grundare åt den andre, och båda grundade bolaget.
+
+**I koden.** `lib/team.ts` (`roll`, fältet `ansvar` borttaget),
+`app/vart-team/page.tsx`, `snajp-support/app/tenants/snajp_kb.py`. Ersätter
+ansvarsraden från 2026-11-17.
+
+---
+
 ## 2026-11-19 — Adminrätten kräver att sessionen gått igenom andra steget; KB-godkännandet blir atomiskt (Claude (agent), efter Codex-granskningen av release-PR:en)
 
 **Beslut.**
