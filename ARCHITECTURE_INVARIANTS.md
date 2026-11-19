@@ -1033,7 +1033,10 @@ undantar, och migration 134 raderar de barn utanför
 synken som synkens replica-raderingar lämnat föräldralösa; `tests/test_gallring_spegel.py`
 håller listorna ihop), väljer två gånger med radlås på kandidaterna och raderna deras
 aktivitet räknas ur mellan varven och raderar bara snittet (migration 138, så att inget
-som skrivs under körningen raderas och ingen skrivning utanför kandidaterna väntar), och gör
+som skrivs under körningen raderas och ingen skrivning utanför kandidaterna väntar), räknar
+ett redigerat utkast som en behandling (migration 141: `behandlad_at` på `outreach_messages`,
+`send_queue`, `lead_list_items` och `generated_emails`, satt av en trigger när texten eller
+statusen ändras), och gör
 ingenting hos en kund vars urval överstiger taket (`GALLRING_TAK`) utan larmar. Varje
 körning loggas per kund i `ss_gallringslogg`, läsbar via `GET /api/admin/gallring`.
 Varför: integritetspolicyn lovar 24 månader från senaste behandlingen i alla

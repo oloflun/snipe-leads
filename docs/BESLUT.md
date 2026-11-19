@@ -131,6 +131,24 @@ skrivningar hos andra kunder går igenom medan gallringen pågår.
   Samma migration tar bort `tvafaktor_aktivera` med två argument, som inte prövade
   hemligheten, inte anropas sedan 132 och aldrig nått main.
 
+**Runda 9 (samma dag).** Två fel, rättade:
+
+- *Ett redigerat utkast räknades inte som en behandling.* Att spara ett väntande utkast
+  ändrar bara subject och body, så ett gammalt prospekt vars utkast just sparats valdes ändå,
+  och kaskaden tog det nysparade utkastet och kön. Samma lucka fanns för listradernas utkast,
+  kampanjmodellens utkast och ett godkännande i kön. Migration 141 lägger `behandlad_at` på
+  de fyra tabellerna, satt av en trigger bara när texten eller statusen faktiskt ändras, och
+  räknar den i urvalen. En trigger valdes framför att varje skrivväg sätter tiden: vägarna är
+  flera (api, skript, webben), och en som glömmer det raderar en kunds pågående arbete.
+  `synk_andrad_at` valdes bort av samma skäl som i 119: den bumpas av varje teknisk skrivning
+  och bär migrationsdagen på äldre rader, så den hade skjutit upp gallringen för allt.
+  `behandlad_at` saknar default och rörs inte av leveransrapporter eller kopplingar.
+- *Synkvakten tystnade när samma rader föll i varje körning.* Synken sätter `synkad_at` även
+  när enskilda rader hoppats över, och vakten tittade bara på åldern. Den larmar nu också när
+  senaste försökets utfall är något annat än `ok` (högst en gång i timmen, som förut). Synkens
+  tidsstämpel lämnas som den är: övriga rader är skrivna, och panelen visar redan utfallet i
+  varningsfärg.
+
 ## 2026-11-19 — Synkflytten verkställs i development; mains steg väntar på releasen (Claude (agent), på Antons uppdrag "verkställ synkflytten")
 
 **Beslut.**

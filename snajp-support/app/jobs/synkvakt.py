@@ -1,4 +1,5 @@
-"""Synkvakten: larmar när synken main → development har stått still.
+"""Synkvakten: larmar när synken main → development har stått still, eller
+när senaste försöket inte lyckades helt (hoppade över rader, avbröts, föll).
 
 ## Varför den finns
 
@@ -80,6 +81,23 @@ def synk_forsenad(alder_min: int | None) -> bool:
     return alder_min is not None and alder_min > GRANS_MINUTER
 
 
+def synk_avvikande_utfall(spegel: dict[str, Any] | None) -> str | None:
+    """Senaste försökets utfall när det inte var helt lyckat, annars None.
+
+    Synken sätter `synkad_at` även när enskilda rader hoppats över (de övriga
+    är skrivna), så åldern ensam håller vakten tyst om samma rader faller vid
+    varje körning (Codex runda 9). Allt utom "ok" (och "hoppade:0", som
+    panelen räknar som lyckat) är en avvikelse. Inget utfall alls är okänt och
+    larmar inte, precis som en okänd ålder."""
+    if not spegel:
+        return None
+    utfall = spegel.get("senaste_utfall")
+    if not isinstance(utfall, str) or not utfall.strip():
+        return None
+    utfall = utfall.strip()
+    return None if utfall in ("ok", "hoppade:0") else utfall
+
+
 async def vakta(
     storage: Any,
     *,
@@ -97,19 +115,30 @@ async def vakta(
         if not spegel or spegel.get("environment") != "development":
             return False
         alder = synk_alder_min(spegel, nu=nu)
-        if not synk_forsenad(alder):
+        forsenad = synk_forsenad(alder)
+        avvikelse = synk_avvikande_utfall(spegel)
+        if not forsenad and avvikelse is None:
             return False
         if nu_mono - _tillstand["larm"] < LARM_SEKUNDER:
             return False
         _tillstand["larm"] = nu_mono
         utfall = str(spegel.get("senaste_utfall") or "okänt")[:200]
-        logger.error(
-            "Synken main → development är försenad: senaste lyckade synk för %s min sedan "
-            "(gräns %s min). Senaste utfall: %s",
-            alder,
-            GRANS_MINUTER,
-            utfall,
-        )
+        if forsenad:
+            logger.error(
+                "Synken main → development är försenad: senaste lyckade synk för %s min sedan "
+                "(gräns %s min). Senaste utfall: %s",
+                alder,
+                GRANS_MINUTER,
+                utfall,
+            )
+        else:
+            logger.error(
+                "Synken main → development lyckades inte helt i senaste försöket: %s "
+                "(senaste synk för %s min sedan). Rader som hoppas över i varje körning "
+                "skiljer main och development åt tills de rättas.",
+                utfall,
+                "okänt antal" if alder is None else alder,
+            )
         return True
     except asyncio.CancelledError:
         raise

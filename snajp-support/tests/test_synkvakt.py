@@ -113,11 +113,45 @@ async def test_larmar_en_gang_i_timmen(caplog):
 
 @pytest.mark.anyio
 async def test_larmar_inte_nar_synken_ar_farsk_eller_okand(caplog):
+    utan_utfall = _spegel(None)
+    utan_utfall["senaste_utfall"] = None
     with caplog.at_level(logging.ERROR, logger="snajp-support.synkvakt"):
-        for spegel in (_spegel(60), _spegel(None), None):
+        for spegel in (_spegel(60, utfall="ok"), _spegel(5, utfall="hoppade:0"), utan_utfall, None):
             synkvakt.nollstall()
             assert await synkvakt.vakta(_Lagring(spegel), klocka=_Klocka(), nu=NU) is False
     assert not [r for r in caplog.records if r.levelno == logging.ERROR]
+
+
+def test_avvikande_utfall():
+    assert synkvakt.synk_avvikande_utfall(None) is None
+    assert synkvakt.synk_avvikande_utfall({"senaste_utfall": None}) is None
+    assert synkvakt.synk_avvikande_utfall({"senaste_utfall": "ok"}) is None
+    assert synkvakt.synk_avvikande_utfall({"senaste_utfall": "hoppade:0"}) is None
+    assert synkvakt.synk_avvikande_utfall({"senaste_utfall": "hoppade:12"}) == "hoppade:12"
+    assert synkvakt.synk_avvikande_utfall({"senaste_utfall": "fel: OperationalError"}) == "fel: OperationalError"
+    assert synkvakt.synk_avvikande_utfall({"senaste_utfall": "avbruten: x"}) == "avbruten: x"
+
+
+@pytest.mark.anyio
+async def test_upprepade_partiella_fel_larmar_trots_farsk_synk(caplog):
+    """Codex runda 9: synken sätter synkad_at även när rader hoppas över, så
+    en färsk tid och hoppade:N i varje körning höll vakten tyst för alltid."""
+    lagring, klocka = _Lagring(_spegel(3, utfall="hoppade:12")), _Klocka()
+    with caplog.at_level(logging.ERROR, logger="snajp-support.synkvakt"):
+        assert await synkvakt.vakta(lagring, klocka=klocka, nu=NU) is True
+        # Nästa körning hoppar över samma rader, tiden är fortfarande färsk:
+        # inget nytt larm inom timmen, men ett nytt efter den.
+        klocka.t += synkvakt.KONTROLL_SEKUNDER
+        assert await synkvakt.vakta(lagring, klocka=klocka, nu=NU) is False
+        klocka.t = 1000.0 + synkvakt.LARM_SEKUNDER
+        assert await synkvakt.vakta(lagring, klocka=klocka, nu=NU) is True
+        # När raderna rättats och synken lyckas tystnar vakten.
+        lagring.spegel = _spegel(3, utfall="ok")
+        klocka.t += synkvakt.LARM_SEKUNDER
+        assert await synkvakt.vakta(lagring, klocka=klocka, nu=NU) is False
+    fel = [r.getMessage() for r in caplog.records if r.levelno == logging.ERROR]
+    assert len(fel) == 2
+    assert "hoppade:12" in fel[0] and "3 min" in fel[0]
 
 
 @pytest.mark.anyio

@@ -80,6 +80,24 @@ def test_spegeln_lamnar_det_synkade_at_synken():
     assert not re.search(r"v_\w+ := v_tomt_\w+;", sql), "en synkad kategori nollas helt i spegeln"
 
 
+def test_redigerade_utkast_raknas_som_behandling():
+    """Migration 141 (Codex runda 9): utkastredigering ändrar bara texten, så
+    triggern sätter behandlad_at och den senaste gallra_tenant räknar den i
+    prospektens, listradernas och kampanjmodellens urval."""
+    alla = "\n".join(_utan_kommentarer(p.read_text(encoding="utf-8"))
+                     for p in sorted(MIGRATIONER.glob("*.sql")))
+    for tabell, kolumner in (("outreach_messages", "subject, body"), ("send_queue", "status"),
+                             ("lead_list_items", "utkast"), ("generated_emails", "subject, body, status")):
+        assert f"alter table public.{tabell}" in alla and re.search(
+            rf"before update of {kolumner} on public\.{tabell}\s+for each row\s+when", alla), tabell
+    senaste = [f for f in _gallringsmigrationer()
+               if "function public.gallra_tenant" in f.read_text(encoding="utf-8")][-1]
+    sql = _utan_kommentarer(senaste.read_text(encoding="utf-8"))
+    for uttryck in ("m.behandlad_at", "q.behandlad_at", "greatest(created_at, processad_at, behandlad_at)",
+                    "greatest(created_at, sent_at, behandlad_at)", "g.behandlad_at"):
+        assert uttryck in sql, f"{senaste.name}: {uttryck} saknas i urvalet"
+
+
 def test_jobbet_ar_av_som_standard():
     config = (APP / "config.py").read_text(encoding="utf-8")
     assert re.search(r"^\s*gallring_aktiv:\s*bool\s*=\s*False\s*$", config, re.MULTILINE)
