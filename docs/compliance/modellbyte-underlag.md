@@ -743,6 +743,118 @@ Kostnad för kvällens prov: omkring 15 kr i Vertex (uppskattat ur
 `tokens_in`, 1,6 M för lite och 1,45 M för 2.5, plus utdata och kvittosviten).
 Inga mejl, inga godkända utkast, inga riktiga kunders arbetsytor.
 
+### 6.5 Bytet till gemini-3.8-flash i alla steg, 2026-11-19 (Antons beslut)
+
+Anton 2026-11-19: "Byt till 3.8 Flash, det är bättre att vi får fler leads än
+färre och träffsäkerhet i svar är viktigare än kostnadsbesparingar när vi väl
+har kunder" (`docs/BESLUT.md` 2026-11-19). Det ersätter rekommendationen i
+avsnitt 1.
+
+**Gjort i development** (aldrig i main). På `api`: `GOOGLE_CLOUD_REGION=eu`,
+`VERTEX_RESERVREGIONER` tom, `VERTEX_INBADDNING_REGION=europe-west1`,
+`MODEL=gemini-3.8-flash`, `VISION_MODEL=gemini-3.8-flash`,
+`LLM_TIMEOUT_CHATT_S=60`. På `web`: `GOOGLE_CLOUD_REGION=eu`,
+`MODEL=gemini-3.8-flash`. Utkast, humanizer, profil och kvitton ärver `MODEL`;
+`VERTEX_BILD_REGION`, `VERTEX_UTKAST_REGION` och `KVITTO_MODEL` är osatta.
+Koden i PR #96 (merge `5a8aee9b`): 503 från Vertex får samma omtag som 429, och
+jobbens tidsgräns är 600 s (var 300). Startloggen: "riktig agent aktiv
+(provider=gemini, modell=gemini-3.8-flash)", "Application startup complete",
+och alla modellanrop i loggen går till `aiplatform.eu.rep.googleapis.com`
+(utom inbäddningarna, europe-west1).
+
+**Mätningen samma natt**, repots evalsviter mot den driftsatta miljön, tre
+samtidiga, bara syntetiska evalkunder (`.example`-prospekt, påhittade kvitton),
+med en tillfällig env-fil så att `.env.deploy` är orörd (kontrollsumman
+jämförd före och efter):
+
+| Svit | gemini-3.8-flash, `eu` (2026-11-19) | Jämförelse | Latens 3.8 (p50 / p95) |
+|---|---|---|---|
+| Support, 50 fall | **47/50**, 1 tekniskt fel (en fråga tog 125 s och fick felbeskedet) | 2.5-flash 47/50 (2026-11-10), 3.5-flash-lite 48/50 (2026-11-18) | 23,6 / 104,9 s (2.5: 8,0 / 14,7 s; lite 5,9 / 8,1 s) |
+| Iris-utkast, 11 fall | **9/11 godkända, 0 tekniska fel** (inga påhitt 100 %) | 2.5-flash samma prov 2026-11-18: 7/11 med två 503; 3.8 under PayGo 2026-11-18: 4/11 levererade | 41 / 73 s (2.5: median 22 s) |
+| Kvitton, 40 fall | **38/40, 0 kvalitetsfel**; de två som föll var evalklientens tidsgräns 180 s | 2.5-flash 37/40, 3.5-flash-lite 30/40 | 47 / 133 s (2.5: 20,9 / 37,9 s) |
+
+Kvittosviten kördes två gånger: i den första startade api:n om mitt i
+körningen (en push till development 00:46 deployade om), vilket gav två 502
+och en tidsgräns; kvaliteten var 37/40 med samma fall godkända. Svaren ligger i
+`docs/stabilitet-2026-11/eval/dev-38-*.json`.
+
+**Bedömning.** Kvaliteten är den bästa uppmätta i alla tre sviterna, och de
+tekniska felen från 2026-11-18 (503 i utkasten) är borta med omtagen och den
+längre jobbgränsen. Priset är tiden: chatten svarar på 24 s i median (p95 105 s)
+mot 8 s med 2.5, och en kvittouppladdning tar 47 s i median och kan gå över
+tre minuter, och den är synkron (`POST /api/kvitton/underlag`). Det är de två
+saker att följa när kunderna kommer.
+
+#### Kostnadsmodellen: rörligt (PayGo) och fast (Provisioned Throughput)
+
+Källa: https://cloud.google.com/vertex-ai/generative-ai/pricing (avsnittet
+Provisioned Throughput) och
+https://docs.cloud.google.com/vertex-ai/generative-ai/docs/provisioned-throughput/supported-models,
+https://docs.cloud.google.com/vertex-ai/generative-ai/docs/models/gemini/3-8-flash
+och .../provisioned-throughput/use-provisioned-throughput, hämtade 2026-11-19.
+
+**Rörligt (Standard PayGo, det vi kör).** Betalt per token, ingen bindning, på
+Googles delade kapacitet. Därav 503 och 429 när `eu` är full. Listpris
+icke-global (USD per miljon tokens): 2.5-flash 0,30 / 2,50; 3.5-flash-lite
+0,33 / 2,75; 3.8-flash 0,825 / 4,125 till 2026-12-31 och 1,65 / 8,25 från
+2027-01-01. Per enhet, uppmätt i avsnitt 3.2:
+
+| | 2.5-flash (i dag) | 3.5-flash-lite | 3.8-flash till nyår | 3.8-flash från 2027 |
+|---|---|---|---|---|
+| Kr per supportchatt | 0,14 | 0,16 | 0,39 | ~0,78 |
+| Kr per triagerat mejl | 0,044 | 0,049 | 0,11 | ~0,22 |
+| Kr per utkast | 0,56 | 0,52 | 0,83 | ~1,66 |
+| Leads per månad, dagens volym (avsnitt 4) | ~1 440 kr | ~1 340 kr | ~2 150 kr | ~4 300 kr |
+| Per 1 000 supportchattar | 140 kr | 160 kr | 390 kr | ~780 kr |
+
+**Fast (Provisioned Throughput, PT).** En abonnerad kapacitet i en viss
+region, modell och version, köpt i GSU:er med bindning. Den debiteras per
+timme oavsett användning, och oanvänd kapacitet sparas inte till nästa månad.
+Den finns för 3.8-flash i `eu`. Pris per GSU och timme, icke-global (USD):
+
+| Bindning | Per GSU och timme | Per GSU och månad (730 h) | Ungefär i kr |
+|---|---|---|---|
+| 1 vecka | 7,854 | 1 319 per vecka | ~13 800 kr per vecka |
+| 1 månad | 4,068 | 2 970 | ~31 200 kr |
+| 3 månader | 3,616 | 2 640 | ~27 700 kr per månad |
+| 1 år | 3,014 | 2 200 | ~23 100 kr per månad |
+
+Till 2026-12-31 ger Google 50 % i kredit på PT-utgifterna för 3.8-flash.
+
+En GSU för 3.8-flash bär **675 tokens per sekund** efter omräkning: en
+inmatad token räknas som 1 och en utdatatoken (och tänkande) som 5. Kvoten
+mäts över ett glidande fönster på 40–120 s när man har högst 3 GSU. Allt utöver
+PT går som vanlig PayGo ("spillover") och debiteras som rörligt. Med huvudet
+`X-Vertex-AI-LLM-Request-Type: dedicated` får man i stället 429 över
+kvoten. Supported-models-sidan säger att överskottet går till `global` som
+standard. Det står i avsnittet om den globala ändpunkten, och det är inte
+bekräftat att det också gäller PT köpt i `eu`. **Före ett köp måste
+överskottets väg kontrolleras**, eftersom `global` är förbjudet för kunddata
+(INV-DATA-006).
+
+**Varför PT inte köps nu (bedömning).**
+
+- **Snittlasten är liten.** Dagens leadsvolym på 3.8 är ungefär 340 M in och
+  14 M ut per månad. Det blir ~410 M omräknade tokens, eller ~156 tokens per
+  sekund, en fjärdedel av en GSU.
+- **Topparna är stora.** Ett utkast läser ~158 000 tokens på ~40 s, alltså
+  ~4 000 per sekund eller sex GSU:er för ett enda utkast i full fart.
+  - En GSU rymmer 27 000–81 000 tokens per fönster. Ett utkast spiller alltså
+    över till PayGo ändå, och kapacitetsproblemet finns kvar för just det som
+    föll.
+- **Priset sparar inget.** Fullt utnyttjad bär en GSU 1,78 miljarder
+  omräknade tokens i månaden.
+  - Det kostar ungefär 2 900 USD på 2027 års PayGo-pris, samma som GSU:n på en
+    månads bindning (2 970 USD).
+  - PT köps alltså för garanterad kapacitet och svarstid, inte för priset, och
+    först vid nära full beläggning.
+- **När det blir aktuellt.** PT börjar löna sig när en kund kräver korta
+  svarstider i chatten, eller när Vertex-räkningen närmar sig 25 000–30 000 kr
+  i månaden.
+  - Då räcker 1–3 GSU för chatten och triagen, alltså 23 000–93 000 kr i
+    månaden beroende på bindning.
+  - Utkasten ligger kvar på PayGo i bakgrunden, där väntan inte märks.
+
 ## 7. Risker
 
 | Risk | Bedömning | Motåtgärd |
