@@ -65,6 +65,17 @@ tvåfaktor saknar markeringen och förlorar adminrätten vid deployen, vilket ä
   närmaste `giltig_till` (`versioner.kb_version_med_giltighet`); när dagen passerat byter
   den värde. Går utgången inte att läsa rörs cachen inte alls.
 
+**Runda 4 (samma dag).** Två luckor i runda 3:s rättningar, rättade:
+- Synken raderar i replica-läge, där kaskaderna inte körs. När main raderade en kund,
+  en agentkörning eller en tråd blev barnen utanför synken kvar i spegeln utan förälder
+  (kanalkontakter med telefonnummer och namn, chattläge, feedbacktext, demolänkar).
+  Migration 134: `gallra_spegelns_foraldralosa()` raderar dem, oberoende av policy, och
+  `gallra_alla` anropar den i spegeln. `tests/test_gallring_spegel.py` hittar varje sådant
+  kaskadbarn ur migrationskedjan och kräver att det städas.
+- Cacheversionen fick prefixet `g1:` också utan slutdatum. Annars hade den återgått till
+  den rena räknaren när den sista tidsbegränsade artikeln gått ut, och en post cachad
+  före ändringen hade matchat igen.
+
 ## 2026-11-19 — Synkflytten verkställs i development; mains steg väntar på releasen (Claude (agent), på Antons uppdrag "verkställ synkflytten")
 
 **Beslut.**

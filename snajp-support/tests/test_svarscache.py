@@ -321,6 +321,32 @@ async def test_kb_version_bumpar_processlokalt_utan_redis():
 
 
 @pytest.mark.anyio
+async def test_kb_version_med_giltighet_ateranvander_aldrig_det_gamla_formatet():
+    """Codex runda 4: en post från före giltighetsversionen bär den rena
+    räknaren ("0"). När tenantens sista tidsbegränsade artikel gått ut får den
+    aldrig matcha igen, så det nya formatet skiljer sig också utan slutdatum."""
+    from datetime import datetime, timedelta
+    from zoneinfo import ZoneInfo
+
+    from app.storage.memory import MemoryStorage
+
+    lagring = MemoryStorage()
+    gammal_post = await versioner.kb_version(TENANT_A)
+    idag = datetime.now(ZoneInfo("Europe/Stockholm")).date()
+    await lagring.add_kb_article(
+        TENANT_A, title="Kampanj", content="Gäller i dag.", category="ovrigt", giltig_till=idag
+    )
+    med_utgang = await versioner.kb_version_med_giltighet(lagring, TENANT_A)
+    assert med_utgang == f"g1:{gammal_post}:u{idag.isoformat()}"
+
+    for artikel in lagring.kb[TENANT_A]:
+        artikel["giltig_till"] = str(idag - timedelta(days=1))
+    efter = await versioner.kb_version_med_giltighet(lagring, TENANT_A)
+    assert efter == f"g1:{gammal_post}"
+    assert efter not in (gammal_post, med_utgang)
+
+
+@pytest.mark.anyio
 async def test_config_version_kombinerar_global_och_tenant():
     forsta = await versioner.config_version(TENANT_A)
     assert forsta == "0:0"

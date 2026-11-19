@@ -472,6 +472,57 @@ async def test_spegeln_gallrar_det_synken_inte_for_over():
 
 
 @pytest.mark.anyio
+async def test_spegeln_raderar_barn_som_synken_lamnat_foraldralosa():
+    """Migration 134 (Codex runda 4, 2026-11-19): synken raderar kunden i
+    replica-läge, där kaskaden inte körs. Kanalkontakten och chattläget blir
+    kvar utan förälder; spegelns gallring tar dem, oberoende av policy."""
+    conn = await _anslut(DSN)
+    try:
+        t = await _ny_tenant(conn, "foraldralos", policy=None)
+        tx = conn.transaction()
+        await tx.start()
+        try:
+            await conn.execute("create table public.mirror_meta (environment text)")
+            kund = await conn.fetchval(
+                "insert into ss_customers (tenant_id, name) values ($1, 'Kanal Kund') returning id", t["id"])
+            await conn.execute(
+                "insert into ss_chat_state (tenant_id, customer_id) values ($1, $2)", t["id"], kund)
+            anslutning = await conn.fetchval(
+                "insert into ss_channel_connections (tenant_id, kanal, extern_id) values ($1, 'whatsapp', $2)"
+                " returning id",
+                t["id"], f"test-{uuid.uuid4().hex}")
+            await conn.execute(
+                """insert into ss_channel_contacts (tenant_id, anslutning_id, customer_id, extern_anvandare,
+                       visningsnamn) values ($1, $2, $3, '46700000000', 'Kanal Kund')""",
+                t["id"], anslutning, kund)
+            kvar_kund = await conn.fetchval(
+                "insert into ss_customers (tenant_id, name) values ($1, 'Kvar Kund') returning id", t["id"])
+            await conn.execute(
+                "insert into ss_chat_state (tenant_id, customer_id) values ($1, $2)", t["id"], kvar_kund)
+
+            # Som synken: radera föräldern i replica-läge.
+            await conn.execute("set local session_replication_role = replica")
+            await conn.execute("delete from ss_customers where id = $1", kund)
+            await conn.execute("set local session_replication_role = origin")
+            assert await conn.fetchval("select count(*) from ss_channel_contacts where customer_id = $1", kund) == 1
+
+            await conn.execute("delete from ss_gallringskorning")
+            svar = _json(await conn.fetchval("select gallra_alla(5)"))
+            assert svar["spegel"] is True
+            assert svar["foraldralosa"]["ss_channel_contacts"] == 1
+            assert svar["foraldralosa"]["ss_chat_state"] == 1
+            assert not await conn.fetchval("select count(*) from ss_channel_contacts where customer_id = $1", kund)
+            assert not await conn.fetchval("select count(*) from ss_chat_state where customer_id = $1", kund)
+            assert await conn.fetchval("select count(*) from ss_chat_state where customer_id = $1", kvar_kund) == 1
+        finally:
+            await tx.rollback()
+        # Utanför en spegel gör funktionen ingenting.
+        assert _json(await conn.fetchval("select gallra_spegelns_foraldralosa()")) == {"spegel": False}
+    finally:
+        await conn.close()
+
+
+@pytest.mark.anyio
 async def test_schemalagda_korningen_tak_dygnsspärr_och_spegel():
     """gallra_alla som snajp_app: bara kunder med policy, taket håller, och en
     andra körning samma dygn gör ingenting."""

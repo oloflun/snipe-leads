@@ -1023,8 +1023,9 @@ promptar och svar nollas, raderna står kvar. Den schemalagda körningen
 per svenskt dygn (dygnsspärren `ss_gallringskorning` i samma transaktion), i en
 spegel bara för tabellerna synken inte för över (migration 133: när `mirror_meta`
 finns nollar `gallra_tenant` urvalet för tabellerna i `scripts/railway_synk.py:SYNK`,
-som får main:s raderingar genom synken; `tests/test_gallring_spegel.py` håller
-listorna ihop), och gör
+som får main:s raderingar genom synken, och migration 134 raderar de barn utanför
+synken som synkens replica-raderingar lämnat föräldralösa; `tests/test_gallring_spegel.py`
+håller listorna ihop), och gör
 ingenting hos en kund vars urval överstiger taket (`GALLRING_TAK`) utan larmar. Varje
 körning loggas per kund i `ss_gallringslogg`, läsbar via `GET /api/admin/gallring`.
 Varför: integritetspolicyn lovar 24 månader från senaste behandlingen i alla

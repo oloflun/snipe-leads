@@ -100,7 +100,10 @@ async def kb_version_med_giltighet(storage: Any, tenant_id: str) -> str | None:
     dag matchade i upp till 21 dagar till (Codex-granskningen 2026-11-19).
     Med den tidigaste `giltig_till` som ännu gäller i strängen byter versionen
     värde så fort den dagen passerat, och varje post från före blir omatchbar.
-    En tenant utan slutdatum får samma version som förut.
+    Formatet bär alltid prefixet `g1:`, också utan slutdatum. Utan det hade
+    versionen återgått till den gamla, rena räknaren när tenantens sista
+    tidsbegränsade artikel gått ut, och en post cachad före den här ändringen,
+    på den artikeln, hade matchat igen (Codex-granskningen runda 4).
 
     None när utgången inte gick att läsa: anroparen hoppar då över cachen helt,
     både uppslag och lagring (fail closed)."""
@@ -110,7 +113,7 @@ async def kb_version_med_giltighet(storage: Any, tenant_id: str) -> str | None:
     except Exception:  # noqa: BLE001 — cachen är en optimering, aldrig ett måste
         logger.warning("Kunde inte läsa KB-utgångarna för %s; svarscachen hoppas över.", tenant_id)
         return None
-    return f"{bas}:u{utgang.isoformat()}" if utgang else bas
+    return f"g1:{bas}:u{utgang.isoformat()}" if utgang else f"g1:{bas}"
 
 
 async def config_version(tenant_id: str) -> str:

@@ -39,6 +39,8 @@ def test_sparrlistan_och_bokforingen_raderas_aldrig():
                        "kvitto_mejl_lasta"):
             assert not re.search(rf"delete\s+from\s+(public\.)?{tabell}\b", sql), (
                 f"{fil.name} raderar ur {tabell}")
+        if "function public.gallra_tenant" not in sql:
+            continue  # t.ex. 134, som bara byter gallra_alla
         # contacts → suppressions kaskaderar: kopplingen nollas före raderingen.
         nolla = sql.find("update public.suppressions set contact_id = null")
         radera = sql.find("delete from public.contacts")
@@ -48,7 +50,8 @@ def test_sparrlistan_och_bokforingen_raderas_aldrig():
 def test_ingen_policy_ingen_gallring_och_ingen_policy_i_migrationerna():
     for fil in _gallringsmigrationer():
         sql = _utan_kommentarer(fil.read_text(encoding="utf-8"))
-        assert "'ingen_policy'" in sql
+        if "function public.gallra_tenant" in sql:
+            assert "'ingen_policy'" in sql
         assert not re.search(r"insert\s+into\s+(public\.)?ss_gallringspolicy", sql), (
             f"{fil.name} skriver en policy — beslutet är ägarens")
 
