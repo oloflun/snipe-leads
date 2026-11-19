@@ -52,8 +52,8 @@ const T = {
   avbryt: { sv: "Avbryt", en: "Cancel" },
   koderRubrik: { sv: "Spara återställningskoderna nu", en: "Save your recovery codes now" },
   koderIngress: {
-    sv: "Tvåstegsverifieringen är på. Har du inte telefonen kan du logga in med en av koderna nedan i stället för koden ur appen. Varje kod fungerar en gång. Koderna visas bara nu: spara dem i din lösenordshanterare.",
-    en: "Two-step verification is on. If you don't have your phone, you can sign in with one of the codes below instead of the app code. Each code works once. The codes are only shown now: save them in your password manager."
+    sv: "Tvåstegsverifieringen är på. Har du inte telefonen kan du logga in med en av koderna nedan i stället för koden ur appen. Varje kod fungerar en gång. Koderna visas bara nu: spara dem i din lösenordshanterare. Logga sedan ut och in igen med koden: adminytan öppnas bara för en inloggning som gått igenom båda stegen.",
+    en: "Two-step verification is on. If you don't have your phone, you can sign in with one of the codes below instead of the app code. Each code works once. The codes are only shown now: save them in your password manager. Then sign out and back in with the code: the admin area only opens for a sign-in that passed both steps."
   },
   koderLista: { sv: "Återställningskoder", en: "Recovery codes" },
   kopiera: { sv: "Kopiera koderna", en: "Copy the codes" },

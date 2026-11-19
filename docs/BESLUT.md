@@ -9,6 +9,29 @@ möjligt), vad det betyder i koden.
 
 ---
 
+## 2026-11-19 — Adminrätten kräver att sessionen gått igenom andra steget; KB-godkännandet blir atomiskt (Claude (agent), efter Codex-granskningen av release-PR:en)
+
+**Beslut.**
+1. En plattformsadmin vars konto har aktiv tvåfaktor får adminrätt bara i en session
+   vars inloggning gick igenom andra steget. JWT:n bär markeringen `tvafaktor` från
+   inloggningen; den kan inte läggas till i efterhand. Gäller oavsett tvånget
+   `TVAFAKTOR_KRAVS_FOR_PLATTFORMSADMIN`. Efter aktiveringen loggar adminen ut och in
+   igen med koden (texten vid återställningskoderna säger det).
+2. Att lägga till ett förslag från webbplatsskanningen skriver artikeln och beslutet i
+   en transaktion (`lagg_till_kb_forslag`). Migration 130 lägger tillbaka utkast som
+   den gamla vägen lämnat `tillagd` utan artikel.
+
+**Resonemanget.** Codex (gpt-6-astra) visade att aktiveringen inte återkallade några
+sessioner: en session från före aktiveringen, eller en stulen sådan, behöll adminrätten
+utan kod. Och att godkännandet committade beslutet före artikeln, så att ett avbrott
+tappade förslaget för gott. Att kräva markeringen i stället för att räkna
+sessionsversioner håller ändringen liten: alla gamla sessioner för konton med
+tvåfaktor saknar markeringen och förlorar adminrätten vid deployen, vilket är avsikten.
+
+**I koden.** `lib/auth.ts` (jwt/session), `lib/auth/inloggningssteg.ts`,
+`lib/auth/tvafaktor-session.ts`, `lib/auth/admin.ts`, `snajp-support/app/api/kb.py`,
+`storage/*.lagg_till_kb_forslag`, `db/migrations/20261119100000_130_kb_forslag_utan_artikel.sql`.
+
 ## 2026-11-19 — Synkflytten verkställs i development; mains steg väntar på releasen (Claude (agent), på Antons uppdrag "verkställ synkflytten")
 
 **Beslut.**

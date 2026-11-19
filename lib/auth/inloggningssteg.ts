@@ -15,6 +15,10 @@
  *  - En fel eller redan använd kod räknas som ett misslyckat försök, i samma
  *    räknare som lösenordet: andra steget omfattas av samma spärr.
  *  - Räknaren nollställs bara när BÅDA stegen gått igenom.
+ *  - Utfallet säger om andra steget prövades. Sessionen bär det, och
+ *    adminrätten kräver det för ett konto med aktiv tvåfaktor
+ *    (lib/auth/admin.ts:sessionenUppfyllerTvafaktor): en session från före
+ *    aktiveringen, eller från en OAuth-inloggning, blir då ingen admin.
  */
 
 export type Konto = { id: string; losenordshash: string | null };
@@ -32,7 +36,8 @@ export type Beroenden<L extends TvafaktorLageMin = TvafaktorLageMin> = {
 };
 
 export type Utfall =
-  | { typ: "ok"; konto: Konto }
+  /** `tvafaktor`: andra steget prövades och godtogs i just den här inloggningen. */
+  | { typ: "ok"; konto: Konto; tvafaktor: boolean }
   | { typ: "fel" }
   | { typ: "sparrad" }
   | { typ: "tvafaktor_kravs" }
@@ -61,5 +66,5 @@ export async function loggaIn<L extends TvafaktorLageMin>(kod: string, b: Beroen
   }
 
   await b.nollstall();
-  return { typ: "ok", konto };
+  return { typ: "ok", konto, tvafaktor: Boolean(lage?.aktiv) };
 }

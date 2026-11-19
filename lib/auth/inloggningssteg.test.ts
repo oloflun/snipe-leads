@@ -96,6 +96,7 @@ test("utan tvåfaktor: rätt lösenord räcker, räknaren nollställs", async ()
   const v = varld({ tvafaktor: false });
   const u = await loggaIn("", v.b);
   assert.equal(u.typ, "ok");
+  assert.equal(u.typ === "ok" && u.tvafaktor, false, "sessionen markeras inte som tvåstegsverifierad");
   assert.equal(v.s.nollstallningar, 1);
 });
 
@@ -112,6 +113,7 @@ test("korrekt kod loggar in och nollställer räknaren", async () => {
   v.s.forsok = 2;
   const u = await loggaIn(totpKod(v.hemlighet), v.b);
   assert.equal(u.typ, "ok");
+  assert.equal(u.typ === "ok" && u.tvafaktor, true, "sessionen bär att andra steget gick igenom");
   assert.equal(v.s.forsok, 0);
 });
 

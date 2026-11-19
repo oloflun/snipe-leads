@@ -355,37 +355,28 @@ async def besluta_kb_forslag(
             if await storage.besluta_kb_forslag(tenant_id, forslag_id, status="avvisad"):
                 avvisade.append(forslag_id)
             continue
-        forslag = await storage.besluta_kb_forslag(tenant_id, forslag_id, status="tillagd")
+        # Läses utan anspråk. Inbäddningen (ett nätanrop) räknas först, och
+        # artikeln och beslutet skrivs sedan i EN transaktion
+        # (lagg_till_kb_forslag). Förut märktes utkastet tillagt och
+        # committades före artikeln, så att ett avbrott däremellan lämnade
+        # utkastet tillagt utan artikel och borta ur listan (Codex 2026-11-19).
+        forslag = await storage.hamta_vantande_kb_forslag(tenant_id, forslag_id)
         if not forslag:
             continue
         nyckel = titelnyckel(forslag["title"])
         if nyckel in titlar:
             # Kunden har redan en artikel med den rubriken. Den rörs inte;
             # utkastet lämnar listan som avvisat.
-            await storage.angra_kb_forslag(tenant_id, forslag_id)
-            await storage.besluta_kb_forslag(tenant_id, forslag_id, status="avvisad")
-            fanns_redan.append(forslag_id)
+            if await storage.besluta_kb_forslag(tenant_id, forslag_id, status="avvisad"):
+                fanns_redan.append(forslag_id)
             continue
-        try:
-            embedding = None
-            if not settings.is_simulation():
-                from ..agent.embeddings import embed_text
+        embedding = None
+        if not settings.is_simulation():
+            from ..agent.embeddings import embed_text
 
-                embedding = await embed_text(f"{forslag['title']}\n{forslag['content']}")
-            artikel = await storage.add_kb_article(
-                tenant_id,
-                title=forslag["title"],
-                content=forslag["content"],
-                category=forslag["category"],
-                embedding=embedding,
-                source_url=forslag.get("source_url"),
-            )
-        except Exception:
-            # Artikeln sparades inte: utkastet ska stå kvar som väntande, inte
-            # se tillagt ut.
-            await storage.angra_kb_forslag(tenant_id, forslag_id)
-            raise
-        await storage.satt_kb_forslag_artikel(tenant_id, forslag_id, artikel["id"])
+            embedding = await embed_text(f"{forslag['title']}\n{forslag['content']}")
+        if not await storage.lagg_till_kb_forslag(tenant_id, forslag_id, embedding=embedding):
+            continue  # ett annat klick hann före
         titlar.add(nyckel)
         tillagda.append(forslag_id)
 

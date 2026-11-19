@@ -185,3 +185,43 @@ async def test_skanning_som_inte_kan_starta_syns_med_skal(monkeypatch):
             skanning = (await c.get("/api/kb/forslag", headers=DEMO)).json()["skanning"]
     assert skanning["status"] == "fel"
     assert skanning["fel"] == "Webbplatsen hittades inte."
+
+
+@pytest.mark.anyio
+async def test_ett_avbrutet_godkannande_lamnar_utkastet_vantande(monkeypatch):
+    """Codex 2026-11-19: förut märktes utkastet tillagt före artikeln, och ett
+    avbrott däremellan tappade det. Nu ändras ingenting förrän artikeln och
+    beslutet skrivs tillsammans, så utkastet står kvar och går att lägga till
+    igen."""
+    monkeypatch.setattr(ks, "ar_publik_vard", lambda url: True)
+    monkeypatch.setattr(ks, "bygg_anropare", lambda: None)
+    monkeypatch.setattr(ks, "skanna", _falsk_skanning(_utkast("Leveranstider")))
+
+    async with app.router.lifespan_context(app):
+        storage = app.state.storage
+        async with _client() as c:
+            r = await c.post("/api/kb/skanna", json={"webbplats": "lingonkudden.se", "spara": True}, headers=DEMO)
+            assert r.status_code == 202, r.text
+            svar = await _vanta_klar(c)
+            [utkast] = [f for f in svar["forslag"] if f["title"] == "Leveranstider"]
+            tenant_id = svar["skanning"]["tenant_id"]
+
+            riktig = storage.lagg_till_kb_forslag
+
+            async def avbryts(*a, **k):
+                raise asyncio.CancelledError
+
+            monkeypatch.setattr(storage, "lagg_till_kb_forslag", avbryts)
+            with pytest.raises(asyncio.CancelledError):
+                await c.post("/api/kb/forslag/beslut", json={"ids": [utkast["id"]], "beslut": "lagg_till"}, headers=DEMO)
+            vantande = (await c.get("/api/kb/forslag", headers=DEMO)).json()["forslag"]
+            assert [f["id"] for f in vantande] == [utkast["id"]]
+            assert not any(a["title"] == "Leveranstider" for a in await storage.list_kb(tenant_id))
+
+            monkeypatch.setattr(storage, "lagg_till_kb_forslag", riktig)
+            b = await c.post("/api/kb/forslag/beslut", json={"ids": [utkast["id"]], "beslut": "lagg_till"}, headers=DEMO)
+            assert b.status_code == 200 and b.json()["tillagda"] == [utkast["id"]]
+            assert sum(1 for a in await storage.list_kb(tenant_id) if a["title"] == "Leveranstider") == 1
+
+        for a in await storage.list_kb(tenant_id):
+            await storage.delete_kb_article(tenant_id, a["id"])

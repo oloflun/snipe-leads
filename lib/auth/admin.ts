@@ -4,6 +4,7 @@ import { cache } from "react";
 import { sqlAsUser } from "@/lib/db";
 import { harAktivTvafaktor } from "@/lib/auth/tvafaktor";
 import { TVAFAKTOR_KRAVS_FOR_PLATTFORMSADMIN } from "@/lib/auth/tvafaktor-krypto";
+import { sessionenUppfyllerTvafaktor } from "@/lib/auth/tvafaktor-session";
 import { getWorkspaceContext } from "@/lib/workspace";
 
 /**
@@ -61,7 +62,13 @@ export const getPlatformAdmin = cache(async function getPlatformAdmin(): Promise
   if (await saknarKravdTvafaktor(admin.userId)) {
     return null;
   }
-  return admin;
+  // Oberoende av tvånget: har kontot tvåfaktor på ska SESSIONEN ha gått
+  // igenom den. Annars behåller en session från före aktiveringen (eller en
+  // stulen sådan) adminrätten utan kod (Codex-granskningen 2026-11-19).
+  if (!(await sessionenUppfyllerTvafaktor(admin.userId, admin.tvafaktorISessionen, harAktivTvafaktor))) {
+    return null;
+  }
+  return { userId: admin.userId, email: admin.email };
 });
 
 /**
@@ -70,7 +77,7 @@ export const getPlatformAdmin = cache(async function getPlatformAdmin(): Promise
  * ännu inte har tvåfaktor när tvånget är påslaget. Ger ingen annan adminrätt.
  */
 export const getPlatformAdminUtanTvafaktorkrav = cache(
-  async function getPlatformAdminUtanTvafaktorkrav(): Promise<PlatformAdmin | null> {
+  async function getPlatformAdminUtanTvafaktorkrav(): Promise<(PlatformAdmin & { tvafaktorISessionen: boolean }) | null> {
     const context = await getWorkspaceContext();
     if (!context) {
       return null;
@@ -80,7 +87,11 @@ export const getPlatformAdminUtanTvafaktorkrav = cache(
     if (!context.isPlatformAdmin) {
       return null;
     }
-    return { userId: context.user.id, email: context.user.email };
+    return {
+      userId: context.user.id,
+      email: context.user.email,
+      tvafaktorISessionen: context.user.tvafaktor === true
+    };
   }
 );
 

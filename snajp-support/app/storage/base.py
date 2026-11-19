@@ -465,12 +465,17 @@ class Storage(Protocol):
         två klick aldrig blir två artiklar."""
         ...
 
-    async def satt_kb_forslag_artikel(self, tenant_id: str, forslag_id: str, artikel_id: str) -> None:
-        """Pekar ett tillagt utkast på artikeln det blev."""
+    async def hamta_vantande_kb_forslag(self, tenant_id: str, forslag_id: str) -> dict[str, Any] | None:
+        """Ett VÄNTANDE utkast, utan att ta det i anspråk. None annars."""
         ...
 
-    async def angra_kb_forslag(self, tenant_id: str, forslag_id: str) -> None:
-        """Lägger tillbaka ett utkast som väntande, när artikeln inte gick att spara."""
+    async def lagg_till_kb_forslag(
+        self, tenant_id: str, forslag_id: str, *, embedding: list[float] | None
+    ) -> dict[str, Any] | None:
+        """Gör ett väntande utkast till en ny artikel: artikeln, `tillagd` och
+        artikel_id skrivs i EN transaktion. Returnerar artikeln, eller None om
+        utkastet inte (längre) väntar. Ett avbrott lämnar utkastet väntande
+        och ingen artikel, så att kunden kan försöka igen."""
         ...
 
     # -- Agentens föreslagna lärdomar (självlärning, 2026-08-26) -------------

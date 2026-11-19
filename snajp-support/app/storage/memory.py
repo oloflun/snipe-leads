@@ -861,15 +861,29 @@ class MemoryStorage:
                 return dict(f)
         return None
 
-    async def satt_kb_forslag_artikel(self, tenant_id: str, forslag_id: str, artikel_id: str) -> None:
+    async def hamta_vantande_kb_forslag(self, tenant_id: str, forslag_id: str) -> dict[str, Any] | None:
         for f in self.kb_forslag.get(tenant_id, []):
-            if f["id"] == str(forslag_id):
-                f["artikel_id"] = str(artikel_id)
+            if f["id"] == str(forslag_id) and f["status"] == "vantar":
+                return dict(f)
+        return None
 
-    async def angra_kb_forslag(self, tenant_id: str, forslag_id: str) -> None:
+    async def lagg_till_kb_forslag(
+        self, tenant_id: str, forslag_id: str, *, embedding: list[float] | None
+    ) -> dict[str, Any] | None:
+        # Ingen await mellan kontrollen och skrivningarna: atomiskt i en
+        # händelseloop, som transaktionen i Postgres-vägen.
         for f in self.kb_forslag.get(tenant_id, []):
-            if f["id"] == str(forslag_id):
-                f.update(status="vantar", artikel_id=None, beslutad_at=None)
+            if f["id"] == str(forslag_id) and f["status"] == "vantar":
+                row = _kb_row(tenant_id, {"title": f["title"], "content": f["content"], "category": f["category"]})
+                row["embedding"] = embedding
+                row["source_url"] = f.get("source_url")
+                row["giltig_till"] = None
+                self.kb.setdefault(tenant_id, []).append(row)
+                f.update(status="tillagd", artikel_id=str(row["id"]),
+                         beslutad_at=datetime.now(timezone.utc).isoformat())
+                return {"id": row["id"], "title": f["title"], "category": f["category"],
+                        "source_url": f.get("source_url"), "giltig_till": None}
+        return None
 
     async def satt_kb_vektor(self, tenant_id: str, artikel_id: str, embedding: list[float]) -> None:
         for a in self.kb.get(tenant_id, []):

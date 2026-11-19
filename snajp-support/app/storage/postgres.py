@@ -1217,22 +1217,57 @@ class PostgresStorage:
             )
         return _forslag_rad(record) if record else None
 
-    async def satt_kb_forslag_artikel(self, tenant_id: str, forslag_id: str, artikel_id: str) -> None:
+    async def hamta_vantande_kb_forslag(self, tenant_id: str, forslag_id: str) -> dict[str, Any] | None:
+        try:
+            uuid.UUID(str(forslag_id))
+        except ValueError:
+            return None
         async with self._scoped(tenant_id) as conn:
-            await conn.execute(
-                "update ss_kb_forslag set artikel_id = $3::uuid where tenant_id = $1 and id = $2::uuid",
-                tenant_id, str(forslag_id), str(artikel_id),
+            record = await conn.fetchrow(
+                "select * from ss_kb_forslag where tenant_id = $1 and id = $2::uuid and status = 'vantar'",
+                tenant_id, str(forslag_id),
             )
+        return _forslag_rad(record) if record else None
 
-    async def angra_kb_forslag(self, tenant_id: str, forslag_id: str) -> None:
+    async def lagg_till_kb_forslag(
+        self, tenant_id: str, forslag_id: str, *, embedding: list[float] | None
+    ) -> dict[str, Any] | None:
+        # En transaktion: radlåset på förslaget, artikeln och beslutet. Ett
+        # avbrott någonstans (CancelledError, processen dör) rullar tillbaka
+        # allt, och förslaget står kvar som väntande (Codex 2026-11-19).
+        try:
+            uuid.UUID(str(forslag_id))
+        except ValueError:
+            return None
         async with self._scoped(tenant_id) as conn:
-            await conn.execute(
+            forslag = await conn.fetchrow(
                 """
-                update ss_kb_forslag set status = 'vantar', artikel_id = null, beslutad_at = null
-                 where tenant_id = $1 and id = $2::uuid
+                select * from ss_kb_forslag
+                 where tenant_id = $1 and id = $2::uuid and status = 'vantar'
+                 for update
                 """,
                 tenant_id, str(forslag_id),
             )
+            if not forslag:
+                return None
+            artikel = await conn.fetchrow(
+                """
+                insert into ss_knowledge_base (tenant_id, title, content, category, embedding, source_url)
+                values ($1, $2, $3, $4, $5, $6)
+                returning id, title, category, source_url, giltig_till
+                """,
+                tenant_id, forslag["title"], forslag["content"], forslag["category"],
+                embedding, forslag["source_url"],
+            )
+            await conn.execute(
+                """
+                update ss_kb_forslag
+                   set status = 'tillagd', artikel_id = $3::uuid, beslutad_at = now()
+                 where tenant_id = $1 and id = $2::uuid
+                """,
+                tenant_id, str(forslag_id), str(artikel["id"]),
+            )
+        return _row(artikel)
 
     async def satt_kb_vektor(self, tenant_id: str, artikel_id: str, embedding: list[float]) -> None:
         async with self._scoped(tenant_id) as conn:
