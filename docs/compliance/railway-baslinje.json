@@ -1,5 +1,5 @@
 {
-  "hamtad": "2026-11-18T16:21:42Z",
+  "hamtad": "2026-11-19T00:20:26Z",
   "miljoer": {
     "development": {
       "tjanster": {
@@ -222,7 +222,7 @@
             "LEADS_PIPELINE": "v2",
             "LEADS_WORKERS": "16",
             "LLM_PROVIDER": "gemini",
-            "MODEL": "gemini-2.5-flash",
+            "MODEL": "gemini-3.8-flash",
             "PUBLIC_BASE_URL": "https://web-development-6c85.up.railway.app",
             "RAILWAY_ENVIRONMENT": "development",
             "RAILWAY_ENVIRONMENT_NAME": "development",
@@ -235,6 +235,7 @@
             "RAILWAY_SERVICE_WEB_URL": "web-development-6c85.up.railway.app",
             "RAILWAY_STATIC_URL": "api-development-5cc3.up.railway.app",
             "SEMANTIC_CACHE": "shadow",
+            "VISION_MODEL": "gemini-3.8-flash",
             "WEBBPOOL_FORDELNING": "1"
           },
           "variabler": [
@@ -245,6 +246,7 @@
             "FLYTT_MAL_URL",
             "FLYTT_NYCKEL",
             "GEMINI_API_KEY",
+            "GOOGLE_CLOUD_REGION",
             "GOOGLE_SERVICE_ACCOUNT_JSON",
             "IMAP_FOLDER",
             "IMAP_PASSWORD_SNAJP",
@@ -257,6 +259,7 @@
             "LEADS_PIPELINE",
             "LEADS_WORKERS",
             "LLM_PROVIDER",
+            "LLM_TIMEOUT_CHATT_S",
             "MODEL",
             "PUBLIC_BASE_URL",
             "RAILWAY_ENVIRONMENT",
@@ -285,9 +288,92 @@
             "SNAJP_SKILL_UNLOCK_KEY",
             "SUPPORT_BUDGET_LIVRUSTNING",
             "TYPESAFE_API_KEY",
+            "VERTEX_INBADDNING_REGION",
+            "VERTEX_RESERVREGIONER",
+            "VISION_MODEL",
             "WEBBPOOL_FORDELNING",
             "WEBBPOOL_INSPIRATION",
             "WEBBPOOL_MOTTAGARE"
+          ]
+        },
+        "migrera": {
+          "installningar": {
+            "bevakade_sokvagar": [
+              "db/migrations/**",
+              "railway/000_auth_compat.sql",
+              "railway/Dockerfile.drift",
+              "scripts/railway_drift.py",
+              "scripts/railway_migrate.py"
+            ],
+            "byggare": "RAILPACK",
+            "byggkommando": null,
+            "cron": null,
+            "deploy_trigger": [
+              {
+                "gren": "development",
+                "leverantor": "github",
+                "repo": "oloflun/snipe-leads",
+                "vanta_pa_ci": false
+              }
+            ],
+            "dockerfile": "railway/Dockerfile.drift",
+            "domaner": {
+              "egna": [],
+              "railway": []
+            },
+            "draining_s": null,
+            "fore_deploy": null,
+            "halsokontroll": {
+              "sokvag": null,
+              "timeout_s": null
+            },
+            "kalla": {
+              "image": null,
+              "repo": "oloflun/snipe-leads"
+            },
+            "omstart": {
+              "max_forsok": 10,
+              "policy": "NEVER"
+            },
+            "overlap_s": null,
+            "railway_konfigfil": null,
+            "regioner_och_repliker": {
+              "ams": 1
+            },
+            "rotkatalog": "/",
+            "sleep": false,
+            "startkommando": "python scripts/railway_drift.py migrera",
+            "tcp_proxy": {
+              "pa": false,
+              "portar": []
+            },
+            "volymer": []
+          },
+          "varden": {
+            "MIGRERA_APPLY": "1",
+            "RAILWAY_ENVIRONMENT": "development",
+            "RAILWAY_ENVIRONMENT_NAME": "development",
+            "RAILWAY_PRIVATE_DOMAIN": "migrera.railway.internal",
+            "RAILWAY_PROJECT_NAME": "brave-passion",
+            "RAILWAY_SERVICE_API_URL": "api-development-5cc3.up.railway.app",
+            "RAILWAY_SERVICE_NAME": "migrera",
+            "RAILWAY_SERVICE_SUPPORT_URL": "support-development.up.railway.app",
+            "RAILWAY_SERVICE_WEB_URL": "web-development-6c85.up.railway.app"
+          },
+          "variabler": [
+            "MIGRERA_APPLY",
+            "MIGRERA_PG_URL",
+            "RAILWAY_ENVIRONMENT",
+            "RAILWAY_ENVIRONMENT_ID",
+            "RAILWAY_ENVIRONMENT_NAME",
+            "RAILWAY_PRIVATE_DOMAIN",
+            "RAILWAY_PROJECT_ID",
+            "RAILWAY_PROJECT_NAME",
+            "RAILWAY_SERVICE_API_URL",
+            "RAILWAY_SERVICE_ID",
+            "RAILWAY_SERVICE_NAME",
+            "RAILWAY_SERVICE_SUPPORT_URL",
+            "RAILWAY_SERVICE_WEB_URL"
           ]
         },
         "support": {
@@ -424,6 +510,7 @@
             "volymer": []
           },
           "varden": {
+            "MODEL": "gemini-3.8-flash",
             "NEXT_PUBLIC_SITE_URL": "https://web-development-6c85.up.railway.app",
             "RAILWAY_ENVIRONMENT": "development",
             "RAILWAY_ENVIRONMENT_NAME": "development",
@@ -445,7 +532,9 @@
             "AUTH_TRUST_HOST",
             "DATABASE_URL",
             "DEEPSEEK_API_KEY",
+            "GOOGLE_CLOUD_REGION",
             "GOOGLE_SERVICE_ACCOUNT_JSON",
+            "MODEL",
             "NEXT_PUBLIC_SITE_URL",
             "RAILWAY_ENVIRONMENT",
             "RAILWAY_ENVIRONMENT_ID",
