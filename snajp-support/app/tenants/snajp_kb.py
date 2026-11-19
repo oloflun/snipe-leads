@@ -41,13 +41,12 @@ KB_ARTICLES: list[dict] = [
     {
         "title": "Vilka står bakom Snajp",
         "category": "ovrigt",
-        # Speglar lib/team.ts och /vart-team (2026-10-05, ansvaret 2026-11-17).
+        # Speglar lib/team.ts och /vart-team (2026-10-05, titlarna 2026-11-19).
         # Namnen är bekräftade uppgifter, inte härledda — se team.ts egen docstring.
         "content": (
-            "Snajp har två grundare: Sebastian Bergman och Anton Lundin. Båda har "
-            "titeln Grundare. Sebastian är marknadsansvarig och Anton är tekniskt "
-            "ansvarig. Snajp byggs i Göteborg och Umeå. Mer om teamet finns på "
-            "sidan /vart-team på snajp.se."
+            "Snajp har två grundare: Sebastian Bergman och Anton Lundin. Sebastian "
+            "är VD och Anton är teknikchef. Snajp byggs i Göteborg och Umeå. Mer om "
+            "teamet finns på sidan /vart-team på snajp.se."
         ),
     },
     {
