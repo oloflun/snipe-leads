@@ -11,8 +11,8 @@ läget). En policy som beskriver något som inte görs räknas inte.
 
 **Redan blockerat på Anton, inte rört här:** Supabase-integrationen och release-PR 72,
 Railway Pro och säkerhetskopior, rotering av hemligheter, radering av Render, Redis Cloud
-och Supabase-projektet, signering av avtal (DPA) och besluten i `underlag/LASMIG.md`,
-valet av ersättare för gemini-2.5, juristgranskning.
+och Supabase-projektet, signering av avtal (DPA) och besluten i `underlag/LASMIG.md`, juristgranskning.
+(Valet av ersättare för gemini-2.5 är gjort: gemini-3.8-flash, BESLUT 2026-11-19.)
 
 ## Klasser
 
