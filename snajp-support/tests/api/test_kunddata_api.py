@@ -195,6 +195,37 @@ async def test_policy_url_sparas(client: TestClient):
     assert falt["policy_url"]["varde"] == "https://exempel.se/integritetspolicy"
 
 
+async def test_avtalsgrinden_syns_och_satts_bredvid_avtalsdatumet(client: TestClient):
+    """Flaggan kraver_avtal (070, standard true sedan 118) går att läsa och
+    sätta i samma väg som avtalsdatumet, utan SQL. Den hör till tenanten,
+    inte kundregistret, och får därför aldrig hamna i upserten mot
+    ss_customer_details."""
+    from app.avtalsgrind import avtal_saknas, nollstall_cache
+
+    kund = await app.state.storage.create_tenant(slug="kunddata-avtal", name="Avtal AB")
+    vag = f"/api/admin/tenants/{kund['id']}/kunddata"
+
+    data = client.get(vag, headers=_master()).json()["kunddata"]
+    assert data["tenant"]["kraver_avtal"] is True
+
+    svar = client.put(vag, headers=_master(), json={"kraver_avtal": False})
+    assert svar.status_code == 200, svar.text
+    assert svar.json()["sparat"] == ["kraver_avtal"]
+    assert client.get(vag, headers=_master()).json()["kunddata"]["tenant"]["kraver_avtal"] is False
+    assert "kraver_avtal" not in (await app.state.storage.get_customer_details(kund["id"]) or {})
+    nollstall_cache()
+    assert await avtal_saknas(app.state.storage, kund["id"]) is False
+
+    # På igen, utan avtalsdatum: grinden stänger direkt i den här processen.
+    client.put(vag, headers=_master(), json={"kraver_avtal": True})
+    assert await avtal_saknas(app.state.storage, kund["id"]) is True
+
+
+async def test_kundnyckel_kan_inte_satta_avtalsgrinden(client: TestClient):
+    svar = client.put(VAG, headers=_kund(), json={"kraver_avtal": False})
+    assert svar.status_code == 403
+
+
 async def test_varje_kunddatafalt_gar_att_skriva(client: TestClient):
     """Modellen och KUNDDATA_FALT får inte glida isär igen.
 

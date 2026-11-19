@@ -7,11 +7,20 @@
 
 ## Varför skriptet finns
 
-Kallmejlgrinden (app/leads/send_guard.py) har två krav som INTE är kodfrågor:
-regel 1 vill se företagsnamn, organisationsnummer och postadress i sidfoten,
-regel 2 en länk till avsändarens integritetspolicy. Saknas något byggs utkastet
-inte ens (app/agent/leads_tools.py), och kunden ser ett blockerat utskick utan
-att förstå varför.
+Utskicksspärren (app/leads/send_guard.py) har två krav som hänger på
+kundregistret och INTE är kodfrågor:
+
+  * Regel 1 kräver företagsnamnet i sidfoten. Det är tenantens namn
+    (`ss_tenants.name`); utan det byggs ingen fot (app/agent/leads_tools.py,
+    `lagstadgad_fot`) och varje utskick blockeras.
+  * Regel 2 kräver, vid utskick till en PERSONLIG adress, en länk till
+    avsändarens integritetspolicy (`policy_url`). Utan den blockeras utskick
+    till personliga adresser; info@ och kontakt@ går igenom.
+
+Organisationsnummer och postadress stoppar ALDRIG ett utskick (Antons beslut
+2026-10-10, docs/BESLUT.md). Foten tar med dem när de finns. De bör ändå fyllas
+i: e-handelslagen ställer kravet på avsändaren, alltså kunden, och det är bara
+här Snajp kan hjälpa kunden att uppfylla det.
 
 Uppgifterna bor i `ss_customer_details` (migration 053 + 073) och fylls annars
 för hand i admin under Kunder & Data. Det är en punktlista i ett dokument, och
@@ -60,6 +69,25 @@ FALT = (
     "faktureringsadress",
     "kund_sedan",
 )
+
+#: Fält som inte spärrar men bör finnas: e-handelslagen kräver dem av
+#: avsändaren, och utskicksfoten visar dem när de finns.
+BOR_FYLLAS = ("orgnr", "foretagsadress")
+
+
+def grindlage(foretagsnamn: str | None, falt: dict[str, str | None]) -> tuple[list[str], list[str]]:
+    """(det som blockerar utskick, det som bör fyllas i) för ett ifyllt register.
+
+    Speglar send_guard.py: regel 1 kräver bara företagsnamnet, regel 2
+    policy_url vid personliga adresser. Org.nr och adress är aldrig en spärr.
+    """
+    blockerar: list[str] = []
+    if not str(foretagsnamn or "").strip():
+        blockerar.append("företagsnamn (tenantens namn) — regel 1 blockerar varje utskick")
+    if not str(falt.get("policy_url") or "").strip():
+        blockerar.append("policy_url — regel 2 blockerar utskick till personliga adresser")
+    bor = [f for f in BOR_FYLLAS if not str(falt.get(f) or "").strip()]
+    return blockerar, bor
 
 
 def api_anrop(url: str, nyckel: str, metod: str, kropp: dict | None = None) -> dict:
@@ -134,15 +162,21 @@ def main() -> int:
         else:
             print(f"  {falt:20} {fore if fore else '(tomt)'}  ->  {efter}")
 
-    # Grindens krav, sagt rakt ut: det är DE tre fälten som avgör om ett
-    # kallmejl över huvud taget byggs.
+    # Spärrens krav, sagt rakt ut och skilt från det som bara bör finnas.
     efter_allt = {f: nytt.get(f) or (falt_nu.get(f) or {}).get("varde") for f in FALT}
-    saknas = [f for f in ("orgnr", "foretagsadress", "policy_url") if not efter_allt.get(f)]
+    blockerar, bor = grindlage(namn, efter_allt)
     print()
-    if saknas:
-        print("Iris kan INTE skicka efteråt — saknas: " + ", ".join(saknas))
+    if blockerar:
+        print("Blockerar utskick efteråt:")
+        for rad in blockerar:
+            print(f"  - {rad}")
     else:
-        print("Kallmejlgrindens krav uppfyllda (orgnr, foretagsadress, policy_url).")
+        print("Utskicksspärrens krav uppfyllda (företagsnamn, policy_url).")
+    if bor:
+        print(
+            "Bör fyllas i: " + ", ".join(bor)
+            + " — krävs av e-handelslagen och visas i sidfoten (ingen spärr)."
+        )
 
     if not args.apply:
         print("\nInget skrivet. Kör med --apply.")

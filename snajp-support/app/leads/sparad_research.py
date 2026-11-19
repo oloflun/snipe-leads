@@ -122,12 +122,8 @@ def _ur_aldre_korning(
         "produkt": _vald_produkt(fynd, produkter) if produkter else None,
         "offer_summary": " · ".join(str(offer.get(k)) for k in ("name", "promise", "cta") if offer.get(k))
         or "(inget erbjudande formulerat)",
-        "research_evidence": [
-            str(x)
-            for x in (*(fynd.get("evidence") or []), *(fynd.get("likely_pains") or []),
-                      *(fynd.get("trigger_events") or []))
-            if str(x).strip()
-        ],
+        # Grindens belägg: bara de verifierade citaten (se `las`).
+        "research_evidence": list(citat),
         "disqualifiers": prospekt.get("disqualifiers") or [],
     }
 
@@ -157,6 +153,17 @@ async def las(storage, tenant_id: str, prospect_id: str) -> dict[str, Any] | Non
         underlag = _ur_aldre_korning(logg, prospekt, produkter, list(profil.get("vinklar") or []))
         if underlag is None:
             return None
+    # Grundningsgrindens belägg byggs om ur det som bevisligen står i hämtat
+    # material: de verifierade citaten och de uppmätta webbsignalerna (Antons
+    # beställning 2026-11-16). Körningar före dess sparade modellens
+    # overifierade evidence, likely_pains och trigger_events här, och då hade
+    # ett påhittat tal blivit tillåtet även i ett omskrivet utkast eller en
+    # uppföljning. Pains och triggers står kvar som underlag till prompten.
+    underlag["research_evidence"] = [
+        str(x)
+        for x in (*(underlag.get("citat") or []), *(underlag.get("webbsignaler") or []))
+        if str(x).strip()
+    ]
     for falt in ("qualified", "icp_fit", "disqualifiers", "lagesbeskrivning"):
         if prospekt.get(falt) is not None:
             underlag[falt] = prospekt[falt]

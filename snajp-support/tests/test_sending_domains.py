@@ -9,9 +9,21 @@ class Provider:
     def __init__(self):self.kw=None
     async def send(self,**kw):self.kw=kw;return 're_msg_1'
 
+
+async def _inga_begransade(tenant_id):
+    return set()
+
+
+def _lager():
+    # Sändaren prövar art. 18-spärren före varje svar (sender._vagra_begransad);
+    # stubben svarar att ingen mottagare är spärrad.
+    storage=type("S",(),{})();storage._sending_domains={}
+    storage.list_begransade=_inga_begransade
+    return storage
+
 @pytest.mark.anyio
 async def test_verified_tenant_domain_controls_from_reply_to_and_tags():
-    storage=type("S",(),{})();storage._sending_domains={}
+    storage=_lager()
     await save_config(storage,'t1',{'resend_domain_id':'d1','sending_domain':'mail.acme.se','from_local_part':'support','from_name':'Acme','reply_to':'help@acme.se','status':'verified','dns_records':[]})
     p=Provider();note=await skicka_supportsvar({'provider':'imap','from_email':'buyer@example.com','subject':'Hi'},content='Svar',tenant_id='t1',storage=storage,provider=p)
     assert p.kw['from_email']=='support@mail.acme.se';assert p.kw['reply_to']=='help@acme.se'
@@ -19,7 +31,7 @@ async def test_verified_tenant_domain_controls_from_reply_to_and_tags():
 
 @pytest.mark.anyio
 async def test_unverified_domain_uses_visible_global_fallback():
-    storage=type("S",(),{})();storage._sending_domains={}
+    storage=_lager()
     await save_config(storage,'t1',{'resend_domain_id':'d1','sending_domain':'mail.acme.se','from_local_part':'support','from_name':'Acme','reply_to':'help@acme.se','status':'pending','dns_records':[]})
     p=Provider();note=await skicka_supportsvar({'provider':'imap','from_email':'buyer@example.com','subject':'Hi'},content='Svar',tenant_id='t1',storage=storage,provider=p)
     assert p.kw['from_email'] is None; assert 'synlig fallback' in note

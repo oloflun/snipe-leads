@@ -24,7 +24,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 ADDONS_TS = ROOT / "lib" / "addons.ts"
-MIGRATIONS = ROOT / "supabase" / "migrations"
+MIGRATIONS = ROOT / "db" / "migrations"
 
 #: `addonKeys = [ "inbox", ... ] as const` — nycklarna UI:t känner till.
 _ADDON_KEYS_RE = re.compile(r"export const addonKeys\s*=\s*\[(.*?)\]\s*as const", re.DOTALL)

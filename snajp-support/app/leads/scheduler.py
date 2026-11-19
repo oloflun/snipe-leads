@@ -117,6 +117,29 @@ async def _kor_send_guard(storage, tenant_id: str, thread: dict, message: dict, 
     # enda punkt där allt är känt samtidigt, och den enda som varje utskick
     # måste passera. Ett påhittat bolagsnamn kan råka vara ett riktigt bolag
     # — då är mejlet inte ofarligt, det är fel mottagare.
+    #
+    # Begränsad behandling (GDPR art. 18, migration 124) går före allt: den
+    # registrerade har begärt att uppgifterna bara får lagras, och det gäller
+    # hos varje kund. Går listan inte att läsa köas mejlet om i stället för
+    # att skickas: en spärr som inte går att pröva får inte släppa igenom.
+    mottagare = str(thread.get("prospect_email") or "").strip().casefold()
+    if mottagare:
+        try:
+            begransade = await storage.list_begransade(tenant_id)
+        except Exception:  # noqa: BLE001
+            logger.exception("Kunde inte läsa behandlingsbegränsningarna för %s", tenant_id)
+            return GuardBeslut(
+                SG_KOLA_OM,
+                "begransning_okand",
+                "Begränsningarna av behandling (art. 18) gick inte att läsa; utskicket väntar.",
+            )
+        if mottagare in begransade:
+            return GuardBeslut(
+                SG_BLOCKERA,
+                "begransad_behandling",
+                "Mottagaren har begärt begränsning av behandlingen (GDPR art. 18). "
+                "Inget utskick förrän begränsningen hävts.",
+            )
     prospect_id = thread.get("prospect_id")
     if prospect_id:
         prospect = await storage.get_prospect(tenant_id, prospect_id) or {}

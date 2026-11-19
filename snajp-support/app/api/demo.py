@@ -46,9 +46,21 @@ def _client_ip(request: Request) -> str:
     return request.client.host if request.client else "unknown"
 
 
+def _giltigt_sessions_id(varde: str | None) -> str | None:
+    """Cookien, om den är ett id servern själv kan ha gett (ett UUID).
+
+    Värdet skrivs tillbaka i Set-Cookie och blir nyckel i processminnets tak,
+    så godtycklig text av godtycklig längd ska inte speglas (kodskanningen
+    2026-11-17). Ett annat värde ger en ny session, som en rensad cookie."""
+    try:
+        return str(uuid.UUID(str(varde))) if varde and len(varde) <= 36 else None
+    except ValueError:
+        return None
+
+
 @router.post("/api/demo/chat")
 async def demo_chat(request: Request, response: Response, payload: DemoChatRequest) -> dict:
-    session_id = request.cookies.get(_SESSION_COOKIE) or str(uuid.uuid4())
+    session_id = _giltigt_sessions_id(request.cookies.get(_SESSION_COOKIE)) or str(uuid.uuid4())
     response.set_cookie(_SESSION_COOKIE, session_id, max_age=PUBLIC_DEMO_SESSION_WINDOW_SECONDS, httponly=True)
 
     ip_scope = rate_limit_db.demo_ip_scope(_client_ip(request))

@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
 import { getTenant } from "@/lib/tenants";
 
-// Tunn proxy mot den headless Snajp-Support-backenden (FastAPI, hostas på Render).
+// Tunn proxy mot den headless Snajp-Support-backenden (FastAPI, Railway-tjänsten `api`).
 // Webbläsaren träffar bara Next-appen; den interna API-nyckeln sätts server-side.
-// SNAJP_SUPPORT_URL sätts på Vercel till Render-URL:en; lokalt defaultar den till 8000.
+// SNAJP_SUPPORT_URL sätts på Railway-tjänsten `web` (scripts/railway_provision.py);
+// lokalt defaultar den till 8000.
 
 export const SNAJP_SUPPORT_URL = process.env.SNAJP_SUPPORT_URL ?? "http://127.0.0.1:8000";
 export const SNAJP_INTERNAL_API_KEY =
@@ -192,6 +193,22 @@ export async function proxyWithApiKey(
   const budgetMs = budgetFor(path, metod);
   let lastCause: unknown;
 
+  // Åtkomstloggen (migration 123): ett master-anrop bär plattformsadminens
+  // användar-id, så att backendens rad i audit_logs säger VEM. Id:t kommer ur
+  // sessionen här på servern, aldrig från klienten, och backenden godtar det
+  // bara om det står i platform_admins. Utan admin (provisioneringen av en ny
+  // kund) skickas ingen rubrik och raden blir "master-nyckel".
+  const adminHuvud: Record<string, string> = {};
+  if (process.env.SNAJP_MASTER_API_KEY && apiKey === process.env.SNAJP_MASTER_API_KEY) {
+    try {
+      const { getPlatformAdmin } = await import("@/lib/auth/admin");
+      const admin = await getPlatformAdmin();
+      if (admin) adminHuvud["X-Snajp-Admin"] = admin.userId;
+    } catch {
+      // Utanför en begäran (ingen session att läsa): raden blir utan admin.
+    }
+  }
+
   for (let attempt = 0; attempt < forsok; attempt += 1) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), budgetMs);
@@ -206,6 +223,7 @@ export async function proxyWithApiKey(
           // från klienten — och backenden kan bara BEGRÄNSA på den, inte höja.
           ...(userId ? { "X-Snajp-User": userId } : {}),
           ...(isDemo ? { "X-Snajp-Demo": "true" } : {}),
+          ...adminHuvud,
           ...(init.headers ?? {})
         },
         cache: "no-store",

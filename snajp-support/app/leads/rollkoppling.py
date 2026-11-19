@@ -39,7 +39,7 @@ def rollkoppling_oklar(rad: dict[str, Any]) -> bool:
     namngiven = bool(str(rad.get("contact_name") or "").strip())
     epost = str(rad.get("contact_email") or "").strip()
     personlig_adress = bool(
-        epost and Prospect(company_name="", contact_email=epost).epost_ar_personlig
+        epost and Prospect(company_name="", contact_email=epost).epost_bar_namnform
     )
     return namngiven or personlig_adress
 

@@ -1,0 +1,1037 @@
+{
+  "hamtad": "2026-11-19T00:20:26Z",
+  "miljoer": {
+    "development": {
+      "tjanster": {
+        "Postgres": {
+          "installningar": {
+            "bevakade_sokvagar": [],
+            "byggare": "RAILPACK",
+            "byggkommando": null,
+            "cron": null,
+            "deploy_trigger": [],
+            "dockerfile": null,
+            "domaner": {
+              "egna": [],
+              "railway": []
+            },
+            "draining_s": null,
+            "fore_deploy": null,
+            "halsokontroll": {
+              "sokvag": null,
+              "timeout_s": null
+            },
+            "kalla": {
+              "image": "ghcr.io/railwayapp-templates/postgres-ssl:17",
+              "repo": null
+            },
+            "omstart": {
+              "max_forsok": 10,
+              "policy": "ON_FAILURE"
+            },
+            "overlap_s": null,
+            "railway_konfigfil": null,
+            "regioner_och_repliker": {
+              "ams": 1
+            },
+            "rotkatalog": null,
+            "sleep": false,
+            "startkommando": null,
+            "tcp_proxy": {
+              "pa": true,
+              "portar": [
+                5432
+              ]
+            },
+            "volymer": [
+              {
+                "monteringssokvag": "/var/lib/postgresql/data",
+                "namn": "postgres-volume-BM7I"
+              }
+            ]
+          },
+          "varden": {
+            "RAILWAY_ENVIRONMENT": "development",
+            "RAILWAY_ENVIRONMENT_NAME": "development",
+            "RAILWAY_PRIVATE_DOMAIN": "postgres.railway.internal",
+            "RAILWAY_PROJECT_NAME": "brave-passion",
+            "RAILWAY_SERVICE_API_URL": "api-development-5cc3.up.railway.app",
+            "RAILWAY_SERVICE_SUPPORT_URL": "support-development.up.railway.app",
+            "RAILWAY_SERVICE_WEB_URL": "web-development-6c85.up.railway.app",
+            "SSL_CERT_DAYS": "820"
+          },
+          "variabler": [
+            "PGDATA",
+            "POSTGRES_DB",
+            "POSTGRES_PASSWORD",
+            "POSTGRES_USER",
+            "RAILWAY_ENVIRONMENT",
+            "RAILWAY_ENVIRONMENT_ID",
+            "RAILWAY_ENVIRONMENT_NAME",
+            "RAILWAY_PRIVATE_DOMAIN",
+            "RAILWAY_PROJECT_ID",
+            "RAILWAY_PROJECT_NAME",
+            "RAILWAY_SERVICE_API_URL",
+            "RAILWAY_SERVICE_ID",
+            "RAILWAY_SERVICE_NAME",
+            "RAILWAY_SERVICE_SUPPORT_URL",
+            "RAILWAY_SERVICE_WEB_URL",
+            "RAILWAY_TCP_APPLICATION_PORT",
+            "RAILWAY_TCP_PROXY_DOMAIN",
+            "RAILWAY_TCP_PROXY_PORT",
+            "RAILWAY_VOLUME_ID",
+            "RAILWAY_VOLUME_MOUNT_PATH",
+            "RAILWAY_VOLUME_NAME",
+            "SSL_CERT_DAYS"
+          ]
+        },
+        "Redis": {
+          "installningar": {
+            "bevakade_sokvagar": [],
+            "byggare": "RAILPACK",
+            "byggkommando": null,
+            "cron": null,
+            "deploy_trigger": [],
+            "dockerfile": null,
+            "domaner": {
+              "egna": [],
+              "railway": []
+            },
+            "draining_s": null,
+            "fore_deploy": null,
+            "halsokontroll": {
+              "sokvag": null,
+              "timeout_s": null
+            },
+            "kalla": {
+              "image": "redis:8.2",
+              "repo": null
+            },
+            "omstart": {
+              "max_forsok": 10,
+              "policy": "ON_FAILURE"
+            },
+            "overlap_s": null,
+            "railway_konfigfil": null,
+            "regioner_och_repliker": {
+              "ams": 1
+            },
+            "rotkatalog": null,
+            "sleep": false,
+            "startkommando": "/bin/sh -c \"rm -rf $RAILWAY_VOLUME_MOUNT_PATH/lost+found/ && exec docker-entrypoint.sh redis-server --requirepass $REDIS_PASSWORD --save 60 1 --dir $RAILWAY_VOLUME_MOUNT_PATH\"",
+            "tcp_proxy": {
+              "pa": false,
+              "portar": []
+            },
+            "volymer": [
+              {
+                "monteringssokvag": "/data",
+                "namn": "redis-volume"
+              }
+            ]
+          },
+          "varden": {
+            "RAILWAY_ENVIRONMENT": "development",
+            "RAILWAY_ENVIRONMENT_NAME": "development",
+            "RAILWAY_PRIVATE_DOMAIN": "redis.railway.internal",
+            "RAILWAY_PROJECT_NAME": "brave-passion",
+            "RAILWAY_SERVICE_API_URL": "api-development-5cc3.up.railway.app",
+            "RAILWAY_SERVICE_SUPPORT_URL": "support-development.up.railway.app",
+            "RAILWAY_SERVICE_WEB_URL": "web-development-6c85.up.railway.app"
+          },
+          "variabler": [
+            "RAILWAY_ENVIRONMENT",
+            "RAILWAY_ENVIRONMENT_ID",
+            "RAILWAY_ENVIRONMENT_NAME",
+            "RAILWAY_PRIVATE_DOMAIN",
+            "RAILWAY_PROJECT_ID",
+            "RAILWAY_PROJECT_NAME",
+            "RAILWAY_SERVICE_API_URL",
+            "RAILWAY_SERVICE_ID",
+            "RAILWAY_SERVICE_NAME",
+            "RAILWAY_SERVICE_SUPPORT_URL",
+            "RAILWAY_SERVICE_WEB_URL",
+            "RAILWAY_VOLUME_ID",
+            "RAILWAY_VOLUME_MOUNT_PATH",
+            "RAILWAY_VOLUME_NAME",
+            "REDISHOST",
+            "REDISPASSWORD",
+            "REDISPORT",
+            "REDISUSER",
+            "REDIS_PASSWORD",
+            "REDIS_URL"
+          ]
+        },
+        "api": {
+          "installningar": {
+            "bevakade_sokvagar": [],
+            "byggare": "RAILPACK",
+            "byggkommando": null,
+            "cron": null,
+            "deploy_trigger": [
+              {
+                "gren": "development",
+                "leverantor": "github",
+                "repo": "oloflun/snipe-leads",
+                "vanta_pa_ci": false
+              }
+            ],
+            "dockerfile": "snajp-support/Dockerfile",
+            "domaner": {
+              "egna": [],
+              "railway": [
+                "api-development-5cc3.up.railway.app"
+              ]
+            },
+            "draining_s": null,
+            "fore_deploy": null,
+            "halsokontroll": {
+              "sokvag": "/health/live",
+              "timeout_s": null
+            },
+            "kalla": {
+              "image": null,
+              "repo": "oloflun/snipe-leads"
+            },
+            "omstart": {
+              "max_forsok": 10,
+              "policy": "ON_FAILURE"
+            },
+            "overlap_s": null,
+            "railway_konfigfil": null,
+            "regioner_och_repliker": {
+              "ams": 1
+            },
+            "rotkatalog": "/",
+            "sleep": false,
+            "startkommando": null,
+            "tcp_proxy": {
+              "pa": false,
+              "portar": []
+            },
+            "volymer": []
+          },
+          "varden": {
+            "AUTO_SEND_MIN_CONFIDENCE": "0.75",
+            "EMAIL_PROVIDER": "resend",
+            "FLYTT_MAL_URL": "https://api-production-d7695.up.railway.app",
+            "INBOX_POLL_SECONDS": "300",
+            "INKORG_JEV": "off",
+            "IRIS_JEV": "pa",
+            "LEADS_MERINFO": "scrapegraph",
+            "LEADS_PIPELINE": "v2",
+            "LEADS_WORKERS": "16",
+            "LLM_PROVIDER": "gemini",
+            "MODEL": "gemini-3.8-flash",
+            "PUBLIC_BASE_URL": "https://web-development-6c85.up.railway.app",
+            "RAILWAY_ENVIRONMENT": "development",
+            "RAILWAY_ENVIRONMENT_NAME": "development",
+            "RAILWAY_PRIVATE_DOMAIN": "snipe-leads.railway.internal",
+            "RAILWAY_PROJECT_NAME": "brave-passion",
+            "RAILWAY_PUBLIC_DOMAIN": "api-development-5cc3.up.railway.app",
+            "RAILWAY_SERVICE_API_URL": "api-development-5cc3.up.railway.app",
+            "RAILWAY_SERVICE_NAME": "api",
+            "RAILWAY_SERVICE_SUPPORT_URL": "support-development.up.railway.app",
+            "RAILWAY_SERVICE_WEB_URL": "web-development-6c85.up.railway.app",
+            "RAILWAY_STATIC_URL": "api-development-5cc3.up.railway.app",
+            "SEMANTIC_CACHE": "shadow",
+            "VISION_MODEL": "gemini-3.8-flash",
+            "WEBBPOOL_FORDELNING": "1"
+          },
+          "variabler": [
+            "AUTO_SEND_MIN_CONFIDENCE",
+            "DATABASE_URL",
+            "DEEPSEEK_API_KEY",
+            "EMAIL_PROVIDER",
+            "FLYTT_MAL_URL",
+            "FLYTT_NYCKEL",
+            "GEMINI_API_KEY",
+            "GOOGLE_CLOUD_REGION",
+            "GOOGLE_SERVICE_ACCOUNT_JSON",
+            "IMAP_FOLDER",
+            "IMAP_PASSWORD_SNAJP",
+            "INBOX_POLL_SECONDS",
+            "INKORG_JEV",
+            "INTEGRATION_NYCKEL",
+            "IRIS_JEV",
+            "LEADS_DAILY_TOKEN_BUDGET",
+            "LEADS_MERINFO",
+            "LEADS_PIPELINE",
+            "LEADS_WORKERS",
+            "LLM_PROVIDER",
+            "LLM_TIMEOUT_CHATT_S",
+            "MODEL",
+            "PUBLIC_BASE_URL",
+            "RAILWAY_ENVIRONMENT",
+            "RAILWAY_ENVIRONMENT_ID",
+            "RAILWAY_ENVIRONMENT_NAME",
+            "RAILWAY_PRIVATE_DOMAIN",
+            "RAILWAY_PROJECT_ID",
+            "RAILWAY_PROJECT_NAME",
+            "RAILWAY_PUBLIC_DOMAIN",
+            "RAILWAY_SERVICE_API_URL",
+            "RAILWAY_SERVICE_ID",
+            "RAILWAY_SERVICE_NAME",
+            "RAILWAY_SERVICE_SUPPORT_URL",
+            "RAILWAY_SERVICE_WEB_URL",
+            "RAILWAY_STATIC_URL",
+            "REDIS_URL",
+            "REDIS_URL_FORE_FLYTT",
+            "RESEND_API_KEY",
+            "RESEND_WEBHOOK_SECRET",
+            "SCRAPEGRAPHAI_API_KEY",
+            "SEMANTIC_CACHE",
+            "SMTP_FROM",
+            "SMTP_FROM_NAME",
+            "SNAJP_DEMO_API_KEY",
+            "SNAJP_MASTER_API_KEY",
+            "SNAJP_SKILL_UNLOCK_KEY",
+            "SUPPORT_BUDGET_LIVRUSTNING",
+            "TYPESAFE_API_KEY",
+            "VERTEX_INBADDNING_REGION",
+            "VERTEX_RESERVREGIONER",
+            "VISION_MODEL",
+            "WEBBPOOL_FORDELNING",
+            "WEBBPOOL_INSPIRATION",
+            "WEBBPOOL_MOTTAGARE"
+          ]
+        },
+        "migrera": {
+          "installningar": {
+            "bevakade_sokvagar": [
+              "db/migrations/**",
+              "railway/000_auth_compat.sql",
+              "railway/Dockerfile.drift",
+              "scripts/railway_drift.py",
+              "scripts/railway_migrate.py"
+            ],
+            "byggare": "RAILPACK",
+            "byggkommando": null,
+            "cron": null,
+            "deploy_trigger": [
+              {
+                "gren": "development",
+                "leverantor": "github",
+                "repo": "oloflun/snipe-leads",
+                "vanta_pa_ci": false
+              }
+            ],
+            "dockerfile": "railway/Dockerfile.drift",
+            "domaner": {
+              "egna": [],
+              "railway": []
+            },
+            "draining_s": null,
+            "fore_deploy": null,
+            "halsokontroll": {
+              "sokvag": null,
+              "timeout_s": null
+            },
+            "kalla": {
+              "image": null,
+              "repo": "oloflun/snipe-leads"
+            },
+            "omstart": {
+              "max_forsok": 10,
+              "policy": "NEVER"
+            },
+            "overlap_s": null,
+            "railway_konfigfil": null,
+            "regioner_och_repliker": {
+              "ams": 1
+            },
+            "rotkatalog": "/",
+            "sleep": false,
+            "startkommando": "python scripts/railway_drift.py migrera",
+            "tcp_proxy": {
+              "pa": false,
+              "portar": []
+            },
+            "volymer": []
+          },
+          "varden": {
+            "MIGRERA_APPLY": "1",
+            "RAILWAY_ENVIRONMENT": "development",
+            "RAILWAY_ENVIRONMENT_NAME": "development",
+            "RAILWAY_PRIVATE_DOMAIN": "migrera.railway.internal",
+            "RAILWAY_PROJECT_NAME": "brave-passion",
+            "RAILWAY_SERVICE_API_URL": "api-development-5cc3.up.railway.app",
+            "RAILWAY_SERVICE_NAME": "migrera",
+            "RAILWAY_SERVICE_SUPPORT_URL": "support-development.up.railway.app",
+            "RAILWAY_SERVICE_WEB_URL": "web-development-6c85.up.railway.app"
+          },
+          "variabler": [
+            "MIGRERA_APPLY",
+            "MIGRERA_PG_URL",
+            "RAILWAY_ENVIRONMENT",
+            "RAILWAY_ENVIRONMENT_ID",
+            "RAILWAY_ENVIRONMENT_NAME",
+            "RAILWAY_PRIVATE_DOMAIN",
+            "RAILWAY_PROJECT_ID",
+            "RAILWAY_PROJECT_NAME",
+            "RAILWAY_SERVICE_API_URL",
+            "RAILWAY_SERVICE_ID",
+            "RAILWAY_SERVICE_NAME",
+            "RAILWAY_SERVICE_SUPPORT_URL",
+            "RAILWAY_SERVICE_WEB_URL"
+          ]
+        },
+        "support": {
+          "installningar": {
+            "bevakade_sokvagar": [],
+            "byggare": "RAILPACK",
+            "byggkommando": null,
+            "cron": null,
+            "deploy_trigger": [
+              {
+                "gren": "development",
+                "leverantor": "github",
+                "repo": "oloflun/snipe-leads",
+                "vanta_pa_ci": false
+              }
+            ],
+            "dockerfile": null,
+            "domaner": {
+              "egna": [],
+              "railway": [
+                "support-development.up.railway.app"
+              ]
+            },
+            "draining_s": null,
+            "fore_deploy": null,
+            "halsokontroll": {
+              "sokvag": null,
+              "timeout_s": null
+            },
+            "kalla": {
+              "image": null,
+              "repo": "oloflun/snipe-leads"
+            },
+            "omstart": {
+              "max_forsok": 10,
+              "policy": "ON_FAILURE"
+            },
+            "overlap_s": null,
+            "railway_konfigfil": null,
+            "regioner_och_repliker": {
+              "ams": 1
+            },
+            "rotkatalog": "/support-webb",
+            "sleep": false,
+            "startkommando": null,
+            "tcp_proxy": {
+              "pa": false,
+              "portar": []
+            },
+            "volymer": []
+          },
+          "varden": {
+            "RAILWAY_ENVIRONMENT": "development",
+            "RAILWAY_ENVIRONMENT_NAME": "development",
+            "RAILWAY_PRIVATE_DOMAIN": "support.railway.internal",
+            "RAILWAY_PROJECT_NAME": "brave-passion",
+            "RAILWAY_PUBLIC_DOMAIN": "support-development.up.railway.app",
+            "RAILWAY_SERVICE_API_URL": "api-development-5cc3.up.railway.app",
+            "RAILWAY_SERVICE_NAME": "support",
+            "RAILWAY_SERVICE_SUPPORT_URL": "support-development.up.railway.app",
+            "RAILWAY_SERVICE_WEB_URL": "web-development-6c85.up.railway.app",
+            "RAILWAY_STATIC_URL": "support-development.up.railway.app",
+            "SNAJP_SUPPORT_URL": "https://api-development-5cc3.up.railway.app"
+          },
+          "variabler": [
+            "AGENTSAJT_EPOST",
+            "AGENTSAJT_LOSEN",
+            "AGENTSAJT_SSO_SECRET",
+            "RAILWAY_ENVIRONMENT",
+            "RAILWAY_ENVIRONMENT_ID",
+            "RAILWAY_ENVIRONMENT_NAME",
+            "RAILWAY_PRIVATE_DOMAIN",
+            "RAILWAY_PROJECT_ID",
+            "RAILWAY_PROJECT_NAME",
+            "RAILWAY_PUBLIC_DOMAIN",
+            "RAILWAY_SERVICE_API_URL",
+            "RAILWAY_SERVICE_ID",
+            "RAILWAY_SERVICE_NAME",
+            "RAILWAY_SERVICE_SUPPORT_URL",
+            "RAILWAY_SERVICE_WEB_URL",
+            "RAILWAY_STATIC_URL",
+            "SNAJP_AGENT_API_KEY",
+            "SNAJP_SUPPORT_TILLATNA",
+            "SNAJP_SUPPORT_URL"
+          ]
+        },
+        "web": {
+          "installningar": {
+            "bevakade_sokvagar": [],
+            "byggare": "RAILPACK",
+            "byggkommando": null,
+            "cron": null,
+            "deploy_trigger": [
+              {
+                "gren": "development",
+                "leverantor": "github",
+                "repo": "oloflun/snipe-leads",
+                "vanta_pa_ci": false
+              }
+            ],
+            "dockerfile": null,
+            "domaner": {
+              "egna": [],
+              "railway": [
+                "web-development-6c85.up.railway.app"
+              ]
+            },
+            "draining_s": null,
+            "fore_deploy": null,
+            "halsokontroll": {
+              "sokvag": "/api/health",
+              "timeout_s": null
+            },
+            "kalla": {
+              "image": null,
+              "repo": "oloflun/snipe-leads"
+            },
+            "omstart": {
+              "max_forsok": 10,
+              "policy": "ON_FAILURE"
+            },
+            "overlap_s": null,
+            "railway_konfigfil": null,
+            "regioner_och_repliker": {
+              "ams": 1
+            },
+            "rotkatalog": "/",
+            "sleep": false,
+            "startkommando": null,
+            "tcp_proxy": {
+              "pa": false,
+              "portar": []
+            },
+            "volymer": []
+          },
+          "varden": {
+            "MODEL": "gemini-3.8-flash",
+            "NEXT_PUBLIC_SITE_URL": "https://web-development-6c85.up.railway.app",
+            "RAILWAY_ENVIRONMENT": "development",
+            "RAILWAY_ENVIRONMENT_NAME": "development",
+            "RAILWAY_PRIVATE_DOMAIN": "web.railway.internal",
+            "RAILWAY_PROJECT_NAME": "brave-passion",
+            "RAILWAY_PUBLIC_DOMAIN": "web-development-6c85.up.railway.app",
+            "RAILWAY_SERVICE_API_URL": "api-development-5cc3.up.railway.app",
+            "RAILWAY_SERVICE_NAME": "web",
+            "RAILWAY_SERVICE_SUPPORT_URL": "support-development.up.railway.app",
+            "RAILWAY_SERVICE_WEB_URL": "web-development-6c85.up.railway.app",
+            "RAILWAY_STATIC_URL": "web-development-6c85.up.railway.app",
+            "SITE_URL": "https://web-development-6c85.up.railway.app",
+            "SNAJP_SUPPORT_INTERNAL_URL": "http://snipe-leads.railway.internal:8080",
+            "SNAJP_SUPPORT_URL": "https://api-development-5cc3.up.railway.app",
+            "SUPPORT_EXTERN_URL": "https://support-development.up.railway.app"
+          },
+          "variabler": [
+            "AUTH_SECRET",
+            "AUTH_TRUST_HOST",
+            "DATABASE_URL",
+            "DEEPSEEK_API_KEY",
+            "GOOGLE_CLOUD_REGION",
+            "GOOGLE_SERVICE_ACCOUNT_JSON",
+            "MODEL",
+            "NEXT_PUBLIC_SITE_URL",
+            "RAILWAY_ENVIRONMENT",
+            "RAILWAY_ENVIRONMENT_ID",
+            "RAILWAY_ENVIRONMENT_NAME",
+            "RAILWAY_PRIVATE_DOMAIN",
+            "RAILWAY_PROJECT_ID",
+            "RAILWAY_PROJECT_NAME",
+            "RAILWAY_PUBLIC_DOMAIN",
+            "RAILWAY_SERVICE_API_URL",
+            "RAILWAY_SERVICE_ID",
+            "RAILWAY_SERVICE_NAME",
+            "RAILWAY_SERVICE_SUPPORT_URL",
+            "RAILWAY_SERVICE_WEB_URL",
+            "RAILWAY_STATIC_URL",
+            "RESEND_API_KEY",
+            "SITE_URL",
+            "SMTP_FROM",
+            "SMTP_FROM_NAME",
+            "SNAJP_INTERNAL_API_KEY",
+            "SNAJP_KEY_LIVRUSTNING",
+            "SNAJP_KEY_SNAJP",
+            "SNAJP_KEY_TESTKUND",
+            "SNAJP_MASTER_API_KEY",
+            "SNAJP_SUPPORT_INTERNAL_URL",
+            "SNAJP_SUPPORT_URL",
+            "SUPPORT_EXTERN_URL"
+          ]
+        }
+      }
+    },
+    "main": {
+      "tjanster": {
+        "Postgres": {
+          "installningar": {
+            "bevakade_sokvagar": [],
+            "byggare": "RAILPACK",
+            "byggkommando": null,
+            "cron": null,
+            "deploy_trigger": [],
+            "dockerfile": null,
+            "domaner": {
+              "egna": [],
+              "railway": []
+            },
+            "draining_s": null,
+            "fore_deploy": null,
+            "halsokontroll": {
+              "sokvag": null,
+              "timeout_s": null
+            },
+            "kalla": {
+              "image": "ghcr.io/railwayapp-templates/postgres-ssl:17",
+              "repo": null
+            },
+            "omstart": {
+              "max_forsok": 10,
+              "policy": "ON_FAILURE"
+            },
+            "overlap_s": null,
+            "railway_konfigfil": null,
+            "regioner_och_repliker": {
+              "ams": 1
+            },
+            "rotkatalog": null,
+            "sleep": false,
+            "startkommando": null,
+            "tcp_proxy": {
+              "pa": true,
+              "portar": [
+                5432
+              ]
+            },
+            "volymer": [
+              {
+                "monteringssokvag": "/var/lib/postgresql/data",
+                "namn": "postgres-volume"
+              }
+            ]
+          },
+          "varden": {
+            "RAILWAY_ENVIRONMENT": "main",
+            "RAILWAY_ENVIRONMENT_NAME": "main",
+            "RAILWAY_PRIVATE_DOMAIN": "postgres.railway.internal",
+            "RAILWAY_PROJECT_NAME": "brave-passion",
+            "RAILWAY_SERVICE_API_URL": "api-production-d7695.up.railway.app",
+            "RAILWAY_SERVICE_SUPPORT_URL": "support-main.up.railway.app",
+            "RAILWAY_SERVICE_WEB_URL": "www.snajp.se",
+            "SSL_CERT_DAYS": "820"
+          },
+          "variabler": [
+            "PGDATA",
+            "POSTGRES_DB",
+            "POSTGRES_PASSWORD",
+            "POSTGRES_USER",
+            "RAILWAY_ENVIRONMENT",
+            "RAILWAY_ENVIRONMENT_ID",
+            "RAILWAY_ENVIRONMENT_NAME",
+            "RAILWAY_PRIVATE_DOMAIN",
+            "RAILWAY_PROJECT_ID",
+            "RAILWAY_PROJECT_NAME",
+            "RAILWAY_SERVICE_API_URL",
+            "RAILWAY_SERVICE_ID",
+            "RAILWAY_SERVICE_NAME",
+            "RAILWAY_SERVICE_SUPPORT_URL",
+            "RAILWAY_SERVICE_WEB_URL",
+            "RAILWAY_TCP_APPLICATION_PORT",
+            "RAILWAY_TCP_PROXY_DOMAIN",
+            "RAILWAY_TCP_PROXY_PORT",
+            "RAILWAY_VOLUME_ID",
+            "RAILWAY_VOLUME_MOUNT_PATH",
+            "RAILWAY_VOLUME_NAME",
+            "SSL_CERT_DAYS"
+          ]
+        },
+        "Redis-main": {
+          "installningar": {
+            "bevakade_sokvagar": [],
+            "byggare": "RAILPACK",
+            "byggkommando": null,
+            "cron": null,
+            "deploy_trigger": [],
+            "dockerfile": null,
+            "domaner": {
+              "egna": [],
+              "railway": []
+            },
+            "draining_s": null,
+            "fore_deploy": null,
+            "halsokontroll": {
+              "sokvag": null,
+              "timeout_s": null
+            },
+            "kalla": {
+              "image": "redis:8.2",
+              "repo": null
+            },
+            "omstart": {
+              "max_forsok": 10,
+              "policy": "ON_FAILURE"
+            },
+            "overlap_s": null,
+            "railway_konfigfil": null,
+            "regioner_och_repliker": {
+              "ams": 1
+            },
+            "rotkatalog": null,
+            "sleep": false,
+            "startkommando": "/bin/sh -c \"rm -rf $RAILWAY_VOLUME_MOUNT_PATH/lost+found/ && exec docker-entrypoint.sh redis-server --requirepass $REDIS_PASSWORD --save 60 1 --dir $RAILWAY_VOLUME_MOUNT_PATH\"",
+            "tcp_proxy": {
+              "pa": false,
+              "portar": []
+            },
+            "volymer": [
+              {
+                "monteringssokvag": "/data",
+                "namn": "redis-main-volume"
+              }
+            ]
+          },
+          "varden": {
+            "RAILWAY_ENVIRONMENT": "main",
+            "RAILWAY_ENVIRONMENT_NAME": "main",
+            "RAILWAY_PRIVATE_DOMAIN": "redis-main.railway.internal",
+            "RAILWAY_PROJECT_NAME": "brave-passion",
+            "RAILWAY_SERVICE_API_URL": "api-production-d7695.up.railway.app",
+            "RAILWAY_SERVICE_SUPPORT_URL": "support-main.up.railway.app",
+            "RAILWAY_SERVICE_WEB_URL": "www.snajp.se"
+          },
+          "variabler": [
+            "RAILWAY_ENVIRONMENT",
+            "RAILWAY_ENVIRONMENT_ID",
+            "RAILWAY_ENVIRONMENT_NAME",
+            "RAILWAY_PRIVATE_DOMAIN",
+            "RAILWAY_PROJECT_ID",
+            "RAILWAY_PROJECT_NAME",
+            "RAILWAY_SERVICE_API_URL",
+            "RAILWAY_SERVICE_ID",
+            "RAILWAY_SERVICE_NAME",
+            "RAILWAY_SERVICE_SUPPORT_URL",
+            "RAILWAY_SERVICE_WEB_URL",
+            "RAILWAY_VOLUME_ID",
+            "RAILWAY_VOLUME_MOUNT_PATH",
+            "RAILWAY_VOLUME_NAME",
+            "REDISHOST",
+            "REDISPASSWORD",
+            "REDISPORT",
+            "REDISUSER",
+            "REDIS_PASSWORD",
+            "REDIS_URL"
+          ]
+        },
+        "api": {
+          "installningar": {
+            "bevakade_sokvagar": [],
+            "byggare": "RAILPACK",
+            "byggkommando": null,
+            "cron": null,
+            "deploy_trigger": [
+              {
+                "gren": "main",
+                "leverantor": "github",
+                "repo": "oloflun/snipe-leads",
+                "vanta_pa_ci": false
+              }
+            ],
+            "dockerfile": "snajp-support/Dockerfile",
+            "domaner": {
+              "egna": [],
+              "railway": [
+                "api-production-d7695.up.railway.app"
+              ]
+            },
+            "draining_s": null,
+            "fore_deploy": null,
+            "halsokontroll": {
+              "sokvag": "/health/live",
+              "timeout_s": null
+            },
+            "kalla": {
+              "image": null,
+              "repo": "oloflun/snipe-leads"
+            },
+            "omstart": {
+              "max_forsok": 10,
+              "policy": "ON_FAILURE"
+            },
+            "overlap_s": null,
+            "railway_konfigfil": null,
+            "regioner_och_repliker": {
+              "ams": 1
+            },
+            "rotkatalog": "/",
+            "sleep": false,
+            "startkommando": null,
+            "tcp_proxy": {
+              "pa": false,
+              "portar": []
+            },
+            "volymer": []
+          },
+          "varden": {
+            "AUTO_SEND_MIN_CONFIDENCE": "0.75",
+            "EMAIL_PROVIDER": "resend",
+            "INBOX_POLL_SECONDS": "300",
+            "INKORG_JEV": "off",
+            "LEADS_PIPELINE": "v2",
+            "LEADS_REGISTER": "allabolag",
+            "LLM_PROVIDER": "gemini",
+            "MODEL": "gemini-2.5-flash",
+            "PUBLIC_BASE_URL": "https://web-production-1fe2c.up.railway.app",
+            "RAILWAY_ENVIRONMENT": "main",
+            "RAILWAY_ENVIRONMENT_NAME": "main",
+            "RAILWAY_PRIVATE_DOMAIN": "snipe-leads.railway.internal",
+            "RAILWAY_PROJECT_NAME": "brave-passion",
+            "RAILWAY_PUBLIC_DOMAIN": "api-production-d7695.up.railway.app",
+            "RAILWAY_SERVICE_API_URL": "api-production-d7695.up.railway.app",
+            "RAILWAY_SERVICE_NAME": "api",
+            "RAILWAY_SERVICE_SUPPORT_URL": "support-main.up.railway.app",
+            "RAILWAY_SERVICE_WEB_URL": "www.snajp.se",
+            "RAILWAY_STATIC_URL": "api-production-d7695.up.railway.app",
+            "SEMANTIC_CACHE": "shadow"
+          },
+          "variabler": [
+            "AUTO_SEND_MIN_CONFIDENCE",
+            "DATABASE_URL",
+            "DEEPSEEK_API_KEY",
+            "EMAIL_PROVIDER",
+            "FLYTT_NYCKEL",
+            "GEMINI_API_KEY",
+            "GOOGLE_SERVICE_ACCOUNT_JSON",
+            "IMAP_FOLDER",
+            "IMAP_PASSWORD_SNAJP",
+            "INBOX_POLL_SECONDS",
+            "INKORG_JEV",
+            "INTEGRATION_NYCKEL",
+            "LEADS_DAILY_TOKEN_BUDGET",
+            "LEADS_PIPELINE",
+            "LEADS_REGISTER",
+            "LLM_PROVIDER",
+            "MODEL",
+            "PUBLIC_BASE_URL",
+            "RAILWAY_ENVIRONMENT",
+            "RAILWAY_ENVIRONMENT_ID",
+            "RAILWAY_ENVIRONMENT_NAME",
+            "RAILWAY_PRIVATE_DOMAIN",
+            "RAILWAY_PROJECT_ID",
+            "RAILWAY_PROJECT_NAME",
+            "RAILWAY_PUBLIC_DOMAIN",
+            "RAILWAY_SERVICE_API_URL",
+            "RAILWAY_SERVICE_ID",
+            "RAILWAY_SERVICE_NAME",
+            "RAILWAY_SERVICE_SUPPORT_URL",
+            "RAILWAY_SERVICE_WEB_URL",
+            "RAILWAY_STATIC_URL",
+            "REDIS_URL",
+            "REDIS_URL_FORE_FLYTT",
+            "RESEND_API_KEY",
+            "RESEND_WEBHOOK_SECRET",
+            "SCRAPEGRAPHAI_API_KEY",
+            "SEMANTIC_CACHE",
+            "SMTP_FROM",
+            "SMTP_FROM_NAME",
+            "SNAJP_DEMO_API_KEY",
+            "SNAJP_MASTER_API_KEY",
+            "SNAJP_SKILL_UNLOCK_KEY",
+            "TYPESAFE_API_KEY"
+          ]
+        },
+        "support": {
+          "installningar": {
+            "bevakade_sokvagar": [],
+            "byggare": "RAILPACK",
+            "byggkommando": null,
+            "cron": null,
+            "deploy_trigger": [
+              {
+                "gren": "main",
+                "leverantor": "github",
+                "repo": "oloflun/snipe-leads",
+                "vanta_pa_ci": false
+              }
+            ],
+            "dockerfile": null,
+            "domaner": {
+              "egna": [],
+              "railway": [
+                "support-main.up.railway.app"
+              ]
+            },
+            "draining_s": null,
+            "fore_deploy": null,
+            "halsokontroll": {
+              "sokvag": null,
+              "timeout_s": null
+            },
+            "kalla": {
+              "image": null,
+              "repo": "oloflun/snipe-leads"
+            },
+            "omstart": {
+              "max_forsok": 10,
+              "policy": "ON_FAILURE"
+            },
+            "overlap_s": null,
+            "railway_konfigfil": null,
+            "regioner_och_repliker": {
+              "ams": 1
+            },
+            "rotkatalog": "/support-webb",
+            "sleep": false,
+            "startkommando": null,
+            "tcp_proxy": {
+              "pa": false,
+              "portar": []
+            },
+            "volymer": []
+          },
+          "varden": {
+            "RAILWAY_ENVIRONMENT": "main",
+            "RAILWAY_ENVIRONMENT_NAME": "main",
+            "RAILWAY_PRIVATE_DOMAIN": "support.railway.internal",
+            "RAILWAY_PROJECT_NAME": "brave-passion",
+            "RAILWAY_PUBLIC_DOMAIN": "support-main.up.railway.app",
+            "RAILWAY_SERVICE_API_URL": "api-production-d7695.up.railway.app",
+            "RAILWAY_SERVICE_NAME": "support",
+            "RAILWAY_SERVICE_SUPPORT_URL": "support-main.up.railway.app",
+            "RAILWAY_SERVICE_WEB_URL": "www.snajp.se",
+            "RAILWAY_STATIC_URL": "support-main.up.railway.app",
+            "SNAJP_SUPPORT_URL": "https://api-production-d7695.up.railway.app"
+          },
+          "variabler": [
+            "AGENTSAJT_EPOST",
+            "AGENTSAJT_LOSEN",
+            "AGENTSAJT_SSO_SECRET",
+            "RAILWAY_ENVIRONMENT",
+            "RAILWAY_ENVIRONMENT_ID",
+            "RAILWAY_ENVIRONMENT_NAME",
+            "RAILWAY_PRIVATE_DOMAIN",
+            "RAILWAY_PROJECT_ID",
+            "RAILWAY_PROJECT_NAME",
+            "RAILWAY_PUBLIC_DOMAIN",
+            "RAILWAY_SERVICE_API_URL",
+            "RAILWAY_SERVICE_ID",
+            "RAILWAY_SERVICE_NAME",
+            "RAILWAY_SERVICE_SUPPORT_URL",
+            "RAILWAY_SERVICE_WEB_URL",
+            "RAILWAY_STATIC_URL",
+            "SNAJP_AGENT_API_KEY",
+            "SNAJP_SUPPORT_TILLATNA",
+            "SNAJP_SUPPORT_URL"
+          ]
+        },
+        "web": {
+          "installningar": {
+            "bevakade_sokvagar": [],
+            "byggare": "RAILPACK",
+            "byggkommando": null,
+            "cron": null,
+            "deploy_trigger": [
+              {
+                "gren": "main",
+                "leverantor": "github",
+                "repo": "oloflun/snipe-leads",
+                "vanta_pa_ci": false
+              }
+            ],
+            "dockerfile": null,
+            "domaner": {
+              "egna": [
+                "www.snajp.se"
+              ],
+              "railway": [
+                "web-production-1fe2c.up.railway.app"
+              ]
+            },
+            "draining_s": null,
+            "fore_deploy": null,
+            "halsokontroll": {
+              "sokvag": "/api/health",
+              "timeout_s": null
+            },
+            "kalla": {
+              "image": null,
+              "repo": "oloflun/snipe-leads"
+            },
+            "omstart": {
+              "max_forsok": 10,
+              "policy": "ON_FAILURE"
+            },
+            "overlap_s": null,
+            "railway_konfigfil": null,
+            "regioner_och_repliker": {
+              "ams": 1
+            },
+            "rotkatalog": "/",
+            "sleep": false,
+            "startkommando": null,
+            "tcp_proxy": {
+              "pa": false,
+              "portar": []
+            },
+            "volymer": []
+          },
+          "varden": {
+            "NEXT_PUBLIC_SITE_URL": "https://www.snajp.se",
+            "RAILWAY_ENVIRONMENT": "main",
+            "RAILWAY_ENVIRONMENT_NAME": "main",
+            "RAILWAY_PRIVATE_DOMAIN": "web.railway.internal",
+            "RAILWAY_PROJECT_NAME": "brave-passion",
+            "RAILWAY_PUBLIC_DOMAIN": "www.snajp.se",
+            "RAILWAY_SERVICE_API_URL": "api-production-d7695.up.railway.app",
+            "RAILWAY_SERVICE_NAME": "web",
+            "RAILWAY_SERVICE_SUPPORT_URL": "support-main.up.railway.app",
+            "RAILWAY_SERVICE_WEB_URL": "www.snajp.se",
+            "RAILWAY_STATIC_URL": "www.snajp.se",
+            "SITE_URL": "https://www.snajp.se",
+            "SNAJP_SUPPORT_INTERNAL_URL": "http://snipe-leads.railway.internal:8080",
+            "SNAJP_SUPPORT_URL": "https://api-production-d7695.up.railway.app",
+            "SUPPORT_EXTERN_URL": "https://support-main.up.railway.app"
+          },
+          "variabler": [
+            "AUTH_SECRET",
+            "AUTH_TRUST_HOST",
+            "DATABASE_URL",
+            "DEEPSEEK_API_KEY",
+            "GOOGLE_SERVICE_ACCOUNT_JSON",
+            "NEXT_PUBLIC_SITE_URL",
+            "RAILWAY_ENVIRONMENT",
+            "RAILWAY_ENVIRONMENT_ID",
+            "RAILWAY_ENVIRONMENT_NAME",
+            "RAILWAY_PRIVATE_DOMAIN",
+            "RAILWAY_PROJECT_ID",
+            "RAILWAY_PROJECT_NAME",
+            "RAILWAY_PUBLIC_DOMAIN",
+            "RAILWAY_SERVICE_API_URL",
+            "RAILWAY_SERVICE_ID",
+            "RAILWAY_SERVICE_NAME",
+            "RAILWAY_SERVICE_SUPPORT_URL",
+            "RAILWAY_SERVICE_WEB_URL",
+            "RAILWAY_STATIC_URL",
+            "RESEND_API_KEY",
+            "SITE_URL",
+            "SMTP_FROM",
+            "SMTP_FROM_NAME",
+            "SNAJP_INTERNAL_API_KEY",
+            "SNAJP_KEY_LIVRUSTNING",
+            "SNAJP_KEY_SNAJP",
+            "SNAJP_KEY_TESTKUND",
+            "SNAJP_MASTER_API_KEY",
+            "SNAJP_SUPPORT_INTERNAL_URL",
+            "SNAJP_SUPPORT_URL",
+            "SUPPORT_EXTERN_URL"
+          ]
+        }
+      }
+    }
+  },
+  "projekt": "brave-passion",
+  "projekt_id": "b4ec4f98-2d00-4410-bfae-12fb69652d0b"
+}

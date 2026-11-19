@@ -1,0 +1,254 @@
+# Säkerhetsbevakning (ISO 27001 A.5.6, kontakt med intressegrupper;
+# omvärldsbevakning, genomgången 2026-11-18).
+#
+# VAD: varje körning läser två källor och jämför med vår stack:
+#   * CERT-SE:s publika RSS-flöde (https://www.cert.se/feed/rss.xml; den äldre
+#     adressen https://www.cert.se/feed.rss omdirigeras dit). Rubrik och
+#     ingress jämförs mot sökord som "Next.js", "PostgreSQL", "Redis".
+#   * GitHub Advisory Database, REST-API:t GET /advisories (globala advisories,
+#     typerna reviewed och malware), filtrerat på ekosystem (npm, pip) och
+#     paketen vi kör.
+# Stacken, sökorden och paketen står i .github/sakerhetsbevakning.json och är
+# härledda ur repot (package.json, package-lock.json, snajp-support/
+# requirements.txt, Dockerfile:s basimage, Postgres 17 i verify.yml). Utöka
+# listan där; flödet behöver inte röras. Logiken bor i
+# scripts/sakerhetsbevakning.py och är testad utan nätverk i
+# tests/test_sakerhetsbevakning.py.
+#
+# En träff publicerad de senaste sju dagarna blir ett ärende med etiketten
+# `sakerhetsbevakning`. Flera träffar i samma körning samlas i ett ärende (högst
+# 15 per ärende), varje träff med källa, rubrik, länk, publiceringsdatum, vad
+# som matchade och, för GitHub-advisories, berörda versionsintervall mot
+# versionen i package-lock.json (npm) eller kravet i requirements.txt (pip).
+# Dedup: varje träff bär en stabil nyckel (GHSA-id, eller CERT-SE-postens länk)
+# i en dold markör i ärendet. Nycklar som redan står i ett ärende med etiketten,
+# öppet eller stängt, skapar inget nytt ärende. Sju dagars fönster kostar
+# därför inga dubbletter, och en tappad körning (se SCHEMAT) missar inget.
+#
+# VARFÖR: ISO 27001 A.5.6 kräver att vi håller kontakt med intressegrupper och
+# säkerhetsforum. CERT-SE är Sveriges nationella CSIRT; GitHubs databas är den
+# som täcker våra npm- och pip-beroenden. Dependabot ser bara det som står i
+# låsfilerna; den här bevakningen ser också CERT-SE:s varningar om plattformar
+# (Postgres, Redis, Railway, Google Cloud) som inte är paket.
+#
+# Inga hemligheter utöver den inbyggda GITHUB_TOKEN (issues: write för
+# ärendena, actions: read för reservgrinden). Anropen bär bara paketnamn och
+# datum; ingen kunddata, inga svarskroppar från vår drift. Text ur källorna
+# saneras innan den hamnar i ett ärende (inga @-omnämnanden, ingen HTML).
+#
+# Provkörning: starta manuellt med `simulera_traff`
+#   gh workflow run sakerhetsbevakning.yml -R oloflun/snipe-leads -f simulera_traff=true
+# En provträff med en nyckel unik för körningen läggs till, så ett ärende
+# märkt "(simulerat prov)" skapas varje gång. Stäng det efteråt.
+#
+# KÄNDA BEGRÄNSNINGAR
+#   * Ingen läser ärendena ännu. Vem som tar emot och bedömer dem (och inom
+#     vilken tid) är ägarens beslut; tills Anton bestämt det når ärendet bara
+#     den som bevakar repot via GitHubs e-post.
+#   * Flödet ser bara det som är publicerat: GitHub-reviewed och malware-
+#     advisories (inte unreviewed), och CERT-SE:s rubrik och ingress. En
+#     sårbarhet som CERT-SE bara nämner längre ned i ett veckobrev syns inte,
+#     och CERT-SE:s flöde bär bara de senaste tio posterna.
+#   * Sökorden matchar ord, inte betydelse: "React" eller "GitHub" kan ge en
+#     träff som inte berör oss, och en produkt som saknas i listan ger ingen.
+#   * Versionsjämförelsen är en ledtråd. npm jämförs mot package-lock.json;
+#     pip har ingen låsfil, så där står bara kravet ur requirements.txt.
+#     Transitiva beroenden bevakas bara om de står i listan (som starlette och
+#     @auth/core gör).
+#   * GitHubs schemalagda körningar tappas ofta i det här repot, se SCHEMAT.
+#
+# SCHEMAT (samma mönster som overvakning.yml, se dess avsnitt "SCHEMAT OCH
+# VARFÖR DET INTE RÄCKER")
+#   1. Två scheman om dygnet på mindre belastade minuter (05:37 och 15:19 UTC),
+#      så att ett tappat schema inte ensamt avgör.
+#   2. En reserv: flödet körs också när Verify eller synk gått klart
+#      (workflow_run). Reservgrinden (jobbet `grind`) avbryter tidigt om
+#      bevakningen redan gått de senaste 20 timmarna, så att varje push inte
+#      ger en ny körning mot källorna. 20 och inte 24 timmar, så att en körning
+#      vid ungefär samma tid nästa dygn inte hoppas över. Grinden räknar bara
+#      körningar där jobbet "Bevaka säkerhetsflödena" lyckades, inte körningar
+#      som grinden själv avbrutit.
+#   3. Dödmanskontrollen i verify.yml (scripts/overvakning_dodman.sh med
+#      FLODE=sakerhetsbevakning.yml): har bevakningen inte lyckats på två dygn
+#      öppnas ett ärende med etiketten `sakerhetsbevakning-tyst`. Det här
+#      flödet stänger det när det går. Ett källfel (en källa svarar inte) fäller
+#      jobbet efter att ärendena för den andra källan skapats, så ett bestående
+#      källfel syns också som att bevakningen inte lyckats.
+#   Schemat körs från standardgrenen (development); filen måste finnas där.
+#
+# Minuter: grinden kostar en debiterad minut per Verify- och synkkörning,
+# själva bevakningen ett par minuter per dygn.
+name: säkerhetsbevakning
+
+on:
+  schedule:
+    - cron: "37 5 * * *"
+    - cron: "19 15 * * *"
+  # Reserven: körs när CI eller synken gått klart, oavsett utfall och gren.
+  # Grinden nedan begränsar den till en körning per 20 timmar.
+  workflow_run:
+    workflows: ["Verify", "synk"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      simulera_traff:
+        description: "Lägg till en simulerad träff, så att ärendekedjan kan provas"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  issues: write
+  actions: read
+
+concurrency:
+  group: sakerhetsbevakning
+  cancel-in-progress: false
+
+env:
+  ETIKETT: sakerhetsbevakning
+  # Publiceringsfönstret i dagar. Dedup mot ärendena gör överlapp gratis.
+  DAGAR: "7"
+  # Reservgrinden: hoppa över om bevakningen lyckats så här nyligen (20 h).
+  RESERV_SEKUNDER: "72000"
+
+jobs:
+  grind:
+    name: Reservgrind
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    outputs:
+      kor: ${{ steps.grind.outputs.kor }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: github.event_name == 'workflow_run'
+        with:
+          persist-credentials: false
+
+      - name: Har bevakningen redan gått det senaste dygnet?
+        id: grind
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          HANDELSE: ${{ github.event_name }}
+        run: |
+          set -uo pipefail
+          if [[ "$HANDELSE" != "workflow_run" ]]; then
+            echo "Händelse $HANDELSE: kör alltid."
+            echo "kor=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # Kan åldern inte läsas körs bevakningen hellre en gång för mycket.
+          if ! alder="$(LAGE=alder FLODE=sakerhetsbevakning.yml bash scripts/overvakning_dodman.sh)" \
+              || ! [[ "$alder" =~ ^-?[0-9]+$ ]]; then
+            echo "::warning::Kunde inte läsa när bevakningen senast gick; kör."
+            echo "kor=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if (( alder < RESERV_SEKUNDER )); then
+            echo "Bevakningen lyckades för $((alder / 60)) minuter sedan (gräns $((RESERV_SEKUNDER / 60))); reserven behövs inte."
+            echo "kor=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "Bevakningen lyckades senast för $((alder / 60)) minuter sedan; reserven kör."
+            echo "kor=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  bevaka:
+    # Namnet läses av scripts/overvakning_dodman.sh (profilen
+    # sakerhetsbevakning.yml); byt inte det ena utan det andra.
+    name: Bevaka säkerhetsflödena
+    needs: grind
+    if: needs.grind.outputs.kor == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Skapa etiketten om den saknas
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          if ! gh label list --limit 200 --json name --jq '.[].name' | grep -qx "$ETIKETT"; then
+            gh label create "$ETIKETT" --color 5319E7 \
+              --description "Säkerhetsbevakningen: CERT-SE eller GitHub-advisory som berör vår stack"
+          fi
+
+      - name: Hämta källorna och jämför med stacken
+        id: bevaka
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          # Skriptet läser GITHUB_TOKEN för GitHub-API:t (högre gräns).
+          GITHUB_TOKEN: ${{ github.token }}
+          SIMULERA_TRAFF: ${{ github.event_name == 'workflow_dispatch' && inputs.simulera_traff || false }}
+        run: |
+          set -uo pipefail
+          KANDA="$RUNNER_TEMP/kanda.txt"
+          UT="$RUNNER_TEMP/traffar.json"
+          # Alla ärendekroppar med etiketten, öppna och stängda: nycklarna i
+          # dem är dedup-underlaget. Faller läsningen avbryts körningen, hellre
+          # än att samma träffar öppnas igen.
+          if ! gh api --paginate "repos/$GH_REPO/issues?labels=$ETIKETT&state=all&per_page=100" \
+              --jq '.[].body // ""' > "$KANDA"; then
+            echo "::error::Kunde inte läsa befintliga ärenden; avbryter för att inte skapa dubbletter."
+            exit 1
+          fi
+          flaggor=()
+          [[ "$SIMULERA_TRAFF" == "true" ]] && flaggor+=(--simulera-traff)
+          python3 scripts/sakerhetsbevakning.py \
+            --dagar "$DAGAR" \
+            --kanda-nycklar "$KANDA" \
+            --ut "$UT" \
+            --korning "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
+            "${flaggor[@]}"
+          kod=$?
+          echo "kod=$kod" >> "$GITHUB_OUTPUT"
+          # 1 = konfigurationen går inte att läsa: inga ärenden, fäll direkt.
+          [[ $kod -eq 1 || ! -s "$UT" ]] && exit 1
+          exit 0
+
+      - name: Skapa ärenden för nya träffar
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          UT="$RUNNER_TEMP/traffar.json"
+          antal="$(jq '.arenden | length' "$UT")"
+          {
+            echo "### Säkerhetsbevakning"
+            echo
+            echo "Nya träffar: $(jq '.traffar | length' "$UT"), ärenden: $antal"
+            jq -r '.traffar[] | "- \(.nyckel) (\(.kalla))"' "$UT"
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [[ "$antal" -eq 0 ]]; then echo "Inga nya träffar."; exit 0; fi
+          for i in $(seq 0 $((antal - 1))); do
+            jq -r ".arenden[$i].kropp" "$UT" > "$RUNNER_TEMP/kropp.md"
+            titel="$(jq -r ".arenden[$i].titel" "$UT")"
+            gh issue create --title "$titel" --label "$ETIKETT" --body-file "$RUNNER_TEMP/kropp.md"
+          done
+
+      - name: Fäll körningen om en källa inte gick att läsa
+        if: steps.bevaka.outputs.kod != '0'
+        shell: bash
+        run: |
+          jq -r '.fel[] | "::error::\(.)"' "$RUNNER_TEMP/traffar.json"
+          echo "En källa kunde inte läsas. Ärendena för den andra källan är skapade; nästa körning tar igen resten inom publiceringsfönstret."
+          exit 1
+
+      - name: Stäng dödmanskontrollens ärende (bevakningen går)
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          LAGE: stang
+          FLODE: sakerhetsbevakning.yml
+        run: bash scripts/overvakning_dodman.sh

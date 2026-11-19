@@ -655,13 +655,25 @@ def _siffror(text: str) -> set[str]:
     return set(re.findall(r"\d+", _TUSENTAL.sub("", text or "")))
 
 
+#: Numreringen i en lista ("1. **Urvalet:**", eller "2) " först på en rad) är
+#: ingen sakuppgift. Den visades som "Siffrorna 1, 3, 4 står inte i
+#: källsidan" i genomgången 2026-11-18. Strikt med flit: bara radstart eller
+#: fetstil före eller efter ("1. **Urvalet:**" och "**1. Urvalet:**", den
+#: senare var den som låg kvar i omprövningen), så att "returer inom 14." i
+#: slutet av en mening prövas.
+_LISTNUMMER = re.compile(
+    r"(?m)^[ \t]*\d{1,2}[.)][ \t]+|(?<!\S)\d{1,2}\.[ \t]+(?=\*\*)|(?<=\*\*)\d{1,2}[.)][ \t]+"
+)
+
+
 def obelagda_siffror(innehall: str, kalltext: str) -> list[str]:
     """Tal i artikeln som inte står i källsidan. "1 499 kr" och "1499 kr" räknas lika.
 
     En billig kontroll av den dyraste felsorten: ett påhittat pris eller en
     påhittad returfrist ser exakt lika trovärdig ut som en riktig.
     """
-    return sorted(_siffror(innehall) - _siffror(kalltext), key=lambda s: (len(s), s))
+    utan_numrering = _LISTNUMMER.sub("", innehall or "")
+    return sorted(_siffror(utan_numrering) - _siffror(kalltext), key=lambda s: (len(s), s))
 
 
 @dataclass
@@ -679,8 +691,17 @@ def _klipp(text: str, langd: int) -> str:
     return text if len(text) <= langd else text[: langd - 1].rstrip() + "…"
 
 
-def _sanera_artikel(ra: dict, kallsidor: dict[str, Sida]) -> tuple[dict | None, str]:
-    """Modellens förslag -> artikel som klarar KbArticle, eller (None, skäl)."""
+def _sanera_artikel(
+    ra: dict, kallsidor: dict[str, Sida], webbplatstext: str = ""
+) -> tuple[dict | None, str]:
+    """Modellens förslag -> artikel som klarar KbArticle, eller (None, skäl).
+
+    `webbplatstext` är alla skannade sidors text. Ett tal som saknas på
+    källsidan men står på en annan sida av samma webbplats är inte påhittat:
+    modellen har bara angett fel sida som källa. Genomgången 2026-11-18
+    varnade för "50, 70" i ett förslag som angav /support-pa-svenska, medan
+    "50–70 %" stod på /support.
+    """
     if not isinstance(ra, dict):
         return None, "inte ett objekt"
     kalla = str(ra.get("source_url") or "").strip()
@@ -695,17 +716,17 @@ def _sanera_artikel(ra: dict, kallsidor: dict[str, Sida]) -> tuple[dict | None, 
     varningar: list[str] = []
     if kategori not in CATEGORIES:
         ny = kategori_for(sida.url, titel)
-        varningar.append(f"Modellen föreslog kategorin {kategori!r}, som inte finns — ändrad till {ny}.")
+        varningar.append(f"Modellen föreslog kategorin {kategori!r}, som inte finns. Den ändrades till {ny}.")
         kategori = ny
     try:
         konfidens = max(0.0, min(1.0, float(ra.get("confidence", 0.5))))
     except (TypeError, ValueError):
         konfidens = 0.5
-    obelagda = obelagda_siffror(innehall, sida.text)
+    obelagda = obelagda_siffror(innehall, f"{sida.text}\n{webbplatstext}")
     if obelagda:
         konfidens = min(konfidens, 0.3)
         varningar.append(
-            f"Siffrorna {', '.join(obelagda)} står inte i källsidan — kontrollera eller stryk."
+            f"Siffrorna {', '.join(obelagda)} står inte på webbplatsen. Kontrollera eller stryk dem."
         )
     return {
         "title": titel,
@@ -873,6 +894,7 @@ async def utkast_med_llm(genomsokning: Genomsokning, bolagsnamn: str, anropa: Ll
         utkast.ej_utkastade.extend(d.sida.url for d in batch)
     system = SYSTEMPROMPT.format(namn=bolagsnamn or "bolaget", kategorier=", ".join(CATEGORIES))
     sedda_titlar: set[str] = set()
+    webbplatstext = "\n".join(s.text for s in genomsokning.sidor)
 
     for batch in batcher[:MAX_LLM_ANROP]:
         utkast.anrop += 1
@@ -885,7 +907,7 @@ async def utkast_med_llm(genomsokning: Genomsokning, bolagsnamn: str, anropa: Ll
             continue
         kallsidor = {d.sida.url: d.sida for d in batch}
         for ra in data.get("artiklar") or []:
-            artikel, skal = _sanera_artikel(ra, kallsidor)
+            artikel, skal = _sanera_artikel(ra, kallsidor, webbplatstext)
             if artikel is None:
                 utkast.kasserade.append({"title": str((ra or {}).get("title", ""))[:120], "skal": skal})
                 continue

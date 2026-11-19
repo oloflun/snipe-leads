@@ -63,6 +63,7 @@ ADMIN_EMAIL = "snajpsupport@gmail.com"
 # riktiga plattformsadminkontot (Fas 0-fyndet K1, 2026-11-09); den lokala
 # stacken har inget med det kontot att göra och får ett eget, öppet värde.
 # QA-skripten mot localhost körs med QA_ADMIN_LOSEN satt till detsamma.
+ADMIN_LOSEN_UR_MILJON = bool(os.environ.get("SNAJP_ADMIN_PASSWORD"))
 ADMIN_LOSEN = os.environ.get("SNAJP_ADMIN_PASSWORD", "lokal-admin-2026")
 
 
@@ -508,7 +509,11 @@ def main() -> int:
     skriv_env_local()
     utfardas_tenantnyckel()
 
-    skriv(NASTA_STEG.format(app=LOSEN_APP, email=ADMIN_EMAIL, losen=ADMIN_LOSEN,
+    # Det lokala standardvärdet skrivs ut; ett lösenord ur miljön gör det inte
+    # (kodskanningen 2026-11-17): den som satt det vet det redan, och en
+    # terminallogg ska inte bära ett riktigt lösenord.
+    losen = "(lösenordet i SNAJP_ADMIN_PASSWORD)" if ADMIN_LOSEN_UR_MILJON else ADMIN_LOSEN
+    skriv(NASTA_STEG.format(app=LOSEN_APP, email=ADMIN_EMAIL, losen=losen,
                             kund=KUND_EPOST, kundlosen=KUND_LOSEN))
     return 0
 

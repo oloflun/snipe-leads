@@ -9,6 +9,1265 @@ möjligt), vad det betyder i koden.
 
 ---
 
+## 2026-11-19 — Adminrätten kräver att sessionen gått igenom andra steget; KB-godkännandet blir atomiskt (Claude (agent), efter Codex-granskningen av release-PR:en)
+
+**Beslut.**
+1. En plattformsadmin vars konto har aktiv tvåfaktor får adminrätt bara i en session
+   vars inloggning gick igenom andra steget. JWT:n bär markeringen `tvafaktor` från
+   inloggningen; den kan inte läggas till i efterhand. Gäller oavsett tvånget
+   `TVAFAKTOR_KRAVS_FOR_PLATTFORMSADMIN`. Efter aktiveringen loggar adminen ut och in
+   igen med koden (texten vid återställningskoderna säger det).
+2. Att lägga till ett förslag från webbplatsskanningen skriver artikeln och beslutet i
+   en transaktion (`lagg_till_kb_forslag`). Migration 130 lägger tillbaka utkast som
+   den gamla vägen lämnat `tillagd` utan artikel.
+
+**Resonemanget.** Codex (gpt-6-astra) visade att aktiveringen inte återkallade några
+sessioner: en session från före aktiveringen, eller en stulen sådan, behöll adminrätten
+utan kod. Och att godkännandet committade beslutet före artikeln, så att ett avbrott
+tappade förslaget för gott. Att kräva markeringen i stället för att räkna
+sessionsversioner håller ändringen liten: alla gamla sessioner för konton med
+tvåfaktor saknar markeringen och förlorar adminrätten vid deployen, vilket är avsikten.
+
+**I koden.** `lib/auth.ts` (jwt/session), `lib/auth/inloggningssteg.ts`,
+`lib/auth/tvafaktor-session.ts`, `lib/auth/admin.ts`, `snajp-support/app/api/kb.py`,
+`storage/*.lagg_till_kb_forslag`, `db/migrations/20261119100000_130_kb_forslag_utan_artikel.sql`.
+
+**Runda 2 (samma dag).** Tre fel till, rättade:
+- "Avbryt" på en påbörjad inrullning kunde i ett kapplopp radera ett nyss aktiverat skydd
+  utan kod. Migration 131 ger en egen funktion som bara raderar en rad utan `aktiverad_at`.
+- Begränsad behandling (art. 18) prövas nu också i sändaren, precis före varje supportsvar
+  (`sender._vagra_begransad`, fail closed), så att ett utkast från före spärren inte går ut
+  när det godkänns. Api:t svarar 409 med skälet.
+- KB-versionen höjs direkt efter varje sparat förslag, så att ett fel på nästa inte lämnar
+  gamla cachesvar giltiga. Kvar är bara fönstret mellan commit och höjning om processen dör
+  hårt; det har varje KB-skrivväg, och TTL:n begränsar det.
+
+**Runda 3 (samma dag).** Tre fel till, rättade:
+- **Gallringen i spegeln (INV-DATA-005 snävas in).** `gallra_alla` och jobbet gjorde
+  ingenting i development, på antagandet att synken för över main:s gallring. Men synken
+  omfattar inte bland annat genererade mejl, kontakter, säljlistan, feedbacktexten,
+  händelserna och sidcachen, så sådana rader i spegeln låg kvar för alltid. Nu gallrar
+  spegeln själv de tabeller synken inte för över, med samma policy och urval
+  (migration 133); de synkade lämnas åt synken som förut, eftersom en egen radering där
+  hade kopierats tillbaka från main. `tests/test_gallring_spegel.py` håller SQL-listan
+  ihop med `railway_synk.SYNK`. `scripts/gallra.py --satt-policy` mot main skriver nu
+  policyn också i development, eftersom policytabellen inte synkas. Invarianten sade
+  "aldrig i en spegel"; den säger nu "i en spegel bara det osynkade". **Anton:** gallringen
+  är fortfarande AV i båda miljöerna (`GALLRING_AKTIV`). Ska spegeln gallra behöver
+  flaggan slås på i development också.
+- **Tvåfaktoraktiveringen** slog på den hemlighet som stod i raden vid aktiveringen, inte
+  den som koden prövats mot. En parallell "Påbörja" däremellan gav aktiv tvåfaktor med en
+  hemlighet appen aldrig fått. Migration 132: aktiveringen tar med den verifierade
+  (krypterade) hemligheten och går bara igenom om raden fortfarande bär den.
+- **Utgångna KB-artiklar i svarscachen.** Ingen skriver i basen när en artikel går ut vid
+  midnatt, så KB-versionen stod still och ett svar cachat på artikelns sista dag kunde
+  serveras i upp till 21 dagar till. KB-versionen i cachenyckeln bär nu tenantens
+  närmaste `giltig_till` (`versioner.kb_version_med_giltighet`); när dagen passerat byter
+  den värde. Går utgången inte att läsa rörs cachen inte alls.
+
+**Runda 4 (samma dag).** Två luckor i runda 3:s rättningar, rättade:
+- Synken raderar i replica-läge, där kaskaderna inte körs. När main raderade en kund,
+  en agentkörning eller en tråd blev barnen utanför synken kvar i spegeln utan förälder
+  (kanalkontakter med telefonnummer och namn, chattläge, feedbacktext, demolänkar).
+  Migration 134: `gallra_spegelns_foraldralosa()` raderar dem, oberoende av policy, och
+  `gallra_alla` anropar den i spegeln. `tests/test_gallring_spegel.py` hittar varje sådant
+  kaskadbarn ur migrationskedjan och kräver att det städas.
+- Cacheversionen fick prefixet `g1:` också utan slutdatum. Annars hade den återgått till
+  den rena räknaren när den sista tidsbegränsade artikeln gått ut, och en post cachad
+  före ändringen hade matchat igen.
+
+**Runda 5 (samma dag).** Ett fel, från 119, rättat: gallringsurvalet skyddade bara den
+närmaste föräldern till ett kvarvarande ärende. I en kedja A ← B ← C med C ny raderades A,
+främmande nyckeln bröts och hela kundens gallring rullades tillbaka. Migration 135 utesluter
+varje förfader rekursivt; databastestet prövar tre led och att kundens övriga kategorier
+gallras.
+
+**Runda 6 (samma dag).** Två fel, rättade:
+
+- *Gallringen kunde radera ny aktivitet.* Urvalen låg i arrayer utan lås och raderingen gick
+  på id. Ett meddelande som sparades mellan urvalet och raderingen hindrade inte att ärendet
+  togs, och kaskaden tog meddelandet med sig. Migration 136 låser varje tabell urvalet läser
+  eller raderar i (share row exclusive) före urvalet. Låset tas med nowait i tio sekunders
+  försök, så gallringen väntar aldrig med lås i handen och kan inte hamna i ett dödläge med en
+  skrivande transaktion; går det inte ger den upp för kunden, och nästa körning tar den.
+  Skälet till ett tabellås i stället för radlås och ny kontroll: urvalet läser ett trettiotal
+  tabeller, och en ny kontroll per kategori hade dubblerat hela urvalet. Priset är att
+  skrivningar i de tabellerna väntar medan gallringen pågår, några sekunder en gång per dygn.
+  Ett test håller låslistan lika med tabellerna funktionen rör, och ett databastest sparar ett
+  meddelande mitt under gallringen.
+- *KB-versionen överlevde inte ett Redis-fel.* Räknaren i Redis höjdes efter att artikeln
+  committats; föll Redis eller processen där matchade gamla svar i upp till 21 dagar till.
+  Migration 137 lägger en räknare per kund i databasen (`ss_kb_version`) som en trigger på
+  `ss_knowledge_base` höjer i samma transaktion som varje ändring, oavsett skrivväg. Den ingår
+  i cachenyckeln, som nu har prefixet `g2:`. Redis-räknaren står kvar bredvid; den kan bara
+  göra en post omatchbar tidigare, aldrig hålla en gammal vid liv.
+
+**Runda 7 (samma dag).** Ett fel, i runda 6:s rättning, rättat: tabellåset i 136 stoppade
+skrivningar för alla kunder, och eftersom `gallra_alla` kör alla kunder i en transaktion låg
+det kvar tills hela dygnskörningen var klar. Ett lås per kund som skrivvägarna tar valdes
+bort: skrivningarna går genom ett fyrtiotal vägar utanför `_scoped` och dessutom webben, så
+ett frivilligt lås hade haft luckor. Migration 138 väljer i stället två gånger. Mellan varven
+låses kandidaterna och raderna deras aktivitet räknas ur (`for update`, högst tio sekunders
+väntan), och bara snittet raderas. En ny barnrad blockeras av föräldens lås genom den
+främmande nyckeln, en låst rad kan inte ändras, och det som hann skrivas före låset syns i
+andra varvet. Låsen gäller bara rader utan aktivitet på två år, så att de ligger kvar till
+dygnskörningens slut stör ingen. Ett test kräver radlås eller ett uttalat skäl för varje
+tabell urvalet rör; databastester visar att ett meddelande under gallringen står kvar och att
+skrivningar hos andra kunder går igenom medan gallringen pågår.
+
+**Runda 8 (samma dag).** Två fel, rättade:
+
+- *Spegelns provrader gallrades aldrig.* 133 nollade hela urvalet för de synkade tabellerna
+  i spegeln, men synken undantar provkörningarna (`is_test`, testprospekt, provlistor), så de
+  fick varken en radering från main eller en egen. Migration 139 lägger synkens villkor för
+  en provkörning i varje synkat urval i spegeln, i urvalet och inte efteråt, så att
+  beroendena mellan urvalen räknas på samma rader. Testet håller villkoren lika med `SYNK`;
+  ett databastest gallrar gamla provrader och lämnar gamla speglade rader i samma tabeller.
+- *Tvåfaktor kunde stänga ute ett konto från Google eller Microsoft.* Kontot saknar lösenord;
+  efter aktiveringen nekas OAuth-vägen och lösenordsvägen finns inte. Inrullningen vägrar nu
+  ett konto utan lösenord och pekar på "Glömt lösenordet?" (felkoden `kraver_losenord`), och
+  migration 140 vägrar aktiveringen i databasen också. Ett TOTP-steg efter OAuth valdes bort:
+  det är ett nytt inloggningsflöde, och lösenordskravet stänger luckan med det som finns.
+  Samma migration tar bort `tvafaktor_aktivera` med två argument, som inte prövade
+  hemligheten, inte anropas sedan 132 och aldrig nått main.
+
+**Runda 9 (samma dag).** Två fel, rättade:
+
+- *Ett redigerat utkast räknades inte som en behandling.* Att spara ett väntande utkast
+  ändrar bara subject och body, så ett gammalt prospekt vars utkast just sparats valdes ändå,
+  och kaskaden tog det nysparade utkastet och kön. Samma lucka fanns för listradernas utkast,
+  kampanjmodellens utkast och ett godkännande i kön. Migration 141 lägger `behandlad_at` på
+  de fyra tabellerna, satt av en trigger bara när texten eller statusen faktiskt ändras, och
+  räknar den i urvalen. En trigger valdes framför att varje skrivväg sätter tiden: vägarna är
+  flera (api, skript, webben), och en som glömmer det raderar en kunds pågående arbete.
+  `synk_andrad_at` valdes bort av samma skäl som i 119: den bumpas av varje teknisk skrivning
+  och bär migrationsdagen på äldre rader, så den hade skjutit upp gallringen för allt.
+  `behandlad_at` saknar default och rörs inte av leveransrapporter eller kopplingar.
+- *Synkvakten tystnade när samma rader föll i varje körning.* Synken sätter `synkad_at` även
+  när enskilda rader hoppats över, och vakten tittade bara på åldern. Den larmar nu också när
+  senaste försökets utfall är något annat än `ok` (högst en gång i timmen, som förut). Synkens
+  tidsstämpel lämnas som den är: övriga rader är skrivna, och panelen visar redan utfallet i
+  varningsfärg.
+
+**Runda 10 (samma dag).** Två fel av samma slag som runda 9:s första: en återöppnad uppgift
+nollar `klar_at` och tog prospektets senaste aktivitet med sig, och listflödet skriver
+utkastet på radens prospekt, inte på listraden, så en gammal listrad gallrades fast
+prospektet just fått ett utkast. Att räkna upp skrivvägarna kolumn för kolumn hade missat en
+väg per runda; de är fler än femtio. Migration 142 gör därför regeln allmän: triggern
+`gallring_behandlad` sätter `behandlad_at` vid varje faktisk ändring (`to_jsonb(old)` skiljer
+sig från `to_jsonb(new)`) i alla 25 tabeller urvalet läser aktivitet ur, varje urval räknar
+den, och en listrad med prospekt väljs bara när prospektet väljs. Priset är att en teknisk
+skrivning (en leveransrapport, en poängomräkning) också skjuter gallringen framåt för just
+den raden. Det felar åt rätt håll: gallringen blir senare, aldrig för tidig. En återkommande
+teknisk skrivning över gamla rader skulle däremot hålla dem vid liv för alltid; ingen sådan
+finns i dag (städaren rör bara hängande jobb och listor, en gång), och INV-DATA-005 säger att
+ingen får tillkomma.
+
+**Runda 11 (samma dag).** Ett fel, åt andra hållet: 142 lät listraden följa prospektet men
+inte tvärtom. "Processa om" uppdaterar listradens `processad_at` och rör prospektet bara när
+kontakten ändrats, så ett gammalt prospekt raderades med sina trådar medan den nyss
+behandlade listraden blev kvar utan koppling. Migration 143 räknar listraderna i prospektets
+urval och låser dem mellan varven även när de inte själva väljs. Skäl: en rad som en
+människa nyss arbetat med ska aldrig förlora sin bakgrund, oavsett vilken av de två
+tabellerna arbetet skrevs i.
+
+**Runda 12 (samma dag).** Gallringen läste aldrig behandlingsbegränsningarna (124, art. 18):
+en adress vars uppgifter bara får lagras fick ändå sina gamla mejl, prospekt och loggar
+raderade. Begränsningen begärs ofta just för att uppgifterna ska finnas kvar (art. 18.1 b
+och c), så det var ett lagbrott åt det håll gallringen aldrig får fela. Migration 144
+undantar adressens rader med samma nycklar som `gdpr_radera.py` söker på, löptexten i
+loggtabellerna utan adresskolumn och anonymiseringen av agentloggarna. En ny begränsning
+tar ett rådgivande lås som gallringen håller delat före andra varvet, i stället för ett
+tabellås (138:s regel: ingen annan skrivning ska vänta på gallringen). När begränsningen
+hävs gallras uppgifterna vid nästa körning.
+
+## 2026-11-19 — Synkflytten verkställs i development; mains steg väntar på releasen (Claude (agent), på Antons uppdrag "verkställ synkflytten")
+
+**Beslut.**
+1. Tjänsten `migrera` körs hos Railway i miljön development (gren `development`,
+   `railway/Dockerfile.drift`, `MIGRERA_APPLY=1`, `MIGRERA_PG_URL` som referens till
+   Postgres-tjänstens egna variabler över det privata nätet). `migrera.yml` går kvar
+   parallellt; båda tar samma rådgivande lås.
+2. PR-kontrollen "releasens migrationer" kan läsa liggarna över HTTPS
+   (`GET /api/drift/schema`, nyckeln `SCHEMA_LASNYCKEL`, migration 129 ger `snajp_app`
+   läsrätt på liggaren). Utan nyckeln i GitHub går kontrollen som förut.
+3. `scripts/railway_provision.py` skapar inte längre en TCP-proxy för main när
+   `RAILWAY_MAIN_PG_HOST` saknas, så att en stängd produktionsport inte öppnas igen av
+   nästa `--apply`.
+4. `scripts/railway.py` går genom Railways inloggade CLI (`railway api`, variablerna via
+   stdin) när `RAILWAY_TOKEN` saknas eller avvisas.
+
+**Resonemanget.** Anton bad om att synkflytten skulle verkställas. Allt som går att göra
+utan att ändra produktionen är gjort. Synktjänsten i main kräver migration 122 (rollen
+`synk_las`) i mains databas, och den körs när release-PR:en mergas, som är Antons
+handgrepp. Att köra den eller andra migrationer mot main före mergen, eller att skriva
+databashemligheter till GitHub, stoppades av agentens behörighetsgrind och görs därför
+av Anton (runbookens steg 2b och 6). Tokenen i `.env.deploy` svarade "Not Authorized"
+2026-11-19; CLI-reserven gör att skripten fungerar tills Anton byter den.
+
+**I koden.** `scripts/railway.py`, `scripts/releasens_migrationer.py`,
+`snajp-support/app/api/drift.py`, `db/migrations/20261119090000_129_schema_lasvag.sql`,
+`.github/workflows/migrera.yml`, `scripts/railway_provision.py`,
+`tests/test_synkflytt_steg_9_11.py`. Läget per steg står i
+`docs/compliance/synkflytt-runbook.md`.
+
+## 2026-11-19 — gemini-3.8-flash i alla steg, i `eu` (Anton)
+
+**Beslut.** Byt från gemini-2.5-flash till gemini-3.8-flash i EU-multiregionen
+`eu`: chatten, triagen, Iris utkast och humanizer, leadssökningen, Jev,
+bildmodellen (webbedömningen och kvittofoton) och kvittohanteraren.
+Inbäddningarna ligger kvar på gemini-embedding-001 i europe-west1 (den finns
+inte i `eu`). Ersätter rekommendationen i `docs/compliance/modellbyte-underlag.md`
+avsnitt 1 (3.5-flash-lite för chatten) och backningen 2026-11-18.
+
+**Resonemanget (Antons ord).** "Byt till 3.8 Flash, det är bättre att vi får fler
+leads än färre och träffsäkerhet i svar är viktigare än kostnadsbesparingar när
+vi väl har kunder." Underlaget stöder det: 3.8 var bäst i support (49/50),
+triage (49/50), utkast (9/10 godkända, 10/10 utan stilfynd) och kvittofoton
+(38/40), och i webbedömningen felar den bara åt det stränga hållet (ingen dålig
+sajt kallad bra), alltså fler leads till webbpoolen snarare än färre.
+
+**Det som följer med beslutet.**
+- **Kostnaden.** Ungefär 1,5 gånger dagens per utkast och 2,8 gånger per chatt
+  till 2026-12-31; priset dubblas 2027-01-01. Räknat på dagens volym: leads
+  ~2 150 kr/mån till nyår, ~4 300 kr därefter (i dag ~1 440 kr).
+- **Kapaciteten.** 3.8 i `eu` går på Googles delade kapacitet och gav 503, 429
+  och långa svarstider i provet 2026-11-18. Därför i samma ändring: 503 får
+  samma omtag som 429 (`step_runner.py`), jobbens tidsgräns är 600 s
+  (`jobs/store.py`, var 300) och chattens stegsgräns sätts till 60 s
+  (`LLM_TIMEOUT_CHATT_S`, avsnitt 6.1 i underlaget). Provisioned Throughput
+  (fast månadskostnad) köps inte nu: en GSU i `eu` kostar omkring 31 000 kr i
+  månaden på en månads bindning och bär 675 tokens i sekunden, mindre än ett
+  enda utkast i taget; utkasten hade spillt över till den delade kapaciteten
+  ändå.
+- **Kvittofoton.** 3.8 rättade ett avsiktligt felsummerat kvitto i mätningen
+  (underlaget 3.6). Kvittosviten körs mot development efter bytet; faller den
+  får kvittostegen en egen modell med `KVITTO_MODEL`.
+- **main** följer med nästa release (koden för `eu` och 3.8 finns bara i
+  development) och samma variabler på `api` och `web` i main.
+
+## 2026-11-18 kväll — HSTS i appen, utan underdomäner (Claude (agent), på Antons uppdrag)
+
+**Beslut.** Webben skickar `Strict-Transport-Security: max-age=63072000` på alla
+sökvägar (`next.config.ts`, `headers()`), utan `includeSubDomains` och utan `preload`.
+
+**Resonemanget.** P23 säger att HSTS ska läggas till om Railways kant inte sätter den.
+Mätningen 2026-11-18 visade att den saknas på allt Railway serverar, också
+`www.snajp.se` (`docs/compliance/bevis/tls-2026-11-18.txt`). Rubriken binder bara värden
+som skickar den. `includeSubDomains` skulle på `snajp.se` binda alla underdomäner, också
+sådana som inte går via appen, och det är ett eget beslut för Anton; `preload` går inte
+att ångra snabbt. Två år är det vanliga värdet och samma som Vercel redan skickar för
+`snajp.se`.
+
+**I koden.** Gäller i `development` efter deployen och i `main` med nästa release. Mät
+med `curl -sI https://web-development-6c85.up.railway.app/ | grep -i strict`.
+
+## 2026-11-18 natt — valfri tvåstegsverifiering (TOTP) för plattformsadmin (Claude (agent), på Antons uppdrag)
+
+**Beslut.** Plattformsadmin kan slå på tvåstegsverifiering med en autentiseringsapp (TOTP,
+RFC 6238), med tio engångskoder för återställning. Den är valfri. Tvånget är en flagga i koden,
+`TVAFAKTOR_KRAVS_FOR_PLATTFORMSADMIN = false`; att slå på det är Antons beslut. Ersätter
+punkt (2) i beslutet nedan ("tvåfaktor byggs inte i den här omgången").
+
+**Resonemanget.** Anton beställde TOTP med krav på krypterad hemlighet, hashade
+återställningskoder, avstängning bara med giltig kod, inloggningsspärren över andra steget och
+ingen ny Railway-variabel. Skälet som stoppade förra omgången, en ny nyckel i Railway, löstes
+genom att härleda krypteringsnyckeln med HKDF ur `AUTH_SECRET` med egna info-värden. `AUTH_SECRET`
+valdes framför `SNAJP_MASTER_API_KEY` eftersom den bara finns på `web`, som är den enda tjänst
+som läser hemligheten, och redan är roten till inloggningens förtroende; master-nyckeln finns
+också på `api` och är en åtkomstnyckel. Priset: byts `AUTH_SECRET` måste varje admin med
+tvåfaktor rullas in på nytt (`AUTH.md`). Andra steget sitter i `authorize`, så det gäller också
+direkta anrop till Auth.js, och en fel kod räknas i samma spärr som ett fel lösenord. Räknaren
+nollställs först när båda stegen gått igenom, annars hade den som har lösenordet kunnat
+nollställa den mellan gissningarna. Databasen ser aldrig hemligheten i klartext men förbrukar
+tidssteg och återställningskoder atomiskt (återspelning, samtidiga inloggningar) och vägrar
+avstängning utan en nyss godkänd kod. Google- och Microsoft-inloggning nekas för konton med
+tvåfaktor, eftersom de annars hade gått runt andra steget. Valfritt och inte tvingande: ett
+tvång låser ute en admin som tappar telefonen och koderna, och det är ett beslut om drift och
+risk som ägaren ska fatta.
+
+**Vad det betyder i koden.** `db/migrations/20261118180000_128_tvafaktor.sql`;
+`lib/auth/totp.ts`, `lib/auth/tvafaktor-krypto.ts` (nyckeln, flaggan), `lib/auth/tvafaktor.ts`,
+`lib/auth/inloggningssteg.ts`, `authorize` och `signIn` i `lib/auth.ts`,
+`lib/actions/tvafaktor.ts`, `components/settings/Tvafaktor.tsx`, andra steget i
+`components/auth/LoginForm.tsx`, `getPlatformAdmin()` i `lib/auth/admin.ts` (tvånget). Ny
+dependency `uqr` (MIT, inga beroenden) för QR-koden. Tester: `lib/auth/totp.test.ts`,
+`lib/auth/tvafaktor-krypto.test.ts`, `lib/auth/inloggningssteg.test.ts`,
+`snajp-support/tests/db/test_tvafaktor.py` (CI-jobbet `databas`). `AUTH.md`, matrisen (A.8.5,
+A.5.17), poängplanen.
+
+---
+
+## 2026-11-18 natt — demon märks genom en smal funktion, inte en update-rätt (Claude (agent), på Antons uppdrag)
+
+**Beslut.** `startDemo` märker arbetsytan `is_demo` genom security definer-funktionen
+`markera_demoarbetsyta()` (migration 127), anropad med användarens identitet. Webbens
+kolumnrätt `update (is_demo)` på `workspaces` från 126 tas bort. Går märkningen inte igenom
+startar ingen demo.
+
+**Resonemanget.** Anton bad om rättelsen och gav två vägar: identitet plus en smal RLS-policy,
+eller en security definer-funktion. Funktionen valdes, av samma skäl som i 038: RLS skyddar
+rader, inte kolumner, så en update-policy på `workspaces` hade låtit webben skriva hela raden
+för den egna arbetsytan, också `slug` som avgör vilken kunds data arbetsytan ser. Funktionen
+kan bara göra en sak: sätta `is_demo = true` på den inloggades egen arbetsyta, och bara när
+kontot är ett nyss skapat `demo-<uuid>@snajp.se` och arbetsytan saknar slug och andra
+medlemmar. Att demon stoppas när märkningen misslyckas är medvetet: en omärkt demo är ett
+fullt konto med fullt löptak, alltså samma fel som rättas.
+
+**Vad det betyder i koden.** `db/migrations/20261118170000_127_demo_markering.sql`;
+`startDemo` i `lib/actions/auth.ts`; `TILLATET` i
+`snajp-support/tests/db/test_snajp_web_rattigheter.py`;
+`snajp-support/tests/db/test_demo_markering.py` (CI-jobbet `databas`); `AUTH.md`;
+`docs/compliance/datamangder.md`.
+
+---
+
+## 2026-11-18 natt — webbens databasroll får bara det webben gör (Claude (agent), på Antons uppdrag)
+
+**Beslut.** Rollen `snajp_web` har sedan migration 126 bara de rättigheter webbens egen SQL
+behöver: 13 tabeller, på flera av dem bara vissa kolumner, och ingen rättighet på tabeller
+som skapas senare. `auth.users` är inte längre läsbar för PUBLIC; `snajp_app` läser bara
+`id` och `email`. Ersätter formen i migration 030 ("breda grants, RLS som grind").
+
+**Resonemanget.** Anton bad om minskningen (ISO 27001 A.8.2, A.8.3, A.5.15) men varnade för
+att en för snäv rättighet bryter webben. 030 valde breda rättigheter för att likna Supabases
+`authenticated`; det skälet föll när Supabase Auth togs bort, och kvar blev en roll som kunde
+läsa kundens support- och leadsdata så fort en fråga satte `app.tenant_id`, och en
+`auth.users` som varje roll kunde läsa. Kartläggningen visade att webben gör lite direkt mot
+databasen (23 filer, 67 satser) och att resten går via api:t med kundens nyckel, så
+minskningen gick att göra säkert. Skyddet mot att bryta webben är att CI kör varje sats ur
+webbens källkod som `snajp_web` med EXPLAIN, som prövar rättigheterna utan att köra något;
+skyddet mot att det breddas igen är att samma test jämför rollens rättigheter med en exakt
+lista. `startDemo` behåller update-rätten på `workspaces.is_demo` trots att uppdateringen
+redan i dag påverkar noll rader (ingen update-policy, ingen användaridentitet): att ta bort
+rätten hade gjort satsen till ett fel och stoppat demon. Felet i sig är ett eget ärende.
+Priset: en migration som lägger till en tabell webben ska nå måste ge rättigheten uttryckligen.
+
+**Vad det betyder i koden.** `db/migrations/20261118160000_126_snajp_web_minsta_rattighet.sql`;
+`snajp-support/tests/db/test_snajp_web_rattigheter.py` (listan `TILLATET`); `AUTH.md`
+(Databasrollen); `docs/compliance/datamangder.md` §1 och fynd 3.
+
+---
+
+## 2026-11-18 natt — spärr mot upprepade inloggningsförsök, tvåfaktor uppskjuten (Claude (agent), på Antons uppdrag)
+
+*Punkt (2) ersatt samma natt: valfri TOTP för plattformsadmin byggd, se ovan.*
+
+**Beslut.** (1) Lösenordsinloggning och begäran om lösenordsåterställning spärras
+tillfälligt efter upprepade försök, per e-postadress och per klient-IP (migration 125,
+`lib/auth/inloggningsregler.ts`): inloggning 5 misslyckade per adress eller 20 per IP på
+15 minuter, återställning 3 per adress eller 10 per IP på en timme. Spärren är 1, 5, 15
+och sedan 60 minuter för varje ny spärr inom ett dygn. Tillståndet ligger i Postgres. (2)
+Tvåfaktor (TOTP) för plattformsadmin byggs inte i den här omgången.
+
+**Resonemanget.** Anton bad om spärren (ISO 27001 A.8.5) med kravet att den inte får
+avslöja om ett konto finns. Därför räknas adressen likadant med och utan konto, beskedet
+är detsamma för alla, och ett spärrat försök prövar aldrig lösenordet. IP-tröskeln är
+högre än adressens eftersom ett kontor delar IP bakom NAT; utan IP-gränsen hade en
+angripare kunnat pröva ett lösenord mot många adresser. Postgres i stället för Redis:
+webben har ingen Redis-anslutning, men har redan Postgres, och spärren behöver vara
+atomisk mellan webbens repliker, vilket upserten ger. Nycklarna är HMAC med `AUTH_SECRET`
+så att tabellen inte blir en lista över adresser som prövats. Spärren släpper igenom vid
+databasfel (fail open) och loggar det: när databasen är nere går inloggningen ändå inte,
+och en deploy som hinner före migrationen hade annars låst ute alla. Tvåfaktor kräver
+lagring av krypterade hemligheter, en ny nyckel i Railway (som agenten inte får ändra),
+ett inrullningsflöde med QR-kod och ett andra inloggningssteg; det är för stort för att
+göras tryggt i samma veva, och Anton har inte beslutat om tvånget.
+
+**Vad det betyder i koden.** `db/migrations/20261118150000_125_inloggningsforsok.sql`
+(tabellen nås bara genom funktionerna); `lib/auth/inloggningsregler.ts`,
+`lib/auth/inloggningsforsok.ts`; `authorize` i `lib/auth.ts` (gäller också direkta
+anrop till `/api/auth/callback/credentials`); `requestPasswordReset` i
+`lib/actions/auth.ts`; beskedet på båda språken i `components/auth/LoginForm.tsx`.
+Tester: `snajp-support/tests/db/test_inloggningsforsok.py` (CI-jobbet `databas`),
+`lib/auth/inloggningsregler.test.ts`.
+
+---
+
+## 2026-11-18 sen kväll — begränsning av behandling som spärrmarkering, licensgrind med obeslutade undantag (Claude (agent), på Antons uppdrag)
+
+**Beslut.** (1) Begränsning av behandling (GDPR art. 18) är en markering per e-postadress
+i tabellen `behandlingsbegransningar` (migration 124), **global över alla kunder**, satt
+och hävd bara med `scripts/gdpr_radera.py --begransa` / `--hav-begransning`. En aktiv
+markering blockerar utskick till adressen och skickar inkommande mejl till Att hantera
+utan AI. Kan listan inte läsas stoppar spärren (utskicket köas om, mejlet går till en
+människa). Markeringen **behålls vid radering** och en hävning lämnar raden kvar. (2)
+Licensgrinden i CI godtar 18 copyleft- eller okända licenser som står i vitlistan som
+**obeslutade**, så att CI är grön tills Anton beslutat.
+
+**Resonemanget.** Anton bad om agentens delar av de krav som väntar på honom
+(`docs/compliance/score-plan-2026-11-18.md`, sist). (1) Begäran gäller personen, inte en
+kunds lista, och rättighetsskriptet söker och raderar redan över alla kunder, så
+markeringen följer samma gräns. En spärr som släpper igenom när den inte kan prövas är
+ingen spärr. En radering ska inte tyst häva en begränsning, och raden är belägget för att
+begäran hanterades (art. 18.3: personen informeras före hävning). Approllerna får bara
+läsa: en markering som appen kan ta bort skyddar inte mot appen. Befintliga utkast och
+research stoppas inte i koden; det hade krävt ingrepp på många ställen, och skriptet ber i
+stället handläggaren arkivera berörda leads. (2) Att fälla CI på de licenser som redan
+används hade stoppat allt arbete för ett beslut som är Antons; att godta dem tyst hade
+dolt beslutet. Vitlistan visar dem som obeslutade med agentens bedömning bredvid.
+
+**Vad det betyder i koden.** `db/migrations/20261118140000_124_behandlingsbegransning.sql`;
+`Storage.list_begransade`; `leads/scheduler.py` (`_kor_send_guard`, regel
+`begransad_behandling`); `email_pipeline/processor.py` (`process_email`);
+`scripts/gdpr_radera.py`; `scripts/licenser.py` och `docs/compliance/licenser-vitlista.json`.
+
+---
+
+## 2026-11-18 natt — åtkomstlogg för admin, ingen kvittotext i agent_runs, övervakningens reserv (Claude (agent), på Antons uppdrag)
+
+**Beslut.** (1) Varje anrop med master-nyckeln och varje kundbesök skriver en rad i
+`audit_logs`: vem, när, åtgärd, kund och ruttens mall, aldrig innehåll eller nycklar
+(migration 123, INV-SEC-013). Raderna sparas i **365 dagar** och gallras automatiskt,
+oberoende av kunddatans gallring. Approllerna får inte ändra eller radera dem. (2) Den
+äldre bokföringsytan sparar inte kvittots text i `agent_runs`, bara längd, sha256 och
+underlagets id (PR 83). (3) Övervakningen körs på två scheman, efter varje Verify och
+synk, och en dödmanskontroll i CI larmar när den inte gått på tre timmar (PR 84).
+
+**Resonemanget.** Anton bad om att åtgärda de tre fynden ur poängplanen
+(`docs/compliance/score-plan-2026-11-18.md`) utan att han behöver göra något. (1)
+Plattformsadmin läser och ändrar alla kunders data, och utan logg går det inte att svara
+på vem som gjorde vad (ISO 27001 A.8.15, A.5.15–A.5.18, GDPR art. 32). Loggen sitter i
+beroendet `require_master_key`, inte per endpoint, så att nästa admin-endpoint inte kan
+glömmas. Den skrivs genom en säkerhetsdefinierad funktion, så att appen som loggas inte
+kan skriva om loggen. Ett admin-id godtas bara om det står i `platform_admins`. 365 dagar
+är en teknisk utgångspunkt: en säkerhetslogg ska ha en egen, bestämd lagringstid och inte
+följa kunddatans period, som ännu inte är beslutad. Faller skrivningen går anropet igenom
+med en varning, för en adminyta som låses av en loggstörning stoppar den som ska rätta
+störningen. Läsningar under ett kundbesök loggas som besöket, inte per anrop. (2) Ingen
+felsökning har behövt kvittotexten: fälten står i `bk_underlag`. Texten bär namn,
+kortnummer och ibland personnummer, och `agent_runs` gallras inte förrän perioden är
+beslutad (DPIA R10). (3) Schemat gav en körning av omkring 60. Orsaken är GitHubs
+schemaläggare, som tappar de flesta schemalagda körningar i repot (synk.yml cirka 4 av 144
+om dygnet, före och efter att repot blev privat). Det går inte att rätta i repot, så
+övervakningen får en reserv som inte är ett schema, och tystnaden larmar.
+
+**I koden.** Migration `db/migrations/20261118130000_123_adminlogg.sql`;
+`snajp-support/app/api/adminlogg.py`, `deps.require_master_key`, `logga_adminatkomst` i
+lagringarna; `app/api/snajp-support/_lib.ts` (`X-Snajp-Admin`). Tester:
+`tests/invariants/test_inv_sec_013.py`, `snajp-support/tests/db/test_adminlogg.py`.
+`app/api/bookkeeping.py:kvittotext_for_logg`, `tests/bookkeeping/test_kvittotext_logg.py`.
+`.github/workflows/overvakning.yml`, `scripts/overvakning_dodman.sh`, jobbet
+`overvakning-dodman` i `verify.yml`.
+
+**Öppet för Anton.** Om 365 dagar är rätt lagringstid för åtkomstloggen. Om en extern
+pingtjänst ska väcka övervakningen när inget annat händer i repot. Releasen till `main`.
+
+**Backa.** (1) Ta bort anropet i `require_master_key`; migrationen kan stå kvar. (2) Återställ
+`input_text` i `bookkeeping.py`. (3) Ta bort `workflow_run` och jobbet `overvakning-dodman`.
+
+---
+
+## 2026-11-18 natt — säkerhets- och AI-frågan i varje PR, och en egen modell för kvittohanteraren (Claude (agent), på Antons uppdrag)
+
+**Beslut.** (1) Varje PR mot `development` ska besvara två frågor i
+`.github/pull_request_template.md`, "Säkerhet och dataskydd" och "AI-påverkan",
+och CI fäller PR:en annars (INV-PROC-001, `.github/workflows/pr-granskning.yml`).
+Botar och release-PR:er mot `main` är undantagna. (2) Kvittohanteraren får egna
+variabler, `KVITTO_MODEL` och `VERTEX_KVITTO_REGION`. Tomma ger dagens beteende
+(`MODEL` i huvudregionen), och de sätts inte i någon miljö.
+
+**Resonemanget.** Anton bad om att höja antalet uppfyllda compliance-krav med det
+som inte kräver hans beslut (`docs/compliance/score-plan-2026-11-18.md`). Säkerhet
+och AI-påverkan prövades bara när någon kom ihåg det; en fråga som CI kräver ett
+svar på är det minsta som gör prövningen till en del av varje arbete (ISO 27001
+A.5.8, ISO 42001 A.6.1.3). Frågan prövar att svaret finns, inte att det är rätt.
+Kvittovariablerna finns för att kvittosviten föll från 37/40 till 30/40 när `MODEL`
+byttes i development, med en obetald kundfaktura bokförd som klar
+(`docs/compliance/modellbyte-underlag.md` avsnitt 6.4): vid ett byte ska
+kvittostegen kunna stanna på en prövad modell. Vilken modell de ska ha är Antons
+beslut, liksom om variablerna ska sättas.
+
+**I koden.** `scripts/pr_granskning.py`, `tests/invariants/test_inv_proc_001.py`;
+`snajp-support/app/config.py` (`kvitto_model`, `vertex_kvitto_region`,
+`kvittomodell`, `kvittoregion`, kontrollerna i `llm_provider_fault`),
+`app/agent/llm.py` (`get_kvitto_client`, `get_kvitto_agent_model`),
+`app/kvitton/hanterare.py`. INV-DATA-006 nämner regionen. Tester:
+`tests/kvitton/test_kvitto_modell.py`, `tests/invariants/test_inv_data_006.py`.
+
+**Backa.** Ta bort arbetsflödet `pr-granskning.yml` (och INV-PROC-001). För
+kvittovariablerna behövs ingen backning så länge de är osatta.
+
+## 2026-11-18 sen kväll — provbytet i development återställt helt (Claude, på Antons uppdrag)
+
+**Beslut.** Development kör åter samma modellinställningar som main: bara
+`MODEL=gemini-2.5-flash` på `api`, inga regionvariabler och inga stegmodeller.
+Variablerna från provbytet (`GOOGLE_CLOUD_REGION=eu`, `VERTEX_RESERVREGIONER`,
+`VERTEX_INBADDNING_REGION`, `VERTEX_BILD_REGION`, `VERTEX_UTKAST_REGION`,
+`VISION_MODEL`, `LEADS_DRAFT_MODEL`, `LEADS_HUMANIZER_MODEL` och `MODEL` på `web`)
+är borttagna. Koden från PR #74, #76 och #78 ligger kvar och är overksam när
+variablerna saknas.
+
+**Resonemanget.** Kvittosviten föll från 37/40 till 30/40 när kvittohanteraren
+gick på gemini-3.5-flash-lite (den följer `MODEL`), och ett av felen tar sig
+förbi granskningen: en obetald kundfaktura bokades som klar med det egna bolaget
+som motpart. Development speglar produktionen, så ett fel som bokför fel ska inte
+stå kvar i en miljö med riktiga kunders data medan bytet ändå inte kan
+genomföras: utkasten och bildmodellen saknar en godkänd ersättare i `eu`.
+Mätningarna är gjorda och dokumenterade (modellbyte-underlag.md 3.5–3.7, 6.4,
+8); provbytet har gett det det kunde ge. Supporten var bättre på lite (48/50 mot
+47/50), så ett framtida byte bör ge kvittohanteraren en egen modell.
+
+**Öppet för Anton.** Ersättare för gemini-2.5 till utkast och bilder, och om
+kvittohanteraren ska få en egen modellvariabel.
+
+---
+
+## 2026-11-18 kväll — utkasten på gemini-3.5-flash-lite prövade i development och backade; kvittosviten körd (Claude (agent), på Antons uppdrag)
+
+**Beslut.** Iris utkast och humanizer i development ligger kvar på
+gemini-2.5-flash i europe-west1 (`LEADS_DRAFT_MODEL`, `LEADS_HUMANIZER_MODEL`,
+`VERTEX_UTKAST_REGION=europe-west1`). 3.5-flash-lite i `eu` prövades och
+backades samma kväll. Inga andra variabler ändrades; main är inte rörd.
+
+**Resonemanget.** Antons grind: inga tekniska fel, och stilgrinden
+(INV-LEADS-UTKAST-002) i nivå med 2.5, högst ett fall sämre. Samma 11 fall ur
+`evals/iris_utkast.json` kördes på båda modellerna samma kväll, mot nya
+syntetiska evalkunder. 3.5-flash-lite levererade alla 11 utan fel, på 6,5–40 s
+(2.5-flash: 9 av 11, två föll på 503 i europe-west1, 11,6–84 s). Stilen höll
+inte: lite hade facitets `slentrian_ingang` ("När …"-ingångar) i sex av elva
+utkast, 2.5-flash i inget av sina 15 levererade utkast den dagen. Per fall är
+lite sämre i fyra och bättre i ett; `bedom_iris` godkände 4 mot 7. Bara om
+2.5:s två serverfel räknas som stilfel blir skillnaden ett fall (5 mot 6), och
+agenten bedömde att stilgrinden ska mäta stilen, inte kapaciteten. Att
+backningen inte är gratis står i underlaget: 2.5 i europe-west1 tappade två
+utkast på 503 samma kväll.
+
+**Kvittosviten.** 30/40 mot 37/40 med allt på 2.5 (2026-11-10), 0 tekniska
+fel, p50 7,2 s mot 20,9 s. Sviten är text-PDF:er, så den mäter `MODEL`
+(3.5-flash-lite i `eu` sedan provbytet), inte bildmodellen. Lite skickar sju
+underlag till granskning som ska vara klara, och bokförde en obetald
+kundfaktura som klar med det egna bolaget som motpart. Körd med en tillfällig
+env-fil och en ny evalkund (`eval-11181437-kvitto`); `.env.deploy` är orörd.
+
+**Öppet för ägaren.** Vilken modell utkasten ska ha när 2.5 stängs (lite
+skriver sämre ingångar, 3.8 i `eu` saknar kapacitet utan Provisioned
+Throughput), och om kvittohanteraren ska ha en egen modell i stället för
+`MODEL`. Kostnad för kvällens prov: omkring 15 kr i Vertex.
+
+**Backa/byta.** Sätt `LEADS_DRAFT_MODEL`, `LEADS_HUMANIZER_MODEL` =
+`gemini-3.5-flash-lite` och `VERTEX_UTKAST_REGION` = `eu` på `api` och `web` i
+development för att pröva lite igen. Detaljer och siffror per fall:
+`modellbyte-underlag.md` avsnitt 6.4.
+
+---
+
+## 2026-11-18 — Supabase-spåret tas bort helt (Anton)
+
+**Beslut.** "Ta bort supabase-spåret som ligger kvar helt." Migrationerna
+flyttas från `supabase/migrations/` till `db/migrations/`. Raderat: edge
+functions, `supabase/config.toml` och `schema.sql`, GoTrue-adaptern
+`lib/supabase-auth.ts` med sina grenar i inloggning, registrering och demo,
+`@supabase/supabase-js`, Supabase-MCP:n i `.mcp.json`, nyckeln
+`PREVIEW_POSTGRES_URL` och skripten som bara talade med Supabase
+(provisionering, schema, speglingen `supabase_seed_dev.py`, flytten därifrån,
+preview-grenens anslutning). Utan katalogen `supabase/` går kontrollen
+Supabase Preview igenom (grön på release-PR:en direkt efter pushen). Appen
+Supabase är fortfarande installerad på repot hos GitHub och kan kopplas bort
+där (github.com/settings/installations); det kräver Antons inloggning.
+
+**Resonemanget.** Supabase Preview på release-PR:en var röd, för att den
+körde mot en Supabase-gren som varit död sedan augusti och som vi enligt
+`MIGRATIONS-PENDING.md` inte rör. Allt körs på Railway sedan dess, och det
+som låg kvar var bara spår som kunde lura någon att tro att Supabase
+fortfarande var en väg: en katalog med Supabase-namn, en auth-gren som
+aktiverades om en gammal variabel råkade vara satt, och skript som skrev dit.
+
+**Vad som lever kvar med flit.** Liggaren `supabase_migrations.schema_migrations`
+och `auth`-schemat (`railway/000_auth_compat.sql`) är namn i Railway-databasen.
+Att döpa om dem kräver en migration mot main och ändrar inget i beteendet.
+Supabase står kvar som underbiträde i `lib/bolag.ts` ("avvecklas") tills
+projektet hos Supabase är raderat: där ligger fortfarande gammal data, och
+det är ett juridiskt påstående, inte kod. Sessionsloggar, handoffs, planer
+och `email-studio/kopior` är historik och är inte omskrivna.
+
+---
+
+## 2026-11-18 — utkasten i development tillbaka på gemini-2.5-flash i europe-west1 efter mätningen (Claude (agent), på Antons uppdrag)
+
+**Beslut.** Iris utkast och humanizer i development går tillbaka till
+gemini-2.5-flash i europe-west1 (`LEADS_DRAFT_MODEL`, `LEADS_HUMANIZER_MODEL`,
+ny `VERTEX_UTKAST_REGION`, PR #78). Chatten, triagen, leadssökningen, Email
+Studio och övriga textsteg ligger kvar på gemini-3.5-flash-lite i `eu`. Main är
+inte rörd.
+
+**Resonemanget.** Antons uppdrag: pröva det som inte prövats i development,
+bara mot syntetiska kunder, och backa en variabel till dagens värde om en
+kärnfunktion inte fungerar. Utkasten på gemini-3.8-flash i `eu` föll i 7 av 11
+fall (503, 429, svar över 120 s, jobb över femminutersgränsen) redan med tre
+samtidiga jobb, och de som kom fram tog 161–277 s mot 23 s i dag. Kvaliteten
+var bra, men det spelar ingen roll när de flesta utkast inte blir av. 2.5
+saknas i `eu`, så utkasten behövde en egen region i koden för att kunna backas
+till just dagens värde. Efter backningen: 6 av 6 utan fel, 8–21 s.
+3.5-flash-lite höll i resten: supporten 48/50 (i dag 47/50) på 5,9 s i median,
+leadssökningen och Email Studio svarade 200 med de nya tankeinställningarna.
+
+**Öppet för ägaren.** Vilken modell utkasten ska ha när 2.5 stängs:
+3.5-flash-lite i `eu` (billigast, 7/10 lokalt, inte prövat i development) eller
+3.8-flash med reserverad kapacitet (Provisioned Throughput) i `eu`.
+
+**Backa.** Ta bort `LEADS_DRAFT_MODEL`, `LEADS_HUMANIZER_MODEL` och
+`VERTEX_UTKAST_REGION` på `api` och `web` i development; då ärver utkasten
+`MODEL` i `eu`. Detaljer: `modellbyte-underlag.md` avsnitt 6.4.
+
+**I koden.** `config.py` (`vertex_utkast_region`, `utkastregion`, kontrollen i
+`llm_provider_fault`), `agent/step_runner.py` (`UTKASTSTEGENS_FALT`).
+INV-DATA-006 nämner variabeln.
+
+---
+
+## 2026-11-18 — provbytet i development gjort, textmodellerna till `eu`, bildmodellen kvar (Claude (agent), på Antons uppdrag)
+
+**Beslut.** Development kör sedan 2026-11-18 gemini-3.5-flash-lite (`MODEL`)
+och gemini-3.8-flash för utkast och humanizer i Vertex-multiregionen `eu`,
+utan reservregion. Bildmodellen (gemini-2.5-flash) och inbäddningarna
+(gemini-embedding-001) ligger kvar i europe-west1, med den nya inställningen
+`VERTEX_BILD_REGION` (PR #76) och `VERTEX_INBADDNING_REGION`. Miljön `main` är
+inte rörd. Ersätter posten nedan om att provbytet inte gjordes.
+
+**Resonemanget.** Anton bad om provbytet med bildmodellen oförändrad, så att
+textmodellerna kan prövas medan bildvalet är öppet. Det krävde en egen region
+för bildklienten, eftersom 2.5 saknas i `eu`. Utkasten fick 3.8-flash, som
+underlaget rekommenderar: 3.5-flash-lite brister där (6/10 utan stilfynd mot
+7/10 i dag, 3.8 10/10). Reservregionerna är tomma, eftersom ingen av
+modellerna finns i de vanliga EU-regionerna eller i europe-west3; koden väntar
+då ut ett 429 i `eu`.
+
+Den fulla webbkalibreringen mot alla 58 facitsajter visade att ingen modell
+klarar grinden på 85 %, inte heller dagens: 2.5-flash 81 %, 3.8-flash 81 %,
+3.5-flash-lite 79 % med en akut sajt på bra (utan den inaktuella
+sagobetong.se: 82,5, 82,5 och 80,7 %). 3.8 felar bara åt det stränga hållet
+(nio bra sajter blev dåliga), de andra två åt båda håll. Grinden och facit är
+inte ändrade. Vilken bildmodell som ska ersätta 2.5, och om grinden eller
+prompten ska ses över, är ägarens beslut (`modellbyte-underlag.md` avsnitt 3.7).
+
+**Kontrollen.** Deployerna lyckades, startloggen var utan
+`llm_provider_fault`, och två syntetiska supportfrågor mot demotenanten gick
+igenom: text till `eu`, inbäddningar och bildbeskrivning till europe-west1,
+alla 200. Inga mejl, inga godkända utkast, ingen leadskörning. Kostnad:
+57 ScrapeGraph-krediter och omkring 10 kr i Vertex.
+
+**Backa.** Ta bort variablerna i `modellbyte-underlag.md` avsnitt 6.4 på `api`
+och `web` i development; standardvärdena ger gemini-2.5-flash i europe-west1
+så länge Google låter 2.5 svara.
+
+**I koden.** `config.py` (`vertex_bild_region`, `bildregion`, kontrollen i
+`llm_provider_fault`), `agent/llm.py:get_vision_client`. INV-DATA-006 nämner
+`VERTEX_BILD_REGION`. Tester: `tests/invariants/test_inv_data_006.py`,
+`tests/agent/test_modellbyte_gemini3.py`.
+
+---
+
+## 2026-11-18 — provbyte i development (Claude (agent), inom Antons uppdrag om EU-compliance) — inte gjort: bildmodellen klarade inte grinden
+
+*Ersatt samma dag av posten ovan: provbytet gjordes med bildmodellen kvar på 2.5-flash.*
+
+**Beslut.** Variablerna i `modellbyte-underlag.md` avsnitt 6.1 sattes **inte**
+i Railway-miljön `development`. Development kör gemini-2.5-flash i
+europe-west1 som förut. Inget i miljön `main` är rört.
+
+**Resonemanget.** Uppdraget var att göra provbytet bara om två villkor höll:
+kvoten i `eu` (under cirka 5 % 429) och att bildmodellen klarar
+webbkalibreringens grind på 85 %. Kvoten höll: ingen regional kvot finns för
+3.x i `eu`, och 0 av 60 samtidiga anrop per modell fick 429. Bildmodellen
+klarade inte grinden. På ett urval om 30 av facitets 58 sajter, med samma
+skärmbilder för alla modeller, fick gemini-3.8-flash 80 % (strängare än facit:
+fem bra sajter blev dåliga) och gemini-3.5-flash-lite 83 %; dagens
+gemini-2.5-flash fick 83 % och 87 % i två körningar. En bildmodell måste sättas
+vid bytet, eftersom bildklienten anropas i samma region som resten och 2.5
+saknas i `eu`, så bytet kan inte göras med bildmodellen kvar på 2.5. I
+kvittoavläsningen läste 3.8-flash foton bäst men rättade ett avsiktligt
+felsummerat kvitto (793 blev 798), och 3.5-flash-lite läste foton sämst.
+Att sänka grinden eller räkna bort ett fall för att få igenom bytet är
+ägarens beslut, inte agentens.
+
+**Nästa steg.** Kalibrera 3.5-flash-lite och 3.8-flash mot alla 58 sajter
+(omkring 60 ScrapeGraph-krediter till) och välj bildmodell utifrån det, eller
+låt Anton avgöra på urvalet. Siffrorna står i `modellbyte-underlag.md` avsnitt
+3.5 och 3.6. Mätningen kostade omkring 13 kr i Vertex och 50
+ScrapeGraph-krediter.
+
+---
+
+## 2026-11-18 (Claude (agent), inom Antons uppdrag om EU-compliance; ändringarna väntar på Antons granskning) — Bytet från Gemini 2.5 förbereds så att det blir en ändring av variabler
+
+**Beslut.** Koden förbereds för gemini-3.x utan att någon modell byts:
+EU-multiregionen `eu` står på listan över tillåtna Vertex-regioner (med sin
+egen värd, `aiplatform.eu.rep.googleapis.com`), inbäddningarna får en egen
+region (`VERTEX_INBADDNING_REGION`), tänkandet skickas i den form gemini-3.x
+tar, och uppstartskontrollen mot fel modellfamilj gäller också
+stegmodellerna och bildmodellen. Standardvärdena (`gemini-2.5-flash`,
+`europe-west1`) och alla värden i drift är orörda. Vilken modell som ska
+användas är ägarens beslut; underlaget är
+`docs/compliance/modellbyte-underlag.md`.
+
+**Resonemanget.** Google anger 20 oktober 2026 som pensionsdatum för
+gemini-2.5-pro, -flash och -flash-lite. Uppmätt mot projektets Vertex
+2026-11-18 finns ingen av ersättarna i `europe-west1`, `europe-west4` eller
+`europe-north1`: gemini-3.8-flash och gemini-3.5-flash-lite svarar bara i `eu`,
+gemini-3.5-flash i `eu` och `europe-west3`. Utan `eu` på listan hade bytet till
+3.8 krävt en kodändring, och listans egen kommentar sade att den skulle läggas
+till i samma ändring som gör värden möjlig. `eu` är en EU-multiregion, där
+Google anger att behandlingen stannar inom EU, och dataskyddsbedömningen
+(`gemini-bedomning.md` avsnitt 7) föreslår själv att gå över till den.
+`gemini-embedding-001` saknas i `eu`; med en egen region kommer
+kunskapsbasens vektorer ur samma modell före och efter bytet. Tankebudgeten
+är avvecklad för gemini-3.x: budget 0 gav ett anrop mot gemini-3.8-flash som
+hängde i 90 sekunder, och 3.8 avvisar nivån MINIMAL med 400. Email Studio
+skickade `reasoningEffort: "minimal"` och hade fallit på varje anrop med 3.8.
+
+**I koden.** `config.py` (`VERTEX_EU_REGIONER`, `vertex_vard`,
+`vertex_inbaddning_region`, `inbaddningsregion`, kontrollen av stegmodellerna i
+`llm_provider_fault`), `agent/llm.py` (`gemini_tank_kwargs` med modell,
+`lagsta_tankniva`), `agent/step_runner.py`, `agent/embeddings.py`,
+`leads/discovery.py` (`_sokningens_tankande`), `leads/profil.py`,
+`lib/llm/modellval.ts` (`vertexVard`, `lagstaTankande`, `eu` i `EU_REGIONER`),
+`app/api/email-studio/route.ts`. Tester:
+`tests/agent/test_modellbyte_gemini3.py`, `tests/invariants/test_inv_data_006.py`,
+`lib/llm/modellval.test.ts`. Mätverktyget: `scripts/mat_modellbyte.py`.
+INV-DATA-006 nämner `eu` och inbäddningsregionen.
+
+## 2026-11-18 (Claude (agent), inom Antons uppdrag om synkflytten; väntar på Antons granskning) — Koden för att flytta synken till Railway, utan ändring i driften
+
+**Beslut.** Kodstegen i `docs/compliance/synkflytt-plan.md` (smala hemligheter,
+synkskriptet, läsrollen, driftavbilden) är byggda så att de kan ligga i
+`development` och `main` utan att något i driften ändras. Själva flytten
+(upplägg A, planens steg 0) är fortfarande Antons beslut. Handgreppen står i
+`docs/compliance/synkflytt-runbook.md`.
+
+**Resonemanget.** Synken var tionde minut ryms inte i gratisplanens 2 000
+Actions-minuter (posten nedan), och planen kräver att koden finns i `main`
+innan tjänsterna kan byggas där. Varje del är därför avstängd tills ägaren
+slår på den:
+- `synk.yml` och `migrera.yml` läser sex smala hemligheter och faller tillbaka
+  på `ENV_DEPLOY` så länge de inte finns.
+- Migration 122 skapar `synk_las` utan inloggning och utan lösenord. I
+  development, där den körs vid pushen, går det inte att logga in som rollen.
+- Synkskriptet beter sig som förut när det körs från Actions. Det tar nu ett
+  rådgivande lås, som alltid är ledigt där eftersom Actions kör en synk åt
+  gången. Det skriver också senaste försök och utfall i developments
+  `mirror_meta`, och det sätter inte längre replica-läge på main utanför
+  första synken, där main ändå är skrivskyddad. Spärrarna för körning hos
+  Railway (INV-DATA-008) gäller bara när `SYNK_*_PG_URL` är satta.
+- `scripts/railway_provision.py` föreslår `gemini` i stället för `deepseek` som
+  startvärde för en ny miljö utan leverantör. Uppstartsspärren vägrar ändå
+  DeepSeek där data är riktig, och ett startvärde ska inte peka dit.
+
+**Inte byggt.** Planens steg 9 (PR-kontrollen över HTTPS) kräver en ny nyckel
+i båda miljöerna. Steg 10 (insyn i panelen och larm) ändrar vad development
+visar. Båda väntar på beslut.
+
+---
+## 2026-11-18 (Anton) — Webbplatsskanningen startas av onboardingen och kompletterar
+
+**Beslut.** Anton, på frågan om guidens löfte att agenterna läser sajten:
+"Se till att scanningen startas automatiskt, och att den kompletterar, inte
+skriver över kundens egna uppgifter."
+
+**Resonemanget.** Guiden lovade att agenterna läser webbplatsen, men
+kunskapsbasen var tom efter onboardingen: skanningen (`app/kb_skanning.py`)
+fanns, men inget startade den och ingenting av den sparades.
+
+**I koden.**
+- Onboardingen startar skanningen åt kunden när paketet har supportagenten
+  (`lib/snajp/webbplatsskanning.ts`, anropad från `lib/actions/onboarding.ts`).
+  Inloggningsvägen startar den aldrig: en ny hämtning är tillägget Synkad
+  kunskapsbas, inte uppsättningen (`docs/pilot_onboarding.md`).
+- Skanningen skriver FÖRSLAG, aldrig artiklar (migration 121,
+  `ss_kb_forslag`). Ett förslag blir en ny artikel först när kunden lägger
+  till det, genom samma väg som en handskriven artikel. Kundens egna artiklar,
+  affärskontext, målgrupp och röstdokument rörs aldrig.
+- "Kompletterar" är mekaniskt: ett utkast med samma rubrik som en artikel
+  kunden har föreslås inte, ett avvisat utkast kommer inte tillbaka vid nästa
+  skanning, och två klick blir aldrig två artiklar (`nya_forslag` i
+  `app/api/kb.py`, låst av `tests/api/test_kb_forslag.py`).
+- Förloppet och utfallet sparas (`ss_kb_skanningar`) och syns i Översikt ›
+  Kom igång och överst i Kunskapsbas, även efter en omladdning. En skanning
+  som inte kunde starta sparas med skälet. En skanning i taget.
+
+**Agentens val, som Anton kan ändra.** Förslagen läggs inte in automatiskt.
+Kunden lägger till dem, ett i taget eller alla på en gång. Skälet är
+skanningsmodulens egen regel, att utkasten godkänns av en människa: en siffra
+som inte står i källsidan sänker utkastets säkerhet, och agenten citerar det
+som står i basen. Vill Anton att förslagen läggs in direkt är det en ändring i
+`_spara_utfall`.
+
+## 2026-11-18 (agenten, på Antons uppdrag) — Onboardingen efter den visuella genomgången
+
+Anton beställde en genomgång av hela onboardingen, sida för sida, och att
+bristerna skulle rättas tills varje steg håller för en professionell kund.
+Besluten nedan är agentens, fattade under genomgången. Anton har inte godkänt
+dem var för sig och kan ändra dem.
+
+**Beslut 1: onboardingen frågar efter företagets namn.** Arbetsytan hette
+"<kontots namn> workspace" (signup-triggern), och backendens kundnamn tas ur
+arbetsytans namn. Uppmätt i den lokala stacken: en nyss upplagd kund hette
+"Anna Testsson workspace" i `ss_tenants`, och det namnet står i sidfoten på
+varje utskick. Namnet sätts genom en RPC (migration 120), eftersom
+`workspaces` har radskydd utan uppdateringsregel och en vanlig UPDATE träffar
+noll rader utan att fela.
+
+**Beslut 2: fliken "Prova demo" på inloggningen är en länk till /demo.**
+Fliken kunde bara svara med ett fel, eftersom mejlvägen för åtkomstlänken
+aldrig kopplades (`requestDemoAccess`). Demon är öppen på /demo. Funktionen
+ligger kvar i `lib/actions/auth.ts`, oanvänd, tills någon bestämmer om
+åtkomstlänken ska byggas.
+
+**Beslut 3: `/login?mode=signup` öppnar läget Skapa konto**, och de två
+länkar som betyder "kom igång" pekar dit (demobannern i AppShell,
+DemoKorning). Förut landade en ny kund under rubriken "Välkommen tillbaka".
+
+**Beslut 4: Google- och Microsoft-knapparna visas bara när de är
+konfigurerade** (`AUTH_GOOGLE_ID`, `AUTH_MICROSOFT_ENTRA_ID_ID`). En knapp som
+alltid svarar "inte konfigurerad än" är sämre än ingen.
+
+**Beslut 5: en arbetsyta utan aktivitet får en startruta överst på
+översikten** (`components/dashboard/KomIgang.tsx`). Anton tog bort hälsningen
+ur översikten 2026-10-07 och det beslutet står kvar: rutan visas bara medan
+arbetsytan saknar körningar, och försvinner av sig själv. Skälet är att den
+nya kunden annars landar på en statistiksida utan statistik, utan något som
+säger vad nästa steg är. Varje rad leder till en sida som redan finns.
+
+**Beslut 6: guiden validerar själv.** Formulären har `noValidate`. Alla fel
+i ett steg visas på en gång vid sitt fält, webbadresser utan protokoll
+godtas (webbläsarens `type="url"` nekade dem, trots att servern tar emot
+dem), och postnumret ska ha fem siffror ("abc" gick igenom till fakturan).
+
+**Öppet för Anton (besvarat samma dag, se posten ovan).** Guiden säger att
+"agenterna läser er webbplats och lär sig resten själva", men skanningen
+startades inte. Anton beslutade att den ska startas automatiskt.
+
+**I koden.** `components/auth/OnboardingWizard.tsx`,
+`components/auth/LoginForm.tsx` (`LoginSida`), `app/login/page.tsx`,
+`lib/actions/onboarding.ts`, `components/dashboard/KomIgang.tsx`,
+`components/dashboard/Aktivitet.tsx`,
+`supabase/migrations/20261118090000_120_arbetsytans_namn.sql`,
+`scripts/qa_ny_kund.mjs`.
+
+## 2026-11-18 (Anton) — Repot är privat, och det som följer av det
+
+**Beslut.** Repot `oloflun/snipe-leads` är privat sedan 2026-11-18 (Antons
+beslut: "Repot ska vara privat och är ändrat till det nu, anpassa övriga beslut
+efter det").
+
+**Resonemanget.** Repot var publikt, och plattformsadminens lösenord låg i den
+publika historiken. Dataskyddsgenomgången höll därför utkasten som beskriver
+öppna brister utanför repot. Med ett privat repo kan de ligga där de hör hemma.
+
+**Vad som ändrats till följd av beslutet (Claude (agent), samma dag):**
+- Utkasten som hölls utanför repot är committade: `docs/pub-avtal.md`,
+  DPIA:n, intresseavvägningen, incidentloggen och `docs/JURIDIK_ATGARDER.md`.
+  Compliance-underlaget (ramverkskörningar, policyer, rutiner, brev, utredningar
+  och bevis) ligger i `docs/compliance/`. Görs repot publikt igen ska den mappen
+  flyttas ut först: den beskriver brister i detalj, och policytexterna bygger
+  på AGPL-licensierade mallar ur Comp AI.
+- GitHubs hemlighetsskanning, push-skydd och kodskanning finns inte för
+  privata repon på gratisplanen och är avstängda. I stället skannar jobbet
+  `hemligheter` i `verify.yml` varje ny commit med gitleaks. Dependabot
+  fungerar som förut.
+- Grenskyddet på `main` gäller inte längre (det kräver betald plan för privata
+  repon). Kravet på kodägarens godkännande är alltså inte tekniskt framtvingat.
+  Regeln står kvar: release till `main` är Antons handgrepp.
+- Gratisplanen ger 2 000 Actions-minuter i månaden. Övervakningen går därför
+  en gång i timmen i stället för var 15:e minut. Synken (`synk.yml`, var tionde
+  minut) skulle ensam ta mer än kvoten om GitHub körde den som schemalagt; det
+  talar för att flytta den till Railway enligt `docs/compliance/synkflytt-plan.md`.
+  När kvoten är slut stannar alla workflows, även migrationerna.
+
+**Kvar trots beslutet.** Lösenordet som låg i den publika historiken ska fortfarande
+bytas: historiken kan redan vara kopierad.
+
+---
+
+## 2026-11-18 (Claude (agent), inom Antons uppdrag 2026-11-17 om EU-compliance) — Modellanropen maskeras och hålls i EU i koden
+
+**Beslut.** Fem brister som dataskyddsbedömningen av Gemini på Vertex AI pekade
+ut stängs i kod: personnummer maskeras också före uppsägningsklassaren och före
+varje inbäddning; tjänsten vägrar starta där data är riktig om en Vertex-region
+inte ligger i EU, om `LLM_BASE_URL` pekar någon annanstans än Vertex i EU, eller
+om `LLM_PROVIDER` är `openai`; Email Studio väljer aldrig OpenAI eller en region
+utanför EU där data är riktig; och ett test håller Googles sökgrundning kvar i
+leadssökningen. Invarianterna INV-DATA-006 och INV-DATA-007.
+
+**Resonemanget.** Bedömningen fann att DPIA:n och integritetspolicyn lovar att
+personnummer maskeras, men två vägar skickade dem omaskerade till Google:
+klassaren fick hela meddelandet och inbäddningarna räknades på omaskerad
+kundtext. Maskeringen sitter nu där texten lämnar huset, ett ställe per väg,
+så att en ny anropare inte kan glömma den. Inbäddningarna maskeras i
+`embed_text`, som både skrivning och läsning går genom; text utan personnummer
+går ut oförändrad, så kunskapsbasens vektorer och svarscachen påverkas inte
+(svarscachen tar dessutom bara emot frågor utan personnummer). Regionerna och
+bas-URL:en lästes ur miljön utan kontroll: en felaktig variabel hade tyst
+flyttat behandlingen ur EU, och det skulle ingen märka. Spärren är samma sort
+som DeepSeek-spärren: den kraschar hellre än varnar, och bara där data är
+riktig. OpenAI står inte i underbiträdesförteckningen och leverantörsgranskningen
+säger "inte för kunddata"; att släppa in det i drift är ett avtalsbeslut.
+Driften använder inte OpenAI i dag (`LLM_PROVIDER=gemini` i api i båda miljöerna,
+ingen `OPENAI_API_KEY`, `GOOGLE_CLOUD_REGION`, `VERTEX_RESERVREGIONER` eller
+`LLM_BASE_URL` i någon tjänst enligt konfigurationsutdraget 2026-11-17), så
+ingenting ändras vid deploy. Sökgrundningens frågor sparas hos Google i tre
+dygn utan möjlighet att stänga av; i dag får den bara målgrupp, kriterier och
+bolagsnamn, och testet hindrar att det ändras utan att någon tar ställning.
+
+**I koden.** `snajp-support/app/config.py` (`VERTEX_EU_REGIONER`,
+`bas_url_tillaten`, `Settings.llm_provider_fault`, `Settings.vertex_regioner`),
+`app/agent/llm.py` (`vertex_region`, `_resolve_base_url`),
+`app/agent/embeddings.py`, `app/agent/retention_classifier.py`,
+`app/leads/discovery.py`, `lib/llm/modellval.ts` (`EU_REGIONER`,
+`dataskyddsvarning`), `app/api/email-studio/route.ts`. Inte gjort här:
+modellbytet från Gemini 2.5 (ägarens beslut), cachen i Google Cloud och ett
+servicekonto per miljö (ägarens hand), fler maskeringstyper.
+
+## 2026-11-18 (Claude (agent), inom Antons uppdrag om EU-compliance; ändringarna väntar på Antons granskning) — Render-koden tas bort ur repot
+
+**Beslut.** Allt i repot som kan skriva till, deploya till eller hålla liv i
+den avvecklade Render-stacken tas bort: skrivvägen i `scripts/keys.py`
+(Render-pushen och det den anropade), driftkontrollen `scripts/verify_render.py`
+och blueprinten `snajp-support/render.yaml`. Samtidigt tas `keys.py`:s
+skrivväg mot appens Vercel-projekt bort (push och pull), som bara tjänade samma
+döda stack. Invarianten INV-DEPLOY-001 stod mot blueprinten och skyddar nu
+samma sak, byggkontexten för api, mot filen som styr Railway.
+
+**Resonemanget.** En undersökning 2026-11-18 visade att Render inte fyller
+någon funktion: ingenting i koden, hos Railway eller i DNS pekar dit, och
+loggarna visar ingen kundtrafik. Koden låg ändå kvar och var farlig. Ett enda
+kommando kunde skriva backend-hemligheter och DeepSeek som leverantör till
+båda Render-tjänsterna och starta en deploy, alltså återinföra den
+tredjelandsöverföring som spärrades 2026-08-24. Blueprinten sa själv att en
+blueprint som ligger kvar är en tjänst som kan återuppstå. Kod som inte
+behövs och som kan göra skada tas bort i stället för att märkas som vilande.
+
+**Läget hos leverantörerna.** Båda Render-tjänsterna är suspenderade sedan
+2026-11-17 23:46 UTC. Det gamla Vercel-projektet `snajp` är pausat 2026-11-18,
+med inloggningsskydd och avstängda förhandsdeployer. Apex-omdirigeringen
+(Vercel-projektet `snajp-apex`) berörs inte.
+
+**I koden.** `scripts/keys.py` (Render- och Vercel-vägarna borta, övriga
+kommandon oförändrade), `scripts/verify_render.py` och `snajp-support/render.yaml`
+borttagna, `tests/invariants/test_inv_deploy_001.py` och posten i
+`ARCHITECTURE_INVARIANTS.md` anpassade, nytt test
+`tests/invariants/test_render_avvecklad.py` som fäller om Render-koden kommer
+tillbaka. Instruktioner om Render i `DEPLOY.md`, `DEPLOY_KEYS.md`, `RAILWAY.md`,
+`AUTH.md` och `snajp-support/README.md` är ersatta med en mening om att stacken
+är avvecklad.
+
+**Kvar hos ägaren.** Radera båda Render-tjänsterna (de är bara suspenderade)
+och ta bort Renders åtkomst till repot (GitHub-appen). Rotera de hemligheter
+som legat hos Render. Återkalla Render-API-nyckeln och ta sedan bort raderna
+`RENDER_API_KEY` och `PREVIEW_RENDER_SERVICE_ID` ur `.env.deploy`. Begär en
+raderingsbekräftelse från Render för tjänsterna, loggarna och
+miljövariablerna.
+
+## 2026-11-18 (Anton) — Extern övervakning, säkerhetskontakt och Dependabot
+
+**Beslut.** Fyra luckor som en genomgång mot ISO 27001 visade fylls: en
+schemalagd övervakning av produktionen som larmar via ett GitHub-ärende, en
+kontaktväg för säkerhetsrapporter (`SECURITY.md`, `security.txt`), veckovisa
+beroendeuppdateringar via Dependabot, och minsta möjliga rättigheter i de nya
+arbetsflödena. Beställt av Anton genom genomgången; resonemanget nedan är
+beställningens, inte hans egna ord.
+
+**Resonemanget.** Tjänstens interna larm är troligen inte aktiva (sändvägens
+variabler saknas i driften) och ingen extern övervakning fanns. Går
+produktionen ner, eller faller den tillbaka till minnesläge för jobbkön eller
+lagringen eller till simuleringsläge, får ingen veta det förrän en kund hör av
+sig. Repot är publikt, Actions är gratis här och ägaren får mejl när ett
+ärende skapas, så ett ärende är den billigaste larmvägen som redan når fram.
+
+**I koden.** `.github/workflows/overvakning.yml` (var 15:e minut,
+etiketten `driftlarm`, kända begränsningar i filens huvud),
+`.github/dependabot.yml`, `SECURITY.md`, `public/.well-known/security.txt`.
+Svarstiden för en säkerhetsrapport är inte beslutad och står som `[FYLL]`.
+
+---
+
+## 2026-11-17 (Sebbe) — Teamsidan: ansvar under titeln, inga bioradar
+
+**Beslut.** På /vart-team står Sebastian Bergman som Grundare med raden
+"Marknadsansvarig" under, och Anton Lundin som Grundare med "Tekniskt
+ansvarig". Bioraderna om vad var och en byggt är borttagna. Supportchattens
+kunskapsbas säger samma sak.
+
+**Resonemang.** Sebbes beställning, ordagrant: "Skriv under medgrundare under
+Sebastian: Marknadsansvarig. Skriv under Anton: Tekniskt ansvarig", och att
+bioraderna skulle bort. Något skäl utöver det gavs inte. Det ersätter
+resonemanget i `lib/team.ts` från 2026-08-25 om att ingen
+funktionsuppdelning var bestämd: nu är den det.
+
+**I koden.** `lib/team.ts` (fältet `ansvar`, tomma `bio`),
+`app/vart-team/page.tsx`, `snajp-support/app/tenants/snajp_kb.py`.
+
+---
+
+## 2026-11-17 (Anton) — Jobbkön flyttas till Railways egen Redis
+
+**Beslut.** Jobbkön flyttas från Redis Cloud till Railways egen Redis, i
+stället för att Redis Cloud uppgraderas. Antons ord: "Ja, flytta", som svar på
+frågan om jobbkön skulle flyttas till Railways egen Redis i stället för att han
+uppgraderar Redis Cloud.
+
+**Resonemanget.** Skälen kommer ur dataskyddsgenomgången samma dag, inte ur
+Antons egna ord utöver beslutet. Redis Cloud-databasen låg på gratisplanen,
+som saknar stöd för krypterad anslutning, så TLS gick inte att slå på enligt
+beslutet "Gör alla fyra" tidigare samma kväll. Alternativet var en betald
+plan. Flytten tar bort trafiken över publikt nät, tar bort en leverantör ur
+kedjan när den gamla databasen är raderad, och skiljer miljöerna åt:
+produktionen och testmiljön delade tidigare samma databas. Ingen ny leverantör
+tillkommer, eftersom Railway redan är underbiträde och all behandling där sker
+i Amsterdam.
+
+**I driften.** Testmiljön använder sin befintliga Redis-tjänst hos Railway. I
+produktionen skapades en ny Redis-tjänst hos Railway med samma uppsättning som
+testmiljöns: lösenord, egen volym, Amsterdam, ingen publik adress. Api-tjänsten
+i båda miljöerna når Redis över Railways privata nätverk. Uppstartsloggen i
+båda miljöerna visar att jobbkön, svarscachen, chattströmmen och leadsströmmen
+kör mot Redis, och hälsokontrollen svarar ok. Pågående jobb och cache i den
+gamla databasen följde inte med; jobben lever högst en timme och cachen byggs
+upp igen. `lib/bolag.ts` för Redis Cloud som "avvecklas".
+`scripts/redis_tls_pa.py` är inaktuellt och får inte köras.
+
+**Kvar.** Den gamla Redis Cloud-databasen har kvar cache och arbetsminne tills
+livslängden gått ut eller databasen raderas. Att radera den och säga upp kontot
+är Antons beslut och inte gjort. Den gamla adressen ligger i en reservvariabel
+på api-tjänsten, så att bytet går att backa; den tas bort när flytten fått gå
+några dagar. Bedömningen av tiden då trafiken gick okrypterat är Antons
+(`INCIDENT_RESPONSE.md`, 2026-08-29).
+
+---
+
+## 2026-11-17 (Claude (agent), inom Antons uppdrag 2026-11-17 om EU-compliance; ändringarna är ocommittade tills Anton godkänt) — En mottagaradress är personlig om den inte är en känd funktionsadress
+
+**Beslut.** En mottagaradress räknas som personlig när lokaldelen inte är en
+känd funktionsadress. Förut krävdes en punkt eller ett bindestreck, så
+`anna@bolaget.se` och `andersson@bolaget.se` fick den korta foten utan
+information enligt art. 14 och utan krav på länk till avsändarens
+integritetspolicy. Nu får de den fullständiga foten. Funktionsadresser (info@,
+kontakt@ och de övriga i listan) får fortfarande den korta foten enligt
+beslutet 2026-10-24. `vd@` och `ceo@` räknas som personliga.
+
+**Resonemanget.** Funktionens egen docstring säger principen: att flagga en
+funktionsadress för mycket kostar ett stycke text, att missa en personlig
+adress kostar ett regelbrott. Därför avgörs frågan av en lista över kända
+funktionsadresser och inte av hur lokaldelen ser ut. `vd@` och `ceo@` når en
+enskild, utpekbar person och är därför personliga. Poängsättningen av
+kontaktvägen och rollkopplingsflaggan behåller det gamla avgörandet, så
+rangordningen av leads ändras inte. Utkastens låsta facit
+(INV-LEADS-UTKAST-002) är orört och dess tester går gröna.
+
+**Följd att känna till.** Sidfoten byggs om i sändögonblicket, så redan
+godkända, köade utkast till namnadresser får den fullständiga foten. En kund
+som saknar `policy_url` i kundregistret får sådana utskick stoppade av
+spärrens regel 2, med besked, tills `policy_url` är ifylld.
+
+**I koden.** `snajp-support/app/leads/sources/base.py` (listan
+`FUNKTIONSADRESSER` och den nya egenskapen `epost_bar_namnform`, som
+poängsättningen och rollkopplingen använder), avdelningsorden i
+`snajp-support/app/leads/discovery.py` (`AVDELNINGSORD`). Test:
+`snajp-support/tests/leads/test_personlig_adress.py`. Inte committat eller
+driftsatt.
+
+---
+
+## 2026-11-17 (Anton) — Kundmejl går inte till TypeSafe
+
+**Beslut.** Kundernas kundmejl skickas inte längre till TypeSafe (modellen
+Jev). Antons ord: "Gör alla fyra", som svar på frågan om kundmejl till
+TypeSafe skulle stängas av, hemlighetsskanning slås på, Redis få TLS och
+säkerhetskopior slås på.
+
+**Resonemanget.** Skälen kommer ur dataskyddsgenomgången samma dag, inte ur
+Antons egna ord utöver beslutet. TypeSafe var aldrig godkänd som
+underbiträde och saknades i alla underbiträdesförteckningar. Leverantören
+behandlar i USA utan anslutning till Data Privacy Framework. Dess avtal ger
+en tidsobegränsad rätt att härleda och använda telemetri ur kunddata. Beslutet
+2026-09-30 i `snajp-support/app/leads/jev.py` sa redan att Jev aldrig ser
+kundmejl.
+
+**I driften.** Inkorgsklassningen via Jev är avstängd (`INKORG_JEV` av) i main
+och development sedan 2026-11-17 20:54 UTC. Nya deployer kom upp och
+hälsokontrollerna svarar ok. Inkorgen sorteras nu bara av kodreglerna. Jev
+används fortfarande i leadsdelen, där den får prospekts publika
+bolagsuppgifter och sidutdrag utan e-postadresser, telefonnummer och
+personnummer. TypeSafe-posten i `lib/bolag.ts` säger detsamma.
+
+**Kvar.** Kundmejltext som skickades före avstängningen ligger kvar hos
+TypeSafe enligt deras villkor; radering och bekräftelse är inte begärda.
+Bedömning av anmälningsplikt och underrättelse till berörda kunder är Antons
+(`INCIDENT_RESPONSE.md`, 2026-11-17). Beslut om leadsdelen återstår
+(`docs/pub-avtal.md`, Bilaga 3). Slås inkorgsklassningen på igen ska
+underbiträdeslistan ändras först.
+
+---
+
+## 2026-11-17 (Claude (agent), inom Antons uppdrag 2026-11-17 om EU-compliance; ändringarna är ocommittade tills Anton godkänt) — Google AI Studio får inte bära kunddata
+
+**Beslut.** Där data är riktig vägrar tjänsten starta med gemini utan ett
+läsbart servicekonto för Vertex AI, och varje reservväg till Google AI Studio
+vägrar själv (INV-DATA-004). Servicekontot i main och development är
+kontrollerat och klarar spärren.
+
+**Resonemanget.** AI Studio har ingen EU-bunden behandling, och på
+gratisnivån får Google använda innehållet. Nyckeln var satt i båda miljöerna,
+så ett saknat servicekonto hade tyst skickat kundmejl dit. Gränsen och skälet
+är desamma som för DeepSeek-spärren: en felaktig konfiguration ska dö
+högljutt, inte tyst skicka kunddata vidare. Att ta tillbaka AI Studio i drift
+är ett avtalsbeslut, inte ett kodbeslut.
+
+**I koden.** `snajp-support/app/config.py`, `snajp-support/app/agent/llm.py`,
+`snajp-support/app/leads/discovery.py`, `lib/llm/modellval.ts`. Spärr:
+INV-DATA-004, test i `snajp-support/tests/invariants/test_inv_data_004.py`.
+
+---
+
+## 2026-11-17 (Claude (agent), inom Antons uppdrag 2026-11-17 om EU-compliance; ändringarna är ocommittade tills Anton godkänt) — Avtalsgrinden är standard för kunder som läggs upp manuellt
+
+**Beslut.** En ny kund som skapas utan uttryckligt värde får avtalsgrinden på:
+ingen trafik på chatt, inkommande mejl och kanaler förrän ett avtalsdatum är
+registrerat. Befintliga kunder behåller sitt värde. Test-, demo- och interna
+konton anger av uttryckligen. Plattformsadmin slår på och av grinden i Kunder
+& Data, där det också syns när en kunds trafik är stoppad.
+
+**Resonemanget.** Snajp är personuppgiftsbiträde och får enligt GDPR art. 28
+inte behandla en kunds personuppgifter utan biträdesavtal. Som opt-in berodde
+skyddet på att någon kom ihåg en SQL-sats, och bara piloten hade den satt.
+Migrationen ändrar bara standardvärdet, ingen rad, så ingen levande trafik
+stängs av vid deploy.
+
+**Öppen fråga till Anton.** Självregistrerade kunder och testarbetsytor skapas
+med grinden av, så att provflödet fungerar som i dag. Det betyder att en
+självregistrerad kund fortfarande kan koppla en riktig inkorg utan avtal. Två
+vägar: (a) låt registreringen ingå avtalet genom att villkoren och
+biträdesavtalet godkänns där, och registrera datumet automatiskt, eller (b)
+slå på grinden även för dem och registrera avtalet för hand. (a) kräver ett
+juristgranskat biträdesavtal.
+
+**I koden.** Migration `118_avtalsgrind_standard.sql` (ingen `update`).
+`POST /api/keys` tar det valfria fältet `kraver_avtal`. Adminvyn:
+`components/admin/Kunddata.tsx`, `lib/actions/kunddata.ts`,
+`snajp-support/app/api/admin_kunddata.py`. Undantaget för provflödet:
+`lib/snajp/testtenant.ts`, `scripts/koppla_testytor.py`. Spärr: INV-AVTAL-001,
+test i `snajp-support/tests/invariants/test_inv_avtal_001.py`. Adminvyn är
+inte granskad i en webbläsare, och migrationen är inte körd.
+
+---
+
+## 2026-11-17 (Claude (agent), inom Antons uppdrag 2026-11-17 om EU-compliance; ändringarna är ocommittade tills Anton godkänt) — AI-upplysningen garanteras av koden, inte av modellen
+
+**Beslut.** Chatten visar "AI-assistent" i huvudet, också i kundernas
+inbäddade widget. Ett supportmejl som går ut utan mänsklig granskning får en
+fast rad efter signaturen om att en AI-assistent skrev svaret och hur kunden
+når en människa. Ett svar som en människa godkänt får ingen rad. Den som i ett
+mejl ber om en människa eskaleras av koden.
+
+**Resonemanget.** AI-förordningen (EU 2024/1689) art. 50.1 gäller sedan
+2026-08-02: den som interagerar med ett AI-system ska få veta det, om det inte
+är uppenbart. Systemprompten förbjöd agenten att utge sig för att vara
+människa, men sade också att den inte behövde inleda med att den är en AI. En
+upplysning som hänger på modellens goda vilja är ingen upplysning. Ett
+granskat svar är människans svar och får därför ingen rad. Raden lovar en
+människa till den som ber om en, och ett löfte i ett mejl ska hållas av kod:
+inkommande mejl prövas därför mot samma regel som chatten redan använder.
+Leadsagentens utskick är inte ändrade. Om art. 50 gäller autonoma första mejl
+och uppföljningar är en fråga för juristen.
+
+**I koden.** `components/snajp/SupportChat.tsx` (huvudet).
+`snajp-support/app/email_pipeline/processor.py`: `AI_UPPLYSNING`,
+`med_ai_upplysning` och eskaleringen via `support_regler.ber_om_manniska`.
+Spärr: INV-AI-001, test i `snajp-support/tests/invariants/test_inv_ai_001.py`.
+Mejlvägen skriver alltid svenska i dag; den engelska raden finns men används
+inte än. Chattens huvud är inte granskat i en webbläsare.
+
+---
+
+## 2026-11-17 (Claude (agent), inom Antons uppdrag 2026-11-17 om EU-compliance; ändringarna är ocommittade tills Anton godkänt) — Jev får inte se personnummer, och /villkor säger vad utskicksspärren faktiskt kontrollerar
+
+**Beslut.** Två rättningar ur dataskyddsgenomgången inför första betalande kund:
+
+1. Texten som går till TypeSafe (Jev) maskerar nu personnummer och
+   samordningsnummer, utöver e-post och telefon.
+2. Avsnittet om utskick i `/villkor` beskriver spärren som den är: den kräver
+   företagsnamn och avregistreringslänk, och vid en personlig adress även
+   art. 14-information och policylänk. Organisationsnummer och postadress tas
+   med i sidfoten när Kunden har angett dem, och Kunden ansvarar för att ange dem.
+
+**Resonemanget.** Jev klassar inkorgen (ämnesrad och upp till 1 500 tecken
+kundmejl) och triagerar leads. Kundmejl bär ibland personnummer, och
+supportagenten maskerade dem redan före sitt modellanrop medan Jev-vägen bara
+tog bort e-post och telefon. Telefonmönstret åt dessutom slutet av ett
+personnummer ("850101-1236" blev "85[telefon]") och lämnade födelsedatumet
+kvar, så maskeringen körs före telefonmönstret. Villkoren lovade sedan Antons
+beslut 2026-10-10 (org.nr och postadress stoppar aldrig ett utskick) en
+kontroll som koden inte gör; en villkorstext som påstår mer än koden gör är ett
+löfte till kunden som bryts.
+
+**I koden.** `snajp-support/app/leads/jev.py:_utan_personuppgifter` anropar
+`app/moderation/maskering.maskera_personnummer` (ingen ny regex), test i
+`tests/leads/test_automation.py`. `app/villkor/VillkorSida.tsx`, posten
+`utskick`, svenska och engelska. Spärren är oförändrad
+(`app/leads/send_guard.py`, regel 1 och 2).
+
+---
+
+## 2026-11-16 (Anton) — Agenterna svarar bara med det som går att belägga, annars lämnar de över
+
+**Beslut.** Anton, först: "Djupdyk i NVIDIA/auto-ontology och inkorporera det
+mot vår nuvarande kunskapsbas för att förbättra träffsäkerheten samt
+säkerställa att agenterna fysiskt inte kan hallucinera eller blanda ihop
+information." Sedan, om det som återstod: "det måste gå att lita på den till
+hundra procent, är den inte hundra procent säker måste den eskalera, men kom
+ihåg att målet är alltid hantera ärenden så långt som möjligt på egen hand …
+men då behöver vi ha fakta att luta oss mot, samt ett tydligt och enkelt sätt
+att förklara hur det fungerar mot kund." De enskilda valen nedan gjordes i
+arbetet. Inget är pushat; nivån Ordagrant är inte standard förrän den är mätt.
+
+**Resonemanget.** Auto-ontology är en text-till-SQL-stack över
+relationsdatabaser. Vår kunskapsbas är fritext per kund, så stacken passar
+inte, och den hade skickat kundtext till en ny leverantör utan avtal. Det som
+gick att föra över är dess mönster: modellen pekar ut och koden slår upp
+ordagrant, värden prövas mot källan, kopior hålls isär, och utan belägg vägrar
+systemet. Hundra procent går bara att lova om det som sägs är kundens egen
+text: en omskrivning kan alltid ändra innebörden (ett struket "inte", ett
+struket villkor), och ingen kod kan gå i god för en fri formulering.
+
+**I koden, val för val.**
+
+- **Namngivna källor** (INV-GROUND-002). Varje kontaktuppgift och varje tal
+  prövas källa för källa, och körningen sparar vilken källa som bär vad.
+  Kundens egen text får upprepas men bär aldrig ett pris, en procentsats, en
+  frist eller en webbadress. "8 år" bär inte "8 månader". En källhänvisning
+  till en artikel modellen aldrig fick gör frågan obesvarad.
+- **Nivån Ordagrant** (INV-GROUND-003). Svaret byggs av kod: hälsningen,
+  agentens frågor och meningar ord för ord ur en källa. Valet att bygga i kod
+  och inte pröva modellens text: det enda sättet att slippa en lista över
+  tillåtna ord, där varje öppet ord är ett hål. Valet att lämna över svar på
+  andra språk: en översättning är en ny formulering, och Antons regel är att
+  det som inte är säkert lämnas över. Valet att inte göra nivån till standard:
+  den är inte mätt mot riktig modell, och den ändrar hur varje svar ser ut.
+- **Iris** (INV-GROUND-004). Bara ordagrant verifierade citat och uppmätta
+  webbsignaler gör ett tal eller ett namn tillåtet. Den exakta text som köas
+  grindas, också ämnesraden. Två tester som låste fast hålet är ändrade;
+  utkastens facit är orört.
+- **Språkkorrekturen kan inte lägga till något.** Den körs efter grindarna
+  (leadskön, supportmejlen), så en korrektur som tillför ett tal, en länk, ett
+  kundnamn eller ett superlativ förkastas.
+- **Kunskapsbasens artiklar har källa och giltighetstid** (migration 117). En
+  utgången artikel används inte i svar men ligger kvar i listan. Valet att
+  inte bygga en redigeringsväg eller ett fält i portalen nu: ändringen i
+  portalen går inte att granska visuellt på den här maskinen i dag.
+- **Svarscachen** serverar ett sparat svar bara när frågans nyckelord är
+  desamma, inte bara när vektorerna ligger nära.
+- **Mejlets delsvar** går genom faktagrinden innan en människa granskar det.
+- **Evalsviten mäter sökträffen**: om sökningen hämtade artikeln som bär
+  svaret. Det talet är taket för hur mycket agenten kan klara själv.
+- **Kundförklaringen** står i `docs/SA-FUNGERAR-FAKTAKONTROLLEN.md`, och
+  nivåernas beskrivning i portalen säger samma sak.
+
+**Kvar, och varför.** Att rätt mening valdes går inte att bevisa i kod.
+Vektorerna i kunskapsbasen är inte ifyllda (kräver en körning mot en delad
+miljö). Portalen visar inte källa, giltighetstid eller belägg än.
+
+---
+
 ## 2026-11-16 (Sebbe) — 100 utskick om dagen, äldst först, ett i minuten från 08:00
 
 **Beslut.** Sebbe bad först om att "utskicken man gör inte ligger väntandes

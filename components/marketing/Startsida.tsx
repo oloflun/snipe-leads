@@ -113,8 +113,9 @@ function Markerad({ text: varde }: Readonly<{ text: string }>) {
 
 /**
  * En agents yta i hjälten. Tre lager, ett per rörelse (F-030): figuren glider in,
- * `.svav-flyt` svävar i vila och `.svav-lut` lutar sig mot pekaren. Texten under
- * står still, så att ytan läses som den som svävar.
+ * `.svav-flyt` svävar i vila och `.svav-lut` lyfts under pekaren, båda bara i höjdled
+ * och på hela bildpunkter så att ytans text står skarp. Texten under står still, så att
+ * ytan läses som den som svävar.
  */
 function Svavare({ agent, andra }: Readonly<{ agent: Agent; andra: boolean }>) {
   const { text, locale } = useLocale();
@@ -150,7 +151,7 @@ function Svavare({ agent, andra }: Readonly<{ agent: Agent; andra: boolean }>) {
           <a
             href={`#${a.ankare}`}
             aria-label={text(a.lasMerOm)}
-            className="focus-ring inline-flex min-h-11 items-center rounded-input text-[0.9375rem] font-medium text-paper-muted underline underline-offset-4 transition-colors hover:text-paper"
+            className="focus-ring inline-flex min-h-11 items-center rounded-input text-[0.9375rem] font-medium text-paper underline decoration-paper/50 underline-offset-4 transition-colors hover:decoration-paper"
           >
             {text(COPY.lasMer)}
           </a>

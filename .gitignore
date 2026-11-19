@@ -26,7 +26,6 @@ new_auth_err.txt
 new_auth_out.txt
 *.zip
 *.zip.lnk
-supabase/.db-password.txt
 .vercel/
 # Vercel-länkning under eget namn (t.ex. `.vercel-snipra/` från en andra
 # projektlänk i samma repo). `.vercel` matchar inte de varianterna, så de låg

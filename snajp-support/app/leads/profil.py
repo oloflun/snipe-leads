@@ -590,7 +590,7 @@ async def _anropa_modell(kundtext: str, icp: dict[str, Any]) -> dict[str, Any]:
                 {"role": "system", "content": _SYSTEM},
                 {"role": "user", "content": anvandare},
             ],
-            **tankande_kwargs(),
+            **tankande_kwargs(modell),
         )
     innehall = svar.choices[0].message.content or "{}"
     # Insynen (Fas 7): systemtexten är vår och står i koden, användartexten

@@ -142,6 +142,9 @@ SYSTEM_FOG = "\n\n"
 #: visar samma tal som anropet får.
 STANDARD_TEMPERATUR = 0.3
 
+#: Stegen (via `model_setting`) som går till VERTEX_UTKAST_REGION när den är satt.
+UTKASTSTEGENS_FALT = frozenset({"leads_draft_model", "leads_humanizer_model"})
+
 
 def bygg_systemprompt(
     step: PlaybookStep, lager: Instruktionslager, roll: str
@@ -484,10 +487,34 @@ async def run_step(
     # Steget vinner över den globala defaulten om det deklarerar en egen
     # thinking-nivå (t.ex. cs:customer-escalation, se support_playbook.py).
     effective_mode = step.thinking if step.thinking is not None else settings.thinking_mode
+
+    # Per-steg-modellval: steget kan peka ut ett Settings-fält (t.ex.
+    # leads_draft_model) vars värde ersätter huvudmodellen för just det här
+    # anropet. Tomt fält = ärv settings.model — beteendet före 2026-09-02.
+    # Valt före tänkandet sedan 2026-11-18: gemini-3.x styr tänkandet med en
+    # nivå i stället för en budget, och nivån beror på modellen.
+    effective_model = settings.model
+    if step.model_setting:
+        effective_model = getattr(settings, step.model_setting, "") or settings.model
+
+    # Utkastets och humanizerns egen Vertex-region (VERTEX_UTKAST_REGION,
+    # 2026-11-18), så att de kan ligga kvar på en modell som saknas i
+    # huvudregionen. Osatt = huvudregionen, som förut.
+    utkastregion: str | None = None
+    if (
+        step.model_setting in UTKASTSTEGENS_FALT
+        and _uses_vertex(settings)
+        and (settings.vertex_utkast_region or "").strip()
+    ):
+        utkastregion = settings.utkastregion()
+        client = get_llm_client(region=utkastregion)
+
     if settings.llm_provider == "deepseek":
         extra = thinking_kwargs(effective_mode)
     elif settings.llm_provider == "gemini":
-        extra = gemini_tank_kwargs(step.thinking, settings.gemini_reasoning_effort.strip().lower())
+        extra = gemini_tank_kwargs(
+            step.thinking, settings.gemini_reasoning_effort.strip().lower(), effective_model
+        )
     else:
         extra = {}
 
@@ -502,12 +529,6 @@ async def run_step(
     # omtag med exponentiell backoff — se get_llm_client i agent/llm.py.
     effective_temperature = step.temperature if step.temperature is not None else STANDARD_TEMPERATUR
 
-    # Per-steg-modellval: steget kan peka ut ett Settings-fält (t.ex.
-    # leads_draft_model) vars värde ersätter huvudmodellen för just det här
-    # anropet. Tomt fält = ärv settings.model — beteendet före 2026-09-02.
-    effective_model = settings.model
-    if step.model_setting:
-        effective_model = getattr(settings, step.model_setting, "") or settings.model
     # Pro-modellerna kan inte stänga av tänkandet: tankebudget 0 ger 400.
     # Utkastet körs på gemini-2.5-pro sedan 2026-10-15 (Antons krav på nivån
     # i varje mejl), så där tänker modellen lite i stället för inte alls.
@@ -562,8 +583,13 @@ async def run_step(
                     "LLM-steget %s svarade inte inom %.0f s; försöker en gång till.",
                     step.skill, chattgrans,
                 )
-            except Exception as fel:  # noqa: BLE001 — bara 429 särbehandlas
-                ar_429 = getattr(fel, "status_code", None) == 429
+            except Exception as fel:  # noqa: BLE001 — bara 429 och 503 särbehandlas
+                # 503 räknas som 429 sedan 2026-11-19: gemini-3.8-flash i `eu`
+                # (delad kapacitet) svarar 503 Service Unavailable när den är
+                # full, och i provet 2026-11-18 föll utkast på 503 som hade
+                # gått igenom med samma tålamod som 429 får
+                # (docs/compliance/modellbyte-underlag.md avsnitt 6.4).
+                ar_429 = getattr(fel, "status_code", None) in (429, 503)
                 # KREDITSLUT är inte transient: "prepayment credits are
                 # depleted" går inte över av 60 sekunders tålamod, det går
                 # över av att en människa betalar. Att vänta här hade bara
@@ -592,7 +618,9 @@ async def run_step(
                 # en full region går inte över av att vänta, en annan har
                 # oftast plats. Kort paus när regionen byts.
                 if talamod_429 and _uses_vertex(settings):
-                    regioner = vertex_regioner(settings)
+                    # Ett utkaststeg med egen region byter inte: modellen
+                    # finns kanske inte i reservregionerna (2.5 saknas i `eu`).
+                    regioner = [utkastregion] if utkastregion else vertex_regioner(settings)
                     if len(regioner) > 1:
                         client = get_llm_client(region=regioner[vanta_forsok % len(regioner)])
                         if vanta_forsok < len(regioner):

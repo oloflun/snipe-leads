@@ -107,7 +107,7 @@ export function SidMeny({ tone = "paper" }: Readonly<{ tone?: "paper" | "ink" }>
         aria-haspopup="true"
         className={cn(
           "focus-ring inline-flex min-h-11 items-center gap-1.5 rounded-input px-3 text-sm font-medium transition-colors",
-          ljus ? "text-paper-muted hover:text-paper" : "text-ink-muted hover:text-ink"
+          ljus ? "text-paper [text-shadow:0_1px_2px_oklch(var(--ink)/0.45)] hover:text-paper/75" : "text-ink-muted hover:text-ink"
         )}
       >
         {text(shared.menyEtikett)}

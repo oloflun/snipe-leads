@@ -27,7 +27,7 @@ type Installningar = {
     frustration_raknas: boolean;
   };
   tonlage: "standard" | "formell" | "personlig" | "kortfattad";
-  faktakontroll: "tillatande" | "forsiktig" | "strikt";
+  faktakontroll: "tillatande" | "forsiktig" | "strikt" | "ordagrant";
   amnesomrade: string;
   sprak: "kundens" | "svenska";
   options?: { amnesomrade_tak?: number };
@@ -53,16 +53,24 @@ const FAKTAKONTROLL: { varde: Installningar["faktakontroll"]; etikett: Localized
     varde: "forsiktig",
     etikett: { sv: "Försiktig", en: "Careful" },
     forklaring: {
-      sv: "Dessutom siffror: priser, frister, leveranstider.",
-      en: "Also figures: prices, deadlines, delivery times."
+      sv: "Dessutom siffror: priser, frister och leveranstider. Kunden kan inte själv föra in dem i svaret.",
+      en: "Also figures: prices, deadlines and delivery times. The customer cannot plant them in the answer."
     }
   },
   {
     varde: "strikt",
     etikett: { sv: "Strikt", en: "Strict" },
     forklaring: {
-      sv: "Dessutom löften som gratis, återbetalning eller garanti.",
-      en: "Also promises such as free, refund or warranty."
+      sv: "Dessutom löften som gratis, återbetalning eller garanti, och en mening får inte blanda uppgifter ur två artiklar.",
+      en: "Also promises such as free, refund or warranty, and a sentence may not mix facts from two articles."
+    }
+  },
+  {
+    varde: "ordagrant",
+    etikett: { sv: "Ordagrant", en: "Verbatim" },
+    forklaring: {
+      sv: "Svaret består av meningar ordagrant ur kunskapsbasen. Finns ingen mening som svarar säger agenten det och erbjuder en kollega. Gäller svar på svenska.",
+      en: "The answer consists of sentences taken word for word from the knowledge base. If no sentence answers, the agent says so and offers a colleague. Applies to answers in Swedish."
     }
   }
 ];

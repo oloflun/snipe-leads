@@ -157,6 +157,9 @@ export function LandingPhoto({
 
       {/* Header sits over the photograph, so it carries no ground of its own. */}
       <header data-mo="header" className="absolute inset-x-0 top-0 z-30">
+        {/* Kontrollerna står i helt papper med ingressens tunna skugga (Sebbe
+            2026-11-17): i paper-muted försvann "EN", "Logga in" och "Meny" mot
+            en himmel med samma ljushet. */}
         {/* `items-start`, inte `items-center`. Märket är nu flera gånger högre
             än kontrollerna, och centrerat hade raden hamnat mitt på logotypen i
             stället för i överkant — se utkastet: båda börjar på samma höjd och
@@ -175,13 +178,13 @@ export function LandingPhoto({
             <button
               type="button"
               onClick={toggleLocale}
-              className="focus-ring min-h-11 rounded-input px-3 text-sm font-medium text-paper-muted transition-colors hover:text-paper"
+              className="focus-ring min-h-11 rounded-input px-3 text-sm font-medium text-paper [text-shadow:0_1px_2px_oklch(var(--ink)/0.45)] transition-colors hover:text-paper/75"
             >
               {locale === "sv" ? "EN" : "SV"}
             </button>
             <Link
               href="/login"
-              className="focus-ring inline-flex min-h-11 items-center rounded-input px-3 text-sm font-medium text-paper-muted transition-colors hover:text-paper"
+              className="focus-ring inline-flex min-h-11 items-center rounded-input px-3 text-sm font-medium text-paper [text-shadow:0_1px_2px_oklch(var(--ink)/0.45)] transition-colors hover:text-paper/75"
             >
               {text(shared.navLogin)}
             </Link>

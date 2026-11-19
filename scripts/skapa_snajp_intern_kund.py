@@ -253,7 +253,15 @@ def main() -> int:
     # 3. Backend-tenant + nyckel — ordagrant provisioneringens väg.
     slug = kund_slug(arbetsyta)
     print(f"  tenant-slug: {slug}")
-    kropp = api_anrop(f"{api_url}/api/keys", master, "POST", {"tenant_name": ARBETSYTA, "slug": slug})
+    # kraver_avtal false: Snajps EGET konto. Snajp är där själv
+    # personuppgiftsansvarig, inte biträde åt en kund, så det finns inget
+    # biträdesavtal att vänta på (INV-AVTAL-001 gäller kundtenants).
+    kropp = api_anrop(
+        f"{api_url}/api/keys",
+        master,
+        "POST",
+        {"tenant_name": ARBETSYTA, "slug": slug, "kraver_avtal": False},
+    )
     nyckel, tenant_id = kropp.get("api_key"), kropp.get("tenant_id")
     if not nyckel or not tenant_id:
         sys.exit(f"AVBRYTER: /api/keys gav inget nyckelfält. Svarsnycklar: {sorted(kropp)}")

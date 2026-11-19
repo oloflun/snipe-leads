@@ -1,0 +1,12 @@
+Säkerhetskopior för Railway-volymer, projekt brave-passion. Hämtat 2026-11-17T20:16Z, read-only via Railway GraphQL.
+miljö: development
+   volym redis-volume (Redis) region=ams storlek=32 MB
+      scheman: INGA schemalagda säkerhetskopior
+      kopior: 0 st
+   volym postgres-volume-BM7I (Postgres) region=ams storlek=1861 MB
+      scheman: INGA schemalagda säkerhetskopior
+      kopior: 0 st
+miljö: main
+   volym postgres-volume (Postgres) region=ams storlek=1444 MB
+      scheman: INGA schemalagda säkerhetskopior
+      kopior: 0 st

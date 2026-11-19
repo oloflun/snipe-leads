@@ -91,7 +91,7 @@ identiteter" längst ned i den här filen.
 
 **Av sig själva sedan 2026-11-16** (`.github/workflows/migrera.yml`):
 
-- En push till `development` eller `main` som rör `supabase/migrations/`
+- En push till `development` eller `main` som rör `db/migrations/`
   kör kedjan mot den miljön. Jobbet tar under en minut och Railways bygge
   flera, så schemat ligger före koden. Det är en ordning och ingen grind:
   Railway väntar inte på GitHub Actions. Kontrollera att jobbet `migrera`
@@ -130,6 +130,10 @@ Supabase-grenar. **Den driver ingenting längre.** Avsnitten står kvar för att
 förklarar varför saker ser ut som de gör, inte för att de beskriver hur något
 deployas i dag.
 
+**Render är avvecklat och bortplockat ur repot 2026-11-18** (blueprinten,
+driftkontrollen och skrivvägen i `scripts/keys.py`, se `docs/BESLUT.md`). Använd
+inte Render till något.
+
 Två konkreta konsekvenser som annars ser ut som buggar:
 
 * `.github/workflows/deploy-production.yml` deployade en Vercel-förhandsvisning
@@ -147,8 +151,9 @@ Två konkreta konsekvenser som annars ser ut som buggar:
   `CallbackRouteError` — `authorize` i `lib/auth.ts` kastar mot en databas som
   saknar halva schemat. Det är inte ett kodfel och ska inte felsökas som ett.
 
-Städa inte bort kedjan utan att först flytta det som fortfarande används:
-Vercel-scopet håller variabler som `scripts/onboard_tenant.py` skriver till.
+Skrivvägarna från repot till den döda kedjan är borttagna: `onboard_tenant.py`
+skriver inte längre till Vercel, och `keys.py` har sedan 2026-11-18 varken
+Render-push eller Vercels push och pull.
 
 ---
 
@@ -180,7 +185,7 @@ har riktningen vänts.
 
 ## Migrationskedjan är självbärande sedan `000_base_schema.sql`
 
-`supabase/migrations/000_base_schema.sql` innehåller dashboardens grundtabeller
+`db/migrations/000_base_schema.sql` innehåller dashboardens grundtabeller
 (`workspaces`, `profiles`, `business_contexts` …). Den finns för att kedjan inte
 var självbärande: `001` och framåt förutsätter att `workspaces` finns, men den
 skapades bara av `supabase/schema.sql` — som ingen migrationsmekanism kör.
@@ -198,33 +203,13 @@ tabellerna.
 
 ## Render
 
-> **LEGACY — driver ingenting i dag.** Produkten deployas från Railway; se
-> "Den levande kedjan" högst upp. Avsnittet står kvar för att det förklarar
-> varför saker ser ut som de gör, inte för att beskriva hur något deployas nu.
-
-Blueprinten är `snajp-support/render.yaml` och innehåller **båda** tjänsterna.
-
-`branch:` står i git på båda. Det är inte kosmetik: grenvalet var ett osynligt
-dashboardfält, och två produktionsincidenter kom ur att det pekade fel utan att
-synas i någon diff. `INV-DEPLOY-001` kräver numera att varje tjänst anger sin
-gren, och kontrollerar `rootDir`/`dockerfilePath` **per tjänst** — den var
-tidigare blind för allt utom den första.
-
-**Root Directory-fältet i dashboarden ska vara TOMT.** Det har återgått till
-`snajp-support` av sig självt och fällt ett Docker-bygge med
-`"/agent-core": not found`. `agent-core/` ligger utanför `snajp-support/` och
-kan inte kopieras in om byggkontexten är undermappen.
-
-### Kvoten — läs innan du slår på keep-alive för previewen
-
-Renders gratisnivå ger **750 instanstimmar per månad delat på ALLA
-gratistjänster** i workspacet. `keep-backend-awake.yml` pingar därför bara
-**produktionen** (~250 h/mån). Två varma tjänster hade landat på ~500 h, och när
-taket spricker stänger Render av allt till nästa månad.
-
-Previewen får alltså en minuts kallstart vid första anropet efter inaktivitet.
-Det är rätt avvägning för en testmiljö. Behövs dygnet-runt-drift: uppgradera en
-tjänst till Starter (~7 USD/mån), vilket också tar bort SMTP-blockeringen.
+> **AVVECKLAT 2026-11-18.** Render fyller ingen funktion. Blueprinten
+> (`snajp-support/render.yaml`), driftkontrollen (`scripts/verify_render.py`)
+> och skrivvägen i `scripts/keys.py` är borttagna ur repot, och pingen som höll
+> tjänsten vaken togs bort 2026-11-17. Tjänsterna hos Render stängs och raderas
+> av ägaren (`docs/BESLUT.md`). Återskapa inget av det: driften ligger på
+> Railway, se "Den levande kedjan" högst upp. Lärdomen om byggkontexten lever
+> kvar i `INV-DEPLOY-001` och `INV-DEPLOY-002`.
 
 ---
 
@@ -563,45 +548,19 @@ logotyp och besiktning kräver ögon och skrivs ut som checklista. Se `TENANTS.m
 Verifierat mot Railways API — grenarna är lästa ur `deploymentTriggers`, inte
 antagna. Senast omkontrollerat 2026-08-27 efter omläggningen av development.
 
-### Vercel, Render och Supabase (2026-08-15) — LEGACY
+### Vercel och Supabase (2026-08-15) — LEGACY
 
 | | Värde |
 |---|---|
 | Vercel-projekt | `snajp` — `prj_ZXXMG8Jlz0zHeLdg5NTMhN0tHpw9` |
 | Preview-alias | `https://snajp-git-development-olofluns-projects.vercel.app` |
-| Render produktion | `srv-d9k99ktg1s2s73fl0v6g` — https://snajp-support.onrender.com |
-| Render preview | `srv-da0dopojo6nc73ea3b6g` — https://snajp-support-dev.onrender.com |
 | Supabase produktion | `spsmblyvasagpekjmgmf` (org Snipe, eu-west-1) |
 | Supabase preview-gren | `eppgmjswfnrfwnqvtrge`, persistent, `with_data: true` |
 
 Hemligheter och anslutningssträngar ligger i `.env.deploy` (gitignorerad).
 
-### Det finns ingen Render Blueprint
-
-`GET /v1/blueprints` returnerar en **tom lista**. Båda tjänsterna är
-fristående — produktionen skapad i dashboarden, previewen via API:t.
-`render.yaml` läses alltså inte av någonting.
-
-Det betyder att `INV-DEPLOY-001` vaktar en fil som inte styr driften, och att
-sanningen ligger i Renders databas där ingen diff visar den. Det är precis den
-luckan som orsakade två incidenter: Root Directory som svängde tillbaka till
-`snajp-support`, och grenvalet som pekade mot `development` medan frontenden
-deployade från `main`.
-
-**Fixen är en driftkontroll, inte en blueprint:**
-
-```bash
-python scripts/verify_render.py
-```
-
-Den jämför Renders faktiska tjänster mot `render.yaml` — gren, rootDir,
-dockerfilePath, healthCheckPath och plan — och returnerar 1 vid avvikelse.
-Kör den efter varje ändring i dashboarden och som del av driftsättningsrutinen.
-Filen beskriver avsikten; skriptet bevisar att verkligheten stämmer.
-
-Att i stället registrera en riktig Blueprint hade krävt att `render.yaml` fanns
-på den gren blueprinten läser (`main`), alltså en push till produktion innan
-något verifierats i preview. Fel ordning.
+Render-raderna och avsnittet om Render-driftkontrollen är struket 2026-11-18:
+Render är avvecklat, se avsnittet "Render" ovan.
 
 ## Migrationer 028 och 029 — kör BÅDA före rollbytet
 
@@ -628,8 +587,8 @@ och `SNAJP_INTERNAL_API_KEY` gällde "Production, Preview" — att sätta ett
 preview-värde tog bort dem ur **produktionen**. Upptäckt genom att lista
 scopet efteråt, inte av något felmeddelande.
 
-`scripts/keys.py:vercel_env_set()` vägrar numera skriva till en delad post och
-säger vad man ska göra i stället. Varje variabel bör vara en post per miljö.
+`scripts/keys.py:vercel_env_set()` vägrade efter det att skriva till en delad
+post. Funktionen togs bort 2026-11-18 med resten av Vercel-skrivvägen.
 
 **2. Preview-deployen är SSO-skyddad, och ska förbli det.**
 `ssoProtection` är på för allt utom egna domäner, så `*.vercel.app` kräver
@@ -701,7 +660,7 @@ Uppmätt i produktionen före fixen:
 
     totalt: 30    tidsstämplade: 30    repo-numrerade: 0
 
-Branching-workflowen läser `supabase/migrations/` från git-grenen, ser
+Branching-workflowen läser `db/migrations/` från git-grenen, ser
 versionerna `000`–`029`, hittar ingen av dem i `schema_migrations` och försöker
 applicera **alla trettio**. De faller direkt, eftersom tabellerna och policyerna
 redan finns.
@@ -718,7 +677,7 @@ kontrollera efteråt:
 
 ```sql
 select count(*) from supabase_migrations.schema_migrations where version ~ '^[0-9]{1,3}$';
--- ska vara lika många som antalet filer i supabase/migrations/
+-- ska vara lika många som antalet filer i db/migrations/
 ```
 
 ## Spegling main → development och Flytta till main (plan del E, 2026-10-02)

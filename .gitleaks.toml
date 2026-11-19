@@ -1,0 +1,16 @@
+# Undantag för hemlighetsskanningen i CI (jobbet `hemligheter` i verify.yml).
+# Standardreglerna gäller; bara testfixturer och lokala testdatabaser undantas.
+# Lägg ALDRIG till produktionskod eller konfiguration här: ett fynd där är ett
+# riktigt fynd tills motsatsen är visad.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Testfixturer och CI:ns lokala testdatabas"
+paths = [
+  '''(^|/)tests?/''',
+]
+regexes = [
+  # CI:ns egen Postgres-tjänst och den lokala stacken.
+  '''postgres(ql)?://[^:\s]+:[^@\s]+@(127\.0\.0\.1|localhost)(:\d+)?/''',
+]

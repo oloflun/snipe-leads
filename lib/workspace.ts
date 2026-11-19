@@ -5,7 +5,8 @@ import { auth } from "@/lib/auth";
 import { hasDatabase, sqlAsUser } from "@/lib/db";
 import type { BusinessContext, Profile, Workspace } from "@/lib/database.types";
 
-export type WorkspaceUser = { id: string; email: string | null; name: string | null };
+/** `tvafaktor`: sessionens inloggning gick igenom andra steget (lib/auth.ts, jwt). */
+export type WorkspaceUser = { id: string; email: string | null; name: string | null; tvafaktor?: boolean };
 
 export type WorkspaceContext = {
   user: WorkspaceUser;
@@ -102,7 +103,8 @@ export const getWorkspaceContext = cache(async function getWorkspaceContext(): P
     user: {
       id: userId,
       email: session.user.email ?? null,
-      name: session.user.name ?? null
+      name: session.user.name ?? null,
+      tvafaktor: session.user.tvafaktor === true
     },
     profile: row.profile,
     workspace: row.workspace,

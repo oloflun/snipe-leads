@@ -89,7 +89,7 @@ def test_migrationen_slapper_in_vardet():
     måste ändras tillsammans — se 047 om varför uppräkningen finns på två
     ställen med flit.
     """
-    sql = (ROT / "supabase" / "migrations" / "047_bookkeeping_entitlement.sql").read_text(
+    sql = (ROT / "db" / "migrations" / "047_bookkeeping_entitlement.sql").read_text(
         encoding="utf-8"
     )
     villkor = re.findall(r"array\[[^\]]*\]::text\[\]", sql)

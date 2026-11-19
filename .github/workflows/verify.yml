@@ -29,14 +29,86 @@ on:
       # commit pushas till båda grenarna. Det är avsiktligt betalt.
       - railway-main
 
+# Jobben läser bara koden (checkout och git fetch); ingenting skrivs tillbaka.
+permissions:
+  contents: read
+
 jobs:
+  # Hemlighetsskanning i CI (2026-11-18). GitHubs egen hemlighetsskanning och
+  # push-skydd stängdes av när repot blev privat: gratisplanen har dem bara för
+  # publika repon. gitleaks skannar BARA de nya commitarna i en PR eller push,
+  # inte historiken: historiken bär kända gamla lösenord (bytas av ägaren) och
+  # skulle annars fälla varje körning. Värden maskeras i utskriften (--redact).
+  hemligheter:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: gitleaks på nya commits
+        env:
+          BAS: ${{ github.event.pull_request.base.sha || github.event.before }}
+          TOPP: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -eu
+          curl -sSfL -o /tmp/gl.tgz https://github.com/gitleaks/gitleaks/releases/download/v8.18.4/gitleaks_8.18.4_linux_x64.tar.gz
+          tar -xzf /tmp/gl.tgz -C /tmp gitleaks
+          if [ -z "${BAS}" ] || [ "${BAS}" = "0000000000000000000000000000000000000000" ]; then
+            INTERVALL="${TOPP}~1..${TOPP}"
+          else
+            INTERVALL="${BAS}..${TOPP}"
+          fi
+          echo "Skannar ${INTERVALL}"
+          # --verbose visar fil, rad, regel och commit per träff, så att en
+          # träff går att åtgärda utan att köra om skanningen lokalt. Värdena
+          # är fortfarande maskerade (--redact).
+          /tmp/gitleaks detect --source . --config .gitleaks.toml --no-banner --redact --verbose --log-opts="${INTERVALL}"
+
+  # Dödmanskontrollen för övervakningen (2026-11-18). GitHub hoppar över de
+  # flesta schemalagda körningarna i det här repot (se overvakning.yml), så
+  # kontrollen sitter i CI, som körs på varje push och PR oberoende av schemat.
+  # Har övervakningen inte gått klart på tre timmar öppnas ett ärende med
+  # etiketten overvakning-tyst. Jobbet fäller aldrig CI: det larmar.
+  overvakning-dodman:
+    name: dödmanskontroll för övervakningen
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    # Bara när tokenen får skriva ärenden: push, och PR inifrån repot.
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+    permissions:
+      contents: read
+      actions: read
+      issues: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Har övervakningen gått de senaste tre timmarna?
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: bash scripts/overvakning_dodman.sh
+      # Samma kontroll för säkerhetsbevakningen (ISO 27001 A.5.6), gräns två
+      # dygn, etiketten `sakerhetsbevakning-tyst`. Jobbets namn ovan lämnas
+      # orört eftersom det kan vara en obligatorisk kontroll.
+      - name: Har säkerhetsbevakningen gått de senaste två dygnen?
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          FLODE: sakerhetsbevakning.yml
+        run: bash scripts/overvakning_dodman.sh
+
   python-tests:
     name: pytest (snajp-support)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
           cache: pip
@@ -50,11 +122,136 @@ jobs:
         working-directory: snajp-support
         run: pytest
 
+  licenser:
+    # Licensgrinden (ISO 27001 A.5.32, 2026-11-18). scripts/licenser.py läser
+    # npm-licenserna ur lockfilerna (web och support-webb) och pip-licenserna
+    # ur de INSTALLERADE paketens metadata, så Python-beroendena installeras
+    # här i jobbets egen rena miljö: det är den körningen som är rättvisande,
+    # inte en utvecklingsmaskin med hundratals andra paket. Driftskriptens
+    # requirements installeras också, eftersom de står i förteckningen.
+    # Fäller på copyleft och okända licenser som inte står i
+    # docs/compliance/licenser-vitlista.json. Eget jobb och inte ett steg i
+    # pytest-jobbet, så att ett rött licensbeslut syns för sig och inte
+    # blandas ihop med ett testfel. Inga npm-paket installeras.
+    name: licenser (copyleft-grind)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            snajp-support/requirements.txt
+            scripts/requirements-scripts.txt
+
+      - name: Installera Python-beroendena
+        run: pip install -r snajp-support/requirements.txt -r scripts/requirements-scripts.txt
+
+      - name: Testa licenstolkningen
+        run: python -m pytest tests/test_licenser.py -q
+
+      - name: Kontrollera licenserna
+        run: python scripts/licenser.py --kontrollera
+
+  databas:
+    # Raderingslogik får inte gå ut otestad, och minneslagret som resten av
+    # sviten kör mot gallrar inte. Det här jobbet reser HELA migrationskedjan
+    # från noll mot en tom Postgres (samma huvudversion som driften, 17, med
+    # pgvector som 002 kräver), på samma sätt som scripts/lokal_stack.py gör
+    # lokalt, och kör databastesterna mot den. Databasen är syntetisk och dör
+    # med jobbet; inga hemligheter, ingen riktig miljö.
+    name: databastester (Postgres 17, hela migrationskedjan)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # Jobbet läser bara koden; tokenen får inte mer än så.
+    permissions:
+      contents: read
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_PASSWORD: localdev
+          POSTGRES_DB: railway
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      # Lösenorden är lokal_stack.py:s öppna engångsvärden, inga hemligheter.
+      LOKAL_DSN: postgresql://postgres:localdev@127.0.0.1:5432/railway
+      GALLRING_TEST_DSN: postgresql://postgres:localdev@127.0.0.1:5432/railway
+      GALLRING_TEST_APP_DSN: postgresql://snajp_app:localapp@127.0.0.1:5432/railway
+      GALLRING_TEST_WEB_DSN: postgresql://snajp_web:localweb@127.0.0.1:5432/railway
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: snajp-support/requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r snajp-support/requirements.txt psycopg2-binary
+
+      - name: Compliance-skriptens tester utan databas
+        # Testerna i repo-rotens tests/ kördes inte av något jobb. De här tre
+        # håller rättighetsskriptets tabellkarta i fas med migrationerna
+        # (GDPR PR-1, PR-3, PR-4), säkerhetsbevakningens filtrering (A.5.6)
+        # och konfigurationsbaslinjens maskering av hemligheter (A.8.9).
+        run: python -m pytest tests/test_gdpr_radera.py tests/test_sakerhetsbevakning.py tests/test_railway_baslinje.py -q
+
+      - name: Res migrationskedjan från noll
+        # lokal_stack.kor_kedjan: railway_migrate.planned() i ordning
+        # (railway/000_auth_compat.sql först), approllernas lösenord och
+        # NULLIF-kontrollen av tenant-policyerna. Faller på första migrationen
+        # som inte går att applicera och säger vilken.
+        run: |
+          python -c "import sys; sys.path.insert(0, 'scripts'); import lokal_stack; sys.exit(1 if lokal_stack.kor_kedjan() else 0)"
+
+      - name: Gallringen mot databasen
+        working-directory: snajp-support
+        run: pytest tests/db/test_gallring.py -v -rs -s
+
+      - name: Tenantisoleringen (RLS), rättighetsskriptet och åtkomstloggen mot databasen
+        # test_adminlogg.py: migration 123, INV-SEC-013 (2026-11-18).
+        # test_inloggningsforsok.py: migration 125, spärren mot upprepade
+        # inloggningsförsök (ISO 27001 A.8.5, 2026-11-18).
+        # test_snajp_web_rattigheter.py: migration 126, webbens roll har exakt
+        # listans rättigheter, och varje SQL-sats i webben går att köra som
+        # snajp_web (EXPLAIN) (A.8.2, A.8.3, A.5.15).
+        # test_demo_markering.py: migration 127, startDemo märker arbetsytan
+        # is_demo genom en smal security definer-funktion (2026-11-18).
+        # test_tvafaktor.py: migration 128, tvåstegsverifieringens lagring:
+        # bara plattformsadmin rullar in, steg och återställningskod förbrukas
+        # en gång, avstängning kräver en nyss godkänd kod (A.8.5, A.5.17).
+        # INV-SEC-001 som snajp_app mot det migrerade schemat, och en
+        # provkörning av scripts/gdpr_radera.py (sök, registerutdrag och
+        # radering, och från migration 124 begränsning av behandlingen enligt
+        # art. 18: --begransa, --hav-begransning och approllernas
+        # läsrättighet) med en syntetisk person. Ett överhoppat test räknas som
+        # fel här: utan databasen bevisar de ingenting (2026-11-18).
+        working-directory: snajp-support
+        env:
+          DATABASE_URL: postgresql://postgres:localdev@127.0.0.1:5432/railway
+        run: |
+          set -o pipefail
+          pytest tests/db/test_rls_isolation.py tests/db/test_gdpr_radera_db.py tests/db/test_adminlogg.py tests/db/test_inloggningsforsok.py tests/db/test_snajp_web_rattigheter.py tests/db/test_demo_markering.py tests/db/test_tvafaktor.py -v -rs | tee /tmp/db-ut.txt
+          if grep -qE "[0-9]+ skipped" /tmp/db-ut.txt; then echo "::error::ett databastest hoppades över"; exit 1; fi
+
   invariants:
     name: Architecture invariants
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           # INV-SKILL-006 nedan kör `git diff origin/<bas>...HEAD`. Tre punkter
           # betyder "sedan den gemensamma förfadern", vilket kräver att basen
@@ -73,7 +270,7 @@ jobs:
           # och den gissningen blir fel exakt när den behöver stämma.
           fetch-depth: 0
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
           cache: pip
@@ -102,7 +299,7 @@ jobs:
     name: agent-core laddas i den byggda imagen
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Hämta basimagen från en spegel
         # public.ecr.aws svarar 429 "Data limit exceeded" på GitHubs delade
@@ -137,13 +334,36 @@ jobs:
           assert len(SUPPORT_V1.steps) > 0
           print('agent-core OK i containern')"
 
+      - name: Driftavbilden (synk och migrationer hos Railway)
+        # railway/Dockerfile.drift, docs/compliance/synkflytt-plan.md steg 4.
+        # Ingen databas och inga hemligheter: avbilden ska bygga, skripten ska
+        # gå att starta, kedjan ska finnas på disk, och startkommandot ska
+        # vägra utan jobb och i fel miljö.
+        run: |
+          set -eu
+          docker build -f railway/Dockerfile.drift -t snajp-drift .
+          docker run --rm snajp-drift python scripts/railway_synk.py --help
+          docker run --rm snajp-drift python scripts/railway_migrate.py --help
+          docker run --rm snajp-drift python -c "
+          import sys; sys.path.insert(0, 'scripts')
+          import railway_migrate as rm
+          p = rm.planned()
+          assert p[0][1].is_file() and len(p) > 100, len(p)
+          assert any(v.endswith('_122_synk_lasroll') for v, _ in p)
+          print(len(p), 'migrationer i avbilden')"
+          if docker run --rm snajp-drift; then echo "::error::startkommandot utan jobb kördes"; exit 1; fi
+          if docker run --rm -e RAILWAY_ENVIRONMENT_NAME=development snajp-drift python scripts/railway_drift.py synk; then
+            echo "::error::synken startade i development"; exit 1
+          fi
+          echo "driftavbilden OK"
+
   type-check:
     name: npm run type-check
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 20
           cache: npm

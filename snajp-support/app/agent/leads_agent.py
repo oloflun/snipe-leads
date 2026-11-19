@@ -992,18 +992,18 @@ async def run_research_step(
     )
 
     # Underlaget grundningsgrinden (W5) mäter utkastets påståenden mot.
-    # ORDAGRANNA citat + pains + triggers — det är det som faktiskt hamnar
-    # citerat i ett mejl. Medvetet INTE hela `material`: den råa skrapningen
-    # på 14 000 tecken hade licensierat varje siffra någonstans på prospektets
-    # sajt, inklusive att ett telefonnummer blir en statistik.
+    # Medvetet INTE hela `material`: den råa skrapningen på 14 000 tecken hade
+    # licensierat varje siffra någonstans på prospektets sajt, inklusive att
+    # ett telefonnummer blir en statistik. Och bara citat som ORDAGRANT står i
+    # materialet (Antons beställning 2026-11-16): modellens pains, triggers
+    # och overifierade citat gjorde förut varje tal och namn i dem tillåtet.
+    from ..leads.bedomning import verifierade_belagg
+
     research_evidence = [
-        str(item)
-        for item in (
-            *(customer.get("evidence") or []),
-            *(customer.get("likely_pains") or []),
-            *(account.get("trigger_events") or []),
+        c["citat"]
+        for c in verifierade_belagg(
+            [{"citat": str(item)} for item in customer.get("evidence") or []], material
         )
-        if str(item).strip()
     ]
 
     escalated_steps = [s.skill for s in trace.steps if s.escalated]

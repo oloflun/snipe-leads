@@ -5,7 +5,7 @@
 POST /api/chat körde agentkedjan som `asyncio.create_task` i SAMMA process
 (se app/api/chat.py). En deploy dödar den processen mitt i körningen —
 jobbposten i Redis (app/jobs/store.py) blir kvar som "processing" och
-auto-failas efter JOB_TIMEOUT_SECONDS (300 s). Kunden får ett felmeddelande
+auto-failas efter JOB_TIMEOUT_SECONDS (600 s). Kunden får ett felmeddelande
 i stället för sitt svar, trots att arbetet ofta redan var klart eller nästan
 klart.
 
@@ -142,7 +142,7 @@ class ChattStrom:
         # MAX_LEVERANSER, FÖRE kvitteringen. Utan den kvitterades posten tyst
         # och jobbet stod kvar i processing i alla lager som inte har en egen
         # tidsgräns (leads_job_ledger, lead_lists) — för evigt. None = gamla
-        # beteendet (chattens jobbpost auto-failar ändå efter 300 s).
+        # beteendet (chattens jobbpost auto-failar ändå efter JOB_TIMEOUT_SECONDS).
         self.vid_uppgivet = vid_uppgivet
         # Namnrymd per driftsättning. UTAN den stod produktionens och
         # spegelns containrar i SAMMA consumer group, och en grupp delar ut

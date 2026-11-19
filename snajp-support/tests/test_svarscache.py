@@ -321,6 +321,63 @@ async def test_kb_version_bumpar_processlokalt_utan_redis():
 
 
 @pytest.mark.anyio
+async def test_kb_version_med_giltighet_ateranvander_aldrig_det_gamla_formatet():
+    """Codex runda 4: en post från före giltighetsversionen bär den rena
+    räknaren ("0"). När tenantens sista tidsbegränsade artikel gått ut får den
+    aldrig matcha igen, så det nya formatet skiljer sig också utan slutdatum."""
+    from datetime import datetime, timedelta
+    from zoneinfo import ZoneInfo
+
+    from app.storage.memory import MemoryStorage
+
+    lagring = MemoryStorage()
+    gammal_post = await versioner.kb_version(TENANT_A)
+    idag = datetime.now(ZoneInfo("Europe/Stockholm")).date()
+    await lagring.add_kb_article(
+        TENANT_A, title="Kampanj", content="Gäller i dag.", category="ovrigt", giltig_till=idag
+    )
+    med_utgang = await versioner.kb_version_med_giltighet(lagring, TENANT_A)
+    assert med_utgang.startswith(f"g2:{gammal_post}:d")
+    assert med_utgang.endswith(f":u{idag.isoformat()}")
+
+    for artikel in lagring.kb[TENANT_A]:
+        artikel["giltig_till"] = str(idag - timedelta(days=1))
+    efter = await versioner.kb_version_med_giltighet(lagring, TENANT_A)
+    assert efter.startswith(f"g2:{gammal_post}:d") and ":u" not in efter
+    assert efter not in (gammal_post, med_utgang, f"g1:{gammal_post}")
+
+
+@pytest.mark.anyio
+async def test_kb_versionen_byter_varde_fast_redis_faller_efter_artikeln():
+    """Codex runda 6: artikeln committades och sedan föll höjningen i Redis.
+    Nästa läsning i Redis gav den gamla räknaren, och gamla svar matchade i
+    upp till 21 dagar. Basens egen version (databasdelen) byter värde med
+    artikeln, så hela versionen gör det också när Redis står still."""
+    from app.storage.memory import MemoryStorage
+
+    class _Redis:
+        async def get(self, _nyckel):
+            return b"7"
+
+        async def incr(self, _nyckel):
+            raise ConnectionError("Redis svarar inte")
+
+    versioner.konfigurera(_Redis())
+    try:
+        lagring = MemoryStorage()
+        fore = await versioner.kb_version_med_giltighet(lagring, TENANT_A)
+        await lagring.add_kb_article(
+            TENANT_A, title="Ny artikel", content="Ny text.", category="ovrigt"
+        )
+        await versioner.bumpa_kb(TENANT_A)  # fångar Redis-felet
+        efter = await versioner.kb_version_med_giltighet(lagring, TENANT_A)
+        assert await versioner.kb_version(TENANT_A) == "7", "förutsättningen: Redis står still"
+        assert efter != fore, "en ny artikel måste byta KB-version även när Redis inte höjs"
+    finally:
+        versioner.konfigurera(None)
+
+
+@pytest.mark.anyio
 async def test_config_version_kombinerar_global_och_tenant():
     forsta = await versioner.config_version(TENANT_A)
     assert forsta == "0:0"
@@ -388,3 +445,44 @@ def test_tolka_traff_hanterar_redis_py_8_dictform():
     platt = [1, b"ns:svarscache:abc", [b"avstand", b"0.02", b"svar", b"Platt svar", b"kategori", b"ovrigt"]]
     platt_post = cache._tolka_traff(platt, tenant="t", kbv="v1", cfgv="v1")
     assert platt_post is not None and platt_post.svar == "Platt svar"
+
+
+# --- Samma fråga: likheten räcker inte (2026-11-16) --------------------------
+
+
+def test_samma_fraga_kraver_samma_nyckelord():
+    samma = svarscache.samma_fraga
+    assert samma("hur lång är garantin på elektroder?", "hur lång är garantin på elektroder")
+    # Småord och ordföljd avgör inte ämnet.
+    assert samma("garantin på elektroder, hur lång är den?", "hur lång är garantin på elektroder")
+    # Ett annat föremål eller ett annat tal är en annan fråga, hur nära
+    # vektorerna än ligger.
+    assert not samma("hur lång är garantin på batteriet?", "hur lång är garantin på elektroder?")
+    assert not samma("levererar ni inom 2 dagar?", "levererar ni inom 5 dagar?")
+    # En post utan sparad fråga (äldre poster) serveras aldrig.
+    assert not samma("hur lång är garantin?", "")
+
+
+@pytest.mark.anyio
+async def test_forbered_serverar_inte_ett_svar_pa_en_annan_fraga(monkeypatch):
+    """Vektorn träffar (likhet 1,0) men frågan gäller något annat: miss."""
+
+    async def _samma_vektor(_text):
+        return [1.0, 0.0, 0.0]
+
+    monkeypatch.setattr("app.agent.embeddings.embed_text", _samma_vektor)
+    svarscache.konfigurera(None)
+    await svarscache.spara(
+        TENANT_A, kbv="1", cfgv="1:1", vektor=[1.0, 0.0, 0.0],
+        fraga_norm="hur lång är garantin på elektroder?", svar="1 år.", kategori="garanti",
+    )
+
+    async def _forbered(fraga):
+        return await svarscache.forbered(
+            TENANT_A, history=[], attachments=[], fakta=[], message=fraga, kbv="1", cfgv="1:1"
+        )
+
+    assert (await _forbered("Hur lång är garantin på elektroder?")).traff is not None
+    annan = await _forbered("Hur lång är garantin på batteriet?")
+    assert annan.behorig is True and annan.traff is None
+    svarscache.konfigurera(None)

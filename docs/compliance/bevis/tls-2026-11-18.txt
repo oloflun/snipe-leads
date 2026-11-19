@@ -1,0 +1,30 @@
+TLS och HSTS på Snajps publika adresser
+Mätt 2026-11-18 cirka 19:09 UTC av agenten (Claude), från en utvecklardator.
+Verktyg: curl -sS -D - (rubriker) och openssl s_client -tls1 / -tls1_1 / -tls1_2 / -tls1_3
+(vilka protokollversioner servern accepterar). Bara läsning av publika svar; inga
+inloggningar, ingen kunddata. Krav: P23 (TLS 1.2 eller senare, HSTS), ISO 27001 A.8.21, A.8.24.
+
+Adress                                   TLS1.0  TLS1.1  TLS1.2  TLS1.3  HSTS   http -> https    Server
+web-production-1fe2c.up.railway.app      nej     nej     ja      ja      saknas 301              railway-hikari
+api-production-d7695.up.railway.app      nej     nej     ja      ja      saknas –                railway-hikari
+web-development-6c85.up.railway.app      nej     nej     ja      ja      saknas –                railway-hikari
+api-development-5cc3.up.railway.app      nej     nej     ja      ja      saknas –                railway-hikari
+www.snajp.se                             –       nej     ja      –       saknas 301              railway-hikari
+support-main.up.railway.app              –       nej     ja      –       saknas 301              railway-hikari
+snajp.se (apex)                          –       nej     ja      –       finns  308 till www     Vercel (bara omdirigering)
+
+"–" = inte provat. Chiffer vid TLS 1.2: ECDHE-ECDSA-AES256-GCM-SHA384 (Railway),
+ECDHE-RSA-AES128-GCM-SHA256 (Vercel). TLS 1.3: TLS_AES_256_GCM_SHA384.
+
+Slutsatser
+1. Alla adresser vägrar TLS 1.0 och 1.1 och accepterar 1.2. Kravet i P23 (TLS 1.2 eller
+   senare) håller på de mätta adresserna. Ingen SSL Labs-rapport; den här mätningen
+   ersätter den inte för certifikatkedja och chifferlista i sin helhet.
+2. Railways kant sätter inte HSTS. Appen satte den inte heller (next.config.ts före
+   2026-11-18). Rubriken läggs till i next.config.ts i PR:en som för in den här filen,
+   och syns i development efter deployen; i main först efter release.
+3. http omdirigeras till https på de adresser som provades (301), så HSTS skyddar mot
+   en nedgradering vid första anropet, inte mot okrypterad trafik i övrigt.
+
+Kontroll efter deploy (development): se docs/compliance/score-plan-2026-11-18.md,
+avsnittet "Uttömt 2026-11-18".

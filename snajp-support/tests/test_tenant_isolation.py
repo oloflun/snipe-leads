@@ -44,7 +44,9 @@ async def _create_tenant_b(client) -> dict:
     response = await client.post(
         "/api/keys",
         headers={"X-API-Key": MASTER_KEY},
-        json={"tenant_name": "Fjällrävens Sport AB"},
+        # kraver_avtal false: testdata. Sedan migration 118 kräver en ny
+        # tenant annars signerat avtal (INV-AVTAL-001), och chatten vägras.
+        json={"tenant_name": "Fjällrävens Sport AB", "kraver_avtal": False},
     )
     assert response.status_code == 201
     return response.json()

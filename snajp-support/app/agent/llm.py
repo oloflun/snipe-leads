@@ -47,7 +47,14 @@ from functools import lru_cache
 
 from openai import AsyncOpenAI
 
-from ..config import Settings, get_settings
+from ..config import (
+    VERTEX_EU_REGIONER,
+    Settings,
+    ar_eu_region,
+    bas_url_tillaten,
+    get_settings,
+    vertex_vard,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -182,17 +189,37 @@ async def varm_vertex_token(settings: Settings) -> None:
 
 def vertex_regioner(settings: Settings) -> list[str]:
     """Huvudregionen följd av reservregionerna (bara EU, se config)."""
-    reserv = [r.strip() for r in (settings.vertex_reservregioner or "").split(",") if r.strip()]
-    return list(dict.fromkeys([settings.google_cloud_region, *reserv]))
+    return settings.vertex_regioner()
+
+
+def vertex_region(settings: Settings, region: str | None = None) -> str:
+    """Regionen ett Vertex-anrop ska gå till, eller ForbjudenProviderIMiljon.
+
+    INV-DATA-006. Uppstartskontrollen läser de konfigurerade regionerna, men en
+    region kan också skickas in vid anropet (reservregionen vid 429), och en
+    ingång utanför lifespan passerar aldrig uppstarten. Varje väg som bygger en
+    Vertex-adress (chattklienterna, inbäddningen, den grundade sökningen) går
+    därför hit först. Lokalt och i testsviten släpps varje region igenom.
+    """
+    region = region or settings.google_cloud_region
+    if settings.har_riktig_kunddata() and not ar_eu_region(region):
+        fel = (
+            f"Vertex-regionen {region!r} ligger inte i EU, och processen kan nå "
+            f"riktig kunddata. Anropet görs inte. Tillåtna regioner: "
+            f"{', '.join(VERTEX_EU_REGIONER)} (GOOGLE_CLOUD_REGION, VERTEX_RESERVREGIONER)."
+        )
+        logger.error("Dataskyddsspärr: %s", fel)
+        raise ForbjudenProviderIMiljon(fel)
+    return region
 
 
 def _vertex_base_url(settings: Settings, region: str | None = None) -> str:
     """OpenAI-kompatibla Vertex AI-endpointen."""
     info = json.loads(settings.google_service_account_json)
     project = info["project_id"]
-    region = region or settings.google_cloud_region
+    region = vertex_region(settings, region)
     return (
-        f"https://{region}-aiplatform.googleapis.com/v1beta1/"
+        f"https://{vertex_vard(region)}/v1beta1/"
         f"projects/{project}/locations/{region}/endpoints/openapi/"
     )
 
@@ -315,6 +342,14 @@ def _resolve_base_url(settings: Settings) -> str | None:
     se `Settings.active_llm_key` för hela historien.
     """
     if settings.llm_base_url:
+        # INV-DATA-006: bas-URL:en går före all regionlogik. Där data är
+        # riktig får den bara peka på en Vertex-värd i EU; lokalt (en lokal
+        # modell, en proxy) fungerar den som förut.
+        if settings.har_riktig_kunddata() and not bas_url_tillaten(settings.llm_base_url):
+            raise ForbjudenProviderIMiljon(
+                "LLM_BASE_URL pekar inte på en Vertex-värd i EU, och processen kan "
+                "nå riktig kunddata. Ta bort variabeln."
+            )
         return settings.llm_base_url
     if settings.llm_provider == "deepseek":
         return _DEEPSEEK_BASE_URL
@@ -325,6 +360,28 @@ def _resolve_base_url(settings: Settings) -> str | None:
     return None  # OpenAI SDK-default
 
 
+#: INV-DATA-004. Loggas och bärs av felet när reservvägen vägrar.
+AI_STUDIO_VAGRAN = (
+    "Google AI Studio vägrades: processen kan nå riktig kunddata och "
+    "servicekontot (GOOGLE_SERVICE_ACCOUNT_JSON) saknas. AI Studio får inte bära "
+    "kunddata. Sätt servicekontot, så går anropet via Vertex AI i EU."
+)
+
+
+def ai_studio_vagras(settings: Settings) -> bool:
+    """Sant när reservvägen till AI Studio inte får bära anropet (INV-DATA-004).
+
+    Uppstartskontrollen (`llm_provider_fault`) fäller gemini utan servicekonto,
+    men sidovagnarna och sökningen läser servicekontot oavsett LLM_PROVIDER, och
+    en ingång utanför lifespan (skript, worker) passerar aldrig uppstarten. Därför
+    står spärren också här, i varje gren som annars hade ringt AI Studio.
+    """
+    if settings.har_riktig_kunddata():
+        logger.error("Dataskyddsspärr: %s", AI_STUDIO_VAGRAN)
+        return True
+    return False
+
+
 def _gemini_key_and_url(settings: Settings) -> tuple[str, str]:
     """Nyckel + bas-URL för Gemini-sidovagnarna (embeddings, vision).
 
@@ -332,6 +389,8 @@ def _gemini_key_and_url(settings: Settings) -> tuple[str, str]:
     """
     if settings.google_service_account_json:
         return _vertex_token(settings), _vertex_base_url(settings)
+    if ai_studio_vagras(settings):
+        raise ForbjudenProviderIMiljon(AI_STUDIO_VAGRAN)
     key = settings.embedding_api_key or settings.gemini_api_key
     return key, _GEMINI_BASE_URL
 
@@ -369,7 +428,38 @@ GEMINI_REASONING_EFFORT = ("none", "minimal", "low", "medium", "high")
 TANKANDE_AV = {"extra_body": {"extra_body": {"google": {"thinking_config": {"thinking_budget": 0}}}}}
 
 
-def gemini_tank_kwargs(mode: str | None, effort: str) -> dict:
+#: Gemini 3.x och senare: tankebudgeten är avvecklad ("The thinking_budget
+#: parameter is deprecated for Gemini 3 and later models", Vertex, Thinking,
+#: hämtad 2026-11-18) och tänkandet styrs med en nivå. Uppmätt 2026-11-18 mot
+#: Vertex (eu, europe-west3): gemini-3.5-flash och -flash-lite tar MINIMAL (0
+#: tänktokens); gemini-3.8-flash svarar 400 "Thinking level is unsupported:
+#: THINKING_LEVEL_MINIMAL" och tar lägst LOW; tankebudget 0 på 3.8 gav ett
+#: anrop som hängde i 90 s av två. "none" blir därför modellens lägsta nivå.
+_UTAN_MINIMAL = ("gemini-3.8-flash",)
+
+
+def _gemini_generation(modell: str | None) -> int:
+    """Huvudversionen i ett gemini-namn (`gemini-3.5-flash` -> 3), 0 om okänd."""
+    namn = (modell or "").strip().lower().rsplit("/", 1)[-1]
+    if not namn.startswith("gemini-"):
+        return 0
+    huvud = namn.removeprefix("gemini-").split(".", 1)[0].split("-", 1)[0]
+    return int(huvud) if huvud.isdigit() else 0
+
+
+def lagsta_tankniva(modell: str | None) -> str:
+    """Den lägsta tankenivå en gemini-3.x-modell tar: MINIMAL, eller LOW för
+    modeller som avvisar MINIMAL."""
+    namn = (modell or "").strip().lower().rsplit("/", 1)[-1]
+    return "LOW" if namn.startswith(_UTAN_MINIMAL) else "MINIMAL"
+
+
+def _tankniva(niva: str) -> dict:
+    """Samma nästlade form som TANKANDE_AV (Vertex godtar den)."""
+    return {"extra_body": {"extra_body": {"google": {"thinking_config": {"thinking_level": niva}}}}}
+
+
+def gemini_tank_kwargs(mode: str | None, effort: str, modell: str | None = None) -> dict:
     """Geminis tänkande. "none" = av (tankebudget 0), övriga värden skickas som
     OpenAI-kompatibilitetens `reasoning_effort`.
 
@@ -378,17 +468,29 @@ def gemini_tank_kwargs(mode: str | None, effort: str) -> dict:
     default — eskaleringsbedömningen ska inte strypas av en kostnadsflagga.
     Ett okänt värde skickas inte: ett felstavat env-värde ska inte ge 400 på
     varje agentanrop.
+
+    `modell` (2026-11-18): på gemini-3.x blir "none" modellens lägsta
+    tankenivå i stället för tankebudget 0, och "minimal" blir LOW på en modell
+    som avvisar MINIMAL. Utan modell, eller på gemini-2.5, gäller det gamla.
     """
     if not effort or mode == "enabled" or effort not in GEMINI_REASONING_EFFORT:
         return {}
+    if _gemini_generation(modell) >= 3:
+        lagst = lagsta_tankniva(modell)
+        if effort == "none":
+            return _tankniva(lagst)
+        if effort == "minimal" and lagst != "MINIMAL":
+            return {"reasoning_effort": lagst.lower()}
+        return {"reasoning_effort": effort}
     if effort == "none":
         return TANKANDE_AV
     return {"reasoning_effort": effort}
 
 
-def tankande_kwargs() -> dict:
+def tankande_kwargs(modell: str | None = None) -> dict:
     """För småanropen UTANFÖR stegmotorn (klassificerare, sammanfattningar,
-    bildbeskrivning): samma inställning som stegen, bara på Gemini.
+    bildbeskrivning): samma inställning som stegen, bara på Gemini. Utan
+    `modell` gäller huvudmodellen (MODEL), som de anropen använder.
 
     Uppmätt i development 2026-09-19: uppsägningsklassificeraren tänkte i
     snitt 408 tokens för att skriva 30 — tänkandet var nästan hela anropets
@@ -396,7 +498,9 @@ def tankande_kwargs() -> dict:
     settings = get_settings()
     if settings.llm_provider != "gemini":
         return {}
-    return gemini_tank_kwargs(None, settings.gemini_reasoning_effort.strip().lower())
+    return gemini_tank_kwargs(
+        None, settings.gemini_reasoning_effort.strip().lower(), modell or settings.model
+    )
 
 
 # --- Klienterna ---------------------------------------------------------------
@@ -511,13 +615,14 @@ def get_embedding_client() -> AsyncOpenAI | None:
                 return _embedding_client
             _embedding_client = AsyncOpenAI(
                 api_key=_vertex_token(settings),
-                base_url=_vertex_base_url(settings),
+                base_url=_vertex_base_url(settings, settings.inbaddningsregion()),
                 timeout=_tidsgrans(settings),
             )
             return _embedding_client
 
     key = settings.embedding_api_key or settings.gemini_api_key
-    if not _looks_real(key):
+    # None är den befintliga "ingen klient"-vägen: KB-sökningen går på fulltext.
+    if not _looks_real(key) or ai_studio_vagras(settings):
         return None
 
     with _clients_lock:
@@ -545,14 +650,18 @@ def get_vision_client() -> AsyncOpenAI | None:
             _vision_client = _med_vertex_modellnamn(
                 AsyncOpenAI(
                     api_key=_vertex_token(settings),
-                    base_url=_vertex_base_url(settings),
+                    # VERTEX_BILD_REGION: bildmodellen kan ligga kvar i en
+                    # region där textmodellen inte finns (modellbytet 2026-11-18).
+                    base_url=_vertex_base_url(settings, settings.bildregion()),
                     timeout=_tidsgrans(settings),
                 )
             )
             return _vision_client
 
     key = settings.embedding_api_key or settings.gemini_api_key
-    if not _looks_real(key):
+    # None är den befintliga "ingen klient"-vägen: agent/vision.py ber agenten
+    # eskalera, kvittoflödena säger att bildläsningen saknas.
+    if not _looks_real(key) or ai_studio_vagras(settings):
         return None
 
     with _clients_lock:
@@ -570,6 +679,26 @@ def get_agent_model():
 
     settings = get_settings()
     return OpenAIChatCompletionsModel(model=settings.model, openai_client=get_llm_client())
+
+
+def get_kvitto_client() -> AsyncOpenAI:
+    """Klienten för kvittohanterarens modellanrop (KVITTO_MODEL,
+    VERTEX_KVITTO_REGION, 2026-11-18). Utan VERTEX_KVITTO_REGION, eller utan
+    Vertex, är det den vanliga chattklienten, alltså beteendet före
+    variablerna. En region utanför EU vägras av `vertex_region` i
+    klientbygget och av uppstartskontrollen (INV-DATA-006)."""
+    settings = get_settings()
+    if _uses_vertex(settings) and (settings.vertex_kvitto_region or "").strip():
+        return get_llm_client(region=settings.kvittoregion())
+    return get_llm_client()
+
+
+def get_kvitto_agent_model():
+    """Agents SDK-modellen för kvittohanteraren: `settings.kvittomodell()`
+    (KVITTO_MODEL, annars MODEL) på `get_kvitto_client()`."""
+    from agents import OpenAIChatCompletionsModel
+
+    return OpenAIChatCompletionsModel(model=get_settings().kvittomodell(), openai_client=get_kvitto_client())
 
 
 def configure_agents_sdk() -> None:

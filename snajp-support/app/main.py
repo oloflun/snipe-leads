@@ -19,6 +19,7 @@ import asyncio
 from .api import (
     admin,
     admin_flytt,
+    admin_gallring,
     admin_konvertera,
     admin_ombedom,
     admin_utkastsvep,
@@ -31,6 +32,7 @@ from .api import (
     chattar,
     demo,
     drafts,
+    drift,
     inbox,
     integrationer,
     kanaler,
@@ -366,6 +368,15 @@ async def lifespan(app: FastAPI):
 
         trial_task = asyncio.create_task(run_trial_paminnare(app.state))
 
+    # Gallringen: raderar kunddata äldre än kundens beslutade period, högst en
+    # gång per dygn; i en spegel bara det synken inte för över. AV som
+    # standard (GALLRING_AKTIV). Se app/jobs/gallring.py och migration 119, 133.
+    gallring_task = None
+    if settings.gallring_aktiv:
+        from .jobs.gallring import run_gallring
+
+        gallring_task = asyncio.create_task(run_gallring(app.state))
+
     # Vertex-tokenen hämtas och hålls färsk utanför händelseloopen (H7): utan
     # det blockerade det första kundanropet efter varje deploy, och sedan ett
     # i timmen, hela api:t medan tokenen förnyades. Se agent/llm.py.
@@ -382,7 +393,7 @@ async def lifespan(app: FastAPI):
     # ett pågående steg ska hinna ta emot avbrottet; Railway ger processen 30.
     uppgifter = [
         t
-        for t in (poller_task, send_scheduler_task, stadare_task, trial_task, vertex_task,
+        for t in (poller_task, send_scheduler_task, stadare_task, trial_task, gallring_task, vertex_task,
                   *chat_worker_tasks, *leads_worker_tasks)
         if t is not None
     ]
@@ -447,12 +458,16 @@ app.include_router(sending_domains_api.router)
 app.include_router(admin.router)
 app.include_router(admin_flytt.router)
 app.include_router(admin_flytt.mottag)
+# Synkflytten steg 9: liggarens versioner för PR-kontrollen, egen smal nyckel.
+app.include_router(drift.router)
 # Skrivytan mot agentprofilen. Egen modul, samma prefix och samma master-nyckel —
 # se docstringen i api/admin_profil.py för varför läsning och skrivning är skilda åt.
 app.include_router(admin_profil.router)
 # Kundregistret — fliken Kunder & Data. Egen modul av samma skäl som profilen,
 # se docstringen i api/admin_kunddata.py.
 app.include_router(admin_kunddata.router)
+# Gallringens insyn (läsning, master-grindad) — se docstringen i admin_gallring.py.
+app.include_router(admin_gallring.router)
 app.include_router(admin_konvertera.router)
 # Ombedömning av sparade Iris-leads efter regelskärpningen 2026-10-06; se
 # docstringen i api/admin_ombedom.py.
@@ -617,7 +632,10 @@ async def health_ready(response: Response) -> dict:
         await app.state.storage.get_channel_config(DEFAULT_TENANT_ID, "web")
     except Exception as error:  # noqa: BLE001 — readiness får aldrig kasta
         storage_ok = False
-        warnings.append(f"Lagringen svarar inte: {error}")
+        # Feltexten kan bära värdnamn och användarnamn, och den här vägen är
+        # öppen utan nyckel: texten till loggen, bara typen i svaret.
+        logger.warning("/health/ready: lagringen svarar inte: %s", error)
+        warnings.append(f"Lagringen svarar inte ({type(error).__name__}).")
         response.status_code = 503
 
     return {

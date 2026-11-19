@@ -481,26 +481,50 @@ def _sokmodell(settings) -> str:
     return modell
 
 
+def _sokningens_tankande(modell: str) -> dict:
+    """Tänkandet av, i den form modellen tar: tankebudget 0 på gemini-2.5,
+    lägsta tankenivå på gemini-3.x, där budgeten är avvecklad (se
+    agent/llm.gemini_tank_kwargs, uppmätt 2026-11-18)."""
+    from ..agent.llm import _gemini_generation, lagsta_tankniva
+
+    if _gemini_generation(modell) >= 3:
+        return {"thinkingLevel": lagsta_tankniva(modell)}
+    return {"thinkingBudget": 0}
+
+
 async def _gemini_med_sokning(prompt: str) -> str:
     settings = get_settings()
     modell = _sokmodell(settings)
 
     # Vertex AI: bearer-token + annan endpoint; AI Studio: ?key= query-param.
     if settings.google_service_account_json:
-        from ..agent.llm import _vertex_token, _vertex_base_url
+        from ..agent.llm import ForbjudenProviderIMiljon, _vertex_token, vertex_region
         import json as _json
+
+        # INV-DATA-006: en region utanför EU vägras innan något lämnar huset.
+        try:
+            region = vertex_region(settings)
+        except ForbjudenProviderIMiljon as fel:
+            raise DiscoveryError(str(fel)) from fel
+        from ..config import vertex_vard
+
         token = _vertex_token(settings)
         info = _json.loads(settings.google_service_account_json)
         project = info["project_id"]
-        region = settings.google_cloud_region
         url = (
-            f"https://{region}-aiplatform.googleapis.com/v1beta1/"
+            f"https://{vertex_vard(region)}/v1beta1/"
             f"projects/{project}/locations/{region}/"
             f"publishers/google/models/{modell}:generateContent"
         )
         headers: dict[str, str] = {"Authorization": f"Bearer {token}"}
         params: dict[str, str] = {}
     else:
+        from ..agent.llm import AI_STUDIO_VAGRAN, ai_studio_vagras
+
+        # INV-DATA-004: AI Studio bär aldrig kunddata. DiscoveryError är den
+        # befintliga vägen för en sökning som inte kunde köra.
+        if ai_studio_vagras(settings):
+            raise DiscoveryError(AI_STUDIO_VAGRAN)
         nyckel = settings.gemini_api_key or settings.active_llm_key()
         if not nyckel or len(nyckel) < 20:
             raise DiscoveryError("Ingen Gemini-nyckel — sokningen kan inte kora.")
@@ -520,7 +544,7 @@ async def _gemini_med_sokning(prompt: str) -> str:
         # (63 592 tänktokens); thinkingBudget 0 gav 16 s och 9 s med 8
         # användbara rader vardera. Grounded-sökningen behöver söka, inte
         # resonera — tänkandet var hela latensen.
-        "generationConfig": {"temperature": 0.2, "thinkingConfig": {"thinkingBudget": 0}},
+        "generationConfig": {"temperature": 0.2, "thinkingConfig": _sokningens_tankande(modell)},
     }
     svar: httpx.Response | None = None
     for forsok in range(1, _SOKNING_FORSOK + 1):

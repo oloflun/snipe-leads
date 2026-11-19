@@ -36,7 +36,8 @@ export type Kontakt = {
 };
 
 export type Kunddata = {
-  tenant: { id: string; slug: string | null; name: string };
+  /** `kraver_avtal`: avtalsgrinden (migration 070, standard för nya kunder sedan 118). */
+  tenant: { id: string; slug: string | null; name: string; kraver_avtal?: boolean };
   falt: Record<string, KunddataFalt>;
   kontakter: Kontakt[];
   uppdaterad: string | null;
@@ -103,7 +104,7 @@ export async function sparaKunddata(
       | "avtal_signerat",
       string
     >
-  >
+  > & { kraver_avtal?: boolean }
 ): Promise<KunddataResultat> {
   const { error } = await masterFetch(
     `/tenants/${encodeURIComponent(tenantId)}/kunddata`,

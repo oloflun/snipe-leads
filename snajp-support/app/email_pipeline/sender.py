@@ -63,6 +63,11 @@ class SandningsFel(RuntimeError):
     skickat — det är hela skillnaden mot noteringarna ovan."""
 
 
+class BegransadMottagare(SandningsFel):
+    """Mottagaren har begärt begränsning av behandlingen (art. 18): inget
+    skickas, och det är ett beslut, inte ett leveransfel."""
+
+
 def _svarsheaders(email: dict[str, Any]) -> dict[str, str] | None:
     """In-Reply-To/References för ett svar, eller None när inget original-id finns.
 
@@ -76,6 +81,26 @@ def _svarsheaders(email: dict[str, Any]) -> dict[str, str] | None:
     if original.startswith("<") and original.endswith(">") and "@" in original:
         return {"In-Reply-To": original, "References": original}
     return None
+
+
+async def _vagra_begransad(storage: Any, tenant_id: str, mottagare: str) -> None:
+    """Begränsad behandling (GDPR art. 18, migration 124) i sändningsögonblicket.
+
+    Processorn stoppar AI:n när mejlet kommer in, men ett utkast eller autosvar
+    som skapats före spärren gick förut ut när det godkändes (Codex-granskningen
+    2026-11-19). Här prövas spärren igen, precis före sändningen, för varje
+    supportsvar. Går listan inte att läsa skickas inget (fail closed)."""
+    try:
+        begransad = mottagare.casefold() in await storage.list_begransade(tenant_id)
+    except Exception as fel:  # noqa: BLE001
+        logger.exception("Kunde inte läsa behandlingsbegränsningarna för %s", tenant_id)
+        raise SandningsFel(
+            "Svaret skickades inte: listan över begränsad behandling gick inte att läsa. Försök igen om en stund."
+        ) from fel
+    if begransad:
+        raise BegransadMottagare(
+            "Svaret skickades inte: mottagaren har begärt begränsning av behandlingen (GDPR art. 18)."
+        )
 
 
 def _svarsamne(amne: str | None) -> str:
@@ -112,6 +137,8 @@ async def skicka_supportsvar(
         return NOT_SIMULERAT
 
     mottagare = str(email["from_email"]).strip()
+    if tenant_id and storage:
+        await _vagra_begransad(storage, tenant_id, mottagare)
     amne = _svarsamne(email.get("subject"))
     from_email = from_name = reply_to = None
     fallback = ""

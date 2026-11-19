@@ -38,6 +38,18 @@ const nextConfig: NextConfig = {
     return [
       {
         /**
+         * HSTS (P23, ISO 27001 A.8.21 och A.8.24): webbläsaren ska aldrig gå
+         * över okrypterad http till appen, inte heller efter en nedgraderad
+         * länk. Railways kant sätter inte rubriken (mätt 2026-11-18,
+         * docs/compliance/bevis/tls-2026-11-18.txt). Två år, utan
+         * includeSubDomains och preload: underdomänerna under up.railway.app
+         * är inte våra, och för snajp.se är det ett eget beslut.
+         */
+        source: "/:path*",
+        headers: [{ key: "Strict-Transport-Security", value: "max-age=63072000" }]
+      },
+      {
+        /**
          * Service workern får ALDRIG cachas länge.
          *
          * Webbläsaren hämtar `/sw.js` för att upptäcka en ny version. Ligger

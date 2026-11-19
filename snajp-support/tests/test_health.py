@@ -107,6 +107,33 @@ async def test_otillganglig_lagring_ger_503():
     assert any("Lagringen svarar inte" in warning for warning in body["warnings"])
 
 
+async def test_readiness_lamnar_inte_ut_lagringens_feltext():
+    """/health/ready är öppen utan nyckel. Databasdrivrutinens feltext kan
+    bära värdnamn, adress och användarnamn; den hör hemma i serverloggen,
+    inte i svaret till vem som helst (kodskanningen 2026-11-17)."""
+
+    class TrasigLagring:
+        name = "trasig"
+
+        async def get_channel_config(self, *_args, **_kwargs):
+            raise RuntimeError('connection to server at "intern-vard.example" failed for user "tjanst"')
+
+    async with app.router.lifespan_context(app):
+        riktig = app.state.storage
+        app.state.storage = TrasigLagring()
+        try:
+            async with _client() as client:
+                response = await client.get("/health/ready")
+        finally:
+            app.state.storage = riktig
+
+    assert response.status_code == 503
+    text = response.text
+    assert "intern-vard.example" not in text
+    assert "tjanst" not in text
+    assert "RuntimeError" in text, "feltypen ska synas, så att den som läser vet vad som hände"
+
+
 async def test_cors_ar_av_som_default():
     """CORS behövs inte för vår frontend (proxyn anropar server-side). Att den
     är av som default är en säkerhetsegenskap, inte en glömska."""

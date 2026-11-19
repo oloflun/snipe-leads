@@ -69,6 +69,7 @@ from fastapi.encoders import jsonable_encoder
 from pydantic import BaseModel, Field
 
 from ..config import get_settings
+from ..jobs.synkvakt import synk_alder_min, synk_forsenad
 from ..leads import upptagna
 from ..storage.base import BEDOMNINGSFALT
 from .deps import require_master_key
@@ -86,8 +87,6 @@ SIGNATURHUVUD = "X-Flytt-Signatur"
 PAKET_MAX_ALDER = timedelta(minutes=15)
 #: Så långt fram i tiden får `skapad` ligga (klockor som går olika).
 _PAKET_FRAMTID = timedelta(minutes=5)
-#: Nästa nattliga spegling (.github/workflows/spegla-dev.yml, cron 0 2 * * * UTC).
-NASTA_SPEGLING = "04:00 svensk sommartid (02:00 UTC)"
 
 
 class FlyttRequest(BaseModel):
@@ -265,12 +264,20 @@ async def _bygg_paket(storage, tenant: dict[str, Any], typ: str, ids: list[str])
 
 @router.get("/status")
 async def flytt_status(request: Request) -> dict:
-    """Är den här miljön en spegel, när speglas den nästa gång, och är
-    flyttvägen konfigurerad. Panelen i Byt kund renderas bara i en spegel."""
+    """Är den här miljön en spegel, hur går synken, och är flyttvägen
+    konfigurerad. Panelen i Byt kund renderas bara i en spegel.
+
+    `spegel` bär synkens senaste försök, utfall och antal när synken skrivit
+    dem (storage.spegel_info). `synk_alder_min` är minuter sedan senaste
+    lyckade synk (None = okänt) och `synk_forsenad` samma gräns som
+    synkvakten larmar på (app/jobs/synkvakt.py)."""
     s = get_settings()
+    spegel = await request.app.state.storage.spegel_info()
+    alder = synk_alder_min(spegel)
     return {
-        "spegel": await request.app.state.storage.spegel_info(),
-        "nasta_spegling": NASTA_SPEGLING,
+        "spegel": spegel,
+        "synk_alder_min": alder,
+        "synk_forsenad": synk_forsenad(alder),
         "mal_konfigurerat": bool(s.flytt_mal_url),
         "nyckel_konfigurerad": bool(s.flytt_nyckel),
     }

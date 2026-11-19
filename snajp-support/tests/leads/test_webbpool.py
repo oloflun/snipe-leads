@@ -11,7 +11,7 @@ import pytest
 from app.leads import korning, webbpool
 from app.storage.memory import MemoryStorage
 
-MIGRATION = Path(__file__).resolve().parents[3] / "supabase/migrations/20261008150000_108_webbpool.sql"
+MIGRATION = Path(__file__).resolve().parents[3] / "db/migrations/20261008150000_108_webbpool.sql"
 
 
 @pytest.fixture

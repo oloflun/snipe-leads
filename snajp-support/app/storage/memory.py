@@ -160,6 +160,8 @@ class MemoryStorage:
         self.metrics: list[dict[str, Any]] = []
         self.api_keys: dict[str, dict[str, Any]] = {}
         self.kb: dict[str, list[dict[str, Any]]] = {}
+        self.kb_skanningar: dict[str, list[dict[str, Any]]] = {}
+        self.kb_forslag: dict[str, list[dict[str, Any]]] = {}
         self.channel_overrides: dict[tuple[str, str], dict[str, Any]] = {}
         self.taxonomy_overrides: dict[str, tuple[str, ...]] = {}
         self.context_docs: dict[str, list[dict[str, Any]]] = {}
@@ -170,6 +172,10 @@ class MemoryStorage:
         # Avregistreringar, tenant-skopade. Motsvarar public.suppressions med
         # tenant_id från migration 030.
         self.suppressions: dict[str, list[dict[str, Any]]] = {}
+        # Begränsning av behandling (GDPR art. 18), GLOBAL som
+        # public.behandlingsbegransningar (migration 124). Seedas i tester;
+        # i drift skrivs den bara av scripts/gdpr_radera.py.
+        self.behandlingsbegransningar: list[dict[str, Any]] = []
         # tenant -> adress -> token. Speglar ss_avregistreringslankar.
         self.avregistreringslankar: dict[str, dict[str, str]] = {}
         #: Demolänkarna (migration 116): token -> {tenant_id, thread_id, mal_url, handelser}.
@@ -198,6 +204,8 @@ class MemoryStorage:
         self.prospects: dict[str, list[dict[str, Any]]] = {}
         self.prospect_sources: dict[str, list[dict[str, Any]]] = {}
         self.agent_runs: dict[str, list[dict[str, Any]]] = {}
+        #: Åtkomstloggen (audit_logs, migration 123): en post per master-anrop.
+        self.adminlogg: list[dict[str, Any]] = []
         #: prompt_lager (migration 101): {hash: text}, global som tabellen.
         self.prompt_lager: dict[str, str] = {}
         # Leads-jobbens liggare (INV-JOB-002, migration 059). Nycklad på
@@ -285,7 +293,9 @@ class MemoryStorage:
 
     # -- Tenants ------------------------------------------------------------
 
-    async def create_tenant(self, *, slug: str, name: str) -> dict[str, Any]:
+    async def create_tenant(
+        self, *, slug: str, name: str, kraver_avtal: bool | None = None
+    ) -> dict[str, Any]:
         for tenant in self.tenants.values():
             if tenant["slug"] == slug:
                 return tenant
@@ -294,6 +304,8 @@ class MemoryStorage:
             "slug": slug,
             "name": name,
             "active": True,
+            # Speglar kolumnens standard sedan migration 118 (INV-AVTAL-001).
+            "kraver_avtal": True if kraver_avtal is None else kraver_avtal,
             "created_at": _now(),
         }
         self.tenants[tenant["id"]] = tenant
@@ -317,6 +329,15 @@ class MemoryStorage:
             if overlagd.get(nyckel) is None:
                 overlagd[nyckel] = detaljer.get(falt)
         return overlagd
+
+    async def set_tenant_kraver_avtal(
+        self, tenant_id: str, *, kraver_avtal: bool
+    ) -> dict[str, Any] | None:
+        tenant = self.tenants.get(tenant_id)
+        if tenant is None:
+            return None
+        tenant["kraver_avtal"] = kraver_avtal
+        return dict(tenant)
 
     async def set_tenant_active(self, tenant_id: str, *, active: bool) -> dict[str, Any] | None:
         tenant = self.tenants.get(tenant_id)
@@ -347,6 +368,9 @@ class MemoryStorage:
 
     async def spegel_info(self) -> dict[str, Any] | None:
         return None  # minneslagret speglas aldrig
+
+    async def schema_versioner(self) -> list[str]:
+        return []  # minneslagret har ingen migrationsliggare
 
     async def logga_flytt(self, tenant_id: str, *, typ: str, ref_id: str, resultat: str) -> None:
         if typ not in ("mejl", "korning"):
@@ -702,8 +726,16 @@ class MemoryStorage:
         query_tokens = _expand_query(_tokenize(query))
         if not query_tokens:
             return []
+        # Migration 117: en utgången artikel är inte underlag längre. Svensk
+        # dag, samma som Postgres-vägen; artikeln gäller hela sin sista dag.
+        from zoneinfo import ZoneInfo
+
+        idag = datetime.now(ZoneInfo("Europe/Stockholm")).date()
         scored = []
         for article in self.kb.get(tenant_id, []):
+            giltig_till = article.get("giltig_till")
+            if giltig_till and date.fromisoformat(str(giltig_till)) < idag:
+                continue
             overlap = len(query_tokens & article["tokens"])
             title_overlap = len(query_tokens & article["title_tokens"])
             if overlap:
@@ -712,7 +744,8 @@ class MemoryStorage:
         scored.sort(key=lambda pair: pair[0], reverse=True)
         return [
             {"id": a["id"], "title": a["title"], "content": a["content"],
-             "category": a["category"], "similarity": round(score, 2)}
+             "category": a["category"], "source_url": a.get("source_url"),
+             "similarity": round(score, 2)}
             for score, a in scored[:limit]
             # Tröskeln var 0.2. Sedan svaret måste komma ur ärendets fack
             # (article_in_category) kostar en svag träff inget: den kan bara
@@ -722,10 +755,30 @@ class MemoryStorage:
             if score >= 0.12
         ]
 
+    async def kb_cachestatus(self, tenant_id: str) -> tuple[str, date | None]:
+        from zoneinfo import ZoneInfo
+
+        artiklar = self.kb.get(tenant_id, [])
+        # Postgres har en räknare som en trigger höjer (migration 137). Här
+        # räcker ett fingeravtryck av själva artiklarna: det byter värde vid
+        # varje ändring, oavsett vilken metod som gjorde den.
+        version = hashlib.sha256(
+            json.dumps(artiklar, sort_keys=True, default=str).encode("utf-8")
+        ).hexdigest()[:16]
+        idag = datetime.now(ZoneInfo("Europe/Stockholm")).date()
+        datum = [
+            date.fromisoformat(str(a["giltig_till"]))
+            for a in artiklar
+            if a.get("giltig_till")
+        ]
+        kvar = [d for d in datum if d >= idag]
+        return version, (min(kvar) if kvar else None)
+
     async def list_kb(self, tenant_id: str) -> list[dict[str, Any]]:
         return [
             {"id": a["id"], "title": a["title"], "content": a["content"],
-             "category": a["category"], "created_at": a["created_at"]}
+             "category": a["category"], "source_url": a.get("source_url"),
+             "giltig_till": a.get("giltig_till"), "created_at": a["created_at"]}
             for a in self.kb.get(tenant_id, [])
         ]
 
@@ -737,11 +790,19 @@ class MemoryStorage:
         content: str,
         category: str,
         embedding: list[float] | None = None,
+        source_url: str | None = None,
+        giltig_till: date | None = None,
     ) -> dict[str, Any]:
         row = _kb_row(tenant_id, {"title": title, "content": content, "category": category})
         row["embedding"] = embedding
+        row["source_url"] = source_url
+        # ISO-sträng, samma form som Postgres-vägens _row ger för en date-kolumn.
+        row["giltig_till"] = str(giltig_till) if giltig_till else None
         self.kb.setdefault(tenant_id, []).append(row)
-        return {"id": row["id"], "title": title, "category": category}
+        return {
+            "id": row["id"], "title": title, "category": category,
+            "source_url": source_url, "giltig_till": row["giltig_till"],
+        }
 
     async def delete_kb_article(self, tenant_id: str, artikel_id: str) -> bool:
         artiklar = self.kb.get(tenant_id, [])
@@ -754,6 +815,94 @@ class MemoryStorage:
             {"id": a["id"], "title": a["title"], "content": a["content"]}
             for a in self.kb.get(tenant_id, []) if a.get("embedding") is None
         ][:limit]
+
+    # -- Webbplatsskanningens utfall (migration 121) ---------------------------
+
+    async def skapa_kb_skanning(
+        self, tenant_id: str, *, webbplats: str, startad_av: str, status: str = "pagar", fel: str | None = None
+    ) -> dict[str, Any]:
+        nu = datetime.now(timezone.utc).isoformat()
+        rad = {
+            "id": str(uuid.uuid4()), "tenant_id": tenant_id, "webbplats": webbplats,
+            "status": status, "startad_av": startad_av, "sidor": None, "lasbara_sidor": None,
+            "forslag": 0, "redan_fanns": 0, "fel": fel, "startad_at": nu,
+            "klar_at": nu if status != "pagar" else None,
+        }
+        self.kb_skanningar.setdefault(tenant_id, []).append(rad)
+        return dict(rad)
+
+    async def avsluta_kb_skanning(
+        self,
+        tenant_id: str,
+        skanning_id: str,
+        *,
+        status: str,
+        sidor: int | None = None,
+        lasbara_sidor: int | None = None,
+        forslag: int = 0,
+        redan_fanns: int = 0,
+        fel: str | None = None,
+    ) -> None:
+        for rad in self.kb_skanningar.get(tenant_id, []):
+            if rad["id"] == str(skanning_id):
+                rad.update(
+                    status=status, sidor=sidor, lasbara_sidor=lasbara_sidor, forslag=forslag,
+                    redan_fanns=redan_fanns, fel=fel, klar_at=datetime.now(timezone.utc).isoformat(),
+                )
+
+    async def senaste_kb_skanning(self, tenant_id: str) -> dict[str, Any] | None:
+        rader = self.kb_skanningar.get(tenant_id, [])
+        return dict(rader[-1]) if rader else None
+
+    async def list_kb_forslag(self, tenant_id: str, *, status: str | None = None) -> list[dict[str, Any]]:
+        return [dict(f) for f in self.kb_forslag.get(tenant_id, []) if status is None or f["status"] == status]
+
+    async def add_kb_forslag(
+        self, tenant_id: str, skanning_id: str, forslag: list[dict[str, Any]]
+    ) -> int:
+        nu = datetime.now(timezone.utc).isoformat()
+        for f in forslag:
+            self.kb_forslag.setdefault(tenant_id, []).append({
+                "id": str(uuid.uuid4()), "tenant_id": tenant_id, "skanning_id": str(skanning_id),
+                "title": f["title"], "content": f["content"], "category": f["category"],
+                "source_url": f.get("source_url"), "confidence": f.get("confidence"),
+                "varningar": list(f.get("varningar") or []), "status": "vantar",
+                "artikel_id": None, "created_at": nu, "beslutad_at": None,
+            })
+        return len(forslag)
+
+    async def besluta_kb_forslag(
+        self, tenant_id: str, forslag_id: str, *, status: str, artikel_id: str | None = None
+    ) -> dict[str, Any] | None:
+        for f in self.kb_forslag.get(tenant_id, []):
+            if f["id"] == str(forslag_id) and f["status"] == "vantar":
+                f.update(status=status, artikel_id=artikel_id, beslutad_at=datetime.now(timezone.utc).isoformat())
+                return dict(f)
+        return None
+
+    async def hamta_vantande_kb_forslag(self, tenant_id: str, forslag_id: str) -> dict[str, Any] | None:
+        for f in self.kb_forslag.get(tenant_id, []):
+            if f["id"] == str(forslag_id) and f["status"] == "vantar":
+                return dict(f)
+        return None
+
+    async def lagg_till_kb_forslag(
+        self, tenant_id: str, forslag_id: str, *, embedding: list[float] | None
+    ) -> dict[str, Any] | None:
+        # Ingen await mellan kontrollen och skrivningarna: atomiskt i en
+        # händelseloop, som transaktionen i Postgres-vägen.
+        for f in self.kb_forslag.get(tenant_id, []):
+            if f["id"] == str(forslag_id) and f["status"] == "vantar":
+                row = _kb_row(tenant_id, {"title": f["title"], "content": f["content"], "category": f["category"]})
+                row["embedding"] = embedding
+                row["source_url"] = f.get("source_url")
+                row["giltig_till"] = None
+                self.kb.setdefault(tenant_id, []).append(row)
+                f.update(status="tillagd", artikel_id=str(row["id"]),
+                         beslutad_at=datetime.now(timezone.utc).isoformat())
+                return {"id": row["id"], "title": f["title"], "category": f["category"],
+                        "source_url": f.get("source_url"), "giltig_till": None}
+        return None
 
     async def satt_kb_vektor(self, tenant_id: str, artikel_id: str, embedding: list[float]) -> None:
         for a in self.kb.get(tenant_id, []):
@@ -866,6 +1015,15 @@ class MemoryStorage:
         return {
             str(rad["email"]).strip().casefold()
             for rad in self.suppressions.get(tenant_id, [])
+        }
+
+    async def list_begransade(self, tenant_id: str) -> set[str]:
+        # Global, som behandlingsbegransningar (migration 124): tenant_id
+        # påverkar inte svaret.
+        return {
+            str(rad["email"]).strip().casefold()
+            for rad in self.behandlingsbegransningar
+            if rad.get("havd_at") is None
         }
 
     async def avregistreringstoken(self, tenant_id: str, *, email: str) -> str:
@@ -3410,6 +3568,57 @@ class MemoryStorage:
                 "created_at": _now(),
             }
         )
+
+    # -- Åtkomstloggen (migration 123) --------------------------------------
+    #
+    # Samma fält som funktionen skriver; gallringen och kontrollen mot
+    # platform_admins prövas mot Postgres (tests/db/test_adminlogg.py).
+
+    async def logga_adminatkomst(
+        self,
+        *,
+        kanal: str,
+        admin_user_id: str | None,
+        tenant_id: str | None,
+        metod: str | None,
+        resurs: str,
+        entity_id: str | None = None,
+        request_id: str | None = None,
+    ) -> None:
+        if kanal not in ("master", "kundbesok"):
+            raise ValueError(f"okänd kanal {kanal!r}")
+        self.adminlogg.append(
+            {
+                "kanal": kanal,
+                "admin_user_id": admin_user_id,
+                "tenant_id": tenant_id,
+                "metod": metod,
+                "resurs": resurs,
+                "entity_id": entity_id,
+                "request_id": request_id,
+                "created_at": _now(),
+            }
+        )
+
+    # -- Gallring (migration 119) -------------------------------------------
+    #
+    # Minneslagret gallrar inte: gallringen ÄR databasfunktionen gallra_alla,
+    # och en efterbildning här hade testat en annan implementation än den som
+    # raderar i drift. Den riktiga prövas mot Postgres i tests/db/test_gallring.py.
+
+    async def gallra_dygnet(self, *, tak: int) -> dict[str, Any]:
+        return {"status": "ingen_databas"}
+
+    async def list_gallringslogg(
+        self, *, tenant_id: str | None = None, limit: int = 50
+    ) -> list[dict[str, Any]]:
+        return []
+
+    async def list_gallringspolicyer(self) -> list[dict[str, Any]]:
+        return []
+
+    async def list_gallringskorningar(self, *, limit: int = 14) -> list[dict[str, Any]]:
+        return []
 
     # -- Kundregister (migration 053) ---------------------------------------
     #

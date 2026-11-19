@@ -92,6 +92,38 @@ async def kb_version(tenant_id: str) -> str:
     return str(_minne_kb[tenant_id])
 
 
+async def kb_version_med_giltighet(storage: Any, tenant_id: str) -> str | None:
+    """KB-versionen plus tenantens närmaste artikelutgång.
+
+    Räknaren ovan steg bara när någon skrev i basen. En artikel som går ut vid
+    midnatt skrivs inte av någon, så ett svar som cachats på artikelns sista
+    dag matchade i upp till 21 dagar till (Codex-granskningen 2026-11-19).
+    Med den tidigaste `giltig_till` som ännu gäller i strängen byter versionen
+    värde så fort den dagen passerat, och varje post från före blir omatchbar.
+    Formatet bär alltid ett prefix, också utan slutdatum. Utan det hade
+    versionen återgått till den gamla, rena räknaren när tenantens sista
+    tidsbegränsade artikel gått ut, och en post cachad före den här ändringen,
+    på den artikeln, hade matchat igen (Codex-granskningen runda 4).
+
+    Runda 6: räknaren i Redis höjdes efter att artikeln committats. Föll Redis
+    där, eller processen, lästes den gamla versionen igen och gamla svar
+    matchade vidare. Strängen bär därför också basens egen version ur
+    databasen (`d`), som byter värde i samma transaktion som artikeln
+    (migration 137). Prefixet är `g2:` sedan dess, så att ingen post i det
+    gamla formatet kan matcha.
+
+    None när databasdelen inte gick att läsa: anroparen hoppar då över cachen
+    helt, både uppslag och lagring (fail closed)."""
+    bas = await kb_version(tenant_id)
+    try:
+        databas, utgang = await storage.kb_cachestatus(tenant_id)
+    except Exception:  # noqa: BLE001 — cachen är en optimering, aldrig ett måste
+        logger.warning("Kunde inte läsa KB-versionen för %s; svarscachen hoppas över.", tenant_id)
+        return None
+    version = f"g2:{bas}:d{databas}"
+    return f"{version}:u{utgang.isoformat()}" if utgang else version
+
+
 async def config_version(tenant_id: str) -> str:
     """`"<global>:<tenant>"` — se moduldocstringen för varför två räknare."""
     if _redis is not None:

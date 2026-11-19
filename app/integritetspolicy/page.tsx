@@ -26,7 +26,7 @@ export const metadata: Metadata = {
          får inte skrivas tillbaka utan att någon läst avtalet.
          Se docs/JURIDIK_ATGARDER.md, P0.1c.
       3. Gallringstiden 24 månader mot det gallringsjobbet faktiskt kör
-         (supabase/migrations/048_gallring.sql). Två tal som glidit isär är
+         (db/migrations/048_gallring.sql). Två tal som glidit isär är
          värre än inget tal alls.
     Den gula utkastrutan är BORTTAGEN UR VYN på begäran 2026-08-25 och ska
     inte skrivas tillbaka. Den här markeringen är för utvecklaren, inte för

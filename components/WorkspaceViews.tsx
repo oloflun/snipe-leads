@@ -6,7 +6,6 @@ import { SoulEditor } from "@/components/SoulEditor";
 import { Agentinstruktioner } from "@/components/admin/Agentinstruktioner";
 import { PageShell, useArbetsvag } from "@/components/AppShell";
 import { btnPrimary, btnSecondary, etikett } from "@/components/ui";
-import { LoginForm } from "@/components/auth/LoginForm";
 import { SignOutButton } from "@/components/auth/SignOutButton";
 import { useDashboard } from "@/components/dashboard/DashboardContext";
 import { Analys } from "@/components/dashboard/Analys";
@@ -28,6 +27,7 @@ import { Inkorgar } from "@/components/settings/Inkorgar";
 import { NotisSettings } from "@/components/settings/NotisSettings";
 import { TemaSettings } from "@/components/settings/TemaSettings";
 import { PlanSettings } from "@/components/settings/PlanSettings";
+import { Tvafaktor } from "@/components/settings/Tvafaktor";
 // Kvar ur mock-data: BARA `workflowSteps`, som är AssistantViews stegkedja —
 // en beskrivning av hur agenten arbetar, inte kunddata som utger sig för att
 // vara kundens. Allt annat härifrån (companies, contacts, emailVariants,
@@ -84,7 +84,8 @@ const SETTINGS_TITLAR: Record<SettingsSectionKey, Localized> = {
   notiser: { sv: "Notiser", en: "Notifications" },
   tema: { sv: "Tema", en: "Theme" },
   addons: { sv: "Tillägg", en: "Add-ons" },
-  agentinstruktioner: { sv: "Globala agentinstruktioner", en: "Global agent instructions" }
+  agentinstruktioner: { sv: "Globala agentinstruktioner", en: "Global agent instructions" },
+  tvafaktor: { sv: "Tvåstegsverifiering", en: "Two-step verification" }
 };
 
 const SETTINGS_BESKRIVNINGAR: Partial<Record<SettingsSectionKey, Localized>> = {
@@ -95,7 +96,8 @@ const SETTINGS_BESKRIVNINGAR: Partial<Record<SettingsSectionKey, Localized>> = {
   agentinstruktioner: {
     sv: "Reglerna varje agent läser först, för varje kund. Policy och säkerhet. Ton och röst hör hemma hos kunden.",
     en: "The rules every agent reads first, for every customer. Policy and security. Tone and voice belong to the customer."
-  }
+  },
+  tvafaktor: { sv: "Gäller bara ditt konto.", en: "Applies only to your account." }
 };
 
 const T = {
@@ -111,12 +113,6 @@ const T = {
   och: { sv: " och ", en: " and " },
   bolagsuppgifter: { sv: "Bolagsuppgifter", en: "Company details" },
   andraIUppstart: { sv: "Ändra i uppstartsformuläret", en: "Edit in the onboarding form" },
-  snajpWorkspace: { sv: "Snajps arbetsyta", en: "Snajp workspace" },
-  loggaIn: { sv: "Logga in", en: "Sign in" },
-  loggaInText: {
-    sv: "Logga in med lösenord eller magic link. Efter första inloggningen fyller du i affärskontexten innan översikten öppnas.",
-    en: "Sign in with a password or a magic link. After your first sign-in you set up the business context before the dashboard opens."
-  },
   loadingTitel: {
     sv: "Loading, empty och error states i Snajps formspråk",
     en: "Loading, empty and error states in Snajp's design language"
@@ -348,6 +344,8 @@ export function SettingsView({
           {/* Plattformens egen sida. Grinden står i SettingsSection, på servern —
               att posten inte renderas i menyn är inte en grind. */}
           {section === "agentinstruktioner" ? <Agentinstruktioner /> : null}
+          {/* Grindad på platform_admins i SettingsSection (också med tvånget påslaget). */}
+          {section === "tvafaktor" ? <Tvafaktor /> : null}
         </div>
       </div>
     </PageShell>
@@ -406,32 +404,8 @@ function CompanySettings() {
 // strängar om roller som aldrig funnits i schemat ('Sales lead', 'Researcher',
 // 'Viewer') — profiles.role har två värden: owner och member.
 
-export function LoginView() {
-  const { text } = useLocale();
-  return (
-    <main className="min-h-screen bg-paper text-ink">
-      {/* gap-x först vid md — se kommentaren i OnboardingWizard.Falt: under md
-          är båda sektionerna col-span-12, och gapen ensamma är bredare än
-          viewporten. */}
-      <div className="mx-auto grid min-h-screen max-w-[1480px] grid-cols-12 px-6 py-10 md:gap-x-8 md:px-8">
-        <section className="col-span-12 flex flex-col justify-between bg-ink p-8 text-paper md:col-span-6">
-          <div>
-            <p className="text-[0.8125rem] font-medium text-paper-muted">{text(T.snajpWorkspace)}</p>
-            <h1 className="mt-8 text-[1.75rem] font-semibold leading-tight tracking-[-0.02em]">
-              {text(T.loggaIn)}
-            </h1>
-          </div>
-          <p className="mt-12 max-w-[44ch] text-[16px] leading-7 text-paper-muted">
-            {text(T.loggaInText)}
-          </p>
-        </section>
-        <section className="col-span-12 mt-8 flex items-center md:col-span-6 md:mt-0 md:pl-10">
-          <LoginForm />
-        </section>
-      </div>
-    </main>
-  );
-}
+// LoginView bor i components/auth/LoginForm.tsx (LoginSida) sedan 2026-11-18:
+// /login drog annars in hela arbetsytans kod genom den här filen.
 
 // OnboardingView bor numera i app/onboarding/page.tsx + components/auth/
 // OnboardingWizard.tsx: flödet blev fem steg (företag, bransch,

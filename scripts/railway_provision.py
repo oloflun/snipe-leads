@@ -5,9 +5,9 @@
     python scripts/railway_provision.py --apply           # båda miljöerna
     python scripts/railway_provision.py --apply --env development
 
-Kör om den hur många gånger som helst. Motsvarigheten till render.yaml, fast
-som ett kommando som faktiskt går att verifiera i stället för en blueprint som
-visade sig inte existera.
+Kör om den hur många gånger som helst. Ett kommando som faktiskt går att
+verifiera, i stället för en blueprint som visade sig inte existera (Render-
+blueprinten, borttagen med resten av Render 2026-11-18).
 
 Hemligheter läses ur .env.deploy och skrivs ALDRIG ut — varken till terminalen
 eller till loggen. Nya hemligheter skrivs tillbaka till .env.deploy.
@@ -303,8 +303,16 @@ def provision(env_name: str, branch: str, apply: bool) -> None:
     # TCP-proxy: migrationskedjan och speglingen körs UTIFRÅN, inte inne i
     # containern. Utan den finns ingen väg in till en databas som bara har ett
     # privat värdnamn.
+    #
+    # Utom i main (synkflytten steg 11, 2026-11-19): produktionens port ska
+    # vara stängd när synken och migrationerna körs hos Railway. Saknas mains
+    # värd i .env.deploy betyder det att porten är stängd med flit, och en ny
+    # --apply får inte öppna den igen. Öppna den för hand och dokumentera det
+    # (synkflytt-runbook.md, steg 12, backning).
     store = env_read()
-    if not store.get(f"RAILWAY_{env_name.upper()}_PG_HOST"):
+    if env_name == "main" and not store.get("RAILWAY_MAIN_PG_HOST"):
+        print("    ingen TCP-proxy för main: porten hålls stängd (synkflytt-runbook.md steg 12)")
+    elif not store.get(f"RAILWAY_{env_name.upper()}_PG_HOST"):
         # En klonad miljö ärver källans proxy-konfiguration, så en proxy kan redan
         # finnas. Läs den i så fall i stället för att skapa en till (som failar).
         existing = gql(
@@ -341,7 +349,7 @@ def provision(env_name: str, branch: str, apply: bool) -> None:
     }
     # snipe-u70: LLM_PROVIDER/MODEL skrevs tidigare OVILLKORLIGT här, VARJE
     # körning — även mot en redan provisionerad miljö. Mot main eller
-    # development sätter "deepseek" den förbjudna providern (se CLAUDE.md,
+    # development satte "deepseek" den förbjudna providern (se CLAUDE.md,
     # Settings.llm_provider_fault) och tjänsten vägrar starta. Samma felklass
     # som scripts/keys.py:FIXED (kommentaren där pekar hit): predikatet är
     # satt/osatt, INTE looks_placeholder — ett providernamn är kort per
@@ -349,8 +357,14 @@ def provision(env_name: str, branch: str, apply: bool) -> None:
     # över ett redan valt värde också. De två raderna är bara ett startvärde
     # för en NY miljö som saknar provider helt; en befintlig miljös val rörs
     # aldrig.
+    #
+    # Startvärdet är gemini (Vertex AI i EU) sedan 2026-11-18, inte deepseek:
+    # uppstartsspärren vägrar ändå DeepSeek där data är riktig (CLAUDE.md,
+    # "DeepSeek får inte se kunddata"), och ett startvärde ska inte peka på en
+    # leverantör som är förbjuden i varje miljö skriptet provisionerar.
+    # gemini-2.5-flash är samma namn som config.vision_model.
     befintliga = read_vars(api["id"], env_id)
-    for namn, startvarde in (("LLM_PROVIDER", "deepseek"), ("MODEL", "deepseek-v4-flash")):
+    for namn, startvarde in (("LLM_PROVIDER", "gemini"), ("MODEL", "gemini-2.5-flash")):
         if not befintliga.get(namn, "").strip():
             api_vars[namn] = startvarde
     set_vars(api["id"], env_id, api_vars)

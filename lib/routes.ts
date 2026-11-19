@@ -303,6 +303,12 @@ export const settingsGroups: SettingsGroup[] = [
         href: "/admin/installningar/agentinstruktioner",
         label: { sv: "Globala agentinstruktioner", en: "Global agent instructions" },
         adminOnly: true
+      },
+      {
+        // Personlig för den inloggade plattformsadminen (migration 128).
+        href: "/admin/installningar/tvafaktor",
+        label: { sv: "Tvåstegsverifiering", en: "Two-step verification" },
+        adminOnly: true
       }
     ]
   },
@@ -372,7 +378,7 @@ const demoDoldaSektioner = new Set(["team"]);
  * tyst blir oskyddad. Två rader att hålla i synk är billigare än en grind
  * som kan misslyckas tyst.
  */
-const adminSektioner = new Set<string>(["agentinstruktioner"]);
+const adminSektioner = new Set<string>(["agentinstruktioner", "tvafaktor"]);
 
 export function sektionKraverAdmin(section: string): boolean {
   return adminSektioner.has(section);
@@ -407,7 +413,8 @@ export type SettingsSectionKey =
   | "mailboxes"
   | "notiser"
   | "tema"
-  | "agentinstruktioner";
+  | "agentinstruktioner"
+  | "tvafaktor";
 
 const settingsSections: Record<string, SettingsSectionKey> = {
   "": "foretaget",
@@ -422,7 +429,8 @@ const settingsSections: Record<string, SettingsSectionKey> = {
   mailboxes: "mailboxes",
   notiser: "notiser",
   tema: "tema",
-  agentinstruktioner: "agentinstruktioner"
+  agentinstruktioner: "agentinstruktioner",
+  tvafaktor: "tvafaktor"
 };
 
 /**

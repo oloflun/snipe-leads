@@ -280,9 +280,12 @@ async def test_research_v2_ar_exakt_ett_anrop_med_v1_kontraktet():
     assert result["company_summary"] == "Svensk e-handel inom kläder."
     assert result["likely_pains"] == ["Många returfrågor"]
 
-    # Beläggen = citat + pains + triggers, som V1.
+    # Beläggen = bara det som ordagrant står i materialet (2026-11-16):
+    # triggern är modellens egen slutsats och gör inget tillåtet i grinden,
+    # men når fortfarande utkastet via toppnivåfältet.
     assert "Fri retur inom 30 dagar" in result["research_evidence"]
-    assert "Rekryterar kundtjänst" in result["research_evidence"]
+    assert "Rekryterar kundtjänst" not in result["research_evidence"]
+    assert result["trigger_events"] == ["Rekryterar kundtjänst"]
 
     # agent_runs-raden skrevs med V2:s pack_version.
     runs = await storage.list_agent_runs(TENANT, agent_type="leads_research")

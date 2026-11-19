@@ -1,4 +1,4 @@
-"""Postgres-lagring mot Supabase (multi-tenant, pgvector + svensk fulltext-fallback).
+"""Postgres-lagring mot Railway-Postgres (multi-tenant, pgvector + svensk fulltext-fallback).
 
 Varje operation körs i en transaktion som först sätter app.tenant_id via
 set_config — då verkställs RLS-policyerna från 003_snajp_multitenant.sql —
@@ -134,6 +134,10 @@ _NYCKEL_TTL_S = 30.0
 #: last_used_at skrivs högst så här ofta per nyckel.
 _SENAST_ANVAND_S = 300.0
 
+#: mirror_meta-kolumner som synken skapar själv och som därför kan saknas i en
+#: äldre spegel (se spegel_info). Ordningen är svarets ordning.
+_SPEGEL_VALFRIA = ("lage", "synkad_at", "senaste_forsok_at", "senaste_utfall", "senaste_antal")
+
 
 def _row(record: asyncpg.Record | None) -> dict[str, Any] | None:
     if record is None:
@@ -147,6 +151,17 @@ def _row(record: asyncpg.Record | None) -> dict[str, Any] | None:
         elif key == "sentiment" and value is not None:
             data[key] = float(value)
     return data
+
+
+def _forslag_rad(record: asyncpg.Record) -> dict[str, Any]:
+    """Ett utkast ur ss_kb_forslag. `varningar` är jsonb, som asyncpg lämnar
+    som text utan en registrerad kodare."""
+    rad = _row(record)
+    if isinstance(rad.get("varningar"), str):
+        rad["varningar"] = json.loads(rad["varningar"])
+    if rad.get("confidence") is not None:
+        rad["confidence"] = round(float(rad["confidence"]), 2)
+    return rad
 
 
 #: RRF-konstanten. 60 är standarden (Elasticsearch, OpenSearch, Qdrant) och
@@ -292,17 +307,48 @@ class PostgresStorage:
 
     # -- Tenants ------------------------------------------------------------
 
-    async def create_tenant(self, *, slug: str, name: str) -> dict[str, Any]:
+    async def create_tenant(
+        self, *, slug: str, name: str, kraver_avtal: bool | None = None
+    ) -> dict[str, Any]:
         # Administrativ operation — körs utan tenant-kontext (kräver master-nyckel i API-lagret).
+        #
+        # kraver_avtal: None utelämnar kolumnen så att databasens standard
+        # gäller (true sedan migration 118). Upserten skriver bara name, så en
+        # befintlig tenants avtalsgrind ändras aldrig av ett omtag.
+        async with self.pool.acquire() as conn:
+            if kraver_avtal is None:
+                record = await conn.fetchrow(
+                    """
+                    insert into ss_tenants (slug, name) values ($1, $2)
+                    on conflict (slug) do update set name = excluded.name
+                    returning *
+                    """,
+                    slug,
+                    name,
+                )
+            else:
+                record = await conn.fetchrow(
+                    """
+                    insert into ss_tenants (slug, name, kraver_avtal) values ($1, $2, $3)
+                    on conflict (slug) do update set name = excluded.name
+                    returning *
+                    """,
+                    slug,
+                    name,
+                    kraver_avtal,
+                )
+        return _row(record)
+
+    async def set_tenant_kraver_avtal(
+        self, tenant_id: str, *, kraver_avtal: bool
+    ) -> dict[str, Any] | None:
+        # Samma väg och samma policy (ss_tenants_admin_write, 029) som
+        # set_tenant_active: oskopad, bakom require_master_key.
         async with self.pool.acquire() as conn:
             record = await conn.fetchrow(
-                """
-                insert into ss_tenants (slug, name) values ($1, $2)
-                on conflict (slug) do update set name = excluded.name
-                returning *
-                """,
-                slug,
-                name,
+                "update ss_tenants set kraver_avtal = $2 where id = $1 returning *",
+                tenant_id,
+                kraver_avtal,
             )
         return _row(record)
 
@@ -934,10 +980,14 @@ class PostgresStorage:
         await conn.execute("set local ivfflat.probes = 10")
         records = await conn.fetch(
             """
-            select id, title, content, category,
+            select id, title, content, category, source_url,
                    1 - (embedding <=> $2::vector) as similarity
             from ss_knowledge_base
             where tenant_id = $1 and embedding is not null
+              -- Migration 117: utgångna artiklar är inte underlag. Svensk dag;
+              -- artikeln gäller hela sin sista dag.
+              and (giltig_till is null
+                   or giltig_till >= (now() at time zone 'Europe/Stockholm')::date)
             order by embedding <=> $2::vector
             limit $3
             """,
@@ -974,12 +1024,15 @@ class PostgresStorage:
                 ), ' | '
               ) as expr
             )
-            select k.id, k.title, k.content, k.category,
+            select k.id, k.title, k.content, k.category, k.source_url,
                    ts_rank(k.search_tsv, to_tsquery('swedish', q.expr)) as rank
             from ss_knowledge_base k, q
             where k.tenant_id = $1
               and q.expr <> ''
               and k.search_tsv @@ to_tsquery('swedish', q.expr)
+              -- Samma giltighetsfilter som vektorvägen (migration 117).
+              and (k.giltig_till is null
+                   or k.giltig_till >= (now() at time zone 'Europe/Stockholm')::date)
             order by rank desc
             limit $3
             """,
@@ -989,15 +1042,30 @@ class PostgresStorage:
         )
         return [
             {"id": str(r["id"]), "title": r["title"], "content": r["content"],
-             "category": r["category"], "similarity": round(float(r["rank"]), 2)}
+             "category": r["category"], "source_url": r["source_url"],
+             "similarity": round(float(r["rank"]), 2)}
             for r in records
         ]
+
+    async def kb_cachestatus(self, tenant_id: str) -> tuple[str, date | None]:
+        async with self._scoped(tenant_id) as conn:
+            rad = await conn.fetchrow(
+                """
+                select
+                  coalesce((select version from ss_kb_version where tenant_id = $1), 0) as version,
+                  (select min(giltig_till) from ss_knowledge_base
+                    where tenant_id = $1
+                      and giltig_till >= (now() at time zone 'Europe/Stockholm')::date) as utgang
+                """,
+                tenant_id,
+            )
+        return str(rad["version"]), rad["utgang"]
 
     async def list_kb(self, tenant_id: str) -> list[dict[str, Any]]:
         async with self._scoped(tenant_id) as conn:
             records = await conn.fetch(
                 """
-                select id, title, content, category, created_at
+                select id, title, content, category, source_url, giltig_till, created_at
                 from ss_knowledge_base where tenant_id = $1 order by created_at
                 """,
                 tenant_id,
@@ -1012,18 +1080,27 @@ class PostgresStorage:
         content: str,
         category: str,
         embedding: list[float] | None = None,
+        source_url: str | None = None,
+        giltig_till: date | None = None,
     ) -> dict[str, Any]:
+        # asyncpg kräver ett date-objekt för en date-kolumn, aldrig en sträng.
+        if isinstance(giltig_till, str):
+            giltig_till = date.fromisoformat(giltig_till)
         async with self._scoped(tenant_id) as conn:
             record = await conn.fetchrow(
                 """
-                insert into ss_knowledge_base (tenant_id, title, content, category, embedding)
-                values ($1, $2, $3, $4, $5) returning id, title, category
+                insert into ss_knowledge_base
+                  (tenant_id, title, content, category, embedding, source_url, giltig_till)
+                values ($1, $2, $3, $4, $5, $6, $7)
+                returning id, title, category, source_url, giltig_till
                 """,
                 tenant_id,
                 title,
                 content,
                 category,
                 embedding,
+                source_url,
+                giltig_till,
             )
         return _row(record)
 
@@ -1053,6 +1130,158 @@ class PostgresStorage:
                 limit,
             )
         return [_row(r) for r in records]
+
+    # -- Webbplatsskanningens utfall (migration 121) ---------------------------
+
+    async def skapa_kb_skanning(
+        self, tenant_id: str, *, webbplats: str, startad_av: str, status: str = "pagar", fel: str | None = None
+    ) -> dict[str, Any]:
+        async with self._scoped(tenant_id) as conn:
+            record = await conn.fetchrow(
+                """
+                insert into ss_kb_skanningar (tenant_id, webbplats, startad_av, status, fel, klar_at)
+                values ($1, $2, $3, $4, $5, case when $4 = 'pagar' then null else now() end)
+                returning *
+                """,
+                tenant_id, webbplats, startad_av, status, fel,
+            )
+        return _row(record)
+
+    async def avsluta_kb_skanning(
+        self,
+        tenant_id: str,
+        skanning_id: str,
+        *,
+        status: str,
+        sidor: int | None = None,
+        lasbara_sidor: int | None = None,
+        forslag: int = 0,
+        redan_fanns: int = 0,
+        fel: str | None = None,
+    ) -> None:
+        async with self._scoped(tenant_id) as conn:
+            await conn.execute(
+                """
+                update ss_kb_skanningar
+                   set status = $3, sidor = $4, lasbara_sidor = $5, forslag = $6,
+                       redan_fanns = $7, fel = $8, klar_at = now()
+                 where tenant_id = $1 and id = $2::uuid
+                """,
+                tenant_id, str(skanning_id), status, sidor, lasbara_sidor, forslag, redan_fanns, fel,
+            )
+
+    async def senaste_kb_skanning(self, tenant_id: str) -> dict[str, Any] | None:
+        async with self._scoped(tenant_id) as conn:
+            record = await conn.fetchrow(
+                "select * from ss_kb_skanningar where tenant_id = $1 order by startad_at desc limit 1",
+                tenant_id,
+            )
+        return _row(record)
+
+    async def list_kb_forslag(self, tenant_id: str, *, status: str | None = None) -> list[dict[str, Any]]:
+        async with self._scoped(tenant_id) as conn:
+            records = await conn.fetch(
+                """
+                select * from ss_kb_forslag
+                 where tenant_id = $1 and ($2::text is null or status = $2)
+                 order by created_at, id
+                """,
+                tenant_id, status,
+            )
+        return [_forslag_rad(r) for r in records]
+
+    async def add_kb_forslag(
+        self, tenant_id: str, skanning_id: str, forslag: list[dict[str, Any]]
+    ) -> int:
+        if not forslag:
+            return 0
+        async with self._scoped(tenant_id) as conn:
+            await conn.executemany(
+                """
+                insert into ss_kb_forslag
+                  (tenant_id, skanning_id, title, content, category, source_url, confidence, varningar)
+                values ($1, $2::uuid, $3, $4, $5, $6, $7, $8::jsonb)
+                """,
+                [
+                    (
+                        tenant_id, str(skanning_id), f["title"], f["content"], f["category"],
+                        f.get("source_url"), f.get("confidence"), json.dumps(list(f.get("varningar") or [])),
+                    )
+                    for f in forslag
+                ],
+            )
+        return len(forslag)
+
+    async def besluta_kb_forslag(
+        self, tenant_id: str, forslag_id: str, *, status: str, artikel_id: str | None = None
+    ) -> dict[str, Any] | None:
+        try:
+            uuid.UUID(str(forslag_id))
+        except ValueError:
+            return None
+        async with self._scoped(tenant_id) as conn:
+            record = await conn.fetchrow(
+                """
+                update ss_kb_forslag
+                   set status = $3, artikel_id = $4::uuid, beslutad_at = now()
+                 where tenant_id = $1 and id = $2::uuid and status = 'vantar'
+                returning *
+                """,
+                tenant_id, str(forslag_id), status, artikel_id,
+            )
+        return _forslag_rad(record) if record else None
+
+    async def hamta_vantande_kb_forslag(self, tenant_id: str, forslag_id: str) -> dict[str, Any] | None:
+        try:
+            uuid.UUID(str(forslag_id))
+        except ValueError:
+            return None
+        async with self._scoped(tenant_id) as conn:
+            record = await conn.fetchrow(
+                "select * from ss_kb_forslag where tenant_id = $1 and id = $2::uuid and status = 'vantar'",
+                tenant_id, str(forslag_id),
+            )
+        return _forslag_rad(record) if record else None
+
+    async def lagg_till_kb_forslag(
+        self, tenant_id: str, forslag_id: str, *, embedding: list[float] | None
+    ) -> dict[str, Any] | None:
+        # En transaktion: radlåset på förslaget, artikeln och beslutet. Ett
+        # avbrott någonstans (CancelledError, processen dör) rullar tillbaka
+        # allt, och förslaget står kvar som väntande (Codex 2026-11-19).
+        try:
+            uuid.UUID(str(forslag_id))
+        except ValueError:
+            return None
+        async with self._scoped(tenant_id) as conn:
+            forslag = await conn.fetchrow(
+                """
+                select * from ss_kb_forslag
+                 where tenant_id = $1 and id = $2::uuid and status = 'vantar'
+                 for update
+                """,
+                tenant_id, str(forslag_id),
+            )
+            if not forslag:
+                return None
+            artikel = await conn.fetchrow(
+                """
+                insert into ss_knowledge_base (tenant_id, title, content, category, embedding, source_url)
+                values ($1, $2, $3, $4, $5, $6)
+                returning id, title, category, source_url, giltig_till
+                """,
+                tenant_id, forslag["title"], forslag["content"], forslag["category"],
+                embedding, forslag["source_url"],
+            )
+            await conn.execute(
+                """
+                update ss_kb_forslag
+                   set status = 'tillagd', artikel_id = $3::uuid, beslutad_at = now()
+                 where tenant_id = $1 and id = $2::uuid
+                """,
+                tenant_id, str(forslag_id), str(artikel["id"]),
+            )
+        return _row(artikel)
 
     async def satt_kb_vektor(self, tenant_id: str, artikel_id: str, embedding: list[float]) -> None:
         async with self._scoped(tenant_id) as conn:
@@ -1214,6 +1443,15 @@ class PostgresStorage:
         async with self._scoped(tenant_id) as conn:
             records = await conn.fetch(
                 "select email from suppressions where tenant_id = $1", tenant_id
+            )
+        return {str(r["email"]).strip().casefold() for r in records}
+
+    async def list_begransade(self, tenant_id: str) -> set[str]:
+        # Global tabell (migration 124): policyn släpper igenom alla rader,
+        # skopningen av anslutningen påverkar inte svaret.
+        async with self._scoped(tenant_id) as conn:
+            records = await conn.fetch(
+                "select email from behandlingsbegransningar where havd_at is null"
             )
         return {str(r["email"]).strip().casefold() for r in records}
 
@@ -4478,21 +4716,49 @@ class PostgresStorage:
     # därifrån — inte i RLS, som per definition inte kan uttrycka
     # "alla tenants".
 
+    async def schema_versioner(self) -> list[str]:
+        # Bara filnamn ur liggaren (migration 129 ger snajp_app läsrätt).
+        async with self.pool.acquire() as conn:
+            if not await conn.fetchval("select to_regclass('supabase_migrations.schema_migrations') is not null"):
+                return []
+            rader = await conn.fetch("select version from supabase_migrations.schema_migrations")
+        return [r["version"] for r in rader]
+
     async def spegel_info(self) -> dict[str, Any] | None:
         async with self.pool.acquire() as conn:
             finns = await conn.fetchval("select to_regclass('public.mirror_meta') is not null")
             if not finns:
                 return None
-            # lage/synkad_at sätts av scripts/railway_synk.py (tvåvägssynken).
-            har_lage = await conn.fetchval(
-                "select exists (select 1 from information_schema.columns "
-                "where table_schema = 'public' and table_name = 'mirror_meta' and column_name = 'lage')"
-            )
+            # Kolumnerna utöver environment/seeded_at skapas av synken själv
+            # (scripts/railway_synk.py): lage/synkad_at vid första lyckade
+            # synken, senaste_forsok_at/senaste_utfall/senaste_antal av
+            # skriv_utfall (synkflytt-planen § 3 Insyn). En äldre spegel saknar
+            # dem, så bara de som finns läses. Namnen kommer ur listan nedan,
+            # aldrig ur databasen, och kan därför sättas in i frågan.
+            finns_kol = {
+                r["column_name"]
+                for r in await conn.fetch(
+                    "select column_name from information_schema.columns "
+                    "where table_schema = 'public' and table_name = 'mirror_meta'"
+                )
+            }
+            valfria = [k for k in _SPEGEL_VALFRIA if k in finns_kol]
             rad = await conn.fetchrow(
-                "select environment, seeded_at" + (", lage, synkad_at" if har_lage else "")
+                "select " + ", ".join(["environment", "seeded_at", *valfria])
                 + " from public.mirror_meta limit 1"
             )
-        return _row(rad) if rad else None
+        if not rad:
+            return None
+        data = _row(rad)
+        # jsonb kommer som text (poolen har ingen jsonb-kodek); antal per
+        # tabell och åtgärd, inga nycklar eller värden.
+        antal = data.get("senaste_antal")
+        if isinstance(antal, str):
+            try:
+                data["senaste_antal"] = json.loads(antal)
+            except ValueError:
+                data["senaste_antal"] = None
+        return data
 
     async def logga_flytt(self, tenant_id: str, *, typ: str, ref_id: str, resultat: str) -> None:
         async with self._scoped(tenant_id) as conn:
@@ -4710,6 +4976,92 @@ class PostgresStorage:
                 json.dumps(detail or {}, ensure_ascii=False),
                 run_id,
             )
+
+    # -- Åtkomstloggen (migration 123) --------------------------------------
+    #
+    # Oskopad anslutning: master-anropen har ingen tenant-kontext, och
+    # funktionen är säkerhetsdefinierad (snajp_app får inte skriva i
+    # audit_logs direkt).
+
+    async def logga_adminatkomst(
+        self,
+        *,
+        kanal: str,
+        admin_user_id: str | None,
+        tenant_id: str | None,
+        metod: str | None,
+        resurs: str,
+        entity_id: str | None = None,
+        request_id: str | None = None,
+    ) -> None:
+        async with self.pool.acquire() as conn:
+            await conn.execute(
+                "select public.logga_adminatkomst($1, $2::uuid, $3::uuid, $4, $5, $6::uuid, $7)",
+                kanal,
+                admin_user_id,
+                tenant_id,
+                metod,
+                resurs,
+                entity_id,
+                request_id,
+                timeout=5,
+            )
+
+    # -- Gallring (migration 119) -------------------------------------------
+    #
+    # Oskopade anslutningar: gallra_alla går över alla kunder med policy och
+    # är säkerhetsdefinierad; loggtabellerna har en läspolicy för snajp_app
+    # (119). Läsvägarna anropas bara bakom require_master_key.
+
+    async def gallra_dygnet(self, *, tak: int) -> dict[str, Any]:
+        async with self.pool.acquire() as conn:
+            # Ingen tidsgräns på 60 s här: en kund med lång historik kan ta
+            # längre, och hela körningen är EN transaktion (dygnsspärren och
+            # raderingarna går tillbaka tillsammans om något faller).
+            svar = await conn.fetchval(
+                "select public.gallra_alla($1, 'schemalagd')", tak, timeout=900
+            )
+        return json.loads(svar) if isinstance(svar, str) else (svar or {})
+
+    async def list_gallringslogg(
+        self, *, tenant_id: str | None = None, limit: int = 50
+    ) -> list[dict[str, Any]]:
+        async with self.pool.acquire() as conn:
+            records = await conn.fetch(
+                """
+                select g.*, t.slug as tenant_slug
+                  from ss_gallringslogg g
+                  left join ss_tenants t on t.id = g.tenant_id
+                 where ($1::uuid is null or g.tenant_id = $1)
+                 order by g.kord_at desc, g.id desc
+                 limit $2
+                """,
+                tenant_id,
+                limit,
+            )
+        return [_avkoda_jsonb(_row(r), "antal") for r in records]
+
+    async def list_gallringspolicyer(self) -> list[dict[str, Any]]:
+        async with self.pool.acquire() as conn:
+            records = await conn.fetch(
+                """
+                select t.id as tenant_id, t.slug as tenant_slug,
+                       p.dagar, p.beslutad_av, p.beslutad_at,
+                       (select max(g.kord_at) from ss_gallringslogg g
+                         where g.tenant_id = t.id and not g.torrkorning) as senast_kord_at
+                  from ss_tenants t
+                  left join ss_gallringspolicy p on p.tenant_id = t.id
+                 order by t.slug
+                """
+            )
+        return [_row(r) for r in records]
+
+    async def list_gallringskorningar(self, *, limit: int = 14) -> list[dict[str, Any]]:
+        async with self.pool.acquire() as conn:
+            records = await conn.fetch(
+                "select * from ss_gallringskorning order by dag desc limit $1", limit
+            )
+        return [_row(r) for r in records]
 
     # -- Kundregister (migration 053) ---------------------------------------
     #

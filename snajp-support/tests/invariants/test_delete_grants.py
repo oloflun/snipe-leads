@@ -17,7 +17,7 @@ ROOT = Path(__file__).resolve().parents[3]
 def test_varje_raderad_tabell_har_delete_grant():
     kod = (ROOT / "snajp-support" / "app" / "storage" / "postgres.py").read_text(encoding="utf-8")
     raderade = set(re.findall(r"delete\s+from\s+(?:public\.)?([a-z_]+)", kod, re.IGNORECASE))
-    migrationer = "\n".join(p.read_text(encoding="utf-8") for p in (ROOT / "supabase" / "migrations").glob("*.sql"))
+    migrationer = "\n".join(p.read_text(encoding="utf-8") for p in (ROOT / "db" / "migrations").glob("*.sql"))
     beviljade = set(re.findall(r"grant\s+[a-z,\s]*\bdelete\b[a-z,\s]*\s+on\s+(?:table\s+)?(?:public\.)?([a-z_]+)", migrationer, re.IGNORECASE))
     saknas = sorted(raderade - beviljade)
     assert not saknas, f"DELETE utan grant till snajp_app: {saknas}"

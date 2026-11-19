@@ -1,20 +1,31 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { AuthError } from "next-auth";
+import { AuthError, CredentialsSignin } from "next-auth";
 
 import { randomBytes, randomUUID } from "node:crypto";
 
+import { headers } from "next/headers";
+
 import { auth, ensureWorkspace, signIn, signOut as authSignOut } from "@/lib/auth";
-import { sql } from "@/lib/db";
+import { arSparrad, registreraForsok } from "@/lib/auth/inloggningsforsok";
+import { SPARRKOD, TVAFAKTOR_FEL, TVAFAKTOR_KRAVS } from "@/lib/auth/sparrkod";
+import { sql, sqlAsUser } from "@/lib/db";
 import { hashPassword } from "@/lib/password";
-import { hasSupabaseAuthEnv, supabaseAuth } from "@/lib/supabase-auth";
 
 export type AuthActionResult = {
   success: boolean;
   error?: string;
   message?: string;
+  /**
+   * Maskinläsbar orsak, för besked som formuläret visar på sidans språk.
+   * `for_manga_forsok`: spärren mot upprepade försök (lib/auth/inloggningsregler.ts).
+   * `tvafaktor_kravs` / `tvafaktor_fel`: andra steget (lib/auth/tvafaktor.ts).
+   */
+  kod?: typeof SPARRKOD | typeof TVAFAKTOR_KRAVS | typeof TVAFAKTOR_FEL;
 };
+
+const KANDA_KODER = new Set<string>([SPARRKOD, TVAFAKTOR_KRAVS, TVAFAKTOR_FEL]);
 
 // De svenska felmeddelandena är skrivna FÖR ANVÄNDAREN och överlever bytet av
 // auth-leverantör med flit. Supabase svarade på engelska med utvecklartexter;
@@ -62,7 +73,9 @@ const MIN_PASSWORD_LENGTH = 8;
 export async function signInWithPassword(
   email: string,
   password: string,
-  nextPath = "/dashboard"
+  nextPath = "/dashboard",
+  /** Andra steget: en TOTP-kod eller en återställningskod. Bara när kontot kräver det. */
+  totp?: string
 ): Promise<AuthActionResult> {
   // Utan databas finns ingen att logga in. Det här är en tydlig konfig-felsträng
   // i stället för en generisk 500 "This page couldn't load" som inte säger något
@@ -76,8 +89,13 @@ export async function signInWithPassword(
   }
 
   try {
-    await signIn("credentials", { email, password, redirect: false });
+    await signIn("credentials", { email, password, totp: totp ?? "", redirect: false });
   } catch (error) {
+    // Spärren och andra steget (lib/auth.ts:authorize). Beskedet skrivs i
+    // formuläret på sidans språk; servern skickar bara koden.
+    if (error instanceof CredentialsSignin && KANDA_KODER.has(error.code)) {
+      return { success: false, kod: error.code as AuthActionResult["kod"] };
+    }
     if (error instanceof AuthError) {
       return { success: false, error: authErrorMessage(error.type) };
     }
@@ -141,8 +159,13 @@ async function startsidaFor(userId: string | null, nextPath: string): Promise<st
   if (!userId || nextPath !== "/dashboard") {
     return nextPath;
   }
-  const { isPlatformAdmin } = await import("@/lib/auth/admin");
-  return (await isPlatformAdmin(userId)) ? "/admin" : nextPath;
+  const { isPlatformAdmin, saknarKravdTvafaktor } = await import("@/lib/auth/admin");
+  if (!(await isPlatformAdmin(userId))) {
+    return nextPath;
+  }
+  // Med tvånget påslaget (TVAFAKTOR_KRAVS_FOR_PLATTFORMSADMIN) har en admin
+  // utan tvåfaktor ingen adminrätt förrän inrullningen är gjord.
+  return (await saknarKravdTvafaktor(userId)) ? "/settings/tvafaktor" : "/admin";
 }
 
 export async function signUpWithPassword(
@@ -154,21 +177,7 @@ export async function signUpWithPassword(
     return { success: false, error: "Lösenordet är för kort." };
   }
 
-  // Supabase-stacken: GoTrue skapar användaren (bcrypt) och triggern skapar
-  // workspacen. Ingen direkt SQL mot auth.users.
-  if (hasSupabaseAuthEnv()) {
-    const { error } = await supabaseAuth().auth.signUp({
-      email,
-      password,
-      options: { data: { full_name: fullName } }
-    });
-    if (error) {
-      return { success: false, error: authErrorMessage(error.message) };
-    }
-    return signInWithPassword(email, password, "/onboarding");
-  }
-
-  // Railway: direkt SQL (scrypt).
+  // Direkt SQL (scrypt).
   const existing = await sql<{ id: string }>(
     "select id from auth.users where lower(email) = lower($1)",
     [email]
@@ -211,25 +220,6 @@ export async function startDemo(): Promise<AuthActionResult> {
   const email = `demo-${randomUUID()}@snajp.se`;
   const password = randomBytes(24).toString("base64url");
 
-  // Supabase-stacken: GoTrue skapar demoanvändaren, triggern skapar workspacen.
-  if (hasSupabaseAuthEnv()) {
-    const { data, error } = await supabaseAuth().auth.signUp({
-      email,
-      password,
-      options: { data: { full_name: "Demo" } }
-    });
-    if (error || !data.user) {
-      return { success: false, error: "Demo kunde inte startas. Försök igen." };
-    }
-    await sql(
-      `update public.workspaces set is_demo = true
-       from public.profiles p where workspaces.id = p.workspace_id and p.id = $1`,
-      [data.user.id]
-    );
-    return signInWithPassword(email, password, "/onboarding");
-  }
-
-  // Railway: direkt SQL (scrypt).
   try {
     const rows = await sql<{ id: string }>(
       `insert into auth.users (email, encrypted_password, raw_user_meta_data, email_confirmed_at)
@@ -237,12 +227,20 @@ export async function startDemo(): Promise<AuthActionResult> {
       [email, await hashPassword(password)]
     );
     // Triggern skapade workspacen med is_demo=false; markera den här.
-    await sql(
-      `update public.workspaces set is_demo = true
-       from public.profiles p where workspaces.id = p.workspace_id and p.id = $1`,
-      [rows[0].id]
-    );
+    //
+    // Med användarens identitet och genom funktionen (migration 127), inte
+    // med en UPDATE via `sql()`: workspaces saknar update-policy med flit, och
+    // utan identitet träffade satsen noll rader utan att kasta. Varje demo
+    // fick då fullt löptak. Funktionen svarar false om inget markerades, och
+    // då startar ingen demo: en omärkt demo är ett fullt konto.
+    const demoId = rows[0].id;
+    const markerad = await sqlAsUser<{ ok: boolean }>(demoId, "select public.markera_demoarbetsyta() as ok");
+    if (!markerad[0]?.ok) {
+      console.error("startDemo: arbetsytan gick inte att märka is_demo");
+      return { success: false, error: "Demo kunde inte startas. Försök igen." };
+    }
   } catch (error) {
+    console.error("startDemo:", (error as Error).message);
     return { success: false, error: "Demo kunde inte startas. Försök igen." };
   }
 
@@ -289,6 +287,18 @@ export async function requestPasswordReset(email: string): Promise<AuthActionRes
       error:
         "Återställning via mail är inte konfigurerad i den här miljön. Kontakta support så återställs lösenordet manuellt."
     };
+  }
+
+  // Spärren mot upprepade begäranden (lib/auth/inloggningsregler.ts): varje
+  // begäran räknas, före uppslaget, och likadant för en adress utan konto. Ett
+  // spärrat besked avslöjar alltså inte om adressen finns, och ingen token och
+  // inget mejl skapas.
+  const inkommande = await headers();
+  if (
+    (await arSparrad("aterstallning", email, inkommande)) ||
+    (await registreraForsok("aterstallning", email, inkommande))
+  ) {
+    return { success: false, kod: SPARRKOD };
   }
 
   const userId = await anvandarId(email);

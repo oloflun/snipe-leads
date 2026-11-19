@@ -4,7 +4,7 @@ Tabellstrukturen speglar referensarkitekturen (jawwad-ali/ai-customer-support-ag
 utökad med tenants: varje kunddatarad bär tenant_id och alla metoder tar tenant_id
 som första parameter, så att varje kundföretag är helt isolerat. Två implementationer:
 
-- PostgresStorage: Supabase Postgres + pgvector; sätter dessutom app.tenant_id per
+- PostgresStorage: Postgres (Railway) + pgvector; sätter dessutom app.tenant_id per
   transaktion så RLS-policyerna i 003_snajp_multitenant.sql verkställs.
 - MemoryStorage: in-memory med samma gränssnitt (graceful degradation utan databas).
 
@@ -114,7 +114,21 @@ class Storage(Protocol):
 
     # -- Tenants (administrativa; kräver master-nyckel i API-lagret) --------
 
-    async def create_tenant(self, *, slug: str, name: str) -> dict[str, Any]: ...
+    async def create_tenant(
+        self, *, slug: str, name: str, kraver_avtal: bool | None = None
+    ) -> dict[str, Any]:
+        """Upsert på slug. `kraver_avtal` gäller bara en NY tenant: None ger
+        databasens standard (true sedan migration 118, INV-AVTAL-001), false
+        anges bara för test-, demo- och interna tenants. En befintlig tenants
+        flagga rörs aldrig härifrån."""
+        ...
+
+    async def set_tenant_kraver_avtal(
+        self, tenant_id: str, *, kraver_avtal: bool
+    ) -> dict[str, Any] | None:
+        """Plattformsadmins avtalsgrind per kund (Kunder & Data). None när
+        tenanten inte finns."""
+        ...
 
     async def get_tenant(self, tenant_id: str) -> dict[str, Any] | None: ...
 
@@ -159,7 +173,18 @@ class Storage(Protocol):
         """Markören spegelskriptet sätter (scripts/railway_seed_dev.py,
         tabellen public.mirror_meta): {environment, seeded_at} i en spegel,
         None i main och i minneslagret. admin_flytt.importera vägrar i en
-        spegel; panelen Flytta till main renderas bara i en."""
+        spegel; panelen Flytta till main renderas bara i en.
+
+        När synken (scripts/railway_synk.py) har skapat kolumnerna följer
+        också lage, synkad_at (senaste lyckade synk), senaste_forsok_at,
+        senaste_utfall ('ok', 'hoppade:<n>', 'avbruten: <skäl>', 'fel: <typ>')
+        och senaste_antal (dict tabell → åtgärd → antal) med. Saknas en
+        kolumn saknas nyckeln. Tider är ISO-strängar."""
+        ...
+
+    async def schema_versioner(self) -> list[str]:
+        """Migrationsliggarens versioner (supabase_migrations.schema_migrations),
+        för GET /api/drift/schema. Bara filnamn; tom lista utan liggare."""
         ...
 
     async def logga_flytt(self, tenant_id: str, *, typ: str, ref_id: str, resultat: str) -> None:
@@ -356,9 +381,29 @@ class Storage(Protocol):
         query: str,
         embedding: list[float] | None = None,
         limit: int = 3,
-    ) -> list[dict[str, Any]]: ...
+    ) -> list[dict[str, Any]]:
+        """Agentens sökning. Lämnar aldrig tillbaka en artikel vars
+        `giltig_till` har passerat (svensk dag); utan giltig_till gäller den
+        tills vidare. Träffarna bär `source_url` (migration 117)."""
+        ...
 
-    async def list_kb(self, tenant_id: str) -> list[dict[str, Any]]: ...
+    async def kb_cachestatus(self, tenant_id: str) -> tuple[str, date | None]:
+        """(basens version, närmaste utgång) för svarscachens KB-version.
+
+        Versionen byter värde i samma transaktion som varje ändring av kundens
+        artiklar (Postgres: räknaren ss_kb_version, migration 137), så att ett
+        Redis-fel eller ett avbrott efter commit aldrig lämnar gamla svar
+        giltiga (Codex-granskningen runda 6). Utgången är den tidigaste
+        `giltig_till` som ännu inte passerat (svensk dag), eller None när ingen
+        artikel har ett slutdatum framför sig; med den i versionen slutar ett
+        cachat svar matcha när en artikel går ut (Codex-granskningen
+        2026-11-19)."""
+        ...
+
+    async def list_kb(self, tenant_id: str) -> list[dict[str, Any]]:
+        """Portalens lista: ALLA artiklar, även utgångna, med `source_url` och
+        `giltig_till`, så att kunden ser vad som gått ut och kan byta ut det."""
+        ...
 
     async def add_kb_article(
         self,
@@ -368,6 +413,8 @@ class Storage(Protocol):
         content: str,
         category: str,
         embedding: list[float] | None = None,
+        source_url: str | None = None,
+        giltig_till: date | None = None,
     ) -> dict[str, Any]: ...
 
     async def delete_kb_article(self, tenant_id: str, artikel_id: str) -> bool:
@@ -382,6 +429,67 @@ class Storage(Protocol):
         ...
 
     async def satt_kb_vektor(self, tenant_id: str, artikel_id: str, embedding: list[float]) -> None: ...
+
+    # -- Webbplatsskanningens utfall (migration 121) --------------------------
+    #
+    # Skanningen (app/kb_skanning.py) skriver aldrig i kunskapsbasen. Den sparar
+    # utkast här, och ett utkast blir en artikel först när kunden lägger till
+    # det, genom add_kb_article. Kundens egna artiklar rörs alltså aldrig.
+
+    async def skapa_kb_skanning(
+        self, tenant_id: str, *, webbplats: str, startad_av: str, status: str = "pagar", fel: str | None = None
+    ) -> dict[str, Any]:
+        """En ny skanning. `status="fel"` med `fel` för en som inte kunde starta."""
+        ...
+
+    async def avsluta_kb_skanning(
+        self,
+        tenant_id: str,
+        skanning_id: str,
+        *,
+        status: str,
+        sidor: int | None = None,
+        lasbara_sidor: int | None = None,
+        forslag: int = 0,
+        redan_fanns: int = 0,
+        fel: str | None = None,
+    ) -> None: ...
+
+    async def senaste_kb_skanning(self, tenant_id: str) -> dict[str, Any] | None:
+        """Den senast startade skanningen, eller None om ingen finns."""
+        ...
+
+    async def list_kb_forslag(self, tenant_id: str, *, status: str | None = None) -> list[dict[str, Any]]:
+        """Utkasten, äldst först. Utan `status` alla, oavsett beslut."""
+        ...
+
+    async def add_kb_forslag(
+        self, tenant_id: str, skanning_id: str, forslag: list[dict[str, Any]]
+    ) -> int:
+        """Sparar utkasten (title, content, category, source_url, confidence,
+        varningar) som väntande. Returnerar antalet sparade."""
+        ...
+
+    async def besluta_kb_forslag(
+        self, tenant_id: str, forslag_id: str, *, status: str, artikel_id: str | None = None
+    ) -> dict[str, Any] | None:
+        """Flyttar ett VÄNTANDE utkast till `tillagd` eller `avvisad` och
+        returnerar det. None om det inte finns eller redan är beslutat, så att
+        två klick aldrig blir två artiklar."""
+        ...
+
+    async def hamta_vantande_kb_forslag(self, tenant_id: str, forslag_id: str) -> dict[str, Any] | None:
+        """Ett VÄNTANDE utkast, utan att ta det i anspråk. None annars."""
+        ...
+
+    async def lagg_till_kb_forslag(
+        self, tenant_id: str, forslag_id: str, *, embedding: list[float] | None
+    ) -> dict[str, Any] | None:
+        """Gör ett väntande utkast till en ny artikel: artikeln, `tillagd` och
+        artikel_id skrivs i EN transaktion. Returnerar artikeln, eller None om
+        utkastet inte (längre) väntar. Ett avbrott lämnar utkastet väntande
+        och ingen artikel, så att kunden kan försöka igen."""
+        ...
 
     # -- Agentens föreslagna lärdomar (självlärning, 2026-08-26) -------------
     #
@@ -686,6 +794,13 @@ class Storage(Protocol):
 
     async def add_suppression(self, tenant_id: str, *, email: str, reason: str) -> None:
         """Skrivs av avregistreringslänken. Ska gälla omedelbart."""
+        ...
+
+    async def list_begransade(self, tenant_id: str) -> set[str]:
+        """Adresser med en aktiv begränsning av behandlingen (GDPR art. 18,
+        migration 124). Gäller ALLA kunder: begäran gäller personen.
+        `tenant_id` skopar bara anslutningen. Skrivs aldrig härifrån, bara av
+        scripts/gdpr_radera.py --begransa."""
         ...
 
     async def avregistreringstoken(self, tenant_id: str, *, email: str) -> str:
@@ -1751,6 +1866,52 @@ class Storage(Protocol):
         run_id: str | None = None,
         detail: dict[str, Any] | None = None,
     ) -> None: ...
+
+    # -- Åtkomstloggen (migration 123, app/api/adminlogg.py) ----------------
+
+    async def logga_adminatkomst(
+        self,
+        *,
+        kanal: str,
+        admin_user_id: str | None,
+        tenant_id: str | None,
+        metod: str | None,
+        resurs: str,
+        entity_id: str | None = None,
+        request_id: str | None = None,
+    ) -> None:
+        """En rad i audit_logs genom databasfunktionen logga_adminatkomst, som
+        också gallrar rader äldre än 365 dagar. Inget innehåll, bara vem, när,
+        åtgärd, kund och resurs."""
+        ...
+
+    # -- Gallring (migration 119, app/jobs/gallring.py) ---------------------
+    #
+    # Raderingen görs av databasfunktionen gallra_alla, aldrig av appens egna
+    # frågor: urvalet, ordningen och taket ska finnas på ETT ställe, och det
+    # stället är testat mot en riktig Postgres (tests/db/test_gallring.py).
+
+    async def gallra_dygnet(self, *, tak: int) -> dict[str, Any]:
+        """Den schemalagda gallringen: alla kunder med beslutad policy, högst
+        en gång per svenskt dygn; i en spegel bara det synken inte för över
+        (migration 133). Svaret är gallra_alla:s {status, dag, kunder, spegel}. Minneslagret gallrar inte ({status: 'ingen_databas'})."""
+        ...
+
+    async def list_gallringslogg(
+        self, *, tenant_id: str | None = None, limit: int = 50
+    ) -> list[dict[str, Any]]:
+        """Gallringsloggen, nyast först, med kundens slug."""
+        ...
+
+    async def list_gallringspolicyer(self) -> list[dict[str, Any]]:
+        """Varje kund med sin beslutade period (dagar, beslutad_av,
+        beslutad_at; null om ingen policy) och senaste skarpa körning."""
+        ...
+
+    async def list_gallringskorningar(self, *, limit: int = 14) -> list[dict[str, Any]]:
+        """Dygnsspärrens rader, nyast först: när den schemalagda körningen
+        startade, blev klar och vad den gjorde."""
+        ...
 
     # -- Kundregister (migration 053, kräver master-nyckel) -----------------
     #

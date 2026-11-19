@@ -18,7 +18,11 @@ from __future__ import annotations
 from typing import Any
 
 #: Stegloggens textfält. `output` finns bara i as_full (`step_outputs`).
-_STEGTEXTER = frozenset({"user_message", "raw_output", "reasoning_content", "system_prompt", "output"})
+#: `detalj` är supportens faktagrindssteg (support_agent): kunskapsbasens
+#: meningar, vilken artikel som bar vad och det modellen försökte säga.
+_STEGTEXTER = frozenset(
+    {"user_message", "raw_output", "reasoning_content", "system_prompt", "output", "detalj"}
+)
 #: Nycklarna en steglogg ligger under i ett agentsvar.
 _STEGLOGGAR = frozenset({"step_log", "step_outputs"})
 #: Så djupt i svaret en steglogg letas. Chattens ligger överst, leadsjobbens

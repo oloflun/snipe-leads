@@ -247,7 +247,7 @@ och kastar `SkillIntegrityError` vid avvikelse — ingen fallback till
 filsystemet. Verifieringen sker per fil INNE i `registry._read_skill_file`,
 alltså före varje `parts.append` i `load_full_skill`, aldrig efter
 konkateneringen. `settings.skill_source` defaultar till `"filesystem"` i all
-miljö och `render.yaml` sätter aldrig `SKILL_SOURCE` (INV-DEPLOY-001).
+miljö och ingen driftkonfiguration sätter `SKILL_SOURCE` (INV-DEPLOY-001).
 Varför: spegeln finns för att kunna svara på "vilken text producerade den här
 `agent_runs`-raden?". En spegel som tyst kan leverera annan text än manifestet
 säger besvarar inte frågan — den ljuger om den, vilket är sämre än att inte
@@ -333,6 +333,64 @@ uppfunnen för att den lät bra, och mejlet var på väg ut i Snajps namn.
 Test: snajp-support/tests/agent/test_grounding_cycle.py
 Införd: 2026-08-14 · Upphävs endast genom waiver
 
+### INV-GROUND-002 — Varje uppgift i ett supportsvar står i EN namngiven källa av rätt slag
+`app/agent/support_faktagrind.kontrollera` tar namngivna källor (`Kalla`: ID,
+text, slag) och prövar varje kontaktuppgift och varje tal källa för källa,
+aldrig mot en hopslagen textmassa. Kundens egen text (`KUNDTEXT`) bär ekon
+(ordernummer, kundens egen adress) men aldrig ett pris, en procentsats, en
+frist eller en webbadress. En frist binds till sin tidsenhet. På `strikt` måste
+företagsuppgifterna i en mening stå i en och samma källa. Domen bär belägget
+per uppgift (`Faktadom.belagg`), och det sparas i körningens `faktagrind`.
+`support_agent.tolka_beslut` räknar en fråga som obesvarad när modellen
+hänvisar till ett käll-ID den aldrig fick: beslutet blir DELVIS.
+Varför: underlaget var en enda sträng där kundens fråga ingick. "Ni har väl
+90 dagars öppet köp?" gjorde 90 dagar till ett tillåtet tal, tvärt emot
+grundprompten avsnitt 3, och källistan modellen lämnade lästes aldrig.
+Mönstret är NVIDIA/auto-ontologys (`retrieval/interactive/kb_coverage.py`):
+modellen pekar ut, koden slår upp, och bara det som finns räknas.
+Test: snajp-support/tests/agent/test_kallbunden_faktagrind.py
+Införd: 2026-11-16 · Upphävs endast genom waiver
+
+### INV-GROUND-003 — I citatläget går ingen av modellens egna sakmeningar ut
+Med `faktakontroll: ordagrant` bygger KOD svaret
+(`app/agent/support_faktagrind.grinda`, som anropar `citatsvar` och sedan
+dömer exakt den byggda texten): kvar blir hälsningen (bara
+hälsningsord och ett känt namn), agentens frågor och de meningar som står
+ordagrant i en källa, skrivna som de står i källan. Kundens egen text citeras
+aldrig, och språkputsen körs inte. `kontrollera(niva="ordagrant")` dömer sedan
+den exakta text som ska ut: en mening som varken är en hälsning, en fråga
+eller ett citat fäller svaret. Finns inget citat och ingen fråga kvar efter en
+reparationsrunda går den fasta osäkerhetstexten ut och en kollega erbjuds. På
+ett annat språk än svenska finns inget att citera: en kollega tar ärendet.
+Mejlvägen dömer bara (`kontrollera`): på den här nivån går varje utkast som
+inte redan är rena citat till granskning. Grindens detaljer (belägg, det som
+fälldes) sparas i körningens steglogg under `detalj`, som `utan_stegtexter`
+tar bort när stegloggen lämnas ut till chattbubblan.
+Varför: de lägre nivåerna prövar det som går att känna igen i en text (nummer,
+adresser, tal, löftesord). "Du kan returnera utan kvitto" bär inget av det, och
+en omskrivning kan alltid ändra innebörden: ett struket "inte", ett struket
+villkor. Det enda som går att lova är att meningen är kundens egen.
+Taket är känt: att RÄTT mening valdes går inte att bevisa i kod.
+Test: snajp-support/tests/agent/test_citatlage.py
+Införd: 2026-11-16 · Upphävs endast genom waiver
+
+### INV-GROUND-004 — Det modellen själv skrev är aldrig ett belägg, och det som köas är det som grindats
+Iris `research_evidence`, alltså det `build_permitted_facts` gör till tillåtna
+tal och namn, bär bara det som bevisligen står i hämtat material: citat som
+`bedomning.verifierade_belagg` funnit ordagrant, och de uppmätta
+webbsignalerna (`leads_research_v2`, `leads_agent`, `sparad_research.las`).
+Modellens `likely_pains`, `trigger_events` och overifierade `evidence` når
+utkaststeget som underlag för hur mejlet skrivs, men gör inget tillåtet.
+`run_outreach_draft_v2` kör `check_grounding` och `check_gissningar` på den
+exakta ämnesraden och brödtexten som köas, efter att tilltal, bolagsnamn och
+ämnesrad satts; uppföljningarna sätter dem före grinden. En språkkorrektur
+(`textkvalitet._verifiera_korrektur`) som lägger till ett tal, en länk, ett
+kundnamn eller ett superlativ förkastas, och originalet behålls.
+Varför: grinden godkände varje tal researchmodellen själv hade skrivit, och
+texten ändrades efter grinden på tre ställen utan ny kontroll.
+Test: snajp-support/tests/agent/test_iris_grindhal.py
+Införd: 2026-11-16 · Upphävs endast genom waiver
+
 ### INV-AUDIT-001 — Varje körning identifierar alla tre instruktionslagren
 `app/agentcore/overlays.pack_version()` bygger
 `<manifest_hash[:12]>+<overlay_hash[:8]>+<global_hash[:8]>:<playbook>` och är
@@ -365,11 +423,17 @@ Test: tests/invariants/test_inv_skill_006.py
 Införd: 2026-08-14 · Upphävs endast genom waiver
 
 ### INV-DEPLOY-001 — Skill-registret finns i den byggda containern
-`render.yaml` sätter `rootDir: .` (repo-roten) och `Dockerfile` COPY:ar både
-`snajp-support/app` och `agent-core` med bevarat katalogdjup under `/srv`.
-`.dockerignore` är en allowlist som uttryckligen släpper igenom `agent-core`.
-`render.yaml` sätter aldrig `SKILL_SOURCE` — produktionen läser skills från
+`scripts/railway_provision.py` sätter api-tjänstens `rootDirectory="/"`
+(repo-roten) och `dockerfilePath="snajp-support/Dockerfile"`, och `Dockerfile`
+COPY:ar både `snajp-support/app` och `agent-core` med bevarat katalogdjup under
+`/srv`. `snajp-support/Dockerfile.dockerignore` är en allowlist som uttryckligen
+släpper igenom `agent-core`. Inget skript i `scripts/` och inget arbetsflöde i
+`.github/workflows/` sätter `SKILL_SOURCE` — produktionen läser skills från
 filsystemet, aldrig från DB-spegeln.
+Anpassad 2026-11-18: regeln stod tidigare mot Render-blueprinten `render.yaml`,
+som togs bort när Render avvecklades (docs/BESLUT.md). Skyddet är detsamma och
+gäller nu filen som styr Railway; att varje miljö har en utskriven gren vaktas
+av INV-DEPLOY-002.
 Varför: med `rootDir: snajp-support` låg `agent-core/` utanför Dockers
 byggkontext och kunde inte COPY:as ens avsiktligt. Felet var osynligt tills
 det inte var det: agentimporterna är uppskjutna in i request-handlers, så
@@ -378,7 +442,7 @@ på det första riktiga agentanropet, som `UnknownSkillError`. Dessutom
 maskerad av att `is_simulation()` kortsluter före playbook-importen, vilket
 betyder att felet utlöstes av att man satte `DEEPSEEK_API_KEY` för att gå live.
 Test: tests/invariants/test_inv_deploy_001.py
-Införd: 2026-08-14 · Upphävs endast genom waiver
+Införd: 2026-08-14 · Anpassad: 2026-11-18 · Upphävs endast genom waiver
 
 ### INV-API-001 — Svar tolkas aldrig som JSON utan kontroll; långsam route sätter `maxDuration`
 Varje `await <svar>.json()` under `app/`, `lib/` och `components/` går via
@@ -637,6 +701,11 @@ körning (`svarscache.svara_fran_cache`). Läge `shadow` loggar bara en
 `PUT /api/admin/instruktioner`) som bumpas från KB-skrivvägen
 (`app/api/kb.py`) och tenantprofilens instruktioner/ton/SOUL-skrivväg
 (`app/api/admin_profil.py`) — en bump gör varenda äldre post omatchbar.
+KB-versionen bär dessutom basens egen version ur databasen (`ss_kb_version`, som en
+trigger höjer i samma transaktion som varje artikeländring, migration 137) och den
+närmaste artikelutgången (`versioner.kb_version_med_giltighet`), så att varken ett
+Redis-fel efter commit eller en artikel som går ut lämnar gamla svar giltiga; går
+den inte att läsa hoppas cachen över.
 `scripts/kor_evals.py` sätter `SEMANTIC_CACHE=off` explicit.
 Varför: en cache som kunde återanvända ett svar format kring EN kunds
 historik, minnesfakta eller personnummer på en ANNAN kund vore en läcka, inte
@@ -897,6 +966,189 @@ facit i kod glider nästa justering tillbaka utan att någon märker det.
 Referens: `docs/UTKASTKEDJAN-REFERENS-2026-10-16.md`.
 Test: snajp-support/tests/leads/test_utkastfacit_2026_10_16.py
 Införd: 2026-10-16 · Upphävs endast genom waiver
+
+### INV-AI-001 — Ett supportsvar som skickas utan mänsklig granskning bär en kodskriven AI-upplysning
+`app/email_pipeline/processor.process_email` lägger `AI_UPPLYSNING` sist i varje
+autosvar (`med_ai_upplysning`, efter signaturen, aldrig dubblerad) innan
+`skicka_supportsvar` anropas, och det sparade utkastet bär samma text. Ett
+utkast som en människa godkänner, och ett autosvar vars sändning föll och
+därför blev ett granskat utkast, får ingen rad. Upplysningen lovar att den
+som svarar och ber om en människa får en: `ber_om_manniska` på kundens text
+(utan citerade upplysningar) eskalerar i kod. Chatten visar "AI-assistent" i
+huvudet i `components/snajp/SupportChat.tsx`, också i den inbäddade widgeten.
+Varför: AI-förordningen (EU 2024/1689) art. 50.1, tillämplig från 2026-08-02.
+Systemprompten förbjuder agenten att utge sig för att vara människa, men en
+upplysning som hänger på modellens goda vilja är ingen upplysning.
+Test: snajp-support/tests/invariants/test_inv_ai_001.py
+Införd: 2026-11-17 · Upphävs endast genom waiver
+
+### INV-AVTAL-001 — En ny tenant kräver signerat avtal om inget annat sägs
+`ss_tenants.kraver_avtal` har standardvärdet true (migration 118), och migrationen
+som vände standarden rör inga befintliga rader. En tenant som skapas utan värde
+(`create_tenant`, `POST /api/keys`) får grinden på, och `app/avtalsgrind.py`
+vägrar dess publika ytor tills `ss_customer_details.avtal_signerat` bär ett datum.
+false anges uttryckligen bara för test-, demo- och interna tenants. Undantag tills
+Anton beslutat annat (BESLUT 2026-11-17): självregistrerade kunder och
+testarbetsytor (`lib/snajp/testtenant.ts`, `scripts/koppla_testytor.py`) skapas med
+false, så att provflödet fungerar som före 118. Plattformsadmin
+sätter flaggan i Kunder & Data (`PUT /api/admin/tenants/{id}/kunddata`).
+Varför: Snajp är personuppgiftsbiträde och får enligt GDPR art. 28 inte behandla en
+kunds personuppgifter utan biträdesavtal. Som opt-in (070) fick en ny kund trafik
+om ingen kom ihåg att slå på flaggan med SQL.
+Test: snajp-support/tests/invariants/test_inv_avtal_001.py
+Införd: 2026-11-17 · Upphävs endast genom waiver
+
+### INV-DATA-004 — Google AI Studio bär aldrig kunddata
+Där `Settings.har_riktig_kunddata()` är sann (känt kunddatamiljönamn eller en
+databas utanför loopback, samma gräns som DeepSeek-spärren) fäller
+`Settings.llm_provider_fault()` uppstarten i `app/main.py` när `LLM_PROVIDER=gemini`
+och `GOOGLE_SERVICE_ACCOUNT_JSON` saknas eller inte går att läsa. Varje gren som
+annars ringer AI Studio (`generativelanguage.googleapis.com`, `GEMINI_API_KEY`)
+vägrar dessutom själv via `agent/llm.ai_studio_vagras`: chattklienten kastar
+`ForbjudenProviderIMiljon`, bild- och embeddingsklienten blir None (befintlig
+"ingen klient"-väg), den grundade sökningen kastar `DiscoveryError`. Email Studio
+(`lib/llm/modellval.ts`) väljer aldrig AI Studio där `harRiktigKunddata` är sann.
+Lokalt och i testsviten fungerar AI Studio som förut.
+Varför: AI Studio ger ingen EU-bunden behandling, och på gratisnivån får Google
+använda innehållet med mänsklig granskning. GEMINI_API_KEY är satt i main och
+development, så ett servicekonto som saknas eller är trasigt hade tyst skickat
+kundmejl dit i stället för till Vertex AI i EU.
+Test: snajp-support/tests/invariants/test_inv_data_004.py
+Införd: 2026-11-17 · Upphävs endast genom waiver
+
+### INV-DATA-005 — Gallringen tar bara det beslutade, aldrig spärrlistan eller bokföringen
+Gallringen är databasfunktionerna `gallra_tenant` och `gallra_alla` (migration 119);
+appens kod raderar aldrig själv. En kund utan rad i `ss_gallringspolicy` gallras
+aldrig, och ingen migration skriver en policy: perioden sätts av ägaren med
+`scripts/gallra.py --policyns-period`. `suppressions` raderas aldrig (kopplingen till
+en kontakt nollas före kontaktens radering, annars tar kaskaden spärren med sig),
+och `bk_underlag`/`bk_verifikat`/`kvitto_mejl_lasta` rörs aldrig. Agentloggarnas
+promptar och svar nollas, raderna står kvar. Den schemalagda körningen
+(`app/jobs/gallring.py`) är AV som standard (`GALLRING_AKTIV`), görs högst en gång
+per svenskt dygn (dygnsspärren `ss_gallringskorning` i samma transaktion), i en
+spegel bara för det synken inte för över (migration 133 och 139: när `mirror_meta`
+finns väljer `gallra_tenant` i tabellerna i `scripts/railway_synk.py:SYNK`, som får
+main:s raderingar genom synken, bara de lokala provraderna synkens eget villkor
+undantar, och migration 134 raderar de barn utanför
+synken som synkens replica-raderingar lämnat föräldralösa; `tests/test_gallring_spegel.py`
+håller listorna ihop), väljer två gånger med radlås på kandidaterna och raderna deras
+aktivitet räknas ur mellan varven och raderar bara snittet (migration 138, så att inget
+som skrivs under körningen raderas och ingen skrivning utanför kandidaterna väntar), räknar
+varje faktisk ändring av en rad som en behandling (migration 141 och 142: triggern
+`gallring_behandlad` sätter `behandlad_at` i varje tabell urvalet läser aktivitet ur, och
+varje urval räknar den; en listrad med prospekt väljs bara när prospektet väljs, och
+prospektets urval räknar listraderna som pekar på det, migration 143; en adress med
+aktiv begränsning av behandlingen (124) gallras inte förrän begränsningen hävts,
+migration 144; ingen
+återkommande teknisk skrivning får röra gamla rader i de tabellerna, för då gallras de
+aldrig), och gör
+ingenting hos en kund vars urval överstiger taket (`GALLRING_TAK`) utan larmar. Varje
+körning loggas per kund i `ss_gallringslogg`, läsbar via `GET /api/admin/gallring`.
+Varför: integritetspolicyn lovar 24 månader från senaste behandlingen i alla
+kategorier, automatiserat och loggat (GDPR art. 5.1 e), men 048 gallrade bara
+supportmejl och ingen körning var schemalagd. Raderingslogik som går fel tömmer en
+kund eller tar bort skyddet för den som avregistrerat sig; därför prövas den mot en
+riktig Postgres med hela migrationskedjan: snajp-support/tests/db/test_gallring.py
+i CI-jobbet `databastester` (.github/workflows/verify.yml).
+Test: snajp-support/tests/invariants/test_inv_data_005.py
+Införd: 2026-11-18 · Upphävs endast genom waiver
+
+### INV-DATA-006 — Där data är riktig går modellanropen bara till Vertex AI i en EU-region
+Där `Settings.har_riktig_kunddata()` är sann fäller `Settings.llm_provider_fault()`
+uppstarten i `app/main.py` när (a) `LLM_PROVIDER=openai`, också som standardvärde
+när variabeln saknas, (b) `GOOGLE_CLOUD_REGION`, `VERTEX_INBADDNING_REGION`,
+`VERTEX_BILD_REGION` (bildklienten, sedan 2026-11-18), `VERTEX_UTKAST_REGION`
+(Iris utkast och humanizer, sedan 2026-11-18), `VERTEX_KVITTO_REGION`
+(kvittohanterarens agent och kontrolläsning, `agent/llm.get_kvitto_client`,
+sedan 2026-11-18; modellen väljs med `KVITTO_MODEL`, och båda tomma ger MODEL i
+huvudregionen) eller
+någon post i `VERTEX_RESERVREGIONER` inte står på `config.VERTEX_EU_REGIONER`
+(EU-regionerna och, sedan 2026-11-18, EU-multiregionen `eu` med värden
+`aiplatform.eu.rep.googleapis.com` via `config.vertex_vard`; aldrig `us` eller
+`global`), eller (c)
+`LLM_BASE_URL` är satt och inte går över https till en värd i
+`config.VERTEX_EU_VARDAR`. Klientbygget vägrar själv: `agent/llm.vertex_region`
+kastar `ForbjudenProviderIMiljon` för en region utanför listan (chattklienten,
+reservregionklienterna vid 429, bild- och inbäddningsklienten), inbäddningen
+(`embeddings._vertex_predict`) går samma väg, den grundade sökningen kastar
+`DiscoveryError`, och `_resolve_base_url` vägrar en bas-URL utanför listan. Email
+Studio (`lib/llm/modellval.ts`) väljer aldrig OpenAI och aldrig Vertex utanför
+`EU_REGIONER` där `harRiktigKunddata` är sann, och routen loggar varför. Lokalt
+och i testsviten fungerar allt som förut. Att släppa in OpenAI i drift är ett
+avtalsbeslut, inte ett kodbeslut.
+Varför: regionerna och bas-URL:en lästes ur miljön utan kontroll, så en felaktig
+variabel (`global`, `us-central1`) hade tyst flyttat behandlingen av kundmejl ur
+EU. OpenAI var tillåtet med riktig kunddata och är standardvärdet för
+`LLM_PROVIDER`, men står inte i underbiträdesförteckningen (dataskyddsbedömningen
+av Gemini 2026-11-18, A3 till A5).
+Test: snajp-support/tests/invariants/test_inv_data_006.py
+Införd: 2026-11-18 · Upphävs endast genom waiver
+
+### INV-DATA-007 — Kundtext lämnar huset maskerad, och sökgrundningen stannar i leadssökningen
+Personnummer maskeras med `moderation/maskering.maskera_personnummer` där texten
+lämnar systemet: i uppsägningsklassaren (`agent/retention_classifier.
+classify_cancellation_risk`) och i `agent/embeddings.embed_text`, före cachen och
+före anropet, så att varje inbäddning (kundtext och kunskapsbas, skrivning och
+läsning) går genom samma maskering. Text utan personnummer går ut oförändrad.
+Googles sökverktyg (`google_search` och dess alias) konfigureras bara i
+`leads/discovery._gemini_med_sokning`, som bara anropas från `hitta_bolag` och
+`sla_upp_webbplats`; deras indata står uppräknade i testet, discovery importerar
+inga moduler som bär kundmejl, och webbdelen använder inte verktyget alls.
+Varför: klassaren och inbäddningarna skickade personnummer omaskerade till
+Google trots att DPIA:n och policyn säger att de maskeras. Sökgrundningens
+frågor sparas hos Google i upp till tre dygn och det går inte att stänga av, så
+ingen kundmejltext får nå dit (dataskyddsbedömningen 2026-11-18, A1, A2, A6).
+Test: snajp-support/tests/invariants/test_inv_data_007.py
+Införd: 2026-11-18 · Upphävs endast genom waiver
+
+### INV-DATA-008 — Synken skriver bara till development, och hos Railway kan den inte skriva till main
+Efter första synken skriver `scripts/railway_synk.py` bara till development: main
+öppnas skrivskyddat, och replica-läget sätts på main bara i första synken
+(`replikamal`). Inne hos Railway (anslutningarna ur `SYNK_MAIN_PG_URL` och
+`SYNK_DEVELOPMENT_PG_URL`) avbryter `kontrollera_anslutningar` före första frågan
+när miljön inte är main, när båda sidor är samma databas, när developments värd
+ligger på `railway.internal`, när sträckan saknar `sslmode=require` och vid
+`--forsta`; `main_kan_skriva` avbryter om main-anslutningen får ändra någon tabell.
+Main läses då som `synk_las` (migration 122: utan inloggning och lösenord tills
+ägaren slår på dem i main, bara `select`, `default_transaction_read_only`). Med
+`--apply` tar synken ett rådgivande lås på development (`ta_las`), och utfallet
+skrivs bara till en databas vars markör säger development (`skriv_utfall`).
+Startkommandot `scripts/railway_drift.py` kör synken bara i Railway-miljön main.
+Varför: synken flyttar från GitHub Actions till Railway-miljön main
+(docs/compliance/synkflytt-plan.md). Där är `postgres.railway.internal`
+produktionen, och en tjänst kan kopieras mellan miljöer med ett klick: en
+felkopplad variabel ska stoppa synken, inte vända den. Under flytten körs två
+synkar samtidigt, och låset gör att bara en skriver.
+Test: snajp-support/tests/invariants/test_inv_data_008.py
+Införd: 2026-11-18 · Upphävs endast genom waiver
+
+### INV-PROC-001 — Varje PR mot development besvarar säkerhets- och AI-frågan
+`.github/pull_request_template.md` har avsnitten "Säkerhet och dataskydd" och
+"AI-påverkan". Arbetsflödet `.github/workflows/pr-granskning.yml` kör
+`scripts/pr_granskning.py` när en PR öppnas, uppdateras eller redigeras, och
+fäller den om något av avsnitten saknas eller saknar ett ikryssat svar. Botar
+och PR:er mot andra grenar än development (release-PR:er mot main) är undantagna.
+Varför: säkerhet och AI-påverkan prövades bara när någon kom ihåg det. ISO 27001
+A.5.8 kräver att informationssäkerhet ingår i varje arbete, och ISO 42001
+A.6.1.3 att ändringar av modell och prompt prövas
+(docs/compliance/score-plan-2026-11-18.md).
+Test: tests/invariants/test_inv_proc_001.py
+Införd: 2026-11-18 · Upphävs endast genom waiver
+
+### INV-SEC-013 — Varje admin- och master-endpoint skriver i åtkomstloggen
+Varje route under `/api/admin` och `/api/keys` har `deps.require_master_key` i
+sitt beroendeträd, och `require_master_key` anropar
+`app/api/adminlogg.logga_masteranrop`, som skriver en rad i `audit_logs` genom
+databasfunktionen `logga_adminatkomst` (migration 123): vem (plattformsadmin ur
+`X-Snajp-Admin`, prövad mot `platform_admins`, annars "master-nyckel"), när,
+åtgärd, kund och ruttens mall. Aldrig frågesträng, kropp, svar eller nyckel.
+Kundbesöket (`log_admin_impersonation`) skriver i samma logg. Approllerna får
+inte ändra eller radera i tabellen, och raderna gallras efter 365 dagar.
+Enda undantaget är flyttmottagningen (HMAC mellan miljöerna).
+Varför: ingen kod skrev i `audit_logs`, så ingen admins åtkomst till kunddata
+gick att granska i efterhand (ISO 27001 A.8.15, A.5.15–A.5.18; GDPR art. 32).
+Test: tests/invariants/test_inv_sec_013.py
+Införd: 2026-11-18 · Upphävs endast genom waiver
 
 ## Roadmap
 

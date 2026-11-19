@@ -24,6 +24,9 @@ class _Settings:
     def active_llm_key(self) -> str:
         return self.gemini_api_key
 
+    def har_riktig_kunddata(self) -> bool:  # INV-DATA-004: AI Studio bara lokalt
+        return False
+
 
 class _Svar:
     status_code = 200
@@ -66,7 +69,11 @@ async def test_sokningens_innehall_bar_rollen_user(monkeypatch, vertex):
     assert [del_["role"] for del_ in innehall] == ["user"]
     assert fangat["kropp"]["tools"] == [{"google_search": {}}]
     # 2026-09-15: med tänkande tog sökningen 258–300+ s, utan 9–16 s.
-    assert fangat["kropp"]["generationConfig"]["thinkingConfig"] == {"thinkingBudget": 0}
+    # Vertex kör gemini-2.5-flash (budget 0); AI Studio-vägen byter till
+    # gemini-3.8-flash, där budgeten är avvecklad och lägsta nivån är LOW
+    # (2026-11-18, docs/compliance/modellbyte-underlag.md).
+    vantat = {"thinkingBudget": 0} if vertex else {"thinkingLevel": "LOW"}
+    assert fangat["kropp"]["generationConfig"]["thinkingConfig"] == vantat
     if vertex:
         assert "aiplatform.googleapis.com" in fangat["url"]
         assert "/publishers/google/models/gemini-2.5-flash:generateContent" in fangat["url"]

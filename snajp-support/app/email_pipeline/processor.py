@@ -35,6 +35,44 @@ _SIGNATURE = "\n\nVänliga hälsningar,\n{avsandare}"
 #: tenantrad förväntar sig.
 _STANDARD_AVSANDARE = "Snajp Support"
 
+#: AI-upplysningen på autosvar (INV-AI-001, AI-förordningen art. 50.1). Kod,
+#: inte modell: en upplysning som hänger på promptens goda vilja är ingen.
+#: Bara mejl som går ut UTAN mänsklig granskning får den; ett godkänt utkast
+#: är människans svar. Den svenska raden ger kunden just de ord som
+#: support_regler.ber_om_manniska känner igen; därför tvättas raden bort ur
+#: ett inkommande svar som citerar den (_utan_upplysning) innan regexen körs.
+AI_UPPLYSNING = {
+    "sv": (
+        "Det här svaret är skrivet av en AI-assistent. Vill du hellre ha svar "
+        "från en människa? Svara på mejlet och skriv att du vill prata med en "
+        "medarbetare, så tar en av oss över."
+    ),
+    "en": (
+        "This reply was written by an AI assistant. Would you rather hear from "
+        "a person? Reply to this email and ask for a member of our team, and "
+        "one of us will take over."
+    ),
+}
+
+
+def med_ai_upplysning(content: str, sprak: str | None = "sv") -> str:
+    """Lägg AI-upplysningen sist, efter signaturen, utan att röra den.
+    Bär texten redan en upplysning (på något språk) läggs ingen till."""
+    if any(rad in content for rad in AI_UPPLYSNING.values()):
+        return content
+    rad = AI_UPPLYSNING["en" if sprak == "en" else "sv"]
+    return f"{content.rstrip()}\n\n{rad}"
+
+
+def _utan_upplysning(text: str) -> str:
+    """Kundens text utan citerade AI-upplysningar. Citattecken och
+    radbrytningar från kundens mejlklient tas bort först, så att en
+    ombruten och "> "-citerad rad också känns igen."""
+    platt = " ".join(re.sub(r"(?m)^[ \t>]+", "", text or "").split())
+    for rad in AI_UPPLYSNING.values():
+        platt = platt.replace(rad, " ")
+    return platt
+
 
 def _wrap_reply(body: str, recipient_name: str | None, avsandare: str = _STANDARD_AVSANDARE) -> str:
     """Lägg på exakt en hälsning och en signatur från AVSÄNDARENS företag.
@@ -226,8 +264,18 @@ async def _faktakontroll(
         )["faktakontroll"]
     except Exception:  # noqa: BLE001 — standardnivån hellre än ingen kontroll
         niva = "forsiktig"
-    kallor = [f"{a.get('title') or ''}\n{a.get('content') or ''}" for a in articles]
-    kallor += [email.get("subject") or "", email.get("body_text") or "", profil or ""]
+    # Namngivna källor (INV-GROUND-002): kundens eget mejl får bära ett eko,
+    # aldrig ett pris, en procentsats, en frist eller en webbadress.
+    # Mejlvägen DÖMER bara (kontrollera), den bygger inte om utkastet som
+    # chatten gör i citatläget (support_faktagrind.grinda). På nivån ordagrant
+    # fälls därför varje utkast som inte redan är rena citat och går till
+    # granskning. Det är valt: ett mejl har hälsning och signatur runt sig
+    # och en språkkorrektur efter sig, och ett byggt mejl är en egen uppgift.
+    kallor = support_faktagrind.kb_kallor(articles) + [
+        support_faktagrind.kundtext(email.get("subject")),
+        support_faktagrind.kundtext(email.get("body_text")),
+        support_faktagrind.Kalla("PROFIL", profil or "", "profil"),
+    ]
     return support_faktagrind.kontrollera(
         utkast, niva=niva, kallor=kallor, tenant_namn=avsandare
     )
@@ -488,6 +536,30 @@ async def process_email(
         )
         return {"action": "att_hantera"}
 
+    # Begränsad behandling (GDPR art. 18, migration 124): mejlet är sparat,
+    # men varken klassning, Jev, triage eller AI-utkast får röra det. Det går
+    # till Att hantera, där en människa läser det. Går listan inte att läsa
+    # gäller samma sak: hellre ett mejl för mycket hos en människa än ett
+    # behandlat mot personens begäran.
+    fran = str(email.get("from_email") or "").strip().casefold()
+    if fran:
+        try:
+            begransad = fran in await storage.list_begransade(tenant_id)
+            okand = False
+        except Exception:  # noqa: BLE001
+            logger.exception("Kunde inte läsa behandlingsbegränsningarna för %s", tenant_id)
+            begransad, okand = True, True
+        if begransad:
+            await storage.update_email(tenant_id, email_id, status="att_hantera")
+            await storage.log_decision(
+                tenant_id, email_id=email_id, event="begransad_behandling",
+                detail={"note": "Begränsningarna kunde inte läsas — till Att hantera, ingen AI."
+                        if okand else
+                        "Avsändaren har begärt begränsning av behandlingen (art. 18) — "
+                        "till Att hantera, ingen AI."},
+            )
+            return {"action": "att_hantera"}
+
     # Klassningen (migration 084, plan del D): support, lead eller ej
     # relaterat, FÖRE avtalsgrinden och triagen. Kodregler och Jev kostar
     # ingen modellbudget; bara support går vidare till LLM-triagen.
@@ -613,6 +685,15 @@ async def process_email(
             must_escalate = True
             escalation_reason = "Ingen träff i kunskapsbasen — grundningsregeln kräver att en människa tar ärendet."
 
+        # En uttrycklig begäran om en människa eskalerar i kod, samma regex
+        # som chatten (INV-ESC-001). Det är löftet i AI-upplysningen ovan.
+        if not must_escalate:
+            from ..agent.support_regler import ber_om_manniska
+
+            if ber_om_manniska(_utan_upplysning(email.get("body_text") or "")):
+                must_escalate = True
+                escalation_reason = "Kunden bad om att få prata med en människa."
+
         if must_escalate or rule == "escalate":
             reason = escalation_reason or f"Regeln för facket {CATEGORY_LABELS[triage['category']]} kräver mänsklig granskning."
             body = _ESCALATION_BODY if must_escalate and articles else (
@@ -625,8 +706,27 @@ async def process_email(
             # gäller fortfarande utan KB-träffar (ingen källa = inget delsvar)
             # och när modellen inte gav något utkast. Utkastet går ALLTID till
             # granskning här, aldrig ut automatiskt.
+            # Delsvaret går genom samma faktagrind som ett vanligt utkast
+            # (2026-11-16). Det granskas visserligen av en människa, men den
+            # som granskar ska inte behöva hitta en påhittad uppgift själv:
+            # håller det inte används den fasta texten, och det ostödda står
+            # i beslutsloggen.
             if articles and triage.get("beslut") in ("DELVIS", "ESKALERA") and triage.get("draft_body"):
-                body = triage["draft_body"]
+                delsvar = await _faktakontroll(
+                    storage, tenant_id, triage["draft_body"],
+                    articles=articles, email=email, profil=profil, avsandare=avsandare,
+                )
+                if delsvar.ok:
+                    body = triage["draft_body"]
+                else:
+                    await storage.log_decision(
+                        tenant_id, email_id=email_id, event="faktagrind",
+                        detail={
+                            "note": "Delsvaret innehöll uppgifter som inte står i "
+                            "underlaget. Den fasta texten används i stället.",
+                            "ostodda": list(delsvar.ostodda)[:10],
+                        },
+                    )
             content = _wrap_reply(body, email["from_name"], avsandare)
             await storage.update_ticket(
                 tenant_id, ticket["id"], status="escalated", priority="high",
@@ -682,6 +782,14 @@ async def process_email(
             and faktadom.ok
         )
         if auto_ok:
+            # Ingen människa läser det här svaret före utskick: upplysningen
+            # läggs på i kod (INV-AI-001). Svenska, för mejlvägen skriver alltid
+            # svenska (textkvalitet.SPRAKREGLER, hälsningen och signaturen).
+            # Det sparade utkastet bär samma text som det skickade, så ett
+            # omtag dubblerar varken raden eller idempotensnyckeln. `content`
+            # själv rörs inte: faller sändningen blir det ett utkast som en
+            # människa granskar, och då är svaret hennes.
+            autosvar = med_ai_upplysning(content, "sv")
             # Sändningen sker FÖRE varje statusskrivning, samma kontrakt som
             # godkännandevägen (api/drafts.py). Misslyckas den degraderar
             # ärendet till ett vanligt utkast i granskningskön — fail mot
@@ -689,7 +797,7 @@ async def process_email(
             from .sender import SandningsFel, skicka_supportsvar
 
             try:
-                sandnotering = await skicka_supportsvar(email, content=content, tenant_id=tenant_id, storage=storage)
+                sandnotering = await skicka_supportsvar(email, content=autosvar, tenant_id=tenant_id, storage=storage)
             except SandningsFel as fel:
                 await storage.log_decision(
                     tenant_id, email_id=email_id, event="auto_send_failed",
@@ -700,11 +808,11 @@ async def process_email(
         if auto_ok:
             draft = await storage.create_draft(
                 tenant_id, email_id=email_id, ticket_id=ticket["id"],
-                content=content, status="auto_sent", auto=True, confidence=confidence,
+                content=autosvar, status="auto_sent", auto=True, confidence=confidence,
             )
             await storage.save_message(
                 tenant_id, conversation_id=ticket["conversation_id"],
-                direction="outbound", content=content,
+                direction="outbound", content=autosvar,
             )
             await storage.update_ticket(tenant_id, ticket["id"], status="resolved")
             await storage.update_email(tenant_id, email_id, status="auto_sent")

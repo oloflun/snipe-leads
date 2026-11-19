@@ -3,8 +3,7 @@
 
     python scripts/verify_railway.py
 
-Samma roll som scripts/verify_render.py fyller för Render, och av samma skäl:
-de fält som styr driften (gren, byggkontext, roll, radsäkerhet, korskoppling)
+Skälet: de fält som styr driften (gren, byggkontext, roll, radsäkerhet, korskoppling)
 syns inte i någon diff. Sanningen ligger i Railways databas och i Postgres, så
 den måste frågas ut.
 
@@ -220,7 +219,7 @@ def deployed_migrations(project: dict, env_id: str, branch: str) -> tuple[set[st
 
     ## Varför inte arbetskopian
 
-    Kontrollen räknade förut filerna i `supabase/migrations/` och jämförde
+    Kontrollen räknade förut filerna i `db/migrations/` och jämförde
     antalet med liggarens. Det gör svaret beroende av vilken gren den som kör
     råkar stå på. Från en development-checkout föll den alltid på main med
     "89 av 98" — och de nio fanns inte i main-koden heller, alltså var
@@ -256,16 +255,19 @@ def deployed_migrations(project: dict, env_id: str, branch: str) -> tuple[set[st
         kandidater.append((sha, f"deployad commit {sha[:8]}"))
     kandidater.append((f"origin/{branch}", f"origin/{branch}"))
 
+    # Katalogen hette supabase/migrations fram till 2026-11-18. En deployad
+    # commit från före flytten har den gamla sökvägen, så båda läses.
+    sokvagar = ("db/migrations", "supabase/migrations")
     for ref, label in kandidater:
-        kod, ut = _git("ls-tree", "-r", "--name-only", ref, "--", "supabase/migrations")
+        kod, ut = _git("ls-tree", "-r", "--name-only", ref, "--", *sokvagar)
         if kod != 0 and ref == sha:
             _git("fetch", "--quiet", "origin", ref)
-            kod, ut = _git("ls-tree", "-r", "--name-only", ref, "--", "supabase/migrations")
+            kod, ut = _git("ls-tree", "-r", "--name-only", ref, "--", *sokvagar)
         if kod == 0 and ut:
             stems = {Path(rad).stem for rad in ut.splitlines() if rad.endswith(".sql")}
             # railway_migrate.py kör railway/000_auth_compat.sql först och
             # registrerar den under sitt filnamn. Den ligger utanför
-            # supabase/migrations/ men är en rad i samma liggare.
+            # db/migrations/ men är en rad i samma liggare.
             return stems | {"000_auth_compat"}, label
     return None, (f"deployad commit {sha[:8]}" if sha else f"origin/{branch}")
 
@@ -316,7 +318,7 @@ def verify_database(env_name: str, store: dict,
         # Framförhållning är inte ett fel. Arbetskopian står ofta på
         # development medan main kör en äldre commit; de migrationerna hör
         # till kod som ännu inte befordrats och ska INTE köras här.
-        i_arbetskopian = {p.stem for p in (REPO_ROOT / "supabase" / "migrations").glob("*.sql")}
+        i_arbetskopian = {p.stem for p in (REPO_ROOT / "db" / "migrations").glob("*.sql")}
         vantar = sorted(i_arbetskopian - expected - applied)
         if vantar:
             notes.append(

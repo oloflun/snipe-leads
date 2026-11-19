@@ -16,7 +16,10 @@ from ..storage.base import Storage
 from ..storage.memory import MemoryStorage
 
 TABELLER: list[tuple[str, tuple[str, ...]]] = [
-    ("ss_knowledge_base", ("title", "content", "category", "embedding")),
+    (
+        "ss_knowledge_base",
+        ("title", "content", "category", "embedding", "source_url", "giltig_till"),
+    ),
     ("ss_category_rules", ("category", "mode")),
     ("agent_configs", ("agent_type", "settings", "instructions_md", "tone", "taxonomy")),
     ("agent_context_docs", ("kind", "content", "source", "version")),

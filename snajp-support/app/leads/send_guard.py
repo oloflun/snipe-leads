@@ -111,8 +111,8 @@ class Utskick:
     #: Används för karensregeln — inte mottagaradressen, eftersom ett bolag
     #: som byter kontaktperson annars hade fått ett nytt mejl dagen efter.
     foretagsnyckel: str
-    #: True när mottagaradressen är personlig (`fornamn.efternamn@`) snarare
-    #: än funktionell. Sätts av `Prospect.epost_ar_personlig`.
+    #: True när mottagaradressen är personlig (`anna@`, `fornamn.efternamn@`)
+    #: snarare än funktionell. Sätts av `Prospect.epost_ar_personlig`.
     personlig_adress: bool
     #: Skicka nu ur kön (Anton 2026-10-10): en människa har valt att mejlet
     #: går direkt. Bara kontorstiden (regel 5a) släpps; övriga spärrar gäller.

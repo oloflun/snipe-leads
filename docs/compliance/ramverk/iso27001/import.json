@@ -1,0 +1,783 @@
+{
+  "framework": {
+    "name": "ISO 27001",
+    "id": "frk_681ecc34e85064efdbb76993",
+    "version": "2022",
+    "source": "trycompai/comp",
+    "commit": "712ee1b3d722ca1b4f09eb4e5b67cd3bde8713ed"
+  },
+  "organization": "Snajp (enskild firma)",
+  "generated": "2026-11-17",
+  "note": "Utkast för senare inläsning via Comp AI:s API. Sökvägar i policies är relativa till docs/compliance/ramverk/iso27001/, i tasks.evidenceFiles relativa till repots rot. Sex policyer och fem uppgifter delas med ../gdpr/import.json (samma templateId); läs in dem en gång. Riskskala 1–5 med motsvarande Comp-enum. Vendors finns i ../gdpr/import.json och upprepas inte.",
+  "policies": [
+    {
+      "name": "Compliance & Regulatory Monitoring",
+      "templateId": "frk_pt_685e4010bde64520b9abaf1d",
+      "status": "draft",
+      "statusNote": "UTKAST 2026-11-17, inte godkänd",
+      "approver": "Anton",
+      "path": "../gdpr/policyer/01-compliance-regulatory-monitoring.md",
+      "sharedWith": "GDPR",
+      "isoGap": "Saknar kontakt med CERT-SE och polis (A.5.5), intressegrupper (A.5.6), licensförteckning (A.5.32) och lagringstider för egna register (A.5.33)."
+    },
+    {
+      "name": "Data Classification & Handling",
+      "templateId": "frk_pt_685e40d46e7b1123022bf3e8",
+      "status": "draft",
+      "statusNote": "UTKAST 2026-11-17, inte godkänd",
+      "approver": "Anton",
+      "path": "../gdpr/policyer/02-data-classification-handling.md",
+      "sharedWith": "GDPR",
+      "isoGap": "Täcker A.5.12, A.5.13, A.8.10–A.8.12 i sak. Testinformation (A.8.33) behandlas i P24."
+    },
+    {
+      "name": "Incident Response & Breach Notification",
+      "templateId": "frk_pt_685e43e23b78127274355980",
+      "status": "draft",
+      "statusNote": "UTKAST 2026-11-17, inte godkänd",
+      "approver": "Anton",
+      "path": "../gdpr/policyer/03-incident-response-breach-notification.md",
+      "sharedWith": "GDPR",
+      "isoGap": "Gäller personuppgiftsincidenter; ISO kräver alla säkerhetshändelser (A.5.24, A.5.25) och bevissäkring (A.5.28, se P25). Räknar internlarmet som befintligt, vilket driftkonfigurationen motsäger."
+    },
+    {
+      "name": "Privacy & Data-Subject Rights",
+      "templateId": "frk_pt_685e410082a807a0274b4531",
+      "status": "draft",
+      "statusNote": "UTKAST 2026-11-17, inte godkänd",
+      "approver": "Anton",
+      "path": "../gdpr/policyer/04-privacy-data-subject-rights.md",
+      "sharedWith": "GDPR",
+      "isoGap": "Inga tillägg för A.5.34."
+    },
+    {
+      "name": "Security & Privacy Awareness Training",
+      "templateId": "frk_pt_685e458a49e1eff0af54e3d2",
+      "status": "draft",
+      "statusNote": "UTKAST 2026-11-17, inte godkänd",
+      "approver": "Anton",
+      "path": "../gdpr/policyer/05-security-privacy-awareness-training.md",
+      "sharedWith": "GDPR",
+      "isoGap": "Kompetenskrav per roll och förteckning (7.2) saknas."
+    },
+    {
+      "name": "Vendor & Third-Party Risk",
+      "templateId": "frk_pt_685e462046667f75a50a2c3e",
+      "status": "draft",
+      "statusNote": "UTKAST 2026-11-17, inte godkänd",
+      "approver": "Anton",
+      "path": "../gdpr/policyer/06-vendor-third-party-risk.md",
+      "sharedWith": "GDPR",
+      "isoGap": "IKT-leveranskedjan (A.5.21) och exitplan för molntjänster (A.5.23) läggs till i P26."
+    },
+    {
+      "name": "Information Security & Privacy Governance",
+      "templateId": "frk_pt_685e3f7b4ebcb27b60c51434",
+      "status": "draft",
+      "statusNote": "UTKAST 2026-11-17, inte godkänd",
+      "approver": "Anton",
+      "path": "policyer/07-information-security-privacy-governance.md"
+    },
+    {
+      "name": "Policy Management & Exception Handling",
+      "templateId": "frk_pt_685e405054f7c35d89ccccf2",
+      "status": "draft",
+      "statusNote": "UTKAST 2026-11-17, inte godkänd",
+      "approver": "Anton",
+      "path": "policyer/08-policy-management-exception-handling.md"
+    },
+    {
+      "name": "Risk Management",
+      "templateId": "frk_pt_685e3fc75bd72cd0745dc5d1",
+      "status": "draft",
+      "statusNote": "UTKAST 2026-11-17, inte godkänd",
+      "approver": "Anton",
+      "path": "policyer/09-risk-management.md"
+    },
+    {
+      "name": "Internal Audit Procedure",
+      "templateId": "frk_pt_691e4bd04aac53e783cb7c14",
+      "status": "draft",
+      "statusNote": "UTKAST 2026-11-17, inte godkänd",
+      "approver": "Anton",
+      "path": "policyer/10-internal-audit-procedure.md"
+    },
+    {
+      "name": "Access Control & Least Privilege",
+      "templateId": "frk_pt_685e42188e2df1c285cca159",
+      "status": "draft",
+      "statusNote": "UTKAST 2026-11-17, inte godkänd",
+      "approver": "Anton",
+      "path": "policyer/11-access-control-least-privilege.md"
+    },
+    {
+      "name": "Authentication & Password",
+      "templateId": "frk_pt_685e42445c99797321ef051a",
+      "status": "draft",
+      "statusNote": "UTKAST 2026-11-17, inte godkänd",
+      "approver": "Anton",
+      "path": "policyer/12-authentication-password.md"
+    },
+    {
+      "name": "Acceptable Use & Workstation Security",
+      "templateId": "frk_pt_685e453cad89de25e5aebf4a",
+      "status": "draft",
+      "statusNote": "UTKAST 2026-11-17, inte godkänd",
+      "approver": "Anton",
+      "path": "policyer/13-acceptable-use-workstation-security.md"
+    },
+    {
+      "name": "Remote Access & BYOD",
+      "templateId": "frk_pt_685e426ccbb0de15a90cf446",
+      "status": "draft",
+      "statusNote": "UTKAST 2026-11-17, inte godkänd",
+      "approver": "Anton",
+      "path": "policyer/14-remote-access-byod.md"
+    },
+    {
+      "name": "Background Screening & On/Off-boarding",
+      "templateId": "frk_pt_685e45c938ad29ad775a2344",
+      "status": "draft",
+      "statusNote": "UTKAST 2026-11-17, inte godkänd",
+      "approver": "Anton",
+      "path": "policyer/15-background-screening-on-off-boarding.md"
+    },
+    {
+      "name": "Code of Business Conduct",
+      "templateId": "frk_pt_68e3f39e77b0a823add09bf5",
+      "status": "draft",
+      "statusNote": "UTKAST 2026-11-17, inte godkänd",
+      "approver": "Anton",
+      "path": "policyer/16-code-of-business-conduct.md"
+    },
+    {
+      "name": "Physical Security & Environmental",
+      "templateId": "frk_pt_685e4508d8c0d14ae873e644",
+      "status": "draft",
+      "statusNote": "UTKAST 2026-11-17, inte godkänd",
+      "approver": "Anton",
+      "path": "policyer/17-physical-security-environmental.md"
+    },
+    {
+      "name": "Backup, Business Continuity & Disaster Recovery",
+      "templateId": "frk_pt_685e44939f827e6a9f736fd4",
+      "status": "draft",
+      "statusNote": "UTKAST 2026-11-17, inte godkänd",
+      "approver": "Anton",
+      "path": "policyer/18-backup-business-continuity-disaster-recovery.md"
+    },
+    {
+      "name": "Change & Release Management",
+      "templateId": "frk_pt_685e42c38c3267d391674ce3",
+      "status": "draft",
+      "statusNote": "UTKAST 2026-11-17, inte godkänd",
+      "approver": "Anton",
+      "path": "policyer/19-change-release-management.md"
+    },
+    {
+      "name": "Secure Software Development Lifecycle ",
+      "templateId": "frk_pt_685e4319a5bb1d2d411975e6",
+      "status": "draft",
+      "statusNote": "UTKAST 2026-11-17, inte godkänd. Mallens namn slutar med ett mellanslag i seed-datan; behållet för matchning",
+      "approver": "Anton",
+      "path": "policyer/20-secure-software-development-lifecycle.md"
+    },
+    {
+      "name": "Secure Configuration & Hardening",
+      "templateId": "frk_pt_685e42a3bbd08ad14de297f0",
+      "status": "draft",
+      "statusNote": "UTKAST 2026-11-17, inte godkänd",
+      "approver": "Anton",
+      "path": "policyer/21-secure-configuration-hardening.md"
+    },
+    {
+      "name": "Vulnerability & Patch Management",
+      "templateId": "frk_pt_685e43555493efd5f79c15be",
+      "status": "draft",
+      "statusNote": "UTKAST 2026-11-17, inte godkänd",
+      "approver": "Anton",
+      "path": "policyer/22-vulnerability-patch-management.md"
+    },
+    {
+      "name": "Encryption & Crypto Controls",
+      "templateId": "frk_pt_685e4177d5da489e7c5e1b1b",
+      "status": "draft",
+      "statusNote": "UTKAST 2026-11-17, inte godkänd",
+      "approver": "Anton",
+      "path": "policyer/23-encryption-crypto-controls.md"
+    },
+    {
+      "name": "Information Sharing & Transfer",
+      "templateId": "frk_pt_685e46557bc14fbddea6468a",
+      "status": "draft",
+      "statusNote": "UTKAST 2026-11-17, inte godkänd",
+      "approver": "Anton",
+      "path": "policyer/24-information-sharing-transfer.md"
+    },
+    {
+      "name": "Logging, Monitoring & Audit",
+      "templateId": "frk_pt_685e43997555c7ab39983c21",
+      "status": "draft",
+      "statusNote": "UTKAST 2026-11-17, inte godkänd",
+      "approver": "Anton",
+      "path": "policyer/25-logging-monitoring-audit.md"
+    },
+    {
+      "name": "Third-Party Processors (Vendors)",
+      "templateId": "frk_pt_68bb155d6b8eaafd14904188",
+      "status": "draft",
+      "statusNote": "UTKAST 2026-11-17, inte godkänd. Mallen är samma text som Vendor & Third-Party Risk; filen hänvisar dit och lägger bara till ISO-delarna",
+      "approver": "Anton",
+      "path": "policyer/26-third-party-processors-vendors.md"
+    }
+  ],
+  "tasks": [
+    {
+      "name": "2FA",
+      "templateId": "frk_tt_68406cd9dde2d8cd4c463fe0",
+      "status": "todo",
+      "evidenceFiles": [
+        "DEPLOY.md"
+      ],
+      "comment": "Bara Gmail-kontots tvåstegsverifiering är belagd (DEPLOY.md:347-350). Övriga konton okända; ingen tvåfaktor i appen."
+    },
+    {
+      "name": "Access Review Log",
+      "templateId": "frk_tt_68e805457c2dcc784e72e3cc",
+      "status": "in_progress",
+      "evidenceFiles": [
+        "docs/compliance/underlag/rutiner/d-atkomstgenomgang.md"
+      ],
+      "comment": "Rutin och mall som utkast, nästan allt [FYLL]; ingen granskning gjord.",
+      "changed": "2026-11-18"
+    },
+    {
+      "name": "App Availability",
+      "templateId": "frk_tt_68406d2e86acc048d1774ea6",
+      "status": "todo",
+      "sharedWith": "GDPR",
+      "evidenceFiles": [
+        "snajp-support/app/api/rate_limit.py",
+        "docs/compliance/bevis/railway-regioner-2026-11-17.txt",
+        "docs/compliance/bevis/railway-konfiguration-2026-11-17-efter.txt"
+      ],
+      "comment": "Som GDPR. Tillägg: Postgres i main har fortfarande publik TCP-proxy (railway-konfiguration-2026-11-17-efter rad 229-231).",
+      "changed": "2026-11-18"
+    },
+    {
+      "name": "Backup Restoration Test",
+      "templateId": "frk_tt_68e52b269db179c434734766",
+      "status": "todo",
+      "evidenceFiles": [
+        "docs/compliance/bevis/railway-backuper-2026-11-17.txt",
+        "docs/compliance/underlag/beslut/g-sakerhetskopiering-aterstallning.md"
+      ],
+      "comment": "Inga säkerhetskopior; Railway kräver Pro-planen. Beslutsutkast om mål och prov finns.",
+      "changed": "2026-11-18"
+    },
+    {
+      "name": "Code Changes",
+      "templateId": "frk_tt_68406d64f09f13271c14dd01",
+      "status": "in_progress",
+      "evidenceFiles": [
+        ".github/CODEOWNERS",
+        ".github/workflows/verify.yml"
+      ],
+      "comment": "Grenskydd och code owner på main; CodeQL på PR. development oskyddad med produktionsdata; Railway väntar inte på CI; ingen backningsplan i PR.",
+      "changed": "2026-11-18"
+    },
+    {
+      "name": "Data Masking",
+      "templateId": "frk_tt_686b51339d7e9f8ef2081a70",
+      "status": "in_progress",
+      "evidenceFiles": [
+        "snajp-support/app/moderation/maskering.py",
+        "snajp-support/app/leads/jev.py"
+      ],
+      "comment": "Personnummer maskeras före Vertex och, i development, före TypeSafe (PR 45). Hälsouppgifter, inbäddningar och testmiljön inte.",
+      "changed": "2026-11-18"
+    },
+    {
+      "name": "Device List",
+      "templateId": "frk_tt_68406903839203801ac8041a",
+      "status": "in_progress",
+      "evidenceFiles": [
+        "docs/compliance/underlag/rutiner/e-enheter.md"
+      ],
+      "comment": "Mall som utkast, inte ifylld.",
+      "changed": "2026-11-18"
+    },
+    {
+      "name": "Employee Access",
+      "templateId": "frk_tt_68406ca292d9fffb264991b9",
+      "status": "in_progress",
+      "evidenceFiles": [
+        "docs/compliance/underlag/rutiner/d-atkomstgenomgang.md"
+      ],
+      "comment": "Ingen identitetsleverantör; kontoförteckningen som mall i åtkomstgenomgången; avslutsrutin bara som utkast.",
+      "changed": "2026-11-18"
+    },
+    {
+      "name": "Employee Performance Evaluations",
+      "templateId": "frk_tt_68e52b27c4bdbf1b24051b8b",
+      "status": "in_review",
+      "evidenceFiles": [],
+      "comment": "Föreslås not_relevant: inga anställda. Anton beslutar."
+    },
+    {
+      "name": "Employee Verification",
+      "templateId": "frk_tt_68406951bd282273ebe286cc",
+      "status": "todo",
+      "evidenceFiles": [],
+      "comment": "Inget sekretessavtal belagt. Undantag för Anton och Sebbe föreslås i P15."
+    },
+    {
+      "name": "Encryption at Rest",
+      "templateId": "frk_tt_68e52b26bf0e656af9e4e9c3",
+      "status": "todo",
+      "sharedWith": "GDPR",
+      "evidenceFiles": [],
+      "comment": "Som GDPR. Tillägg: diskkryptering på datorerna."
+    },
+    {
+      "name": "Incident Response",
+      "templateId": "frk_tt_68406b4f40c87c12ae0479ce",
+      "status": "in_progress",
+      "sharedWith": "GDPR",
+      "evidenceFiles": [
+        "INCIDENT_RESPONSE.md",
+        "docs/compliance/underlag/rutiner/c-incidentovning.md"
+      ],
+      "comment": "Som GDPR. Tillägg: registret ska omfatta alla säkerhetshändelser, också driftlarmen.",
+      "changed": "2026-11-18"
+    },
+    {
+      "name": "Internal Security Audit",
+      "templateId": "frk_tt_68e52b2618cb9d9722c6edfd",
+      "status": "todo",
+      "evidenceFiles": [],
+      "comment": "Ingen revision. Matriserna är underlag, inte revision."
+    },
+    {
+      "name": "Legal Proof of Company Registration",
+      "templateId": "frk_tt_68d28f68f117d45c0adcba33",
+      "status": "todo",
+      "evidenceFiles": [],
+      "comment": "Utdrag från Bolagsverket saknas. Org.nr för enskild firma är personnumret (beslut B1)."
+    },
+    {
+      "name": "Monitoring & Alerting",
+      "templateId": "frk_tt_68406af04a4acb93083413b9",
+      "status": "in_progress",
+      "sharedWith": "GDPR",
+      "evidenceFiles": [
+        "snajp-support/app/notifications/prioriterat_mejl.py",
+        "docs/compliance/bevis/railway-konfiguration-2026-11-17.txt",
+        ".github/workflows/overvakning.yml"
+      ],
+      "comment": "Driftövervakning med provad larmkedja (ärende 53); schemat glest under natten; INTERNLARM_SMTP_* saknas i api i båda miljöerna; ingen felspårning.",
+      "changed": "2026-11-18"
+    },
+    {
+      "name": "Planning",
+      "templateId": "frk_tt_68406e7abae2a9b16c2cc197",
+      "status": "todo",
+      "evidenceFiles": [
+        "docs/compliance/bevis/railway-backuper-2026-11-17.txt",
+        "docs/compliance/underlag/beslut/g-sakerhetskopiering-aterstallning.md"
+      ],
+      "comment": "Inga säkerhetskopior, ingen återställning till tidpunkt. Railway kräver Pro-planen.",
+      "changed": "2026-11-18"
+    },
+    {
+      "name": "Production Firewall & No-Public-Access Controls",
+      "templateId": "frk_tt_68fa2a852e70f757188f0c39",
+      "status": "in_progress",
+      "evidenceFiles": [
+        "docs/compliance/bevis/railway-konfiguration-2026-11-17.txt",
+        ".github/workflows/synk.yml",
+        "docs/compliance/bevis/railway-konfiguration-2026-11-17-efter.txt",
+        "docs/compliance/synkflytt-plan.md"
+      ],
+      "comment": "Redis nås inte längre över internet (Railways privata nät). Postgres har fortfarande publik TCP-proxy i main och development, som synken använder; plan i synkflytt-plan.md.",
+      "changed": "2026-11-18"
+    },
+    {
+      "name": "Public Policies",
+      "templateId": "frk_tt_6840791cac0a7b780dbaf932",
+      "status": "in_progress",
+      "sharedWith": "GDPR",
+      "evidenceFiles": [
+        "app/integritetspolicy/IntegritetspolicySida.tsx",
+        "app/villkor/VillkorSida.tsx"
+      ],
+      "comment": "Som GDPR.",
+      "changed": "2026-11-18"
+    },
+    {
+      "name": "Sanitized Inputs",
+      "templateId": "frk_tt_68406eedf0f0ddd220ea19c2",
+      "status": "in_progress",
+      "evidenceFiles": [
+        "snajp-support/requirements.txt"
+      ],
+      "comment": "Pydantic i API:t. Next-appens validering inte genomgången."
+    },
+    {
+      "name": "Secure Devices",
+      "templateId": "frk_tt_6840796f77d8a0dff53f947a",
+      "status": "in_progress",
+      "evidenceFiles": [
+        "docs/compliance/underlag/rutiner/e-enheter.md"
+      ],
+      "comment": "Mall per dator som utkast; ingen dator kontrollerad.",
+      "changed": "2026-11-18"
+    },
+    {
+      "name": "Secure Secrets",
+      "templateId": "frk_tt_68407ae5274a64092c305104",
+      "status": "in_progress",
+      "evidenceFiles": [
+        "scripts/keys.py",
+        "docs/compliance/bevis/historik-hemligheter-2026-11-17.txt"
+      ],
+      "comment": "Hemlighetsskanning och push-skydd påslagna, 0 öppna larm 2026-11-18 (känner bara leverantörsformat). Lösenordet i publik historik inte bytt. Hela .env.deploy som en GitHub-hemlighet.",
+      "changed": "2026-11-18"
+    },
+    {
+      "name": "Separation of Environments",
+      "templateId": "frk_tt_68e52a484cad0014de7a628f",
+      "status": "in_progress",
+      "evidenceFiles": [
+        "docs/compliance/bevis/railway-regioner-2026-11-17.txt",
+        "scripts/lokal_stack.py",
+        "docs/compliance/bevis/railway-konfiguration-2026-11-17-efter.txt"
+      ],
+      "comment": "Egen Redis per miljö sedan 2026-11-17. Testmiljön speglar produktionsdata och delar Vertex-konto.",
+      "changed": "2026-11-18"
+    },
+    {
+      "name": "TLS / HTTPS",
+      "templateId": "frk_tt_68406f411fe27e47a0d6d5f3",
+      "status": "todo",
+      "evidenceFiles": [],
+      "comment": "Publika adresser på HTTPS; SSL Labs-mätning saknas; ingen HSTS. Redis går inte längre över internet.",
+      "changed": "2026-11-18"
+    },
+    {
+      "name": "Utility Monitoring",
+      "templateId": "frk_tt_6849c1a1038c3f18cfff47bf",
+      "status": "todo",
+      "evidenceFiles": [],
+      "comment": "Ingen verktygslista, tidssynk inte kontrollerad."
+    }
+  ],
+  "risks": [
+    {
+      "title": "Plattformsadminens lösenord i publik git-historik",
+      "description": "Repot är publikt och lösenordet ligger kvar i historiken; det är inte bytt. Ger åtkomst som plattformsadmin till alla kunders data. Samma risk som i ../gdpr/import.json.",
+      "category": "technology",
+      "likelihood": 5,
+      "likelihoodEnum": "very_likely",
+      "likelihoodRationale": "Värdet är läsbart för vem som helst utan inloggning.",
+      "impact": 5,
+      "impactEnum": "severe",
+      "impactRationale": "Åtkomst till samtliga kunders data.",
+      "treatmentType": "mitigate",
+      "treatment": "Byt lösenordet och övriga exponerade lösenord; hemlighetsskanning och push-skydd; besluta repots synlighet (JA #1, #2).",
+      "owner": "Anton",
+      "status": "open",
+      "controls": [
+        "A.5.17",
+        "A.8.5",
+        "A.8.28"
+      ],
+      "evidence": "BESLUTSUNDERLAG A1; bevis/historik-hemligheter-2026-11-17.txt",
+      "statusNote": "Hemlighetsskanning och push-skydd påslagna 2026-11-17. Lösenordet inte bytt; repot publikt.",
+      "changed": "2026-11-18"
+    },
+    {
+      "title": "Produktionsdatabasen saknar säkerhetskopior",
+      "description": "Inga scheman och inga kopior på någon Railway-volym. Ett förstört schema går inte att återställa.",
+      "category": "resilience",
+      "likelihood": 3,
+      "likelihoodEnum": "possible",
+      "likelihoodRationale": "Flera deployer och migrationer per dag, skript som skriver mot driften, synk mellan miljöerna.",
+      "impact": 5,
+      "impactEnum": "severe",
+      "impactRationale": "All kunddata kan gå förlorad; art. 32.1 c.",
+      "treatmentType": "mitigate",
+      "treatment": "Schemalagda kopior, en kopia utanför Railway, återställningsprov, RTO och RPO (P18).",
+      "owner": "Anton",
+      "status": "open",
+      "controls": [
+        "A.8.13",
+        "A.5.30"
+      ],
+      "evidence": "bevis/railway-backuper-2026-11-17.txt; BESLUTSUNDERLAG A4",
+      "statusNote": "Railway kräver Pro-planen för kopior; inte uppgraderad.",
+      "changed": "2026-11-18"
+    },
+    {
+      "title": "Testmiljön är en fullständig spegel av produktionens persondata",
+      "description": "All kunddata kopieras var tionde minut till development. Delad Redis och delat Vertex-konto, kundnycklar i klartext, AI-kodverktyg läser spegeln. Samma risk som i ../gdpr/import.json.",
+      "category": "governance",
+      "likelihood": 4,
+      "likelihoodEnum": "likely",
+      "likelihoodRationale": "Spegeln används i det dagliga arbetet.",
+      "impact": 4,
+      "impactEnum": "major",
+      "impactRationale": "Alla kunders data i en miljö med svagare skydd.",
+      "treatmentType": "mitigate",
+      "treatment": "Minimering eller pseudonymisering; egen Redis; servicekonto per miljö (JA #14, #16).",
+      "owner": "Anton",
+      "status": "open",
+      "controls": [
+        "A.8.31",
+        "A.8.33",
+        "A.8.22"
+      ],
+      "evidence": "DEPLOY.md:155-174; BESLUTSUNDERLAG A3"
+    },
+    {
+      "title": "Kundmejltext till TypeSafe (Jev) i USA utan belagt avtal",
+      "description": "INKORG_JEV=auto i båda miljöerna. Samma risk som i ../gdpr/import.json.",
+      "category": "vendor_management",
+      "likelihood": 5,
+      "likelihoodEnum": "very_likely",
+      "likelihoodRationale": "Pågår vid varje mejl som kodreglerna inte sorterar.",
+      "impact": 4,
+      "impactEnum": "major",
+      "impactRationale": "Kundernas kunders text till ett ej godkänt underbiträde i tredjeland.",
+      "treatmentType": "avoid",
+      "treatment": "INKORG_JEV=off i båda miljöerna (JA #3).",
+      "owner": "Anton",
+      "status": "pending",
+      "controls": [
+        "A.5.14",
+        "A.5.19",
+        "A.8.9"
+      ],
+      "evidence": "BESLUTSUNDERLAG A2; bevis/railway-konfiguration rad 95, 235",
+      "statusNote": "INKORG_JEV=off i main och development sedan 2026-11-17 (railway-konfiguration-2026-11-17-efter.txt). Kvar: raderingsbegäran till TypeSafe, bedömning av anmälningsplikt, beslut om leadsdelen.",
+      "changed": "2026-11-18"
+    },
+    {
+      "title": "Redis utan TLS och delad mellan miljöerna",
+      "description": "Jobbposter med agentens svar går okrypterat till Redis Cloud. Samma risk som i ../gdpr/import.json.",
+      "category": "technology",
+      "likelihood": 3,
+      "likelihoodEnum": "possible",
+      "likelihoodRationale": "Trafik över publikt nät mellan två leverantörer.",
+      "impact": 3,
+      "impactEnum": "moderate",
+      "impactRationale": "Kundsvar i klartext med kort livslängd.",
+      "treatmentType": "mitigate",
+      "treatment": "scripts/redis_tls_pa.py --apply; egen Redis för development (JA #4).",
+      "owner": "Anton",
+      "status": "closed",
+      "controls": [
+        "A.8.20",
+        "A.8.21",
+        "A.8.24"
+      ],
+      "evidence": "bevis/railway-konfiguration rad 118, 256",
+      "statusNote": "Jobbkön på Railways egen Redis över privat nät, egen tjänst per miljö (railway-konfiguration-2026-11-17-efter.txt). Kvar som städning: radera Redis Cloud-databasen och reservvariabeln REDIS_URL_FORE_FLYTT.",
+      "changed": "2026-11-18"
+    },
+    {
+      "title": "Produktionsdatabasen nås från internet",
+      "description": "Postgres i main har Railways publika TCP-proxy, som synken från GitHubs runners använder. Skyddas bara av lösenordet, som ligger i Actions-hemligheten ENV_DEPLOY.",
+      "category": "technology",
+      "likelihood": 2,
+      "likelihoodEnum": "unlikely",
+      "likelihoodRationale": "Kräver databaslösenordet; inget känt läckage av det.",
+      "impact": 5,
+      "impactEnum": "severe",
+      "impactRationale": "Direkt åtkomst till all kunddata.",
+      "treatmentType": "mitigate",
+      "treatment": "Flytta synken till Railway och stäng proxyn (JA #11).",
+      "owner": "Anton",
+      "status": "open",
+      "controls": [
+        "A.8.20",
+        "A.8.22"
+      ],
+      "evidence": "bevis/railway-konfiguration rad 216-218; .github/workflows/synk.yml:34-44",
+      "statusNote": "Postgres publika TCP-proxy kvar i main och development 2026-11-18.",
+      "changed": "2026-11-18"
+    },
+    {
+      "title": "Okänt skydd på konton och datorer",
+      "description": "Tvåfaktor på leverantörskontona, diskkryptering och skärmlås på datorerna, lösenordshanterare: inget är kontrollerat. Alla nycklar finns lokalt i .env.deploy.",
+      "category": "technology",
+      "likelihood": 3,
+      "likelihoodEnum": "possible",
+      "likelihoodRationale": "Läget är okänt; två privata datorer i hemmiljö.",
+      "impact": 5,
+      "impactEnum": "severe",
+      "impactRationale": "En stulen dator eller ett kapat konto ger åtkomst till all drift.",
+      "treatmentType": "mitigate",
+      "treatment": "Kontroll och skärmbilder; tvåfaktor överallt; lösenordshanterare (P12, P13).",
+      "owner": "Anton",
+      "status": "open",
+      "controls": [
+        "A.8.1",
+        "A.8.5",
+        "A.7.9"
+      ],
+      "evidence": "Inget belägg (matris.md A.8.1)"
+    },
+    {
+      "title": "Delade konton och delat servicekonto",
+      "description": "Plattformsadmin är det delade kontot snajpsupport@gmail.com, agentsajten har en gemensam inloggning, ett Vertex-servicekonto används i alla miljöer och lokalt.",
+      "category": "technology",
+      "likelihood": 3,
+      "likelihoodEnum": "possible",
+      "likelihoodRationale": "Delade lösenord sprids och byts sällan.",
+      "impact": 4,
+      "impactEnum": "major",
+      "impactRationale": "Ingen spårbarhet per person; ett läckt lösenord når alla kunder.",
+      "treatmentType": "mitigate",
+      "treatment": "Personliga konton, servicekonto per miljö (P11, JA #14).",
+      "owner": "Anton",
+      "status": "open",
+      "controls": [
+        "A.5.16",
+        "A.8.2"
+      ],
+      "evidence": "AUTH.md:134-136; DEPLOY.md:559"
+    },
+    {
+      "title": "Ingen övervakning av drift och intrång",
+      "description": "Internlarmet saknar sina variabler i båda miljöerna. Ingen upptidskontroll, ingen felspårning, ingen adminlogg.",
+      "category": "technology",
+      "likelihood": 4,
+      "likelihoodEnum": "likely",
+      "likelihoodRationale": "Fel och intrång upptäcks bara om någon råkar se dem.",
+      "impact": 4,
+      "impactEnum": "major",
+      "impactRationale": "Sen upptäckt gör 72-timmarsfristen svår och skadan större.",
+      "treatmentType": "mitigate",
+      "treatment": "Sätt larmvariablerna, upptidskontroll, felspårning, loggtid (P25).",
+      "owner": "Anton",
+      "status": "pending",
+      "controls": [
+        "A.8.15",
+        "A.8.16"
+      ],
+      "evidence": "bevis/railway-konfiguration rad 83-132, 224-266; snajp-support/app/notifications/prioriterat_mejl.py:141-158",
+      "statusNote": "Driftövervakning av produktionen var 15:e minut (glest schema i praktiken) med provad larmkedja (ärende 53). Inget som upptäcker intrång; internlarmen inaktiva.",
+      "changed": "2026-11-18"
+    },
+    {
+      "title": "Ändringar når driften utan grind",
+      "description": "development deployas vid push utan granskning och bär produktionsdata. Railway väntar inte på CI. Driftvariabler ändras för hand utan logg.",
+      "category": "technology",
+      "likelihood": 4,
+      "likelihoodEnum": "likely",
+      "likelihoodRationale": "Flera pushar per dag; promptläckan 2026-11-10 nådde driften.",
+      "impact": 3,
+      "impactEnum": "moderate",
+      "impactRationale": "Fel och dataläckor når riktiga kunders data innan någon granskat.",
+      "treatmentType": "mitigate",
+      "treatment": "Deploy bara vid grön CI; beslut före ändring av driftvariabler; granskning av Antons egna PR:er (P19).",
+      "owner": "Anton",
+      "status": "open",
+      "controls": [
+        "A.8.32",
+        "A.8.25",
+        "A.8.9"
+      ],
+      "evidence": ".github/workflows/verify.yml:21-26; INCIDENT_RESPONSE.md:90"
+    },
+    {
+      "title": "Ingen skanning av sårbarheter och hemligheter",
+      "description": "Ingen Dependabot, ingen CodeQL, ingen hemlighetsskanning. 16 hemlighetslika värden i historiken.",
+      "category": "technology",
+      "likelihood": 3,
+      "likelihoodEnum": "possible",
+      "likelihoodRationale": "Många beroenden i Python och Node; publikt repo.",
+      "impact": 4,
+      "impactEnum": "major",
+      "impactRationale": "En känd sårbarhet eller läckt nyckel kan ge åtkomst till kunddata.",
+      "treatmentType": "mitigate",
+      "treatment": "Slå på Dependabot, CodeQL, hemlighetsskanning och push-skydd (P22, JA #2, #21).",
+      "owner": "Anton",
+      "status": "pending",
+      "controls": [
+        "A.8.8",
+        "A.8.28",
+        "A.5.21"
+      ],
+      "evidence": "BESLUTSUNDERLAG A1; bevis/historik-hemligheter-2026-11-17.txt",
+      "statusNote": "Dependabot, CodeQL och hemlighetsskanning påslagna. Öppna larm 2026-11-18: Dependabot 10 kritiska och 28 höga; kodskanning 44.",
+      "changed": "2026-11-18"
+    },
+    {
+      "title": "Allt hänger på Anton",
+      "description": "Anton är ensam code owner, ensam som bedömer incidenter och ensam beslutsfattare. Ingen ersättare och ingen plan för hans frånvaro.",
+      "category": "operations",
+      "likelihood": 3,
+      "likelihoodEnum": "possible",
+      "likelihoodRationale": "Sjukdom eller semester inträffar.",
+      "impact": 4,
+      "impactEnum": "major",
+      "impactRationale": "Incidenter och releaser stannar; fristen mot kund kan missas.",
+      "treatmentType": "mitigate",
+      "treatment": "Utse ersättare och beskriv befogenheter (P07, P18).",
+      "owner": "Anton",
+      "status": "open",
+      "controls": [
+        "5.3",
+        "A.5.2",
+        "A.5.29"
+      ],
+      "evidence": ".github/CODEOWNERS; INCIDENT_RESPONSE.md:12-20"
+    },
+    {
+      "title": "Sebbes avtal och sekretess okända",
+      "description": "Sebbe har full åtkomst till kod, driften och alla nycklar. Avtalsform, sekretess och villkor efter avslut är inte dokumenterade.",
+      "category": "governance",
+      "likelihood": 2,
+      "likelihoodEnum": "unlikely",
+      "likelihoodRationale": "Inget tyder på problem; risken är formell tills ett avslut sker.",
+      "impact": 4,
+      "impactEnum": "major",
+      "impactRationale": "Utan avtal saknas tystnadsplikt enligt art. 28.3 b och grund för krav efter avslut.",
+      "treatmentType": "mitigate",
+      "treatment": "Skriftligt avtal med sekretess och säkerhetsvillkor; avslutsrutin (P15).",
+      "owner": "Anton",
+      "status": "open",
+      "controls": [
+        "A.6.2",
+        "A.6.5",
+        "A.6.6"
+      ],
+      "evidence": "../gdpr/policyer/01-compliance-regulatory-monitoring.md rad 27"
+    },
+    {
+      "title": "Gamla stacken lever: Render och Supabase",
+      "description": "Render-tjänsten pingas fortfarande av en GitHub-workflow, nyckeln är inte roterad, Supabase-projektet med historiska data finns kvar. Samma risk som i ../gdpr/import.json.",
+      "category": "vendor_management",
+      "likelihood": 3,
+      "likelihoodEnum": "possible",
+      "likelihoodRationale": "Tjänsterna lever utan övervakning.",
+      "impact": 4,
+      "impactEnum": "major",
+      "impactRationale": "Okontrollerad åtkomstväg till databasuppgifter och historiska persondata.",
+      "treatmentType": "avoid",
+      "treatment": "Stäng Render, rotera nyckeln, radera Supabase-projektet, ta bort keep-backend-awake.yml (JA #15).",
+      "owner": "Anton",
+      "status": "pending",
+      "controls": [
+        "A.5.23",
+        "A.8.10"
+      ],
+      "evidence": "INCIDENT_RESPONSE.md:85-86; .github/workflows/keep-backend-awake.yml:27",
+      "statusNote": "Render-tjänsterna suspenderade 2026-11-17; gamla Vercel-projektet pausat med inloggningsskydd 2026-11-18. Kvar: rotera Render-nyckeln (ej belagt), radera Render och Supabase med bekräftelse, bedöm incidentposterna.",
+      "changed": "2026-11-18"
+    }
+  ],
+  "updated": "2026-11-18"
+}

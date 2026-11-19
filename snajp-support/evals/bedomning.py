@@ -63,6 +63,24 @@ def bedom_support(fall: dict[str, Any], svar: dict[str, Any]) -> dict[str, bool]
     return {"utfall": utfall, "fakta": fakta, "inga_fel": inga_fel, "format": format_ok}
 
 
+def soktraff(fall: dict[str, Any], svar: dict[str, Any], kb: list[dict[str, Any]]) -> bool | None:
+    """Hämtade sökningen en artikel som bär det fallet kräver?
+
+    En upplysning, inte ett kriterium: den skiljer "sökningen hittade inte
+    artikeln" från "artikeln fanns där men svaret tog inte med uppgiften".
+    Citatläget kan bara svara med det sökningen hämtat, så det här talet är
+    taket för hur mycket agenten kan klara själv. None när fallet inte ska
+    besvaras, inte kräver något eller när svaret inte bär några källor.
+    """
+    grupper = fall.get("ska_innehalla") or []
+    kallor = svar.get("kb_sources")
+    if fall.get("utfall", "svar") != "svar" or not grupper or kallor is None:
+        return None
+    rubriker = {str(k.get("title") or "") for k in kallor}
+    hamtat = "\n".join(f"{a['title']}\n{a['content']}" for a in kb if a["title"] in rubriker)
+    return _grupper_uppfyllda(grupper, hamtat)
+
+
 # -- Iris ----------------------------------------------------------------------
 
 

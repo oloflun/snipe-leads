@@ -10,7 +10,10 @@ import assert from "node:assert/strict";
 import { generateKeyPairSync } from "node:crypto";
 import {
   arLoopback,
+  dataskyddsvarning,
+  EU_REGIONER,
   harRiktigKunddata,
+  lagstaTankande,
   lasServiceAccount,
   valjModell,
   vertexBaseUrl,
@@ -80,6 +83,21 @@ test("trasig service account-JSON faller vidare till GEMINI_API_KEY", () => {
   assert.equal(val?.provider, "gemini");
 });
 
+// INV-DATA-004: AI Studio bär aldrig kunddata — ingen EU-bindning, och på
+// gratisnivån får Google använda innehållet.
+for (const env of [
+  { RAILWAY_ENVIRONMENT_NAME: "main" },
+  { ENVIRONMENT: "development" },
+  { DATABASE_URL: "postgres://u:p@db.railway.internal:5432/x" }
+]) {
+  test(`AI Studio spärras där data är riktig (${Object.keys(env)[0]})`, () => {
+    assert.equal(valjModell({ ...env, GEMINI_API_KEY: NYCKEL }), null);
+    assert.equal(valjModell({ ...env, GOOGLE_SERVICE_ACCOUNT_JSON: "{inte json", GEMINI_API_KEY: NYCKEL }), null);
+    // Med ett läsbart servicekonto är ingenting ändrat: Vertex som förut.
+    assert.equal(valjModell({ ...env, GOOGLE_SERVICE_ACCOUNT_JSON: SA_JSON, GEMINI_API_KEY: NYCKEL })?.provider, "vertex");
+  });
+}
+
 test("platshållare räknas inte som nyckel", () => {
   assert.equal(valjModell({ OPENAI_API_KEY: "sk-...", GEMINI_API_KEY: "din-gemini-nyckel-har-xxxxxxxx" }), null);
 });
@@ -139,4 +157,57 @@ test("vertexBaseUrl speglar llm.py", () => {
     vertexBaseUrl("proj", "europe-west1"),
     "https://europe-west1-aiplatform.googleapis.com/v1beta1/projects/proj/locations/europe-west1/endpoints/openapi/"
   );
+});
+
+// INV-DATA-006: där data är riktig går Email Studio bara till Vertex i EU.
+const RIKTIG = { RAILWAY_ENVIRONMENT_NAME: "main", DATABASE_URL: "postgresql://u:p@db.exempel.se:5432/railway" };
+
+test("riktig data: Vertex före OpenAI, och OpenAI aldrig", () => {
+  const val = valjModell({ ...RIKTIG, OPENAI_API_KEY: NYCKEL, GOOGLE_SERVICE_ACCOUNT_JSON: SA_JSON });
+  assert.equal(val?.provider, "vertex");
+  assert.equal(valjModell({ ...RIKTIG, OPENAI_API_KEY: NYCKEL }), null);
+  assert.ok(dataskyddsvarning({ ...RIKTIG, OPENAI_API_KEY: NYCKEL })?.includes("OPENAI_API_KEY"));
+});
+
+test("riktig data: driftens konfiguration (ingen region satt) går till europe-west1", () => {
+  const val = valjModell({ ...RIKTIG, GOOGLE_SERVICE_ACCOUNT_JSON: SA_JSON });
+  assert.ok(val && val.provider === "vertex");
+  assert.equal(val.region, "europe-west1");
+  assert.equal(dataskyddsvarning({ ...RIKTIG, GOOGLE_SERVICE_ACCOUNT_JSON: SA_JSON }), null);
+});
+
+test("riktig data: en region utanför EU väljs aldrig", () => {
+  for (const region of ["us-central1", "global", "europe-west2"]) {
+    const env = { ...RIKTIG, GOOGLE_SERVICE_ACCOUNT_JSON: SA_JSON, GOOGLE_CLOUD_REGION: region };
+    assert.equal(valjModell(env), null, region);
+    assert.ok(dataskyddsvarning(env)?.includes(region));
+  }
+  assert.ok(EU_REGIONER.includes("europe-west1") && !(EU_REGIONER as readonly string[]).includes("global"));
+});
+
+test("riktig data: EU-multiregionen väljs, med sin egen värd och gemini-3.x", () => {
+  // Gemini 3.x finns i EU bara i `eu` och (3.5-flash) europe-west3 (2026-11-18).
+  const env = { ...RIKTIG, GOOGLE_SERVICE_ACCOUNT_JSON: SA_JSON, GOOGLE_CLOUD_REGION: "eu", MODEL: "gemini-3.8-flash" };
+  const val = valjModell(env);
+  assert.ok(val && val.provider === "vertex");
+  assert.equal(
+    val.baseURL,
+    "https://aiplatform.eu.rep.googleapis.com/v1beta1/projects/test-proj/locations/eu/endpoints/openapi/"
+  );
+  assert.equal(val.namn, "google/gemini-3.8-flash");
+  assert.equal(dataskyddsvarning(env), null);
+  assert.ok(!(EU_REGIONER as readonly string[]).includes("us"));
+});
+
+test("lägsta tänkandet per modell: 3.8-flash avvisar minimal", () => {
+  assert.equal(lagstaTankande("google/gemini-3.8-flash"), "low");
+  assert.equal(lagstaTankande("gemini-3.8-flash"), "low");
+  assert.equal(lagstaTankande("google/gemini-3.5-flash"), "minimal");
+  assert.equal(lagstaTankande("google/gemini-2.5-flash"), "minimal");
+});
+
+test("lokalt: OpenAI vinner och vilken region som helst går, som förut", () => {
+  assert.equal(valjModell({ OPENAI_API_KEY: NYCKEL, GOOGLE_SERVICE_ACCOUNT_JSON: SA_JSON })?.provider, "openai");
+  const val = valjModell({ GOOGLE_SERVICE_ACCOUNT_JSON: SA_JSON, GOOGLE_CLOUD_REGION: "us-central1" });
+  assert.ok(val && val.provider === "vertex" && val.region === "us-central1");
 });

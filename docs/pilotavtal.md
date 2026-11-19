@@ -148,17 +148,22 @@ Ort och datum ______________________
 
 ## Bilaga 1 — Underbiträden
 
+Läget 2026-11-17, ur leverantörsgranskningen samma dag.
+
 | Underbiträde | Ändamål | Region / avtal |
 |---|---|---|
-| Google (Gemini via Vertex AI) | Språkmodell: klassificerar och skriver text, läser bilder och kvitton | [Vertex-region + Googles DPA — verifieras] |
-| Railway | Drift av applikationen och databasen | [Region — `scripts/railway_region.py` gav "okänd" för alla tjänster 2026-09-13] |
-| Resend (EU) | Utskick av mejl | [EU-region + DPA — verifieras] |
-| Redis Cloud (Redis Ltd) | Jobbkö och cache med automatisk radering (TTL) | [EU-region + DPA — `scripts/redis_kontroll.py`] |
-| ScrapeGraphAI | Hämtning av publika webbsidor under leads-research | [Region + DPA — ej bekräftat] |
+| Google Cloud, Vertex AI ([FYLL: avtalspart enligt Googles avtal]) | Språkmodell (Gemini): klassificerar och skriver text, läser bilder och kvitton, bygger sökvektorer | Inom EU: anrop till europe-west1 (Belgien), reserv europe-west4 och europe-north1; behandlingen sker inom EU men inte nödvändigtvis i det land som anropas. Flaggade meddelanden kan sparas upp till 90 dagar. Cloud Data Processing Addendum gäller automatiskt via Google Cloud-villkoren. Överföring: DPF och SCC |
+| Railway (Railway Corporation) | Drift av applikationen, databasen, bakgrundsjobben, jobbkön och cachen, i produktion och i en testmiljö som är en kopia av produktionen | Amsterdam (EU West) för alla tjänster och volymer, hämtat 2026-11-17. Jobbkön nås över Railways privata nätverk, med en egen databas per miljö. Backupernas plats ej belagd ([FYLL: Railways besked]). DPA signeras via DocuSign, ännu inte signerad 2026-11-17. Överföring enligt DPA:n: DPF, annars SCC, när den är signerad |
+| Redis Cloud (Redis EMEA Ltd), avvecklas | Tidigare jobbkö och cache. Används inte i driften sedan 2026-11-17, då jobbkön flyttades till Railway. Har kvar tillfälliga uppgifter (cache och arbetsminne) tills databasen raderats; raden stryks då | Google Cloud europe-west1 (Belgien). DPA gäller automatiskt via Redis Cloud Agreement §5.3; oklart om gratisnivån omfattas ([FYLL: bekräfta betald plan]). Överföring: SCC med UK-tillägg |
+| Resend | Utskick av mejl och rapporter om studs och klagomål | Skickar från eu-west-1 (Irland), men mejlinnehåll och loggar lagras i USA i 30 dagar. DPA gäller automatiskt med avtalet. Överföring: DPF (under omprövning 2026-11-17) och SCC |
+| TypeSafe AI, Inc. (Jev) | Klassning av prospekt under leadsresearch: publika bolagsuppgifter och sidutdrag utan e-postadresser, telefonnummer och personnummer. Kundmejl går inte hit sedan 2026-11-17 (ägarens beslut; inkorgsklassningen är avstängd) | USA. DPA inkorporerad i Master Customer Agreement; ej belagt vilka villkor kontot accepterade. Villkoren ger en tidsobegränsad rätt till telemetri ur kunddata. Överföring: SCC; ej i DPF |
+| ScrapeGraphAI, Inc. | Hämtning och skärmbilder av publika webbsidor under leadsresearch | USA. Ingen publicerad DPA (begärs via kontaktvägen i villkoren). Ingen överföringsmekanism angiven; ej i DPF |
+| GitHub, Inc. (Microsoft) | Körmaskiner för synken från produktion till testmiljö var tionde minut och för databasmigreringar | Region anges inte (Azure, vissa AWS). GitHubs DPA gäller inte Free-planen, som kontot har. Ingen avtalad överföringsmekanism. Stryks när synken inte längre bär persondata |
 
-*Håll i synk med `UNDERLEVERANTORER` i `lib/bolag.ts` och
-`docs/registerforteckning.md`. Den listan tar fortfarande upp Supabase och
-OpenAI. Stryk dem där om de inte längre behandlar data, eller lägg till dem här.*
+*Håll i synk med `UNDERLEVERANTORER` i `lib/bolag.ts`, Bilaga 3 i
+`docs/pub-avtal.md` och `docs/registerforteckning.md`. OpenAI är inte i drift
+och står inte med. Supabase är inte längre driftdatabas och får inga nya
+uppgifter; det gamla projektet bär historiska uppgifter tills det raderats.*
 
 ## Bilaga 2 — Underlag från Kunden (vecka 1)
 

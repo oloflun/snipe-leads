@@ -21,7 +21,7 @@ att ta tillbaka.
 ## Var datan faktiskt bor — och en avvikelse värd att veta om
 
 `TENANTS.md` steg 5 säger att `business_contexts` ska fyllas för workspacet.
-Den tabellen ligger i Supabase och läses av dashboarden (Next.js).
+Den tabellen ligger i Postgres och läses av dashboarden (Next.js).
 
 Backenden — den här tjänsten — läser inte den tabellen. Den läser
 `context_docs` med `kind='product_marketing'`, vilket är vad

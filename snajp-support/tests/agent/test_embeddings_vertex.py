@@ -26,6 +26,8 @@ async def test_vertex_predict_ber_om_ratt_dimension_och_lasar_vektorn(monkeypatc
         google_cloud_region="europe-west1",
         embedding_model="gemini-embedding-001",
         embedding_dimensions=1536,
+        # INV-DATA-006: regionspärren frågar om datan är riktig.
+        har_riktig_kunddata=lambda: True,
     )
     sedd: dict = {}
 

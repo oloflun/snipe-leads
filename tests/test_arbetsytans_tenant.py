@@ -34,8 +34,8 @@ ROOT = Path(__file__).resolve().parents[1]
 TESTTENANT = ROOT / "lib" / "snajp" / "testtenant.ts"
 TENANT = ROOT / "lib" / "snajp" / "tenant.ts"
 BYTKUND = ROOT / "components" / "admin" / "BytKund.tsx"
-MIGRATION_040 = ROOT / "supabase" / "migrations" / "040_testkund_egen_tenant.sql"
-MIGRATION_061 = ROOT / "supabase" / "migrations" / "061_arbetsytans_egna_tenant.sql"
+MIGRATION_040 = ROOT / "db" / "migrations" / "040_testkund_egen_tenant.sql"
+MIGRATION_061 = ROOT / "db" / "migrations" / "061_arbetsytans_egna_tenant.sql"
 
 #: Ett workspace-id i den form appen får det. Sluggen härleds ur det.
 WORKSPACE_ID = "a1aa612a-3f4d-4b7e-9c11-0d2e5f6a7b8c"

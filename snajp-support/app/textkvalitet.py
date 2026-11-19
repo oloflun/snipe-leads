@@ -216,7 +216,11 @@ def putsa(text: str) -> tuple[str, list[Anmarkning]]:
     # Blankstegsstädning. Mellanslag före skiljetecken är aldrig korrekt
     # svenska — vanligaste resterna efter platshållarstädningen ("Hej ,").
     text = text.replace(" ", " ")
-    text = re.sub(r"[ \t]+([,.!?;:])", r"\1", text)
+    # Varje blankstegsrad matchas hel, med ett skiljetecken efter om det
+    # finns, och stryks bara då. Förut krävde uttrycket skiljetecknet, och en
+    # lång blankstegsrad utan det prövades på nytt från varje position:
+    # kvadratisk tid (kodskanningen 2026-11-17).
+    text = re.sub(r"[ \t]+([,.!?;:]?)", lambda m: m.group(1) or m.group(0), text)
     text = re.sub(r"[ \t]{2,}", " ", text)
     text = re.sub(r"\n{3,}", "\n\n", text)
     # "Hej ,"-fallet när namnet försvunnit: "Hej," är en korrekt hälsning.
@@ -341,7 +345,18 @@ def _verifiera_korrektur(original: str, korrigerad: str) -> bool:
     for namn in SKYDDADE_NAMN:
         if original.count(namn) != korrigerad.count(namn):
             return False
-    return True
+    # Och ingenting får TILLKOMMA (2026-11-16). Korrekturen körs efter
+    # faktagrindarna, så ett tal, en frist, en länk, ett nummer eller ett
+    # superlativ som den lägger till har ingen grind sett. Samma grind som
+    # supportsvaren på strikt nivå, med originalet som enda källa. Det
+    # originalet självt inte håller (ett oifyllt mallfält) räknas inte mot
+    # korrekturen.
+    from .agent.support_faktagrind import Kalla, kontrollera
+
+    kalla = [Kalla("ORIGINAL", original)]
+    return set(kontrollera(korrigerad, niva="strikt", kallor=kalla).ostodda) <= set(
+        kontrollera(original, niva="strikt", kallor=kalla).ostodda
+    )
 
 
 _KORREKTUR_PROMPT = """Du är korrekturläsare. Rätta ENBART språket i texten nedan:

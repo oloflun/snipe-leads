@@ -100,7 +100,12 @@ export async function utfardaTenantnyckel(
   const response = await fetch(`${SNAJP_SUPPORT_URL}/api/keys`, {
     method: "POST",
     headers: { "Content-Type": "application/json", "X-API-Key": masterKey },
-    body: JSON.stringify({ tenant_name: namn, slug }),
+    // Avtalsgrinden (INV-AVTAL-001) är på som standard sedan migration 118.
+    // Självregistrerade kunder och testarbetsytor skapas här och får den AV,
+    // så att provflödet fungerar som före 118. Om de ska ha grinden på, och
+    // hur avtalet då ingås vid registreringen, är Antons beslut
+    // (docs/BESLUT.md 2026-11-17). Ändra inte värdet utan det beslutet.
+    body: JSON.stringify({ tenant_name: namn, slug, kraver_avtal: false }),
     signal: AbortSignal.timeout(timeoutMs)
   });
 

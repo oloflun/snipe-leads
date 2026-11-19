@@ -1,0 +1,19 @@
+# Allowlist för railway/Dockerfile.drift (samma mönster som
+# snajp-support/Dockerfile.dockerignore): allt är uteslutet utom det avbilden
+# behöver. Glöms något bort faller bygget högljutt i stället för att avbilden
+# tyst får med mer än den ska.
+**
+
+!scripts/railway_drift.py
+!scripts/railway_synk.py
+!scripts/railway_migrate.py
+!scripts/railway_provision.py
+!scripts/railway.py
+!railway/000_auth_compat.sql
+!db/migrations
+
+# Skräp inuti de tillåtna katalogerna (sista matchning vinner).
+**/__pycache__
+**/*.pyc
+**/.env
+**/.env.*

@@ -1,0 +1,590 @@
+-- 144: gallringen rör aldrig uppgifter med aktiv begränsning av behandlingen
+-- (Codex-granskningen 2026-11-19, runda 12).
+--
+-- Migration 124 inför begränsningen (GDPR art. 18): en aktiv rad i
+-- behandlingsbegransningar betyder att adressens uppgifter bara får lagras.
+-- Ofta begärs den just för att uppgifterna ska finnas kvar (art. 18.1 b och c:
+-- personen motsätter sig radering, eller behöver uppgifterna för ett
+-- rättsligt anspråk). gallra_tenant läste aldrig tabellen, så ett gammalt mejl
+-- eller prospekt med aktiv begränsning raderades vid nästa körning, med
+-- utkast, meddelanden och källor i kaskaden.
+--
+-- Nu läser varje varv de aktiva begränsningarna och undantar, med samma
+-- nycklar som scripts/gdpr_radera.py söker på:
+--   * mejlen på avsändaren, kunderna, ärendena och kundminnet på kundens
+--     mejlidentifierare, prospekten, listraderna, avregistreringslänkarna,
+--     kampanjkontakterna och säljlistan på sin adresskolumn;
+--   * kampanjutkasten, agentloggarna och jobbliggaren på sitt prospekt,
+--     sin tråd eller sin kontakt;
+--   * loggtabellerna utan adresskolumn (agentloggar, händelser, sidcachen,
+--     säljlistans anteckningar) när adressen står i löptexten, samma fält som
+--     gdpr_radera.py:FRITEXT söker i.
+-- En förälder med en undantagen rad står kvar av sig själv: ärendet har ett
+-- kvarvarande mejl, listan en kvarvarande rad. Anonymiseringen av agentloggar
+-- är också en behandling och undantas på samma sätt.
+--
+-- Låset: gallringen tar ett delat rådgivande lås före andra varvet, och en
+-- trigger låter varje ny begränsning ta samma lås exklusivt. En begränsning
+-- som skrivs medan gallringen väljer väntar då tills gallringen är klar (och
+-- gäller det som finns kvar), och en som redan skrivits, eller håller låset
+-- i en öppen transaktion, syns i andra varvet. Inget tabellås (138:s regel):
+-- ingen annan skrivning väntar. Låset hålls till transaktionens slut, i
+-- dygnskörningen (gallra_alla, en transaktion över alla kunder) hela
+-- körningen; bara rättighetsskriptets nya begränsningar väntar så länge.
+
+create or replace function public.behandlingsbegransning_las() returns trigger
+language plpgsql as $$
+begin
+  perform pg_advisory_xact_lock(hashtext('snajp.behandlingsbegransning'));
+  return new;
+end $$;
+
+drop trigger if exists behandlingsbegransning_las on public.behandlingsbegransningar;
+create trigger behandlingsbegransning_las before insert on public.behandlingsbegransningar
+  for each row execute function public.behandlingsbegransning_las();
+--
+-- När begränsningen hävs (havd_at) gallras uppgifterna som vanligt vid nästa
+-- körning. gallra_tenant är 143 med undantagen. Additiv och idempotent.
+
+create or replace function public.gallring_namner_begransad(p_text text, p_begr text[])
+returns boolean
+language sql
+immutable
+as $$
+  select exists (select 1 from unnest(p_begr) b
+                  where position(b in lower(coalesce(p_text, ''))) > 0)
+$$;
+
+create or replace function public.gallra_tenant(
+  p_tenant uuid,
+  p_torrkorning boolean default true,
+  p_tak integer default null,
+  p_kord_av text default 'skript'
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_dagar      integer;
+  v_grans      timestamptz;
+  v_tomt_uuid  uuid[] := '{}';
+  v_tomt_text  text[] := '{}';
+  v_begr       text[];
+  v_ws         uuid[];
+  v_mejl       uuid[];
+  v_arenden    uuid[];
+  v_minne      uuid[];
+  v_kunder     uuid[];
+  v_prospekt   uuid[];
+  v_listrader  uuid[];
+  v_listor     uuid[];
+  v_liggare    text[];
+  v_lankar     text[];
+  v_genererade uuid[];
+  v_kontakter  uuid[];
+  v_saljlista  uuid[];
+  v_korningar  uuid[];
+  v_feedback   uuid[];
+  v_evals      uuid[];
+  v_forslag    uuid[];
+  v_handelser  uuid[];
+  v_sidcache   text[];
+  v_sedda      bigint;
+  v_sparr      bigint;
+  v_antal      jsonb;
+  v_totalt     bigint;
+  v_status     text;
+  v_logg       bigint;
+  v_spegel     boolean := to_regclass('public.mirror_meta') is not null;
+  v_varv       integer;
+  v_timeout    text;
+  v_mejl_1       uuid[];
+  v_arenden_1    uuid[];
+  v_minne_1      uuid[];
+  v_kunder_1     uuid[];
+  v_prospekt_1   uuid[];
+  v_listrader_1  uuid[];
+  v_listor_1     uuid[];
+  v_liggare_1    text[];
+  v_lankar_1     text[];
+  v_genererade_1 uuid[];
+  v_kontakter_1  uuid[];
+  v_saljlista_1  uuid[];
+  v_korningar_1  uuid[];
+  v_feedback_1   uuid[];
+  v_evals_1      uuid[];
+  v_forslag_1    uuid[];
+  v_handelser_1  uuid[];
+  v_sidcache_1   text[];
+begin
+  select dagar into v_dagar
+    from public.ss_gallringspolicy
+   where tenant_id = p_tenant;
+
+  if v_dagar is null then
+    -- Ingen beslutad policy: ingenting gallras. Den ofarliga defaulten (048).
+    return jsonb_build_object('status', 'ingen_policy', 'tenant_id', p_tenant);
+  end if;
+
+  v_grans := now() - make_interval(days => v_dagar);
+
+  select coalesce(array_agg(id), v_tomt_uuid) into v_ws
+    from public.workspaces where ss_tenant_id = p_tenant;
+
+  -- 138: urvalet görs två gånger. Efter första varvet låses kandidaterna och
+  -- raderna deras aktivitet räknas ur (for update), och andra varvet väljer
+  -- igen med en ny ögonblicksbild. Bara det båda varven valde raderas. En rad
+  -- som fick aktivitet före låset syns i andra varvet och står kvar; efter
+  -- låset kan ingen ny rad knytas till en kandidat (främmande nycklarna tar
+  -- ett nyckellås på föräldern) och ingen låst rad ändras. Låsen gäller bara
+  -- rader utan aktivitet sedan gränsen, så skrivningar hos andra kunder, och
+  -- i kundens levande data, väntar aldrig på gallringen (Codex runda 6 och 7).
+  -- Utan lås står: meddelanden, identifierare och demolänkarnas händelser (nya
+  -- rader blockeras via föräldern, tiderna ändras aldrig), agent_evals,
+  -- agent_suggestions och platform_events (bara created_at), de sedda
+  -- inkommande (raderas i en sats som prövar seen_at själv) och spärrlistan
+  -- (en ny rad mot en låst kontakt blockeras). Avregistreringslänken skapas
+  -- med en upsert som väntar på radlåset och gör en ny token om den gamla
+  -- raderats, så ett mejl får aldrig en död länk.
+  -- Torrkörningen och en körning över taket väljer en gång och låser inget.
+  if not p_torrkorning and current_setting('transaction_isolation') <> 'read committed' then
+    raise exception 'gallra_tenant raderar bara i read committed: andra varvet ska se allt som skrivits före låset'
+      using errcode = 'invalid_transaction_state';
+  end if;
+
+  for v_varv in 1..2 loop
+    -- 144: adresser med aktiv begränsning av behandlingen (art. 18, 124).
+    select coalesce(array_agg(distinct lower(email)), v_tomt_text) into v_begr
+      from public.behandlingsbegransningar where havd_at is null;
+
+    -- -- Urvalen. Ingenting ändras förrän alla är räknade. ----------------------
+    -- 139: i en spegel väljer varje synkad tabell bara sina egna provrader,
+    -- med synkens villkor (scripts/railway_synk.py:SYNK, där "false" betyder
+    -- att allt synkas). De speglade raderna får main:s raderingar genom synken,
+    -- och en egen radering där hade kopierats tillbaka vid nästa varv; de
+    -- lokala provraderna når synken aldrig och gallras här. Villkoret står i
+    -- urvalet, inte efteråt, så att beroendena mellan urvalen räknas på samma
+    -- rader. tests/test_gallring_spegel.py håller villkoren lika med SYNK.
+
+    -- Supportmejl: mejlets egen aktivitet och dess utkast.
+    select coalesce(array_agg(e.id), v_tomt_uuid) into v_mejl
+      from public.ss_emails e
+     where e.tenant_id = p_tenant
+       and (not v_spegel or (e.is_test))
+       and greatest(e.created_at, e.received_at, e.updated_at, e.hanterad_at, e.behandlad_at,
+             (select max(greatest(d.created_at, d.updated_at, d.behandlad_at))
+                from public.ss_drafts d where d.email_id = e.id)) < v_grans
+       and coalesce(lower(e.from_email), '') <> all(v_begr);
+
+    -- Ärenden (chatt och mejl): ärendets, meddelandenas, mejlens och utkastens
+    -- senaste tid. Ett ärende som ett kvarvarande mejl eller utkast pekar på,
+    -- eller som är förfader till ett kvarvarande ärende, i hur många led som
+    -- helst, står kvar (främmande nycklar utan kaskad; 135).
+    with recursive kandidat as (
+      select t.id
+        from public.ss_tickets t
+       where t.tenant_id = p_tenant
+         and (not v_spegel or (t.is_test))
+         and not exists (select 1 from public.ss_customer_identifiers i
+                          where i.customer_id = t.customer_id and i.type = 'email'
+                            and lower(i.value) = any(v_begr))
+         and greatest(t.created_at, t.updated_at, t.behandlad_at,
+               (select max(greatest(c.created_at, c.behandlad_at, m.created_at))
+                  from public.ss_conversations c
+                  left join public.ss_messages m on m.conversation_id = c.id
+                 where c.ticket_id = t.id),
+               (select max(greatest(e.created_at, e.received_at, e.updated_at, e.hanterad_at, e.behandlad_at))
+                  from public.ss_emails e where e.ticket_id = t.id),
+               (select max(greatest(d.created_at, d.updated_at, d.behandlad_at))
+                  from public.ss_drafts d where d.ticket_id = t.id)) < v_grans
+         and not exists (select 1 from public.ss_emails e
+                          where e.ticket_id = t.id and e.id <> all(v_mejl))
+         and not exists (select 1 from public.ss_drafts d
+                          where d.ticket_id = t.id and d.email_id <> all(v_mejl))
+    ),
+    -- Förfäderna till varje ärende som står kvar. Startar i föräldern till ett
+    -- ärende utanför urvalet och går uppåt; union stoppar en eventuell cykel.
+    behall(id) as (
+      select b.parent_ticket_id
+        from public.ss_tickets b
+       where b.parent_ticket_id is not null
+         and b.id not in (select id from kandidat)
+      union
+      select t.parent_ticket_id
+        from public.ss_tickets t
+        join behall on t.id = behall.id
+       where t.parent_ticket_id is not null
+    )
+    select coalesce(array_agg(k.id), v_tomt_uuid) into v_arenden
+      from kandidat k
+     where k.id not in (select id from behall);
+
+    -- Kundminnet: varje faktum är en egen behandling.
+    select coalesce(array_agg(id), v_tomt_uuid) into v_minne
+      from public.customer_memory
+     where tenant_id = p_tenant and greatest(created_at, behandlad_at) < v_grans
+       and (not v_spegel or (false))
+       and not exists (select 1 from public.ss_customer_identifiers i
+                          where i.customer_id = customer_memory.customer_id and i.type = 'email'
+                            and lower(i.value) = any(v_begr));
+
+    -- Chatt- och supportkunden: när varken kunden själv, chattläget,
+    -- kanalkontakten eller kundminnet rörts, och inget ärende står kvar.
+    select coalesce(array_agg(c.id), v_tomt_uuid) into v_kunder
+      from public.ss_customers c
+     where c.tenant_id = p_tenant
+       and (not v_spegel or (false))
+       and not exists (select 1 from public.ss_customer_identifiers i
+                          where i.customer_id = c.id and i.type = 'email'
+                            and lower(i.value) = any(v_begr))
+       and greatest(c.created_at, c.behandlad_at,
+             (select max(i.created_at) from public.ss_customer_identifiers i
+               where i.customer_id = c.id),
+             (select max(greatest(s.updated_at, s.overlamnad_at, s.behandlad_at)) from public.ss_chat_state s
+               where s.customer_id = c.id),
+             (select max(greatest(k.created_at, k.updated_at, k.behandlad_at)) from public.ss_channel_contacts k
+               where k.customer_id = c.id),
+             (select max(greatest(m.created_at, m.behandlad_at)) from public.customer_memory m
+               where m.customer_id = c.id)) < v_grans
+       and not exists (select 1 from public.ss_tickets t
+                        where t.customer_id = c.id and t.id <> all(v_arenden));
+
+    -- Prospekten: den senaste tiden över allt som hänger på prospektet.
+    select coalesce(array_agg(p.id), v_tomt_uuid) into v_prospekt
+      from public.prospects p
+     where p.tenant_id = p_tenant
+       and (not v_spegel or (p.origin in ('test', 'example')))
+       and coalesce(lower(p.contact_email), '') <> all(v_begr)
+       and greatest(p.created_at, p.arkiverad_at, p.behandlad_at,
+             (select max(greatest(t.created_at, t.last_inbound_at, t.svarsklass_at, t.behandlad_at))
+                from public.outreach_threads t where t.prospect_id = p.id),
+             (select max(greatest(coalesce(m.sent_at, m.created_at), m.leverans_at, m.kasserad_at,
+                                 m.behandlad_at))
+                from public.outreach_messages m
+                join public.outreach_threads t on t.id = m.thread_id
+               where t.prospect_id = p.id),
+             (select max(greatest(q.created_at, q.scheduled_at, q.behandlad_at))
+                from public.send_queue q
+                join public.outreach_threads t on t.id = q.thread_id
+               where t.prospect_id = p.id),
+             (select max(greatest(d.created_at, d.behandlad_at, h.created_at))
+                from public.ss_demolankar d
+                join public.outreach_threads t on t.id = d.thread_id
+                left join public.ss_demolank_handelser h on h.token = d.token
+               where t.prospect_id = p.id),
+             (select max(greatest(s.created_at, s.aterkom_datum::timestamptz, s.behandlad_at))
+                from public.lead_samtal s where s.prospect_id = p.id),
+             (select max(greatest(a.created_at, a.behandlad_at)) from public.lead_anteckningar a where a.prospect_id = p.id),
+             (select max(greatest(u.created_at, u.klar_at, u.forfaller::timestamptz, u.behandlad_at))
+                from public.lead_uppgifter u where u.prospect_id = p.id),
+             (select max(l.created_at) from public.prospect_status_logg l where l.prospect_id = p.id),
+             (select max(greatest(k.retrieved_at, k.behandlad_at)) from public.prospect_sources k where k.prospect_id = p.id),
+             -- 143: listraden som pekar på prospektet ("Processa om" rör bara
+             -- listraden när kontakten är oförändrad).
+             (select max(greatest(i.created_at, i.processad_at, i.behandlad_at))
+                from public.lead_list_items i where i.prospect_id = p.id)
+           ) < v_grans;
+
+    -- Listorna: varje rad för sig, sedan de listor som blir tomma.
+    select coalesce(array_agg(id), v_tomt_uuid) into v_listrader
+      from public.lead_list_items
+     where tenant_id = p_tenant
+       and (not v_spegel or (list_id in (select id from public.lead_lists where is_test)))
+       and greatest(created_at, processad_at, behandlad_at) < v_grans
+       and coalesce(lower(contact_email), '') <> all(v_begr)
+       -- 142: en listrad vars prospekt står kvar (nytt utkast, svar, samtal)
+       -- står också kvar; prospektets urval räknas före listradernas.
+       and (prospect_id is null or prospect_id = any(v_prospekt));
+
+    select coalesce(array_agg(l.id), v_tomt_uuid) into v_listor
+      from public.lead_lists l
+     where l.tenant_id = p_tenant
+       and (not v_spegel or (l.is_test))
+       and greatest(l.created_at, l.completed_at, l.behandlad_at) < v_grans
+       and not exists (select 1 from public.lead_list_items i
+                        where i.list_id = l.id and i.id <> all(v_listrader));
+
+    -- Jobbliggaren: bara avslutade jobb (INV-JOB-002 läser pågående).
+    select coalesce(array_agg(job_id), v_tomt_text) into v_liggare
+      from public.leads_job_ledger
+     where tenant_id = p_tenant
+       and (not v_spegel or (is_test))
+       and status in ('completed', 'failed')
+       and greatest(created_at, updated_at, completed_at, behandlad_at) < v_grans
+       and (prospect_id is null or prospect_id not in (select bp.id from public.prospects bp where lower(bp.contact_email) = any(v_begr)))
+       and not public.gallring_namner_begransad(concat_ws(' ', korning::text, error), v_begr);
+
+    -- Avregistreringslänken återanvänds för varje mejl till samma adress, så
+    -- dess egen tid säger inget om när den senast skickades. Den står kvar så
+    -- länge adressen finns i ett kvarvarande prospekt eller en kvarvarande
+    -- listrad hos kunden.
+    select coalesce(array_agg(a.token), v_tomt_text) into v_lankar
+      from public.ss_avregistreringslankar a
+     where a.tenant_id = p_tenant
+       and greatest(a.created_at, a.anvand_at, a.behandlad_at) < v_grans
+       and coalesce(lower(a.email), '') <> all(v_begr)
+       and not exists (select 1 from public.prospects p
+                        where p.tenant_id = p_tenant
+                          and lower(p.contact_email) = lower(a.email)
+                          and p.id <> all(v_prospekt))
+       and not exists (select 1 from public.lead_list_items i
+                        where i.tenant_id = p_tenant
+                          and lower(i.contact_email) = lower(a.email)
+                          and i.id <> all(v_listrader));
+
+    -- Den gamla kampanjmodellen hänger på arbetsytan, inte på tenanten.
+    select coalesce(array_agg(id), v_tomt_uuid) into v_genererade
+      from public.generated_emails
+     where workspace_id = any(v_ws)
+       and greatest(created_at, sent_at, behandlad_at) < v_grans
+       and (contact_id is null or contact_id not in
+             (select bk.id from public.contacts bk where lower(bk.email) = any(v_begr)))
+       and not public.gallring_namner_begransad(concat_ws(' ', subject, body), v_begr);
+
+    select coalesce(array_agg(k.id), v_tomt_uuid) into v_kontakter
+      from public.contacts k
+     where k.workspace_id = any(v_ws)
+       and coalesce(lower(k.email), '') <> all(v_begr)
+       and greatest(k.created_at, k.behandlad_at,
+             (select max(greatest(g.created_at, g.sent_at, g.behandlad_at)) from public.generated_emails g
+               where g.contact_id = k.id),
+             (select max(greatest(m.booked_for, m.behandlad_at)) from public.meetings m where m.contact_id = k.id)) < v_grans;
+
+    select coalesce(array_agg(id), v_tomt_uuid) into v_saljlista
+      from public.saljlista
+     where workspace_id = any(v_ws)
+       and greatest(created_at, updated_at, senast_kontaktad::timestamptz, behandlad_at) < v_grans
+       and coalesce(lower(kontaktmail), '') <> all(v_begr)
+       and not public.gallring_namner_begransad(anteckningar, v_begr);
+
+    -- Agentloggarna: bara rader som fortfarande bär något att nolla, så att en
+    -- andra körning räknar noll.
+    select coalesce(array_agg(id), v_tomt_uuid) into v_korningar
+      from public.agent_runs
+     where tenant_id = p_tenant
+       and (not v_spegel or (is_test))
+       and created_at < v_grans
+       and (input is not null or output is not null or grounding is not null
+            or step_log <> '[]'::jsonb or prospect_id is not null or thread_id is not null)
+       and (prospect_id is null or prospect_id not in (select bp.id from public.prospects bp where lower(bp.contact_email) = any(v_begr)))
+       and (thread_id is null or thread_id not in
+             (select bt.id from public.outreach_threads bt where bt.prospect_id in (select bp.id from public.prospects bp where lower(bp.contact_email) = any(v_begr))))
+       and not public.gallring_namner_begransad(
+             concat_ws(' ', input, output, step_log::text, grounding::text), v_begr);
+
+    select coalesce(array_agg(id), v_tomt_uuid) into v_feedback
+      from public.agent_feedback
+     where tenant_id = p_tenant
+       and created_at < v_grans
+       and (comment is not null or corrected_output is not null)
+       and not public.gallring_namner_begransad(concat_ws(' ', comment, corrected_output), v_begr);
+
+    select coalesce(array_agg(id), v_tomt_uuid) into v_evals
+      from public.agent_evals
+     where tenant_id = p_tenant and created_at < v_grans
+       and not public.gallring_namner_begransad(concat_ws(' ', input, approved_output), v_begr);
+
+    select coalesce(array_agg(id), v_tomt_uuid) into v_forslag
+      from public.agent_suggestions
+     where tenant_id = p_tenant and created_at < v_grans
+       and (not v_spegel or (false))
+       and not public.gallring_namner_begransad(content::text, v_begr);
+
+    select coalesce(array_agg(id), v_tomt_uuid) into v_handelser
+      from public.platform_events
+     where tenant_id = p_tenant and created_at < v_grans
+       and not public.gallring_namner_begransad(concat_ws(' ', message, detail::text), v_begr);
+
+    select coalesce(array_agg(url), v_tomt_text) into v_sidcache
+      from public.leads_sidcache
+     where tenant_id = p_tenant and hamtad_at < v_grans
+       and not public.gallring_namner_begransad(innehall, v_begr);
+
+    select count(*) into v_sedda
+      from public.ss_channel_inbound_seen
+     where tenant_id = p_tenant and seen_at < v_grans;
+
+    if v_varv = 1 then
+      v_totalt := cardinality(v_mejl) + cardinality(v_arenden) + cardinality(v_minne)
+                + cardinality(v_kunder) + cardinality(v_prospekt) + cardinality(v_listrader)
+                + cardinality(v_listor) + cardinality(v_liggare) + cardinality(v_lankar)
+                + cardinality(v_genererade) + cardinality(v_kontakter) + cardinality(v_saljlista)
+                + cardinality(v_korningar) + cardinality(v_feedback) + cardinality(v_evals)
+                + cardinality(v_forslag) + cardinality(v_handelser) + cardinality(v_sidcache)
+                + v_sedda;
+      exit when p_torrkorning or (p_tak is not null and v_totalt > p_tak);
+      v_mejl_1 := v_mejl;
+      v_arenden_1 := v_arenden;
+      v_minne_1 := v_minne;
+      v_kunder_1 := v_kunder;
+      v_prospekt_1 := v_prospekt;
+      v_listrader_1 := v_listrader;
+      v_listor_1 := v_listor;
+      v_liggare_1 := v_liggare;
+      v_lankar_1 := v_lankar;
+      v_genererade_1 := v_genererade;
+      v_kontakter_1 := v_kontakter;
+      v_saljlista_1 := v_saljlista;
+      v_korningar_1 := v_korningar;
+      v_feedback_1 := v_feedback;
+      v_evals_1 := v_evals;
+      v_forslag_1 := v_forslag;
+      v_handelser_1 := v_handelser;
+      v_sidcache_1 := v_sidcache;
+      -- En skrivning som håller en kandidatrad väntas ut högst tio sekunder;
+      -- sedan faller kunden för i dag och nästa körning tar den.
+      v_timeout := current_setting('lock_timeout');
+      perform set_config('lock_timeout', '10s', true);
+      perform pg_advisory_xact_lock_shared(hashtext('snajp.behandlingsbegransning'));
+      perform 1 from public.ss_emails where id = any(v_mejl) or ticket_id = any(v_arenden) for update;
+      perform 1 from public.ss_drafts where email_id = any(v_mejl) or ticket_id = any(v_arenden) for update;
+      perform 1 from public.ss_tickets where id = any(v_arenden) for update;
+      perform 1 from public.ss_conversations where ticket_id = any(v_arenden) for update;
+      perform 1 from public.ss_customers where id = any(v_kunder) for update;
+      perform 1 from public.ss_chat_state where customer_id = any(v_kunder) for update;
+      perform 1 from public.ss_channel_contacts where customer_id = any(v_kunder) for update;
+      perform 1 from public.customer_memory where id = any(v_minne) or customer_id = any(v_kunder) for update;
+      perform 1 from public.prospects where id = any(v_prospekt) for update;
+      perform 1 from public.outreach_threads where prospect_id = any(v_prospekt) for update;
+      perform 1 from public.outreach_messages where thread_id in (select t.id from public.outreach_threads t where t.prospect_id = any(v_prospekt)) for update;
+      perform 1 from public.send_queue where thread_id in (select t.id from public.outreach_threads t where t.prospect_id = any(v_prospekt)) for update;
+      perform 1 from public.ss_demolankar where thread_id in (select t.id from public.outreach_threads t where t.prospect_id = any(v_prospekt)) for update;
+      perform 1 from public.lead_samtal where prospect_id = any(v_prospekt) for update;
+      perform 1 from public.lead_anteckningar where prospect_id = any(v_prospekt) for update;
+      perform 1 from public.lead_uppgifter where prospect_id = any(v_prospekt) for update;
+      perform 1 from public.prospect_status_logg where prospect_id = any(v_prospekt) for update;
+      perform 1 from public.prospect_sources where prospect_id = any(v_prospekt) for update;
+      perform 1 from public.lead_list_items where id = any(v_listrader) or prospect_id = any(v_prospekt) for update;
+      perform 1 from public.lead_lists where id = any(v_listor) for update;
+      perform 1 from public.leads_job_ledger where job_id = any(v_liggare) for update;
+      perform 1 from public.ss_avregistreringslankar where token = any(v_lankar) for update;
+      perform 1 from public.generated_emails where id = any(v_genererade) or contact_id = any(v_kontakter) for update;
+      perform 1 from public.contacts where id = any(v_kontakter) for update;
+      perform 1 from public.meetings where contact_id = any(v_kontakter) for update;
+      perform 1 from public.saljlista where id = any(v_saljlista) for update;
+      perform 1 from public.agent_runs where id = any(v_korningar) for update;
+      perform 1 from public.agent_feedback where id = any(v_feedback) for update;
+      perform 1 from public.leads_sidcache where tenant_id = p_tenant and url = any(v_sidcache) for update;
+      perform set_config('lock_timeout', v_timeout, true);
+    else
+      v_mejl := array(select unnest(v_mejl) intersect select unnest(v_mejl_1));
+      v_arenden := array(select unnest(v_arenden) intersect select unnest(v_arenden_1));
+      v_minne := array(select unnest(v_minne) intersect select unnest(v_minne_1));
+      v_kunder := array(select unnest(v_kunder) intersect select unnest(v_kunder_1));
+      v_prospekt := array(select unnest(v_prospekt) intersect select unnest(v_prospekt_1));
+      v_listrader := array(select unnest(v_listrader) intersect select unnest(v_listrader_1));
+      v_listor := array(select unnest(v_listor) intersect select unnest(v_listor_1));
+      v_liggare := array(select unnest(v_liggare) intersect select unnest(v_liggare_1));
+      v_lankar := array(select unnest(v_lankar) intersect select unnest(v_lankar_1));
+      v_genererade := array(select unnest(v_genererade) intersect select unnest(v_genererade_1));
+      v_kontakter := array(select unnest(v_kontakter) intersect select unnest(v_kontakter_1));
+      v_saljlista := array(select unnest(v_saljlista) intersect select unnest(v_saljlista_1));
+      v_korningar := array(select unnest(v_korningar) intersect select unnest(v_korningar_1));
+      v_feedback := array(select unnest(v_feedback) intersect select unnest(v_feedback_1));
+      v_evals := array(select unnest(v_evals) intersect select unnest(v_evals_1));
+      v_forslag := array(select unnest(v_forslag) intersect select unnest(v_forslag_1));
+      v_handelser := array(select unnest(v_handelser) intersect select unnest(v_handelser_1));
+      v_sidcache := array(select unnest(v_sidcache) intersect select unnest(v_sidcache_1));
+    end if;
+  end loop;
+
+  -- Spärrlistans koppling till kontakter som raderas. Räknas för loggen men
+  -- inte i taket: raden står kvar, bara pekaren nollas.
+  select count(*) into v_sparr
+    from public.suppressions
+   where contact_id = any(v_kontakter);
+
+  v_antal := jsonb_build_object(
+    'ss_emails',                jsonb_build_object('atgard', 'radera', 'antal', cardinality(v_mejl)),
+    'ss_tickets',               jsonb_build_object('atgard', 'radera', 'antal', cardinality(v_arenden)),
+    'customer_memory',          jsonb_build_object('atgard', 'radera', 'antal', cardinality(v_minne)),
+    'ss_customers',             jsonb_build_object('atgard', 'radera', 'antal', cardinality(v_kunder)),
+    'prospects',                jsonb_build_object('atgard', 'radera', 'antal', cardinality(v_prospekt)),
+    'lead_list_items',          jsonb_build_object('atgard', 'radera', 'antal', cardinality(v_listrader)),
+    'lead_lists',               jsonb_build_object('atgard', 'radera', 'antal', cardinality(v_listor)),
+    'leads_job_ledger',         jsonb_build_object('atgard', 'radera', 'antal', cardinality(v_liggare)),
+    'ss_avregistreringslankar', jsonb_build_object('atgard', 'radera', 'antal', cardinality(v_lankar)),
+    'generated_emails',         jsonb_build_object('atgard', 'radera', 'antal', cardinality(v_genererade)),
+    'contacts',                 jsonb_build_object('atgard', 'radera', 'antal', cardinality(v_kontakter)),
+    'saljlista',                jsonb_build_object('atgard', 'radera', 'antal', cardinality(v_saljlista)),
+    'agent_runs',               jsonb_build_object('atgard', 'anonymisera', 'antal', cardinality(v_korningar)),
+    'agent_feedback',           jsonb_build_object('atgard', 'anonymisera', 'antal', cardinality(v_feedback)),
+    'agent_evals',              jsonb_build_object('atgard', 'radera', 'antal', cardinality(v_evals)),
+    'agent_suggestions',        jsonb_build_object('atgard', 'radera', 'antal', cardinality(v_forslag)),
+    'platform_events',          jsonb_build_object('atgard', 'radera', 'antal', cardinality(v_handelser)),
+    'leads_sidcache',           jsonb_build_object('atgard', 'radera', 'antal', cardinality(v_sidcache)),
+    'ss_channel_inbound_seen',  jsonb_build_object('atgard', 'radera', 'antal', v_sedda),
+    'suppressions',             jsonb_build_object('atgard', 'frikoppla', 'antal', v_sparr)
+  );
+
+  v_totalt := cardinality(v_mejl) + cardinality(v_arenden) + cardinality(v_minne)
+            + cardinality(v_kunder) + cardinality(v_prospekt) + cardinality(v_listrader)
+            + cardinality(v_listor) + cardinality(v_liggare) + cardinality(v_lankar)
+            + cardinality(v_genererade) + cardinality(v_kontakter) + cardinality(v_saljlista)
+            + cardinality(v_korningar) + cardinality(v_feedback) + cardinality(v_evals)
+            + cardinality(v_forslag) + cardinality(v_handelser) + cardinality(v_sidcache)
+            + v_sedda;
+
+  if p_torrkorning then
+    v_status := 'torrkorning';
+  elsif p_tak is not null and v_totalt > p_tak then
+    v_status := 'tak_nadd';
+  else
+    v_status := 'klar';
+  end if;
+
+  if v_status = 'klar' then
+    -- -- Raderingen, i främmande nycklars ordning. -------------------------
+
+    -- Mejlen först: ss_emails.ticket_id och ss_drafts.ticket_id saknar kaskad.
+    delete from public.ss_emails where id = any(v_mejl);
+    -- Föräldrar och barn i samma sats: NO ACTION prövas vid satsens slut.
+    delete from public.ss_tickets where id = any(v_arenden);
+    delete from public.customer_memory where id = any(v_minne);
+    delete from public.ss_customers where id = any(v_kunder);
+
+    delete from public.prospects where id = any(v_prospekt);
+    delete from public.lead_list_items where id = any(v_listrader);
+    delete from public.lead_lists where id = any(v_listor);
+    delete from public.leads_job_ledger where job_id = any(v_liggare);
+    delete from public.ss_avregistreringslankar where token = any(v_lankar);
+
+    -- SPÄRRLISTAN FÖRE KONTAKTERNA. suppressions.contact_id kaskaderar från
+    -- contacts; utan det här steget hade gallringen tagit med sig
+    -- avregistreringen och nästa utskick nått den som bett att slippa.
+    update public.suppressions set contact_id = null where contact_id = any(v_kontakter);
+    delete from public.generated_emails where id = any(v_genererade);
+    delete from public.contacts where id = any(v_kontakter);
+    delete from public.saljlista where id = any(v_saljlista);
+
+    update public.agent_runs
+       set input = null, output = null, grounding = null, step_log = '[]'::jsonb,
+           prospect_id = null, thread_id = null
+     where id = any(v_korningar);
+    update public.agent_feedback
+       set comment = null, corrected_output = null
+     where id = any(v_feedback);
+    delete from public.agent_evals where id = any(v_evals);
+    delete from public.agent_suggestions where id = any(v_forslag);
+    delete from public.platform_events where id = any(v_handelser);
+    delete from public.leads_sidcache where tenant_id = p_tenant and url = any(v_sidcache);
+    delete from public.ss_channel_inbound_seen where tenant_id = p_tenant and seen_at < v_grans;
+  end if;
+
+  -- Spårbarheten. En gallring ingen kan visa att den skett är, vid en
+  -- granskning, en gallring som inte skett (048).
+  insert into public.ss_gallringslogg
+    (tenant_id, kord_av, torrkorning, status, dagar, grans, tak, totalt, antal)
+  values
+    (p_tenant, coalesce(p_kord_av, 'skript'), p_torrkorning, v_status, v_dagar, v_grans,
+     p_tak, v_totalt, v_antal)
+  returning id into v_logg;
+
+  return jsonb_build_object(
+    'status', v_status, 'tenant_id', p_tenant, 'dagar', v_dagar, 'grans', v_grans,
+    'spegel', v_spegel, 'tak', p_tak, 'totalt', v_totalt, 'antal', v_antal, 'logg_id', v_logg
+  );
+end;
+$$;

@@ -44,6 +44,13 @@ EXPECTED_ORDER_KB_GAP = [
 ]
 
 
+def _modellsteg(step_log: list[dict]) -> list[dict]:
+    """Stegen som är modellanrop. Stegloggen bär också pseudo-steg utan
+    `skill` (integrationer, svarscache, faktagrind), samma urval som
+    kvotbokföringen i api/chat.py gör."""
+    return [s for s in step_log if "skill" in s]
+
+
 @pytest.fixture
 def anyio_backend():
     return "asyncio"
@@ -130,7 +137,7 @@ async def test_one_llm_call_per_skill_step_in_declared_order():
 
     assert llm.calls == EXPECTED_ORDER_NORMAL, "Ett anrop per steg, i playbook-ordning"
     assert result["skills_used"] == EXPECTED_ORDER_NORMAL
-    assert len(result["step_log"]) == len(EXPECTED_ORDER_NORMAL)
+    assert len(_modellsteg(result["step_log"])) == len(EXPECTED_ORDER_NORMAL)
 
 
 @pytest.mark.anyio
@@ -247,7 +254,7 @@ async def test_step_log_records_contract_fields_per_step():
     storage, llm = MemoryStorage(), _FakeLLM()
     result = await _run(storage, llm)
 
-    for entry in result["step_log"]:
+    for entry in _modellsteg(result["step_log"]):
         assert entry["sources_used"] == ["kb-1"]
         assert entry["context_refs"] == ["context_pack"]
         assert entry["attempts"] == 1
@@ -262,7 +269,7 @@ async def test_agent_run_is_logged_with_step_log_g10():
     runs = await storage.list_agent_runs(TENANT, agent_type="support")
     assert len(runs) == 1
     assert runs[0]["skills_used"] == EXPECTED_ORDER_NORMAL
-    assert len(runs[0]["step_log"]) == len(EXPECTED_ORDER_NORMAL)
+    assert len(_modellsteg(runs[0]["step_log"])) == len(EXPECTED_ORDER_NORMAL)
     assert "cs:kb-article" not in runs[0]["skills_used"]
     assert runs[0]["tokens_in"] > 0
     assert ":support/v1" in runs[0]["pack_version"]
@@ -372,7 +379,7 @@ async def test_broken_contract_retries_once_then_escalates_that_step():
     llm = _BadLLM()
     result = await _run(storage, llm)
 
-    draft_entries = [e for e in result["step_log"] if e["skill"] == "cs:draft-response"]
+    draft_entries = [e for e in result["step_log"] if e.get("skill") == "cs:draft-response"]
     assert draft_entries[0]["attempts"] == 2
     assert draft_entries[0]["escalated"] is True
 

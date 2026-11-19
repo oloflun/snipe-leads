@@ -3,7 +3,8 @@
 # och fällde tre api-byggen i rad.
 FROM public.ecr.aws/docker/library/python:3.12-slim
 
-# Byggkontexten är REPO-ROTEN, inte snajp-support/ (render.yaml: rootDir: .).
+# Byggkontexten är REPO-ROTEN, inte snajp-support/ (scripts/railway_provision.py:
+# rootDirectory="/", INV-DEPLOY-001).
 #
 # Skälet är tvingande: agent-core/ ligger utanför snajp-support/, och Docker
 # kan inte COPY:a något utanför sin byggkontext. Med den gamla uppsättningen

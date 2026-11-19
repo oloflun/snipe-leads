@@ -105,7 +105,7 @@ insert into ss_tenants (slug, name) values ('<slug>', '<Namn AB>');
 insert into workspaces (name, slug, ss_tenant_id, products) values (...);
 ```
 
-Se [007_workspace_tenants.sql](supabase/migrations/007_workspace_tenants.sql).
+Se [007_workspace_tenants.sql](db/migrations/007_workspace_tenants.sql).
 Fyll även `business_contexts` för workspacet — det är leads-agentens produktdata.
 
 ### 5b. Chattwidget på kundens egen sajt (valfritt)

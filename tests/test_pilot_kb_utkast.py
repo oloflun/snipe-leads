@@ -414,6 +414,36 @@ def test_obelagda_siffror():
     assert pk.obelagda_siffror("30 dagars öppet köp", "14 dagars ångerrätt") == ["30"]
 
 
+def test_listnumrering_ar_ingen_sakuppgift():
+    """Genomgången 2026-11-18: "Siffrorna 1, 3, 4 står inte i källsidan" för en
+    numrerad lista. Numreringen räknas inte; ett tal i slutet av en mening gör det."""
+    kalla = "Urvalet, researchen och utkastet."
+    assert pk.obelagda_siffror("Tre steg: 1. **Urvalet:** a 2. **Researchen:** b", kalla) == []
+    assert pk.obelagda_siffror("Steg:\n1. Urvalet\n2) Researchen", kalla) == []
+    assert pk.obelagda_siffror("Fyra steg: **1. Urvalet:** a **2. Researchen:** b", kalla) == []
+    assert pk.obelagda_siffror("Returer tas emot inom 14.", kalla) == ["14"]
+
+
+def test_tal_pa_annan_sida_av_webbplatsen_ar_belagt():
+    """Genomgången 2026-11-18: förslaget angav /support-pa-svenska som källa,
+    men "50–70 %" stod på /support. Talet är inte påhittat, alltså ingen
+    varning; ett tal som inte står någonstans på webbplatsen varnas fortfarande."""
+    from app.kb_skanning import Sida, _sanera_artikel
+
+    kalla = Sida(url="https://exempel.se/a", titel="A", h1="A", text="Agenten svarar dygnet runt.")
+    ra = {
+        "title": "Vad gör agenten?",
+        "content": "Agenten tar bort 50–70 % av det repetitiva jobbet.",
+        "category": "ovrigt",
+        "source_url": "https://exempel.se/a",
+        "confidence": 0.8,
+    }
+    artikel, _ = _sanera_artikel(ra, {kalla.url: kalla}, "Vi tar bort 50–70 % av jobbet.")
+    assert artikel["varningar"] == []
+    artikel, _ = _sanera_artikel(ra, {kalla.url: kalla}, "Inga tal här.")
+    assert artikel["varningar"] == ["Siffrorna 50, 70 står inte på webbplatsen. Kontrollera eller stryk dem."]
+
+
 def _llm_genomsokning() -> pk.Genomsokning:
     return pk.Genomsokning(
         webbplats=SAJT,

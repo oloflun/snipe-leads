@@ -1,7 +1,9 @@
 """Central konfiguration för Snajp-Support-tjänsten."""
 
+import json
 from functools import lru_cache
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from pydantic import AliasChoices, Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -73,6 +75,74 @@ MILJOER_MED_KUNDDATA = ("main", "production", "prod", "development", "dev")
 # nyckel i `active_llm_key` och en bas-URL i `agent/llm._resolve_base_url` —
 # annars är den inte stödd, den ser bara stödd ut.
 KANDA_PROVIDERS = ("openai", "deepseek", "gemini")
+
+#: INV-DATA-006. Vertex-regioner i EU:s medlemsstater. Där data är riktig
+#: vägrar tjänsten starta, och klienten vägrar byggas, med en region som inte
+#: står här. Listan är kort med flit; varje post är en region i ett EU-land som
+#: Google anger för generativ AI på Vertex:
+#:
+#:   europe-west1       Belgien. Standardregionen (google_cloud_region).
+#:   europe-west4       Nederländerna. Reservregion vid 429.
+#:   europe-north1      Finland. Reservregion vid 429.
+#:   europe-west3       Tyskland (Frankfurt).
+#:   europe-west8       Italien (Milano).
+#:   europe-west9       Frankrike (Paris).
+#:   europe-southwest1  Spanien (Madrid).
+#:   eu                 EU-multiregionen. Google: "multi-region endpoints let you
+#:                      ensure that machine learning processing of Customer Data
+#:                      by the service stays within a specific jurisdictional
+#:                      boundary" (Vertex, Deployment and endpoint locations,
+#:                      hämtad 2026-11-18). Värden är aiplatform.eu.rep.googleapis.com
+#:                      (`vertex_vard`). Gemini 3.x finns i EU bara här och,
+#:                      för gemini-3.5-flash, i europe-west3 (uppmätt 2026-11-18,
+#:                      docs/compliance/modellbyte-underlag.md). Ingen miljö
+#:                      använder den förrän ägaren sätter GOOGLE_CLOUD_REGION=eu.
+#:
+#: Står ALDRIG med: `global` och multiregionen `us` (behandling var som helst),
+#: europe-west2 (London) och europe-west6 (Zürich), som inte ligger i EU.
+VERTEX_EU_REGIONER = (
+    "europe-west1",
+    "europe-west4",
+    "europe-north1",
+    "europe-west3",
+    "europe-west8",
+    "europe-west9",
+    "europe-southwest1",
+    "eu",
+)
+
+#: Multiregionerna har en egen värd ({multiregion}.rep), regionerna
+#: `{region}-aiplatform`. Bara EU-multiregionen används här.
+_VERTEX_MULTIREGIONER = ("eu",)
+
+
+def vertex_vard(region: str) -> str:
+    """Vertex-värden för en region: `aiplatform.eu.rep.googleapis.com` för
+    EU-multiregionen, annars `{region}-aiplatform.googleapis.com`. Sökvägen är
+    densamma (`.../locations/{region}/...`). Varje anropsställe bygger sin URL
+    härifrån, så att en ny region inte kräver fyra ändringar."""
+    region = (region or "").strip()
+    if region in _VERTEX_MULTIREGIONER:
+        return f"aiplatform.{region}.rep.googleapis.com"
+    return f"{region}-aiplatform.googleapis.com"
+
+
+#: Värdarna som LLM_BASE_URL får peka på där data är riktig: Vertex värdar för
+#: EU-regionerna ovan, och inget annat.
+VERTEX_EU_VARDAR = tuple(vertex_vard(r) for r in VERTEX_EU_REGIONER)
+
+
+def ar_eu_region(region: str) -> bool:
+    """Om regionen står på `VERTEX_EU_REGIONER`."""
+    return (region or "").strip() in VERTEX_EU_REGIONER
+
+
+def bas_url_tillaten(url: str) -> bool:
+    """Om en bas-URL går till en Vertex-värd i EU, över https. Värdnamnet
+    jämförs exakt: en delsträngskontroll hade godkänt
+    `europe-west1-aiplatform.googleapis.com.exempel.se`."""
+    delar = urlsplit((url or "").strip())
+    return delar.scheme == "https" and (delar.hostname or "") in VERTEX_EU_VARDAR
 
 
 #: Värdnamn som betyder "databasen kör på den här maskinen". Bara de här räknas
@@ -162,7 +232,9 @@ class Settings(BaseSettings):
     #
     # SE `llm_provider_fault` NEDAN INNAN DU ÄNDRAR DEFAULTEN. DeepSeek är
     # tillåten bara mot syntetisk data; i main och development vägrar tjänsten
-    # starta med den. Beslutet är dokumenterat i CLAUDE.md.
+    # starta med den. Beslutet är dokumenterat i CLAUDE.md. Detsamma gäller
+    # OpenAI sedan 2026-11-18 (INV-DATA-006): defaulten står kvar för lokal
+    # körning och testsviten, men en riktig miljö måste sätta gemini.
     llm_provider: str = "openai"
     llm_base_url: str = ""  # tom => härleds från provider (se agent/llm.py)
     openai_api_key: str = ""
@@ -184,6 +256,35 @@ class Settings(BaseSettings):
     #: europe-west1 i flera minuter medan ett litet anrop gick igenom i alla
     #: tre. Bara EU-regioner: data lämnar aldrig EU. Komma emellan.
     vertex_reservregioner: str = "europe-west4,europe-north1"
+    #: Regionen för inbäddningarna (`embeddings._vertex_predict`). Tom = samma
+    #: som GOOGLE_CLOUD_REGION, beteendet före 2026-11-18. Finns för
+    #: modellbytet: gemini-3.x ligger i multiregionen `eu`, men
+    #: gemini-embedding-001 svarar 404 där och 200 i europe-west1 och
+    #: europe-west3 (uppmätt 2026-11-18). Kunskapsbasens vektorer ska komma ur
+    #: samma modell före och efter bytet. Bara EU-regioner, som ovan.
+    vertex_inbaddning_region: str = ""
+    #: Regionen för bildanropen (`agent.llm.get_vision_client`: bildbeskrivning,
+    #: kvitton, bokföringsunderlag och webbrevisionens bildbedömning). Tom =
+    #: samma som GOOGLE_CLOUD_REGION, beteendet före 2026-11-18. Finns för
+    #: modellbytet: textmodellerna kan gå till `eu` medan bildmodellen ligger
+    #: kvar på gemini-2.5-flash i europe-west1, eftersom ingen 3.x-modell
+    #: klarade webbkalibreringens grind (modellbyte-underlag.md avsnitt 3.6).
+    #: Bara EU-regioner, som ovan.
+    vertex_bild_region: str = ""
+    #: Regionen för Iris utkast och humanizer (stegen med `model_setting`
+    #: leads_draft_model / leads_humanizer_model i step_runner). Tom = samma
+    #: som GOOGLE_CLOUD_REGION. Finns för modellbytet (2026-11-18): i
+    #: development föll fem av elva utkast på gemini-3.8-flash i `eu` (503,
+    #: 429 och svar på över 120 s), och utkasten ska då kunna gå tillbaka till
+    #: gemini-2.5-flash i europe-west1 medan resten av texten stannar i `eu`.
+    #: Bara EU-regioner, som ovan.
+    vertex_utkast_region: str = ""
+    #: Regionen för kvittohanterarens modellanrop (KVITTO_MODEL ovan; agenten
+    #: och kontrolläsningen i kvitton/hanterare.py). Tom = samma som
+    #: GOOGLE_CLOUD_REGION. Finns av samma skäl som VERTEX_UTKAST_REGION:
+    #: kvittostegen ska kunna ligga kvar på gemini-2.5-flash i europe-west1
+    #: medan MODEL går till `eu`. Bara EU-regioner, som ovan (INV-DATA-006).
+    vertex_kvitto_region: str = ""
     model: str = "gpt-4o-mini"
     embedding_model: str = "gemini-embedding-001"
     #: MÅSTE stämma med kolumnen `ss_knowledge_base.embedding`, som är
@@ -237,8 +338,10 @@ class Settings(BaseSettings):
     #   faktagrind; blind parvis dom i båda ordningarna 1–1, två oavgjorda;
     #   ~0,53 -> ~0,26 kr/lead, 292 -> 66 s.
     #
-    # "none" = tankebudget 0 (se llm.gemini_tank_kwargs — Vertex avvisar
-    # reasoning_effort="none"). Steg med thinking="enabled" behåller sitt
+    # "none" = tankebudget 0 på gemini-2.5 (se llm.gemini_tank_kwargs — Vertex
+    # avvisar reasoning_effort="none"). På gemini-3.x, där tankebudgeten är
+    # avvecklad, blir "none" den lägsta tankenivå modellen tar (MINIMAL, LOW för
+    # gemini-3.8-flash), uppmätt 2026-11-18. Steg med thinking="enabled" behåller sitt
     # tänkande: eskaleringsbedömningen och kvittoavläsningen. Tom sträng ger
     # leverantörens default; "minimal"/"low"/"medium"/"high" går som
     # reasoning_effort.
@@ -333,6 +436,14 @@ class Settings(BaseSettings):
     # ändrad affärskontext, så en starkare modell kostar nästan inget. Tom =
     # ärv MODEL.
     iris_profil_model: str = ""
+    # Kvittohanterarens EGEN modell (app/kvitton/hanterare.py: agenten och den
+    # andra, oberoende kontrolläsningen). Tom = ärv MODEL, beteendet före
+    # 2026-11-18. Finns för modellbytet: kvittosviten mot development gav
+    # 30/40 på 3.5-flash-lite mot 37/40 på 2.5-flash, med en obetald
+    # kundfaktura bokförd som klar (modellbyte-underlag.md avsnitt 6.4), så
+    # kvittostegen ska kunna ligga kvar på en annan modell än MODEL. Sätts
+    # inte i någon miljö utan ägarens beslut.
+    kvitto_model: str = ""
     # Jev-kaskaden (app/leads/jev.py): "off" | "skugga" (loggar Jevs beslut
     # bredvid LLM-bedömningen, fäller inget) | "pa" (fäller uppenbara missar
     # före researchanropet). Nyckeln bor i Railways variabellager.
@@ -370,6 +481,22 @@ class Settings(BaseSettings):
     # 0 stänger av den. Svepet är idempotent (unik logg per arbetsyta och
     # typ), så intervallet styr bara hur snabbt en ny kandidat upptäcks.
     trial_paminnelse_sekunder: int = 6 * 3600
+
+    # Gallringen (app/jobs/gallring.py, migration 119). AV som standard: en
+    # körning raderar kunddata, och den slås på av ägaren i main när varje
+    # kund har en beslutad policy (scripts/gallra.py --policyns-period).
+    # Kunder utan policy gallras aldrig. I en spegel (development) gallras
+    # bara tabellerna synken inte för över (migration 133); de synkade får
+    # main:s raderingar genom synken.
+    gallring_aktiv: bool = False
+    # Högst så här många rader ändras hos EN kund per körning. Är urvalet
+    # större görs ingenting hos kunden och plattformsadmin larmas; ett
+    # felaktigt policyvärde ska ge ett larm, inte en tom kund.
+    gallring_tak: int = 5000
+    # Körningen görs högst en gång per svenskt dygn (dygnsspärren i
+    # databasen), tidigast den här timmen. Loopen tittar en gång i timmen.
+    gallring_timme: int = 3
+    gallring_kontroll_sekunder: int = 3600
     # Fas R2 (bd snipe-cku): semantisk svarscache. "off" (default): cachen
     # rörs aldrig — varken lookup eller store, inte ens ett embedding-anrop.
     # "shadow": lookup+store körs, men en TRÄFF ändrar inget i svaret, bara
@@ -456,6 +583,11 @@ class Settings(BaseSettings):
     # målet (mains api-URL) sätts bara i development. Tomt = vägen stängd.
     flytt_nyckel: str = Field("", validation_alias=AliasChoices("FLYTT_NYCKEL", "flytt_nyckel"))
     flytt_mal_url: str = Field("", validation_alias=AliasChoices("FLYTT_MAL_URL", "flytt_mal_url"))
+
+    # Synkflytten steg 9 (app/api/drift.py): PR-kontrollen läser liggarens
+    # versioner över HTTPS med den här smala nyckeln i stället för att ansluta
+    # till databasen. Tomt = endpointen svarar 404.
+    schema_lasnyckel: str = Field("", validation_alias=AliasChoices("SCHEMA_LASNYCKEL", "schema_lasnyckel"))
 
     # SMTP-uppgifterna för snajpsupport@gmail.com. ETT konto för HELA
     # plattformen — det här är prioriterade mejl till OSS, inte kundutskick,
@@ -555,7 +687,7 @@ class Settings(BaseSettings):
     # DEFAULT filesystem i ALL miljö. DB-spegeln är en granskningspost över vilken
     # text en agent_runs-rad producerades ur, inte en uppdateringskanal: kan DB:n
     # leverera text containern inte har på disk är git bara källa till sanning i
-    # intentionen. render.yaml ska aldrig sätta SKILL_SOURCE.
+    # intentionen. Ingen driftkonfiguration ska sätta SKILL_SOURCE (INV-DEPLOY-001).
     skill_source: str = "filesystem"
 
     @model_validator(mode="after")
@@ -692,31 +824,170 @@ class Settings(BaseSettings):
                 f"variabeln och låt koden välja default."
             )
 
+        # Stegmodellerna går genom samma klient som MODEL, och bildmodellen
+        # alltid till Gemini (get_vision_client). Ett namn från fel leverantör
+        # ger 404 först i det steget, alltså hos en kund, så det fälls här av
+        # samma skäl som MODEL (2026-11-18, inför bytet från gemini-2.5).
+        for falt, vantad in (
+            ("leads_draft_model", self.llm_provider),
+            ("leads_humanizer_model", self.llm_provider),
+            ("iris_profil_model", self.llm_provider),
+            ("kvitto_model", self.llm_provider),
+            ("vision_model", "gemini"),
+        ):
+            varde = getattr(self, falt)
+            faltets_provider = provider_for_model(varde)
+            if faltets_provider is not None and faltets_provider != vantad:
+                return (
+                    f"{falt.upper()}={varde!r} är en {faltets_provider}-modell, men "
+                    f"anropet går till {vantad}. Svaret blir 404 i varje sådant "
+                    f"steg. Sätt en {vantad}-modell, eller ta bort variabeln."
+                )
+
         if self.llm_provider == "deepseek" and self.har_riktig_kunddata():
-            # Skälet formuleras efter VAD som fällde, inte som en generisk
-            # rad. Meddelandet är det enda någon läser när en deploy dör
-            # 23:01, och "miljön ''" besvarar inte frågan varför.
-            if self.aktiv_miljo() in MILJOER_MED_KUNDDATA:
-                varfor = (
-                    f"Miljön '{self.aktiv_miljo()}' bär eller speglar riktig kunddata."
-                )
-            else:
-                varfor = (
-                    f"Miljönamnet är okänt, men DATABASE_URL pekar på en databas "
-                    f"som inte kör på den här maskinen ({_vard_ur_dsn(self.database_url)}). "
-                    f"En process som kan öppna en fjärrdatabas kan nå riktiga "
-                    f"personuppgifter, oavsett vilken värd den kör på — det var "
-                    f"precis så den bortglömda Render-stacken kunde köra DeepSeek "
-                    f"mot skarp data utan att någon spärr sa ifrån."
-                )
             return (
-                f"LLM_PROVIDER=deepseek är inte tillåtet här. {varfor} DeepSeek "
+                f"LLM_PROVIDER=deepseek är inte tillåtet här. {self._varfor_riktig_data()} DeepSeek "
                 f"behandlar prompten i Kina, och vi har varken SCC, "
                 f"överföringsbedömning eller PUB-villkor på plats. "
-                f"Sätt en tillåten provider (openai eller gemini) med rätt nyckel, "
+                f"Sätt LLM_PROVIDER=gemini med GOOGLE_SERVICE_ACCOUNT_JSON (Vertex AI i EU), "
                 f"eller stäng av tjänsten om den inte ska köra alls."
             )
+
+        # INV-DATA-006: OpenAI står inte i underbiträdesförteckningen och är
+        # inte godkänt för kunddata (leverantörsgranskningen 2026-11-17).
+        # `openai` är också standardvärdet, så en riktig miljö som glömt
+        # LLM_PROVIDER fångas här i stället för att tyst skicka till USA.
+        if self.llm_provider == "openai" and self.har_riktig_kunddata():
+            return (
+                f"LLM_PROVIDER=openai är inte tillåtet här (det är också "
+                f"standardvärdet när variabeln saknas). {self._varfor_riktig_data()} "
+                f"OpenAI behandlar prompten i USA, står inte i "
+                f"underbiträdesförteckningen och har varken PUB-villkor eller "
+                f"överföringsbedömning. Att släppa in OpenAI i drift är ett "
+                f"avtalsbeslut, inte ett kodbeslut. Sätt LLM_PROVIDER=gemini med "
+                f"GOOGLE_SERVICE_ACCOUNT_JSON (Vertex AI i EU) och deploya om."
+            )
+
+        # INV-DATA-006: behandlingen stannar i EU. En region eller bas-URL som
+        # pekar ut ur EU hade annars flyttat varje kundmejl utan att något
+        # larmade. Läser värdena som de står, och ett osatt värde betyder
+        # kodens standardvärde, som står på listan.
+        if self.har_riktig_kunddata():
+            utanfor = [
+                r
+                for r in dict.fromkeys(
+                    [
+                        *self.vertex_regioner(),
+                        self.inbaddningsregion(),
+                        self.bildregion(),
+                        self.utkastregion(),
+                        self.kvittoregion(),
+                    ]
+                )
+                if not ar_eu_region(r)
+            ]
+            if utanfor:
+                return (
+                    f"Vertex-regionen {', '.join(utanfor)} ligger inte i EU "
+                    f"(GOOGLE_CLOUD_REGION={self.google_cloud_region!r}, "
+                    f"VERTEX_RESERVREGIONER={self.vertex_reservregioner!r}, "
+                    f"VERTEX_INBADDNING_REGION={self.vertex_inbaddning_region!r}, "
+                    f"VERTEX_BILD_REGION={self.vertex_bild_region!r}, "
+                    f"VERTEX_UTKAST_REGION={self.vertex_utkast_region!r}, "
+                    f"VERTEX_KVITTO_REGION={self.vertex_kvitto_region!r}). "
+                    f"{self._varfor_riktig_data()} Kunddata får bara behandlas i EU. "
+                    f"Tillåtna regioner: {', '.join(VERTEX_EU_REGIONER)}. Rätta "
+                    f"variabeln, eller ta bort den så gäller standardvärdet, och "
+                    f"deploya om."
+                )
+            if self.llm_base_url and not bas_url_tillaten(self.llm_base_url):
+                return (
+                    f"LLM_BASE_URL pekar på {urlsplit(self.llm_base_url).hostname or 'en okänd värd'}, "
+                    f"som inte är en Vertex-värd i EU. {self._varfor_riktig_data()} "
+                    f"LLM_BASE_URL går före all regionlogik, så chatten hade gått "
+                    f"dit. Ta bort variabeln (koden härleder adressen ur "
+                    f"GOOGLE_CLOUD_REGION) och deploya om."
+                )
+
+        # INV-DATA-004: utan läsbart servicekonto faller Gemini tillbaka på
+        # Google AI Studio (GEMINI_API_KEY) — ingen EU-bunden behandling, och
+        # på gratisnivån får Google använda innehållet. Samma gräns och samma
+        # skäl att krascha som DeepSeek-spärren ovan.
+        if self.llm_provider == "gemini" and self.har_riktig_kunddata() and not self.servicekonto_lasbart():
+            if self.google_service_account_json:
+                vad = (
+                    "GOOGLE_SERVICE_ACCOUNT_JSON är satt men går inte att läsa "
+                    "(JSON, project_id, client_email eller private_key saknas)."
+                )
+            else:
+                vad = "GOOGLE_SERVICE_ACCOUNT_JSON saknas."
+            return (
+                f"LLM_PROVIDER=gemini utan servicekonto är inte tillåtet här. {vad} "
+                f"{self._varfor_riktig_data()} Utan servicekontot går chatt, "
+                f"bildbeskrivning, embeddings och sökning till Google AI Studio "
+                f"med GEMINI_API_KEY, och AI Studio får inte bära kunddata: "
+                f"behandlingen är inte bunden till EU, och på gratisnivån får "
+                f"Google använda innehållet. Sätt GOOGLE_SERVICE_ACCOUNT_JSON till "
+                f"servicekontots hela JSON-fil (python scripts/keys.py --key "
+                f"GOOGLE_SERVICE_ACCOUNT_JSON) och deploya om."
+            )
         return None
+
+    def _varfor_riktig_data(self) -> str:
+        """Skälet formuleras efter VAD som gjorde datan riktig, inte som en
+        generisk rad. Meddelandet är det enda någon läser när en deploy dör
+        23:01, och "miljön ''" besvarar inte frågan varför."""
+        if self.aktiv_miljo() in MILJOER_MED_KUNDDATA:
+            return f"Miljön '{self.aktiv_miljo()}' bär eller speglar riktig kunddata."
+        return (
+            f"Miljönamnet är okänt, men DATABASE_URL pekar på en databas "
+            f"som inte kör på den här maskinen ({_vard_ur_dsn(self.database_url)}). "
+            f"En process som kan öppna en fjärrdatabas kan nå riktiga "
+            f"personuppgifter, oavsett vilken värd den kör på — det var "
+            f"precis så den bortglömda Render-stacken kunde köra DeepSeek "
+            f"mot skarp data utan att någon spärr sa ifrån."
+        )
+
+    def vertex_regioner(self) -> list[str]:
+        """Huvudregionen följd av reservregionerna, utan dubbletter."""
+        reserv = [r.strip() for r in (self.vertex_reservregioner or "").split(",") if r.strip()]
+        return list(dict.fromkeys([self.google_cloud_region, *reserv]))
+
+    def inbaddningsregion(self) -> str:
+        """Regionen för inbäddningarna: VERTEX_INBADDNING_REGION, annars
+        huvudregionen (se fältet)."""
+        return (self.vertex_inbaddning_region or "").strip() or self.google_cloud_region
+
+    def bildregion(self) -> str:
+        """Regionen för bildanropen: VERTEX_BILD_REGION, annars huvudregionen
+        (se fältet)."""
+        return (self.vertex_bild_region or "").strip() or self.google_cloud_region
+
+    def utkastregion(self) -> str:
+        """Regionen för Iris utkast och humanizer: VERTEX_UTKAST_REGION,
+        annars huvudregionen (se fältet)."""
+        return (self.vertex_utkast_region or "").strip() or self.google_cloud_region
+
+    def kvittoregion(self) -> str:
+        """Regionen för kvittohanterarens modellanrop: VERTEX_KVITTO_REGION,
+        annars huvudregionen (se fältet)."""
+        return (self.vertex_kvitto_region or "").strip() or self.google_cloud_region
+
+    def kvittomodell(self) -> str:
+        """Kvittohanterarens modell: KVITTO_MODEL, annars MODEL (se fältet)."""
+        return (self.kvitto_model or "").strip() or self.model
+
+    def servicekonto_lasbart(self) -> bool:
+        """Om GOOGLE_SERVICE_ACCOUNT_JSON går att använda mot Vertex: JSON med
+        de fält som `agent/llm.py` och google-auth läser. Ringer aldrig Google."""
+        try:
+            info = json.loads(self.google_service_account_json or "")
+        except ValueError:
+            return False
+        return isinstance(info, dict) and all(
+            isinstance(info.get(falt), str) and info.get(falt)
+            for falt in ("project_id", "client_email", "private_key")
+        )
 
     def master_key_fault(self) -> str | None:
         """Varför masternyckeln inte duger här, eller None.

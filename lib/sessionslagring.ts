@@ -16,9 +16,12 @@ function nyttId(): string {
   try {
     return crypto.randomUUID();
   } catch {
-    // randomUUID kräver säker kontext. Reserven är inte kryptografisk, men en
-    // chattsession utan den vore ingen session alls.
-    return `${Date.now().toString(16)}-${Math.random().toString(16).slice(2)}-${Math.random().toString(16).slice(2)}`;
+    // randomUUID kräver säker kontext; getRandomValues gör det inte. Id:t är
+    // nyckeln som läser tillbaka samtalet (/api/chat/samtal), så reserven får
+    // inte vara gissningsbar: Math.random var det (kodskanningen 2026-11-17).
+    const bytes = crypto.getRandomValues(new Uint8Array(16));
+    const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+    return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
   }
 }
 

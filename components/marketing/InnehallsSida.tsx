@@ -44,7 +44,9 @@ export function InnehallsSida({
             <Link href="/" className="focus-ring rounded-input px-3 py-2 text-sm text-ink-muted hover:text-ink">
               Till startsidan
             </Link>
-            <SidMeny />
+            {/* tone="ink": huvudet står på papper. Förvalet är ljus text för fotot,
+                och "Meny" syntes inte här (Sebbe 2026-11-17). */}
+            <SidMeny tone="ink" />
           </div>
         </div>
       </header>

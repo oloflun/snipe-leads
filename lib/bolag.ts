@@ -33,13 +33,25 @@
  * ligga på egen domän.
  */
 
+import type { Localized } from "@/lib/i18n";
+
 export const BOLAG = {
   /** Registrerat firmanamn (enskild firma). Samma som varumärket. */
   namn: "Snajp",
   orgnr: "[XXXXXX-XXXX]",
   postadress: "[Gatuadress, postnummer, ort]",
-  /** Sätts när integritetspolicyn granskats av jurist och publicerats skarpt. */
-  policyUppdaterad: "[DATUM]"
+  /**
+   * När varje juridisk sida senast ändrades i sak (ÅÅÅÅ-MM-DD), visat som
+   * "Senast uppdaterad" under rubriken. En platshållare renderas inte. Datumet
+   * säger när texten ändrades, inte att den är juristgranskad; det är den inte.
+   * Uppdatera datumet i samma ändring som sidans text.
+   */
+  uppdaterad: {
+    integritetspolicy: "2026-11-17",
+    cookies: "2026-11-17",
+    villkor: "[DATUM]",
+    angerratt: "[DATUM]"
+  }
 } as const;
 
 /** Adressen för dataskyddsärenden. Ska ligga på snajp.se, inte på Gmail. */
@@ -116,70 +128,137 @@ export const bolagsuppgifterna_klara =
  */
 export type Underleverantor = {
   namn: string;
-  andamal: string;
-  /** Var behandlingen sker. Tredjeland kräver SCC — se juridik-checklistan. */
-  region: string;
+  /** Visas publikt i integritetspolicyn, därför på svenska och engelska. */
+  andamal: Localized;
+  /**
+   * Var behandlingen sker, och överföringsmekanismen när den gäller utan
+   * vidare (leverantörens villkor). Ett avtal som ännu inte är ingått
+   * påstås inte här; avtalsläget står i kommentaren över varje post och i
+   * docs/JURIDIK_ATGARDER.md.
+   */
+  region: Localized;
 };
 
+/*
+ * Läget 2026-11-17, ur leverantörsgranskningen samma dag och Railways
+ * regionlista. Utelämnade med flit:
+ * - OpenAI: konfigurerad i koden men inte i drift. Läggs tillbaka här i
+ *   samma ändring som en nyckel sätts i en miljö med riktig data.
+ * - Google AI Studio (reservvägen i koden): får inte användas för kunddata
+ *   och ska spärras i miljöer med riktig data. Används den, ska den in här.
+ */
 export const UNDERLEVERANTORER: readonly Underleverantor[] = [
   {
-    // Aktiv chattprovider sedan 2026-08-24 (LLM_PROVIDER=gemini). Driver
-    // dessutom bildbeskrivning och embeddings sedan tidigare.
-    namn: "Google (Gemini)",
-    andamal: "Språkmodell som genererar och klassificerar text, beskriver bilder och bygger sökvektorer.",
-    region:
-      "[Ange dataregion OCH avtalsnivå. Avgörande: en gratisnivå tillåter " +
-      "typiskt leverantören att använda innehållet för produktförbättring. " +
-      "Se docs/JURIDIK_ATGARDER.md, P0.1c.]"
+    // Vertex AI sedan 2026-09-12. Avtal: Cloud Data Processing Addendum,
+    // gäller automatiskt via GCP-villkoren. Vilken Google-enhet som är
+    // avtalspart är inte kontrollerat (faktureringskontot).
+    namn: "Google Cloud (Vertex AI)",
+    andamal: {
+      sv: "Språkmodell (Gemini) som klassificerar och skriver text, beskriver bilder och bygger sökvektorer.",
+      en: "Language model (Gemini) that classifies and writes text, describes images and builds search vectors."
+    },
+    region: {
+      sv: "Inom EU, via regionala anrop i Belgien, Nederländerna och Finland. Behandlingen sker inom EU men inte nödvändigtvis i det land vi anropar. Meddelanden som Googles automatiska säkerhetsfilter flaggar kan sparas upp till 90 dagar. Google LLC är amerikanskt; överföring med EU-U.S. Data Privacy Framework och standardavtalsklausuler.",
+      en: "Within the EU, through regional endpoints in Belgium, the Netherlands and Finland. Processing takes place within the EU but not necessarily in the country we call. Prompts flagged by Google's automated safety filters may be kept for up to 90 days. Google LLC is a US company; transfers rely on the EU-U.S. Data Privacy Framework and standard contractual clauses."
+    }
   },
   {
-    // Konfigurerad i koden men ingen nyckel satt i någon miljö 2026-08-24.
-    namn: "OpenAI",
-    andamal: "Alternativ språkmodell. Inte i drift just nu.",
-    region: "[Ange dataregion och avtalsform — DPA + SCC]"
-  },
-  {
-    namn: "Supabase",
-    andamal: "Databaslagring och autentisering.",
-    region: "Irland, EU"
-  },
-  {
+    // Avtal: Railways DPA signeras via DocuSign och är ännu inte signerad
+    // 2026-11-17. Ingen överföringsmekanism skrivs ut förrän den är det.
     namn: "Railway",
-    andamal: "Drift av applikationen och databasen.",
-    region: "[Ange datacenterregion]"
+    andamal: {
+      sv: "Drift av applikationen, databasen, bakgrundsjobben, jobbkön och cachen.",
+      en: "Hosting of the application, the database, background jobs, the job queue and the cache."
+    },
+    region: {
+      sv: "Amsterdam, Nederländerna (EU). Railway Corporation är ett amerikanskt bolag.",
+      en: "Amsterdam, the Netherlands (EU). Railway Corporation is a US company."
+    }
   },
   {
-    // Jobbkö sedan 2026-08-29: pågående chatt- och leadsjobb (inklusive
-    // agentens svar till kunden) ligger här med kort TTL tills de hämtats.
-    namn: "Redis Cloud (Redis Ltd)",
-    andamal:
-      "Jobbkö och cache: pågående ärenden och svar under behandling, med automatisk radering (TTL).",
-    region:
-      "[Verifiera EU-region och TLS med scripts/redis_kontroll.py, teckna " +
-      "Redis DPA i kontot. Se docs/JURIDIK_ATGARDER.md, P1.2.]"
+    // Jobbkö 2026-08-29 till 2026-11-17. Jobbkön flyttades till Railways egen
+    // Redis 2026-11-17 efter ägarens beslut (docs/BESLUT.md). Den gamla
+    // databasen har kvar cache och arbetsminne tills den raderats. Avtal: DPA
+    // gäller automatiskt via Redis Cloud Agreement §5.3. Avtalspart Redis EMEA
+    // Ltd (UK). Posten stryks när databasen är raderad.
+    namn: "Redis Cloud (avvecklas)",
+    andamal: {
+      sv: "Tidigare jobbkö och cache. Används inte i driften men har kvar tillfälliga uppgifter tills databasen raderats.",
+      en: "Former job queue and cache. Not used in operation, but still holds temporary data until the database is deleted."
+    },
+    region: {
+      sv: "Google Cloud europe-west1, Belgien (EU). Avtalspart är Redis EMEA Ltd i Storbritannien; överföring med standardavtalsklausuler.",
+      en: "Google Cloud europe-west1, Belgium (EU). The contracting party is Redis EMEA Ltd in the United Kingdom; transfers rely on standard contractual clauses."
+    }
   },
   {
-    // Sändväg sedan 2026-08-29 (EMAIL_PROVIDER=resend): utgående svar till
-    // kunder går via Resends API.
+    // Sändväg sedan 2026-08-29. Avtal: DPA gäller automatiskt via villkoren.
+    // Regionen styr bara varifrån mejlen skickas, inte var de lagras.
     namn: "Resend",
-    andamal: "Utskick av mejlsvar till kunder (HTTPS-sändväg).",
-    region:
-      "[Ange dataregion och avtalsform — DPA + SCC. Resend är ett " +
-      "US-bolag; region och DPF-status ska bekräftas. Se P1.2.]"
+    andamal: {
+      sv: "Utskick av mejl och rapporter om studs och klagomål.",
+      en: "Sending email and reporting bounces and complaints."
+    },
+    region: {
+      sv: "Mejlen skickas från Irland (EU). Mejlinnehåll och loggar lagras i USA i 30 dagar. Överföring med EU-U.S. Data Privacy Framework och standardavtalsklausuler.",
+      en: "Email is sent from Ireland (EU). Email content and logs are stored in the United States for 30 days. Transfers rely on the EU-U.S. Data Privacy Framework and standard contractual clauses."
+    }
   },
   {
-    // Upptäckt saknad 2026-09-02: tjänsten har använts av leads-researchen
-    // (app/agent/research_tools.py) sedan skrapningen byggdes, men stod
-    // aldrig här — exakt det "avtalsbrott, inte stavfel" som kommentaren
-    // ovanför listan varnar för. Den hämtar prospektens EGNA publika sidor
-    // (kontakt/om oss), och det som kommer tillbaka är namngivna personer,
-    // titlar och arbetsmejl — personuppgifter behandlade för vår räkning.
+    // Ägaren beslutade 2026-11-17 att kundmejl inte går till TypeSafe, och
+    // inkorgsklassningen via Jev är avstängd i båda miljöerna (docs/BESLUT.md).
+    // Slås den på igen ska den här posten ändras först.
+    // Avtal: DPA inkorporerad i Master Customer Agreement; det är inte belagt
+    // vilka villkor kontot accepterade. Ej i DPF. Ingen mekanism skrivs ut.
+    namn: "TypeSafe AI, Inc. (Jev)",
+    andamal: {
+      sv: "Språkmodell som klassar bolag under leadsresearch. Får publika bolagsuppgifter och sidutdrag utan e-postadresser, telefonnummer och personnummer.",
+      en: "Language model that classifies companies during lead research. Receives public company information and page excerpts without email addresses, phone numbers or personal identity numbers."
+    },
+    region: {
+      sv: "USA.",
+      en: "United States."
+    }
+  },
+  {
+    // Upptäckt saknad 2026-09-02. Avtal: ingen publicerad DPA; begärs via
+    // kontaktvägen i villkoren. Ingen överföringsmekanism angiven, ej i DPF.
     namn: "ScrapeGraphAI",
-    andamal:
-      "Hämtning av prospekts publika webbsidor (kontakt- och om oss-sidor) " +
-      "under leads-research.",
-    region:
-      "[Ange dataregion och avtalsform — DPA + ev. SCC. Varken region eller " +
-      "avtal är bekräftat; flaggat till Anton 2026-09-02.]"
+    andamal: {
+      sv: "Hämtning av prospekts publika webbsidor (kontakt- och om oss-sidor) och skärmbilder av dem under leadsresearch.",
+      en: "Fetching prospects' public web pages (contact and about pages), and screenshots of them, during lead research."
+    },
+    region: {
+      sv: "USA.",
+      en: "United States."
+    }
+  },
+  {
+    // Synken (GitHub Actions) går main → development sedan 2026-10-17 och bär
+    // produktionens persondata. Avtal: GitHubs DPA omfattar inte Free-planen.
+    // Posten stryks när synken inte längre bär persondata.
+    namn: "GitHub (Microsoft)",
+    andamal: {
+      sv: "Körmaskiner som synkroniserar produktionsdata till testmiljön och kör databasmigreringar.",
+      en: "Runners that synchronise production data to the test environment and run database migrations."
+    },
+    region: {
+      sv: "USA och andra länder. GitHub anger inte i vilken region körmaskinerna står.",
+      en: "United States and other countries. GitHub does not state which region the runners are in."
+    }
+  },
+  {
+    // Inte längre driftdatabas (Railway sedan augusti). Det gamla projektet
+    // bär historiska uppgifter tills det raderats. Avtal: DPA och SCC gäller
+    // automatiskt via villkoren. Posten stryks när raderingen är bekräftad.
+    namn: "Supabase (avvecklas)",
+    andamal: {
+      sv: "Tidigare databas. Används inte i driften men har kvar historiska uppgifter tills projektet raderats.",
+      en: "Former database. Not used in operation, but still holds historical data until the project is deleted."
+    },
+    region: {
+      sv: "Irland (EU). Supabase Pte. Ltd. finns i Singapore; överföring med standardavtalsklausuler.",
+      en: "Ireland (EU). Supabase Pte. Ltd. is based in Singapore; transfers rely on standard contractual clauses."
+    }
   }
 ] as const;
