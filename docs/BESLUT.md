@@ -76,6 +76,12 @@ tvåfaktor saknar markeringen och förlorar adminrätten vid deployen, vilket ä
   den rena räknaren när den sista tidsbegränsade artikeln gått ut, och en post cachad
   före ändringen hade matchat igen.
 
+**Runda 5 (samma dag).** Ett fel, från 119, rättat: gallringsurvalet skyddade bara den
+närmaste föräldern till ett kvarvarande ärende. I en kedja A ← B ← C med C ny raderades A,
+främmande nyckeln bröts och hela kundens gallring rullades tillbaka. Migration 135 utesluter
+varje förfader rekursivt; databastestet prövar tre led och att kundens övriga kategorier
+gallras.
+
 ## 2026-11-19 — Synkflytten verkställs i development; mains steg väntar på releasen (Claude (agent), på Antons uppdrag "verkställ synkflytten")
 
 **Beslut.**

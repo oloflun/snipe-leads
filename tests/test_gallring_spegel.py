@@ -15,7 +15,14 @@ import sys
 from pathlib import Path
 
 ROT = Path(__file__).resolve().parents[1]
-MIGRATION = ROT / "db" / "migrations" / "20261119130000_133_gallring_i_spegeln.sql"
+
+
+def _senaste(funktion: str) -> Path:
+    """Den sista migrationen som definierar funktionen: den som gäller."""
+    return [
+        p for p in sorted((ROT / "db" / "migrations").glob("*.sql"))
+        if f"create or replace function public.{funktion}(" in p.read_text(encoding="utf-8")
+    ][-1]
 
 
 def _synk() -> dict[str, str]:
@@ -27,7 +34,7 @@ def _synk() -> dict[str, str]:
 
 
 def _sql() -> str:
-    return MIGRATION.read_text(encoding="utf-8")
+    return _senaste("gallra_tenant").read_text(encoding="utf-8")
 
 
 def test_spegelns_nollade_urval_ar_exakt_synkens_tabeller():
@@ -56,12 +63,12 @@ def test_spegeln_gallrar_de_osynkade_tabellerna():
 
 
 def test_gallra_alla_avbryter_inte_langre_i_en_spegel():
-    alla = _sql().split("create or replace function public.gallra_alla(", 1)[1]
+    alla = _senaste("gallra_alla").read_text(encoding="utf-8").split(
+        "create or replace function public.gallra_alla(", 1)[1]
     assert "'status', 'spegel'" not in alla
     assert "return jsonb_build_object('status', 'kord'" in alla
 
 
-FORALDRALOSA = ROT / "db" / "migrations" / "20261119140000_134_spegelns_foraldralosa.sql"
 
 
 def _kaskadbarn_till_synkade(synkade: set[str]) -> set[tuple[str, str]]:
@@ -93,7 +100,7 @@ def test_varje_kaskadbarn_till_en_synkad_tabell_stadas_i_spegeln():
     synkade = set(_synk())
     barn = _kaskadbarn_till_synkade(synkade)
     assert ("ss_channel_contacts", "ss_customers") in barn, "skanningen hittar inte det kända fallet"
-    sql = FORALDRALOSA.read_text(encoding="utf-8")
+    sql = _senaste("gallra_spegelns_foraldralosa").read_text(encoding="utf-8")
     for tabell, foralder in sorted(barn):
         assert re.search(
             rf"delete from public\.{tabell} \w+\s+where not exists \(select 1 from public\.{foralder} ", sql

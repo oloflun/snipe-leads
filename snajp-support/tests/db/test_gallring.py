@@ -472,6 +472,50 @@ async def test_spegeln_gallrar_det_synken_inte_for_over():
 
 
 @pytest.mark.anyio
+async def test_kvarvarande_arende_behaller_alla_sina_forfader():
+    """Migration 135 (Codex runda 5, 2026-11-19): kedjan A <- B <- C där A och B
+    är gamla och C ny. Förut föll bara B ur urvalet; raderingen av A bröt
+    parent_ticket_id och hela kundens gallring rullades tillbaka. Nu står A och
+    B kvar, en helt gammal kedja gallras, och kundens övriga kategorier
+    gallras som vanligt."""
+    conn = await _anslut(DSN)
+    try:
+        t = await _ny_tenant(conn, "kedja", policy=POLICY_DAGAR)
+        kund = await conn.fetchval(
+            f"insert into ss_customers (tenant_id, name, created_at) values ($1, 'Kedjekund', {NY}) returning id",
+            t["id"])
+
+        async def arende(tid_sql: str, forfader=None):
+            return await conn.fetchval(
+                f"""insert into ss_tickets (tenant_id, customer_id, subject, parent_ticket_id, created_at, updated_at)
+                    values ($1, $2, 'Kedja', $3, {tid_sql}, {tid_sql}) returning id""",
+                t["id"], kund, forfader)
+
+        a = await arende(GAMMAL)
+        b = await arende(GAMMAL, a)
+        c = await arende(NY, b)
+        x = await arende(GAMMAL)
+        y = await arende(GAMMAL, x)
+        z = await arende(GAMMAL, y)
+        await conn.execute(
+            f"insert into platform_events (tenant_id, level, source, message, created_at) "
+            f"values ($1, 'info', 'test', 'gammal', {GAMMAL})", t["id"])
+
+        svar = _json(await conn.fetchval("select gallra_tenant($1, false)", t["id"]))
+        assert svar["status"] == "klar", svar
+        for kvar in (a, b, c):
+            assert await _finns(conn, "ss_tickets", kvar), "en förfader till ett kvarvarande ärende raderades"
+        for borta in (x, y, z):
+            assert not await _finns(conn, "ss_tickets", borta), "en helt gammal kedja gallrades inte"
+        assert svar["antal"]["ss_tickets"]["antal"] == 3
+        assert svar["antal"]["platform_events"]["antal"] == 1
+        assert not await conn.fetchval(
+            "select count(*) from platform_events where tenant_id = $1", t["id"])
+    finally:
+        await conn.close()
+
+
+@pytest.mark.anyio
 async def test_spegeln_raderar_barn_som_synken_lamnat_foraldralosa():
     """Migration 134 (Codex runda 4, 2026-11-19): synken raderar kunden i
     replica-läge, där kaskaden inte körs. Kanalkontakten och chattläget blir
