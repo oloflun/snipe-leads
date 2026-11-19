@@ -10,7 +10,8 @@
 --
 -- Därför: på varje tabell gallringen läser aktivitet ur, eller väljer som
 -- kandidat, sätter triggern gallring_behandlad behandlad_at varje gång en rad
--- faktiskt ändras (to_jsonb(old) skiljer sig från to_jsonb(new)). En
+-- faktiskt ändras (to_jsonb(old) skiljer sig från to_jsonb(new), utom i
+-- genererade kolumner). En
 -- uppdatering som inte ändrar något bumpar inte. Synken skriver i
 -- replica-läge, där triggern inte körs, så main:s tid kopieras oförändrad.
 --
@@ -34,16 +35,25 @@
 -- vars prospekt får aktivitet före låset faller ur andra urvalet. Additiv och
 -- idempotent.
 
+-- Jämförelsen görs i funktionen, inte i triggerns WHEN: en BEFORE-trigger får
+-- inte läsa hela NEW när tabellen har genererade kolumner, och de är inte
+-- beräknade ännu i NEW. Därför tas de bort ur båda sidor; namnen skickas som
+-- triggerns argument (tomt när tabellen saknar sådana).
 create or replace function public.gallring_behandlad() returns trigger
 language plpgsql as $$
+declare
+  v_utom text[] := coalesce(tg_argv::text[], '{}');
 begin
-  new.behandlad_at := now();
+  if (to_jsonb(new) - v_utom) is distinct from (to_jsonb(old) - v_utom) then
+    new.behandlad_at := now();
+  end if;
   return new;
 end $$;
 
 do $$
 declare
   t text;
+  v_gen text;
 begin
   foreach t in array array[
       'ss_emails', 'ss_drafts', 'ss_tickets', 'ss_conversations',
@@ -58,10 +68,12 @@ begin
       continue;
     end if;
     execute format('alter table public.%I add column if not exists behandlad_at timestamptz', t);
+    select string_agg(quote_literal(column_name), ', ' order by column_name) into v_gen
+      from information_schema.columns
+     where table_schema = 'public' and table_name = t and is_generated = 'ALWAYS';
     execute format('drop trigger if exists gallring_behandlad on public.%I', t);
     execute format('create trigger gallring_behandlad before update on public.%I
-                    for each row when (to_jsonb(old) is distinct from to_jsonb(new))
-                    execute function public.gallring_behandlad()', t);
+                    for each row execute function public.gallring_behandlad(%s)', t, coalesce(v_gen, ''));
   end loop;
 end $$;
 

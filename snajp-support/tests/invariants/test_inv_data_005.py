@@ -101,7 +101,10 @@ def test_varje_andring_raknas_som_behandling():
     sql_142 = _utan_kommentarer(fil.read_text(encoding="utf-8"))
     for tabell in _BEHANDLADE:
         assert f"'{tabell}'" in sql_142, f"{tabell} saknar triggern gallring_behandlad"
-    assert "when (to_jsonb(old) is distinct from to_jsonb(new))" in sql_142
+    # Jämförelsen i funktionen (en WHEN på hela NEW fäller tabeller med
+    # genererade kolumner), med de genererade kolumnerna undantagna.
+    assert "if (to_jsonb(new) - v_utom) is distinct from (to_jsonb(old) - v_utom) then" in sql_142
+    assert "is_generated = 'always'" in sql_142
 
     senaste = [f for f in _gallringsmigrationer()
                if "function public.gallra_tenant" in f.read_text(encoding="utf-8")][-1]
