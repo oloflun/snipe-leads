@@ -102,6 +102,19 @@ gallras.
   i cachenyckeln, som nu har prefixet `g2:`. Redis-räknaren står kvar bredvid; den kan bara
   göra en post omatchbar tidigare, aldrig hålla en gammal vid liv.
 
+**Runda 7 (samma dag).** Ett fel, i runda 6:s rättning, rättat: tabellåset i 136 stoppade
+skrivningar för alla kunder, och eftersom `gallra_alla` kör alla kunder i en transaktion låg
+det kvar tills hela dygnskörningen var klar. Ett lås per kund som skrivvägarna tar valdes
+bort: skrivningarna går genom ett fyrtiotal vägar utanför `_scoped` och dessutom webben, så
+ett frivilligt lås hade haft luckor. Migration 138 väljer i stället två gånger. Mellan varven
+låses kandidaterna och raderna deras aktivitet räknas ur (`for update`, högst tio sekunders
+väntan), och bara snittet raderas. En ny barnrad blockeras av föräldens lås genom den
+främmande nyckeln, en låst rad kan inte ändras, och det som hann skrivas före låset syns i
+andra varvet. Låsen gäller bara rader utan aktivitet på två år, så att de ligger kvar till
+dygnskörningens slut stör ingen. Ett test kräver radlås eller ett uttalat skäl för varje
+tabell urvalet rör; databastester visar att ett meddelande under gallringen står kvar och att
+skrivningar hos andra kunder går igenom medan gallringen pågår.
+
 ## 2026-11-19 — Synkflytten verkställs i development; mains steg väntar på releasen (Claude (agent), på Antons uppdrag "verkställ synkflytten")
 
 **Beslut.**

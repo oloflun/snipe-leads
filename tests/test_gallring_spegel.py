@@ -93,23 +93,41 @@ def _kaskadbarn_till_synkade(synkade: set[str]) -> set[tuple[str, str]]:
     return {(barn, foralder) for barn, foralder in par if foralder in synkade and barn not in synkade}
 
 
-def test_gallringen_laser_varje_tabell_den_laser_eller_raderar_i_fore_urvalet():
-    """Migration 136 (Codex runda 6): urvalet ska se allt som skrivits före
-    raderingen. Låset ska därför täcka varje tabell funktionen läser eller
-    skriver i, utom policyn och arbetsytorna, och tas före första urvalet. En
-    ny tabell i urvalet utan plats i låset fäller testet."""
-    sql = _sql()
-    kropp = sql.split("create or replace function public.gallra_tenant(", 1)[1]
-    las = re.search(r"lock table\s+(.*?)\s+in share row exclusive mode nowait;", kropp, re.S)
-    assert las, "gallra_tenant låser inte tabellerna"
-    lasta = set(re.findall(r"public\.(\w+)", las.group(1)))
-    rorda = set(re.findall(r"(?:from|join|update) public\.(\w+)", kropp)) - {
-        "ss_gallringspolicy", "workspaces", "ss_gallringslogg",
-    }
-    assert lasta == rorda, (
-        f"läser eller raderar utan lås: {sorted(rorda - lasta)}, låser i onödan: {sorted(lasta - rorda)}"
-    )
-    assert las.start() < kropp.index("select coalesce(array_agg("), "låset ska tas före urvalet"
+# Tabeller gallra_tenant rör utan radlås, och varför (migration 138). Allt
+# annat den läser eller skriver i ska låsas mellan varven.
+_UTAN_RADLAS = {
+    "ss_gallringspolicy": "policyn, inget urval",
+    "workspaces": "pekar ut arbetsytorna, inget urval",
+    "ss_gallringslogg": "gallringens egen logg",
+    "ss_messages": "nya rader blockeras via ss_conversations, tiderna ändras aldrig",
+    "ss_customer_identifiers": "nya rader blockeras via ss_customers, tiderna ändras aldrig",
+    "ss_demolank_handelser": "nya rader blockeras via ss_demolankar, tiderna ändras aldrig",
+    "agent_evals": "bara created_at",
+    "agent_suggestions": "bara created_at",
+    "platform_events": "bara created_at",
+    "ss_channel_inbound_seen": "raderas i en sats som prövar seen_at själv",
+    "suppressions": "en ny rad mot en låst kontakt blockeras via contacts",
+}
+
+
+def test_gallringen_laser_rader_inte_tabeller_och_valjer_igen():
+    """Codex runda 6 och 7: urvalet ska se allt som skrivits före raderingen,
+    utan att stoppa skrivningar hos andra kunder. Migration 138 väljer två
+    gånger, låser kandidaterna och raderna deras aktivitet räknas ur mellan
+    varven och raderar snittet. En ny tabell i urvalet utan radlås eller
+    uttalat skäl fäller testet."""
+    kropp = _sql().split("create or replace function public.gallra_tenant(", 1)[1]
+    assert "lock table" not in kropp.lower(), "ett tabellås stoppar skrivningar för alla kunder"
+    assert "for v_varv in 1..2 loop" in kropp
+    lasta = set(re.findall(r"perform 1 from public\.(\w+) .*? for update;", kropp))
+    rorda = set(re.findall(r"(?:from|join|update) public\.(\w+)", kropp))
+    saknas = rorda - lasta - set(_UTAN_RADLAS)
+    assert not saknas, f"läser eller raderar utan radlås och utan skäl: {sorted(saknas)}"
+    assert not (lasta & set(_UTAN_RADLAS)), "en tabell står både låst och som undantag"
+    for kategori in re.findall(r"(v_\w+)_1 := \1;", kropp):
+        assert f"{kategori} := array(select unnest({kategori}) intersect select unnest({kategori}_1));" in kropp, (
+            f"{kategori} sparas från första varvet men snittas inte"
+        )
 
 
 def test_varje_kaskadbarn_till_en_synkad_tabell_stadas_i_spegeln():

@@ -1030,8 +1030,9 @@ spegel bara för tabellerna synken inte för över (migration 133: när `mirror_
 finns nollar `gallra_tenant` urvalet för tabellerna i `scripts/railway_synk.py:SYNK`,
 som får main:s raderingar genom synken, och migration 134 raderar de barn utanför
 synken som synkens replica-raderingar lämnat föräldralösa; `tests/test_gallring_spegel.py`
-håller listorna ihop), låser före urvalet varje tabell urvalet läser eller raderar i
-(migration 136, så att inget som skrivs under körningen raderas), och gör
+håller listorna ihop), väljer två gånger med radlås på kandidaterna och raderna deras
+aktivitet räknas ur mellan varven och raderar bara snittet (migration 138, så att inget
+som skrivs under körningen raderas och ingen skrivning utanför kandidaterna väntar), och gör
 ingenting hos en kund vars urval överstiger taket (`GALLRING_TAK`) utan larmar. Varje
 körning loggas per kund i `ss_gallringslogg`, läsbar via `GET /api/admin/gallring`.
 Varför: integritetspolicyn lovar 24 månader från senaste behandlingen i alla

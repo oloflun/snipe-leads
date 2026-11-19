@@ -517,12 +517,12 @@ async def test_kvarvarande_arende_behaller_alla_sina_forfader():
 
 @pytest.mark.anyio
 async def test_meddelande_som_sparas_under_gallringen_raderas_inte():
-    """Migration 136 (Codex runda 6, 2026-11-19): urvalet låg utan lås, och
-    raderingen gick på id. Ett meddelande som sparades mellan urvalet och
-    raderingen hindrade inte att ärendet togs, och kaskaden tog meddelandet
-    med sig. Nu väntar gallringen ut den skrivande transaktionen innan den
-    väljer, och ärendet står kvar med det nya meddelandet. Torrkörningen
-    låser inte och väntar inte."""
+    """Codex runda 6, 2026-11-19: urvalet låg utan lås, och raderingen gick på
+    id. Ett meddelande som sparades mellan urvalet och raderingen hindrade inte
+    att ärendet togs, och kaskaden tog meddelandet med sig. Sedan migration 138
+    låser gallringen kandidaternas rader efter första urvalet, väntar där ut den
+    skrivande transaktionen, och andra urvalet ser meddelandet: ärendet står
+    kvar. Torrkörningen låser inte och väntar inte."""
     import asyncio
 
     conn = await _anslut(DSN)
@@ -574,9 +574,62 @@ async def test_meddelande_som_sparas_under_gallringen_raderas_inte():
 
 
 @pytest.mark.anyio
+async def test_gallringen_stoppar_inte_skrivningar_utanfor_sina_kandidater():
+    """Codex runda 7: tabellåset i 136 stoppade skrivningar för alla kunder
+    tills hela dygnskörningen var klar. Med radlåsen i 138 håller gallringen av
+    kund A sin transaktion öppen, och ändå går ett meddelande hos kund B, en
+    händelse och ett nytt ärende hos A igenom direkt."""
+    import asyncio
+
+    gallrare = await _anslut(DSN)
+    annan = await _anslut(DSN)
+    try:
+        a = await _ny_tenant(gallrare, "las-a", policy=POLICY_DAGAR)
+        b = await _ny_tenant(gallrare, "las-b", policy=POLICY_DAGAR)
+
+        async def gammalt_arende(t):
+            kund = await gallrare.fetchval(
+                f"insert into ss_customers (tenant_id, name, created_at) values ($1, 'Kund', {NY}) returning id",
+                t["id"])
+            arende = await gallrare.fetchval(
+                f"""insert into ss_tickets (tenant_id, customer_id, subject, created_at, updated_at)
+                    values ($1, $2, 'Gammalt', {GAMMAL}, {GAMMAL}) returning id""",
+                t["id"], kund)
+            samtal = await gallrare.fetchval(
+                f"insert into ss_conversations (tenant_id, ticket_id, created_at) values ($1, $2, {GAMMAL}) returning id",
+                t["id"], arende)
+            return kund, arende, samtal
+
+        kund_a, arende_a, _ = await gammalt_arende(a)
+        _, _, samtal_b = await gammalt_arende(b)
+
+        tx = gallrare.transaction()
+        await tx.start()
+        try:
+            svar = _json(await gallrare.fetchval("select gallra_tenant($1, false)", a["id"]))
+            assert svar["status"] == "klar" and svar["antal"]["ss_tickets"]["antal"] == 1, svar
+
+            await asyncio.wait_for(annan.execute(
+                """insert into ss_messages (tenant_id, conversation_id, direction, content)
+                   values ($1, $2, 'inbound', 'Hos en annan kund.')""", b["id"], samtal_b), timeout=3)
+            await asyncio.wait_for(annan.execute(
+                "insert into platform_events (tenant_id, level, source, message) values ($1, 'info', 'test', 'medan')",
+                a["id"]), timeout=3)
+            await asyncio.wait_for(annan.execute(
+                "insert into ss_tickets (tenant_id, customer_id, subject) values ($1, $2, 'Nytt')",
+                a["id"], kund_a), timeout=3)
+        finally:
+            await tx.commit()
+        assert not await _finns(gallrare, "ss_tickets", arende_a)
+    finally:
+        await gallrare.close()
+        await annan.close()
+
+
+@pytest.mark.anyio
 async def test_gallringen_raderar_bara_i_read_committed():
-    """Migration 136: i repeatable read tas ögonblicksbilden före låset, och
-    urvalet hade då inte sett det som skrevs medan gallringen väntade."""
+    """Migration 138: i repeatable read delar båda urvalen ögonblicksbild, och
+    det andra hade då inte sett det som skrevs medan gallringen väntade."""
     conn = await _anslut(DSN)
     try:
         t = await _ny_tenant(conn, "isolering", policy=POLICY_DAGAR)
