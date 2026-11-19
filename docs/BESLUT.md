@@ -163,6 +163,14 @@ teknisk skrivning över gamla rader skulle däremot hålla dem vid liv för allt
 finns i dag (städaren rör bara hängande jobb och listor, en gång), och INV-DATA-005 säger att
 ingen får tillkomma.
 
+**Runda 11 (samma dag).** Ett fel, åt andra hållet: 142 lät listraden följa prospektet men
+inte tvärtom. "Processa om" uppdaterar listradens `processad_at` och rör prospektet bara när
+kontakten ändrats, så ett gammalt prospekt raderades med sina trådar medan den nyss
+behandlade listraden blev kvar utan koppling. Migration 143 räknar listraderna i prospektets
+urval och låser dem mellan varven även när de inte själva väljs. Skäl: en rad som en
+människa nyss arbetat med ska aldrig förlora sin bakgrund, oavsett vilken av de två
+tabellerna arbetet skrevs i.
+
 ## 2026-11-19 — Synkflytten verkställs i development; mains steg väntar på releasen (Claude (agent), på Antons uppdrag "verkställ synkflytten")
 
 **Beslut.**

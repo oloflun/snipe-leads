@@ -888,6 +888,71 @@ async def test_varje_andring_ar_en_behandling_och_listraden_foljer_prospektet():
 
 
 @pytest.mark.anyio
+async def test_omprocessad_listrad_skyddar_sitt_prospekt():
+    """Codex runda 11: "Processa om" uppdaterar listradens processad_at och
+    rör bakgrundsprospektet bara när kontakten ändrats. Prospektets urval
+    räknade inte listraden, så ett gammalt prospekt raderades med sina trådar
+    medan listraden blev kvar utan koppling. Sedan migration 143 räknar
+    prospektet sina listrader, och låset tar listraderna som pekar på ett
+    kandidatprospekt: en omprocessning före gallringen och en som håller sin
+    transaktion öppen under den räddar båda prospektet."""
+    import asyncio
+
+    conn = await _anslut(DSN)
+    skrivare = await _anslut(DSN)
+    try:
+        t = await _ny_tenant(conn, "omprocess", policy=POLICY_DAGAR)
+        tid = t["id"]
+
+        async def listprospekt(namn: str) -> tuple:
+            pid = await conn.fetchval(
+                f"""insert into prospects (tenant_id, company_name, contact_name, contact_email, created_at)
+                    values ($1, $2, 'Test Testsson', $3, {GAMMAL}) returning id""",
+                tid, f"Omprocessbolag {namn} AB", f"vd.{namn}.{uuid.uuid4().hex[:6]}@example.com")
+            trad = await conn.fetchval(
+                f"insert into outreach_threads (tenant_id, prospect_id, created_at) values ($1, $2, {GAMMAL}) returning id",
+                tid, pid)
+            lid = await conn.fetchval(
+                f"""insert into lead_lists (tenant_id, titel, antal, status, created_at, completed_at)
+                    values ($1, 'Lista', 1, 'klar', {GAMMAL}, {GAMMAL}) returning id""", tid)
+            rad = await conn.fetchval(
+                f"""insert into lead_list_items (list_id, tenant_id, company_name, contact_email, prospect_id,
+                         created_at, processad_at)
+                    values ($1, $2, 'Listbolag AB', $3, $4, {GAMMAL}, {GAMMAL}) returning id""",
+                lid, tid, f"rad.{namn}.{uuid.uuid4().hex[:6]}@example.com", pid)
+            return pid, trad, rad
+
+        p_fore, trad_fore, r_fore = await listprospekt("fore")
+        p_under, trad_under, r_under = await listprospekt("under")
+        p_orord, _, r_orord = await listprospekt("orord")
+
+        # Omprocessningen före gallringen: bara listraden ändras.
+        await conn.execute("update lead_list_items set processad_at = now() where id = $1", r_fore)
+
+        # Omprocessningen under gallringen håller sin transaktion öppen.
+        tx = skrivare.transaction()
+        await tx.start()
+        await skrivare.execute("update lead_list_items set processad_at = now() where id = $1", r_under)
+        gallring = asyncio.create_task(conn.fetchval("select gallra_tenant($1, false)", tid))
+        await asyncio.sleep(0.6)
+        assert not gallring.done(), "gallringen ska vänta ut omprocessningen"
+        await tx.commit()
+        svar = _json(await asyncio.wait_for(gallring, timeout=15))
+        assert svar["status"] == "klar", svar
+
+        for pid, trad, rad in ((p_fore, trad_fore, r_fore), (p_under, trad_under, r_under)):
+            assert await _finns(conn, "prospects", pid), "en omprocessad listrad skyddade inte sitt prospekt"
+            assert await _finns(conn, "outreach_threads", trad)
+            assert await conn.fetchval("select prospect_id from lead_list_items where id = $1", rad) == pid
+        for tabell, id_ in (("prospects", p_orord), ("lead_list_items", r_orord)):
+            assert not await _finns(conn, tabell, id_), f"{tabell} {id_} skulle ha gallrats"
+        assert svar["antal"]["prospects"]["antal"] == 1
+    finally:
+        await conn.close()
+        await skrivare.close()
+
+
+@pytest.mark.anyio
 async def test_spegeln_raderar_barn_som_synken_lamnat_foraldralosa():
     """Migration 134 (Codex runda 4, 2026-11-19): synken raderar kunden i
     replica-läge, där kaskaden inte körs. Kanalkontakten och chattläget blir

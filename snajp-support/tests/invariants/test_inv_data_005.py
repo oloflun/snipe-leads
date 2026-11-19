@@ -118,6 +118,21 @@ def test_varje_andring_raknas_som_behandling():
     assert "and (prospect_id is null or prospect_id = any(v_prospekt))" in sql
 
 
+def test_listraden_skyddar_sitt_prospekt():
+    """Migration 143 (Codex runda 11): en omprocessad listrad ändrar inte
+    prospektet när kontakten är oförändrad. Prospektets urval räknar därför
+    listraderna som pekar på det, och låset tar dem även när de inte själva
+    väljs."""
+    senaste = [f for f in _gallringsmigrationer()
+               if "function public.gallra_tenant" in f.read_text(encoding="utf-8")][-1]
+    sql = _utan_kommentarer(senaste.read_text(encoding="utf-8"))
+    assert re.search(r"select max\(greatest\(i\.created_at, i\.processad_at, i\.behandlad_at\)\)\s*"
+                     r"from public\.lead_list_items i where i\.prospect_id = p\.id", sql), (
+        f"{senaste.name}: prospektets urval räknar inte sina listrader")
+    assert ("perform 1 from public.lead_list_items where id = any(v_listrader) "
+            "or prospect_id = any(v_prospekt) for update;") in sql
+
+
 def test_jobbet_ar_av_som_standard():
     config = (APP / "config.py").read_text(encoding="utf-8")
     assert re.search(r"^\s*gallring_aktiv:\s*bool\s*=\s*False\s*$", config, re.MULTILINE)
