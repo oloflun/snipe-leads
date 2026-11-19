@@ -403,7 +403,7 @@ async def test_h_olasbar_utgang_hoppar_over_cachen(monkeypatch):
     async def _fel(_tenant):
         raise RuntimeError("databasen svarar inte")
 
-    monkeypatch.setattr(storage, "kb_nasta_utgang", _fel)
+    monkeypatch.setattr(storage, "kb_cachestatus", _fel)
     llm = _FakeLLM(category="leverans")
     await _kor(storage, llm, message="Hur lång är leveranstiden?", customer_email="fel@example.com")
     assert llm.calls == EXPECTED_ORDER_NORMAL

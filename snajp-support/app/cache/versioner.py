@@ -100,20 +100,28 @@ async def kb_version_med_giltighet(storage: Any, tenant_id: str) -> str | None:
     dag matchade i upp till 21 dagar till (Codex-granskningen 2026-11-19).
     Med den tidigaste `giltig_till` som ännu gäller i strängen byter versionen
     värde så fort den dagen passerat, och varje post från före blir omatchbar.
-    Formatet bär alltid prefixet `g1:`, också utan slutdatum. Utan det hade
+    Formatet bär alltid ett prefix, också utan slutdatum. Utan det hade
     versionen återgått till den gamla, rena räknaren när tenantens sista
     tidsbegränsade artikel gått ut, och en post cachad före den här ändringen,
     på den artikeln, hade matchat igen (Codex-granskningen runda 4).
 
-    None när utgången inte gick att läsa: anroparen hoppar då över cachen helt,
-    både uppslag och lagring (fail closed)."""
+    Runda 6: räknaren i Redis höjdes efter att artikeln committats. Föll Redis
+    där, eller processen, lästes den gamla versionen igen och gamla svar
+    matchade vidare. Strängen bär därför också basens egen version ur
+    databasen (`d`), som byter värde i samma transaktion som artikeln
+    (migration 137). Prefixet är `g2:` sedan dess, så att ingen post i det
+    gamla formatet kan matcha.
+
+    None när databasdelen inte gick att läsa: anroparen hoppar då över cachen
+    helt, både uppslag och lagring (fail closed)."""
     bas = await kb_version(tenant_id)
     try:
-        utgang = await storage.kb_nasta_utgang(tenant_id)
+        databas, utgang = await storage.kb_cachestatus(tenant_id)
     except Exception:  # noqa: BLE001 — cachen är en optimering, aldrig ett måste
-        logger.warning("Kunde inte läsa KB-utgångarna för %s; svarscachen hoppas över.", tenant_id)
+        logger.warning("Kunde inte läsa KB-versionen för %s; svarscachen hoppas över.", tenant_id)
         return None
-    return f"g1:{bas}:u{utgang.isoformat()}" if utgang else f"g1:{bas}"
+    version = f"g2:{bas}:d{databas}"
+    return f"{version}:u{utgang.isoformat()}" if utgang else version
 
 
 async def config_version(tenant_id: str) -> str:

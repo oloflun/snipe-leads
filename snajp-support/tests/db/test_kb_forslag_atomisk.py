@@ -104,6 +104,47 @@ async def test_ett_fel_mitt_i_rullar_tillbaka_och_ett_nytt_forsok_lyckas():
 
 
 @pytest.mark.anyio
+async def test_kb_versionen_foljer_artikelns_transaktion():
+    """Migration 137 (Codex runda 6): svarscachens KB-version byter värde i
+    samma transaktion som artikeln, inte efteråt i Redis. En tillbakarullad
+    skrivning lämnar den orörd, en lyckad byter den, en annan kund ser den
+    inte, och raden följer kunden när kunden raderas."""
+    from app.storage.postgres import PostgresStorage
+
+    agare = await _agare()
+    tid, fid = await _kund_med_utkast(agare)
+    annan, _ = await _kund_med_utkast(agare)
+    pool = await asyncpg.create_pool(APP_DSN, min_size=1, max_size=1)
+    try:
+        lager = PostgresStorage(pool)
+        fore, _ = await lager.kb_cachestatus(tid)
+        assert fore == "0"
+
+        with pytest.raises(Exception):
+            await lager.lagg_till_kb_forslag(tid, fid, embedding=[0.1, 0.2])
+        assert (await lager.kb_cachestatus(tid))[0] == fore, "en tillbakarullad skrivning höjde versionen"
+
+        assert await lager.lagg_till_kb_forslag(tid, fid, embedding=None)
+        efter, _ = await lager.kb_cachestatus(tid)
+        assert efter != fore, "artikeln committades utan att KB-versionen bytte värde"
+        assert (await lager.kb_cachestatus(annan))[0] == "0", "en annan kunds version påverkades"
+
+        # Radskyddet: approllen med en annan kunds tenant ser inte raden.
+        async with pool.acquire() as conn:
+            async with conn.transaction():
+                await conn.execute("select set_config('app.tenant_id', $1, true)", annan)
+                assert await conn.fetchval("select count(*) from ss_kb_version where tenant_id = $1::uuid", tid) == 0
+    finally:
+        await pool.close()
+        await _stada(agare, tid)
+        await _stada(agare, annan)
+        rester = await agare.fetchval(
+            "select count(*) from ss_kb_version where tenant_id = any($1::uuid[])", [tid, annan])
+        await agare.close()
+    assert rester == 0, "KB-versionen blev kvar efter att kunden raderats"
+
+
+@pytest.mark.anyio
 async def test_migration_130_lagger_tillbaka_utkast_utan_artikel():
     agare = await _agare()
     tid, fid = await _kund_med_utkast(agare, status="tillagd")

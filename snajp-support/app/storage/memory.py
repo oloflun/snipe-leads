@@ -755,17 +755,24 @@ class MemoryStorage:
             if score >= 0.12
         ]
 
-    async def kb_nasta_utgang(self, tenant_id: str) -> date | None:
+    async def kb_cachestatus(self, tenant_id: str) -> tuple[str, date | None]:
         from zoneinfo import ZoneInfo
 
+        artiklar = self.kb.get(tenant_id, [])
+        # Postgres har en räknare som en trigger höjer (migration 137). Här
+        # räcker ett fingeravtryck av själva artiklarna: det byter värde vid
+        # varje ändring, oavsett vilken metod som gjorde den.
+        version = hashlib.sha256(
+            json.dumps(artiklar, sort_keys=True, default=str).encode("utf-8")
+        ).hexdigest()[:16]
         idag = datetime.now(ZoneInfo("Europe/Stockholm")).date()
         datum = [
             date.fromisoformat(str(a["giltig_till"]))
-            for a in self.kb.get(tenant_id, [])
+            for a in artiklar
             if a.get("giltig_till")
         ]
         kvar = [d for d in datum if d >= idag]
-        return min(kvar) if kvar else None
+        return version, (min(kvar) if kvar else None)
 
     async def list_kb(self, tenant_id: str) -> list[dict[str, Any]]:
         return [

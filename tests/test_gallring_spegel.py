@@ -93,6 +93,25 @@ def _kaskadbarn_till_synkade(synkade: set[str]) -> set[tuple[str, str]]:
     return {(barn, foralder) for barn, foralder in par if foralder in synkade and barn not in synkade}
 
 
+def test_gallringen_laser_varje_tabell_den_laser_eller_raderar_i_fore_urvalet():
+    """Migration 136 (Codex runda 6): urvalet ska se allt som skrivits före
+    raderingen. Låset ska därför täcka varje tabell funktionen läser eller
+    skriver i, utom policyn och arbetsytorna, och tas före första urvalet. En
+    ny tabell i urvalet utan plats i låset fäller testet."""
+    sql = _sql()
+    kropp = sql.split("create or replace function public.gallra_tenant(", 1)[1]
+    las = re.search(r"lock table\s+(.*?)\s+in share row exclusive mode nowait;", kropp, re.S)
+    assert las, "gallra_tenant låser inte tabellerna"
+    lasta = set(re.findall(r"public\.(\w+)", las.group(1)))
+    rorda = set(re.findall(r"(?:from|join|update) public\.(\w+)", kropp)) - {
+        "ss_gallringspolicy", "workspaces", "ss_gallringslogg",
+    }
+    assert lasta == rorda, (
+        f"läser eller raderar utan lås: {sorted(rorda - lasta)}, låser i onödan: {sorted(lasta - rorda)}"
+    )
+    assert las.start() < kropp.index("select coalesce(array_agg("), "låset ska tas före urvalet"
+
+
 def test_varje_kaskadbarn_till_en_synkad_tabell_stadas_i_spegeln():
     """Migration 134 (Codex runda 4): synken raderar i replica-läge, där
     kaskaderna inte körs. Ett barn utanför SYNK till en förälder i SYNK blir

@@ -82,6 +82,26 @@ främmande nyckeln bröts och hela kundens gallring rullades tillbaka. Migration
 varje förfader rekursivt; databastestet prövar tre led och att kundens övriga kategorier
 gallras.
 
+**Runda 6 (samma dag).** Två fel, rättade:
+
+- *Gallringen kunde radera ny aktivitet.* Urvalen låg i arrayer utan lås och raderingen gick
+  på id. Ett meddelande som sparades mellan urvalet och raderingen hindrade inte att ärendet
+  togs, och kaskaden tog meddelandet med sig. Migration 136 låser varje tabell urvalet läser
+  eller raderar i (share row exclusive) före urvalet. Låset tas med nowait i tio sekunders
+  försök, så gallringen väntar aldrig med lås i handen och kan inte hamna i ett dödläge med en
+  skrivande transaktion; går det inte ger den upp för kunden, och nästa körning tar den.
+  Skälet till ett tabellås i stället för radlås och ny kontroll: urvalet läser ett trettiotal
+  tabeller, och en ny kontroll per kategori hade dubblerat hela urvalet. Priset är att
+  skrivningar i de tabellerna väntar medan gallringen pågår, några sekunder en gång per dygn.
+  Ett test håller låslistan lika med tabellerna funktionen rör, och ett databastest sparar ett
+  meddelande mitt under gallringen.
+- *KB-versionen överlevde inte ett Redis-fel.* Räknaren i Redis höjdes efter att artikeln
+  committats; föll Redis eller processen där matchade gamla svar i upp till 21 dagar till.
+  Migration 137 lägger en räknare per kund i databasen (`ss_kb_version`) som en trigger på
+  `ss_knowledge_base` höjer i samma transaktion som varje ändring, oavsett skrivväg. Den ingår
+  i cachenyckeln, som nu har prefixet `g2:`. Redis-räknaren står kvar bredvid; den kan bara
+  göra en post omatchbar tidigare, aldrig hålla en gammal vid liv.
+
 ## 2026-11-19 — Synkflytten verkställs i development; mains steg väntar på releasen (Claude (agent), på Antons uppdrag "verkställ synkflytten")
 
 **Beslut.**

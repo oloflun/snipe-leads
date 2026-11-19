@@ -701,6 +701,11 @@ körning (`svarscache.svara_fran_cache`). Läge `shadow` loggar bara en
 `PUT /api/admin/instruktioner`) som bumpas från KB-skrivvägen
 (`app/api/kb.py`) och tenantprofilens instruktioner/ton/SOUL-skrivväg
 (`app/api/admin_profil.py`) — en bump gör varenda äldre post omatchbar.
+KB-versionen bär dessutom basens egen version ur databasen (`ss_kb_version`, som en
+trigger höjer i samma transaktion som varje artikeländring, migration 137) och den
+närmaste artikelutgången (`versioner.kb_version_med_giltighet`), så att varken ett
+Redis-fel efter commit eller en artikel som går ut lämnar gamla svar giltiga; går
+den inte att läsa hoppas cachen över.
 `scripts/kor_evals.py` sätter `SEMANTIC_CACHE=off` explicit.
 Varför: en cache som kunde återanvända ett svar format kring EN kunds
 historik, minnesfakta eller personnummer på en ANNAN kund vore en läcka, inte
@@ -1025,7 +1030,8 @@ spegel bara för tabellerna synken inte för över (migration 133: när `mirror_
 finns nollar `gallra_tenant` urvalet för tabellerna i `scripts/railway_synk.py:SYNK`,
 som får main:s raderingar genom synken, och migration 134 raderar de barn utanför
 synken som synkens replica-raderingar lämnat föräldralösa; `tests/test_gallring_spegel.py`
-håller listorna ihop), och gör
+håller listorna ihop), låser före urvalet varje tabell urvalet läser eller raderar i
+(migration 136, så att inget som skrivs under körningen raderas), och gör
 ingenting hos en kund vars urval överstiger taket (`GALLRING_TAK`) utan larmar. Varje
 körning loggas per kund i `ss_gallringslogg`, läsbar via `GET /api/admin/gallring`.
 Varför: integritetspolicyn lovar 24 månader från senaste behandlingen i alla

@@ -183,6 +183,7 @@ Registrerade: i regel inga; kunskapsbas och kontextdokument kan nämna kundens a
 | `ss_knowledge_base` | Artiklar, källa | LIUR, kund | – (126) | Nej | Avtalets löptid |
 | `ss_kb_skanningar` | Skanning av kundens webbplats, vem som startade | LIU, kund | – (126) | Nej | 12 månader |
 | `ss_kb_forslag` | Föreslagna artiklar ur skanningen | LIU, kund | – (126) | Nej | Avvisade: 12 månader. Godkända blir artiklar |
+| `ss_kb_version` | Ett räknartal per kund för svarscachen, inga personuppgifter (137) | L, kund; skrivs bara av triggern | – | Raderas med kunden | Avtalets löptid |
 | `ss_channel_configs` | Ton och längd per kanal | LIU, kund + globala rader | – (126) | Nej | Avtalets löptid |
 | `ss_channel_connections` | Kanalkoppling, krypterade hemligheter | LIUR, kund | – (126) | Nej | Så länge kopplingen är aktiv |
 | `ss_integrations` | Integration, krypterade hemligheter | LIUR, kund | – (126) | Nej | Så länge integrationen är aktiv |

@@ -1047,16 +1047,19 @@ class PostgresStorage:
             for r in records
         ]
 
-    async def kb_nasta_utgang(self, tenant_id: str) -> date | None:
+    async def kb_cachestatus(self, tenant_id: str) -> tuple[str, date | None]:
         async with self._scoped(tenant_id) as conn:
-            return await conn.fetchval(
+            rad = await conn.fetchrow(
                 """
-                select min(giltig_till) from ss_knowledge_base
-                where tenant_id = $1
-                  and giltig_till >= (now() at time zone 'Europe/Stockholm')::date
+                select
+                  coalesce((select version from ss_kb_version where tenant_id = $1), 0) as version,
+                  (select min(giltig_till) from ss_knowledge_base
+                    where tenant_id = $1
+                      and giltig_till >= (now() at time zone 'Europe/Stockholm')::date) as utgang
                 """,
                 tenant_id,
             )
+        return str(rad["version"]), rad["utgang"]
 
     async def list_kb(self, tenant_id: str) -> list[dict[str, Any]]:
         async with self._scoped(tenant_id) as conn:

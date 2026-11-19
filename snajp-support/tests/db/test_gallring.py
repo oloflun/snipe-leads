@@ -516,6 +516,81 @@ async def test_kvarvarande_arende_behaller_alla_sina_forfader():
 
 
 @pytest.mark.anyio
+async def test_meddelande_som_sparas_under_gallringen_raderas_inte():
+    """Migration 136 (Codex runda 6, 2026-11-19): urvalet låg utan lås, och
+    raderingen gick på id. Ett meddelande som sparades mellan urvalet och
+    raderingen hindrade inte att ärendet togs, och kaskaden tog meddelandet
+    med sig. Nu väntar gallringen ut den skrivande transaktionen innan den
+    väljer, och ärendet står kvar med det nya meddelandet. Torrkörningen
+    låser inte och väntar inte."""
+    import asyncio
+
+    conn = await _anslut(DSN)
+    skrivare = await _anslut(DSN)
+    torr = await _anslut(DSN)
+    try:
+        t = await _ny_tenant(conn, "samtidig", policy=POLICY_DAGAR)
+        kund = await conn.fetchval(
+            f"insert into ss_customers (tenant_id, name, created_at) values ($1, 'Samtidig Kund', {NY}) returning id",
+            t["id"])
+        arende = await conn.fetchval(
+            f"""insert into ss_tickets (tenant_id, customer_id, subject, created_at, updated_at)
+                values ($1, $2, 'Gammalt', {GAMMAL}, {GAMMAL}) returning id""",
+            t["id"], kund)
+        samtal = await conn.fetchval(
+            f"insert into ss_conversations (tenant_id, ticket_id, created_at) values ($1, $2, {GAMMAL}) returning id",
+            t["id"], arende)
+        await conn.execute(
+            f"""insert into ss_messages (tenant_id, conversation_id, direction, content, created_at)
+                values ($1, $2, 'inbound', 'Gammal fråga.', {GAMMAL})""",
+            t["id"], samtal)
+
+        tx = skrivare.transaction()
+        await tx.start()
+        nytt = await skrivare.fetchval(
+            """insert into ss_messages (tenant_id, conversation_id, direction, content)
+               values ($1, $2, 'inbound', 'Ny fråga i det gamla ärendet.') returning id""",
+            t["id"], samtal)
+
+        # Torrkörningen går igenom fast skrivaren håller sin transaktion öppen.
+        torrsvar = _json(await asyncio.wait_for(
+            torr.fetchval("select gallra_tenant($1, true)", t["id"]), timeout=5))
+        assert torrsvar["status"] == "torrkorning", torrsvar
+
+        gallring = asyncio.create_task(conn.fetchval("select gallra_tenant($1, false)", t["id"]))
+        await asyncio.sleep(0.6)
+        assert not gallring.done(), "gallringen ska vänta ut den skrivande transaktionen"
+        await tx.commit()
+
+        svar = _json(await asyncio.wait_for(gallring, timeout=15))
+        assert svar["status"] == "klar", svar
+        assert await _finns(conn, "ss_tickets", arende), "ärendet raderades fast det fick ett nytt meddelande"
+        assert await _finns(conn, "ss_messages", nytt), "det nya meddelandet raderades av gallringen"
+        assert svar["antal"]["ss_tickets"]["antal"] == 0
+    finally:
+        await conn.close()
+        await skrivare.close()
+        await torr.close()
+
+
+@pytest.mark.anyio
+async def test_gallringen_raderar_bara_i_read_committed():
+    """Migration 136: i repeatable read tas ögonblicksbilden före låset, och
+    urvalet hade då inte sett det som skrevs medan gallringen väntade."""
+    conn = await _anslut(DSN)
+    try:
+        t = await _ny_tenant(conn, "isolering", policy=POLICY_DAGAR)
+        async with conn.transaction(isolation="repeatable_read"):
+            with pytest.raises(asyncpg.exceptions.InvalidTransactionStateError):
+                await conn.fetchval("select gallra_tenant($1, false)", t["id"])
+        async with conn.transaction(isolation="repeatable_read"):
+            svar = _json(await conn.fetchval("select gallra_tenant($1, true)", t["id"]))
+            assert svar["status"] == "torrkorning"
+    finally:
+        await conn.close()
+
+
+@pytest.mark.anyio
 async def test_spegeln_raderar_barn_som_synken_lamnat_foraldralosa():
     """Migration 134 (Codex runda 4, 2026-11-19): synken raderar kunden i
     replica-läge, där kaskaden inte körs. Kanalkontakten och chattläget blir

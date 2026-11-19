@@ -387,11 +387,17 @@ class Storage(Protocol):
         tills vidare. Träffarna bär `source_url` (migration 117)."""
         ...
 
-    async def kb_nasta_utgang(self, tenant_id: str) -> date | None:
-        """Den tidigaste `giltig_till` som ännu inte passerat (svensk dag), eller
-        None när ingen artikel har ett slutdatum framför sig. Svarscachen lägger
-        datumet i KB-versionen, så att ett cachat svar slutar matcha när en
-        artikel går ut (Codex-granskningen 2026-11-19)."""
+    async def kb_cachestatus(self, tenant_id: str) -> tuple[str, date | None]:
+        """(basens version, närmaste utgång) för svarscachens KB-version.
+
+        Versionen byter värde i samma transaktion som varje ändring av kundens
+        artiklar (Postgres: räknaren ss_kb_version, migration 137), så att ett
+        Redis-fel eller ett avbrott efter commit aldrig lämnar gamla svar
+        giltiga (Codex-granskningen runda 6). Utgången är den tidigaste
+        `giltig_till` som ännu inte passerat (svensk dag), eller None när ingen
+        artikel har ett slutdatum framför sig; med den i versionen slutar ett
+        cachat svar matcha när en artikel går ut (Codex-granskningen
+        2026-11-19)."""
         ...
 
     async def list_kb(self, tenant_id: str) -> list[dict[str, Any]]:

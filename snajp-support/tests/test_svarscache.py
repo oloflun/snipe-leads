@@ -337,13 +337,44 @@ async def test_kb_version_med_giltighet_ateranvander_aldrig_det_gamla_formatet()
         TENANT_A, title="Kampanj", content="Gäller i dag.", category="ovrigt", giltig_till=idag
     )
     med_utgang = await versioner.kb_version_med_giltighet(lagring, TENANT_A)
-    assert med_utgang == f"g1:{gammal_post}:u{idag.isoformat()}"
+    assert med_utgang.startswith(f"g2:{gammal_post}:d")
+    assert med_utgang.endswith(f":u{idag.isoformat()}")
 
     for artikel in lagring.kb[TENANT_A]:
         artikel["giltig_till"] = str(idag - timedelta(days=1))
     efter = await versioner.kb_version_med_giltighet(lagring, TENANT_A)
-    assert efter == f"g1:{gammal_post}"
-    assert efter not in (gammal_post, med_utgang)
+    assert efter.startswith(f"g2:{gammal_post}:d") and ":u" not in efter
+    assert efter not in (gammal_post, med_utgang, f"g1:{gammal_post}")
+
+
+@pytest.mark.anyio
+async def test_kb_versionen_byter_varde_fast_redis_faller_efter_artikeln():
+    """Codex runda 6: artikeln committades och sedan föll höjningen i Redis.
+    Nästa läsning i Redis gav den gamla räknaren, och gamla svar matchade i
+    upp till 21 dagar. Basens egen version (databasdelen) byter värde med
+    artikeln, så hela versionen gör det också när Redis står still."""
+    from app.storage.memory import MemoryStorage
+
+    class _Redis:
+        async def get(self, _nyckel):
+            return b"7"
+
+        async def incr(self, _nyckel):
+            raise ConnectionError("Redis svarar inte")
+
+    versioner.konfigurera(_Redis())
+    try:
+        lagring = MemoryStorage()
+        fore = await versioner.kb_version_med_giltighet(lagring, TENANT_A)
+        await lagring.add_kb_article(
+            TENANT_A, title="Ny artikel", content="Ny text.", category="ovrigt"
+        )
+        await versioner.bumpa_kb(TENANT_A)  # fångar Redis-felet
+        efter = await versioner.kb_version_med_giltighet(lagring, TENANT_A)
+        assert await versioner.kb_version(TENANT_A) == "7", "förutsättningen: Redis står still"
+        assert efter != fore, "en ny artikel måste byta KB-version även när Redis inte höjs"
+    finally:
+        versioner.konfigurera(None)
 
 
 @pytest.mark.anyio
