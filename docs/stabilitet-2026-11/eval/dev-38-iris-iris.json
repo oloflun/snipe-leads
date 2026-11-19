@@ -1,0 +1,624 @@
+{
+ "etikett": "dev-38-iris",
+ "agent": "iris",
+ "miljo": "development",
+ "commit": "5a8aee9",
+ "tid": "2026-11-18T23:42:48+00:00",
+ "sammanfattning": {
+  "antal": 11,
+  "godkanda": 9,
+  "andel": 0.818,
+  "per_kriterium": {
+   "inga_pahitt": 1.0,
+   "levererat": 0.909,
+   "skrivregler": 0.909
+  },
+  "per_typ": {
+   "svag-signal": "1/1",
+   "tydlig-signal": "8/10"
+  }
+ },
+ "tekniska_fel": 0,
+ "latens_s": {
+  "p50": 41.0,
+  "p95": 72.9,
+  "max": 76.94
+ },
+ "fall": [
+  {
+   "id": "vvs-borlange-bergvarme",
+   "typ": "tydlig-signal",
+   "kriterier": {
+    "levererat": true,
+    "inga_pahitt": true,
+    "skrivregler": true
+   },
+   "fel": null,
+   "latens_s": 35.46,
+   "svar": {
+    "subject": "frågor om bokning och priser",
+    "body": "Hej,\n\nNi servar bergvärmepumpar åt villaägare och bostadsrättsföreningar i Dalarna. Vår supportagent svarar på kundernas mejl- och chattfrågor utifrån er kunskapsbas, och lämnar över till er när den är osäker.\n\nNi betalar en fast månadsavgift för tjänsten.\n\nVill ni veta mer är det bara att svara på mejlet så bokar vi en genomgång.",
+    "queued": true,
+    "escalated": false,
+    "escalation_reason": null,
+    "tokens_in": 124847,
+    "steg": [
+     {
+      "skill": "sa:draft-outreach",
+      "ms": 3350,
+      "forsok": 1
+     },
+     {
+      "skill": "sa:draft-outreach",
+      "ms": 3279,
+      "forsok": 1
+     },
+     {
+      "skill": "sa:draft-outreach",
+      "ms": 3536,
+      "forsok": 1
+     },
+     {
+      "skill": "snajp:humanizer-svenska",
+      "ms": 13922,
+      "forsok": 1
+     },
+     {
+      "skill": "sa:draft-outreach",
+      "ms": 3142,
+      "forsok": 1
+     },
+     {
+      "skill": "snajp:humanizer-svenska",
+      "ms": 4377,
+      "forsok": 1
+     }
+    ]
+   },
+   "upplysning": {
+    "signal": true
+   }
+  },
+  {
+   "id": "bygg-umea-altan-fastpris",
+   "typ": "tydlig-signal",
+   "kriterier": {
+    "levererat": true,
+    "inga_pahitt": true,
+    "skrivregler": true
+   },
+   "fel": null,
+   "latens_s": 36.64,
+   "svar": {
+    "subject": "frågorna om era altanbyggen",
+    "body": "Hej,\n\nNi bygger altaner och uterum åt privatpersoner i Umeå som frågar om bygglov och fast pris via webben. Vår Supportagent svarar på de mejlfrågorna åt er på svenska utifrån er information, och lämnar över till er när den inte säkert kan svara.\n\nTjänsten kostar en fast månadsavgift.\n\nVill ni veta mer bokar vi gärna en genomgång om ni svarar här.",
+    "queued": true,
+    "escalated": false,
+    "escalation_reason": null,
+    "tokens_in": 82721,
+    "steg": [
+     {
+      "skill": "sa:draft-outreach",
+      "ms": 4269,
+      "forsok": 1
+     },
+     {
+      "skill": "sa:draft-outreach",
+      "ms": 21383,
+      "forsok": 1
+     },
+     {
+      "skill": "sa:draft-outreach",
+      "ms": 3498,
+      "forsok": 1
+     },
+     {
+      "skill": "snajp:humanizer-svenska",
+      "ms": 4292,
+      "forsok": 1
+     }
+    ]
+   },
+   "upplysning": {
+    "signal": true
+   }
+  },
+  {
+   "id": "ehandel-boras-norge-finland",
+   "typ": "tydlig-signal",
+   "kriterier": {
+    "levererat": true,
+    "inga_pahitt": true,
+    "skrivregler": true
+   },
+   "fel": null,
+   "latens_s": 40.97,
+   "svar": {
+    "subject": "frågor om tull och fraktkostnad",
+    "body": "Hej,\n\nEra nya kunder i Norge och Finland ställer ofta frågor om tull, fraktkostnad och leveranstid. Vår supportagent svarar på de frågorna hos er på svenska utifrån er kunskapsbas, och lämnar över när den inte säkert kan svara.\n\nTjänsten har en fast månadsavgift.\n\nVill ni veta mer är det bara att svara på mejlet, så bokar vi en genomgång.",
+    "queued": true,
+    "escalated": false,
+    "escalation_reason": null,
+    "tokens_in": 82617,
+    "steg": [
+     {
+      "skill": "sa:draft-outreach",
+      "ms": 3379,
+      "forsok": 1
+     },
+     {
+      "skill": "sa:draft-outreach",
+      "ms": 3380,
+      "forsok": 1
+     },
+     {
+      "skill": "sa:draft-outreach",
+      "ms": 18708,
+      "forsok": 1
+     },
+     {
+      "skill": "snajp:humanizer-svenska",
+      "ms": 11592,
+      "forsok": 1
+     }
+    ]
+   },
+   "upplysning": {
+    "signal": true
+   }
+  },
+  {
+   "id": "redovisning-vasteras-kundportal",
+   "typ": "tydlig-signal",
+   "kriterier": {
+    "levererat": true,
+    "inga_pahitt": true,
+    "skrivregler": true
+   },
+   "fel": null,
+   "latens_s": 76.94,
+   "svar": {
+    "subject": "underlag och inloggning i portalen",
+    "body": "Hej,\n\nEra kunder mejlar ofta om hur de loggar in, vilka underlag som ska laddas upp och när momsen ska redovisas. Vår supportagent svarar på kundernas mejl och chattfrågor direkt utifrån er kunskapsbas, och lämnar över till er när den inte säkert vet svaret.\n\nTjänsten har en fast månadsavgift.\n\nVill ni veta mer är det bara att svara här, så bokar vi en genomgång.",
+    "queued": true,
+    "escalated": false,
+    "escalation_reason": null,
+    "tokens_in": 125110,
+    "steg": [
+     {
+      "skill": "sa:draft-outreach",
+      "ms": 29522,
+      "forsok": 1
+     },
+     {
+      "skill": "sa:draft-outreach",
+      "ms": 6760,
+      "forsok": 1
+     },
+     {
+      "skill": "sa:draft-outreach",
+      "ms": 13052,
+      "forsok": 1
+     },
+     {
+      "skill": "snajp:humanizer-svenska",
+      "ms": 4376,
+      "forsok": 1
+     },
+     {
+      "skill": "sa:draft-outreach",
+      "ms": 4858,
+      "forsok": 1
+     },
+     {
+      "skill": "snajp:humanizer-svenska",
+      "ms": 9082,
+      "forsok": 1
+     }
+    ]
+   },
+   "upplysning": {
+    "signal": false
+   }
+  },
+  {
+   "id": "tandvard-uppsala-kvallsoppet",
+   "typ": "tydlig-signal",
+   "kriterier": {
+    "levererat": true,
+    "inga_pahitt": true,
+    "skrivregler": false
+   },
+   "fel": null,
+   "latens_s": 30.61,
+   "svar": {
+    "subject": "patienternas frågor om tider",
+    "body": "Hej,\n\nEra patienter i Uppsala hör ofta av sig om ombokningar och priser inför besöket. Vår Supportagent svarar på mejl och chattfrågor utifrån er egen information, och lämnar över till er när den inte säkert kan svara.\n\nTjänsten kostar en fast månadsavgift.\n\nSvara på mejlet så bokar vi en genomgång om ni vill veta mer.",
+    "queued": true,
+    "escalated": false,
+    "escalation_reason": null,
+    "tokens_in": 167182,
+    "steg": [
+     {
+      "skill": "sa:draft-outreach",
+      "ms": 3498,
+      "forsok": 1
+     },
+     {
+      "skill": "sa:draft-outreach",
+      "ms": 3277,
+      "forsok": 1
+     },
+     {
+      "skill": "sa:draft-outreach",
+      "ms": 3611,
+      "forsok": 1
+     },
+     {
+      "skill": "snajp:humanizer-svenska",
+      "ms": 2861,
+      "forsok": 1
+     },
+     {
+      "skill": "sa:draft-outreach",
+      "ms": 4034,
+      "forsok": 1
+     },
+     {
+      "skill": "snajp:humanizer-svenska",
+      "ms": 2481,
+      "forsok": 1
+     },
+     {
+      "skill": "sa:draft-outreach",
+      "ms": 3439,
+      "forsok": 1
+     },
+     {
+      "skill": "snajp:humanizer-svenska",
+      "ms": 3000,
+      "forsok": 1
+     }
+    ]
+   },
+   "upplysning": {
+    "signal": false
+   }
+  },
+  {
+   "id": "fastighet-norrkoping-nya-foreningar",
+   "typ": "tydlig-signal",
+   "kriterier": {
+    "levererat": true,
+    "inga_pahitt": true,
+    "skrivregler": true
+   },
+   "fel": null,
+   "latens_s": 72.94,
+   "svar": {
+    "subject": "Frågor från era boende",
+    "body": "Hej,\n\nNi sköter förvaltningen åt bostadsrättsföreningar där de boende hör av sig om allt från felanmälan till andrahandsuthyrning. Vår supportagent svarar på de mejlen och chattfrågorna på svenska utifrån er egen kunskapsbas.\n\nTjänsten kostar en fast månadsavgift.\n\nVill ni veta mer kan ni svara här så bokar vi en genomgång.",
+    "queued": true,
+    "escalated": false,
+    "escalation_reason": null,
+    "tokens_in": 184845,
+    "steg": [
+     {
+      "skill": "sa:draft-outreach",
+      "ms": 3543,
+      "forsok": 1
+     },
+     {
+      "skill": "sa:draft-outreach",
+      "ms": 3344,
+      "forsok": 1
+     },
+     {
+      "skill": "sa:draft-outreach",
+      "ms": 3628,
+      "forsok": 1
+     },
+     {
+      "skill": "snajp:humanizer-svenska",
+      "ms": 6768,
+      "forsok": 1
+     },
+     {
+      "skill": "sa:draft-outreach",
+      "ms": 3203,
+      "forsok": 1
+     },
+     {
+      "skill": "snajp:humanizer-svenska",
+      "ms": 11848,
+      "forsok": 1
+     },
+     {
+      "skill": "sa:draft-outreach",
+      "ms": 3962,
+      "forsok": 1
+     },
+     {
+      "skill": "snajp:humanizer-svenska",
+      "ms": 12283,
+      "forsok": 1
+     },
+     {
+      "skill": "mk:copy-editing",
+      "ms": 15641,
+      "forsok": 1
+     }
+    ]
+   },
+   "upplysning": {
+    "signal": true
+   }
+  },
+  {
+   "id": "logistik-jonkoping-terminal-torsvik",
+   "typ": "tydlig-signal",
+   "kriterier": {
+    "levererat": true,
+    "inga_pahitt": true,
+    "skrivregler": true
+   },
+   "fel": null,
+   "latens_s": 49.08,
+   "svar": {
+    "subject": "frågor om bokning och spårning",
+    "body": "Hej,\n\nEra företagskunder i Småland mejlar ofta om bokning och spårning av gods. Vår AI-supportagent svarar på kundernas mejl och chattfrågor på svenska utifrån er egen kunskapsbas, och lämnar över till er när den inte säkert kan svara.\n\nTjänsten kostar en fast månadsavgift.\n\nVill ni veta mer är ni välkomna att svara på mejlet, så bokar vi en genomgång.",
+    "queued": true,
+    "escalated": false,
+    "escalation_reason": null,
+    "tokens_in": 167568,
+    "steg": [
+     {
+      "skill": "sa:draft-outreach",
+      "ms": 3600,
+      "forsok": 1
+     },
+     {
+      "skill": "sa:draft-outreach",
+      "ms": 3329,
+      "forsok": 1
+     },
+     {
+      "skill": "sa:draft-outreach",
+      "ms": 5491,
+      "forsok": 1
+     },
+     {
+      "skill": "snajp:humanizer-svenska",
+      "ms": 3613,
+      "forsok": 1
+     },
+     {
+      "skill": "sa:draft-outreach",
+      "ms": 4012,
+      "forsok": 1
+     },
+     {
+      "skill": "snajp:humanizer-svenska",
+      "ms": 3845,
+      "forsok": 1
+     },
+     {
+      "skill": "sa:draft-outreach",
+      "ms": 18060,
+      "forsok": 1
+     },
+     {
+      "skill": "snajp:humanizer-svenska",
+      "ms": 3032,
+      "forsok": 1
+     }
+    ]
+   },
+   "upplysning": {
+    "signal": false
+   }
+  },
+  {
+   "id": "restaurang-visby-julbord",
+   "typ": "tydlig-signal",
+   "kriterier": {
+    "levererat": false,
+    "inga_pahitt": true,
+    "skrivregler": true
+   },
+   "fel": null,
+   "latens_s": 56.54,
+   "svar": {
+    "subject": "Frågorna inför julbordsbokningen",
+    "body": "Hej,\n\nNi tar emot sällskap i Visby där gästerna mejlar om allergier, menyn och platser inför julbordet. Vår AI-supportagent svarar på de frågorna åt er direkt via mejl och chatt på svenska, utifrån er egen kunskapsbas.\n\nKan agenten inte svara säkert lämnar den över till någon hos er. Tjänsten kostar en fast månadsavgift.\n\nVill ni veta mer är det bara att svara här, så bokar vi en genomgång.",
+    "queued": false,
+    "escalated": true,
+    "escalation_reason": "Faktagrinden stoppade utkastet även efter en reparationsrunda (meningar som gissar om mottagaren: ['Kan agenten inte svara säkert lämnar den över till någon hos er.']). Utkastet köas inte.",
+    "tokens_in": 123230,
+    "steg": [
+     {
+      "skill": "sa:draft-outreach",
+      "ms": 4274,
+      "forsok": 1
+     },
+     {
+      "skill": "sa:draft-outreach",
+      "ms": 26952,
+      "forsok": 1
+     },
+     {
+      "skill": "sa:draft-outreach",
+      "ms": 3273,
+      "forsok": 1
+     },
+     {
+      "skill": "snajp:humanizer-svenska",
+      "ms": 9305,
+      "forsok": 1
+     },
+     {
+      "skill": "mk:copy-editing",
+      "ms": 3160,
+      "forsok": 1
+     },
+     {
+      "skill": "snajp:humanizer-svenska",
+      "ms": 8044,
+      "forsok": 1
+     }
+    ]
+   },
+   "upplysning": {
+    "signal": true
+   }
+  },
+  {
+   "id": "trafikskola-gavle-intensivkurs",
+   "typ": "tydlig-signal",
+   "kriterier": {
+    "levererat": true,
+    "inga_pahitt": true,
+    "skrivregler": true
+   },
+   "fel": null,
+   "latens_s": 54.27,
+   "svar": {
+    "subject": "elevernas frågor inför körkortet",
+    "body": "Hej,\n\nNi utbildar körkortselever som ofta mejlar om handledarkursen och bokning av riskutbildningen. Vår Supportagent svarar på elevernas mejl och chattfrågor på svenska utifrån er kunskapsbas, och lämnar över till er när den inte säkert kan svara.\n\nTjänsten har en fast månadsavgift.\n\nVill ni veta mer är det bara att svara här, så bokar vi en genomgång.",
+    "queued": true,
+    "escalated": false,
+    "escalation_reason": null,
+    "tokens_in": 167831,
+    "steg": [
+     {
+      "skill": "sa:draft-outreach",
+      "ms": 3862,
+      "forsok": 1
+     },
+     {
+      "skill": "sa:draft-outreach",
+      "ms": 2908,
+      "forsok": 1
+     },
+     {
+      "skill": "sa:draft-outreach",
+      "ms": 3933,
+      "forsok": 1
+     },
+     {
+      "skill": "snajp:humanizer-svenska",
+      "ms": 18349,
+      "forsok": 1
+     },
+     {
+      "skill": "sa:draft-outreach",
+      "ms": 5618,
+      "forsok": 1
+     },
+     {
+      "skill": "snajp:humanizer-svenska",
+      "ms": 2615,
+      "forsok": 1
+     },
+     {
+      "skill": "sa:draft-outreach",
+      "ms": 2861,
+      "forsok": 1
+     },
+     {
+      "skill": "snajp:humanizer-svenska",
+      "ms": 9597,
+      "forsok": 1
+     }
+    ]
+   },
+   "upplysning": {
+    "signal": false
+   }
+  },
+  {
+   "id": "it-karlstad-helpdesk-abonnemang",
+   "typ": "tydlig-signal",
+   "kriterier": {
+    "levererat": true,
+    "inga_pahitt": true,
+    "skrivregler": true
+   },
+   "fel": null,
+   "latens_s": 27.98,
+   "svar": {
+    "subject": "Lösenordsbyten och delade mappar",
+    "body": "Hej,\n\nNi sköter drift och support åt småföretag i Värmland vars användare mejlar om lösenordsbyten och delade mappar. Vår supportagent svarar på de frågorna direkt på svenska utifrån er kunskapsbas och lämnar över när den är osäker.\n\nTjänsten kostar en fast månadsavgift för Klarälvens IT-partner.\n\nVill ni se hur det fungerar i praktiken är det bara att svara på mejlet, så bokar vi en genomgång.",
+    "queued": true,
+    "escalated": false,
+    "escalation_reason": null,
+    "tokens_in": 62699,
+    "steg": [
+     {
+      "skill": "sa:draft-outreach",
+      "ms": 3380,
+      "forsok": 1
+     },
+     {
+      "skill": "sa:draft-outreach",
+      "ms": 3554,
+      "forsok": 1
+     },
+     {
+      "skill": "snajp:humanizer-svenska",
+      "ms": 13421,
+      "forsok": 1
+     }
+    ]
+   },
+   "upplysning": {
+    "signal": false
+   }
+  },
+  {
+   "id": "restaurang-kalmar-catering-planer",
+   "typ": "svag-signal",
+   "kriterier": {
+    "levererat": true,
+    "inga_pahitt": true,
+    "skrivregler": true
+   },
+   "fel": null,
+   "latens_s": 22.51,
+   "svar": {
+    "subject": "bordsbokning och större sällskap",
+    "body": "Hej,\n\nEra gäster mejlar om bordsbokning och större sällskap inför kvällarna på Bryggmagasinet Kök & Bar. Vår supportagent svarar på gästernas frågor direkt utifrån er egen information, och lämnar över när den är osäker.\n\nTjänsten kostar en fast månadsavgift.\n\nVill ni veta mer är det bara att svara här, så bokar vi en genomgång.",
+    "queued": true,
+    "escalated": false,
+    "escalation_reason": null,
+    "tokens_in": 83575,
+    "steg": [
+     {
+      "skill": "sa:draft-outreach",
+      "ms": 3557,
+      "forsok": 1
+     },
+     {
+      "skill": "sa:draft-outreach",
+      "ms": 2804,
+      "forsok": 1
+     },
+     {
+      "skill": "sa:draft-outreach",
+      "ms": 3562,
+      "forsok": 1
+     },
+     {
+      "skill": "snajp:humanizer-svenska",
+      "ms": 4375,
+      "forsok": 1
+     }
+    ]
+   },
+   "upplysning": {
+    "signal": true
+   }
+  }
+ ],
+ "signal_andel": 0.545
+}
