@@ -122,6 +122,7 @@ _UTAN_RADLAS = {
     "platform_events": "bara created_at",
     "ss_channel_inbound_seen": "raderas i en sats som prövar seen_at själv",
     "suppressions": "en ny rad mot en låst kontakt blockeras via contacts",
+    "behandlingsbegransningar": "en ny begränsning väntar på gallringens rådgivande lås (144)",
 }
 
 

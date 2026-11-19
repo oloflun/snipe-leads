@@ -133,6 +133,34 @@ def test_listraden_skyddar_sitt_prospekt():
             "or prospect_id = any(v_prospekt) for update;") in sql
 
 
+def test_begransad_behandling_undantas():
+    """Migration 144 (Codex runda 12): en aktiv begränsning av behandlingen
+    (124, art. 18) betyder att uppgifterna bara får lagras. Den senaste
+    gallra_tenant läser begränsningarna i varje varv, låser tabellen före andra
+    varvet och undantar varje kategori som bär adressen."""
+    senaste = [f for f in _gallringsmigrationer()
+               if "function public.gallra_tenant" in f.read_text(encoding="utf-8")][-1]
+    sql = _utan_kommentarer(senaste.read_text(encoding="utf-8"))
+    assert "from public.behandlingsbegransningar where havd_at is null" in sql
+    assert "perform pg_advisory_xact_lock_shared(hashtext('snajp.behandlingsbegransning'));" in sql
+    sql_144 = _utan_kommentarer(
+        (MIGRATIONER / "20261119235000_144_gallring_respekterar_begransning.sql").read_text(encoding="utf-8"))
+    assert "perform pg_advisory_xact_lock(hashtext('snajp.behandlingsbegransning'));" in sql_144
+    assert "before insert on public.behandlingsbegransningar" in sql_144
+    for villkor in ("coalesce(lower(e.from_email), '') <> all(v_begr)",
+                    "coalesce(lower(p.contact_email), '') <> all(v_begr)",
+                    "coalesce(lower(contact_email), '') <> all(v_begr)",
+                    "coalesce(lower(a.email), '') <> all(v_begr)",
+                    "coalesce(lower(k.email), '') <> all(v_begr)",
+                    "coalesce(lower(kontaktmail), '') <> all(v_begr)",
+                    "where i.customer_id = t.customer_id and i.type = 'email'",
+                    "where i.customer_id = c.id and i.type = 'email'",
+                    "where i.customer_id = customer_memory.customer_id and i.type = 'email'"):
+        assert villkor in sql, f"{senaste.name}: undantaget saknas: {villkor}"
+    # Loggtabellerna utan adresskolumn prövas på löptexten.
+    assert sql.count("gallring_namner_begransad(") >= 8
+
+
 def test_jobbet_ar_av_som_standard():
     config = (APP / "config.py").read_text(encoding="utf-8")
     assert re.search(r"^\s*gallring_aktiv:\s*bool\s*=\s*False\s*$", config, re.MULTILINE)

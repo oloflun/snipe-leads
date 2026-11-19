@@ -36,7 +36,8 @@ samma princip som redan gäller i CLAUDE.md.
 (migration 124). Uppgifterna ligger kvar, men så länge markeringen är aktiv
 stoppar sändningsspärren varje utskick till adressen hos alla kunder, och ett
 inkommande mejl från adressen går till Att hantera utan klassning, Jev eller
-AI-utkast. `--hav-begransning SKÄL` hävs den; det kräver bekräftelse, för
+AI-utkast. Gallringen (`gallra_tenant`, migration 144) rör inte adressens
+uppgifter förrän markeringen hävts. `--hav-begransning SKÄL` hävs den; det kräver bekräftelse, för
 art. 18.3 kräver att personen informerats innan begränsningen hävs. Raden
 står kvar med tid och skäl som belägg för att begäran hanterats, och den
 behålls också vid `--radera` (BEHALLS): en radering ska inte tyst häva en

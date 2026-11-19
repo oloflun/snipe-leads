@@ -953,6 +953,114 @@ async def test_omprocessad_listrad_skyddar_sitt_prospekt():
 
 
 @pytest.mark.anyio
+async def test_begransad_behandling_gallras_inte_forran_den_havs():
+    """Codex runda 12: gallra_tenant läste aldrig behandlingsbegransningar
+    (124, GDPR art. 18), så ett gammalt mejl eller prospekt vars adress bara
+    fick lagras raderades ändå. Sedan migration 144 undantas adressens mejl,
+    kund (med ärende), prospekt, listrad, agentlogg (via prospektet och via
+    löptexten) och en begränsning som skrivs under gallringen väntar ut den
+    och syns i andra varvet. När begränsningen hävs gallras allt som vanligt."""
+    import asyncio
+
+    conn = await _anslut(DSN)
+    skrivare = await _anslut(DSN)
+    begransade: list[str] = []
+    try:
+        t = await _ny_tenant(conn, "begransad", policy=POLICY_DAGAR)
+        tid = t["id"]
+
+        def adress(namn: str) -> str:
+            a = f"begr.{namn}.{uuid.uuid4().hex[:8]}@example.com"
+            begransade.append(a)
+            return a
+
+        a_fore, a_under, a_fri = adress("fore"), adress("under"), adress("fritext")
+
+        async def personens_data(a: str) -> dict:
+            mejl = await conn.fetchval(
+                f"""insert into ss_emails (tenant_id, provider_message_id, from_email, from_name,
+                         body_text, created_at, received_at, updated_at)
+                    values ($1, $2, $3, 'Test Person', 'Hej', {GAMMAL}, {GAMMAL}, {GAMMAL}) returning id""",
+                tid, f"<{uuid.uuid4().hex}@example.com>", a)
+            kund = await conn.fetchval(
+                f"insert into ss_customers (tenant_id, name, created_at) values ($1, 'Test Person', {GAMMAL}) returning id",
+                tid)
+            await conn.execute(
+                f"""insert into ss_customer_identifiers (tenant_id, customer_id, type, value, created_at)
+                    values ($1, $2, 'email', $3, {GAMMAL})""", tid, kund, a)
+            arende = await conn.fetchval(
+                f"""insert into ss_tickets (tenant_id, customer_id, subject, created_at, updated_at)
+                    values ($1, $2, 'Gammalt', {GAMMAL}, {GAMMAL}) returning id""", tid, kund)
+            pid = await conn.fetchval(
+                f"""insert into prospects (tenant_id, company_name, contact_name, contact_email, created_at)
+                    values ($1, 'Begränsat AB', 'Test Testsson', $2, {GAMMAL}) returning id""", tid, a)
+            lid = await conn.fetchval(
+                f"""insert into lead_lists (tenant_id, titel, antal, status, created_at, completed_at)
+                    values ($1, 'Lista', 1, 'klar', {GAMMAL}, {GAMMAL}) returning id""", tid)
+            rad = await conn.fetchval(
+                f"""insert into lead_list_items (list_id, tenant_id, company_name, contact_email, created_at)
+                    values ($1, $2, 'Begränsat AB', $3, {GAMMAL}) returning id""", lid, tid, a)
+            korning = await conn.fetchval(
+                f"""insert into agent_runs (tenant_id, agent_type, pack_version, input, output, prospect_id, created_at)
+                    values ($1, 'support', 'test', 'Mejl', 'Svar', $2, {GAMMAL}) returning id""", tid, pid)
+            return {"ss_emails": mejl, "ss_customers": kund, "ss_tickets": arende, "prospects": pid,
+                    "lead_lists": lid, "lead_list_items": rad, "agent_runs": korning}
+
+        fore = await personens_data(a_fore)
+        under = await personens_data(a_under)
+        orord = await personens_data(f"orord.{uuid.uuid4().hex[:8]}@example.com")
+        fri = await conn.fetchval(
+            f"""insert into agent_runs (tenant_id, agent_type, pack_version, input, output, created_at)
+                values ($1, 'support', 'test', $2, 'Svar', {GAMMAL}) returning id""",
+            tid, f"Mejl från {a_fri.upper()}")
+
+        await conn.execute(
+            "insert into behandlingsbegransningar (email, skal) values ($1, 'test'), ($2, 'test')",
+            a_fore, a_fri)
+
+        # En begränsning som skrivs medan gallringen väljer.
+        tx = skrivare.transaction()
+        await tx.start()
+        await skrivare.execute(
+            "insert into behandlingsbegransningar (email, skal) values ($1, 'test')", a_under)
+        gallring = asyncio.create_task(conn.fetchval("select gallra_tenant($1, false)", tid))
+        await asyncio.sleep(0.6)
+        assert not gallring.done(), "gallringen ska vänta ut begränsningen som skrivs"
+        await tx.commit()
+        svar = _json(await asyncio.wait_for(gallring, timeout=15))
+        assert svar["status"] == "klar", svar
+
+        for data in (fore, under):
+            for tabell, id_ in data.items():
+                assert await _finns(conn, tabell, id_), f"{tabell} raderades trots aktiv begränsning"
+        assert await conn.fetchval("select input from agent_runs where id = $1", fore["agent_runs"]) == "Mejl"
+        assert await conn.fetchval("select input from agent_runs where id = $1", fri), (
+            "agentloggen som nämner adressen anonymiserades trots begränsningen")
+        for tabell, id_ in orord.items():
+            if tabell == "agent_runs":
+                assert await conn.fetchval("select input from agent_runs where id = $1", id_) is None
+            else:
+                assert not await _finns(conn, tabell, id_), f"{tabell} {id_} skulle ha gallrats"
+
+        # Begränsningen hävs: nästa körning gallrar som vanligt.
+        await conn.execute(
+            "update behandlingsbegransningar set havd_at = now(), havd_skal = 'test' where email = any($1::text[])",
+            begransade)
+        svar = _json(await conn.fetchval("select gallra_tenant($1, false)", tid))
+        assert svar["status"] == "klar", svar
+        for tabell in ("ss_emails", "ss_customers", "prospects", "lead_list_items", "lead_lists"):
+            assert not await _finns(conn, tabell, fore[tabell]), f"{tabell} gallrades inte efter hävningen"
+        assert await conn.fetchval("select input from agent_runs where id = $1", fri) is None
+    finally:
+        if begransade:
+            await conn.execute(
+                "update behandlingsbegransningar set havd_at = now(), havd_skal = 'test' "
+                "where email = any($1::text[]) and havd_at is null", begransade)
+        await conn.close()
+        await skrivare.close()
+
+
+@pytest.mark.anyio
 async def test_spegeln_raderar_barn_som_synken_lamnat_foraldralosa():
     """Migration 134 (Codex runda 4, 2026-11-19): synken raderar kunden i
     replica-läge, där kaskaden inte körs. Kanalkontakten och chattläget blir

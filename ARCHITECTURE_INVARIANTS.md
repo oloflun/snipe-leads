@@ -1037,7 +1037,9 @@ som skrivs under körningen raderas och ingen skrivning utanför kandidaterna v�
 varje faktisk ändring av en rad som en behandling (migration 141 och 142: triggern
 `gallring_behandlad` sätter `behandlad_at` i varje tabell urvalet läser aktivitet ur, och
 varje urval räknar den; en listrad med prospekt väljs bara när prospektet väljs, och
-prospektets urval räknar listraderna som pekar på det, migration 143; ingen
+prospektets urval räknar listraderna som pekar på det, migration 143; en adress med
+aktiv begränsning av behandlingen (124) gallras inte förrän begränsningen hävts,
+migration 144; ingen
 återkommande teknisk skrivning får röra gamla rader i de tabellerna, för då gallras de
 aldrig), och gör
 ingenting hos en kund vars urval överstiger taket (`GALLRING_TAK`) utan larmar. Varje

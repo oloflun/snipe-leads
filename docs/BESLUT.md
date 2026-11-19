@@ -171,6 +171,16 @@ urval och låser dem mellan varven även när de inte själva väljs. Skäl: en 
 människa nyss arbetat med ska aldrig förlora sin bakgrund, oavsett vilken av de två
 tabellerna arbetet skrevs i.
 
+**Runda 12 (samma dag).** Gallringen läste aldrig behandlingsbegränsningarna (124, art. 18):
+en adress vars uppgifter bara får lagras fick ändå sina gamla mejl, prospekt och loggar
+raderade. Begränsningen begärs ofta just för att uppgifterna ska finnas kvar (art. 18.1 b
+och c), så det var ett lagbrott åt det håll gallringen aldrig får fela. Migration 144
+undantar adressens rader med samma nycklar som `gdpr_radera.py` söker på, löptexten i
+loggtabellerna utan adresskolumn och anonymiseringen av agentloggarna. En ny begränsning
+tar ett rådgivande lås som gallringen håller delat före andra varvet, i stället för ett
+tabellås (138:s regel: ingen annan skrivning ska vänta på gallringen). När begränsningen
+hävs gallras uppgifterna vid nästa körning.
+
 ## 2026-11-19 — Synkflytten verkställs i development; mains steg väntar på releasen (Claude (agent), på Antons uppdrag "verkställ synkflytten")
 
 **Beslut.**
