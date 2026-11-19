@@ -149,6 +149,20 @@ skrivningar hos andra kunder går igenom medan gallringen pågår.
   tidsstämpel lämnas som den är: övriga rader är skrivna, och panelen visar redan utfallet i
   varningsfärg.
 
+**Runda 10 (samma dag).** Två fel av samma slag som runda 9:s första: en återöppnad uppgift
+nollar `klar_at` och tog prospektets senaste aktivitet med sig, och listflödet skriver
+utkastet på radens prospekt, inte på listraden, så en gammal listrad gallrades fast
+prospektet just fått ett utkast. Att räkna upp skrivvägarna kolumn för kolumn hade missat en
+väg per runda; de är fler än femtio. Migration 142 gör därför regeln allmän: triggern
+`gallring_behandlad` sätter `behandlad_at` vid varje faktisk ändring (`to_jsonb(old)` skiljer
+sig från `to_jsonb(new)`) i alla 25 tabeller urvalet läser aktivitet ur, varje urval räknar
+den, och en listrad med prospekt väljs bara när prospektet väljs. Priset är att en teknisk
+skrivning (en leveransrapport, en poängomräkning) också skjuter gallringen framåt för just
+den raden. Det felar åt rätt håll: gallringen blir senare, aldrig för tidig. En återkommande
+teknisk skrivning över gamla rader skulle däremot hålla dem vid liv för alltid; ingen sådan
+finns i dag (städaren rör bara hängande jobb och listor, en gång), och INV-DATA-005 säger att
+ingen får tillkomma.
+
 ## 2026-11-19 — Synkflytten verkställs i development; mains steg väntar på releasen (Claude (agent), på Antons uppdrag "verkställ synkflytten")
 
 **Beslut.**

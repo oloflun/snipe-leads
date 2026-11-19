@@ -1034,9 +1034,11 @@ synken som synkens replica-raderingar lämnat föräldralösa; `tests/test_gallr
 håller listorna ihop), väljer två gånger med radlås på kandidaterna och raderna deras
 aktivitet räknas ur mellan varven och raderar bara snittet (migration 138, så att inget
 som skrivs under körningen raderas och ingen skrivning utanför kandidaterna väntar), räknar
-ett redigerat utkast som en behandling (migration 141: `behandlad_at` på `outreach_messages`,
-`send_queue`, `lead_list_items` och `generated_emails`, satt av en trigger när texten eller
-statusen ändras), och gör
+varje faktisk ändring av en rad som en behandling (migration 141 och 142: triggern
+`gallring_behandlad` sätter `behandlad_at` i varje tabell urvalet läser aktivitet ur, och
+varje urval räknar den; en listrad med prospekt väljs bara när prospektet väljs; ingen
+återkommande teknisk skrivning får röra gamla rader i de tabellerna, för då gallras de
+aldrig), och gör
 ingenting hos en kund vars urval överstiger taket (`GALLRING_TAK`) utan larmar. Varje
 körning loggas per kund i `ss_gallringslogg`, läsbar via `GET /api/admin/gallring`.
 Varför: integritetspolicyn lovar 24 månader från senaste behandlingen i alla

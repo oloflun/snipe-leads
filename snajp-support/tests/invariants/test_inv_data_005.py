@@ -80,22 +80,39 @@ def test_spegeln_lamnar_det_synkade_at_synken():
     assert not re.search(r"v_\w+ := v_tomt_\w+;", sql), "en synkad kategori nollas helt i spegeln"
 
 
-def test_redigerade_utkast_raknas_som_behandling():
-    """Migration 141 (Codex runda 9): utkastredigering ändrar bara texten, så
-    triggern sätter behandlad_at och den senaste gallra_tenant räknar den i
-    prospektens, listradernas och kampanjmodellens urval."""
-    alla = "\n".join(_utan_kommentarer(p.read_text(encoding="utf-8"))
-                     for p in sorted(MIGRATIONER.glob("*.sql")))
-    for tabell, kolumner in (("outreach_messages", "subject, body"), ("send_queue", "status"),
-                             ("lead_list_items", "utkast"), ("generated_emails", "subject, body, status")):
-        assert f"alter table public.{tabell}" in alla and re.search(
-            rf"before update of {kolumner} on public\.{tabell}\s+for each row\s+when", alla), tabell
+#: Varje tabell gallringen läser aktivitet ur eller väljer som kandidat och som
+#: kan uppdateras (migration 142). Loggtabeller som bara får nya rader står utanför.
+_BEHANDLADE = (
+    "ss_emails", "ss_drafts", "ss_tickets", "ss_conversations", "ss_customers", "ss_chat_state",
+    "ss_channel_contacts", "customer_memory", "prospects", "outreach_threads", "outreach_messages",
+    "send_queue", "ss_demolankar", "lead_samtal", "lead_anteckningar", "lead_uppgifter",
+    "prospect_sources", "lead_list_items", "lead_lists", "leads_job_ledger",
+    "ss_avregistreringslankar", "generated_emails", "contacts", "meetings", "saljlista",
+)
+
+
+def test_varje_andring_raknas_som_behandling():
+    """Migration 141 och 142 (Codex runda 9 och 10): en ändring som inte rör
+    någon av urvalets tider (ett redigerat utkast, en återöppnad uppgift) fick
+    ett levande prospekt gallrat. Triggern gallring_behandlad sätter
+    behandlad_at vid varje faktisk ändring i varje tabell urvalet läser, och
+    den senaste gallra_tenant räknar den överallt."""
+    fil = MIGRATIONER / "20261119220000_142_varje_andring_ar_behandling.sql"
+    sql_142 = _utan_kommentarer(fil.read_text(encoding="utf-8"))
+    for tabell in _BEHANDLADE:
+        assert f"'{tabell}'" in sql_142, f"{tabell} saknar triggern gallring_behandlad"
+    assert "when (to_jsonb(old) is distinct from to_jsonb(new))" in sql_142
+
     senaste = [f for f in _gallringsmigrationer()
                if "function public.gallra_tenant" in f.read_text(encoding="utf-8")][-1]
     sql = _utan_kommentarer(senaste.read_text(encoding="utf-8"))
-    for uttryck in ("m.behandlad_at", "q.behandlad_at", "greatest(created_at, processad_at, behandlad_at)",
-                    "greatest(created_at, sent_at, behandlad_at)", "g.behandlad_at"):
-        assert uttryck in sql, f"{senaste.name}: {uttryck} saknas i urvalet"
+    for alias in ("e", "d", "t", "c", "s", "k", "m", "p", "q", "a", "u", "l", "g"):
+        assert f"{alias}.behandlad_at" in sql, f"{senaste.name}: {alias}.behandlad_at saknas i urvalet"
+    # Varje greatest() i urvalen bär behandlad_at, utom de som bara läser
+    # loggtabeller (identifierare, demolänkarnas händelser, statusloggen).
+    for rad in re.findall(r"greatest\([^;]*?\)\s*<\s*v_grans", sql, re.DOTALL):
+        assert "behandlad_at" in rad, f"{senaste.name}: ett urval räknar inte behandlad_at:\n{rad}"
+    assert "and (prospect_id is null or prospect_id = any(v_prospekt))" in sql
 
 
 def test_jobbet_ar_av_som_standard():

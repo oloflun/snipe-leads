@@ -819,6 +819,75 @@ async def test_redigerat_utkast_ar_en_behandling():
 
 
 @pytest.mark.anyio
+async def test_varje_andring_ar_en_behandling_och_listraden_foljer_prospektet():
+    """Codex runda 10: en återöppnad uppgift nollade klar_at och tog med sig
+    prospektets senaste aktivitet, och listflödet skriver utkastet på radens
+    prospekt, så en gammal listrad gallrades fast prospektet just fått ett
+    utkast. Sedan migration 142 sätter triggern behandlad_at vid varje faktisk
+    ändring i de tabeller urvalet läser, och en listrad med prospekt väljs bara
+    när prospektet väljs."""
+    conn = await _anslut(DSN)
+    try:
+        t = await _ny_tenant(conn, "andring", policy=POLICY_DAGAR)
+        tid = t["id"]
+
+        async def prospekt(namn: str) -> tuple:
+            pid = await conn.fetchval(
+                f"""insert into prospects (tenant_id, company_name, contact_name, contact_email, created_at)
+                    values ($1, $2, 'Test Testsson', $3, {GAMMAL}) returning id""",
+                tid, f"Ändringsbolag {namn} AB", f"vd.{namn}.{uuid.uuid4().hex[:6]}@example.com")
+            uppgift = await conn.fetchval(
+                f"""insert into lead_uppgifter (tenant_id, prospect_id, titel, klar, klar_at, created_at)
+                    values ($1, $2, 'Ring tillbaka', true, {GAMMAL}, {GAMMAL}) returning id""",
+                tid, pid)
+            trad = await conn.fetchval(
+                f"insert into outreach_threads (tenant_id, prospect_id, created_at) values ($1, $2, {GAMMAL}) returning id",
+                tid, pid)
+            return pid, uppgift, trad
+
+        async def lista(pid) -> tuple:
+            lid = await conn.fetchval(
+                f"""insert into lead_lists (tenant_id, titel, antal, status, created_at, completed_at)
+                    values ($1, 'Lista', 1, 'klar', {GAMMAL}, {GAMMAL}) returning id""", tid)
+            rad = await conn.fetchval(
+                f"""insert into lead_list_items (list_id, tenant_id, company_name, contact_email, prospect_id, created_at)
+                    values ($1, $2, 'Listbolag AB', $3, $4, {GAMMAL}) returning id""",
+                lid, tid, f"rad.{uuid.uuid4().hex[:6]}@example.com", pid)
+            return lid, rad
+
+        p_ateroppnad, u_ateroppnad, _ = await prospekt("ateroppnad")
+        p_utkast, _, trad_utkast = await prospekt("utkast")
+        p_noll, u_noll, _ = await prospekt("noll")
+        p_orord, _, _ = await prospekt("orord")
+        l_utkast, r_utkast = await lista(p_utkast)
+        l_orord, r_orord = await lista(p_orord)
+
+        # Uppgiften återöppnas (klar_at nollas), listflödet skriver ett utkast
+        # på prospektet, och en uppdatering som inte ändrar något.
+        await conn.execute("update lead_uppgifter set klar = false, klar_at = null where id = $1", u_ateroppnad)
+        await conn.execute(
+            """insert into outreach_messages (tenant_id, thread_id, direction, subject, body)
+               values ($1, $2, 'outbound', 'Hej', 'Nytt listutkast')""", tid, trad_utkast)
+        await conn.execute("update lead_uppgifter set klar_at = klar_at where id = $1", u_noll)
+        assert await conn.fetchval("select behandlad_at from lead_uppgifter where id = $1", u_noll) is None
+        assert await conn.fetchval("select behandlad_at from lead_uppgifter where id = $1", u_ateroppnad)
+
+        svar = _json(await conn.fetchval("select gallra_tenant($1, false)", tid))
+        assert svar["status"] == "klar", svar
+
+        assert await _finns(conn, "prospects", p_ateroppnad), "en återöppnad uppgift skyddade inte prospektet"
+        assert await _finns(conn, "lead_uppgifter", u_ateroppnad)
+        assert await _finns(conn, "prospects", p_utkast)
+        assert await _finns(conn, "lead_list_items", r_utkast), "listraden gallrades fast prospektet fick ett utkast"
+        assert await _finns(conn, "lead_lists", l_utkast)
+        for tabell, id_ in (("prospects", p_noll), ("prospects", p_orord),
+                            ("lead_list_items", r_orord), ("lead_lists", l_orord)):
+            assert not await _finns(conn, tabell, id_), f"{tabell} {id_} skulle ha gallrats"
+    finally:
+        await conn.close()
+
+
+@pytest.mark.anyio
 async def test_spegeln_raderar_barn_som_synken_lamnat_foraldralosa():
     """Migration 134 (Codex runda 4, 2026-11-19): synken raderar kunden i
     replica-läge, där kaskaden inte körs. Kanalkontakten och chattläget blir
