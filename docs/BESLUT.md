@@ -115,6 +115,22 @@ dygnskörningens slut stör ingen. Ett test kräver radlås eller ett uttalat sk
 tabell urvalet rör; databastester visar att ett meddelande under gallringen står kvar och att
 skrivningar hos andra kunder går igenom medan gallringen pågår.
 
+**Runda 8 (samma dag).** Två fel, rättade:
+
+- *Spegelns provrader gallrades aldrig.* 133 nollade hela urvalet för de synkade tabellerna
+  i spegeln, men synken undantar provkörningarna (`is_test`, testprospekt, provlistor), så de
+  fick varken en radering från main eller en egen. Migration 139 lägger synkens villkor för
+  en provkörning i varje synkat urval i spegeln, i urvalet och inte efteråt, så att
+  beroendena mellan urvalen räknas på samma rader. Testet håller villkoren lika med `SYNK`;
+  ett databastest gallrar gamla provrader och lämnar gamla speglade rader i samma tabeller.
+- *Tvåfaktor kunde stänga ute ett konto från Google eller Microsoft.* Kontot saknar lösenord;
+  efter aktiveringen nekas OAuth-vägen och lösenordsvägen finns inte. Inrullningen vägrar nu
+  ett konto utan lösenord och pekar på "Glömt lösenordet?" (felkoden `kraver_losenord`), och
+  migration 140 vägrar aktiveringen i databasen också. Ett TOTP-steg efter OAuth valdes bort:
+  det är ett nytt inloggningsflöde, och lösenordskravet stänger luckan med det som finns.
+  Samma migration tar bort `tvafaktor_aktivera` med två argument, som inte prövade
+  hemligheten, inte anropas sedan 132 och aldrig nått main.
+
 ## 2026-11-19 — Synkflytten verkställs i development; mains steg väntar på releasen (Claude (agent), på Antons uppdrag "verkställ synkflytten")
 
 **Beslut.**

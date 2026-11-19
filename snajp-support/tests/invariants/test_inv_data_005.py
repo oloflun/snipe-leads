@@ -66,16 +66,18 @@ def test_dygnsparr_och_spegel_i_databasen():
 
 
 def test_spegeln_lamnar_det_synkade_at_synken():
-    """Migration 133: den senaste gallra_tenant känner igen spegeln och nollar där
-    urvalet för de synkade tabellerna. Vilka de är håller tests/test_gallring_spegel.py
-    ihop med scripts/railway_synk.py:SYNK."""
+    """Migration 133 och 139: den senaste gallra_tenant känner igen spegeln och
+    väljer där i de synkade tabellerna bara lokala provrader (synkens villkor).
+    Villkoren håller tests/test_gallring_spegel.py lika med
+    scripts/railway_synk.py:SYNK."""
     senaste = [f for f in _gallringsmigrationer()
                if "function public.gallra_tenant" in f.read_text(encoding="utf-8")][-1]
     sql = _utan_kommentarer(senaste.read_text(encoding="utf-8"))
     assert "v_spegel     boolean := to_regclass('public.mirror_meta') is not null" in sql
-    assert sql.count("if v_spegel then") == 2
-    for variabel in ("v_mejl", "v_arenden", "v_kunder", "v_prospekt", "v_korningar"):
-        assert f"{variabel} := v_tomt_" in sql
+    assert "and (not v_spegel or (e.is_test))" in sql
+    assert "and (not v_spegel or (t.is_test))" in sql
+    assert "and (not v_spegel or (false))" in sql  # kunderna synkas alla
+    assert not re.search(r"v_\w+ := v_tomt_\w+;", sql), "en synkad kategori nollas helt i spegeln"
 
 
 def test_jobbet_ar_av_som_standard():

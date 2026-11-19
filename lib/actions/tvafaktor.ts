@@ -10,6 +10,7 @@ import {
   aktiveraTvafaktor,
   avaktiveraTvafaktor,
   avbrytTvafaktorInrullning,
+  harLosenord,
   lasTvafaktor,
   paborjaTvafaktor,
   provaOchForbruka
@@ -32,7 +33,14 @@ import {
  * skriver beskedet på sidans språk.
  */
 
-export type TvafaktorFelkod = "ej_admin" | "fel_kod" | "for_manga_forsok" | "redan_aktiv" | "ingen_inrullning" | "fel";
+export type TvafaktorFelkod =
+  | "ej_admin"
+  | "fel_kod"
+  | "for_manga_forsok"
+  | "redan_aktiv"
+  | "ingen_inrullning"
+  | "kraver_losenord"
+  | "fel";
 
 export type TvafaktorStatus =
   | { ok: true; aktiv: boolean; paborjad: boolean; koderKvar: number; kravs: boolean }
@@ -77,6 +85,9 @@ export async function paborjaInrullning(): Promise<TvafaktorInrullning> {
   try {
     const lage = await lasTvafaktor(admin.userId);
     if (lage?.aktiv) return { ok: false, fel: "redan_aktiv" };
+    // Ett konto från Google eller Microsoft har inget lösenord att logga in
+    // med när OAuth-vägen nekas efter aktiveringen (Codex runda 8).
+    if (!(await harLosenord(admin.userId))) return { ok: false, fel: "kraver_losenord" };
     const hemlighet = nyTotpHemlighet();
     const sparad = await paborjaTvafaktor(
       admin.userId,
@@ -103,6 +114,7 @@ export async function bekraftaInrullning(kod: string): Promise<TvafaktorAktiveri
     const lage = await lasTvafaktor(admin.userId);
     if (!lage) return { ok: false, fel: "ingen_inrullning" };
     if (lage.aktiv) return { ok: false, fel: "redan_aktiv" };
+    if (!(await harLosenord(admin.userId))) return { ok: false, fel: "kraver_losenord" };
     const authSecret = process.env.AUTH_SECRET;
     const hemlighet = dekrypteraHemlighet(lage.hemlighet, admin.userId, authSecret);
     if (!hemlighet) return { ok: false, fel: "ingen_inrullning" };

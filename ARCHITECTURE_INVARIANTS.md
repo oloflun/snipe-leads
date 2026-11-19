@@ -1026,9 +1026,10 @@ och `bk_underlag`/`bk_verifikat`/`kvitto_mejl_lasta` rörs aldrig. Agentloggarna
 promptar och svar nollas, raderna står kvar. Den schemalagda körningen
 (`app/jobs/gallring.py`) är AV som standard (`GALLRING_AKTIV`), görs högst en gång
 per svenskt dygn (dygnsspärren `ss_gallringskorning` i samma transaktion), i en
-spegel bara för tabellerna synken inte för över (migration 133: när `mirror_meta`
-finns nollar `gallra_tenant` urvalet för tabellerna i `scripts/railway_synk.py:SYNK`,
-som får main:s raderingar genom synken, och migration 134 raderar de barn utanför
+spegel bara för det synken inte för över (migration 133 och 139: när `mirror_meta`
+finns väljer `gallra_tenant` i tabellerna i `scripts/railway_synk.py:SYNK`, som får
+main:s raderingar genom synken, bara de lokala provraderna synkens eget villkor
+undantar, och migration 134 raderar de barn utanför
 synken som synkens replica-raderingar lämnat föräldralösa; `tests/test_gallring_spegel.py`
 håller listorna ihop), väljer två gånger med radlås på kandidaterna och raderna deras
 aktivitet räknas ur mellan varven och raderar bara snittet (migration 138, så att inget

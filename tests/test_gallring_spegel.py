@@ -1,11 +1,11 @@
-"""Gallringen i development-spegeln (migration 133) och synken hör ihop.
+"""Gallringen i development-spegeln (migration 133, 139) och synken hör ihop.
 
-I en spegel nollar gallra_tenant urvalet för de tabeller synken för över
-(main:s raderingar når spegeln genom synk_raderingar) och gallrar resten
-själv. Listan står i SQL och synkens tabeller i scripts/railway_synk.py:SYNK.
-Glider de isär blir antingen en tabell aldrig gallrad i spegeln (den lades
-till i SYNK men nollas inte, eller togs ur SYNK men nollas fortfarande) eller
-gallrad två gånger. Det här testet läser båda och kräver att de stämmer.
+I en spegel väljer gallra_tenant i de tabeller synken för över bara de
+provrader synken aldrig rör (synkens eget villkor), eftersom main:s
+raderingar når de speglade raderna genom synk_raderingar; resten gallrar den
+själv. Villkoren står i SQL och synkens i scripts/railway_synk.py:SYNK.
+Glider de isär blir antingen rader aldrig gallrade i spegeln eller gallrade
+två gånger. Det här testet läser båda och kräver att de stämmer.
 """
 from __future__ import annotations
 
@@ -37,20 +37,35 @@ def _sql() -> str:
     return _senaste("gallra_tenant").read_text(encoding="utf-8")
 
 
-def test_spegelns_nollade_urval_ar_exakt_synkens_tabeller():
+#: Aliaset varje synkad tabell har i sitt urval i gallra_tenant ("" = inget).
+_ALIAS = {
+    "ss_emails": "e.", "ss_tickets": "t.", "ss_customers": "c.", "prospects": "p.",
+    "lead_lists": "l.", "customer_memory": "", "lead_list_items": "", "leads_job_ledger": "",
+    "agent_runs": "", "agent_suggestions": "",
+}
+
+
+def test_spegelns_urval_ar_exakt_synkens_provrader():
+    """Migration 139 (Codex runda 8): i en spegel väljer varje synkad tabell
+    bara de rader synken aldrig för över, med samma villkor som SYNK. Ingen
+    synkad tabell nollas längre helt, och ingen osynkad bär villkoret."""
     sql = _sql()
-    # Kategori → variabel, ur sammanställningen gallringen loggar.
     kategori = dict(
         re.findall(r"'(\w+)',\s+jsonb_build_object\('atgard', '\w+', 'antal', cardinality\((v_\w+)\)\)", sql)
     )
     assert len(kategori) >= 18, kategori
-    nollade = set(re.findall(r"(v_\w+) := v_tomt_\w+;", sql))
-    nollade_tabeller = {t for t, v in kategori.items() if v in nollade}
-    synkade = set(_synk())
-    assert nollade_tabeller == {t for t in kategori if t in synkade}, (
-        "Spegelns gallring och SYNK har glidit isär: "
-        f"nollas men synkas inte {sorted(nollade_tabeller - synkade)}, "
-        f"synkas men nollas inte {sorted({t for t in kategori if t in synkade} - nollade_tabeller)}"
+    assert not re.search(r"v_\w+ := v_tomt_\w+;", sql), "en synkad kategori nollas fortfarande helt i spegeln"
+    synk = _synk()
+    synkade_kategorier = {t for t in kategori if t in synk}
+    assert synkade_kategorier == set(_ALIAS), (
+        f"synkade kategorier utan alias i testet: {sorted(synkade_kategorier - set(_ALIAS))}, "
+        f"alias för kategorier som inte synkas: {sorted(set(_ALIAS) - synkade_kategorier)}"
+    )
+    for tabell in sorted(synkade_kategorier):
+        villkor = f"(not v_spegel or ({synk[tabell].replace('x.', _ALIAS[tabell])}))"
+        assert sql.count(villkor) >= 1, f"{tabell}: urvalet bär inte synkens villkor {villkor}"
+    assert sql.count("not v_spegel or") == len(synkade_kategorier), (
+        "en tabell som inte synkas bär spegelvillkoret, eller en bär det två gånger"
     )
 
 

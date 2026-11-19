@@ -84,7 +84,7 @@ async def _las(web, uid: str):
 async def _aktivt_konto(agare, web) -> str:
     uid = await _konto(agare, admin=True)
     assert await _som(web, uid, "select public.tvafaktor_paborja($1)", BLOB) is True
-    assert await _som(web, uid, "select public.tvafaktor_aktivera($1::bigint, $2::text[])", 1000, HASHAR) is True
+    assert await _som(web, uid, "select public.tvafaktor_aktivera($1::bigint, $2::text[], $3::text)", 1000, HASHAR, BLOB) is True
     return uid
 
 
@@ -106,21 +106,21 @@ async def test_inrullning_bara_for_plattformsadmin_och_egen_rad():
         assert rad["aktiv"] is False and rad["hemlighet"] == BLOB and rad["koder_kvar"] == 0
 
         # Utan identitet eller med fel identitet aktiveras ingenting.
-        akt = "select public.tvafaktor_aktivera($1::bigint, $2::text[])"
-        assert await _som(web, None, akt, 1000, HASHAR) is False
-        assert await _som(web, kund, akt, 1000, HASHAR) is False
-        assert await _som(web, admin, akt, 1000, HASHAR) is True
+        akt = "select public.tvafaktor_aktivera($1::bigint, $2::text[], $3::text)"
+        assert await _som(web, None, akt, 1000, HASHAR, BLOB) is False
+        assert await _som(web, kund, akt, 1000, HASHAR, BLOB) is False
+        assert await _som(web, admin, akt, 1000, HASHAR, BLOB) is True
         rad = await _las(web, admin)
         assert rad["aktiv"] is True and rad["senaste_steg"] == 1000 and rad["koder_kvar"] == 3
 
         # En aktiv rad skrivs inte över av en ny inrullning, och aktiveras inte två gånger.
         assert await _som(web, admin, "select public.tvafaktor_paborja($1)", "v1." + "b" * 40) is False
         assert (await _las(web, admin))["hemlighet"] == BLOB
-        assert await _som(web, admin, akt, 2000, HASHAR) is False
+        assert await _som(web, admin, akt, 2000, HASHAR, BLOB) is False
 
         # Ogiltiga hashar vägras högt.
         with pytest.raises(asyncpg.RaiseError):
-            await _som(web, admin, akt, 1, ["inte-en-hash"])
+            await _som(web, admin, akt, 1, ["inte-en-hash"], BLOB)
     finally:
         await _stada(agare, konton)
         await agare.close()
@@ -273,6 +273,40 @@ async def test_aktiveringen_galler_bara_den_verifierade_hemligheten():
 
         with pytest.raises(asyncpg.RaiseError):
             await _som(web, uid, akt, 1000, HASHAR, None)
+    finally:
+        await _stada(agare, konton)
+        await agare.close()
+        await web.close()
+
+
+@pytest.mark.anyio
+async def test_konto_utan_losenord_kan_inte_aktivera():
+    """Migration 140 (Codex runda 8, 2026-11-19): ett konto från Google eller
+    Microsoft saknar lösenord. Efter aktiveringen hade OAuth nekats och
+    lösenordsvägen saknats, så aktiveringen vägras högt och raden står kvar
+    påbörjad. Versionen med två argument, utan hemlighetsprövning, finns inte
+    längre."""
+    agare, web = await _anslut(DSN), await _anslut(WEB_DSN)
+    konton = []
+    try:
+        uid = await _konto(agare, admin=True)
+        konton.append(uid)
+        await agare.execute("update auth.users set encrypted_password = null where id = $1", uuid.UUID(uid))
+        akt = "select public.tvafaktor_aktivera($1::bigint, $2::text[], $3::text)"
+
+        assert await _som(web, uid, "select public.tvafaktor_paborja($1)", BLOB) is True
+        with pytest.raises(asyncpg.RaiseError, match="kraver_losenord"):
+            await _som(web, uid, akt, 1000, HASHAR, BLOB)
+        rad = await _las(web, uid)
+        assert rad["aktiv"] is False and rad["koder_kvar"] == 0
+
+        # Med ett lösenord går samma inrullning igenom.
+        await agare.execute("update auth.users set encrypted_password = 'scrypt$1$x$y' where id = $1", uuid.UUID(uid))
+        assert await _som(web, uid, akt, 1000, HASHAR, BLOB) is True
+
+        assert await agare.fetchval(
+            "select to_regprocedure('public.tvafaktor_aktivera(bigint, text[])') is null"
+        ), "versionen med två argument ska vara borttagen"
     finally:
         await _stada(agare, konton)
         await agare.close()

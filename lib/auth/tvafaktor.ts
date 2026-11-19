@@ -104,6 +104,20 @@ export async function provaOchForbruka(userId: string, lage: TvafaktorLage, kod:
   return "fel";
 }
 
+/**
+ * Om kontot kan logga in med lösenord. Ett konto från Google eller Microsoft
+ * saknar lösenord, och med tvåfaktor på nekas OAuth-vägen: utan lösenord hade
+ * aktiveringen stängt ute kontot (Codex runda 8). Databasen vägrar också
+ * aktiveringen för ett sådant konto (migration 140).
+ */
+export async function harLosenord(userId: string): Promise<boolean> {
+  const rader = await sql<{ ok: boolean }>(
+    "select coalesce(encrypted_password, '') <> '' as ok from auth.users where id = $1::uuid",
+    [userId]
+  );
+  return Boolean(rader[0]?.ok);
+}
+
 /** Påbörja inrullningen med en krypterad hemlighet. Bara plattformsadmin (128). */
 export async function paborjaTvafaktor(userId: string, krypterad: string): Promise<boolean> {
   const rader = await sqlAsUser<{ ok: boolean }>(userId, "select public.tvafaktor_paborja($1) as ok", [krypterad]);

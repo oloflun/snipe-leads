@@ -81,6 +81,10 @@ const FEL: Record<TvafaktorFelkod, Localized> = {
   for_manga_forsok: { sv: "För många försök. Vänta några minuter och försök igen.", en: "Too many attempts. Wait a few minutes and try again." },
   redan_aktiv: { sv: "Tvåstegsverifieringen är redan på.", en: "Two-step verification is already on." },
   ingen_inrullning: { sv: "Inrullningen hittades inte. Börja om.", en: "The setup was not found. Start over." },
+  kraver_losenord: {
+    sv: "Kontot loggar in med Google eller Microsoft och har inget lösenord. Med tvåstegsverifiering på loggar du in med lösenord och kod, så sätt ett lösenord först via ”Glömt lösenordet?” på inloggningssidan.",
+    en: "This account signs in with Google or Microsoft and has no password. With two-step verification on, you sign in with a password and a code, so set a password first via “Forgot your password?” on the sign-in page."
+  },
   fel: { sv: "Något gick fel. Försök igen.", en: "Something went wrong. Try again." }
 };
 

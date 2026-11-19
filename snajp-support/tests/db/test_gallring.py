@@ -424,8 +424,9 @@ async def test_gallringen_tar_det_gamla_i_varje_kategori_och_bara_det():
 
 @pytest.mark.anyio
 async def test_spegeln_gallrar_det_synken_inte_for_over():
-    """Migration 133 (Codex runda 3, 2026-11-19): i en spegel nollas urvalet för
-    tabellerna synken för över, och resten gallras som i main. Feedbacktexten,
+    """Migration 133 (Codex runda 3, 2026-11-19), med 139: i en spegel väljer de
+    synkade tabellerna bara lokala provrader (här finns inga), och resten
+    gallras som i main. Feedbacktexten,
     de genererade mejlen, kontakterna, säljlistan, händelserna och sidcachen
     försvinner; supportmejl, ärenden, prospekt och agentloggar står kvar åt
     synken."""
@@ -465,6 +466,70 @@ async def test_spegeln_gallrar_det_synken_inte_for_over():
             assert rad["input"] == "Mejl från Test Person"
             # Spärren står kvar, frikopplad från den raderade kontakten.
             assert await _finns(conn, "suppressions", ids["sparr_kontakt"])
+        finally:
+            await tx.rollback()
+    finally:
+        await conn.close()
+
+
+@pytest.mark.anyio
+async def test_spegeln_gallrar_lokala_provrader_i_synkade_tabeller():
+    """Migration 139 (Codex runda 8, 2026-11-19): synken undantar provkörningar
+    (is_test, testprospekt, provlistor), så de får aldrig en radering från main.
+    I spegeln gallras de därför här, med synkens eget villkor, medan gamla
+    speglade rader i samma tabeller står kvar åt synken."""
+    conn = await _anslut(DSN)
+    try:
+        t = await _ny_tenant(conn, "provrader", policy=POLICY_DAGAR)
+        tid = t["id"]
+        kund = await conn.fetchval(
+            f"insert into ss_customers (tenant_id, name, created_at) values ($1, 'Provkund', {NY}) returning id", tid)
+        rader = {}
+        for prov in (True, False):
+            namn = "prov" if prov else "speglad"
+            rader[f"mejl_{namn}"] = await conn.fetchval(
+                f"""insert into ss_emails (tenant_id, provider_message_id, from_email, from_name, body_text,
+                         is_test, created_at, received_at, updated_at)
+                    values ($1, $2, 'prov@example.com', 'Test Person', 'Hej', $3,
+                            {GAMMAL}, {GAMMAL}, {GAMMAL}) returning id""",
+                tid, f"provrad-{uuid.uuid4().hex}", prov)
+            rader[f"arende_{namn}"] = await conn.fetchval(
+                f"""insert into ss_tickets (tenant_id, customer_id, subject, is_test, created_at, updated_at)
+                    values ($1, $2, 'Prov', $3, {GAMMAL}, {GAMMAL}) returning id""", tid, kund, prov)
+            rader[f"korning_{namn}"] = await conn.fetchval(
+                f"""insert into agent_runs (tenant_id, agent_type, pack_version, input, output, is_test, created_at)
+                    values ($1, 'support', 'test', 'Mejl från Test Person', 'Hej', $2, {GAMMAL}) returning id""",
+                tid, prov)
+            rader[f"prospekt_{namn}"] = await conn.fetchval(
+                f"""insert into prospects (tenant_id, company_name, contact_email, origin, created_at)
+                    values ($1, 'Påhittat AB', $2, $3, {GAMMAL}) returning id""",
+                tid, f"{namn}.{uuid.uuid4().hex[:6]}@example.com", "test" if prov else "manual")
+            rader[f"lista_{namn}"] = await conn.fetchval(
+                f"""insert into lead_lists (tenant_id, titel, antal, status, is_test, created_at, completed_at)
+                    values ($1, 'Lista', 1, 'klar', $2, {GAMMAL}, {GAMMAL}) returning id""", tid, prov)
+            await conn.execute(
+                f"""insert into lead_list_items (list_id, tenant_id, company_name, contact_email, created_at)
+                    values ($1, $2, 'Listbolag AB', 'lista@example.com', {GAMMAL})""",
+                rader[f"lista_{namn}"], tid)
+
+        tx = conn.transaction()
+        await tx.start()
+        try:
+            await conn.execute("create table public.mirror_meta (environment text)")
+            svar = _json(await conn.fetchval("select gallra_tenant($1, false)", tid))
+            assert svar["status"] == "klar" and svar["spegel"] is True, svar
+            antal = {k: v["antal"] for k, v in svar["antal"].items()}
+            for kategori in ("ss_emails", "ss_tickets", "agent_runs", "prospects", "lead_lists", "lead_list_items"):
+                assert antal[kategori] == 1, (kategori, antal)
+            assert antal["ss_customers"] == 0
+            for tabell, nyckel in (("ss_emails", "mejl"), ("ss_tickets", "arende"),
+                                   ("prospects", "prospekt"), ("lead_lists", "lista")):
+                assert not await _finns(conn, tabell, rader[f"{nyckel}_prov"]), f"lokal provrad kvar i {tabell}"
+                assert await _finns(conn, tabell, rader[f"{nyckel}_speglad"]), f"speglad rad raderad i {tabell}"
+            assert await conn.fetchval("select input from agent_runs where id = $1", rader["korning_prov"]) is None
+            assert await conn.fetchval(
+                "select input from agent_runs where id = $1", rader["korning_speglad"]) == "Mejl från Test Person"
+            assert await _finns(conn, "ss_customers", kund)
         finally:
             await tx.rollback()
     finally:
