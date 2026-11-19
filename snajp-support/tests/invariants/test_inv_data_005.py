@@ -1,5 +1,6 @@
 """INV-DATA-005 — gallringen: bara beslutad policy, aldrig spärrlistan eller
-bokföringen, högst en gång per dygn, aldrig i en spegel, av som standard.
+bokföringen, högst en gång per dygn, i en spegel bara det synken inte för
+över (migration 133; förut aldrig i en spegel), av som standard.
 
 Den statiska halvan. Beteendet prövas mot en riktig Postgres med hela
 migrationskedjan i tests/db/test_gallring.py (CI-jobbet "databastester").
@@ -61,11 +62,23 @@ def test_dygnsparr_och_spegel_i_databasen():
         assert "insert into public.ss_gallringskorning" in sql and "on conflict (dag) do nothing" in sql
 
 
-def test_jobbet_ar_av_som_standard_och_vagrar_i_spegeln():
+def test_spegeln_lamnar_det_synkade_at_synken():
+    """Migration 133: den senaste gallra_tenant känner igen spegeln och nollar där
+    urvalet för de synkade tabellerna. Vilka de är håller tests/test_gallring_spegel.py
+    ihop med scripts/railway_synk.py:SYNK."""
+    senaste = [f for f in _gallringsmigrationer()
+               if "function public.gallra_tenant" in f.read_text(encoding="utf-8")][-1]
+    sql = _utan_kommentarer(senaste.read_text(encoding="utf-8"))
+    assert "v_spegel     boolean := to_regclass('public.mirror_meta') is not null" in sql
+    assert sql.count("if v_spegel then") == 2
+    for variabel in ("v_mejl", "v_arenden", "v_kunder", "v_prospekt", "v_korningar"):
+        assert f"{variabel} := v_tomt_" in sql
+
+
+def test_jobbet_ar_av_som_standard():
     config = (APP / "config.py").read_text(encoding="utf-8")
     assert re.search(r"^\s*gallring_aktiv:\s*bool\s*=\s*False\s*$", config, re.MULTILINE)
     jobb = (APP / "jobs" / "gallring.py").read_text(encoding="utf-8")
-    assert "spegel_info()" in jobb
     main = (APP / "main.py").read_text(encoding="utf-8")
     assert "if settings.gallring_aktiv:" in main
     # Appens egen kod raderar aldrig i gallringen; det gör databasfunktionen.

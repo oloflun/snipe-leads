@@ -112,9 +112,12 @@ export async function bekraftaInrullning(kod: string): Promise<TvafaktorAktiveri
     const aktiverad = await aktiveraTvafaktor(
       admin.userId,
       steg,
-      koder.map((k) => hashaAterstallningskod(k, authSecret))
+      koder.map((k) => hashaAterstallningskod(k, authSecret)),
+      lage.hemlighet
     );
-    if (!aktiverad) return { ok: false, fel: "fel" };
+    // false = raden bär inte längre hemligheten koden prövades mot (en ny
+    // inrullning hann emellan) eller aktiverades redan: börja om.
+    if (!aktiverad) return { ok: false, fel: "ingen_inrullning" };
     return { ok: true, koder };
   } catch (fel) {
     console.error("bekraftaInrullning:", (fel as Error).message);

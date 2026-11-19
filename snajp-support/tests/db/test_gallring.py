@@ -423,6 +423,55 @@ async def test_gallringen_tar_det_gamla_i_varje_kategori_och_bara_det():
 
 
 @pytest.mark.anyio
+async def test_spegeln_gallrar_det_synken_inte_for_over():
+    """Migration 133 (Codex runda 3, 2026-11-19): i en spegel nollas urvalet för
+    tabellerna synken för över, och resten gallras som i main. Feedbacktexten,
+    de genererade mejlen, kontakterna, säljlistan, händelserna och sidcachen
+    försvinner; supportmejl, ärenden, prospekt och agentloggar står kvar åt
+    synken."""
+    conn = await _anslut(DSN)
+    try:
+        t = await _ny_tenant(conn, "spegel", policy=POLICY_DAGAR)
+        ids = await _seeda(conn, t)
+        tx = conn.transaction()
+        await tx.start()
+        try:
+            await conn.execute("create table public.mirror_meta (environment text)")
+            svar = _json(await conn.fetchval("select gallra_tenant($1, false)", t["id"]))
+            assert svar["status"] == "klar" and svar["spegel"] is True
+            antal = {k: v["antal"] for k, v in svar["antal"].items()}
+            print("\nSPEGEL", json.dumps(antal, ensure_ascii=False))
+            assert antal == {
+                "ss_emails": 0, "ss_tickets": 0, "customer_memory": 0, "ss_customers": 0,
+                "prospects": 0, "lead_list_items": 0, "lead_lists": 0, "leads_job_ledger": 0,
+                "ss_avregistreringslankar": 0, "generated_emails": 1, "contacts": 1, "saljlista": 1,
+                "agent_runs": 0, "agent_feedback": 1, "agent_evals": 1, "agent_suggestions": 0,
+                "platform_events": 1, "leads_sidcache": 1, "ss_channel_inbound_seen": 0,
+                "suppressions": 1,
+            }
+            # Det osynkade är borta eller anonymiserat ...
+            assert not await _finns(conn, "contacts", ids["kontakt_gammal"])
+            assert not await _finns(conn, "saljlista", ids["salj_gammal"])
+            assert not await conn.fetchval(
+                "select count(*) from agent_feedback where run_id = $1 and comment is not null",
+                ids["korning_gammal"])
+            assert not await conn.fetchval(
+                "select count(*) from generated_emails where contact_id = $1", ids["kontakt_gammal"])
+            # ... och det synkade står kvar åt synken.
+            assert await _finns(conn, "ss_emails", ids["mejl_gammal"])
+            assert await _finns(conn, "ss_customers", ids["kund_gammal"])
+            assert await _finns(conn, "prospects", ids["prospekt_gammal"])
+            rad = await conn.fetchrow("select input from agent_runs where id = $1", ids["korning_gammal"])
+            assert rad["input"] == "Mejl från Test Person"
+            # Spärren står kvar, frikopplad från den raderade kontakten.
+            assert await _finns(conn, "suppressions", ids["sparr_kontakt"])
+        finally:
+            await tx.rollback()
+    finally:
+        await conn.close()
+
+
+@pytest.mark.anyio
 async def test_schemalagda_korningen_tak_dygnsspärr_och_spegel():
     """gallra_alla som snajp_app: bara kunder med policy, taket håller, och en
     andra körning samma dygn gör ingenting."""
@@ -480,15 +529,16 @@ async def test_schemalagda_korningen_tak_dygnsspärr_och_spegel():
         assert igen["status"] == "redan_kord"
         assert await handelser(liten) == 2
 
-        # En spegel gallrar aldrig.
+        # En spegel kör också (migration 133). Händelserna synkas inte, så
+        # spegeln gallrar dem själv; det synkade lämnas åt synken (nästa test).
         tx = agare.transaction()
         await tx.start()
         try:
             await agare.execute("create table public.mirror_meta (environment text)")
             await agare.execute("delete from ss_gallringskorning")
             spegel = _json(await agare.fetchval("select gallra_alla(5)"))
-            assert spegel["status"] == "spegel"
-            assert await handelser(liten) == 2
+            assert spegel["status"] == "kord" and spegel["spegel"] is True
+            assert await handelser(liten) == 1
         finally:
             await tx.rollback()
 
@@ -507,7 +557,7 @@ async def test_schemalagda_korningen_tak_dygnsspärr_och_spegel():
             assert (await lagring.list_gallringskorningar())[0]["tak_nadda"] == 1
         finally:
             await lagring.pool.close()
-        print("RESULTAT bara kunder med policy, taket höll, andra körningen samma dygn gjorde inget, spegeln vägrade")
+        print("RESULTAT bara kunder med policy, taket höll, andra körningen samma dygn gjorde inget, spegeln gallrade det osynkade")
     finally:
         await agare.execute("delete from ss_gallringspolicy")
         await app.close()

@@ -387,6 +387,13 @@ class Storage(Protocol):
         tills vidare. Träffarna bär `source_url` (migration 117)."""
         ...
 
+    async def kb_nasta_utgang(self, tenant_id: str) -> date | None:
+        """Den tidigaste `giltig_till` som ännu inte passerat (svensk dag), eller
+        None när ingen artikel har ett slutdatum framför sig. Svarscachen lägger
+        datumet i KB-versionen, så att ett cachat svar slutar matcha när en
+        artikel går ut (Codex-granskningen 2026-11-19)."""
+        ...
+
     async def list_kb(self, tenant_id: str) -> list[dict[str, Any]]:
         """Portalens lista: ALLA artiklar, även utgångna, med `source_url` och
         `giltig_till`, så att kunden ser vad som gått ut och kan byta ut det."""
@@ -1880,8 +1887,8 @@ class Storage(Protocol):
 
     async def gallra_dygnet(self, *, tak: int) -> dict[str, Any]:
         """Den schemalagda gallringen: alla kunder med beslutad policy, högst
-        en gång per svenskt dygn, aldrig i en spegel. Svaret är gallra_alla:s
-        {status, dag, kunder}. Minneslagret gallrar inte ({status: 'ingen_databas'})."""
+        en gång per svenskt dygn; i en spegel bara det synken inte för över
+        (migration 133). Svaret är gallra_alla:s {status, dag, kunder, spegel}. Minneslagret gallrar inte ({status: 'ingen_databas'})."""
         ...
 
     async def list_gallringslogg(

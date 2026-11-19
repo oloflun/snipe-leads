@@ -16,10 +16,12 @@ Mekanismen är databasfunktionen `gallra_alla` (migration 119); den här modulen
   raderingen. Loopen tittar en gång i timmen och kör tidigast `GALLRING_TIMME`.
 * Tak per kund (`GALLRING_TAK`): är urvalet större görs ingenting hos kunden,
   och plattformsadmin larmas (platform_events + prioriterat mejl).
-* Aldrig i en spegel. Development är en spegel av produktionen och får
-  main:s raderingar genom synken; samma regel som autopiloten och
-  inkorgsläsningen (leads/autopilot.py, leads/scheduler.tvavags). Databas-
-  funktionen vägrar dessutom själv när mirror_meta finns.
+* I en spegel bara det synken inte för över (migration 133). Development får
+  main:s raderingar genom synken för de synkade tabellerna; resten
+  (genererade mejl, kontakter, feedbacktext, händelser, sidcache …) gallrar
+  spegeln själv med samma policy. Det avgör databasfunktionen, inte den här
+  modulen. Fram till 2026-11-19 gjorde spegeln ingenting alls, och rader
+  utanför synken låg kvar för alltid (Codex-granskningen, runda 3).
 * Får aldrig krascha tjänsten: varje fel loggas och loopen fortsätter, samma
   mönster som trial-påminnaren.
 
@@ -93,14 +95,12 @@ async def _larma(storage: Any, kund: dict[str, Any], *, tak: int) -> None:
 async def kor_gallring(storage: Any, *, nu: datetime | None = None) -> dict[str, Any]:
     """Ett varv. Returnerar vad som hände: {status, ...}.
 
-    status: 'avstangd', 'spegel', 'for_tidigt', eller gallra_alla:s svar
-    ('kord', 'redan_kord', 'spegel', 'ingen_databas')."""
+    status: 'avstangd', 'for_tidigt', eller gallra_alla:s svar
+    ('kord', 'redan_kord', 'ingen_databas'). I en spegel bär svaret
+    `spegel: true`, och databasen har då bara gallrat det synken inte för över."""
     settings = get_settings()
     if not settings.gallring_aktiv:
         return {"status": "avstangd"}
-    if await storage.spegel_info():
-        # Bara main gallrar; spegeln får raderingarna genom synken.
-        return {"status": "spegel"}
     lokal = (nu or datetime.now(_SVERIGE)).astimezone(_SVERIGE)
     if lokal.hour < settings.gallring_timme:
         return {"status": "for_tidigt"}

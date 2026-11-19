@@ -353,6 +353,63 @@ async def test_f_kb_version_bump_ger_miss(monkeypatch):
     )
 
 
+# --- (h) En artikel som går ut vid midnatt => miss dagen efter --------------
+
+
+@pytest.mark.anyio
+async def test_h_artikelutgang_ger_miss_utan_skrivning(monkeypatch):
+    """Ingen skriver i basen när en artikel går ut, så räknaren står still.
+    Versionen bär därför tenantens närmaste utgång (Codex-granskningen
+    2026-11-19): när dagen passerat byter den värde och svaret som cachats
+    på artikelns sista dag slutar matcha."""
+    from datetime import datetime, timedelta
+    from zoneinfo import ZoneInfo
+
+    _lage(monkeypatch, "on")
+    storage = MemoryStorage()
+    idag = datetime.now(ZoneInfo("Europe/Stockholm")).date()
+    await storage.add_kb_article(
+        TENANT, title="Garanti vintern", content="Tre års garanti till och med i dag.",
+        category="garanti", giltig_till=idag,
+    )
+    fraga = "Hur lång garanti har ni?"
+
+    llm1 = _FakeLLM(category="garanti")
+    await _kor(storage, llm1, message=fraga, customer_email="sista-dagen@example.com")
+    assert llm1.calls == EXPECTED_ORDER_NORMAL
+    assert len(svarscache.hamta_cache()._poster) == 1
+
+    # Samma dag: träff.
+    llm2 = _FakeLLM(category="garanti")
+    await _kor(storage, llm2, message=fraga, customer_email="samma-dag@example.com")
+    assert llm2.calls == [], "Samma dag ska svaret fortfarande komma ur cachen."
+
+    # Midnatt passerar: artikeln gick ut i går.
+    for artikel in storage.kb[TENANT]:
+        if artikel["title"] == "Garanti vintern":
+            artikel["giltig_till"] = str(idag - timedelta(days=1))
+    llm3 = _FakeLLM(category="garanti")
+    await _kor(storage, llm3, message=fraga, customer_email="dagen-efter@example.com")
+    assert llm3.calls == EXPECTED_ORDER_NORMAL, (
+        "Ett svar cachat på en artikels sista dag fick inte serveras efter att artikeln gått ut."
+    )
+
+
+@pytest.mark.anyio
+async def test_h_olasbar_utgang_hoppar_over_cachen(monkeypatch):
+    _lage(monkeypatch, "on")
+    storage = MemoryStorage()
+
+    async def _fel(_tenant):
+        raise RuntimeError("databasen svarar inte")
+
+    monkeypatch.setattr(storage, "kb_nasta_utgang", _fel)
+    llm = _FakeLLM(category="leverans")
+    await _kor(storage, llm, message="Hur lång är leveranstiden?", customer_email="fel@example.com")
+    assert llm.calls == EXPECTED_ORDER_NORMAL
+    assert svarscache.hamta_cache()._poster == [], "Utan läsbar utgång får inget lagras."
+
+
 # --- (g) Icke-cachebar kategori (betalning) => aldrig store -----------------
 
 

@@ -369,8 +369,8 @@ async def lifespan(app: FastAPI):
         trial_task = asyncio.create_task(run_trial_paminnare(app.state))
 
     # Gallringen: raderar kunddata äldre än kundens beslutade period, högst en
-    # gång per dygn, aldrig i en spegel. AV som standard (GALLRING_AKTIV).
-    # Se app/jobs/gallring.py och migration 119.
+    # gång per dygn; i en spegel bara det synken inte för över. AV som
+    # standard (GALLRING_AKTIV). Se app/jobs/gallring.py och migration 119, 133.
     gallring_task = None
     if settings.gallring_aktiv:
         from .jobs.gallring import run_gallring

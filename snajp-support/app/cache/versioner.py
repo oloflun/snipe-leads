@@ -92,6 +92,27 @@ async def kb_version(tenant_id: str) -> str:
     return str(_minne_kb[tenant_id])
 
 
+async def kb_version_med_giltighet(storage: Any, tenant_id: str) -> str | None:
+    """KB-versionen plus tenantens närmaste artikelutgång.
+
+    Räknaren ovan steg bara när någon skrev i basen. En artikel som går ut vid
+    midnatt skrivs inte av någon, så ett svar som cachats på artikelns sista
+    dag matchade i upp till 21 dagar till (Codex-granskningen 2026-11-19).
+    Med den tidigaste `giltig_till` som ännu gäller i strängen byter versionen
+    värde så fort den dagen passerat, och varje post från före blir omatchbar.
+    En tenant utan slutdatum får samma version som förut.
+
+    None när utgången inte gick att läsa: anroparen hoppar då över cachen helt,
+    både uppslag och lagring (fail closed)."""
+    bas = await kb_version(tenant_id)
+    try:
+        utgang = await storage.kb_nasta_utgang(tenant_id)
+    except Exception:  # noqa: BLE001 — cachen är en optimering, aldrig ett måste
+        logger.warning("Kunde inte läsa KB-utgångarna för %s; svarscachen hoppas över.", tenant_id)
+        return None
+    return f"{bas}:u{utgang.isoformat()}" if utgang else bas
+
+
 async def config_version(tenant_id: str) -> str:
     """`"<global>:<tenant>"` — se moduldocstringen för varför två räknare."""
     if _redis is not None:

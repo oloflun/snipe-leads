@@ -246,6 +246,40 @@ async def test_kontot_raderas_med_sin_tvafaktor():
 
 
 @pytest.mark.anyio
+async def test_aktiveringen_galler_bara_den_verifierade_hemligheten():
+    """Migration 132 (Codex runda 3, 2026-11-19): koden prövades mot hemlighet A,
+    men en ny inrullning hann byta raden till B. Aktiveringen med A vägras och
+    raden står kvar påbörjad med B; med B går den igenom."""
+    agare, web = await _anslut(DSN), await _anslut(WEB_DSN)
+    konton = []
+    try:
+        uid = await _konto(agare, admin=True)
+        konton.append(uid)
+        hemlighet_b = "v1." + "b" * 40
+        akt = "select public.tvafaktor_aktivera($1::bigint, $2::text[], $3::text)"
+
+        assert await _som(web, uid, "select public.tvafaktor_paborja($1)", BLOB) is True
+        # Den parallella inrullningen byter hemlighet efter att A lästs och prövats.
+        assert await _som(web, uid, "select public.tvafaktor_paborja($1)", hemlighet_b) is True
+
+        assert await _som(web, uid, akt, 1000, HASHAR, BLOB) is False
+        rad = await _las(web, uid)
+        assert rad["aktiv"] is False and rad["hemlighet"] == hemlighet_b and rad["koder_kvar"] == 0
+
+        assert await _som(web, None, akt, 1000, HASHAR, hemlighet_b) is False
+        assert await _som(web, uid, akt, 1000, HASHAR, hemlighet_b) is True
+        rad = await _las(web, uid)
+        assert rad["aktiv"] is True and rad["hemlighet"] == hemlighet_b and rad["koder_kvar"] == 3
+
+        with pytest.raises(asyncpg.RaiseError):
+            await _som(web, uid, akt, 1000, HASHAR, None)
+    finally:
+        await _stada(agare, konton)
+        await agare.close()
+        await web.close()
+
+
+@pytest.mark.anyio
 async def test_avbryt_rör_aldrig_ett_aktiverat_skydd():
     """Migration 131 (Codex runda 2, 2026-11-19): `tvafaktor_avbryt_inrullning`
     raderar bara en påbörjad rad. Direkt efter aktiveringen, när

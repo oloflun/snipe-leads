@@ -42,6 +42,29 @@ tvåfaktor saknar markeringen och förlorar adminrätten vid deployen, vilket ä
   gamla cachesvar giltiga. Kvar är bara fönstret mellan commit och höjning om processen dör
   hårt; det har varje KB-skrivväg, och TTL:n begränsar det.
 
+**Runda 3 (samma dag).** Tre fel till, rättade:
+- **Gallringen i spegeln (INV-DATA-005 snävas in).** `gallra_alla` och jobbet gjorde
+  ingenting i development, på antagandet att synken för över main:s gallring. Men synken
+  omfattar inte bland annat genererade mejl, kontakter, säljlistan, feedbacktexten,
+  händelserna och sidcachen, så sådana rader i spegeln låg kvar för alltid. Nu gallrar
+  spegeln själv de tabeller synken inte för över, med samma policy och urval
+  (migration 133); de synkade lämnas åt synken som förut, eftersom en egen radering där
+  hade kopierats tillbaka från main. `tests/test_gallring_spegel.py` håller SQL-listan
+  ihop med `railway_synk.SYNK`. `scripts/gallra.py --satt-policy` mot main skriver nu
+  policyn också i development, eftersom policytabellen inte synkas. Invarianten sade
+  "aldrig i en spegel"; den säger nu "i en spegel bara det osynkade". **Anton:** gallringen
+  är fortfarande AV i båda miljöerna (`GALLRING_AKTIV`). Ska spegeln gallra behöver
+  flaggan slås på i development också.
+- **Tvåfaktoraktiveringen** slog på den hemlighet som stod i raden vid aktiveringen, inte
+  den som koden prövats mot. En parallell "Påbörja" däremellan gav aktiv tvåfaktor med en
+  hemlighet appen aldrig fått. Migration 132: aktiveringen tar med den verifierade
+  (krypterade) hemligheten och går bara igenom om raden fortfarande bär den.
+- **Utgångna KB-artiklar i svarscachen.** Ingen skriver i basen när en artikel går ut vid
+  midnatt, så KB-versionen stod still och ett svar cachat på artikelns sista dag kunde
+  serveras i upp till 21 dagar till. KB-versionen i cachenyckeln bär nu tenantens
+  närmaste `giltig_till` (`versioner.kb_version_med_giltighet`); när dagen passerat byter
+  den värde. Går utgången inte att läsa rörs cachen inte alls.
+
 ## 2026-11-19 — Synkflytten verkställs i development; mains steg väntar på releasen (Claude (agent), på Antons uppdrag "verkställ synkflytten")
 
 **Beslut.**

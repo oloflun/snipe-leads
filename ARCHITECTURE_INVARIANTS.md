@@ -1020,8 +1020,11 @@ en kontakt nollas före kontaktens radering, annars tar kaskaden spärren med si
 och `bk_underlag`/`bk_verifikat`/`kvitto_mejl_lasta` rörs aldrig. Agentloggarnas
 promptar och svar nollas, raderna står kvar. Den schemalagda körningen
 (`app/jobs/gallring.py`) är AV som standard (`GALLRING_AKTIV`), görs högst en gång
-per svenskt dygn (dygnsspärren `ss_gallringskorning` i samma transaktion), aldrig i en
-spegel (jobbet och `gallra_alla` vägrar båda när `mirror_meta` finns), och gör
+per svenskt dygn (dygnsspärren `ss_gallringskorning` i samma transaktion), i en
+spegel bara för tabellerna synken inte för över (migration 133: när `mirror_meta`
+finns nollar `gallra_tenant` urvalet för tabellerna i `scripts/railway_synk.py:SYNK`,
+som får main:s raderingar genom synken; `tests/test_gallring_spegel.py` håller
+listorna ihop), och gör
 ingenting hos en kund vars urval överstiger taket (`GALLRING_TAK`) utan larmar. Varje
 körning loggas per kund i `ss_gallringslogg`, läsbar via `GET /api/admin/gallring`.
 Varför: integritetspolicyn lovar 24 månader från senaste behandlingen i alla

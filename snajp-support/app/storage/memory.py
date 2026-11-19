@@ -755,6 +755,18 @@ class MemoryStorage:
             if score >= 0.12
         ]
 
+    async def kb_nasta_utgang(self, tenant_id: str) -> date | None:
+        from zoneinfo import ZoneInfo
+
+        idag = datetime.now(ZoneInfo("Europe/Stockholm")).date()
+        datum = [
+            date.fromisoformat(str(a["giltig_till"]))
+            for a in self.kb.get(tenant_id, [])
+            if a.get("giltig_till")
+        ]
+        kvar = [d for d in datum if d >= idag]
+        return min(kvar) if kvar else None
+
     async def list_kb(self, tenant_id: str) -> list[dict[str, Any]]:
         return [
             {"id": a["id"], "title": a["title"], "content": a["content"],

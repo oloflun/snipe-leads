@@ -485,8 +485,9 @@ class Settings(BaseSettings):
     # Gallringen (app/jobs/gallring.py, migration 119). AV som standard: en
     # körning raderar kunddata, och den slås på av ägaren i main när varje
     # kund har en beslutad policy (scripts/gallra.py --policyns-period).
-    # Kunder utan policy gallras aldrig, och i en spegel (development) gör
-    # körningen ingenting — spegeln får main:s raderingar genom synken.
+    # Kunder utan policy gallras aldrig. I en spegel (development) gallras
+    # bara tabellerna synken inte för över (migration 133); de synkade får
+    # main:s raderingar genom synken.
     gallring_aktiv: bool = False
     # Högst så här många rader ändras hos EN kund per körning. Är urvalet
     # större görs ingenting hos kunden och plattformsadmin larmas; ett

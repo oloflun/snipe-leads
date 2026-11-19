@@ -1047,6 +1047,17 @@ class PostgresStorage:
             for r in records
         ]
 
+    async def kb_nasta_utgang(self, tenant_id: str) -> date | None:
+        async with self._scoped(tenant_id) as conn:
+            return await conn.fetchval(
+                """
+                select min(giltig_till) from ss_knowledge_base
+                where tenant_id = $1
+                  and giltig_till >= (now() at time zone 'Europe/Stockholm')::date
+                """,
+                tenant_id,
+            )
+
     async def list_kb(self, tenant_id: str) -> list[dict[str, Any]]:
         async with self._scoped(tenant_id) as conn:
             records = await conn.fetch(

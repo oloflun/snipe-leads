@@ -1145,13 +1145,21 @@ async def run_support_agent(
     # TRÄFF i läge "on" ska kosta NOLL LLM-anrop, och klassificeraren
     # (Del E steg 6, flyttad hit 2026-08-29) är själv ett LLM-anrop — den
     # måste alltså vänta tills vi vet att den faktiskt behövs.
-    kbv = await versioner.kb_version(tenant_id)
+    # Versionen bär tenantens närmaste artikelutgång, så att ett cachat svar
+    # slutar gälla när en artikel det byggde på går ut. None = utgången gick
+    # inte att läsa, och då rörs cachen inte alls (behorig stannar False, så
+    # inget lagras heller).
+    kbv = (
+        await versioner.kb_version_med_giltighet(storage, tenant_id)
+        if settings.semantic_cache != "off"
+        else await versioner.kb_version(tenant_id)
+    )
     cfgv = await versioner.config_version(tenant_id)
     cache_kontext = svarscache.CacheKontext(behorig=False)
     # `not abuse.ska_eskalera`: ett meddelande påhoppsbedömningen redan
     # flaggat ska aldrig ens titta i cachen — eskaleringsvägen är beslutad i
     # kod och en cachad FAQ-replik vore fel svar oavsett cosinuslikhet.
-    if settings.semantic_cache != "off" and not abuse.ska_eskalera:
+    if settings.semantic_cache != "off" and not abuse.ska_eskalera and kbv is not None:
         cache_kontext = await svarscache.forbered(
             tenant_id,
             history=history,

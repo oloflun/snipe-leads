@@ -2,7 +2,7 @@
 
 Själva raderingen är databasfunktionen gallra_alla och prövas mot en riktig
 Postgres i tests/db/test_gallring.py. Här prövas det som ligger i Python:
-avstängd som standard, aldrig i en spegel, inte före natten, larm när taket
+avstängd som standard, spegeln lämnad åt databasen, inte före natten, larm när taket
 nås eller en kund faller, och att ett fel aldrig fäller loopen.
 """
 
@@ -63,11 +63,19 @@ async def test_avstangd_gor_ingenting(monkeypatch):
 
 
 @pytest.mark.anyio
-async def test_spegeln_gallrar_aldrig(monkeypatch):
+async def test_spegeln_kor_databasens_gallring(monkeypatch):
+    """Migration 133: spegeln anropar gallra_alla som main. Vad som får röras
+    där (bara det synken inte för över) avgör databasfunktionen, som prövas i
+    tests/db/test_gallring.py. Förut stannade jobbet här, och rader utanför
+    synken låg kvar i spegeln för alltid."""
     _installning(monkeypatch)
-    lagring = _Lagring(spegel={"environment": "development", "lage": "envags"})
-    assert (await gallring.kor_gallring(lagring, nu=NATT))["status"] == "spegel"
-    assert lagring.anrop == []
+    lagring = _Lagring(
+        svar={"status": "kord", "dag": "2026-11-18", "kunder": [], "spegel": True},
+        spegel={"environment": "development", "lage": "envags"},
+    )
+    svar = await gallring.kor_gallring(lagring, nu=NATT)
+    assert svar["status"] == "kord" and svar["spegel"] is True
+    assert lagring.anrop == [5000]
 
 
 @pytest.mark.anyio

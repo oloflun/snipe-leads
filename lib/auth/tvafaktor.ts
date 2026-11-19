@@ -110,12 +110,22 @@ export async function paborjaTvafaktor(userId: string, krypterad: string): Promi
   return Boolean(rader[0]?.ok);
 }
 
-/** Aktivera efter en godkänd kod; byter återställningskoderna (hashar). */
-export async function aktiveraTvafaktor(userId: string, steg: number, kodhashar: string[]): Promise<boolean> {
+/**
+ * Aktivera efter en godkänd kod; byter återställningskoderna (hashar).
+ * `verifieradHemlighet` är den krypterade hemligheten koden prövades mot:
+ * databasen aktiverar bara om raden fortfarande bär just den, så att en
+ * parallell ny inrullning aldrig slår på en hemlighet appen inte har (132).
+ */
+export async function aktiveraTvafaktor(
+  userId: string,
+  steg: number,
+  kodhashar: string[],
+  verifieradHemlighet: string
+): Promise<boolean> {
   const rader = await sqlAsUser<{ ok: boolean }>(
     userId,
-    "select public.tvafaktor_aktivera($1::bigint, $2::text[]) as ok",
-    [steg, kodhashar]
+    "select public.tvafaktor_aktivera($1::bigint, $2::text[], $3::text) as ok",
+    [steg, kodhashar, verifieradHemlighet]
   );
   return Boolean(rader[0]?.ok);
 }

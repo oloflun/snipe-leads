@@ -33,6 +33,10 @@ en kund och avslutar utan att radera något. Att bestämma hur länge en kunds
 data får ligga kvar och att radera den är två olika beslut, och ett kommando
 som gjorde båda hade gjort det första av misstag.
 
+Satt mot `railway-main` skrivs policyn också i `railway-development`: spegeln
+gallrar själv de tabeller synken inte för över (migration 133) och läser då
+sin egen kopia av policyn, som inte synkas.
+
 `--policyns-period` är de 24 månader integritetspolicyn utlovar, som 731 dagar:
 24 månader är som mest 731 dagar, så ingenting gallras före 24 månader.
 
@@ -88,31 +92,31 @@ def main() -> int:
 
     dagar = POLICYNS_PERIOD_DAGAR if args.policyns_period else args.satt_policy
 
-    with psycopg2.connect(dsn_for(args.env)) as conn, conn.cursor() as cur:
-        if dagar is not None:
-            if not args.tenant or not args.beslutad_av:
-                sys.exit("AVBRYTER: policyn kräver både --tenant och --beslutad-av.")
-            tenant_id = _slå_upp_tenant(cur, args.tenant)
-            cur.execute(
-                """
-                insert into ss_gallringspolicy (tenant_id, dagar, beslutad_av)
-                values (%s, %s, %s)
-                on conflict (tenant_id)
-                do update set dagar = excluded.dagar,
-                              beslutad_av = excluded.beslutad_av,
-                              beslutad_at = now()
-                """,
-                (tenant_id, dagar, args.beslutad_av),
-            )
-            print(f"Policy satt: {dagar} dagar för {args.tenant} ({args.beslutad_av}).")
-            print("Ingenting raderades. Torrkör gallringen innan den körs skarpt.")
-            return 0
+    if dagar is not None:
+        if not args.tenant or not args.beslutad_av:
+            sys.exit("AVBRYTER: policyn kräver både --tenant och --beslutad-av.")
+        _satt_policy(args.env, args.tenant, dagar, args.beslutad_av)
+        print(f"Policy satt: {dagar} dagar för {args.tenant} ({args.beslutad_av}).")
+        if args.env == "railway-main":
+            # Spegeln gallrar det synken inte för över med sin egen kopia av
+            # policyn (migration 133), och policytabellen synkas inte.
+            try:
+                _satt_policy("railway-development", args.tenant, dagar, args.beslutad_av)
+                print("Samma policy satt i railway-development (spegeln).")
+            except (SystemExit, psycopg2.Error) as fel:
+                print(
+                    "VARNING: policyn kunde inte sättas i railway-development "
+                    f"({type(fel).__name__}). Kör samma kommando med --env railway-development."
+                )
+        print("Ingenting raderades. Torrkör gallringen innan den körs skarpt.")
+        return 0
 
+    with psycopg2.connect(dsn_for(args.env)) as conn, conn.cursor() as cur:
         cur.execute("select to_regclass('public.mirror_meta') is not null")
-        if cur.fetchone()[0] and args.apply:
-            sys.exit(
-                "AVBRYTER: databasen är en spegel (mirror_meta). Den får main:s "
-                "raderingar genom synken; gallra i main. Torrkörning går bra."
+        if cur.fetchone()[0]:
+            print(
+                "Spegel (mirror_meta): bara tabellerna synken inte för över gallras här "
+                "(migration 133). Resten får main:s raderingar genom synken."
             )
 
         if args.tenant:
@@ -155,6 +159,22 @@ def main() -> int:
                 "sätt en policy med --policyns-period eller --satt-policy."
             )
     return 0
+
+
+def _satt_policy(env: str, tenant: str, dagar: int, beslutad_av: str) -> None:
+    with psycopg2.connect(dsn_for(env)) as conn, conn.cursor() as cur:
+        tenant_id = _slå_upp_tenant(cur, tenant)
+        cur.execute(
+            """
+            insert into ss_gallringspolicy (tenant_id, dagar, beslutad_av)
+            values (%s, %s, %s)
+            on conflict (tenant_id)
+            do update set dagar = excluded.dagar,
+                          beslutad_av = excluded.beslutad_av,
+                          beslutad_at = now()
+            """,
+            (tenant_id, dagar, beslutad_av),
+        )
 
 
 def _slå_upp_tenant(cur, nyckel: str) -> str:
