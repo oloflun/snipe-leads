@@ -342,6 +342,8 @@ async def besluta_kb_forslag(
     med samma väg som en handskriven (inbäddning, KB-versionen bumpas). En
     befintlig artikel ändras aldrig: finns rubriken redan i basen när kunden
     trycker, hoppas utkastet över och räknas som `fanns_redan`."""
+    from ..cache import versioner
+
     settings = get_settings()
     storage = request.app.state.storage
     tenant_id = tenant["tenant_id"]
@@ -377,13 +379,13 @@ async def besluta_kb_forslag(
             embedding = await embed_text(f"{forslag['title']}\n{forslag['content']}")
         if not await storage.lagg_till_kb_forslag(tenant_id, forslag_id, embedding=embedding):
             continue  # ett annat klick hann före
+        # Svarscachen ogiltigförklaras direkt efter varje sparad artikel, inte
+        # efter hela loopen: faller nästa utkast står den här artikeln kvar,
+        # och då får gamla svar inte leva vidare i 21 dagar (Codex runda 2).
+        await versioner.bumpa_kb(tenant_id)
         titlar.add(nyckel)
         tillagda.append(forslag_id)
 
-    if tillagda:
-        from ..cache import versioner
-
-        await versioner.bumpa_kb(tenant_id)
     return {"tillagda": tillagda, "avvisade": avvisade, "fanns_redan": fanns_redan}
 
 

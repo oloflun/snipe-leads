@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 
 from ..budget import SupportBudgetExceededError, kontrollera_support_budget
 from ..email_pipeline.omformulering import omformulera_utkast
-from ..email_pipeline.sender import SandningsFel, skicka_supportsvar
+from ..email_pipeline.sender import BegransadMottagare, SandningsFel, skicka_supportsvar
 from .deps import require_tenant
 from .schemas import ApproveDraftRequest, OmformuleraDraftRequest, RejectDraftRequest
 
@@ -53,6 +53,9 @@ async def approve_draft(
             sandnotering = await skicka_supportsvar(email, content=content, tenant_id=tenant_id, storage=storage)
         else:
             sandnotering = await skicka_supportsvar(email, content=content)
+    except BegransadMottagare as fel:
+        # Ett beslut, inte ett leveransfel: utkastet står kvar oskickat.
+        raise HTTPException(status_code=409, detail=str(fel)) from fel
     except SandningsFel as fel:
         raise HTTPException(status_code=502, detail=str(fel)) from fel
 

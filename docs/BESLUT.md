@@ -32,6 +32,16 @@ tvåfaktor saknar markeringen och förlorar adminrätten vid deployen, vilket ä
 `lib/auth/tvafaktor-session.ts`, `lib/auth/admin.ts`, `snajp-support/app/api/kb.py`,
 `storage/*.lagg_till_kb_forslag`, `db/migrations/20261119100000_130_kb_forslag_utan_artikel.sql`.
 
+**Runda 2 (samma dag).** Tre fel till, rättade:
+- "Avbryt" på en påbörjad inrullning kunde i ett kapplopp radera ett nyss aktiverat skydd
+  utan kod. Migration 131 ger en egen funktion som bara raderar en rad utan `aktiverad_at`.
+- Begränsad behandling (art. 18) prövas nu också i sändaren, precis före varje supportsvar
+  (`sender._vagra_begransad`, fail closed), så att ett utkast från före spärren inte går ut
+  när det godkänns. Api:t svarar 409 med skälet.
+- KB-versionen höjs direkt efter varje sparat förslag, så att ett fel på nästa inte lämnar
+  gamla cachesvar giltiga. Kvar är bara fönstret mellan commit och höjning om processen dör
+  hårt; det har varje KB-skrivväg, och TTL:n begränsar det.
+
 ## 2026-11-19 — Synkflytten verkställs i development; mains steg väntar på releasen (Claude (agent), på Antons uppdrag "verkställ synkflytten")
 
 **Beslut.**

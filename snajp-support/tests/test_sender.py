@@ -233,3 +233,35 @@ async def test_approve_av_testmejl_skickar_inget_och_sager_det():
                 if d.get("event") == "approved_and_sent"
             ]
             assert noteringar == [NOT_TESTMEJL]
+
+
+# --- begränsad behandling i sändningsögonblicket (Codex runda 2, 2026-11-19) ---
+
+
+async def test_spärrad_mottagare_far_inget_svar_aven_om_utkastet_ar_aldre():
+    """Ett utkast som skapats innan spärren sattes går inte ut när det godkänns."""
+    from app.email_pipeline.sender import BegransadMottagare
+    from app.storage.memory import MemoryStorage
+
+    lager = MemoryStorage()
+    lager.behandlingsbegransningar.append({"email": "Kund@Example.com", "havd_at": None})
+    provider = _Skickare()
+    with pytest.raises(BegransadMottagare):
+        await skicka_supportsvar(_mejlrad(), content="Hej!", tenant_id="t-1", storage=lager, provider=provider)
+    assert provider.skickade == []
+
+    # Hävd spärr: svaret går ut.
+    lager.behandlingsbegransningar[0]["havd_at"] = "2026-11-19T10:00:00+00:00"
+    await skicka_supportsvar(_mejlrad(), content="Hej!", tenant_id="t-1", storage=lager, provider=provider)
+    assert len(provider.skickade) == 1
+
+
+async def test_olasbar_sparrlista_skickar_inget():
+    class _Trasig:
+        async def list_begransade(self, tenant_id):
+            raise RuntimeError("databasen svarar inte")
+
+    provider = _Skickare()
+    with pytest.raises(SandningsFel):
+        await skicka_supportsvar(_mejlrad(), content="Hej!", tenant_id="t-1", storage=_Trasig(), provider=provider)
+    assert provider.skickade == []

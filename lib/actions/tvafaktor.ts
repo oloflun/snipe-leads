@@ -9,6 +9,7 @@ import { nyTotpHemlighet, otpauthAdress, provaTotp, serUtSomTotp } from "@/lib/a
 import {
   aktiveraTvafaktor,
   avaktiveraTvafaktor,
+  avbrytTvafaktorInrullning,
   lasTvafaktor,
   paborjaTvafaktor,
   provaOchForbruka
@@ -126,10 +127,12 @@ export async function avbrytInrullning(): Promise<TvafaktorSvar> {
   const admin = await getPlatformAdminUtanTvafaktorkrav();
   if (!admin) return { ok: false, fel: "ej_admin" };
   try {
+    // En sats i databasen som bara raderar en rad utan aktiverad_at (migration
+    // 131). Förut lästes läget först och tvafaktor_avaktivera() anropades
+    // sedan: en aktivering däremellan kunde raderas utan kod (Codex 2026-11-19).
+    if (await avbrytTvafaktorInrullning(admin.userId)) return { ok: true };
     const lage = await lasTvafaktor(admin.userId);
-    if (lage?.aktiv) return { ok: false, fel: "redan_aktiv" };
-    await avaktiveraTvafaktor(admin.userId);
-    return { ok: true };
+    return lage?.aktiv ? { ok: false, fel: "redan_aktiv" } : { ok: true };
   } catch (fel) {
     console.error("avbrytInrullning:", (fel as Error).message);
     return { ok: false, fel: "fel" };

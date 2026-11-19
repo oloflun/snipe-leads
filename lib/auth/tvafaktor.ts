@@ -120,6 +120,15 @@ export async function aktiveraTvafaktor(userId: string, steg: number, kodhashar:
   return Boolean(rader[0]?.ok);
 }
 
+/**
+ * Ta bort en PÅBÖRJAD inrullning. Rör aldrig ett aktiverat skydd: databasen
+ * raderar bara en rad utan aktiverad_at, i en sats (migration 131).
+ */
+export async function avbrytTvafaktorInrullning(userId: string): Promise<boolean> {
+  const rader = await sqlAsUser<{ ok: boolean }>(userId, "select public.tvafaktor_avbryt_inrullning() as ok");
+  return Boolean(rader[0]?.ok);
+}
+
 /** Ta bort tvåfaktorn. Databasen kräver en godkänd kod de senaste två minuterna. */
 export async function avaktiveraTvafaktor(userId: string): Promise<boolean> {
   const rader = await sqlAsUser<{ ok: boolean }>(userId, "select public.tvafaktor_avaktivera() as ok");

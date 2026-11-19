@@ -243,3 +243,29 @@ async def test_kontot_raderas_med_sin_tvafaktor():
     finally:
         await agare.close()
         await web.close()
+
+
+@pytest.mark.anyio
+async def test_avbryt_rör_aldrig_ett_aktiverat_skydd():
+    """Migration 131 (Codex runda 2, 2026-11-19): `tvafaktor_avbryt_inrullning`
+    raderar bara en påbörjad rad. Direkt efter aktiveringen, när
+    `tvafaktor_avaktivera()` själv hade godtagit raderingen, står skyddet kvar."""
+    agare, web = await _anslut(DSN), await _anslut(WEB_DSN)
+    konton = []
+    try:
+        aktiv = await _aktivt_konto(agare, web)
+        konton.append(aktiv)
+        avbryt = "select public.tvafaktor_avbryt_inrullning()"
+        assert await _som(web, aktiv, avbryt) is False
+        assert (await _las(web, aktiv))["aktiv"] is True
+        assert await _som(web, None, avbryt) is False
+
+        paborjad = await _konto(agare, admin=True)
+        konton.append(paborjad)
+        assert await _som(web, paborjad, "select public.tvafaktor_paborja($1)", BLOB) is True
+        assert await _som(web, paborjad, avbryt) is True
+        assert await _las(web, paborjad) is None
+    finally:
+        await _stada(agare, konton)
+        await agare.close()
+        await web.close()

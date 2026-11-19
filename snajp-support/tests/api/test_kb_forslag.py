@@ -225,3 +225,50 @@ async def test_ett_avbrutet_godkannande_lamnar_utkastet_vantande(monkeypatch):
 
         for a in await storage.list_kb(tenant_id):
             await storage.delete_kb_article(tenant_id, a["id"])
+
+
+@pytest.mark.anyio
+async def test_cachen_ogiltigforklaras_aven_om_nasta_utkast_faller(monkeypatch):
+    """Codex runda 2: versionen höjdes först efter hela loopen, så ett fel på
+    det andra utkastet lämnade det första sparat men gamla cachesvar giltiga."""
+    from app.cache import versioner
+
+    monkeypatch.setattr(ks, "ar_publik_vard", lambda url: True)
+    monkeypatch.setattr(ks, "bygg_anropare", lambda: None)
+    monkeypatch.setattr(ks, "skanna", _falsk_skanning(_utkast("Garanti", "Betalsätt")))
+
+    async with app.router.lifespan_context(app):
+        storage = app.state.storage
+        async with _client() as c:
+            r = await c.post("/api/kb/skanna", json={"webbplats": "lingonkudden.se", "spara": True}, headers=DEMO)
+            assert r.status_code == 202, r.text
+            svar = await _vanta_klar(c)
+            tenant_id = svar["skanning"]["tenant_id"]
+            forsta, andra = sorted(svar["forslag"], key=lambda f: f["title"] != "Garanti")
+
+            riktig = storage.lagg_till_kb_forslag
+
+            async def andra_faller(tid, fid, **k):
+                if fid == andra["id"]:
+                    raise RuntimeError("databasen föll")
+                return await riktig(tid, fid, **k)
+
+            monkeypatch.setattr(storage, "lagg_till_kb_forslag", andra_faller)
+            hojningar: list[str] = []
+            riktig_bump = versioner.bumpa_kb
+
+            async def raknad(tid):
+                hojningar.append(tid)
+                await riktig_bump(tid)
+
+            monkeypatch.setattr(versioner, "bumpa_kb", raknad)
+            with pytest.raises(RuntimeError):
+                await c.post(
+                    "/api/kb/forslag/beslut",
+                    json={"ids": [forsta["id"], andra["id"]], "beslut": "lagg_till"},
+                    headers=DEMO,
+                )
+            assert hojningar == [tenant_id], "det sparade utkastet ska redan ha ogiltigförklarat cachen"
+
+        for a in await storage.list_kb(tenant_id):
+            await storage.delete_kb_article(tenant_id, a["id"])
