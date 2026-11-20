@@ -159,6 +159,9 @@ def test_begransad_behandling_undantas():
         assert villkor in sql, f"{senaste.name}: undantaget saknas: {villkor}"
     # Loggtabellerna utan adresskolumn prövas på löptexten.
     assert sql.count("gallring_namner_begransad(") >= 8
+    # 145 (Codex runda 13): feedbacken följer sin körnings skydd.
+    assert re.search(r"from public\.agent_feedback\s.*?where r\.id = agent_feedback\.run_id",
+                     sql, re.DOTALL), f"{senaste.name}: feedbacken prövas inte mot sin körning"
 
 
 def test_jobbet_ar_av_som_standard():

@@ -1003,8 +1003,16 @@ async def test_begransad_behandling_gallras_inte_forran_den_havs():
             korning = await conn.fetchval(
                 f"""insert into agent_runs (tenant_id, agent_type, pack_version, input, output, prospect_id, created_at)
                     values ($1, 'support', 'test', 'Mejl', 'Svar', $2, {GAMMAL}) returning id""", tid, pid)
+            # 145: feedback utan adressen i texten hör till den skyddade körningen.
+            feedback = await conn.fetchval(
+                f"""insert into agent_feedback (tenant_id, run_id, verdict, comment, corrected_output, created_at)
+                    values ($1, $2, 'bad', 'För stelt', 'Bättre svar', {GAMMAL}) returning id""", tid, korning)
             return {"ss_emails": mejl, "ss_customers": kund, "ss_tickets": arende, "prospects": pid,
-                    "lead_lists": lid, "lead_list_items": rad, "agent_runs": korning}
+                    "lead_lists": lid, "lead_list_items": rad, "agent_runs": korning,
+                    "agent_feedback": feedback}
+
+        async def feedbacktext(id_) -> str | None:
+            return await conn.fetchval("select comment from agent_feedback where id = $1", id_)
 
         fore = await personens_data(a_fore)
         under = await personens_data(a_under)
@@ -1013,6 +1021,9 @@ async def test_begransad_behandling_gallras_inte_forran_den_havs():
             f"""insert into agent_runs (tenant_id, agent_type, pack_version, input, output, created_at)
                 values ($1, 'support', 'test', $2, 'Svar', {GAMMAL}) returning id""",
             tid, f"Mejl från {a_fri.upper()}")
+        fri_feedback = await conn.fetchval(
+            f"""insert into agent_feedback (tenant_id, run_id, verdict, comment, created_at)
+                values ($1, $2, 'good', 'Bra ton', {GAMMAL}) returning id""", tid, fri)
 
         await conn.execute(
             "insert into behandlingsbegransningar (email, skal) values ($1, 'test'), ($2, 'test')",
@@ -1036,9 +1047,16 @@ async def test_begransad_behandling_gallras_inte_forran_den_havs():
         assert await conn.fetchval("select input from agent_runs where id = $1", fore["agent_runs"]) == "Mejl"
         assert await conn.fetchval("select input from agent_runs where id = $1", fri), (
             "agentloggen som nämner adressen anonymiserades trots begränsningen")
+        for data in (fore, under):
+            assert await feedbacktext(data["agent_feedback"]) == "För stelt", (
+                "feedbacken på en skyddad körning nollades")
+        assert await feedbacktext(fri_feedback) == "Bra ton", (
+            "feedbacken på en körning som skyddas via löptexten nollades")
         for tabell, id_ in orord.items():
             if tabell == "agent_runs":
                 assert await conn.fetchval("select input from agent_runs where id = $1", id_) is None
+            elif tabell == "agent_feedback":
+                assert await feedbacktext(id_) is None
             else:
                 assert not await _finns(conn, tabell, id_), f"{tabell} {id_} skulle ha gallrats"
 
@@ -1051,6 +1069,8 @@ async def test_begransad_behandling_gallras_inte_forran_den_havs():
         for tabell in ("ss_emails", "ss_customers", "prospects", "lead_list_items", "lead_lists"):
             assert not await _finns(conn, tabell, fore[tabell]), f"{tabell} gallrades inte efter hävningen"
         assert await conn.fetchval("select input from agent_runs where id = $1", fri) is None
+        assert await feedbacktext(fore["agent_feedback"]) is None
+        assert await feedbacktext(fri_feedback) is None
     finally:
         if begransade:
             await conn.execute(

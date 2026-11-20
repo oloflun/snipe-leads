@@ -1039,7 +1039,7 @@ varje faktisk ändring av en rad som en behandling (migration 141 och 142: trigg
 varje urval räknar den; en listrad med prospekt väljs bara när prospektet väljs, och
 prospektets urval räknar listraderna som pekar på det, migration 143; en adress med
 aktiv begränsning av behandlingen (124) gallras inte förrän begränsningen hävts,
-migration 144; ingen
+migration 144, och en agentkörnings feedback följer körningens skydd, migration 145; ingen
 återkommande teknisk skrivning får röra gamla rader i de tabellerna, för då gallras de
 aldrig), och gör
 ingenting hos en kund vars urval överstiger taket (`GALLRING_TAK`) utan larmar. Varje

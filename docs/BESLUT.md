@@ -199,6 +199,14 @@ tar ett rådgivande lås som gallringen håller delat före andra varvet, i stä
 tabellås (138:s regel: ingen annan skrivning ska vänta på gallringen). När begränsningen
 hävs gallras uppgifterna vid nästa körning.
 
+**Runda 13 (2026-11-20, efter releasen).** Ett hål i 144: feedbacken på en agentkörning
+prövades bara på sin egen text. En körning som skyddas via sitt prospekt stod kvar, men
+feedbackraden på den, vars kommentar inte nämner adressen, fick kommentaren och det
+rättade svaret nollade. Migration 145 undantar feedbacken när dess körning (`run_id`, alltid
+satt) omfattas av en begränsning, med samma villkor som körningens eget urval. Skäl: en rad
+som hör till en skyddad rad är lika skyddad, även när kopplingen går via en främmande nyckel
+och inte via adressen. Gallringen är fortfarande av i produktionen, så inget har raderats.
+
 ## 2026-11-19 — Synkflytten verkställs i development; mains steg väntar på releasen (Claude (agent), på Antons uppdrag "verkställ synkflytten")
 
 **Beslut.**
