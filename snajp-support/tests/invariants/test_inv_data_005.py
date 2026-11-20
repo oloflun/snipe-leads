@@ -164,6 +164,26 @@ def test_begransad_behandling_undantas():
                      sql, re.DOTALL), f"{senaste.name}: feedbacken prövas inte mot sin körning"
 
 
+def test_taket_raknar_kaskaden():
+    """Migration 146 (Codex runda 14): taket skyddar mot ett felaktigt
+    policyvärde och måste räkna allt som försvinner, även barnen som ON DELETE
+    CASCADE tar. Den senaste gallra_tenant räknar kaskaden före takprövningen i
+    första varvet och igen efter låsen."""
+    senaste = [f for f in _gallringsmigrationer()
+               if "function public.gallra_tenant" in f.read_text(encoding="utf-8")][-1]
+    sql = _utan_kommentarer(senaste.read_text(encoding="utf-8"))
+    anrop = ("v_kaskad := public.gallring_kaskad(v_mejl, v_arenden, v_minne, v_kunder, "
+             "v_prospekt, v_genererade);")
+    assert sql.count(anrop) == 2, f"{senaste.name}: kaskaden räknas inte i båda varven"
+    forsta = sql.index(anrop)
+    assert forsta < sql.index("exit when p_torrkorning or (p_tak is not null and v_totalt > p_tak);"), (
+        "kaskaden räknas efter takprövningen i första varvet")
+    andra = sql.index(anrop, forsta + 1)
+    assert andra < sql.index("v_status := 'tak_nadd';"), "kaskaden räknas efter slutprövningen"
+    assert sql.count("v_totalt := v_totalt + (select coalesce(sum(value::bigint), 0) "
+                     "from jsonb_each_text(v_kaskad));") == 2
+
+
 def test_jobbet_ar_av_som_standard():
     config = (APP / "config.py").read_text(encoding="utf-8")
     assert re.search(r"^\s*gallring_aktiv:\s*bool\s*=\s*False\s*$", config, re.MULTILINE)

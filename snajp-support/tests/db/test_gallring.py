@@ -340,6 +340,16 @@ async def test_gallringen_tar_det_gamla_i_varje_kategori_och_bara_det():
         print("SKARP", json.dumps(antal, ensure_ascii=False))
         # Torrkörningen räknade exakt det som sedan gjordes.
         assert {k: v["antal"] for k, v in torr["antal"].items()} == antal
+        # 146: varje tabell minskade med exakt det loggen säger, kaskaden med.
+        efter_kaskad = await _bild(conn, a)
+        for tabell in _TABELLER_TENANT + _TABELLER_YTA:
+            post = svar["antal"].get(tabell)
+            vantat = post["antal"] if post and post["atgard"] in ("radera", "kaskad") else 0
+            assert fore_a[tabell] - efter_kaskad[tabell] == vantat, (tabell, fore_a[tabell],
+                                                                    efter_kaskad[tabell], post)
+        assert antal["ss_messages"] == 2 and antal["outreach_messages"] == 1, antal
+        assert svar["totalt"] == sum(v for k, v in antal.items() if k != "suppressions")
+        antal = {k: v["antal"] for k, v in svar["antal"].items() if v["atgard"] != "kaskad"}
         assert antal == {
             "ss_emails": 1, "ss_tickets": 2, "customer_memory": 2, "ss_customers": 1,
             "prospects": 1, "lead_list_items": 1, "lead_lists": 1, "leads_job_ledger": 1,
@@ -416,7 +426,7 @@ async def test_gallringen_tar_det_gamla_i_varje_kategori_och_bara_det():
             a["id"])
         assert [(r["status"], r["torrkorning"]) for r in logg] == [
             ("torrkorning", True), ("klar", False), ("klar", False)]
-        assert logg[1]["totalt"] == sum(v for k, v in antal.items() if k != "suppressions")
+        assert logg[1]["totalt"] == svar["totalt"]
         print("RESULTAT kategorier gallrade, ny data kvar, kund B orörd, spärr och underlag orörda")
     finally:
         await conn.close()
@@ -440,8 +450,9 @@ async def test_spegeln_gallrar_det_synken_inte_for_over():
             await conn.execute("create table public.mirror_meta (environment text)")
             svar = _json(await conn.fetchval("select gallra_tenant($1, false)", t["id"]))
             assert svar["status"] == "klar" and svar["spegel"] is True
-            antal = {k: v["antal"] for k, v in svar["antal"].items()}
+            antal = {k: v["antal"] for k, v in svar["antal"].items() if v["atgard"] != "kaskad"}
             print("\nSPEGEL", json.dumps(antal, ensure_ascii=False))
+            assert not any(v["antal"] for v in svar["antal"].values() if v["atgard"] == "kaskad"), svar
             assert antal == {
                 "ss_emails": 0, "ss_tickets": 0, "customer_memory": 0, "ss_customers": 0,
                 "prospects": 0, "lead_list_items": 0, "lead_lists": 0, "leads_job_ledger": 0,
@@ -1078,6 +1089,94 @@ async def test_begransad_behandling_gallras_inte_forran_den_havs():
                 "where email = any($1::text[]) and havd_at is null", begransade)
         await conn.close()
         await skrivare.close()
+
+
+@pytest.mark.anyio
+async def test_taket_raknar_det_kaskaden_tar():
+    """Codex runda 14: taket räknade bara de valda raderna, så ett prospekt med
+    fem meddelanden vägde en rad men raderade sju. Sedan migration 146 räknas
+    kaskaden mot taket och i loggen; över taket lämnas allt orört."""
+    conn = await _anslut(DSN)
+    try:
+        t = await _ny_tenant(conn, "kaskadtak", policy=POLICY_DAGAR)
+        tid = t["id"]
+        pid = await conn.fetchval(
+            f"""insert into prospects (tenant_id, company_name, contact_name, contact_email, created_at)
+                values ($1, 'Kaskad AB', 'Test Testsson', $2, {GAMMAL}) returning id""",
+            tid, f"kaskad.{uuid.uuid4().hex[:8]}@example.com")
+        trad = await conn.fetchval(
+            f"insert into outreach_threads (tenant_id, prospect_id, created_at) values ($1, $2, {GAMMAL}) returning id",
+            tid, pid)
+        for _ in range(5):
+            await conn.execute(
+                f"""insert into outreach_messages (tenant_id, thread_id, direction, body, sent_at, created_at)
+                    values ($1, $2, 'outbound', 'Hej Test', {GAMMAL}, {GAMMAL})""", tid, trad)
+
+        torr = _json(await conn.fetchval("select gallra_tenant($1, true)", tid))
+        assert torr["antal"]["prospects"]["antal"] == 1
+        assert torr["antal"]["outreach_threads"] == {"atgard": "kaskad", "antal": 1}, torr["antal"]
+        assert torr["antal"]["outreach_messages"] == {"atgard": "kaskad", "antal": 5}, torr["antal"]
+        assert torr["totalt"] >= 7, torr
+
+        # Föräldern ensam ligger under taket, kaskaden över: ingenting rörs.
+        svar = _json(await conn.fetchval("select gallra_tenant($1, false, 6)", tid))
+        assert svar["status"] == "tak_nadd", svar
+        assert await _finns(conn, "prospects", pid)
+        assert await conn.fetchval("select count(*) from outreach_messages where thread_id = $1", trad) == 5
+
+        # Med plats under taket gallras allt, och loggen säger hur mycket.
+        svar = _json(await conn.fetchval("select gallra_tenant($1, false, $2)", tid, torr["totalt"]))
+        assert svar["status"] == "klar" and svar["totalt"] == torr["totalt"], svar
+        assert not await _finns(conn, "prospects", pid)
+        assert not await conn.fetchval("select count(*) from outreach_messages where thread_id = $1", trad)
+        logg = await conn.fetchval(
+            "select totalt from ss_gallringslogg where tenant_id = $1 and status = 'klar'", tid)
+        assert logg == torr["totalt"]
+    finally:
+        await conn.close()
+
+
+@pytest.mark.anyio
+async def test_varje_kaskad_fran_gallringen_raknas():
+    """Migration 146: varje tabell som ON DELETE CASCADE tömmer när gallringen
+    raderar (i hur många led som helst) står i gallring_kaskad eller är en egen
+    kategori i gallra_tenant. En ny tabell med kaskad mot ett prospekt eller ett
+    ärende fäller testet tills den räknas mot taket."""
+    import re
+
+    conn = await _anslut(DSN)
+    try:
+        tenant_def = await conn.fetchval(
+            "select pg_get_functiondef('public.gallra_tenant(uuid, boolean, integer, text)'::regprocedure)")
+        kaskad_def = await conn.fetchval(
+            "select pg_get_functiondef('public.gallring_kaskad(uuid[], uuid[], uuid[], uuid[], uuid[], uuid[])'"
+            "::regprocedure)")
+        raderade = set(re.findall(r"delete from public\.(\w+)", tenant_def))
+        assert {"prospects", "ss_tickets", "ss_emails", "ss_customers"} <= raderade, raderade
+        kanter = await conn.fetch(
+            """select c.relname as barn, p.relname as foralder
+                 from pg_constraint k
+                 join pg_class c on c.oid = k.conrelid
+                 join pg_class p on p.oid = k.confrelid
+                 join pg_namespace n on n.oid = c.relnamespace
+                where k.contype = 'f' and k.confdeltype = 'c' and n.nspname = 'public'""")
+        # Spärrlistans koppling nollas före kontakterna och kaskaderar aldrig.
+        undantag = {("suppressions", "contacts")}
+        saknas, besokta, ko = [], set(), list(raderade)
+        while ko:
+            foralder = ko.pop()
+            if foralder in besokta:
+                continue
+            besokta.add(foralder)
+            for k in kanter:
+                if k["foralder"] != foralder or (k["barn"], foralder) in undantag:
+                    continue
+                if k["barn"] not in raderade and f"'{k['barn']}'" not in kaskad_def:
+                    saknas.append(f"{k['barn']} <- {foralder}")
+                ko.append(k["barn"])
+        assert not saknas, f"kaskad som taket inte räknar: {sorted(saknas)}"
+    finally:
+        await conn.close()
 
 
 @pytest.mark.anyio

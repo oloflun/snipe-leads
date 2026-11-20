@@ -207,6 +207,15 @@ satt) omfattas av en begränsning, med samma villkor som körningens eget urval.
 som hör till en skyddad rad är lika skyddad, även när kopplingen går via en främmande nyckel
 och inte via adressen. Gallringen är fortfarande av i produktionen, så inget har raderats.
 
+**Runda 14 (samma dag).** Taket räknade bara de valda raderna i varje kategori, inte barnen
+som ON DELETE CASCADE tar med sig. Ett prospekt med en tråd och hundra meddelanden vägde en
+rad men raderade 102, så taket, som är skyddet mot ett felaktigt policyvärde, kunde passeras
+utan larm, och torrkörningen och loggen underskattade ingreppet. Migration 146 räknar
+kaskaden (`gallring_kaskad`) före takprövningen och igen efter låsen, på det som faktiskt
+raderas, och visar varje barntabell i loggen med åtgärden "kaskad". Ett databastest läser
+katalogens kaskader och fäller en ny tabell som taket inte räknar. Skäl: ett tak som inte
+räknar det som försvinner skyddar inte mot det det finns till för.
+
 ## 2026-11-19 — Synkflytten verkställs i development; mains steg väntar på releasen (Claude (agent), på Antons uppdrag "verkställ synkflytten")
 
 **Beslut.**

@@ -1042,7 +1042,9 @@ aktiv begränsning av behandlingen (124) gallras inte förrän begränsningen h�
 migration 144, och en agentkörnings feedback följer körningens skydd, migration 145; ingen
 återkommande teknisk skrivning får röra gamla rader i de tabellerna, för då gallras de
 aldrig), och gör
-ingenting hos en kund vars urval överstiger taket (`GALLRING_TAK`) utan larmar. Varje
+ingenting hos en kund vars urval överstiger taket (`GALLRING_TAK`) utan larmar; taket
+räknar också varje rad som ON DELETE CASCADE tar med sig (`gallring_kaskad`, migration 146,
+och databastestet som fäller en ny kaskad som inte räknas). Varje
 körning loggas per kund i `ss_gallringslogg`, läsbar via `GET /api/admin/gallring`.
 Varför: integritetspolicyn lovar 24 månader från senaste behandlingen i alla
 kategorier, automatiserat och loggat (GDPR art. 5.1 e), men 048 gallrade bara
