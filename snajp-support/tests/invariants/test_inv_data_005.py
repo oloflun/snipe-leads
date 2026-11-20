@@ -164,6 +164,29 @@ def test_begransad_behandling_undantas():
                      sql, re.DOTALL), f"{senaste.name}: feedbacken prövas inte mot sin körning"
 
 
+def test_spegeln_vantar_pa_begransningarna():
+    """Migration 147 (Codex runda 15): spegelns gallring prövar begränsningarna
+    mot spegelns egen tabell. gdpr_radera.py skriver samma rad i båda
+    miljöerna, synken för över alla rader och stämplar, och den senaste
+    gallra_tenant kör inte skarpt i en spegel utan en stämpel från de senaste
+    två timmarna."""
+    senaste = [f for f in _gallringsmigrationer()
+               if "function public.gallra_tenant" in f.read_text(encoding="utf-8")][-1]
+    sql = _utan_kommentarer(senaste.read_text(encoding="utf-8"))
+    sparr = sql.find("if v_spegel and not p_torrkorning then")
+    assert sparr >= 0, f"{senaste.name}: spegeln prövar inte begränsningssynken"
+    assert "(to_jsonb(m) ->> 'begransningar_synkade_at')::timestamptz" in sql[sparr:sparr + 400]
+    assert sparr < sql.index("for v_varv in 1..2 loop"), "spärren prövas efter urvalet"
+
+    skript = ROOT / "scripts"
+    synk = (skript / "railway_synk.py").read_text(encoding="utf-8")
+    assert synk.index("fel += skriv_begransningar(dc, begransningar)") < synk.index(
+        "dc.execute(\"update public.mirror_meta set lage = 'envags', synkad_at = now()\")")
+    gdpr = (skript / "gdpr_radera.py").read_text(encoding="utf-8")
+    assert "return _spegla_till_development(rad, args.epost)" in gdpr
+    assert "synkas inte till development-spegeln" not in gdpr
+
+
 def test_taket_raknar_kaskaden():
     """Migration 146 (Codex runda 14): taket skyddar mot ett felaktigt
     policyvärde och måste räkna allt som försvinner, även barnen som ON DELETE

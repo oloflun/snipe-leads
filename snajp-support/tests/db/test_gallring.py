@@ -432,6 +432,13 @@ async def test_gallringen_tar_det_gamla_i_varje_kategori_och_bara_det():
         await conn.close()
 
 
+#: En spegel vars begränsningar synken nyss fört över (migration 147): utan
+#: stämpeln kör spegelns gallring inte skarpt.
+_SPEGEL = (
+    "create table public.mirror_meta (environment text, begransningar_synkade_at timestamptz);"
+    " insert into public.mirror_meta values ('development', now())"
+)
+
 @pytest.mark.anyio
 async def test_spegeln_gallrar_det_synken_inte_for_over():
     """Migration 133 (Codex runda 3, 2026-11-19), med 139: i en spegel väljer de
@@ -447,7 +454,7 @@ async def test_spegeln_gallrar_det_synken_inte_for_over():
         tx = conn.transaction()
         await tx.start()
         try:
-            await conn.execute("create table public.mirror_meta (environment text)")
+            await conn.execute(_SPEGEL)
             svar = _json(await conn.fetchval("select gallra_tenant($1, false)", t["id"]))
             assert svar["status"] == "klar" and svar["spegel"] is True
             antal = {k: v["antal"] for k, v in svar["antal"].items() if v["atgard"] != "kaskad"}
@@ -482,6 +489,51 @@ async def test_spegeln_gallrar_det_synken_inte_for_over():
     finally:
         await conn.close()
 
+
+@pytest.mark.anyio
+async def test_spegeln_gallrar_inte_utan_farsk_begransningssynk():
+    """Migration 147 (Codex runda 15, 2026-11-20): spegelns gallring prövar
+    begränsningarna mot spegelns egen tabell. Utan en stämpel från synken de
+    senaste två timmarna kan den inte veta att en ny begränsning i main finns
+    med, och raderar då ingenting. Torrkörningen går som förut, och när synken
+    stämplat gallrar den."""
+    conn = await _anslut(DSN)
+    try:
+        t = await _ny_tenant(conn, "osynkad", policy=POLICY_DAGAR)
+        ids = await _seeda(conn, t)
+        tx = conn.transaction()
+        await tx.start()
+        try:
+            await conn.execute("create table public.mirror_meta (environment text)")
+            await conn.execute("insert into public.mirror_meta values ('development')")
+            for steg in ("utan kolumn", "utan stämpel", "gammal stämpel"):
+                if steg == "utan stämpel":
+                    await conn.execute(
+                        "alter table public.mirror_meta add column begransningar_synkade_at timestamptz")
+                if steg == "gammal stämpel":
+                    await conn.execute(
+                        "update public.mirror_meta set begransningar_synkade_at = now() - interval '3 hours'")
+                del_tx = conn.transaction()
+                await del_tx.start()
+                try:
+                    with pytest.raises(asyncpg.exceptions.ObjectNotInPrerequisiteStateError, match="synken"):
+                        await conn.fetchval("select gallra_tenant($1, false)", t["id"])
+                finally:
+                    await del_tx.rollback()
+                assert await _finns(conn, "contacts", ids["kontakt_gammal"]), steg
+
+            torr = _json(await conn.fetchval("select gallra_tenant($1, true)", t["id"]))
+            assert torr["spegel"] is True and torr["antal"]["contacts"]["antal"] == 1, torr
+
+            await conn.execute("update public.mirror_meta set begransningar_synkade_at = now()")
+            svar = _json(await conn.fetchval("select gallra_tenant($1, false)", t["id"]))
+            assert svar["status"] == "klar" and svar["spegel"] is True, svar
+            assert not await _finns(conn, "contacts", ids["kontakt_gammal"])
+        finally:
+            await tx.rollback()
+        print("RESULTAT spegeln väntade utan färsk begränsningssynk och gallrade efter stämpeln")
+    finally:
+        await conn.close()
 
 @pytest.mark.anyio
 async def test_spegeln_gallrar_lokala_provrader_i_synkade_tabeller():
@@ -526,7 +578,7 @@ async def test_spegeln_gallrar_lokala_provrader_i_synkade_tabeller():
         tx = conn.transaction()
         await tx.start()
         try:
-            await conn.execute("create table public.mirror_meta (environment text)")
+            await conn.execute(_SPEGEL)
             svar = _json(await conn.fetchval("select gallra_tenant($1, false)", tid))
             assert svar["status"] == "klar" and svar["spegel"] is True, svar
             antal = {k: v["antal"] for k, v in svar["antal"].items()}
@@ -1190,7 +1242,7 @@ async def test_spegeln_raderar_barn_som_synken_lamnat_foraldralosa():
         tx = conn.transaction()
         await tx.start()
         try:
-            await conn.execute("create table public.mirror_meta (environment text)")
+            await conn.execute(_SPEGEL)
             kund = await conn.fetchval(
                 "insert into ss_customers (tenant_id, name) values ($1, 'Kanal Kund') returning id", t["id"])
             await conn.execute(
@@ -1293,7 +1345,7 @@ async def test_schemalagda_korningen_tak_dygnsspärr_och_spegel():
         tx = agare.transaction()
         await tx.start()
         try:
-            await agare.execute("create table public.mirror_meta (environment text)")
+            await agare.execute(_SPEGEL)
             await agare.execute("delete from ss_gallringskorning")
             spegel = _json(await agare.fetchval("select gallra_alla(5)"))
             assert spegel["status"] == "kord" and spegel["spegel"] is True

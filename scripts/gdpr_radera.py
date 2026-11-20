@@ -41,8 +41,15 @@ uppgifter förrän markeringen hävts. `--hav-begransning SKÄL` hävs den; det 
 art. 18.3 kräver att personen informerats innan begränsningen hävs. Raden
 står kvar med tid och skäl som belägg för att begäran hanterats, och den
 behålls också vid `--radera` (BEHALLS): en radering ska inte tyst häva en
-begränsning. Markeringen synkas inte till development-spegeln; skriptet
-påminner om att köra samma kommando där.
+begränsning.
+
+Mot `railway-main` skrivs samma rad (samma id och tider) i development-spegeln
+i samma körning, efter att main bekräftats (begransning_spegel.py). Spegeln
+gallrar själv det synken inte för över, och dess gallring ser bara spegelns
+egen tabell (Codex runda 15). Faller skrivningen i development avslutas
+skriptet med kod 3; synken för över raden inom tio minuter, och spegelns
+gallring kör inte skarpt utan en färsk överföring (migration 147). Samma
+kommando igen skriver om raden i spegeln; det ändrar ingenting i main.
 
 ## Vad som INTE raderas, och varför
 
@@ -75,7 +82,10 @@ import sys
 
 import psycopg2
 
+import begransning_spegel
 from gdpr_verktyg import DAGENS_MILJOER, ENVIRONMENTS, dsn_for
+
+begransning_dsn = dsn_for  # utbytbar i testerna
 
 #: Underfrågor som pekar ut personens rader i föräldratabellerna. Samma villkor
 #: som i TABELLER, så att utdraget och raderingen talar om samma rader.
@@ -323,13 +333,26 @@ def _aktiv_begransning(cur, epost: str):
     return cur.fetchone()
 
 
-def _begransning(cur, args) -> int:
-    """--begransa och --hav-begransning. Rör inga andra tabeller."""
+def _senaste_begransning(cur, epost: str) -> dict | None:
+    """Adressens senaste rad som JSON (den aktiva om en finns): det som speglas."""
+    cur.execute(
+        "select to_jsonb(b) from behandlingsbegransningar b where lower(email) = lower(%s) "
+        "order by (havd_at is null) desc, begard_at desc limit 1",
+        (epost.strip(),),
+    )
+    rad = cur.fetchone()
+    return rad[0] if rad else None
+
+
+def _begransning(cur, args) -> dict | None:
+    """--begransa och --hav-begransning. Rör inga andra tabeller. Svarar med
+    adressens senaste rad, som speglas till development (även när ingenting
+    ändrades i main: det är omförsöket när spegeln missade förra gången)."""
     aktiv = _aktiv_begransning(cur, args.epost)
     if args.begransa:
         if aktiv:
             print(f"\nBegränsningen är redan aktiv sedan {aktiv[2]:%Y-%m-%d} ({aktiv[1]}). Ingen ändring.")
-            return 0
+            return _senaste_begransning(cur, args.epost)
         cur.execute(
             "insert into behandlingsbegransningar (email, skal) values (lower(%s), %s) returning id",
             (args.epost.strip(), args.begransa.strip()),
@@ -342,7 +365,7 @@ def _begransning(cur, args) -> int:
     else:
         if not aktiv:
             print("\nIngen aktiv begränsning för adressen. Ingen ändring.")
-            return 0
+            return _senaste_begransning(cur, args.epost)
         print("\nArt. 18.3: den registrerade ska ha informerats innan begränsningen hävs.")
         _bekrafta(args.epost, "hävning av begränsningen")
         cur.execute(
@@ -350,9 +373,32 @@ def _begransning(cur, args) -> int:
             (args.hav_begransning.strip(), aktiv[0]),
         )
         print(f"Begränsningen hävd ({aktiv[0]}). Raden står kvar som belägg.")
-    if args.env == "railway-main":
-        print("Påminnelse: markeringen synkas inte till development-spegeln. Kör samma "
-              "kommando med --env railway-development.")
+    return _senaste_begransning(cur, args.epost)
+
+
+def _spegla_till_development(rad: dict, epost: str) -> int:
+    """Samma rad i development-spegeln, efter att main bekräftats. En hävd rad
+    häver också en äldre aktiv rad för adressen som satts direkt i spegeln:
+    spegeln ska visa main:s läge. Kod 3 om skrivningen faller."""
+    try:
+        with psycopg2.connect(begransning_dsn("railway-development")) as dev, dev.cursor() as cur:
+            utfall = begransning_spegel.spegla_rad(cur, rad)
+            if rad.get("havd_at"):
+                cur.execute(
+                    "update behandlingsbegransningar set havd_at = %s::timestamptz, havd_skal = %s "
+                    "where lower(email) = lower(%s) and havd_at is null",
+                    (rad["havd_at"], rad.get("havd_skal"), epost.strip()),
+                )
+    except (psycopg2.Error, SystemExit) as fel:
+        orsak = type(fel).__name__ if isinstance(fel, psycopg2.Error) else str(fel)
+        print(f"\nVARNING: markeringen kunde inte skrivas i development-spegeln ({orsak}).")
+        print("Synken för över den inom tio minuter, och spegelns gallring kör inte skarpt")
+        print("utan en färsk överföring (migration 147). Kör samma kommando igen för att försöka nu.")
+        return 3
+    if utfall == "krock":
+        print("\nDevelopment-spegeln har redan en egen aktiv begränsning för adressen; den står kvar.")
+    else:
+        print("\nSamma markering skriven i development-spegeln.")
     return 0
 
 
@@ -437,7 +483,11 @@ def main() -> int:
             print(json.dumps(utdrag, indent=2, ensure_ascii=False, default=str))
 
         if args.begransa is not None or args.hav_begransning is not None:
-            return _begransning(cur, args)
+            rad = _begransning(cur, args)
+            conn.commit()  # main först: spegeln får aldrig ett läge main inte har
+            if rad is not None and args.env == "railway-main":
+                return _spegla_till_development(rad, args.epost)
+            return 0
 
         if not args.radera:
             print("\nIngenting raderades. Lägg till --radera för att göra det.")

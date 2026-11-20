@@ -216,6 +216,35 @@ raderas, och visar varje barntabell i loggen med åtgärden "kaskad". Ett databa
 katalogens kaskader och fäller en ny tabell som taket inte räknar. Skäl: ett tak som inte
 räknar det som försvinner skyddar inte mot det det finns till för.
 
+**Runda 15 (samma dag).** Två fynd.
+
+*Spegelns gallring såg inte main:s begränsningar.* Development gallrar själv det synken
+inte för över och prövar begränsningarna mot sin egen tabell. Den tabellen synkades inte,
+och `gdpr_radera.py --begransa` skrev bara i main med en påminnelse om att köra samma
+kommando mot development. En missad eller misslyckad andra körning lät spegeln gallra bort
+det en begränsning i main skyddar. Nu:
+- Skriptet skriver samma rad (samma id och tider) i båda miljöerna och avslutar med kod 3
+  om spegeln inte gick att nå.
+- Synken för över alla rader var tionde minut och stämplar
+  `mirror_meta.begransningar_synkade_at`.
+- Spegelns gallring vägrar köra skarpt utan en stämpel från de senaste två timmarna
+  (migration 147). Vägran blir ett kundfel med larm.
+
+Skäl: en begränsning är en rättighet som ska gälla överallt där uppgifterna finns.
+Skyddet får inte hänga på att någon minns ett andra kommando, och en spegel som inte kan
+veta att den är aktuell ska vänta i stället för att gissa.
+
+*En stulen session kunde slå på tvåfaktor åt angriparen.* Inrullningen krävde bara en
+adminsession. Den som kom åt sessionen till ett konto utan aktiv tvåfaktor kunde rulla in
+sin egen hemlighet och få återställningskoderna, och ägaren stängdes ute. Nu:
+- `paborjaInrullning` kräver lösenordet på nytt, under inloggningens spärr mot gissning,
+  innan någon hemlighet skapas.
+- Databasen godtar bara en påbörjad inrullning från de senaste femton minuterna
+  (migration 148).
+
+Skäl: att lägga till en faktor ändrar vem som kan logga in. Det kräver samma bevis som en
+inloggning, och en session ensam är inte det beviset.
+
 ## 2026-11-19 — Synkflytten verkställs i development; mains steg väntar på releasen (Claude (agent), på Antons uppdrag "verkställ synkflytten")
 
 **Beslut.**
