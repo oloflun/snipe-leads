@@ -42,6 +42,11 @@ const T = {
     en: "A setup was started but not confirmed. Start over to get a new QR code."
   },
   borjaOm: { sv: "Börja om", en: "Start over" },
+  losenord: { sv: "Ditt lösenord", en: "Your password" },
+  losenordHint: {
+    sv: "Ange lösenordet igen innan tvåstegsverifieringen slås på.",
+    en: "Enter your password again before turning on two-step verification."
+  },
   steg1: { sv: "1. Skanna QR-koden med appen", en: "1. Scan the QR code with the app" },
   qrEtikett: { sv: "QR-kod för autentiseringsappen", en: "QR code for the authenticator app" },
   manuellt: { sv: "Går det inte att skanna? Ange nyckeln för hand:", en: "Can't scan it? Enter the key by hand:" },
@@ -80,7 +85,11 @@ const FEL: Record<TvafaktorFelkod, Localized> = {
   fel_kod: { sv: "Koden stämmer inte. Kontrollera klockan i telefonen och försök igen.", en: "The code is not correct. Check the clock on your phone and try again." },
   for_manga_forsok: { sv: "För många försök. Vänta några minuter och försök igen.", en: "Too many attempts. Wait a few minutes and try again." },
   redan_aktiv: { sv: "Tvåstegsverifieringen är redan på.", en: "Two-step verification is already on." },
-  ingen_inrullning: { sv: "Inrullningen hittades inte. Börja om.", en: "The setup was not found. Start over." },
+  fel_losenord: { sv: "Lösenordet stämmer inte.", en: "The password is not correct." },
+  ingen_inrullning: {
+    sv: "Inrullningen hittades inte eller är äldre än femton minuter. Börja om.",
+    en: "The setup was not found or is older than fifteen minutes. Start over."
+  },
   kraver_losenord: {
     sv: "Kontot loggar in med Google eller Microsoft och har inget lösenord. Med tvåstegsverifiering på loggar du in med lösenord och kod, så sätt ett lösenord först via ”Glömt lösenordet?” på inloggningssidan.",
     en: "This account signs in with Google or Microsoft and has no password. With two-step verification on, you sign in with a password and a code, so set a password first via “Forgot your password?” on the sign-in page."
@@ -100,10 +109,12 @@ export function Tvafaktor() {
   const { text } = useLocale();
   const [lage, setLage] = useState<Lage>({ typ: "laddar" });
   const [kod, setKod] = useState("");
+  const [losenord, setLosenord] = useState("");
   const [fel, setFel] = useState<Localized | null>(null);
   const [besked, setBesked] = useState<Localized | null>(null);
   const [isPending, startTransition] = useTransition();
   const kodId = useId();
+  const losenordId = useId();
 
   async function lasOm() {
     const status = await hamtaTvafaktorStatus();
@@ -127,11 +138,13 @@ export function Tvafaktor() {
     setBesked(null);
   }
 
-  function borja() {
+  function borja(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
     nollstallBesked();
     const kravs = lage.typ === "av" ? lage.kravs : false;
     startTransition(async () => {
-      const svar = await paborjaInrullning();
+      const svar = await paborjaInrullning(losenord);
+      setLosenord("");
       if (!svar.ok) {
         setFel(FEL[svar.fel]);
         return;
@@ -215,12 +228,32 @@ export function Tvafaktor() {
             <span className="font-medium text-ink">{text(T.av)}</span>
           </p>
           {lage.paborjad ? <p className={meta}>{text(T.paborjadIngress)}</p> : null}
-          <div>
-            <button type="button" onClick={borja} disabled={isPending} className={btnPrimary}>
-              {isPending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
-              {text(lage.paborjad ? T.borjaOm : T.slaPa)}
-            </button>
-          </div>
+          <form onSubmit={borja} className="grid gap-4" noValidate>
+            <div className="grid max-w-xs gap-2">
+              <label htmlFor={losenordId} className={etikett}>
+                {text(T.losenord)}
+              </label>
+              {/* 16 px (text-base): under det zoomar iOS Safari in på fältet. */}
+              <input
+                id={losenordId}
+                type="password"
+                value={losenord}
+                onChange={(e) => setLosenord(e.target.value)}
+                autoComplete="current-password"
+                aria-describedby={`${losenordId}-hint`}
+                className="h-12 w-full rounded-input border border-ink/15 bg-paper2/70 px-4 text-base text-ink focus:border-ochre"
+              />
+              <p id={`${losenordId}-hint`} className={meta}>
+                {text(T.losenordHint)}
+              </p>
+            </div>
+            <div>
+              <button type="submit" disabled={isPending || !losenord} className={btnPrimary}>
+                {isPending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
+                {text(lage.paborjad ? T.borjaOm : T.slaPa)}
+              </button>
+            </div>
+          </form>
         </div>
       ) : null}
 

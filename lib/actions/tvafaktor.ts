@@ -11,6 +11,7 @@ import {
   avaktiveraTvafaktor,
   avbrytTvafaktorInrullning,
   harLosenord,
+  lasLosenordshash,
   lasTvafaktor,
   paborjaTvafaktor,
   provaOchForbruka
@@ -23,6 +24,7 @@ import {
   krypteraHemlighet,
   nyaAterstallningskoder
 } from "@/lib/auth/tvafaktor-krypto";
+import { verifyPassword } from "@/lib/password";
 
 /**
  * Tvåstegsverifieringen för plattformsadmin: läge, inrullning och
@@ -36,6 +38,7 @@ import {
 export type TvafaktorFelkod =
   | "ej_admin"
   | "fel_kod"
+  | "fel_losenord"
   | "for_manga_forsok"
   | "redan_aktiv"
   | "ingen_inrullning"
@@ -78,16 +81,35 @@ export async function hamtaTvafaktorStatus(): Promise<TvafaktorStatus> {
  * Steg 1: en ny hemlighet, krypterad i databasen men inte aktiverad.
  * Klienten får hemligheten (för den manuella inmatningen) och QR-kodens
  * moduler; QR-koden ritas i komponenten, ingen bild lämnar servern.
+ *
+ * Kräver lösenordet på nytt (Codex runda 15, 2026-11-20): med bara en stulen
+ * session hade en angripare kunnat rulla in sin egen hemlighet, få
+ * återställningskoderna och stänga ute ägaren. Prövningen omfattas av
+ * inloggningens spärr mot gissning, och hemligheten skapas först efter den;
+ * den påbörjade raden gäller sedan i femton minuter (migration 148).
  */
-export async function paborjaInrullning(): Promise<TvafaktorInrullning> {
+export async function paborjaInrullning(losenord: string): Promise<TvafaktorInrullning> {
   const admin = await getPlatformAdminUtanTvafaktorkrav();
   if (!admin) return { ok: false, fel: "ej_admin" };
+  const epost = admin.email ?? admin.userId;
+  const inkommande = await headers();
   try {
     const lage = await lasTvafaktor(admin.userId);
     if (lage?.aktiv) return { ok: false, fel: "redan_aktiv" };
     // Ett konto från Google eller Microsoft har inget lösenord att logga in
     // med när OAuth-vägen nekas efter aktiveringen (Codex runda 8).
-    if (!(await harLosenord(admin.userId))) return { ok: false, fel: "kraver_losenord" };
+    const hash = await lasLosenordshash(admin.userId);
+    if (!hash) return { ok: false, fel: "kraver_losenord" };
+    if (await arSparrad("inloggning", epost, inkommande)) {
+      return { ok: false, fel: "for_manga_forsok" };
+    }
+    const angivet = typeof losenord === "string" ? losenord.slice(0, 1024) : "";
+    if (!angivet || !(await verifyPassword(angivet, hash))) {
+      if (await registreraForsok("inloggning", epost, inkommande)) {
+        return { ok: false, fel: "for_manga_forsok" };
+      }
+      return { ok: false, fel: "fel_losenord" };
+    }
     const hemlighet = nyTotpHemlighet();
     const sparad = await paborjaTvafaktor(
       admin.userId,

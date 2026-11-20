@@ -118,6 +118,19 @@ export async function harLosenord(userId: string): Promise<boolean> {
   return Boolean(rader[0]?.ok);
 }
 
+/**
+ * Kontots lösenordshash, eller null utan lösenord. Inrullningen prövar
+ * lösenordet på nytt mot den: en session ensam räcker inte för att slå på
+ * tvåfaktor (Codex runda 15, migration 148). Hashen lämnar aldrig servern.
+ */
+export async function lasLosenordshash(userId: string): Promise<string | null> {
+  const rader = await sql<{ hash: string | null }>(
+    "select nullif(encrypted_password, '') as hash from auth.users where id = $1::uuid",
+    [userId]
+  );
+  return rader[0]?.hash ?? null;
+}
+
 /** Påbörja inrullningen med en krypterad hemlighet. Bara plattformsadmin (128). */
 export async function paborjaTvafaktor(userId: string, krypterad: string): Promise<boolean> {
   const rader = await sqlAsUser<{ ok: boolean }>(userId, "select public.tvafaktor_paborja($1) as ok", [krypterad]);
