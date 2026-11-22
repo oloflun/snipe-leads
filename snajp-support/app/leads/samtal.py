@@ -80,11 +80,16 @@ def samtalslista(
     *,
     lista: Literal["aterkoppling", "ring"],
     idag: date,
+    aterkom: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
     """Raderna i en lista, de som ska ringas i dag först, sedan äldst först.
 
     `samtal` är tenantens samtal i skapandeordning; `forsta_kontakt` är
-    prospekt-id → första skickade mejlets tid."""
+    prospekt-id → första skickade mejlets tid. `aterkom` är prospekt-id →
+    konversationens återkomdatum (migration 149): ett lead som svarat
+    "återkom" och har telefon står i återkopplingen från det datumet, så att
+    konversationen och samtalen är samma arbetslista."""
+    aterkom = aterkom or {}
     per_prospekt: dict[str, list[dict[str, Any]]] = {}
     for rad in samtal:
         per_prospekt.setdefault(str(rad["prospect_id"]), []).append(rad)
@@ -96,12 +101,22 @@ def samtalslista(
         if lista == "ring":
             if p.get("origin") != "ring" or p.get("status") in _KLARA:
                 continue
-        elif p.get("origin") == "ring" or p.get("status") != "contacted" or not p.get("contact_phone"):
+        elif (
+            p.get("origin") == "ring"
+            or not p.get("contact_phone")
+            or not (p.get("status") == "contacted" or (p.get("status") == "replied" and str(p["id"]) in aterkom))
+        ):
             continue
         pid = str(p["id"])
         historik = per_prospekt.get(pid, [])
         senaste = historik[-1] if historik else None
         nasta = nasta_samtal(senaste)
+        konv = _datum(aterkom.get(pid))
+        if lista == "aterkoppling" and konv and nasta is not None and (
+            senaste is None or (_datum(senaste.get("created_at")) or date.min) < konv
+        ):
+            # Konversationens datum gäller tills någon ringt på eller efter det.
+            nasta = konv
         if nasta is None:
             continue
         kontaktad = _datum(forsta_kontakt.get(pid))
@@ -160,4 +175,31 @@ async def registrera(
         ny_status = "contacted"
     if ny_status and ny_status != prospect.get("status"):
         await storage.update_prospect(tenant_id, pid, status=ny_status, status_kalla="manuell")
+    await _i_konversationen(storage, tenant_id, prospect, utfall=utfall, aterkom_datum=aterkom_datum)
     return rad
+
+
+async def _i_konversationen(
+    storage: Any, tenant_id: str, prospect: dict[str, Any], *, utfall: str, aterkom_datum: date | None
+) -> None:
+    """Samtalet i konversationen (migration 149, Antons beställning
+    2026-11-22: "allt hänger ihop"). Återkom med datum blir konversationens
+    återkomdatum, och ett bokat möte blir en notis till resten av arbetsytan.
+    Själva samtalet visas i tråden ur lead_samtal. Kastar aldrig."""
+    from . import konversation
+
+    if utfall not in ("aterkom", "mote"):
+        return
+    try:
+        trad = await storage.find_outreach_thread(tenant_id, prospect_id=str(prospect["id"]))
+        if trad is None:
+            return
+        if utfall == "aterkom" and aterkom_datum:
+            await storage.satt_trad_steg(tenant_id, str(trad["id"]), steg="aterkom", aterkom_datum=aterkom_datum)
+        elif utfall == "mote" and prospect.get("status") not in ("meeting", "won"):
+            await konversation.logga(
+                storage, tenant_id, prospect_id=str(prospect["id"]), thread_id=str(trad["id"]), typ="mote",
+                kalla="manuell", detalj={"via": "samtal"}, last=True,
+            )
+    except Exception:  # noqa: BLE001 — konversationen får inte fälla samtalet
+        pass

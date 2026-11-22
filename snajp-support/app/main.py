@@ -41,8 +41,10 @@ from .api import (
     kvitton,
     leads,
     leads_kampanjer,
+    leads_konversationer,
     leads_massatgard,
     leads_suite,
+    leads_uppfoljningar,
     rules,
     sending_domains_api,
     support_config,
@@ -447,6 +449,10 @@ app.include_router(keys.router)
 app.include_router(kb.router)
 app.include_router(leads.router)
 app.include_router(leads_suite.router)
+# Iris-konversationerna och notiserna (migration 149); se api/leads_konversationer.py.
+app.include_router(leads_konversationer.router)
+# Uppföljningarna för sig och bolagssökningen; se api/leads_uppfoljningar.py.
+app.include_router(leads_uppfoljningar.router)
 # Massåtgärder i Iris-listan och Ta bort lista; se api/leads_massatgard.py.
 app.include_router(leads_massatgard.router)
 app.include_router(leads_kampanjer.router)

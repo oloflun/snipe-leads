@@ -16,6 +16,12 @@ test("Gmails svenska citatrad skiljer svaret från vårt mejl, även radbruten",
   assert.equal(delaCitat(bruten)[0], "Nej tack.");
 });
 
+test("citatrad utan Den först (Gmail i mobilen) räknas också, en vanlig kolonrad inte", () => {
+  const body = "Toppen!\n\nHälsningar\nPer\n\n18 nov. 2026 kl. 12:56 skrev Kim Exempel <kim@exempel.test>:\n\n> Perfekt";
+  assert.equal(delaCitat(body)[0], "Toppen!\n\nHälsningar\nPer");
+  assert.equal(delaCitat("Hej,\n\nSå här skrev vi i avtalet:\nPunkt ett")[1], "");
+});
+
 test("Outlooks Från/Skickat-block och avdelaren räknas som citat", () => {
   assert.equal(delaCitat("Återkommer.\n\nFrån: Sebastian B\nSkickat: den 22 oktober 2026\nÄmne: Hej")[0], "Återkommer.");
   assert.equal(delaCitat("Tack!\n-----Ursprungligt meddelande-----\nHej,")[0], "Tack!");

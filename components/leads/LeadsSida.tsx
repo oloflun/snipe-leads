@@ -7,6 +7,10 @@ import { PageShell } from "@/components/AppShell";
 import { useDashboard } from "@/components/dashboard/DashboardContext";
 import { IrisErbjudanden } from "@/components/leads/IrisErbjudanden";
 import { IrisInkorg } from "@/components/leads/IrisInkorg";
+import { BolagsSok } from "@/components/leads/BolagsSok";
+import { Konversationer, NotisKnapp } from "@/components/leads/Konversationer";
+import { Uppfoljningar } from "@/components/leads/Uppfoljningar";
+import { useNotisantal } from "@/lib/leads/konversationer";
 import { Kampanjer } from "@/components/leads/Kampanjer";
 import { IrisKorningar } from "@/components/leads/IrisKorningar";
 import { LeadDetail, exempelTillRad, type ExempelRad } from "@/components/leads/IrisBolag";
@@ -35,10 +39,16 @@ import { cn } from "@/lib/utils";
  * får hela bredden, och lådan stängs med Esc, krysset eller ett klick utanför.
  */
 
-type Segment = "listor" | "inkorg" | "samtal" | "korningar" | "erbjudanden";
+type Segment = "listor" | "konversationer" | "uppfoljningar" | "inkorg" | "samtal" | "korningar" | "erbjudanden";
 
 const SEGMENT_ETIKETT: Record<Segment, Localized> = {
   listor: { sv: "Översikt", en: "Overview" },
+  // Det kunderna i första hand köper (Anton 2026-11-22): egen flik, andra
+  // efter översikten, i stället för filtret Svarat under Inkorg › Skickat.
+  konversationer: { sv: "Konversationer", en: "Conversations" },
+  // När uppföljningarna skrivs och var de hamnar (Anton 2026-11-22): förut
+  // stod de bland körningarnas utkast och gick inte att skilja ut.
+  uppfoljningar: { sv: "Uppföljningar", en: "Follow-ups" },
   inkorg: { sv: "Inkorg", en: "Inbox" },
   // Ringlistan och återkopplingen (Antons beställning 2026-10-07).
   samtal: { sv: "Samtal", en: "Calls" },
@@ -108,8 +118,9 @@ export function IrisBolag({ demo = false }: Readonly<{ demo?: boolean }>) {
   const sokParams = useSearchParams();
 
   const segmentVal = tolkaSegment(sokParams.get("vy"));
-  // Lådan öppnas från översikten och från Inkorg › Skickat (Fas 4).
-  const valdId = segmentVal === "listor" || segmentVal === "inkorg" ? sokParams.get("lead") : null;
+  // Lådan öppnas från varje flik sedan bolagssökningen (Anton 2026-11-22):
+  // ett bolag ska gå att öppna var man än står.
+  const valdId = sokParams.get("lead");
   // Översiktens "Ladda upp CRM-kundlista" landar på ?vy=listor&crm=1.
   const crmOppen = segmentVal === "listor" && sokParams.get("crm") === "1";
   const flikRefs = useRef<Partial<Record<Segment, HTMLButtonElement | null>>>({});
@@ -121,7 +132,10 @@ export function IrisBolag({ demo = false }: Readonly<{ demo?: boolean }>) {
   const [demoSteg, setDemoSteg] = useState(0);
   const [demoOmgang, setDemoOmgang] = useState(0);
 
-  const segment: Segment[] = demo ? ["listor"] : ["listor", "inkorg", "samtal", "korningar", "erbjudanden"];
+  const segment: Segment[] = demo ? ["listor"] : ["listor", "konversationer", "uppfoljningar", "inkorg", "samtal", "korningar", "erbjudanden"];
+  const notiser = useNotisantal(!demo && !isDemo);
+  const oppnaKonversation = (threadId: string | null) =>
+    satt({ vy: "konversationer", trad: threadId, lead: null, flik: null });
 
   const satt = useCallback(
     (andring: Record<string, string | null>) => {
@@ -136,7 +150,7 @@ export function IrisBolag({ demo = false }: Readonly<{ demo?: boolean }>) {
     [pathname, router, sokParams]
   );
 
-  const valjSegment = (s: Segment) => satt({ vy: s === "listor" ? null : s, lead: null, flik: null });
+  const valjSegment = (s: Segment) => satt({ vy: s === "listor" ? null : s, lead: null, flik: null, trad: null });
 
   // En avslutad körning stänger formuläret så att de nya raderna syns direkt.
   useEffect(() => {
@@ -186,6 +200,12 @@ export function IrisBolag({ demo = false }: Readonly<{ demo?: boolean }>) {
       title={{ sv: "Leads", en: "Leads" }}
       action={
         <>
+          {demo || isDemo ? null : (
+            <>
+              <BolagsSok onValj={(id) => satt({ lead: id })} />
+              <NotisKnapp antal={notiser} onOppna={oppnaKonversation} />
+            </>
+          )}
           {/* Samma grind som SaljlistaSektion: formuläret knappen öppnar finns
               bara i den egna, skrivbara säljlistan — inte i demon, inte under
               ett kundbesök. */}
@@ -307,13 +327,25 @@ export function IrisBolag({ demo = false }: Readonly<{ demo?: boolean }>) {
             className={cn(flik, segmentVal === s ? flikAktiv : flikInaktiv)}
           >
             {text(SEGMENT_ETIKETT[s])}
+            {s === "konversationer" && notiser > 0 ? (
+              <span
+                aria-label={text({ sv: `${notiser} olästa`, en: `${notiser} unread` })}
+                className="num inline-flex min-w-[1.25rem] items-center justify-center rounded-full bg-ochre px-1.5 text-[0.75rem] font-semibold leading-5 tabular-nums text-ink"
+              >
+                {notiser}
+              </span>
+            ) : null}
           </button>
         ))}
       </div>
       )}
 
       <div className="mt-6" role="tabpanel" id="leads-flikpanel" aria-labelledby={`leads-flik-${segmentVal}`}>
-        {segmentVal === "inkorg" ? (
+        {segmentVal === "konversationer" && !demo ? (
+          <Konversationer trad={sokParams.get("trad")} onTrad={(t) => satt({ trad: t })} />
+        ) : segmentVal === "uppfoljningar" && !demo ? (
+          <Uppfoljningar onValjLead={(id) => satt({ lead: id })} />
+        ) : segmentVal === "inkorg" ? (
           demo ? (
             <p className="text-[0.9375rem] text-ink-muted">{text(T.inkorgDemo)}</p>
           ) : (
@@ -342,6 +374,7 @@ export function IrisBolag({ demo = false }: Readonly<{ demo?: boolean }>) {
             exempel={exempelRader as unknown as SuiteProspekt[]}
             onValjLead={(id) => satt({ lead: id })}
             onOppnaKorningar={(jobId) => satt({ vy: "korningar", lead: null, id: jobId })}
+            onOppnaKonversation={oppnaKonversation}
           />
         )}
       </div>

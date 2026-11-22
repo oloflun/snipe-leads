@@ -266,8 +266,20 @@ async def _queue_outreach_draft_impl(
             {"queued": False, "error": "Ett godkänt utkast väntar redan på att skickas i den här tråden."},
             ensure_ascii=False,
         )
-    if vantande:
+    # Ett osänt utkast utan aktiv köpost räknas också (Telecom Buddy
+    # 2026-11-18: utkastet låg kvar utan post och hade annars blivit ett andra
+    # väntande utkast i tråden). Det ersatta syns i konversationen och går att
+    # återställa där (migration 149).
+    ersatt = await outreach.storage.get_pending_outreach_message(outreach.tenant_id, outreach.thread_id)
+    if vantande or ersatt:
         await outreach.storage.cancel_pending_sends(outreach.tenant_id, outreach.thread_id)
+    if ersatt:
+        from ..leads import konversation
+
+        await konversation.logga(
+            outreach.storage, outreach.tenant_id, prospect_id=trad.get("prospect_id"),
+            thread_id=outreach.thread_id, typ="utkast_ersatt", detalj={"message_id": str(ersatt["id"])},
+        )
 
     now = datetime.now(timezone.utc)
     timing = check_cold_outreach_gate(now)

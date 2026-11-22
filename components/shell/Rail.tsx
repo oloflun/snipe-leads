@@ -75,6 +75,13 @@ export type RailNavItem = {
    * ingen extra wrapper, ingen förändrad markup. Se `Rail` nedan.
    */
   children?: RailNavChild[];
+  /**
+   * Olästa notiser bakom posten (Leads: nya svar, utkast och möten,
+   * migration 149). En ochre siffra vid lg, en prick på ikonen i ikonrailen.
+   * `antalEtikett` är det skärmläsaren hör ("3 olästa").
+   */
+  antal?: number;
+  antalEtikett?: string;
 };
 
 export type RailNavGroup = {
@@ -105,7 +112,9 @@ export function RailRad({
   dimmadTitel,
   vilande = false,
   vilandeTitel,
-  vilandeLank = false
+  vilandeLank = false,
+  antal = 0,
+  antalEtikett
 }: Readonly<{
   href: string;
   etikett: string;
@@ -118,6 +127,8 @@ export function RailRad({
   vilande?: boolean;
   vilandeTitel?: string;
   vilandeLank?: boolean;
+  antal?: number;
+  antalEtikett?: string;
 }>) {
   if (vilande && vilandeLank) {
     // Adminens väg in: samma mörka ton som kundens låsta post, men en länk.
@@ -210,6 +221,18 @@ export function RailRad({
         />
       )}
       <span className="hidden truncate lg:inline">{etikett}</span>
+      {antal > 0 ? (
+        <>
+          <span
+            aria-hidden
+            className="num ml-auto hidden min-w-[1.25rem] items-center justify-center rounded-full bg-ochre px-1.5 text-[0.75rem] font-semibold leading-5 tabular-nums text-ink lg:inline-flex"
+          >
+            {antal > 99 ? "99+" : antal}
+          </span>
+          <span aria-hidden className="absolute right-2.5 top-2 h-2 w-2 rounded-full bg-ochre lg:hidden" />
+          <span className="sr-only">{antalEtikett ?? String(antal)}</span>
+        </>
+      ) : null}
     </Link>
   );
 }
@@ -299,6 +322,8 @@ export function Rail({
                   vilande={item.vilande}
                   vilandeTitel={item.vilandeTitel}
                   vilandeLank={item.vilandeLank}
+                  antal={item.antal}
+                  antalEtikett={item.antalEtikett}
                 />
               )
             )}

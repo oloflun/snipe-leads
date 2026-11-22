@@ -141,6 +141,8 @@ SYNK: dict[str, str] = {
     "lead_samtal": f"x.prospect_id in ({_TEST_PROSPEKT})",
     "lead_anteckningar": f"x.prospect_id in ({_TEST_PROSPEKT})",
     "lead_uppgifter": f"x.prospect_id in ({_TEST_PROSPEKT})",
+    # Konversationernas händelser och notiser (migration 149).
+    "lead_handelser": f"x.prospect_id in ({_TEST_PROSPEKT})",
     "suppressions": "false",
     "leads_job_ledger": "x.is_test",
     "agent_runs": "x.is_test",

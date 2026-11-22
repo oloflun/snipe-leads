@@ -9,6 +9,52 @@ möjligt), vad det betyder i koden.
 
 ---
 
+## 2026-11-22 — Konversationerna och uppföljningarna får egna flikar i Leads; notiser i Snajp (Anton, byggt av Claude (agent))
+
+**Beslut.**
+1. Leads får fliken **Konversationer**, andra efter Översikt, och en ruta överst i
+   Översikt (nya svar, utkast som väntar, möten, återkom i dag). Konversationen visas
+   som en tråd med utkaststudio: ämne och text redigeras, Skicka, Spara, Skriv om
+   (med önskemål) och Kassera. En människa godkänner alltid.
+2. Fem steg: Svarat, Möte bokat, Återkom (datum), Ej intresserad, Kontakta inte.
+   Möte, Ej intresserad och Kontakta inte är prospektets status (meeting, lost,
+   suppressed), så att Skickat, samtalslistorna och mätningen räknar samma sak.
+   Svarat och Återkom skiljs av `outreach_threads.steg`/`aterkom_datum` (migration 149).
+3. Händelseloggen per tråd och notiserna är en tabell (`lead_handelser`). Notiserna
+   (nytt svar, nytt utkast, möte bokat, Iris lämnar över) **läses av arbetsytan, inte
+   av varje användare**.
+4. Ett utkast som ersätts eller kasseras står kvar i tråden och går att återställa.
+5. Ett utkast som påstår att något redan är gjort ("jag har skickat en inbjudan")
+   skickas bara när människan kryssat i att det är gjort (kontrolleras även i API:t).
+6. Mejl skickade utanför Snajp syns i tråden när de står i prospektets citat, och
+   kan läggas in för hand. De blir inga rader i `outreach_messages`.
+7. Leads får fliken **Uppföljningar**: vad som väntar på granskning, skrivs, är dags,
+   kommer och har gått ut. Skapa uppföljning finns för markerade bolag i fliken, i
+   Iris-listan och i Skickat › Väntar på svar.
+8. **Sök bolag** i Leads sidhuvud hittar alla kundens leads, också kontaktade och
+   arkiverade, och öppnar leadets låda.
+
+**Resonemanget.** Anton: kunderna köper i första hand de nya konversationerna, så de
+ska ha "en egen flik och en större plats i Leads-översikten … med notiser även från
+Snajp för nya svar och händelser och allt annat som förväntas i en faktisk
+CRM-suite". Telecom Buddy (main 2026-11-22) visade varför: svarsutkasten syntes
+ingenstans, två kasserades tyst, och mötet som bokats från Sebastians Gmail gav "Möte
+0". Status i prospektet och inte en ny statuskolumn: annars hade Skickat och
+konversationen kunnat säga olika saker. Notiserna läses per arbetsyta för att
+konversationerna är en delad inkorg; den som öppnat svaret har tagit det. Per
+användare är en senare utbyggnad om flera säljare delar en arbetsyta. Om
+uppföljningarna: "Just nu finns inget gränssnitt eller insikt i när återkopplingsmejl
+skapas och vart de hamnar … det behöver bli lättare att gå in på en enskild kund och
+även kunna söka på denna."
+
+**I koden.** `db/migrations/20261122090000_149_iris_konversationer.sql`,
+`snajp-support/app/leads/konversation.py`, `app/api/leads_konversationer.py`,
+`app/api/leads_uppfoljningar.py`, `app/leads/svar.py` (händelserna, Skriv om),
+`components/leads/Konversationer.tsx`, `KonversationsTrad.tsx`, `Uppfoljningar.tsx`,
+`BolagsSok.tsx`, räknaren i `components/shell/Rail.tsx`.
+
+---
+
 ## 2026-11-19 — Titlarna på Vårt team: "Grundare & VD" och "Grundare & Teknikchef" (Sebbe)
 
 **Beslut.** Sebastian Bergmans titel på /vart-team är "Grundare & VD" och Anton

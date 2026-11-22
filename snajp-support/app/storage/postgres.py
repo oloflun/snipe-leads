@@ -2101,6 +2101,197 @@ class PostgresStorage:
             )
         return int(resultat.split()[-1])
 
+    # -- Iris-konversationer (migration 149) --------------------------------
+
+    async def logga_handelse(
+        self,
+        tenant_id: str,
+        *,
+        prospect_id: str,
+        thread_id: str | None,
+        typ: str,
+        kalla: str = "kod",
+        detalj: dict[str, Any] | None = None,
+        notis: bool = False,
+        last: bool = False,
+    ) -> dict[str, Any]:
+        async with self._scoped(tenant_id) as conn:
+            record = await conn.fetchrow(
+                """
+                insert into lead_handelser
+                  (tenant_id, prospect_id, thread_id, typ, kalla, detalj, notis, last_at)
+                values ($1, $2, $3, $4, $5, $6::jsonb, $7, case when $7 and $8 then now() end)
+                returning *
+                """,
+                tenant_id,
+                prospect_id,
+                thread_id,
+                typ,
+                kalla,
+                json.dumps(detalj or {}, ensure_ascii=False, default=str),
+                notis,
+                last,
+            )
+        return _avkoda_jsonb(_row(record), "detalj")
+
+    async def list_handelser(self, tenant_id: str, *, thread_id: str) -> list[dict[str, Any]]:
+        async with self._scoped(tenant_id) as conn:
+            records = await conn.fetch(
+                """
+                select * from lead_handelser
+                 where tenant_id = $1 and thread_id = $2
+                 order by created_at, id
+                """,
+                tenant_id,
+                thread_id,
+            )
+        return [_avkoda_jsonb(_row(r), "detalj") for r in records]
+
+    async def list_notiser(self, tenant_id: str, *, limit: int = 30) -> list[dict[str, Any]]:
+        async with self._scoped(tenant_id) as conn:
+            records = await conn.fetch(
+                """
+                select h.*, p.company_name
+                  from lead_handelser h
+                  left join prospects p on p.id = h.prospect_id
+                 where h.tenant_id = $1 and h.notis
+                 order by h.created_at desc, h.id desc
+                 limit $2
+                """,
+                tenant_id,
+                limit,
+            )
+        return [_avkoda_jsonb(_row(r), "detalj") for r in records]
+
+    async def antal_olasta_notiser(self, tenant_id: str) -> int:
+        async with self._scoped(tenant_id) as conn:
+            return int(
+                await conn.fetchval(
+                    "select count(*) from lead_handelser where tenant_id = $1 and notis and last_at is null",
+                    tenant_id,
+                )
+                or 0
+            )
+
+    async def markera_notiser_lasta(
+        self, tenant_id: str, *, ids: list[str] | None = None, thread_id: str | None = None
+    ) -> int:
+        async with self._scoped(tenant_id) as conn:
+            resultat = await conn.execute(
+                """
+                update lead_handelser set last_at = now()
+                 where tenant_id = $1 and notis and last_at is null
+                   and ($2::uuid[] is null or id = any($2::uuid[]))
+                   and ($3::uuid is null or thread_id = $3::uuid)
+                """,
+                tenant_id,
+                ids,
+                thread_id,
+            )
+        return int(resultat.split()[-1])
+
+    async def konversationstradar(self, tenant_id: str) -> list[dict[str, Any]]:
+        async with self._scoped(tenant_id) as conn:
+            records = await conn.fetch(
+                """
+                select t.id as thread_id, t.prospect_id, t.svarsklass, t.steg, t.aterkom_datum,
+                       t.last_inbound_at, p.company_name, p.contact_name, p.contact_email,
+                       p.status,
+                       sv.id as svar_id, sv.body as svar_body, sv.sent_at as svar_at,
+                       u.id as utkast_id, u.subject as utkast_subject, u.body as utkast_body,
+                       u.created_at as utkast_at,
+                       agg.senast_skickat_at, coalesce(agg.antal, 0) as antal_meddelanden,
+                       coalesce(h.olasta, 0) as olasta, h.senaste_handelse_at
+                  from outreach_threads t
+                  join prospects p on p.id = t.prospect_id
+                  left join lateral (
+                    select count(*) filter (where notis and last_at is null)::int as olasta,
+                           max(created_at) as senaste_handelse_at,
+                           bool_or(typ in ('extern', 'steg', 'mote')) as manuell
+                      from lead_handelser where thread_id = t.id
+                  ) h on true
+                  left join lateral (
+                    select m.id, m.body, m.sent_at from outreach_messages m
+                     where m.thread_id = t.id and m.direction = 'inbound'
+                     order by m.sent_at desc nulls last, m.created_at desc, m.id desc limit 1
+                  ) sv on true
+                  left join lateral (
+                    select m.id, m.subject, m.body, m.created_at from outreach_messages m
+                     where m.thread_id = t.id and m.direction = 'outbound'
+                       and m.sent_at is null and m.kasserad_at is null
+                     order by m.created_at desc, m.id desc limit 1
+                  ) u on true
+                  left join lateral (
+                    select max(m.sent_at) filter (where m.direction = 'outbound') as senast_skickat_at,
+                           (count(*) filter (where m.direction = 'inbound' or m.sent_at is not null))::int as antal
+                      from outreach_messages m where m.thread_id = t.id
+                  ) agg on true
+                 where t.tenant_id = $1
+                   and p.arkiverad_at is null and p.origin <> 'example'
+                   and (t.last_inbound_at is not null or coalesce(h.manuell, false)
+                        or p.status in ('meeting', 'won'))
+                """,
+                tenant_id,
+            )
+        return [_row(r) for r in records]
+
+    async def satt_trad_steg(self, tenant_id: str, thread_id: str, *, steg: str | None, aterkom_datum: Any) -> None:
+        if isinstance(aterkom_datum, str):
+            aterkom_datum = date.fromisoformat(aterkom_datum)
+        async with self._scoped(tenant_id) as conn:
+            await conn.execute(
+                "update outreach_threads set steg = $3, aterkom_datum = $4 where tenant_id = $1 and id = $2",
+                tenant_id,
+                thread_id,
+                steg,
+                aterkom_datum,
+            )
+
+    async def nolla_trad_steg(self, tenant_id: str, thread_id: str) -> None:
+        async with self._scoped(tenant_id) as conn:
+            await conn.execute(
+                "update outreach_threads set steg = null where tenant_id = $1 and id = $2 and steg is not null",
+                tenant_id,
+                thread_id,
+            )
+
+    async def aterkom_datum(self, tenant_id: str) -> dict[str, Any]:
+        async with self._scoped(tenant_id) as conn:
+            records = await conn.fetch(
+                "select prospect_id, aterkom_datum from outreach_threads "
+                "where tenant_id = $1 and aterkom_datum is not null",
+                tenant_id,
+            )
+        return {str(r["prospect_id"]): r["aterkom_datum"] for r in records}
+
+    async def aterstall_utkast(self, tenant_id: str, thread_id: str, message_id: str) -> bool:
+        async with self._scoped(tenant_id) as conn:
+            resultat = await conn.execute(
+                """
+                update outreach_messages set kasserad_at = null
+                 where tenant_id = $1 and thread_id = $2 and id = $3 and direction = 'outbound'
+                   and sent_at is null and kasserad_at is not null
+                """,
+                tenant_id,
+                thread_id,
+                message_id,
+            )
+        return resultat.split()[-1] == "1"
+
+    async def ny_granskningspost(self, tenant_id: str, thread_id: str, *, scheduled_at: Any) -> dict[str, Any]:
+        async with self._scoped(tenant_id) as conn:
+            record = await conn.fetchrow(
+                """
+                insert into send_queue (tenant_id, thread_id, scheduled_at, status, gate_checks)
+                values ($1, $2, $3, 'awaiting_review', '{}'::jsonb)
+                returning *
+                """,
+                tenant_id,
+                thread_id,
+                scheduled_at,
+            )
+        return _avkoda_jsonb(_row(record), "gate_checks")
+
     async def utkast_lagen(
         self, tenant_id: str, *, med_text: bool = False, prospect_id: str | None = None,
         bara: list[str] | None = None,

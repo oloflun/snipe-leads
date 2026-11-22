@@ -150,6 +150,8 @@ KASKAD = [
     ("lead_uppgifter", f"prospect_id in ({_PROSPEKT})", "prospects"),
     ("prospect_status_logg", f"prospect_id in ({_PROSPEKT})", "prospects"),
     ("lead_samtal", f"prospect_id in ({_PROSPEKT})", "prospects"),
+    # Konversationens händelser (149): ett mejl utanför Snajp bär sin text i detalj.
+    ("lead_handelser", f"prospect_id in ({_PROSPEKT})", "prospects"),
     ("ss_customer_identifiers", f"customer_id in ({_KUND})", "ss_customers"),
     ("ss_tickets", f"customer_id in ({_KUND})", "ss_customers"),
     ("ss_conversations", f"ticket_id in ({_ARENDE})", "ss_customers"),

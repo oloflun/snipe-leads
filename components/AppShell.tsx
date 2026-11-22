@@ -29,6 +29,7 @@ import { ImpersonationBanner } from "@/components/ImpersonationBanner";
 import { LasrollBanner } from "@/components/LasrollBanner";
 import { VyVaxel } from "@/components/VyVaxel";
 import { useLocale, type Localized } from "@/lib/i18n";
+import { useNotisantal } from "@/lib/leads/konversationer";
 import { appRoutes, arVilande, produktForInstallningsvag, routesForProducts, tillAdminvag } from "@/lib/routes";
 import type { Scope } from "@/lib/routes";
 import { cn } from "@/lib/utils";
@@ -180,6 +181,12 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
     isPlatformAdmin
   } = useDashboard();
 
+  // Olästa notiser i Leads (migration 149). Före skalets tidiga retur under
+  // /admin: en hook får inte hoppas över. Där räknar AdminShell själv.
+  const leadsNotiser = useNotisantal(
+    signedIn && !isDemo && !iDemolage(pathname) && !pathname.startsWith("/admin") && products.includes("leads")
+  );
+
   // Entitlement styr menyn, inget annat (Snajp Suite 2026-10-03, se
   // aterstallLage ovan). En meny som döljer poster efter läget gömmer den
   // kontroll man skulle ha tryckt på.
@@ -313,6 +320,10 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
             label: t(route.labelKey),
             Icon: RUTT_IKONER[route.href] ?? LayoutDashboard,
             active: aktiv,
+            // Olästa notiser i Leads (migration 149): nya svar, utkast, möten.
+            ...(route.href === "/dashboard/leads"
+              ? { antal: leadsNotiser, antalEtikett: text({ sv: `${leadsNotiser} olästa`, en: `${leadsNotiser} unread` }) }
+              : {}),
             // Läget sätts vid klicket, inte i en effekt på den nya sidan: en
             // effekt hade hunnit rendera målsidan i det gamla läget först, och
             // bytet hade synts som ett hopp.
