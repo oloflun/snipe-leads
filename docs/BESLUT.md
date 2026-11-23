@@ -9,6 +9,48 @@ möjligt), vad det betyder i koden.
 
 ---
 
+## 2026-11-23 — Tonläget in i onboardingen; bara onboardingen kopplar arbetsytan (Anton)
+
+**Beslut.**
+1. Röstdokumentet är ett eget steg i onboardingen ("Röst och ton", efter målgruppen och
+   före paketet), förifyllt med utkastet och ändringsbart innan arbetsytan skapas.
+   Bransch är ett steg för sig. Första versionen lade tonfältet i branschsteget, och
+   Anton avvisade det samma kväll: "röst och tonläge ska vara ett eget fält, bransch/nisch
+   ska vara ett eget fält, att blanda ihop det med ton blir förvirrande."
+2. Webbplatsen läses in när onboardingen sparas också för en testarbetsyta, och också
+   när arbetsytan redan är kopplad till en kund.
+3. Genomförandet (agentens val, inte Antons ord): proxyn kopplar inte en arbetsyta
+   som inte gått igenom onboardingen, och Kunskapsbas har en egen start för den första
+   inläsningen när ingen har körts.
+
+**Resonemanget.** Anton 2026-11-23, efter att ha lagt upp en testarbetsyta inför ett
+kundmöte: "den verkar inte läsa av hemsidan och fylla på kunskapsbasen av sig själv,
+det måste fixas. Hitta orsaken till problemet och lös det permanent. Se även till att
+stycket om tonläge finns med i onboardingen och går att ändra, just nu är våra
+inställningar förladdade och går inte att ändra förrän profilen är skapad."
+
+Orsaken, ur produktionens loggar: arbetsytan var redan kopplad till en kund
+(`kund-ad046232`) när onboardingen skickades in. En annan öppen flik hade anropat
+proxyn, och `requireSnajpTenant()` kopplar en arbetsyta utan kund vid första anropet.
+Onboardingens testväg försökte sedan koppla en testtenant, `link_test_tenant` nekade
+(den kopplar bara en arbetsyta utan slug), felet svaldes, och allt som hängde på den
+nya nyckeln hoppades över: webbplatsskanningen, målgruppen och erbjudandena. API-loggen
+har inget anrop till `/api/kb/skanna`. Samma lucka rättades för riktiga kunder
+2026-11-18, men inte för testarbetsytor. Testvägen skrev dessutom aldrig målgruppen
+och erbjudandena, inte heller när kopplingen lyckades.
+
+**Vad det betyder i koden.** `lib/snajp/kopplingsvag.ts` väljer väg ur arbetsytans
+slug, och `lib/actions/onboarding.ts` kör samma följdsteg på alla tre vägarna.
+`lib/snajp/tenant.ts` svarar 409 i stället för att koppla en arbetsyta utan
+affärskontext. `lib/snajp/standard.ts` skriver kundens röstdokument, och låter det gå
+före ett orört utkast. `components/settings/WebbplatsForslag.tsx` visar ett
+startformulär när ingen skanning har körts.
+
+**Öppet.** Inläsningen skriver fortfarande förslag som kunden lägger till (beslutet
+2026-11-18). Ska artiklarna läggas in direkt, utan granskning, är det ett eget beslut:
+då blir en felläst uppgift på sajten något agenten får citera. En testarbetsyta som
+redan kopplats som kund behåller sin kund-slug och är inte märkt som testyta.
+
 ## 2026-11-23 — Verify bantas; Dependabot öppnar inga egna pull requests (Anton)
 
 **Beslut.**
