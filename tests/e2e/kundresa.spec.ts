@@ -165,7 +165,7 @@ test("onboardingen: tomma fält, ogiltigt orgnr, tillbaka och omladdning", async
   await kravRenText(page, "onboarding efter omladdning");
 });
 
-test("onboardingen: fem steg till arbetsytan", async () => {
+test("onboardingen: sex steg till arbetsytan", async () => {
   await page.getByLabel("Företagets namn").fill(kund.foretag);
   await page.getByLabel("Webbplats").fill(kund.webbplats);
   await page.getByLabel("Organisationsnummer").fill(kund.orgnr);
@@ -196,7 +196,12 @@ test("onboardingen: fem steg till arbetsytan", async () => {
   await page.getByLabel("Särskilt fokus").fill(kund.malgrupp.fokus);
   await page.getByRole("button", { name: /Fortsätt/ }).click();
 
-  // Steg 5, paketet. Duo är förvalt; villkoren startar okryssade. Notismejlen
+  // Steg 5, röst och ton (eget steg sedan 2026-11-23). Förifyllt med ett utkast;
+  // kunden ska kunna gå vidare utan att ha skrivit något.
+  await expect(page.getByLabel("Röst och tonläge")).not.toHaveValue("");
+  await page.getByRole("button", { name: /Fortsätt/ }).click();
+
+  // Steg 6, paketet. Duo är förvalt; villkoren startar okryssade. Notismejlen
   // slås av: kontot är ett testkonto och ska inte få påminnelser.
   const notis = page.locator('label:has-text("Ja, mejla mig") input[type="checkbox"]');
   if ((await notis.count()) && (await notis.isChecked())) await notis.uncheck();

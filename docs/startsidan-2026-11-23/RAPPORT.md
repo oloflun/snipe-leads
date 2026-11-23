@@ -161,7 +161,7 @@ På telefon är förbättringen mätt: inga hack och inga långa uppgifter under
 
 ## 4. Kundresan som test
 
-`tests/e2e/kundresa.spec.ts` går registrering, onboardingens fem steg, arbetsytans
+`tests/e2e/kundresa.spec.ts` går registrering, onboardingens sex steg, arbetsytans
 vyer, isolering, kunskapsbasen, testchatten, Iris körformulär och sessionen. Det
 fäller på varje konsolfel och varje svar med 4xx eller 5xx, och avbryter varje
 anrop till en sändväg så att inget mejl kan lämna huset.
