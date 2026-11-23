@@ -9,6 +9,205 @@ möjligt), vad det betyder i koden.
 
 ---
 
+## 2026-11-23 — Jev frågas aldrig om webbkriterier (agenten, under Antons Jev-beslut)
+
+**Beslutet:** Jevs triage ställer inga frågor om kriterier med belägg
+`webbsignal`, och ett sådant svar kan aldrig fälla ett bolag. De kriterierna
+avgörs bara i kod ur webbrevisionen (`bedomning.webbutslag`).
+
+**Resonemanget:** Regel 9 säger redan att webbkriterier avgörs i kod och inte
+av en modells fria utslag. Jev frågade ändå om dem. Umeå Webdesigns profil i
+main har "Bolag med tråkiga och gamla hemsidor" och "Bolag som saknar hemsida
+och endast har en Facebook-profil" som två måste-krav, fast kunden skrev
+"eller". Koden läser båda som "vill ha dålig sajt" och klarar det. Jev läser
+varje krav bokstavligt och skulle fälla varje bolag som har en sajt, med
+belägg, så fort `IRIS_JEV=pa` sätts i main. I development är samma krav
+omkompilerade till bör-krav, och därför syntes felet inte där.
+
+**I koden:** `app/leads/jev.py:_fragor` och `_tolka`, testet
+`tests/leads/test_jev_gemini.py::test_webbkriterier_fragas_aldrig_till_jev`.
+
+---
+
+## 2026-11-23 — Jev svarar med Flash-Lite på Vertex i EU tills ett bättre alternativ finns (Anton)
+
+**Beslutet, Antons ord:** "Lägg och konfigurera Flash lite för
+klassificering utifrån de kriterier vi har efter din bästa möjliga förmåga,
+så får vi använda det tills vi har ett bättre alternativ." Han lade till att
+han velat ha mer påtryckning om de uteblivna klassningarna.
+
+**Läget före:**
+- `IRIS_JEV` var aldrig satt i main, så Jev-triagen och trafikpolisen har
+  aldrig kört för leads där. Varje kandidat gick till den dyra researchen, och
+  klassningen hög/mellan/låg saknades.
+- `INKORG_JEV` har varit av i båda miljöerna sedan 2026-11-17, så inkorgen
+  sorteras bara av kodreglerna.
+- Development hade `IRIS_JEV=pa` och skickade fortfarande publika bolagsdata
+  till TypeSafe.
+
+**I koden:**
+- `JEV_MOTOR` är `gemini` som standard. Då besvarar `app/leads/jev_gemini.py`
+  Jevs typade frågor med MODEL (Flash-Lite) på Vertex i EU, med samma in- och
+  utdata som TypeSafe. `jev.triage`, `jev.klassa` och inkorgens
+  `klassning.klassa` är oförändrade.
+- `typesafe` går bara att välja uttryckligen.
+- Kalibreringen: ytterlägena (≤ 0,08 och ≥ 0,92, de enda som fäller) kräver
+  ett citerat belägg ur texten. Annars kläms svaret i koden till 0,15–0,85,
+  så att en gissning aldrig fäller ett bolag.
+- Bara Vertex (servicekontot), aldrig AI Studio.
+
+**Live-prov (syntetiska bolag):** en kommun fälldes med belägg, en e-handel
+och ett bolag utan information gick vidare, ungefär 1 s per anrop efter det
+första. Klassningen efter researchen svarade försiktigt (0,5) på en tydlig
+e-handel. Den mäts mot kodens nivåer med `scripts/iris_jev_eval.py` efter
+de första körningarna.
+
+**Driften:**
+- Development byter motor vid nästa deploy, eftersom `IRIS_JEV=pa` redan är
+  satt.
+- Main får `IRIS_JEV=pa` först när koden nått main. Att sätta den före skulle
+  skicka bolagsdata till TypeSafe, eftersom mains kod bara känner den motorn.
+
+## 2026-11-22 — Main till kreditprojektet med developments modeller; bakåtfyllnad av webbpoolen; PageSpeed som gratisreserv (Anton)
+
+**Besluten, Antons ord:** "Se även till att main kör på exakt samma
+kreditprojekt, det nya och med samma modell som development." Om de gamla
+leadsen: "se till att det inte går igång av nästa körning, utan när jag säger
+till, efter att ha fyllt på krediterna." Om PageSpeed: "lägg till Googles
+Pagespeed som del av sidbedömningen eftersom det inte kostar något."
+
+**Main.** api och web i main har nu samma `GOOGLE_SERVICE_ACCOUNT_JSON` som
+development (projekt `rock-sentinel-515323-r8`). De har också
+`GOOGLE_CLOUD_REGION=eu`, `MODEL=gemini-3.5-flash-lite`,
+`VISION_MODEL`/`KVITTO_MODEL=gemini-3.8-flash` och
+`VERTEX_INBADDNING_REGION=europe-west1`, samt tokentaken 40 M (leads) och
+2 M (support). Det ersätter "main väntar på releasen" från 2026-11-21. Mains
+kod stöder redan `eu` (`config.vertex_vard`); development ligger bara fem
+gallrings- och driftcommits före. Mains gamla nyckel är sparad lokalt som
+reserv. Main och development delar nu servicekonto. Ett eget konto för main
+(JURIDIK_ATGARDER #14) återstår och kräver att en ny nyckel skapas.
+
+**Bakåtfyllnaden.** `webbpool.bakatfyll` lägger in alla källkunders leads och
+listrader med webbplats i poolen. Den bedömer obedömda och okända och
+fördelar dem. Den startas bara via `POST /api/admin/webbpool/bakatfyll`
+(`scripts/webbpool_bakatfyll.py`), aldrig av en körning. Den torrkör som
+standard och vägrar starta när ScrapeGraphs saldo är under 2 krediter per
+sajt. Dygnstaket gäller inte bakåtfyllnaden, som har kreditkontrollen som
+tak. Läget räknas ur poolen och finns kvar efter en omstart.
+
+**PageSpeed.** Utan ScrapeGraph-bild bedöms PageSpeeds bild av datorvyn, som
+är samma vy som kalibreringen gjordes mot. Det kräver `PAGESPEED_API_KEY`.
+Utan nyckel tas mobilbilden som förut. `webbrevision.bildkalla` visar
+varifrån bilden kom. Nyckeln saknas fortfarande i båda miljöerna, och utan
+den svarar PageSpeed 429.
+
+**Jev och Googles beslutsmodell (utredning, inget byte).** Gemini Decisions
+API (`gemini-decision-1`, 2026-11-11) är byggd som Jev, men finns i dag bara
+i Gemini Developer API och AI Studio. Där finns inget EU-läge, den betalas
+inte via Vertex, och gratisnivån får använda indata. Den uppfyller alltså
+inte EU-kravet (INV-DATA-004/006). Bevaka när den kommer till Google Cloud.
+
+## 2026-11-22 — Webbpoolens fördelning slås på i main (Anton)
+
+**Beslutet:** "Ja, slå på." Webbpoolens fördelning till Alunix och Umeå
+Webbdesign körs nu i main, med samma mottagare och inspirationskund som i
+development. Det ersätter "på bara i development för test" från 2026-10-08.
+
+**Bakgrund:** inga nya webbleads hade kommit på snajp.se sedan vecka 42.
+Listorna för vecka 41 och 42 i main hade skapats i development och följt med
+den första synken. I main var `WEBBPOOL_FORDELNING`, `WEBBPOOL_MOTTAGARE` och
+`WEBBPOOL_INSPIRATION` aldrig satta, så poolen fylldes men fördelades aldrig
+(92 akuta sajter i mottagarnas län väntade).
+Anton slog på fördelningen trots att ScrapeGraph-krediten är slut. Utan den
+blir nästan alla bildbedömningar `okand`, så tills krediten är påfylld kommer
+bara akuta sajter, som avgörs i koden utan bild. PageSpeed saknar nyckel och
+svarar 429.
+
+**I koden:** flaggorna är satta på api i main. Fördelningen körs efter nästa
+körning (`webbpool.efter_korning`). `webbpool.mata_in` gör nu om en
+`okand`-bedömning vid nästa passage i stället för att räkna den som färsk i
+30 dagar.
+
+## 2026-11-21 — Vertex flyttar till kreditprojektet, och kostnaden får budget, tak och lägre tokentak (Anton)
+
+**Beslut.** Development och main ska fakturera Vertex i kreditprojektet
+`rock-sentinel-515323-r8` (faktureringskontot `0159BE-C0FCCA-881885`) i stället
+för `snajp-506221`. Förslagen i `docs/KOSTNADER-SPRAKMODELL.md` § 4 genomförs.
+
+**Resonemanget.** Anton, om förslagen: "Det låter bra, men vi ska använda oss av
+det nya kreditprojektet även för main". Krediten (omkring 2 600 kr) betalar då
+driften så länge den räcker. Budgeten, taket och tokentaken gör att ett fel som
+skenar märks och stoppas innan det blir en faktura.
+
+**Gjort 2026-11-21.**
+- Development (api och web): `GOOGLE_SERVICE_ACCOUNT_JSON` byts till
+  kreditprojektets nyckel. Dessutom `LEADS_DAILY_TOKEN_BUDGET=40000000` (förut 150 M)
+  och `SUPPORT_DAILY_TOKEN_BUDGET=2000000` (förut av). Deployen gick igenom och
+  startade utan Vertex-fel. Den gamla nyckeln ligger som reserv i
+  `~/.secrets/snajp-vertex-snajp-506221.json`.
+- Kreditkontot: budgeten "Snajp Vertex manad" är 3 000 kr i månaden för hela
+  kontot. Den räknar bruttokostnaden, alltså före krediten, och mejlar vid 50,
+  80 och 100 % av utfallet och vid 100 % av prognosen.
+- Kreditkontot: utgiftstaket "Snajp Vertex tak" är 8 000 kr i månaden på Vertex
+  AI i `rock-sentinel-515323-r8`. Det pausar Vertex i projektet tills det lyfts.
+- Kontot är ett betalkonto ("Paid account"). När krediten är slut dras
+  kostnaden från kortet, så budgeten och taket är skyddet.
+
+**Main väntar på releasen.** `gemini-2.5-flash`, som main kör, finns inte i
+kreditprojektet. Den svarade 404 i europe-west1, -west4 och -north1, eftersom
+Google inte ger nya projekt tillgång till den. Lite, 3.8, inbäddningen i
+europe-west1 och den grundade sökningen svarar 200. Main byter därför nyckel i
+samma steg som releasen tar dit Lite och 3.8, tillsammans med tokentaken. Byts
+nyckeln före releasen slutar main svara. Vid bytet bör main få ett eget
+servicekonto i kreditprojektet, så att miljöerna inte delar nyckel
+(JURIDIK_ATGARDER #14).
+
+---
+
+## 2026-11-20 — Språkmodellen blir gemini-3.5-flash-lite i support, sortering och utkast (Anton)
+
+**Beslut.** `MODEL=gemini-3.5-flash-lite` i Vertex-regionen `eu`. Det gäller
+supportagenten, triagen, Iris-utkasten, humanizern och profilen, som alla ärver
+`MODEL`. Bildbedömningen (`VISION_MODEL`) och kvittona (`KVITTO_MODEL`) ligger
+kvar på `gemini-3.8-flash`. Ersätter beslutet 2026-11-19 (3.8 Flash i alla
+steg) för de steg som ärver `MODEL`.
+
+**Resonemanget.** Anton, efter att ha läst outputen från alla 117 testfall för
+fem modeller (`docs/compliance/modellbyte-underlag.md` § 6.6): "Vi kör på 3.5
+Lite. Jag har granskat outputsen och tycker att de till största del är korrekta
+och svarar på det som behövs utan att krångla till det, utkasten är även mer
+direkta och säljande även om de kan finputsas lite med ytterligare
+instruktioner, men vi ger feedback på det efter några skarpa körningar."
+
+Underlaget visar att Lite är den billigaste (17 kr för hela sviten mot 37 kr
+för 3.8 i dag och omkring 73 kr efter 3.8:s prishöjning 2027-01-01) och den
+snabbaste (ett supportsvar tar omkring 5 s i median). Den har inget aviserat
+slutdatum.
+
+**Bildbedömningen (webbplatsen) blir kvar på 3.8 (Anton, samma kväll).** Anton
+fick 15 omstridda facitsajter bedömda av båda modellerna på samma skärmbild.
+3.8 kallade alla sex dåliga dåliga och åtta av nio "bra" dåliga, medan Lite
+kallade fem av de sex dåliga bra. Anton: "övriga 'bra' borde klassas som
+dåliga, eller bristfälliga, där 3.8 är rätt i sin bedömning om alla, de bör
+absolut kontaktas." Facit är rättat efter det: åtta sajter bra → dalig och
+alvegardens.se akut → dalig (ny sajt sedan facit), i
+`tests/leads/fixtures/webbfacit_2026-10-08.json`. Merkostnaden mot Lite är
+omkring 0,04 kr per bedömd sajt, alltså 3,60 kr per 100 leads (0,08 kr och
+8,40 kr efter 3.8:s prishöjning 2027-01-01). Skärmbildens ScrapeGraph-krediter
+är desamma oavsett modell.
+
+**Kvittona** är pausade/avvecklade (Anton), så modellvalet där spelar ingen
+roll. `KVITTO_MODEL=gemini-3.8-flash` står kvar i development: att ta bort
+variabeln nekades av behörighetsspärren.
+
+**I drift.** Bara development. Railway på `api`: `MODEL=gemini-3.5-flash-lite`,
+`VISION_MODEL=gemini-3.8-flash` (`KVITTO_MODEL=gemini-3.8-flash`, utan verkan). På `web`:
+`MODEL=gemini-3.5-flash-lite`. `LLM_TIMEOUT_CHATT_S=60` står kvar. Main får
+samma värden först med release-PR:en och Antons ja. Feedback på utkastens ton
+tas efter några skarpa körningar.
+
+---
+
 ## 2026-11-19 — Titlarna på Vårt team: "Grundare & VD" och "Grundare & Teknikchef" (Sebbe)
 
 **Beslut.** Sebastian Bergmans titel på /vart-team är "Grundare & VD" och Anton
