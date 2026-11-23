@@ -113,7 +113,9 @@ for (const sida of SIDOR) {
   for (const vy of VYER) {
     console.log(`\n${sida}  ${vy}`);
     const fore = await gaIgenom(FORE, sida, vy);
-    const efter = await gaIgenom(EFTER, sida, vy);
+    // Samma adress på båda sidor: en genomgång räcker, och kontrollen blir då bara
+    // "står något kvar dolt, och är konsolen ren".
+    const efter = FORE === EFTER ? fore : await gaIgenom(EFTER, sida, vy);
     console.log(`  sidhöjd före ${fore.hojd}, efter ${efter.hojd}${fore.hojd === efter.hojd ? "" : "  <-- SKILJER"}`);
     if (fore.hojd !== efter.hojd) anmarkningar += 1;
     for (const [namn, k] of [["före", fore], ["efter", efter]]) {

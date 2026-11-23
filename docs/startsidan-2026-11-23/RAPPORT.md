@@ -1,8 +1,9 @@
 # Startsidans lagg, felvägarna och kundresan (2026-11-23)
 
-Arbetsgren `buddy-demo-prep`, utgår från `origin/development` vid `15227ef4`.
-Uppdraget kom från Sebastian. Delarna om testkunden Buddy AB ströks under arbetet
-och finns inte med här.
+Arbetsgren `buddy-demo-prep`, utgår från `origin/development` vid `15227ef4`,
+ihopslagen med `development` 2026-11-24 och pushad dit. Uppdraget kom från
+Sebastian. Delarna om en särskild testkund ströks under arbetet och finns inte
+med här.
 
 ## 1. Bedömning mot målen
 
@@ -15,11 +16,13 @@ och finns inte med här.
 | CLS < 0,1 | 0 → 0 | Ja |
 | Stabila 60 bilder per sekund vid fyra gångers CPU-strypning | 24 % → 23,5 % sena huvudtrådsrutor | Nej, se 3.2 |
 | Inga synliga fel, statuskoder eller teknisk text för kunden | Sexton kända läckor stängda | Ja för de kända, se 2.2 |
-| Kundresan automatiserad som e2e-test | Skrivet, inte kört | Nej, se 4 |
+| Kundresan automatiserad som e2e-test | 11 steg, tre gröna körningar i rad mot development | Ja, i Chromium |
+| Iris hittar leads och skriver utkast för en ny kund | Ett lead på nivå A med utkast på 45 s | Ja, se 6 |
+| Supportagenten svarar ur kundens egen kunskapsbas | Ja, på 6 s | Ja, en fråga prövad |
 
 Sidan är tydligt snabbare att ladda och hackar inte längre i scrollen på en
-långsam maskin, men den når inte uppdragets siffror. Det som återstår är
-strukturellt och står i avsnitt 5.
+långsam maskin, men den når inte uppdragets siffror på mobil. I development når
+desktop målet (97). Det som återstår är strukturellt och står i avsnitt 5.
 
 ## 2. Vad som ändrats
 
@@ -166,7 +169,8 @@ vyer, isolering, kunskapsbasen, testchatten, Iris körformulär och sessionen. D
 fäller på varje konsolfel och varje svar med 4xx eller 5xx, och avbryter varje
 anrop till en sändväg så att inget mejl kan lämna huset.
 
-Se avsnitt 6 för läget efter körningen mot development.
+Det är kört mot development: tre gröna körningar i rad, varav en med riktiga
+modellanrop (`KUNDRESA_LIVE=1`). Utfallet står i avsnitt 6.
 
 Repot har ingen Playwright i `package.json`, med flit (samma val som
 `scripts/qa_*.mjs`): `npm i --no-save @playwright/test` före körning.
@@ -191,7 +195,63 @@ Rangordnat efter hur mycket det väger.
 
 ## 6. Verifiering i development
 
-**Ej klart.** Fylls i efter push.
+Efter push till `development` (2026-11-24 00:25), mot
+`web-development-6c85.up.railway.app`.
+
+**Kundresan** (`BASE=<development> npx playwright test -c tests/e2e --project=chromium`),
+en nyskapad testkund per körning med adress under `example.com`:
+
+| Steg | Utfall |
+|---|---|
+| Publika sidor laddar utan konsolfel eller felsvar (nio sidor) | Godkänt |
+| Registrering landar i onboardingen | Godkänt |
+| Onboarding: tomt formulär, ogiltigt organisationsnummer, omladdning mitt i | Godkänt |
+| Onboarding: sex steg, Tillbaka bär kvar värdena, dubbelklick på sista knappen | Godkänt |
+| Arbetsytan bär kundens egen text och börjar tom (inga andras leads, körningar, kunskap) | Godkänt |
+| Tjugoen vyer i arbetsytan och inställningarna öppnas utan fel eller teknisk text | Godkänt |
+| Isolering: okända id ger 404, utan session 401, adminytan 404 | Godkänt |
+| Kunskapsbasen: spara, och för lång text ger en mening i stället för `[object Object]` | Godkänt |
+| Supportagenten svarar i testchatten | Godkänt, riktigt svar |
+| Iris: körning på ett lead ger lead och utkast | Godkänt, riktig körning |
+| Utloggning, skyddad sida utan session, `?next=` till annan sajt, två flikar | Godkänt |
+
+Tre körningar i rad gick igenom: en med alla elva stegen, två där de två stegen med
+modellanrop hoppades över (nio av nio). Inget anrop till en sändväg försöktes.
+
+Vad de riktiga anropen gav:
+
+- **Supportagenten**, frågan "Hur kommer jag i kontakt med er?", svar på sex
+  sekunder: "Du når oss på vardagar mellan 08 och 17. Ställ din fråga här i chatten
+  så hjälper vi dig vidare." Uppgiften kommer ur artikeln testet just sparat i
+  kundens kunskapsbas.
+- **Iris**, ett beställt lead: klar på 45 sekunder, två bolag undersökta, ett
+  levererat med motivering och utkast med ämnesrad och brödtext. En tidigare
+  körning undersökte fyra bolag och levererade ett på nivå A med citat från bolagets
+  sajt som belägg, och lade fyra bolag i ringlistan.
+
+Det här är en fråga och två körningar, alltså ett bevis på att kedjan fungerar för
+en nyregistrerad kund, inte en bedömning av kvaliteten över många fall.
+
+**Publika sidor** (`scripts/jamfor_startsida.mjs` mot development): `/`, `/leads`
+och `/support` i 1440 och 390 punkters bredd. Inget element kvar dolt, inga
+konsolfel, ingen `will-change` kvar efter att rörelsen lagt sig.
+
+**Lighthouse**, startsidan, tre körningar per enhet:
+
+| | Poäng | FCP | LCP | TBT | Vikt |
+|---|---|---|---|---|---|
+| Produktionen i dag (snajp.se, gamla koden), mobil | 59 | 2,13 s | 6,65 s | 515 ms | 1 294 kB |
+| Development med ändringarna, mobil | 79 | 1,25 s | 4,15 s | 267 ms | 723 kB |
+| Produktionen i dag, desktop | 92 | 0,61 s | 1,39 s | 81 ms | 1 294 kB |
+| Development med ändringarna, desktop | 97 | 0,38 s | 1,13 s | 34 ms | 810 kB |
+
+**Testkonton som ligger kvar i development.** Varje körning skapade ett konto
+`e2e-kund+<åtta siffror>@example.com` med arbetsytan "E2E Testbolaget <siffror> AB",
+sex stycken. Notismejlen är avslagna och adressen kan inte ta emot mejl.
+`scripts/qa_radera_konto.py` vägrar radera dem, med rätta: de bär en egen
+kunskapsbasartikel och två av dem har leads. Jag har inte raderat något för hand i
+en databas som speglar produktionen. De försvinner vid nästa spegling, eller tas
+bort med `scripts/gdpr_radera.py`.
 
 ## 7. Det som inte gick att göra
 
@@ -199,7 +259,14 @@ Rangordnat efter hur mycket det väger.
   startar ingen motor eftersom WSL inte är installerat. Inloggade flöden går därför
   inte att köra på utvecklingsmaskinen. `wsl --install` (admin och omstart) löser det.
 - **Körning i fler webbläsare.** Testet har projekt för WebKit, telefon och
-  surfplatta, men är bara tänkt att köras i Chromium tills väljarna satt sig.
+  surfplatta, men är bara kört i Chromium. Utloggningen på smal skärm ligger i en
+  meny, och den vägen är oprövad.
+- **Supportagentens kvalitet över många frågor** (uppdraget nämnde femton) och
+  chattwidgeten på en kunds sajt. En självregistrerad kund har ingen publik chatt
+  förrän den lagts upp i `lib/tenants/`, så det finns ingen widget att pröva för en
+  ny kund.
+- **Varje knapp i varje vy.** Testet öppnar alla vyer och fäller på fel, men
+  klickar inte på varje knapp i dem.
 
 ## 8. Mäta om
 

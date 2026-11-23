@@ -80,3 +80,8 @@ scripts/.kalla.env
 .beads/proxieddb/
 .beads/interactions.jsonl
 .marketing/
+
+# Playwright-utdata från tests/e2e (spår, skärmbilder, rapport). Körningsbevis, inte källkod.
+.playwright-utfall/
+.playwright-rapport/
+.playwright-live.log

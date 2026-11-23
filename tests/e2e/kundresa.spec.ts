@@ -6,10 +6,10 @@
  *   BASE=http://localhost:3100 npx playwright test -c tests/e2e --project=chromium
  *   BASE=... npx playwright test -c tests/e2e --project=chromium --repeat-each=3
  *
- * EJ KÖRD ÄNNU (2026-11-23). Testet är skrivet mot källkoden och har inte kunnat
- * köras: den lokala stacken går inte att resa på utvecklingsmaskinen (Postgres
- * saknar pgvector, se docs/startsidan-2026-11-23/RAPPORT.md), och en körning mot development kräver att
- * grenen ligger där. Räkna med att väljare behöver justeras vid första körningen.
+ * Körd mot development 2026-11-24: tre gröna körningar i rad i Chromium, varav en
+ * med KUNDRESA_LIVE=1. Lokalt går den inte att köra på en maskin utan pgvector
+ * (se docs/startsidan-2026-11-23/RAPPORT.md). WebKit, telefon och surfplatta
+ * finns som projekt men är inte körda.
  *
  * ## Vad som fäller testet
  *
@@ -85,6 +85,12 @@ async function kravRenText(page: Page, steg: string) {
   const text = await page.locator("body").innerText();
   const traff = text.match(FULTEXT);
   expect(traff?.[0] ?? null, `${steg}: teknisk text i vyn nära "${traff ? text.slice(Math.max(0, traff.index! - 60), traff.index! + 80) : ""}"`).toBeNull();
+}
+
+/** Ett utkast får aldrig bära en ofylld platshållare eller modellens egna anteckningar. */
+async function kravRenUtkast(text: string) {
+  const traff = text.match(/\{\{.*?\}\}|\[(?:namn|företag|bolag|förnamn)\]|undefined|\bnull\b|Som AI|As an AI/i);
+  expect(traff?.[0] ?? null, `utkastet bär en platshållare eller modellrest: ${traff?.[0]}`).toBeNull();
 }
 
 // ------------------------------------------------------------- utskicksspärren
@@ -315,8 +321,14 @@ test("kunskapsbasen: spara, och för lång text ger en begriplig mening", async 
   // aldrig "[object Object]". Det avsiktliga 422-svaret räknas inte som fel.
   await page.getByPlaceholder(/Rubrik/).fill("För lång text");
   await page.getByPlaceholder("Texten agenterna ska svara ur").fill("a ".repeat(4100));
+  // Svaret väntas in uttryckligen: en feltext som redan står på sidan får inte
+  // se ut som utfallet av det här klicket.
+  const avvisat = page.waitForResponse(
+    (r) => new URL(r.url()).pathname === "/api/snajp-support/kb" && r.request().method() === "POST"
+  );
   await page.getByRole("button", { name: "Spara i kunskapsbasen" }).click();
-  await expect(page.getByText(/gick inte att (läsa|spara)/i).first()).toBeVisible({ timeout: 30_000 });
+  expect((await avvisat).status()).toBe(422);
+  await expect(page.getByText(/Uppgifterna gick inte att läsa|Texten gick inte att spara/).first()).toBeVisible();
   await kravRenText(page, "kunskapsbasen, för lång text");
   const ovantade = fynd.filter((f) => !(f.sort === "svar" && /^422 \/api\/snajp-support\/kb/.test(f.text)));
   fynd.length = 0;
@@ -339,7 +351,10 @@ test("supportagenten: testchatten öppnas och tar emot en fråga", async () => {
   const svar = page.locator('[data-chatt-roll="agent"]').last();
   await expect(svar).toBeVisible({ timeout: 180_000 });
   await expect(page.locator('[data-chatt-roll="system"]'), "chatten visade ett fel").toHaveCount(0);
-  expect((await svar.innerText()).trim().length).toBeGreaterThan(20);
+  const text = (await svar.innerText()).trim();
+  expect(text.length).toBeGreaterThan(20);
+  // Svaret skrivs ut: att en bubbla dök upp säger inte att svaret är rimligt.
+  console.log(`    supportagentens svar: ${text.replace(/\s+/g, " ").slice(0, 400)}`);
 });
 
 test("Iris: körformuläret öppnas, och en körning ger leads med utkast", async () => {
@@ -352,11 +367,43 @@ test("Iris: körformuläret öppnas, och en körning ger leads med utkast", asyn
   await expect(starta).toBeEnabled();
 
   test.skip(!LIVE, "körningen kräver en riktig modell och kostar pengar (KUNDRESA_LIVE=1)");
+  // Motorn fortsätter tills ett leverbart lead finns, högst tolv undersökta bolag.
+  test.setTimeout(20 * 60_000);
 
   await starta.click();
   // Förloppet ska synas där körningen startades, aldrig en frusen skärm.
   await expect(page.getByText(/Letar bolag|Startar körningen|leads klara|bolag undersökta/).first()).toBeVisible({ timeout: 30_000 });
-  await expect(page.getByText(/1 av 1 leads|leads klara/).first()).toBeVisible({ timeout: 15 * 60_000 });
+  await expect(page.getByText(/1 av 1 leads/).first()).toBeVisible({ timeout: 15 * 60_000 });
+
+  // Raden i vyn räcker inte som bevis. Körningen och leadet läses ur API:t:
+  // ett levererat lead är ett bolag med kontaktadress, lägesbild och ett utkast i kön.
+  const korningar = await page.request.get("/api/snajp-support/leads/korningar?limit=5");
+  expect(korningar.status()).toBe(200);
+  const senaste = ((await korningar.json()).korningar ?? [])[0];
+  expect(senaste, "körningen syns inte i listan").toBeTruthy();
+  // `error` är en tom sträng på en körning som gick bra, inte null.
+  expect(String(senaste.error ?? ""), "körningen bär ett fel").toBe("");
+  expect(senaste.korning?.levererade ?? 0, "inget lead levererades").toBeGreaterThanOrEqual(1);
+  const prospekt = await page.request.get("/api/snajp-support/leads/prospects?limit=5");
+  const rader = ((await prospekt.json()).prospects ?? []) as Record<string, any>[];
+  expect(rader.length, "körningen gav inget bolag i listan").toBeGreaterThanOrEqual(1);
+  const lead = rader[0];
+  expect(String(lead.company_name ?? "").trim(), "leadet saknar bolagsnamn").not.toBe("");
+  expect(String(lead.motivering ?? lead.lagesbeskrivning ?? "").trim(), "leadet saknar motivering").not.toBe("");
+  console.log(
+    `    körningen: ${senaste.korning.levererade} av ${senaste.korning.mal} leads, ${senaste.korning.undersokta} bolag undersökta, status ${senaste.status}`
+  );
+  // Utkastet: ämnesrad och en brödtext som är ett mejl och inte en mall på en rad.
+  const utkastsvar = await page.request.get(`/api/snajp-support/leads/prospects/${lead.id}/utkast`);
+  expect(utkastsvar.status()).toBe(200);
+  const utkast = (await utkastsvar.json()).utkast as { subject?: string; brodtext?: string; body?: string } | null;
+  expect(utkast, "leadet har inget utkast").toBeTruthy();
+  expect(String(utkast!.subject ?? "").trim(), "utkastet saknar ämnesrad").not.toBe("");
+  const brodtext = String(utkast!.brodtext ?? utkast!.body ?? "").trim();
+  expect(brodtext.length, "utkastets brödtext är för kort för att vara ett mejl").toBeGreaterThan(120);
+  await kravRenUtkast(brodtext);
+  console.log(`    utkastet: "${utkast!.subject}" · ${brodtext.replace(/\s+/g, " ").slice(0, 420)}`);
+  console.log(`    leadet: ${lead.company_name} · ${String(lead.motivering ?? "").replace(/\s+/g, " ").slice(0, 220)}`);
 
   // Förloppet överlever en omladdning.
   await page.goto("/dashboard/leads?vy=korningar", { waitUntil: "networkidle" });
