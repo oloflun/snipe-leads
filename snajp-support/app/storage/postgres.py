@@ -4122,6 +4122,7 @@ class PostgresStorage:
         automatutskick: bool = False,
         mailbox_id: str | None = None,
         last_i_brevladan: bool = False,
+        besvarat_i_brevladan: bool = False,
     ) -> dict[str, Any] | None:
         async with self._scoped(tenant_id) as conn:
             record = await conn.fetchrow(
@@ -4129,9 +4130,9 @@ class PostgresStorage:
                 insert into ss_emails
                   (tenant_id, provider, provider_message_id, from_email, from_name,
                    subject, body_text, received_at, is_test, automatutskick, mailbox_id,
-                   last_i_brevladan)
+                   last_i_brevladan, besvarat_i_brevladan)
                 values ($1, $2, $3, $4, $5, $6, $7, coalesce($8::timestamptz, now()), $9, $10,
-                        $11::uuid, $12)
+                        $11::uuid, $12, $13)
                 on conflict (tenant_id, provider_message_id) do nothing
                 returning *
                 """,
@@ -4147,6 +4148,7 @@ class PostgresStorage:
                 automatutskick,
                 mailbox_id,
                 bool(last_i_brevladan),
+                bool(besvarat_i_brevladan),
             )
         return _row(record)
 

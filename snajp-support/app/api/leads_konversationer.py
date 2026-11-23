@@ -541,7 +541,9 @@ async def notiser(request: Request, limit: int = 30, tenant: dict = Depends(requ
             {"id": str(r["id"]), "typ": r["typ"], "tid": _iso(r["created_at"]), "last": bool(r.get("last_at")),
              "thread_id": str(r["thread_id"]) if r.get("thread_id") else None,
              "prospect_id": str(r["prospect_id"]), "company_name": r.get("company_name"),
-             "klass": (r.get("detalj") or {}).get("klass")}
+             "klass": (r.get("detalj") or {}).get("klass"),
+             # Svaret var öppnat men obesvarat i brevlådan när utkastet skrevs.
+             "oppnat": bool((r.get("detalj") or {}).get("oppnat"))}
             for r in rader
         ],
         "olasta": await storage.antal_olasta_notiser(tenant_id),

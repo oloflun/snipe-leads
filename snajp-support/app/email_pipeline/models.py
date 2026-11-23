@@ -32,6 +32,9 @@ class InboundEmail:
     # Brevlådan mejlet hämtades från — dess syfte (support/leads) styr klassningen.
     mailbox_id: str | None = None
     # Mejlet var läst på servern (\Seen) när Snajp hämtade det: en människa
-    # har öppnat det i brevlådan. Inget AI-utkast skrivs; det går till manuell
-    # hantering (Anton 2026-11-23, migration 150).
+    # har öppnat det i brevlådan. Det kvalificeras och får utkast som vanligt,
+    # men skickas aldrig av sig självt (Anton 2026-11-23, migration 150).
     last_i_brevladan: bool = False
+    # Mejlet var dessutom besvarat från brevlådan (\Answered). Bara då skrivs
+    # inget utkast: det går till manuell hantering.
+    besvarat_i_brevladan: bool = False

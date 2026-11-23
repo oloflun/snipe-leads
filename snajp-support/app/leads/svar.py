@@ -148,6 +148,7 @@ async def hantera_prospektsvar(
     tenant_name: str,
     context_pack: str,
     publik_bas_url: str = "",
+    oppnat: bool = False,
     utan_utkast: bool = False,
 ) -> dict[str, Any]:
     """Tar emot ETT inkommande prospektsvar och agerar på det.
@@ -156,11 +157,17 @@ async def hantera_prospektsvar(
     notifiera) görs i KOD — modellen klassificerar och formulerar, inget
     annat. Samma arbetsfördelning som support_agent och run_outreach_draft.
 
-    `utan_utkast` (Anton 2026-11-23): svaret var redan öppnat i brevlådan när
-    Snajp hämtade det. Det sparas och klassas som vanligt, så att steget, kön,
-    återkontakten och en avregistrering följer med, men Iris skriver inget
-    svarsutkast: en människa har läst det och svarar själv. Konversationen
-    visar att svaret lämnats över och varför.
+    Mejl som någon öppnat i brevlådan (Anton 2026-11-23):
+
+    `oppnat`       svaret var läst men obesvarat när Snajp hämtade det. Iris
+                   sköter konversationen som vanligt: klassar, skriver utkast
+                   och notifierar. Att någon råkat öppna mejlet får inte göra
+                   att svaret glöms. Notisen säger att det ligger obesvarat.
+    `utan_utkast`  svaret var redan besvarat från brevlådan. Det sparas och
+                   klassas, så att steget, kön, återkontakten och en
+                   avregistrering följer med, men Iris skriver inget
+                   svarsutkast ovanpå ett svar som redan gått. Konversationen
+                   visar att svaret lämnats över och varför.
     """
     started = time.monotonic()
 
@@ -184,7 +191,8 @@ async def hantera_prospektsvar(
         storage, tenant_id, prospect_id=thread.get("prospect_id"), thread_id=thread_id, typ="svar",
         detalj={
             "message_id": str((inkommet or {}).get("id") or ""),
-            **({"last_i_brevladan": True} if utan_utkast else {}),
+            **({"last_i_brevladan": True} if oppnat or utan_utkast else {}),
+            **({"besvarat_i_brevladan": True} if utan_utkast else {}),
         },
     )
     try:
@@ -230,6 +238,8 @@ async def hantera_prospektsvar(
         "grounding": None,
         # Vilka av kundens eskaleringsregler som lämnade svaret till en människa.
         "eskalerat": [],
+        # Svaret var öppnat men obesvarat i brevlådan: utkastets notis säger det.
+        "oppnat_i_brevladan": bool(oppnat and not utan_utkast),
         # Konversationens underlag för _avsluta, tas bort före svaret.
         "_konversation": (str(thread.get("prospect_id") or ""), vantande_fore),
     }
@@ -444,12 +454,12 @@ async def hantera_prospektsvar(
                 started=started,
             )
         if utan_utkast:
-            # Öppnat i brevlådan: svaret är människans. Kön ställs in av samma
-            # skäl som vid en eskaleringsregel — en automatisk uppföljning
-            # ovanpå en fråga som någon redan läst vore fel svar. Inget
-            # prioriterat mejl: den som öppnade svaret vet redan om det.
+            # Redan besvarat från brevlådan: ett utkast ovanpå det vore ett
+            # andra svar. Kön ställs in av samma skäl som vid en
+            # eskaleringsregel — samtalet är människans. Inget prioriterat
+            # mejl: den som svarade vet redan om det.
             utfall["handoff"] = True
-            utfall["eskalerat"].append("last_i_brevladan")
+            utfall["eskalerat"].append("besvarat_i_brevladan")
             utfall["cancelled_sends"] = await storage.cancel_pending_sends(tenant_id, thread_id)
             if prospect_id:
                 await storage.update_prospect(tenant_id, prospect_id, status="replied")
@@ -756,7 +766,12 @@ async def _konversationens_handelser(storage, tenant_id: str, utfall: dict[str, 
         ny = await storage.get_pending_outreach_message(tenant_id, thread_id)
         await konversation.logga(
             storage, tenant_id, prospect_id=prospect_id, thread_id=thread_id, typ="utkast",
-            detalj={"message_id": str((ny or {}).get("id") or ""), "klass": utfall.get("klass")},
+            detalj={
+                "message_id": str((ny or {}).get("id") or ""), "klass": utfall.get("klass"),
+                # Notisen blir "obesvarat i brevlådan": någon har öppnat
+                # svaret utan att svara, och utkastet ska inte glömmas.
+                **({"oppnat": True} if utfall.get("oppnat_i_brevladan") else {}),
+            },
         )
     elif vantande_fore and not await storage.get_pending_outreach_message(tenant_id, thread_id):
         await konversation.logga(

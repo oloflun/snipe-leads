@@ -1647,10 +1647,13 @@ class Storage(Protocol):
         automatutskick: bool = False,
         mailbox_id: str | None = None,
         last_i_brevladan: bool = False,
+        besvarat_i_brevladan: bool = False,
     ) -> dict[str, Any] | None:
         """Sparar ett inkommande mail. Returnerar None vid dublett (dedupe).
         `last_i_brevladan` (migration 150): mejlet var läst på servern när det
-        hämtades, så en människa har öppnat det och inget AI-utkast skrivs."""
+        hämtades, så en människa har öppnat det; det kvalificeras som vanligt
+        men skickas aldrig av sig självt. `besvarat_i_brevladan`: det var
+        dessutom besvarat från brevlådan, och då skrivs inget AI-utkast."""
         ...
 
     async def delete_emails_by_provider(self, tenant_id: str, provider: str) -> int:

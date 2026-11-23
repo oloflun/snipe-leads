@@ -9,41 +9,54 @@ möjligt), vad det betyder i koden.
 
 ---
 
-## 2026-11-23 — Inkorgen hämtar också mejl som redan är öppnade; på dem skrivs inget utkast (Anton)
+## 2026-11-23 — Inkorgen hämtar också mejl som redan är öppnade; öppnat men obesvarat får utkast ändå, bara redan besvarat lämnas (Anton)
 
 **Beslut.**
 1. Hämtningen går på UID i stället för på olästa: varje brevlåda bär ett märke (högsta
    UID som står i databasen), och nästa synk hämtar allt över märket, läst eller inte.
    En brevlåda utan märke börjar med olästa plus de senaste sju dagarnas mejl
    (`IMAP_TILLBAKABLICK_DAGAR`); det som redan finns faller som dubletter.
-2. Ett mejl som var läst på servern när Snajp hämtade det märks `last_i_brevladan`.
-   Kundtjänsten: Att hantera, märkt "Öppnat i brevlådan", ingen triage och inget utkast.
-   Leads: svaret sparas i konversationen och klassas, så att steget, kön, återkontakten
-   och en avregistrering gäller, men Iris skriver inget svarsutkast och konversationen
-   säger varför. Ett nytt lead ur ett öppnat mejl får inget automatiskt utkast.
+2. Varje öppnat mejl kvalificeras. Vad som sedan händer beror på om det är besvarat:
+
+   | Mejlet i brevlådan | Leads (Iris) | Kundtjänst |
+   |---|---|---|
+   | Oöppnat | Som förut | Som förut |
+   | Öppnat, obesvarat (`last_i_brevladan`) | Klassas och får svarsutkast som vanligt. Notisen säger "Obesvarat i brevlådan: utkast klart". | Triage och utkast som vanligt, märkt "Öppnat, obesvarat". Aldrig autosvar: utkastet väntar på ett ja. |
+   | Redan besvarat (`besvarat_i_brevladan`) | Sparas i konversationen och klassas, så att steget, kön, återkontakten och en avregistrering gäller. Inget utkast; händelseloggen säger varför. | Att hantera, märkt "Besvarat i brevlådan" och avbockat. Ingen triage, inget utkast. |
+
 3. Klassningen går före: ett nyhetsbrev som någon öppnat göms som förut.
 
 **Resonemanget.** Anton, om mejl till alias som landar i samma Gmail-brevlåda: "de
 kanske inte når fram till supportinkorgen/Iris ändå?" Det stämde: sökningen på olästa
 tappade varje mejl som någon hann öppna före synken, utan spår. Anton: "Bygg om
 hämtningen, men se till att supporten ser de vi öppnat och därmed inte skriver utkast
-på dem utan sorterar till manuell hantering." Den som öppnat ett mejl kan redan ha
-svarat från brevlådan, och ett utkast ovanpå det ger dubbla svar. Klassningen körs
-ändå på svar från leads: en begäran om att slippa kontakt ska spärra adressen också
-när en människa läst mejlet först.
+på dem utan sorterar till manuell hantering." Den första versionen (samma dag, aldrig
+släppt) lät därför bli utkast på varje öppnat mejl. Anton förtydligade: "I en
+fortlöpande konversation som skötts av Iris eller som är tänkt att skötas av Iris, får
+inte konversationen avbrytas eller tappas för att man råkar öppna mailet, alla öppnade
+mail behöver kvalificeras och finns det inget svar så bör ett utkast ändå skrivas och
+notifiera användaren, ifall det tex glömts bort." Gränsen går alltså vid om någon har
+svarat, inte vid om någon har tittat: ett utkast ovanpå ett svar som redan gått ger
+dubbla svar, medan ett öppnat mejl utan svar är just det som glöms. Autosvaret stängs
+för öppnade mejl eftersom den som öppnade det kan vara på väg att svara; ett utkast som
+väntar på ett ja kan inte krocka med det.
 
-**Kända gränser.** Läst på servern betyder att någon eller något har öppnat mejlet:
-ett Gmail-filter som markerar som läst räknas också. Mejl som ett filter arkiverar
+**Kända gränser.** Besvarat läses ur brevlådans egen markering (`\Answered`) i det
+ögonblick Snajp hämtar mejlet. Svarar någon från brevlådan efter hämtningen ligger
+Snajps utkast kvar tills en människa kasserar det; så var det redan för oöppnade mejl.
+Ett Gmail-filter som markerar som läst räknas som öppnat. Mejl som ett filter arkiverar
 förbi inkorgen hämtas inte, som förut. Tillbakablicken vid första synken tar in upp till
-sju dagars öppnade mejl som Snajp aldrig fått; de hamnar i Att hantera utan utkast,
-också de som redan besvarats från brevlådan. Ett mejl som raderats ur Snajp de senaste
-sju dagarna men ligger kvar i brevlådan kommer in igen vid den första synken.
+sju dagars öppnade mejl som Snajp aldrig fått, och de obesvarade bland dem får utkast.
+Ett mejl som raderats ur Snajp de senaste sju dagarna men ligger kvar i brevlådan kommer
+in igen vid den första synken.
 
 **I koden.** Migration 150 (`ss_mailboxes.imap_last_uid`, `imap_uidvalidity`,
-`ss_emails.last_i_brevladan`), `app/email_pipeline/connectors/imap.py` (`_fetch_sync`),
-`poller.py` (`_flytta_market`), `processor.py` (grenen efter klassningen,
-`_hantera_lead`), `app/leads/svar.py` (`utan_utkast`), `components/snajp/Dashboard.tsx`
-och `lib/leads/konversationer.ts` (märkningen). Test: `tests/test_inkorg_oppnade_mejl.py`.
+`ss_emails.last_i_brevladan`, `besvarat_i_brevladan`),
+`app/email_pipeline/connectors/imap.py` (`_fetch_sync`, `_flaggor`), `poller.py`
+(`_flytta_market`), `processor.py` (grenen efter klassningen, `auto_ok`,
+`_hantera_lead`), `app/leads/svar.py` (`oppnat`, `utan_utkast`),
+`components/snajp/Dashboard.tsx` och `lib/leads/konversationer.ts` (märkningen,
+`notisEtikett`). Test: `tests/test_inkorg_oppnade_mejl.py`.
 
 ---
 

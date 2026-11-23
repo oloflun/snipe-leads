@@ -14,9 +14,16 @@
 --                                   byter servern den gäller märket inte
 --   ss_emails.last_i_brevladan      mejlet var läst på servern när Snajp
 --                                   hämtade det: en människa har öppnat det.
---                                   Inget AI-utkast; det går till Att hantera
---                                   (support) eller lämnas över i
+--                                   Det kvalificeras och får utkast som
+--                                   vanligt, men skickas aldrig av sig självt.
+--   ss_emails.besvarat_i_brevladan  mejlet var dessutom besvarat från
+--                                   brevlådan. Inget AI-utkast: Att hantera,
+--                                   avbockat (support), eller överlämnat i
 --                                   konversationen (leads).
+--
+-- Antons förtydligande samma dag: en konversation som Iris sköter får inte
+-- tappas för att någon råkar öppna mejlet. Bara ett redan besvarat mejl
+-- lämnas utan utkast.
 --
 -- Additiv och idempotent. Default false och null: gamla rader och API-ingest
 -- beter sig som förut, och en brevlåda utan märke börjar med olästa plus de
@@ -27,4 +34,5 @@ alter table public.ss_mailboxes
   add column if not exists imap_uidvalidity bigint;
 
 alter table public.ss_emails
-  add column if not exists last_i_brevladan boolean not null default false;
+  add column if not exists last_i_brevladan boolean not null default false,
+  add column if not exists besvarat_i_brevladan boolean not null default false;

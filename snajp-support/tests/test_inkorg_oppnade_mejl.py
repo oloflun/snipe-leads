@@ -2,7 +2,11 @@
 
 Antons beställning 2026-11-23: "Bygg om hämtningen, men se till att supporten
 ser de vi öppnat och därmed inte skriver utkast på dem utan sorterar till
-manuell hantering."
+manuell hantering." Förtydligat samma dag: "I en fortlöpande konversation som
+skötts av Iris eller som är tänkt att skötas av Iris, får inte konversationen
+avbrytas eller tappas för att man råkar öppna mailet, alla öppnade mail
+behöver kvalificeras och finns det inget svar så bör ett utkast ändå skrivas
+och notifiera användaren, ifall det tex glömts bort."
 
 Sökningen på olästa (UNSEEN) tappade varje mejl som en människa hann öppna i
 brevlådan före synken. Nu ska
@@ -10,9 +14,12 @@ brevlådan före synken. Nu ska
   1. allt med högre UID än brevlådans märke hämtas, läst eller inte;
   2. en brevlåda utan märke börja med olästa plus de senaste dagarna;
   3. märket bara flyttas förbi det som står i databasen;
-  4. ett mejl som var läst på servern bära `last_i_brevladan`, gå till Att
-     hantera utan utkast (support) eller lämnas över i konversationen utan
-     utkast (leads), och ändå klassas så att en avregistrering gäller.
+  4. ett mejl som var öppnat men obesvarat (`last_i_brevladan`) kvalificeras
+     och få utkast som vanligt, med en notis som säger att det ligger
+     obesvarat, men aldrig skickas av sig självt;
+  5. ett mejl som redan var besvarat från brevlådan (`besvarat_i_brevladan`)
+     inte få något utkast: Att hantera, avbockat (support), eller överlämnat
+     i konversationen (leads), och ändå klassas så att en avregistrering gäller.
 """
 
 from __future__ import annotations
@@ -73,11 +80,12 @@ def _klient(sokresultat: bytes, mejl: dict[bytes, list], *, uidvalidity: bytes =
 
 def test_med_marke_hamtas_allt_med_hogre_uid_ocksa_det_lasta():
     client = _klient(
-        b"8 9",
+        b"8 9 10",
         {
             b"8": [(b"1 (UID 8 FLAGS (\\Seen) BODY[] {42}", _rfc822("<last@x>")), b")"],
             # Vissa servrar lägger flaggorna efter kroppen.
             b"9": [(b"2 (UID 9 BODY[] {42}", _rfc822("<olast@x>")), b" FLAGS (\\Recent))"],
+            b"10": [(b"3 (UID 10 FLAGS (\\Answered \\Seen) BODY[] {42}", _rfc822("<besvarat@x>")), b")"],
         },
     )
     tillstand: dict = {}
@@ -88,7 +96,9 @@ def test_med_marke_hamtas_allt_med_hogre_uid_ocksa_det_lasta():
         )
 
     assert client.sokningar == [("UID", "8:*")]
-    assert [(m.imap_uid, m.last_i_brevladan) for m in mejl] == [("8", True), ("9", False)]
+    assert [(m.imap_uid, m.last_i_brevladan, m.besvarat_i_brevladan) for m in mejl] == [
+        ("8", True, False), ("9", False, False), ("10", True, True),
+    ]
     assert tillstand["market_galler"] and tillstand["uidvalidity"] == 3 and tillstand["uidnext"] == 20
     # Hämtningen rör fortfarande inga flaggor.
     assert "store" not in [anrop.args[0] for anrop in client.uid.call_args_list]
@@ -226,34 +236,76 @@ async def test_ett_fel_i_hamtningen_ror_inte_market(monkeypatch):
     assert rad["imap_last_uid"] == 12
 
 
-# -- Kundtjänsten: Att hantera, inget utkast ----------------------------------
+# -- Kundtjänsten -------------------------------------------------------------
+
+PAKETFRAGAN = (
+    "Beställde för en vecka sedan och spårningen har inte "
+    "uppdaterats på fyra dagar. När kommer paketet?"
+)
 
 
-async def _sparat(storage: MemoryStorage, *, last: bool, fran: str = "anna@example.com"):
-    return await storage.save_email(
-        DEFAULT_TENANT_ID, provider="imap", provider_message_id=f"oppnat-{fran}-{last}", from_email=fran,
+async def test_besvarat_supportmejl_gar_till_att_hantera_avbockat_utan_utkast(monkeypatch):
+    storage = MemoryStorage()
+    mail = await storage.save_email(
+        DEFAULT_TENANT_ID, provider="imap", provider_message_id="besvarat-1", from_email="anna@example.com",
         from_name="Anna Andersson", subject="Fråga om min order", body_text="Hej, var är mitt paket?",
-        last_i_brevladan=last,
+        last_i_brevladan=True, besvarat_i_brevladan=True,
     )
 
-
-async def test_oppnat_supportmejl_gar_till_att_hantera_utan_utkast(monkeypatch):
-    storage = MemoryStorage()
-    mail = await _sparat(storage, last=True)
-
     async def ingen_modell(*args, **kwargs):
-        raise AssertionError("Triagen nåddes fast mejlet var öppnat i brevlådan")
+        raise AssertionError("Triagen nåddes fast mejlet redan var besvarat från brevlådan")
 
     monkeypatch.setattr(processor, "_triage_email", ingen_modell)
 
     assert await process_email(storage, DEFAULT_TENANT_ID, mail) == {"action": "att_hantera"}
 
     sparat = await storage.get_email(DEFAULT_TENANT_ID, mail["id"])
-    assert sparat["status"] == "att_hantera" and sparat["last_i_brevladan"] and not sparat["draft"]
-    assert "last_i_brevladan" in [b["event"] for b in await storage.list_decisions(DEFAULT_TENANT_ID, mail["id"])]
-    # Fliken Att hantera listar det; den vanliga inkorgen gör det inte.
+    assert sparat["status"] == "att_hantera" and sparat["besvarat_i_brevladan"] and not sparat["draft"]
+    # Avbockat: det syns i Att hantera men väntar inte på någon.
+    assert sparat["hanterad_at"]
+    assert "besvarat_i_brevladan" in [b["event"] for b in await storage.list_decisions(DEFAULT_TENANT_ID, mail["id"])]
     assert [e["id"] for e in await storage.list_emails(DEFAULT_TENANT_ID, status="att_hantera")] == [mail["id"]]
     assert await storage.list_emails(DEFAULT_TENANT_ID) == []
+
+
+async def _genom_kedjan(*, last: bool) -> dict:
+    """Paketfrågan genom hela supportkedjan, med regeln 'auto' för facket."""
+    from httpx import ASGITransport, AsyncClient
+
+    from app.config import get_settings
+    from app.main import app
+
+    demo = {"X-API-Key": get_settings().snajp_demo_api_key}
+    async with app.router.lifespan_context(app):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            await client.put("/api/rules", headers=demo, json={"category": "leverans", "mode": "auto"})
+            storage = app.state.storage
+            mail = await storage.save_email(
+                DEFAULT_TENANT_ID, provider="imap", provider_message_id=f"paket-{last}",
+                from_email="johan@example.com", from_name="Johan Berg", subject="Var är mitt paket?",
+                body_text=PAKETFRAGAN, last_i_brevladan=last,
+            )
+            await process_email(storage, DEFAULT_TENANT_ID, mail)
+            return (await client.get(f"/api/inbox/{mail['id']}", headers=demo)).json()
+
+
+async def test_oppnat_men_obesvarat_supportmejl_far_utkast_men_aldrig_autosvar():
+    """Att någon råkat öppna mejlet får inte göra att det tappas: det får sitt
+    utkast. Men den som öppnade det kan vara på väg att svara, så det som
+    annars hade gått ut av sig självt väntar på ett ja."""
+    mejl = await _genom_kedjan(last=True)
+
+    assert mejl["status"] == "awaiting_approval" and mejl["last_i_brevladan"]
+    assert mejl["draft"] and mejl["draft"]["status"] == "pending"
+    assert processor.AI_UPPLYSNING["sv"] not in mejl["draft"]["content"]
+    beslut = {d["event"]: d["detail"] for d in mejl["decisions"]}
+    assert "last_i_brevladan" in beslut and "auto_sent" not in beslut
+    assert beslut["draft_created"]["why_not_auto"] == "Mejlet var redan öppnat i brevlådan"
+
+
+async def test_samma_mejl_oppnat_av_ingen_gar_ut_som_autosvar():
+    mejl = await _genom_kedjan(last=False)
+    assert mejl["status"] == "auto_sent"
 
 
 async def test_oppnat_nyhetsbrev_goms_som_forut():
@@ -300,49 +352,78 @@ async def _svara(storage, thread_id: str, body: str, klass: str, **kwargs):
     return utfall, anrop, mejl
 
 
-async def test_oppnat_svar_fran_lead_sparas_och_klassas_men_far_inget_utkast():
+async def test_oppnat_men_obesvarat_svar_fran_lead_far_utkast_och_en_notis_som_sager_det():
+    """Iris konversation får inte tappas för att någon råkat öppna svaret."""
     storage = MemoryStorage()
     pid, tid = await _trad(storage)
 
-    utfall, _, mejl = await _svara(storage, tid, "Hej, kan ni visa en demo?", "fraga", utan_utkast=True)
+    utfall, _, _ = await _svara(storage, tid, "Hej, kan ni visa en demo?", "fraga", oppnat=True)
+
+    assert utfall["klass"] == "fraga" and utfall["queued"] and not utfall["handoff"]
+    assert await storage.get_pending_outreach_message(TENANT, tid)
+    assert (await storage.get_prospect(TENANT, pid))["status"] == "replied"
+    handelser = {h["typ"]: h for h in await storage.list_handelser(TENANT, thread_id=tid)}
+    assert handelser["svar"]["detalj"]["last_i_brevladan"] is True
+    # Utkastets notis bär märket, så att rubriken blir "Obesvarat i brevlådan".
+    assert handelser["utkast"]["detalj"]["oppnat"] is True and handelser["utkast"]["notis"]
+    assert "overlamnat" not in handelser
+    notiser = await storage.list_notiser(TENANT)
+    assert any(n["typ"] == "utkast" and (n.get("detalj") or {}).get("oppnat") for n in notiser)
+
+
+async def test_svar_oppnat_av_ingen_far_utkast_utan_market():
+    storage = MemoryStorage()
+    _, tid = await _trad(storage)
+    utfall, _, _ = await _svara(storage, tid, "Hej, kan ni visa en demo?", "fraga")
+    assert utfall["queued"] and await storage.get_pending_outreach_message(TENANT, tid)
+    handelser = {h["typ"]: h for h in await storage.list_handelser(TENANT, thread_id=tid)}
+    assert "oppnat" not in handelser["utkast"]["detalj"] and "last_i_brevladan" not in handelser["svar"]["detalj"]
+
+
+async def test_redan_besvarat_svar_fran_lead_sparas_och_klassas_men_far_inget_utkast():
+    storage = MemoryStorage()
+    pid, tid = await _trad(storage)
+
+    utfall, _, mejl = await _svara(
+        storage, tid, "Hej, kan ni visa en demo?", "fraga", oppnat=True, utan_utkast=True
+    )
 
     assert utfall["klass"] == "fraga" and not utfall["queued"] and utfall["handoff"]
-    assert utfall["eskalerat"] == ["last_i_brevladan"]
+    assert utfall["eskalerat"] == ["besvarat_i_brevladan"]
     assert await storage.get_pending_outreach_message(TENANT, tid) is None
     # Svaret står i tråden och leadet har flyttats till Svarat.
     assert [m["direction"] for m in await storage.list_outreach_messages(TENANT, tid)] == ["outbound", "inbound"]
     assert (await storage.get_prospect(TENANT, pid))["status"] == "replied"
     # Konversationen säger varför det inte finns något utkast.
     handelser = {h["typ"]: h for h in await storage.list_handelser(TENANT, thread_id=tid)}
-    assert handelser["svar"]["detalj"]["last_i_brevladan"] is True
-    assert handelser["overlamnat"]["detalj"]["eskalerat"] == ["last_i_brevladan"]
+    assert handelser["svar"]["detalj"]["besvarat_i_brevladan"] is True
+    assert handelser["overlamnat"]["detalj"]["eskalerat"] == ["besvarat_i_brevladan"]
     assert "utkast" not in handelser
-    # Den som öppnade svaret vet redan om det: inget prioriterat mejl.
+    # Den som svarade vet redan om det: inget prioriterat mejl.
     mejl.assert_not_called()
 
 
-async def test_samma_svar_oppnat_av_ingen_far_utkast_som_forut():
-    storage = MemoryStorage()
-    _, tid = await _trad(storage)
-    utfall, _, _ = await _svara(storage, tid, "Hej, kan ni visa en demo?", "fraga")
-    assert utfall["queued"] and await storage.get_pending_outreach_message(TENANT, tid)
-
-
-async def test_oppnad_avregistrering_sparrar_adressen_anda():
+async def test_besvarad_avregistrering_sparrar_adressen_anda():
     storage = MemoryStorage()
     pid, tid = await _trad(storage)
-    utfall, _, _ = await _svara(storage, tid, "Ta bort mig från er lista.", "avregistrering", utan_utkast=True)
+    utfall, _, _ = await _svara(
+        storage, tid, "Ta bort mig från er lista.", "avregistrering", oppnat=True, utan_utkast=True
+    )
     assert utfall["suppressed"]
     assert "tomas@buddy.se" in await storage.list_suppressions(TENANT)
     assert (await storage.get_prospect(TENANT, pid))["status"] == "suppressed"
 
 
-async def test_inkorgen_skickar_flaggan_vidare_till_svarshanteringen(monkeypatch):
+@pytest.mark.parametrize(
+    ("besvarat", "vantat"), [(False, {"oppnat": True, "utan_utkast": False}), (True, {"oppnat": True, "utan_utkast": True})]
+)
+async def test_inkorgen_skickar_flaggorna_vidare_till_svarshanteringen(monkeypatch, besvarat, vantat):
     storage = MemoryStorage()
     pid, tid = await _trad(storage)
     mail = await storage.save_email(
         TENANT, provider="imap", provider_message_id="svar-1", from_email="tomas@buddy.se", from_name="Tomas",
-        subject="Re: En tanke", body_text="Hej, kan ni visa en demo?", last_i_brevladan=True,
+        subject="Re: En tanke", body_text="Hej, kan ni visa en demo?",
+        last_i_brevladan=True, besvarat_i_brevladan=besvarat,
     )
     fangat: dict = {}
 
@@ -356,5 +437,5 @@ async def test_inkorgen_skickar_flaggan_vidare_till_svarshanteringen(monkeypatch
     utfall = await process_email(storage, TENANT, mail)
 
     assert utfall["action"] == "lead" and utfall["thread_id"] == tid
-    assert fangat["utan_utkast"] is True and fangat["thread_id"] == tid
+    assert {k: fangat[k] for k in vantat} == vantat and fangat["thread_id"] == tid
     assert (await storage.get_email(TENANT, mail["id"]))["status"] == "lead"

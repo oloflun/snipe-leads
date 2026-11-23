@@ -126,15 +126,22 @@ export function handelseText(h: TradHandelse, text: (v: Localized) => string): s
   const d = h.detalj ?? {};
   switch (h.typ) {
     case "svar":
-      return d.last_i_brevladan
-        ? text({ sv: "Nytt svar kom in, redan öppnat i brevlådan", en: "A new reply arrived, already opened in the mailbox" })
-        : text({ sv: "Nytt svar kom in", en: "A new reply arrived" });
+      return d.besvarat_i_brevladan
+        ? text({ sv: "Nytt svar kom in, redan besvarat från brevlådan", en: "A new reply arrived, already answered from the mailbox" })
+        : d.last_i_brevladan
+          ? text({ sv: "Nytt svar kom in, öppnat i brevlådan men obesvarat", en: "A new reply arrived, opened in the mailbox but unanswered" })
+          : text({ sv: "Nytt svar kom in", en: "A new reply arrived" });
     case "klassad":
       return text({ sv: `Iris läste svaret som: ${klassText(String(d.klass ?? ""), text)}`, en: `Iris read the reply as: ${klassText(String(d.klass ?? ""), text)}` });
     case "utkast":
       return d.omskrivet
         ? text({ sv: "Iris skrev om svarsutkastet", en: "Iris rewrote the reply draft" })
-        : text({ sv: "Iris skrev ett svarsutkast", en: "Iris wrote a reply draft" });
+        : d.oppnat
+          ? text({
+              sv: "Iris skrev ett svarsutkast: svaret låg öppnat men obesvarat i brevlådan",
+              en: "Iris wrote a reply draft: the reply was opened but unanswered in the mailbox"
+            })
+          : text({ sv: "Iris skrev ett svarsutkast", en: "Iris wrote a reply draft" });
     case "utkast_ersatt":
       return text({ sv: "Ett väntande utkast ersattes av ett nytt", en: "A waiting draft was replaced by a new one" });
     case "utkast_kasserat":
@@ -163,10 +170,10 @@ export function handelseText(h: TradHandelse, text: (v: Localized) => string): s
     case "mote":
       return text({ sv: "Möte bokat", en: "Meeting booked" });
     case "overlamnat":
-      return Array.isArray(d.eskalerat) && d.eskalerat.includes("last_i_brevladan")
+      return Array.isArray(d.eskalerat) && d.eskalerat.includes("besvarat_i_brevladan")
         ? text({
-            sv: "Svaret var öppnat i brevlådan: Iris skrev inget utkast, svaret är ditt",
-            en: "The reply was opened in the mailbox: Iris wrote no draft, the reply is yours"
+            sv: "Svaret var redan besvarat från brevlådan: Iris skrev inget utkast",
+            en: "The reply was already answered from the mailbox: Iris wrote no draft"
           })
         : text({ sv: "Iris lämnade över till en människa", en: "Iris handed over to a person" });
     case "extern":
@@ -200,6 +207,8 @@ export type Notis = {
   prospect_id: string;
   company_name: string | null;
   klass: string | null;
+  /** Svaret låg öppnat men obesvarat i brevlådan när Iris skrev utkastet. */
+  oppnat?: boolean;
 };
 
 export const NOTIS_ETIKETT: Record<Notis["typ"], Localized> = {
@@ -208,6 +217,15 @@ export const NOTIS_ETIKETT: Record<Notis["typ"], Localized> = {
   mote: { sv: "Möte bokat", en: "Meeting booked" },
   overlamnat: { sv: "Iris lämnar över", en: "Iris hands over" }
 };
+
+/** Notisens rubrik. Ett utkast på ett svar som någon öppnat utan att svara
+ *  sägs rakt ut, så att det inte glöms (Anton 2026-11-23). */
+export function notisEtikett(n: Notis): Localized {
+  if (n.typ === "utkast" && n.oppnat) {
+    return { sv: "Obesvarat i brevlådan: utkast klart", en: "Unanswered in the mailbox: draft ready" };
+  }
+  return NOTIS_ETIKETT[n.typ] ?? { sv: n.typ, en: n.typ };
+}
 
 /** Signalen att notiserna ändrats (lästa, nya): räknaren i railen hämtar om. */
 export const NOTISER_UPPDATERADE = "snipra:notiser-uppdaterade";

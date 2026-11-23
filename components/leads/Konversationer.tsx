@@ -7,7 +7,7 @@ import { SkeletonRows, Talrad, Tomt, btnLiten, btnSecondary, chip, chipAktiv, ch
 import { felmeddelande } from "@/lib/http/json";
 import { useLocale, type Localized } from "@/lib/i18n";
 import {
-  NOTIS_ETIKETT,
+  notisEtikett,
   STEG,
   STEG_ETIKETT,
   STEG_PRICK,
@@ -398,7 +398,7 @@ export function NotisKnapp({ antal, onOppna }: Readonly<{ antal: number; onOppna
                     />
                     <span className="min-w-0 flex-1">
                       <span className={cn("block text-[0.9375rem] text-ink", !n.last && "font-semibold")}>
-                        {text(NOTIS_ETIKETT[n.typ] ?? { sv: n.typ, en: n.typ })}
+                        {text(notisEtikett(n))}
                         {n.company_name ? <span className="font-normal text-ink-muted"> · {n.company_name}</span> : null}
                       </span>
                       <span className={cn(meta, "block")}>

@@ -6,8 +6,9 @@ r"""IMAP-connector — täcker både Gmail och Microsoft 365/Outlook.
 Hämtar allt som kommit efter det senast hämtade mejlets UID, läst eller inte
 (Anton 2026-11-23, migration 150). Den gamla sökningen på olästa (UNSEEN)
 tappade varje mejl som en människa hann öppna i brevlådan före synken. Ett
-mejl som redan var läst på servern bär `last_i_brevladan`, så att kedjan kan
-låta bli att skriva utkast på det. Hämtningen sker med BODY.PEEK (utan att
+mejl som redan var läst på servern bär `last_i_brevladan` (kvalificeras som
+vanligt, skickas aldrig av sig självt), och ett som redan var besvarat bär
+`besvarat_i_brevladan` (inget utkast). Hämtningen sker med BODY.PEEK (utan att
 röra \Seen) och extraherar text + bildbilagor (som data-URLs).
 Läst-markeringen görs av anroparen via mark_seen() EFTER lyckad ingest.
 imaplib är synkron — körs i trådpool så event-loopen aldrig blockeras.
@@ -170,17 +171,18 @@ def _svarskod(client, kod: str) -> int | None:
         return None
 
 
-def _ar_last(msg_data: list) -> bool:
-    """Bär fetch-svaret \\Seen? Flaggorna står före eller efter kroppen
-    beroende på server, så varje del som inte är själva kroppen läses."""
-    delar = [d[0] if isinstance(d, tuple) else d for d in msg_data]
-    for del_ in delar:
+def _flaggor(msg_data: list) -> set[bytes]:
+    """Mejlets flaggor ur fetch-svaret, i gemener (\\seen, \\answered …). De
+    står före eller efter kroppen beroende på server, så varje del som inte
+    är själva kroppen läses."""
+    flaggor: set[bytes] = set()
+    for del_ in (d[0] if isinstance(d, tuple) else d for d in msg_data):
         if not isinstance(del_, bytes):
             continue
         traff = _FLAGGOR.search(del_)
-        if traff and b"\\seen" in traff.group(1).lower():
-            return True
-    return False
+        if traff:
+            flaggor.update(traff.group(1).lower().split())
+    return flaggor
 
 
 def _fetch_sync(
@@ -241,6 +243,7 @@ def _fetch_sync(
                 logger.warning("IMAP-svaret för UID %s gick inte att läsa; mejlet hoppas över.", uid)
                 continue
             message = email.message_from_bytes(msg_data[0][1])
+            flaggor = _flaggor(msg_data)
             from_name, from_email = email.utils.parseaddr(message.get("From", ""))
             received = None
             if message.get("Date"):
@@ -260,7 +263,10 @@ def _fetch_sync(
                     attachments=_extract_attachments(message),
                     imap_uid=msg_uid.decode(),
                     automatutskick=ar_automatutskick(message),
-                    last_i_brevladan=_ar_last(msg_data),
+                    # Besvarat räknas också som öppnat: vissa klienter sätter
+                    # \Answered utan \Seen.
+                    last_i_brevladan=b"\\seen" in flaggor or b"\\answered" in flaggor,
+                    besvarat_i_brevladan=b"\\answered" in flaggor,
                 )
             )
     finally:
