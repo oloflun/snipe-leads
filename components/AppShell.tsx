@@ -626,7 +626,14 @@ export function PageShell({
           <h1 className={cn(rubrikSida, "min-w-0 break-words")}>
             {typeof title === "string" ? title : text(title)}
           </h1>
-          {action ? <div className="shrink-0">{action}</div> : null}
+          {/* En rad med luft emellan, som Sidhuvud (ui.tsx). Rutan var
+              `shrink-0` utan radlayout: Leads fick sökfält, notisknapp och två
+              knappar staplade på höjden, knapparna kant i kant, och rubriken
+              centrerades mot stapeln och hamnade lägre än på andra sidor
+              (uppmätt 2026-11-23). min-w-0 så att raden bryter på smal skärm. */}
+          {action ? (
+            <div className="flex min-w-0 flex-wrap items-center justify-end gap-3">{action}</div>
+          ) : null}
         </div>
         <div className="mt-6">{children}</div>
       </section>
