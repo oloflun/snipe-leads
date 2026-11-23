@@ -1,0 +1,5 @@
+ZoomInfo Contact ID,Last Name,First Name,Middle Name,Salutation,Job Title,Management Level,Department,Direct Phone Number,Email Address,Mobile phone,Contact Accuracy Score,ZoomInfo Company ID,Company Name,Website,Company HQ Phone,Employees,Revenue (in 000s USD),Company City,Company Country
+9001000001,Vall,Xenia,,Ms.,Chief Operating Officer,C-Level,C-Suite,+46 8 465 004 92,xenia.vall@example.se,+46 70 174 06 92,95,8001000001,Ny Nät Test AB,www.nynat.example.se,+46 8 465 004 00,85,"12,500",Stockholm,Sweden
+9001000002,Wern,Yngve,P.,Mr.,VD,C-Level,C-Suite,,yngve@example.se,+46 70 174 06 93,88,8001000002,Xi Xpress Test AB,xi.example.se,,20,"3,100",Göteborg,Sweden
+9001000003,Ytter,Zara,,,IT Manager,Manager,Information Technology,+46 31 390 69 94,,,80,8001000003,"Omikron Om, Test AB",https://omikron-om.example.com,,300,"45,000",Göteborg,Sweden
+9001000004,Åsén,Albin,,Mr.,Inköpschef,Director,Operations,,albin.asen@example.com,0701740695,85,8001000004,Pi Pump Test AB,,+46 8 465 004 95,40,"7,000",Västerås,Sweden

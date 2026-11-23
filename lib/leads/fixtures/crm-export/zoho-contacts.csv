@@ -1,0 +1,5 @@
+Record Id,Contact Owner,Contact Owner.id,First Name,Last Name,Account Name,Account Name.id,Title,Email,Phone,Mobile,Mailing City
+zcrm_5123000000600001,Test Säljare,zcrm_5123000000000101,Greta,Lööf,Kappa Kyl Test AB,zcrm_5123000000500001,Teknisk chef,greta.loof@example.se,08-465 004 60,070-174 06 60,Stockholm
+zcrm_5123000000600002,Test Säljare,zcrm_5123000000000101,Hugo,Kask,Lambda Logistik Test AB,zcrm_5123000000500002,COO,hugo@example.com,,+46701740661,Göteborg
+zcrm_5123000000600003,Test Säljare,zcrm_5123000000000101,Ines,Rask,Ny Nord Test AB,zcrm_5123000000500004,VD,ines.rask@example.se,,0701740663,Kiruna
+zcrm_5123000000600004,Test Säljare,zcrm_5123000000000101,Jon,Vik,,,,jon.vik@example.se,,,

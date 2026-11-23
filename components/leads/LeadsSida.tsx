@@ -13,8 +13,11 @@ import { Uppfoljningar } from "@/components/leads/Uppfoljningar";
 import { useNotisantal } from "@/lib/leads/konversationer";
 import { Kampanjer } from "@/components/leads/Kampanjer";
 import { IrisKorningar } from "@/components/leads/IrisKorningar";
-import { LeadDetail, exempelTillRad, type ExempelRad } from "@/components/leads/IrisBolag";
+import { CrmKundlista } from "@/components/leads/CrmKundlista";
+import { LeadDetail, ListorUpsell, exempelTillRad, type ExempelRad } from "@/components/leads/IrisBolag";
+import { LeadslistorView, type Listdel } from "@/components/leads/LeadslistorView";
 import { LeadsOversikt } from "@/components/leads/LeadsOversikt";
+import { SaljlistaUtforska } from "@/components/leads/Saljlista";
 import { LeadsRunForm } from "@/components/leads/LeadsRunForm";
 import { Samtalslista } from "@/components/leads/Samtalslista";
 import { btnPrimary, btnSecondary, flik, flikAktiv, flikInaktiv, fliklista } from "@/components/ui";
@@ -39,10 +42,10 @@ import { cn } from "@/lib/utils";
  * får hela bredden, och lådan stängs med Esc, krysset eller ett klick utanför.
  */
 
-type Segment = "listor" | "konversationer" | "uppfoljningar" | "inkorg" | "samtal" | "korningar" | "erbjudanden";
+type Segment = "oversikt" | "konversationer" | "uppfoljningar" | "inkorg" | "samtal" | "listor" | "korningar" | "erbjudanden";
 
 const SEGMENT_ETIKETT: Record<Segment, Localized> = {
-  listor: { sv: "Översikt", en: "Overview" },
+  oversikt: { sv: "Översikt", en: "Overview" },
   // Det kunderna i första hand köper (Anton 2026-11-22): egen flik, andra
   // efter översikten, i stället för filtret Svarat under Inkorg › Skickat.
   konversationer: { sv: "Konversationer", en: "Conversations" },
@@ -52,21 +55,28 @@ const SEGMENT_ETIKETT: Record<Segment, Localized> = {
   inkorg: { sv: "Inkorg", en: "Inbox" },
   // Ringlistan och återkopplingen (Antons beställning 2026-10-07).
   samtal: { sv: "Samtal", en: "Calls" },
+  // Egen flik igen (Anton 2026-11-23): egna importerade listor, beställda
+  // listor, säljlistan och kundlistan. Låg hopfälld längst ner i översikten
+  // sedan 2026-10-07 och hittades inte. Står bredvid Körningar: de två
+  // vägarna in för bolag, det ni har och det Iris hittar.
+  listor: { sv: "Listor", en: "Lists" },
   korningar: { sv: "Körningar", en: "Runs" },
   // Erbjudandena, A/B-utfallet och kampanjerna (Anton 2026-10-25), för alla kunder.
   erbjudanden: { sv: "Erbjudanden", en: "Offers" }
 };
 
-/** Gamla vyadresser landar i översikten (fd Leads/Utkast/Listor, Sebbes
- *  omläggning 2026-10-06: EN första flik med allt). Nyckeln är kvar "listor"
- *  så att gamla ?vy=listor-länkar (och ?crm=1) fortsätter fungera. */
+/** Gamla vyadresser landar i översikten (fd Leads/Utkast, Sebbes omläggning
+ *  2026-10-06). `?vy=listor` är listfliken igen sedan 2026-11-23, så länkar
+ *  dit (sidomenyn, `?crm=1` från översikten) landar där listorna står. */
 const GAMLA: Record<string, Segment> = {
-  bolag: "listor",
-  tabell: "listor",
-  pipeline: "listor",
-  leads: "listor",
-  utkast: "listor"
+  bolag: "oversikt",
+  tabell: "oversikt",
+  pipeline: "oversikt",
+  leads: "oversikt",
+  utkast: "oversikt"
 };
+
+const LISTDELAR: Listdel[] = ["listor", "saljlista", "kunder"];
 
 const T = {
   korIris: { sv: "Kör Iris", en: "Run Iris" },
@@ -97,9 +107,9 @@ const T = {
 } satisfies Record<string, Localized>;
 
 function tolkaSegment(vy: string | null): Segment {
-  if (!vy) return "listor";
+  if (!vy) return "oversikt";
   if (vy in GAMLA) return GAMLA[vy];
-  return (Object.keys(SEGMENT_ETIKETT) as Segment[]).includes(vy as Segment) ? (vy as Segment) : "listor";
+  return (Object.keys(SEGMENT_ETIKETT) as Segment[]).includes(vy as Segment) ? (vy as Segment) : "oversikt";
 }
 
 /** Demons körsteg, i den ordning en riktig körning går. */
@@ -123,6 +133,9 @@ export function IrisBolag({ demo = false }: Readonly<{ demo?: boolean }>) {
   const valdId = sokParams.get("lead");
   // Översiktens "Ladda upp CRM-kundlista" landar på ?vy=listor&crm=1.
   const crmOppen = segmentVal === "listor" && sokParams.get("crm") === "1";
+  // Listflikens vy (listor, säljlista, kundlista) står i ?del=.
+  const delParam = sokParams.get("del") as Listdel | null;
+  const listdel: Listdel = delParam && LISTDELAR.includes(delParam) ? delParam : crmOppen ? "kunder" : "listor";
   const flikRefs = useRef<Partial<Record<Segment, HTMLButtonElement | null>>>({});
   const [korOppen, setKorOppen] = useState(false);
   const [exempelRader, setExempelRader] = useState<ExempelRad[]>([]);
@@ -132,7 +145,11 @@ export function IrisBolag({ demo = false }: Readonly<{ demo?: boolean }>) {
   const [demoSteg, setDemoSteg] = useState(0);
   const [demoOmgang, setDemoOmgang] = useState(0);
 
-  const segment: Segment[] = demo ? ["listor"] : ["listor", "konversationer", "uppfoljningar", "inkorg", "samtal", "korningar", "erbjudanden"];
+  // Demon visar översikten och listorna: importen går att prova där, hela
+  // vägen fram till det sista steget, utan att något sparas.
+  const segment: Segment[] = demo
+    ? ["oversikt", "listor"]
+    : ["oversikt", "konversationer", "uppfoljningar", "inkorg", "samtal", "listor", "korningar", "erbjudanden"];
   const notiser = useNotisantal(!demo && !isDemo);
   const oppnaKonversation = (threadId: string | null) =>
     satt({ vy: "konversationer", trad: threadId, lead: null, flik: null });
@@ -150,7 +167,7 @@ export function IrisBolag({ demo = false }: Readonly<{ demo?: boolean }>) {
     [pathname, router, sokParams]
   );
 
-  const valjSegment = (s: Segment) => satt({ vy: s === "listor" ? null : s, lead: null, flik: null, trad: null });
+  const valjSegment = (s: Segment) => satt({ vy: s === "oversikt" ? null : s, lead: null, flik: null, trad: null, del: null, crm: null });
 
   // En avslutad körning stänger formuläret så att de nya raderna syns direkt.
   useEffect(() => {
@@ -214,14 +231,21 @@ export function IrisBolag({ demo = false }: Readonly<{ demo?: boolean }>) {
             // öppnar formuläret där nere. Kör Iris står kvar bredvid.
             <button
               type="button"
-              onClick={() => window.dispatchEvent(new Event("snipra:saljlista-bestall"))}
+              onClick={() => {
+                // Säljlistan står monterad även när en annan vy syns, så den
+                // hör händelsen; vyn byts så att formuläret kommer fram.
+                satt({ del: "saljlista", crm: null });
+                window.dispatchEvent(new Event("snipra:saljlista-bestall"));
+              }}
               className={btnSecondary}
             >
               {text(T.bestallLeads)}
             </button>
           ) : null}
-          {/* Fliken Körningar bär ingen Kör Iris-knapp (Sebbe 2026-10-07). */}
-          {segmentVal === "korningar" ? null : (
+          {/* Fliken Körningar bär ingen Kör Iris-knapp (Sebbe 2026-10-07), och
+              inte Listor heller: där är Importera lista flikens handling, och
+              en sida har en primär knapp (DESIGN.md § App surfaces). */}
+          {segmentVal === "korningar" || segmentVal === "listor" ? null : (
             <button type="button" aria-expanded={korOppen} onClick={() => setKorOppen((v) => !v)} className={btnPrimary}>
               {text(T.korIris)}
             </button>
@@ -229,7 +253,7 @@ export function IrisBolag({ demo = false }: Readonly<{ demo?: boolean }>) {
         </>
       }
     >
-      {korOppen && segmentVal !== "korningar" ? (
+      {korOppen && segmentVal !== "korningar" && segmentVal !== "listor" ? (
         <div className="mb-10 rounded-card border border-ink/12 bg-paper2/40 p-5 md:p-6">
           <LeadsRunForm
             isTest={demo || isDemo || vy === "demo"}
@@ -357,6 +381,24 @@ export function IrisBolag({ demo = false }: Readonly<{ demo?: boolean }>) {
           )
         ) : segmentVal === "samtal" ? (
           <Samtalslista demo={demo} />
+        ) : segmentVal === "listor" ? (
+          harListaddon || demo || isDemo || vy === "demo" ? (
+            <LeadslistorView
+              demo={demo}
+              crmOppen={crmOppen}
+              del={listdel}
+              onDel={(d) => satt({ del: d === "listor" ? null : d, crm: null })}
+              onValjLead={(id) => satt({ lead: id })}
+            />
+          ) : (
+            // Utan listtillägget: kundlistan gäller Iris också, resten visas
+            // som det tillval det är.
+            <div className="grid gap-8">
+              <CrmKundlista startOppen={crmOppen} />
+              <SaljlistaUtforska />
+              <ListorUpsell />
+            </div>
+          )
         ) : segmentVal === "korningar" ? (
           <IrisKorningar />
         ) : segmentVal === "erbjudanden" && !demo ? (
@@ -369,7 +411,7 @@ export function IrisBolag({ demo = false }: Readonly<{ demo?: boolean }>) {
         ) : (
           <LeadsOversikt
             demo={demo}
-            crmOppen={crmOppen}
+            onOppnaListor={(del) => satt({ vy: "listor", del: del === "listor" ? null : del, lead: null })}
             valdId={valdId}
             exempel={exempelRader as unknown as SuiteProspekt[]}
             onValjLead={(id) => satt({ lead: id })}

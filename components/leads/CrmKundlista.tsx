@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ImportCsv, type ImporteradLista } from "@/components/leads/ImportCsv";
+import { ImportLista, type ImporteradLista } from "@/components/leads/ImportLista";
 import { btnSecondary } from "@/components/ui";
 import { useLocale, type Localized } from "@/lib/i18n";
 
@@ -20,8 +20,8 @@ import { useLocale, type Localized } from "@/lib/i18n";
 const T = {
   rubrik: { sv: "Befintliga kunder från ditt CRM", en: "Existing customers from your CRM" },
   hjalp: {
-    sv: "Ladda upp en CSV-export av din kundlista ur HubSpot, Pipedrive, Salesforce, Upsales eller ett eget kalkylark. Iris och leadslistorna hoppar sedan över de bolagen, så att du aldrig får en befintlig kund som lead.",
-    en: "Upload a CSV export of your customer list from HubSpot, Pipedrive, Salesforce, Upsales or your own spreadsheet. Iris and the lead lists then skip those companies, so an existing customer never shows up as a lead."
+    sv: "Ladda upp din kundlista som CSV eller Excel ur HubSpot, Pipedrive, Salesforce, Upsales eller ett eget kalkylark. Iris och leadslistorna hoppar sedan över de bolagen, så att du aldrig får en befintlig kund som lead.",
+    en: "Upload your customer list as CSV or Excel from HubSpot, Pipedrive, Salesforce, Upsales or your own spreadsheet. Iris and the lead lists then skip those companies, so an existing customer never shows up as a lead."
   },
   ladda: { sv: "Ladda upp befintlig CRM-kundlista", en: "Upload existing CRM customer list" },
   stang: { sv: "Stäng uppladdningen", en: "Close the upload" }
@@ -62,7 +62,7 @@ export function CrmKundlista({
       </div>
       {oppen ? (
         <div id="crm-kundlista-uppladdning" className="mt-5 border-t border-ink/12 pt-5">
-          <ImportCsv kalla="crm" demo={demo} onKlar={(lista) => onKlar?.(lista)} />
+          <ImportLista kalla="crm" demo={demo} onKlar={(lista) => onKlar?.(lista)} />
         </div>
       ) : null}
     </section>

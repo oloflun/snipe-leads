@@ -1,0 +1,5 @@
+Record Id,Lead Owner,Lead Owner.id,First Name,Last Name,Company,Designation,Email,Phone,Mobile,Website,Lead Status,Lead Source,Created Time
+zcrm_5123000000412001,Test Säljare,zcrm_5123000000000101,Greta,Lööf,Kappa Kyl Test AB,Teknisk chef,greta.loof@example.se,08-465 004 60,070-174 06 60,www.kappakyl.example.se,Contacted,Advertisement,2026-08-12 10:15:00
+zcrm_5123000000412002,Test Säljare,zcrm_5123000000000101,Hugo,Kask,Lambda Logistik Test AB,COO,hugo@example.com,,+46701740661,https://lambda.example.com,Not Contacted,Cold Call,2026-08-13 11:00:00
+zcrm_5123000000412003,Test Säljare,zcrm_5123000000000101,,Mård,"My Media, Test AB",,info@example.se,031-390 69 62,,,Junk Lead,,2026-08-14 09:00:00
+zcrm_5123000000412004,Test Säljare,zcrm_5123000000000101,Ines,Rask,Ny Nord Test AB,VD,ines.rask@example.se,,0701740663,ny-nord.example.se,Pre-Qualified,Web Download,2026-08-15 14:30:00

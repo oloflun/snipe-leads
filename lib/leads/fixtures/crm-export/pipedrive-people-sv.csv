@@ -1,0 +1,5 @@
+ID,Namn,Organisation,E-post,Telefon,Etikett,Ägare,Befattning
+501,Rut Hed,Rho Rör Test AB,rut.hed@example.se,"070-174 06 20, 070-174 06 21",Beslutsfattare,Test Säljare,VD
+502,Sven Falk,Sigma Säkerhet Test AB,"sven@example.se, info@example.se",08-465 004 22,,Test Säljare,Säkerhetschef
+503,Tove Gran,Tau Teknik Test AB,,+46 70 174 06 23,,,
+504,Ulf Hall,Ypsilon Ytbehandling Test AB,ulf.hall@example.com,,Kund,Test Säljare,Platschef

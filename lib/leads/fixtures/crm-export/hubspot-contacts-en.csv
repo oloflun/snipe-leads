@@ -1,0 +1,6 @@
+Record ID,Company Name,Create Date,Email,First Name,Job Title,Last Name,Lead Status,Lifecycle Stage,Mobile Phone Number,Phone Number,Website URL,Associated Company
+85301234501,Alfa Bygg Test AB,2026-03-14 09:22,anna.berg@example.se,Anna,VD,Berg,NEW,lead,070-174 06 05,08-465 004 01,https://www.alfabygg.example.se,Alfa Bygg Test AB
+85301234502,Beta Konsult Test AB,2026-04-02 13:05,erik@example.se,Erik,"Inköpschef, logistik",Lund,OPEN,marketingqualifiedlead,+46701740606,,betakonsult.example.se,Beta Konsult Test AB
+85301234503,"Gamma ""Gruppen"" Test AB",2026-05-19 08:47,sara.nilsson@example.com,Sara,Ekonomichef,Nilsson,IN_PROGRESS,salesqualifiedlead,,031-390 69 02,http://gamma.example.com,"Gamma ""Gruppen"" Test AB"
+85301234504,Delta El Test AB,2026-06-01 10:00,johan.ek@example.se,Johan,,Ek,CONNECTED,customer,+46 70 174 06 07,,,Delta El Test AB
+85301234505,,2026-07-11 15:30,maria@example.se,Maria,Ägare,Holm,,subscriber,0701740608,,,

@@ -1,9 +1,7 @@
 "use client";
 
-import { ChevronDown } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useDashboard } from "@/components/dashboard/DashboardContext";
-import { CrmKundlista } from "@/components/leads/CrmKundlista";
 import { IrisGranskning } from "@/components/leads/IrisGranskning";
 import { KonversationsRuta } from "@/components/leads/Konversationer";
 import {
@@ -14,10 +12,8 @@ import {
   utfallston,
   type KorningsRad
 } from "@/components/leads/IrisKorningar";
-import { ListorUpsell } from "@/components/leads/IrisBolag";
 import { LeadsTabell } from "@/components/leads/LeadsTabell";
-import { LeadslistorView } from "@/components/leads/LeadslistorView";
-import { SaljlistaUtforska } from "@/components/leads/Saljlista";
+import type { Listdel } from "@/components/leads/LeadslistorView";
 import { Nyckeltal, btnLiten, btnSecondary, meta, rubrikPanel } from "@/components/ui";
 import { readJsonBody } from "@/lib/http/json";
 import { useLocale, type Localized } from "@/lib/i18n";
@@ -67,11 +63,14 @@ const T = {
     sv: "Nyaste överst. Poängen väger hur väl bolaget passar, styrkta citat från sajten, kontakten och om tidpunkten är rätt. Ny är bolag Iris just hittat, Redo de du granskat och vill kontakta.",
     en: "Newest first. The score weighs how well the company fits, verified quotes from its site, the contact and whether the timing is right. New is companies Iris just found, Ready the ones you have reviewed and want to contact."
   },
-  listorRubrik: { sv: "Listor och säljlista", en: "Lists and sales list" },
+  listorRubrik: { sv: "Listor", en: "Lists" },
   listorInnehall: {
-    sv: "Säljlistan, kundlistor från ditt CRM och beställda listor.",
-    en: "The sales list, customer lists from your CRM and ordered lists."
+    sv: "Inga listor ännu. Importera en egen lista ur ditt CRM eller ett kalkylblad, eller beställ en.",
+    en: "No lists yet. Import a list of your own from your CRM or a spreadsheet, or order one."
   },
+  allaListor: { sv: "Alla listor", en: "All lists" },
+  importeraLista: { sv: "Importera lista", en: "Import a list" },
+  laddaUppKunder: { sv: "Ladda upp befintliga kunder", en: "Upload existing customers" },
   av: { sv: "av", en: "of" },
   test: { sv: "test", en: "test" },
   leadsKlara: { sv: "leads klara", en: "leads done" }
@@ -212,27 +211,101 @@ function KorningsRuta({ onOppna, onPagaende }: Readonly<{ onOppna: (jobId: strin
   );
 }
 
+type Listsammandrag = { id: string; titel: string; kalla?: string | null; item_count?: number | null };
+
+/**
+ * Listorna i översikten: de senaste listorna och vägen in till fliken Listor.
+ * Förut låg hela listdelen hopfälld här, ~3 000 px under leadsen, och
+ * hittades inte (Anton 2026-11-23). Demon har inget konto och gör inget anrop.
+ */
+function ListorRuta({ demo, onOppna }: Readonly<{ demo: boolean; onOppna: (del: Listdel) => void }>) {
+  const { text } = useLocale();
+  const [listor, setListor] = useState<Listsammandrag[] | null>(demo ? [] : null);
+
+  useEffect(() => {
+    if (demo) return;
+    let avbruten = false;
+    void (async () => {
+      try {
+        const response = await fetch("/api/snajp-support/leads/listor", { cache: "no-store" });
+        const svar = response.ok ? await readJsonBody<{ lists?: Listsammandrag[] }>(response) : null;
+        if (!avbruten) setListor(svar?.lists ?? []);
+      } catch {
+        if (!avbruten) setListor([]);
+      }
+    })();
+    return () => {
+      avbruten = true;
+    };
+  }, [demo]);
+
+  const egna = (listor ?? []).filter((l) => l.kalla !== "crm" && l.kalla !== "saljlista");
+  const kunder = (listor ?? []).filter((l) => l.kalla === "crm").reduce((summa, l) => summa + (l.item_count ?? 0), 0);
+  const lank = "focus-ring text-[0.8125rem] font-medium text-ink-muted underline underline-offset-4 hover:text-ink";
+
+  return (
+    <section aria-labelledby="leads-listor" className={cn(kort, "relative min-w-0")}>
+      <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2">
+        <h2 id="leads-listor" className={rubrikPanel}>
+          {text(T.listorRubrik)}
+        </h2>
+        <button type="button" onClick={() => onOppna("listor")} className={lank}>
+          {text(T.allaListor)}
+        </button>
+      </div>
+      {listor === null ? (
+        <p className={cn(meta, "mt-3")}>…</p>
+      ) : egna.length === 0 ? (
+        <p className={cn(meta, "mt-3 max-w-[70ch]")}>{text(T.listorInnehall)}</p>
+      ) : (
+        <ul className="mt-3 divide-y divide-ink/10">
+          {egna.slice(0, 3).map((l) => (
+            <li key={l.id} className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1 py-2.5">
+              <span className="min-w-0 break-words text-[0.9375rem] font-medium">{l.titel}</span>
+              {typeof l.item_count === "number" ? (
+                <span className={cn(meta, "num tabular-nums")}>
+                  {text({ sv: `${l.item_count} bolag`, en: `${l.item_count} companies` })}
+                </span>
+              ) : null}
+            </li>
+          ))}
+        </ul>
+      )}
+      <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2">
+        <button type="button" onClick={() => onOppna("listor")} className={cn(btnSecondary, btnLiten)}>
+          {text(T.importeraLista)}
+        </button>
+        <button type="button" onClick={() => onOppna("kunder")} className={lank}>
+          {kunder > 0
+            ? text({ sv: `${kunder} befintliga kunder utesluts`, en: `${kunder} existing customers are excluded` })
+            : text(T.laddaUppKunder)}
+        </button>
+      </div>
+    </section>
+  );
+}
+
 export function LeadsOversikt({
   demo = false,
-  crmOppen = false,
   valdId = null,
   exempel = INGA_EXEMPEL,
   onValjLead,
   onOppnaKorningar,
-  onOppnaKonversation
+  onOppnaKonversation,
+  onOppnaListor
 }: Readonly<{
   demo?: boolean;
-  crmOppen?: boolean;
   valdId?: string | null;
   exempel?: SuiteProspekt[];
   onValjLead?: (id: string) => void;
   onOppnaKorningar?: (jobId: string | null) => void;
   onOppnaKonversation?: (threadId: string | null) => void;
+  /** Öppnar fliken Listor i den givna vyn. */
+  onOppnaListor?: (del: Listdel) => void;
 }>) {
-  const { addons, isDemo, vy, isPlatformAdmin, impersonation } = useDashboard();
+  const { isDemo, vy, isPlatformAdmin, impersonation } = useDashboard();
   const { text, locale } = useLocale();
   const arDemo = demo || isDemo || vy === "demo";
-  const harListaddon = addons.includes("leadlists");
   // Listans egna tal (LeadsTabell.onAntal): samma rader som Alla och Ny visar,
   // och skickat/svar ur samma lista som Inkorg › Skickat (GET /leads/skickat,
   // de senaste fyra veckorna), så att nyckeltalen och listorna aldrig säger
@@ -247,7 +320,6 @@ export function LeadsOversikt({
     godkanda: number;
   } | null>(null);
   const [antalUtkast, setAntalUtkast] = useState<number | null>(null);
-  const [listorOppna, setListorOppna] = useState(crmOppen);
   // Körningsrutan vet om en Iris-körning pågår; tabellen går då i livetakt.
   const [pagaendeKorningar, setPagaendeKorningar] = useState(0);
 
@@ -320,38 +392,7 @@ export function LeadsOversikt({
         />
       </section>
 
-      {/* Hopfälld under rubriken (kritik 4, Sebbes val): listdelen är ett eget
-          arbete och lade ~3 000 px under leadsen. En länk till CRM-uppladdningen
-          (crmOppen) fäller ut den direkt. */}
-      <section aria-labelledby="leads-listor" className={kolumn}>
-        <h2 id="leads-listor" className={rubrikPanel}>
-          <button
-            type="button"
-            aria-expanded={listorOppna}
-            aria-controls="leads-listor-innehall"
-            onClick={() => setListorOppna((v) => !v)}
-            className="focus-ring -mx-1 inline-flex min-h-9 items-center gap-1.5 rounded-input px-1 text-left hover:text-ink-muted"
-          >
-            {text(T.listorRubrik)}
-            <ChevronDown aria-hidden className={cn("h-4 w-4 transition-transform", listorOppna && "rotate-180")} />
-          </button>
-        </h2>
-        {listorOppna ? (
-          <div id="leads-listor-innehall" className="mt-4">
-            {harListaddon || arDemo ? (
-              <LeadslistorView demo={demo} crmOppen={crmOppen} onValjLead={onValjLead} />
-            ) : (
-              <div className="grid gap-8">
-                <SaljlistaUtforska />
-                <CrmKundlista startOppen={crmOppen} />
-                <ListorUpsell />
-              </div>
-            )}
-          </div>
-        ) : (
-          <p className={cn(meta, "mt-1")}>{text(T.listorInnehall)}</p>
-        )}
-      </section>
+      {onOppnaListor ? <ListorRuta demo={arDemo} onOppna={onOppnaListor} /> : null}
     </div>
   );
 }

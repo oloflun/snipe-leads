@@ -1173,10 +1173,17 @@ class Storage(Protocol):
         kalla: str = "sok",
         kallistor: list[str] | None = None,
         kontaktfilter: str | None = None,
+        importinfo: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """`kalla`, `kallistor`, `kontaktfilter` (migration 082): en kombinerad
         lista bär sina källistor och filtret som användes, så bygget går att
-        granska i efterhand. 'sok' för allt som byggs av en sökning."""
+        granska i efterhand. 'sok' för allt som byggs av en sökning.
+        `importinfo` (migration 152): importens kvitto, bara för import/crm."""
+        ...
+
+    async def satt_importinfo(self, tenant_id: str, list_id: str, importinfo: dict[str, Any] | None) -> None:
+        """Ersätter listans importkvitto (migration 152): en import i flera
+        delar skriver det slutliga kvittot med den sista delen."""
         ...
 
     async def set_lead_list_status(
@@ -1204,7 +1211,10 @@ class Storage(Protocol):
         self, tenant_id: str, *, list_id: str, **falt: Any
     ) -> dict[str, Any]:
         """En rad i listan. `item_typ` defaultar till 'bolag' — MVP:n skriver
-        aldrig 'privatperson' (juridiskt beslut, se migration 060)."""
+        aldrig 'privatperson' (juridiskt beslut, se migration 060).
+        `avtalsslut` (ISO-datum) och `extra` (dict) från importen (migration
+        152) skrivs bara när de har ett värde, och kommer tillbaka som ISO-
+        sträng respektive dict."""
         ...
 
     async def list_lead_list_items(
@@ -1244,7 +1254,12 @@ class Storage(Protocol):
     async def lista_upptagna_bolag(self, tenant_id: str) -> list[dict[str, Any]]:
         """`company_name` och `orgnr` för varje bolag kunden redan har: alla
         prospekt och alla rader i alla leadslistor (CRM-kunder inräknade).
-        Iris och listbygget utesluter dem (app/leads/upptagna.py)."""
+        Iris och listbygget utesluter dem (app/leads/upptagna.py).
+
+        Varje rad bär också `kalla` — 'crm' för en rad i en CRM-kundlista,
+        annars 'lead' — och `list_id` (None för ett prospekt), så att
+        importen kan skilja en befintlig kund från ett bolag som redan är
+        lead och bortse från listan den själv fyller på."""
         ...
 
     async def rensa_lead_list_items(self, tenant_id: str, list_id: str) -> int:

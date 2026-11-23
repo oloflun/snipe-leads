@@ -9,6 +9,78 @@ möjligt), vad det betyder i koden.
 
 ---
 
+## 2026-11-23 — Listimporten hårdtestad; Listor är en egen flik med import i fyra steg (Anton)
+
+**Beslut.**
+1. Listimporten ska läsa det kunderna faktiskt har: exporter ur de stora CRM-systemen och
+   egna kalkylblad, som CSV eller Excel, och vara lätt att förstå.
+2. Listorna är en egen del av Leads med en tydlig uppgift, inte en hopfälld del av översikten.
+3. Genomförandet nedan är agentens val, inte Antons ord, och kan ändras av honom.
+
+**Resonemanget.** Anton 2026-11-23, efter att Henrik (Buddy) frågat om leads ur deras egna
+data (gamla prospekt, förlorade affärer, kunder vars avtal går ut): "Vi behöver hårdtesta
+listimporten och miljön för denna för att motsvara riktig CRM-funktionalitet, som stöder
+alla tänkbara listformat från olika CRM-leverantörer och gör det användarvänligt och
+intuitivt. Ta gärna inspiration från hur Twenty byggt upp sin suite och se till att
+listorna inte bara blir en halvt undangömd flik, utan en integrerad del i sviten med en
+tydlig funktion som logiskt samspelar med de övriga delarna i Leads-sviten."
+
+Hårdtestet gav skälet till ombyggnaden. Den gamla importen läste bara CSV i UTF-8 och
+matchade rubriker ordagrant mot fem mallar. Av tolv vanliga fall gav nio noll rader eller
+fel rader: svensk Excels CSV (Windows-1252), Excels Unicode-text (UTF-16), `sep=;`,
+titelrader före rubrikraden, Salesforce-rapportens fot som blev fyra bolag, svenska rubriker
+som Förnamn och Mobiltelefon, Dynamics dolda kolumner, och "Kund" som bolagsnamn.
+Excel-filer gick inte att ladda upp alls. Kolumner utan fält kastades tyst, och ingenting
+jämfördes med kundens befintliga kunder, leads eller spärrlista.
+
+**Agentens val.**
+- **Listor är en egen flik igen**, bredvid Körningar: de två vägarna in för bolag, det
+  kunden har och det Iris hittar. Det ersätter placeringen från 2026-10-07, då listdelen
+  fälldes ihop längst ner i översikten. Fliken har tre vyer (Listor, Säljlista, Befintliga
+  kunder) i stället för tre sektioner under varandra, efter Twentys modell med vyer inne
+  i ett objekt. Översikten har kvar en liten ruta som pekar in i fliken.
+- **Kör Iris visas inte på fliken Listor.** Där är Importera lista flikens handling, och en
+  sida har en primär knapp (DESIGN.md § App surfaces). Samma undantag som fliken Körningar.
+- **Fyra steg efter Twentys import:** fil, kolumner, granska, klart. Till skillnad från
+  Twenty finns ett kvitto, och det sparas på listan (regeln 2026-10-10 om att utfallet ska
+  finnas kvar efter en omladdning).
+- **Dataminimering.** Kolumner som inte blir ett fält importeras inte om kunden inte väljer
+  det. Affärsuppgifter (status, typ, bransch, storlek, leverantör, avtalets övriga uppgifter)
+  föreslås följa med som extra uppgift. Fritextanteckningar föreslås inte: de kan innehålla
+  personuppgifter som utskicket inte behöver.
+- **Personnummer sparas inte.** Ett org.nr vars tredje siffra är 0 eller 1 är en enskild
+  firmas personnummer. Värden som inte håller (en adress utan domän, ett tal Excel gjort om
+  till 5,56E+09) lämnas tomma och visas i granskningen. Raden importeras ändå.
+- **Personens uppgifter före bolagets.** Har filen flera telefon- eller e-postkolumner tas
+  mobilen före växeln och kontaktpersonens adress före info-adressen, rad för rad.
+- **Ett bolag, en rad.** Dubbletter i filen slås ihop, och raden med en adress behålls.
+- **Det som hoppas över.** Befintliga kunder (kundlistan) och adresser som avböjt kontakt
+  hoppas alltid över, också adresser med begränsad behandling enligt GDPR art. 18. Bolag
+  som redan är leads hoppas över om kunden inte kryssar för att ta med dem.
+- **Avtalsslut är ett eget fält.** Listan går att sortera och dela upp efter hur snart
+  avtalet går ut. Utkasten använder inte datumet ännu: utkastkedjans facit är låst
+  (INV-LEADS-UTKAST-002) och ändras bara med Antons ja.
+- **Högst 5 000 rader per lista**, skickade i satser om 500 med förlopp.
+
+**Det som inte är belagt.** Fixturerna i `lib/leads/fixtures/crm-export` är syntetiska.
+Bara Vismas rubriker är tagna ordagrant ur leverantörens dokumentation. Övriga bygger på
+vad som gick att belägga om exportens struktur och på rubriker ur minnet. En riktig
+exportfil som faller igenom ska läggas dit som ny fixtur.
+
+**I koden.** Läsaren `lib/leads/importfil.ts` (teckenkodning, xlsx utan beroende, HTML,
+Excel 2003-XML), `lib/leads/csv.ts` (avgränsare, citat), `lib/leads/importmallar.ts`
+(rubrikrad, fot, kolumnmatchning), `lib/leads/importvarden.ts` (org.nr, e-post, telefon,
+webbplats, datum), `lib/leads/importrader.ts` (radbyggare, dubbletter).
+`components/leads/ImportLista.tsx` ersätter `ImportCsv.tsx`. Migration 152 lägger till
+`lead_list_items.avtalsslut`, `lead_list_items.extra` och `lead_lists.importinfo`.
+`POST /api/leads/import` tar emot satser (`list_id`) och hoppar över enligt ovan;
+`POST /api/leads/import/granska` är förhandsgranskningen. `avtalsslut` och `extra` följer
+aldrig med när plattformsadmin kopierar en lista till en annan kund
+(`admin_listor.LISTRADSFALT`). Flytten från development till main (`admin_flytt.py`) bär
+dem inte heller: det är en lucka, inte ett beslut.
+
+---
+
 ## 2026-11-23 — Tonläget in i onboardingen; bara onboardingen kopplar arbetsytan (Anton)
 
 **Beslut.**

@@ -2460,6 +2460,7 @@ class MemoryStorage:
         kalla: str = "sok",
         kallistor: list[str] | None = None,
         kontaktfilter: str | None = None,
+        importinfo: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         if not 1 <= antal <= 200:
             raise ValueError(f"antal={antal} bryter mot lead_lists-checken (1–200).")
@@ -2479,11 +2480,18 @@ class MemoryStorage:
             "kalla": kalla,
             "kallistor": list(kallistor) if kallistor else None,
             "kontaktfilter": kontaktfilter,
+            # jsonb (152): en kopia, som Postgres, så att anroparens dict inte delas.
+            "importinfo": json.loads(json.dumps(importinfo, default=str)) if importinfo is not None else None,
             "created_at": _now(),
             "completed_at": None,
         }
         self.lead_lists.setdefault(tenant_id, []).append(rad)
         return dict(rad)
+
+    async def satt_importinfo(self, tenant_id: str, list_id: str, importinfo: dict[str, Any] | None) -> None:
+        for rad in self.lead_lists.get(tenant_id, []):
+            if rad["id"] == list_id:
+                rad["importinfo"] = json.loads(json.dumps(importinfo, default=str)) if importinfo is not None else None
 
 
     async def saljlista_fyll_pa(self, tenant_id: str, rader: list[dict[str, Any]]) -> int:
@@ -2575,6 +2583,9 @@ class MemoryStorage:
             "postnr": falt.get("postnr"),
             "webbniva": falt.get("webbniva"),
             "webbrevision": falt.get("webbrevision"),
+            # Migration 152: date-kolumnen kommer ur Postgres som ISO-sträng.
+            "avtalsslut": str(falt["avtalsslut"])[:10] if falt.get("avtalsslut") else None,
+            "extra": json.loads(json.dumps(falt["extra"])) if falt.get("extra") is not None else None,
             "prospect_id": None,
             "kallor": [],
             "processad_at": None,
@@ -2624,8 +2635,23 @@ class MemoryStorage:
                 i["utkast"] = json.loads(json.dumps(utkast)) if utkast is not None else None
 
     async def lista_upptagna_bolag(self, tenant_id: str) -> list[dict[str, Any]]:
-        rader = [*self.prospects.get(tenant_id, []), *(i for i in self.lead_list_items if i["tenant_id"] == tenant_id)]
-        return [{"company_name": r.get("company_name"), "orgnr": r.get("orgnr")} for r in rader]
+        crm = {r["id"] for r in self.lead_lists.get(tenant_id, []) if r.get("kalla") == "crm"}
+        return [
+            *(
+                {"company_name": p.get("company_name"), "orgnr": p.get("orgnr"), "kalla": "lead", "list_id": None}
+                for p in self.prospects.get(tenant_id, [])
+            ),
+            *(
+                {
+                    "company_name": i.get("company_name"),
+                    "orgnr": i.get("orgnr"),
+                    "kalla": "crm" if i["list_id"] in crm else "lead",
+                    "list_id": i["list_id"],
+                }
+                for i in self.lead_list_items
+                if i["tenant_id"] == tenant_id
+            ),
+        ]
 
     async def rensa_lead_list_items(self, tenant_id: str, list_id: str) -> int:
         fore = len(self.lead_list_items)

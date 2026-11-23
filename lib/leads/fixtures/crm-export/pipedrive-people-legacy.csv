@@ -1,0 +1,5 @@
+Person - ID,Person - Name,Person - Organization,Person - Email,Person - Phone,Person - Label,Person - Owner,Person - Job title
+301,Ingrid Lind,Iota Ventilation Test AB,"ingrid.lind@example.se, ingrid@example.com","070-174 06 15, 08-465 004 15",Decision maker,Test Säljare,VD
+302,Olof Dahl,Kappa Kök Test AB,olof@example.se,+46701740616,,Test Säljare,Driftansvarig
+303,Eva Ahl,Lambda Lås & Larm Test AB,,0701740617,Influencer,,
+304,Mats Berg,My Måleri Test HB,mats.berg@example.se,,,Test Säljare,Delägare

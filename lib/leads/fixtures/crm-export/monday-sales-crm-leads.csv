@@ -1,0 +1,10 @@
+Leads
+Nya leads
+Name,Status,Company,Title,Email,Phone,Owner,Last interaction
+Lisa Åström,New Lead,Gamma Gym Test AB,Klubbchef,lisa.astrom@example.se,+46 70 174 06 95,Test Säljare,2026-11-10
+Mikael Brand,Attempted to contact,Delta Dörr Test AB,VD,mikael@example.se,070-174 06 96,Test Säljare,
+
+Kvalificerade
+Name,Status,Company,Title,Email,Phone,Owner,Last interaction
+Nina Carp,Qualified,Epsilon Energi Test AB,Energichef,nina.carp@example.com,08-465 004 97,Test Säljare,2026-11-18
+Otto Dun,Contacted,Zeta Zoo Test AB,,,0701740698,,

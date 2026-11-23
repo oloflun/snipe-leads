@@ -1,0 +1,5 @@
+ID,Name,Owner,Address,Label,People,Open deals,Website,Org.nr
+201,Ny Nätverk Test AB,Test Säljare,"Industrigatan 4, 972 54 Luleå",Customer,1,0,ny.example.se,569900-0211
+202,Xi Transport Test AB,Test Säljare,,Cold lead,0,1,,5699000229
+203,"Omikron Data, Test AB",,"Drottninggatan 5, 111 51 Stockholm",,2,0,https://omikron.example.com,
+204,Pi Plåt Test AB,Test Säljare,,Hot lead,1,1,www.piplat.example.se,569900-0245
