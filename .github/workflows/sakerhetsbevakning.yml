@@ -76,19 +76,18 @@
 #      källfel syns också som att bevakningen inte lyckats.
 #   Schemat körs från standardgrenen (development); filen måste finnas där.
 #
-# Minuter: grinden kostar en debiterad minut per Verify- och synkkörning,
-# själva bevakningen ett par minuter per dygn.
+# ÄNDRAT 2026-11-23 (Actions-minuterna tog slut): punkt 1 och 2 ovan är
+# ersatta. Ett schema om dygnet (05:37 UTC). Reserven är inte längre
+# workflow_run med ett eget grindjobb, som kostade en debiterad minut per
+# Verify-körning, utan ett steg i Verifys enda jobb: vid push till
+# development startar det det här flödet (workflow_dispatch) om bevakningen
+# inte lyckats på 20 timmar och ingen körning redan står i kö. Steget kostar
+# inget eget jobb. Dödmanskontrollen (punkt 3) är oförändrad.
 name: säkerhetsbevakning
 
 on:
   schedule:
     - cron: "37 5 * * *"
-    - cron: "19 15 * * *"
-  # Reserven: körs när CI eller synken gått klart, oavsett utfall och gren.
-  # Grinden nedan begränsar den till en körning per 20 timmar.
-  workflow_run:
-    workflows: ["Verify", "synk"]
-    types: [completed]
   workflow_dispatch:
     inputs:
       simulera_traff:
@@ -109,57 +108,12 @@ env:
   ETIKETT: sakerhetsbevakning
   # Publiceringsfönstret i dagar. Dedup mot ärendena gör överlapp gratis.
   DAGAR: "7"
-  # Reservgrinden: hoppa över om bevakningen lyckats så här nyligen (20 h).
-  RESERV_SEKUNDER: "72000"
 
 jobs:
-  grind:
-    name: Reservgrind
-    runs-on: ubuntu-latest
-    timeout-minutes: 3
-    outputs:
-      kor: ${{ steps.grind.outputs.kor }}
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        if: github.event_name == 'workflow_run'
-        with:
-          persist-credentials: false
-
-      - name: Har bevakningen redan gått det senaste dygnet?
-        id: grind
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-          HANDELSE: ${{ github.event_name }}
-        run: |
-          set -uo pipefail
-          if [[ "$HANDELSE" != "workflow_run" ]]; then
-            echo "Händelse $HANDELSE: kör alltid."
-            echo "kor=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          # Kan åldern inte läsas körs bevakningen hellre en gång för mycket.
-          if ! alder="$(LAGE=alder FLODE=sakerhetsbevakning.yml bash scripts/overvakning_dodman.sh)" \
-              || ! [[ "$alder" =~ ^-?[0-9]+$ ]]; then
-            echo "::warning::Kunde inte läsa när bevakningen senast gick; kör."
-            echo "kor=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          if (( alder < RESERV_SEKUNDER )); then
-            echo "Bevakningen lyckades för $((alder / 60)) minuter sedan (gräns $((RESERV_SEKUNDER / 60))); reserven behövs inte."
-            echo "kor=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "Bevakningen lyckades senast för $((alder / 60)) minuter sedan; reserven kör."
-            echo "kor=true" >> "$GITHUB_OUTPUT"
-          fi
-
   bevaka:
     # Namnet läses av scripts/overvakning_dodman.sh (profilen
     # sakerhetsbevakning.yml); byt inte det ena utan det andra.
     name: Bevaka säkerhetsflödena
-    needs: grind
-    if: needs.grind.outputs.kor == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:

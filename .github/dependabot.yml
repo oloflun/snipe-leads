@@ -1,9 +1,21 @@
-# Automatiska beroendeuppdateringar (ISO 27001-genomgången 2026-11-18).
+# Beroendeuppdateringar (ISO 27001-genomgången 2026-11-18).
 #
-# Veckovis, måndag morgon, mot development (allt arbete går dit, aldrig till
-# main). Mindre uppdateringar (minor + patch) samlas i en pull request per
-# ekosystem och katalog; majoruppdateringar kommer var för sig, eftersom de är
-# beslut som någon ska fatta. Säkerhetsuppdateringar följer samma grupper.
+# DEPENDABOT ÖPPNAR INGA EGNA PULL REQUESTS (Anton 2026-11-23: "se till att
+# den inte öppnar egna"). Taket open-pull-requests-limit är 0 i varje
+# ekosystem, och repots automatiska säkerhetsuppdateringar är avstängda
+# (`gh api -X DELETE repos/oloflun/snipe-leads/automated-security-fixes`).
+# Skälet: repot är privat sedan 2026-11-18 och har gratisplanens 2 000
+# Actions-minuter i månaden. Varje Dependabot-PR kostade ett eget bygge plus
+# en hel Verify per push, och sju sådana PR:er öppnades samma måndag.
+#
+# Det som finns kvar: sårbarhetslarmen (vulnerability alerts) är på, och
+# säkerhetsbevakningen (.github/workflows/sakerhetsbevakning.yml) läser
+# GitHubs advisories mot stacken och skriver ärenden. Uppdateringarna görs
+# för hand på development och följer med release-PR:en till main, på samma
+# sätt som de sju Dependabot-PR:erna samlades i PR 105.
+#
+# Konfigurationen nedan står kvar så att grupper och mål är givna den dag
+# taket höjs igen. Höj då ett ekosystem i taget.
 #
 # Repots bumpgrind (INV-SKILL-006, scripts/check_vendor_bump.py i verify.yml)
 # gäller bara agent-core/skills/**. Där finns inga manifest, så Dependabots
@@ -27,7 +39,7 @@ updates:
       time: "06:00"
       timezone: Europe/Stockholm
     target-branch: development
-    open-pull-requests-limit: 3
+    open-pull-requests-limit: 0
     commit-message:
       prefix: "chore(beroenden)"
     groups:
@@ -52,7 +64,7 @@ updates:
       time: "06:00"
       timezone: Europe/Stockholm
     target-branch: development
-    open-pull-requests-limit: 3
+    open-pull-requests-limit: 0
     commit-message:
       prefix: "chore(beroenden)"
     groups:
@@ -72,7 +84,7 @@ updates:
       time: "06:00"
       timezone: Europe/Stockholm
     target-branch: development
-    open-pull-requests-limit: 2
+    open-pull-requests-limit: 0
     commit-message:
       prefix: "chore(beroenden)"
     groups:
@@ -91,7 +103,7 @@ updates:
       time: "06:00"
       timezone: Europe/Stockholm
     target-branch: development
-    open-pull-requests-limit: 1
+    open-pull-requests-limit: 0
     commit-message:
       prefix: "chore(beroenden)"
     ignore:

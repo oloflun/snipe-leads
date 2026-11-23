@@ -9,6 +9,40 @@ möjligt), vad det betyder i koden.
 
 ---
 
+## 2026-11-23 — Verify bantas; Dependabot öppnar inga egna pull requests (Anton)
+
+**Beslut.**
+1. Verify är ett jobb i stället för åtta, med samma kontroller som steg. Det körs inte
+   på en pull request vars huvudgren själv körs på push (release-PR:en development →
+   main), och en commit som bara rör dokumentation får bara hemlighetsskanningen.
+   `railway-main` är struken ur grenarna.
+2. Övervakningen och säkerhetsbevakningen på GitHub startas inte längre efter varje
+   Verify (workflow_run). Övervakningen där är reserven till Railway-tjänsten och går
+   var tredje timme; säkerhetsbevakningen går en gång om dygnet, och Verify startar
+   den vid push till development om den inte lyckats på 20 timmar.
+3. Dependabot öppnar inga egna pull requests: taket är 0 i `.github/dependabot.yml`
+   och repots automatiska säkerhetsuppdateringar är avstängda. Sårbarhetslarmen står
+   kvar. De sju öppna Dependabot-PR:erna (106–112) är ihopslagna på development och
+   följer med release-PR:en 105.
+
+**Resonemanget.** GitHub slutade starta jobb 2026-11-23 06:47. Det var inte ett kort
+som nekats, utan gratisplanens 2 000 Actions-minuter för privata repon: repot blev
+privat 2026-11-18 och publika repon har obegränsade minuter, därför märktes det aldrig
+förut. Räknat jobb för jobb gick 2 137 minuter mellan 18 november och stoppet, och
+Verify stod för 2 108 av novembers 2 989. GitHub avrundar varje jobb uppåt till hel
+minut, så åtta jobb på runt fem minuters verkligt arbete kostade nio, och varje
+körning startade dessutom två bevakningsflöden för en minut var. Anton valde att
+banta i stället för GitHub Pro: "Okej, banta Verify, samla även alla dependabot-pull
+requests till den stora och se till att den inte öppnar egna."
+
+**Vad det kostar.** Kontrollerna går i följd, så en körning tar längre tid. Kvoten
+nollställs 1 december; i november går inga kontroller alls. Grenskyddet på main
+kommer inte tillbaka av det här: det kräver GitHub Pro eller ett publikt repo.
+Beroendeuppdateringar kommer inte längre av sig själva, de görs för hand på
+development.
+
+---
+
 ## 2026-11-23 — Driftjobben körs hos Railway; gamla kopior i Skickat byts mot originalen (Anton)
 
 **Beslut.**
