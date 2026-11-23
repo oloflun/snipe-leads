@@ -23,6 +23,7 @@ from .api import (
     admin_konvertera,
     admin_ombedom,
     admin_utkastsvep,
+    admin_webbpool,
     admin_kunddata,
     admin_listor,
     admin_profil,
@@ -41,8 +42,10 @@ from .api import (
     kvitton,
     leads,
     leads_kampanjer,
+    leads_konversationer,
     leads_massatgard,
     leads_suite,
+    leads_uppfoljningar,
     rules,
     sending_domains_api,
     support_config,
@@ -447,6 +450,10 @@ app.include_router(keys.router)
 app.include_router(kb.router)
 app.include_router(leads.router)
 app.include_router(leads_suite.router)
+# Iris-konversationerna och notiserna (migration 149); se api/leads_konversationer.py.
+app.include_router(leads_konversationer.router)
+# Uppföljningarna för sig och bolagssökningen; se api/leads_uppfoljningar.py.
+app.include_router(leads_uppfoljningar.router)
 # Massåtgärder i Iris-listan och Ta bort lista; se api/leads_massatgard.py.
 app.include_router(leads_massatgard.router)
 app.include_router(leads_kampanjer.router)
@@ -472,6 +479,8 @@ app.include_router(admin_konvertera.router)
 # Ombedömning av sparade Iris-leads efter regelskärpningen 2026-10-06; se
 # docstringen i api/admin_ombedom.py.
 app.include_router(admin_ombedom.router)
+# Webbpoolens bakåtfyllnad, bara för hand (2026-11-22) — se admin_webbpool.py.
+app.include_router(admin_webbpool.router)
 # Utkastsvepet (skrivande, master-grindat) — se docstringen i admin_utkastsvep.py.
 app.include_router(admin_utkastsvep.router)
 # Kopiera eller flytta en leadslista till en annan kund; se api/admin_listor.py.

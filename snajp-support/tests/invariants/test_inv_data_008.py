@@ -363,6 +363,13 @@ def test_lasrollen_far_bara_lasa_och_saknar_losenord():
 
 
 def test_lasrollen_far_lasa_varje_synkad_tabell(s):
+    """122 ger rätten för tabellerna som fanns då; en senare tabell i SYNK
+    ger den i sin egen migration (149: lead_handelser)."""
     sql = MIGRATION.read_text(encoding="utf-8")
+    senare = "\n".join(
+        p.read_text(encoding="utf-8").lower() for p in sorted(MIGRATION.parent.glob("*.sql")) if p.name > MIGRATION.name
+    )
     for tabell in (*s.synk.SYNK, "ss_tenants", "synk_raderingar", "mirror_meta"):
-        assert f"'{tabell}'" in sql, tabell
+        assert f"'{tabell}'" in sql or f"grant select on table public.{tabell} to synk_las" in senare, tabell
+    for rad in re.findall(r"grant\s+[^;]*to synk_las", senare):
+        assert re.match(r"grant select on table public\.\w+ to synk_las", rad), rad

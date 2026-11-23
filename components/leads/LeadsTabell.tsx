@@ -7,6 +7,7 @@ import { Badge, Cell, SkeletonRows, Tabell, Tomt, btnPrimary, btnSecondary, etik
 import { useSmal } from "@/components/leads/smal";
 import { Sidvaljare, tillListansTopp, useBredSkarm, useSida, useSidaFor } from "@/components/leads/sidindelning";
 import { SkickatLista, type SkickatRad } from "@/components/leads/SkickatLista";
+import { skapaUppfoljningar } from "@/components/leads/Uppfoljningar";
 import type { Signatur } from "@/components/leads/IrisGranskning";
 import { useRadrorelse } from "@/components/leads/useRadrorelse";
 import { BekraftaUtskick, type Bekraftelsetyp } from "@/components/leads/BekraftaUtskick";
@@ -1369,6 +1370,24 @@ export function LeadsTabell({
                   utan === 0
                 )}
                 {knapp("skapa-om", { sv: "Skapa om utkast", en: "Recreate drafts" }, { sv: "Skapar…", en: "Creating…" }, () => void skapaUtkast(valt, true))}
+                {/* Anton 2026-11-22: uppföljningar till markerade bolag som
+                    redan fått mejl. Visas bara när något markerat har det. */}
+                {!demo && valt.some((p) => p.skickat_at || p.utkast_status === "skickat")
+                  ? knapp(
+                      "uppfoljning",
+                      { sv: "Skapa uppföljning", en: "Create follow-up" },
+                      { sv: "Skapar…", en: "Creating…" },
+                      () =>
+                        void utfor("uppfoljning", async () => {
+                          const notis = await skapaUppfoljningar(
+                            valt.filter((p) => p.skickat_at || p.utkast_status === "skickat").map((p) => p.id),
+                            text
+                          );
+                          setValda(new Set());
+                          return notis;
+                        })
+                    )
+                  : null}
               </>
             ) : null}
             {lage === "arkiverade"

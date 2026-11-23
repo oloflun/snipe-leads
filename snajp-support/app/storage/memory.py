@@ -221,6 +221,8 @@ class MemoryStorage:
         # Leads Suite (migration 086): platta listor, samma form som tabellerna.
         self.lead_anteckningar: list[dict[str, Any]] = []
         self.lead_samtal: list[dict[str, Any]] = []
+        #: Konversationernas händelselogg och notiser (migration 149).
+        self.lead_handelser: list[dict[str, Any]] = []
         self.lead_uppgifter: list[dict[str, Any]] = []
         self.prospect_status_logg: list[dict[str, Any]] = []
         self.lead_vyer: list[dict[str, Any]] = []
@@ -442,6 +444,14 @@ class MemoryStorage:
         if rad and rad["tenant_id"] == tenant_id:
             rad["last_sync_at"] = _now()
             rad["last_error"] = last_error
+
+    async def satt_imap_marke(
+        self, tenant_id: str, mailbox_id: str, *, last_uid: int, uidvalidity: int | None
+    ) -> None:
+        rad = self.mailboxes.get(mailbox_id)
+        if rad and rad["tenant_id"] == tenant_id:
+            rad["imap_last_uid"] = int(last_uid)
+            rad["imap_uidvalidity"] = uidvalidity
 
     # -- Kunddata -----------------------------------------------------------
 
@@ -1505,6 +1515,155 @@ class MemoryStorage:
                 antal += 1
         return antal
 
+    # -- Iris-konversationer (migration 149) --------------------------------
+
+    #: Speglar check-villkoret på lead_handelser.typ.
+    HANDELSETYPER = frozenset({
+        "svar", "klassad", "utkast", "utkast_ersatt", "utkast_kasserat", "utkast_aterstallt",
+        "utkast_redigerat", "generering_startad", "generering_fel", "skickat", "steg", "mote",
+        "overlamnat", "extern",
+    })
+
+    async def logga_handelse(
+        self,
+        tenant_id: str,
+        *,
+        prospect_id: str,
+        thread_id: str | None,
+        typ: str,
+        kalla: str = "kod",
+        detalj: dict[str, Any] | None = None,
+        notis: bool = False,
+        last: bool = False,
+    ) -> dict[str, Any]:
+        self._ager_prospekt(tenant_id, prospect_id)
+        if typ not in self.HANDELSETYPER or kalla not in ("kod", "manuell"):
+            raise ValueError(f"typ={typ!r}/kalla={kalla!r} bryter mot checken (149).")
+        nu = _now()
+        rad = {
+            "id": str(uuid.uuid4()), "tenant_id": tenant_id, "prospect_id": prospect_id,
+            "thread_id": thread_id, "typ": typ, "kalla": kalla, "detalj": dict(detalj or {}),
+            "notis": notis, "last_at": nu if (notis and last) else None, "created_at": nu,
+        }
+        self.lead_handelser.append(rad)
+        return dict(rad)
+
+    async def list_handelser(self, tenant_id: str, *, thread_id: str) -> list[dict[str, Any]]:
+        return [
+            dict(r) for r in self.lead_handelser
+            if r["tenant_id"] == tenant_id and r["thread_id"] == thread_id
+        ]
+
+    async def list_notiser(self, tenant_id: str, *, limit: int = 30) -> list[dict[str, Any]]:
+        namn = {p["id"]: p.get("company_name") for p in self.prospects.get(tenant_id, [])}
+        rader = [r for r in self.lead_handelser if r["tenant_id"] == tenant_id and r["notis"]]
+        return [{**r, "company_name": namn.get(r["prospect_id"])} for r in self._nyast_forst(rader)[:limit]]
+
+    async def antal_olasta_notiser(self, tenant_id: str) -> int:
+        return sum(
+            1 for r in self.lead_handelser
+            if r["tenant_id"] == tenant_id and r["notis"] and r["last_at"] is None
+        )
+
+    async def markera_notiser_lasta(
+        self, tenant_id: str, *, ids: list[str] | None = None, thread_id: str | None = None
+    ) -> int:
+        nu, antal = _now(), 0
+        for r in self.lead_handelser:
+            if r["tenant_id"] != tenant_id or not r["notis"] or r["last_at"] is not None:
+                continue
+            if ids is not None and r["id"] not in ids:
+                continue
+            if thread_id is not None and r["thread_id"] != thread_id:
+                continue
+            r["last_at"] = nu
+            antal += 1
+        return antal
+
+    async def konversationstradar(self, tenant_id: str) -> list[dict[str, Any]]:
+        prospekt = {p["id"]: p for p in self.prospects.get(tenant_id, [])}
+        meddelanden = self.outreach_messages.get(tenant_id, [])
+        handelser = [r for r in self.lead_handelser if r["tenant_id"] == tenant_id]
+        ut = []
+        for t in self.outreach_threads.get(tenant_id, {}).values():
+            p = prospekt.get(t.get("prospect_id"))
+            if p is None or p.get("arkiverad_at") or p.get("origin") == "example":
+                continue
+            egna = [r for r in handelser if r["thread_id"] == t["id"]]
+            if not (
+                t.get("last_inbound_at")
+                or any(r["typ"] in ("extern", "steg", "mote") for r in egna)
+                or p.get("status") in ("meeting", "won")
+            ):
+                continue
+            tradens = [m for m in meddelanden if m["thread_id"] == t["id"]]
+            svar = [m for m in tradens if m["direction"] == "inbound"]
+            utkast = [
+                m for m in tradens
+                if m["direction"] == "outbound" and not m.get("sent_at") and not m.get("kasserad_at")
+            ]
+            skickade = [m["sent_at"] for m in tradens if m["direction"] == "outbound" and m.get("sent_at")]
+            senaste_svar = svar[-1] if svar else {}
+            senaste_utkast = utkast[-1] if utkast else {}
+            ut.append({
+                "thread_id": t["id"], "prospect_id": p["id"],
+                "svarsklass": t.get("svarsklass"), "steg": t.get("steg"),
+                "aterkom_datum": t.get("aterkom_datum"),
+                "last_inbound_at": t.get("last_inbound_at"),
+                "company_name": p.get("company_name"), "contact_name": p.get("contact_name"),
+                "contact_email": p.get("contact_email"), "status": p.get("status"),
+                "svar_id": senaste_svar.get("id"), "svar_body": senaste_svar.get("body"),
+                "svar_at": senaste_svar.get("sent_at"),
+                "utkast_id": senaste_utkast.get("id"), "utkast_subject": senaste_utkast.get("subject"),
+                "utkast_body": senaste_utkast.get("body"), "utkast_at": senaste_utkast.get("created_at"),
+                "senast_skickat_at": max(skickade, default=None),
+                "antal_meddelanden": sum(
+                    1 for m in tradens if m["direction"] == "inbound" or m.get("sent_at")
+                ),
+                "olasta": sum(1 for r in egna if r["notis"] and r["last_at"] is None),
+                "senaste_handelse_at": max((r["created_at"] for r in egna), default=None),
+            })
+        return ut
+
+    async def satt_trad_steg(self, tenant_id: str, thread_id: str, *, steg: str | None, aterkom_datum: Any) -> None:
+        thread = self.outreach_threads.get(tenant_id, {}).get(thread_id)
+        if thread is not None:
+            thread["steg"] = steg
+            thread["aterkom_datum"] = (
+                aterkom_datum.isoformat() if hasattr(aterkom_datum, "isoformat") else aterkom_datum
+            )
+
+    async def nolla_trad_steg(self, tenant_id: str, thread_id: str) -> None:
+        thread = self.outreach_threads.get(tenant_id, {}).get(thread_id)
+        if thread is not None:
+            thread["steg"] = None
+
+    async def aterkom_datum(self, tenant_id: str) -> dict[str, Any]:
+        return {
+            t["prospect_id"]: t["aterkom_datum"]
+            for t in self.outreach_threads.get(tenant_id, {}).values()
+            if t.get("aterkom_datum")
+        }
+
+    async def aterstall_utkast(self, tenant_id: str, thread_id: str, message_id: str) -> bool:
+        for m in self.outreach_messages.get(tenant_id, []):
+            if (
+                m["id"] == message_id and m["thread_id"] == thread_id and m["direction"] == "outbound"
+                and not m.get("sent_at") and m.get("kasserad_at")
+            ):
+                m["kasserad_at"] = None
+                return True
+        return False
+
+    async def ny_granskningspost(self, tenant_id: str, thread_id: str, *, scheduled_at: Any) -> dict[str, Any]:
+        item = {
+            "id": str(uuid.uuid4()), "tenant_id": tenant_id, "thread_id": thread_id,
+            "scheduled_at": scheduled_at, "status": "awaiting_review", "gate_checks": {},
+            "created_at": _now(),
+        }
+        self.send_queue.setdefault(tenant_id, []).append(item)
+        return dict(item)
+
     async def utkast_lagen(
         self, tenant_id: str, *, med_text: bool = False, prospect_id: str | None = None,
         bara: list[str] | None = None,
@@ -1825,7 +1984,7 @@ class MemoryStorage:
             m for m in self.outreach_messages.get(tenant_id, []) if m["thread_id"] not in bort_tradar
         ]
         self.send_queue[tenant_id] = [q for q in self.send_queue.get(tenant_id, []) if q["thread_id"] not in bort_tradar]
-        for tabell in ("lead_anteckningar", "lead_uppgifter", "prospect_status_logg", "lead_samtal"):
+        for tabell in ("lead_anteckningar", "lead_uppgifter", "prospect_status_logg", "lead_samtal", "lead_handelser"):
             if hasattr(self, tabell):
                 setattr(self, tabell, [r for r in getattr(self, tabell) if r.get("prospect_id") not in bort])
         return {"raderade": raderade, "kontaktade": sorted(kontaktade & valda)}
@@ -2812,6 +2971,8 @@ class MemoryStorage:
         is_test: bool = False,
         automatutskick: bool = False,
         mailbox_id: str | None = None,
+        last_i_brevladan: bool = False,
+        besvarat_i_brevladan: bool = False,
     ) -> dict[str, Any] | None:
         dedupe_key = (tenant_id, provider_message_id)
         if dedupe_key in self.email_dedupe:
@@ -2832,6 +2993,8 @@ class MemoryStorage:
             "is_test": is_test,
             "automatutskick": automatutskick,
             "mailbox_id": mailbox_id,
+            "last_i_brevladan": bool(last_i_brevladan),
+            "besvarat_i_brevladan": bool(besvarat_i_brevladan),
             "hanterad_at": None,
             "created_at": _now(),
             "updated_at": _now(),

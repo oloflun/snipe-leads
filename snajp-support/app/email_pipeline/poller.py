@@ -235,8 +235,17 @@ async def sync_mailbox(
             "error": f"Inget app-lösenord för {mailbox['address']} — koppla om inkorgen under Inställningar → Inkorgar.",
         })
 
+    # Märket (migration 150): allt med högre UID än det senast sparade hämtas,
+    # läst eller inte. Utan märke börjar brevlådan med olästa plus de senaste
+    # dagarnas mejl; det som redan står i databasen faller som dubletter.
+    marke = mailbox.get("imap_last_uid")
+    tillstand: dict = {}
     inbound, error = await imap.fetch_new(
         host, mailbox["address"], password, settings.imap_folder,
+        efter_uid=int(marke) if marke is not None else None,
+        uidvalidity=mailbox.get("imap_uidvalidity"),
+        tillbakablick_dagar=settings.imap_tillbakablick_dagar,
+        tillstand=tillstand,
         oauth_client_id=settings.imap_oauth_client_id if oauth_ready else "",
         oauth_client_secret=settings.imap_oauth_client_secret if oauth_ready else "",
         oauth_refresh_token=settings.imap_oauth_refresh_token if oauth_ready else "",
@@ -247,10 +256,9 @@ async def sync_mailbox(
     email_ids: list[str] = []
     # Läst-markeringen sker EFTER ingest, aldrig före (hämtningen använder
     # PEEK). Går en ingest sönder markeras bara de mejl som faktiskt står i
-    # databasen; resten är kvar som olästa och hämtas om nästa synk. En
-    # dublett (ingest_email returnerar None) markeras också — raden finns
-    # redan, och ett oläst exemplar hade annars klampat i 20-mejlsfönstret
-    # varje varv för evigt.
+    # databasen, och UID-märket stannar där: resten hämtas om nästa synk. En
+    # dublett (ingest_email returnerar None) räknas som sparad — raden finns
+    # redan, och märket ska förbi den.
     ingestade_uids: list[str] = []
     ingest_fel: str | None = None
     for message in inbound:
@@ -271,6 +279,8 @@ async def sync_mailbox(
         else:
             email_ids.append(email["id"])
 
+    await _flytta_market(storage, tenant_id, mailbox, ingestade_uids, tillstand, tomt=not inbound and not error)
+
     mark_fel = await imap.mark_seen(
         host, mailbox["address"], password, settings.imap_folder, ingestade_uids,
         oauth_client_id=settings.imap_oauth_client_id if oauth_ready else "",
@@ -286,6 +296,36 @@ async def sync_mailbox(
             "error": error or ingest_fel or mark_fel,
         }
     )
+
+
+async def _flytta_market(
+    storage: Storage, tenant_id: str, mailbox: dict, ingestade_uids: list[str], tillstand: dict, *, tomt: bool
+) -> None:
+    """Flyttar brevlådans UID-märke förbi det som nu står i databasen.
+
+    Mejlen kommer lägst UID först och ingesten bryter vid första fel, så det
+    högsta ingestade UID:t har inget osparat under sig. En brevlåda utan
+    gällande märke och utan något att hämta får märket strax under nästa UID,
+    så att nästa synk frågar efter nya mejl och inte gör om tillbakablicken.
+    Kastar aldrig: går märket inte att skriva hämtas samma mejl igen och
+    faller som dubletter, vilket är den billiga sidan av felet."""
+    if not mailbox.get("id"):
+        return
+    nummer = [int(u) for u in ingestade_uids if str(u).isdigit()]
+    nytt: int | None = None
+    if nummer:
+        nytt = max(nummer)
+    elif tomt and not tillstand.get("market_galler") and tillstand.get("uidnext"):
+        nytt = int(tillstand["uidnext"]) - 1
+    if nytt is None:
+        return
+    giltighet = tillstand.get("uidvalidity", mailbox.get("imap_uidvalidity"))
+    if nytt == mailbox.get("imap_last_uid") and giltighet == mailbox.get("imap_uidvalidity"):
+        return
+    try:
+        await storage.satt_imap_marke(tenant_id, mailbox["id"], last_uid=nytt, uidvalidity=giltighet)
+    except Exception:  # noqa: BLE001
+        logger.exception("Kunde inte flytta UID-märket för %s", mailbox.get("address"))
 
 
 async def sync_all_mailboxes(storage: Storage) -> list[dict]:

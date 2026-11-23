@@ -6,6 +6,7 @@
 
 !scripts/railway_drift.py
 !scripts/railway_synk.py
+!scripts/begransning_spegel.py
 !scripts/railway_migrate.py
 !scripts/railway_provision.py
 !scripts/railway.py

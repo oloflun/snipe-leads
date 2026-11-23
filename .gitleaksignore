@@ -1,0 +1,9 @@
+# Enskilda fynd som visats vara falsklarm. Ett fingeravtryck per rad
+# (commit:fil:regel:rad), aldrig ett mönster. Skälet står ovanför raden.
+# Varje rad kräver Antons ja.
+#
+# 2026-11-23 (Antons ja): Railways tjänst-ID för api, inte en nyckel. Värdet
+# står öppet i DEPLOY.md och scripts/api_key_setup.py på main. Variabeln hette
+# API, vilket fick generic-api-key att slå till. Namnet är bytt till TJANST_ID
+# i 61a29b44.
+cf7b8e571d90d91a2a4c5a81ab877ab4e22f9b87:scripts/satt_pagespeed_nyckel.py:generic-api-key:25

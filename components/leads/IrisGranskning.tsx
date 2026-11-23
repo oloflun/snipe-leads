@@ -58,6 +58,8 @@ export type Signatur = {
   text: string;
   namn: string;
   titel?: string;
+  /** Raden under titeln ("Snajp | AI för leads och kundtjänst"), 2026-11-23. */
+  verksamhet?: string;
   telefon?: string;
   epost?: string;
   ort?: string;
@@ -66,14 +68,42 @@ export type Signatur = {
   logotyp_url?: string;
 };
 
-/** Signaturens första grupp (namn, titel, telefon, e-post) — det som känner
- *  igen ett FÖRÅLDRAT block i ett äldre mejl (samma person, annan bolags-
- *  eller platsrad). Speglar backendens `signatur._persongrupp`. */
+/** Signaturens första grupp (namn, titel, verksamhet, telefon, e-post) — det
+ *  som känner igen ett FÖRÅLDRAT block i ett äldre mejl (samma person, annan
+ *  bolags- eller platsrad). Speglar backendens `signatur._persongrupp`. */
 function persongrupp(signatur: Signatur | null): string {
   if (!signatur) return "";
-  return [signatur.namn, signatur.titel, signatur.telefon, signatur.epost]
+  return [signatur.namn, signatur.titel, signatur.verksamhet, signatur.telefon, signatur.epost]
     .filter((rad): rad is string => Boolean(rad))
     .join("\n");
+}
+
+/** Var ett föråldrat signaturblock börjar, eller -1. Speglar backendens
+ *  `signatur._foraldrat_start`: persongruppen ordagrant, annars en rad som är
+ *  exakt avsändarens namn följd av två till tolv korta rader fram till foten
+ *  (titeln eller adressen har bytts sedan mejlet skrevs). */
+function foraldratStart(text: string, signatur: Signatur | null): number {
+  if (!signatur) return -1;
+  const pg = persongrupp(signatur);
+  const pgIndex = pg ? text.indexOf(pg) : -1;
+  if (pgIndex >= 0) return pgIndex;
+  if (!signatur.namn) return -1;
+  const fot = text.indexOf("\n--\n");
+  const slut = fot >= 0 ? fot : text.length;
+  const huvud = text.slice(0, slut);
+  let start = -1;
+  let fran = 0;
+  for (;;) {
+    const i = huvud.indexOf(signatur.namn, fran);
+    if (i < 0) break;
+    const fore = i === 0 || huvud[i - 1] === "\n";
+    const efter = huvud.slice(i + signatur.namn.length).match(/^[ \t]*(\n|$)/);
+    if (fore && efter) start = i;
+    fran = i + 1;
+  }
+  if (start < 0) return -1;
+  const rader = huvud.slice(start).split("\n").filter((r) => r.trim());
+  return rader.length >= 2 && rader.length <= 12 && rader.every((r) => r.length <= 90) ? start : -1;
 }
 
 /**
@@ -90,8 +120,7 @@ function persongrupp(signatur: Signatur | null): string {
 export function MejlSvans({ signatur, svans }: Readonly<{ signatur: Signatur | null; svans: string }>) {
   const { text } = useLocale();
   const exakt = Boolean(signatur && svans.startsWith(signatur.text));
-  const pg = persongrupp(signatur);
-  const foraldrad = !exakt && Boolean(pg) && svans.startsWith(pg);
+  const foraldrad = !exakt && foraldratStart(svans, signatur) === 0;
   const sig = exakt || foraldrad ? signatur : null;
   let fot: string;
   if (exakt && signatur) {
@@ -120,7 +149,8 @@ export function MejlSvans({ signatur, svans }: Readonly<{ signatur: Signatur | n
       {sig ? (
         <div className="mt-3 font-[Arial,Helvetica,sans-serif] text-[0.8125rem] leading-[1.5] text-ink">
           <p className="font-bold">{sig.namn}</p>
-          {sig.titel ? <p>{sig.titel}</p> : null}
+          {sig.titel ? <p className="font-bold">{sig.titel}</p> : null}
+          {sig.verksamhet ? <p>{sig.verksamhet}</p> : null}
           {sig.telefon ? <p>{sig.telefon}</p> : null}
           {sig.epost ? <p>{sig.epost}</p> : null}
           {sig.logotyp_url ? (
@@ -135,7 +165,7 @@ export function MejlSvans({ signatur, svans }: Readonly<{ signatur: Signatur | n
           ) : (
             <span className="block h-3" aria-hidden />
           )}
-          {sig.ort ? <p>{sig.ort}</p> : null}
+          {sig.ort ? <p className="font-bold">{sig.ort}</p> : null}
           {sig.webb && webbHref ? (
             <p>
               <a href={webbHref} target="_blank" rel="noreferrer" className="underline underline-offset-2">
@@ -169,8 +199,7 @@ export function delaMejl(body: string, signatur: Signatur | null): [string, stri
   const sigIndex = signatur?.text ? body.indexOf(signatur.text) : -1;
   if (sigIndex >= 0) start.push(sigIndex);
   else {
-    const pg = persongrupp(signatur);
-    const pgIndex = pg ? body.indexOf(pg) : -1;
+    const pgIndex = foraldratStart(body, signatur);
     if (pgIndex >= 0) start.push(pgIndex);
   }
   const fotIndex = body.indexOf("\n--\n");

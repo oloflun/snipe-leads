@@ -111,9 +111,8 @@ def jev_lage() -> str:
 def _jev_nyckel() -> bool:
     """Inkorgen styrs av INKORG_JEV ensam, inte av IRIS_JEV: en kund kan vilja
     ha Jev i inkorgen utan Jev i Iris och tvärtom. Nyckeln är det enda delade."""
-    from ..config import get_settings
-
-    return bool(get_settings().typesafe_api_key)
+    # Sedan 2026-11-22 svarar Gemini på Vertex i EU som standard (jev.motor).
+    return jev.redo()
 
 
 async def klassa(

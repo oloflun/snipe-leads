@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useDashboard } from "@/components/dashboard/DashboardContext";
 import { CrmKundlista } from "@/components/leads/CrmKundlista";
 import { IrisGranskning } from "@/components/leads/IrisGranskning";
+import { KonversationsRuta } from "@/components/leads/Konversationer";
 import {
   KORNINGSSTATUS,
   korningsTyp,
@@ -217,7 +218,8 @@ export function LeadsOversikt({
   valdId = null,
   exempel = INGA_EXEMPEL,
   onValjLead,
-  onOppnaKorningar
+  onOppnaKorningar,
+  onOppnaKonversation
 }: Readonly<{
   demo?: boolean;
   crmOppen?: boolean;
@@ -225,6 +227,7 @@ export function LeadsOversikt({
   exempel?: SuiteProspekt[];
   onValjLead?: (id: string) => void;
   onOppnaKorningar?: (jobId: string | null) => void;
+  onOppnaKonversation?: (threadId: string | null) => void;
 }>) {
   const { addons, isDemo, vy, isPlatformAdmin, impersonation } = useDashboard();
   const { text, locale } = useLocale();
@@ -286,6 +289,8 @@ export function LeadsOversikt({
     // flex-kolumn, inte grid: ett grid-items min-width:auto lät tabellernas
     // minsta bredd växa hela sidan i sidled (uppmätt 1318 px vid 1280).
     <div className="flex min-w-0 flex-col gap-6">
+      {/* Konversationerna först (Anton 2026-11-22): det kunderna köper. */}
+      {arDemo || !onOppnaKonversation ? null : <KonversationsRuta onOppna={onOppnaKonversation} />}
       <Nyckeltal poster={nyckeltal} />
 
       <div className={cn("grid min-w-0 items-start gap-4", !arDemo && "lg:grid-cols-2")}>

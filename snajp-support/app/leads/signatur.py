@@ -33,7 +33,10 @@ import re
 from typing import Any
 
 #: Fälten i settings["signatur"], i den ordning textblocket renderar dem.
-_TEXTFALT = ("namn", "titel", "telefon", "epost")
+#: `verksamhet` (2026-11-23) är raden under titeln, "Snajp | AI för leads och
+#: kundtjänst", så att blocket kan stå som i avsändarens egen Gmail-signatur:
+#: namn, titel, verksamhet, telefon, e-post.
+_TEXTFALT = ("namn", "titel", "verksamhet", "telefon", "epost")
 _PLATSFALT = ("ort", "webb")
 
 #: Samma mönster som `leads_agent._DANGLING_SIGN_OFF`. Duplicerat med flit —
@@ -80,6 +83,34 @@ def _persongrupp(sig: dict[str, str]) -> str:
     """Signaturens första grupp (namn, titel, telefon, e-post): det som känner
     igen en föråldrad signatur vars plats- eller bolagsrad ändrats."""
     return "\n".join(sig[f] for f in _TEXTFALT if sig.get(f))
+
+
+def _foraldrat_start(text: str, sig: dict[str, str]) -> int:
+    """Var ett FÖRÅLDRAT signaturblock börjar i texten, eller -1.
+
+    Först persongruppen ordagrant (samma person, annan plats- eller
+    bolagsrad). Sedan namnraden: när titeln, verksamhetsraden eller adressen
+    bytts (2026-11-23: "Snajp Support | AI för leads och kundtjänst" blev
+    "Grundare & VD") stämmer persongruppen inte längre, och blocket lämnades
+    då som rå text medan `med_signatur` la en andra signatur efter det. En
+    rad som är exakt avsändarens namn, följd av två till tolv korta rader fram
+    till foten eller textens slut, är ett signaturblock och ingen brödtext."""
+    pg = _persongrupp(sig)
+    if pg and (i := text.find(pg)) >= 0:
+        return i
+    namn = sig.get("namn") or ""
+    if not namn:
+        return -1
+    fot = text.find(_FOTSTART)
+    slut = fot if fot >= 0 else len(text)
+    traffar = list(re.finditer(rf"(?:^|\n){re.escape(namn)}[ \t]*(?=\n|$)", text[:slut]))
+    if not traffar:
+        return -1
+    start = traffar[-1].start() + (1 if text[traffar[-1].start()] == "\n" else 0)
+    rader = [r for r in text[start:slut].split("\n") if r.strip()]
+    if 2 <= len(rader) <= 12 and all(len(r) <= 90 for r in rader):
+        return start
+    return -1
 
 
 def bygg_signaturtext(sig: dict[str, str]) -> str:
@@ -183,10 +214,10 @@ def dela_utkast(body: str, sig: dict[str, str] | None) -> tuple[str, str]:
     sigtext = bygg_signaturtext(sig) if sig else ""
     if sigtext and (i := text.find(sigtext)) >= 0:
         kandidater.append(i)
-    elif sig and (pg := _persongrupp(sig)) and (i := text.find(pg)) >= 0:
-        # En föråldrad signatur (samma person, annan bolagsrad eller ort):
-        # hör till svansen, så att sla_ihop kan byta den (Anton 2026-10-12:
-        # "Snajp AB" → "Snajp Sverige" i 77 köade utkast).
+    elif sig and (i := _foraldrat_start(text, sig)) >= 0:
+        # En föråldrad signatur (samma person, annan bolagsrad, ort eller
+        # titel): hör till svansen, så att sla_ihop kan byta den (Anton
+        # 2026-10-12: "Snajp AB" → "Snajp Sverige" i 77 köade utkast).
         kandidater.append(i)
     if (i := text.find(_FOTSTART)) >= 0:
         kandidater.append(i + 1)
@@ -208,8 +239,7 @@ def sla_ihop(
         return brodtext
     sigtext = bygg_signaturtext(sig) if sig else ""
     if sig and sigtext and not svans.startswith(sigtext):
-        pg = _persongrupp(sig)
-        if pg and svans.startswith(pg):
+        if _foraldrat_start(svans, sig) == 0:
             # Föråldrad signatur: byt ut den mot den aktuella, fram till foten.
             j = svans.find(_FOTSTART)
             svans = sigtext + (svans[j:] if j >= 0 else "")
@@ -265,6 +295,31 @@ def _radbryt_till_html(text: str) -> str:
     )
 
 
+_FOTLANK = re.compile(r"^(?P<fore>.*?)(?::\s*)?(?P<url>https?://\S+)\s*$")
+
+
+def _fot_html(fot: str) -> str:
+    """Den lagstadgade foten i HTML-delen: finstilt och grå, med länktext i
+    stället för rå adress (Anton 2026-11-23: GDPR-blocket var lika långt som
+    mejlet). Samma ord som textdelen; bara adresserna blir länkar, "…: URL"
+    blir en länk på raden själv. Textdelen bär alltid hela adressen."""
+    rader: list[str] = []
+    for rad in fot.strip("\n").split("\n"):
+        m = _FOTLANK.match(rad)
+        if m and m.group("fore").strip() and m.group("fore").strip() != "--":
+            url = _html.escape(m.group("url"), quote=True)
+            rader.append(f'<a href="{url}" style="color:#8a8a8a;">{_html.escape(m.group("fore").strip())}</a>')
+        elif rad.strip() == "--":
+            continue
+        else:
+            rader.append(_html.escape(rad))
+    inre = "<br>".join(r for r in rader if r.strip())
+    return (
+        '<div style="margin-top:2em;color:#8a8a8a;font-size:11px;line-height:1.5;'
+        f'font-family:Arial,Helvetica,sans-serif;">{inre}</div>'
+    )
+
+
 def _logotyp_img(sig: dict[str, str]) -> str:
     return (
         f'<img src="{_html.escape(sig["logotyp_url"], quote=True)}" alt="{_html.escape(sig.get("bolag") or sig["namn"])}"'
@@ -283,16 +338,28 @@ def _signatur_html(sig: dict[str, str]) -> str:
     en enkel div-struktur: mejlklienter stödjer varken <style>-block eller
     externa ark."""
     rad = '<div style="margin:0;">{}</div>'
+    fet = '<div style="margin:0;font-weight:bold;">{}</div>'
+    lank = 'style="color:#1a1a1a;"'
     delar: list[str] = []
-    person = [rad.format(_html.escape(sig[f])) for f in _TEXTFALT if sig.get(f)]
+    person: list[str] = []
+    for falt in _TEXTFALT:
+        if not sig.get(falt):
+            continue
+        varde = _html.escape(sig[falt])
+        if falt in ("namn", "titel"):
+            # Namn och titel i fetstil, som i avsändarens egen signatur.
+            person.append(fet.format(varde))
+        elif falt == "epost" and "@" in sig[falt]:
+            person.append(rad.format(f'<a href="mailto:{_html.escape(sig[falt], quote=True)}" {lank}>{varde}</a>'))
+        else:
+            person.append(rad.format(varde))
     if person:
-        person[0] = f'<div style="margin:0;font-weight:bold;">{_html.escape(sig["namn"])}</div>'
         delar.append("".join(person))
     if sig.get("logotyp_url"):
         delar.append(_logotyp_img(sig))
     plats: list[str] = []
     if sig.get("ort"):
-        plats.append(rad.format(_html.escape(sig["ort"])))
+        plats.append(fet.format(_html.escape(sig["ort"])))
     if sig.get("webb"):
         webb = _html.escape(sig["webb"])
         href = sig["webb"] if sig["webb"].startswith("http") else f"https://{sig['webb']}"
@@ -327,9 +394,9 @@ def bygg_html(brodtext: str, sig: dict[str, str]) -> str:
     text = bygg_signaturtext(sig)
     index = brodtext.find(text) if text else -1
     slut = index + len(text) if index >= 0 else -1
-    if index < 0 and (pg := _persongrupp(sig)) and (i := brodtext.find(pg)) >= 0:
-        # Föråldrat block: från persongruppen fram till foten (eller texten
-        # slut) ERSÄTTS av den aktuella signaturen i HTML-delen.
+    if index < 0 and (i := _foraldrat_start(brodtext, sig)) >= 0:
+        # Föråldrat block: från persongruppen (eller namnraden) fram till
+        # foten (eller textens slut) ERSÄTTS av den aktuella signaturen.
         index = i
         j = brodtext.find(_FOTSTART, i)
         slut = j if j >= 0 else len(brodtext)
@@ -343,11 +410,7 @@ def bygg_html(brodtext: str, sig: dict[str, str]) -> str:
         efter = "" if fotstart < 0 else brodtext[fotstart + 1 :]
         kropp = _radbryt_till_html(fore.rstrip()) + _logotyp_html(sig)
         if efter.strip():
-            kropp += (
-                '<div style="margin-top:1.5em;color:#6b6b6b;font-size:12px;">'
-                + _radbryt_till_html(efter.strip("\n"))
-                + "</div>"
-            )
+            kropp += _fot_html(efter)
     elif index < 0:
         kropp = _radbryt_till_html(brodtext)
     else:
@@ -355,11 +418,7 @@ def bygg_html(brodtext: str, sig: dict[str, str]) -> str:
         efter = brodtext[slut:].strip("\n")
         kropp = _radbryt_till_html(fore) + _signatur_html(sig)
         if efter.strip():
-            kropp += (
-                '<div style="margin-top:1.5em;color:#6b6b6b;font-size:12px;">'
-                + _radbryt_till_html(efter)
-                + "</div>"
-            )
+            kropp += _fot_html(efter)
     return (
         '<!doctype html><html><body style="margin:0;padding:0;background:#ffffff;">'
         '<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;'

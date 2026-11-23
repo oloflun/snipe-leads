@@ -32,6 +32,8 @@ async def ingest_email(
         is_test=is_test or inbound.provider == "mock",
         automatutskick=inbound.automatutskick,
         mailbox_id=inbound.mailbox_id,
+        last_i_brevladan=inbound.last_i_brevladan,
+        besvarat_i_brevladan=inbound.besvarat_i_brevladan,
     )
     if email is None:
         logger.info("Dublett hoppad: %s", inbound.provider_message_id)
@@ -57,6 +59,8 @@ async def ingest_email(
             "from": inbound.from_email,
             "subject": inbound.subject,
             "attachments": len(inbound.attachments),
+            **({"last_i_brevladan": True} if inbound.last_i_brevladan else {}),
+            **({"besvarat_i_brevladan": True} if inbound.besvarat_i_brevladan else {}),
         },
     )
     return email

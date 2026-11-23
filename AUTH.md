@@ -77,7 +77,10 @@ Valfri. En plattformsadmin slår på den under Inställningar › Plattformen �
 Tvåstegsverifiering (`/admin/installningar/tvafaktor`,
 `components/settings/Tvafaktor.tsx`, `lib/actions/tvafaktor.ts`).
 
-- **Inrullning:** en ny hemlighet (160 bitar, base32) visas som QR-kod
+- **Inrullning:** kräver lösenordet på nytt, under inloggningens spärr mot
+  gissning: en session ensam räcker inte för att lägga till en faktor (Codex
+  runda 15). Den påbörjade inrullningen gäller i femton minuter (migration 148).
+  En ny hemlighet (160 bitar, base32) visas som QR-kod
   (`otpauth://`, SHA-1, sex siffror, 30 sekunder) och som manuell nyckel. En kod
   ur appen bekräftar; först då är tvåfaktorn på. Samtidigt skapas tio
   engångskoder för återställning (`ABCDE-FGHJK`), som visas en gång och lagras

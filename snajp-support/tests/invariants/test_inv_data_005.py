@@ -159,6 +159,52 @@ def test_begransad_behandling_undantas():
         assert villkor in sql, f"{senaste.name}: undantaget saknas: {villkor}"
     # Loggtabellerna utan adresskolumn prövas på löptexten.
     assert sql.count("gallring_namner_begransad(") >= 8
+    # 145 (Codex runda 13): feedbacken följer sin körnings skydd.
+    assert re.search(r"from public\.agent_feedback\s.*?where r\.id = agent_feedback\.run_id",
+                     sql, re.DOTALL), f"{senaste.name}: feedbacken prövas inte mot sin körning"
+
+
+def test_spegeln_vantar_pa_begransningarna():
+    """Migration 147 (Codex runda 15): spegelns gallring prövar begränsningarna
+    mot spegelns egen tabell. gdpr_radera.py skriver samma rad i båda
+    miljöerna, synken för över alla rader och stämplar, och den senaste
+    gallra_tenant kör inte skarpt i en spegel utan en stämpel från de senaste
+    två timmarna."""
+    senaste = [f for f in _gallringsmigrationer()
+               if "function public.gallra_tenant" in f.read_text(encoding="utf-8")][-1]
+    sql = _utan_kommentarer(senaste.read_text(encoding="utf-8"))
+    sparr = sql.find("if v_spegel and not p_torrkorning then")
+    assert sparr >= 0, f"{senaste.name}: spegeln prövar inte begränsningssynken"
+    assert "(to_jsonb(m) ->> 'begransningar_synkade_at')::timestamptz" in sql[sparr:sparr + 400]
+    assert sparr < sql.index("for v_varv in 1..2 loop"), "spärren prövas efter urvalet"
+
+    skript = ROOT / "scripts"
+    synk = (skript / "railway_synk.py").read_text(encoding="utf-8")
+    assert synk.index("fel += skriv_begransningar(dc, begransningar)") < synk.index(
+        "dc.execute(\"update public.mirror_meta set lage = 'envags', synkad_at = now()\")")
+    gdpr = (skript / "gdpr_radera.py").read_text(encoding="utf-8")
+    assert "return _spegla_till_development(rad, args.epost)" in gdpr
+    assert "synkas inte till development-spegeln" not in gdpr
+
+
+def test_taket_raknar_kaskaden():
+    """Migration 146 (Codex runda 14): taket skyddar mot ett felaktigt
+    policyvärde och måste räkna allt som försvinner, även barnen som ON DELETE
+    CASCADE tar. Den senaste gallra_tenant räknar kaskaden före takprövningen i
+    första varvet och igen efter låsen."""
+    senaste = [f for f in _gallringsmigrationer()
+               if "function public.gallra_tenant" in f.read_text(encoding="utf-8")][-1]
+    sql = _utan_kommentarer(senaste.read_text(encoding="utf-8"))
+    anrop = ("v_kaskad := public.gallring_kaskad(v_mejl, v_arenden, v_minne, v_kunder, "
+             "v_prospekt, v_genererade);")
+    assert sql.count(anrop) == 2, f"{senaste.name}: kaskaden räknas inte i båda varven"
+    forsta = sql.index(anrop)
+    assert forsta < sql.index("exit when p_torrkorning or (p_tak is not null and v_totalt > p_tak);"), (
+        "kaskaden räknas efter takprövningen i första varvet")
+    andra = sql.index(anrop, forsta + 1)
+    assert andra < sql.index("v_status := 'tak_nadd';"), "kaskaden räknas efter slutprövningen"
+    assert sql.count("v_totalt := v_totalt + (select coalesce(sum(value::bigint), 0) "
+                     "from jsonb_each_text(v_kaskad));") == 2
 
 
 def test_jobbet_ar_av_som_standard():

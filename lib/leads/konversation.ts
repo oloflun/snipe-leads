@@ -17,6 +17,10 @@ export type KonversationsMejl = {
  *  avdelaren "-----Ursprungligt meddelande-----" och ">"-citat. */
 const CITATSTART = [
   /^(?:Den|On)\s[^\n]*(?:\n[^\n]*)?\b(?:skrev|wrote)\b[^\n]*:[ \t]*$/m,
+  // Gmail i mobilen och Apple Mail: "18 nov. 2026 kl. 12:56 skrev Namn <a@b.se>:"
+  // (inget "Den" först). Kräver en siffra före "skrev", så att en vanlig rad
+  // som slutar med kolon inte klipps (Leads › Konversationer 2026-11-22).
+  /^[^\n]*\d[^\n]*\b(?:skrev|wrote)\b[^\n]*:[ \t]*$/m,
   /^-{2,}\s*(?:Ursprungligt meddelande|Original Message|Vidarebefordrat meddelande|Forwarded message)\s*-{2,}/im,
   /^(?:Från|From):[^\n]*\n(?:Skickat|Sent|Datum|Date):/m,
   /^>/m

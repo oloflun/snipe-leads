@@ -280,6 +280,33 @@ async def test_aktiveringen_galler_bara_den_verifierade_hemligheten():
 
 
 @pytest.mark.anyio
+async def test_en_gammal_paborjad_inrullning_kan_inte_aktiveras():
+    """Migration 148 (Codex runda 15, 2026-11-20): webben kräver lösenordet
+    innan en inrullning påbörjas, och den påbörjade raden gäller i femton
+    minuter. En äldre rad aktiveras inte, inte ens med rätt hemlighet och kod;
+    en ny påbörjan (med lösenordet igen) öppnar fönstret på nytt."""
+    agare, web = await _anslut(DSN), await _anslut(WEB_DSN)
+    konton = []
+    try:
+        uid = await _konto(agare, admin=True)
+        konton.append(uid)
+        akt = "select public.tvafaktor_aktivera($1::bigint, $2::text[], $3::text)"
+        assert await _som(web, uid, "select public.tvafaktor_paborja($1)", BLOB) is True
+        await agare.execute(
+            "update public.tvafaktor set uppdaterad_at = now() - interval '16 minutes' where user_id = $1",
+            uuid.UUID(uid))
+        assert await _som(web, uid, akt, 1000, HASHAR, BLOB) is False
+        assert (await _las(web, uid))["aktiv"] is False
+
+        assert await _som(web, uid, "select public.tvafaktor_paborja($1)", BLOB) is True
+        assert await _som(web, uid, akt, 1000, HASHAR, BLOB) is True
+        assert (await _las(web, uid))["aktiv"] is True
+    finally:
+        await _stada(agare, konton)
+        await agare.close()
+        await web.close()
+
+@pytest.mark.anyio
 async def test_konto_utan_losenord_kan_inte_aktivera():
     """Migration 140 (Codex runda 8, 2026-11-19): ett konto från Google eller
     Microsoft saknar lösenord. Efter aktiveringen hade OAuth nekats och

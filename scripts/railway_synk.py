@@ -92,6 +92,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import psycopg2  # noqa: E402
 import psycopg2.extras  # noqa: E402
 
+import begransning_spegel  # noqa: E402
 from railway_migrate import dsn  # noqa: E402
 from railway_provision import env_read  # noqa: E402
 
@@ -140,6 +141,8 @@ SYNK: dict[str, str] = {
     "lead_samtal": f"x.prospect_id in ({_TEST_PROSPEKT})",
     "lead_anteckningar": f"x.prospect_id in ({_TEST_PROSPEKT})",
     "lead_uppgifter": f"x.prospect_id in ({_TEST_PROSPEKT})",
+    # Konversationernas händelser och notiser (migration 149).
+    "lead_handelser": f"x.prospect_id in ({_TEST_PROSPEKT})",
     "suppressions": "false",
     "leads_job_ledger": "x.is_test",
     "agent_runs": "x.is_test",
@@ -606,6 +609,38 @@ def skriv_utfall(dev, utfall: str, antal: dict | None = None) -> None:
             pass
 
 
+def las_begransningar(mc) -> list[dict] | None:
+    """Alla rader i main:s behandlingsbegransningar (art. 18), eller None om
+    tabellen inte går att läsa (migration 124 eller läsrättigheten i 147 inte
+    körd i main). Läses i en savepoint: ett fel här fäller inte synken, men
+    spegeln får då ingen ny stämpel och dess gallring står still."""
+    mc.execute("savepoint begransningar")
+    try:
+        mc.execute(begransning_spegel.LAS_SQL)
+        rader_ = [r[0] for r in mc.fetchall()]
+    except psycopg2.Error:
+        mc.execute("rollback to savepoint begransningar")
+        return None
+    mc.execute("release savepoint begransningar")
+    return rader_
+
+
+def skriv_begransningar(dc, rader_: list[dict] | None) -> list[str]:
+    """För över main:s begränsningar till development och stämpla, i synkens
+    transaktion (Codex runda 15). Utan läsbara rader ingen stämpel: då står
+    spegelns gallring still (migration 147) i stället för att gallra bort det
+    en begränsning i main skyddar. En krock (en annan aktiv rad för adressen
+    finns redan i spegeln) är inget fel: den raden skyddar adressen lika mycket."""
+    if rader_ is None:
+        print("VARNING: behandlingsbegransningar gick inte att läsa i main; spegelns gallring väntar.")
+        return []
+    krockar = sum(1 for r in rader_ if begransning_spegel.spegla_rad(dc, r) == "krock")
+    begransning_spegel.stampla(dc)
+    print(f"skrivet: behandlingsbegransningar ({len(rader_)} rader, {krockar} redan skyddade "
+          "av en egen aktiv rad i development)", flush=True)
+    return []
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--apply", action="store_true")
@@ -706,6 +741,10 @@ def synka(args, dev, mn, dc, mc) -> int:
             print(f"{t:26} {len(plan['till_main']):>7} {len(plan['till_dev']):>7} "
                   f"{len(plan['radera_main']):>9} {len(plan['radera_dev']):>8}")
 
+    begransningar = las_begransningar(mc)
+    print(f"behandlingsbegransningar: {'kan inte läsas i main' if begransningar is None else len(begransningar)}"
+          " rader från main (förs över utan provfilter, se begransning_spegel.py)")
+
     if not args.apply:
         print("\nTorrkörning: inget skrivet. Kör med --apply (första gången --apply --forsta).")
         return 0
@@ -738,6 +777,7 @@ def synka(args, dev, mn, dc, mc) -> int:
             print(f"godkand_i → main på {c.rowcount} köade utkast i {'development' if c is dc else 'main'}")
     for c in replikamal(dc, mc, forsta=forsta):
         c.execute("set session_replication_role = origin")
+    fel += skriv_begransningar(dc, begransningar)
     dc.execute("update public.mirror_meta set lage = 'envags', synkad_at = now()")
     mn.commit()
     dev.commit()

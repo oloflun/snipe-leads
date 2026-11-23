@@ -13,6 +13,7 @@ import { useDashboard } from "@/components/dashboard/DashboardContext";
 import { AgentMenu } from "@/components/snajp/AgentMenu";
 import { signOut } from "@/lib/actions/auth";
 import { useLocale } from "@/lib/i18n";
+import { useNotisantal } from "@/lib/leads/konversationer";
 import { arVilande, routesForProducts, tillAdminvag } from "@/lib/routes";
 import { cn } from "@/lib/utils";
 
@@ -119,6 +120,7 @@ export function AdminShell({
   const pathname = usePathname();
   const { t, text, locale, toggleLocale } = useLocale();
   const { products, workspaceName, availableScopes, setScope } = useDashboard();
+  const leadsNotiser = useNotisantal(products.includes("leads"));
 
   // Samma entitlement- och scope-filter som kundens nav. Adminytan är en
   // superset av arbetsytan, inte en genväg förbi dess regler.
@@ -172,6 +174,10 @@ export function AdminShell({
       Icon: RUTT_IKONER[flik.origHref] ?? LayoutDashboard,
       active: aktiv === flik.href,
       onClick: () => aterstallLage(availableScopes, setScope),
+      // Olästa notiser i Leads (migration 149), för den kund admin står i.
+      ...(flik.origHref === "/dashboard/leads"
+        ? { antal: leadsNotiser, antalEtikett: text({ sv: `${leadsNotiser} olästa`, en: `${leadsNotiser} unread` }) }
+        : {}),
       // Vilande agent (Kvitton sedan 2026-10-17): mörklagd som i kundens
       // meny, men admin kan öppna den (Sebbe 2026-10-18).
       vilande: flik.vilande,

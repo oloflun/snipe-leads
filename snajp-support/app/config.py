@@ -453,6 +453,12 @@ class Settings(BaseSettings):
     # kundmejl är kunddata, IRIS_JEV gäller publika bolagsuppgifter.
     inkorg_jev: str = "off"
     typesafe_api_key: str = ""
+    # Vem som svarar på Jevs frågor (2026-11-22, Antons beställning):
+    # "gemini" = Flash-Lite på Vertex i EU (app/leads/jev_gemini.py), samma
+    # biträde som resten av Snajp; "typesafe" = jev-1.13.0, som inte är
+    # godkänt underbiträde (BESLUT 2026-11-17). JEV_MODELL tom = MODEL.
+    jev_motor: str = "gemini"
+    jev_modell: str = ""
     # Leads-budgeten (INV-JOB-002-arbetet, app/leads/budget.py): max summa
     # tokens_in+tokens_out per tenant och rullande 24 timmar över leads-
     # agenttyperna. Vid taket svarar körningsstarterna 429 i stället för att
@@ -528,6 +534,11 @@ class Settings(BaseSettings):
     imap_user: str = ""
     imap_password: str = ""  # Gmail: app-lösenord; Outlook: app-lösenord/IMAP-auth
     imap_folder: str = "INBOX"
+    # En brevlåda utan UID-märke (första synken efter migration 150, eller när
+    # servern bytt UIDVALIDITY) hämtar olästa plus allt från så här många dagar
+    # bakåt. Redan sparade mejl faller som dubletter; de som en människa öppnat
+    # utan att Snajp fått dem kommer in märkta och utan utkast. 0 = bara olästa.
+    imap_tillbakablick_dagar: int = 7
     # XOAUTH2 är förstahandsvalet för Gmail. Refresh-token ger nya kortlivade
     # access-tokens; inga access-tokens sparas i env eller databas.
     imap_oauth_client_id: str = ""

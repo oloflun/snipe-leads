@@ -229,6 +229,15 @@ class Storage(Protocol):
         slutsatsen att pollern var död, fast den hade hämtat mail)."""
         ...
 
+    async def satt_imap_marke(
+        self, tenant_id: str, mailbox_id: str, *, last_uid: int, uidvalidity: int | None
+    ) -> None:
+        """Brevlådans märke (migration 150): högsta UID som står i databasen
+        och mappens UIDVALIDITY när det sattes. Nästa synk hämtar allt med
+        högre UID, läst eller inte. Märket sätts bara förbi mejl som faktiskt
+        sparats (eller var dubletter), aldrig förbi ett som inte gick in."""
+        ...
+
     # -- Kunddata (alltid tenant-skopade) -----------------------------------
 
     async def find_or_create_customer(
@@ -777,6 +786,76 @@ class Storage(Protocol):
     ) -> int:
         """Skjuter trådens köade poster till `until` (autosvar/semester).
         Returnerar antalet flyttade."""
+        ...
+
+    # -- Iris-konversationer (migration 149) --------------------------------
+
+    async def logga_handelse(
+        self,
+        tenant_id: str,
+        *,
+        prospect_id: str,
+        thread_id: str | None,
+        typ: str,
+        kalla: str = "kod",
+        detalj: dict[str, Any] | None = None,
+        notis: bool = False,
+        last: bool = False,
+    ) -> dict[str, Any]:
+        """En rad i konversationens händelselogg (lead_handelser). `notis`
+        gör den till en notis i Snajp; `last` markerar den som läst direkt
+        (en människas egen åtgärd är ingen nyhet för henne)."""
+        ...
+
+    async def list_handelser(self, tenant_id: str, *, thread_id: str) -> list[dict[str, Any]]:
+        """Trådens händelser, äldst först."""
+        ...
+
+    async def list_notiser(self, tenant_id: str, *, limit: int = 30) -> list[dict[str, Any]]:
+        """Notiserna, nyast först, med bolagets namn (company_name)."""
+        ...
+
+    async def antal_olasta_notiser(self, tenant_id: str) -> int: ...
+
+    async def markera_notiser_lasta(
+        self, tenant_id: str, *, ids: list[str] | None = None, thread_id: str | None = None
+    ) -> int:
+        """Markerar olästa notiser som lästa: de angivna, trådens, eller alla
+        (inget av dem angivet). Returnerar antalet."""
+        ...
+
+    async def konversationstradar(self, tenant_id: str) -> list[dict[str, Any]]:
+        """En rad per konversation: en tråd med ett inkommet svar, ett
+        stegbyte eller ett mejl utanför Snajp, eller vars lead har ett möte.
+        Arkiverade leads och exempelbolag står utanför. Per rad: trådens och
+        prospektets fält (thread_id, prospect_id, svarsklass, steg, aterkom_datum,
+        last_inbound_at, company_name, contact_name, contact_email, status),
+        senaste svaret (svar_id, svar_body, svar_at), det väntande utkastet
+        (utkast_id, utkast_subject, utkast_body, utkast_at), senast_skickat_at,
+        antal_meddelanden, olasta (olästa notiser) och senaste_handelse_at."""
+        ...
+
+    async def satt_trad_steg(self, tenant_id: str, thread_id: str, *, steg: str | None, aterkom_datum: Any) -> None:
+        """Det steg en människa valt (outreach_threads.steg) och återkomdatumet
+        (None tar bort det)."""
+        ...
+
+    async def nolla_trad_steg(self, tenant_id: str, thread_id: str) -> None:
+        """Ett nytt svar: det manuella steget gäller inte längre (datumet står kvar)."""
+        ...
+
+    async def aterkom_datum(self, tenant_id: str) -> dict[str, Any]:
+        """prospect_id → återkomdatum, för trådar som har ett."""
+        ...
+
+    async def aterstall_utkast(self, tenant_id: str, thread_id: str, message_id: str) -> bool:
+        """Tar tillbaka ett kasserat, osänt utkast. False om det inte finns,
+        redan är skickat eller inte är kasserat."""
+        ...
+
+    async def ny_granskningspost(self, tenant_id: str, thread_id: str, *, scheduled_at: Any) -> dict[str, Any]:
+        """En köpost som väntar på granskning, för ett utkast som saknar en
+        aktiv post (det återställda, eller ett vars post ställts in)."""
         ...
 
     # -- Leads: underlaget send_guard dömer på (DEL 2.3) --------------------
@@ -1567,8 +1646,14 @@ class Storage(Protocol):
         is_test: bool = False,
         automatutskick: bool = False,
         mailbox_id: str | None = None,
+        last_i_brevladan: bool = False,
+        besvarat_i_brevladan: bool = False,
     ) -> dict[str, Any] | None:
-        """Sparar ett inkommande mail. Returnerar None vid dublett (dedupe)."""
+        """Sparar ett inkommande mail. Returnerar None vid dublett (dedupe).
+        `last_i_brevladan` (migration 150): mejlet var läst på servern när det
+        hämtades, så en människa har öppnat det; det kvalificeras som vanligt
+        men skickas aldrig av sig självt. `besvarat_i_brevladan`: det var
+        dessutom besvarat från brevlådan, och då skrivs inget AI-utkast."""
         ...
 
     async def delete_emails_by_provider(self, tenant_id: str, provider: str) -> int:

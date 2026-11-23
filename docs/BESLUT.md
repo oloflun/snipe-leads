@@ -9,6 +9,377 @@ möjligt), vad det betyder i koden.
 
 ---
 
+## 2026-11-23 — Inkorgen hämtar också mejl som redan är öppnade; öppnat men obesvarat får utkast ändå, bara redan besvarat lämnas (Anton)
+
+**Beslut.**
+1. Hämtningen går på UID i stället för på olästa: varje brevlåda bär ett märke (högsta
+   UID som står i databasen), och nästa synk hämtar allt över märket, läst eller inte.
+   En brevlåda utan märke börjar med olästa plus de senaste sju dagarnas mejl
+   (`IMAP_TILLBAKABLICK_DAGAR`); det som redan finns faller som dubletter.
+2. Varje öppnat mejl kvalificeras. Vad som sedan händer beror på om det är besvarat:
+
+   | Mejlet i brevlådan | Leads (Iris) | Kundtjänst |
+   |---|---|---|
+   | Oöppnat | Som förut | Som förut |
+   | Öppnat, obesvarat (`last_i_brevladan`) | Klassas och får svarsutkast som vanligt. Notisen säger "Obesvarat i brevlådan: utkast klart". | Triage och utkast som vanligt, märkt "Öppnat, obesvarat". Aldrig autosvar: utkastet väntar på ett ja. |
+   | Redan besvarat (`besvarat_i_brevladan`) | Sparas i konversationen och klassas, så att steget, kön, återkontakten och en avregistrering gäller. Inget utkast; händelseloggen säger varför. | Att hantera, märkt "Besvarat i brevlådan" och avbockat. Ingen triage, inget utkast. |
+
+3. Klassningen går före: ett nyhetsbrev som någon öppnat göms som förut.
+
+**Resonemanget.** Anton, om mejl till alias som landar i samma Gmail-brevlåda: "de
+kanske inte når fram till supportinkorgen/Iris ändå?" Det stämde: sökningen på olästa
+tappade varje mejl som någon hann öppna före synken, utan spår. Anton: "Bygg om
+hämtningen, men se till att supporten ser de vi öppnat och därmed inte skriver utkast
+på dem utan sorterar till manuell hantering." Den första versionen (samma dag, aldrig
+släppt) lät därför bli utkast på varje öppnat mejl. Anton förtydligade: "I en
+fortlöpande konversation som skötts av Iris eller som är tänkt att skötas av Iris, får
+inte konversationen avbrytas eller tappas för att man råkar öppna mailet, alla öppnade
+mail behöver kvalificeras och finns det inget svar så bör ett utkast ändå skrivas och
+notifiera användaren, ifall det tex glömts bort." Gränsen går alltså vid om någon har
+svarat, inte vid om någon har tittat: ett utkast ovanpå ett svar som redan gått ger
+dubbla svar, medan ett öppnat mejl utan svar är just det som glöms. Autosvaret stängs
+för öppnade mejl eftersom den som öppnade det kan vara på väg att svara; ett utkast som
+väntar på ett ja kan inte krocka med det.
+
+**Kända gränser.** Besvarat läses ur brevlådans egen markering (`\Answered`) i det
+ögonblick Snajp hämtar mejlet. Svarar någon från brevlådan efter hämtningen ligger
+Snajps utkast kvar tills en människa kasserar det; så var det redan för oöppnade mejl.
+Ett Gmail-filter som markerar som läst räknas som öppnat. Mejl som ett filter arkiverar
+förbi inkorgen hämtas inte, som förut. Tillbakablicken vid första synken tar in upp till
+sju dagars öppnade mejl som Snajp aldrig fått, och de obesvarade bland dem får utkast.
+Ett mejl som raderats ur Snajp de senaste sju dagarna men ligger kvar i brevlådan kommer
+in igen vid den första synken.
+
+**I koden.** Migration 150 (`ss_mailboxes.imap_last_uid`, `imap_uidvalidity`,
+`ss_emails.last_i_brevladan`, `besvarat_i_brevladan`),
+`app/email_pipeline/connectors/imap.py` (`_fetch_sync`, `_flaggor`), `poller.py`
+(`_flytta_market`), `processor.py` (grenen efter klassningen, `auto_ok`,
+`_hantera_lead`), `app/leads/svar.py` (`oppnat`, `utan_utkast`),
+`components/snajp/Dashboard.tsx` och `lib/leads/konversationer.ts` (märkningen,
+`notisEtikett`). Test: `tests/test_inkorg_oppnade_mejl.py`.
+
+---
+
+## 2026-11-23 — Ett nej följs upp en gång efter sex månader, "återkom" efter två; bara en uttrycklig begäran spärrar (Anton)
+
+**Beslut.**
+
+| Svar | Steg | Återkontakt |
+|---|---|---|
+| "Inte aktuellt nu", "hör av er senare" | Återkom | Tiden de själva nämner, annars 2 månader |
+| "Nej tack", "inte intresserade" | Ej intresserad | En gång, efter 6 månader |
+| "Sluta mejla", "ta bort mig", avregistrering | Kontakta inte | Aldrig |
+
+Ett andra nej efter en återkontakt blir Kontakta inte. Återkontakten skrivs aldrig av
+sig själv: datumet lyfter konversationen till Att göra, och en människa väljer.
+Klassningen väljer avregistrering framför nej när den är osäker (förut tvärtom).
+
+**Resonemanget.** Anton: "Om en kund säger att de inte är intresserade sätter vi de
+in lista att kontakta längre fram när förutsättningarna kanske ändrats, kanske efter 4
+månader, ej aktuellt just nu/återkom i en annan lista som kontaktas snabbare, kanske
+efter 2 månader … så man inte sätter kontakta ej på andra som inte uttryckligen bett
+om det eller avregistrerat sig." Agentens förslag var sex månader i stället för fyra
+efter ett nej (ett nej hänger ofta på budgetår eller halvår, och fyra månader läses
+lätt som tjat), en enda återkontakt, och att osäkra svar ska spärras: en invändning
+mot direktmarknadsföring ska följas utan prövning (GDPR art. 21), så när ett nej
+börjar följas upp måste varje begäran om att slippa kontakt bli Kontakta inte.
+Anton: "Ja bygg den, 6 mån".
+
+**I koden.** `app/leads/konversation.py` (`aterkontakt_datum`, `ATERKONTAKT_STANDARD`;
+kundval under `aterkontakt` i leadsinställningarna), `app/leads/svar.py`
+(`_satt_aterkontakt`, `andra_nej`, klassningens uppgift),
+`components/leads/KonversationsTrad.tsx` (datumet och knappen för återkontakten).
+
+---
+
+## 2026-11-23 — Första mejlet bär signaturen med logotyp igen; GDPR-foten blir två meningar i finstil; ren avregistreringsadress (Anton)
+
+**Beslut.**
+1. Varje utskick bär HTML-delen med signaturen och logotypen, också trådens första
+   mejl. Ersätter punkten "Det första mejlet i en tråd går utan HTML och logotyp" i
+   beslutet 2026-10-24 (Sebbe). Volymtaket, upptrappningen och takten från samma
+   beslut och från 2026-11-16 står kvar.
+2. Foten till en personlig adress är två meningar och två länkrader i stället för
+   fyra stycken, och sätts finstilt med länktext i HTML-delen. Funktionsadresser
+   (info@, kontakt@) har som förut ingen GDPR-text.
+3. Signaturens rader följer avsändarens egen Gmail-signatur: namn och titel i
+   fetstil, en ny rad `verksamhet` under titeln, telefon, e-post, logga, ort, webb.
+   Snajps titel blir "Grundare & VD".
+4. Länkarna i mejlen bär `www.snajp.se` (`PUBLIC_BASE_URL` i main, bytt 2026-11-23).
+
+**Resonemanget.** Anton: "Hur mättes det? Jag har svårt att tro att html-signaturen
+med bilder gjorde att det hamnade i skräpposten, snarare gdpr-blocket." Det mättes
+inte: diagnosen 2026-10-24 säger själv att slutsatsen om inkorgen "är en slutsats,
+inte en mätning", databasen gick inte att läsa då, och placeringstestet med och utan
+logotyp som den föreslog är inte gjort. Dess huvudmisstanke var volymdubbleringen
+från huvuddomänen. Anton valde "Med bild, utan gdpr-block".
+
+GDPR-texten är inte borttagen helt, och det är agentens avvägning inom beställningen:
+art. 14 kräver att den som får ett kallt mejl till en personlig adress får veta vem
+som behandlar uppgiften, varför, varifrån den kom och att hen kan invända, och
+`send_guard` regel 4 spärrar ett utskick som saknar det. De fyra upplysningarna står
+kvar i två meningar; resten bär länken till integritetspolicyn. Vill Anton ta bort
+också de två meningarna är det ett juridiskt beslut som kräver att regel 4 ändras.
+
+Signaturens inställning får inte bytas i en miljö som kör äldre kod: den kände igen
+ett äldre block på namn, titel, telefon och e-post tillsammans, och ett titelbyte gav
+då två signaturer i de köade utkasten. `signatur._foraldrat_start` känner nu igen
+blocket på namnraden.
+
+**I koden.** `app/leads/scheduler.py` och `provmejl.py` (HTML-delen alltid),
+`app/leads/utskicksfot.py` (`bygg_fot`), `app/leads/signatur.py` (`verksamhet`,
+`_foraldrat_start`, `_signatur_html`, `_fot_html`), `scripts/publik_bas_url.py`,
+`scripts/satt_mejlsignatur.py` (Snajps nya rader; körs mot main efter releasen).
+
+---
+
+## 2026-11-23 — Jev frågas aldrig om webbkriterier (agenten, under Antons Jev-beslut)
+
+**Beslutet:** Jevs triage ställer inga frågor om kriterier med belägg
+`webbsignal`, och ett sådant svar kan aldrig fälla ett bolag. De kriterierna
+avgörs bara i kod ur webbrevisionen (`bedomning.webbutslag`).
+
+**Resonemanget:** Regel 9 säger redan att webbkriterier avgörs i kod och inte
+av en modells fria utslag. Jev frågade ändå om dem. Umeå Webdesigns profil i
+main har "Bolag med tråkiga och gamla hemsidor" och "Bolag som saknar hemsida
+och endast har en Facebook-profil" som två måste-krav, fast kunden skrev
+"eller". Koden läser båda som "vill ha dålig sajt" och klarar det. Jev läser
+varje krav bokstavligt och skulle fälla varje bolag som har en sajt, med
+belägg, så fort `IRIS_JEV=pa` sätts i main. I development är samma krav
+omkompilerade till bör-krav, och därför syntes felet inte där.
+
+**I koden:** `app/leads/jev.py:_fragor` och `_tolka`, testet
+`tests/leads/test_jev_gemini.py::test_webbkriterier_fragas_aldrig_till_jev`.
+
+---
+
+## 2026-11-23 — Jev svarar med Flash-Lite på Vertex i EU tills ett bättre alternativ finns (Anton)
+
+**Beslutet, Antons ord:** "Lägg och konfigurera Flash lite för
+klassificering utifrån de kriterier vi har efter din bästa möjliga förmåga,
+så får vi använda det tills vi har ett bättre alternativ." Han lade till att
+han velat ha mer påtryckning om de uteblivna klassningarna.
+
+**Läget före:**
+- `IRIS_JEV` var aldrig satt i main, så Jev-triagen och trafikpolisen har
+  aldrig kört för leads där. Varje kandidat gick till den dyra researchen, och
+  klassningen hög/mellan/låg saknades.
+- `INKORG_JEV` har varit av i båda miljöerna sedan 2026-11-17, så inkorgen
+  sorteras bara av kodreglerna.
+- Development hade `IRIS_JEV=pa` och skickade fortfarande publika bolagsdata
+  till TypeSafe.
+
+**I koden:**
+- `JEV_MOTOR` är `gemini` som standard. Då besvarar `app/leads/jev_gemini.py`
+  Jevs typade frågor med MODEL (Flash-Lite) på Vertex i EU, med samma in- och
+  utdata som TypeSafe. `jev.triage`, `jev.klassa` och inkorgens
+  `klassning.klassa` är oförändrade.
+- `typesafe` går bara att välja uttryckligen.
+- Kalibreringen: ytterlägena (≤ 0,08 och ≥ 0,92, de enda som fäller) kräver
+  ett citerat belägg ur texten. Annars kläms svaret i koden till 0,15–0,85,
+  så att en gissning aldrig fäller ett bolag.
+- Bara Vertex (servicekontot), aldrig AI Studio.
+
+**Live-prov (syntetiska bolag):** en kommun fälldes med belägg, en e-handel
+och ett bolag utan information gick vidare, ungefär 1 s per anrop efter det
+första. Klassningen efter researchen svarade försiktigt (0,5) på en tydlig
+e-handel. Den mäts mot kodens nivåer med `scripts/iris_jev_eval.py` efter
+de första körningarna.
+
+**Driften:**
+- Development byter motor vid nästa deploy, eftersom `IRIS_JEV=pa` redan är
+  satt.
+- Main får `IRIS_JEV=pa` först när koden nått main. Att sätta den före skulle
+  skicka bolagsdata till TypeSafe, eftersom mains kod bara känner den motorn.
+
+---
+
+## 2026-11-22 — Konversationerna och uppföljningarna får egna flikar i Leads; notiser i Snajp (Anton, byggt av Claude (agent))
+
+**Beslut.**
+1. Leads får fliken **Konversationer**, andra efter Översikt, och en ruta överst i
+   Översikt (nya svar, utkast som väntar, möten, återkom i dag). Konversationen visas
+   som en tråd med utkaststudio: ämne och text redigeras, Skicka, Spara, Skriv om
+   (med önskemål) och Kassera. En människa godkänner alltid.
+2. Fem steg: Svarat, Möte bokat, Återkom (datum), Ej intresserad, Kontakta inte.
+   Möte, Ej intresserad och Kontakta inte är prospektets status (meeting, lost,
+   suppressed), så att Skickat, samtalslistorna och mätningen räknar samma sak.
+   Svarat och Återkom skiljs av `outreach_threads.steg`/`aterkom_datum` (migration 149).
+3. Händelseloggen per tråd och notiserna är en tabell (`lead_handelser`). Notiserna
+   (nytt svar, nytt utkast, möte bokat, Iris lämnar över) **läses av arbetsytan, inte
+   av varje användare**.
+4. Ett utkast som ersätts eller kasseras står kvar i tråden och går att återställa.
+5. Ett utkast som påstår att något redan är gjort ("jag har skickat en inbjudan")
+   skickas bara när människan kryssat i att det är gjort (kontrolleras även i API:t).
+6. Mejl skickade utanför Snajp syns i tråden när de står i prospektets citat, och
+   kan läggas in för hand. De blir inga rader i `outreach_messages`.
+7. Leads får fliken **Uppföljningar**: vad som väntar på granskning, skrivs, är dags,
+   kommer och har gått ut. Skapa uppföljning finns för markerade bolag i fliken, i
+   Iris-listan och i Skickat › Väntar på svar.
+8. **Sök bolag** i Leads sidhuvud hittar alla kundens leads, också kontaktade och
+   arkiverade, och öppnar leadets låda.
+
+**Resonemanget.** Anton: kunderna köper i första hand de nya konversationerna, så de
+ska ha "en egen flik och en större plats i Leads-översikten … med notiser även från
+Snajp för nya svar och händelser och allt annat som förväntas i en faktisk
+CRM-suite". Telecom Buddy (main 2026-11-22) visade varför: svarsutkasten syntes
+ingenstans, två kasserades tyst, och mötet som bokats från Sebastians Gmail gav "Möte
+0". Status i prospektet och inte en ny statuskolumn: annars hade Skickat och
+konversationen kunnat säga olika saker. Notiserna läses per arbetsyta för att
+konversationerna är en delad inkorg; den som öppnat svaret har tagit det. Per
+användare är en senare utbyggnad om flera säljare delar en arbetsyta. Om
+uppföljningarna: "Just nu finns inget gränssnitt eller insikt i när återkopplingsmejl
+skapas och vart de hamnar … det behöver bli lättare att gå in på en enskild kund och
+även kunna söka på denna."
+
+**I koden.** `db/migrations/20261122090000_149_iris_konversationer.sql`,
+`snajp-support/app/leads/konversation.py`, `app/api/leads_konversationer.py`,
+`app/api/leads_uppfoljningar.py`, `app/leads/svar.py` (händelserna, Skriv om),
+`components/leads/Konversationer.tsx`, `KonversationsTrad.tsx`, `Uppfoljningar.tsx`,
+`BolagsSok.tsx`, räknaren i `components/shell/Rail.tsx`.
+
+---
+
+## 2026-11-22 — Main till kreditprojektet med developments modeller; bakåtfyllnad av webbpoolen; PageSpeed som gratisreserv (Anton)
+
+**Besluten, Antons ord:** "Se även till att main kör på exakt samma
+kreditprojekt, det nya och med samma modell som development." Om de gamla
+leadsen: "se till att det inte går igång av nästa körning, utan när jag säger
+till, efter att ha fyllt på krediterna." Om PageSpeed: "lägg till Googles
+Pagespeed som del av sidbedömningen eftersom det inte kostar något."
+
+**Main.** api och web i main har nu samma `GOOGLE_SERVICE_ACCOUNT_JSON` som
+development (projekt `rock-sentinel-515323-r8`). De har också
+`GOOGLE_CLOUD_REGION=eu`, `MODEL=gemini-3.5-flash-lite`,
+`VISION_MODEL`/`KVITTO_MODEL=gemini-3.8-flash` och
+`VERTEX_INBADDNING_REGION=europe-west1`, samt tokentaken 40 M (leads) och
+2 M (support). Det ersätter "main väntar på releasen" från 2026-11-21. Mains
+kod stöder redan `eu` (`config.vertex_vard`); development ligger bara fem
+gallrings- och driftcommits före. Mains gamla nyckel är sparad lokalt som
+reserv. Main och development delar nu servicekonto. Ett eget konto för main
+(JURIDIK_ATGARDER #14) återstår och kräver att en ny nyckel skapas.
+
+**Bakåtfyllnaden.** `webbpool.bakatfyll` lägger in alla källkunders leads och
+listrader med webbplats i poolen. Den bedömer obedömda och okända och
+fördelar dem. Den startas bara via `POST /api/admin/webbpool/bakatfyll`
+(`scripts/webbpool_bakatfyll.py`), aldrig av en körning. Den torrkör som
+standard och vägrar starta när ScrapeGraphs saldo är under 2 krediter per
+sajt. Dygnstaket gäller inte bakåtfyllnaden, som har kreditkontrollen som
+tak. Läget räknas ur poolen och finns kvar efter en omstart.
+
+**PageSpeed.** Utan ScrapeGraph-bild bedöms PageSpeeds bild av datorvyn, som
+är samma vy som kalibreringen gjordes mot. Det kräver `PAGESPEED_API_KEY`.
+Utan nyckel tas mobilbilden som förut. `webbrevision.bildkalla` visar
+varifrån bilden kom. Nyckeln saknas fortfarande i båda miljöerna, och utan
+den svarar PageSpeed 429.
+
+**Jev och Googles beslutsmodell (utredning, inget byte).** Gemini Decisions
+API (`gemini-decision-1`, 2026-11-11) är byggd som Jev, men finns i dag bara
+i Gemini Developer API och AI Studio. Där finns inget EU-läge, den betalas
+inte via Vertex, och gratisnivån får använda indata. Den uppfyller alltså
+inte EU-kravet (INV-DATA-004/006). Bevaka när den kommer till Google Cloud.
+
+## 2026-11-22 — Webbpoolens fördelning slås på i main (Anton)
+
+**Beslutet:** "Ja, slå på." Webbpoolens fördelning till Alunix och Umeå
+Webbdesign körs nu i main, med samma mottagare och inspirationskund som i
+development. Det ersätter "på bara i development för test" från 2026-10-08.
+
+**Bakgrund:** inga nya webbleads hade kommit på snajp.se sedan vecka 42.
+Listorna för vecka 41 och 42 i main hade skapats i development och följt med
+den första synken. I main var `WEBBPOOL_FORDELNING`, `WEBBPOOL_MOTTAGARE` och
+`WEBBPOOL_INSPIRATION` aldrig satta, så poolen fylldes men fördelades aldrig
+(92 akuta sajter i mottagarnas län väntade).
+Anton slog på fördelningen trots att ScrapeGraph-krediten är slut. Utan den
+blir nästan alla bildbedömningar `okand`, så tills krediten är påfylld kommer
+bara akuta sajter, som avgörs i koden utan bild. PageSpeed saknar nyckel och
+svarar 429.
+
+**I koden:** flaggorna är satta på api i main. Fördelningen körs efter nästa
+körning (`webbpool.efter_korning`). `webbpool.mata_in` gör nu om en
+`okand`-bedömning vid nästa passage i stället för att räkna den som färsk i
+30 dagar.
+
+## 2026-11-21 — Vertex flyttar till kreditprojektet, och kostnaden får budget, tak och lägre tokentak (Anton)
+
+**Beslut.** Development och main ska fakturera Vertex i kreditprojektet
+`rock-sentinel-515323-r8` (faktureringskontot `0159BE-C0FCCA-881885`) i stället
+för `snajp-506221`. Förslagen i `docs/KOSTNADER-SPRAKMODELL.md` § 4 genomförs.
+
+**Resonemanget.** Anton, om förslagen: "Det låter bra, men vi ska använda oss av
+det nya kreditprojektet även för main". Krediten (omkring 2 600 kr) betalar då
+driften så länge den räcker. Budgeten, taket och tokentaken gör att ett fel som
+skenar märks och stoppas innan det blir en faktura.
+
+**Gjort 2026-11-21.**
+- Development (api och web): `GOOGLE_SERVICE_ACCOUNT_JSON` byts till
+  kreditprojektets nyckel. Dessutom `LEADS_DAILY_TOKEN_BUDGET=40000000` (förut 150 M)
+  och `SUPPORT_DAILY_TOKEN_BUDGET=2000000` (förut av). Deployen gick igenom och
+  startade utan Vertex-fel. Den gamla nyckeln ligger som reserv i
+  `~/.secrets/snajp-vertex-snajp-506221.json`.
+- Kreditkontot: budgeten "Snajp Vertex manad" är 3 000 kr i månaden för hela
+  kontot. Den räknar bruttokostnaden, alltså före krediten, och mejlar vid 50,
+  80 och 100 % av utfallet och vid 100 % av prognosen.
+- Kreditkontot: utgiftstaket "Snajp Vertex tak" är 8 000 kr i månaden på Vertex
+  AI i `rock-sentinel-515323-r8`. Det pausar Vertex i projektet tills det lyfts.
+- Kontot är ett betalkonto ("Paid account"). När krediten är slut dras
+  kostnaden från kortet, så budgeten och taket är skyddet.
+
+**Main väntar på releasen.** `gemini-2.5-flash`, som main kör, finns inte i
+kreditprojektet. Den svarade 404 i europe-west1, -west4 och -north1, eftersom
+Google inte ger nya projekt tillgång till den. Lite, 3.8, inbäddningen i
+europe-west1 och den grundade sökningen svarar 200. Main byter därför nyckel i
+samma steg som releasen tar dit Lite och 3.8, tillsammans med tokentaken. Byts
+nyckeln före releasen slutar main svara. Vid bytet bör main få ett eget
+servicekonto i kreditprojektet, så att miljöerna inte delar nyckel
+(JURIDIK_ATGARDER #14).
+
+---
+
+## 2026-11-20 — Språkmodellen blir gemini-3.5-flash-lite i support, sortering och utkast (Anton)
+
+**Beslut.** `MODEL=gemini-3.5-flash-lite` i Vertex-regionen `eu`. Det gäller
+supportagenten, triagen, Iris-utkasten, humanizern och profilen, som alla ärver
+`MODEL`. Bildbedömningen (`VISION_MODEL`) och kvittona (`KVITTO_MODEL`) ligger
+kvar på `gemini-3.8-flash`. Ersätter beslutet 2026-11-19 (3.8 Flash i alla
+steg) för de steg som ärver `MODEL`.
+
+**Resonemanget.** Anton, efter att ha läst outputen från alla 117 testfall för
+fem modeller (`docs/compliance/modellbyte-underlag.md` § 6.6): "Vi kör på 3.5
+Lite. Jag har granskat outputsen och tycker att de till största del är korrekta
+och svarar på det som behövs utan att krångla till det, utkasten är även mer
+direkta och säljande även om de kan finputsas lite med ytterligare
+instruktioner, men vi ger feedback på det efter några skarpa körningar."
+
+Underlaget visar att Lite är den billigaste (17 kr för hela sviten mot 37 kr
+för 3.8 i dag och omkring 73 kr efter 3.8:s prishöjning 2027-01-01) och den
+snabbaste (ett supportsvar tar omkring 5 s i median). Den har inget aviserat
+slutdatum.
+
+**Bildbedömningen (webbplatsen) blir kvar på 3.8 (Anton, samma kväll).** Anton
+fick 15 omstridda facitsajter bedömda av båda modellerna på samma skärmbild.
+3.8 kallade alla sex dåliga dåliga och åtta av nio "bra" dåliga, medan Lite
+kallade fem av de sex dåliga bra. Anton: "övriga 'bra' borde klassas som
+dåliga, eller bristfälliga, där 3.8 är rätt i sin bedömning om alla, de bör
+absolut kontaktas." Facit är rättat efter det: åtta sajter bra → dalig och
+alvegardens.se akut → dalig (ny sajt sedan facit), i
+`tests/leads/fixtures/webbfacit_2026-10-08.json`. Merkostnaden mot Lite är
+omkring 0,04 kr per bedömd sajt, alltså 3,60 kr per 100 leads (0,08 kr och
+8,40 kr efter 3.8:s prishöjning 2027-01-01). Skärmbildens ScrapeGraph-krediter
+är desamma oavsett modell.
+
+**Kvittona** är pausade/avvecklade (Anton), så modellvalet där spelar ingen
+roll. `KVITTO_MODEL=gemini-3.8-flash` står kvar i development: att ta bort
+variabeln nekades av behörighetsspärren.
+
+**I drift.** Bara development. Railway på `api`: `MODEL=gemini-3.5-flash-lite`,
+`VISION_MODEL=gemini-3.8-flash` (`KVITTO_MODEL=gemini-3.8-flash`, utan verkan). På `web`:
+`MODEL=gemini-3.5-flash-lite`. `LLM_TIMEOUT_CHATT_S=60` står kvar. Main får
+samma värden först med release-PR:en och Antons ja. Feedback på utkastens ton
+tas efter några skarpa körningar.
+
+---
+
 ## 2026-11-19 — Titlarna på Vårt team: "Grundare & VD" och "Grundare & Teknikchef" (Sebbe)
 
 **Beslut.** Sebastian Bergmans titel på /vart-team är "Grundare & VD" och Anton
@@ -198,6 +569,52 @@ loggtabellerna utan adresskolumn och anonymiseringen av agentloggarna. En ny beg
 tar ett rådgivande lås som gallringen håller delat före andra varvet, i stället för ett
 tabellås (138:s regel: ingen annan skrivning ska vänta på gallringen). När begränsningen
 hävs gallras uppgifterna vid nästa körning.
+
+**Runda 13 (2026-11-20, efter releasen).** Ett hål i 144: feedbacken på en agentkörning
+prövades bara på sin egen text. En körning som skyddas via sitt prospekt stod kvar, men
+feedbackraden på den, vars kommentar inte nämner adressen, fick kommentaren och det
+rättade svaret nollade. Migration 145 undantar feedbacken när dess körning (`run_id`, alltid
+satt) omfattas av en begränsning, med samma villkor som körningens eget urval. Skäl: en rad
+som hör till en skyddad rad är lika skyddad, även när kopplingen går via en främmande nyckel
+och inte via adressen. Gallringen är fortfarande av i produktionen, så inget har raderats.
+
+**Runda 14 (samma dag).** Taket räknade bara de valda raderna i varje kategori, inte barnen
+som ON DELETE CASCADE tar med sig. Ett prospekt med en tråd och hundra meddelanden vägde en
+rad men raderade 102, så taket, som är skyddet mot ett felaktigt policyvärde, kunde passeras
+utan larm, och torrkörningen och loggen underskattade ingreppet. Migration 146 räknar
+kaskaden (`gallring_kaskad`) före takprövningen och igen efter låsen, på det som faktiskt
+raderas, och visar varje barntabell i loggen med åtgärden "kaskad". Ett databastest läser
+katalogens kaskader och fäller en ny tabell som taket inte räknar. Skäl: ett tak som inte
+räknar det som försvinner skyddar inte mot det det finns till för.
+
+**Runda 15 (samma dag).** Två fynd.
+
+*Spegelns gallring såg inte main:s begränsningar.* Development gallrar själv det synken
+inte för över och prövar begränsningarna mot sin egen tabell. Den tabellen synkades inte,
+och `gdpr_radera.py --begransa` skrev bara i main med en påminnelse om att köra samma
+kommando mot development. En missad eller misslyckad andra körning lät spegeln gallra bort
+det en begränsning i main skyddar. Nu:
+- Skriptet skriver samma rad (samma id och tider) i båda miljöerna och avslutar med kod 3
+  om spegeln inte gick att nå.
+- Synken för över alla rader var tionde minut och stämplar
+  `mirror_meta.begransningar_synkade_at`.
+- Spegelns gallring vägrar köra skarpt utan en stämpel från de senaste två timmarna
+  (migration 147). Vägran blir ett kundfel med larm.
+
+Skäl: en begränsning är en rättighet som ska gälla överallt där uppgifterna finns.
+Skyddet får inte hänga på att någon minns ett andra kommando, och en spegel som inte kan
+veta att den är aktuell ska vänta i stället för att gissa.
+
+*En stulen session kunde slå på tvåfaktor åt angriparen.* Inrullningen krävde bara en
+adminsession. Den som kom åt sessionen till ett konto utan aktiv tvåfaktor kunde rulla in
+sin egen hemlighet och få återställningskoderna, och ägaren stängdes ute. Nu:
+- `paborjaInrullning` kräver lösenordet på nytt, under inloggningens spärr mot gissning,
+  innan någon hemlighet skapas.
+- Databasen godtar bara en påbörjad inrullning från de senaste femton minuterna
+  (migration 148).
+
+Skäl: att lägga till en faktor ändrar vem som kan logga in. Det kräver samma bevis som en
+inloggning, och en session ensam är inte det beviset.
 
 ## 2026-11-19 — Synkflytten verkställs i development; mains steg väntar på releasen (Claude (agent), på Antons uppdrag "verkställ synkflytten")
 

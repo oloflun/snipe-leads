@@ -430,6 +430,12 @@ async def _hantera_lead(storage: Storage, tenant_id: str, email: dict[str, Any],
     await storage.update_email(tenant_id, email_id, status="lead")
     prospect_id = utfall.get("prospect_id")
     thread_id = utfall.get("thread_id")
+    # Öppnat i brevlådan (migration 150): Iris sköter konversationen som
+    # vanligt, också när någon råkat öppna svaret. Bara ett svar som redan
+    # besvarats från brevlådan lämnas utan utkast; det sparas och klassas
+    # ändå, så att steget, kön och en avregistrering följer med.
+    oppnat = bool(email.get("last_i_brevladan"))
+    besvarat = bool(email.get("besvarat_i_brevladan"))
     if not prospect_id:
         fran = str(email.get("from_email") or "").strip().lower()
         namn = str(email.get("from_name") or "").strip() or fran.rsplit("@", 1)[-1]
@@ -443,7 +449,8 @@ async def _hantera_lead(storage: Storage, tenant_id: str, email: dict[str, Any],
         except Exception:  # noqa: BLE001 — ett prospekt som inte gick att skapa stoppar inte leadet
             logger.exception("Kunde inte skapa prospekt ur inkommande lead %s", email_id)
         else:
-            await _utkast_for_inkorgslead(storage, tenant_id, prospekt)
+            if not besvarat:
+                await _utkast_for_inkorgslead(storage, tenant_id, prospekt)
     svar: dict[str, Any] | None = None
     if thread_id and not get_settings().is_simulation():
         try:
@@ -458,12 +465,18 @@ async def _hantera_lead(storage: Storage, tenant_id: str, email: dict[str, Any],
                 tenant_name=str(tenant.get("company_name") or tenant.get("name") or ""),
                 context_pack=context_pack,
                 publik_bas_url=get_settings().publik_bas_url,
+                oppnat=oppnat,
+                utan_utkast=besvarat,
             )
         except Exception:  # noqa: BLE001 — svarshanteringen får inte fälla inkorgen
             logger.exception("Prospektsvaret %s gick inte att hantera", email_id)
     await storage.log_decision(
         tenant_id, email_id=email_id, event="lead",
-        detail={"prospect_id": prospect_id, "thread_id": thread_id, "svar": (svar or {}).get("klass")},
+        detail={
+            "prospect_id": prospect_id, "thread_id": thread_id, "svar": (svar or {}).get("klass"),
+            **({"last_i_brevladan": True} if oppnat else {}),
+            **({"besvarat_i_brevladan": True} if besvarat else {}),
+        },
     )
     return {"action": "lead", "prospect_id": prospect_id, "thread_id": thread_id}
 
@@ -566,6 +579,32 @@ async def process_email(
     klass = await _klassa_och_styr(storage, tenant_id, email)
     if klass is not None:
         return klass
+
+    # Mejl som någon redan öppnat i brevlådan (Anton 2026-11-23, migration
+    # 150). Efter klassningen, så att ett svar från ett lead når sin
+    # konversation (_hantera_lead) och ett nyhetsbrev göms som förut.
+    #
+    #   besvarat  Någon har svarat från brevlådan. Ett utkast ovanpå det ger
+    #             dubbla svar: mejlet går till Att hantera, avbockat, så att
+    #             det syns men inte väntar på någon.
+    #   öppnat    Öppnat men obesvarat. Att någon råkat öppna mejlet får inte
+    #             göra att det tappas: det kvalificeras och får utkast som
+    #             vanligt. Enda skillnaden är att svaret aldrig skickas av
+    #             sig självt (auto_ok nedan), för den som öppnade det kan
+    #             vara på väg att svara.
+    if email.get("besvarat_i_brevladan"):
+        await storage.update_email(tenant_id, email_id, status="att_hantera", hanterad=True)
+        await storage.log_decision(
+            tenant_id, email_id=email_id, event="besvarat_i_brevladan",
+            detail={"till": "att_hantera", "utkast": False},
+        )
+        return {"action": "att_hantera"}
+    oppnat = bool(email.get("last_i_brevladan"))
+    if oppnat:
+        await storage.log_decision(
+            tenant_id, email_id=email_id, event="last_i_brevladan",
+            detail={"utkast": True, "autosvar": False},
+        )
 
     # Avtalsgrinden FÖRE allt annat: ingen kundtext får gå till modell-
     # leverantören för en tenant utan registrerat avtal (migration 070).
@@ -780,6 +819,9 @@ async def process_email(
             and (sentiment is None or sentiment >= 0.4)
             and not kvalitet.kraver_granskning
             and faktadom.ok
+            # Öppnat i brevlådan: den som öppnade mejlet kan vara på väg att
+            # svara. Utkastet väntar på ett ja, aldrig ett autosvar.
+            and not oppnat
         )
         if auto_ok:
             # Ingen människa läser det här svaret före utskick: upplysningen
@@ -839,6 +881,7 @@ async def process_email(
                 "rule": rule, "confidence": confidence,
                 "why_not_auto": (
                     "Regeln är 'draft'" if rule != "auto"
+                    else "Mejlet var redan öppnat i brevlådan" if oppnat
                     else f"Konfidensen {confidence} ligger under tröskeln {settings.auto_send_min_confidence}"
                     if confidence < settings.auto_send_min_confidence
                     else f"Textkvalitetskontrollen flaggade utkastet: {kvalitet.sammanfattning()}"

@@ -2250,11 +2250,23 @@ async def update_queue_item_text(
     amne = str(payload.get("subject") or "").strip()
     brodtext = payload.get("brodtext")
     text = str((brodtext if brodtext is not None else payload.get("body")) or "").strip()
+    await spara_utkasttext(
+        storage, tenant_id, str(item["thread_id"]), amne=amne, text=text, ar_brodtext=brodtext is not None
+    )
+    return {"id": item_id, "subject": amne}
+
+
+async def spara_utkasttext(
+    storage, tenant_id: str, thread_id: str, *, amne: str, text: str, ar_brodtext: bool = True
+) -> dict:
+    """Sparar en människas redigering i trådens väntande utkast och
+    returnerar meddelandet. Delas av granskningskön och konversationens
+    utkaststudio (app/api/leads_konversationer.py)."""
     if not amne or not text:
         raise HTTPException(status_code=422, detail="Ämnesrad och text får inte vara tomma.")
     if len(amne) > 200 or len(text) > 8000:
         raise HTTPException(status_code=422, detail="Ämnesraden får vara högst 200 tecken och texten 8 000.")
-    meddelande = await storage.get_pending_outreach_message(tenant_id, item["thread_id"])
+    meddelande = await storage.get_pending_outreach_message(tenant_id, thread_id)
     if meddelande is None:
         raise HTTPException(status_code=409, detail="Utkastet har ingen text att ändra.")
     # Signaturen och den lagstadgade foten är kodens text: de följer med från
@@ -2265,9 +2277,9 @@ async def update_queue_item_text(
     settings = await storage.get_agent_settings(tenant_id, agent_type="leads")
     sig = normalisera_signatur(settings.get("signatur"))
     _, svans = dela_utkast(meddelande.get("body") or "", sig)
-    if brodtext is None:
+    if not ar_brodtext:
         text, _ = dela_utkast(text, sig)
-    trad = await storage.get_outreach_thread(tenant_id, item["thread_id"]) or {}
+    trad = await storage.get_outreach_thread(tenant_id, thread_id) or {}
     sprak = "en" if trad.get("language_state") == "en_confirmed" else "sv"
     text = sla_ihop(text, svans, sig, halsning=HALSNING[sprak])
     # Signaturen ska alltid med (Sebbe 2026-10-11) — också när det lagrade
@@ -2277,7 +2289,7 @@ async def update_queue_item_text(
     if sig:
         text = med_signatur_fore_fot(text, sig, halsning=HALSNING[sprak])
     await storage.update_outreach_message_text(tenant_id, meddelande["id"], subject=amne, body=text)
-    return {"id": item_id, "subject": amne}
+    return {**meddelande, "subject": amne, "body": text}
 
 
 #: Granskarens besked per utfall (Godkänn och skicka).

@@ -100,6 +100,25 @@ async def test_hela_kedjan_fordelar_efter_lan_en_gang(pool_pa, monkeypatch):
 
 
 @pytest.mark.anyio
+async def test_okand_bedomning_provas_igen(pool_pa):
+    """En bedömning utan skärmbild (okand) räknas inte som färsk: domänen
+    bedöms om när nästa körning passerar den, inte först efter 30 dagar."""
+    from datetime import UTC, datetime
+
+    storage = MemoryStorage()
+    kalla = await storage.create_tenant(slug="redovisning", name="Redovisning")
+    k: dict = {}
+    korning.pool_in(k, {"company_name": "Gbg Bygg AB", "website": "https://gbgbygg.se", "ort": "Göteborg"})
+    assert await webbpool.mata_in(storage, k, kalla["id"]) == ["gbgbygg.se"]
+    await storage.webbpool_spara({"doman": "gbgbygg.se", "webbniva": "okand", "webbrevision": {"pagespeed": {}},
+                                  "bedomd_at": datetime.now(UTC)})
+    assert await webbpool.mata_in(storage, k, kalla["id"]) == ["gbgbygg.se"]
+    await storage.webbpool_spara({"doman": "gbgbygg.se", "webbniva": "akut", "webbrevision": {"platshallare": "x"},
+                                  "bedomd_at": datetime.now(UTC)})
+    assert await webbpool.mata_in(storage, k, kalla["id"]) == []
+
+
+@pytest.mark.anyio
 async def test_mottagarens_egen_korning_matas_inte_in(pool_pa):
     storage = MemoryStorage()
     alunix = await storage.create_tenant(slug="alunix", name="Alunix")
@@ -209,3 +228,89 @@ async def test_korningens_slut_startar_webbpoolen_en_gang(monkeypatch):
         await asyncio.sleep(0)
     assert len(anrop) == 1
     assert list(anrop[0]["webbpool"]) == ["gbgbygg.se"]
+
+
+@pytest.mark.anyio
+async def test_bakatfyllnaden_startar_bara_for_hand_och_med_kredit(pool_pa, monkeypatch):
+    """Antons beställning 2026-11-22: gamla leads bedöms och fördelas bara när
+    bakåtfyllnaden startas för hand, och inte när ScrapeGraphs saldo är för
+    lågt. En okänd bedömning tas med, en riktig gör det inte."""
+    import asyncio
+    from datetime import UTC, datetime
+
+    storage = MemoryStorage()
+    kalla = await storage.create_tenant(slug="redovisning", name="Källa")
+    alunix = await storage.create_tenant(slug="alunix", name="Alunix")
+    await storage.create_tenant(slug="umea-webbdesign", name="Umeå Webbdesign")
+    for namn, webb in (("Gbg Bygg AB", "https://gbgbygg.se"), ("Klar AB", "https://klar.se"),
+                       ("Okand AB", "https://okand.se")):
+        p = await storage.create_prospect(kalla["id"], company_name=namn, origin="iris")
+        rad = next(x for x in storage.prospects[kalla["id"]] if x["id"] == p["id"])
+        rad.update(website=webb, ort="Göteborg")
+    await storage.webbpool_spara({"doman": "klar.se", "website": "https://klar.se/", "webbniva": "bra",
+                                  "bedomd_at": datetime.now(UTC)})
+    await storage.webbpool_spara({"doman": "okand.se", "website": "https://okand.se/", "webbniva": "okand",
+                                  "bedomd_at": datetime.now(UTC)})
+
+    anrop: list[str] = []
+
+    async def bedom_en(rad, befintlig=None):
+        anrop.append(rad["doman"])
+        return {"webbniva": "akut", "platshallare": "parkerad"}
+
+    monkeypatch.setattr(webbpool, "bedom_en", bedom_en)
+
+    torr = await webbpool.bakatfyll(storage, apply=False)
+    assert torr["kvar_att_bedoma"] == 2 and not torr["startad"] and anrop == []
+
+    monkeypatch.setattr(webbpool, "scrapegraph_krediter", lambda: 1)
+    for_lite = await webbpool.bakatfyll(storage, apply=True)
+    assert not for_lite["startad"] and "krediter" in for_lite["fel"] and anrop == []
+
+    monkeypatch.setattr(webbpool, "scrapegraph_krediter", lambda: 100)
+    start = await webbpool.bakatfyll(storage, apply=True)
+    assert start["startad"]
+    for _ in range(50):
+        if not webbpool._bakatfyll.get("pagar"):
+            break
+        await asyncio.sleep(0.01)
+    assert sorted(anrop) == ["gbgbygg.se", "okand.se"]
+    assert (await webbpool.bakatfyll_lage(storage))["kvar_att_bedoma"] == 0
+    assert {i["company_name"] for i in storage.lead_list_items if i["tenant_id"] == alunix["id"]} == {
+        "Gbg Bygg AB", "Okand AB"}
+
+
+@pytest.mark.anyio
+async def test_pagespeed_dator_ar_gratisreserven_for_skarmbilden(monkeypatch):
+    """Utan ScrapeGraph-bild tas PageSpeeds datorbild (med nyckel), och
+    bildkällan sparas. Antons beställning 2026-11-22."""
+    from app.leads import webbrevision
+
+    strategier: list[str] = []
+
+    async def pagespeed(url, strategi):
+        strategier.append(strategi)
+        return {"prestanda": 40, "skarmbild": f"data:image/png;base64,{strategi}"}
+
+    async def ingen_bild(url, bara_stealth=False):
+        return None
+
+    sedda: list[str] = []
+
+    async def visuell(url, bild, fakta):
+        sedda.append(bild)
+        return {"modernitet": 4, "top_3_brister": ["Liten text"]}
+
+    monkeypatch.setenv("LEADS_WEBBREVISION", "1")
+    monkeypatch.setattr(webbrevision, "pagespeed", pagespeed)
+    monkeypatch.setattr(webbrevision, "skarmbild_via_scrapegraph", ingen_bild)
+    monkeypatch.setattr(webbrevision, "visuell", visuell)
+    monkeypatch.setattr(webbrevision, "_psi_nyckel", lambda: True)
+    rev = await webbrevision.revidera("https://exempel.se", {})
+    assert strategier == ["mobile", "desktop"] and sedda == ["data:image/png;base64,desktop"]
+    assert rev["bildkalla"] == "pagespeed_dator" and rev["webbniva"] == "dalig"
+
+    strategier.clear()
+    monkeypatch.setattr(webbrevision, "_psi_nyckel", lambda: False)
+    rev = await webbrevision.revidera("https://exempel.se", {})
+    assert strategier == ["mobile"] and rev["bildkalla"] == "pagespeed_mobil"

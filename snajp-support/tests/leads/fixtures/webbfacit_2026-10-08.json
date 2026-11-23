@@ -1,5 +1,5 @@
 {
- "kalla": "Antons facit 2026-10-08: 58 sajter ur Alunix-körningar, adresserna som Anton skrev dem. avvecklad = ska kastas (Såg & Betong låg under Akut i facit men är under avveckling).",
+ "kalla": "Antons facit 2026-10-08: 58 sajter ur Alunix-körningar, adresserna som Anton skrev dem. avvecklad = ska kastas (Såg & Betong låg under Akut i facit men är under avveckling). Reviderat 2026-11-20 (Anton): bjorkmansmaleri, bovikmarin, svenskparkering, hunnebosjomack, vigab, bjorlandamarin, futurenautic och wigson från bra till dalig (\"de bör absolut kontaktas\"; 3.8-flash hade rätt om alla), och alvegardens.se från akut till dalig (ny sajt sedan facit, 3.8-flash bedömde den dålig).",
  "sajter": [
   {
    "url": "https://www.galeon.se/",
@@ -43,7 +43,7 @@
   },
   {
    "url": "https://alvegardens.se/",
-   "niva": "akut"
+   "niva": "dalig"
   },
   {
    "url": "https://borealtech.netlify.app/",
@@ -135,7 +135,7 @@
   },
   {
    "url": "https://www.bjorkmansmaleri.se/",
-   "niva": "bra"
+   "niva": "dalig"
   },
   {
    "url": "https://boatsystemgroup.com/",
@@ -147,7 +147,7 @@
   },
   {
    "url": "https://shop.bovikmarin.se/",
-   "niva": "bra"
+   "niva": "dalig"
   },
   {
    "url": "https://www.carlenbil.se/kopa",
@@ -159,15 +159,15 @@
   },
   {
    "url": "https://svenskparkering.se/",
-   "niva": "bra"
+   "niva": "dalig"
   },
   {
    "url": "https://www.hunnebosjomack.se/",
-   "niva": "bra"
+   "niva": "dalig"
   },
   {
    "url": "https://vigab.se/",
-   "niva": "bra"
+   "niva": "dalig"
   },
   {
    "url": "https://zipwake.com/",
@@ -183,7 +183,7 @@
   },
   {
    "url": "https://www.bjorlandamarin.se/",
-   "niva": "bra"
+   "niva": "dalig"
   },
   {
    "url": "https://www.ringsten.se/",
@@ -191,7 +191,7 @@
   },
   {
    "url": "https://futurenautic.com/",
-   "niva": "bra"
+   "niva": "dalig"
   },
   {
    "url": "https://www.sailguide.com/",
@@ -199,7 +199,7 @@
   },
   {
    "url": "https://wigson.se/",
-   "niva": "bra"
+   "niva": "dalig"
   },
   {
    "url": "https://ak-centralen.dk/sv/",

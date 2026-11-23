@@ -1,5 +1,30 @@
 # Snipra Status
 
+## 2026-11-23 — Claude — Iris-konversationer, signaturen i första mejlet, återkontakt, inkorgen hämtar öppnade mejl
+
+Leads har fått flikarna Konversationer och Uppföljningar, notiser i railen och bolagssök (migration 149). Varje
+utskick bär signaturen med logotypen, GDPR-foten är två meningar, och länkarna bär `www.snajp.se`. Ett nej följs upp
+en gång efter sex månader, "återkom" efter två. Inkorgen hämtar på UID i stället för på olästa (migration 150):
+öppnat men obesvarat kvalificeras och får utkast, redan besvarat lämnas utan. Besluten står i `docs/BESLUT.md`
+2026-11-22 och 2026-11-23. I release-PR 103.
+
+**Nästa att bygga (Antons beställning 2026-11-23): efterkontroll av svar från brevlådan.** Om någon har svarat läses
+bara i det ögonblick Snajp hämtar mejlet. Svarar någon från Gmail efter hämtningen ligger Snajps utkast kvar tills en
+människa kasserar det; det gäller också oöppnade mejl. Bygg:
+1. Spara mejlets IMAP-UID på `ss_emails` (ny kolumn, additiv migration).
+2. Låt varje synk fråga brevlådan vilka av de senaste dagarnas hämtade mejl som nu bär `\Answered`
+   (en sökning per brevlåda, `connectors/imap.py`), och sätt `besvarat_i_brevladan` på dem.
+3. Leads: kassera det väntande svarsutkastet synligt och återställbart (samma väg som Kassera i konversationen),
+   logga en händelse "besvarat från brevlådan" och ställ in köade uppföljningar. Kundtjänst: avvisa det väntande
+   utkastet och bocka av mejlet.
+4. Hämta gärna själva svaret ur Skickat-mappen in i konversationen, så att tråden visar vad som sades. I dag läggs
+   sådana mejl in för hand eller ur citat.
+5. Tester mot en efterbildad IMAP-klient, beslut i `docs/BESLUT.md`.
+
+**Kvar efter releasen:** kör `scripts/satt_mejlsignatur.py` mot main (inte före: den gamla koden ger då dubbla
+signaturer i köade utkast). Den första synken ser sju dagar bakåt och ger utkast på öppnade, obesvarade mejl från
+den perioden. Ej verifierat: hämtningen mot en riktig Gmail-brevlåda, och märkningen i webbläsaren.
+
 ## 2026-10-23 — Claude — körningarna når beställt antal
 
 Körningen på 200 i main stannade på 18: taket 40 listsidor gav 2 007 av 8 400 bolag, och fällda bolag prövades om

@@ -11,6 +11,7 @@ import { meddelaLeadsUppdaterade, sandtid } from "@/lib/leads/utkast";
 import { STATUS_ETIKETT } from "@/lib/prospekt";
 import { cn } from "@/lib/utils";
 import { ProvmejlKnapp } from "@/components/leads/ProvmejlKnapp";
+import { skapaUppfoljningar } from "@/components/leads/Uppfoljningar";
 import { Sidvaljare, useSida } from "@/components/leads/sidindelning";
 import { MejlMedSignatur, type Signatur } from "@/components/leads/IrisGranskning";
 
@@ -198,7 +199,7 @@ export function SkickatLista({
   const [oppen, setOppen] = useState<string | null>(null);
   const [filter, setFilter] = useState<Filter>("alla");
   const [valda, setValda] = useState<Set<string>>(new Set());
-  const [atgard, setAtgard] = useState<{ namn: "skicka" | "tid" | "iris"; klara?: number } | null>(null);
+  const [atgard, setAtgard] = useState<{ namn: "skicka" | "tid" | "iris" | "uppfoljning"; klara?: number } | null>(null);
   const [tidOppen, setTidOppen] = useState(false);
   const [nyTid, setNyTid] = useState("");
   const [besked, setBesked] = useState<{ text: string; orsaker?: string[]; fel: boolean } | null>(null);
@@ -213,17 +214,41 @@ export function SkickatLista({
     [rader, filter]
   );
 
-  // Bara schemalagda med köpost går att markera, och bara de som syns räknas.
+  // Markerbara: schemalagda med köpost (skicka nu, ändra tid, tillbaka), och
+  // sedan 2026-11-22 de som väntar på svar (Skapa uppföljning, Anton: "möjlighet
+  // att generera återkopplingar till markerade bolag"). Bara de som syns räknas.
   // `provmejl` är av i demon: där skickas ingenting på riktigt.
   const markerbara = useMemo(
-    () => (provmejl ? synliga.filter((r) => r.schemalagt && r.queue_item_id) : []),
+    () =>
+      provmejl
+        ? synliga.filter((r) => (r.schemalagt && r.queue_item_id) || (!r.schemalagt && r.prospect_id && filterFor(r) === "vantar"))
+        : [],
     [provmejl, synliga]
   );
   // Ett uppslag per rad, inte en genomsökning: med 2 400 rader var
   // `markerbara.includes(r)` miljontals jämförelser per rendering (2026-11-15).
   const markerbaraIds = useMemo(() => new Set(markerbara.map((r) => r.id)), [markerbara]);
-  const valt = markerbara.filter((r) => valda.has(r.id));
-  const allaValda = markerbara.length > 0 && valt.length === markerbara.length;
+  const valtAlla = markerbara.filter((r) => valda.has(r.id));
+  const valt = valtAlla.filter((r) => r.schemalagt);
+  // En uppföljning per bolag, hur många mejl till bolaget som än är markerade.
+  const valtUppfoljning = [...new Set(valtAlla.filter((r) => !r.schemalagt).map((r) => r.prospect_id as string))];
+  const allaValda = markerbara.length > 0 && valtAlla.length === markerbara.length;
+
+  /** Skapa uppföljning för de markerade som väntar på svar (Anton 2026-11-22).
+   *  Iris skriver dem i bakgrunden; de står i Leads › Uppföljningar. */
+  async function uppfoljning() {
+    if (!valtUppfoljning.length || atgard) return;
+    setAtgard({ namn: "uppfoljning" });
+    setBesked(null);
+    try {
+      setBesked(await skapaUppfoljningar(valtUppfoljning, text));
+      setValda(new Set());
+    } catch (orsak) {
+      setBesked({ text: felmeddelande(orsak), fel: true });
+    } finally {
+      setAtgard(null);
+    }
+  }
   // En sida i taget i sidan (components/leads/sidindelning.tsx); markeringen
   // och Markera alla gäller fortfarande hela filtret.
   const sidor = useSida(synliga.length, filter);
@@ -408,7 +433,7 @@ export function SkickatLista({
         <div
           className={cn(
             "flex flex-col gap-3",
-            valt.length > 0 && "sticky top-14 z-20 -mx-1 border-b border-ink/12 bg-paper px-1 py-2 lg:top-0"
+            valtAlla.length > 0 && "sticky top-14 z-20 -mx-1 border-b border-ink/12 bg-paper px-1 py-2 lg:top-0"
           )}
         >
           <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
@@ -419,12 +444,29 @@ export function SkickatLista({
             >
               {allaValda
                 ? text({ sv: "Avmarkera alla", en: "Clear all" })
-                : text({ sv: `Markera alla schemalagda (${markerbara.length})`, en: `Select all scheduled (${markerbara.length})` })}
+                : text({ sv: `Markera alla (${markerbara.length})`, en: `Select all (${markerbara.length})` })}
             </button>
+            {valtUppfoljning.length > 0 ? (
+              <>
+                <span className="num text-[0.875rem] font-medium">
+                  {text({ sv: `${valtUppfoljning.length} bolag väntar på svar`, en: `${valtUppfoljning.length} companies awaiting reply` })}
+                </span>
+                <button
+                  type="button"
+                  disabled={atgard !== null}
+                  onClick={() => void uppfoljning()}
+                  className={cn(btnPrimary, "disabled:opacity-60")}
+                >
+                  {atgard?.namn === "uppfoljning"
+                    ? text({ sv: "Skapar…", en: "Creating…" })
+                    : text({ sv: `Skapa uppföljning (${valtUppfoljning.length})`, en: `Create follow-up (${valtUppfoljning.length})` })}
+                </button>
+              </>
+            ) : null}
             {valt.length > 0 ? (
               <>
                 <span className="num text-[0.875rem] font-medium">
-                  {text({ sv: `${valt.length} markerade`, en: `${valt.length} selected` })}
+                  {text({ sv: `${valt.length} schemalagda markerade`, en: `${valt.length} scheduled selected` })}
                 </span>
                 <button
                   type="button"
