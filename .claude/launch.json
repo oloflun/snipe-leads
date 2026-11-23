@@ -12,6 +12,18 @@
       "autoPort": true
     },
     {
+      "name": "web-prod",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "start",
+        "--",
+        "-p",
+        "3100"
+      ],
+      "port": 3100
+    },
+    {
       "name": "support-sajt",
       "runtimeExecutable": "npm",
       "runtimeArgs": [
