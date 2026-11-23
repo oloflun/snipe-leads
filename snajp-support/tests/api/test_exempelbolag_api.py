@@ -121,7 +121,10 @@ async def test_vagen_in_kraver_ingen_riktig_nyckel_men_korningen_gor_det():
                 "/api/leads/runs/batch", headers=DEMO, json={"limit": 1, "is_test": True}
             )
             assert korning.status_code == 503
-            assert "DEEPSEEK_API_KEY" in korning.json()["detail"]
+            # Beskedet är kundens: att felet är vårt, aldrig vilken variabel som saknas.
+            besked = korning.json()["detail"]
+            assert "kan inte köras just nu" in besked
+            assert "API_KEY" not in besked
 
 
 @pytest.mark.anyio
