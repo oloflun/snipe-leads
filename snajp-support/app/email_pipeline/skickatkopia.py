@@ -29,13 +29,16 @@ logger = logging.getLogger("snajp-support.skickatkopia")
 
 async def kopiera_till_skickat(
     storage, tenant_id: str, *, till: str, amne: str, brodtext: str, fran: str = "",
-    syfte: str = "support",
+    syfte: str = "support", html: str | None = None, fran_namn: str = "",
 ) -> str | None:
     """Lägger kopian i den synkbara inkorg vars syfte (migration 084) passar
     utskicket: samma syfte först, sedan 'bada', sist vilken som helst — en
     kund med en enda inkorg får kopian där som förut. None när kopian är
     lagd eller när det inte finns någon inkorg att lägga den i; annars ett
-    felmeddelande för loggen. Kastar aldrig."""
+    felmeddelande för loggen. Kastar aldrig.
+
+    `html` och `fran_namn` är utskickets egna: kopian ska visa samma mejl som
+    mottagaren fick, med signaturens logotyp och avsändarens namn."""
     # Lata importer: poller drar in processorn, och den kedjan ska inte
     # betalas av moduler som bara råkar importera sändvägen.
     from .connectors import imap
@@ -61,6 +64,8 @@ async def kopiera_till_skickat(
                 till=till,
                 amne=amne,
                 brodtext=brodtext,
+                html=html,
+                fran_namn=fran_namn,
             )
             if fel is None:
                 logger.info(

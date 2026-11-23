@@ -632,6 +632,10 @@ async def _process_due_item(
                 brodtext=message["body"],
                 fran=extra.get("from_email") or getattr(provider, "avsandare", ""),
                 syfte="leads",
+                # Samma HTML-del och avsändarnamn som gick ut: utan dem visade
+                # Skickat ett textmejl utan logga (Anton 2026-11-23).
+                html=extra.get("html"),
+                fran_namn=extra.get("from_name") or getattr(provider, "avsandarnamn", "") or "",
             )
         return "sent"
 

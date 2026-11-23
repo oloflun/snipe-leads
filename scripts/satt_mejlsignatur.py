@@ -78,6 +78,83 @@ def api_anrop(url: str, nyckel: str, metod: str, kropp: dict | None = None) -> d
         sys.exit(f"AVBRYTER: {metod} /api/leads/config svarade {fel.code}: {detalj}")
 
 
+def direkt(store: dict, env: str, slug: str, signatur: dict, *, apply: bool) -> int:
+    """Samma byte rakt i databasen, för en miljö där tenantens nyckel inte
+    finns i .env.deploy (main 2026-11-23: bytet blev liggande ett halvt dygn
+    och 75 mejl gick ut med den gamla signaturen).
+
+    Valideringen är API:ts egen (SignaturRequest) och bara nyckeln `signatur`
+    i settings rörs, så resten av leads-inställningarna står orörda. Beviset
+    är en ny läsning genom samma normalisering som sändvägen använder.
+    """
+    import psycopg2
+
+    from railway_migrate import dsn
+
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "snajp-support"))
+    from app.api.schemas import SignaturRequest
+    from app.leads.signatur import bygg_signaturtext, normalisera
+
+    varde = SignaturRequest(**signatur).model_dump(exclude_none=True)
+    if normalisera(varde) is None and varde.get("aktiv") is not False:
+        sys.exit("AVBRYTER: signaturen normaliseras till ingenting (namn saknas).")
+
+    conn = psycopg2.connect(dsn(store, env), connect_timeout=20)
+    try:
+        cur = conn.cursor()
+        cur.execute("select id from public.ss_tenants where slug = %s", (slug,))
+        rad = cur.fetchone()
+        if not rad:
+            sys.exit(f"AVBRYTER: ingen tenant med sluggen {slug!r} i {env}.")
+        tenant_id = rad[0]
+        cur.execute(
+            "select settings->'signatur' from public.agent_configs where tenant_id = %s and agent_type = 'leads'",
+            (tenant_id,),
+        )
+        nuvarande = (cur.fetchone() or (None,))[0]
+        print(f"miljö: {env}  tenant: {slug}  (direkt i databasen)")
+        print("nuvarande:" if nuvarande else "nuvarande: (ingen signatur)")
+        if nuvarande:
+            print(json.dumps(nuvarande, ensure_ascii=False, indent=2))
+        print("blir:")
+        print(json.dumps(varde, ensure_ascii=False, indent=2))
+        if not apply:
+            conn.rollback()
+            print("\nInget skrivet. Kör med --apply.")
+            return 0
+        ny = json.dumps(varde, ensure_ascii=False)
+        cur.execute(
+            """insert into public.agent_configs (tenant_id, agent_type, settings)
+               values (%s, 'leads', jsonb_build_object('signatur', %s::jsonb))
+               on conflict (tenant_id, agent_type)
+               do update set settings = jsonb_set(coalesce(public.agent_configs.settings, '{}'::jsonb),
+                                                  '{signatur}', %s::jsonb),
+                             updated_at = now()""",
+            (tenant_id, ny, ny),
+        )
+        conn.commit()
+        cur.execute(
+            "select settings->'signatur' from public.agent_configs where tenant_id = %s and agent_type = 'leads'",
+            (tenant_id,),
+        )
+        kontroll = normalisera((cur.fetchone() or (None,))[0])
+    finally:
+        conn.close()
+    if varde.get("aktiv") is False:
+        print("\nVerifierat: signaturen är avstängd." if kontroll is None else "VARNING: signaturen läste tillbaka trots --av.")
+        return 0 if kontroll is None else 1
+    if not kontroll or kontroll.get("namn") != varde["namn"]:
+        print("VARNING: signaturen läste inte tillbaka som väntat.")
+        return 1
+    print("\nVerifierat mot en ny läsning (normaliserat värde):")
+    print(json.dumps(kontroll, ensure_ascii=False, indent=2))
+    print("\nTextblocket i mejlen:")
+    print(bygg_signaturtext(kontroll))
+    if not kontroll.get("logotyp_url"):
+        print("OBS: ingen logotyp_url i det sparade värdet — mejlen går utan logga.")
+    return 0
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--slug", required=True, help="tenantens slug, t.ex. kund-7cea8ee9")
@@ -85,6 +162,10 @@ def main() -> int:
     ap.add_argument("--apply", action="store_true", help="skriv (annars visas bara planen)")
     ap.add_argument("--jag-menar-produktion", action="store_true")
     ap.add_argument("--av", action="store_true", help="stäng av signaturen (aktiv=false)")
+    ap.add_argument(
+        "--direkt", action="store_true",
+        help="skriv i databasen i stället för via API:t (när tenantens nyckel saknas i .env.deploy)",
+    )
     for falt in FALT:
         ap.add_argument("--" + falt.replace("_", "-"), default=None)
     args = ap.parse_args()
@@ -94,13 +175,6 @@ def main() -> int:
 
     store = env_read()
     prefix = f"RAILWAY_{args.env.upper()}"
-    api_url = store.get(f"{prefix}_API_URL", "").rstrip("/")
-    # Tenantens egen nyckel — /api/leads/config är tenant-scopad, inte admin.
-    nyckelnamn = f"{prefix}_KEY_{args.slug.upper().replace('-', '_')}"
-    nyckel = store.get(nyckelnamn)
-    if not api_url or not nyckel:
-        sys.exit(f"AVBRYTER: {prefix}_API_URL / {nyckelnamn} saknas i .env.deploy.")
-
     web_url = store.get(f"{prefix}_WEB_URL", "").rstrip("/")
     signatur = {
         **STANDARD,
@@ -108,6 +182,18 @@ def main() -> int:
         **{f: getattr(args, f) for f in FALT if getattr(args, f) is not None},
         "aktiv": not args.av,
     }
+    if args.direkt:
+        return direkt(store, args.env, args.slug, signatur, apply=args.apply)
+
+    api_url = store.get(f"{prefix}_API_URL", "").rstrip("/")
+    # Tenantens egen nyckel — /api/leads/config är tenant-scopad, inte admin.
+    nyckelnamn = f"{prefix}_KEY_{args.slug.upper().replace('-', '_')}"
+    nyckel = store.get(nyckelnamn)
+    if not api_url or not nyckel:
+        sys.exit(
+            f"AVBRYTER: {prefix}_API_URL / {nyckelnamn} saknas i .env.deploy. "
+            "Lägg till --direkt för att skriva i databasen i stället."
+        )
 
     nuvarande = api_anrop(f"{api_url}/api/leads/config", nyckel, "GET").get("signatur")
 

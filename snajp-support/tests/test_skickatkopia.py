@@ -151,6 +151,8 @@ async def test_kopiera_till_skickat_anvander_kopplad_inkorg(monkeypatch):
             "till": "prospect@example.se",
             "amne": "En idé",
             "brodtext": "Hej!",
+            "html": None,
+            "fran_namn": "",
         }
     ]
 
@@ -204,7 +206,7 @@ async def test_supportsvar_lagger_kopia_i_skickat(monkeypatch):
 
     anrop: list[dict] = []
 
-    async def fejk_kopia(storage, tenant_id, *, till, amne, brodtext, fran=""):
+    async def fejk_kopia(storage, tenant_id, *, till, amne, brodtext, fran="", **_):
         anrop.append({"tenant_id": tenant_id, "till": till, "amne": amne})
         return None
 
@@ -247,3 +249,70 @@ async def test_simulerad_sandning_lagger_ingen_kopia(monkeypatch):
         storage=storage,
         provider=LoggingSendProvider(),
     )
+
+
+# -- Kopian visar det som gick ut (Anton 2026-11-23) --------------------------
+#
+# Utskicket bar HTML-delen med signaturen och logotypen, men kopian i Skickat
+# var ren text från adressen utan namn. Den som öppnade Skickat såg ett mejl
+# utan logga och trodde att mottagaren fått samma sak.
+
+
+async def test_kopian_bar_html_delen_och_avsandarnamnet(monkeypatch):
+    import email as email_mod
+
+    klient = _FakeImapClient(GMAIL_SVENSK_LIST)
+    monkeypatch.setattr(imaplib, "IMAP4_SSL", lambda host, timeout=30: klient)
+
+    fel = await imap_connector.spara_i_skickat(
+        "imap.gmail.com", "snajpsupport@gmail.com", APP_LOSENORD,
+        fran="kontakt@snajp.se", till="prospect@example.se", amne="En idé till er",
+        brodtext="Hej!\n\nSebastian Bergman",
+        html='<html><body><p>Hej!</p><img src="https://www.snajp.se/epost/snajp-logga.png"></body></html>',
+        fran_namn="Snajp",
+    )
+    assert fel is None
+
+    _, _, _, raa = next(a for a in klient.anrop if a[0] == "append")
+    mejl = email_mod.message_from_bytes(raa)
+    assert mejl["From"] == "Snajp <kontakt@snajp.se>"
+    assert mejl.get_content_type() == "multipart/alternative"
+    delar = {d.get_content_type(): d.get_payload(decode=True).decode("utf-8") for d in mejl.walk() if not d.is_multipart()}
+    assert delar["text/plain"].startswith("Hej!")
+    assert "snajp-logga.png" in delar["text/html"]
+
+
+async def test_kopian_utan_html_ar_ren_text_som_forut(monkeypatch):
+    import email as email_mod
+
+    klient = _FakeImapClient(GMAIL_SVENSK_LIST)
+    monkeypatch.setattr(imaplib, "IMAP4_SSL", lambda host, timeout=30: klient)
+    await imap_connector.spara_i_skickat(
+        "imap.gmail.com", "a@gmail.com", APP_LOSENORD,
+        fran="x@y.se", till="b@c.se", amne="Svar", brodtext="Hej.",
+    )
+    _, _, _, raa = next(a for a in klient.anrop if a[0] == "append")
+    mejl = email_mod.message_from_bytes(raa)
+    assert mejl.get_content_type() == "text/plain"
+    assert mejl["From"] == "x@y.se"
+
+
+async def test_kopiera_till_skickat_for_vidare_html_och_namn(monkeypatch):
+    storage = MemoryStorage()
+    storage.tenants[TENANT] = {"id": TENANT, "slug": "umeawebdesign", "name": "Umeå Webdesign"}
+    await storage.upsert_mailbox(
+        TENANT, provider="gmail", address="umeawebdesign@gmail.com",
+        secret_enc=kryptera({"losenord": APP_LOSENORD}),
+    )
+    anrop: list[dict] = []
+
+    async def fejk(host, user, password, **kwargs):
+        anrop.append(kwargs)
+        return None
+
+    monkeypatch.setattr(imap_connector, "spara_i_skickat", fejk)
+    await kopiera_till_skickat(
+        storage, TENANT, till="p@x.se", amne="a", brodtext="b", html="<p>b</p>", fran_namn="Snajp",
+    )
+    assert anrop[0]["html"] == "<p>b</p>"
+    assert anrop[0]["fran_namn"] == "Snajp"

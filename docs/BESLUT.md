@@ -9,6 +9,52 @@ möjligt), vad det betyder i koden.
 
 ---
 
+## 2026-11-23 — Snajps signatur i main är bytt; kopian i Skickat visar det som gick ut (Anton)
+
+**Beslut.**
+1. Snajps signatur i main är den nya (Grundare & VD, `sebastian@snajp.se`, logotypen från
+   `www.snajp.se`), satt 2026-11-23 10:10 med `scripts/satt_mejlsignatur.py --direkt`.
+2. Kopian som läggs i kundens Skickat bär samma HTML-del och samma avsändarnamn som
+   mejlet mottagaren fick. Förut var kopian ren text från adressen utan namn.
+3. Signaturskriptet har en väg rakt i databasen (`--direkt`) för en miljö där tenantens
+   nyckel inte finns i `.env.deploy`. Valideringen är API:ts egen och bara nyckeln
+   `signatur` rörs.
+4. Ett föråldrat signaturblock känns igen också när foten efter det saknar raden `--`.
+
+**Resonemanget.** Anton, med skärmbilder ur Gmail av två utskick från samma morgon:
+"Vad fan?? Jag trodde att det var löst, du måste larma tydligare om sådant, och bilden
+syns fortfarande inte som i provmejlet, gör vad som krävs för att lösa det". Två saker
+låg bakom:
+- Signaturbytet i main blev aldrig kört efter releasen. Agentens körning stoppades av
+  behörighetsspärren på natten, och det stod som en punkt bland flera i rapporten i
+  stället för som ett stopp. När sändfönstret öppnade 08:00 gick 75 mejl ut med den
+  gamla signaturen innan dagens tak nåddes 09:37.
+- Skärmbilderna var Snajps kopior i Skickat, inte mejlen som mottagarna fick. Mejltjänsten
+  visar att de tolv senaste utskicken bar HTML-delen med logotypen och blev levererade.
+  Kopian byggdes däremot som ren text, så den som öppnade Skickat såg ett mejl utan logga
+  och drog den rimliga slutsatsen att mottagaren fått samma sak. Kopian är kundens kvitto
+  och ska visa det som gick ut.
+
+**Regeln som följer av det (Anton: "du måste larma tydligare om sådant").** Ett steg i
+produktionen som inte blev gjort, och som påverkar vad som går ut till mottagare, är ett
+stopp och inte en rad i en lista: det står först i rapporten, med vad som går ut under
+tiden och när.
+
+**I koden.** `app/email_pipeline/connectors/imap.py` (`_skickat_meddelande`),
+`skickatkopia.kopiera_till_skickat` (`html`, `fran_namn`), `leads/scheduler.py` och
+`email_pipeline/sender.py` (skickar dem vidare), `leads/signatur.py` (`_foraldrat_slut`,
+`_prosastart`), `scripts/satt_mejlsignatur.py --direkt`.
+
+**Mätt.** Samtliga 4 891 osända utkast i Snajps kö i main kördes genom signaturbytet och
+HTML-bygget med signaturen som nu står i main: alla ger exakt en ny signatur, ingen rest
+av den gamla och logotypen i HTML-delen. Med koden som låg i main gav tre av dem dubbel
+signatur (gammal fot utan `--`).
+
+**Känt.** De 75 mejlen från 2026-11-23 och de tidigare utskicken bär den gamla signaturen
+och svarsadressen i signaturraden; de går inte att ta tillbaka. Svar på dem når inkorgen
+ändå, eftersom svarsadressen i mejlhuvudet är brevlådan. Äldre kopior i Skickat är ren
+text; bara nya får HTML-delen.
+
 ## 2026-11-23 — Inkorgen hämtar också mejl som redan är öppnade; öppnat men obesvarat får utkast ändå, bara redan besvarat lämnas (Anton)
 
 **Beslut.**

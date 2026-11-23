@@ -21,9 +21,12 @@ människa kasserar det; det gäller också oöppnade mejl. Bygg:
    sådana mejl in för hand eller ur citat.
 5. Tester mot en efterbildad IMAP-klient, beslut i `docs/BESLUT.md`.
 
-**Kvar efter releasen:** kör `scripts/satt_mejlsignatur.py` mot main (inte före: den gamla koden ger då dubbla
-signaturer i köade utkast). Den första synken ser sju dagar bakåt och ger utkast på öppnade, obesvarade mejl från
-den perioden. Ej verifierat: hämtningen mot en riktig Gmail-brevlåda, och märkningen i webbläsaren.
+**Efter releasen (2026-11-23 förmiddag).** Snajps signatur i main byttes först 10:10, efter att 75 mejl gått ut
+med den gamla 08:00–09:37 (dagens tak). Bytet är gjort med `scripts/satt_mejlsignatur.py --direkt` och verifierat mot
+en ny läsning; alla 4 891 osända utkast i kön ger rätt signatur och logga med koden i den här grenen. Kopian i
+Skickat bär nu samma HTML-del som mottagaren får (förut ren text, vilket såg ut som att loggan saknades). Beslutet
+och regeln om tydligare larm: `docs/BESLUT.md` 2026-11-23. Ej verifierat: en ny kopia i Gmails Skickat efter
+releasen, och märkningen av öppnade mejl i webbläsaren.
 
 ## 2026-10-23 — Claude — körningarna når beställt antal
 
