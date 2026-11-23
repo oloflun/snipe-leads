@@ -79,6 +79,15 @@ PRIS = {
     "gemini-3.8-flash@2027": (1.65, 8.25),
     "gemini-3.5-flash": (1.65, 9.90),
     "gemini-3.5-flash-lite": (0.33, 2.75),
+    # 2026-11-20: AI Studio-prislistan (aistudio.google.com/docs/pricing,
+    # global) + 10 % för eu, samma påslag som bekräftats i kontots SKU-lista
+    # för 3.8-flash och 3.5-flash-lite.
+    "gemini-3.6-flash": (0.825, 4.125),
+    "gemini-4-hydrogen": (1.65, 8.25),
+    "gemini-4-neon": (3.30, 16.50),
+    # 3.7-flash står inte i prislistans ordagranna del; 3.8:s pris som
+    # platshållare så att kostnadstaket ändå räknar.
+    "gemini-3.7-flash": (0.825, 4.125),
 }
 
 
@@ -116,11 +125,20 @@ def satt_miljo(args: argparse.Namespace) -> None:
     # vid 429 hade blandat in en annan region i mätningen.
     os.environ["VERTEX_RESERVREGIONER"] = args.region
     os.environ["VERTEX_INBADDNING_REGION"] = "europe-west1"
+    # Samma chattgräns som development kör med 3.8 (underlaget avsnitt 6.2,
+    # LLM_TIMEOUT_CHATT_S=60). Med kodens standard 20 s föll 3.8 på tid i
+    # varje supportfall 2026-11-20, och mätningen sa då inget om svaren.
+    os.environ["LLM_TIMEOUT_CHATT_S"] = str(args.chattgrans_s)
     os.environ["VISION_MODEL"] = args.modell
     utkast = args.utkastmodell or args.modell
     os.environ["LEADS_DRAFT_MODEL"] = utkast
     os.environ["LEADS_HUMANIZER_MODEL"] = utkast
-    os.environ["GOOGLE_SERVICE_ACCOUNT_JSON"] = _las_servicekonto()
+    # --nyckelfil: ett annat projekts servicekonto (t.ex. kreditprojektet), så
+    # att mätningen inte drar på produktionens kapacitet (risken i underlaget,
+    # avsnitt 7). Filen läses i processen och skrivs aldrig ut.
+    os.environ["GOOGLE_SERVICE_ACCOUNT_JSON"] = (
+        Path(args.nyckelfil).read_text(encoding="utf-8") if args.nyckelfil else _las_servicekonto()
+    )
 
 
 # -- Tokens ---------------------------------------------------------------------
@@ -329,6 +347,8 @@ async def main() -> None:
     p.add_argument("--iris-urval", type=int, default=10)
     p.add_argument("--etikett", required=True)
     p.add_argument("--tak-kr", type=float, default=150.0)
+    p.add_argument("--chattgrans-s", type=float, default=60.0, help="LLM_TIMEOUT_CHATT_S; development kör 60")
+    p.add_argument("--nyckelfil", default="", help="servicekontots JSON-fil; tom = GOOGLE_SERVICE_ACCOUNT_JSON i snajp-support/.env")
     args = p.parse_args()
     satt_miljo(args)
 

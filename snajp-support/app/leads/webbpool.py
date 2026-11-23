@@ -224,7 +224,9 @@ async def mata_in(storage: Any, korning: dict[str, Any], tenant_id: str) -> list
             bedomd = gammal.get("bedomd_at")
             if isinstance(bedomd, str):
                 bedomd = datetime.fromisoformat(bedomd)
-            if not bedomd or bedomd < gransen:
+            # En okänd nivå är en misslyckad bedömning (ingen skärmbild), inte
+            # en färsk: den prövas igen vid nästa passage, som i _farsk.
+            if not bedomd or bedomd < gransen or gammal.get("webbniva") == "okand":
                 behover.append(rad["doman"])
         return behover
     except Exception:  # noqa: BLE001
@@ -286,19 +288,21 @@ async def bedom_en(rad: dict[str, Any], *, befintlig: dict[str, Any] | None = No
     return {**rev, "webbniva": rev.get("webbniva") or "okand"}
 
 
-async def bedom(storage: Any, domaner: list[str], tenant_id: str) -> int:
+async def bedom(storage: Any, domaner: list[str], tenant_id: str, *, utan_dygnstak: bool = False) -> int:
     """Bedömer domänerna under ett eget kredittak, inom dygnstaket. Antalet
-    bedömda. Kastar aldrig."""
+    bedömda. Kastar aldrig. `utan_dygnstak` bara för bakåtfyllnaden, som
+    Anton startar för hand och som har sitt eget tak (kreditkontrollen)."""
     from . import sidhamtning
 
     if not domaner or not aktiv():
         return 0
     idag = date.today()
-    kvar = _dagstak() - _dagens.get(idag, 0)
-    if kvar <= 0:
-        logger.info("Webbpoolens dygnstak (%s) är nått; %s domäner väntar.", _dagstak(), len(domaner))
-        return 0
-    domaner = domaner[:kvar]
+    if not utan_dygnstak:
+        kvar = _dagstak() - _dagens.get(idag, 0)
+        if kvar <= 0:
+            logger.info("Webbpoolens dygnstak (%s) är nått; %s domäner väntar.", _dagstak(), len(domaner))
+            return 0
+        domaner = domaner[:kvar]
     rader = await storage.webbpool_hamta(domaner)
     # Två krediter per skärmbild, sju om stealth behövs (webbrevision).
     sidhamtning.starta(storage, tenant_id, tak=webbrevision.STEALTH_KREDITER * len(domaner),
@@ -320,7 +324,8 @@ async def bedom(storage: Any, domaner: list[str], tenant_id: str) -> int:
             "bedomd_at": datetime.now(UTC),
         })
         bedomda += 1
-    _dagens[idag] = _dagens.get(idag, 0) + bedomda
+    if not utan_dygnstak:
+        _dagens[idag] = _dagens.get(idag, 0) + bedomda
     return bedomda
 
 
@@ -402,6 +407,154 @@ async def efter_korning(storage: Any, korning: dict[str, Any], tenant_id: str) -
     domaner = await mata_in(storage, korning, tenant_id)
     await bedom(storage, domaner, tenant_id)
     await fordela(storage)
+
+
+# -- Bakåtfyllnad (Antons beställning 2026-11-22) -----------------------------
+#
+# Leads från före poolen, ur listor och importer, och alla som fick nivån
+# okand medan ScrapeGraph-krediten var slut. Startas BARA för hand
+# (POST /api/admin/webbpool/bakatfyll, scripts/webbpool_bakatfyll.py) och
+# aldrig av en körning. Torrkör som standard. Idempotent: en avbruten körning
+# fortsätter där den slutade, eftersom bara obedömda och okända domäner tas.
+
+#: Krediter per bildbedömning (skärmbild utan stealth). Kontrollen räknar med
+#: detta; stealth (7) behövs bara när en ruta skymmer.
+KREDITER_PER_SAJT = 2
+#: Domäner per bedömningsomgång: ett eget kredittak per omgång (bedom), och
+#: fördelningen körs mellan omgångarna så att listorna växer under tiden.
+BAKATFYLL_OMGANG = 50
+#: Läget i processen. Det som överlever en omstart är poolen själv
+#: (bakatfyll_lage räknar om den), så en ny start tar vid där den slutade.
+_bakatfyll: dict[str, Any] = {}
+
+
+async def _kandidater_per_kund(storage: Any) -> dict[str, list[dict[str, Any]]]:
+    """Poolrader för varje kunds leads och listrader med webbplats, per
+    källkund. Webbyråer och mottagare är aldrig källa (utesluten_kalla)."""
+    ut: dict[str, list[dict[str, Any]]] = {}
+    kolumner = ["company_name", "website", "orgnr", "ort", "postnr", "lan", "sni"]
+    for tenant in await storage.list_tenants():
+        if utesluten_kalla(tenant):
+            continue
+        tid = str(tenant["id"])
+        rader: dict[str, dict[str, Any]] = {}
+        offset = 0
+        while True:
+            sida = await storage.list_prospects(tid, limit=500, offset=offset, kolumner=kolumner)
+            for p in sida:
+                rad = bolagsrad(p, "korning")
+                if rad:
+                    rader.setdefault(rad["doman"], rad)
+            if len(sida) < 500:
+                break
+            offset += 500
+        for lista in await storage.list_lead_lists(tid, limit=500):
+            if lista.get("kalla") == "webbpool":
+                continue
+            for item in await storage.list_lead_list_items(tid, str(lista["id"]), med_flyttade=True):
+                rad = bolagsrad(item, "lista")
+                if rad:
+                    rader.setdefault(rad["doman"], rad)
+        if rader:
+            ut[tid] = list(rader.values())
+    return ut
+
+
+def _behover_bedomning(pool: dict[str, Any] | None) -> bool:
+    return not pool or not pool.get("bedomd_at") or pool.get("webbniva") == "okand"
+
+
+def scrapegraph_krediter() -> int | None:
+    """Krediter kvar hos ScrapeGraph, None när det inte går att fråga."""
+    from ..config import get_settings
+
+    nyckel = get_settings().scrapegraphai_api_key
+    if not nyckel:
+        return None
+    try:
+        from scrapegraph_py import ScrapeGraphAI
+
+        svar = ScrapeGraphAI(api_key=nyckel).credits()
+        return int(svar.data.remaining) if svar and svar.data is not None else None
+    except Exception:  # noqa: BLE001
+        logger.info("ScrapeGraphs kreditsaldo gick inte att läsa.")
+        return None
+
+
+async def bakatfyll_lage(storage: Any) -> dict[str, Any]:
+    """Hur långt bakåtfyllnaden kommit, räknat ur poolen (överlever omstart)
+    plus den pågående körningens läge i processen."""
+    per_kund = await _kandidater_per_kund(storage)
+    domaner = sorted({r["doman"] for rader in per_kund.values() for r in rader})
+    pool = await storage.webbpool_hamta(domaner) if domaner else {}
+    nivaer: dict[str, int] = {}
+    for d in domaner:
+        niva = (pool.get(d) or {}).get("webbniva") or "obedomd"
+        nivaer[niva] = nivaer.get(niva, 0) + 1
+    kvar = sum(1 for d in domaner if _behover_bedomning(pool.get(d)))
+    return {
+        "domaner": len(domaner),
+        "kvar_att_bedoma": kvar,
+        "nivaer": nivaer,
+        "krediter_behov": kvar * KREDITER_PER_SAJT,
+        "korning": dict(_bakatfyll),
+    }
+
+
+async def bakatfyll(storage: Any, *, apply: bool, max_bedom: int | None = None,
+                    utan_kreditkontroll: bool = False) -> dict[str, Any]:
+    """Torrkör (apply=False): läget och vad som skulle bedömas. apply=True
+    lägger in alla kunders domäner i poolen och startar bedömningen i
+    bakgrunden. Vägrar om ScrapeGraphs saldo inte räcker, så att inget körs
+    av misstag före påfyllningen."""
+    lage = await bakatfyll_lage(storage)
+    krediter = scrapegraph_krediter()
+    antal = min(lage["kvar_att_bedoma"], max_bedom) if max_bedom else lage["kvar_att_bedoma"]
+    lage.update(krediter_kvar=krediter, ska_bedomas=antal, startad=False)
+    if not apply or not antal:
+        return lage
+    if not aktiv():
+        lage["fel"] = "Webbpoolen är avstängd (WEBBPOOL tom)."
+        return lage
+    if _bakatfyll.get("pagar"):
+        lage["fel"] = "En bakåtfyllnad pågår redan."
+        return lage
+    if not utan_kreditkontroll and (krediter is None or krediter < antal * KREDITER_PER_SAJT):
+        lage["fel"] = (f"ScrapeGraph har {krediter if krediter is not None else 'okänt antal'} krediter; "
+                       f"{antal} sajter behöver {antal * KREDITER_PER_SAJT}. Fyll på, eller sätt max_bedom.")
+        return lage
+    import asyncio
+
+    _bakatfyll.clear()
+    _bakatfyll.update(pagar=True, startad_at=datetime.now(UTC).isoformat(), mal=antal, bedomda=0, fel=None)
+    asyncio.create_task(_bakatfyll_kor(storage, antal))
+    lage.update(startad=True, korning=dict(_bakatfyll))
+    return lage
+
+
+async def _bakatfyll_kor(storage: Any, antal: int) -> None:
+    """Själva bakåtfyllnaden. Kastar aldrig; läget står i _bakatfyll."""
+    try:
+        per_kund = await _kandidater_per_kund(storage)
+        kvar = antal
+        for tid, rader in per_kund.items():
+            if kvar <= 0:
+                break
+            for rad in rader:
+                await storage.webbpool_spara(rad)
+            pool = await storage.webbpool_hamta([r["doman"] for r in rader])
+            att_gora = [r["doman"] for r in rader if _behover_bedomning(pool.get(r["doman"]))][:kvar]
+            for i in range(0, len(att_gora), BAKATFYLL_OMGANG):
+                n = await bedom(storage, att_gora[i:i + BAKATFYLL_OMGANG], tid, utan_dygnstak=True)
+                _bakatfyll["bedomda"] = _bakatfyll.get("bedomda", 0) + n
+                await fordela(storage)
+            kvar -= len(att_gora)
+        _bakatfyll["fordelat"] = await fordela(storage)
+    except Exception as fel:  # noqa: BLE001
+        logger.exception("Webbpoolens bakåtfyllnad föll.")
+        _bakatfyll["fel"] = type(fel).__name__
+    finally:
+        _bakatfyll.update(pagar=False, klar_at=datetime.now(UTC).isoformat())
 
 
 def demo() -> None:

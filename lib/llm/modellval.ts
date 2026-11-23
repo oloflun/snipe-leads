@@ -173,10 +173,14 @@ export function vertexModellnamn(namn: string): string {
  * lägst för gemini-2.5 och gemini-3.5, men gemini-3.8-flash svarar 400
  * "Thinking level is unsupported: THINKING_LEVEL_MINIMAL" och tar lägst "low"
  * (uppmätt 2026-11-18, spegel av `lagsta_tankniva` i snajp-support/app/agent/llm.py).
+ * Samma 400 uppmätt 2026-11-20 för gemini-3.7-flash, gemini-4-hydrogen och
+ * gemini-4-neon.
  */
+const UTAN_MINIMAL = ["gemini-3.8-flash", "gemini-3.7-flash", "gemini-4-hydrogen", "gemini-4-neon"];
+
 export function lagstaTankande(namn: string): "minimal" | "low" {
   const rent = (namn || "").trim().toLowerCase().split("/").pop() || "";
-  return rent.startsWith("gemini-3.8-flash") ? "low" : "minimal";
+  return UTAN_MINIMAL.some((m) => rent.startsWith(m)) ? "low" : "minimal";
 }
 
 function geminiModell(env: Miljo, standard: string): string {

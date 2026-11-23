@@ -70,8 +70,23 @@ def lage() -> str:
     return varde if varde in ("off", "skugga", "pa") else "off"
 
 
+def motor() -> str:
+    """Vem som svarar: "gemini" (Flash-Lite på Vertex i EU, standard sedan
+    2026-11-22) eller "typesafe" (jev-1.13.0, inte godkänt underbiträde)."""
+    return "typesafe" if (get_settings().jev_motor or "").strip().lower() == "typesafe" else "gemini"
+
+
+def redo() -> bool:
+    """Kan motorn svara? Delas med inkorgen (klassning._jev_nyckel)."""
+    if motor() == "typesafe":
+        return bool(get_settings().typesafe_api_key)
+    from . import jev_gemini
+
+    return jev_gemini.redo()
+
+
 def aktiv() -> bool:
-    return lage() != "off" and bool(get_settings().typesafe_api_key)
+    return lage() != "off" and redo()
 
 
 def _utan_personuppgifter(text: str) -> str:
@@ -88,23 +103,30 @@ async def fraga(state: dict[str, Any], fragor: dict[str, Any]) -> dict[str, Any]
     """Ett anrop. Kastar vid fel — anroparen avgör vad ett fel betyder."""
     from ..agentcore.insyn import Tidtagare, logga_anrop
 
-    nyckel = get_settings().typesafe_api_key
+    modell = MODELL
     with Tidtagare() as tid:
-        async with httpx.AsyncClient(verify=ssl_kontext(), timeout=TIMEOUT_S) as client:
-            svar = await client.post(
-                ENDPOINT,
-                json={"state": state, "model": MODELL, "questions": fragor},
-                headers={"Authorization": f"Bearer {nyckel}"},
-            )
-        svar.raise_for_status()
-        svaren = svar.json().get("answers") or {}
+        if motor() == "gemini":
+            from . import jev_gemini
+
+            modell = f"gemini:{jev_gemini._modell()}"
+            svaren = await jev_gemini.fraga(state, fragor)
+        else:
+            nyckel = get_settings().typesafe_api_key
+            async with httpx.AsyncClient(verify=ssl_kontext(), timeout=TIMEOUT_S) as client:
+                svar = await client.post(
+                    ENDPOINT,
+                    json={"state": state, "model": MODELL, "questions": fragor},
+                    headers={"Authorization": f"Bearer {nyckel}"},
+                )
+            svar.raise_for_status()
+            svaren = svar.json().get("answers") or {}
     # Insynen (Fas 7): vad Jev fick (bolagsdata utan personuppgifter, se
     # _utan_personuppgifter) och vad den svarade.
     logga_anrop(
         "jev",
         prompt=json.dumps({"state": state, "questions": fragor}, ensure_ascii=False),
         svar=json.dumps(svaren, ensure_ascii=False),
-        modell=MODELL,
+        modell=modell,
         latens_ms=tid.ms,
     )
     return svaren
@@ -145,7 +167,12 @@ def _fragor(profil: dict[str, Any], rader: list[str]) -> dict[str, Any]:
         }
     }
     for k in profil.get("kriterier") or []:
-        if k.get("krav") == "maste":
+        # Webbkriterier avgörs i kod ur webbrevisionen (regel 9,
+        # bedomning.webbutslag), aldrig av Jev. Umeå Webdesigns profil i main
+        # har "gamla hemsidor" och "saknar hemsida, bara Facebook" som två
+        # måste-krav (kundens "eller"). Bokstavligt läst fäller det andra
+        # varje bolag med sajt, med belägg (2026-11-23).
+        if k.get("krav") == "maste" and k.get("belagg") != "webbsignal":
             fragor[f"krav_{k['id']}"] = {
                 "type": "noul",
                 "instructions": f"Does this company meet this requirement: {k['text']}",
@@ -172,6 +199,8 @@ def _tolka(profil: dict[str, Any], svar: dict[str, Any], rader: list[str]) -> di
         stod = rader[int(val[1:])]
     skal: list[str] = []
     for k in profil.get("kriterier") or []:
+        if k.get("krav") != "maste" or k.get("belagg") == "webbsignal":
+            continue  # se _fragor: bara måste-krav som inte avgörs i kod
         p = (svar.get(f"krav_{k['id']}") or {}).get("noul")
         if isinstance(p, (int, float)) and p <= NEJ_GRANS:
             skal.append(f"{k['text']} (Jev: {p:.2f})")

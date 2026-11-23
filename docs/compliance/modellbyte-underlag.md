@@ -855,6 +855,68 @@ bekräftat att det också gäller PT köpt i `eu`. **Före ett köp måste
     månaden beroende på bindning.
   - Utkasten ligger kvar på PayGo i bakgrunden, där väntan inte märks.
 
+### 6.6 Jämförelse efter Googles avveckling av 3.6, 2026-11-20
+
+Google mejlade att `gemini-3.6-flash` stängs. 3.6 och 3.7 stängs för alla
+projekt den 28 januari 2027. 3.5 Flash och 3.5 Flash-Lite har inget satt
+datum.
+
+Mätningen gjordes med `scripts/mat_modellbyte.py --matning alla`, alla anrop i
+`eu`. Den kördes på kreditprojektet (gratiskrediten, nyckel via `--nyckelfil`),
+med chattgräns 60 s som i development (`--chattgrans-s`), och bara på
+fixturer. Resultaten finns i `var/modellbyte/kredit-20261120-*.json`. Hela
+dagen kostade omkring 385 kr av krediten.
+
+| Modell | Support /50 | Golden /7 | Triage /50 | Iris /10 (stilgrind) | Support median | Kostnad, hela sviten |
+|---|---|---|---|---|---|---|
+| `gemini-4-hydrogen` | 47¹ | 7 | 50 | 10 (10) | 21 s¹ | 82 kr |
+| `gemini-3.8-flash` | 47 | 7 | 49 | 8 (10) | 43 s² | 37 kr (≈ 73 kr på 2027 års pris) |
+| `gemini-3.7-flash` | 49³ | 7 | 49 | 9 (10) | 142 s | 39 kr⁴ |
+| `gemini-3.5-flash-lite` | 44³ | 6 | 46 | 8 (7) | 5 s | 17 kr |
+| `gemini-3.5-flash` | 44 | 6 | 48 | 1 (9; skrivregler 1) | 18 s | 74 kr |
+
+1. Hydrogens supportsvit kördes om ensam (`kredit-20261120-4-hydrogen-ensam`).
+   När den körde parallellt med de andra fick den 27/50, varav 18 var
+   tidsgränsfel (120 s).
+2. 3.8 körde parallellt med tre andra modeller i samma projekt. Ensam mätte den
+   24 s (§ 6.5).
+3. 3.7, 3.5 Flash-Lite och Hydrogens golden, triage och Iris kommer från en
+   körning med chattgräns 20 s. Det var den första körningen, vars loop
+   fortsatte efter att 3.8-processen dödats, och den skrev över filerna.
+   Parallellkörningen med 60 s gav enligt loggarna 3.7 27/50 i support (mest
+   tidsgränsfel) och Flash-Lite 46/7/47/7. Upp till sex körningar gick samtidigt
+   i projektet, så alla latenser är för höga. Filerna i
+   `var/modellbyte/kredit-20261120-*.json` är källan för siffrorna i tabellen.
+4. 3.7:s pris är inte publicerat, så summan är räknad på 3.8:s introduktionspris.
+
+**Slutsats.** 3.8 Flash behålls i dag: den har bäst kvalitet per krona så
+länge introduktionspriset gäller. 4 Hydrogen är bäst i alla sviter och kostar
+per token lika mycket som 3.8 efter 2027-01-01. Den gör av med fler tokens,
+så en körning blir ungefär 10 % dyrare än 3.8 på 2027 års pris. Den är
+kandidaten att mäta om och byta till inför prishöjningen.
+
+3.5 Flash väljs bort: den har de svagaste utkasten och det högsta priset. 3.7
+väljs bort: den är för långsam och stängs i januari. 3.5 Flash-Lite är bara
+aktuell för snabba steg, som chatt och triage, inte för utkast.
+
+**Antons beslut samma kväll** (`docs/BESLUT.md` 2026-11-20): Lite används i
+support, triage och utkast. Han har läst outputen och tycker att svaren är
+korrekta och raka, och att utkasten är mer direkta och säljande. Utkasten
+finputsas efter skarpa körningar. Det går före slutsatsen ovan. I development
+(inte main) har `api` och `web` fått `MODEL=gemini-3.5-flash-lite`.
+`VISION_MODEL` är `gemini-3.8-flash` efter Antons granskning av 15 omstridda
+facitsajter, bedömda av båda modellerna på samma skärmbild. Lite kallade fem
+av sex dåliga sajter bra. Anton dömde att 3.8 hade rätt om alla, och facit är
+rättat: åtta sajter gick från bra till dalig och alvegardens.se från akut till
+dalig. Med det rättade facit hade 3.8 den 18 november fått omkring 55 av 58
+rätt (§ 3.7). Det är inte omkört. Merkostnaden mot Lite är omkring 0,04 kr per
+bedömd sajt, eller 3,60 kr per 100 leads. Kvittona är pausade, så
+`KVITTO_MODEL` saknar betydelse.
+
+Koden tar redan Hydrogen och 3.7. `_UTAN_MINIMAL` i `app/agent/llm.py` och
+`UTAN_MINIMAL` i `lib/llm/modellval.ts` ger tankenivån LOW, eftersom de två
+svarar 400 på MINIMAL.
+
 ## 7. Risker
 
 | Risk | Bedömning | Motåtgärd |
