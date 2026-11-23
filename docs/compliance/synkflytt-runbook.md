@@ -19,10 +19,10 @@ Uppdraget räknar ett steg längre än planen. Tabellen visar vilka steg som hö
 | 3 | 2 | Synkskriptet: miljövariabler, spärrar, lås, utfall | Kod | Klar |
 | 4 | 3 | Läsrollen `synk_las` (migration 122) | Kod | Klar; i main först med releasen |
 | 5 | 4 | Driftavbilden `railway/Dockerfile.drift` | Kod | Klar |
-| 6 | 5 | Tjänsten `synk` i main, torrkörning | Railway + ägare | Väntar på releasen (migration 122 i main) |
-| 7 | 6 | Parallellkörning med skrivning, minst 24 h | Railway | Efter steg 6 |
-| 8 | 7 | Stäng av GitHub-synken | Kod | Efter steg 7 |
-| 9 | 8 | Tjänsten `migrera` per miljö | Railway | **development: körs sedan 2026-11-19** (`MIGRERA_APPLY=1`); main efter releasen |
+| 6 | 5 | Tjänsten `synk` i main, torrkörning | Railway + ägare | **Gjort 2026-11-23** med `scripts/railway_driftjobb.py --apply --bara synk` och `railway_synk_anslut.py --apply`. Kvar för ägaren: försegla de två variablerna |
+| 7 | 6 | Parallellkörning med skrivning, minst 24 h | Railway | **Ersatt 2026-11-23:** GitHub-synken gick inte (GitHub startade inga jobb), så parallellkörningen gick inte att göra. Railway-synken torrkördes och slogs sedan på (`--skarp`) |
+| 8 | 7 | Stäng av GitHub-synken | Kod | **Gjort 2026-11-23:** schemat borttaget ur `synk.yml`, manuell start kvar |
+| 9 | 8 | Tjänsten `migrera` per miljö | Railway | **development: körs sedan 2026-11-19** (`MIGRERA_APPLY=1`); **main: körs sedan 2026-11-23** som tjänsten `migrera-main` (en tjänst finns bara i miljön den skapades i) |
 | 10 | 9 | PR-kontrollen utan databas | Kod + ägare | Koden klar 2026-11-19 (`scripts/releasens_migrationer.py`, `GET /api/drift/schema`, migration 129); ägaren sätter `SCHEMA_LASNYCKEL`, se steg 10b |
 | 11 | 10 | Insyn i panelen och larm | Kod | Klar 2026-11-19 |
 | 12 | 11 | Stäng produktionens publika port | Ägare | Nedan; provisioneringens vakt är klar 2026-11-19 |

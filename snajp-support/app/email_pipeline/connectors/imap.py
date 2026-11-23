@@ -412,6 +412,13 @@ def _skickatmapp(client) -> str | None:
     enda pålitliga vägen: NAMNET är lokaliserat efter kontots språk — svensk
     Gmail heter "[Gmail]/Skickat", engelsk "[Gmail]/Sent Mail". Hårdkodade
     namn är bara fallback (SKICKAT_KANDIDATER)."""
+    return mapp_med_attribut(client, b"\\sent")
+
+
+def mapp_med_attribut(client, attribut: bytes) -> str | None:
+    """Mappen som bär ett särskilt attribut i LIST (RFC 6154), angivet med
+    gemener: b"\\sent" eller b"\\trash". Namnet ges tillbaka i den form
+    servern gav det."""
     typ, rader = client.list()
     if typ != "OK":
         return None
@@ -419,7 +426,7 @@ def _skickatmapp(client) -> str | None:
         if not isinstance(rad, bytes):
             continue
         traff = _LIST_RAD.match(rad.strip())
-        if not traff or b"\\sent" not in traff.group("attrs").lower():
+        if not traff or attribut not in traff.group("attrs").lower():
             continue
         namn = traff.group("namn").strip()
         if namn.startswith(b'"') and namn.endswith(b'"'):
@@ -431,7 +438,8 @@ def _skickatmapp(client) -> str | None:
 
 
 def _skickat_meddelande(
-    *, fran: str, till: str, amne: str, brodtext: str, html: str | None = None, fran_namn: str = ""
+    *, fran: str, till: str, amne: str, brodtext: str, html: str | None = None, fran_namn: str = "",
+    datum: datetime | None = None, message_id: str | None = None,
 ) -> EmailMessage:
     """Kopian som den läggs i Skickat: samma delar som mottagaren fick.
 
@@ -445,7 +453,12 @@ def _skickat_meddelande(
     meddelande["From"] = email.utils.formataddr((fran_namn, fran)) if fran_namn else fran
     meddelande["To"] = till
     meddelande["Subject"] = amne
-    meddelande["Date"] = email.utils.formatdate()
+    # `datum` och `message_id` är för kopior som läggs dit i efterhand
+    # (scripts/skickat_original.py): sändtiden i stället för nu, och ett eget
+    # id som gör en omkörning ofarlig.
+    meddelande["Date"] = email.utils.format_datetime(datum) if datum else email.utils.formatdate()
+    if message_id:
+        meddelande["Message-ID"] = message_id
     meddelande.set_content(brodtext)
     if html:
         meddelande.add_alternative(html, subtype="html")

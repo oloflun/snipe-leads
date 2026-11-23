@@ -12,9 +12,10 @@
 # Fönsterlöst per definition: körs på GitHubs runner, inte på en lokal maskin.
 name: synk
 
+# Schemat är borttaget 2026-11-23: synken körs hos Railway (tjänsten `synk` i
+# miljön main, var tionde minut; DEPLOY.md "Driftjobben körs hos Railway").
+# Den manuella starten står kvar som reserv (synkflytt-runbook.md, steg 8).
 on:
-  schedule:
-    - cron: "*/10 * * * *"
   workflow_dispatch:
 
 concurrency:

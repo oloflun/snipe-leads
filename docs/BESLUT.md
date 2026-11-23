@@ -9,6 +9,56 @@ möjligt), vad det betyder i koden.
 
 ---
 
+## 2026-11-23 — Driftjobben körs hos Railway; gamla kopior i Skickat byts mot originalen (Anton)
+
+**Beslut.**
+1. Synken, migrationerna och övervakningen körs som tjänster hos Railway: `migrera-main`
+   och `synk` i miljön main, `overvakning` i development (`migrera` i development fanns
+   sedan 2026-11-19). Uppsättningen är `scripts/railway_driftjobb.py`.
+2. Övervakningen hos Railway larmar med mejl till `snajpsupport@gmail.com` genom
+   mejltjänsten. GitHub-flödet står kvar som en andra kontroll.
+3. `synk.yml` har inget schema längre. `migrera.yml` och `overvakning.yml` står kvar.
+4. Textkopiorna i Snajps Skickat byts mot utskicken som de gick ut
+   (`scripts/skickat_original.py`). Den gamla kopian flyttas till papperskorgen först när
+   originalet ligger på plats.
+
+**Resonemanget.** 2026-11-23 slutade GitHub starta jobb för repot ("recent account
+payments have failed or your spending limit needs to be increased"). Synken, de
+automatiska migrationerna och övervakningen stod still, och kontrollerna på release-PR:en
+blev röda utan att ha körts. Anton: "det finns inget gångbart alternativ till
+GitHub-jobben?" och sedan "Gör vad som krävs för att få alla jobben i drift på Railway".
+Flytten av synken och migrationerna var redan planerad och till stor del byggd
+(`docs/compliance/synkflytt-plan.md`, upplägg A): driftavbilden, startkommandot, läsrollen
+`synk_las` och `migrera` i development fanns. Det som återstod var handgreppen i main.
+Planens parallellkörning i 24 timmar mot GitHub-synken gick inte att göra, eftersom
+GitHub-synken inte gick; Railway-synken torrkördes i stället och slogs sedan på.
+
+Om kopiorna, Anton: "Finns det något sätt att få utskicken i sin originalversion med
+signaturen intakt i skickat?" och "Byt ut mailen i skickat". Mejltjänsten sparar varje
+utskick som det gick ut, så originalet går att lägga dit ordagrant. Ett utskick som gick
+med en äldre signatur visas med den: kopian är ett kvitto och skrivs aldrig om.
+
+**Övervakningen: avvägningen.** Flödet på GitHub är gjort för att stå utanför det som
+övervakas. Hos Railway körs kontrollen i development, en annan miljö än main, men på
+samma plattform: går hela Railway ner larmar den inte. Därför står GitHub-flödet kvar,
+och de två täcker varandra. Jobbet har inget minne mellan körningarna, så larmfloden hålls
+nere med mejltjänstens idempotensnyckel (samma avvikelse, högst ett mejl per sex timmar)
+och inget mejl sägs när läget är friskt igen.
+
+**Inte flyttat.** Säkerhetsbevakningen skriver ärenden på GitHub och behöver en
+GitHub-token hos Railway, som bara Anton kan skapa. Testerna (`verify.yml`,
+`pr-granskning.yml`) hör hemma på GitHub. Båda går igen när betalningen är ordnad;
+säkerhetsbevakningen tar då igen sju dagar bakåt.
+
+**Kvar för ägaren.** Försegla `SYNK_MAIN_PG_URL`, `SYNK_DEVELOPMENT_PG_URL` och
+`MIGRERA_PG_URL` i Railways gränssnitt (Seal går inte via API:t). Planens steg 12 och 13
+(stäng mains publika port, ta bort `ENV_DEPLOY` och rotera) är inte gjorda.
+
+**I koden.** `scripts/railway_driftjobb.py`, `scripts/overvakning.py`,
+`scripts/railway_drift.py` (jobbet `overvakning`), `railway/Dockerfile.drift`,
+`scripts/skickat_original.py`, `app/email_pipeline/connectors/imap.py`
+(`mapp_med_attribut`, sändtid och eget id på kopian), `tests/test_driftjobb_railway.py`.
+
 ## 2026-11-23 — Snajps signatur i main är bytt; kopian i Skickat visar det som gick ut (Anton)
 
 **Beslut.**

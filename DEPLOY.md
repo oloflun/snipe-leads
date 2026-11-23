@@ -87,9 +87,42 @@ python scripts/railway.py q \
 `environmentId`/`serviceId` för respektive miljö och tjänst står i "Faktiska
 identiteter" längst ned i den här filen.
 
+### Driftjobben körs hos Railway (2026-11-23)
+
+Synken, migrationerna och övervakningen går som egna tjänster hos Railway och
+är inte längre beroende av GitHub Actions. 2026-11-23 slutade GitHub starta
+jobb för repot, och alla tre stod still tills de flyttades.
+
+| Tjänst | Miljö | Gren | Körs | Vad |
+|---|---|---|---|---|
+| `migrera` | development | `development` | vid deploy som rör `db/migrations/` | migrationskedjan mot development |
+| `migrera-main` | main | `main` | vid deploy som rör `db/migrations/` | migrationskedjan mot main |
+| `synk` | main | `main` | var tionde minut | speglar main till development |
+| `overvakning` | development | `development` | var femtonde minut | kontrollerar produktionens publika adresser, mejlar larm |
+
+- Alla bygger `railway/Dockerfile.drift` och startar `scripts/railway_drift.py <jobb>`.
+- Uppsättningen är ett kommando som går att köra om:
+  `python scripts/railway_driftjobb.py` (visar läget), `--apply` (skapar det som
+  saknas), `--skarp` (slår på skrivningen: `MIGRERA_APPLY`, `SYNK_APPLY`).
+  Synkens anslutningar: `python scripts/railway_synk_anslut.py --apply`.
+- Utfallet läses med `railway logs --service <tjänst> --environment <miljö>`
+  eller i Railway under tjänsten (Deployments, Cron Runs).
+- Larmet från `overvakning` går som mejl till `snajpsupport@gmail.com`, högst
+  en gång per sex timmar för samma avvikelse. Prov utan att något är nere:
+  sätt `SIMULERA_FEL=1` på tjänsten, vänta en körning och ta bort den igen.
+- GitHub-flödena `migrera.yml` och `overvakning.yml` står kvar som en andra
+  väg när GitHub går. Migrationerna håller samma rådgivande lås, så de två
+  vägarna väntar på varandra. `synk.yml` har inget schema längre.
+- Kvar på GitHub: testerna (`verify.yml`, `pr-granskning.yml`) och
+  säkerhetsbevakningen, som skriver ärenden och behöver en GitHub-token.
+
+Bakgrund och stegen i detalj: `docs/compliance/synkflytt-plan.md` och
+`synkflytt-runbook.md`. Beslutet: `docs/BESLUT.md` 2026-11-23.
+
 ### Migrationer körs mot Railway
 
-**Av sig själva sedan 2026-11-16** (`.github/workflows/migrera.yml`):
+**Av sig själva sedan 2026-11-16** (`.github/workflows/migrera.yml`), och
+sedan 2026-11-23 också av tjänsterna `migrera` och `migrera-main` ovan:
 
 - En push till `development` eller `main` som rör `db/migrations/`
   kör kedjan mot den miljön. Jobbet tar under en minut och Railways bygge

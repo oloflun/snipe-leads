@@ -5,6 +5,7 @@
 **
 
 !scripts/railway_drift.py
+!scripts/overvakning.py
 !scripts/railway_synk.py
 !scripts/begransning_spegel.py
 !scripts/railway_migrate.py
