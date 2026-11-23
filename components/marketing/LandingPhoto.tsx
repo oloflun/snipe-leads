@@ -8,7 +8,7 @@ import { useLocale } from "@/lib/i18n";
 import type { ProductKey } from "@/lib/routes";
 import { saljbaraProdukter } from "@/lib/routes";
 import { KONTAKT_MEJL, mejlaOss, productCopy, shared, varforSnajp, varforSupport } from "@/components/marketing/copy";
-import { hemFragor, imagery, photo, sectionCopy } from "@/components/marketing/copy-sections";
+import { hemFragor, imagery, photo, photoSet, photoSizes, sectionCopy } from "@/components/marketing/copy-sections";
 import { AgentResultat } from "@/components/marketing/AgentResultat";
 import { AgentFlode, HemGranser, HemHjalte } from "@/components/marketing/Startsida";
 import { HeroText } from "@/components/marketing/LiveText";
@@ -211,6 +211,8 @@ export function LandingPhoto({
           <img
             data-mo="hero-img"
             src={photo(imagery.hero.src)}
+            srcSet={photoSet(imagery.hero.src)}
+            sizes="(max-aspect-ratio: 3/2) 150vh, 100vw"
             alt={text(imagery.hero.alt)}
             className="absolute inset-0 h-full w-full bg-ink object-cover object-center"
             fetchPriority="high"
@@ -478,8 +480,11 @@ export function LandingPhoto({
               <img
                 data-parallax
                 src={photo(imagery.street.src)}
+                srcSet={photoSet(imagery.street.src)}
+                sizes={photoSizes.gata}
                 alt={text(imagery.street.alt)}
                 loading="lazy"
+                decoding="async"
                 className="h-[380px] w-full object-cover md:h-[600px]"
               />
             </figure>
@@ -526,12 +531,21 @@ export function LandingPhoto({
             run of text sections needed one more break, and the image rhymes with
             "the same email to a hundred companies". */}
         <section data-mo="band" className="relative h-[220px] overflow-hidden md:h-[300px]">
-          <div
-            data-parallax
-            className="parallax absolute -inset-y-[10%] inset-x-0 bg-seal"
-            aria-hidden="true"
-            style={{ backgroundImage: `url(${photo(imagery.grid.src)})` }}
-          />
+          {/* Fotot var en CSS-bakgrund och hämtades därför med sidan, i full
+              bredd, fast bandet ligger långt ned. Som <img> med object-cover
+              ritas samma utsnitt, men latladdat och i den bredd skärmen behöver. */}
+          <div data-parallax className="parallax absolute -inset-y-[10%] inset-x-0 bg-seal" aria-hidden="true">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={photo(imagery.grid.src)}
+              srcSet={photoSet(imagery.grid.src)}
+              sizes={photoSizes.band}
+              alt=""
+              loading="lazy"
+              decoding="async"
+              className="h-full w-full object-cover object-center"
+            />
+          </div>
           <div
             className="absolute inset-0"
             aria-hidden="true"
@@ -619,8 +633,11 @@ export function LandingPhoto({
           <img
             data-parallax
             src={photo(imagery.desk.src)}
+            srcSet={photoSet(imagery.desk.src)}
+            sizes={photoSizes.bord}
             alt={text(imagery.desk.alt)}
             loading="lazy"
+            decoding="async"
             className="absolute inset-0 h-full w-full bg-paper2 object-cover"
           />
           <div

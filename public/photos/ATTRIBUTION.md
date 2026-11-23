@@ -34,3 +34,13 @@ They were hotlinked from `images.unsplash.com` during development. Serving them
 from `public/` removes a third-party dependency from the critical render path:
 the hero photograph is the page's largest contentful paint, and it should not
 depend on another company's CDN being reachable.
+
+## Narrower variants (2026-11-23)
+
+Each photograph also exists in a narrower width, so that a phone does not download
+a 2000 px original for an image it draws 600 px wide: `goteborg-golden-1280.webp`,
+`haga-1100.webp`, `facade-1200.webp` and `desk-900.webp`. They were made from the
+files above with ImageMagick (`-resize <width>x -quality 78 -define webp:method=6`,
+quality 76 for the facade) and are chosen by the browser through `srcset`
+(`photoSet` in `components/marketing/copy-sections.ts`). Replace a photograph and
+its narrow variant together.

@@ -2,6 +2,8 @@ import Link from "next/link";
 import { Logo } from "@/components/Logo";
 import { SidMeny } from "@/components/marketing/SidMeny";
 import { Sidfot } from "@/components/marketing/Sidfot";
+// Förladdar Fraunces på den här sidan (lib/fonts-rubrik.ts säger varför).
+import "@/lib/fonts-rubrik";
 
 /**
  * Skalet runt menyns innehållssidor: FAQ, Vårt team, Boka demo.

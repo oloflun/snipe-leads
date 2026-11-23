@@ -2,6 +2,8 @@ import Link from "next/link";
 import { Logo } from "@/components/Logo";
 import { Sidfot } from "@/components/marketing/Sidfot";
 import { utanPlatshallare } from "@/lib/bolag";
+// Förladdar Fraunces på den här sidan (lib/fonts-rubrik.ts säger varför).
+import "@/lib/fonts-rubrik";
 
 /**
  * Skalet runt de tre juridiska sidorna: integritetspolicy, villkor, cookies.
