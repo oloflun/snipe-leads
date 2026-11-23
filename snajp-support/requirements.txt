@@ -25,7 +25,7 @@ openai>=3.3,<4
 asyncpg>=0.32.0
 pydantic>=2.8
 pydantic-settings>=2.4
-python-dotenv>=1.0
+python-dotenv>=1.2.4
 scrapegraph-py>=2.1.0  # Fas B research (G4) — se app/agent/research_tools.py
 pypdf>=5.1.0  # Bokföring: textlagret ur en PDF — se app/bookkeeping/underlag.py
 # Jobbkön (202 + polling). RedisJobStore importerar `redis.asyncio` LATE, och
