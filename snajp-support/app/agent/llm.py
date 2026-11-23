@@ -435,7 +435,9 @@ TANKANDE_AV = {"extra_body": {"extra_body": {"google": {"thinking_config": {"thi
 #: tänktokens); gemini-3.8-flash svarar 400 "Thinking level is unsupported:
 #: THINKING_LEVEL_MINIMAL" och tar lägst LOW; tankebudget 0 på 3.8 gav ett
 #: anrop som hängde i 90 s av två. "none" blir därför modellens lägsta nivå.
-_UTAN_MINIMAL = ("gemini-3.8-flash",)
+#: 2026-11-20 (eu, samma 400 på MINIMAL, LOW svarar): gemini-3.7-flash,
+#: gemini-4-hydrogen och gemini-4-neon. gemini-3.6-flash tar MINIMAL.
+_UTAN_MINIMAL = ("gemini-3.8-flash", "gemini-3.7-flash", "gemini-4-hydrogen", "gemini-4-neon")
 
 
 def _gemini_generation(modell: str | None) -> int:
