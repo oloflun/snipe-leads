@@ -19,7 +19,7 @@ WORKDIR /srv
 
 RUN pip install --no-cache-dir "psycopg2-binary==2.9.10"
 
-COPY scripts/railway_drift.py scripts/railway_synk.py scripts/begransning_spegel.py scripts/railway_migrate.py scripts/railway_provision.py scripts/railway.py ./scripts/
+COPY scripts/railway_drift.py scripts/overvakning.py scripts/railway_synk.py scripts/begransning_spegel.py scripts/railway_migrate.py scripts/railway_provision.py scripts/railway.py ./scripts/
 COPY railway/000_auth_compat.sql ./railway/000_auth_compat.sql
 COPY db/migrations ./db/migrations
 

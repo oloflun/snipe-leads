@@ -70,6 +70,11 @@ export type Underlag = {
    * Blir kundens egna erbjudanden, aktiva i form A med lika vikt.
    */
   erbjudanden?: string[];
+  /**
+   * Röstdokumentet kunden skrev eller godkände i onboardingen. Saknas i
+   * inloggningsvägen, och då gäller utkastet (`roststartpunkt`).
+   */
+  rost?: string;
 };
 
 /**
@@ -163,8 +168,12 @@ function produktdokument(underlag: Underlag): string {
   return rader.join("\n").trim();
 }
 
-/** Utkastet till röstdokument. Regler, inte påståenden om kunden. */
-function roststartpunkt(): string {
+/**
+ * Utkastet till röstdokument. Regler, inte påståenden om kunden. Exporteras
+ * för onboardingens förifyllning (app/onboarding/page.tsx), där kunden ändrar
+ * det innan arbetsytan skapas.
+ */
+export function roststartpunkt(): string {
   return [
     "Vi säger du, aldrig ni.",
     "Korta meningar. Ett budskap per stycke.",
@@ -293,10 +302,14 @@ export async function sattStandardinstallningar(
 
   try {
     const svar = await anrop<{ content?: string }>(apiKey, "/api/leads/soul");
-    if (!(svar?.content ?? "").trim()) {
+    const befintlig = (svar?.content ?? "").trim();
+    const egen = (underlag.rost ?? "").trim();
+    // Kundens text från onboardingen går före ett orört utkast: utkastet är
+    // vårt förval, inte kundens val. Inloggningsvägen kan ha hunnit skriva det.
+    if (!befintlig || (egen && egen !== befintlig && befintlig === roststartpunkt())) {
       await anrop(apiKey, "/api/leads/soul", {
         method: "PUT",
-        body: JSON.stringify({ content: roststartpunkt() })
+        body: JSON.stringify({ content: egen || roststartpunkt() })
       });
       utfall.rostdokument = true;
     }

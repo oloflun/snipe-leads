@@ -341,3 +341,76 @@ def test_arbetsytans_namn_efter_halsningen_ger_inte_dubbel_avslutning():
     # En vanlig mening sist rörs inte.
     ut2 = med_signatur("Hej,\n\nVänliga hälsningar,\nHör av dig.", SIG, halsning="Vänliga hälsningar,")
     assert "Hör av dig." in ut2
+
+
+# -- Fot utan avgränsare (main 2026-11-23) ------------------------------------
+#
+# Utkast köade i oktober 2026 bär foten utan raden "--". Det gamla blocket
+# kändes då inte igen (långa rader efter det), och den nya signaturen lades
+# EFTER foten medan den gamla stod kvar: 3 av 4 891 köade utkast i main.
+
+_GAMMALT_BLOCK = (
+    "Sebastian Bergman\nSnajp Support | AI för leads och kundtjänst\n+46 70 360 05 64\n"
+    "snajpsupport@gmail.com\n\nUmeå & Göteborg\nwww.snajp.se\n\nSnajp Sverige"
+)
+_FOT_UTAN_AVGRANSARE = (
+    "Du får det här mejlet därför att din adress är hämtad ur offentliga företagsuppgifter och vi "
+    "bedömer att erbjudandet är relevant för din verksamhet.\n"
+    "Snajp är personuppgiftsansvarig för dina uppgifter. Du har rätt att invända mot behandlingen.\n\n"
+    "Vill du inte få fler mejl från oss: https://www.snajp.se/avregistrera/0123456789abcdef0123456789abcdef"
+)
+_NY_SIG = {
+    "namn": "Sebastian Bergman", "titel": "Grundare & VD", "verksamhet": "Snajp | AI för leads och kundtjänst",
+    "telefon": "+46 70 360 05 64", "epost": "sebastian@snajp.se", "ort": "Umeå & Göteborg", "webb": "www.snajp.se",
+    "logotyp_url": "https://www.snajp.se/epost/snajp-logga.png",
+}
+
+
+def test_foraldrad_signatur_fore_fot_utan_avgransare_byts_pa_plats():
+    sig = normalisera(_NY_SIG)
+    body = f"Hej,\n\nEn fråga.\n\nVänliga hälsningar,\n{_GAMMALT_BLOCK}\n\n{_FOT_UTAN_AVGRANSARE}"
+    ny = med_aktuell_signatur(body, sig, halsning="Vänliga hälsningar,")
+    assert ny.count("Sebastian Bergman") == 1
+    assert ny.count(bygg_signaturtext(sig)) == 1
+    assert "Snajp Support |" not in ny and "snajpsupport@gmail.com" not in ny and "Snajp Sverige" not in ny
+    # Signaturen står före foten, och foten är kvar ord för ord.
+    assert ny.index("Grundare & VD") < ny.index("Du får det här mejlet")
+    assert ny.endswith(_FOT_UTAN_AVGRANSARE)
+    assert ny.count("Vänliga hälsningar") == 1
+    assert med_aktuell_signatur(ny, sig, halsning="Vänliga hälsningar,") == ny  # idempotent
+
+
+def test_bygg_html_foraldrat_block_fore_fot_utan_avgransare():
+    sig = normalisera(_NY_SIG)
+    body = f"Hej,\n\nEn fråga.\n\nVänliga hälsningar,\n{_GAMMALT_BLOCK}\n\n{_FOT_UTAN_AVGRANSARE}"
+    html = bygg_html(body, sig)
+    assert "snajp-logga.png" in html and "Grundare &amp; VD" in html
+    assert "Snajp Support |" not in html and "snajpsupport@gmail.com" not in html
+    assert html.index("<img") < html.index("Du får det här mejlet")
+
+
+def test_namn_foljt_av_lopande_text_ar_inget_signaturblock():
+    """Ett namn på egen rad följt av korta rader och sedan löpande text som
+    inte är en fot är brödtext: inget byts och inget delas."""
+    sig = normalisera(_NY_SIG)
+    lang = "Det här är en lång mening i brödtexten som går långt över nittio tecken och som inte har med någon fot att göra."
+    body = f"Hej,\n\nSebastian Bergman\nhär igen.\nKort rad.\n{lang}"
+    assert dela_utkast(body, sig) == (body, "")
+
+
+def test_dubbel_fot_gammal_utan_avgransare_och_ny_efter_ger_en_signatur():
+    """De tre utkasten i main: gammalt block, gammal fot utan "--" och sedan
+    en ny fot efter "--". Blocket byts, den gamla foten går med det och den
+    nya foten står kvar."""
+    sig = normalisera(_NY_SIG)
+    ny_fot = "--\nSnajp\nAvregistrera dig: https://www.snajp.se/avregistrera/0123456789abcdef0123456789abcdef"
+    body = (
+        f"Hej,\n\nEn fråga.\n\nVänliga hälsningar,\n{_GAMMALT_BLOCK}\n\n{_FOT_UTAN_AVGRANSARE}\n\n{ny_fot}"
+    )
+    ny = med_aktuell_signatur(body, sig, halsning="Vänliga hälsningar,")
+    assert ny.count("Sebastian Bergman") == 1 and ny.count(bygg_signaturtext(sig)) == 1
+    assert "Snajp Support |" not in ny and "snajpsupport@gmail.com" not in ny
+    assert "Du får det här mejlet" not in ny  # den gamla foten gick med blocket
+    assert ny.endswith(ny_fot)
+    html = bygg_html(body, sig)
+    assert "snajp-logga.png" in html and "Snajp Support |" not in html

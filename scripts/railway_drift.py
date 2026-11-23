@@ -3,6 +3,7 @@
 
     python scripts/railway_drift.py synk      # tjänsten synk i miljön main (cron)
     python scripts/railway_drift.py migrera   # tjänsten migrera, en per miljö
+    python scripts/railway_drift.py overvakning   # tjänsten overvakning i miljön development (cron)
 
 docs/compliance/synkflytt-plan.md och synkflytt-runbook.md. Samma kommando i
 båda miljöerna; vad som körs avgörs av RAILWAY_ENVIRONMENT_NAME, som Railway
@@ -14,6 +15,9 @@ sätter själv, och av två variabler som ägaren slår på:
 * migrera: visar vad som väntar tills MIGRERA_APPLY=1; då körs kedjan mot den
   egna miljön och kontrolleras efteråt att inget väntar, som i migrera.yml.
   Anslutningen: MIGRERA_PG_URL (railway_migrate.anslutning).
+* overvakning: kontrollerar produktionens publika adresser och mejlar ett
+  larm vid avvikelse (scripts/overvakning.py). Körs i development, en annan
+  miljö än den som övervakas. Läser ingen databas.
 
 Utan jobb, utanför Railway eller i fel miljö vägrar kommandot.
 """
@@ -46,7 +50,11 @@ def kommandon(jobb: str, environ: Mapping[str, str]) -> list[list[str]]:
         if environ.get("MIGRERA_APPLY", "").strip() == "1":
             return [[*bas, "--apply"], bas]
         return [bas]
-    sys.exit("Användning: railway_drift.py synk|migrera")
+    if jobb == "overvakning":
+        if miljo != "development":
+            sys.exit(f"AVBRYT: övervakningen körs i Railway-miljön development, inte i {miljo or '(ingen)'}.")
+        return [[sys.executable, str(SKRIPT / "overvakning.py")]]
+    sys.exit("Användning: railway_drift.py synk|migrera|overvakning")
 
 
 def main(argv: list[str] | None = None) -> int:

@@ -1,0 +1,7 @@
+Bolag;Orgnummer;Kontakt;Tel;Epost;Hemsida;Årsvärde (kr)
+Fi Flytt Test AB;569900-1714;Ulla Vass;08-465 004 15;ulla@example.se;fiflytt.example.se;125 000,00
+Chi Catering Test AB;5699001722;Viktor Wall;070-174 06 16;viktor@example.se;www.chicatering.example.se;48 500,50
+Psi Projekt Test AB;569900-1730;Wanja Ax;+46 70 174 06 17;wanja@example.com;https://psi-projekt.example.com;9 900,00
+Omega Omsorg Test AB;;Xavier By;0701740618;;;0,00
+
+Summa;;;;;;183 400,50

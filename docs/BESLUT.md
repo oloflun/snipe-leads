@@ -9,6 +9,250 @@ möjligt), vad det betyder i koden.
 
 ---
 
+## 2026-11-23 — Listimporten hårdtestad; Listor är en egen flik med import i fyra steg (Anton)
+
+**Beslut.**
+1. Listimporten ska läsa det kunderna faktiskt har: exporter ur de stora CRM-systemen och
+   egna kalkylblad, som CSV eller Excel, och vara lätt att förstå.
+2. Listorna är en egen del av Leads med en tydlig uppgift, inte en hopfälld del av översikten.
+3. Genomförandet nedan är agentens val, inte Antons ord, och kan ändras av honom.
+
+**Resonemanget.** Anton 2026-11-23, efter att Henrik (Buddy) frågat om leads ur deras egna
+data (gamla prospekt, förlorade affärer, kunder vars avtal går ut): "Vi behöver hårdtesta
+listimporten och miljön för denna för att motsvara riktig CRM-funktionalitet, som stöder
+alla tänkbara listformat från olika CRM-leverantörer och gör det användarvänligt och
+intuitivt. Ta gärna inspiration från hur Twenty byggt upp sin suite och se till att
+listorna inte bara blir en halvt undangömd flik, utan en integrerad del i sviten med en
+tydlig funktion som logiskt samspelar med de övriga delarna i Leads-sviten."
+
+Hårdtestet gav skälet till ombyggnaden. Den gamla importen läste bara CSV i UTF-8 och
+matchade rubriker ordagrant mot fem mallar. Av tolv vanliga fall gav nio noll rader eller
+fel rader: svensk Excels CSV (Windows-1252), Excels Unicode-text (UTF-16), `sep=;`,
+titelrader före rubrikraden, Salesforce-rapportens fot som blev fyra bolag, svenska rubriker
+som Förnamn och Mobiltelefon, Dynamics dolda kolumner, och "Kund" som bolagsnamn.
+Excel-filer gick inte att ladda upp alls. Kolumner utan fält kastades tyst, och ingenting
+jämfördes med kundens befintliga kunder, leads eller spärrlista.
+
+**Agentens val.**
+- **Listor är en egen flik igen**, bredvid Körningar: de två vägarna in för bolag, det
+  kunden har och det Iris hittar. Det ersätter placeringen från 2026-10-07, då listdelen
+  fälldes ihop längst ner i översikten. Fliken har tre vyer (Listor, Säljlista, Befintliga
+  kunder) i stället för tre sektioner under varandra, efter Twentys modell med vyer inne
+  i ett objekt. Översikten har kvar en liten ruta som pekar in i fliken.
+- **Kör Iris visas inte på fliken Listor.** Där är Importera lista flikens handling, och en
+  sida har en primär knapp (DESIGN.md § App surfaces). Samma undantag som fliken Körningar.
+- **Fyra steg efter Twentys import:** fil, kolumner, granska, klart. Till skillnad från
+  Twenty finns ett kvitto, och det sparas på listan (regeln 2026-10-10 om att utfallet ska
+  finnas kvar efter en omladdning).
+- **Dataminimering.** Kolumner som inte blir ett fält importeras inte om kunden inte väljer
+  det. Affärsuppgifter (status, typ, bransch, storlek, leverantör, avtalets övriga uppgifter)
+  föreslås följa med som extra uppgift. Fritextanteckningar föreslås inte: de kan innehålla
+  personuppgifter som utskicket inte behöver.
+- **Personnummer sparas inte.** Ett org.nr vars tredje siffra är 0 eller 1 är en enskild
+  firmas personnummer. Värden som inte håller (en adress utan domän, ett tal Excel gjort om
+  till 5,56E+09) lämnas tomma och visas i granskningen. Raden importeras ändå.
+- **Personens uppgifter före bolagets.** Har filen flera telefon- eller e-postkolumner tas
+  mobilen före växeln och kontaktpersonens adress före info-adressen, rad för rad.
+- **Ett bolag, en rad.** Dubbletter i filen slås ihop, och raden med en adress behålls.
+- **Det som hoppas över.** Befintliga kunder (kundlistan) och adresser som avböjt kontakt
+  hoppas alltid över, också adresser med begränsad behandling enligt GDPR art. 18. Bolag
+  som redan är leads hoppas över om kunden inte kryssar för att ta med dem.
+- **Avtalsslut är ett eget fält.** Listan går att sortera och dela upp efter hur snart
+  avtalet går ut. Utkasten använder inte datumet ännu: utkastkedjans facit är låst
+  (INV-LEADS-UTKAST-002) och ändras bara med Antons ja.
+- **Högst 5 000 rader per lista**, skickade i satser om 500 med förlopp.
+
+**Det som inte är belagt.** Fixturerna i `lib/leads/fixtures/crm-export` är syntetiska.
+Bara Vismas rubriker är tagna ordagrant ur leverantörens dokumentation. Övriga bygger på
+vad som gick att belägga om exportens struktur och på rubriker ur minnet. En riktig
+exportfil som faller igenom ska läggas dit som ny fixtur.
+
+**I koden.** Läsaren `lib/leads/importfil.ts` (teckenkodning, xlsx utan beroende, HTML,
+Excel 2003-XML), `lib/leads/csv.ts` (avgränsare, citat), `lib/leads/importmallar.ts`
+(rubrikrad, fot, kolumnmatchning), `lib/leads/importvarden.ts` (org.nr, e-post, telefon,
+webbplats, datum), `lib/leads/importrader.ts` (radbyggare, dubbletter).
+`components/leads/ImportLista.tsx` ersätter `ImportCsv.tsx`. Migration 152 lägger till
+`lead_list_items.avtalsslut`, `lead_list_items.extra` och `lead_lists.importinfo`.
+`POST /api/leads/import` tar emot satser (`list_id`) och hoppar över enligt ovan;
+`POST /api/leads/import/granska` är förhandsgranskningen. `avtalsslut` och `extra` följer
+aldrig med när plattformsadmin kopierar en lista till en annan kund
+(`admin_listor.LISTRADSFALT`). Flytten från development till main (`admin_flytt.py`) bär
+dem inte heller: det är en lucka, inte ett beslut.
+
+---
+
+## 2026-11-23 — Tonläget in i onboardingen; bara onboardingen kopplar arbetsytan (Anton)
+
+**Beslut.**
+1. Röstdokumentet är ett eget steg i onboardingen ("Röst och ton", efter målgruppen och
+   före paketet), förifyllt med utkastet och ändringsbart innan arbetsytan skapas.
+   Bransch är ett steg för sig. Första versionen lade tonfältet i branschsteget, och
+   Anton avvisade det samma kväll: "röst och tonläge ska vara ett eget fält, bransch/nisch
+   ska vara ett eget fält, att blanda ihop det med ton blir förvirrande."
+2. Webbplatsen läses in när onboardingen sparas också för en testarbetsyta, och också
+   när arbetsytan redan är kopplad till en kund.
+3. Genomförandet (agentens val, inte Antons ord): proxyn kopplar inte en arbetsyta
+   som inte gått igenom onboardingen, och Kunskapsbas har en egen start för den första
+   inläsningen när ingen har körts.
+
+**Resonemanget.** Anton 2026-11-23, efter att ha lagt upp en testarbetsyta inför ett
+kundmöte: "den verkar inte läsa av hemsidan och fylla på kunskapsbasen av sig själv,
+det måste fixas. Hitta orsaken till problemet och lös det permanent. Se även till att
+stycket om tonläge finns med i onboardingen och går att ändra, just nu är våra
+inställningar förladdade och går inte att ändra förrän profilen är skapad."
+
+Orsaken, ur produktionens loggar: arbetsytan var redan kopplad till en kund
+(`kund-ad046232`) när onboardingen skickades in. En annan öppen flik hade anropat
+proxyn, och `requireSnajpTenant()` kopplar en arbetsyta utan kund vid första anropet.
+Onboardingens testväg försökte sedan koppla en testtenant, `link_test_tenant` nekade
+(den kopplar bara en arbetsyta utan slug), felet svaldes, och allt som hängde på den
+nya nyckeln hoppades över: webbplatsskanningen, målgruppen och erbjudandena. API-loggen
+har inget anrop till `/api/kb/skanna`. Samma lucka rättades för riktiga kunder
+2026-11-18, men inte för testarbetsytor. Testvägen skrev dessutom aldrig målgruppen
+och erbjudandena, inte heller när kopplingen lyckades.
+
+**Vad det betyder i koden.** `lib/snajp/kopplingsvag.ts` väljer väg ur arbetsytans
+slug, och `lib/actions/onboarding.ts` kör samma följdsteg på alla tre vägarna.
+`lib/snajp/tenant.ts` svarar 409 i stället för att koppla en arbetsyta utan
+affärskontext. `lib/snajp/standard.ts` skriver kundens röstdokument, och låter det gå
+före ett orört utkast. `components/settings/WebbplatsForslag.tsx` visar ett
+startformulär när ingen skanning har körts.
+
+**Öppet.** Inläsningen skriver fortfarande förslag som kunden lägger till (beslutet
+2026-11-18). Ska artiklarna läggas in direkt, utan granskning, är det ett eget beslut:
+då blir en felläst uppgift på sajten något agenten får citera. En testarbetsyta som
+redan kopplats som kund behåller sin kund-slug och är inte märkt som testyta.
+
+## 2026-11-23 — Verify bantas; Dependabot öppnar inga egna pull requests (Anton)
+
+**Beslut.**
+1. Verify är ett jobb i stället för åtta, med samma kontroller som steg. Det körs inte
+   på en pull request vars huvudgren själv körs på push (release-PR:en development →
+   main), och en commit som bara rör dokumentation får bara hemlighetsskanningen.
+   `railway-main` är struken ur grenarna.
+2. Övervakningen och säkerhetsbevakningen på GitHub startas inte längre efter varje
+   Verify (workflow_run). Övervakningen där är reserven till Railway-tjänsten och går
+   var tredje timme; säkerhetsbevakningen går en gång om dygnet, och Verify startar
+   den vid push till development om den inte lyckats på 20 timmar.
+3. Dependabot öppnar inga egna pull requests: taket är 0 i `.github/dependabot.yml`
+   och repots automatiska säkerhetsuppdateringar är avstängda. Sårbarhetslarmen står
+   kvar. De sju öppna Dependabot-PR:erna (106–112) är ihopslagna på development och
+   följer med release-PR:en 105.
+
+**Resonemanget.** GitHub slutade starta jobb 2026-11-23 06:47. Det var inte ett kort
+som nekats, utan gratisplanens 2 000 Actions-minuter för privata repon: repot blev
+privat 2026-11-18 och publika repon har obegränsade minuter, därför märktes det aldrig
+förut. Räknat jobb för jobb gick 2 137 minuter mellan 18 november och stoppet, och
+Verify stod för 2 108 av novembers 2 989. GitHub avrundar varje jobb uppåt till hel
+minut, så åtta jobb på runt fem minuters verkligt arbete kostade nio, och varje
+körning startade dessutom två bevakningsflöden för en minut var. Anton valde att
+banta i stället för GitHub Pro: "Okej, banta Verify, samla även alla dependabot-pull
+requests till den stora och se till att den inte öppnar egna."
+
+**Vad det kostar.** Kontrollerna går i följd, så en körning tar längre tid. Kvoten
+nollställs 1 december; i november går inga kontroller alls. Grenskyddet på main
+kommer inte tillbaka av det här: det kräver GitHub Pro eller ett publikt repo.
+Beroendeuppdateringar kommer inte längre av sig själva, de görs för hand på
+development.
+
+---
+
+## 2026-11-23 — Driftjobben körs hos Railway; gamla kopior i Skickat byts mot originalen (Anton)
+
+**Beslut.**
+1. Synken, migrationerna och övervakningen körs som tjänster hos Railway: `migrera-main`
+   och `synk` i miljön main, `overvakning` i development (`migrera` i development fanns
+   sedan 2026-11-19). Uppsättningen är `scripts/railway_driftjobb.py`.
+2. Övervakningen hos Railway larmar med mejl till `snajpsupport@gmail.com` genom
+   mejltjänsten. GitHub-flödet står kvar som en andra kontroll.
+3. `synk.yml` har inget schema längre. `migrera.yml` och `overvakning.yml` står kvar.
+4. Textkopiorna i Snajps Skickat byts mot utskicken som de gick ut
+   (`scripts/skickat_original.py`). Den gamla kopian flyttas till papperskorgen först när
+   originalet ligger på plats.
+
+**Resonemanget.** 2026-11-23 slutade GitHub starta jobb för repot ("recent account
+payments have failed or your spending limit needs to be increased"). Synken, de
+automatiska migrationerna och övervakningen stod still, och kontrollerna på release-PR:en
+blev röda utan att ha körts. Anton: "det finns inget gångbart alternativ till
+GitHub-jobben?" och sedan "Gör vad som krävs för att få alla jobben i drift på Railway".
+Flytten av synken och migrationerna var redan planerad och till stor del byggd
+(`docs/compliance/synkflytt-plan.md`, upplägg A): driftavbilden, startkommandot, läsrollen
+`synk_las` och `migrera` i development fanns. Det som återstod var handgreppen i main.
+Planens parallellkörning i 24 timmar mot GitHub-synken gick inte att göra, eftersom
+GitHub-synken inte gick; Railway-synken torrkördes i stället och slogs sedan på.
+
+Om kopiorna, Anton: "Finns det något sätt att få utskicken i sin originalversion med
+signaturen intakt i skickat?" och "Byt ut mailen i skickat". Mejltjänsten sparar varje
+utskick som det gick ut, så originalet går att lägga dit ordagrant. Ett utskick som gick
+med en äldre signatur visas med den: kopian är ett kvitto och skrivs aldrig om.
+
+**Övervakningen: avvägningen.** Flödet på GitHub är gjort för att stå utanför det som
+övervakas. Hos Railway körs kontrollen i development, en annan miljö än main, men på
+samma plattform: går hela Railway ner larmar den inte. Därför står GitHub-flödet kvar,
+och de två täcker varandra. Jobbet har inget minne mellan körningarna, så larmfloden hålls
+nere med mejltjänstens idempotensnyckel (samma avvikelse, högst ett mejl per sex timmar)
+och inget mejl sägs när läget är friskt igen.
+
+**Inte flyttat.** Säkerhetsbevakningen skriver ärenden på GitHub och behöver en
+GitHub-token hos Railway, som bara Anton kan skapa. Testerna (`verify.yml`,
+`pr-granskning.yml`) hör hemma på GitHub. Båda går igen när betalningen är ordnad;
+säkerhetsbevakningen tar då igen sju dagar bakåt.
+
+**Kvar för ägaren.** Försegla `SYNK_MAIN_PG_URL`, `SYNK_DEVELOPMENT_PG_URL` och
+`MIGRERA_PG_URL` i Railways gränssnitt (Seal går inte via API:t). Planens steg 12 och 13
+(stäng mains publika port, ta bort `ENV_DEPLOY` och rotera) är inte gjorda.
+
+**I koden.** `scripts/railway_driftjobb.py`, `scripts/overvakning.py`,
+`scripts/railway_drift.py` (jobbet `overvakning`), `railway/Dockerfile.drift`,
+`scripts/skickat_original.py`, `app/email_pipeline/connectors/imap.py`
+(`mapp_med_attribut`, sändtid och eget id på kopian), `tests/test_driftjobb_railway.py`.
+
+## 2026-11-23 — Snajps signatur i main är bytt; kopian i Skickat visar det som gick ut (Anton)
+
+**Beslut.**
+1. Snajps signatur i main är den nya (Grundare & VD, `sebastian@snajp.se`, logotypen från
+   `www.snajp.se`), satt 2026-11-23 10:10 med `scripts/satt_mejlsignatur.py --direkt`.
+2. Kopian som läggs i kundens Skickat bär samma HTML-del och samma avsändarnamn som
+   mejlet mottagaren fick. Förut var kopian ren text från adressen utan namn.
+3. Signaturskriptet har en väg rakt i databasen (`--direkt`) för en miljö där tenantens
+   nyckel inte finns i `.env.deploy`. Valideringen är API:ts egen och bara nyckeln
+   `signatur` rörs.
+4. Ett föråldrat signaturblock känns igen också när foten efter det saknar raden `--`.
+
+**Resonemanget.** Anton, med skärmbilder ur Gmail av två utskick från samma morgon:
+"Vad fan?? Jag trodde att det var löst, du måste larma tydligare om sådant, och bilden
+syns fortfarande inte som i provmejlet, gör vad som krävs för att lösa det". Två saker
+låg bakom:
+- Signaturbytet i main blev aldrig kört efter releasen. Agentens körning stoppades av
+  behörighetsspärren på natten, och det stod som en punkt bland flera i rapporten i
+  stället för som ett stopp. När sändfönstret öppnade 08:00 gick 75 mejl ut med den
+  gamla signaturen innan dagens tak nåddes 09:37.
+- Skärmbilderna var Snajps kopior i Skickat, inte mejlen som mottagarna fick. Mejltjänsten
+  visar att de tolv senaste utskicken bar HTML-delen med logotypen och blev levererade.
+  Kopian byggdes däremot som ren text, så den som öppnade Skickat såg ett mejl utan logga
+  och drog den rimliga slutsatsen att mottagaren fått samma sak. Kopian är kundens kvitto
+  och ska visa det som gick ut.
+
+**Regeln som följer av det (Anton: "du måste larma tydligare om sådant").** Ett steg i
+produktionen som inte blev gjort, och som påverkar vad som går ut till mottagare, är ett
+stopp och inte en rad i en lista: det står först i rapporten, med vad som går ut under
+tiden och när.
+
+**I koden.** `app/email_pipeline/connectors/imap.py` (`_skickat_meddelande`),
+`skickatkopia.kopiera_till_skickat` (`html`, `fran_namn`), `leads/scheduler.py` och
+`email_pipeline/sender.py` (skickar dem vidare), `leads/signatur.py` (`_foraldrat_slut`,
+`_prosastart`), `scripts/satt_mejlsignatur.py --direkt`.
+
+**Mätt.** Samtliga 4 891 osända utkast i Snajps kö i main kördes genom signaturbytet och
+HTML-bygget med signaturen som nu står i main: alla ger exakt en ny signatur, ingen rest
+av den gamla och logotypen i HTML-delen. Med koden som låg i main gav tre av dem dubbel
+signatur (gammal fot utan `--`).
+
+**Känt.** De 75 mejlen från 2026-11-23 och de tidigare utskicken bär den gamla signaturen
+och svarsadressen i signaturraden; de går inte att ta tillbaka. Svar på dem når inkorgen
+ändå, eftersom svarsadressen i mejlhuvudet är brevlådan. Äldre kopior i Skickat är ren
+text; bara nya får HTML-delen.
+
 ## 2026-11-23 — Inkorgen hämtar också mejl som redan är öppnade; öppnat men obesvarat får utkast ändå, bara redan besvarat lämnas (Anton)
 
 **Beslut.**

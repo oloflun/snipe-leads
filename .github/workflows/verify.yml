@@ -1,177 +1,58 @@
 name: Verify
 
+# ETT JOBB, INTE ÅTTA (2026-11-23). Repot är privat sedan 2026-11-18 och har
+# gratisplanens 2 000 Actions-minuter i månaden. GitHub avrundar varje JOBB
+# uppåt till hel minut, och de åtta jobben som stod här (hemligheter,
+# dödmanskontroll, pytest, licenser, databas, invarianter, docker-smoke,
+# type-check) tog runt fem minuter tillsammans men kostade nio, eftersom vart
+# och ett checkade ut, installerade Python-beroendena och avrundades för sig.
+# Taket nåddes 2026-11-23 06:47 och GitHub slutade starta jobb (räknat jobb
+# för jobb: 2 108 av novembers 2 989 minuter var Verify). Nu är det ett jobb
+# med samma kontroller som steg. Varje kontroll körs även om en tidigare
+# fallit (`!cancelled()`), så att ett rött testfel inte döljer ett rött
+# licensbeslut, och stegets namn visar vilken som föll.
+#
+# Det här är DETEKTION, inte en grind: Railway bygger på push och väntar inte
+# på GitHub Actions, så en röd Verify stoppar ingenting. Den gör felet synligt
+# på grenen där det spelar roll.
 on:
   pull_request:
   push:
     branches:
-      # Arbetsgrenarna.
       - development
       - main
-      # DEPLOYGRENEN för produktion. Development deployar sedan 2026-08-27
-      # direkt från grenen development (Railways trigger omlagd, se DEPLOY.md),
-      # så railway-development är död och borttagen ur listan 2026-08-29.
-      # railway-main är däremot fortfarande den gren produktionen byggs från,
-      # och den ska stå kvar här tills main-cutovern är gjord.
-      #
-      # Historiken som motiverar raden: 2026-08-24 deployade fyra commits i
-      # rad medan Verify var rött, eftersom rödheten satt på en gren som ingen
-      # deploy läste. Bokföringschattens tur två var trasig i drift med grön
-      # dev-maskin.
-      #
-      # LÄS DET HÄR INNAN DU LITAR PÅ DEN: det här är DETEKTION, inte en
-      # grind. Railway bygger på push och väntar inte på GitHub Actions, så en
-      # röd Verify stoppar fortfarande ingenting — den gör bara att felet syns
-      # på den gren där det spelar roll, i stället för att gömma sig på
-      # grannen. En riktig grind kräver att deployen görs beroende av jobbet,
-      # och det är ett annat beslut än det här.
-      #
-      # Kostnaden är att en main-ändring kör Verify två gånger, eftersom samma
-      # commit pushas till båda grenarna. Det är avsiktligt betalt.
-      - railway-main
+      # railway-main är pensionerad (CLAUDE.md) och struken 2026-11-23.
 
-# Jobben läser bara koden (checkout och git fetch); ingenting skrivs tillbaka.
+# En ny push till samma pull request avbryter den förra körningen: en PR
+# skannas alltid från basen, så inget går förlorat. Pushar avbryts ALDRIG,
+# eftersom hemlighetsskanningen bara läser varje pushs egna commits; en
+# avbruten push-körning skulle lämna dess commits oskannade. Gruppen är därför
+# commitens sha för push (unik, ingen kö) och PR:ens ref för pull_request.
+concurrency:
+  group: verify-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
 jobs:
-  # Hemlighetsskanning i CI (2026-11-18). GitHubs egen hemlighetsskanning och
-  # push-skydd stängdes av när repot blev privat: gratisplanen har dem bara för
-  # publika repon. gitleaks skannar BARA de nya commitarna i en PR eller push,
-  # inte historiken: historiken bär kända gamla lösenord (bytas av ägaren) och
-  # skulle annars fälla varje körning. Värden maskeras i utskriften (--redact).
-  hemligheter:
+  verify:
+    name: Verify
+    # En pull request vars huvudgren själv körs på push (development → main,
+    # release-PR:en) prövas redan av push-körningen på samma commit, och
+    # GitHub visar den på PR:en. Den andra körningen var ren dubbelkostnad.
+    if: github.event_name != 'pull_request' || (github.head_ref != 'development' && github.head_ref != 'main')
     runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
-          persist-credentials: false
-      - name: gitleaks på nya commits
-        env:
-          BAS: ${{ github.event.pull_request.base.sha || github.event.before }}
-          TOPP: ${{ github.event.pull_request.head.sha || github.sha }}
-        run: |
-          set -eu
-          curl -sSfL -o /tmp/gl.tgz https://github.com/gitleaks/gitleaks/releases/download/v8.18.4/gitleaks_8.18.4_linux_x64.tar.gz
-          tar -xzf /tmp/gl.tgz -C /tmp gitleaks
-          if [ -z "${BAS}" ] || [ "${BAS}" = "0000000000000000000000000000000000000000" ]; then
-            INTERVALL="${TOPP}~1..${TOPP}"
-          else
-            INTERVALL="${BAS}..${TOPP}"
-          fi
-          echo "Skannar ${INTERVALL}"
-          # --verbose visar fil, rad, regel och commit per träff, så att en
-          # träff går att åtgärda utan att köra om skanningen lokalt. Värdena
-          # är fortfarande maskerade (--redact).
-          /tmp/gitleaks detect --source . --config .gitleaks.toml --no-banner --redact --verbose --log-opts="${INTERVALL}"
-
-  # Dödmanskontrollen för övervakningen (2026-11-18). GitHub hoppar över de
-  # flesta schemalagda körningarna i det här repot (se overvakning.yml), så
-  # kontrollen sitter i CI, som körs på varje push och PR oberoende av schemat.
-  # Har övervakningen inte gått klart på tre timmar öppnas ett ärende med
-  # etiketten overvakning-tyst. Jobbet fäller aldrig CI: det larmar.
-  overvakning-dodman:
-    name: dödmanskontroll för övervakningen
-    runs-on: ubuntu-latest
-    timeout-minutes: 3
-    # Bara när tokenen får skriva ärenden: push, och PR inifrån repot.
-    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+    timeout-minutes: 30
     permissions:
       contents: read
-      actions: read
+      # write: säkerhetsbevakningens reserv startar flödet (workflow_dispatch).
+      actions: write
       issues: write
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - name: Har övervakningen gått de senaste tre timmarna?
-        continue-on-error: true
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-        run: bash scripts/overvakning_dodman.sh
-      # Samma kontroll för säkerhetsbevakningen (ISO 27001 A.5.6), gräns två
-      # dygn, etiketten `sakerhetsbevakning-tyst`. Jobbets namn ovan lämnas
-      # orört eftersom det kan vara en obligatorisk kontroll.
-      - name: Har säkerhetsbevakningen gått de senaste två dygnen?
-        continue-on-error: true
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-          FLODE: sakerhetsbevakning.yml
-        run: bash scripts/overvakning_dodman.sh
-
-  python-tests:
-    name: pytest (snajp-support)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-
-      - uses: actions/setup-python@v7
-        with:
-          python-version: "3.12"
-          cache: pip
-          cache-dependency-path: snajp-support/requirements.txt
-
-      - name: Install dependencies
-        working-directory: snajp-support
-        run: pip install -r requirements.txt
-
-      - name: Run tests
-        working-directory: snajp-support
-        run: pytest
-
-  licenser:
-    # Licensgrinden (ISO 27001 A.5.32, 2026-11-18). scripts/licenser.py läser
-    # npm-licenserna ur lockfilerna (web och support-webb) och pip-licenserna
-    # ur de INSTALLERADE paketens metadata, så Python-beroendena installeras
-    # här i jobbets egen rena miljö: det är den körningen som är rättvisande,
-    # inte en utvecklingsmaskin med hundratals andra paket. Driftskriptens
-    # requirements installeras också, eftersom de står i förteckningen.
-    # Fäller på copyleft och okända licenser som inte står i
-    # docs/compliance/licenser-vitlista.json. Eget jobb och inte ett steg i
-    # pytest-jobbet, så att ett rött licensbeslut syns för sig och inte
-    # blandas ihop med ett testfel. Inga npm-paket installeras.
-    name: licenser (copyleft-grind)
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v7
-
-      - uses: actions/setup-python@v7
-        with:
-          python-version: "3.12"
-          cache: pip
-          cache-dependency-path: |
-            snajp-support/requirements.txt
-            scripts/requirements-scripts.txt
-
-      - name: Installera Python-beroendena
-        run: pip install -r snajp-support/requirements.txt -r scripts/requirements-scripts.txt
-
-      - name: Testa licenstolkningen
-        run: python -m pytest tests/test_licenser.py -q
-
-      - name: Kontrollera licenserna
-        run: python scripts/licenser.py --kontrollera
-
-  databas:
-    # Raderingslogik får inte gå ut otestad, och minneslagret som resten av
-    # sviten kör mot gallrar inte. Det här jobbet reser HELA migrationskedjan
-    # från noll mot en tom Postgres (samma huvudversion som driften, 17, med
-    # pgvector som 002 kräver), på samma sätt som scripts/lokal_stack.py gör
-    # lokalt, och kör databastesterna mot den. Databasen är syntetisk och dör
-    # med jobbet; inga hemligheter, ingen riktig miljö.
-    name: databastester (Postgres 17, hela migrationskedjan)
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    # Jobbet läser bara koden; tokenen får inte mer än så.
-    permissions:
-      contents: read
     services:
+      # Databastesterna: hela migrationskedjan från noll mot en tom Postgres
+      # (samma huvudversion som driften, 17, med pgvector som 002 kräver).
+      # Syntetisk, dör med jobbet; inga hemligheter, ingen riktig miljö.
       postgres:
         image: pgvector/pgvector:pg17
         env:
@@ -184,147 +65,216 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 20
-    env:
-      # Lösenorden är lokal_stack.py:s öppna engångsvärden, inga hemligheter.
-      LOKAL_DSN: postgresql://postgres:localdev@127.0.0.1:5432/railway
-      GALLRING_TEST_DSN: postgresql://postgres:localdev@127.0.0.1:5432/railway
-      GALLRING_TEST_APP_DSN: postgresql://snajp_app:localapp@127.0.0.1:5432/railway
-      GALLRING_TEST_WEB_DSN: postgresql://snajp_web:localweb@127.0.0.1:5432/railway
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Full historik: gitleaks läser ett commitintervall och INV-SKILL-006
+          # kör `git diff origin/<bas>...HEAD`, som kräver en gemensam förfader.
+          # actions/checkout hämtar annars EN commit, och steget föll då med
+          # `fatal: origin/main...HEAD: no merge base` på varje pull request.
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Vilka commits och filer körningen gäller
+        id: omfang
+        env:
+          BAS: ${{ github.event.pull_request.base.sha || github.event.before }}
+          TOPP: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -eu
+          if [ -z "${BAS}" ] || [ "${BAS}" = "0000000000000000000000000000000000000000" ] || ! git cat-file -e "${BAS}^{commit}" 2>/dev/null; then
+            INTERVALL="${TOPP}~1..${TOPP}"
+          else
+            INTERVALL="${BAS}..${TOPP}"
+          fi
+          echo "intervall=${INTERVALL}" >> "$GITHUB_OUTPUT"
+          # Bara dokumentation (docs/ och markdown i roten): hemligheterna
+          # skannas, resten hoppas över. Allt annat kör hela kedjan.
+          # Går diffen inte att läsa körs allt.
+          if FILER=$(git diff --name-only "${INTERVALL/../...}") && [ -n "${FILER}" ] \
+             && ! printf '%s\n' "${FILER}" | grep -qvE '^(docs/|[^/]+\.md$)'; then
+            echo "kod=false" >> "$GITHUB_OUTPUT"; echo "Bara dokumentation i ${INTERVALL}: hemligheterna skannas, resten hoppas över."
+          else
+            echo "kod=true" >> "$GITHUB_OUTPUT"; echo "Kör alla kontroller (${INTERVALL})."
+          fi
+
+      # Hemlighetsskanning (2026-11-18). GitHubs egen hemlighetsskanning och
+      # push-skydd stängdes av när repot blev privat. gitleaks skannar BARA de
+      # nya commitarna, inte historiken: historiken bär kända gamla lösenord
+      # (bytas av ägaren). --verbose visar fil, rad, regel och commit per
+      # träff; värdena maskeras (--redact). Körs alltid, också för docs.
+      - name: hemligheter (gitleaks på nya commits)
+        env:
+          INTERVALL: ${{ steps.omfang.outputs.intervall }}
+        run: |
+          set -eu
+          curl -sSfL -o /tmp/gl.tgz https://github.com/gitleaks/gitleaks/releases/download/v8.18.4/gitleaks_8.18.4_linux_x64.tar.gz
+          tar -xzf /tmp/gl.tgz -C /tmp gitleaks
+          echo "Skannar ${INTERVALL}"
+          /tmp/gitleaks detect --source . --config .gitleaks.toml --no-banner --redact --verbose --log-opts="${INTERVALL}"
+
+      # Dödmanskontrollerna (2026-11-18). Öppnar ett ärende om övervakningen
+      # eller säkerhetsbevakningen inte gått; fäller aldrig CI. Bara när
+      # tokenen får skriva ärenden: push, och PR inifrån repot.
+      - name: dödman - har övervakningen gått?
+        if: ${{ !cancelled() && (github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository) }}
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          # GitHubs övervakning är reserven sedan 2026-11-23: schema var tredje
+          # timme, som GitHub ofta tappar (se overvakning.yml). Den egentliga
+          # övervakningen går var femtonde minut hos Railway. Gränsen ett
+          # dygn larmar när reserven tystnat, inte för varje tappat schema.
+          GRANS_SEKUNDER: "86400"
+        run: bash scripts/overvakning_dodman.sh
+      # Säkerhetsbevakningens reserv (2026-11-23, ersätter workflow_run och
+      # grindjobbet i sakerhetsbevakning.yml, som kostade en minut per Verify).
+      # Vid push till development: har bevakningen inte lyckats på 20 timmar
+      # och står ingen körning i kö startas den. Ett tappat schema missar inget
+      # (bevakningen läser sju dagar bakåt och deduplicerar mot ärendena).
+      - name: säkerhetsbevakningens reserv
+        if: ${{ !cancelled() && github.event_name == 'push' && github.ref == 'refs/heads/development' }}
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -uo pipefail
+          if ! alder="$(LAGE=alder FLODE=sakerhetsbevakning.yml bash scripts/overvakning_dodman.sh)" || ! [[ "$alder" =~ ^-?[0-9]+$ ]]; then
+            alder=999999
+          fi
+          if (( alder < 72000 )); then
+            echo "Bevakningen lyckades för $((alder / 60)) minuter sedan; ingen reserv behövs."; exit 0
+          fi
+          koade=$(gh api "repos/${GH_REPO}/actions/workflows/sakerhetsbevakning.yml/runs?per_page=20" \
+            --jq '[.workflow_runs[] | select(.status != "completed")] | length')
+          if [ "${koade:-0}" != "0" ]; then echo "En körning står redan i kö."; exit 0; fi
+          gh workflow run sakerhetsbevakning.yml --ref development
+          echo "Bevakningen startad (senast lyckad för $((alder / 3600)) timmar sedan)."
+      - name: dödman - har säkerhetsbevakningen gått?
+        if: ${{ !cancelled() && (github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository) }}
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          FLODE: sakerhetsbevakning.yml
+        run: bash scripts/overvakning_dodman.sh
 
       - uses: actions/setup-python@v7
+        if: ${{ !cancelled() && steps.omfang.outputs.kod == 'true' }}
         with:
           python-version: "3.12"
           cache: pip
-          cache-dependency-path: snajp-support/requirements.txt
+          cache-dependency-path: |
+            snajp-support/requirements.txt
+            scripts/requirements-scripts.txt
 
-      - name: Install dependencies
-        run: pip install -r snajp-support/requirements.txt psycopg2-binary
+      # Driftskriptens krav installeras också: de står i licensförteckningen.
+      # psycopg2-binary installeras först EFTER licensgrinden, eftersom
+      # licenserna läses ur de installerade paketens metadata och grinden ska
+      # se samma miljö som förut.
+      - name: Installera Python-beroendena
+        if: ${{ !cancelled() && steps.omfang.outputs.kod == 'true' }}
+        run: pip install -r snajp-support/requirements.txt -r scripts/requirements-scripts.txt
+
+      # Licensgrinden (ISO 27001 A.5.32). Fäller på copyleft och okända
+      # licenser som inte står i docs/compliance/licenser-vitlista.json.
+      - name: licenser (copyleft-grind)
+        if: ${{ !cancelled() && steps.omfang.outputs.kod == 'true' }}
+        run: |
+          python -m pytest tests/test_licenser.py -q
+          python scripts/licenser.py --kontrollera
+
+      - name: pytest (snajp-support)
+        if: ${{ !cancelled() && steps.omfang.outputs.kod == 'true' }}
+        working-directory: snajp-support
+        run: pytest
+
+      - name: Architecture invariants
+        if: ${{ !cancelled() && steps.omfang.outputs.kod == 'true' }}
+        run: |
+          cat waivers.yml
+          pytest tests/invariants
+
+      - name: INV-SKILL-006 — vendor-bump deklarerad
+        # Bara på pull requests: kräver en jämförelsereferens.
+        if: ${{ !cancelled() && steps.omfang.outputs.kod == 'true' && github.event_name == 'pull_request' }}
+        run: |
+          git fetch --no-tags origin "${{ github.base_ref }}"
+          python scripts/check_vendor_bump.py --base "origin/${{ github.base_ref }}"
 
       - name: Compliance-skriptens tester utan databas
-        # Testerna i repo-rotens tests/ kördes inte av något jobb. De här tre
-        # håller rättighetsskriptets tabellkarta i fas med migrationerna
-        # (GDPR PR-1, PR-3, PR-4), säkerhetsbevakningens filtrering (A.5.6)
-        # och konfigurationsbaslinjens maskering av hemligheter (A.8.9).
-        run: python -m pytest tests/test_gdpr_radera.py tests/test_sakerhetsbevakning.py tests/test_railway_baslinje.py -q
+        # Rättighetsskriptets tabellkarta (GDPR PR-1, PR-3, PR-4),
+        # säkerhetsbevakningens filtrering (A.5.6) och baslinjens maskering (A.8.9).
+        if: ${{ !cancelled() && steps.omfang.outputs.kod == 'true' }}
+        run: |
+          pip install psycopg2-binary
+          python -m pytest tests/test_gdpr_radera.py tests/test_sakerhetsbevakning.py tests/test_railway_baslinje.py -q
 
-      - name: Res migrationskedjan från noll
-        # lokal_stack.kor_kedjan: railway_migrate.planned() i ordning
-        # (railway/000_auth_compat.sql först), approllernas lösenord och
-        # NULLIF-kontrollen av tenant-policyerna. Faller på första migrationen
-        # som inte går att applicera och säger vilken.
+      # Databasstegen: lösenorden är lokal_stack.py:s öppna engångsvärden.
+      # DSN:erna sätts per steg, inte på jobbet, så att pytest-steget ovan
+      # inte plockar upp dem och kör databastesterna mot en omigrerad databas.
+      - name: databas - res migrationskedjan från noll
+        if: ${{ !cancelled() && steps.omfang.outputs.kod == 'true' }}
+        env:
+          LOKAL_DSN: postgresql://postgres:localdev@127.0.0.1:5432/railway
+          GALLRING_TEST_DSN: postgresql://postgres:localdev@127.0.0.1:5432/railway
+          GALLRING_TEST_APP_DSN: postgresql://snajp_app:localapp@127.0.0.1:5432/railway
+          GALLRING_TEST_WEB_DSN: postgresql://snajp_web:localweb@127.0.0.1:5432/railway
         run: |
           python -c "import sys; sys.path.insert(0, 'scripts'); import lokal_stack; sys.exit(1 if lokal_stack.kor_kedjan() else 0)"
 
-      - name: Gallringen mot databasen
-        working-directory: snajp-support
-        run: pytest tests/db/test_gallring.py -v -rs -s
-
-      - name: Tenantisoleringen (RLS), rättighetsskriptet och åtkomstloggen mot databasen
-        # test_adminlogg.py: migration 123, INV-SEC-013 (2026-11-18).
-        # test_inloggningsforsok.py: migration 125, spärren mot upprepade
-        # inloggningsförsök (ISO 27001 A.8.5, 2026-11-18).
-        # test_snajp_web_rattigheter.py: migration 126, webbens roll har exakt
-        # listans rättigheter, och varje SQL-sats i webben går att köra som
-        # snajp_web (EXPLAIN) (A.8.2, A.8.3, A.5.15).
-        # test_demo_markering.py: migration 127, startDemo märker arbetsytan
-        # is_demo genom en smal security definer-funktion (2026-11-18).
-        # test_tvafaktor.py: migration 128, tvåstegsverifieringens lagring:
-        # bara plattformsadmin rullar in, steg och återställningskod förbrukas
-        # en gång, avstängning kräver en nyss godkänd kod (A.8.5, A.5.17).
-        # INV-SEC-001 som snajp_app mot det migrerade schemat, och en
-        # provkörning av scripts/gdpr_radera.py (sök, registerutdrag och
-        # radering, och från migration 124 begränsning av behandlingen enligt
-        # art. 18: --begransa, --hav-begransning och approllernas
-        # läsrättighet) med en syntetisk person. Ett överhoppat test räknas som
-        # fel här: utan databasen bevisar de ingenting (2026-11-18).
+      - name: databas - gallringen
+        if: ${{ !cancelled() && steps.omfang.outputs.kod == 'true' }}
         working-directory: snajp-support
         env:
+          LOKAL_DSN: postgresql://postgres:localdev@127.0.0.1:5432/railway
+          GALLRING_TEST_DSN: postgresql://postgres:localdev@127.0.0.1:5432/railway
+          GALLRING_TEST_APP_DSN: postgresql://snajp_app:localapp@127.0.0.1:5432/railway
+          GALLRING_TEST_WEB_DSN: postgresql://snajp_web:localweb@127.0.0.1:5432/railway
+        run: pytest tests/db/test_gallring.py -v -rs -s
+
+      - name: databas - tenantisolering, rättighetsskriptet, åtkomstlogg, inloggning, roller, demo, tvåsteg
+        # Ett överhoppat test räknas som fel: utan databasen bevisar de ingenting.
+        if: ${{ !cancelled() && steps.omfang.outputs.kod == 'true' }}
+        working-directory: snajp-support
+        env:
+          LOKAL_DSN: postgresql://postgres:localdev@127.0.0.1:5432/railway
+          GALLRING_TEST_DSN: postgresql://postgres:localdev@127.0.0.1:5432/railway
+          GALLRING_TEST_APP_DSN: postgresql://snajp_app:localapp@127.0.0.1:5432/railway
+          GALLRING_TEST_WEB_DSN: postgresql://snajp_web:localweb@127.0.0.1:5432/railway
           DATABASE_URL: postgresql://postgres:localdev@127.0.0.1:5432/railway
         run: |
           set -o pipefail
           pytest tests/db/test_rls_isolation.py tests/db/test_gdpr_radera_db.py tests/db/test_adminlogg.py tests/db/test_inloggningsforsok.py tests/db/test_snajp_web_rattigheter.py tests/db/test_demo_markering.py tests/db/test_tvafaktor.py -v -rs | tee /tmp/db-ut.txt
           if grep -qE "[0-9]+ skipped" /tmp/db-ut.txt; then echo "::error::ett databastest hoppades över"; exit 1; fi
 
-  invariants:
-    name: Architecture invariants
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        if: ${{ !cancelled() && steps.omfang.outputs.kod == 'true' }}
         with:
-          # INV-SKILL-006 nedan kör `git diff origin/<bas>...HEAD`. Tre punkter
-          # betyder "sedan den gemensamma förfadern", vilket kräver att basen
-          # FINNS i den lokala historiken.
-          #
-          # actions/checkout hämtar som standard EN commit. Den efterföljande
-          # `--depth=50`-fetchen ger 50 commits av basgrenen, men ingen historik
-          # för HEAD — så någon gemensam förfader går inte att beräkna, och
-          # steget föll med `fatal: origin/main...HEAD: no merge base` på VARJE
-          # pull request. Att `push`-körningarna var gröna dolde det: steget kör
-          # bara på pull_request, så den enda gången det utvärderades var den
-          # gången det fällde.
-          #
-          # 0 = full historik. Alternativet vore ett djupare --depth, men varje
-          # sådan siffra är en gissning om hur långt grenarna hunnit divergera,
-          # och den gissningen blir fel exakt när den behöver stämma.
-          fetch-depth: 0
+          node-version: 20
+          cache: npm
 
-      - uses: actions/setup-python@v7
-        with:
-          python-version: "3.12"
-          cache: pip
-          cache-dependency-path: snajp-support/requirements.txt
-
-      - name: Install dependencies
-        run: pip install -r snajp-support/requirements.txt
-
-      - name: Print active waivers
-        run: cat waivers.yml
-
-      - name: Run invariant tests
-        run: pytest tests/invariants
-
-      - name: INV-SKILL-006 — vendor-bump deklarerad
-        # Bara på pull requests: kräver en jämförelsereferens, och på en push
-        # till development finns ingen meningsfull bas att diffa mot.
-        if: github.event_name == 'pull_request'
+      - name: npm run type-check
+        if: ${{ !cancelled() && steps.omfang.outputs.kod == 'true' }}
         run: |
-          # Ingen --depth här: checkouten ovan hämtar full historik, och en grund
-          # fetch skulle återinföra exakt det som gjorde steget rött.
-          git fetch --no-tags origin "${{ github.base_ref }}"
-          python scripts/check_vendor_bump.py --base "origin/${{ github.base_ref }}"
+          npm ci
+          npm run type-check
 
-  docker-smoke:
-    name: agent-core laddas i den byggda imagen
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-
-      - name: Hämta basimagen från en spegel
-        # public.ecr.aws svarar 429 "Data limit exceeded" på GitHubs delade
-        # runners (2026-10-21 till 10-24: tre körningar i rad på PR #39). Samma
-        # officiella image hämtas från Googles spegel, med Docker Hub som
-        # reserv, och märks med namnet Dockerfilen använder. Bygget hittar den
-        # då lokalt och frågar aldrig ECR. Railways byggare berörs inte.
+      - name: docker - agent-core laddas i den byggda imagen
+        if: ${{ !cancelled() && steps.omfang.outputs.kod == 'true' }}
+        # Basimagen hämtas från en spegel: public.ecr.aws svarar 429 på
+        # GitHubs delade runners (2026-10-21 till 10-24). Byggkontexten ÄR
+        # repo-roten, eftersom agent-core/ ligger utanför snajp-support/.
+        # Importen av playbookerna kastar om någon skill saknas på disk.
         run: |
+          set -eu
           BAS=public.ecr.aws/docker/library/python:3.12-slim
           for kalla in mirror.gcr.io/library/python:3.12-slim docker.io/library/python:3.12-slim; do
-            if docker pull "$kalla"; then docker tag "$kalla" "$BAS"; exit 0; fi
+            if docker pull "$kalla"; then docker tag "$kalla" "$BAS"; break; fi
           done
-          echo "Ingen spegel svarade; bygget hämtar från ECR som förut."
-
-      - name: Bygg imagen från repo-roten
-        # Byggkontexten ÄR repo-roten (punkten sist). agent-core/ ligger
-        # utanför snajp-support/ och kan inte COPY:as annars.
-        run: docker build -f snajp-support/Dockerfile -t snajp-smoke .
-
-      - name: Importera en playbook inuti containern
-        # Starkaste enradiga beviset som finns: PlaybookStep.__post_init__
-        # anropar parse_skill_name, så själva importen kastar om någon av de
-        # fyra skillsen saknas på disk. Ett textpåstående om Dockerfilens
-        # innehåll hade inte fångat en felaktig rootDir.
-        run: |
+          docker build -f snajp-support/Dockerfile -t snajp-smoke .
           docker run --rm snajp-smoke python -c "
           from app.agentcore.registry import load_full_skill
           from app.leads.outreach_playbook import OUTREACH_V1
@@ -334,11 +284,11 @@ jobs:
           assert len(SUPPORT_V1.steps) > 0
           print('agent-core OK i containern')"
 
-      - name: Driftavbilden (synk och migrationer hos Railway)
-        # railway/Dockerfile.drift, docs/compliance/synkflytt-plan.md steg 4.
-        # Ingen databas och inga hemligheter: avbilden ska bygga, skripten ska
-        # gå att starta, kedjan ska finnas på disk, och startkommandot ska
-        # vägra utan jobb och i fel miljö.
+      - name: docker - driftavbilden (synk, migrationer och övervakning hos Railway)
+        # railway/Dockerfile.drift. Avbilden ska bygga, skripten ska gå att
+        # starta, kedjan ska finnas på disk, och startkommandot ska vägra utan
+        # jobb och i fel miljö.
+        if: ${{ !cancelled() && steps.omfang.outputs.kod == 'true' }}
         run: |
           set -eu
           docker build -f railway/Dockerfile.drift -t snajp-drift .
@@ -356,18 +306,3 @@ jobs:
             echo "::error::synken startade i development"; exit 1
           fi
           echo "driftavbilden OK"
-
-  type-check:
-    name: npm run type-check
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 20
-          cache: npm
-
-      - run: npm ci
-
-      - run: npm run type-check

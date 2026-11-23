@@ -1,0 +1,5 @@
+Record ID,Name,Email addresses,Phone numbers,Company,Job title,Primary location
+3b9f1e2a-0c4d-4e5f-9a8b-7c6d5e4f3a2b,Alice Bark,"alice.bark@example.se, alice@example.com","+46701740675, +46846500476",Tau Tvätt Test AB,Grundare,"Stockholm, Sweden"
+4c0a2f3b-1d5e-4f60-ab9c-8d7e6f5a4b3c,Bertil Cyan,bertil@example.se,+46701740677,Ypsilon Yoga Test AB,VD,"Uppsala, Sweden"
+5d1b3a4c-2e6f-4071-bcad-9e8f7a6b5c4d,Cora Dill,,,Fi Fisk Test AB,,
+6e2c4b5d-3f70-4182-cdbe-af9a8b7c6d5e,Dan Eld,dan.eld@example.com,+46313906978,,Konsult,"Göteborg, Sweden"

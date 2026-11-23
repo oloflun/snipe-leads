@@ -4495,10 +4495,11 @@ async def bestall_leadslista(
 
 
 #: Kolumner som följer med när en rad kopieras in i en kombinerad lista.
+#: Importens avtalsslut och extra (152) följer med: samma kund, egna listor.
 _LISTRADSFALT = (
     "item_typ", "company_name", "website", "ort", "contact_name", "contact_role",
     "contact_email", "contact_level", "contact_phone", "orgnr", "source_name",
-    "source_url", "signal", "signal_detalj",
+    "source_url", "signal", "signal_detalj", "avtalsslut", "extra",
 )
 
 

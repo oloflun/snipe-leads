@@ -194,6 +194,7 @@ async def skicka_supportsvar(
         await skickatkopia.kopiera_till_skickat(
             storage, tenant_id, till=mottagare, amne=amne, brodtext=content,
             fran=from_email or "",
+            fran_namn=from_name or getattr(provider, "avsandarnamn", "") or "",
         )
 
     kanal = "Resend" if provider.__class__.__name__ == "ResendMailer" else "SMTP"

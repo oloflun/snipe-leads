@@ -107,10 +107,48 @@ def _foraldrat_start(text: str, sig: dict[str, str]) -> int:
     if not traffar:
         return -1
     start = traffar[-1].start() + (1 if text[traffar[-1].start()] == "\n" else 0)
-    rader = [r for r in text[start:slut].split("\n") if r.strip()]
+    kvar = text[start:slut]
+    # En fot från före avgränsaren "--" (utkast köade i oktober 2026) börjar
+    # med en lång rad direkt efter blocket. Blocket slutar där, men bara om
+    # resten verkligen är en fot; annars är det brödtext och inget block.
+    # Tre utkast i main bar BÅDE den gamla foten och en ny efter "--": då
+    # byts blocket och den gamla foten försvinner med det, fram till "--".
+    k = _prosastart(kvar)
+    if k >= 0:
+        if not _SER_UT_SOM_FOT.search(kvar[k:]):
+            return -1
+        kvar = kvar[:k]
+    rader = [r for r in kvar.split("\n") if r.strip()]
     if 2 <= len(rader) <= 12 and all(len(r) <= 90 for r in rader):
         return start
     return -1
+
+
+#: Längsta raden i ett signaturblock. Längre är löpande text.
+_LANGSTA_SIGNATURRAD = 90
+
+#: Det som känner igen en lagstadgad fot utan avgränsare.
+_SER_UT_SOM_FOT = re.compile(r"/avregistrera/|unsubscribe|personuppgift", re.IGNORECASE)
+
+
+def _prosastart(text: str) -> int:
+    """Var den första raden som är för lång för ett signaturblock börjar, eller -1."""
+    pos = 0
+    for rad in text.split("\n"):
+        if len(rad) > _LANGSTA_SIGNATURRAD:
+            return pos
+        pos += len(rad) + 1
+    return -1
+
+
+def _foraldrat_slut(text: str, start: int) -> int:
+    """Var det föråldrade blocket som börjar på `start` slutar: vid fotens
+    avgränsare, annars vid en fot utan avgränsare, annars vid textens slut."""
+    j = text.find(_FOTSTART, start)
+    if j >= 0:
+        return j
+    k = _prosastart(text[start:])
+    return start + k if k >= 0 else len(text)
 
 
 def bygg_signaturtext(sig: dict[str, str]) -> str:
@@ -242,7 +280,13 @@ def sla_ihop(
         if _foraldrat_start(svans, sig) == 0:
             # Föråldrad signatur: byt ut den mot den aktuella, fram till foten.
             j = svans.find(_FOTSTART)
-            svans = sigtext + (svans[j:] if j >= 0 else "")
+            if j >= 0:
+                svans = sigtext + svans[j:]
+            else:
+                # Fot utan avgränsare: den står kvar efter den nya signaturen
+                # (förut hamnade signaturen efter foten, och den gamla stod kvar).
+                rest = svans[_foraldrat_slut(svans, 0) :].strip("\n")
+                svans = sigtext + (f"\n\n{rest}" if rest else "")
     if sigtext and svans.startswith(sigtext):
         resten = svans[len(sigtext) :]
         return med_signatur(brodtext, sig, halsning=halsning).rstrip() + resten  # type: ignore[arg-type]
@@ -398,8 +442,7 @@ def bygg_html(brodtext: str, sig: dict[str, str]) -> str:
         # Föråldrat block: från persongruppen (eller namnraden) fram till
         # foten (eller textens slut) ERSÄTTS av den aktuella signaturen.
         index = i
-        j = brodtext.find(_FOTSTART, i)
-        slut = j if j >= 0 else len(brodtext)
+        slut = _foraldrat_slut(brodtext, i)
     if index < 0 and sig.get("logotyp_url"):
         # Blocket finns inte ordagrant (signaturen ändrades efter köningen,
         # eller texten skrevs före den). Loggan ska ändå med i varje mejl

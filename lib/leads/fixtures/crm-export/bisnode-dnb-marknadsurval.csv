@@ -1,0 +1,5 @@
+Organisationsnummer;Företagsnamn;Besöksadress;Postnummer;Postort;Telefonnummer;Webbadress;Kontaktperson förnamn;Kontaktperson efternamn;Befattning;E-postadress;Antal anställda (intervall)
+5699001417;Iota Industri Test AB;Fabriksgatan 9;41250;Göteborg;031-3906910;iota-industri.example.se;Kerstin;Lööv;Verkställande direktör;kerstin.loov@example.se;20-49
+5699001425;Kappa Konsult Test AB;Kungsgatan 1;11143;Stockholm;08-46500411;www.kappakonsult.example.se;Lars;Myr;Ekonomichef;lars.myr@example.se;5-9
+5699001433;Lambda Lantbruk Test AB;;57191;Nässjö;;;;;;;1-4
+5699001441;My Marin Test AB;Kajen 2;45330;Lysekil;0701740609;http://mymarin.example.se;Maja;Näs;VD;maja@example.com;10-19

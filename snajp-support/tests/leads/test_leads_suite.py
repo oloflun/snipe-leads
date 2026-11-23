@@ -198,6 +198,313 @@ async def test_import_skapar_lista_med_kalla_import():
             assert tom.status_code == 422
 
 
+async def _importera(client, **json_) -> httpx.Response:
+    json_.setdefault("titel", "Import")
+    return await client.post("/api/leads/import", headers=DEMO, json=json_)
+
+
+async def _crm_kund(client, namn: str, orgnr: str | None = None) -> None:
+    svar = await _importera(client, titel="Kunder", kalla="crm", rader=[{"company_name": namn, "orgnr": orgnr}])
+    assert svar.status_code == 201, svar.text
+
+
+async def test_import_hoppar_over_och_raknar_varje_skal():
+    async with app.router.lifespan_context(app):
+        storage = app.state.storage
+        await _prospekt("Leadbolaget AB")
+        await storage.add_suppression(TENANT, email="Nej@Sparr.se", reason="test")
+        async with _client() as client:
+            await _crm_kund(client, "Kundbolaget AB", "556000-1111")
+            svar = await _importera(
+                client,
+                rader=[
+                    {"company_name": "Nytt Bolag AB"},
+                    {"company_name": " ", "contact_email": "a@b.se"},
+                    {"company_name": "nytt bolag"},  # samma bolag utan bolagsform
+                    {"company_name": "Annat namn", "orgnr": "5560001111"},  # kund på orgnr
+                    {"company_name": "Spärrbolaget AB", "contact_email": "nej@sparr.se"},
+                    {"company_name": "Leadbolaget"},
+                ],
+            )
+            assert svar.status_code == 201, svar.text
+            body = svar.json()
+            assert body["antal"] == 1 and body["hoppade_over"] == 5
+            assert body["hoppade"] == {
+                "utan_bolag": 1, "dubbletter": 1, "redan_kund": 1, "redan_lead": 1, "sparrade": 1,
+            }
+            assert body["list"]["item_count"] == 1 and body["list"]["status"] == "klar"
+
+
+async def test_import_skalens_foretrade():
+    """Kund före spärrad före lead före dubblett."""
+    async with app.router.lifespan_context(app):
+        storage = app.state.storage
+        await _prospekt("Bada AB")
+        await _prospekt("Leaddubbel AB")
+        await storage.add_suppression(TENANT, email="s@x.se", reason="test")
+        async with _client() as client:
+            await _crm_kund(client, "Bada AB")
+            svar = await _importera(
+                client,
+                rader=[
+                    {"company_name": "Bada AB", "contact_email": "s@x.se"},  # kund + spärr + lead
+                    {"company_name": "Leaddubbel AB", "contact_email": "s@x.se"},  # spärr + lead
+                    {"company_name": "Leaddubbel AB"},  # lead (och dubblett i filen)
+                    {"company_name": "Först AB"},
+                ],
+            )
+            body = svar.json()
+            assert body["hoppade"] == {
+                "utan_bolag": 0, "dubbletter": 0, "redan_kund": 1, "redan_lead": 1, "sparrade": 1,
+            }
+            assert body["antal"] == 1
+
+            # Lead före dubblett: bolaget står redan i målistan OCH i en annan lista.
+            mal = (await _importera(client, titel="Mål", rader=[{"company_name": "Tvåställe AB"}])).json()["list"]["id"]
+            await _importera(client, titel="Annan", ta_med_leads=True, rader=[{"company_name": "Tvåställe AB"}])
+            pafyllt = await _importera(client, list_id=mal, rader=[{"company_name": "Tvåställe AB"}])
+            assert pafyllt.json()["hoppade"]["redan_lead"] == 1 and pafyllt.json()["hoppade"]["dubbletter"] == 0
+            med = await _importera(client, list_id=mal, ta_med_leads=True, rader=[{"company_name": "Tvåställe AB"}])
+            assert med.json()["hoppade"]["dubbletter"] == 1
+
+
+async def test_import_ta_med_leads_tar_med_men_aldrig_kunder_eller_sparrade():
+    async with app.router.lifespan_context(app):
+        storage = app.state.storage
+        await _prospekt("Leadett AB")
+        await storage.add_suppression(TENANT, email="s@x.se", reason="test")
+        async with _client() as client:
+            await _crm_kund(client, "Kundett AB")
+            # Ett bolag i en annan (vanlig) lista är också ett lead.
+            assert (await _importera(client, titel="Förra", rader=[{"company_name": "Listbolag AB"}])).status_code == 201
+            svar = await _importera(
+                client,
+                ta_med_leads=True,
+                rader=[
+                    {"company_name": "Leadett AB"},
+                    {"company_name": "Listbolag AB"},
+                    {"company_name": "Kundett AB"},
+                    {"company_name": "Spärrat AB", "contact_email": "s@x.se"},
+                ],
+            )
+            body = svar.json()
+            assert body["antal"] == 2
+            assert body["hoppade"]["redan_kund"] == 1 and body["hoppade"]["sparrade"] == 1
+            assert body["hoppade"]["redan_lead"] == 0
+
+            utan = await _importera(client, titel="Utan", rader=[{"company_name": "Listbolag AB"}, {"company_name": "Ny AB"}])
+            assert utan.json()["hoppade"]["redan_lead"] == 1 and utan.json()["antal"] == 1
+
+
+async def test_crm_import_hoppar_bara_over_utan_bolag_och_dubbletter():
+    async with app.router.lifespan_context(app):
+        await _prospekt("Crmlead AB")
+        async with _client() as client:
+            await _crm_kund(client, "Gammal Kund AB")
+            svar = await _importera(
+                client,
+                kalla="crm",
+                rader=[
+                    {"company_name": "Crmlead AB"},
+                    {"company_name": "Gammal Kund AB"},
+                    {"company_name": "Crmlead"},
+                    {"company_name": ""},
+                ],
+            )
+            body = svar.json()
+            assert body["antal"] == 2
+            assert body["hoppade"] == {
+                "utan_bolag": 1, "dubbletter": 1, "redan_kund": 0, "redan_lead": 0, "sparrade": 0,
+            }
+
+
+async def test_import_i_delar_med_list_id():
+    async with app.router.lifespan_context(app):
+        async with _client() as client:
+            forsta = await _importera(
+                client, titel="Stor fil", importinfo={"fil": "a.csv", "del": 1},
+                rader=[{"company_name": "Del Ett AB"}, {"company_name": "Del Två AB"}],
+            )
+            assert forsta.status_code == 201, forsta.text
+            lid = forsta.json()["list"]["id"]
+            assert forsta.json()["list"]["importinfo"] == {"fil": "a.csv", "del": 1}
+
+            andra = await client.post(
+                "/api/leads/import", headers=DEMO,
+                json={
+                    "list_id": lid, "importinfo": {"fil": "a.csv", "del": 2},
+                    "rader": [{"company_name": "Del Ett"}, {"company_name": "Del Tre AB"}],
+                },
+            )
+            assert andra.status_code == 201, andra.text
+            body = andra.json()
+            # Raden som redan står i listan är en dubblett, inte ett lead.
+            assert body["antal"] == 1 and body["hoppade"]["dubbletter"] == 1 and body["hoppade"]["redan_lead"] == 0
+            assert body["list"]["id"] == lid and body["list"]["item_count"] == 3
+            assert body["list"]["importinfo"] == {"fil": "a.csv", "del": 2}
+
+            # Alla överhoppade i en fortsättning är inget fel.
+            tom = await client.post(
+                "/api/leads/import", headers=DEMO, json={"list_id": lid, "rader": [{"company_name": "Del Tre"}]}
+            )
+            assert tom.status_code == 201 and tom.json()["antal"] == 0
+            assert tom.json()["list"]["importinfo"] == {"fil": "a.csv", "del": 2}
+
+            listor = (await client.get("/api/leads/listor", headers=DEMO)).json()["lists"]
+            rad = next(x for x in listor if x["id"] == lid)
+            assert rad["importinfo"] == {"fil": "a.csv", "del": 2} and rad["item_count"] == 3
+
+
+async def test_import_list_id_fel():
+    async with app.router.lifespan_context(app):
+        storage = app.state.storage
+        async with _client() as client:
+            saknas = await _importera(client, list_id="00000000-0000-4000-a000-00000000abcd", rader=[{"company_name": "X AB"}])
+            assert saknas.status_code == 404
+            assert (await _importera(client, list_id="inte-ett-uuid", rader=[{"company_name": "X AB"}])).status_code == 404
+
+            # En annan kunds lista finns inte här.
+            deras = await storage.create_lead_list(ANNAN, titel="Deras", icp={}, antal=1, kalla="import")
+            frammande = await _importera(client, list_id=deras["id"], rader=[{"company_name": "X AB"}])
+            assert frammande.status_code == 404
+            assert await storage.list_lead_list_items(ANNAN, deras["id"]) == []
+
+            crm = (await _importera(client, kalla="crm", rader=[{"company_name": "Kund AB"}])).json()["list"]["id"]
+            fel_slag = await _importera(client, list_id=crm, rader=[{"company_name": "X AB"}])
+            assert fel_slag.status_code == 409
+            sokt = await storage.create_lead_list(TENANT, titel="Sökt", icp={}, antal=1, kalla="sok")
+            assert (await _importera(client, list_id=sokt["id"], rader=[{"company_name": "X AB"}])).status_code == 409
+
+            utan_titel = await client.post("/api/leads/import", headers=DEMO, json={"rader": [{"company_name": "X AB"}]})
+            assert utan_titel.status_code == 422
+
+
+async def test_import_tak_5000_rader_per_lista():
+    async with app.router.lifespan_context(app):
+        async with _client() as client:
+            forsta = await _importera(client, rader=[{"company_name": f"Takbolag {i}"} for i in range(4999)])
+            assert forsta.status_code == 201, forsta.text
+            lid = forsta.json()["list"]["id"]
+            over = await _importera(client, list_id=lid, rader=[{"company_name": "Tak A"}, {"company_name": "Tak B"}])
+            assert over.status_code == 422 and over.json()["detail"] == "Högst 5 000 rader per lista."
+            assert len(await app.state.storage.list_lead_list_items(TENANT, lid)) == 4999
+            precis = await _importera(client, list_id=lid, rader=[{"company_name": "Tak A"}])
+            assert precis.status_code == 201 and precis.json()["list"]["item_count"] == 5000
+
+
+async def test_import_avtalsslut_extra_och_ort_syns_i_listan():
+    async with app.router.lifespan_context(app):
+        async with _client() as client:
+            extra = {f"kolumn {i}": f"v{i}" for i in range(45)}
+            extra["kolumn 0"] = "x" * 600
+            extra["r" * 150] = "lång rubrik"
+            svar = await _importera(
+                client,
+                rader=[
+                    {"company_name": "Avtal AB", "ort": "Umeå", "avtalsslut": "2027-03-31", "extra": extra},
+                    {"company_name": "Trasigt AB", "avtalsslut": "31/3 nästa år", "extra": {"Tom": "", "Siffra": 7}},
+                    {"company_name": "Ogiltigt AB", "avtalsslut": "2027-02-30"},
+                ],
+            )
+            assert svar.status_code == 201, svar.text
+            items = (await client.get(f"/api/leads/listor/{svar.json()['list']['id']}", headers=DEMO)).json()["items"]
+            a, b, c = items
+            assert a["avtalsslut"] == "2027-03-31" and a["ort"] == "Umeå"
+            assert len(a["extra"]) == 40 and len(a["extra"]["kolumn 0"]) == 500
+            assert "r" * 150 not in a["extra"]
+            assert b["avtalsslut"] is None and b["extra"] == {"Siffra": "7"}
+            assert c["avtalsslut"] is None and c["extra"] is None
+
+
+async def test_import_kvittot_for_stort():
+    async with app.router.lifespan_context(app):
+        async with _client() as client:
+            svar = await _importera(client, importinfo={"x": "y" * 21_000}, rader=[{"company_name": "Kvitto AB"}])
+            assert svar.status_code == 422
+            assert not [x for x in (await client.get("/api/leads/listor", headers=DEMO)).json()["lists"]
+                        if x["titel"] == "Import"]
+
+
+async def test_import_alla_overhoppade_ger_422_med_skalen():
+    async with app.router.lifespan_context(app):
+        await _prospekt("Redan AB")
+        async with _client() as client:
+            svar = await _importera(client, rader=[{"company_name": "Redan AB"}, {"company_name": ""}])
+            assert svar.status_code == 422
+            detalj = svar.json()["detail"]
+            assert "1 utan bolagsnamn" in detalj and "1 redan leads" in detalj
+
+
+async def test_granska_flaggar_i_ordning_och_skriver_inget():
+    async with app.router.lifespan_context(app):
+        storage = app.state.storage
+        await _prospekt("Granskalead AB")
+        await _prospekt("Granskakund AB")
+        await storage.add_suppression(TENANT, email="s@x.se", reason="test")
+        async with _client() as client:
+            await _crm_kund(client, "Granskakund AB")
+            listor_fore = await storage.list_lead_lists(TENANT)
+            prospekt_fore = await storage.list_prospects(TENANT, limit=20_000)
+            rader = [
+                {"company_name": "Granskakund AB", "contact_email": "s@x.se"},
+                {"company_name": "Granskalead AB", "contact_email": "s@x.se"},
+                {"company_name": "Granskalead"},
+                {"company_name": "Helt Nytt AB"},
+            ]
+            svar = await client.post("/api/leads/import/granska", headers=DEMO, json={"kalla": "import", "rader": rader})
+            assert svar.status_code == 200, svar.text
+            assert svar.json() == {
+                "flaggor": ["kund", "sparrad", "lead", None],
+                "antal": {"kund": 1, "sparrad": 1, "lead": 1},
+            }
+            crm = await client.post("/api/leads/import/granska", headers=DEMO, json={"kalla": "crm", "rader": rader})
+            assert crm.json()["flaggor"] == [None] * 4
+
+            assert await storage.list_lead_lists(TENANT) == listor_fore
+            assert await storage.list_prospects(TENANT, limit=20_000) == prospekt_fore
+            tom = await client.post("/api/leads/import/granska", headers=DEMO, json={"rader": []})
+            assert tom.status_code == 422
+
+
+async def test_import_och_granska_sparrar_adress_med_begransad_behandling():
+    """GDPR art. 18 (migration 124): en adress med begränsad behandling lagras
+    inte på nytt. Listan är global, så raden tas bort igen efter testet."""
+    async with app.router.lifespan_context(app):
+        storage = app.state.storage
+        begransning = {"email": "Art18@Begransad.se", "havd_at": None}
+        storage.behandlingsbegransningar.append(begransning)
+        try:
+            async with _client() as client:
+                rader = [
+                    {"company_name": "Begränsad AB", "contact_email": "art18@begransad.se"},
+                    {"company_name": "Fri Väg AB", "contact_email": "ok@frivag.se"},
+                ]
+                granska = await client.post("/api/leads/import/granska", headers=DEMO, json={"kalla": "import", "rader": rader})
+                assert granska.json()["flaggor"] == ["sparrad", None]
+                svar = await _importera(client, titel="Art 18", rader=rader)
+                assert svar.status_code == 201, svar.text
+                assert svar.json()["antal"] == 1 and svar.json()["hoppade"]["sparrade"] == 1
+        finally:
+            storage.behandlingsbegransningar.remove(begransning)
+
+
+async def test_kombinera_behaller_avtalsslut_och_extra():
+    async with app.router.lifespan_context(app):
+        async with _client() as client:
+            lid = (await _importera(
+                client, rader=[{"company_name": "Kombo AB", "avtalsslut": "2026-12-01", "extra": {"Segment": "A"}}]
+            )).json()["list"]["id"]
+            lid2 = (await _importera(client, titel="Andra", rader=[{"company_name": "Kombo Två AB"}])).json()["list"]["id"]
+            svar = await client.post(
+                "/api/leads/listor/kombinera", headers=DEMO,
+                json={"titel": "Kombo", "list_ids": [lid, lid2], "kontaktfilter": "alla"},
+            )
+            assert svar.status_code == 201, svar.text
+            rad, andra = svar.json()["items"]
+            assert rad["avtalsslut"] == "2026-12-01" and rad["extra"] == {"Segment": "A"}
+            assert andra["avtalsslut"] is None and andra["extra"] is None
+
+
 # -- Automationsinställningarna i config ---------------------------------------
 
 

@@ -142,7 +142,7 @@ async def test_levererande_provider_lagger_kopia_i_skickat(monkeypatch):
 
     anrop: list[dict] = []
 
-    async def fejk_kopia(storage_, tenant_id, *, till, amne, brodtext, fran="", syfte="support"):
+    async def fejk_kopia(storage_, tenant_id, *, till, amne, brodtext, fran="", syfte="support", **_):
         assert syfte == "leads"  # leadsutskick hör hemma i leadsinkorgen (084)
         anrop.append({"tenant_id": tenant_id, "till": till, "amne": amne, "fran": fran})
         return None
@@ -159,6 +159,50 @@ async def test_levererande_provider_lagger_kopia_i_skickat(monkeypatch):
     assert anrop == [
         {"tenant_id": TENANT, "till": "info@example.se", "amne": "En idé till er", "fran": "hej@snajp.se"}
     ]
+
+
+@pytest.mark.anyio
+async def test_skickatkopian_bar_samma_html_och_namn_som_utskicket(monkeypatch):
+    """Anton 2026-11-23: mottagaren fick signaturen med logotypen, men kopian
+    i Skickat var ren text från adressen utan namn, så det såg ut som att
+    loggan saknades i utskicket. Kopian får nu samma HTML-del och samma
+    avsändarnamn som gick till mottagaren."""
+    from app.email_pipeline import skickatkopia
+
+    storage = MemoryStorage()
+    item_id, thread_id, _ = _seed(storage, scheduled_at=WITHIN_WINDOW_UTC)
+    storage.agent_settings[(TENANT, "leads")]["signatur"] = {
+        "namn": "Sebastian Bergman", "titel": "Grundare & VD",
+        "logotyp_url": "https://www.snajp.se/epost/snajp-logga.png",
+    }
+
+    kopior: list[dict] = []
+
+    async def fejk_kopia(storage_, tenant_id, **kwargs):
+        kopior.append(kwargs)
+        return None
+
+    monkeypatch.setattr(skickatkopia, "kopiera_till_skickat", fejk_kopia)
+
+    class _HtmlProvider:
+        levererar = True
+        avsandare = "kontakt@snajp.se"
+        avsandarnamn = "Snajp"
+
+        def __init__(self):
+            self.sent: list[dict] = []
+
+        async def send(self, *, to, subject, body, html=None):
+            self.sent.append({"to": to, "html": html})
+
+    provider = _HtmlProvider()
+    outcome = await process_due_item(storage, TENANT, {"id": item_id, "thread_id": thread_id}, provider, now=WITHIN_WINDOW_UTC)
+
+    assert outcome == "sent"
+    utskickets_html = provider.sent[0]["html"]
+    assert utskickets_html and "snajp-logga.png" in utskickets_html
+    assert kopior[0]["html"] == utskickets_html
+    assert kopior[0]["fran_namn"] == "Snajp"
 
 
 @pytest.mark.anyio

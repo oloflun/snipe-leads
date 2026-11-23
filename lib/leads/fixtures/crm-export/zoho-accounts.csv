@@ -1,0 +1,5 @@
+Record Id,Account Owner,Account Owner.id,Account Name,Organisationsnummer,Phone,Website,Account Type,Industry,Billing City,Created Time
+zcrm_5123000000500001,Test Säljare,zcrm_5123000000000101,Kappa Kyl Test AB,569900-0617,08-465 004 60,www.kappakyl.example.se,Customer,Manufacturing,Stockholm,2026-08-12 10:20:00
+zcrm_5123000000500002,Test Säljare,zcrm_5123000000000101,Lambda Logistik Test AB,5699000625,,https://lambda.example.com,Prospect,Transportation,Göteborg,2026-08-13 11:05:00
+zcrm_5123000000500003,Test Säljare,zcrm_5123000000000101,"My Media, Test AB",,031-390 69 62,,Prospect,,Malmö,2026-08-14 09:05:00
+zcrm_5123000000500004,Test Säljare,zcrm_5123000000000101,Ny Nord Test AB,569900-0641,0701740663,ny-nord.example.se,Customer,Services,Kiruna,2026-08-15 14:35:00

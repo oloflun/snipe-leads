@@ -1,0 +1,1393 @@
+[
+  {
+    "fil": "hubspot-contacts-en.csv",
+    "leverantor": "HubSpot",
+    "objekt": "contacts",
+    "sprak": "en",
+    "avgransare": ",",
+    "rubrikrad": 0,
+    "kallor": [
+      "https://knowledge.hubspot.com/import-and-export/export-records"
+    ],
+    "sakerhet": "trolig",
+    "anmarkning": "Vendor doc (read) confirms: Record ID is always the first column, other columns alphabetical when exporting all properties, association columns at the end, header language follows the \"Language of column headers\" choice. Property labels (First Name, Last Name, Email, Phone Number, Job Title, Company Name, Website URL, Lead Status) are HubSpot default contact property labels from memory, not from a sample file. The association column name \"Associated Company\" is not confirmed by the doc. Facit för telefon ändrat 2026-11-23: filen har både Mobile Phone Number och Phone Number, och importen tar mobilen före växeln (flervalsordningen i importmallar.ts).",
+    "forvantad": {
+      "company_name": "Company Name",
+      "contact_name": [
+        "First Name",
+        "Last Name"
+      ],
+      "contact_role": "Job Title",
+      "contact_email": "Email",
+      "contact_phone": "Phone Number",
+      "website": "Website URL",
+      "status": "Lead Status"
+    },
+    "forsta_rad": {
+      "company_name": "Alfa Bygg Test AB",
+      "contact_name": "Anna Berg",
+      "contact_role": "VD",
+      "contact_email": "anna.berg@example.se",
+      "contact_phone": "070-174 06 05",
+      "website": "https://www.alfabygg.example.se",
+      "status": "NEW"
+    }
+  },
+  {
+    "fil": "hubspot-companies-en.csv",
+    "leverantor": "HubSpot",
+    "objekt": "companies",
+    "sprak": "en",
+    "avgransare": ",",
+    "rubrikrad": 0,
+    "kallor": [
+      "https://knowledge.hubspot.com/import-and-export/export-records"
+    ],
+    "sakerhet": "trolig",
+    "anmarkning": "Record ID first per vendor doc. \"Company name\" (lower-case n) and \"Company Domain Name\" are HubSpot default company property labels from memory. HubSpot has no standard org number property; Swedish portals add a custom property, here labelled \"Organisationsnummer\" (custom label, invented by the portal owner). Domain without scheme in \"Company Domain Name\", full URL in \"Website URL\".",
+    "forvantad": {
+      "company_name": "Company name",
+      "orgnr": "Organisationsnummer",
+      "contact_phone": "Phone Number",
+      "website": "Website URL",
+      "status": "Lifecycle Stage"
+    },
+    "forsta_rad": {
+      "company_name": "Alfa Bygg Test AB",
+      "orgnr": "569900-0013",
+      "contact_phone": "08-465 004 01",
+      "website": "https://www.alfabygg.example.se",
+      "status": "customer"
+    }
+  },
+  {
+    "fil": "hubspot-contacts-sv.csv",
+    "leverantor": "HubSpot",
+    "objekt": "contacts",
+    "sprak": "sv",
+    "avgransare": ",",
+    "rubrikrad": 0,
+    "kallor": [
+      "https://knowledge.hubspot.com/import-and-export/export-records"
+    ],
+    "sakerhet": "osaker",
+    "anmarkning": "The doc confirms headers are translated when \"Language of column headers\" is Swedish (values are not translated: lifecycle values stay English). The Swedish labels themselves (Post-ID, Förnamn, Efternamn, E-post, Telefonnummer, Jobbtitel, Företagsnamn, Webbadress, Leadstatus, Livscykelfas) are guessed from the HubSpot Swedish UI, not from a sample export.",
+    "forvantad": {
+      "company_name": "Företagsnamn",
+      "contact_name": [
+        "Förnamn",
+        "Efternamn"
+      ],
+      "contact_role": "Jobbtitel",
+      "contact_email": "E-post",
+      "contact_phone": "Telefonnummer",
+      "website": "Webbadress",
+      "status": "Leadstatus"
+    },
+    "forsta_rad": {
+      "company_name": "Epsilon Måleri Test AB",
+      "contact_name": "Karin Sjö",
+      "contact_role": "Verksamhetschef",
+      "contact_email": "karin.sjo@example.se",
+      "contact_phone": "070-174 06 10",
+      "website": "www.epsilon.example.se",
+      "status": "OPEN"
+    }
+  },
+  {
+    "fil": "pipedrive-organizations-legacy.csv",
+    "leverantor": "Pipedrive",
+    "objekt": "organizations",
+    "sprak": "en",
+    "avgransare": ",",
+    "rubrikrad": 0,
+    "kallor": [
+      "https://support.pipedrive.com/en/article/exporting-data-from-pipedrive"
+    ],
+    "sakerhet": "osaker",
+    "anmarkning": "Vendor doc only says exports contain default, custom and system fields plus linked records, as CSV or XLSX; it shows no header text. The \"Organization - <Field>\" prefix style is recalled from older list exports and migration scripts, not read in a sample. Org number is a custom field (label chosen by the account).",
+    "forvantad": {
+      "company_name": "Organization - Name",
+      "orgnr": "Organization - Organisationsnummer",
+      "website": "Organization - Website",
+      "status": "Organization - Label"
+    },
+    "forsta_rad": {
+      "company_name": "Iota Ventilation Test AB",
+      "orgnr": "569900-0112",
+      "website": "iota.example.se",
+      "status": "Hot lead"
+    }
+  },
+  {
+    "fil": "pipedrive-organizations.csv",
+    "leverantor": "Pipedrive",
+    "objekt": "organizations",
+    "sprak": "en",
+    "avgransare": ",",
+    "rubrikrad": 0,
+    "kallor": [
+      "https://support.pipedrive.com/en/article/exporting-data-from-pipedrive"
+    ],
+    "sakerhet": "osaker",
+    "anmarkning": "Newer plain-label style (field label only, no \"Organization - \" prefix). Header text recalled from the list view column names, not from a sample export.",
+    "forvantad": {
+      "company_name": "Name",
+      "orgnr": "Org.nr",
+      "website": "Website",
+      "status": "Label"
+    },
+    "forsta_rad": {
+      "company_name": "Ny Nätverk Test AB",
+      "orgnr": "569900-0211",
+      "website": "ny.example.se",
+      "status": "Customer"
+    }
+  },
+  {
+    "fil": "pipedrive-people-legacy.csv",
+    "leverantor": "Pipedrive",
+    "objekt": "people",
+    "sprak": "en",
+    "avgransare": ",",
+    "rubrikrad": 0,
+    "kallor": [
+      "https://support.pipedrive.com/en/article/exporting-data-from-pipedrive"
+    ],
+    "sakerhet": "osaker",
+    "anmarkning": "Older prefix style. People carry several emails and phones; legacy exports join them in one cell separated by \", \". Exact header names recalled, not verified. forsta_rad takes the first email/phone of a multi-value cell.",
+    "forvantad": {
+      "company_name": "Person - Organization",
+      "contact_name": "Person - Name",
+      "contact_role": "Person - Job title",
+      "contact_email": "Person - Email",
+      "contact_phone": "Person - Phone",
+      "status": "Person - Label"
+    },
+    "forsta_rad": {
+      "company_name": "Iota Ventilation Test AB",
+      "contact_name": "Ingrid Lind",
+      "contact_role": "VD",
+      "contact_email": "ingrid.lind@example.se",
+      "contact_phone": "070-174 06 15",
+      "status": "Decision maker"
+    }
+  },
+  {
+    "fil": "pipedrive-deals-legacy.csv",
+    "leverantor": "Pipedrive",
+    "objekt": "deals",
+    "sprak": "en",
+    "avgransare": ",",
+    "rubrikrad": 0,
+    "kallor": [
+      "https://support.pipedrive.com/en/article/exporting-data-from-pipedrive"
+    ],
+    "sakerhet": "osaker",
+    "anmarkning": "Deal list export mixing deal, person and organization fields (doc confirms mixing is possible). Prefix header names recalled, not verified. Trap: both \"Deal - Organization\" and \"Organization - Name\" hold the company; \"Deal - Title\" contains the company name plus a suffix and must not be chosen. Deal value uses a decimal point.",
+    "forvantad": {
+      "company_name": "Organization - Name",
+      "contact_name": "Person - Name",
+      "contact_email": "Person - Email",
+      "contact_phone": "Person - Phone",
+      "status": "Deal - Status"
+    },
+    "forsta_rad": {
+      "company_name": "Iota Ventilation Test AB",
+      "contact_name": "Ingrid Lind",
+      "contact_email": "ingrid.lind@example.se",
+      "contact_phone": "070-174 06 15",
+      "status": "open"
+    }
+  },
+  {
+    "fil": "pipedrive-people-sv.csv",
+    "leverantor": "Pipedrive",
+    "objekt": "people",
+    "sprak": "sv",
+    "avgransare": ",",
+    "rubrikrad": 0,
+    "kallor": [
+      "https://support.pipedrive.com/en/article/exporting-data-from-pipedrive"
+    ],
+    "sakerhet": "osaker",
+    "anmarkning": "Pipedrive UI is localised to Swedish; whether export headers follow the UI language is not confirmed. Labels (Namn, Organisation, E-post, Telefon, Etikett, Ägare) are guesses from the Swedish UI. Multi-value cells joined with \", \".",
+    "forvantad": {
+      "company_name": "Organisation",
+      "contact_name": "Namn",
+      "contact_role": "Befattning",
+      "contact_email": "E-post",
+      "contact_phone": "Telefon",
+      "status": "Etikett"
+    },
+    "forsta_rad": {
+      "company_name": "Rho Rör Test AB",
+      "contact_name": "Rut Hed",
+      "contact_role": "VD",
+      "contact_email": "rut.hed@example.se",
+      "contact_phone": "070-174 06 20",
+      "status": "Beslutsfattare"
+    }
+  },
+  {
+    "fil": "salesforce-leads-report.csv",
+    "leverantor": "Salesforce",
+    "objekt": "leads report",
+    "sprak": "en",
+    "avgransare": ",",
+    "rubrikrad": 0,
+    "kallor": [
+      "https://trailhead.salesforce.com/content/learn/projects/create-reports-and-dashboards-for-sales-and-marketing-managers/manage-reported-data",
+      "https://automationchampion.com/2014/02/12/export-reports-without-footers-2/"
+    ],
+    "sakerhet": "trolig",
+    "anmarkning": "Native report export (Details Only, Comma Delimited .csv) per Trailhead; every cell is double-quoted. A blog confirms Salesforce appends five footer rows unless the admin ticks \"Exclude Disclaimer from Formatted Report Exports\"; the exact footer wording (report name, Copyright, \"Confidential Information - Do Not Distribute\", \"Generated By:\", org name) is recalled, not read in a sample. Column labels are standard field labels from memory. Leads report company column is \"Company / Account\". Facit för telefon ändrat 2026-11-23: filen har flera telefonkolumner och importen tar mobilen före växeln (flervalsordningen i importmallar.ts).",
+    "forvantad": {
+      "company_name": "Company / Account",
+      "contact_name": [
+        "First Name",
+        "Last Name"
+      ],
+      "contact_role": "Title",
+      "contact_email": "Email",
+      "contact_phone": "Phone",
+      "website": "Website",
+      "status": "Lead Status"
+    },
+    "forsta_rad": {
+      "company_name": "Fi Fastigheter Test AB",
+      "contact_name": "Hanna Viklund",
+      "contact_role": "IT-chef",
+      "contact_email": "hanna.viklund@example.se",
+      "contact_phone": "070-174 06 30",
+      "website": "www.fi.example.se",
+      "status": "Open - Not Contacted"
+    }
+  },
+  {
+    "fil": "salesforce-accounts-report.csv",
+    "leverantor": "Salesforce",
+    "objekt": "accounts report",
+    "sprak": "en",
+    "avgransare": ",",
+    "rubrikrad": 0,
+    "kallor": [
+      "https://trailhead.salesforce.com/content/learn/projects/create-reports-and-dashboards-for-sales-and-marketing-managers/manage-reported-data",
+      "https://automationchampion.com/2014/02/12/export-reports-without-footers-2/"
+    ],
+    "sakerhet": "trolig",
+    "anmarkning": "Native report export (Details Only, Comma Delimited .csv) per Trailhead; every cell is double-quoted. A blog confirms Salesforce appends five footer rows unless the admin ticks \"Exclude Disclaimer from Formatted Report Exports\"; the exact footer wording (report name, Copyright, \"Confidential Information - Do Not Distribute\", \"Generated By:\", org name) is recalled, not read in a sample. Column labels are standard field labels from memory. \"Account Number\" holds an internal customer number, not the org number (trap); the org number is a custom field whose label the org chose (\"Organisationsnummer\").",
+    "forvantad": {
+      "company_name": "Account Name",
+      "orgnr": "Organisationsnummer",
+      "contact_phone": "Phone",
+      "website": "Website",
+      "status": "Type"
+    },
+    "forsta_rad": {
+      "company_name": "Fi Fastigheter Test AB",
+      "orgnr": "569900-0310",
+      "contact_phone": "08-465 004 30",
+      "website": "www.fi.example.se",
+      "status": "Customer - Direct"
+    }
+  },
+  {
+    "fil": "salesforce-contacts-accounts-report.csv",
+    "leverantor": "Salesforce",
+    "objekt": "contacts & accounts report",
+    "sprak": "en",
+    "avgransare": ",",
+    "rubrikrad": 0,
+    "kallor": [
+      "https://trailhead.salesforce.com/content/learn/projects/create-reports-and-dashboards-for-sales-and-marketing-managers/manage-reported-data",
+      "https://automationchampion.com/2014/02/12/export-reports-without-footers-2/"
+    ],
+    "sakerhet": "trolig",
+    "anmarkning": "Native report export (Details Only, Comma Delimited .csv) per Trailhead; every cell is double-quoted. A blog confirms Salesforce appends five footer rows unless the admin ticks \"Exclude Disclaimer from Formatted Report Exports\"; the exact footer wording (report name, Copyright, \"Confidential Information - Do Not Distribute\", \"Generated By:\", org name) is recalled, not read in a sample. Column labels are standard field labels from memory. Contacts & Accounts report. Two phone columns (Phone, Mobile). Facit för telefon ändrat 2026-11-23: filen har flera telefonkolumner och importen tar mobilen före växeln (flervalsordningen i importmallar.ts).",
+    "forvantad": {
+      "company_name": "Account Name",
+      "contact_name": [
+        "First Name",
+        "Last Name"
+      ],
+      "contact_role": "Title",
+      "contact_email": "Email",
+      "contact_phone": "Phone",
+      "website": "Website"
+    },
+    "forsta_rad": {
+      "company_name": "Fi Fastigheter Test AB",
+      "contact_name": "Hanna Viklund",
+      "contact_role": "IT-chef",
+      "contact_email": "hanna.viklund@example.se",
+      "contact_phone": "070-174 06 30",
+      "website": "www.fi.example.se"
+    }
+  },
+  {
+    "fil": "dynamics365-accounts.csv",
+    "leverantor": "Microsoft Dynamics 365",
+    "objekt": "accounts",
+    "sprak": "en",
+    "avgransare": ",",
+    "rubrikrad": 0,
+    "kallor": [
+      "https://learn.microsoft.com/en-us/training/modules/export-dataverse-excel/export-data",
+      "https://jgvjg48436.lithium.com/t5/Microsoft-Dataverse/Remove-3-quot-hidden-quot-columns-from-default-excel-export-in/m-p/2087003"
+    ],
+    "sakerhet": "trolig",
+    "anmarkning": "Dynamics 365 \"Export to Excel\" writes .xlsx with three hidden leading \"(Do Not Modify)\" columns (record GUID, row checksum, modified on), confirmed by Microsoft Learn and a community thread. This CSV is that sheet saved as CSV. View column labels are standard Dataverse display names from memory; lookup-related columns get the \"(Relationship) (Entity)\" suffix. Contact name is the \"Primary Contact\" lookup; its email comes via a related column.",
+    "forvantad": {
+      "company_name": "Account Name",
+      "contact_name": "Primary Contact",
+      "contact_email": "Email (Primary Contact) (Contact)",
+      "contact_phone": "Main Phone",
+      "website": "Website",
+      "status": "Status"
+    },
+    "forsta_rad": {
+      "company_name": "Beta Bageri Test AB",
+      "contact_name": "Klara Ny",
+      "contact_email": "klara.ny@example.se",
+      "contact_phone": "08-465 004 40",
+      "website": "https://www.betabageri.example.se",
+      "status": "Active"
+    }
+  },
+  {
+    "fil": "dynamics365-contacts.csv",
+    "leverantor": "Microsoft Dynamics 365",
+    "objekt": "contacts",
+    "sprak": "en",
+    "avgransare": ";",
+    "rubrikrad": 0,
+    "kallor": [
+      "https://learn.microsoft.com/en-us/training/modules/export-dataverse-excel/export-data",
+      "https://jgvjg48436.lithium.com/t5/Microsoft-Dataverse/Remove-3-quot-hidden-quot-columns-from-default-excel-export-in/m-p/2087003"
+    ],
+    "sakerhet": "trolig",
+    "anmarkning": "Dynamics 365 \"Export to Excel\" writes .xlsx with three hidden leading \"(Do Not Modify)\" columns (record GUID, row checksum, modified on), confirmed by Microsoft Learn and a community thread. This CSV is that sheet saved as CSV. View column labels are standard Dataverse display names from memory; lookup-related columns get the \"(Relationship) (Entity)\" suffix. Saved as CSV from Excel with Swedish regional settings, which gives \";\" as delimiter and \"yyyy-mm-dd hh:mm\" dates. Labels kept English (UI language English). Facit för telefon ändrat 2026-11-23: filen har flera telefonkolumner och importen tar mobilen före växeln (flervalsordningen i importmallar.ts).",
+    "forvantad": {
+      "company_name": "Company Name",
+      "contact_name": "Full Name",
+      "contact_role": "Job Title",
+      "contact_email": "Email",
+      "contact_phone": "Business Phone"
+    },
+    "forsta_rad": {
+      "company_name": "Beta Bageri Test AB",
+      "contact_name": "Klara Ny",
+      "contact_role": "VD; ägare",
+      "contact_email": "klara.ny@example.se",
+      "contact_phone": "070-174 06 40"
+    }
+  },
+  {
+    "fil": "dynamics365-leads.csv",
+    "leverantor": "Microsoft Dynamics 365",
+    "objekt": "leads",
+    "sprak": "en",
+    "avgransare": ",",
+    "rubrikrad": 0,
+    "kallor": [
+      "https://learn.microsoft.com/en-us/training/modules/export-dataverse-excel/export-data",
+      "https://jgvjg48436.lithium.com/t5/Microsoft-Dataverse/Remove-3-quot-hidden-quot-columns-from-default-excel-export-in/m-p/2087003"
+    ],
+    "sakerhet": "trolig",
+    "anmarkning": "Dynamics 365 \"Export to Excel\" writes .xlsx with three hidden leading \"(Do Not Modify)\" columns (record GUID, row checksum, modified on), confirmed by Microsoft Learn and a community thread. This CSV is that sheet saved as CSV. View column labels are standard Dataverse display names from memory; lookup-related columns get the \"(Relationship) (Entity)\" suffix. \"Topic\" is the lead subject (trap: not a company). \"Status Reason\" is the status column.",
+    "forvantad": {
+      "company_name": "Company Name",
+      "contact_name": "Name",
+      "contact_role": "Job Title",
+      "contact_email": "Email",
+      "contact_phone": "Business Phone",
+      "website": "Website",
+      "status": "Status Reason"
+    },
+    "forsta_rad": {
+      "company_name": "Zeta Zink Test AB",
+      "contact_name": "Rolf Ask",
+      "contact_role": "Driftchef",
+      "contact_email": "rolf.ask@example.se",
+      "contact_phone": "070-174 06 50",
+      "website": "zetazink.example.se",
+      "status": "New"
+    }
+  },
+  {
+    "fil": "zoho-leads.csv",
+    "leverantor": "Zoho CRM",
+    "objekt": "leads",
+    "sprak": "en",
+    "avgransare": ",",
+    "rubrikrad": 0,
+    "kallor": [
+      "https://help.zoho.com/portal/kb/articles/exporting-crm-data",
+      "https://help.zoho.com/portal/ja/community/topic/changes-in-lookup-field-column-headers"
+    ],
+    "sakerhet": "trolig",
+    "anmarkning": "Zoho doc (search excerpt) confirms Record Id is included by default and that lookup columns now end in \".id\" (community post). Record Id values carry the \"zcrm_\" prefix. Field labels (Lead Owner, Designation, Lead Status, Account Name, Created Time) are Zoho default labels from memory, not a sample file. Leads use \"Designation\" for title and \"Company\" for the company. Facit för telefon ändrat 2026-11-23: filen har flera telefonkolumner och importen tar mobilen före växeln (flervalsordningen i importmallar.ts).",
+    "forvantad": {
+      "company_name": "Company",
+      "contact_name": [
+        "First Name",
+        "Last Name"
+      ],
+      "contact_role": "Designation",
+      "contact_email": "Email",
+      "contact_phone": "Phone",
+      "website": "Website",
+      "status": "Lead Status"
+    },
+    "forsta_rad": {
+      "company_name": "Kappa Kyl Test AB",
+      "contact_name": "Greta Lööf",
+      "contact_role": "Teknisk chef",
+      "contact_email": "greta.loof@example.se",
+      "contact_phone": "070-174 06 60",
+      "website": "www.kappakyl.example.se",
+      "status": "Contacted"
+    }
+  },
+  {
+    "fil": "zoho-accounts.csv",
+    "leverantor": "Zoho CRM",
+    "objekt": "accounts",
+    "sprak": "en",
+    "avgransare": ",",
+    "rubrikrad": 0,
+    "kallor": [
+      "https://help.zoho.com/portal/kb/articles/exporting-crm-data",
+      "https://help.zoho.com/portal/ja/community/topic/changes-in-lookup-field-column-headers"
+    ],
+    "sakerhet": "trolig",
+    "anmarkning": "Zoho doc (search excerpt) confirms Record Id is included by default and that lookup columns now end in \".id\" (community post). Record Id values carry the \"zcrm_\" prefix. Field labels (Lead Owner, Designation, Lead Status, Account Name, Created Time) are Zoho default labels from memory, not a sample file. Org number is a custom field.",
+    "forvantad": {
+      "company_name": "Account Name",
+      "orgnr": "Organisationsnummer",
+      "contact_phone": "Phone",
+      "website": "Website",
+      "status": "Account Type"
+    },
+    "forsta_rad": {
+      "company_name": "Kappa Kyl Test AB",
+      "orgnr": "569900-0617",
+      "contact_phone": "08-465 004 60",
+      "website": "www.kappakyl.example.se",
+      "status": "Customer"
+    }
+  },
+  {
+    "fil": "zoho-contacts.csv",
+    "leverantor": "Zoho CRM",
+    "objekt": "contacts",
+    "sprak": "en",
+    "avgransare": ",",
+    "rubrikrad": 0,
+    "kallor": [
+      "https://help.zoho.com/portal/kb/articles/exporting-crm-data",
+      "https://help.zoho.com/portal/ja/community/topic/changes-in-lookup-field-column-headers"
+    ],
+    "sakerhet": "trolig",
+    "anmarkning": "Zoho doc (search excerpt) confirms Record Id is included by default and that lookup columns now end in \".id\" (community post). Record Id values carry the \"zcrm_\" prefix. Field labels (Lead Owner, Designation, Lead Status, Account Name, Created Time) are Zoho default labels from memory, not a sample file. The Account Name lookup exports the name plus an \"Account Name.id\" column (trap: the .id column holds zcrm ids, not a company). Facit för telefon ändrat 2026-11-23: filen har flera telefonkolumner och importen tar mobilen före växeln (flervalsordningen i importmallar.ts).",
+    "forvantad": {
+      "company_name": "Account Name",
+      "contact_name": [
+        "First Name",
+        "Last Name"
+      ],
+      "contact_role": "Title",
+      "contact_email": "Email",
+      "contact_phone": "Phone"
+    },
+    "forsta_rad": {
+      "company_name": "Kappa Kyl Test AB",
+      "contact_name": "Greta Lööf",
+      "contact_role": "Teknisk chef",
+      "contact_email": "greta.loof@example.se",
+      "contact_phone": "070-174 06 60"
+    }
+  },
+  {
+    "fil": "lime-crm-foretag.csv",
+    "leverantor": "Lime CRM",
+    "objekt": "företag",
+    "sprak": "sv",
+    "avgransare": ";",
+    "rubrikrad": 0,
+    "kallor": [
+      "https://lime-limepkg-erp-connector.readthedocs-hosted.com/en/dev/erpsystems/fortnox/howitworks/company"
+    ],
+    "sakerhet": "osaker",
+    "anmarkning": "No Lime CRM export sample found. Lime exports a list view to Excel; headers are the field labels of the customer's own configuration. Labels here (Namn, Organisationsnummer, Telefon, Hemsida, Postort, Ansvarig, Relation) are a plausible Swedish default, guessed. Semicolon = Excel saved as CSV with Swedish regional settings.",
+    "forvantad": {
+      "company_name": "Namn",
+      "orgnr": "Organisationsnummer",
+      "contact_phone": "Telefon",
+      "website": "Hemsida",
+      "status": "Relation"
+    },
+    "forsta_rad": {
+      "company_name": "Omikron Ordning Test AB",
+      "orgnr": "569900-0716",
+      "contact_phone": "08-465 004 70",
+      "website": "www.omikron-ordning.example.se",
+      "status": "Kund"
+    }
+  },
+  {
+    "fil": "lime-crm-personer.csv",
+    "leverantor": "Lime CRM",
+    "objekt": "personer",
+    "sprak": "sv",
+    "avgransare": ";",
+    "rubrikrad": 0,
+    "kallor": [
+      "https://lime-limepkg-erp-connector.readthedocs-hosted.com/en/dev/erpsystems/fortnox/howitworks/company"
+    ],
+    "sakerhet": "osaker",
+    "anmarkning": "Person list export from Lime, labels guessed (Förnamn, Efternamn, Företag, Befattning, E-post, Mobiltelefon, Telefon). Two phone columns; mobile chosen first.",
+    "forvantad": {
+      "company_name": "Företag",
+      "contact_name": [
+        "Förnamn",
+        "Efternamn"
+      ],
+      "contact_role": "Befattning",
+      "contact_email": "E-post",
+      "contact_phone": "Mobiltelefon"
+    },
+    "forsta_rad": {
+      "company_name": "Omikron Ordning Test AB",
+      "contact_name": "Agnes Wall",
+      "contact_role": "VD",
+      "contact_email": "agnes.wall@example.se",
+      "contact_phone": "070-174 06 70"
+    }
+  },
+  {
+    "fil": "superoffice-urval.csv",
+    "leverantor": "SuperOffice",
+    "objekt": "urval (företag + personer)",
+    "sprak": "sv",
+    "avgransare": ";",
+    "rubrikrad": 0,
+    "kallor": [],
+    "sakerhet": "osaker",
+    "anmarkning": "No sample or doc read. SuperOffice exports a selection to Excel/CSV with the archive column labels. Labels guessed from the Swedish UI (Företag, Org.nr, Kategori, Vår kontakt, Person, Titel, E-post, Telefon, Webbadress). Company and person in the same row.",
+    "forvantad": {
+      "company_name": "Företag",
+      "orgnr": "Org.nr",
+      "contact_name": "Person",
+      "contact_role": "Titel",
+      "contact_email": "E-post",
+      "contact_phone": "Telefon",
+      "website": "Webbadress",
+      "status": "Kategori"
+    },
+    "forsta_rad": {
+      "company_name": "Tau Trafik Test AB",
+      "orgnr": "569900-0815",
+      "contact_name": "Erik Malm",
+      "contact_role": "VD",
+      "contact_email": "erik.malm@example.se",
+      "contact_phone": "070-174 06 80",
+      "website": "www.tautrafik.example.se",
+      "status": "Kund"
+    }
+  },
+  {
+    "fil": "upsales-foretag.csv",
+    "leverantor": "Upsales",
+    "objekt": "företag + kontakter",
+    "sprak": "sv",
+    "avgransare": ";",
+    "rubrikrad": 0,
+    "kallor": [],
+    "sakerhet": "osaker",
+    "anmarkning": "No sample or doc read. Upsales list export (Swedish UI) guessed: Företagsnamn, Org.nr, Telefon, Hemsida, Kontoansvarig, Journey-steg, Kontaktperson, Titel, E-post. Upsales commonly exports xlsx; CSV variant assumed.",
+    "forvantad": {
+      "company_name": "Företagsnamn",
+      "orgnr": "Org.nr",
+      "contact_name": "Kontaktperson",
+      "contact_role": "Titel",
+      "contact_email": "E-post",
+      "contact_phone": "Telefon",
+      "website": "Hemsida",
+      "status": "Journey-steg"
+    },
+    "forsta_rad": {
+      "company_name": "Psi Print Test AB",
+      "orgnr": "569900-0914",
+      "contact_name": "Ida Strand",
+      "contact_role": "Marknadschef",
+      "contact_email": "ida.strand@example.se",
+      "contact_phone": "08-465 004 90",
+      "website": "psiprint.example.se",
+      "status": "Lead"
+    }
+  },
+  {
+    "fil": "monday-sales-crm-leads.csv",
+    "leverantor": "monday sales CRM",
+    "objekt": "leads board",
+    "sprak": "en",
+    "avgransare": ",",
+    "rubrikrad": 2,
+    "kallor": [],
+    "sakerhet": "osaker",
+    "anmarkning": "monday boards export to Excel with the board name in the first row and each group as its own block (group title row, then the column header row repeated per group). This structure is recalled, not verified in a sample; column names are the default Leads board template (Name, Status, Company, Title, Email, Phone, Owner) as recalled. Trap: header repeated mid-file and a group title line above it; rubrikrad points at the first header.",
+    "forvantad": {
+      "company_name": "Company",
+      "contact_name": "Name",
+      "contact_role": "Title",
+      "contact_email": "Email",
+      "contact_phone": "Phone",
+      "status": "Status"
+    },
+    "forsta_rad": {
+      "company_name": "Gamma Gym Test AB",
+      "contact_name": "Lisa Åström",
+      "contact_role": "Klubbchef",
+      "contact_email": "lisa.astrom@example.se",
+      "contact_phone": "+46 70 174 06 95",
+      "status": "New Lead"
+    }
+  },
+  {
+    "fil": "close-leads.csv",
+    "leverantor": "Close",
+    "objekt": "leads (with contacts)",
+    "sprak": "en",
+    "avgransare": ",",
+    "rubrikrad": 0,
+    "kallor": [],
+    "sakerhet": "osaker",
+    "anmarkning": "No sample read. Close is lead-centric (a lead = a company with contacts). Header names guessed from Close import conventions (Company, URL, Status, Contact Name, Title, Email, Phone). Real exports may use snake_case API names and one row per contact.",
+    "forvantad": {
+      "company_name": "Company",
+      "contact_name": "Contact Name",
+      "contact_role": "Title",
+      "contact_email": "Email",
+      "contact_phone": "Phone",
+      "website": "URL",
+      "status": "Status"
+    },
+    "forsta_rad": {
+      "company_name": "Eta Event Test AB",
+      "contact_name": "Pia Gren",
+      "contact_role": "Producent",
+      "contact_email": "pia.gren@example.se",
+      "contact_phone": "+46701740660",
+      "website": "https://eta-event.example.se",
+      "status": "Potential"
+    }
+  },
+  {
+    "fil": "copper-people.csv",
+    "leverantor": "Copper",
+    "objekt": "people",
+    "sprak": "en",
+    "avgransare": ",",
+    "rubrikrad": 0,
+    "kallor": [],
+    "sakerhet": "osaker",
+    "anmarkning": "No sample read. Copper (Google Workspace CRM) people export; headers guessed: First Name, Last Name, Title, Company, Work Email, Work Phone, Mobile Phone, Work Website, Contact Type. Facit för telefon ändrat 2026-11-23: filen har flera telefonkolumner och importen tar mobilen före växeln (flervalsordningen i importmallar.ts).",
+    "forvantad": {
+      "company_name": "Company",
+      "contact_name": [
+        "First Name",
+        "Last Name"
+      ],
+      "contact_role": "Title",
+      "contact_email": "Work Email",
+      "contact_phone": "Work Phone",
+      "website": "Work Website",
+      "status": "Contact Type"
+    },
+    "forsta_rad": {
+      "company_name": "Lambda Lack Test AB",
+      "contact_name": "Tilda Rapp",
+      "contact_role": "COO",
+      "contact_email": "tilda.rapp@example.se",
+      "contact_phone": "070-174 06 65",
+      "website": "https://lambda-lack.example.se",
+      "status": "Potential Customer"
+    }
+  },
+  {
+    "fil": "freshsales-contacts.csv",
+    "leverantor": "Freshsales",
+    "objekt": "contacts",
+    "sprak": "en",
+    "avgransare": ",",
+    "rubrikrad": 0,
+    "kallor": [],
+    "sakerhet": "osaker",
+    "anmarkning": "No sample read. Freshsales contact export; labels guessed (First name, Last name, Job title, Emails, Work number, Mobile number, Account name, Website, Lifecycle stage). Freshsales allows several emails; assumed joined with \",\" inside one quoted cell. Facit för telefon ändrat 2026-11-23: filen har flera telefonkolumner och importen tar mobilen före växeln (flervalsordningen i importmallar.ts).",
+    "forvantad": {
+      "company_name": "Account name",
+      "contact_name": [
+        "First name",
+        "Last name"
+      ],
+      "contact_role": "Job title",
+      "contact_email": "Emails",
+      "contact_phone": "Work number",
+      "website": "Website",
+      "status": "Status"
+    },
+    "forsta_rad": {
+      "company_name": "Omikron Ost Test AB",
+      "contact_name": "Yrsa Vinge",
+      "contact_role": "Platschef",
+      "contact_email": "yrsa.vinge@example.se",
+      "contact_phone": "070-174 06 70",
+      "website": "omikronost.example.se",
+      "status": "Contacted"
+    }
+  },
+  {
+    "fil": "attio-people.csv",
+    "leverantor": "Attio",
+    "objekt": "people",
+    "sprak": "en",
+    "avgransare": ",",
+    "rubrikrad": 0,
+    "kallor": [],
+    "sakerhet": "osaker",
+    "anmarkning": "No sample read. Attio exports a list/view with attribute titles as headers; multi-value attributes (Email addresses, Phone numbers) joined with \", \" in one cell. Titles guessed from Attio default People attributes.",
+    "forvantad": {
+      "company_name": "Company",
+      "contact_name": "Name",
+      "contact_role": "Job title",
+      "contact_email": "Email addresses",
+      "contact_phone": "Phone numbers"
+    },
+    "forsta_rad": {
+      "company_name": "Tau Tvätt Test AB",
+      "contact_name": "Alice Bark",
+      "contact_role": "Grundare",
+      "contact_email": "alice.bark@example.se",
+      "contact_phone": "+46701740675"
+    }
+  },
+  {
+    "fil": "twenty-people.csv",
+    "leverantor": "Twenty",
+    "objekt": "people",
+    "sprak": "en",
+    "avgransare": ",",
+    "rubrikrad": 0,
+    "kallor": [],
+    "sakerhet": "osaker",
+    "anmarkning": "No sample read. Twenty (open-source CRM) exports composite fields as \"<Field> / <Sub-field>\" columns; this naming is recalled, not verified. Company is a relation exported by name.",
+    "forvantad": {
+      "company_name": "Company",
+      "contact_name": [
+        "Name / First Name",
+        "Name / Last Name"
+      ],
+      "contact_role": "Job Title",
+      "contact_email": "Emails / Primary Email",
+      "contact_phone": "Phones / Primary Phone Number"
+    },
+    "forsta_rad": {
+      "company_name": "Chi Chips Test AB",
+      "contact_name": "Elsa Fjord",
+      "contact_role": "Marknadschef",
+      "contact_email": "elsa.fjord@example.se",
+      "contact_phone": "701740680"
+    }
+  },
+  {
+    "fil": "apollo-contacts.csv",
+    "leverantor": "Apollo.io",
+    "objekt": "contacts",
+    "sprak": "en",
+    "avgransare": ",",
+    "rubrikrad": 0,
+    "kallor": [
+      "https://knowledge.apollo.io/hc/en-us/articles/4409237712141-Export-Contacts-to-a-CSV"
+    ],
+    "sakerhet": "trolig",
+    "anmarkning": "Apollo help centre (search excerpt; the page itself returned 403) lists \"Company name for emails\", \"Corporate phone\", \"Email status\" among contact export columns. Exact capitalisation and the full column order are recalled from real Apollo exports (Title Case). Trap: two company columns (\"Company\" and \"Company Name for Emails\") and six phone columns. Phone values are written with a leading apostrophe to stop Excel formatting (recalled quirk, unverified); forsta_rad gives the value without it.",
+    "forvantad": {
+      "company_name": "Company",
+      "contact_name": [
+        "First Name",
+        "Last Name"
+      ],
+      "contact_role": "Title",
+      "contact_email": "Email",
+      "contact_phone": "First Phone",
+      "website": "Website",
+      "status": "Stage"
+    },
+    "forsta_rad": {
+      "company_name": "Alfa Analys Test AB",
+      "contact_name": "Ivar Jern",
+      "contact_role": "Chief Executive Officer",
+      "contact_email": "ivar.jern@example.se",
+      "contact_phone": "+46 70 174 06 85",
+      "website": "http://www.alfa-analys.example.se",
+      "status": "Cold"
+    }
+  },
+  {
+    "fil": "salesnav-phantombuster.csv",
+    "leverantor": "LinkedIn Sales Navigator (PhantomBuster List Export)",
+    "objekt": "leads list",
+    "sprak": "en",
+    "avgransare": ",",
+    "rubrikrad": 0,
+    "kallor": [
+      "https://support.phantombuster.com/hc/en-us/articles/26971094458770-How-to-Use-the-Sales-Navigator-List-Export"
+    ],
+    "sakerhet": "trolig",
+    "anmarkning": "Sales Navigator has no native CSV export; PhantomBuster is the common exporter. Its doc (search excerpt) lists profileUrl, firstName, lastName, fullName, title, companyName, linkedInProfileUrl; the remaining columns are recalled. No email/phone/orgnr. camelCase headers. Trap: \"name\" duplicates fullName; \"title\" is job title.",
+    "forvantad": {
+      "company_name": "companyName",
+      "contact_name": "fullName",
+      "contact_role": "title"
+    },
+    "forsta_rad": {
+      "company_name": "Epsilon Elektronik Test AB",
+      "contact_name": "Moa Norr",
+      "contact_role": "VD"
+    }
+  },
+  {
+    "fil": "lusha-contacts.csv",
+    "leverantor": "Lusha",
+    "objekt": "contacts",
+    "sprak": "en",
+    "avgransare": ",",
+    "rubrikrad": 0,
+    "kallor": [],
+    "sakerhet": "osaker",
+    "anmarkning": "No sample read. Lusha prospecting export guessed: numbered email and phone columns (Email 1/Email 2, Phone 1/Phone 2) with a type column per phone. Treat every header as guessed.",
+    "forvantad": {
+      "company_name": "Company Name",
+      "contact_name": [
+        "First Name",
+        "Last Name"
+      ],
+      "contact_role": "Job Title",
+      "contact_email": "Email 1",
+      "contact_phone": "Phone 1",
+      "website": "Company Domain"
+    },
+    "forsta_rad": {
+      "company_name": "Iota Ingenjör Test AB",
+      "contact_name": "Tea Ros",
+      "contact_role": "CTO",
+      "contact_email": "tea.ros@example.se",
+      "contact_phone": "+46 70 174 06 89",
+      "website": "iota-ing.example.se"
+    }
+  },
+  {
+    "fil": "zoominfo-contacts.csv",
+    "leverantor": "ZoomInfo",
+    "objekt": "contacts",
+    "sprak": "en",
+    "avgransare": ",",
+    "rubrikrad": 0,
+    "kallor": [],
+    "sakerhet": "osaker",
+    "anmarkning": "No sample read; header list recalled from ZoomInfo contact exports. Notable: Last Name comes BEFORE First Name; \"Direct Phone Number\" vs \"Mobile phone\" vs \"Company HQ Phone\"; \"Website\" is the company site. Treat as unverified. Facit för telefon ändrat 2026-11-23: filen har flera telefonkolumner och importen tar mobilen före växeln (flervalsordningen i importmallar.ts).",
+    "forvantad": {
+      "company_name": "Company Name",
+      "contact_name": [
+        "First Name",
+        "Last Name"
+      ],
+      "contact_role": "Job Title",
+      "contact_email": "Email Address",
+      "contact_phone": "Direct Phone Number",
+      "website": "Website"
+    },
+    "forsta_rad": {
+      "company_name": "Ny Nät Test AB",
+      "contact_name": "Xenia Vall",
+      "contact_role": "Chief Operating Officer",
+      "contact_email": "xenia.vall@example.se",
+      "contact_phone": "+46 70 174 06 92",
+      "website": "www.nynat.example.se"
+    }
+  },
+  {
+    "fil": "vainu-foretag.csv",
+    "leverantor": "Vainu",
+    "objekt": "companies",
+    "sprak": "en",
+    "avgransare": ",",
+    "rubrikrad": 0,
+    "kallor": [],
+    "sakerhet": "osaker",
+    "anmarkning": "No sample read. Vainu (Nordic company data) export guessed with English labels; \"Business ID\" is the Nordic term for the org number (trap: not obviously \"orgnr\"). Contact columns are the guessed decision-maker add-on.",
+    "forvantad": {
+      "company_name": "Company name",
+      "orgnr": "Business ID",
+      "contact_name": "Contact name",
+      "contact_role": "Contact title",
+      "contact_email": "Contact email",
+      "contact_phone": "Contact phone",
+      "website": "Domain"
+    },
+    "forsta_rad": {
+      "company_name": "Rho Robotik Test AB",
+      "orgnr": "569900-1011",
+      "contact_name": "Ylva Berg",
+      "contact_role": "VD",
+      "contact_email": "ylva.berg@example.se",
+      "contact_phone": "+46 70 174 06 99",
+      "website": "rhorobotik.example.se"
+    }
+  },
+  {
+    "fil": "fortnox-kundregister.csv",
+    "leverantor": "Fortnox",
+    "objekt": "kundregister",
+    "sprak": "sv",
+    "avgransare": ";",
+    "rubrikrad": 0,
+    "kallor": [
+      "https://lime-limepkg-erp-connector.readthedocs-hosted.com/en/dev/erpsystems/fortnox/howitworks/company"
+    ],
+    "sakerhet": "osaker",
+    "anmarkning": "Only \"Kundnummer\" is confirmed as a Fortnox field label (via the Lime ERP connector doc). Other headers guessed from the Fortnox customer card (Namn, Organisationsnummer, Adress, Postnummer, Ort, Telefon, E-post, Er referens, Vår referens, Hemsida). Trap: \"Er referens\" is the customer's contact person, \"Vår referens\" is our own seller.",
+    "forvantad": {
+      "company_name": "Namn",
+      "orgnr": "Organisationsnummer",
+      "contact_name": "Er referens",
+      "contact_email": "E-post",
+      "contact_phone": "Telefon",
+      "website": "Hemsida"
+    },
+    "forsta_rad": {
+      "company_name": "Fi Frisör Test AB",
+      "orgnr": "569900-1110",
+      "contact_name": "Bea Dahl",
+      "contact_email": "faktura@example.se",
+      "contact_phone": "040-628 04 59",
+      "website": "www.fifrisor.example.se"
+    }
+  },
+  {
+    "fil": "visma-eekonomi-kundregister.csv",
+    "leverantor": "Visma eEkonomi / Spiris Bokföring & Fakturering",
+    "objekt": "kundregister",
+    "sprak": "en (fältnamn)",
+    "avgransare": ",",
+    "rubrikrad": 0,
+    "kallor": [
+      "https://support.spiris.se/bokforing-fakturering/en-se/content/online-help/settings-import-export-records-customer.htm"
+    ],
+    "sakerhet": "verifierad",
+    "anmarkning": "Header names read in the vendor help page (same CSV used for export and re-import, comma-delimited, CustomerLabels separated by \";\"). Column order follows the page. The org number column name is given as \"Corp.ID no.\" on the page (one read of the page showed it blank, a second read gave \"Corp.ID no.\"); everything else is verbatim. Contact person is in ContactPerson* columns; company phone in Telephone. IsActive/IsPrivatePerson are True/False.",
+    "forvantad": {
+      "company_name": "Name",
+      "orgnr": "Corp.ID no.",
+      "contact_name": "ContactPersonName",
+      "contact_email": "ContactPersonEmail",
+      "contact_phone": "ContactPersonMobile",
+      "website": "WwwAddress"
+    },
+    "forsta_rad": {
+      "company_name": "Alfa Akustik Test AB",
+      "orgnr": "569900-1219",
+      "contact_name": "Eja Gran",
+      "contact_email": "eja.gran@example.se",
+      "contact_phone": "070-174 06 06",
+      "website": "www.alfa-akustik.example.se"
+    }
+  },
+  {
+    "fil": "allabolag-foretagslista.csv",
+    "leverantor": "Allabolag (företagslista)",
+    "objekt": "företag",
+    "sprak": "sv",
+    "avgransare": ";",
+    "rubrikrad": 0,
+    "kallor": [],
+    "sakerhet": "osaker",
+    "anmarkning": "No export sample or doc read. Allabolag list exports (paid) guessed: Företagsnamn, Org.nr, Bolagsform, Utdelningsadress, Postnr, Postort, Telefon, Hemsida, VD, Antal anställda, Omsättning (tkr). Numbers use space as thousands separator. VD is the contact name; no role column (role implicitly VD).",
+    "forvantad": {
+      "company_name": "Företagsnamn",
+      "orgnr": "Org.nr",
+      "contact_name": "VD",
+      "contact_phone": "Telefon",
+      "website": "Hemsida"
+    },
+    "forsta_rad": {
+      "company_name": "Epsilon Elinstallation Test AB",
+      "orgnr": "569900-1318",
+      "contact_name": "Hanna Juhl",
+      "contact_phone": "040-628 04 60",
+      "website": "www.epsilon-el.example.se"
+    }
+  },
+  {
+    "fil": "bisnode-dnb-marknadsurval.csv",
+    "leverantor": "Bisnode / Dun & Bradstreet (marknadsurval)",
+    "objekt": "företag + beslutsfattare",
+    "sprak": "sv",
+    "avgransare": ";",
+    "rubrikrad": 0,
+    "kallor": [],
+    "sakerhet": "osaker",
+    "anmarkning": "No sample read. Swedish D&B / Bisnode address-list delivery guessed: org number without hyphen (10 digits), contact name split in two columns, \"Befattning\" in Swedish. Org numbers stored as text so leading digits are kept.",
+    "forvantad": {
+      "company_name": "Företagsnamn",
+      "orgnr": "Organisationsnummer",
+      "contact_name": [
+        "Kontaktperson förnamn",
+        "Kontaktperson efternamn"
+      ],
+      "contact_role": "Befattning",
+      "contact_email": "E-postadress",
+      "contact_phone": "Telefonnummer",
+      "website": "Webbadress"
+    },
+    "forsta_rad": {
+      "company_name": "Iota Industri Test AB",
+      "orgnr": "5699001417",
+      "contact_name": "Kerstin Lööv",
+      "contact_role": "Verkställande direktör",
+      "contact_email": "kerstin.loov@example.se",
+      "contact_phone": "031-3906910",
+      "website": "iota-industri.example.se"
+    }
+  },
+  {
+    "fil": "handgjord-enkel.csv",
+    "leverantor": "Handgjord (Excel)",
+    "objekt": "kundlista",
+    "sprak": "sv",
+    "avgransare": ";",
+    "rubrikrad": 0,
+    "kallor": [],
+    "sakerhet": "osaker",
+    "anmarkning": "Constructed variant of a hand-made Swedish spreadsheet; no vendor, headers are the kind small businesses write. sakerhet osaker by definition (no source). Short, abbreviated headers; \"Mail\" for e-mail, \"Mobil\" for phone.",
+    "forvantad": {
+      "company_name": "Företagsnamn",
+      "orgnr": "Org nr",
+      "contact_name": "Kontaktperson",
+      "contact_email": "Mail",
+      "contact_phone": "Mobil"
+    },
+    "forsta_rad": {
+      "company_name": "Ny Nagel Test AB",
+      "orgnr": "569900-1516",
+      "contact_name": "Nora Öst",
+      "contact_email": "nora@example.se",
+      "contact_phone": "070-174 06 10"
+    }
+  },
+  {
+    "fil": "handgjord-titelrader.csv",
+    "leverantor": "Handgjord (Excel)",
+    "objekt": "kundlista",
+    "sprak": "sv",
+    "avgransare": ";",
+    "rubrikrad": 2,
+    "kallor": [],
+    "sakerhet": "osaker",
+    "anmarkning": "Constructed variant of a hand-made Swedish spreadsheet; no vendor, headers are the kind small businesses write. sakerhet osaker by definition (no source). Two title lines above the header row (padded with empty cells, as Excel writes them). rubrikrad = 2.",
+    "forvantad": {
+      "company_name": "Kund",
+      "orgnr": "Org.nr",
+      "contact_name": "Namn",
+      "contact_role": "Roll",
+      "contact_email": "E-post",
+      "contact_phone": "Telefon"
+    },
+    "forsta_rad": {
+      "company_name": "Rho Räddning Test AB",
+      "orgnr": "569900-1615",
+      "contact_name": "Rita Sund",
+      "contact_role": "VD",
+      "contact_email": "rita.sund@example.se",
+      "contact_phone": "070-174 06 13"
+    }
+  },
+  {
+    "fil": "handgjord-summa.csv",
+    "leverantor": "Handgjord (Excel)",
+    "objekt": "kundlista med omsättning",
+    "sprak": "sv",
+    "avgransare": ";",
+    "rubrikrad": 0,
+    "kallor": [],
+    "sakerhet": "osaker",
+    "anmarkning": "Constructed variant of a hand-made Swedish spreadsheet; no vendor, headers are the kind small businesses write. sakerhet osaker by definition (no source). Trailing blank line and a \"Summa\" total row that must not become a lead. Amounts use space thousands separator and decimal comma.",
+    "forvantad": {
+      "company_name": "Bolag",
+      "orgnr": "Orgnummer",
+      "contact_name": "Kontakt",
+      "contact_email": "Epost",
+      "contact_phone": "Tel",
+      "website": "Hemsida"
+    },
+    "forsta_rad": {
+      "company_name": "Fi Flytt Test AB",
+      "orgnr": "569900-1714",
+      "contact_name": "Ulla Vass",
+      "contact_email": "ulla@example.se",
+      "contact_phone": "08-465 004 15",
+      "website": "fiflytt.example.se"
+    }
+  },
+  {
+    "fil": "handgjord-dubbla-rubriker.csv",
+    "leverantor": "Handgjord (Excel)",
+    "objekt": "kundlista",
+    "sprak": "sv",
+    "avgransare": ";",
+    "rubrikrad": 0,
+    "kallor": [],
+    "sakerhet": "osaker",
+    "anmarkning": "Constructed variant of a hand-made Swedish spreadsheet; no vendor, headers are the kind small businesses write. sakerhet osaker by definition (no source). Duplicate header names: \"Telefon\" twice (växel, then mobil) and \"Namn\" twice (företagets namn, then kontaktens namn). forvantad names the header; the importer must pick the FIRST \"Namn\" for company and the SECOND \"Namn\" for contact, and the first \"Telefon\". forsta_rad reflects that.",
+    "forvantad": {
+      "company_name": "Namn",
+      "orgnr": "Org.nr",
+      "contact_name": "Namn",
+      "contact_email": "E-post",
+      "contact_phone": "Telefon"
+    },
+    "forsta_rad": {
+      "company_name": "Alfa Assistans Test AB",
+      "orgnr": "569900-1813",
+      "contact_name": "Yvonne Zell",
+      "contact_email": "yvonne@example.se",
+      "contact_phone": "08-465 004 19"
+    }
+  },
+  {
+    "fil": "handgjord-tom-rubrik.csv",
+    "leverantor": "Handgjord (Excel)",
+    "objekt": "kundlista",
+    "sprak": "sv",
+    "avgransare": ";",
+    "rubrikrad": 0,
+    "kallor": [],
+    "sakerhet": "osaker",
+    "anmarkning": "Constructed variant of a hand-made Swedish spreadsheet; no vendor, headers are the kind small businesses write. sakerhet osaker by definition (no source). Second header cell is empty although the column holds org numbers; orgnr is therefore not in forvantad (cannot be named) but could be detected from content. A trailing empty header cell too (Excel stray column).",
+    "forvantad": {
+      "company_name": "Företag",
+      "contact_name": "Kontakt",
+      "contact_email": "E-post",
+      "contact_phone": "Tel",
+      "website": "Webb"
+    },
+    "forsta_rad": {
+      "company_name": "Epsilon Ekonomi Test AB",
+      "contact_name": "Adam Berg",
+      "contact_email": "adam.berg@example.se",
+      "contact_phone": "070-174 06 23",
+      "website": "epsilon-ekonomi.example.se"
+    }
+  },
+  {
+    "fil": "handgjord-tab.csv",
+    "leverantor": "Handgjord (kopierat ur Excel/Google Sheets)",
+    "objekt": "kundlista",
+    "sprak": "sv",
+    "avgransare": "\t",
+    "rubrikrad": 0,
+    "kallor": [],
+    "sakerhet": "osaker",
+    "anmarkning": "Constructed variant of a hand-made Swedish spreadsheet; no vendor, headers are the kind small businesses write. sakerhet osaker by definition (no source). Tab-delimited (pasted from a spreadsheet, saved as .csv). Cells contain commas and semicolons that must NOT split. Status in Swedish.",
+    "forvantad": {
+      "company_name": "Bolag",
+      "orgnr": "Org.nr",
+      "contact_name": "VD",
+      "contact_phone": "Tel",
+      "website": "Hemsida",
+      "status": "Status"
+    },
+    "forsta_rad": {
+      "company_name": "Iota Ide, Test AB",
+      "orgnr": "569900-2019",
+      "contact_name": "Dora Ek",
+      "contact_phone": "070-174 06 26",
+      "website": "iota-ide.example.se",
+      "status": "Het"
+    }
+  },
+  {
+    "fil": "telekom-avtalsslut-iso.csv",
+    "leverantor": "Telekomåterförsäljare (handgjord)",
+    "objekt": "kundlista med avtal",
+    "sprak": "sv",
+    "avgransare": ";",
+    "rubrikrad": 0,
+    "kallor": [],
+    "sakerhet": "osaker",
+    "anmarkning": "Constructed telecom-reseller customer list (no vendor). Contract-end header and date format chosen per the brief; avtalsslut in forsta_rad is ISO. ISO dates 2027-03-31.",
+    "forvantad": {
+      "company_name": "Kund",
+      "orgnr": "Org.nr",
+      "contact_name": "Kontaktperson",
+      "contact_email": "E-post",
+      "contact_phone": "Telefon",
+      "avtalsslut": "Avtalsslut"
+    },
+    "forsta_rad": {
+      "company_name": "Ny Nordic Test AB",
+      "orgnr": "569900-2118",
+      "contact_name": "Gösta Hall",
+      "contact_email": "gosta@example.se",
+      "contact_phone": "070-174 06 29",
+      "avtalsslut": "2027-03-31"
+    }
+  },
+  {
+    "fil": "telekom-bindningstid-snedstreck.csv",
+    "leverantor": "Telekomåterförsäljare (handgjord)",
+    "objekt": "kundlista med avtal",
+    "sprak": "sv",
+    "avgransare": ";",
+    "rubrikrad": 0,
+    "kallor": [],
+    "sakerhet": "osaker",
+    "anmarkning": "Constructed telecom-reseller customer list (no vendor). Contract-end header and date format chosen per the brief; avtalsslut in forsta_rad is ISO. Day-first slash dates without zero padding (31/3/2027).",
+    "forvantad": {
+      "company_name": "Företag",
+      "orgnr": "Organisationsnummer",
+      "contact_name": "Kontakt",
+      "contact_role": "Roll",
+      "contact_email": "Mejl",
+      "contact_phone": "Mobilnummer",
+      "avtalsslut": "Bindningstid t.o.m."
+    },
+    "forsta_rad": {
+      "company_name": "Rho Rost Test AB",
+      "orgnr": "569900-2217",
+      "contact_name": "Jill Kant",
+      "contact_role": "IT-ansvarig",
+      "contact_email": "jill@example.se",
+      "contact_phone": "070-174 06 32",
+      "avtalsslut": "2027-03-31"
+    }
+  },
+  {
+    "fil": "telekom-avtal-loper-ut-punkt.csv",
+    "leverantor": "Telekomåterförsäljare (handgjord)",
+    "objekt": "kundlista med avtal",
+    "sprak": "sv",
+    "avgransare": ";",
+    "rubrikrad": 0,
+    "kallor": [],
+    "sakerhet": "osaker",
+    "anmarkning": "Constructed telecom-reseller customer list (no vendor). Contract-end header and date format chosen per the brief; avtalsslut in forsta_rad is ISO. Dotted dates 31.03.2027.",
+    "forvantad": {
+      "company_name": "Kundnamn",
+      "orgnr": "Org nr",
+      "contact_name": "Beslutsfattare",
+      "contact_email": "E-post",
+      "contact_phone": "Tel",
+      "status": "Status",
+      "avtalsslut": "Avtal löper ut"
+    },
+    "forsta_rad": {
+      "company_name": "Fi Fart Test AB",
+      "orgnr": "569900-2316",
+      "contact_name": "Mona Nord",
+      "contact_email": "mona@example.se",
+      "contact_phone": "070-174 06 35",
+      "status": "Aktiv",
+      "avtalsslut": "2027-03-31"
+    }
+  },
+  {
+    "fil": "telekom-contract-end-us.csv",
+    "leverantor": "Telecom reseller (hand-made, English)",
+    "objekt": "customer list with contracts",
+    "sprak": "en",
+    "avgransare": ",",
+    "rubrikrad": 0,
+    "kallor": [],
+    "sakerhet": "osaker",
+    "anmarkning": "Constructed telecom-reseller customer list (no vendor). Contract-end header and date format chosen per the brief; avtalsslut in forsta_rad is ISO. US month-first dates (3/31/2027); trap: 1/12/2027 is 12 January, not 1 December.",
+    "forvantad": {
+      "company_name": "Account",
+      "orgnr": "Company Reg. No.",
+      "contact_name": "Contact",
+      "contact_role": "Title",
+      "contact_email": "Email",
+      "contact_phone": "Phone",
+      "website": "Website",
+      "avtalsslut": "Contract End Date"
+    },
+    "forsta_rad": {
+      "company_name": "Alfa Antenn Test AB",
+      "orgnr": "569900-2415",
+      "contact_name": "Petra Qvarn",
+      "contact_role": "CEO",
+      "contact_email": "petra@example.se",
+      "contact_phone": "+46 70 174 06 38",
+      "website": "alfa-antenn.example.se",
+      "avtalsslut": "2027-03-31"
+    }
+  },
+  {
+    "fil": "telekom-avtalsslut-text.csv",
+    "leverantor": "Telekomåterförsäljare (handgjord)",
+    "objekt": "kundlista med avtal",
+    "sprak": "sv",
+    "avgransare": ";",
+    "rubrikrad": 0,
+    "kallor": [],
+    "sakerhet": "osaker",
+    "anmarkning": "Constructed telecom-reseller customer list (no vendor). Contract-end header and date format chosen per the brief; avtalsslut in forsta_rad is ISO. Swedish written-out dates (\"31 mars 2027\", \"1 dec. 2026\", \"15 januari 2028\").",
+    "forvantad": {
+      "company_name": "Företagsnamn",
+      "orgnr": "Org.nr",
+      "contact_name": "Kontaktperson",
+      "contact_email": "E-post",
+      "contact_phone": "Mobil",
+      "avtalsslut": "Avtalsslut"
+    },
+    "forsta_rad": {
+      "company_name": "Epsilon Eko Test AB",
+      "orgnr": "569900-2514",
+      "contact_name": "Tore Ulv",
+      "contact_email": "tore@example.se",
+      "contact_phone": "070-174 06 41",
+      "avtalsslut": "2027-03-31"
+    }
+  },
+  {
+    "fil": "telekom-renewal-month.csv",
+    "leverantor": "Telecom reseller (hand-made, English)",
+    "objekt": "customer list with contracts",
+    "sprak": "en",
+    "avgransare": ",",
+    "rubrikrad": 0,
+    "kallor": [],
+    "sakerhet": "osaker",
+    "anmarkning": "Constructed telecom-reseller customer list (no vendor). Contract-end header and date format chosen per the brief; avtalsslut in forsta_rad is ISO. Month-only dates (2027-03). forsta_rad assumes the contract ends on the LAST day of that month (2027-03-31); the importer may instead reject or ask.",
+    "forvantad": {
+      "company_name": "Company",
+      "orgnr": "Org Number",
+      "contact_name": "Main Contact",
+      "contact_email": "E-mail",
+      "contact_phone": "Mobile",
+      "status": "Status",
+      "avtalsslut": "Renewal Date"
+    },
+    "forsta_rad": {
+      "company_name": "Iota Ion Test AB",
+      "orgnr": "569900-2613",
+      "contact_name": "Wera Yxa",
+      "contact_email": "wera@example.se",
+      "contact_phone": "070-174 06 44",
+      "status": "Active",
+      "avtalsslut": "2027-03-31"
+    }
+  }
+]

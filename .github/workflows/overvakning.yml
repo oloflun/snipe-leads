@@ -71,20 +71,21 @@
 # övervakningen och dödmanskontrollen utebli. En extern pingtjänst eller ett
 # betalt schema utanför GitHub är det som löser det, och det är ägarens val.
 #
-# Minuter: gratisplanen i ett privat repo ger 2 000 i månaden. Om varje schema
-# gick vore det cirka 32 körningar om dygnet, ungefär 1 000 minuter i månaden;
-# i praktiken går en bråkdel.
+# Minuter: gratisplanen i ett privat repo ger 2 000 i månaden.
+#
+# ÄNDRAT 2026-11-23: DET HÄR ÄR RESERVEN, INTE ÖVERVAKNINGEN. Samma kontroll
+# går var femtonde minut hos Railway (tjänsten `overvakning` i miljön
+# development, scripts/overvakning.py, larm som mejl). Kvar här är ett schema
+# var tredje timme, som täcker det Railway inte kan se: att hela Railway är
+# nere. Reserven på workflow_run (punkt 2 ovan) och timschemat är borttagna:
+# de kostade en debiterad minut per Verify-körning, och Actions-minuterna tog
+# slut 2026-11-23. Dödmanskontrollen i verify.yml har därför gränsen ett dygn
+# för det här flödet.
 name: övervakning
 
 on:
   schedule:
-    - cron: "23 * * * *"
     - cron: "41 */3 * * *"
-  # Reserven: körs när CI eller synken gått klart, oavsett utfall och gren.
-  # Kontrollen läser produktionen, inte koden i den körningen.
-  workflow_run:
-    workflows: ["Verify", "synk"]
-    types: [completed]
   workflow_dispatch:
     inputs:
       simulera_fel:

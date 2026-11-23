@@ -33,6 +33,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 TESTTENANT = ROOT / "lib" / "snajp" / "testtenant.ts"
 TENANT = ROOT / "lib" / "snajp" / "tenant.ts"
+ONBOARDING = ROOT / "lib" / "actions" / "onboarding.ts"
 BYTKUND = ROOT / "components" / "admin" / "BytKund.tsx"
 MIGRATION_040 = ROOT / "db" / "migrations" / "040_testkund_egen_tenant.sql"
 MIGRATION_061 = ROOT / "db" / "migrations" / "061_arbetsytans_egna_tenant.sql"
@@ -125,4 +126,30 @@ def test_kundbesok_hos_demokontot_anvander_demonyckeln():
     )
     assert "SNAJP_DEMO_API_KEY" in kund_gren, (
         "Demogrenen i kundbesöket läser inte demonyckeln."
+    )
+
+
+def test_onboardingen_valjer_kopplingsvag_innan_den_kopplar():
+    """En redan kopplad arbetsyta ska behålla sin kund och få samma följdsteg.
+
+    Produktion 2026-11-23: testvägen togs för en arbetsyta som redan var
+    kopplad, `link_test_tenant` nekade, felet svaldes, och webbplatsskanningen,
+    målgruppen och erbjudandena skrevs aldrig. Valet prövas i
+    lib/snajp/kopplingsvag.test.ts; här prövas att onboardingen använder det."""
+    kalla = ONBOARDING.read_text(encoding="utf-8")
+    assert "kopplingsvag(workspace?.slug" in kalla, (
+        "Onboardingen väljer inte längre kopplingsväg ur arbetsytans slug. En redan "
+        "kopplad arbetsyta går då testvägen igen och tappar skanningen."
+    )
+    assert "link_test_tenant nekade" not in kalla, (
+        "Onboardingen kastar igen när link_test_tenant nekar. En nekad koppling "
+        "betyder att en parallell begäran hann före; nyckeln ska läsas, inte kastas bort."
+    )
+
+
+def test_proxyn_kopplar_inte_en_arbetsyta_fore_onboardingen():
+    kalla = TENANT.read_text(encoding="utf-8")
+    assert "!workspace.slug && !context.businessContext" in kalla, (
+        "requireSnajpTenant() kopplar en arbetsyta som inte gått igenom onboardingen. "
+        "En annan öppen flik kan då koppla den utan underlag, före onboardingens egen koppling."
     )
