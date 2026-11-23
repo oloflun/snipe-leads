@@ -371,12 +371,20 @@ export function LandingPhoto({
         {/* data-mo="band": bandet skrubbas fram ur marken, fotot glider sakta
             bakom orden, och orden fylls av sin egen position i vyn. */}
         <section data-mo="band" className="relative overflow-hidden">
-          <div
-            data-parallax
-            className="parallax absolute -inset-y-[8%] inset-x-0 bg-ink"
-            aria-hidden="true"
-            style={{ backgroundImage: `url(${photo(imagery.street.src)})` }}
-          />
+          {/* Som fasadbandet längre ned: en latladdad <img> i rätt bredd i stället för
+              en CSS-bakgrund som hämtade hela originalet (524 kB) med sidan. */}
+          <div data-parallax className="parallax absolute -inset-y-[8%] inset-x-0 bg-ink" aria-hidden="true">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={photo(imagery.street.src)}
+              srcSet={photoSet(imagery.street.src)}
+              sizes="(max-width: 767px) 200vw, 100vw"
+              alt=""
+              loading="lazy"
+              decoding="async"
+              className="h-full w-full object-cover object-center"
+            />
+          </div>
           <div
             className="absolute inset-0"
             aria-hidden="true"

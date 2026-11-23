@@ -7,7 +7,7 @@ import { AgentMenu } from "@/components/snajp/AgentMenu";
 import { LÄSBARA, läsbar } from "@/components/settings/Kunskapsbas";
 import { HttpJsonError, felmeddelande, kroppsbesked, readJsonBody } from "@/lib/http/json";
 import { useLocale, type Locale, type Localized } from "@/lib/i18n";
-import { sessionsId } from "@/lib/sessionslagring";
+import { harSessionsId, sessionsId } from "@/lib/sessionslagring";
 import { POLL_FORSOK, fastext, pollpaus } from "@/lib/snajp/chattfas";
 import { getTenant } from "@/lib/tenants";
 import { cn } from "@/lib/utils";
@@ -278,9 +278,12 @@ function slumpad(texter: Localized[], locale: Locale): string {
 /** Ett fel vars text är skriven för kunden och därför FÅR visas ordagrant. */
 class VisbartFel extends Error {}
 
+const DEMOSESSION = "snajp.demo.session";
+const TESTCHATTSESSION = "snajp.testchatt.session";
+
 function demoSessionId(): string {
   // sessionsId kastar aldrig, se lib/sessionslagring.ts.
-  return sessionsId("snajp.demo.session");
+  return sessionsId(DEMOSESSION);
 }
 
 /** Samma mönster som demoSessionId, EGEN nyckel: en testchatt-flik ska inte
@@ -288,7 +291,7 @@ function demoSessionId(): string {
  * samma webbläsare), och tenanten är ändå alltid den inloggades — sessionen
  * avgör det, inte det här id:t. */
 function testchattSessionId(): string {
-  return sessionsId("snajp.testchatt.session");
+  return sessionsId(TESTCHATTSESSION);
 }
 
 //: R1.5 — pollningen mot jobbet ska tåla ett transient 5xx/nätfel under en
@@ -457,6 +460,12 @@ export function SupportChat({
   // hela samtalet igen — inklusive ett medarbetarsvar som kom medan fönstret
   // var stängt. Kunden ska aldrig behöva börja om.
   useEffect(() => {
+    // En besökare som aldrig chattat i den här fliken har inget samtal att hämta.
+    // Förut gick frågan till backenden ändå, vid varje visning av startsidan
+    // (där chatten ligger långt ned): ett onödigt anrop per besök, och ett rött
+    // konsolfel hos besökaren om backenden just då startade om. En sessionslänk
+    // (`session`) hämtas alltid.
+    if (!session && !harSessionsId(testMode ? TESTCHATTSESSION : DEMOSESSION)) return;
     let avbruten = false;
     void (async () => {
       const svar = await hamtaSamtal();
@@ -473,7 +482,7 @@ export function SupportChat({
     return () => {
       avbruten = true;
     };
-  }, [hamtaSamtal, startaPollning]);
+  }, [hamtaSamtal, startaPollning, session, testMode]);
 
 
   useEffect(() => {
