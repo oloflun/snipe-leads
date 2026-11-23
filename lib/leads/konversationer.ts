@@ -115,6 +115,8 @@ export type Trad = {
     ko_status: string | null;
   } | null;
   generering: { pagar: boolean; fel: string | null; startad_at: string | null };
+  /** Datumet för att höra av sig igen har infallit (Återkom, eller återkontakten efter ett nej). */
+  aterkom_forfallet?: boolean;
   forslag_mote: boolean;
   signatur?: import("@/components/leads/IrisGranskning").Signatur;
 };

@@ -39,6 +39,17 @@ import { cn } from "@/lib/utils";
 const T = {
   stegEtikett: { sv: "Steg", en: "Stage" },
   datum: { sv: "Återkom datum", en: "Follow-up date" },
+  aterkontakt: { sv: "Återkontakt", en: "Recontact" },
+  dagsText: {
+    sv: "Dags att höra av sig igen. Datumet för återkontakt har passerat.",
+    en: "Time to get back in touch. The recontact date has passed."
+  },
+  skrivAterkontakt: { sv: "Låt Iris skriva en återkontakt", en: "Let Iris draft a recontact" },
+  // Önskemålet till Iris när återkontakten skrivs. Samma väg som Skriv om.
+  aterkontaktOnskemal: {
+    sv: "Det här är en återkontakt lång tid efter deras svar. Skriv kort. Knyt an till att de bad oss återkomma eller tackade nej då, ge en ny och konkret anledning ur kontextpaketet till att höra av sig nu, och fråga om läget har ändrats. Ingen press, och upprepa inte det förra erbjudandet ordagrant.",
+    en: "This is a recontact long after their reply. Keep it short. Refer to them asking us to come back or declining then, give one new, concrete reason from the context pack to get in touch now, and ask whether things have changed. No pressure, and do not repeat the previous offer word for word."
+  },
   sparaSteg: { sv: "Spara steg", en: "Save stage" },
   forslagMote: {
     sv: "Ett mejl i tråden säger att en inbjudan har skickats. Är mötet bokat?",
@@ -211,6 +222,10 @@ export function KonversationsTrad({
           <p className="min-w-0 text-ink">{text(T.forslagMote)}</p>
           <SnabbSteg threadId={threadId} steg="mote" etikett={text(T.markeraMote)} onAndrad={andrad} />
         </div>
+      ) : null}
+
+      {trad.aterkom_forfallet && !trad.utkast && !trad.generering.pagar ? (
+        <Aterkontakt threadId={threadId} harSvar={trad.meddelanden.some((m) => m.typ === "svar")} onAndrad={andrad} />
       ) : null}
 
       <ol className="mt-5 space-y-3" aria-label={text({ sv: "Konversationen", en: "The conversation" })}>
@@ -437,7 +452,10 @@ function StegVal({ trad, onAndrad }: Readonly<{ trad: Trad; onAndrad: () => Prom
     setDatum(trad.trad.aterkom_datum ?? "");
   }, [trad.trad.steg, trad.trad.aterkom_datum]);
 
-  const andrat = steg !== trad.trad.steg || (steg === "aterkom" && datum !== (trad.trad.aterkom_datum ?? ""));
+  // Återkom kräver ett datum. Ej intresserad får ett av Snajp (sex månader
+  // om inget annat valts, Anton 2026-11-23) som går att ändra här.
+  const medDatum = steg === "aterkom" || steg === "ej_intresserad";
+  const andrat = steg !== trad.trad.steg || (medDatum && datum !== (trad.trad.aterkom_datum ?? ""));
 
   async function spara() {
     setArbetar(true);
@@ -445,7 +463,7 @@ function StegVal({ trad, onAndrad }: Readonly<{ trad: Trad; onAndrad: () => Prom
     try {
       await leadsAnrop(`/leads/konversationer/${encodeURIComponent(trad.trad.id)}/steg`, {
         method: "POST",
-        body: JSON.stringify({ steg, aterkom_datum: steg === "aterkom" ? datum || null : null })
+        body: JSON.stringify({ steg, aterkom_datum: medDatum ? datum || null : null })
       });
       await onAndrad();
     } catch (orsak) {
@@ -471,10 +489,16 @@ function StegVal({ trad, onAndrad }: Readonly<{ trad: Trad; onAndrad: () => Prom
             </select>
           </span>
         </label>
-        {steg === "aterkom" ? (
+        {medDatum ? (
           <label className="flex flex-col gap-1">
-            <span className={etikett}>{text(T.datum)}</span>
-            <input type="date" required value={datum} onChange={(e) => setDatum(e.target.value)} className={faltTatt} />
+            <span className={etikett}>{text(steg === "aterkom" ? T.datum : T.aterkontakt)}</span>
+            <input
+              type="date"
+              required={steg === "aterkom"}
+              value={datum}
+              onChange={(e) => setDatum(e.target.value)}
+              className={faltTatt}
+            />
           </label>
         ) : null}
         {andrat ? (
@@ -492,6 +516,50 @@ function StegVal({ trad, onAndrad }: Readonly<{ trad: Trad; onAndrad: () => Prom
         <p role="alert" className="text-[0.8125rem] text-danger">
           {fel}
         </p>
+      ) : null}
+    </div>
+  );
+}
+
+/** Datumet för återkontakt har passerat: Iris skriver ett utkast på begäran,
+ *  genom samma kedja som Skriv om. Inget skrivs eller skickas av sig självt. */
+function Aterkontakt({
+  threadId,
+  harSvar,
+  onAndrad
+}: Readonly<{ threadId: string; harSvar: boolean; onAndrad: () => Promise<void> }>) {
+  const { text } = useLocale();
+  const [arbetar, setArbetar] = useState(false);
+  const [fel, setFel] = useState<string | null>(null);
+  return (
+    <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-input border border-ochre/40 bg-ochre/10 px-4 py-3 text-[0.9375rem]">
+      <p className="min-w-0 text-ink">{text(T.dagsText)}</p>
+      {harSvar ? (
+        <span className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            disabled={arbetar}
+            onClick={async () => {
+              setArbetar(true);
+              setFel(null);
+              try {
+                await leadsAnrop(`/leads/konversationer/${encodeURIComponent(threadId)}/utkast/generera`, {
+                  method: "POST",
+                  body: JSON.stringify({ instruktion: text(T.aterkontaktOnskemal) })
+                });
+                await onAndrad();
+              } catch (orsak) {
+                setFel(felmeddelande(orsak));
+              } finally {
+                setArbetar(false);
+              }
+            }}
+            className={cn(btnSecondary, btnLiten)}
+          >
+            {text(T.skrivAterkontakt)}
+          </button>
+          {fel ? <span className="text-[0.8125rem] text-danger">{fel}</span> : null}
+        </span>
       ) : null}
     </div>
   );

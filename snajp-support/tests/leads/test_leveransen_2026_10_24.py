@@ -3,7 +3,9 @@
 ~600 kallmejl gav 2 mänskliga svar och knappt några autosvar. Tre rättningar
 i sändvägen:
 
-- det första mejlet i en tråd går som ren text, utan HTML och logotyp;
+- det första mejlet i en tråd gick som ren text, utan HTML och logotyp.
+  ERSATT 2026-11-23 (Anton, docs/BESLUT.md): antagandet mättes aldrig, och
+  varje mejl bär nu signaturen med logotypen;
 - varje utskick bär taggar (tenant, meddelande) som Resends webhook skickar
   tillbaka, så att en studs eller ett klagomål hamnar på rätt meddelande
   och adressen spärras;
@@ -52,7 +54,9 @@ async def _godkant_utkast(storage: MemoryStorage) -> tuple[str, str]:
     return item_id, thread_id
 
 
-async def test_forsta_mejlet_gar_som_ren_text_med_taggar():
+async def test_forsta_mejlet_bar_signaturen_med_logga_och_taggar():
+    """Anton 2026-11-23: också trådens första mejl bär HTML-delen med
+    signaturen och logotypen (mellan 2026-10-24 och dess: ren text)."""
     storage, provider = MemoryStorage(), _ResendLik()
     item_id, _ = await _godkant_utkast(storage)
 
@@ -60,7 +64,7 @@ async def test_forsta_mejlet_gar_som_ren_text_med_taggar():
 
     assert utfall == "sent", skal
     [mejl] = provider.sent
-    assert mejl["html"] is None
+    assert "logga.png" in (mejl["html"] or "")
     taggar = {t["name"]: t["value"] for t in mejl["tags"]}
     assert taggar["tenant"] == str(TENANT)
     meddelande = next(m for m in storage.outreach_messages[TENANT] if m.get("sent_at"))

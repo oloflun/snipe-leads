@@ -224,6 +224,102 @@ async def test_aterkom_kraver_datum_och_star_i_aterkopplingen():
     assert pa_dagen[0]["ring_idag"] is True
 
 
+# -- Återkontakten (Anton 2026-11-23) -----------------------------------------
+
+
+def test_aterkontaktens_datum():
+    regler = konversation.aterkontakt_regler(None)
+    idag = date(2026, 11, 23)
+    assert regler == {"nej_manader": 6, "aterkom_manader": 2}
+    assert konversation.aterkontakt_datum("negativt", idag=idag, regler=regler) == date(2027, 5, 23)
+    assert konversation.aterkontakt_datum("aterkom", idag=idag, regler=regler) == date(2027, 1, 23)
+    # Tiden de själva nämnde går före, men bara framåt i tiden och inom två år.
+    assert konversation.aterkontakt_datum("aterkom", idag=idag, regler=regler, namngivet="2027-03-01") == date(2027, 3, 1)
+    assert konversation.aterkontakt_datum("aterkom", idag=idag, regler=regler, namngivet="2020-03-01") == date(2027, 1, 23)
+    assert konversation.aterkontakt_datum("aterkom", idag=idag, regler=regler, namngivet="inte ett datum") == date(2027, 1, 23)
+    assert konversation.aterkontakt_datum("avregistrering", idag=idag, regler=regler) is None
+    # Kundval: 0 stänger av, och den 31:a blir månadens sista dag.
+    assert konversation.aterkontakt_datum("negativt", idag=idag, regler={"nej_manader": 0, "aterkom_manader": 2}) is None
+    assert konversation.plus_manader(date(2026, 8, 31), 6) == date(2027, 2, 28)
+    assert konversation.aterkontakt_regler({"aterkontakt": {"nej_manader": 4}})["nej_manader"] == 4
+
+
+def test_ett_nej_med_passerat_datum_ar_att_gora():
+    idag = date(2027, 5, 23)
+    assert konversation.att_gora({"status": "lost", "aterkom_datum": "2027-05-23"}, idag)
+    assert not konversation.att_gora({"status": "lost", "aterkom_datum": "2027-06-01"}, idag)
+    assert not konversation.att_gora({"status": "suppressed", "aterkom_datum": "2027-05-01"}, idag)
+
+
+async def _klassa(storage, thread_id, body, klassning):
+    steg, _ = _stegsvar({"sa:call-summary": klassning})
+    with patch("app.leads.svar.run_step", new=steg), patch(
+        "app.leads.svar.skicka_prioriterat", new=AsyncMock(return_value=True)
+    ):
+        return await hantera_prospektsvar(
+            storage, TENANT, thread_id=thread_id, body=body, tenant_name="Snajp", context_pack="## Kontextpaket\nSnajp.",
+        )
+
+
+async def test_ett_nej_sparrar_inte_men_det_andra_gor_det():
+    storage = MemoryStorage()
+    pid, tid = await _trad(storage)
+
+    forsta = await _klassa(storage, tid, "Nej tack, inte intresserade.", {"klass": "negativt"})
+    assert forsta["suppressed"] is False and forsta["andra_nej"] is False
+    assert (await storage.get_prospect(TENANT, pid))["status"] == "lost"
+    assert "tomas@buddy.se" not in await storage.list_suppressions(TENANT)
+    trad = await storage.get_outreach_thread(TENANT, tid)
+    assert trad["aterkom_datum"] == forsta["aterkontakt"]
+    assert date.fromisoformat(trad["aterkom_datum"]) == konversation.plus_manader(datetime.now(timezone.utc).date(), 6)
+
+    # Två nej i rad på samma mejl är ett nej: ingen spärr utan en återkontakt emellan.
+    igen = await _klassa(storage, tid, "Nej, som sagt.", {"klass": "negativt"})
+    assert igen["andra_nej"] is False and igen["suppressed"] is False
+
+    # Återkontakten går ut, och de tackar nej igen: Kontakta inte.
+    koat = await storage.queue_outreach_message(
+        TENANT, thread_id=tid, body="Har läget ändrats?", subject="Hej igen", humanizer_variant="v",
+        scheduled_at=datetime.now(timezone.utc),
+    )
+    await storage.mark_outreach_message_sent(TENANT, koat["message"]["id"], datetime.now(timezone.utc) + timedelta(seconds=1))
+    await storage.update_send_queue_status(TENANT, koat["queue_item"]["id"], status="sent", gate_checks={})
+    andra = await _klassa(storage, tid, "Nej tack.", {"klass": "negativt"})
+    assert andra["andra_nej"] is True and andra["suppressed"] is True and andra["aterkontakt"] is None
+    assert (await storage.get_prospect(TENANT, pid))["status"] == "suppressed"
+    assert "tomas@buddy.se" in await storage.list_suppressions(TENANT)
+    assert (await storage.get_outreach_thread(TENANT, tid))["aterkom_datum"] is None
+
+
+async def test_aterkom_far_tiden_de_namner_och_en_avregistrering_inget_datum():
+    storage = MemoryStorage()
+    pid, tid = await _trad(storage)
+    om_tre = konversation.plus_manader(datetime.now(timezone.utc).date(), 3)
+    svar = await _klassa(storage, tid, "Hör av er längre fram.", {"klass": "aterkom", "aterkom_datum": om_tre.isoformat()})
+    assert svar["aterkontakt"] == om_tre.isoformat()
+    assert (await storage.get_prospect(TENANT, pid))["status"] == "replied"
+    assert konversation.steg({**await storage.get_outreach_thread(TENANT, tid), "status": "replied"}) == "aterkom"
+
+    avreg = await _klassa(storage, tid, "Kontakta oss inte igen.", {"klass": "avregistrering"})
+    assert avreg["suppressed"] is True and avreg["aterkontakt"] is None
+    assert (await storage.get_outreach_thread(TENANT, tid))["aterkom_datum"] is None
+
+
+async def test_manuellt_ej_intresserad_far_sex_manader():
+    storage = MemoryStorage()
+    pid, tid = await _trad(storage)
+    ut = await konversation.satt_steg(
+        storage, TENANT, thread=await storage.get_outreach_thread(TENANT, tid),
+        prospect=await storage.get_prospect(TENANT, pid), nytt="ej_intresserad",
+    )
+    assert ut["aterkom_datum"] == konversation.plus_manader(datetime.now(timezone.utc).date(), 6).isoformat()
+    inte = await konversation.satt_steg(
+        storage, TENANT, thread=await storage.get_outreach_thread(TENANT, tid),
+        prospect=await storage.get_prospect(TENANT, pid), nytt="kontakta_inte",
+    )
+    assert inte["aterkom_datum"] is None and "tomas@buddy.se" in await storage.list_suppressions(TENANT)
+
+
 async def test_generering_overlever_omladdning():
     nu = datetime(2026, 11, 22, 10, 0, tzinfo=timezone.utc)
     startad = {"typ": "generering_startad", "created_at": (nu - timedelta(minutes=1)).isoformat()}

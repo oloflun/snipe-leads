@@ -67,8 +67,9 @@ async def test_provet_gar_till_kundens_adress_med_signatur_och_rubbar_inget():
     [mejl] = provider.skickat
     assert mejl["to"] == "kund@example.se"
     assert bygg_signaturtext({k: v for k, v in SIGNATUR.items() if k != "aktiv"}) in mejl["body"]
-    # Första mejlet i tråden går som ren text, utan logotyp (2026-10-24).
-    assert mejl["html"] is None
+    # Också trådens första mejl bär HTML-delen med signaturen (Anton
+    # 2026-11-23; mellan 2026-10-24 och dess gick det som ren text).
+    assert mejl["html"] and "font-weight:bold" in mejl["html"]
     assert mejl["headers"] == PROVHEADRAR
     # Kön, meddelandet och texten är orörda.
     assert storage.send_queue[TENANT][-1]["status"] == "queued"

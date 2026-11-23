@@ -216,6 +216,8 @@ class SignaturRequest(BaseModel):
     aktiv: bool = True
     namn: str = Field(..., min_length=1, max_length=200)
     titel: str | None = Field(default=None, max_length=200)
+    #: Raden under titeln, t.ex. "Snajp | AI för leads och kundtjänst".
+    verksamhet: str | None = Field(default=None, max_length=200)
     telefon: str | None = Field(default=None, max_length=200)
     epost: str | None = Field(default=None, max_length=200)
     ort: str | None = Field(default=None, max_length=200)

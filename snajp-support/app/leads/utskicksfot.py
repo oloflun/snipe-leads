@@ -50,6 +50,10 @@ def ny_token() -> str:
     return secrets.token_hex(16)
 
 
+#: Radens text före avregistreringslänken. I HTML-delen blir den länktexten.
+AVREGISTRERA = "Avregistrera dig"
+
+
 def avregistreringslank(bas_url: str, token: str) -> str:
     """URL:en som hamnar i mejlet.
 
@@ -101,26 +105,30 @@ def bygg_fot(
         # regel 4), och fyra meningar GDPR-text lika långa som mejlet fick
         # varje utskick att se ut som ett massutskick. Avsändaren och
         # avregistreringen står kvar: de krävs i alla mejl (regel 1 och 2).
-        return "\n".join([*identitet, "", f"Vill du inte få fler mejl från oss: {lank}"])
+        return "\n".join([*identitet, f"{AVREGISTRERA}: {lank}"])
 
+    # Två meningar i stället för fyra (Anton 2026-11-23: "utan gdpr-block";
+    # blocket var lika långt som mejlet). Art. 14 gäller fortfarande en
+    # personlig adress, så de fyra upplysningarna regel 4 kräver står kvar:
+    # varifrån uppgiften kom ("hämtad"), varför ("därför att"), vem som är
+    # ansvarig ("personuppgiftsansvarig") och rätten att invända. Resten bär
+    # policylänken (ett informationslager till). I mejlets HTML-del sätts
+    # foten finstilt med länktext (signatur._fot_html); här står adresserna
+    # ut, eftersom det här är textdelen och det guarden läser.
     rader = [
         *identitet,
-        "",
-        f"Du får det här mejlet därför att din adress är hämtad ur {kalla} och "
-        f"vi bedömer att erbjudandet är relevant för din verksamhet. Ändamålet "
-        f"är att ta en första affärskontakt.",
-        f"{foretagsnamn} är personuppgiftsansvarig för dina uppgifter. Du har "
-        f"rätt att invända mot behandlingen och att få dina uppgifter "
-        f"raderade.{kontaktrad}",
+        f"Du får mejlet därför att din adress är hämtad ur {kalla} och vi vill ta "
+        f"en första affärskontakt. {foretagsnamn} är personuppgiftsansvarig, och du "
+        f"kan invända mot behandlingen eller få dina uppgifter raderade.{kontaktrad}",
     ]
     if policy_url.strip():
-        # Art. 14.2 pekar mot mer än fyra meningar rymmer — lagringstid,
+        # Art. 14.2 pekar mot mer än två meningar rymmer — lagringstid,
         # mottagare, rätten att klaga till IMY. Länken bär resten, och
         # send_guard blockerar utskick som saknar den, så raden är inte
         # kosmetik. Ordet "personuppgifter" på samma rad som länken är det
         # guarden letar efter — se _POLICY_MONSTER i send_guard.py.
-        rader.append(f"Hur {foretagsnamn} behandlar personuppgifter: {policy_url.strip()}")
-    rader += ["", f"Vill du inte få fler mejl från oss: {lank}"]
+        rader.append(f"Så behandlar {foretagsnamn} personuppgifter: {policy_url.strip()}")
+    rader.append(f"{AVREGISTRERA}: {lank}")
     return "\n".join(rader)
 
 

@@ -546,12 +546,13 @@ async def _process_due_item(
         sig = normalisera_signatur(
             (await storage.get_agent_settings(tenant_id, agent_type="leads")).get("signatur")
         )
-        # Det första mejlet i en tråd går som ren text (Sebbe 2026-10-24): en
-        # bild och HTML i ett kallt mejl från en okänd avsändare är en
-        # reklamsignal som skickar det till skräpposten eller fliken
-        # Kampanjer. Logotypen följer med från första uppföljningen.
-        forsta = await _outbound_sent_count(storage, tenant_id, item["thread_id"]) == 0
-        if sig and not forsta and ("html" in params or har_kwargs):
+        # Varje mejl bär HTML-delen med signaturen och logotypen, också trådens
+        # första (Anton 2026-11-23). Mellan 2026-10-24 och dess gick det första
+        # som ren text, på antagandet att bild och HTML skickade kalla mejl
+        # till skräpposten. Antagandet mättes aldrig: diagnosen den dagen
+        # säger själv "en slutsats, inte en mätning", och det den pekade ut
+        # som huvudorsak var volymdubbleringen. Beslutet: docs/BESLUT.md.
+        if sig and ("html" in params or har_kwargs):
             extra["html"] = bygg_signatur_html(message["body"], sig)
         # Taggarna kommer tillbaka i Resends webhook och pekar ut meddelandet
         # vars studs eller klagomål det gäller (api/sending_domains_api.py).

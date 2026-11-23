@@ -276,6 +276,10 @@ async def trad(request: Request, thread_id: str, tenant: dict = Depends(require_
             for h in handelser
         ],
         "utkast": utkast,
+        # Dags att höra av sig igen (Återkom eller återkontakten efter ett nej).
+        "aterkom_forfallet": konversation.aterkom_forfallet(
+            {**rad, "aterkom_datum": trad_rad.get("aterkom_datum")}, datetime.now(timezone.utc).date()
+        ),
         "generering": konversation.generering(handelser, nu=datetime.now(timezone.utc)),
         # Ett förslag, aldrig ett stegbyte: säger ett mejl utanför Snajp
         # eller ett skickat mejl att ett möte bokats, frågar vyn om steget.
@@ -358,6 +362,12 @@ async def skicka(
     if skal and utfall in ("blocked", "awaiting_review", "sandfel", "requeued"):
         besked = f"{besked}: {skal}"
     if utfall in ("sent", "requeued"):
+        # En återkontakt som gått ut är gjord: datumet tas bort, så att
+        # konversationen inte står som "dags" igen. Svarar de nej en andra
+        # gång spärras adressen (app/leads/svar.py).
+        trad_nu = await storage.get_outreach_thread(tenant_id, thread_id) or {}
+        if trad_nu.get("aterkom_datum"):
+            await storage.satt_trad_steg(tenant_id, thread_id, steg=trad_nu.get("steg"), aterkom_datum=None)
         await konversation.logga(
             storage, tenant_id, prospect_id=str(prospekt["id"]), thread_id=thread_id, typ="skickat",
             kalla="manuell",

@@ -38,17 +38,25 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from railway_provision import env_read  # noqa: E402
 
 #: Snajps egen signatur — defaultvärdena. Ingen hemlighet någonstans här.
+#: Sedan 2026-11-23 samma rader som Sebastians egen Gmail-signatur (Anton:
+#: "ändra texten så att den överensstämmer med signaturen", med titeln
+#: Grundare & VD): namn, titel, verksamhet, telefon, e-post, logga, ort, webb.
+#: Ingen bolagsrad sist; den stod inte i hans signatur.
+#:
+#: KÖR INTE mot en miljö som saknar koden från 2026-11-23: äldre kod känner
+#: igen det gamla blocket i köade utkast på titelraden, och ett titelbyte ger
+#: då två signaturer i samma mejl (signatur._foraldrat_start rättar det).
 STANDARD = {
     "namn": "Sebastian Bergman",
-    "titel": "Snajp Support | AI för leads och kundtjänst",
+    "titel": "Grundare & VD",
+    "verksamhet": "Snajp | AI för leads och kundtjänst",
     "telefon": "+46 70 360 05 64",
-    "epost": "snajpsupport@gmail.com",
+    "epost": "sebastian@snajp.se",
     "ort": "Umeå & Göteborg",
     "webb": "www.snajp.se",
-    "bolag": "Snajp AB",
 }
 
-FALT = (*STANDARD, "logotyp_url")
+FALT = (*STANDARD, "bolag", "logotyp_url")
 
 
 def api_anrop(url: str, nyckel: str, metod: str, kropp: dict | None = None) -> dict:

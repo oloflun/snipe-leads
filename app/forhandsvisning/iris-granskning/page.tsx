@@ -34,10 +34,10 @@ const FOT = [
   "--",
   "Snajp AB, org.nr 559000-0000",
   "Exempelgatan 1, 903 26 Umeå",
-  "",
-  "Du får det här mejlet därför att din adress är hämtad ur offentliga företagsuppgifter och vi bedömer att erbjudandet är relevant för din verksamhet. Ändamålet är att ta en första affärskontakt.",
-  "",
-  "Vill du inte få fler mejl från oss: https://snajp.example/avregistrera/exempel"
+  // Samma form som utskicksfot.bygg_fot sedan 2026-11-23: två meningar och två länkrader.
+  "Du får mejlet därför att din adress är hämtad ur offentliga företagsuppgifter och vi vill ta en första affärskontakt. Snajp AB är personuppgiftsansvarig, och du kan invända mot behandlingen eller få dina uppgifter raderade.",
+  "Så behandlar Snajp AB personuppgifter: https://snajp.example/integritetspolicy",
+  "Avregistrera dig: https://snajp.example/avregistrera/exempel"
 ].join("\n");
 
 const BRODTEXT =

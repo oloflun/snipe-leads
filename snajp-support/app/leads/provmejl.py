@@ -156,20 +156,10 @@ async def skicka_provmejl(
     extra: dict = {}
     from .scheduler import _avsandaridentitet
 
-    # Samma regel som utskicket: det första mejlet i tråden går som ren text,
-    # utan logotyp (scheduler._process_due_item, Sebbe 2026-10-24). Första =
-    # inget annat utgående i tråden skickades före det här.
-    forsta = True
-    if thread:
-        egen = message.get("sent_at")
-        forsta = not any(
-            m.get("direction") == "outbound"
-            and m.get("sent_at")
-            and m.get("id") != message.get("id")
-            and (egen is None or str(m["sent_at"]) < str(egen))
-            for m in await storage.list_outreach_messages(tenant_id, thread["id"])
-        )
-    if sig and not forsta and ("html" in params or har_kwargs):
+    # Samma regel som utskicket (scheduler._process_due_item): varje mejl bär
+    # HTML-delen med signaturen och logotypen, också trådens första
+    # (Anton 2026-11-23).
+    if sig and ("html" in params or har_kwargs):
         extra["html"] = bygg_html(body, sig)
     if "reply_to" in params or har_kwargs:
         extra.update(await _avsandaridentitet(storage, tenant_id))

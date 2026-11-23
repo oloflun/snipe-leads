@@ -111,6 +111,10 @@ function Rad({ r, vald, onValj }: Readonly<{ r: Konversationsrad; vald: boolean;
             <span aria-hidden className={cn("h-1.5 w-1.5 rounded-full", STEG_PRICK[r.steg])} />
             {text(STEG_ETIKETT[r.steg])}
             {r.steg === "aterkom" && r.aterkom_datum ? ` ${r.aterkom_datum}` : ""}
+            {/* Ett nej följs upp en gång längre fram (Anton 2026-11-23). */}
+            {r.steg === "ej_intresserad" && r.aterkom_datum
+              ? text({ sv: `, återkontakt ${r.aterkom_datum}`, en: `, recontact ${r.aterkom_datum}` })
+              : ""}
           </span>
           {r.utkast ? (
             <span className="font-medium text-warning">

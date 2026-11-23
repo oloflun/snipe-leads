@@ -86,16 +86,89 @@ def _datum(varde: Any) -> date | None:
 
 
 def aterkom_forfallet(rad: dict[str, Any], idag: date) -> bool:
+    """Har datumet för att höra av sig igen infallit? Gäller Återkom och,
+    sedan 2026-11-23, Ej intresserad (återkontakten efter ett nej)."""
     datum = _datum(rad.get("aterkom_datum"))
-    return steg(rad) == "aterkom" and datum is not None and datum <= idag
+    return steg(rad) in ("aterkom", "ej_intresserad") and datum is not None and datum <= idag
 
 
 def att_gora(rad: dict[str, Any], idag: date) -> bool:
     """Behöver konversationen en människa nu? Ett oläst svar eller en oläst
     händelse, ett utkast som väntar, eller ett återkomdatum som infallit."""
-    if steg(rad) in ("ej_intresserad", "kontakta_inte"):
+    nu = steg(rad)
+    if nu == "kontakta_inte":
         return bool(rad.get("olasta"))
+    if nu == "ej_intresserad":
+        return bool(rad.get("olasta") or aterkom_forfallet(rad, idag))
     return bool(rad.get("olasta") or rad.get("utkast_id") or aterkom_forfallet(rad, idag))
+
+
+# -- Återkontakten (Anton 2026-11-23) ------------------------------------------
+#
+# "Om en kund säger att de inte är intresserade sätter vi dem i en lista att
+# kontakta längre fram när förutsättningarna kanske ändrats … så man inte
+# sätter kontakta ej på andra som inte uttryckligen bett om det."
+#
+#   inte aktuellt nu / återkom  -> tiden de själva nämner, annars två månader
+#   nej tack / inte intresserade -> en gång, efter sex månader
+#   sluta mejla / ta bort mig    -> Kontakta inte, aldrig
+#
+# Ett andra nej efter en återkontakt blir Kontakta inte (app/leads/svar.py).
+# Återkontakten skrivs aldrig av sig själv: datumet lyfter konversationen till
+# Att göra, och en människa väljer om och vad som skickas.
+
+#: Månader till återkontakten. Kundval i leadsinställningarna under nyckeln
+#: `aterkontakt`; 0 = ingen återkontakt för det svaret.
+ATERKONTAKT_STANDARD = {"nej_manader": 6, "aterkom_manader": 2}
+
+#: Så långt fram får ett datum prospektet själv nämnt ligga.
+_LANGST_FRAM = timedelta(days=730)
+
+
+def aterkontakt_regler(installningar: dict[str, Any] | None) -> dict[str, int]:
+    """Kundens månader för återkontakt, med standardvärden och rimliga gränser."""
+    val = (installningar or {}).get("aterkontakt")
+    regler = dict(ATERKONTAKT_STANDARD)
+    if isinstance(val, dict):
+        for nyckel in regler:
+            try:
+                regler[nyckel] = max(0, min(int(val[nyckel]), 24))
+            except (KeyError, TypeError, ValueError):
+                pass
+    return regler
+
+
+def plus_manader(fran: date, manader: int) -> date:
+    """Samma dag `manader` månader fram; den 31:a blir månadens sista dag."""
+    ar, manad = divmod(fran.month - 1 + manader, 12)
+    ar, manad = fran.year + ar, manad + 1
+    for dag in (fran.day, 30, 29, 28):
+        try:
+            return date(ar, manad, dag)
+        except ValueError:
+            continue
+    return date(ar, manad, 28)
+
+
+def aterkontakt_datum(
+    klass: str, *, idag: date, regler: dict[str, int], namngivet: Any = None
+) -> date | None:
+    """När konversationen ska tas upp igen efter svaret, eller None.
+
+    `namngivet` är datumet prospektet själv nämnde ("hör av er i mars"), som
+    klassningen läst ut. Det gäller för ett "återkom" när det ligger framåt i
+    tiden och inom två år; annars standardtiden."""
+    if klass == "aterkom":
+        try:
+            eget = _datum(namngivet)
+        except ValueError:
+            eget = None
+        if eget and idag < eget <= idag + _LANGST_FRAM:
+            return eget
+        return plus_manader(idag, regler["aterkom_manader"]) if regler["aterkom_manader"] else None
+    if klass == "negativt":
+        return plus_manader(idag, regler["nej_manader"]) if regler["nej_manader"] else None
+    return None
 
 
 # -- Påstådda handlingar i ett utkast ------------------------------------------
@@ -353,9 +426,17 @@ async def satt_steg(
     status = STATUS_FOR_STEG[nytt]
     if not (nytt == "mote" and prospect.get("status") == "won"):
         await storage.update_prospect(tenant_id, prospect_id, status=status, status_kalla=kalla)
-    await storage.satt_trad_steg(
-        tenant_id, thread_id, steg=nytt, aterkom_datum=aterkom_datum if nytt == "aterkom" else None
-    )
+    if nytt == "ej_intresserad" and aterkom_datum is None:
+        # Ett nej utan uttrycklig begäran om att slippa: återkontakt en gång,
+        # om kundens antal månader (standard sex). Kontakta inte får aldrig ett datum.
+        try:
+            regler = aterkontakt_regler(await storage.get_agent_settings(tenant_id, agent_type="leads"))
+        except Exception:  # noqa: BLE001 — utan inställningar gäller standardvärdena
+            regler = dict(ATERKONTAKT_STANDARD)
+        aterkom_datum = aterkontakt_datum("negativt", idag=datetime.now(timezone.utc).date(), regler=regler)
+    if nytt not in ("aterkom", "ej_intresserad"):
+        aterkom_datum = None
+    await storage.satt_trad_steg(tenant_id, thread_id, steg=nytt, aterkom_datum=aterkom_datum)
     await logga(
         storage, tenant_id, prospect_id=prospect_id, thread_id=thread_id, typ="steg", kalla=kalla,
         detalj={"fran": fore, "till": nytt, "aterkom_datum": aterkom_datum.isoformat() if aterkom_datum else None},
@@ -366,7 +447,7 @@ async def satt_steg(
             storage, tenant_id, prospect_id=prospect_id, thread_id=thread_id, typ="mote", kalla=kalla,
             last=kalla == "manuell",
         )
-    return {"steg": nytt, "kasserat": kasserat}
+    return {"steg": nytt, "kasserat": kasserat, "aterkom_datum": aterkom_datum.isoformat() if aterkom_datum else None}
 
 
 def generering(handelser: list[dict[str, Any]], *, nu: datetime) -> dict[str, Any]:

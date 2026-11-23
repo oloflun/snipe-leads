@@ -259,11 +259,18 @@ async def hantera_prospektsvar(
             "tar_upp_pris (bool — frågar eller resonerar om pris, kostnad, rabatt "
             "eller budget), tar_upp_juridik (bool — avtal, villkor, juridik eller "
             "personuppgifter). "
+            "aterkom_datum (ISO-datum ÅÅÅÅ-MM-DD eller null — bara om prospektet själv "
+            "nämner när ni kan höra av er igen; \"i mars\" blir den första i den månaden, "
+            f"räknat från i dag {datetime.now(timezone.utc).date().isoformat()}). "
             "'aterkom' är ett svar som varken är ja eller nej men skjuter frågan framåt: "
             "\"inte just nu\", \"hör av er i vår\", \"återkom efter sommaren\", \"kanske längre fram\". "
-            "'autosvar' är frånvaromeddelanden och autosvar. 'avregistrering' är en "
-            "uttrycklig begäran att slippa fler mejl. Osäker mellan två klasser: välj "
-            "den försiktigare (fraga före positivt, negativt före avregistrering)."
+            "'autosvar' är frånvaromeddelanden och autosvar. 'negativt' är ett nej till "
+            "erbjudandet utan begäran om att slippa kontakt (\"nej tack\", \"inte "
+            "intresserade\"). 'avregistrering' är varje begäran att slippa fler mejl "
+            "eller mer kontakt, också vänligt sagd: \"sluta mejla\", \"ta bort mig\", "
+            "\"kontakta oss inte igen\", \"vi vill inte bli kontaktade\". Osäker mellan "
+            "två klasser: välj den försiktigare (fraga före positivt, avregistrering "
+            "före negativt: ett nej följs upp en gång längre fram, en avregistrering aldrig)."
         ),
         case_context=base,
         playbook_role=_ROLL,
@@ -271,6 +278,25 @@ async def hantera_prospektsvar(
     )
     klass = _klass(klassificering.get("klass"))
     utfall["klass"] = klass
+    # Ett andra nej (Anton 2026-11-23): den som tackat nej, fått en
+    # återkontakt och tackar nej igen ska inte kontaktas mer.
+    # Räknas bara när vi faktiskt hört av oss emellan: två nej i rad på samma
+    # mejl är ett nej.
+    inkomna = [m for m in meddelanden if m["direction"] == "inbound"]
+    forra_svaret = konversation._som_tid(inkomna[-2].get("sent_at")) if len(inkomna) >= 2 else None
+    andra_nej = (
+        klass == "negativt"
+        and thread.get("svarsklass") == "negativt"
+        and forra_svaret is not None
+        and any(
+            m["direction"] == "outbound" and m.get("sent_at") and konversation._som_tid(m["sent_at"]) > forra_svaret
+            for m in meddelanden
+        )
+    )
+    utfall["andra_nej"] = andra_nej
+    if klass in ("positivt", "invandning", "fraga"):
+        # Samtalet lever igen: ett tidigare datum för återkontakt gäller inte.
+        await _satt_aterkontakt(storage, tenant_id, thread_id, None, installningar, utfall)
     # Klassen på tråden (migration 116): A/B-mätningen räknar Ja, Nej och
     # Kanske/Återkom ur den. Ett autosvar är inget svar och skriver inget.
     if klass != "autosvar":
@@ -287,19 +313,27 @@ async def hantera_prospektsvar(
 
     if klass in ("negativt", "avregistrering"):
         utfall["cancelled_sends"] = await storage.cancel_pending_sends(tenant_id, thread_id)
-        if klass == "avregistrering" and prospect_email:
+        sparra = klass == "avregistrering" or andra_nej
+        if sparra and prospect_email:
             # Samma spärr som avregistreringslänken sätter. send_guard regel 3
             # läser den före varje framtida utskick — även i ANDRA trådar.
             await storage.add_suppression(
-                tenant_id, email=prospect_email, reason="svarade: vill inte bli kontaktad"
+                tenant_id,
+                email=prospect_email,
+                reason="svarade nej en andra gång" if andra_nej else "svarade: vill inte bli kontaktad",
             )
             utfall["suppressed"] = True
         if prospect_id:
             await storage.update_prospect(
                 tenant_id,
                 prospect_id,
-                status="suppressed" if klass == "avregistrering" else "lost",
+                status="suppressed" if sparra else "lost",
             )
+        # Återkontakten: ett första nej tas upp en gång, om kundens antal
+        # månader (standard sex). En spärrad adress får aldrig ett datum.
+        await _satt_aterkontakt(
+            storage, tenant_id, thread_id, None if sparra else "negativt", installningar, utfall
+        )
         if klass == "negativt" and regler["negativt_svar"]:
             # Kön är redan inställd ovan; regeln lägger till att kunden får
             # veta det. Ett avvisande svar ska inte bara tyst bli "lost".
@@ -318,6 +352,11 @@ async def hantera_prospektsvar(
         utfall["handoff"] = True
         if prospect_id:
             await storage.update_prospect(tenant_id, prospect_id, status="replied")
+        # Tiden de själva nämnde, annars kundens antal månader (standard två).
+        await _satt_aterkontakt(
+            storage, tenant_id, thread_id, "aterkom", installningar, utfall,
+            namngivet=klassificering.get("aterkom_datum"),
+        )
         await _notifiera(
             tenant_id,
             rubrik=f"{company_name} vill bli kontaktade senare",
@@ -421,6 +460,37 @@ async def hantera_prospektsvar(
             await storage.update_prospect(tenant_id, prospect_id, status="replied")
 
     return await _avsluta(storage, tenant_id, trace, lager, body, utfall, started)
+
+
+async def _satt_aterkontakt(
+    storage,
+    tenant_id: str,
+    thread_id: str,
+    klass: str | None,
+    installningar: dict[str, Any],
+    utfall: dict[str, Any],
+    *,
+    namngivet: Any = None,
+) -> None:
+    """Datumet då konversationen tas upp igen (konversation.aterkontakt_datum),
+    eller inget datum alls för en spärrad adress. Skriver aldrig ett utkast:
+    datumet lyfter konversationen till Att göra, och en människa väljer.
+    Fäller aldrig svarshanteringen (kolumnen kom med migration 149)."""
+    datum = (
+        konversation.aterkontakt_datum(
+            klass,
+            idag=datetime.now(timezone.utc).date(),
+            regler=konversation.aterkontakt_regler(installningar),
+            namngivet=namngivet,
+        )
+        if klass
+        else None
+    )
+    utfall["aterkontakt"] = datum.isoformat() if datum else None
+    try:
+        await storage.satt_trad_steg(tenant_id, thread_id, steg=None, aterkom_datum=datum)
+    except Exception:  # noqa: BLE001
+        pass
 
 
 async def _skriv_svarsutkast(

@@ -277,9 +277,50 @@ def test_bygg_html_byter_foraldrat_block_mot_den_aktuella_signaturen():
     # Loggan sitter i signaturblocket, inte ensam sist: bild före ort,
     # kontaktraderna före bilden.
     assert html.index("snajpsupport@gmail.com") < html.index("<img") < html.index("Umeå")
-    # Foten står kvar efter blocket, i den grå fotstilen.
+    # Foten står kvar efter blocket, finstilt och grå, med länktext i
+    # stället för rå adress (2026-11-23).
     assert html.index("<img") < html.index("556000-0000")
-    assert "color:#6b6b6b" in html
+    assert "font-size:11px" in html
+    assert '<a href="https://x.se/avregistrera/abc"' in html and ">https://x.se/avregistrera" not in html
+
+
+def test_titelbyte_ger_inte_tva_signaturer():
+    """2026-11-23: titeln byttes till "Grundare & VD" och adressen till
+    sebastian@snajp.se. Persongruppen stämmer då inte längre med blocket i de
+    köade utkasten; det ska ändå kännas igen (på namnraden) och bytas, inte
+    stå kvar som rå text med en andra signatur efter sig."""
+    gammal = normalisera(SIG)
+    ny = normalisera({
+        "namn": "Sebastian Bergman", "titel": "Grundare & VD",
+        "verksamhet": "Snajp | AI för leads och kundtjänst", "telefon": "+46 70 360 05 64",
+        "epost": "sebastian@snajp.se", "ort": "Umeå & Göteborg", "webb": "www.snajp.se",
+        "logotyp_url": SIG["logotyp_url"],
+    })
+    body = med_signatur("Hej Per,\n\nEn idé om era kundfrågor.\n\nVänliga hälsningar,", gammal) + "\n\n" + FOT
+
+    text = med_aktuell_signatur(body, ny, halsning="Vänliga hälsningar,")
+    assert text.count("Sebastian Bergman") == 1
+    assert "Grundare & VD\nSnajp | AI för leads och kundtjänst\n+46 70 360 05 64\nsebastian@snajp.se" in text
+    assert "snajpsupport@gmail.com" not in text and "Snajp AB" not in text
+    assert text.endswith(FOT) and text.startswith("Hej Per,\n\nEn idé om era kundfrågor.")
+    assert med_aktuell_signatur(text, ny, halsning="Vänliga hälsningar,") == text  # idempotent
+
+    # HTML-delen ur den GAMLA texten visar också bara den nya signaturen.
+    html = bygg_html(body, ny)
+    assert "snajpsupport@gmail.com" not in html
+    assert html.count(">Sebastian Bergman<") == 1  # (namnet står också i loggans alt-text)
+    # Namn och titel i fetstil, verksamhetsraden under, e-posten som länk.
+    assert '<div style="margin:0;font-weight:bold;">Grundare &amp; VD</div>' in html
+    assert 'href="mailto:sebastian@snajp.se"' in html
+    assert html.index("Grundare") < html.index("Snajp | AI") < html.index("<img") < html.index("Umeå")
+
+
+def test_ett_namn_ensamt_sist_ar_inget_foraldrat_block():
+    """Modellens egen avslutning ("Vänliga hälsningar,\\nSebastian Bergman")
+    är inte ett signaturblock: brödtexten delas inte där."""
+    sig = normalisera(SIG)
+    body = "Hej!\n\nEn idé.\n\nVänliga hälsningar,\nSebastian Bergman"
+    assert dela_utkast(body, sig) == (body, "")
 
 
 def test_bygg_html_foraldrat_block_utan_fot_klipps_vid_textslutet():

@@ -9,6 +9,79 @@ möjligt), vad det betyder i koden.
 
 ---
 
+## 2026-11-23 — Ett nej följs upp en gång efter sex månader, "återkom" efter två; bara en uttrycklig begäran spärrar (Anton)
+
+**Beslut.**
+
+| Svar | Steg | Återkontakt |
+|---|---|---|
+| "Inte aktuellt nu", "hör av er senare" | Återkom | Tiden de själva nämner, annars 2 månader |
+| "Nej tack", "inte intresserade" | Ej intresserad | En gång, efter 6 månader |
+| "Sluta mejla", "ta bort mig", avregistrering | Kontakta inte | Aldrig |
+
+Ett andra nej efter en återkontakt blir Kontakta inte. Återkontakten skrivs aldrig av
+sig själv: datumet lyfter konversationen till Att göra, och en människa väljer.
+Klassningen väljer avregistrering framför nej när den är osäker (förut tvärtom).
+
+**Resonemanget.** Anton: "Om en kund säger att de inte är intresserade sätter vi de
+in lista att kontakta längre fram när förutsättningarna kanske ändrats, kanske efter 4
+månader, ej aktuellt just nu/återkom i en annan lista som kontaktas snabbare, kanske
+efter 2 månader … så man inte sätter kontakta ej på andra som inte uttryckligen bett
+om det eller avregistrerat sig." Agentens förslag var sex månader i stället för fyra
+efter ett nej (ett nej hänger ofta på budgetår eller halvår, och fyra månader läses
+lätt som tjat), en enda återkontakt, och att osäkra svar ska spärras: en invändning
+mot direktmarknadsföring ska följas utan prövning (GDPR art. 21), så när ett nej
+börjar följas upp måste varje begäran om att slippa kontakt bli Kontakta inte.
+Anton: "Ja bygg den, 6 mån".
+
+**I koden.** `app/leads/konversation.py` (`aterkontakt_datum`, `ATERKONTAKT_STANDARD`;
+kundval under `aterkontakt` i leadsinställningarna), `app/leads/svar.py`
+(`_satt_aterkontakt`, `andra_nej`, klassningens uppgift),
+`components/leads/KonversationsTrad.tsx` (datumet och knappen för återkontakten).
+
+---
+
+## 2026-11-23 — Första mejlet bär signaturen med logotyp igen; GDPR-foten blir två meningar i finstil; ren avregistreringsadress (Anton)
+
+**Beslut.**
+1. Varje utskick bär HTML-delen med signaturen och logotypen, också trådens första
+   mejl. Ersätter punkten "Det första mejlet i en tråd går utan HTML och logotyp" i
+   beslutet 2026-10-24 (Sebbe). Volymtaket, upptrappningen och takten från samma
+   beslut och från 2026-11-16 står kvar.
+2. Foten till en personlig adress är två meningar och två länkrader i stället för
+   fyra stycken, och sätts finstilt med länktext i HTML-delen. Funktionsadresser
+   (info@, kontakt@) har som förut ingen GDPR-text.
+3. Signaturens rader följer avsändarens egen Gmail-signatur: namn och titel i
+   fetstil, en ny rad `verksamhet` under titeln, telefon, e-post, logga, ort, webb.
+   Snajps titel blir "Grundare & VD".
+4. Länkarna i mejlen bär `www.snajp.se` (`PUBLIC_BASE_URL` i main, bytt 2026-11-23).
+
+**Resonemanget.** Anton: "Hur mättes det? Jag har svårt att tro att html-signaturen
+med bilder gjorde att det hamnade i skräpposten, snarare gdpr-blocket." Det mättes
+inte: diagnosen 2026-10-24 säger själv att slutsatsen om inkorgen "är en slutsats,
+inte en mätning", databasen gick inte att läsa då, och placeringstestet med och utan
+logotyp som den föreslog är inte gjort. Dess huvudmisstanke var volymdubbleringen
+från huvuddomänen. Anton valde "Med bild, utan gdpr-block".
+
+GDPR-texten är inte borttagen helt, och det är agentens avvägning inom beställningen:
+art. 14 kräver att den som får ett kallt mejl till en personlig adress får veta vem
+som behandlar uppgiften, varför, varifrån den kom och att hen kan invända, och
+`send_guard` regel 4 spärrar ett utskick som saknar det. De fyra upplysningarna står
+kvar i två meningar; resten bär länken till integritetspolicyn. Vill Anton ta bort
+också de två meningarna är det ett juridiskt beslut som kräver att regel 4 ändras.
+
+Signaturens inställning får inte bytas i en miljö som kör äldre kod: den kände igen
+ett äldre block på namn, titel, telefon och e-post tillsammans, och ett titelbyte gav
+då två signaturer i de köade utkasten. `signatur._foraldrat_start` känner nu igen
+blocket på namnraden.
+
+**I koden.** `app/leads/scheduler.py` och `provmejl.py` (HTML-delen alltid),
+`app/leads/utskicksfot.py` (`bygg_fot`), `app/leads/signatur.py` (`verksamhet`,
+`_foraldrat_start`, `_signatur_html`, `_fot_html`), `scripts/publik_bas_url.py`,
+`scripts/satt_mejlsignatur.py` (Snajps nya rader; körs mot main efter releasen).
+
+---
+
 ## 2026-11-22 — Konversationerna och uppföljningarna får egna flikar i Leads; notiser i Snajp (Anton, byggt av Claude (agent))
 
 **Beslut.**
