@@ -22,7 +22,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from railway import gql  # noqa: E402
 
 P = "b4ec4f98-2d00-4410-bfae-12fb69652d0b"
-API = "5828c279-ad8f-429b-b5e1-969372db8a0a"
+TJANST_ID = "5828c279-ad8f-429b-b5e1-969372db8a0a"
 MILJOER = {"development": "02c39616-1b8e-47b7-beea-d8c6cfba1acd", "main": "47bc7047-a458-404b-a1de-ccec612cb96e"}
 
 
@@ -39,10 +39,10 @@ def main() -> None:
     print("PageSpeed svarade 200 med nyckeln.")
     for namn, miljo in MILJOER.items():
         gql("mutation($i:VariableCollectionUpsertInput!){variableCollectionUpsert(input:$i)}",
-            {"i": {"projectId": P, "environmentId": miljo, "serviceId": API,
+            {"i": {"projectId": P, "environmentId": miljo, "serviceId": TJANST_ID,
                    "variables": {"PAGESPEED_API_KEY": nyckel}, "replace": False}})
         v = gql("query($p:String!,$e:String!,$s:String!){variables(projectId:$p,environmentId:$e,serviceId:$s)}",
-                {"p": P, "e": miljo, "s": API})["variables"]
+                {"p": P, "e": miljo, "s": TJANST_ID})["variables"]
         print(f"{namn}/api: PAGESPEED_API_KEY {'satt' if v.get('PAGESPEED_API_KEY') == nyckel else 'SAKNAS'}")
 
 
