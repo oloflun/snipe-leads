@@ -429,7 +429,16 @@ async def revidera(url: str | None, fakta: dict[str, Any]) -> dict[str, Any]:
     # PageSpeed bara på mobil och bara för siffrorna (säljargumentet); bilden
     # kommer från ScrapeGraph, med PageSpeeds som reserv.
     mobil, skarmbild = await asyncio.gather(pagespeed(url, "mobile"), skarmbild_via_scrapegraph(url))
-    skarmbild = skarmbild or (mobil or {}).get("skarmbild")
+    bildkalla = "scrapegraph" if skarmbild else None
+    if not skarmbild:
+        # Gratisreserven (Antons beställning 2026-11-22): PageSpeeds bild på
+        # dator, samma vy som kalibreringen gjordes mot (1440 bred), i stället
+        # för mobilbilden. Bara med nyckel: utan nyckel är kvoten slut (429).
+        dator = await pagespeed(url, "desktop") if _psi_nyckel() else None
+        skarmbild = (dator or {}).get("skarmbild")
+        bildkalla = "pagespeed_dator" if skarmbild else None
+    if not skarmbild and (mobil or {}).get("skarmbild"):
+        skarmbild, bildkalla = mobil["skarmbild"], "pagespeed_mobil"
     vis = await visuell(url, skarmbild, fakta) if skarmbild else None
     if skarmbild and vis is None:
         # Ett tomt eller trasigt modellsvar (Anna Åberg, kalibreringen 2026-10-08).
@@ -453,12 +462,20 @@ async def revidera(url: str | None, fakta: dict[str, Any]) -> dict[str, Any]:
             detaljer={k: vis.get(k) for k in (
                 "navigering_tydlig", "hero_modern", "typografi_och_luft", "bildkvalitet", "fortroende")},
         )
+    if bildkalla:
+        rev["bildkalla"] = bildkalla
     if ar_katalog(url):
         rev["katalog"] = True
     rev["webbniva"] = webbniva(rev)
     rev["bedomd"] = _nu()
     rev["rader"] = citerbara_rader(rev)
     return rev
+
+
+def _psi_nyckel() -> bool:
+    from ..config import get_settings
+
+    return bool(get_settings().pagespeed_api_key)
 
 
 def demo() -> None:
