@@ -1,0 +1,112 @@
+
+http://localhost:3100/  1440x900  CPU 4x  5 körningar
+  1: scroll: webbläsarens  |  p50 16.7  p95 33.4  p99 50.1  max 83  tappade 23.5 %  hack 16  långa 0 st/0 ms (max 0)
+  2: scroll: webbläsarens  |  p50 16.7  p95 33.4  p99 33.4  max 50  tappade 13.1 %  hack 0  långa 0 st/0 ms (max 0)
+  3: scroll: webbläsarens  |  p50 16.7  p95 33.4  p99 33.5  max 50  tappade 26.0 %  hack 1  långa 0 st/0 ms (max 0)
+  4: scroll: webbläsarens  |  p50 16.7  p95 33.4  p99 50.0  max 83  tappade 17.9 %  hack 5  långa 0 st/0 ms (max 0)
+  5: scroll: webbläsarens  |  p50 16.7  p95 33.5  p99 50.1  max 83  tappade 31.2 %  hack 11  långa 0 st/0 ms (max 0)
+  MEDIAN: mjukscroll kvar i 0 av 5 körningar  |  p50 16.7 ms  p95 33.4 ms  p99 50 ms  max 83 ms  tappade 23.5 %  hack 5  långa uppgifter 0 st / 0 ms
+
+http://localhost:3100/  1440x900  CPU 6x  5 körningar
+  1: scroll: webbläsarens  |  p50 16.7  p95 50.1  p99 83.3  max 100  tappade 39.6 %  hack 58  långa 21 st/1260 ms (max 70)
+  2: scroll: webbläsarens  |  p50 16.7  p95 50.1  p99 66.7  max 67  tappade 36.9 %  hack 60  långa 23 st/1295 ms (max 69)
+  3: scroll: webbläsarens  |  p50 16.7  p95 50.1  p99 66.8  max 84  tappade 34.0 %  hack 43  långa 28 st/1674 ms (max 83)
+  4: scroll: webbläsarens  |  p50 16.7  p95 50.1  p99 66.7  max 150  tappade 30.3 %  hack 49  långa 30 st/1692 ms (max 105)
+  5: scroll: webbläsarens  |  p50 16.7  p95 50.0  p99 66.7  max 83  tappade 38.5 %  hack 23  långa 7 st/440 ms (max 81)
+  MEDIAN: mjukscroll kvar i 0 av 5 körningar  |  p50 16.7 ms  p95 50.1 ms  p99 66.7 ms  max 84 ms  tappade 36.9 %  hack 49  långa uppgifter 23 st / 1295 ms
+
+Sparat: docs/demo-buddy/matning/efter-scroll-desktop.json
+
+http://localhost:3100/  390x844 mobil  CPU 4x  5 körningar
+  1: scroll: webbläsarens  |  p50 16.7  p95 16.8  p99 16.9  max 50  tappade 0.5 %  hack 0  långa 0 st/0 ms (max 0)  [nådde inte botten]
+  2: scroll: webbläsarens  |  p50 16.7  p95 16.8  p99 16.8  max 34  tappade 0.3 %  hack 0  långa 0 st/0 ms (max 0)  [nådde inte botten]
+  3: scroll: webbläsarens  |  p50 16.7  p95 16.8  p99 16.9  max 83  tappade 0.7 %  hack 2  långa 1 st/55 ms (max 55)  [nådde inte botten]
+  4: scroll: webbläsarens  |  p50 16.7  p95 16.8  p99 16.9  max 33  tappade 0.3 %  hack 0  långa 0 st/0 ms (max 0)  [nådde inte botten]
+  5: scroll: webbläsarens  |  p50 16.7  p95 16.8  p99 16.9  max 50  tappade 0.3 %  hack 0  långa 0 st/0 ms (max 0)  [nådde inte botten]
+  MEDIAN: mjukscroll kvar i 0 av 5 körningar  |  p50 16.7 ms  p95 16.8 ms  p99 16.9 ms  max 50 ms  tappade 0.3 %  hack 0  långa uppgifter 0 st / 0 ms
+
+Sparat: docs/demo-buddy/matning/efter-scroll-mobil.json
+
+http://localhost:3100/  [mobil]  5 körningar
+  1: poäng 74  FCP 1373  LCP 5192  TBT 242  CLS 0.000  SI 4198
+  2: poäng 72  FCP 1236  LCP 5274  TBT 298  CLS 0.000  SI 4143
+  3: poäng 73  FCP 1232  LCP 5315  TBT 260  CLS 0.000  SI 4208
+  4: poäng 75  FCP 1166  LCP 5305  TBT 204  CLS 0.000  SI 3946
+  5: poäng 66  FCP 1174  LCP 5213  TBT 503  CLS 0.000  SI 4188
+  MEDIAN: poäng 73  FCP 1232 ms  LCP 5274 ms  TBT 260 ms  CLS 0  SI 4188 ms  vikt 734 kB
+
+http://localhost:3100/  [desktop]  5 körningar
+  1: poäng 94  FCP 297  LCP 1436  TBT 40  CLS 0.001  SI 1382
+  2: poäng 94  FCP 300  LCP 1461  TBT 1  CLS 0.001  SI 1376
+  3: poäng 94  FCP 298  LCP 1436  TBT 1  CLS 0.001  SI 1338
+  4: poäng 94  FCP 403  LCP 1449  TBT 11  CLS 0.001  SI 1466
+  5: poäng 94  FCP 302  LCP 1503  TBT 1  CLS 0.001  SI 1427
+  MEDIAN: poäng 94  FCP 300 ms  LCP 1449 ms  TBT 1 ms  CLS 0.001  SI 1382 ms  vikt 821 kB
+
+Sparat: docs/demo-buddy/matning/efter-lighthouse-start.json
+(node:14508) [DEP0190] DeprecationWarning: Passing args to a child process with shell option true can lead to security vulnerabilities, as the arguments are not escaped, only concatenated.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+
+http://localhost:3100/leads  [mobil]  3 körningar
+  1: poäng 67  FCP 1113  LCP 5820  TBT 402  CLS 0.000  SI 3823
+  2: poäng 66  FCP 1074  LCP 5803  TBT 442  CLS 0.000  SI 3580
+  3: poäng 73  FCP 1176  LCP 5813  TBT 237  CLS 0.000  SI 3823
+  MEDIAN: poäng 67  FCP 1113 ms  LCP 5813 ms  TBT 402 ms  CLS 0  SI 3823 ms  vikt 1332 kB
+
+http://localhost:3100/leads  [desktop]  3 körningar
+  1: poäng 98  FCP 299  LCP 1094  TBT 0  CLS 0.002  SI 1017
+  2: poäng 98  FCP 299  LCP 1093  TBT 5  CLS 0.002  SI 1078
+  3: poäng 97  FCP 299  LCP 1108  TBT 3  CLS 0.002  SI 1158
+  MEDIAN: poäng 98  FCP 299 ms  LCP 1094 ms  TBT 3 ms  CLS 0.002  SI 1078 ms  vikt 1332 kB
+
+http://localhost:3100/support  [mobil]  3 körningar
+  1: poäng 65  FCP 1149  LCP 5808  TBT 491  CLS 0.000  SI 3660
+  2: poäng 68  FCP 1239  LCP 5930  TBT 349  CLS 0.000  SI 4050
+  3: poäng 67  FCP 1183  LCP 5803  TBT 409  CLS 0.000  SI 3728
+  MEDIAN: poäng 67  FCP 1183 ms  LCP 5808 ms  TBT 409 ms  CLS 0  SI 3728 ms  vikt 1333 kB
+
+http://localhost:3100/support  [desktop]  3 körningar
+  1: poäng 97  FCP 380  LCP 1131  TBT 10  CLS 0.002  SI 1257
+  2: poäng 98  FCP 302  LCP 1113  TBT 8  CLS 0.002  SI 1079
+  3: poäng 98  FCP 307  LCP 1091  TBT 3  CLS 0.002  SI 1042
+  MEDIAN: poäng 98  FCP 307 ms  LCP 1113 ms  TBT 8 ms  CLS 0.002  SI 1079 ms  vikt 1333 kB
+
+http://localhost:3100/faq  [mobil]  3 körningar
+  1: poäng 82  FCP 923  LCP 4523  TBT 156  CLS 0.013  SI 923
+  2: poäng 80  FCP 923  LCP 4673  TBT 213  CLS 0.000  SI 998
+  3: poäng 83  FCP 920  LCP 4520  TBT 121  CLS 0.013  SI 920
+  MEDIAN: poäng 82  FCP 923 ms  LCP 4523 ms  TBT 156 ms  CLS 0.013  SI 923 ms  vikt 573 kB
+
+http://localhost:3100/faq  [desktop]  3 körningar
+  1: poäng 99  FCP 258  LCP 898  TBT 0  CLS 0.000  SI 293
+  2: poäng 99  FCP 262  LCP 902  TBT 0  CLS 0.016  SI 272
+  3: poäng 99  FCP 264  LCP 904  TBT 1  CLS 0.016  SI 364
+  MEDIAN: poäng 99  FCP 262 ms  LCP 902 ms  TBT 0 ms  CLS 0.016  SI 293 ms  vikt 573 kB
+
+http://localhost:3100/login  [mobil]  3 körningar
+  1: poäng 84  FCP 917  LCP 4517  TBT 106  CLS 0.000  SI 917
+  2: poäng 81  FCP 921  LCP 4521  TBT 199  CLS 0.000  SI 943
+  3: poäng 82  FCP 917  LCP 4517  TBT 167  CLS 0.000  SI 917
+  MEDIAN: poäng 82  FCP 917 ms  LCP 4517 ms  TBT 167 ms  CLS 0  SI 917 ms  vikt 563 kB
+
+http://localhost:3100/login  [desktop]  3 körningar
+  1: poäng 99  FCP 262  LCP 902  TBT 0  CLS 0.000  SI 322
+  2: poäng 99  FCP 255  LCP 895  TBT 0  CLS 0.000  SI 357
+  3: poäng 99  FCP 260  LCP 900  TBT 0  CLS 0.000  SI 314
+  MEDIAN: poäng 99  FCP 260 ms  LCP 900 ms  TBT 0 ms  CLS 0  SI 322 ms  vikt 563 kB
+
+http://localhost:3100/integritetspolicy  [mobil]  3 körningar
+  1: poäng 82  FCP 920  LCP 4520  TBT 167  CLS 0.000  SI 920
+  2: poäng 82  FCP 917  LCP 4517  TBT 156  CLS 0.000  SI 917
+  3: poäng 83  FCP 922  LCP 4522  TBT 134  CLS 0.000  SI 922
+  MEDIAN: poäng 82  FCP 920 ms  LCP 4520 ms  TBT 156 ms  CLS 0  SI 920 ms  vikt 572 kB
+
+http://localhost:3100/integritetspolicy  [desktop]  3 körningar
+  1: poäng 99  FCP 256  LCP 896  TBT 0  CLS 0.000  SI 419
+  2: poäng 99  FCP 258  LCP 878  TBT 2  CLS 0.000  SI 286
+  3: poäng 99  FCP 255  LCP 875  TBT 0  CLS 0.000  SI 379
+  MEDIAN: poäng 99  FCP 256 ms  LCP 878 ms  TBT 0 ms  CLS 0  SI 379 ms  vikt 572 kB
+
+Sparat: docs/demo-buddy/matning/efter-lighthouse-ovriga.json
+(node:9496) [DEP0190] DeprecationWarning: Passing args to a child process with shell option true can lead to security vulnerabilities, as the arguments are not escaped, only concatenated.
+(Use `node --trace-deprecation ...` to show where the warning was created)

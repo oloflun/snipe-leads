@@ -1,0 +1,22 @@
+
+http://localhost:3100/  1440x900  CPU 4x  5 körningar
+  1: p50 16.7  p95 33.4  p99 33.4  max 117  tappade 19.2 %  hack 3  långa 0 st/0 ms (max 0)
+  2: p50 16.7  p95 33.4  p99 33.5  max 67  tappade 24.0 %  hack 4  långa 1 st/55 ms (max 55)
+  3: p50 16.7  p95 33.4  p99 33.5  max 50  tappade 24.5 %  hack 0  långa 0 st/0 ms (max 0)
+  4: p50 16.7  p95 33.4  p99 33.4  max 50  tappade 20.2 %  hack 0  långa 0 st/0 ms (max 0)
+  5: p50 16.7  p95 33.4  p99 33.5  max 50  tappade 26.1 %  hack 0  långa 0 st/0 ms (max 0)
+  MEDIAN: p50 16.7 ms  p95 33.4 ms  p99 33.5 ms  max 50 ms  tappade 24 %  hack 0  långa uppgifter 0 st / 0 ms
+
+http://localhost:3100/  1440x900  CPU 6x  5 körningar
+  1: p50 16.8  p95 50.0  p99 66.6  max 68  tappade 43.9 %  hack 50  långa 18 st/1012 ms (max 74)
+  2: p50 16.8  p95 50.0  p99 66.6  max 100  tappade 47.2 %  hack 53  långa 16 st/843 ms (max 61)
+  3: p50 16.7  p95 50.0  p99 66.6  max 133  tappade 41.9 %  hack 40  långa 24 st/1333 ms (max 109)
+  4: p50 16.8  p95 50.0  p99 50.1  max 67  tappade 43.4 %  hack 36  långa 23 st/1231 ms (max 62)
+  5: p50 16.9  p95 50.0  p99 66.7  max 100  tappade 49.5 %  hack 64  långa 15 st/846 ms (max 90)
+  MEDIAN: p50 16.8 ms  p95 50 ms  p99 66.6 ms  max 100 ms  tappade 43.9 %  hack 50  långa uppgifter 18 st / 1012 ms
+
+Sparat: docs/demo-buddy/matning/fore-scroll-desktop.json
+
+http://localhost:3100/  390x844 mobil  CPU 4x  5 körningar
+  1: p50 16.7  p95 33.3  p99 33.4  max 83  tappade 9.0 %  hack 2  långa 0 st/0 ms (max 0)  [nådde inte botten]
+  2: p50 16.7  p95 33.3  p99 33.4  max 50  tappade 10.4 %  hack 0  långa 0 st/0 ms (max 0)  [nådde inte botten]

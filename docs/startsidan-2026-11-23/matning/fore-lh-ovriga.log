@@ -1,0 +1,64 @@
+
+http://localhost:3100/leads  [mobil]  3 körningar
+  1: poäng 52  FCP 1204  LCP 7539  TBT 971  CLS 0.000  SI 4128
+  2: poäng 56  FCP 1357  LCP 7519  TBT 727  CLS 0.000  SI 3932
+  3: poäng 54  FCP 1137  LCP 7563  TBT 837  CLS 0.000  SI 4346
+  MEDIAN: poäng 54  FCP 1204 ms  LCP 7539 ms  TBT 837 ms  CLS 0  SI 4128 ms  vikt 1817 kB
+
+http://localhost:3100/leads  [desktop]  3 körningar
+  1: poäng 93  FCP 366  LCP 1521  TBT 103  CLS 0.002  SI 1486
+  2: poäng 95  FCP 260  LCP 1382  TBT 44  CLS 0.002  SI 1188
+  3: poäng 94  FCP 349  LCP 1402  TBT 65  CLS 0.002  SI 1362
+  MEDIAN: poäng 94  FCP 349 ms  LCP 1402 ms  TBT 65 ms  CLS 0.002  SI 1362 ms  vikt 1817 kB
+
+http://localhost:3100/support  [mobil]  3 körningar
+  1: poäng 60  FCP 1234  LCP 7604  TBT 541  CLS 0.000  SI 4159
+  2: poäng 64  FCP 1254  LCP 7539  TBT 404  CLS 0.000  SI 3879
+  3: poäng 55  FCP 1224  LCP 7528  TBT 764  CLS 0.000  SI 4075
+  MEDIAN: poäng 60  FCP 1234 ms  LCP 7539 ms  TBT 541 ms  CLS 0  SI 4075 ms  vikt 1818 kB
+
+http://localhost:3100/support  [desktop]  3 körningar
+  1: poäng 95  FCP 262  LCP 1393  TBT 57  CLS 0.002  SI 1325
+  2: poäng 95  FCP 355  LCP 1415  TBT 49  CLS 0.002  SI 1314
+  3: poäng 95  FCP 351  LCP 1407  TBT 30  CLS 0.002  SI 1266
+  MEDIAN: poäng 95  FCP 351 ms  LCP 1407 ms  TBT 49 ms  CLS 0.002  SI 1314 ms  vikt 1818 kB
+
+http://localhost:3100/faq  [mobil]  3 körningar
+  1: poäng 77  FCP 918  LCP 5868  TBT 145  CLS 0.000  SI 918
+  2: poäng 73  FCP 1153  LCP 4430  TBT 479  CLS 0.000  SI 1346
+  3: poäng 78  FCP 930  LCP 5880  TBT 91  CLS 0.000  SI 930
+  MEDIAN: poäng 77  FCP 930 ms  LCP 5868 ms  TBT 145 ms  CLS 0  SI 930 ms  vikt 819 kB
+
+http://localhost:3100/faq  [desktop]  3 körningar
+  1: poäng 98  FCP 260  LCP 1120  TBT 4  CLS 0.016  SI 319
+  2: poäng 98  FCP 262  LCP 1125  TBT 3  CLS 0.016  SI 310
+  3: poäng 98  FCP 259  LCP 1109  TBT 0  CLS 0.000  SI 367
+  MEDIAN: poäng 98  FCP 260 ms  LCP 1120 ms  TBT 3 ms  CLS 0.016  SI 319 ms  vikt 819 kB
+
+http://localhost:3100/login  [mobil]  3 körningar
+  1: poäng 77  FCP 916  LCP 5866  TBT 134  CLS 0.000  SI 916
+  2: poäng 77  FCP 925  LCP 5875  TBT 130  CLS 0.000  SI 925
+  3: poäng 78  FCP 924  LCP 5874  TBT 88  CLS 0.000  SI 924
+  MEDIAN: poäng 77  FCP 924 ms  LCP 5874 ms  TBT 130 ms  CLS 0  SI 924 ms  vikt 809 kB
+
+http://localhost:3100/login  [desktop]  3 körningar
+  1: poäng 98  FCP 259  LCP 1142  TBT 0  CLS 0.000  SI 354
+  2: poäng 98  FCP 263  LCP 1121  TBT 8  CLS 0.000  SI 317
+  3: poäng 98  FCP 255  LCP 1085  TBT 0  CLS 0.000  SI 330
+  MEDIAN: poäng 98  FCP 259 ms  LCP 1121 ms  TBT 0 ms  CLS 0  SI 330 ms  vikt 809 kB
+
+http://localhost:3100/integritetspolicy  [mobil]  3 körningar
+  1: poäng 78  FCP 928  LCP 5919  TBT 113  CLS 0.000  SI 928
+  2: poäng 76  FCP 943  LCP 5915  TBT 177  CLS 0.000  SI 943
+  3: poäng 74  FCP 939  LCP 5908  TBT 242  CLS 0.000  SI 939
+  MEDIAN: poäng 76  FCP 939 ms  LCP 5915 ms  TBT 177 ms  CLS 0  SI 939 ms  vikt 818 kB
+
+http://localhost:3100/integritetspolicy  [desktop]  3 körningar
+  1: poäng 97  FCP 351  LCP 1231  TBT 77  CLS 0.023  SI 605
+  2: poäng 98  FCP 271  LCP 1139  TBT 5  CLS 0.000  SI 395
+  3: poäng 98  FCP 303  LCP 1163  TBT 23  CLS 0.000  SI 436
+  MEDIAN: poäng 98  FCP 303 ms  LCP 1163 ms  TBT 23 ms  CLS 0  SI 436 ms  vikt 818 kB
+
+Sparat: docs/demo-buddy/matning/fore-lighthouse-ovriga.json
+(node:19524) [DEP0190] DeprecationWarning: Passing args to a child process with shell option true can lead to security vulnerabilities, as the arguments are not escaped, only concatenated.
+(Use `node --trace-deprecation ...` to show where the warning was created)

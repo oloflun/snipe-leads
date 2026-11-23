@@ -1,0 +1,452 @@
+[
+  {
+    "sida": "/leads",
+    "enhet": "mobil",
+    "korningar": 3,
+    "poang": 54,
+    "fcp": 1204,
+    "lcp": 7539,
+    "tbt": 837,
+    "cls": 0,
+    "si": 4128,
+    "viktKb": 1817,
+    "lcpElement": "<img data-mo=\"hero-img\" src=\"/photos/goteborg-golden.webp\" alt=\"Göteborg sett från höjden i gyllene kvällsljus\" class=\"absolute inset-0 h-full w-full bg-ink object-cover object-center\" fetchpriority=\"high\" style=\"translate: none; rotate: none; scale: none; transform: translate(0px, 0px);\">",
+    "ravarden": [
+      {
+        "poang": 52,
+        "fcp": 1204.4045,
+        "lcp": 7539.427,
+        "tbt": 971,
+        "cls": 0.000439834439923912,
+        "si": 4128.447117668514,
+        "vikt": 1860372,
+        "lcpElement": "<img data-mo=\"hero-img\" src=\"/photos/goteborg-golden.webp\" alt=\"Göteborg sett från höjden i gyllene kvällsljus\" class=\"absolute inset-0 h-full w-full bg-ink object-cover object-center\" fetchpriority=\"high\" style=\"translate: none; rotate: none; scale: none; transform: translate(0px, 0px);\">"
+      },
+      {
+        "poang": 56,
+        "fcp": 1356.50265,
+        "lcp": 7519.275175000001,
+        "tbt": 726.9999999999991,
+        "cls": 0.00042625310924677637,
+        "si": 3931.6389735911216,
+        "vikt": 1860373,
+        "lcpElement": "<img data-mo=\"hero-img\" src=\"/photos/goteborg-golden.webp\" alt=\"Göteborg sett från höjden i gyllene kvällsljus\" class=\"absolute inset-0 h-full w-full bg-ink object-cover object-center\" fetchpriority=\"high\" style=\"translate: none; rotate: none; scale: none; transform: translate(0px, 0px);\">"
+      },
+      {
+        "poang": 54,
+        "fcp": 1136.8635000000002,
+        "lcp": 7563.2032500000005,
+        "tbt": 836.9999999999998,
+        "cls": 0.00042625310924677637,
+        "si": 4346.471335922765,
+        "vikt": 1860365,
+        "lcpElement": "<img data-mo=\"hero-img\" src=\"/photos/goteborg-golden.webp\" alt=\"Göteborg sett från höjden i gyllene kvällsljus\" class=\"absolute inset-0 h-full w-full bg-ink object-cover object-center\" fetchpriority=\"high\" style=\"translate: none; rotate: none; scale: none; transform: translate(0px, 0px);\">"
+      }
+    ]
+  },
+  {
+    "sida": "/leads",
+    "enhet": "desktop",
+    "korningar": 3,
+    "poang": 94,
+    "fcp": 349,
+    "lcp": 1402,
+    "tbt": 65,
+    "cls": 0.002,
+    "si": 1362,
+    "viktKb": 1817,
+    "lcpElement": "<img data-mo=\"hero-img\" src=\"/photos/goteborg-golden.webp\" alt=\"Göteborg sett från höjden i gyllene kvällsljus\" class=\"absolute inset-0 h-full w-full bg-ink object-cover object-center\" fetchpriority=\"high\" style=\"translate: none; rotate: none; scale: none; transform: translate(0px, 0px);\">",
+    "ravarden": [
+      {
+        "poang": 93,
+        "fcp": 366.2375,
+        "lcp": 1520.9499999999998,
+        "tbt": 103.00000000000006,
+        "cls": 0.0018317947578078207,
+        "si": 1486.401089432613,
+        "vikt": 1860372,
+        "lcpElement": "<img data-mo=\"hero-img\" src=\"/photos/goteborg-golden.webp\" alt=\"Göteborg sett från höjden i gyllene kvällsljus\" class=\"absolute inset-0 h-full w-full bg-ink object-cover object-center\" fetchpriority=\"high\" style=\"translate: none; rotate: none; scale: none; transform: translate(0px, 0px);\">"
+      },
+      {
+        "poang": 95,
+        "fcp": 259.8943,
+        "lcp": 1381.7357499999998,
+        "tbt": 44.05284999999998,
+        "cls": 0.0018883349181321584,
+        "si": 1187.9556971413872,
+        "vikt": 1860372,
+        "lcpElement": "<img data-mo=\"hero-img\" src=\"/photos/goteborg-golden.webp\" alt=\"Göteborg sett från höjden i gyllene kvällsljus\" class=\"absolute inset-0 h-full w-full bg-ink object-cover object-center\" fetchpriority=\"high\" style=\"translate: none; rotate: none; scale: none; transform: translate(0px, 0px);\">"
+      },
+      {
+        "poang": 94,
+        "fcp": 349.3671,
+        "lcp": 1402.1012999999996,
+        "tbt": 64.99999999999989,
+        "cls": 0.0018883349181321584,
+        "si": 1362.2313494728805,
+        "vikt": 1860371,
+        "lcpElement": "<img data-mo=\"hero-img\" src=\"/photos/goteborg-golden.webp\" alt=\"Göteborg sett från höjden i gyllene kvällsljus\" class=\"absolute inset-0 h-full w-full bg-ink object-cover object-center\" fetchpriority=\"high\" style=\"translate: none; rotate: none; scale: none; transform: translate(0px, 0px);\">"
+      }
+    ]
+  },
+  {
+    "sida": "/support",
+    "enhet": "mobil",
+    "korningar": 3,
+    "poang": 60,
+    "fcp": 1234,
+    "lcp": 7539,
+    "tbt": 541,
+    "cls": 0,
+    "si": 4075,
+    "viktKb": 1818,
+    "lcpElement": "<img data-mo=\"hero-img\" src=\"/photos/goteborg-golden.webp\" alt=\"Göteborg sett från höjden i gyllene kvällsljus\" class=\"absolute inset-0 h-full w-full bg-ink object-cover object-center\" fetchpriority=\"high\" style=\"translate: none; rotate: none; scale: none; transform: translate(0px, 0px);\">",
+    "ravarden": [
+      {
+        "poang": 60,
+        "fcp": 1233.7240000000002,
+        "lcp": 7604.344000000002,
+        "tbt": 540.7239999999997,
+        "cls": 0.00039803735724534324,
+        "si": 4159.138166418058,
+        "vikt": 1861334,
+        "lcpElement": "<img data-mo=\"hero-img\" src=\"/photos/goteborg-golden.webp\" alt=\"Göteborg sett från höjden i gyllene kvällsljus\" class=\"absolute inset-0 h-full w-full bg-ink object-cover object-center\" fetchpriority=\"high\" style=\"translate: none; rotate: none; scale: none; transform: translate(0px, 0px);\">"
+      },
+      {
+        "poang": 64,
+        "fcp": 1254.3685,
+        "lcp": 7539.000749999999,
+        "tbt": 403.5787500000001,
+        "cls": 0.00039803735724534324,
+        "si": 3878.762665726814,
+        "vikt": 1861337,
+        "lcpElement": "<img data-mo=\"hero-img\" src=\"/photos/goteborg-golden.webp\" alt=\"Göteborg sett från höjden i gyllene kvällsljus\" class=\"absolute inset-0 h-full w-full bg-ink object-cover object-center\" fetchpriority=\"high\" style=\"translate: none; rotate: none; scale: none; transform: translate(0px, 0px);\">"
+      },
+      {
+        "poang": 55,
+        "fcp": 1224.3880000000001,
+        "lcp": 7528.186,
+        "tbt": 764.4999999999998,
+        "cls": 0.00039803735724534324,
+        "si": 4075.0307406101997,
+        "vikt": 1861336,
+        "lcpElement": "<img data-mo=\"hero-img\" src=\"/photos/goteborg-golden.webp\" alt=\"Göteborg sett från höjden i gyllene kvällsljus\" class=\"absolute inset-0 h-full w-full bg-ink object-cover object-center\" fetchpriority=\"high\" style=\"translate: none; rotate: none; scale: none; transform: translate(0px, 0px);\">"
+      }
+    ]
+  },
+  {
+    "sida": "/support",
+    "enhet": "desktop",
+    "korningar": 3,
+    "poang": 95,
+    "fcp": 351,
+    "lcp": 1407,
+    "tbt": 49,
+    "cls": 0.002,
+    "si": 1314,
+    "viktKb": 1818,
+    "lcpElement": "<img data-mo=\"hero-img\" src=\"/photos/goteborg-golden.webp\" alt=\"Göteborg sett från höjden i gyllene kvällsljus\" class=\"absolute inset-0 h-full w-full bg-ink object-cover object-center\" fetchpriority=\"high\" style=\"translate: none; rotate: none; scale: none; transform: translate(0px, 0px);\">",
+    "ravarden": [
+      {
+        "poang": 95,
+        "fcp": 262.303,
+        "lcp": 1393.4544999999998,
+        "tbt": 57.34850000000023,
+        "cls": 0.0023274202206004153,
+        "si": 1325.445511477632,
+        "vikt": 1861339,
+        "lcpElement": "<img data-mo=\"hero-img\" src=\"/photos/goteborg-golden.webp\" alt=\"Göteborg sett från höjden i gyllene kvällsljus\" class=\"absolute inset-0 h-full w-full bg-ink object-cover object-center\" fetchpriority=\"high\" style=\"translate: none; rotate: none; scale: none; transform: translate(0px, 0px);\">"
+      },
+      {
+        "poang": 95,
+        "fcp": 354.83045,
+        "lcp": 1415.4913499999993,
+        "tbt": 49,
+        "cls": 0.0023274202206004153,
+        "si": 1313.9642815480208,
+        "vikt": 1861336,
+        "lcpElement": "<img data-mo=\"hero-img\" src=\"/photos/goteborg-golden.webp\" alt=\"Göteborg sett från höjden i gyllene kvällsljus\" class=\"absolute inset-0 h-full w-full bg-ink object-cover object-center\" fetchpriority=\"high\" style=\"translate: none; rotate: none; scale: none; transform: translate(0px, 0px);\">"
+      },
+      {
+        "poang": 95,
+        "fcp": 351.277,
+        "lcp": 1406.8310000000001,
+        "tbt": 29.5,
+        "cls": 0.0023274202206004153,
+        "si": 1266.3228438714975,
+        "vikt": 1861335,
+        "lcpElement": "<img data-mo=\"hero-img\" src=\"/photos/goteborg-golden.webp\" alt=\"Göteborg sett från höjden i gyllene kvällsljus\" class=\"absolute inset-0 h-full w-full bg-ink object-cover object-center\" fetchpriority=\"high\" style=\"translate: none; rotate: none; scale: none; transform: translate(0px, 0px);\">"
+      }
+    ]
+  },
+  {
+    "sida": "/faq",
+    "enhet": "mobil",
+    "korningar": 3,
+    "poang": 77,
+    "fcp": 930,
+    "lcp": 5868,
+    "tbt": 145,
+    "cls": 0,
+    "si": 930,
+    "viktKb": 819,
+    "lcpElement": "<p class=\"mt-6 max-w-[62ch] text-[1.125rem] leading-[1.7] text-ink-muted\">",
+    "ravarden": [
+      {
+        "poang": 77,
+        "fcp": 918.3874000000001,
+        "lcp": 5868.387399999999,
+        "tbt": 144.80629999999996,
+        "cls": 0,
+        "si": 918.3874000000001,
+        "vikt": 838557,
+        "lcpElement": "<p class=\"mt-6 max-w-[62ch] text-[1.125rem] leading-[1.7] text-ink-muted\">"
+      },
+      {
+        "poang": 73,
+        "fcp": 1152.8490000000002,
+        "lcp": 4429.698,
+        "tbt": 478.5,
+        "cls": 0,
+        "si": 1346.01741959427,
+        "vikt": 838559,
+        "lcpElement": "<p class=\"mt-6 max-w-[62ch] text-[1.125rem] leading-[1.7] text-ink-muted\">"
+      },
+      {
+        "poang": 78,
+        "fcp": 929.7360000000001,
+        "lcp": 5879.736,
+        "tbt": 91,
+        "cls": 0,
+        "si": 929.7360000000001,
+        "vikt": 838562,
+        "lcpElement": "<p class=\"mt-6 max-w-[62ch] text-[1.125rem] leading-[1.7] text-ink-muted\">"
+      }
+    ]
+  },
+  {
+    "sida": "/faq",
+    "enhet": "desktop",
+    "korningar": 3,
+    "poang": 98,
+    "fcp": 260,
+    "lcp": 1120,
+    "tbt": 3,
+    "cls": 0.016,
+    "si": 319,
+    "viktKb": 819,
+    "lcpElement": "<p class=\"mt-6 max-w-[62ch] text-[1.125rem] leading-[1.7] text-ink-muted\">",
+    "ravarden": [
+      {
+        "poang": 98,
+        "fcp": 259.756,
+        "lcp": 1119.5120000000002,
+        "tbt": 4,
+        "cls": 0.01610438443660402,
+        "si": 318.7400078806503,
+        "vikt": 838559,
+        "lcpElement": "<p class=\"mt-6 max-w-[62ch] text-[1.125rem] leading-[1.7] text-ink-muted\">"
+      },
+      {
+        "poang": 98,
+        "fcp": 262.432,
+        "lcp": 1124.8639999999998,
+        "tbt": 3.0000000000001137,
+        "cls": 0.01610438443660402,
+        "si": 310.3006456655453,
+        "vikt": 838558,
+        "lcpElement": "<p class=\"mt-6 max-w-[62ch] text-[1.125rem] leading-[1.7] text-ink-muted\">"
+      },
+      {
+        "poang": 98,
+        "fcp": 259.4061,
+        "lcp": 1108.51525,
+        "tbt": 0,
+        "cls": 0,
+        "si": 366.59496271128035,
+        "vikt": 838557,
+        "lcpElement": "<p class=\"mt-6 max-w-[62ch] text-[1.125rem] leading-[1.7] text-ink-muted\">"
+      }
+    ]
+  },
+  {
+    "sida": "/login",
+    "enhet": "mobil",
+    "korningar": 3,
+    "poang": 77,
+    "fcp": 924,
+    "lcp": 5874,
+    "tbt": 130,
+    "cls": 0,
+    "si": 924,
+    "viktKb": 809,
+    "lcpElement": "<p class=\"mt-4 max-w-[40ch] text-[1.0625rem] leading-7 text-paper-muted\">",
+    "ravarden": [
+      {
+        "poang": 77,
+        "fcp": 915.788,
+        "lcp": 5865.788000000001,
+        "tbt": 134,
+        "cls": 0.00007982671229009516,
+        "si": 915.788,
+        "vikt": 828078,
+        "lcpElement": "<p class=\"mt-4 max-w-[40ch] text-[1.0625rem] leading-7 text-paper-muted\">"
+      },
+      {
+        "poang": 77,
+        "fcp": 924.932,
+        "lcp": 5874.931999999999,
+        "tbt": 130,
+        "cls": 0,
+        "si": 924.932,
+        "vikt": 828079,
+        "lcpElement": "<p class=\"mt-4 max-w-[40ch] text-[1.0625rem] leading-7 text-paper-muted\">"
+      },
+      {
+        "poang": 78,
+        "fcp": 923.5581,
+        "lcp": 5873.5581,
+        "tbt": 88,
+        "cls": 0,
+        "si": 923.5581,
+        "vikt": 828081,
+        "lcpElement": "<p class=\"mt-4 max-w-[40ch] text-[1.0625rem] leading-7 text-paper-muted\">"
+      }
+    ]
+  },
+  {
+    "sida": "/login",
+    "enhet": "desktop",
+    "korningar": 3,
+    "poang": 98,
+    "fcp": 259,
+    "lcp": 1121,
+    "tbt": 0,
+    "cls": 0,
+    "si": 330,
+    "viktKb": 809,
+    "lcpElement": "<h1 class=\"mt-2 font-display text-[clamp(2rem,4vw,3.25rem)] font-semibold leading-[1.…\">",
+    "ravarden": [
+      {
+        "poang": 98,
+        "fcp": 259.322,
+        "lcp": 1141.9660000000001,
+        "tbt": 0,
+        "cls": 0,
+        "si": 354.0949023340558,
+        "vikt": 828078,
+        "lcpElement": "<h1 class=\"mt-2 font-display text-[clamp(2rem,4vw,3.25rem)] font-semibold leading-[1.…\">"
+      },
+      {
+        "poang": 98,
+        "fcp": 262.5251,
+        "lcp": 1121.31275,
+        "tbt": 7.5,
+        "cls": 0.00001599569871289729,
+        "si": 317.43124783286174,
+        "vikt": 828076,
+        "lcpElement": "<h1 class=\"mt-2 font-display text-[clamp(2rem,4vw,3.25rem)] font-semibold leading-[1.…\">"
+      },
+      {
+        "poang": 98,
+        "fcp": 255.2228,
+        "lcp": 1085.057,
+        "tbt": 0,
+        "cls": 0.00001599569871289729,
+        "si": 330.47560833524574,
+        "vikt": 828077,
+        "lcpElement": "<h1 class=\"mt-2 font-display text-[clamp(2rem,4vw,3.25rem)] font-semibold leading-[1.…\">"
+      }
+    ]
+  },
+  {
+    "sida": "/integritetspolicy",
+    "enhet": "mobil",
+    "korningar": 3,
+    "poang": 76,
+    "fcp": 939,
+    "lcp": 5915,
+    "tbt": 177,
+    "cls": 0,
+    "si": 939,
+    "viktKb": 818,
+    "lcpElement": "<p class=\"mt-6 text-[1.125rem] leading-[1.7] text-ink-muted\">",
+    "ravarden": [
+      {
+        "poang": 78,
+        "fcp": 927.5160000000001,
+        "lcp": 5918.789999999999,
+        "tbt": 113,
+        "cls": 0,
+        "si": 927.5160000000001,
+        "vikt": 837315,
+        "lcpElement": "<p class=\"mt-6 text-[1.125rem] leading-[1.7] text-ink-muted\">"
+      },
+      {
+        "poang": 76,
+        "fcp": 943.1131,
+        "lcp": 5915.117575,
+        "tbt": 177,
+        "cls": 0,
+        "si": 943.1131,
+        "vikt": 837312,
+        "lcpElement": "<p class=\"mt-6 text-[1.125rem] leading-[1.7] text-ink-muted\">"
+      },
+      {
+        "poang": 74,
+        "fcp": 938.626,
+        "lcp": 5907.939,
+        "tbt": 242,
+        "cls": 0,
+        "si": 938.626,
+        "vikt": 837313,
+        "lcpElement": "<p class=\"mt-6 text-[1.125rem] leading-[1.7] text-ink-muted\">"
+      }
+    ]
+  },
+  {
+    "sida": "/integritetspolicy",
+    "enhet": "desktop",
+    "korningar": 3,
+    "poang": 98,
+    "fcp": 303,
+    "lcp": 1163,
+    "tbt": 23,
+    "cls": 0,
+    "si": 436,
+    "viktKb": 818,
+    "lcpElement": "<p>",
+    "ravarden": [
+      {
+        "poang": 97,
+        "fcp": 350.67625,
+        "lcp": 1231.38125,
+        "tbt": 77,
+        "cls": 0.02259417185755434,
+        "si": 604.8167723157894,
+        "vikt": 837317,
+        "lcpElement": "<p>"
+      },
+      {
+        "poang": 98,
+        "fcp": 271.45,
+        "lcp": 1138.625,
+        "tbt": 4.5,
+        "cls": 0,
+        "si": 395.3374298246115,
+        "vikt": 837314,
+        "lcpElement": "<p class=\"mt-6 text-[1.125rem] leading-[1.7] text-ink-muted\">"
+      },
+      {
+        "poang": 98,
+        "fcp": 302.908,
+        "lcp": 1162.908,
+        "tbt": 23,
+        "cls": 0,
+        "si": 436.0009431700847,
+        "vikt": 837313,
+        "lcpElement": "<p class=\"mt-6 text-[1.125rem] leading-[1.7] text-ink-muted\">"
+      }
+    ]
+  }
+]

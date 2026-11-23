@@ -19,6 +19,20 @@
  *  - hack: bildrutor över 50 ms, det ögat läser som ett ryck.
  *  - långa uppgifter: antal och summerad tid över 50 ms.
  *
+ * ## Vem äger scrollen
+ *
+ * Sidan kan scrollas på två sätt. Med mjukscrollen (Lenis) flyttas sidan AV
+ * huvudtråden, så en sen huvudtrådsruta är ett ryck i själva scrollen. Med
+ * webbläsarens egen scroll flyttar kompositorn sidan, och då står scrollen
+ * stadigt även när huvudtråden släpar. Varje körning redovisar därför vem som
+ * ägde scrollen när den slutade (smooth-scroll.js lämnar över när bildrutor
+ * tappas). Måtten ovan gäller huvudtråden i båda fallen: under mjukscroll är de
+ * ryck i scrollen, under webbläsarens scroll är de animationer som släpar.
+ *
+ * Webbläsarens egen bildruterapport (PipelineReporter) provades 2026-11-23 och
+ * ströks: i ett fönster som styrs av Playwright rapporteras nästan varje
+ * bildruta som utebliven även när sidan går felfritt.
+ *
  * Medianen över KORNINGAR redovisas. Siffrorna gäller den här maskinen; det
  * som går att jämföra är före mot efter med samma inställningar.
  *
@@ -86,31 +100,50 @@ async function enKorning(browser, url, stryp) {
   });
 
   const hojd = await page.evaluate(() => document.documentElement.scrollHeight - innerHeight);
-  await page.mouse.move(VB / 2, VH / 2);
-  // Ett hjulsteg i taget med en bildrutas paus, som en hand på ett hjul.
-  // Mjukscrollen dämpar hjulet (wheelMultiplier), så antalet steg går inte att
-  // räkna ut: scrolla tills botten är nådd, med ett tak mot en sida som fastnat.
-  const steg = 120;
-  const tak = Math.ceil(hojd / steg) * 4 + 40;
-  const lage = () => page.evaluate(() => Math.round(scrollY));
+  if (!MOBIL) await page.mouse.move(VB / 2, VH / 2);
   let botten = 0;
-  for (let i = 0; i < tak; i++) {
-    await page.mouse.wheel(0, steg);
-    await page.waitForTimeout(16);
-    if (i % 15 === 14 && (botten = await lage()) >= hojd - 4) break;
+  const lage = () => page.evaluate(() => Math.round(scrollY));
+  if (MOBIL) {
+    // En telefon scrollar med fingret, och då äger webbläsaren scrollen själv
+    // (Lenis jämnar bara ut hjulet). Hjulhändelser i mobilemulering mäter
+    // därför fel sak: en svepgest är det besökaren faktiskt gör.
+    const svep = (avstand) =>
+      cdp.send("Input.synthesizeScrollGesture", {
+        x: Math.round(VB / 2),
+        y: Math.round(VH / 2),
+        yDistance: avstand,
+        speed: 1600,
+        gestureSourceType: "touch",
+        repeatCount: 1
+      });
+    for (let kvar = hojd; kvar > 0; kvar -= 2400) await svep(-Math.min(2400, kvar));
+    await page.waitForTimeout(800);
+    botten = await lage();
+    for (let kvar = hojd; kvar > 0; kvar -= 2400) await svep(Math.min(2400, kvar));
+    await page.waitForTimeout(800);
+  } else {
+    // Mjukscrollen dämpar hjulet (wheelMultiplier), så antalet steg går inte att
+    // räkna ut: scrolla tills botten är nådd, med ett tak mot en sida som fastnat.
+    const steg = 120;
+    const tak = Math.ceil(hojd / steg) * 4 + 40;
+    for (let i = 0; i < tak; i++) {
+      await page.mouse.wheel(0, steg);
+      await page.waitForTimeout(16);
+      if (i % 15 === 14 && (botten = await lage()) >= hojd - 4) break;
+    }
+    await page.waitForTimeout(1200);
+    botten = await lage();
+    for (let i = 0; i < tak; i++) {
+      await page.mouse.wheel(0, -steg);
+      await page.waitForTimeout(16);
+      if (i % 15 === 14 && (await lage()) <= 4) break;
+    }
+    await page.waitForTimeout(1200);
   }
-  await page.waitForTimeout(1200);
-  botten = await lage();
-  for (let i = 0; i < tak; i++) {
-    await page.mouse.wheel(0, -steg);
-    await page.waitForTimeout(16);
-    if (i % 15 === 14 && (await lage()) <= 4) break;
-  }
-  await page.waitForTimeout(1200);
 
   const m = await page.evaluate(() => {
     window.__mat.aktiv = false;
-    return { rutor: window.__mat.rutor, langa: window.__mat.langa };
+    return { rutor: window.__mat.rutor, langa: window.__mat.langa, mjuk: !!window.__lenis };
   });
   await context.close();
 
@@ -118,7 +151,7 @@ async function enKorning(browser, url, stryp) {
   return {
     laddning,
     hojd,
-    naddeBotten: botten >= hojd - 40,
+    naddeBotten: botten >= hojd - 80,
     rutor: s.length,
     p50: pct(s, 50),
     p95: pct(s, 95),
@@ -129,6 +162,7 @@ async function enKorning(browser, url, stryp) {
     langaAntal: m.langa.length,
     langaSumma: m.langa.reduce((a, b) => a + b, 0),
     langaMax: m.langa.length ? Math.max(...m.langa) : 0,
+    mjuk: m.mjuk,
     fel
   };
 }
@@ -144,7 +178,7 @@ for (const sida of SIDOR) {
       const r = await enKorning(browser, url, stryp);
       rader.push(r);
       console.log(
-        `  ${n}: p50 ${r.p50.toFixed(1)}  p95 ${r.p95.toFixed(1)}  p99 ${r.p99.toFixed(1)}  max ${r.max.toFixed(0)}  tappade ${r.tappade.toFixed(1)} %  hack ${r.hack}  långa ${r.langaAntal} st/${r.langaSumma.toFixed(0)} ms (max ${r.langaMax.toFixed(0)})${r.naddeBotten ? "" : "  [nådde inte botten]"}${r.fel.length ? "  JS-FEL: " + r.fel[0] : ""}`
+        `  ${n}: scroll: ${r.mjuk ? "mjuk" : "webbläsarens"}  |  p50 ${r.p50.toFixed(1)}  p95 ${r.p95.toFixed(1)}  p99 ${r.p99.toFixed(1)}  max ${r.max.toFixed(0)}  tappade ${r.tappade.toFixed(1)} %  hack ${r.hack}  långa ${r.langaAntal} st/${r.langaSumma.toFixed(0)} ms (max ${r.langaMax.toFixed(0)})${r.naddeBotten ? "" : "  [nådde inte botten]"}${r.fel.length ? "  JS-FEL: " + r.fel[0] : ""}`
       );
     }
     const med = {
@@ -159,10 +193,11 @@ for (const sida of SIDOR) {
       hack: median(rader.map((r) => r.hack)),
       langaAntal: median(rader.map((r) => r.langaAntal)),
       langaSumma: Math.round(median(rader.map((r) => r.langaSumma))),
-      langaMax: Math.round(median(rader.map((r) => r.langaMax)))
+      langaMax: Math.round(median(rader.map((r) => r.langaMax))),
+      mjukScroll: `${rader.filter((r) => r.mjuk).length} av ${rader.length}`
     };
     console.log(
-      `  MEDIAN: p50 ${med.p50} ms  p95 ${med.p95} ms  p99 ${med.p99} ms  max ${med.max} ms  tappade ${med.tappade} %  hack ${med.hack}  långa uppgifter ${med.langaAntal} st / ${med.langaSumma} ms`
+      `  MEDIAN: mjukscroll kvar i ${med.mjukScroll} körningar  |  p50 ${med.p50} ms  p95 ${med.p95} ms  p99 ${med.p99} ms  max ${med.max} ms  tappade ${med.tappade} %  hack ${med.hack}  långa uppgifter ${med.langaAntal} st / ${med.langaSumma} ms`
     );
     allt.push({ ...med, ravarden: rader });
   }

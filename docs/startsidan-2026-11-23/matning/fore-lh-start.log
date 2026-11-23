@@ -1,0 +1,20 @@
+
+http://localhost:3100/  [mobil]  5 körningar
+  1: poäng 51  FCP 1257  LCP 7557  TBT 936  CLS 0.000  SI 5362
+  2: poäng 49  FCP 1179  LCP 7633  TBT 1215  CLS 0.000  SI 4677
+  3: poäng 55  FCP 1298  LCP 7604  TBT 759  CLS 0.000  SI 4458
+  4: poäng 48  FCP 1459  LCP 7552  TBT 1105  CLS 0.000  SI 5681
+  5: poäng 51  FCP 1336  LCP 7502  TBT 929  CLS 0.000  SI 4953
+  MEDIAN: poäng 51  FCP 1298 ms  LCP 7557 ms  TBT 936 ms  CLS 0  SI 4953 ms  vikt 1306 kB
+
+http://localhost:3100/  [desktop]  5 körningar
+  1: poäng 91  FCP 259  LCP 1465  TBT 125  CLS 0.001  SI 1730
+  2: poäng 90  FCP 410  LCP 1563  TBT 118  CLS 0.001  SI 1914
+  3: poäng 88  FCP 293  LCP 1528  TBT 150  CLS 0.001  SI 1944
+  4: poäng 90  FCP 461  LCP 1612  TBT 89  CLS 0.001  SI 2026
+  5: poäng 88  FCP 291  LCP 1478  TBT 168  CLS 0.001  SI 1834
+  MEDIAN: poäng 90  FCP 293 ms  LCP 1528 ms  TBT 125 ms  CLS 0.001  SI 1914 ms  vikt 1306 kB
+
+Sparat: docs/demo-buddy/matning/fore-lighthouse-start.json
+(node:11232) [DEP0190] DeprecationWarning: Passing args to a child process with shell option true can lead to security vulnerabilities, as the arguments are not escaped, only concatenated.
+(Use `node --trace-deprecation ...` to show where the warning was created)

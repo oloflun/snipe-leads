@@ -1,0 +1,132 @@
+[
+  {
+    "sida": "/",
+    "enhet": "mobil",
+    "korningar": 5,
+    "poang": 73,
+    "fcp": 1232,
+    "lcp": 5274,
+    "tbt": 260,
+    "cls": 0,
+    "si": 4188,
+    "viktKb": 734,
+    "lcpElement": "<img data-mo=\"hero-img\" src=\"http://localhost:3100/photos/goteborg-golden-1280.webp\" srcset=\"/photos/goteborg-golden-1280.webp 1280w, /photos/goteborg-golden.webp 2200w\" sizes=\"(max-width: 767px) 630px, (max-aspect-ratio: 3/2) 150vh, 100vw\" alt=\"Göteborg sett från höjden i gyllene kvällsljus\" class=\"absolute inset-x-0 top-0 h-[420px] w-full bg-ink object-cover object-cente…\" fetchpriority=\"high\" style=\"translate: none; rotate: none; scale: none; transform: translate(0px, 0px);\">",
+    "ravarden": [
+      {
+        "poang": 74,
+        "fcp": 1372.556,
+        "lcp": 5192.112000000001,
+        "tbt": 242.0000000000009,
+        "cls": 0.00031082630021490046,
+        "si": 4198.304001961878,
+        "vikt": 751788,
+        "lcpElement": "<img data-mo=\"hero-img\" src=\"http://localhost:3100/photos/goteborg-golden-1280.webp\" srcset=\"/photos/goteborg-golden-1280.webp 1280w, /photos/goteborg-golden.webp 2200w\" sizes=\"(max-width: 767px) 630px, (max-aspect-ratio: 3/2) 150vh, 100vw\" alt=\"Göteborg sett från höjden i gyllene kvällsljus\" class=\"absolute inset-x-0 top-0 h-[420px] w-full bg-ink object-cover object-cente…\" fetchpriority=\"high\" style=\"translate: none; rotate: none; scale: none; transform: translate(0px, 0px);\">"
+      },
+      {
+        "poang": 72,
+        "fcp": 1235.931,
+        "lcp": 5273.862000000001,
+        "tbt": 298.0000000000009,
+        "cls": 0.00033724259320093214,
+        "si": 4143.448305510459,
+        "vikt": 751788,
+        "lcpElement": "<img data-mo=\"hero-img\" src=\"http://localhost:3100/photos/goteborg-golden-1280.webp\" srcset=\"/photos/goteborg-golden-1280.webp 1280w, /photos/goteborg-golden.webp 2200w\" sizes=\"(max-width: 767px) 630px, (max-aspect-ratio: 3/2) 150vh, 100vw\" alt=\"Göteborg sett från höjden i gyllene kvällsljus\" class=\"absolute inset-x-0 top-0 h-[420px] w-full bg-ink object-cover object-cente…\" fetchpriority=\"high\" style=\"translate: none; rotate: none; scale: none; transform: translate(0px, 0px);\">"
+      },
+      {
+        "poang": 73,
+        "fcp": 1231.92195,
+        "lcp": 5314.609749999999,
+        "tbt": 260.4219500000004,
+        "cls": 0.00037617755301455337,
+        "si": 4207.5538310718875,
+        "vikt": 751786,
+        "lcpElement": "<img data-mo=\"hero-img\" src=\"http://localhost:3100/photos/goteborg-golden-1280.webp\" srcset=\"/photos/goteborg-golden-1280.webp 1280w, /photos/goteborg-golden.webp 2200w\" sizes=\"(max-width: 767px) 630px, (max-aspect-ratio: 3/2) 150vh, 100vw\" alt=\"Göteborg sett från höjden i gyllene kvällsljus\" class=\"absolute inset-x-0 top-0 h-[420px] w-full bg-ink object-cover object-cente…\" fetchpriority=\"high\" style=\"translate: none; rotate: none; scale: none; transform: translate(0px, 0px);\">"
+      },
+      {
+        "poang": 75,
+        "fcp": 1165.9749000000002,
+        "lcp": 5304.874500000002,
+        "tbt": 203.5,
+        "cls": 0.00038001403693106636,
+        "si": 3945.8051569666486,
+        "vikt": 751790,
+        "lcpElement": "<img data-mo=\"hero-img\" src=\"http://localhost:3100/photos/goteborg-golden-1280.webp\" srcset=\"/photos/goteborg-golden-1280.webp 1280w, /photos/goteborg-golden.webp 2200w\" sizes=\"(max-width: 767px) 630px, (max-aspect-ratio: 3/2) 150vh, 100vw\" alt=\"Göteborg sett från höjden i gyllene kvällsljus\" class=\"absolute inset-x-0 top-0 h-[420px] w-full bg-ink object-cover object-cente…\" fetchpriority=\"high\" style=\"translate: none; rotate: none; scale: none; transform: translate(0px, 0px);\">"
+      },
+      {
+        "poang": 66,
+        "fcp": 1173.96075,
+        "lcp": 5212.901875,
+        "tbt": 503.0000000000018,
+        "cls": 0.0003150253915287295,
+        "si": 4188.271794874008,
+        "vikt": 751785,
+        "lcpElement": "<img data-mo=\"hero-img\" src=\"http://localhost:3100/photos/goteborg-golden-1280.webp\" srcset=\"/photos/goteborg-golden-1280.webp 1280w, /photos/goteborg-golden.webp 2200w\" sizes=\"(max-width: 767px) 630px, (max-aspect-ratio: 3/2) 150vh, 100vw\" alt=\"Göteborg sett från höjden i gyllene kvällsljus\" class=\"absolute inset-x-0 top-0 h-[420px] w-full bg-ink object-cover object-cente…\" fetchpriority=\"high\" style=\"translate: none; rotate: none; scale: none; transform: translate(0px, 0px);\">"
+      }
+    ]
+  },
+  {
+    "sida": "/",
+    "enhet": "desktop",
+    "korningar": 5,
+    "poang": 94,
+    "fcp": 300,
+    "lcp": 1449,
+    "tbt": 1,
+    "cls": 0.001,
+    "si": 1382,
+    "viktKb": 821,
+    "lcpElement": "<div class=\"ln\" style=\"position: relative; display: block; text-align: start; translate: none;\">",
+    "ravarden": [
+      {
+        "poang": 94,
+        "fcp": 296.8552,
+        "lcp": 1435.6379999999997,
+        "tbt": 39.57239999999996,
+        "cls": 0.0012474112154511612,
+        "si": 1381.9891027317913,
+        "vikt": 840750,
+        "lcpElement": "<div class=\"ln\" style=\"position: relative; display: block; text-align: start; translate: none;\">"
+      },
+      {
+        "poang": 94,
+        "fcp": 299.772,
+        "lcp": 1461.4299999999994,
+        "tbt": 1,
+        "cls": 0.0011644572004334774,
+        "si": 1376.2551976909801,
+        "vikt": 840750,
+        "lcpElement": "<div class=\"ln\" style=\"position: relative; display: block; text-align: start; translate: none;\">"
+      },
+      {
+        "poang": 94,
+        "fcp": 297.532,
+        "lcp": 1435.83,
+        "tbt": 0.5,
+        "cls": 0.001152621424390919,
+        "si": 1338.065733891593,
+        "vikt": 840747,
+        "lcpElement": "<div class=\"ln\" style=\"position: relative; display: block; text-align: start; translate: none;\">"
+      },
+      {
+        "poang": 94,
+        "fcp": 403.48499999999996,
+        "lcp": 1448.8949999999998,
+        "tbt": 10.999999999999886,
+        "cls": 0.0010424325128641785,
+        "si": 1466.3371955198,
+        "vikt": 840748,
+        "lcpElement": "<div class=\"ln\" style=\"position: relative; display: block; text-align: start; translate: none;\">"
+      },
+      {
+        "poang": 94,
+        "fcp": 301.52410000000003,
+        "lcp": 1503.3584500000002,
+        "tbt": 1,
+        "cls": 0.0010425866185078834,
+        "si": 1427.351044568762,
+        "vikt": 840747,
+        "lcpElement": "<div class=\"ln\" style=\"position: relative; display: block; text-align: start; translate: none;\">"
+      }
+    ]
+  }
+]

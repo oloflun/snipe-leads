@@ -1,0 +1,18 @@
+
+http://localhost:3100/  1440x900  CPU 4x  5 körningar
+  1: p50 16.7  p95 33.4  p99 50.1  max 134  tappade 24.0 %  hack 9  långa 1 st/52 ms (max 52)
+  2: p50 16.7  p95 33.4  p99 50.1  max 66  tappade 25.1 %  hack 10  långa 0 st/0 ms (max 0)
+  3: p50 16.7  p95 33.5  p99 50.0  max 67  tappade 26.2 %  hack 5  långa 0 st/0 ms (max 0)
+  4: p50 16.7  p95 33.4  p99 50.0  max 67  tappade 23.4 %  hack 5  långa 1 st/51 ms (max 51)
+  5: p50 16.7  p95 33.6  p99 50.1  max 83  tappade 27.7 %  hack 9  långa 0 st/0 ms (max 0)
+  MEDIAN: p50 16.7 ms  p95 33.4 ms  p99 50.1 ms  max 67 ms  tappade 25.1 %  hack 9  långa uppgifter 0 st / 0 ms
+
+http://localhost:3100/  1440x900  CPU 6x  5 körningar
+  1: p50 16.8  p95 64.3  p99 83.0  max 117  tappade 41.0 %  hack 61  långa 29 st/1734 ms (max 94)
+  2: p50 16.8  p95 50.3  p99 83.2  max 150  tappade 36.0 %  hack 66  långa 21 st/1364 ms (max 129)
+  3: p50 16.8  p95 66.7  p99 83.4  max 133  tappade 45.1 %  hack 85  långa 56 st/3271 ms (max 82)
+  4: p50 16.9  p95 66.7  p99 99.9  max 150  tappade 46.0 %  hack 95  långa 65 st/3946 ms (max 83)
+  5: p50 16.8  p95 66.7  p99 100.0  max 150  tappade 44.1 %  hack 88  långa 61 st/3681 ms (max 91)
+  MEDIAN: p50 16.8 ms  p95 66.7 ms  p99 83.4 ms  max 150 ms  tappade 44.1 %  hack 85  långa uppgifter 56 st / 3271 ms
+
+Sparat: docs/demo-buddy/matning/efter-scroll-desktop.json
