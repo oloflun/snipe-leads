@@ -9,6 +9,51 @@ möjligt), vad det betyder i koden.
 
 ---
 
+## 2026-11-23 — Startsidan: mjukscrollen lämnar över när den inte håller takten (Claude på Sebastians uppdrag, inte bekräftat av Anton)
+
+**Beslut.** På grenen `buddy-demo-prep`:
+1. Mjukscrollen (Lenis, Antons hustakt 2026-09-25) står kvar som den är, men lämnar
+   över till webbläsarens egen scroll när bildrutor tappas: under sidans första fyra
+   sekunder om 35 % av de sextio senaste bildrutorna tog över 25 ms, därefter under
+   scroll om 20 % gjorde det. Valet minns för webbläsarsessionen. Kod: `smooth-scroll.js`.
+2. Dygnsljusets färger skrivs i steg om 0,0025 i OKLab i stället för varje bildruta.
+3. Rörelsen ställs upp i två omgångar: det som ligger inom en och en halv skärm
+   direkt, resten i pass om åtta millisekunder. Ett element som besökaren hunnit
+   skrolla till innan dess pass kommit står färdigt utan avslöjande.
+4. Text som skrivs fram uppdateras högst var trettionde millisekund.
+5. `gsap.js` laddar bara gsap, ScrollTrigger och SplitText, inte alla arton tillägg.
+6. Typsnitten förladdas per sida: Source Serif 4 bara på marknadssidorna, Fraunces
+   bara på de sidor som ritar med den.
+
+**Resonemanget.** Sebastians uppdrag: "När startsidan laddas laggar och hackar den,
+särskilt vid scroll nedåt när texter och bilder animeras/visas. Det får inte laggas
+alls", och "Ändra inte sajtens utseende/design". Mätningen (produktionsbygge, fyra
+gångers CPU-strypning, `scripts/mat_startsida_*.mjs`) visade att 24 % av bildrutorna
+tappades under scroll. Den största enskilda orsaken gick inte att bygga bort utan att
+röra hustakten: Lenis flyttar sidan från huvudtråden, och varje scrollad bildruta
+kostade runt 17 ms där även när ingenting på sidan rörde sig. Med webbläsarens egen
+scroll kostar samma bildruta en tredjedel, och scrollen står stadigt även när
+huvudtråden släpar. Att ta bort mjukscrollen hade löst hacket men ändrat sidans
+känsla för alla, också där den går bra. Därför en säkring i stället för ett byte.
+
+**Vad Anton behöver ta ställning till.** Punkt 1 ändrar känslan för den som har en
+långsam eller upptagen maskin: scrollen blir webbläsarens vanliga. Trösklarna (35 %
+och 20 %) är satta efter mätning på en maskin och går att flytta. Punkt 3 gör att ett
+avslöjande kan utebli för den som skrollar mycket fort direkt efter laddningen.
+Punkterna 2, 4, 5 och 6 syns inte: en jämförelse bild för bild
+(`scripts/jamfor_startsida.mjs`) gav en nivå per färgkanal i skillnad.
+
+**Vad det inte löste.** Målen i uppdraget (Lighthouse mobil 90, LCP under 2,5 s, TBT
+under 200 ms) nås inte. Siffrorna före och efter, och vad som återstår, står i
+`docs/startsidan-2026-11-23/RAPPORT.md` avsnitt 3.
+
+**I koden.** `smooth-scroll.js`, `gsap.js`, `components/marketing/useLandingMotion.ts`,
+`lib/skrivs.ts`, `lib/fonts.ts`, `lib/fonts-rubrik.ts`, `lib/fonts-landning.ts`,
+`app/globals.css` (`.ground`, `.light`, `.kapitel-ljus`), `next.config.ts` (cache för
+`public/`), `components/marketing/copy-sections.ts` (`photoSet`).
+
+---
+
 ## 2026-11-23 — Verify bantas; Dependabot öppnar inga egna pull requests (Anton)
 
 **Beslut.**
