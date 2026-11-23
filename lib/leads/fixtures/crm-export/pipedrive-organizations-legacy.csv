@@ -1,0 +1,5 @@
+Organization - ID,Organization - Name,Organization - Owner,Organization - Address,Organization - Label,Organization - People,Organization - Open deals,Organization - Organisationsnummer,Organization - Website
+101,Iota Ventilation Test AB,Test Säljare,"Storgatan 1, 903 26 Umeå, Sverige",Hot lead,2,1,569900-0112,iota.example.se
+102,Kappa Kök Test AB,Test Säljare,"Kungsgatan 12, 411 19 Göteborg",Customer,1,0,5699000120,https://www.kappa.example.se
+103,Lambda Lås & Larm Test AB,,,Warm lead,0,2,,
+104,My Måleri Test HB,Test Säljare,"Box 123, 111 22 Stockholm",,3,0,969900-0148,http://my.example.se

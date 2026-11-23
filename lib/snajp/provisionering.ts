@@ -101,7 +101,9 @@ export async function sakerstallKundtenant(
   /** Onboardingens målgruppssteg. Bara uppstarten har det. */
   malgrupp?: Malgruppsfilter,
   /** Onboardingens erbjudanden, ett per stycke. Bara uppstarten har dem. */
-  erbjudanden?: string[]
+  erbjudanden?: string[],
+  /** Onboardingens röstdokument. Bara uppstarten har det. */
+  rost?: string
 ): Promise<Kundtenant | null> {
   if (workspace.slug) {
     // Redan kopplad. Den här funktionen kopplar; den flyttar aldrig en
@@ -146,7 +148,7 @@ export async function sakerstallKundtenant(
     return null;
   }
 
-  await fyllStandardinstallningar(apiKey, workspace, businessContext, malgrupp, erbjudanden);
+  await fyllStandardinstallningar(apiKey, workspace, businessContext, malgrupp, erbjudanden, rost);
 
   return { slug: tenant.slug, apiKey };
 }
@@ -164,7 +166,8 @@ export async function fyllStandardinstallningar(
   workspace: Workspace,
   businessContext: Kundunderlag | null,
   malgrupp?: Malgruppsfilter,
-  erbjudanden?: string[]
+  erbjudanden?: string[],
+  rost?: string
 ): Promise<void> {
   if (!businessContext) {
     // Inget underlag att härleda ur. Att skriva defaultarna ändå hade gett
@@ -181,7 +184,8 @@ export async function fyllStandardinstallningar(
     nastaSteg: businessContext.cta,
     namn: workspace.name,
     malgruppsfilter: malgrupp,
-    erbjudanden
+    erbjudanden,
+    rost
   });
 
   if (utfall.produktbeskrivning || utfall.rostdokument || utfall.icp || utfall.erbjudanden) {

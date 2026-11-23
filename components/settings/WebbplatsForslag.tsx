@@ -2,7 +2,7 @@
 
 import { ExternalLink, Loader2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
-import { Rad, Radlista, btnLiten, btnPrimary, btnSecondary, meta, rubrikPanel } from "@/components/ui";
+import { Rad, Radlista, btnLiten, btnPrimary, btnSecondary, etikett, faltTatt, meta, rubrikPanel } from "@/components/ui";
 import { felmeddelande, kroppsbesked, readJsonBody } from "@/lib/http/json";
 import { useLocale, type Localized } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
@@ -199,6 +199,14 @@ const T = {
     sv: "Alla förslag från {sajt} är hanterade.",
     en: "All suggestions from {sajt} have been handled."
   },
+  startRubrik: { sv: "Läs in er webbplats", en: "Read your website" },
+  startText: {
+    sv: "Vi läser er webbplats och skriver förslag till kunskapsbasen. De blir artiklar först när ni lägger till dem.",
+    en: "We read your website and write suggestions for the knowledge base. They become articles only when you add them."
+  },
+  startAdress: { sv: "Webbplats", en: "Website" },
+  startExempel: { sv: "exempel.se", en: "example.se" },
+  startKnapp: { sv: "Läs in webbplatsen", en: "Read the website" },
   felRubrik: { sv: "Webbplatsen gick inte att läsa", en: "The website could not be read" },
   forsokIgen: { sv: "Försök igen", en: "Try again" },
   laggTill: { sv: "Lägg till", en: "Add" },
@@ -230,6 +238,8 @@ export function WebbplatsForslag({ onAndrat }: Readonly<{ onAndrat: () => void }
   const [upptagen, setUpptagen] = useState<string | null>(null);
   const [besked, setBesked] = useState<Localized | null>(null);
   const [atgardsfel, setAtgardsfel] = useState<Localized | null>(null);
+  /** Adressen i startformuläret, när ingen skanning har körts. */
+  const [adress, setAdress] = useState("");
 
   const skanning = lage?.skanning ?? null;
   const forslag = lage?.forslag ?? [];
@@ -265,15 +275,15 @@ export function WebbplatsForslag({ onAndrat }: Readonly<{ onAndrat: () => void }
     }
   }
 
-  async function skannaIgen() {
-    if (!skanning) return;
+  async function skanna(webbplats: string) {
+    if (!webbplats.trim()) return;
     setUpptagen("skanna");
     setAtgardsfel(null);
     try {
       const svar = await fetch("/api/snajp-support/kb/skanna", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ webbplats: skanning.webbplats, spara: true, startad_av: "kund" })
+        body: JSON.stringify({ webbplats: webbplats.trim(), spara: true, startad_av: "kund" })
       });
       if (!svar.ok && svar.status !== 422) {
         const kropp = await readJsonBody<{ detail?: string; error?: string }>(svar);
@@ -287,8 +297,51 @@ export function WebbplatsForslag({ onAndrat }: Readonly<{ onAndrat: () => void }
     }
   }
 
-  // Ingen skanning har körts: inget att visa. Kunskapsbasen fungerar som förut.
-  if (!skanning && !fel) return null;
+  // Läget är inte hämtat än: inget att visa.
+  if (!lage && !fel) return null;
+
+  // Ingen skanning har körts. Onboardingen startar den, men en arbetsyta från
+  // före den, eller en där starten föll, hade ingen väg hit: panelen visades
+  // inte alls och kunskapsbasen stod tom utan förklaring (produktion
+  // 2026-11-23). Kunden startar den första inläsningen själv här.
+  if (!skanning && !fel) {
+    return (
+      <section aria-labelledby="webbplatsforslag" className="rounded-card border border-ink/15 bg-paper p-5">
+        <h3 id="webbplatsforslag" className={rubrikPanel}>
+          {text(T.startRubrik)}
+        </h3>
+        <p className="mt-2 max-w-[70ch] text-[0.9375rem] leading-6 text-ink-muted">{text(T.startText)}</p>
+        <form
+          className="mt-4 flex flex-wrap items-end gap-3"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void skanna(adress);
+          }}
+        >
+          <label className="grid min-w-0 flex-1 gap-1.5 sm:max-w-[360px]">
+            <span className={etikett}>{text(T.startAdress)}</span>
+            <input
+              value={adress}
+              onChange={(e) => setAdress(e.target.value)}
+              placeholder={text(T.startExempel)}
+              inputMode="url"
+              autoComplete="url"
+              className={cn(faltTatt, "w-full")}
+            />
+          </label>
+          <button type="submit" disabled={upptagen !== null || !adress.trim()} className={btnPrimary}>
+            {upptagen === "skanna" ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
+            {text(T.startKnapp)}
+          </button>
+        </form>
+        {atgardsfel ? (
+          <p role="alert" className="mt-2 break-words text-[0.9375rem] text-danger">
+            {text(atgardsfel)}
+          </p>
+        ) : null}
+      </section>
+    );
+  }
 
   return (
     <section aria-labelledby="webbplatsforslag" className="rounded-card border border-ink/15 bg-paper p-5">
@@ -347,7 +400,7 @@ export function WebbplatsForslag({ onAndrat }: Readonly<{ onAndrat: () => void }
           <button
             type="button"
             disabled={upptagen !== null}
-            onClick={() => void skannaIgen()}
+            onClick={() => void skanna(skanning.webbplats)}
             className={cn(btnSecondary, "mt-3")}
           >
             {upptagen === "skanna" ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}

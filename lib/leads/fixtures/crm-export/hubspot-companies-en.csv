@@ -1,0 +1,5 @@
+Record ID,City,Company Domain Name,Company name,Company owner,Country/Region,Create Date,Industry,Lifecycle Stage,Number of Employees,Organisationsnummer,Phone Number,Website URL
+17012345601,Umeå,alfabygg.example.se,Alfa Bygg Test AB,Test Säljare,Sweden,2026-02-01 08:00,CONSTRUCTION,customer,24,569900-0013,08-465 004 01,https://www.alfabygg.example.se
+17012345602,Göteborg,betakonsult.example.se,Beta Konsult Test AB,Test Säljare,Sweden,2026-02-03 11:12,MANAGEMENT_CONSULTING,lead,7,5699000021,031-390 69 02,betakonsult.example.se
+17012345603,"Stockholm, Kista",gamma.example.com,Gamma Gruppen Test AB,,Sweden,2026-03-10 09:41,COMPUTER_SOFTWARE,opportunity,120,569900-0039,+46 8 465 004 03,http://gamma.example.com
+17012345604,Luleå,deltael.example.se,Delta El Test AB,Test Säljare,Sweden,2026-04-22 14:00,,customer,3,,040-628 04 56,

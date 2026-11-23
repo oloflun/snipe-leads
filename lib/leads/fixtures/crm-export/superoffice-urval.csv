@@ -1,0 +1,5 @@
+Företag;Org.nr;Kategori;Vår kontakt;Person;Titel;E-post;Telefon;Webbadress
+Tau Trafik Test AB;569900-0815;Kund;Test Säljare;Erik Malm;VD;erik.malm@example.se;070-174 06 80;www.tautrafik.example.se
+Ypsilon Yrke Test AB;5699000823;Prospekt;Test Säljare;Frida Ros;HR-chef;frida.ros@example.se;08-465 004 81;https://ypsilon.example.se
+Fi Fönster Test AB;;Prospekt;;Gustav Al;;;+46 70 174 06 82;
+Chi Chark Test AB;569900-0849;Leverantör;Test Säljare;Helga Björk;Inköp;helga@example.com;;chi.example.com

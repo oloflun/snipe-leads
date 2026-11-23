@@ -1,0 +1,5 @@
+Post-ID,E-post,Efternamn,Förnamn,Företagsnamn,Jobbtitel,Leadstatus,Livscykelfas,Telefonnummer,Webbadress
+85309876501,karin.sjo@example.se,Sjö,Karin,Epsilon Måleri Test AB,Verksamhetschef,OPEN,lead,070-174 06 10,www.epsilon.example.se
+85309876502,per@example.se,Åberg,Per,Zeta Åkeri Test AB,VD,NEW,customer,+46701740611,https://zeta.example.se
+85309876503,lena.ostlund@example.com,Östlund,Lena,Eta Städ Test AB,,,lead,08-465 004 12,
+85309876504,nils@example.se,Ström,Nils,Theta Tak Test AB,Ägare,CONNECTED,opportunity,,theta.example.se

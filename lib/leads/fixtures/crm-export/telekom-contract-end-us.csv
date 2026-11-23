@@ -1,0 +1,5 @@
+Account,Company Reg. No.,Contact,Title,Phone,Email,Website,Contract End Date
+Alfa Antenn Test AB,569900-2415,Petra Qvarn,CEO,+46 70 174 06 38,petra@example.se,alfa-antenn.example.se,3/31/2027
+Beta Bas Test AB,5699002423,Rolf Sten,Office Manager,070-174 06 39,rolf@example.com,https://beta-bas.example.com,1/12/2027
+"Gamma Gate, Test AB",,Sofia Tran,,08-465 004 40,,,12/31/2026
+Delta Dock Test AB,569900-2449,,,,hello@example.com,www.deltadock.example.se,

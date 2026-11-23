@@ -1,0 +1,5 @@
+Företagsnamn;Org.nr;Bolagsform;Utdelningsadress;Postnr;Postort;Telefon;Hemsida;VD;Antal anställda;Omsättning (tkr)
+Epsilon Elinstallation Test AB;569900-1318;Aktiebolag;Elvägen 5;906 20;Umeå;040-628 04 60;www.epsilon-el.example.se;Hanna Juhl;14;18 400
+Zeta Zement Test AB;5699001326;Aktiebolag;Box 77;941 22;Piteå;070-174 06 08;;Isak Kvarn;3;2 150
+Eta Entreprenad Test HB;969900-1336;Handelsbolag;;;Skellefteå;;eta-entreprenad.example.se;;1;780
+Theta Transport, Test AB;569900-1342;Aktiebolag;Lastvägen 1;972 54;Luleå;+46 40 628 04 63;https://theta-transport.example.se;Jon Lax;22;31 900

@@ -304,7 +304,20 @@ export async function requireSnajpTenant(): Promise<SnajpTenant> {
    * Arbetsytan får därför sin tenant här, en gång, och kundens uppgifter ur
    * uppstartsformuläret blir samtidigt standardinställningar (se
    * lib/snajp/provisionering.ts). Går det inte står felet kvar som förut.
+   *
+   * Bara när onboardingen är gjord. Onboardingen äger kopplingen, eftersom
+   * bara den vet om arbetsytan är en testarbetsyta och bara den bär målgruppen,
+   * erbjudandena och röstdokumentet. Produktion 2026-11-23: en annan öppen
+   * flik anropade proxyn innan onboardingen skickats in, arbetsytan kopplades
+   * här utan underlag, och onboardingens egen koppling nekades sedan.
    */
+  if (!workspace.slug && !context.businessContext) {
+    throw new SnajpTenantError(
+      409,
+      "Arbetsytan är inte klar ännu. Gör färdigt uppstarten först.",
+      "ej_aktiverad"
+    );
+  }
   if (!workspace.slug) {
     const { sakerstallKundtenant } = await import("@/lib/snajp/provisionering");
     const nykopplad = await sakerstallKundtenant(user.id, workspace, context.businessContext);

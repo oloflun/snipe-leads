@@ -69,7 +69,8 @@ unfinished.
 |---|---|---|
 | Marketing | `/`, `/leads`, `/support` | Hero → problem → statement → live demo → place → steps → objections → limits → close |
 | App | `/dashboard/*`, `/settings/*`, `/demo/*` | Workbench: fast ink-vänsterrail (ikonrail <lg, ochre-markör på aktiv flik — sidans EN tonala inversion), dense rows, fasta tabeller (`Tabell`/`Radlista` i components/ui.tsx: deklarerade kolumnbredder, etikett-huvuden, tnum), fixed type scale (se § App surfaces), ingen mikrotext, no hero, no reveals, no imagery. Samma railmönster som bokforing-webb/components/Sidebar.tsx |
-| Content | `/login`, `/onboarding`, `/not-found` | Single column, typography only |
+| Content | `/onboarding`, `/not-found` | Single column, typography only |
+| Door | `/login` | The landing page's photograph full-bleed, the heading set on it with one marked word in ochre, the form on a paper plate with a hairline. On mobile the photograph is a band above the form. Chosen 2026-11-23 from four built proposals (`koncept/login-2026-11-23`), after the ink-panel version read as "more basic than before". The band and heading colours on the photograph are fixed values, not theme tokens: the photograph is equally dark in both themes |
 
 ## Theme
 

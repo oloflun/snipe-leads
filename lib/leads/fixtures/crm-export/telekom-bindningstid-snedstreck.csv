@@ -1,0 +1,5 @@
+Företag;Organisationsnummer;Kontakt;Roll;Mobilnummer;Mejl;Operatör;Bindningstid t.o.m.
+Rho Rost Test AB;569900-2217;Jill Kant;IT-ansvarig;070-174 06 32;jill@example.se;Operatör A;31/3/2027
+Sigma Spa Test AB;5699002225;Kurt Lo;VD;0701740633;kurt@example.se;Operatör B;1/12/2026
+Tau Tunnel Test AB;569900-2233;Liv Moln;;+46 70 174 06 34;;Operatör A;15/10/2027
+Ypsilon Yrkes Test AB;;;;;kontor@example.com;Operatör C;

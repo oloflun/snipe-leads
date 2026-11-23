@@ -1,0 +1,5 @@
+First Name,Last Name,Job Title,Company Name,Company Domain,Email 1,Email 2,Phone 1,Phone 1 Type,Phone 2,Phone 2 Type,Country,LinkedIn URL
+Tea,Ros,CTO,Iota Ingenjör Test AB,iota-ing.example.se,tea.ros@example.se,,+46 70 174 06 89,Mobile,+46 8 465 004 89,Direct,Sweden,https://www.linkedin.com/in/example-tea-ros
+Ulrik,Salt,VD,Kappa Kran Test AB,kappakran.example.se,ulrik@example.se,ulrik.salt@example.com,,,,,Sweden,
+Viola,Tjärn,Head of Procurement,Lambda Lyft Test AB,lambda.example.com,,,+46701740690,Mobile,,,Sweden,
+Wille,Udd,Ägare,My Möbler Test AB,mymobler.example.se,wille@example.se,,+46313906991,Direct,,,Sweden,

@@ -9,8 +9,8 @@ import { formateraOrgnr, orgnrFel } from "@/lib/orgnr";
  * Bolagsfälten är fyra, inte åtta — de gamla åtta var förifyllda med påhittade
  * värden som gick att skicka in rakt av (se OnboardingWizard, som ärvde
  * lärdomen). Sedan 2026-09-20 bär flödet dessutom bransch, kontaktperson och
- * paketval, och sedan 2026-09-30 leadsagentens målgrupp — i fem steg, se
- * components/auth/OnboardingWizard.tsx.
+ * paketval, sedan 2026-09-30 leadsagentens målgrupp och sedan 2026-11-23
+ * röstdokumentet — i sex steg, se components/auth/OnboardingWizard.tsx.
  */
 export type OnboardingInput = {
   /**
@@ -34,6 +34,12 @@ export type OnboardingInput = {
    * erbjudande per stycke. Valfritt.
    */
   erbjudanden?: string;
+  /**
+   * Röstdokumentet ur steget Röst och ton: hur agenterna ska låta. Förifyllt med
+   * utkastet i lib/snajp/standard.ts och ändrat av kunden (Anton 2026-11-23).
+   * Tomt betyder att utkastet gäller.
+   */
+  rost?: string;
   /**
    * Målgruppssteget — leads-agentens grundfilter, som råa fältvärden
    * (kommaseparerade listor, tal som text). Tolkas här, på serversidan, och
@@ -246,6 +252,8 @@ export async function saveBusinessContext(input: OnboardingInput): Promise<Onboa
   }
 
   const fokus = input.fokus.trim();
+  // Samma tak som röstdokumentet har i backenden (SoulRequest, 4000 tecken).
+  const rost = (input.rost ?? "").trim().slice(0, 4000);
   // Ett erbjudande per stycke (tom rad emellan), högst fem, som i Leads › Erbjudanden.
   const erbjudanden = (input.erbjudanden ?? "")
     .split(/\n\s*\n/)
@@ -348,7 +356,7 @@ export async function saveBusinessContext(input: OnboardingInput): Promise<Onboa
       `Vad vi säljer: ${produkt}`,
       fokus ? `Särskilt fokus: ${fokus}` : null,
       // Står här också: affärskontexten tappas aldrig, även om erbjudande-
-      // inställningarna inte hann skrivas (testarbetsytor får dem inte alls).
+      // inställningarna inte hann skrivas.
       ...erbjudanden.map((e, i) => `Vårt erbjudande i utskicken${erbjudanden.length > 1 ? ` ${i + 1}` : ""}: ${e}`),
       // Kontaktpersonen står i texten OCKSÅ när CRM-skrivningen lyckas:
       // affärskontexten är det lager som aldrig tappas bort, och admin-
@@ -450,182 +458,129 @@ export async function saveBusinessContext(input: OnboardingInput): Promise<Onboa
   }
 
   /**
-   * Testarbetsytan får en EGEN backend-tenant (migration 040).
+   * Arbetsytan får sin backend-kund här, och det kunden just skrev blir
+   * STANDARDINSTÄLLNINGAR i backenden (lib/snajp/standard.ts):
+   * produktbeskrivningen agenten faktiskt läser (`context_docs` med kind
+   * `product_marketing`, inte `business_contexts`), röstdokumentet, målgruppen
+   * och erbjudandena.
    *
-   * Den delade `testkund`-tenanten finns kvar som fallback och beskrivs nedan.
-   * Skälet att den inte längre är förstahandsvalet: delad tenant = delad
-   * kunskapsbas, och en testkunds villkor kunde grunda ett svar till en annan
-   * testkunds kund.
+   * Tre vägar, valda i lib/snajp/kopplingsvag.ts:
    *
-   * Utan det här är bypassen halvfärdig. Uppmätt mot dev-deployen 2026-08-19:
-   * den nyskapade testkunden mötte 409 på Kontroll, Kundtjänst och Röst,
-   * eftersom `requireSnajpTenant()` härleder kunden ur `workspaces.slug` och
-   * den var null. En testkund som inte kan använda produkten testar ingenting.
+   *  - Testarbetsytan får en EGEN tenant (`testkund-<8>`, migration 040). Den
+   *    delade `testkund`-tenanten (migration 038) betydde delad inkorg, delad
+   *    kunskapsbas och delat röstdokument: ett svar till en testkunds kund
+   *    kunde grundas i en annan testkunds villkor, och grundningsgrinden ser
+   *    en träff utan att se att artikeln kom från fel företag. Den delade
+   *    tenanten finns kvar som reserv när backenden inte svarar.
+   *  - En riktig kund får sin (`kund-<8>`, migration 061). Före den lämnade en
+   *    vanlig registrering `workspaces.slug` som null, och
+   *    `requireSnajpTenant()` svarade 409 på varje inloggad yta tills någon
+   *    körde `scripts/onboard_tenant.py` för hand.
+   *  - En arbetsyta som REDAN har en kund behåller den, vad testrutan än
+   *    säger. Ett anrop genom proxyn från en annan flik kan ha kopplat den
+   *    (`requireSnajpTenant()`). Uppmätt för riktiga kunder i development
+   *    2026-11-18, och för en testarbetsyta i produktion 2026-11-23: testvägen
+   *    togs ändå, `link_test_tenant` nekade, felet svaldes, och
+   *    webbplatsskanningen, målgruppen och erbjudandena skrevs aldrig.
    *
-   * Bara för testarbetsytor. En RIKTIG kund kopplas av
-   * `scripts/onboard_tenant.py` till en EGEN tenant — en delad tenant betyder
-   * delad inkorg och delad kunskapsbas, vilket är rätt för ett test och
-   * oacceptabelt för en kund.
-   *
-   * Villkorad på att slug är tom: en workspace som redan pekar på en kund rörs
-   * aldrig härifrån, hur rutan än kryssas.
+   * Fäller inte onboardingen. Affärskontexten är sparad, och
+   * `requireSnajpTenant()` gör om kopplingen vid första sidladdningen om
+   * backenden sov just nu.
    */
-  /** Arbetsytans nyckel när den kopplades just nu. Webbplatsskanningen startas med den. */
+  /** Arbetsytans nyckel. Webbplatsskanningen startas med den. */
   let tenantNyckel: string | null = null;
-  if (input.testkund) {
-    try {
-      // EGEN tenant per testarbetsyta, skapad i drift.
-      //
-      // Den delade `testkund`-tenanten (migration 038) betydde delad inkorg,
-      // delad kunskapsbas och delat röstdokument. Med flera testkunder växte
-      // basen med policys från olika bolag, och ett svar till kund A kunde
-      // grundas i kund B:s villkor — grundningsgrinden ser en träff, den kan
-      // inte se att artikeln kom från fel företag.
-      //
-      // Backenden skapar tenanten (`POST /api/keys`), och nyckeln sparas i
-      // `workspace_tenant_keys` genom en security definer-funktion. Migration
-      // 040 förklarar varför den inte får ligga i `workspaces`.
-      const tenant = await skapaTesttenant(payload.workspace_id, `Testarbetsyta ${webbplats}`);
-      const kopplad = await sqlAsUser<{ ok: boolean }>(
+  const testkund = Boolean(input.testkund);
+  try {
+    const { getWorkspaceForUser } = await import("@/lib/workspace");
+    const { kopplingsvag } = await import("@/lib/snajp/kopplingsvag");
+    const { fyllStandardinstallningar, sakerstallKundtenant } = await import("@/lib/snajp/provisionering");
+    // Samma fyra fält som `Kundunderlag`. Payloaden ovan är redan den text
+    // kunden skrev, så en omläsning ur databasen hade bara varit en extra tur
+    // och retur för samma sak.
+    const underlag = {
+      product: payload.product,
+      target_audience: payload.target_audience,
+      offer: payload.offer,
+      cta: payload.cta
+    };
+    const workspace = await getWorkspaceForUser(user.id);
+    const vag = kopplingsvag(workspace?.slug, testkund);
+    let slug = workspace?.slug ?? null;
+
+    if (workspace && vag === "kundtenant") {
+      // Tålmodigt (`true`): uppstarten får vänta ut en kallstartande backend.
+      // Det är enda tillfället kunden faktiskt väntar på att bli upplagd.
+      const kopplad = await sakerstallKundtenant(
         user.id,
-        "select public.link_test_tenant($1, $2, $3) as ok",
-        [tenant.slug, tenant.tenantId, tenant.apiKey]
+        workspace,
+        underlag,
+        true,
+        malgrupp,
+        erbjudanden,
+        rost
       );
-      if (!kopplad[0]?.ok) {
-        throw new Error("link_test_tenant nekade kopplingen (arbetsytan hade redan en kund?).");
+      tenantNyckel = kopplad?.apiKey ?? null;
+      slug = kopplad?.slug ?? null;
+    } else if (workspace) {
+      if (vag === "testtenant") {
+        // Backenden skapar tenanten (`POST /api/keys`), och nyckeln sparas i
+        // `workspace_tenant_keys` genom en security definer-funktion.
+        // Migration 040 förklarar varför den inte får ligga i `workspaces`.
+        const tenant = await skapaTesttenant(payload.workspace_id, `Testarbetsyta ${webbplats}`);
+        // Nekas kopplingen hann en parallell begäran före. Nyckeln som då står
+        // i tabellen är den rätta, och den läses strax nedan.
+        await sqlAsUser(user.id, "select public.link_test_tenant($1, $2, $3)", [
+          tenant.slug,
+          tenant.tenantId,
+          tenant.apiKey
+        ]);
       }
-      tenantNyckel = tenant.apiKey;
-    } catch (error) {
-      // Kopplingen får inte fälla onboardingen. Affärskontexten är sparad, och
-      // en okopplad testyta ger ett ärligt 409 med instruktion — att slänga
-      // bort ett lyckat sparande för det vore sämre.
-      //
-      // Fallbacken är den GAMLA delade tenanten. Den är sämre (delad
-      // kunskapsbas) men fungerande, och alternativet — en arbetsyta som inte
-      // kan användas alls — är sämre än så. Att den användes syns på att
-      // workspacets slug är `testkund` utan suffix.
-      console.error("[onboarding] kunde inte skapa egen testtenant:", error);
+      // Nyckeln hämtas direkt och inte via requireSnajpTenant(): den läser
+      // arbetsytans kontext genom React-cachen, som delas med renderingen av
+      // omdirigeringen nedan. Med den vägen visade sidan ett tomt steg 1
+      // efter inskickningen i stället för översikten (uppmätt 2026-11-18).
+      const nycklar = await sqlAsUser<{ nyckel: string | null }>(
+        user.id,
+        "select public.tenant_api_key_for_current_workspace() as nyckel"
+      );
+      tenantNyckel = nycklar[0]?.nyckel ?? null;
+      if (!tenantNyckel) {
+        throw new Error(`arbetsytan ${slug ?? workspace.id} saknar sparad nyckel efter kopplingen`);
+      }
+      // Skriver bara tomma fält och förvalen, så inget kunden redan ändrat
+      // skrivs över.
+      await fyllStandardinstallningar(tenantNyckel, workspace, underlag, malgrupp, erbjudanden, rost);
+    }
+
+    // Kundregistret (Admin → Kunder → Data) fylls direkt vid onboarding —
+    // lanseringshandoffens beställning 2026-09-20. Fail-soft: se
+    // lib/snajp/kundregister.ts. Sluggen kommer ur kopplingen, aldrig ur
+    // klienten. Inte för testarbetsytor: där finns inget bolag att registrera.
+    if (slug && !testkund) {
+      const { registreraKunduppgifter } = await import("@/lib/snajp/kundregister");
+      await registreraKunduppgifter(slug, {
+        orgnr: formateraOrgnr(input.orgnr),
+        faktureringsadress,
+        kontakt: {
+          namn: kontaktNamn,
+          roll: kontaktRoll || null,
+          mejl: kontaktMejl,
+          telefon: kontaktTelefon || null
+        }
+      });
+    }
+  } catch (error) {
+    console.error("[onboarding] kunde inte koppla arbetsytans tenant:", error);
+    if (testkund && !tenantNyckel) {
+      // Reserven är den GAMLA delade tenanten. Den är sämre (delad
+      // kunskapsbas) men fungerande, och alternativet, en arbetsyta som inte
+      // kan användas alls, är sämre än så. Att den användes syns på att
+      // arbetsytans slug är `testkund` utan suffix.
       try {
         await sqlAsUser(user.id, "select public.link_testkund_workspace()");
       } catch (fallbackError) {
         console.error("[onboarding] kunde inte koppla testarbetsytan:", fallbackError);
       }
-    }
-  } else {
-    /**
-     * RIKTIGA kunder får också sin tenant här, sedan migration 061.
-     *
-     * Tidigare gjorde de inte det: en vanlig registrering lämnade
-     * `workspaces.slug` som null, och `requireSnajpTenant()` svarade 409 på
-     * varje inloggad yta tills någon av oss körde `scripts/onboard_tenant.py`
-     * för hand. Produkten var alltså oanvändbar för varje ny kund fram till
-     * nästa gång vi tittade — översikten visade streck, röstdokumentet
-     * "Kunde inte hämta", och målgruppssidan ett meddelande om databaskolumner.
-     *
-     * Samtidigt blir det kunden just skrev till STANDARDINSTÄLLNINGAR i
-     * backenden: produktbeskrivningen är den agenten faktiskt läser
-     * (`context_docs` med kind `product_marketing`, inte `business_contexts`),
-     * och röstdokument och målgrupp får ett utkast att ändra i stället för ett
-     * tomt fält. Se lib/snajp/standard.ts för vad som fylls i och vad som med
-     * flit lämnas tomt.
-     *
-     * Fäller inte onboardingen. Affärskontexten är sparad, och
-     * `requireSnajpTenant()` gör om samma koppling vid första sidladdningen om
-     * backenden sov just nu.
-     */
-    try {
-      const { sakerstallKundtenant } = await import("@/lib/snajp/provisionering");
-      const { getWorkspaceForUser } = await import("@/lib/workspace");
-      const workspace = await getWorkspaceForUser(user.id);
-      if (workspace && !workspace.slug) {
-        // Samma fyra fält som `Kundunderlag` — payloaden ovan är redan den
-        // text kunden skrev, så en omläsning ur databasen hade bara varit en
-        // extra tur och retur för samma sak.
-        const kopplad = await sakerstallKundtenant(
-          user.id,
-          workspace,
-          {
-            product: payload.product,
-            target_audience: payload.target_audience,
-            offer: payload.offer,
-            cta: payload.cta
-          },
-          // Tålmodigt: uppstarten får vänta ut en kallstartande backend. Det är
-          // enda tillfället kunden faktiskt väntar på att bli upplagd.
-          true,
-          malgrupp,
-          erbjudanden
-        );
-
-        // Kundregistret (Admin → Kunder → Data) fylls direkt vid onboarding —
-        // lanseringshandoffens beställning 2026-09-20. Fail-soft: se
-        // lib/snajp/kundregister.ts. Sluggen kommer ur provisioneringen,
-        // aldrig ur klienten.
-        tenantNyckel = kopplad?.apiKey ?? null;
-        if (kopplad?.slug) {
-          const { registreraKunduppgifter } = await import("@/lib/snajp/kundregister");
-          await registreraKunduppgifter(kopplad.slug, {
-            orgnr: formateraOrgnr(input.orgnr),
-            faktureringsadress,
-            kontakt: {
-              namn: kontaktNamn,
-              roll: kontaktRoll || null,
-              mejl: kontaktMejl,
-              telefon: kontaktTelefon || null
-            }
-          });
-        }
-      } else if (workspace?.slug) {
-        /**
-         * Arbetsytan har redan en kund i backenden, fast onboardingen inte var
-         * klar: ett anrop genom proxyn kopplar den (`requireSnajpTenant()`),
-         * till exempel från en annan flik. Uppmätt i development 2026-11-18:
-         * då hoppades standardinställningarna, kundregistret och
-         * webbplatsskanningen över. De körs nu mot den befintliga nyckeln.
-         * Standardinställningarna skriver bara tomma fält, så inget kunden
-         * redan ändrat skrivs över.
-         */
-        //
-        // Nyckeln hämtas direkt och inte via requireSnajpTenant(): den läser
-        // arbetsytans kontext genom React-cachen, som delas med renderingen av
-        // omdirigeringen nedan. Med den vägen visade sidan ett tomt steg 1
-        // efter inskickningen i stället för översikten (uppmätt 2026-11-18).
-        const nycklar = await sqlAsUser<{ nyckel: string | null }>(
-          user.id,
-          "select public.tenant_api_key_for_current_workspace() as nyckel"
-        );
-        const apiKey = nycklar[0]?.nyckel;
-        if (!apiKey) {
-          throw new Error(`arbetsytan pekar på ${workspace.slug} men saknar sparad nyckel`);
-        }
-        const { fyllStandardinstallningar } = await import("@/lib/snajp/provisionering");
-        tenantNyckel = apiKey;
-        await fyllStandardinstallningar(
-          apiKey,
-          workspace,
-          {
-            product: payload.product,
-            target_audience: payload.target_audience,
-            offer: payload.offer,
-            cta: payload.cta
-          },
-          malgrupp,
-          erbjudanden
-        );
-        const { registreraKunduppgifter } = await import("@/lib/snajp/kundregister");
-        await registreraKunduppgifter(workspace.slug, {
-          orgnr: formateraOrgnr(input.orgnr),
-          faktureringsadress,
-          kontakt: {
-            namn: kontaktNamn,
-            roll: kontaktRoll || null,
-            mejl: kontaktMejl,
-            telefon: kontaktTelefon || null
-          }
-        });
-      }
-    } catch (error) {
-      console.error("[onboarding] kunde inte koppla arbetsytans tenant:", error);
     }
   }
 
@@ -634,7 +589,7 @@ export async function saveBusinessContext(input: OnboardingInput): Promise<Onboa
    * att kunskapsbasen inte är tom när arbetsytan öppnas. Den skriver förslag,
    * aldrig artiklar: kunden lägger till dem, och en rubrik kunden redan har
    * föreslås inte. Bara med supportagenten i paketet, som är den som svarar
-   * ur kunskapsbasen, och bara när arbetsytan just fick sin egen nyckel.
+   * ur kunskapsbasen, och bara när arbetsytan har en egen nyckel.
    */
   const { PRODUKTER_FOR_PAKET } = await import("@/lib/pricing");
   const medSupport = paket ? PRODUKTER_FOR_PAKET[paket].includes("support") : true;

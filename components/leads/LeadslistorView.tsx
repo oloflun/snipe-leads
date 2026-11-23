@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useDashboard } from "@/components/dashboard/DashboardContext";
 import { CrmKundlista } from "@/components/leads/CrmKundlista";
-import { ImportCsv } from "@/components/leads/ImportCsv";
+import { ImportLista, type Importinfo } from "@/components/leads/ImportLista";
 import { SaljlistaSektion } from "@/components/leads/Saljlista";
 import { btnPrimary, btnSecondary, EmptyState, SkeletonRows, chip, chipAktiv, chipInaktiv, chiplista } from "@/components/ui";
 import { felmeddelande, readJsonBody } from "@/lib/http/json";
@@ -50,6 +50,17 @@ type Lista = {
   kontaktfilter?: string | null;
   /** Processa om / Skapa utkast (migration 110): förloppet, kvar efteråt. */
   processering?: Processering | null;
+  /** Importkvittot (migration 152): filen och vad som hoppades över. */
+  importinfo?: Importinfo | null;
+};
+
+/** Flikens tre vyer. Adressen bär valet i `?del=`. */
+export type Listdel = "listor" | "saljlista" | "kunder";
+
+const DEL_ETIKETT: Record<Listdel, Localized> = {
+  listor: { sv: "Listor", en: "Lists" },
+  saljlista: { sv: "Säljlista", en: "Sales list" },
+  kunder: { sv: "Befintliga kunder", en: "Existing customers" }
 };
 
 type Processering = {
@@ -101,6 +112,9 @@ type ListRad = {
   processad_at?: string | null;
   /** Utkaststatusen, samma härledning som Iris-tabellen (app/leads/utkaststatus.py). */
   utkast_status?: Utkastfalt | null;
+  /** Avtalets slutdatum (ÅÅÅÅ-MM-DD) och filens extra kolumner (import, migration 152). */
+  avtalsslut?: string | null;
+  extra?: Record<string, string> | null;
 };
 
 /** Sant från md (768px) och uppåt; null innan fönstret mätts.
@@ -130,7 +144,37 @@ const STATUS_ETIKETT: Record<string, Localized> = {
  *  (2026-10-02) sitter i SAMMA lista, inte som en separat mejllista. */
 type Kontaktvag = "telefon" | "mejl" | "bada";
 type Kontaktfilter = "alla" | Kontaktvag;
-type Sortering = "kontakt" | "bolag" | "niva";
+type Sortering = "kontakt" | "bolag" | "niva" | "avtal";
+
+/** Avtalsslutet (import, migration 152) som urval: hur snart avtalet går ut.
+ *  Facken överlappar inte, så listan går att dela upp efter datum. */
+type Avtalsfilter = "alla" | "utgangna" | "3" | "6" | "12" | "senare" | "utan";
+const AVTALSFILTER: { id: Avtalsfilter; etikett: Localized }[] = [
+  { id: "alla", etikett: { sv: "Alla avtal", en: "All contracts" } },
+  { id: "utgangna", etikett: { sv: "Har gått ut", en: "Ended" } },
+  { id: "3", etikett: { sv: "Går ut inom 3 månader", en: "Ends within 3 months" } },
+  { id: "6", etikett: { sv: "Om 3 till 6 månader", en: "In 3 to 6 months" } },
+  { id: "12", etikett: { sv: "Om 6 till 12 månader", en: "In 6 to 12 months" } },
+  { id: "senare", etikett: { sv: "Senare än 12 månader", en: "Later than 12 months" } },
+  { id: "utan", etikett: { sv: "Utan datum", en: "No date" } }
+];
+
+const isoDag = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
+/** Facket ett avtalsslut hör till, räknat från `idag` (ÅÅÅÅ-MM-DD, lokal tid). */
+function avtalsfack(avtalsslut: string | null | undefined, idag: string): Exclude<Avtalsfilter, "alla"> {
+  if (!avtalsslut) return "utan";
+  if (avtalsslut < idag) return "utgangna";
+  const om = (manader: number) => {
+    const d = new Date(`${idag}T12:00:00`);
+    d.setMonth(d.getMonth() + manader);
+    return isoDag(d);
+  };
+  if (avtalsslut <= om(3)) return "3";
+  if (avtalsslut <= om(6)) return "6";
+  if (avtalsslut <= om(12)) return "12";
+  return "senare";
+}
 
 function kontaktvag(rad: ListRad): Kontaktvag | null {
   const tel = Boolean(rad.contact_phone);
@@ -181,7 +225,9 @@ function synligaRader(
   items: ListRad[],
   filter: Kontaktfilter,
   sortering: Sortering,
-  webbfilter: Webbfilter = INGET_WEBBFILTER
+  webbfilter: Webbfilter = INGET_WEBBFILTER,
+  avtal: Avtalsfilter = "alla",
+  idag = isoDag(new Date())
 ): ListRad[] {
   const ordning: Record<string, number> = { bada: 0, telefon: 1, mejl: 2 };
   const kvar = items.filter(
@@ -189,9 +235,15 @@ function synligaRader(
       (filter === "alla" || kontaktvag(rad) === filter) &&
       (webbfilter.webb === "alla" || Boolean(rad.website) === (webbfilter.webb === "med")) &&
       (webbfilter.niva === "alla" || rad.webbniva === webbfilter.niva) &&
-      (webbfilter.lan === "alla" || rad.lan === webbfilter.lan)
+      (webbfilter.lan === "alla" || rad.lan === webbfilter.lan) &&
+      (avtal === "alla" || avtalsfack(rad.avtalsslut, idag) === avtal)
   );
   return [...kvar].sort((a, b) => {
+    if (sortering === "avtal") {
+      // Närmast först; rader utan datum sist.
+      const d = (a.avtalsslut ?? "9999").localeCompare(b.avtalsslut ?? "9999");
+      if (d !== 0) return d;
+    }
     if (sortering === "niva") {
       const d = (a.webbniva ? NIVAORDNING[a.webbniva] : 9) - (b.webbniva ? NIVAORDNING[b.webbniva] : 9);
       if (d !== 0) return d;
@@ -208,7 +260,18 @@ function synligaRader(
 
 const T = {
   kombineraRubrik: { sv: "Kombinera listor", en: "Combine lists" },
-  importeraCsv: { sv: "Importera CSV", en: "Import CSV" },
+  importeraLista: { sv: "Importera lista", en: "Import a list" },
+  delar: { sv: "Vy", en: "View" },
+  kundlistor: { sv: "Uppladdade kundlistor", en: "Uploaded customer lists" },
+  listornasJobb: {
+    sv: "Egna listor ur ditt CRM eller ett kalkylblad, och listor du beställt. Varje bolag öppnas som ett lead, och Skapa utkast gör samma research och utkast som för Iris-leads.",
+    en: "Your own lists from your CRM or a spreadsheet, and lists you have ordered. Each company opens as a lead, and Create drafts runs the same research and drafts as for Iris leads."
+  },
+  ingaKundlistor: { sv: "Ingen kundlista är uppladdad.", en: "No customer list has been uploaded." },
+  ingaListorHjalp: {
+    sv: "Importera en egen lista, till exempel gamla prospekt eller förlorade affärer, eller beställ en.",
+    en: "Import a list of your own, for example old prospects or lost deals, or order one."
+  },
   kallaImport: { sv: "Import", en: "Import" },
   listorSkiljs: {
     sv: "Listorna är bredare och kallare än Iris: bolag med VD:ns telefon eller mejl, för samtal eller ett mer generellt utskick. Ett bolag som redan är ett Iris-lead, står i en annan lista eller är din befintliga kund kommer aldrig med.",
@@ -381,7 +444,15 @@ function signaltext(rad: ListRad, text?: (s: Localized) => string): string {
       .filter(Boolean)
       .join(" · ");
   }
-  return [rad.signal, rad.signal_detalj].filter(Boolean).join(" — ") || "—";
+  const signal = [rad.signal, rad.signal_detalj].filter(Boolean).join(" — ");
+  // CSV-filen (utan `text`) bär avtalsslutet och extrakolumnerna i egna kolumner.
+  if (!text) return signal || "—";
+  // En importerad rad: avtalsslutet och kundens egna kolumner är dess signal.
+  const avtal = rad.avtalsslut ? text({ sv: `Avtalet går ut ${rad.avtalsslut}`, en: `Contract ends ${rad.avtalsslut}` }) : null;
+  const extra = Object.entries(rad.extra ?? {})
+    .slice(0, 3)
+    .map(([rubrik, varde]) => `${rubrik}: ${varde}`);
+  return [avtal, signal, ...extra].filter(Boolean).join(" · ") || "—";
 }
 
 /** RFC 4180-citering. Semikolon som avgränsare och BOM först: svensk Excel
@@ -391,9 +462,15 @@ function csvFalt(värde: string | null | undefined): string {
   return /[";\n\r]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
 }
 
+const AVTALSSLUT: Localized = { sv: "Avtalsslut", en: "Contract end" };
+
 function byggCsv(items: ListRad[], locale: Locale): string {
+  // En importerad lista går ut med det den kom in med: avtalsslutet och
+  // kundens egna kolumner, under sina egna rubriker.
+  const medAvtal = items.some((rad) => rad.avtalsslut);
+  const extrarubriker = [...new Set(items.flatMap((rad) => Object.keys(rad.extra ?? {})))];
   const rader = [
-    CSV_RUBRIKER.map((rubrik) => rubrik[locale]),
+    [...CSV_RUBRIKER.map((rubrik) => rubrik[locale]), ...(medAvtal ? [AVTALSSLUT[locale]] : []), ...extrarubriker],
     ...items.map((rad) => [
       rad.company_name,
       rad.orgnr ?? "",
@@ -405,7 +482,9 @@ function byggCsv(items: ListRad[], locale: Locale): string {
       rad.source_name ?? "",
       rad.source_url ?? "",
       rad.website ?? "",
-      rad.contact_email ?? ""
+      rad.contact_email ?? "",
+      ...(medAvtal ? [rad.avtalsslut ?? ""] : []),
+      ...extrarubriker.map((rubrik) => rad.extra?.[rubrik] ?? "")
     ])
   ];
   return "\uFEFF" + rader.map((rad) => rad.map(csvFalt).join(";")).join("\r\n");
@@ -433,16 +512,26 @@ function datum(varde: string | null | undefined): string | null {
 export function LeadslistorView({
   demo = false,
   crmOppen = false,
+  del = "listor",
+  onDel,
   onValjLead
 }: Readonly<{
   demo?: boolean;
   crmOppen?: boolean;
+  /** Vilken av flikens vyer som syns, och bytet (LeadsSida sätter `?del=`). */
+  del?: Listdel;
+  onDel?: (del: Listdel) => void;
   /** Öppnar lådan för ett lead (LeadsSida sätter `?lead=`). Utan den är
    *  listraderna inte klickbara (förhandsvisningarna). */
   onValjLead?: (prospektId: string) => void;
 }> = {}) {
-  const { isDemo, vy } = useDashboard();
+  const { isDemo, vy, impersonation } = useDashboard();
   const { locale, text } = useLocale();
+  // Säljlistan finns i demon (utforskaren) och i den egna vyn, aldrig under
+  // ett kundbesök: samma grind som SaljlistaSektion.
+  const delar: Listdel[] =
+    demo || isDemo || vy === "demo" || (vy === "admin" && !impersonation) ? ["listor", "saljlista", "kunder"] : ["listor", "kunder"];
+  const [bestallOppen, setBestallOppen] = useState(false);
 
   const [titel, setTitel] = useState("");
   const [antal, setAntal] = useState("25");
@@ -586,10 +675,17 @@ export function LeadslistorView({
     }
   }
 
-  async function oppna(lista: Lista) {
+  // En säljlistebeställning (105) är ingen lista att öppna: raderna ligger i
+  // säljlistan. Kundlistorna (098) står i sin egen vy.
+  const egnaListor = (listor ?? []).filter((l) => l.kalla !== "saljlista" && l.kalla !== "crm");
+  const visadeListor = del === "kunder" ? (listor ?? []).filter((l) => l.kalla === "crm") : egnaListor;
+
+  /** Öppnar listan, eller fäller ihop den om den redan är öppen. `alltid`
+   *  för importens "Öppna listan", som aldrig ska stänga. */
+  async function oppna(lista: Lista, alltid = false) {
     if (lista.status !== "klar") return;
     if (vald?.lista.id === lista.id) {
-      setVald(null);
+      if (!alltid) setVald(null);
       return;
     }
     setOppnar(lista.id);
@@ -607,22 +703,98 @@ export function LeadslistorView({
   }
 
   return (
-    <div className="flex min-w-0 flex-col gap-12">
+    <div className="flex min-w-0 flex-col gap-8">
+      {/* Listor, säljlistan och kundlistan är tre vyer av samma flik, inte tre
+          sektioner under varandra (kritiken 2026-10-07: 7 400 px). Alla står
+          monterade, så att en pågående import överlever ett vybyte. */}
+      {onDel && delar.length > 1 ? (
+        <div className={chiplista} role="group" aria-label={text(T.delar)}>
+          {delar.map((d) => (
+            <button
+              key={d}
+              type="button"
+              aria-pressed={del === d}
+              onClick={() => onDel?.(d)}
+              className={cn(chip, del === d ? chipAktiv : chipInaktiv)}
+            >
+              {text(DEL_ETIKETT[d])}
+              {d === "listor" && listor ? <span className="num tabular-nums">{egnaListor.length}</span> : null}
+            </button>
+          ))}
+        </div>
+      ) : null}
+
       {/* ------------------------------ SÄLJLISTAN (100, 103) */}
-      <SaljlistaSektion demo={demo} />
+      <div hidden={del !== "saljlista"}>
+        <SaljlistaSektion demo={demo} />
+      </div>
 
       {/* ------------------------------------- CRM-KUNDLISTAN (098) */}
-      <CrmKundlista
-        demo={demo || isDemo || vy === "demo"}
-        startOppen={crmOppen}
-        onKlar={() => void hamtaListor(true)}
-      />
+      <div hidden={del !== "kunder"}>
+        <CrmKundlista
+          demo={demo || isDemo || vy === "demo"}
+          startOppen={crmOppen}
+          onKlar={() => void hamtaListor(true)}
+        />
+      </div>
 
-      {/* ------------------------------------------- BESTÄLLNING */}
-      <section aria-labelledby="bestall-lista">
-        <h2 id="bestall-lista" className="text-[1.125rem] font-semibold tracking-[-0.01em]">
-          {text(T.bestallEnLista)}
-        </h2>
+      {/* ---------------------------------------------- LISTORNA */}
+      <section aria-labelledby="dina-listor" hidden={del === "saljlista"}>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 id="dina-listor" className="text-[1.125rem] font-semibold tracking-[-0.01em]">
+            {del === "kunder" ? text(T.kundlistor) : text(T.dinaListor)}
+          </h2>
+          {del === "listor" ? (
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                aria-expanded={importOppen}
+                aria-controls="lista-import"
+                onClick={() => setImportOppen((v) => !v)}
+                className={btnPrimary}
+              >
+                {text(T.importeraLista)}
+              </button>
+              <button
+                type="button"
+                aria-expanded={bestallOppen}
+                aria-controls="bestall-lista"
+                onClick={() => setBestallOppen((v) => !v)}
+                className={btnSecondary}
+              >
+                {text(T.bestallEnLista)}
+              </button>
+            </div>
+          ) : null}
+        </div>
+        {del === "listor" ? (
+          <p className="mt-1 max-w-[70ch] text-[14px] leading-6 text-ink-subtle">{text(T.listornasJobb)}</p>
+        ) : null}
+
+        {/* Monterad även stängd: en import som pågår, eller kvittot som just
+            kom, ska inte försvinna med ett klick. */}
+        <div
+          id="lista-import"
+          hidden={!importOppen || del !== "listor"}
+          className="mt-4 rounded-card border border-ink/12 bg-paper2/40 p-4 sm:p-5"
+        >
+          <ImportLista
+            demo={demo || isDemo || vy === "demo"}
+            onKlar={() => void hamtaListor(true)}
+            onOppna={(lista) => {
+              setImportOppen(false);
+              void oppna({ ...(lista as unknown as Lista), status: "klar" }, true);
+            }}
+          />
+        </div>
+
+        {/* ----------------------------------------- BESTÄLLNING */}
+        <div
+          id="bestall-lista"
+          hidden={!bestallOppen || del !== "listor"}
+          className="mt-4 rounded-card border border-ink/12 bg-paper2/40 p-4 sm:p-5"
+        >
+        <h3 className="text-[1.0625rem] font-semibold leading-snug">{text(T.bestallEnLista)}</h3>
         <p className="mt-1 max-w-[64ch] text-[14px] leading-6 text-ink-subtle">{text(T.listorSkiljs)}</p>
 
         <div className="mt-6 grid max-w-[760px] gap-5 sm:grid-cols-2">
@@ -661,29 +833,7 @@ export function LeadslistorView({
             {bestallFel}
           </p>
         ) : null}
-      </section>
-
-      {/* ---------------------------------------------- LISTORNA */}
-      <section aria-labelledby="dina-listor" className="border-t border-ink/15 pt-8">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <h2 id="dina-listor" className="text-[1.125rem] font-semibold tracking-[-0.01em]">
-            {text(T.dinaListor)}
-          </h2>
-          <button
-            type="button"
-            aria-expanded={importOppen}
-            onClick={() => setImportOppen((v) => !v)}
-            className={btnSecondary}
-          >
-            {text(T.importeraCsv)}
-          </button>
         </div>
-
-        {importOppen ? (
-          <div className="mt-4 rounded-card border border-ink/12 bg-paper2/40 p-4">
-            <ImportCsv demo={demo || isDemo || vy === "demo"} onKlar={() => void hamtaListor(true)} />
-          </div>
-        ) : null}
 
         {listFel ? (
           <div className="mt-4">
@@ -702,13 +852,16 @@ export function LeadslistorView({
           <div className="mt-4">
             <SkeletonRows />
           </div>
-        ) : listor.length === 0 ? (
+        ) : visadeListor.length === 0 ? (
           <div className="mt-4">
-            <EmptyState title={text(T.ingaListor)} />
+            <EmptyState
+              title={del === "kunder" ? text(T.ingaKundlistor) : text(T.ingaListor)}
+              body={del === "kunder" ? undefined : text(T.ingaListorHjalp)}
+            />
           </div>
         ) : (
           <>
-          {listor.filter((l) => l.status === "klar" && l.kalla !== "crm" && l.kalla !== "saljlista").length >= 2 ? (
+          {del === "listor" && egnaListor.filter((l) => l.status === "klar").length >= 2 ? (
             <div className="mt-4 rounded-card border border-ink/12 bg-paper2/40 p-4">
               <p className="text-[15px] font-semibold">{text(T.kombineraRubrik)}</p>
               <p className="mt-1 text-[13px] text-ink-subtle">{text(T.kombineraHjalp)}</p>
@@ -759,11 +912,7 @@ export function LeadslistorView({
             </div>
           ) : null}
           <ul className="mt-4 divide-y divide-ink/15 border-y border-ink/15">
-            {listor
-              // En säljlistebeställning (105) är ingen lista att öppna:
-              // raderna ligger i säljlistan ovanför, resten är uteslutning.
-              .filter((lista) => lista.kalla !== "saljlista")
-              .map((lista) => {
+            {visadeListor.map((lista) => {
               const oppen = vald?.lista.id === lista.id;
               const klar = lista.status === "klar";
               return (
@@ -804,7 +953,9 @@ export function LeadslistorView({
                               : lista.kalla === "crm"
                                 ? text(T.kallaCrm)
                                 : lista.kalla === "import"
-                                ? text(T.kallaImport)
+                                ? lista.importinfo?.fil
+                                  ? text({ sv: `Importerad ur ${lista.importinfo.fil}`, en: `Imported from ${lista.importinfo.fil}` })
+                                  : text(T.kallaImport)
                                 : lista.kalla === "webbpool"
                                 ? text({ sv: "Webbpoolen, bedömda sajter", en: "Website pool, assessed sites" })
                                 : text({ sv: `${lista.antal} beställda`, en: `${lista.antal} ordered` }),
@@ -886,6 +1037,9 @@ export function LeadslistorView({
     </div>
   );
 }
+
+/** Så många rader ritas åt gången i en öppen lista. */
+const RADER_PER_SIDA = 200;
 
 /** Samma tak som backendens `_PROCESSERING_MAX_S`: en Processa om som inte
  *  rört sig på så länge dog med processen (en deploy mitt i). */
@@ -1064,9 +1218,15 @@ function Listtabell({
   const [radFel, setRadFel] = useState<string | null>(null);
   const [kontaktfilter, setKontaktfilter] = useState<Kontaktfilter>("alla");
   const harNiva = items.some((rad) => rad.webbniva);
-  const [sortering, setSortering] = useState<Sortering>(harNiva ? "niva" : "kontakt");
+  const harAvtal = items.some((rad) => rad.avtalsslut);
+  const [sortering, setSortering] = useState<Sortering>(harNiva ? "niva" : harAvtal ? "avtal" : "kontakt");
   const [webbfilter, setWebbfilter] = useState<Webbfilter>(INGET_WEBBFILTER);
-  const visade = synligaRader(items, kontaktfilter, sortering, webbfilter);
+  const [avtalsfilter, setAvtalsfilter] = useState<Avtalsfilter>("alla");
+  // Bara de första raderna ritas: en importerad lista kan ha 5 000.
+  const [visaAntal, setVisaAntal] = useState(RADER_PER_SIDA);
+  const idag = isoDag(new Date());
+  const visade = synligaRader(items, kontaktfilter, sortering, webbfilter, avtalsfilter, idag);
+  const ritade = visade.slice(0, visaAntal);
   // Markerat som inte syns räknas inte: det som syns är det som berörs.
   const valt = visade.filter((rad) => valda.has(rad.id));
   const mal = valt.length ? valt : visade;
@@ -1079,6 +1239,26 @@ function Listtabell({
   const p = lista.processering ?? null;
   const igang = pagar(p);
   const korningHref = p?.job_id ? `${bas}/leads?vy=korningar&id=${encodeURIComponent(p.job_id)}` : null;
+
+  // Importens kvitto (migration 152) står kvar på listan efter en omladdning.
+  const info = lista.importinfo;
+  const hoppade = Object.values(info?.hoppade ?? {}).reduce((summa, n) => summa + (Number(n) || 0), 0);
+  const kvittorad = info
+    ? text({
+        sv: `Importerad ${datum(info.importerad_at) ?? ""} ur ${info.fil}: ${info.importerade} av ${info.rader_i_fil} rader${hoppade ? `, ${hoppade} hoppades över` : ""}.`,
+        en: `Imported ${datum(info.importerad_at) ?? ""} from ${info.fil}: ${info.importerade} of ${info.rader_i_fil} rows${hoppade ? `, ${hoppade} skipped` : ""}.`
+      })
+    : null;
+  // Var listans bolag står i kedjan, ur samma utkaststatus som Iris-tabellen.
+  const iLage = (...lagen: string[]) => items.filter((rad) => lagen.includes(rad.utkast_status?.utkast_status ?? "saknas")).length;
+  const [vantar, godkanda, skickade] = [iLage("vantar", "koad"), iLage("godkant"), iLage("skickat")];
+  const trattrad =
+    vantar + godkanda + skickade > 0
+      ? text({
+          sv: `${vantar} utkast väntar på ditt ja · ${godkanda} godkända i kön · ${skickade} skickade`,
+          en: `${vantar} drafts waiting for your yes · ${godkanda} approved in the queue · ${skickade} sent`
+        })
+      : null;
 
   // Listan hämtas om var fjärde sekund medan förloppet pågår (pausat när
   // fliken inte syns), och när lådan eller en massåtgärd ändrat ett utkast.
@@ -1225,6 +1405,8 @@ function Listtabell({
           {text(T.laddaNerCsv)}
         </button>
       </div>
+      {kvittorad ? <p className="mt-2 max-w-[75ch] break-words text-[13px] text-ink-subtle">{kvittorad}</p> : null}
+      {trattrad ? <p className="num mt-2 max-w-[75ch] text-[14px] tabular-nums text-ink-muted">{trattrad}</p> : null}
 
       {atgarder ? (
         <>
@@ -1317,6 +1499,7 @@ function Listtabell({
             className="focus-ring min-h-9 rounded-input border border-ink/15 bg-paper px-2 text-[13px] text-ink"
           >
             {harNiva ? <option value="niva">{text({ sv: "Webbnivå, akut först", en: "Website level, urgent first" })}</option> : null}
+            {harAvtal ? <option value="avtal">{text({ sv: "Avtalsslut, närmast först", en: "Contract end, soonest first" })}</option> : null}
             <option value="kontakt">{text({ sv: "Kontaktväg", en: "Contact channel" })}</option>
             <option value="bolag">{text({ sv: "Bolag A–Ö", en: "Company A–Z" })}</option>
           </select>
@@ -1348,6 +1531,25 @@ function Listtabell({
             </button>
           ))}
         </div>
+        {harAvtal ? (
+          <label className="flex items-center gap-2 text-[13px] text-ink-subtle">
+            {text(AVTALSSLUT)}
+            <select
+              value={avtalsfilter}
+              onChange={(e) => {
+                setAvtalsfilter(e.target.value as Avtalsfilter);
+                setVisaAntal(RADER_PER_SIDA);
+              }}
+              className="focus-ring min-h-9 rounded-input border border-ink/15 bg-paper px-2 text-[13px] text-ink"
+            >
+              {AVTALSFILTER.map((f) => (
+                <option key={f.id} value={f.id}>
+                  {text(f.etikett)} ({f.id === "alla" ? items.length : items.filter((rad) => avtalsfack(rad.avtalsslut, idag) === f.id).length})
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
         {nivaerIListan.length ? (
           <label className="flex items-center gap-2 text-[13px] text-ink-subtle">
             {text({ sv: "Webbnivå", en: "Website level" })}
@@ -1418,7 +1620,7 @@ function Listtabell({
             </tr>
           </thead>
           <tbody className="divide-y divide-ink/15">
-            {visade.map((rad) => (
+            {ritade.map((rad) => (
               <tr key={rad.id} className={cn("transition hover:bg-paper2/60", valda.has(rad.id) && "bg-paper2/40")}>
                 {atgarder ? <td className="py-4 pl-1 align-top">{kryss(rad, "mt-0.5")}</td> : null}
                 <th scope="row" className="py-4 pr-6 text-left align-top font-normal">
@@ -1464,7 +1666,7 @@ function Listtabell({
       </div>
 
       <ul className="mt-4 space-y-2 md:hidden">
-        {visade.map((rad) => (
+        {ritade.map((rad) => (
           <li key={rad.id} className="rounded-input border border-ink/15 px-4 py-3">
             <div className="flex items-start gap-3">
               {atgarder ? kryss(rad, "mt-0.5") : null}
@@ -1506,6 +1708,11 @@ function Listtabell({
           </li>
         ))}
       </ul>
+      {visade.length > ritade.length ? (
+        <button type="button" onClick={() => setVisaAntal((n) => n + RADER_PER_SIDA)} className={cn(btnSecondary, "mt-4")}>
+          {text({ sv: `Visa fler (${visade.length - ritade.length})`, en: `Show more (${visade.length - ritade.length})` })}
+        </button>
+      ) : null}
     </div>
   );
 }

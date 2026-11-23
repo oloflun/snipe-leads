@@ -3424,12 +3424,17 @@ class PostgresStorage:
         kalla: str = "sok",
         kallistor: list[str] | None = None,
         kontaktfilter: str | None = None,
+        importinfo: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
+        # importinfo (152) skrivs bara när den finns: varje annan lista byggs
+        # då som förut, även i en miljö där migrationen inte körts än.
+        med_kvitto = importinfo is not None
         async with self._scoped(tenant_id) as conn:
             record = await conn.fetchrow(
-                """
-                insert into lead_lists (tenant_id, titel, icp, antal, is_test, kalla, kallistor, kontaktfilter)
-                values ($1, $2, $3, $4, $5, $6, $7::uuid[], $8)
+                f"""
+                insert into lead_lists (tenant_id, titel, icp, antal, is_test, kalla, kallistor, kontaktfilter
+                                        {", importinfo" if med_kvitto else ""})
+                values ($1, $2, $3, $4, $5, $6, $7::uuid[], $8{", $9::jsonb" if med_kvitto else ""})
                 returning *
                 """,
                 tenant_id,
@@ -3440,8 +3445,9 @@ class PostgresStorage:
                 kalla,
                 kallistor,
                 kontaktfilter,
+                *([json.dumps(importinfo, ensure_ascii=False, default=str)] if med_kvitto else []),
             )
-        rad = _avkoda_jsonb(_row(record), "icp")
+        rad = _avkoda_jsonb(_row(record), "icp", "importinfo")
         # asyncpg ger uuid[] som en lista av UUID-objekt; API:t talar strängar.
         if rad.get("kallistor"):
             rad["kallistor"] = [str(x) for x in rad["kallistor"]]
@@ -3480,7 +3486,7 @@ class PostgresStorage:
                 tenant_id,
                 limit,
             )
-        return [_avkoda_jsonb(_row(r), "icp") for r in records]
+        return [_avkoda_jsonb(_row(r), "icp", "importinfo") for r in records]
 
     async def saljlista_fyll_pa(self, tenant_id: str, rader: list[dict[str, Any]]) -> int:
         """Via 105:ans security definer-funktion: säljlistan ägs av webben
@@ -3502,7 +3508,15 @@ class PostgresStorage:
                 tenant_id,
                 list_id,
             )
-        return _avkoda_jsonb(_row(record), "icp", "processering") if record else None
+        return _avkoda_jsonb(_row(record), "icp", "processering", "importinfo") if record else None
+
+    async def satt_importinfo(self, tenant_id: str, list_id: str, importinfo: dict[str, Any] | None) -> None:
+        async with self._scoped(tenant_id) as conn:
+            await conn.execute(
+                "update lead_lists set importinfo = $3::jsonb where tenant_id = $1 and id = $2",
+                tenant_id, list_id,
+                json.dumps(importinfo, ensure_ascii=False, default=str) if importinfo is not None else None,
+            )
 
     async def satt_listprocessering(self, tenant_id: str, list_id: str, processering: dict[str, Any] | None) -> None:
         async with self._scoped(tenant_id) as conn:
@@ -3523,16 +3537,25 @@ class PostgresStorage:
     async def add_lead_list_item(
         self, tenant_id: str, *, list_id: str, **falt: Any
     ) -> dict[str, Any]:
+        # Importens kolumner (152) skrivs bara när de har ett värde: varje
+        # annat listbygge skriver som förut, även före migrationen.
+        importkolumner: list[tuple[str, str, Any]] = []
+        if falt.get("avtalsslut"):
+            importkolumner.append(("avtalsslut", "::date", date.fromisoformat(str(falt["avtalsslut"])[:10])))
+        if falt.get("extra") is not None:
+            importkolumner.append(("extra", "::jsonb", json.dumps(falt["extra"], ensure_ascii=False)))
+        kolumner = "".join(f", {k}" for k, _, _ in importkolumner)
+        platser = "".join(f", ${i}{typ}" for i, (_, typ, _) in enumerate(importkolumner, start=21))
         async with self._scoped(tenant_id) as conn:
             record = await conn.fetchrow(
-                """
+                f"""
                 insert into lead_list_items
                   (list_id, tenant_id, item_typ, company_name, website, ort,
                    contact_name, contact_role, contact_email, contact_level,
                    source_name, source_url, signal, signal_detalj,
-                   contact_phone, orgnr, lan, postnr, webbniva, webbrevision)
+                   contact_phone, orgnr, lan, postnr, webbniva, webbrevision{kolumner})
                 values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16,
-                        $17, $18, $19, $20::jsonb)
+                        $17, $18, $19, $20::jsonb{platser})
                 returning *
                 """,
                 list_id,
@@ -3555,8 +3578,9 @@ class PostgresStorage:
                 falt.get("postnr"),
                 falt.get("webbniva"),
                 json.dumps(falt["webbrevision"]) if falt.get("webbrevision") is not None else None,
+                *(v for _, _, v in importkolumner),
             )
-        return _avkoda_jsonb(_row(record), "webbrevision")
+        return _avkoda_jsonb(_row(record), "webbrevision", "extra")
 
     async def list_lead_list_items(
         self, tenant_id: str, list_id: str, *, med_flyttade: bool = False
@@ -3571,7 +3595,7 @@ class PostgresStorage:
                 list_id,
                 med_flyttade,
             )
-        return [_avkoda_jsonb(_row(r), "utkast", "webbrevision", "kallor") for r in records]
+        return [_avkoda_jsonb(_row(r), "utkast", "webbrevision", "kallor", "extra") for r in records]
 
     async def uppdatera_listrad(self, tenant_id: str, item_id: str, falt: dict[str, Any]) -> None:
         from .base import LISTRAD_JSONB, LISTRAD_UPPDATERBARA
@@ -3617,9 +3641,13 @@ class PostgresStorage:
     async def lista_upptagna_bolag(self, tenant_id: str) -> list[dict[str, Any]]:
         async with self._scoped(tenant_id) as conn:
             records = await conn.fetch(
-                """select company_name, orgnr from prospects where tenant_id = $1
+                """select company_name, orgnr, 'lead' as kalla, null::uuid as list_id
+                     from prospects where tenant_id = $1
                    union
-                   select company_name, orgnr from lead_list_items where tenant_id = $1""",
+                   select i.company_name, i.orgnr,
+                          case when l.kalla = 'crm' then 'crm' else 'lead' end, i.list_id
+                     from lead_list_items i join lead_lists l on l.id = i.list_id
+                    where i.tenant_id = $1""",
                 tenant_id,
             )
         return [_row(r) for r in records]

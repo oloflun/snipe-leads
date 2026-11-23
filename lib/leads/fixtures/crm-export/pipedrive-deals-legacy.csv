@@ -1,0 +1,5 @@
+Deal - ID,Deal - Title,Deal - Value,Deal - Currency,Deal - Organization,Deal - Contact person,Deal - Stage,Deal - Status,Deal - Expected close date,Organization - Name,Person - Name,Person - Email,Person - Phone
+401,Iota Ventilation Test AB deal,45000,SEK,Iota Ventilation Test AB,Ingrid Lind,Proposal Made,open,2026-12-15,Iota Ventilation Test AB,Ingrid Lind,ingrid.lind@example.se,070-174 06 15
+402,Kappa Kök – växel,12500.50,SEK,Kappa Kök Test AB,Olof Dahl,Qualified,won,2026-10-01,Kappa Kök Test AB,Olof Dahl,olof@example.se,+46701740616
+403,Lambda Lås & Larm Test AB deal,0,SEK,Lambda Lås & Larm Test AB,Eva Ahl,Lead In,lost,,Lambda Lås & Larm Test AB,Eva Ahl,,0701740617
+404,"Nytt avtal ""My""",98000,SEK,My Måleri Test HB,Mats Berg,Negotiations Started,open,2027-01-31,My Måleri Test HB,Mats Berg,mats.berg@example.se,

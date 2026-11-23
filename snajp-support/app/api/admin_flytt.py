@@ -147,8 +147,10 @@ _LISTRADSFALT = (
     "item_typ", "company_name", "website", "ort", "contact_name", "contact_role",
     "contact_email", "contact_level", "contact_phone", "orgnr", "source_name",
     "source_url", "signal", "signal_detalj", "lan", "postnr", "webbniva", "webbrevision",
+    # Importens fält (migration 152): kundens egna kolumner följer kunden.
+    "avtalsslut", "extra",
 )
-_LISTFALT = ("titel", "icp", "antal", "kalla", "kontaktfilter", "status", "is_test")
+_LISTFALT = ("titel", "icp", "antal", "kalla", "kontaktfilter", "status", "is_test", "importinfo")
 
 
 def _skarp_origin(origin: Any) -> str:
@@ -643,6 +645,7 @@ async def _importera_lista(storage, tenant_id: str, post: dict[str, Any], fran: 
         # Källistorna är developments id:n och finns inte i main.
         kallistor=None,
         kontaktfilter=lista.get("kontaktfilter"),
+        importinfo=lista.get("importinfo") if isinstance(lista.get("importinfo"), dict) else None,
     )
     for rad in rader:
         await storage.add_lead_list_item(

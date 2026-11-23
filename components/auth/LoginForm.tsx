@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useState, useTransition } from "react";
 import { useSearchParams } from "next/navigation";
@@ -33,7 +34,16 @@ import { cn } from "@/lib/utils";
  * - Samma knappar, flikar och etiketter som resten av produkten
  *   (components/ui.tsx), i stället för spärrad mono i versaler med pil.
  *
- * Panelen och formuläret bor i samma komponent eftersom de delar läget.
+ * ## Fotot (Anton 2026-11-23)
+ *
+ * Sidan hade blivit "mer basic än tidigare": en bläckplatta med två rader text
+ * bredvid formuläret. Av fyra förslag (koncept/login-2026-11-23) valde Anton
+ * B: landningssidans Göteborgsfoto över hela skärmen, rubriken direkt på
+ * fotot och formuläret på en pappersplatta till höger. På mobil är fotot ett
+ * band överst. Lägestexten flyttade från panelen till formuläret, och
+ * trestegslistan i läget Skapa konto utgick med panelen.
+ *
+ * Rubriken och formuläret bor i samma komponent eftersom de delar läget.
  */
 
 type AuthMode = "login" | "signup" | "reset";
@@ -88,7 +98,12 @@ const T = {
     sv: "Lösenordet ska ha minst 8 tecken.",
     en: "The password must have at least 8 characters."
   },
-  arbetsyta: { sv: "Snajps arbetsyta", en: "Snajp workspace" },
+  // Rubriken på fotot i inloggningsläget: "Välkommen tillbaka", med det andra
+  // ordet markerat. Läget Skapa konto har sin egen rubrik: en ny kund ska inte
+  // hälsas välkommen tillbaka.
+  valkommen: { sv: "Välkommen", en: "Welcome" },
+  tillbakaOrd: { sv: "tillbaka", en: "back" },
+  fotoKredit: { sv: "Foto: Aron Fjell, Unsplash", en: "Photo: Aron Fjell, Unsplash" },
   lagen: { sv: "Logga in eller skapa konto", en: "Sign in or create an account" },
   loggaIn: { sv: "Logga in", en: "Sign in" },
   skapaKonto: { sv: "Skapa konto", en: "Create account" },
@@ -105,13 +120,6 @@ const T = {
     sv: "Två månader gratis. Inget kort och ingen bindningstid.",
     en: "Two months free. No card and no minimum term."
   },
-  saGarDetTill: { sv: "Så går det till", en: "How it works" },
-  steg1: { sv: "Skapa kontot här", en: "Create the account here" },
-  steg2: {
-    sv: "Berätta om företaget i fem korta steg",
-    en: "Tell us about the company in five short steps"
-  },
-  steg3: { sv: "Arbetsytan öppnas", en: "The workspace opens" },
   google: { sv: "Fortsätt med Google", en: "Continue with Google" },
   microsoft: { sv: "Fortsätt med Microsoft", en: "Continue with Microsoft" },
   eller: { sv: "eller", en: "or" },
@@ -135,6 +143,15 @@ const T = {
 } satisfies Record<string, Localized>;
 
 type FaltId = "namn" | "epost" | "losenord" | "kod";
+
+/**
+ * Fotots band och rubrikfärg. Fasta värden (bläck och papper ur DESIGN.md
+ * § Theme) och inte temats tokens: i mörkt tema byter `--ink` och `--paper`
+ * plats, men fotot är lika mörkt i båda.
+ */
+const FOTOBAND =
+  "linear-gradient(to top, oklch(0.20 0.018 252 / 0.80) 0%, oklch(0.20 0.018 252 / 0.52) 30%, oklch(0.20 0.018 252 / 0.22) 52%, oklch(0.20 0.018 252 / 0) 72%)";
+const FOTOTEXT = "oklch(0.965 0.008 88)";
 
 /** Serverns egna besked kommer på ett språk; samma text i båda halvorna. */
 function besked(varde: string | undefined, reserv: Localized): Localized {
@@ -288,43 +305,49 @@ export function LoginSida({ oauth }: Readonly<{ oauth: OAuthUtbud }>) {
   ).filter(([, , aktiv]) => aktiv);
 
   return (
-    <main className="min-h-screen bg-paper text-ink">
-      {/* gap-x först vid md: under md är båda sektionerna col-span-12, och
-          gapen ensamma är bredare än viewporten. */}
-      <div className="mx-auto grid min-h-screen max-w-[1480px] grid-cols-12 px-6 py-6 md:gap-x-8 md:px-8 md:py-10">
-        {/* Sidans EN tonala inversion. På mobil en låg remsa över formuläret:
-            som halv skärm sköt den formuläret under vecket. */}
-        <section className="col-span-12 flex flex-col bg-ink p-6 text-paper md:col-span-6 md:p-10">
-          <Link href="/" aria-label={text(T.tillStartsidan)} className="focus-ring inline-flex self-start rounded-input">
-            <Logo tone="paper" />
-          </Link>
-          <div className="mt-8 md:mt-auto">
-            <p className="text-[0.8125rem] font-medium text-paper-muted">{text(T.arbetsyta)}</p>
-            <h1 className="mt-2 font-display text-[clamp(2rem,4vw,3.25rem)] font-semibold leading-[1.05] tracking-[-0.02em]">
-              {text(rubrik)}
-            </h1>
-            <p className="mt-4 max-w-[40ch] text-[1.0625rem] leading-7 text-paper-muted">
-              {text(panelText)}
-            </p>
-            {/* Vad som händer efter knappen. Tre rader med hårlinjer och
-                ochre-numeraler, systemets signatur, NOT en kortrad. */}
-            {mode === "signup" ? (
-              <ol className="mt-8 hidden max-w-[40ch] md:block" aria-label={text(T.saGarDetTill)}>
-                {[T.steg1, T.steg2, T.steg3].map((rad, i) => (
-                  <li key={rad.sv} className="flex items-baseline gap-4 border-t border-paper/20 py-3">
-                    <span className="font-display text-[1.5rem] leading-none text-ochre" aria-hidden>
-                      {i + 1}
-                    </span>
-                    <span className="text-[0.9375rem] text-paper">{text(rad)}</span>
-                  </li>
-                ))}
-              </ol>
-            ) : null}
-          </div>
-        </section>
+    <main className="relative min-h-[100svh] bg-paper text-ink min-[900px]:bg-ink">
+      {/* Fotot bär sidan (Anton 2026-11-23, förslag B i koncept/login-2026-11-23):
+          samma Göteborgsfoto som landningssidan, över hela skärmen på desktop
+          och som ett band överst på mobil. Det står helt, utan avtäckning.
+          NOT en bläckplatta med två textrader, som sidan var förut. */}
+      <div className="relative h-[clamp(220px,38svh,380px)] overflow-hidden min-[900px]:fixed min-[900px]:inset-0 min-[900px]:h-auto">
+        <Image
+          src="/photos/goteborg-golden.webp"
+          alt=""
+          fill
+          priority
+          sizes="100vw"
+          className="object-cover object-[50%_78%] min-[900px]:object-[50%_60%]"
+        />
+        {/* Bandet ligger i fotot, underifrån, där rubriken står: ingen form
+            bakom texten. Fasta värden och inte temats tokens, eftersom fotot
+            är lika mörkt i ljust och mörkt tema. */}
+        <div aria-hidden className="pointer-events-none absolute inset-0" style={{ background: FOTOBAND }} />
+        <div className="absolute bottom-5 left-5 right-5 min-[900px]:bottom-[clamp(40px,9vh,96px)] min-[900px]:left-[clamp(24px,3vw,48px)] min-[900px]:right-[calc(clamp(400px,34vw,480px)+clamp(72px,9vw,144px))]">
+          <h1
+            className="font-display text-[clamp(2.25rem,10.5vw,3.75rem)] font-light leading-[0.98] tracking-[-0.025em] min-[900px]:text-[clamp(3.25rem,7.2vw,7rem)]"
+            style={{ color: FOTOTEXT }}
+          >
+            {mode === "login" && !tvaSteg ? (
+              <>
+                <span className="block">{text(T.valkommen)}</span>
+                {/* Ett markerat ord, sist, i den ljusa ockran: den mörkare
+                    försvinner mot solnedgången (DESIGN.md § Hjälten). */}
+                <em className="block font-normal italic text-ochre">{text(T.tillbakaOrd)}</em>
+              </>
+            ) : (
+              text(rubrik)
+            )}
+          </h1>
+        </div>
+      </div>
 
-        <section className="col-span-12 mt-8 flex items-center md:col-span-6 md:mt-0 md:pl-10">
-          <form className="w-full max-w-md" onSubmit={handleSubmit} noValidate>
+      <div className="relative z-10 min-[900px]:flex min-[900px]:min-h-[100svh] min-[900px]:justify-end min-[900px]:p-[clamp(24px,3vw,48px)]">
+        <section className="flex w-full flex-col border-t border-ink/15 bg-paper px-5 pb-8 pt-6 min-[900px]:w-[clamp(400px,34vw,480px)] min-[900px]:rounded-[2px] min-[900px]:border min-[900px]:p-[clamp(28px,3vw,44px)]">
+          <Link href="/" aria-label={text(T.tillStartsidan)} className="focus-ring inline-flex self-start rounded-input">
+            <Logo />
+          </Link>
+          <form className="mt-7 w-full min-[900px]:mt-auto min-[900px]:pt-10" onSubmit={handleSubmit} noValidate>
             {/* Flikraden döljs i återställningsläget: det är ett sidospår, och
                 vägen tillbaka är länken under knappen. */}
             {mode === "reset" || tvaSteg ? null : (
@@ -349,8 +372,12 @@ export function LoginSida({ oauth }: Readonly<{ oauth: OAuthUtbud }>) {
               </div>
             )}
 
+            {/* Vad som gäller för läget man står i. Stod förut på den mörka
+                panelen; nu under flikarna, där formuläret börjar. */}
+            <p className="mt-5 max-w-[40ch] text-[0.9375rem] leading-6 text-ink-muted">{text(panelText)}</p>
+
             {tvaSteg ? (
-              <div className="grid gap-5">
+              <div className="mt-7 grid gap-5">
                 <Falt
                   id="kod"
                   label={text(T.tvaKod)}
@@ -363,7 +390,7 @@ export function LoginSida({ oauth }: Readonly<{ oauth: OAuthUtbud }>) {
                 />
               </div>
             ) : (
-            <div className="mt-8 grid gap-5">
+            <div className="mt-7 grid gap-5">
               {mode === "signup" ? (
                 <Falt
                   id="namn"
@@ -502,6 +529,7 @@ export function LoginSida({ oauth }: Readonly<{ oauth: OAuthUtbud }>) {
               </p>
             </div>
           </form>
+          <p className="mt-7 text-[0.8125rem] text-ink-subtle">{text(T.fotoKredit)}</p>
         </section>
       </div>
     </main>

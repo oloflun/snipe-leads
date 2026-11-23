@@ -4,7 +4,7 @@ import { redirectIfOnboarded } from "@/lib/auth/onboarding-gate";
 // Målgruppsstegets förifyllning — samma tal och roller som standardinställningarna
 // skriver när steget saknas. Modulen är server-only, därför props och inte import
 // i klienten.
-import { SMAFORETAG, STANDARDROLLER } from "@/lib/snajp/standard";
+import { SMAFORETAG, STANDARDROLLER, roststartpunkt } from "@/lib/snajp/standard";
 // Förladdar Fraunces på den här sidan (lib/fonts-rubrik.ts säger varför).
 import "@/lib/fonts-rubrik";
 
@@ -25,6 +25,7 @@ export default async function Page() {
           epost={session?.user?.email ?? null}
           namn={session?.user?.name ?? null}
           standardMalgrupp={{ roller: STANDARDROLLER, anstallda: SMAFORETAG }}
+          standardRost={roststartpunkt()}
         />
       </div>
     </main>

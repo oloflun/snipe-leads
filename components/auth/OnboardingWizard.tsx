@@ -14,9 +14,9 @@ import { PAKET, type Paket } from "@/lib/pricing";
 import { cn } from "@/lib/utils";
 
 /**
- * Onboardingen som ett flöde i fem steg — företaget, branschen,
- * kontaktpersonen, målgruppen, paketet — i stället för ett formulär med allt
- * på en gång.
+ * Onboardingen som ett flöde i sex steg — företaget, branschen,
+ * kontaktpersonen, målgruppen, röst och ton, paketet — i stället för ett
+ * formulär med allt på en gång.
  *
  * Målgruppen ligger FÖRE paketet och visas alltid, med enbart valfria fält:
  * paketsteget bär villkoren och inskickningen och ska förbli sista steget, och
@@ -73,6 +73,10 @@ const STEG = [
   {
     kicker: { sv: "Målgrupp", en: "Target group" },
     rubrik: { sv: "Vilka bolag vill Iris hitta?", en: "Which companies should Iris find?" }
+  },
+  {
+    kicker: { sv: "Röst och ton", en: "Voice and tone" },
+    rubrik: { sv: "Hur ska agenterna låta?", en: "How should the agents sound?" }
   },
   {
     kicker: { sv: "Paket", en: "Plan" },
@@ -216,6 +220,15 @@ const T = {
     en: "The industry gives the agents the right vocabulary from day one. A quote in construction does not sound like one in healthcare."
   },
   bransch: { sv: "Bransch", en: "Industry" },
+  introTon: {
+    sv: "Båda agenterna skriver efter de här reglerna, i utskick och i svar. Texten är ett utkast: skriv om den så att den låter som ni.",
+    en: "Both agents write by these rules, in emails and in replies. The text is a draft: rewrite it until it sounds like you."
+  },
+  rost: { sv: "Röst och tonläge", en: "Voice and tone" },
+  rostHint: {
+    sv: "Går att ändra senare under Inställningar. Töms fältet gäller utkastet.",
+    en: "You can change it later under Settings. If you clear the field, the draft applies."
+  },
   intro2: {
     sv: "Er kontakt hos oss är en människa, inte en kö. Vi hör av oss när agenterna behöver ett beslut, och innan er gratisperiod tar slut.",
     en: "Your contact with us is a person, not a queue. We get in touch when the agents need a decision, and before your free period ends."
@@ -377,12 +390,15 @@ const faltDomId = (id: string) => `ob-${id}`;
 export function OnboardingWizard({
   epost,
   namn,
-  standardMalgrupp
+  standardMalgrupp,
+  standardRost
 }: Readonly<{
   epost?: string | null;
   namn?: string | null;
   /** Förifyllningen ur lib/snajp/standard.ts (server-only, därför en prop). */
   standardMalgrupp: { roller: string[]; anstallda: [number, number] };
+  /** Utkastet till röstdokument ur samma fil. Kunden ändrar det i steget Röst och ton. */
+  standardRost: string;
 }>) {
   const { text } = useLocale();
   const [steg, setSteg] = useState(0);
@@ -421,7 +437,12 @@ export function OnboardingWizard({
   // Erbjudandena utskicken bygger på (Anton 2026-10-25). Ett per stycke.
   const [erbjudanden, setErbjudanden] = useState("");
 
-  // Steg 5 — paketet. Duo förvalt: det är paketet vi vill sälja (pricing.ts).
+  // Steg 5 — röst och ton. Röstdokumentet, förifyllt med utkastet och
+  // ändringsbart här (Anton 2026-11-23). Förut skrevs utkastet rakt in i
+  // arbetsytan och gick att ändra först när den var skapad.
+  const [rost, setRost] = useState(standardRost);
+
+  // Steg 6 — paketet. Duo förvalt: det är paketet vi vill sälja (pricing.ts).
   const [paket, setPaket] = useState<Paket["id"]>("duo");
   const [notiser, setNotiser] = useState(true);
   // Faktureringsadressen — dit fakturan går efter gratisperioden. Krävs för
@@ -516,7 +537,7 @@ export function OnboardingWizard({
       if (!falt.anstMin && !falt.anstMax && min && max && Number(min) > Number(max))
         falt.anstMax = T.felMinMax;
     }
-    if (vilket === 4 && !villkor) falt.villkor = T.felVillkor;
+    if (vilket === 5 && !villkor) falt.villkor = T.felVillkor;
     return { falt, allmant };
   }
 
@@ -552,7 +573,7 @@ export function OnboardingWizard({
   function skickaIn() {
     // Sista steget validerar som de andra — kryssrutan är inte dekor, och
     // serversidan gör om samma kontroll för den som kringgår det.
-    if (!haller(4)) return;
+    if (!haller(5)) return;
     startTransition(async () => {
       const result = await saveBusinessContext({
         foretag,
@@ -561,6 +582,7 @@ export function OnboardingWizard({
         produkt,
         fokus,
         erbjudanden,
+        rost,
         malgrupp: {
           branscher,
           orter,
@@ -1021,7 +1043,31 @@ export function OnboardingWizard({
             </form>
           ) : null}
 
+          {/* Tonen är ett eget steg och inte en del av branschsteget (Anton
+              2026-11-23): bransch och ton är två frågor, och ett steg bär en. */}
           {steg === 4 ? (
+            <form onSubmit={nasta} noValidate>
+              <p className="mt-4 max-w-[62ch] text-[15px] leading-[1.65] text-ink-muted">
+                {text(T.introTon)}
+              </p>
+              {/* Samma tak som röstdokumentet har i inställningarna (4000 tecken). */}
+              <div className="mt-8 grid grid-cols-12 gap-y-6 md:gap-x-8">
+                <Falt
+                  id="rost"
+                  label={text(T.rost)}
+                  hint={text(T.rostHint)}
+                  span="md:col-span-12"
+                  value={rost}
+                  onChange={(v) => setRost(v.slice(0, 4000))}
+                  placeholder={standardRost.split("\n")[0] ?? ""}
+                  rader={8}
+                />
+              </div>
+              <Stegfot error={felText} onTillbaka={() => gaTill(3)} />
+            </form>
+          ) : null}
+
+          {steg === 5 ? (
             <form
               noValidate
               onSubmit={(e) => {
@@ -1217,7 +1263,7 @@ export function OnboardingWizard({
                 <div className="mt-8 flex flex-wrap items-center gap-4">
                   <button
                     type="button"
-                    onClick={() => gaTill(3)}
+                    onClick={() => gaTill(4)}
                     className="focus-ring inline-flex min-h-12 items-center gap-2 rounded-input px-4 text-[0.9375rem] font-medium text-ink-muted hover:text-ink"
                   >
                     <ArrowLeft className="h-4 w-4" aria-hidden />

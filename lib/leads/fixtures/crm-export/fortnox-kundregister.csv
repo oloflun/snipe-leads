@@ -1,0 +1,5 @@
+Kundnummer;Namn;Organisationsnummer;Adress;Postnummer;Ort;Telefon;E-post;Er referens;Vår referens;Hemsida
+1001;Fi Frisör Test AB;569900-1110;Storgatan 3;903 26;Umeå;040-628 04 59;faktura@example.se;Bea Dahl;Test Säljare;www.fifrisor.example.se
+1002;Chi Café Test HB;9699001120;Torget 1;972 31;Luleå;070-174 06 05;chi@example.se;Carl Ek;Test Säljare;
+1003;Psi Pilates Test AB;569900-1136;Box 45;111 22;Stockholm;+46 8 465 004 05;"psi@example.com; ekonomi@example.com";;;https://psi.example.com
+1004;Omega Ombyggnad Test AB;;;;;;;Dina Falk;Test Säljare;
