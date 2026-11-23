@@ -52,20 +52,20 @@ async def require_business_context(storage, tenant_id: str) -> str:
     innehall = ((doc or {}).get("content") or "").strip()
 
     if not innehall:
+        # Texten visas för kunden som utkastets anteckning (draft_note). Förut
+        # pekade den på product_marketing och TENANTS.md, som bara vi kan läsa.
         raise MissingBusinessContextError(
-            "Produktbeskrivningen saknas för den här kunden. Ett utskick grundat "
-            "på en tom produktbeskrivning blir generisk AI-text, vilket är värre "
-            "än inget utskick. Fyll product_marketing via onboarding-samtalet "
-            "(och business_contexts för workspacet, se TENANTS.md steg 5) innan "
-            "körningen startas om."
+            "Beskrivningen av vad ni säljer saknas, och utan den blir ett mejl "
+            "bara allmän text. Fyll i den under Inställningar, Vad ni säljer, "
+            "och kör sedan leadet igen."
         )
 
     if len(innehall) < MINSTA_ANVANDBARA_LANGD:
         raise MissingBusinessContextError(
-            f"Produktbeskrivningen är {len(innehall)} tecken lång, vilket är för "
-            f"tunt för att skriva ett mejl på (minst {MINSTA_ANVANDBARA_LANGD} "
-            "krävs). Den behöver säga vad kunden säljer, till vem och vad som "
-            "skiljer dem från konkurrenterna."
+            f"Beskrivningen av vad ni säljer är {len(innehall)} tecken, och det är "
+            f"för lite att skriva ett mejl på (minst {MINSTA_ANVANDBARA_LANGD}). "
+            "Skriv vad ni säljer, till vem och vad som skiljer er från andra, "
+            "under Inställningar, Vad ni säljer."
         )
 
     return innehall

@@ -26,7 +26,10 @@ async def test_onboarding_chat_endpoint_exists_and_degrades_gracefully_in_simula
                 "/api/leads/onboarding/chat", headers=DEMO, json={"message": "Vi säljer kurser."}
             )
             assert response.status_code == 503
-            assert "riktig LLM-nyckel" in response.json()["detail"]
+            besked = response.json()["detail"]
+            # Kunden ska få veta att felet är vårt, aldrig vilken variabel som saknas.
+            assert "kan inte köras just nu" in besked
+            assert "API_KEY" not in besked and "DEPLOY" not in besked
 
 
 @pytest.mark.anyio

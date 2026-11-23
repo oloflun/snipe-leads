@@ -58,6 +58,13 @@ DEMO_RESPONSE = "demo_response"
 DEMO_IP_HOURLY_RESPONSES = 30
 
 
+_KUNDTEXT = {
+    "tenant": "Agenten har nått sitt tak för den här timmen. Försök igen om en stund.",
+    "user": "Det har kommit många frågor på kort tid. Vänta en stund och försök igen.",
+    "ip": "Det har kommit många frågor på kort tid. Vänta en stund och försök igen.",
+}
+
+
 class RateLimitDbExceededError(RuntimeError):
     """Ett tak nåddes. Bär vilket, så att anroparen kan skriva ett begripligt
     svenskt besked i stället för ett generiskt 429."""
@@ -66,9 +73,10 @@ class RateLimitDbExceededError(RuntimeError):
         self.scope_kind = scope_kind
         self.used = used
         self.cap = cap
-        super().__init__(
-            f"Timtaket för {scope_kind} är nått ({used}/{cap} LLM-anrop senaste timmen)."
-        )
+        # Texten går ut som 429-besked i chatten. Förut stod "Timtaket för
+        # tenant är nått (400/400 LLM-anrop senaste timmen)", våra egna ord
+        # för saken. Talen finns kvar på felet för loggen.
+        super().__init__(_KUNDTEXT.get(scope_kind, _KUNDTEXT["user"]))
 
 
 @dataclass(frozen=True)

@@ -3,7 +3,7 @@
 import { ExternalLink, Loader2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { Rad, Radlista, btnLiten, btnPrimary, btnSecondary, meta, rubrikPanel } from "@/components/ui";
-import { felmeddelande, readJsonBody } from "@/lib/http/json";
+import { felmeddelande, kroppsbesked, readJsonBody } from "@/lib/http/json";
 import { useLocale, type Localized } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
@@ -123,6 +123,19 @@ export function varning(sv: string): Localized {
   return { sv, en: sv };
 }
 
+/**
+ * Reservtexten när servern inte gav något eget besked. Förut kastades bara
+ * statuskoden ("422"), och den stod sedan ensam i rött hos kunden.
+ */
+const SVARADE_INTE = "Det gick inte att nå tjänsten just nu. Försök igen om en stund.";
+const SVARADE_INTE_EN = "The service could not be reached right now. Try again in a moment.";
+
+/** Felet som besked på båda språken. Serverns egna besked är på svenska. */
+function felbesked(orsak: unknown): Localized {
+  const sv = felmeddelande(orsak);
+  return sv === SVARADE_INTE ? { sv, en: SVARADE_INTE_EN } : ord(sv);
+}
+
 /** Värdnamnet, utan protokoll och www, för en läsbar rad. */
 export function vard(url: string): string {
   try {
@@ -144,7 +157,7 @@ export function useWebbplatsskanning(aktiv = true) {
     try {
       const svar = await fetch("/api/snajp-support/kb/forslag", { cache: "no-store" });
       const kropp = await readJsonBody<Lage & { error?: string; detail?: string }>(svar);
-      if (!svar.ok) throw new Error(kropp?.detail ?? kropp?.error ?? `${svar.status}`);
+      if (!svar.ok) throw new Error(kroppsbesked(kropp) ?? SVARADE_INTE);
       setLage({ skanning: kropp?.skanning ?? null, forslag: kropp?.forslag ?? [] });
       setFel(null);
     } catch (orsak) {
@@ -231,7 +244,7 @@ export function WebbplatsForslag({ onAndrat }: Readonly<{ onAndrat: () => void }
         body: JSON.stringify({ ids, beslut })
       });
       const kropp = await readJsonBody<{ tillagda?: string[]; fanns_redan?: string[]; detail?: string; error?: string }>(svar);
-      if (!svar.ok) throw new Error(kropp?.detail ?? kropp?.error ?? `${svar.status}`);
+      if (!svar.ok) throw new Error(kroppsbesked(kropp) ?? SVARADE_INTE);
       const tillagda = kropp?.tillagda?.length ?? 0;
       const redan = kropp?.fanns_redan?.length ?? 0;
       if (beslut === "lagg_till") {
@@ -244,7 +257,7 @@ export function WebbplatsForslag({ onAndrat }: Readonly<{ onAndrat: () => void }
       }
       await ladda();
     } catch (orsak) {
-      setAtgardsfel(ord(felmeddelande(orsak)));
+      setAtgardsfel(felbesked(orsak));
     } finally {
       setUpptagen(null);
     }
@@ -262,11 +275,11 @@ export function WebbplatsForslag({ onAndrat }: Readonly<{ onAndrat: () => void }
       });
       if (!svar.ok && svar.status !== 422) {
         const kropp = await readJsonBody<{ detail?: string; error?: string }>(svar);
-        throw new Error(kropp?.detail ?? kropp?.error ?? `${svar.status}`);
+        throw new Error(kroppsbesked(kropp) ?? SVARADE_INTE);
       }
       await ladda();
     } catch (orsak) {
-      setAtgardsfel(ord(felmeddelande(orsak)));
+      setAtgardsfel(felbesked(orsak));
     } finally {
       setUpptagen(null);
     }

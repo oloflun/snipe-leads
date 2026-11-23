@@ -3,7 +3,7 @@
 import { Loader2, Mail } from "lucide-react";
 import { useId, useState } from "react";
 import { btnLiten, btnPrimary, btnSecondary } from "@/components/ui";
-import { felmeddelande, readJsonBody } from "@/lib/http/json";
+import { felmeddelande, kroppsbesked, readJsonBody } from "@/lib/http/json";
 import { useLocale, type Localized } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
@@ -115,7 +115,7 @@ export function ProvmejlKnapp({
         setOppen(false);
         return;
       }
-      const detalj = typeof svar?.detail === "string" ? svar.detail : `status ${response.status}`;
+      const detalj = kroppsbesked(svar);
       const fel: Localized =
         response.status === 403
           ? T.ejEgen
@@ -123,7 +123,12 @@ export function ProvmejlKnapp({
             ? T.avstangt
             : response.status === 404
               ? T.saknas
-              : { sv: `Provmejlet kunde inte skickas (${detalj}).`, en: `The test email could not be sent (${detalj}).` };
+              : detalj
+                ? { sv: detalj, en: detalj }
+                : {
+                    sv: "Provmejlet kunde inte skickas just nu. Försök igen om en stund.",
+                    en: "The test email could not be sent right now. Try again in a moment."
+                  };
       setBesked({ ton: "fel", text: fel });
     } catch (orsak) {
       const m = felmeddelande(orsak);

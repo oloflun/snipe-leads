@@ -4,7 +4,7 @@ import { Loader2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { createDemoSupportApi } from "@/lib/demo/support-inbox";
 import { Rad, Radlista } from "@/components/ui";
-import { readJsonBody } from "@/lib/http/json";
+import { kroppsbesked, readJsonBody } from "@/lib/http/json";
 import { cn } from "@/lib/utils";
 import { useLocale, type Localized } from "@/lib/i18n";
 
@@ -65,11 +65,10 @@ export function SupportRegler({ demo = false }: Readonly<{ demo?: boolean }>) {
       );
       if (!response.ok || kropp?.offline) {
         throw new Error(
-          kropp?.detail ??
-            kropp?.error ??
+          kroppsbesked(kropp) ??
             text({
-              sv: `Kunde inte nå reglerna (${response.status}).`,
-              en: `Could not reach the rules (${response.status}).`
+              sv: "Reglerna gick inte att nå just nu. Ladda om sidan om en stund.",
+              en: "The rules could not be reached right now. Reload the page in a moment."
             })
         );
       }

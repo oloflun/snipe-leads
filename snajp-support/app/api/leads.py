@@ -18,6 +18,7 @@ from datetime import date, datetime, timedelta, timezone
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request
+from pydantic import ValidationError
 
 from ..config import CATEGORY_LABELS, DEFAULT_TENANT_ID, get_settings
 from ..jobs.stadare import (
@@ -150,6 +151,10 @@ _FEL_INTERNT = (
     "Körningen kunde inte slutföras på grund av ett fel hos oss. Felet är "
     "loggat — kör om den, och hör av dig om det upprepas."
 )
+_FEL_EJ_KORBAR = (
+    "Iris kan inte köras just nu. Felet ligger hos oss och är loggat. "
+    "Försök igen om en stund, och hör av dig om det upprepas."
+)
 _FEL_UTKAST = (
     "ett fel hos oss stoppade det. Felet är loggat — kör Processa om för ett "
     "nytt försök."
@@ -184,6 +189,31 @@ def _ar_leverantorsfel(fel: BaseException) -> bool:
     return False
 
 
+#: Fel som bara en utvecklare kan läsa. "'NoneType' object has no attribute
+#: 'get'" och pydantics engelska fältlista är inte våra domänfel, men de ärver
+#: eller liknar dem (JSONDecodeError och ValidationError är ValueError), och
+#: gick därför rakt ut i kundens körningsruta som "egen" feltext. De loggas av
+#: anroparen och kunden får reservmeningen.
+_PROGRAMFEL: tuple[type[BaseException], ...] = (
+    LookupError,
+    TypeError,
+    AttributeError,
+    NameError,
+    AssertionError,
+    ArithmeticError,
+    UnicodeError,
+    NotImplementedError,
+    RecursionError,
+    OSError,
+    json.JSONDecodeError,
+    ValidationError,
+)
+
+
+def _ar_programfel(fel: BaseException) -> bool:
+    return isinstance(fel, _PROGRAMFEL)
+
+
 def _jobbfeltext(fel: BaseException, *, reserv: str = _FEL_INTERNT) -> str:
     """Den mening ett misslyckat leads-jobb bär ut till kunden.
 
@@ -191,7 +221,8 @@ def _jobbfeltext(fel: BaseException, *, reserv: str = _FEL_INTERNT) -> str:
     eller KUNDTEXT_KVOT). Övriga leverantörsfel får en fast mening — aldrig
     råtexten. Våra EGNA domänfel (ValueError("Prospektet saknar …") och
     liknande) passerar som förut: de är skrivna för att läsas, och att gömma
-    dem bakom en generisk mening vore att gömma diagnosen. Fram till
+    dem bakom en generisk mening vore att gömma diagnosen. Programfel
+    (_PROGRAMFEL) är inte skrivna för att läsas och får reservmeningen. Fram till
     2026-09-13 bar jobbet str(fel) för allt, och kreditslutet nådde kunden
     bara tack vare läsvägens översättning — som inte ser draft_note eller
     lead_lists.felorsak.
@@ -199,7 +230,7 @@ def _jobbfeltext(fel: BaseException, *, reserv: str = _FEL_INTERNT) -> str:
     kundtext = kundtext_for(fel)
     if kundtext:
         return kundtext
-    if _ar_leverantorsfel(fel):
+    if _ar_leverantorsfel(fel) or _ar_programfel(fel):
         return reserv
     return str(fel) or reserv
 
@@ -310,11 +341,13 @@ def _produktrad(text: str, *, max_tecken: int = 180) -> str:
 
 def _require_live_llm() -> None:
     if get_settings().is_simulation():
-        raise HTTPException(
-            status_code=503,
-            detail="Kräver en riktig LLM-nyckel (DEEPSEEK_API_KEY). Se DEPLOY_KEYS.md — "
-            "ingen simuleringsersättning finns för leads-ytorna.",
+        # Orsaken är vår (ingen modellnyckel i miljön, se DEPLOY_KEYS.md) och
+        # hör hemma i loggen. Kunden fick förut variabelnamnet och filnamnet.
+        logger.error(
+            "Leads-ytan anropades utan riktig LLM-nyckel (simuleringsläge). "
+            "Sätt modellnyckeln för miljön, se DEPLOY_KEYS.md."
         )
+        raise HTTPException(status_code=503, detail=_FEL_EJ_KORBAR)
 
 
 def _valj_leads_kedja():

@@ -223,7 +223,8 @@ async def _kor_skanning(
                 )
             except Exception:  # noqa: BLE001 — raden får inte fälla jobbets slutläge
                 logger.exception("kb-skanningens rad kunde inte avslutas")
-        await app_state.jobs.fail(job_id, f"Skanningen avbröts ({type(fel).__name__}).")
+        # Feltypen ("TypeError") står i loggen ovan; kunden får samma mening som raden.
+        await app_state.jobs.fail(job_id, "Skanningen avbröts. Försök igen om en stund.")
 
 
 async def _pagaende_skanning(storage, tenant_id: str) -> dict | None:
@@ -438,8 +439,12 @@ async def extrahera_pdf(
         sidor = len(reader.pages)
         text = "\n".join(sida.extract_text() or "" for sida in reader.pages).strip()
     except Exception as orsak:  # noqa: BLE001 — pypdf kastar flera olika typer
+        # pypdf:s egen text ("EOF marker not found") säger kunden ingenting.
+        logger.warning("PDF gick inte att läsa: %s", orsak)
         raise HTTPException(
-            status_code=422, detail=f"PDF:en gick inte att läsa: {orsak}"
+            status_code=422,
+            detail="PDF:en gick inte att läsa. Den kan vara skadad eller "
+            "lösenordsskyddad. Prova en annan fil, eller klistra in texten.",
         ) from orsak
 
     if sidor == 0:

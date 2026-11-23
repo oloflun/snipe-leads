@@ -25,7 +25,7 @@ import { EjAktiverad, arEjAktiverad } from "@/components/EjAktiverad";
 import { Badge, btnPrimary, btnSecondary, btnLiten, faltTatt } from "@/components/ui";
 import { mejlaOss } from "@/components/marketing/copy";
 import { createDemoSupportApi } from "@/lib/demo/support-inbox";
-import { readJsonBody } from "@/lib/http/json";
+import { kroppsbesked, readJsonBody } from "@/lib/http/json";
 import { useLocale, type Localized } from "@/lib/i18n";
 import { useSmal } from "@/components/leads/smal";
 import { cn } from "@/lib/utils";
@@ -421,7 +421,7 @@ export function Dashboard({
       if (arEjAktiverad(response.status, payload)) {
         throw new EjAktiveradFel();
       }
-      const besked = payload.detail ?? payload.error;
+      const besked = kroppsbesked(payload);
       if (besked) throw new Error(besked);
       throw new CopyFel(T.okantFel);
     }

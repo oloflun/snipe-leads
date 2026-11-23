@@ -124,6 +124,9 @@ export async function readJson<T = unknown>(response: Response): Promise<T | nul
   return parsed;
 }
 
+// Egen fil: testet (node --test) kan inte ladda den här filens parameteregenskaper.
+export { kroppsbesked } from "./besked";
+
 /** Meddelande som går att visa för en användare, oavsett vad som kastades. */
 export function felmeddelande(error: unknown, reserv = "Något gick fel. Försök igen."): string {
   if (error instanceof HttpJsonError) {

@@ -7,7 +7,7 @@ import { useArbetsvag } from "@/components/AppShell";
 import { useDashboard } from "@/components/dashboard/DashboardContext";
 import { KONTAKT_MEJL, mejlaOss } from "@/components/marketing/copy";
 import { Rad, Radlista, btnLiten, btnPrimary, btnSecondary } from "@/components/ui";
-import { readJsonBody } from "@/lib/http/json";
+import { kroppsbesked, readJsonBody } from "@/lib/http/json";
 import { cn } from "@/lib/utils";
 import { useLocale, type Localized } from "@/lib/i18n";
 
@@ -168,11 +168,10 @@ export function Inkorgar() {
       );
       if (!response.ok || kropp?.offline) {
         throw new Error(
-          kropp?.detail ??
-            kropp?.error ??
+          kroppsbesked(kropp) ??
             text({
-              sv: `Kunde inte läsa inkorgarna (${response.status}).`,
-              en: `Could not read the mailboxes (${response.status}).`
+              sv: "Inkorgarna gick inte att läsa just nu. Ladda om sidan om en stund.",
+              en: "The mailboxes could not be read right now. Reload the page in a moment."
             })
         );
       }
@@ -257,8 +256,7 @@ export function Inkorgar() {
       const kropp = await readJsonBody<{ error?: string; detail?: string; connected?: boolean }>(response);
       if (!response.ok || !kropp?.connected) {
         throw new Error(
-          kropp?.detail ??
-            kropp?.error ??
+          kroppsbesked(kropp) ??
             text({ sv: "Kopplingen misslyckades. Försök igen.", en: "Connecting failed. Try again." })
         );
       }
@@ -319,8 +317,7 @@ export function Inkorgar() {
       const kropp = await readJsonBody<{ error?: string; detail?: string }>(response);
       if (!response.ok) {
         throw new Error(
-          kropp?.detail ??
-            kropp?.error ??
+          kroppsbesked(kropp) ??
             text({ sv: "Kunde inte koppla ur inkorgen.", en: "Could not disconnect the mailbox." })
         );
       }

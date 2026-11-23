@@ -168,8 +168,12 @@ async def skicka_provmejl(
 
     try:
         await provider.send(to=adress, subject=message.get("subject") or "", body=body, **extra)
-    except Exception as error:  # noqa: BLE001 — leverantörens fel är kundens besked
+    except Exception as error:  # noqa: BLE001 — loggas, kunden får en fast mening
         logger.exception("Provmejl misslyckades för %s", tenant_id)
-        raise ProvmejlFel(502, f"Provmejlet kunde inte skickas: {error}") from error
+        # Leverantörens råa svar (Resends JSON) hör hemma i loggen ovan, inte i
+        # kundens ruta.
+        raise ProvmejlFel(
+            502, "Provmejlet kunde inte skickas just nu. Försök igen om en stund."
+        ) from error
     logger.info("Provmejl skickat för %s (%s)", tenant_id, "utkast" if queue_item_id else "skickat mejl")
     return {"till": adress, "saknar_fot": not har_fot(body)}
