@@ -164,7 +164,12 @@ def main() -> int:
         if saknas and args.apply:
             set_vars(sid, miljo_id, saknas)
 
-        kopplad = bool((nu.get("source") or {}).get("repo"))
+        # Grenens trigger räknas också: instansens `source` var tom för
+        # overvakning i development fast tjänsten byggde ur repot (2026-11-23).
+        kopplad = bool((nu.get("source") or {}).get("repo")) or any(
+            t["node"]["serviceId"] == sid and t["node"]["environmentId"] == miljo_id
+            for t in projekt["deploymentTriggers"]["edges"]
+        )
         print("  källa: " + ("kopplad" if kopplad else "kopplas" if args.apply else "(skulle kopplas)"))
         if args.apply:
             if not kopplad:
