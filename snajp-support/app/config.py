@@ -528,6 +528,11 @@ class Settings(BaseSettings):
     imap_user: str = ""
     imap_password: str = ""  # Gmail: app-lösenord; Outlook: app-lösenord/IMAP-auth
     imap_folder: str = "INBOX"
+    # En brevlåda utan UID-märke (första synken efter migration 150, eller när
+    # servern bytt UIDVALIDITY) hämtar olästa plus allt från så här många dagar
+    # bakåt. Redan sparade mejl faller som dubletter; de som en människa öppnat
+    # utan att Snajp fått dem kommer in märkta och utan utkast. 0 = bara olästa.
+    imap_tillbakablick_dagar: int = 7
     # XOAUTH2 är förstahandsvalet för Gmail. Refresh-token ger nya kortlivade
     # access-tokens; inga access-tokens sparas i env eller databas.
     imap_oauth_client_id: str = ""

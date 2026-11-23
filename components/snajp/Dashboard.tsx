@@ -71,6 +71,9 @@ type EmailRow = {
   /** Klassningen (migration 084): support | lead | ej_relaterat, och vem som avgjorde. */
   klass?: string | null;
   klass_kalla?: string | null;
+  /** Mejlet var läst på servern när Snajp hämtade det (migration 150): en
+   *  människa har öppnat det i brevlådan, och agenten skriver inget utkast. */
+  last_i_brevladan?: boolean;
 };
 
 type EmailDetail = EmailRow & {
@@ -135,6 +138,10 @@ const STATUS_META: Record<string, { label: Localized; tone: "neutral" | "good" |
 const EVENT_LABELS: Record<string, Localized> = {
   received: { sv: "Mail mottaget", en: "Mail received" },
   notis: { sv: "Larm från Snajp, flyttat till Att hantera", en: "Alert from Snajp, moved to To handle" },
+  last_i_brevladan: {
+    sv: "Redan öppnat i brevlådan: inget utkast, flyttat till Att hantera",
+    en: "Already opened in the mailbox: no draft, moved to To handle"
+  },
   classified: { sv: "Klassificerat", en: "Classified" },
   escalated: { sv: "Eskalerat till människa", en: "Escalated to a person" },
   draft_created: { sv: "Utkast skapat", en: "Draft created" },
@@ -200,6 +207,11 @@ const T = {
   agentenLaser: { sv: "Agenten läser…", en: "Agent is reading…" },
   utanAmne: { sv: "(utan ämne)", en: "(no subject)" },
   hanterat: { sv: "Hanterat", en: "Handled" },
+  oppnat: { sv: "· Öppnat i brevlådan", en: "· Opened in the mailbox" },
+  oppnatText: {
+    sv: "Mejlet var redan öppnat i brevlådan när Snajp hämtade det. Agenten skriver inget utkast på mejl som någon hos er har läst: svara från brevlådan och markera det som hanterat här.",
+    en: "This email was already opened in the mailbox when Snajp fetched it. The agent writes no draft for emails someone on your team has read: reply from the mailbox and mark it as handled here."
+  },
   offert: { sv: "· Offert", en: "· Quote" },
   utbildning: { sv: "· Utbildning", en: "· Training" },
   stang: { sv: "Stäng", en: "Close" },
@@ -1173,6 +1185,9 @@ export function Dashboard({
                           {forslagText(sortering.forslag[email.id])}
                         </span>
                       ) : null}
+                      {email.last_i_brevladan ? (
+                        <span className="shrink-0 font-medium text-ink-muted">{text(T.oppnat)}</span>
+                      ) : null}
                       {email.classification?.offertforfragan ? (
                         <span className="shrink-0 font-medium text-warning">{text(T.offert)}</span>
                       ) : null}
@@ -1220,6 +1235,10 @@ export function Dashboard({
                   <X className="h-4 w-4" />
                 </button>
               </div>
+
+              {selected.last_i_brevladan ? (
+                <p className="rounded-input bg-ochre/10 px-4 py-3 text-sm leading-6 text-ink-muted">{text(T.oppnatText)}</p>
+              ) : null}
 
               <div className="rounded-input bg-ink/[0.03] p-4 text-sm leading-6 text-ink-muted">
                 <p className="whitespace-pre-wrap">{selected.body_text}</p>

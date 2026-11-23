@@ -148,12 +148,19 @@ async def hantera_prospektsvar(
     tenant_name: str,
     context_pack: str,
     publik_bas_url: str = "",
+    utan_utkast: bool = False,
 ) -> dict[str, Any]:
     """Tar emot ETT inkommande prospektsvar och agerar på det.
 
     Sidoeffekterna (spara svaret, ställa in kön, suppressa, köa utkast,
     notifiera) görs i KOD — modellen klassificerar och formulerar, inget
     annat. Samma arbetsfördelning som support_agent och run_outreach_draft.
+
+    `utan_utkast` (Anton 2026-11-23): svaret var redan öppnat i brevlådan när
+    Snajp hämtade det. Det sparas och klassas som vanligt, så att steget, kön,
+    återkontakten och en avregistrering följer med, men Iris skriver inget
+    svarsutkast: en människa har läst det och svarar själv. Konversationen
+    visar att svaret lämnats över och varför.
     """
     started = time.monotonic()
 
@@ -175,7 +182,10 @@ async def hantera_prospektsvar(
     # annat kan fallera, och ett manuellt steg gäller inte efter ett nytt svar.
     await konversation.logga(
         storage, tenant_id, prospect_id=thread.get("prospect_id"), thread_id=thread_id, typ="svar",
-        detalj={"message_id": str((inkommet or {}).get("id") or "")},
+        detalj={
+            "message_id": str((inkommet or {}).get("id") or ""),
+            **({"last_i_brevladan": True} if utan_utkast else {}),
+        },
     )
     try:
         await storage.nolla_trad_steg(tenant_id, thread_id)
@@ -433,6 +443,17 @@ async def hantera_prospektsvar(
                 body=body,
                 started=started,
             )
+        if utan_utkast:
+            # Öppnat i brevlådan: svaret är människans. Kön ställs in av samma
+            # skäl som vid en eskaleringsregel — en automatisk uppföljning
+            # ovanpå en fråga som någon redan läst vore fel svar. Inget
+            # prioriterat mejl: den som öppnade svaret vet redan om det.
+            utfall["handoff"] = True
+            utfall["eskalerat"].append("last_i_brevladan")
+            utfall["cancelled_sends"] = await storage.cancel_pending_sends(tenant_id, thread_id)
+            if prospect_id:
+                await storage.update_prospect(tenant_id, prospect_id, status="replied")
+            return await _avsluta(storage, tenant_id, trace, lager, body, utfall, started)
         karna = str(
             klassificering.get("invandning_karna")
             or klassificering.get("fraga_karna")

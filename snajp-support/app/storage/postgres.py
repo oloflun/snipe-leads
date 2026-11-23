@@ -459,7 +459,8 @@ class PostgresStorage:
             records = await conn.fetch(
                 """
                 select id, tenant_id, provider, address, status, imap_host,
-                       secret_enc, last_sync_at, last_error, syfte
+                       secret_enc, last_sync_at, last_error, syfte,
+                       imap_last_uid, imap_uidvalidity
                 from ss_mailboxes where tenant_id = $1 order by created_at
                 """,
                 tenant_id,
@@ -513,6 +514,16 @@ class PostgresStorage:
                 """update ss_mailboxes set last_sync_at = now(), last_error = $3
                    where tenant_id = $1 and id = $2""",
                 tenant_id, mailbox_id, last_error,
+            )
+
+    async def satt_imap_marke(
+        self, tenant_id: str, mailbox_id: str, *, last_uid: int, uidvalidity: int | None
+    ) -> None:
+        async with self._scoped(tenant_id) as conn:
+            await conn.execute(
+                """update ss_mailboxes set imap_last_uid = $3, imap_uidvalidity = $4
+                   where tenant_id = $1 and id = $2""",
+                tenant_id, mailbox_id, int(last_uid), uidvalidity,
             )
 
     async def find_or_create_customer(
@@ -4110,15 +4121,17 @@ class PostgresStorage:
         is_test: bool = False,
         automatutskick: bool = False,
         mailbox_id: str | None = None,
+        last_i_brevladan: bool = False,
     ) -> dict[str, Any] | None:
         async with self._scoped(tenant_id) as conn:
             record = await conn.fetchrow(
                 """
                 insert into ss_emails
                   (tenant_id, provider, provider_message_id, from_email, from_name,
-                   subject, body_text, received_at, is_test, automatutskick, mailbox_id)
+                   subject, body_text, received_at, is_test, automatutskick, mailbox_id,
+                   last_i_brevladan)
                 values ($1, $2, $3, $4, $5, $6, $7, coalesce($8::timestamptz, now()), $9, $10,
-                        $11::uuid)
+                        $11::uuid, $12)
                 on conflict (tenant_id, provider_message_id) do nothing
                 returning *
                 """,
@@ -4133,6 +4146,7 @@ class PostgresStorage:
                 is_test,
                 automatutskick,
                 mailbox_id,
+                bool(last_i_brevladan),
             )
         return _row(record)
 

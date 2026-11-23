@@ -430,6 +430,10 @@ async def _hantera_lead(storage: Storage, tenant_id: str, email: dict[str, Any],
     await storage.update_email(tenant_id, email_id, status="lead")
     prospect_id = utfall.get("prospect_id")
     thread_id = utfall.get("thread_id")
+    # Öppnat i brevlådan (migration 150): svaret hamnar i konversationen och
+    # klassas, så att steget, kön och en avregistrering följer med, men Iris
+    # skriver inget utkast. En människa har redan läst det.
+    oppnat = bool(email.get("last_i_brevladan"))
     if not prospect_id:
         fran = str(email.get("from_email") or "").strip().lower()
         namn = str(email.get("from_name") or "").strip() or fran.rsplit("@", 1)[-1]
@@ -443,7 +447,8 @@ async def _hantera_lead(storage: Storage, tenant_id: str, email: dict[str, Any],
         except Exception:  # noqa: BLE001 — ett prospekt som inte gick att skapa stoppar inte leadet
             logger.exception("Kunde inte skapa prospekt ur inkommande lead %s", email_id)
         else:
-            await _utkast_for_inkorgslead(storage, tenant_id, prospekt)
+            if not oppnat:
+                await _utkast_for_inkorgslead(storage, tenant_id, prospekt)
     svar: dict[str, Any] | None = None
     if thread_id and not get_settings().is_simulation():
         try:
@@ -458,12 +463,16 @@ async def _hantera_lead(storage: Storage, tenant_id: str, email: dict[str, Any],
                 tenant_name=str(tenant.get("company_name") or tenant.get("name") or ""),
                 context_pack=context_pack,
                 publik_bas_url=get_settings().publik_bas_url,
+                utan_utkast=oppnat,
             )
         except Exception:  # noqa: BLE001 — svarshanteringen får inte fälla inkorgen
             logger.exception("Prospektsvaret %s gick inte att hantera", email_id)
     await storage.log_decision(
         tenant_id, email_id=email_id, event="lead",
-        detail={"prospect_id": prospect_id, "thread_id": thread_id, "svar": (svar or {}).get("klass")},
+        detail={
+            "prospect_id": prospect_id, "thread_id": thread_id, "svar": (svar or {}).get("klass"),
+            **({"last_i_brevladan": True} if oppnat else {}),
+        },
     )
     return {"action": "lead", "prospect_id": prospect_id, "thread_id": thread_id}
 
@@ -566,6 +575,19 @@ async def process_email(
     klass = await _klassa_och_styr(storage, tenant_id, email)
     if klass is not None:
         return klass
+
+    # Öppnat i brevlådan (Anton 2026-11-23, migration 150): mejlet var läst på
+    # servern när Snajp hämtade det, så en människa har redan sett det och
+    # kanske svarat. Inget AI-utkast: det går till Att hantera, märkt, där en
+    # människa avgör. Efter klassningen, så att ett svar från ett lead ändå
+    # når sin konversation (_hantera_lead) och ett nyhetsbrev ändå göms.
+    if email.get("last_i_brevladan"):
+        await storage.update_email(tenant_id, email_id, status="att_hantera")
+        await storage.log_decision(
+            tenant_id, email_id=email_id, event="last_i_brevladan",
+            detail={"till": "att_hantera", "utkast": False},
+        )
+        return {"action": "att_hantera"}
 
     # Avtalsgrinden FÖRE allt annat: ingen kundtext får gå till modell-
     # leverantören för en tenant utan registrerat avtal (migration 070).

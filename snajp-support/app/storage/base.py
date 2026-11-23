@@ -229,6 +229,15 @@ class Storage(Protocol):
         slutsatsen att pollern var död, fast den hade hämtat mail)."""
         ...
 
+    async def satt_imap_marke(
+        self, tenant_id: str, mailbox_id: str, *, last_uid: int, uidvalidity: int | None
+    ) -> None:
+        """Brevlådans märke (migration 150): högsta UID som står i databasen
+        och mappens UIDVALIDITY när det sattes. Nästa synk hämtar allt med
+        högre UID, läst eller inte. Märket sätts bara förbi mejl som faktiskt
+        sparats (eller var dubletter), aldrig förbi ett som inte gick in."""
+        ...
+
     # -- Kunddata (alltid tenant-skopade) -----------------------------------
 
     async def find_or_create_customer(
@@ -1637,8 +1646,11 @@ class Storage(Protocol):
         is_test: bool = False,
         automatutskick: bool = False,
         mailbox_id: str | None = None,
+        last_i_brevladan: bool = False,
     ) -> dict[str, Any] | None:
-        """Sparar ett inkommande mail. Returnerar None vid dublett (dedupe)."""
+        """Sparar ett inkommande mail. Returnerar None vid dublett (dedupe).
+        `last_i_brevladan` (migration 150): mejlet var läst på servern när det
+        hämtades, så en människa har öppnat det och inget AI-utkast skrivs."""
         ...
 
     async def delete_emails_by_provider(self, tenant_id: str, provider: str) -> int:

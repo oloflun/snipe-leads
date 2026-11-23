@@ -445,6 +445,14 @@ class MemoryStorage:
             rad["last_sync_at"] = _now()
             rad["last_error"] = last_error
 
+    async def satt_imap_marke(
+        self, tenant_id: str, mailbox_id: str, *, last_uid: int, uidvalidity: int | None
+    ) -> None:
+        rad = self.mailboxes.get(mailbox_id)
+        if rad and rad["tenant_id"] == tenant_id:
+            rad["imap_last_uid"] = int(last_uid)
+            rad["imap_uidvalidity"] = uidvalidity
+
     # -- Kunddata -----------------------------------------------------------
 
     async def find_or_create_customer(
@@ -2963,6 +2971,7 @@ class MemoryStorage:
         is_test: bool = False,
         automatutskick: bool = False,
         mailbox_id: str | None = None,
+        last_i_brevladan: bool = False,
     ) -> dict[str, Any] | None:
         dedupe_key = (tenant_id, provider_message_id)
         if dedupe_key in self.email_dedupe:
@@ -2983,6 +2992,7 @@ class MemoryStorage:
             "is_test": is_test,
             "automatutskick": automatutskick,
             "mailbox_id": mailbox_id,
+            "last_i_brevladan": bool(last_i_brevladan),
             "hanterad_at": None,
             "created_at": _now(),
             "updated_at": _now(),

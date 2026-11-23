@@ -31,3 +31,7 @@ class InboundEmail:
     automatutskick: bool = False
     # Brevlådan mejlet hämtades från — dess syfte (support/leads) styr klassningen.
     mailbox_id: str | None = None
+    # Mejlet var läst på servern (\Seen) när Snajp hämtade det: en människa
+    # har öppnat det i brevlådan. Inget AI-utkast skrivs; det går till manuell
+    # hantering (Anton 2026-11-23, migration 150).
+    last_i_brevladan: bool = False

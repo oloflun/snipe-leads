@@ -126,7 +126,9 @@ export function handelseText(h: TradHandelse, text: (v: Localized) => string): s
   const d = h.detalj ?? {};
   switch (h.typ) {
     case "svar":
-      return text({ sv: "Nytt svar kom in", en: "A new reply arrived" });
+      return d.last_i_brevladan
+        ? text({ sv: "Nytt svar kom in, redan öppnat i brevlådan", en: "A new reply arrived, already opened in the mailbox" })
+        : text({ sv: "Nytt svar kom in", en: "A new reply arrived" });
     case "klassad":
       return text({ sv: `Iris läste svaret som: ${klassText(String(d.klass ?? ""), text)}`, en: `Iris read the reply as: ${klassText(String(d.klass ?? ""), text)}` });
     case "utkast":
@@ -161,7 +163,12 @@ export function handelseText(h: TradHandelse, text: (v: Localized) => string): s
     case "mote":
       return text({ sv: "Möte bokat", en: "Meeting booked" });
     case "overlamnat":
-      return text({ sv: "Iris lämnade över till en människa", en: "Iris handed over to a person" });
+      return Array.isArray(d.eskalerat) && d.eskalerat.includes("last_i_brevladan")
+        ? text({
+            sv: "Svaret var öppnat i brevlådan: Iris skrev inget utkast, svaret är ditt",
+            en: "The reply was opened in the mailbox: Iris wrote no draft, the reply is yours"
+          })
+        : text({ sv: "Iris lämnade över till en människa", en: "Iris handed over to a person" });
     case "extern":
       return text({ sv: "Ett mejl utanför Snajp lades in", en: "An email sent outside Snajp was added" });
     default:

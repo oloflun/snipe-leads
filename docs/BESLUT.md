@@ -9,6 +9,44 @@ möjligt), vad det betyder i koden.
 
 ---
 
+## 2026-11-23 — Inkorgen hämtar också mejl som redan är öppnade; på dem skrivs inget utkast (Anton)
+
+**Beslut.**
+1. Hämtningen går på UID i stället för på olästa: varje brevlåda bär ett märke (högsta
+   UID som står i databasen), och nästa synk hämtar allt över märket, läst eller inte.
+   En brevlåda utan märke börjar med olästa plus de senaste sju dagarnas mejl
+   (`IMAP_TILLBAKABLICK_DAGAR`); det som redan finns faller som dubletter.
+2. Ett mejl som var läst på servern när Snajp hämtade det märks `last_i_brevladan`.
+   Kundtjänsten: Att hantera, märkt "Öppnat i brevlådan", ingen triage och inget utkast.
+   Leads: svaret sparas i konversationen och klassas, så att steget, kön, återkontakten
+   och en avregistrering gäller, men Iris skriver inget svarsutkast och konversationen
+   säger varför. Ett nytt lead ur ett öppnat mejl får inget automatiskt utkast.
+3. Klassningen går före: ett nyhetsbrev som någon öppnat göms som förut.
+
+**Resonemanget.** Anton, om mejl till alias som landar i samma Gmail-brevlåda: "de
+kanske inte når fram till supportinkorgen/Iris ändå?" Det stämde: sökningen på olästa
+tappade varje mejl som någon hann öppna före synken, utan spår. Anton: "Bygg om
+hämtningen, men se till att supporten ser de vi öppnat och därmed inte skriver utkast
+på dem utan sorterar till manuell hantering." Den som öppnat ett mejl kan redan ha
+svarat från brevlådan, och ett utkast ovanpå det ger dubbla svar. Klassningen körs
+ändå på svar från leads: en begäran om att slippa kontakt ska spärra adressen också
+när en människa läst mejlet först.
+
+**Kända gränser.** Läst på servern betyder att någon eller något har öppnat mejlet:
+ett Gmail-filter som markerar som läst räknas också. Mejl som ett filter arkiverar
+förbi inkorgen hämtas inte, som förut. Tillbakablicken vid första synken tar in upp till
+sju dagars öppnade mejl som Snajp aldrig fått; de hamnar i Att hantera utan utkast,
+också de som redan besvarats från brevlådan. Ett mejl som raderats ur Snajp de senaste
+sju dagarna men ligger kvar i brevlådan kommer in igen vid den första synken.
+
+**I koden.** Migration 150 (`ss_mailboxes.imap_last_uid`, `imap_uidvalidity`,
+`ss_emails.last_i_brevladan`), `app/email_pipeline/connectors/imap.py` (`_fetch_sync`),
+`poller.py` (`_flytta_market`), `processor.py` (grenen efter klassningen,
+`_hantera_lead`), `app/leads/svar.py` (`utan_utkast`), `components/snajp/Dashboard.tsx`
+och `lib/leads/konversationer.ts` (märkningen). Test: `tests/test_inkorg_oppnade_mejl.py`.
+
+---
+
 ## 2026-11-23 — Ett nej följs upp en gång efter sex månader, "återkom" efter två; bara en uttrycklig begäran spärrar (Anton)
 
 **Beslut.**
