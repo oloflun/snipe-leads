@@ -1,0 +1,15 @@
+http://localhost:3100/  1440x900  CPU 4x
+
+Laddning (till 5 s efter load): huvudtråden arbetade 6118 ms av 6749 ms
+  bildrutor med arbete: ? · målningar: 379 · element i stilberäkning: 4009
+  målas mest: #document 314 ms/131 ggr | DIV class='svav-flyt' 101 ms/156 ggr | DIV class='relative mx-auto grid max-w-[1480px] grid-cols-12 gap-y-9 px-6 pb-14 pt-[168px] md:min-h-[100svh] md:gap-y-12 md:px-10 md:pb-20 md:pt-40 xl:items-center xl:gap-x-10 xl:pb-10 xl:pt-28' 16 ms/41 ggr | DIV class='col-span-12 lg:sticky lg:top-28 lg:col-span-4 lg:col-start-9 lg:row-start-1' 10 ms/3 ggr | DIV class='landing serif-fet min-h-screen text-ink' 4 ms/2 ggr | FIGURE class='min-w-0 ml-5 md:ml-0 md:mt-14' 4 ms/5 ggr | FIGCAPTION class='mt-5' 3 ms/8 ggr | FIGURE class='min-w-0 mr-5 md:mr-0' 3 ms/4 ggr
+  Layout 1894 ms (31 %) · Skript 1718 ms (28 %) · Målning 1065 ms (17 %) · Stil 695 ms (11 %) · Övrigt 604 ms (10 %) · Kompositering 134 ms (2 %) · Tolkning 8 ms (0 %)
+  störst: Layout 1765, FunctionCall 862, RunMicrotasks 763, UpdateLayoutTree 692, Layerize 462, Paint 313, PrePaint 289, IntersectionObserverController::computeIntersections 129
+  långa uppgifter (>50 ms): 6 st, 2636 ms; längsta 998, 914, 437, 152, 76 ms
+
+Scroll uppifrån och ned: huvudtråden arbetade 15738 ms av 17833 ms
+  bildrutor med arbete: ? · målningar: 2924 · element i stilberäkning: 9652
+  målas mest: #document 2386 ms/499 ggr | DIV class='overflow-hidden rounded-panel border border-ink/12 bg-paper' 646 ms/1214 ggr | DIV 132 ms/419 ggr | DIV class='col-span-12 lg:sticky lg:top-28 lg:col-span-4 lg:col-start-9 lg:row-start-1' 52 ms/325 ggr | DIV class='light__panes' 32 ms/281 ggr | DIV class='ln' 8 ms/73 ggr | DIV class='mt-10' 8 ms/32 ggr | DIV id='dataskydd' class='col-span-12 scroll-mt-24 sm:col-span-7 lg:col-span-5' 5 ms/1 ggr
+  Målning 5954 ms (38 %) · Övrigt 3219 ms (20 %) · Skript 3158 ms (20 %) · Stil 1620 ms (10 %) · Layout 1105 ms (7 %) · Kompositering 681 ms (4 %) · Tolkning 0 ms (0 %)
+  störst: FunctionCall 2485, Paint 2383, Layerize 2283, UpdateLayoutTree 1620, PrePaint 1286, Layout 606, Commit 559, IntersectionObserverController::computeIntersections 499
+  långa uppgifter (>50 ms): 2 st, 117 ms; längsta 59, 57 ms

@@ -195,6 +195,18 @@ tabs and primary buttons; controls inside data rows are 32–36px, which clears 
 **Kicker on app surfaces:** `.appyta .kicker` (globals.css) renders it as `etikett`; the shells carry
 `appyta`. **One tonal inversion:** the rail. Nothing in the content column is an ink plate.
 
+**A new feature is integrated into the surface, never stacked on it (Anton 2026-11-24).** A page
+has ONE row of key figures, in the order the work flows. A new feature's numbers join that row, as
+a figure or as the note under the figure they belong to; its list becomes a panel among the
+existing panels, with the same head (title, count, a quiet link to the full view) and a place in
+the same grid. The failure this replaces: the conversations feature shipped as its own card with
+four figures in the panel scale, placed above the overview's four figures in the display scale, so
+"Utkast väntar 3" sat over "Utkast att godkänna 200". Leads › Översikt now reads lead → draft →
+sent → reply → meeting in one row (`Nyckeltal` takes five posts: three across from `sm`, five from
+`lg`, the fifth full width on mobile), and "Konversationer som väntar" stands beside "Senaste
+utkasten" and "Senaste körningen". What creates the design here is the single row: the reader gets
+the funnel at a glance, and every panel below answers "what waits for me".
+
 **What replaced the kicker.** Not nothing: the `etikett` does the kicker's one legitimate job
 (saying what a value is) at a reading size in the body face, and the Fraunces section heading does
 the structuring the kicker used to fake. Ledes under headings are gone (F-016, F-018); information

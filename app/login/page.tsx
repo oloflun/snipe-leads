@@ -1,5 +1,7 @@
 import { Suspense } from "react";
 import { LoginSida } from "@/components/auth/LoginForm";
+// Förladdar Fraunces på den här sidan (lib/fonts-rubrik.ts säger varför).
+import "@/lib/fonts-rubrik";
 
 /**
  * Inloggning med lösenord eller SSO, och kontoskapande. `?mode=signup` öppnar

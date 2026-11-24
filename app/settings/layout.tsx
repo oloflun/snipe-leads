@@ -1,6 +1,8 @@
 import { DashboardProvider } from "@/components/dashboard/DashboardContext";
 import { resolveDashboardState } from "@/lib/data/dashboard";
 import { requireOnboarded } from "@/lib/auth/onboarding-gate";
+// Förladdar Fraunces på den här sidan (lib/fonts-rubrik.ts säger varför).
+import "@/lib/fonts-rubrik";
 
 /**
  * Speglar app/dashboard/layout.tsx.

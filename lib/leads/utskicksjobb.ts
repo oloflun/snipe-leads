@@ -7,7 +7,7 @@
  * `totalt`) och till sist utfallet. En hämtning som faller hoppas över:
  * utskicket går vidare på servern ändå.
  */
-import { readJsonBody } from "@/lib/http/json";
+import { kroppsbesked, readJsonBody } from "@/lib/http/json";
 import { taligHamtning } from "@/lib/leads/pollning";
 
 export type Utskicksutfall = {
@@ -50,7 +50,7 @@ export async function foljUtskick(
       cache: "no-store"
     });
     const kropp = await readJsonBody<Jobbsvar>(response);
-    if (!response.ok) throw new Error(kropp?.detail ?? `status ${response.status}`);
+    if (!response.ok) throw new Error(kroppsbesked(kropp) ?? "Förloppet gick inte att hämta. / The progress could not be fetched.");
     return kropp ?? {};
   });
   // En timme: ett utskick på flera hundra mejl ryms med marginal.

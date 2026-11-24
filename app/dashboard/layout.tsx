@@ -2,6 +2,8 @@ import { redirect } from "next/navigation";
 import { DashboardProvider } from "@/components/dashboard/DashboardContext";
 import { resolveDashboardState } from "@/lib/data/dashboard";
 import { requireOnboarded } from "@/lib/auth/onboarding-gate";
+// Förladdar Fraunces på den här sidan (lib/fonts-rubrik.ts säger varför).
+import "@/lib/fonts-rubrik";
 
 /**
  * Entitlement and fresh/demo are resolved once per request on the server, then

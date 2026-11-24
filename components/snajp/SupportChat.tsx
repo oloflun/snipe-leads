@@ -5,9 +5,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { btnLiten, btnPrimary, btnSecondary, etikett, meta } from "@/components/ui";
 import { AgentMenu } from "@/components/snajp/AgentMenu";
 import { LÄSBARA, läsbar } from "@/components/settings/Kunskapsbas";
-import { HttpJsonError, felmeddelande, readJsonBody } from "@/lib/http/json";
+import { HttpJsonError, felmeddelande, kroppsbesked, readJsonBody } from "@/lib/http/json";
 import { useLocale, type Locale, type Localized } from "@/lib/i18n";
-import { sessionsId } from "@/lib/sessionslagring";
+import { harSessionsId, sessionsId } from "@/lib/sessionslagring";
 import { POLL_FORSOK, fastext, pollpaus } from "@/lib/snajp/chattfas";
 import { getTenant } from "@/lib/tenants";
 import { cn } from "@/lib/utils";
@@ -155,6 +155,21 @@ const examplePrompts: Localized[] = [
   }
 ];
 
+/**
+ * Testchattens förslag. Demons frågor ovan hör till en påhittad butik (dubbel
+ * kortdragning, felkod E-101 i kassan); en nyregistrerad kund som säljer något
+ * helt annat fick dem ändå som förslag i sin egen testchatt, och den sista
+ * ("pengarna tillbaka NU!") lämnar dessutom över samtalet till en människa
+ * och låser testchatten i överlämnat läge. De här passar vilket bolag som
+ * helst och besvaras ur kundens egen kunskapsbas.
+ */
+const testPrompts: Localized[] = [
+  { sv: "Vad kan ni hjälpa mig med?", en: "What can you help me with?" },
+  { sv: "Vad kostar det?", en: "What does it cost?" },
+  { sv: "Hur kommer jag igång?", en: "How do I get started?" },
+  { sv: "Hur kommer jag i kontakt med er?", en: "How do I get in touch with you?" }
+];
+
 async function downscaleImage(file: File, maxSize = 1024): Promise<string> {
   const dataUrl = await new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
@@ -263,9 +278,12 @@ function slumpad(texter: Localized[], locale: Locale): string {
 /** Ett fel vars text är skriven för kunden och därför FÅR visas ordagrant. */
 class VisbartFel extends Error {}
 
+const DEMOSESSION = "snajp.demo.session";
+const TESTCHATTSESSION = "snajp.testchatt.session";
+
 function demoSessionId(): string {
   // sessionsId kastar aldrig, se lib/sessionslagring.ts.
-  return sessionsId("snajp.demo.session");
+  return sessionsId(DEMOSESSION);
 }
 
 /** Samma mönster som demoSessionId, EGEN nyckel: en testchatt-flik ska inte
@@ -273,7 +291,7 @@ function demoSessionId(): string {
  * samma webbläsare), och tenanten är ändå alltid den inloggades — sessionen
  * avgör det, inte det här id:t. */
 function testchattSessionId(): string {
-  return sessionsId("snajp.testchatt.session");
+  return sessionsId(TESTCHATTSESSION);
 }
 
 //: R1.5 — pollningen mot jobbet ska tåla ett transient 5xx/nätfel under en
@@ -342,7 +360,7 @@ export function SupportChat({
         en: "Test the agent against your own knowledge base. Runs here are marked as test and do not count as customer traffic."
       })
     : (tenantConfig?.supportIntro ?? null);
-  const prompts = tenantConfig?.supportPrompts ?? examplePrompts.map(text);
+  const prompts = tenantConfig?.supportPrompts ?? (testMode ? testPrompts : examplePrompts).map(text);
 
   // The poll loop runs up to 90 iterations; without this it keeps writing state
   // after the component is gone.
@@ -442,6 +460,12 @@ export function SupportChat({
   // hela samtalet igen — inklusive ett medarbetarsvar som kom medan fönstret
   // var stängt. Kunden ska aldrig behöva börja om.
   useEffect(() => {
+    // En besökare som aldrig chattat i den här fliken har inget samtal att hämta.
+    // Förut gick frågan till backenden ändå, vid varje visning av startsidan
+    // (där chatten ligger långt ned): ett onödigt anrop per besök, och ett rött
+    // konsolfel hos besökaren om backenden just då startade om. En sessionslänk
+    // (`session`) hämtas alltid.
+    if (!session && !harSessionsId(testMode ? TESTCHATTSESSION : DEMOSESSION)) return;
     let avbruten = false;
     void (async () => {
       const svar = await hamtaSamtal();
@@ -458,7 +482,7 @@ export function SupportChat({
     return () => {
       avbruten = true;
     };
-  }, [hamtaSamtal, startaPollning]);
+  }, [hamtaSamtal, startaPollning, session, testMode]);
 
 
   useEffect(() => {
@@ -731,7 +755,13 @@ export function SupportChat({
         });
         const kropp = await readJsonBody<{ error?: string; detail?: string }>(response);
         if (!response.ok) {
-          throw new Error(kropp?.detail ?? kropp?.error ?? `Kunde inte spara (${response.status}).`);
+          throw new Error(
+            kroppsbesked(kropp) ??
+              {
+                sv: "Texten gick inte att spara. Försök igen om en stund.",
+                en: "The text could not be saved. Try again in a moment."
+              }[localeRef.current]
+          );
         }
         setMessages((current) =>
           current.map((item) =>
@@ -805,11 +835,10 @@ export function SupportChat({
       }>(response);
       if (!response.ok) {
         throw new Error(
-          kropp?.detail ??
-            kropp?.error ??
+          kroppsbesked(kropp) ??
             {
-              sv: `Kunde inte läsa PDF:en (${response.status}).`,
-              en: `Could not read the PDF (${response.status}).`
+              sv: "PDF:en gick inte att läsa. Prova en annan fil, eller klistra in texten.",
+              en: "The PDF could not be read. Try another file, or paste the text."
             }[localeRef.current]
         );
       }
@@ -1100,6 +1129,9 @@ export function SupportChat({
           return (
             <div key={message.id} className={cn("flex flex-col", message.role === "user" ? "items-end" : "items-start")}>
               <div
+                // Rollen som attribut: e2e-testet (tests/e2e) hittar agentens svar och
+                // en röd systembubbla utan att gissa på färgklasser.
+                data-chatt-roll={message.role}
                 className={cn(
                   "max-w-[85%] rounded-card px-4 py-3 text-[0.9375rem] leading-6",
                   message.role === "user"

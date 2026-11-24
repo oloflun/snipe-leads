@@ -81,6 +81,43 @@ dem inte heller: det är en lucka, inte ett beslut.
 
 ---
 
+## 2026-11-24 — Nya funktioner integreras i den befintliga ytan; egna ögon före commit (Anton)
+
+**Beslut.**
+1. En ny funktion byggs in i den befintliga designen, aldrig bara ovanpå den. Den ska
+   samspela med det som redan står på sidan och vara logisk och intuitiv för användaren.
+2. Varje synlig ändring granskas med egna ögon innan den committas.
+3. Leads › Översikt har en enda rad nyckeltal i trattens ordning: leads, utkast att
+   godkänna, skickade mejl, svar, bokade möten. Konversationernas tal står i den raden,
+   och "Konversationer som väntar" är en panel bredvid utkasten och körningen.
+
+**Resonemanget.** Anton 2026-11-24, om Leads-översikten: "ändra sedan den nya layouten
+med siffror för konversationer som byggts fult ovanpå siffrorna för leads-översikten och
+integrera det snyggare i den befintliga översikten, lägg till en regel om att ALDRIG
+enbart lägga till funktioner på det sättet, INTEGRERA alltid i den befintliga designen på
+ett sätt som samspelar och är logiskt och intuitivt för användaren, verifiera ALLTID med
+dina egna ögon innan du committar."
+
+Konversationerna (2026-11-22) kom in som en egen ruta med fyra tal överst på sidan. Under
+den stod översiktens egna fyra tal. Det gav två sifferrader i två stilar, och två tal som
+sa nästan samma sak: "Utkast väntar 3" över "Utkast att godkänna 200", "Nya svar 0" över
+"Svar från leads 10".
+
+Samma kväll hade två ändringar gått ut utan att någon sett dem i en körande app:
+maskinen hade för lite minne för en lokal server, och det fick ersätta granskningen.
+Regeln stänger den vägen. Går ytan inte att se committas den inte.
+
+**Vad det betyder i koden.** `components/leads/LeadsOversikt.tsx` (raden nyckeltal och
+panelernas ordning), `components/leads/Konversationer.tsx` (`KonversationsRuta` lämnar
+talen med `onTal` och visar bara det som väntar), `components/ui.tsx` (`Nyckeltal` rymmer
+fem poster). Förhandsvisningen `app/forhandsvisning/konversationer` visar hela översikten,
+så att den går att granska utan databas. Reglerna står i `CLAUDE.md` § Projektregler och
+`DESIGN.md` § App surfaces.
+
+**Öppet.** Talet "Utkast väntar" (svarsutkast i konversationer) har inget eget nyckeltal
+längre: det syns som etikett på raderna i panelen. Ska det räknas ihop med utkasten att
+godkänna är det en fråga om vad det talet betyder, inte om layout.
+
 ## 2026-11-23 — Tonläget in i onboardingen; bara onboardingen kopplar arbetsytan (Anton)
 
 **Beslut.**
@@ -122,6 +159,53 @@ startformulär när ingen skanning har körts.
 2026-11-18). Ska artiklarna läggas in direkt, utan granskning, är det ett eget beslut:
 då blir en felläst uppgift på sajten något agenten får citera. En testarbetsyta som
 redan kopplats som kund behåller sin kund-slug och är inte märkt som testyta.
+
+---
+
+## 2026-11-23 — Startsidan: mjukscrollen lämnar över när den inte håller takten (Claude på Sebastians uppdrag, inte bekräftat av Anton)
+
+**Beslut.** På grenen `buddy-demo-prep`:
+1. Mjukscrollen (Lenis, Antons hustakt 2026-09-25) står kvar som den är, men lämnar
+   över till webbläsarens egen scroll när bildrutor tappas: under sidans första fyra
+   sekunder om 35 % av de sextio senaste bildrutorna tog över 25 ms, därefter under
+   scroll om 20 % gjorde det. Valet minns för webbläsarsessionen. Kod: `smooth-scroll.js`.
+2. Dygnsljusets färger skrivs i steg om 0,0025 i OKLab i stället för varje bildruta.
+3. Rörelsen ställs upp i två omgångar: det som ligger inom en och en halv skärm
+   direkt, resten i pass om åtta millisekunder. Ett element som besökaren hunnit
+   skrolla till innan dess pass kommit står färdigt utan avslöjande.
+4. Text som skrivs fram uppdateras högst var trettionde millisekund.
+5. `gsap.js` laddar bara gsap, ScrollTrigger och SplitText, inte alla arton tillägg.
+6. Typsnitten förladdas per sida: Source Serif 4 bara på marknadssidorna, Fraunces
+   bara på de sidor som ritar med den.
+
+**Resonemanget.** Sebastians uppdrag: "När startsidan laddas laggar och hackar den,
+särskilt vid scroll nedåt när texter och bilder animeras/visas. Det får inte laggas
+alls", och "Ändra inte sajtens utseende/design". Mätningen (produktionsbygge, fyra
+gångers CPU-strypning, `scripts/mat_startsida_*.mjs`) visade att 24 % av bildrutorna
+tappades under scroll. Den största enskilda orsaken gick inte att bygga bort utan att
+röra hustakten: Lenis flyttar sidan från huvudtråden, och varje scrollad bildruta
+kostade runt 17 ms där även när ingenting på sidan rörde sig. Med webbläsarens egen
+scroll kostar samma bildruta en tredjedel, och scrollen står stadigt även när
+huvudtråden släpar. Att ta bort mjukscrollen hade löst hacket men ändrat sidans
+känsla för alla, också där den går bra. Därför en säkring i stället för ett byte.
+
+**Vad Anton behöver ta ställning till.** Punkt 1 ändrar känslan för den som har en
+långsam eller upptagen maskin: scrollen blir webbläsarens vanliga. Trösklarna (35 %
+och 20 %) är satta efter mätning på en maskin och går att flytta. Punkt 3 gör att ett
+avslöjande kan utebli för den som skrollar mycket fort direkt efter laddningen.
+Punkterna 2, 4, 5 och 6 syns inte: en jämförelse bild för bild
+(`scripts/jamfor_startsida.mjs`) gav en nivå per färgkanal i skillnad.
+
+**Vad det inte löste.** Målen i uppdraget (Lighthouse mobil 90, LCP under 2,5 s, TBT
+under 200 ms) nås inte. Siffrorna före och efter, och vad som återstår, står i
+`docs/startsidan-2026-11-23/RAPPORT.md` avsnitt 3.
+
+**I koden.** `smooth-scroll.js`, `gsap.js`, `components/marketing/useLandingMotion.ts`,
+`lib/skrivs.ts`, `lib/fonts.ts`, `lib/fonts-rubrik.ts`, `lib/fonts-landning.ts`,
+`app/globals.css` (`.ground`, `.light`, `.kapitel-ljus`), `next.config.ts` (cache för
+`public/`), `components/marketing/copy-sections.ts` (`photoSet`).
+
+---
 
 ## 2026-11-23 — Verify bantas; Dependabot öppnar inga egna pull requests (Anton)
 

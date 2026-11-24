@@ -195,7 +195,15 @@ export function Sektion({
  * talet ensamt säger inte vad det räknar. Hårlinje ovanför varje post och under raden, så
  * att två rader nyckeltal inte får dubbla linjer emellan.
  */
-const nyckeltalKolumner = ["sm:grid-cols-1", "sm:grid-cols-2", "sm:grid-cols-3", "sm:grid-cols-4"];
+// Fem poster (Leads › Översikt, tratten från lead till bokat möte) står tre
+// i bredd från sm och alla fem på en rad från lg.
+const nyckeltalKolumner = [
+  "sm:grid-cols-1",
+  "sm:grid-cols-2",
+  "sm:grid-cols-3",
+  "sm:grid-cols-4",
+  "sm:grid-cols-3 lg:grid-cols-5"
+];
 
 /**
  * Nyckeltalen i en panel (adminens Kostnad per agent, Fel och eskaleringar):
@@ -225,11 +233,19 @@ export function Nyckeltal({
     <dl
       className={cn(
         "grid grid-cols-2 gap-x-8 border-b border-ink/15",
-        nyckeltalKolumner[Math.min(poster.length, 4) - 1]
+        nyckeltalKolumner[Math.min(poster.length, 5) - 1]
       )}
     >
-      {poster.map((post) => (
-        <div key={post.etikett} className="min-w-0 border-t border-ink/15 py-4">
+      {poster.map((post, i) => (
+        <div
+          key={post.etikett}
+          // Den femte posten står ensam på sista raden i två spalter (mobil):
+          // den får hela bredden, så att raden inte slutar i en halv linje.
+          className={cn(
+            "min-w-0 border-t border-ink/15 py-4",
+            poster.length === 5 && i === 4 && "col-span-2 sm:col-span-1"
+          )}
+        >
           <dt className={etikett}>{post.etikett}</dt>
           <dd className="num mt-2 font-display text-[2rem] leading-none tracking-[-0.02em]">{post.varde}</dd>
           {post.notis ? <dd className={cn(meta, "mt-2")}>{post.notis}</dd> : null}

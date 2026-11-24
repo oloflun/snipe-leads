@@ -1,0 +1,19 @@
+http://localhost:3100/  1440x900  CPU 4x
+
+Laddning (till 5 s efter load): huvudtråden arbetade 5891 ms av 6591 ms
+  bildrutor med arbete: ? · målningar: 350 · element i stilberäkning: 3869
+  målas mest: #document 258 ms/111 ggr | DIV class='landing serif-fet min-h-screen text-ink' 58 ms/33 ggr | DIV class='svav-flyt' 40 ms/63 ggr | DIV class='col-span-12 lg:sticky lg:top-28 lg:col-span-4 lg:col-start-9 lg:row-start-1' 10 ms/9 ggr | DIV class='relative mx-auto grid max-w-[1480px] grid-cols-12 gap-y-9 px-6 pb-14 pt-[168px] md:min-h-[100svh] md:gap-y-12 md:px-10 md:pb-20 md:pt-40 xl:items-center xl:gap-x-10 xl:pb-10 xl:pt-28' 9 ms/28 ggr | DIV class='ln' 6 ms/46 ggr | SECTION id='iris' class='relative' 4 ms/3 ggr | FIGCAPTION class='mt-5' 3 ms/7 ggr
+  Skript 1790 ms (30 %) · Layout 1334 ms (23 %) · Målning 1254 ms (21 %) · Stil 674 ms (11 %) · Övrigt 616 ms (10 %) · Kompositering 207 ms (4 %) · Tolkning 15 ms (0 %)
+  störst: FunctionCall 1251, Layout 1194, UpdateLayoutTree 666, Layerize 636, RunMicrotasks 433, PrePaint 360, Paint 255, Commit 169
+  långa uppgifter (>50 ms): 4 st, 1343 ms; längsta 834, 228, 225, 56 ms
+    834 ms vid 430 ms: Layout 601, UpdateLayoutTree 193, Paint 17, PrePaint 10, ThreadControllerImpl::RunTask 6, Layerize 3
+    228 ms vid 1325 ms: RunMicrotasks 217, FunctionCall fq 3fb-bejtm1a8q.js 4, FunctionCall 3fb-bejtm1a8q.js 4
+    225 ms vid 2065 ms: RunMicrotasks 175, Layout 13, UpdateLayoutTree 11, FunctionCall h 23-mvqj9byn_-.js 2
+    56 ms vid 1796 ms: FunctionCall z 3fb-bejtm1a8q.js 55
+
+Scroll uppifrån och ned: huvudtråden arbetade 14886 ms av 16466 ms
+  bildrutor med arbete: ? · målningar: 1727 · element i stilberäkning: 7601
+  målas mest: #document 1474 ms/295 ggr | DIV class='overflow-hidden rounded-panel border border-ink/12 bg-paper' 407 ms/652 ggr | DIV 77 ms/248 ggr | DIV class='mt-10' 41 ms/164 ggr | DL class='mt-8 grid gap-px overflow-hidden rounded-input border border-ink/12 bg-ink/12 sm:grid-cols-2 lg:grid-cols-4' 28 ms/131 ggr | A class='focus-ring mt-8 inline-block text-[0.9375rem] font-medium underline underline-offset-4 hover:text-ochre' 14 ms/12 ggr | ARTICLE class='flex flex-col rounded-input border p-7 border-ink/12 bg-paper' 7 ms/36 ggr | DIV class='col-span-12 lg:sticky lg:top-28 lg:col-span-4 lg:col-start-9 lg:row-start-1' 6 ms/15 ggr
+  Målning 4951 ms (33 %) · Skript 3359 ms (23 %) · Övrigt 3311 ms (22 %) · Stil 1456 ms (10 %) · Layout 1058 ms (7 %) · Kompositering 751 ms (5 %) · Tolkning 0 ms (0 %)
+  störst: FunctionCall 2628, Layerize 2295, Paint 1468, UpdateLayoutTree 1456, PrePaint 1183, Layout 671, Commit 634, IntersectionObserverController::computeIntersections 387
+  långa uppgifter (>50 ms): 0 st, 0 ms; längsta inga ms

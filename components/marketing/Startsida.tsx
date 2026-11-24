@@ -12,7 +12,7 @@ import { PRODUKTYTOR, ProduktBilder, type Yta } from "@/components/marketing/Pro
 import { LOFTET } from "@/components/marketing/UspSection";
 import { RESULTAT, RESULTAT_NOT, StatRad } from "@/components/marketing/AgentResultat";
 import { leadsCopy, productCopy, shared, supportCopy } from "@/components/marketing/copy";
-import { imagery, photo } from "@/components/marketing/copy-sections";
+import { imagery, photo, photoSet, photoSizes } from "@/components/marketing/copy-sections";
 
 /**
  * Startsidan, delarna som bara finns på `/` (Anton 2026-11-07).
@@ -172,6 +172,8 @@ export function HemHjalte() {
       <img
         data-mo="hero-img"
         src={photo(imagery.hero.src)}
+        srcSet={photoSet(imagery.hero.src)}
+        sizes={photoSizes.hjalte}
         alt={text(imagery.hero.alt)}
         className="absolute inset-x-0 top-0 h-[420px] w-full bg-ink object-cover object-center md:h-full"
         fetchPriority="high"

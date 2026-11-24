@@ -3,6 +3,8 @@ import { getPlatformAdmin } from "@/lib/auth/admin";
 import { AdminShell } from "@/components/admin/AdminShell";
 import { DashboardProvider } from "@/components/dashboard/DashboardContext";
 import { resolveDashboardState } from "@/lib/data/dashboard";
+// Förladdar Fraunces på den här sidan (lib/fonts-rubrik.ts säger varför).
+import "@/lib/fonts-rubrik";
 
 export const dynamic = "force-dynamic";
 

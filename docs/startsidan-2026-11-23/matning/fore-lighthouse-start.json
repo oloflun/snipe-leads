@@ -1,0 +1,132 @@
+[
+  {
+    "sida": "/",
+    "enhet": "mobil",
+    "korningar": 5,
+    "poang": 51,
+    "fcp": 1298,
+    "lcp": 7557,
+    "tbt": 936,
+    "cls": 0,
+    "si": 4953,
+    "viktKb": 1306,
+    "lcpElement": "<img data-mo=\"hero-img\" src=\"/photos/goteborg-golden.webp\" alt=\"Göteborg sett från höjden i gyllene kvällsljus\" class=\"absolute inset-x-0 top-0 h-[420px] w-full bg-ink object-cover object-cente…\" fetchpriority=\"high\" style=\"translate: none; rotate: none; scale: none; transform: translate(0px, 0px);\">",
+    "ravarden": [
+      {
+        "poang": 51,
+        "fcp": 1257.278,
+        "lcp": 7557.141000000001,
+        "tbt": 935.5,
+        "cls": 0.0004393286129811523,
+        "si": 5362.474723430712,
+        "vikt": 1337129,
+        "lcpElement": "<img data-mo=\"hero-img\" src=\"/photos/goteborg-golden.webp\" alt=\"Göteborg sett från höjden i gyllene kvällsljus\" class=\"absolute inset-x-0 top-0 h-[420px] w-full bg-ink object-cover object-cente…\" fetchpriority=\"high\" style=\"translate: none; rotate: none; scale: none; transform: translate(0px, 0px);\">"
+      },
+      {
+        "poang": 49,
+        "fcp": 1179.309,
+        "lcp": 7632.854,
+        "tbt": 1215,
+        "cls": 0.0004418962213837102,
+        "si": 4677.002295048927,
+        "vikt": 1337128,
+        "lcpElement": "<img data-mo=\"hero-img\" src=\"/photos/goteborg-golden.webp\" alt=\"Göteborg sett från höjden i gyllene kvällsljus\" class=\"absolute inset-x-0 top-0 h-[420px] w-full bg-ink object-cover object-cente…\" fetchpriority=\"high\" style=\"translate: none; rotate: none; scale: none; transform: translate(0px, 0px);\">"
+      },
+      {
+        "poang": 55,
+        "fcp": 1297.8680000000002,
+        "lcp": 7604.208,
+        "tbt": 759.4999999999998,
+        "cls": 0.0004391922734077032,
+        "si": 4457.823106092916,
+        "vikt": 1337131,
+        "lcpElement": "<img data-mo=\"hero-img\" src=\"/photos/goteborg-golden.webp\" alt=\"Göteborg sett från höjden i gyllene kvällsljus\" class=\"absolute inset-x-0 top-0 h-[420px] w-full bg-ink object-cover object-cente…\" fetchpriority=\"high\" style=\"translate: none; rotate: none; scale: none; transform: translate(0px, 0px);\">"
+      },
+      {
+        "poang": 48,
+        "fcp": 1458.759,
+        "lcp": 7551.7105,
+        "tbt": 1104.5,
+        "cls": 0.00046624625341520724,
+        "si": 5680.834109086249,
+        "vikt": 1337128,
+        "lcpElement": "<img data-mo=\"hero-img\" src=\"/photos/goteborg-golden.webp\" alt=\"Göteborg sett från höjden i gyllene kvällsljus\" class=\"absolute inset-x-0 top-0 h-[420px] w-full bg-ink object-cover object-cente…\" fetchpriority=\"high\" style=\"translate: none; rotate: none; scale: none; transform: translate(0px, 0px);\">"
+      },
+      {
+        "poang": 51,
+        "fcp": 1335.665,
+        "lcp": 7501.817499999999,
+        "tbt": 929,
+        "cls": 0.00044460274202218463,
+        "si": 4953.475310793088,
+        "vikt": 1337126,
+        "lcpElement": "<img data-mo=\"hero-img\" src=\"/photos/goteborg-golden.webp\" alt=\"Göteborg sett från höjden i gyllene kvällsljus\" class=\"absolute inset-x-0 top-0 h-[420px] w-full bg-ink object-cover object-cente…\" fetchpriority=\"high\" style=\"translate: none; rotate: none; scale: none; transform: translate(0px, 0px);\">"
+      }
+    ]
+  },
+  {
+    "sida": "/",
+    "enhet": "desktop",
+    "korningar": 5,
+    "poang": 90,
+    "fcp": 293,
+    "lcp": 1528,
+    "tbt": 125,
+    "cls": 0.001,
+    "si": 1914,
+    "viktKb": 1306,
+    "lcpElement": "<img alt=\"Snajp\" width=\"552\" height=\"159\" decoding=\"async\" data-nimg=\"1\" class=\"w-auto object-contain h-[clamp(21.84px,4.06vw,68.64px)]\" style=\"color:transparent\" src=\"/snajp-logo-v1-white.svg\">",
+    "ravarden": [
+      {
+        "poang": 91,
+        "fcp": 259.4512,
+        "lcp": 1464.9024,
+        "tbt": 125,
+        "cls": 0.001085952523038528,
+        "si": 1730.2937555538492,
+        "vikt": 1337130,
+        "lcpElement": "<img alt=\"Snajp\" width=\"552\" height=\"159\" decoding=\"async\" data-nimg=\"1\" class=\"w-auto object-contain h-[clamp(21.84px,4.06vw,68.64px)]\" style=\"color:transparent\" src=\"/snajp-logo-v1-white.svg\">"
+      },
+      {
+        "poang": 90,
+        "fcp": 409.834,
+        "lcp": 1563.3360000000007,
+        "tbt": 118,
+        "cls": 0.0012798109873714508,
+        "si": 1913.674036791465,
+        "vikt": 1337127,
+        "lcpElement": "<img alt=\"Snajp\" width=\"552\" height=\"159\" decoding=\"async\" data-nimg=\"1\" class=\"w-auto object-contain h-[clamp(21.84px,4.06vw,68.64px)]\" style=\"color:transparent\" src=\"/snajp-logo-v1-white.svg\">"
+      },
+      {
+        "poang": 88,
+        "fcp": 292.902,
+        "lcp": 1528.2650000000003,
+        "tbt": 149.99999999999972,
+        "cls": 0.0012115349216837786,
+        "si": 1944.1403646561807,
+        "vikt": 1337132,
+        "lcpElement": "<img alt=\"Snajp\" width=\"552\" height=\"159\" decoding=\"async\" data-nimg=\"1\" class=\"w-auto object-contain h-[clamp(21.84px,4.06vw,68.64px)]\" style=\"color:transparent\" src=\"/snajp-logo-v1-white.svg\">"
+      },
+      {
+        "poang": 90,
+        "fcp": 461.01405,
+        "lcp": 1612.0562,
+        "tbt": 88.5,
+        "cls": 0.0011961742739994797,
+        "si": 2025.5994195084336,
+        "vikt": 1337129,
+        "lcpElement": "<img alt=\"Snajp\" width=\"552\" height=\"159\" decoding=\"async\" data-nimg=\"1\" class=\"w-auto object-contain h-[clamp(21.84px,4.06vw,68.64px)]\" style=\"color:transparent\" src=\"/snajp-logo-v1-white.svg\">"
+      },
+      {
+        "poang": 88,
+        "fcp": 290.8453999999999,
+        "lcp": 1478.2680999999993,
+        "tbt": 168.07730000000004,
+        "cls": 0.001079734071652605,
+        "si": 1834.2357446029355,
+        "vikt": 1337127,
+        "lcpElement": "<img alt=\"Snajp\" width=\"552\" height=\"159\" decoding=\"async\" data-nimg=\"1\" class=\"w-auto object-contain h-[clamp(21.84px,4.06vw,68.64px)]\" style=\"color:transparent\" src=\"/snajp-logo-v1-white.svg\">"
+      }
+    ]
+  }
+]

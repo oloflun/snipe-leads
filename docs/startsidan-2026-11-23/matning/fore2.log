@@ -1,0 +1,42 @@
+
+http://localhost:3100/  390x844 mobil  CPU 4x  5 körningar
+  1: p50 16.7  p95 16.8  p99 17.5  max 99  tappade 0.6 %  hack 4  långa 0 st/0 ms (max 0)  [nådde inte botten]
+  2: p50 16.7  p95 16.9  p99 33.4  max 467  tappade 2.1 %  hack 19  långa 5 st/395 ms (max 156)  [nådde inte botten]
+  3: p50 16.7  p95 16.8  p99 18.0  max 233  tappade 0.8 %  hack 5  långa 3 st/387 ms (max 273)  [nådde inte botten]
+  4: p50 16.7  p95 16.8  p99 17.6  max 117  tappade 0.9 %  hack 5  långa 3 st/207 ms (max 98)  [nådde inte botten]
+  5: p50 16.7  p95 16.8  p99 33.3  max 100  tappade 1.3 %  hack 3  långa 2 st/134 ms (max 77)  [nådde inte botten]
+  MEDIAN: p50 16.7 ms  p95 16.8 ms  p99 18 ms  max 117 ms  tappade 0.9 %  hack 5  långa uppgifter 3 st / 207 ms
+
+Sparat: docs/demo-buddy/matning/fore-scroll-mobil.json
+http://localhost:3100/  1440x900  CPU 4x
+
+Laddning (till 5 s efter load): huvudtråden arbetade 5280 ms
+  Skript 1847 ms (35 %) · Layout 1117 ms (21 %) · Målning 1034 ms (20 %) · Övrigt 657 ms (12 %) · Stil 508 ms (10 %) · Kompositering 104 ms (2 %) · Tolkning 13 ms (0 %)
+  störst: Layout 979, FunctionCall 965, RunMicrotasks 774, UpdateLayoutTree 498, Layerize 485, PrePaint 302, Paint 246, IntersectionObserverController::computeIntersections 139
+  långa uppgifter (>50 ms): 5 st, 1668 ms; längsta 1013, 343, 172, 89, 51 ms
+
+Scroll uppifrån och ned: huvudtråden arbetade 14999 ms
+  Målning 5591 ms (37 %) · Övrigt 3777 ms (25 %) · Skript 2807 ms (19 %) · Stil 1457 ms (10 %) · Layout 1018 ms (7 %) · Kompositering 349 ms (2 %) · Tolkning 0 ms (0 %)
+  störst: Paint 2246, FunctionCall 2224, Layerize 2164, UpdateLayoutTree 1457, PrePaint 1179, Layout 538, IntersectionObserverController::computeIntersections 481, EventDispatch 286
+  långa uppgifter (>50 ms): 1 st, 52 ms; längsta 52 ms
+http://localhost:3100/  1440x900  CPU 4x  CSS: .landing .light,.landing .ground{display:none}
+
+Laddning (till 5 s efter load): huvudtråden arbetade 4255 ms
+  Layout 1275 ms (30 %) · Skript 1128 ms (27 %) · Målning 803 ms (19 %) · Övrigt 563 ms (13 %) · Stil 410 ms (10 %) · Kompositering 70 ms (2 %) · Tolkning 7 ms (0 %)
+  störst: Layout 1170, FunctionCall 615, RunMicrotasks 441, UpdateLayoutTree 408, Layerize 344, Paint 239, PrePaint 219, IntersectionObserverController::computeIntersections 105
+  långa uppgifter (>50 ms): 6 st, 1626 ms; längsta 674, 466, 239, 146, 51 ms
+
+Scroll uppifrån och ned: huvudtråden arbetade 12075 ms
+  Målning 4255 ms (35 %) · Övrigt 3212 ms (27 %) · Skript 2356 ms (20 %) · Stil 1038 ms (9 %) · Layout 897 ms (7 %) · Kompositering 316 ms (3 %) · Tolkning 0 ms (0 %)
+  störst: Layerize 1923, FunctionCall 1834, Paint 1212, PrePaint 1119, UpdateLayoutTree 1038, IntersectionObserverController::computeIntersections 471, Layout 426, Commit 249
+  långa uppgifter (>50 ms): 3 st, 331 ms; längsta 186, 79, 66 ms
+
+http://localhost:3100C:/Program Files/Git/  [mobil]  5 körningar
+  körning 1 föll:     at async runLighthouse (file:///C:/Users/sebbe/Desktop/snipe-leads/.claude/worktrees/buddy-demo-prep/node_modules/lighthouse/cli/run.js:210:26)     at async file:///C:/Users/sebbe/Desktop/snipe-leads/.claude/worktrees/buddy-demo-prep/node_modules/lighthouse/cli/index.js:10:1 
+  körning 2 föll:     at async runLighthouse (file:///C:/Users/sebbe/Desktop/snipe-leads/.claude/worktrees/buddy-demo-prep/node_modules/lighthouse/cli/run.js:210:26)     at async file:///C:/Users/sebbe/Desktop/snipe-leads/.claude/worktrees/buddy-demo-prep/node_modules/lighthouse/cli/index.js:10:1 
+  körning 3 föll:     at async runLighthouse (file:///C:/Users/sebbe/Desktop/snipe-leads/.claude/worktrees/buddy-demo-prep/node_modules/lighthouse/cli/run.js:210:26)     at async file:///C:/Users/sebbe/Desktop/snipe-leads/.claude/worktrees/buddy-demo-prep/node_modules/lighthouse/cli/index.js:10:1 
+  körning 4 föll:     at async runLighthouse (file:///C:/Users/sebbe/Desktop/snipe-leads/.claude/worktrees/buddy-demo-prep/node_modules/lighthouse/cli/run.js:210:26)     at async file:///C:/Users/sebbe/Desktop/snipe-leads/.claude/worktrees/buddy-demo-prep/node_modules/lighthouse/cli/index.js:10:1 
+  körning 5 föll:     at async runLighthouse (file:///C:/Users/sebbe/Desktop/snipe-leads/.claude/worktrees/buddy-demo-prep/node_modules/lighthouse/cli/run.js:210:26)     at async file:///C:/Users/sebbe/Desktop/snipe-leads/.claude/worktrees/buddy-demo-prep/node_modules/lighthouse/cli/index.js:10:1 
+  MEDIAN: poäng NaN  FCP NaN ms  LCP NaN ms  TBT NaN ms  CLS NaN  SI NaN ms  vikt NaN kB
+
+http://localhost:3100C:/Program Files/Git/  [desktop]  5 körningar

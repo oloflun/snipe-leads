@@ -6,7 +6,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useArbetsvag } from "@/components/AppShell";
 import { hamtaAffarskontext } from "@/lib/actions/affarskontext";
 import { Rad, Radlista, btnPrimary, btnSecondary } from "@/components/ui";
-import { felmeddelande, readJsonBody } from "@/lib/http/json";
+import { felmeddelande, kroppsbesked, readJsonBody } from "@/lib/http/json";
 import { cn } from "@/lib/utils";
 import { useLocale, type Localized } from "@/lib/i18n";
 import { WebbplatsForslag } from "@/components/settings/WebbplatsForslag";
@@ -132,9 +132,11 @@ export function KunskapsbasKort() {
         const kropp = await readJsonBody<{ error?: string; detail?: string }>(response);
         if (!response.ok) {
           throw new Error(
-            kropp?.detail ??
-              kropp?.error ??
-              loc.text({ sv: `Kunde inte spara (${response.status}).`, en: `Could not save (${response.status}).` })
+            kroppsbesked(kropp) ??
+              loc.text({
+                sv: "Texten gick inte att spara. Försök igen om en stund.",
+                en: "The text could not be saved. Try again in a moment."
+              })
           );
         }
         setAntal((tidigare) => (tidigare ?? 0) + nya.length);
@@ -239,10 +241,10 @@ export function KunskapsbasPanel() {
       const kropp = await readJsonBody<{ articles?: Artikel[]; error?: string }>(response);
       if (!response.ok) {
         throw new Error(
-          kropp?.error ??
+          kroppsbesked(kropp) ??
             loc.text({
-              sv: `Kunde inte hämta kunskapsbasen (${response.status}).`,
-              en: `Could not load the knowledge base (${response.status}).`
+              sv: "Kunskapsbasen gick inte att hämta just nu. Ladda om sidan om en stund.",
+              en: "The knowledge base could not be loaded right now. Reload the page in a moment."
             })
         );
       }
@@ -272,9 +274,11 @@ export function KunskapsbasPanel() {
         const kropp = await readJsonBody<{ error?: string; detail?: string }>(response);
         if (!response.ok) {
           throw new Error(
-            kropp?.detail ??
-              kropp?.error ??
-              loc.text({ sv: `Kunde inte spara (${response.status}).`, en: `Could not save (${response.status}).` })
+            kroppsbesked(kropp) ??
+              loc.text({
+                sv: "Texten gick inte att spara. Försök igen om en stund.",
+                en: "The text could not be saved. Try again in a moment."
+              })
           );
         }
         setMeddelande(

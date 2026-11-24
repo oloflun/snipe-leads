@@ -20,3 +20,10 @@ agent-core/skills/**   -text
 agent-core/overlays/** -text
 agent-core/AGENTS.md   -text
 agent-core/manifest.json -text
+
+# Importkorpusen (lib/leads/importkorpus.test.ts) är exporter ur riktiga CRM-system,
+# och testet läser dem byte för byte och gör själv om dem till CRLF, UTF-16 och
+# Windows-1252. Med autocrlf checkas filerna ut med CRLF på Windows, och testets
+# egen CRLF-variant får då dubbla radslut inne i ett citerat fält ("Sveavägen 10\n\nPlan 3").
+# Testet föll på varje Windows-maskin och gick igenom i CI. Samma skäl som ovan.
+lib/leads/fixtures/** -text

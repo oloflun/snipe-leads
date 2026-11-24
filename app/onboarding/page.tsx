@@ -5,6 +5,8 @@ import { redirectIfOnboarded } from "@/lib/auth/onboarding-gate";
 // skriver när steget saknas. Modulen är server-only, därför props och inte import
 // i klienten.
 import { SMAFORETAG, STANDARDROLLER, roststartpunkt } from "@/lib/snajp/standard";
+// Förladdar Fraunces på den här sidan (lib/fonts-rubrik.ts säger varför).
+import "@/lib/fonts-rubrik";
 
 export default async function Page() {
   // Den som redan är klar ska inte fastna här. Kontrollen låg i proxyn och

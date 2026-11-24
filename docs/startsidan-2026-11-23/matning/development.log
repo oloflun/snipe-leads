@@ -1,0 +1,54 @@
+
+/  1440x900
+  sidhöjd före 12536, efter 12536
+  före: 0 element kvar dolda eller ur läge, 0 med will-change kvar
+  efter: 0 element kvar dolda eller ur läge, 0 med will-change kvar
+  avvikande bildpunkter per höjd (%): 0:0.0  1:0.0  2:0.0  3:0.0  4:0.0  5:0.0  6:0.0  7:0.0  8:0.0  9:0.0  10:0.0  11:0.0  12:0.0  13:0.0  14:0.0  15:0.0
+
+/  390x844
+  sidhöjd före 18910, efter 18910
+  före: 0 element kvar dolda eller ur läge, 0 med will-change kvar
+  efter: 0 element kvar dolda eller ur läge, 0 med will-change kvar
+  avvikande bildpunkter per höjd (%): 0:0.0  1:0.0  2:0.0  3:0.0  4:0.0  5:0.0  6:0.0  7:0.0  8:0.0  9:0.0  10:0.0  11:0.0  12:0.0  13:0.0  14:0.0  15:0.0  16:0.0  17:0.0  18:0.0  19:0.0  20:0.0  21:0.0  22:0.0  23:0.0  24:0.0
+
+/leads  1440x900
+  sidhöjd före 8767, efter 8767
+  före: 0 element kvar dolda eller ur läge, 0 med will-change kvar
+  efter: 0 element kvar dolda eller ur läge, 0 med will-change kvar
+  avvikande bildpunkter per höjd (%): 0:0.0  1:0.0  2:0.0  3:0.0  4:0.0  5:0.0  6:0.0  7:0.0  8:0.0  9:0.0  10:0.0
+
+/leads  390x844
+  sidhöjd före 12253, efter 12253
+  före: 0 element kvar dolda eller ur läge, 0 med will-change kvar
+  efter: 0 element kvar dolda eller ur läge, 0 med will-change kvar
+  avvikande bildpunkter per höjd (%): 0:0.0  1:0.0  2:0.0  3:0.0  4:0.0  5:0.0  6:0.0  7:0.0  8:0.0  9:0.0  10:0.0  11:0.0  12:0.0  13:0.0  14:0.0  15:0.0  16:0.0
+
+/support  1440x900
+  sidhöjd före 9447, efter 9447
+  före: 0 element kvar dolda eller ur läge, 0 med will-change kvar
+  efter: 0 element kvar dolda eller ur läge, 0 med will-change kvar
+  avvikande bildpunkter per höjd (%): 0:0.0  1:0.0  2:0.0  3:0.0  4:0.0  5:0.0  6:0.0  7:0.0  8:0.0  9:0.0  10:0.0  11:0.0
+
+/support  390x844
+  sidhöjd före 13273, efter 13273
+  före: 0 element kvar dolda eller ur läge, 0 med will-change kvar
+  efter: 0 element kvar dolda eller ur läge, 0 med will-change kvar
+  avvikande bildpunkter per höjd (%): 0:0.0  1:0.0  2:0.0  3:0.0  4:0.0  5:0.0  6:0.0  7:0.0  8:0.0  9:0.0  10:0.0  11:0.0  12:0.0  13:0.0  14:0.0  15:0.0  16:0.0  17:0.0
+
+Inga anmärkningar. Bilderna ligger i .shots/development.
+
+https://web-development-6c85.up.railway.app/  [mobil]  3 körningar
+  1: poäng 81  FCP 1248  LCP 4156  TBT 209  CLS 0.000  SI 3634
+  2: poäng 79  FCP 1342  LCP 4150  TBT 267  CLS 0.000  SI 3666
+  3: poäng 72  FCP 1002  LCP 4148  TBT 499  CLS 0.000  SI 3705
+  MEDIAN: poäng 79  FCP 1248 ms  LCP 4150 ms  TBT 267 ms  CLS 0  SI 3666 ms  vikt 723 kB
+
+https://web-development-6c85.up.railway.app/  [desktop]  3 körningar
+  1: poäng 97  FCP 381  LCP 1126  TBT 56  CLS 0.001  SI 1312
+  2: poäng 97  FCP 382  LCP 1113  TBT 30  CLS 0.001  SI 1352
+  3: poäng 97  FCP 365  LCP 1146  TBT 34  CLS 0.001  SI 1318
+  MEDIAN: poäng 97  FCP 381 ms  LCP 1126 ms  TBT 34 ms  CLS 0.001  SI 1318 ms  vikt 810 kB
+
+Sparat: docs/startsidan-2026-11-23/matning/development-lighthouse-start.json
+(node:18076) [DEP0190] DeprecationWarning: Passing args to a child process with shell option true can lead to security vulnerabilities, as the arguments are not escaped, only concatenated.
+(Use `node --trace-deprecation ...` to show where the warning was created)

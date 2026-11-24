@@ -12,6 +12,7 @@ import { arSparrad, registreraForsok } from "@/lib/auth/inloggningsforsok";
 import { SPARRKOD, TVAFAKTOR_FEL, TVAFAKTOR_KRAVS } from "@/lib/auth/sparrkod";
 import { sql, sqlAsUser } from "@/lib/db";
 import { hashPassword } from "@/lib/password";
+import { sakerNasta } from "@/lib/auth/nasta";
 
 export type AuthActionResult = {
   success: boolean;
@@ -31,7 +32,8 @@ const KANDA_KODER = new Set<string>([SPARRKOD, TVAFAKTOR_KRAVS, TVAFAKTOR_FEL]);
 // auth-leverantör med flit. Supabase svarade på engelska med utvecklartexter;
 // Auth.js svarar med feltyper. Nycklarna nedan är därför både de gamla
 // Supabase-strängarna (så inget tappas om något fortfarande kastar dem) och
-// Auth.js egna typnamn. Okända fel går fram i original hellre än att sväljas.
+// Auth.js egna typnamn. Okända fel loggas på servern och användaren får en
+// mening den kan göra något med (authErrorMessage).
 const errorMessages: Record<string, string> = {
   // Meddelandet säger medvetet INTE om det var adressen eller lösenordet som
   // var fel. Att skilja dem åt hade gjort inloggningen till ett verktyg för
@@ -62,8 +64,19 @@ const errorMessages: Record<string, string> = {
     "Adressen finns redan med ett annat inloggningssätt. Logga in på det sätt du använde första gången."
 };
 
+const OKANT_AUTHFEL = "Det gick inte just nu. Försök igen om en stund, och hör av dig om det upprepas.";
+
+/**
+ * Ett fel som användaren kan läsa. Okända fel gick förut fram i original:
+ * Auth.js typnamn ("CallbackRouteError") och Postgres engelska feltext
+ * ("duplicate key value violates unique constraint ...") stod då i rött under
+ * formuläret. De hör hemma i loggen.
+ */
 function authErrorMessage(message: string): string {
-  return errorMessages[message.trim().toLowerCase()] ?? message;
+  const kand = errorMessages[message.trim().toLowerCase()];
+  if (kand) return kand;
+  console.error("auth: okänt fel visades som allmänt besked:", message);
+  return OKANT_AUTHFEL;
 }
 
 // Minimilängden står här nu, inte i Supabase. Åtta i stället för sex: när talet
@@ -125,7 +138,7 @@ export async function signInWithPassword(
     await ensureWorkspace(userId);
   }
 
-  redirect(await startsidaFor(userId, nextPath));
+  redirect(await startsidaFor(userId, sakerNasta(nextPath)));
 }
 
 async function anvandarId(email: string): Promise<string | null> {
@@ -200,6 +213,11 @@ export async function signUpWithPassword(
       [email, await hashPassword(password), fullName]
     );
   } catch (error) {
+    // Två samtidiga registreringar på samma adress: den andra faller på det
+    // unika indexet (23505), och det är samma besked som kontrollen ovan ger.
+    if ((error as { code?: string }).code === "23505") {
+      return { success: false, error: authErrorMessage("user already registered") };
+    }
     return { success: false, error: authErrorMessage((error as Error).message) };
   }
 
@@ -472,7 +490,7 @@ export async function signInWithOAuth(
   // annars hamnar användaren hos providern i en fetch utan webbläsare.
   return {
     success: true,
-    url: `/api/auth/signin/${providerId}?callbackUrl=${encodeURIComponent(nextPath)}`
+    url: `/api/auth/signin/${providerId}?callbackUrl=${encodeURIComponent(sakerNasta(nextPath))}`
   };
 }
 

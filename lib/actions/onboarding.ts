@@ -199,9 +199,12 @@ export async function saveBusinessContext(input: OnboardingInput): Promise<Onboa
     try {
       await sqlAsUser(user.id, "select public.ensure_workspace_for_current_user()");
     } catch (repairError) {
+      // Databasens feltext hör hemma i loggen, inte under formuläret.
+      console.error("onboarding: arbetsytan kunde inte lagas:", repairError);
       return {
         success: false,
-        error: `Ditt konto saknar en arbetsyta och kunde inte repareras: ${(repairError as Error).message}`
+        error:
+          "Ditt konto saknar en arbetsyta, och vi kunde inte lägga upp den automatiskt. Logga ut och in igen. Hjälper inte det, hör av dig till oss så löser vi det."
       };
     }
     profile = await getProfileForUser(user.id);
@@ -388,7 +391,11 @@ export async function saveBusinessContext(input: OnboardingInput): Promise<Onboa
     const { sparaBusinessContext } = await import("@/lib/data/business-context");
     await sparaBusinessContext(user.id, payload);
   } catch (error) {
-    return { success: false, error: (error as Error).message };
+    console.error("onboarding: företagsuppgifterna kunde inte sparas:", error);
+    return {
+      success: false,
+      error: "Uppgifterna gick inte att spara just nu. Försök igen om en stund. Det du fyllt i ligger kvar."
+    };
   }
 
   /**

@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { BolagsSok } from "@/components/leads/BolagsSok";
-import { KonversationsRuta, Konversationer, NotisKnapp } from "@/components/leads/Konversationer";
+import { Konversationer, NotisKnapp } from "@/components/leads/Konversationer";
+import { LeadsOversikt } from "@/components/leads/LeadsOversikt";
 import { Uppfoljningar } from "@/components/leads/Uppfoljningar";
 import { flik, flikAktiv, flikInaktiv, fliklista, rubrikSida } from "@/components/ui";
 import { useLocale } from "@/lib/i18n";
@@ -182,7 +183,13 @@ export default function Page() {
       </div>
       <div className="mt-6">
         {vy === "oversikt" ? (
-          <KonversationsRuta onOppna={(t) => { setVy("konversationer"); setTrad(t); }} />
+          // Hela översikten, så att konversationernas tal syns där de står i
+          // produkten: i sidans rad nyckeltal, inte i en egen ruta.
+          <LeadsOversikt
+            onOppnaKonversation={(t) => { setVy("konversationer"); setTrad(t); }}
+            onOppnaKorningar={() => undefined}
+            onOppnaListor={() => undefined}
+          />
         ) : vy === "konversationer" ? (
           <Konversationer trad={trad} onTrad={setTrad} />
         ) : (

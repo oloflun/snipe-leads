@@ -17,7 +17,13 @@ export const fraunces = Fraunces({
   // axes have to come along or those declarations do nothing.
   axes: ["SOFT", "opsz"],
   variable: "--font-fraunces",
-  display: "swap"
+  display: "swap",
+  // Förladdas INTE härifrån. Rotlayouten gäller varje sida, och startsidan
+  // (LandingPhoto, klassen serif-fet) använder inte Fraunces alls: där låg
+  // 273 kB typsnitt med hög prioritet i vägen för hjältefotot på en telefon
+  // (uppmätt 2026-11-23, Lighthouse mobil: 580 kB typsnitt före LCP).
+  // Sidorna som bär Fraunces förladdar den själva, se lib/fonts-rubrik.ts.
+  preload: false
 });
 
 export const geist = Geist({
@@ -45,7 +51,11 @@ export const sourceSerif = Source_Serif_4({
   style: ["normal", "italic"],
   axes: ["opsz"],
   variable: "--font-source-serif",
-  display: "swap"
+  display: "swap",
+  // Samma skäl som Fraunces ovan, åt andra hållet: bara marknadssidorna bär
+  // Source Serif, och arbetsytan hämtade 238 kB som den aldrig ritade med.
+  // Förladdas av lib/fonts-landning.ts.
+  preload: false
 });
 
 export const fontVariables = `${geist.variable} ${fraunces.variable} ${jetbrainsMono.variable} ${sourceSerif.variable}`;

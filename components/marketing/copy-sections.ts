@@ -331,3 +331,35 @@ export const imagery = {
 export function photo(src: string): string {
   return src;
 }
+
+/**
+ * Smalare varianter av fotona, så att en telefon inte hämtar ett 2000 px brett
+ * original för en bild som visas 600 px bred. Skapade med ImageMagick ur
+ * originalen (`-resize <w>x -quality 78`), se public/photos/ATTRIBUTION.md.
+ * `full` är originalets bredd; `w`-talen är det webbläsaren väljer efter.
+ */
+const SMALA: Record<string, { fil: string; w: number; full: number }> = {
+  "/photos/goteborg-golden.webp": { fil: "/photos/goteborg-golden-1280.webp", w: 1280, full: 2200 },
+  "/photos/haga.webp": { fil: "/photos/haga-1100.webp", w: 1100, full: 2000 },
+  "/photos/facade.webp": { fil: "/photos/facade-1200.webp", w: 1200, full: 2000 },
+  "/photos/desk.webp": { fil: "/photos/desk-900.webp", w: 900, full: 1762 }
+};
+
+/** `srcSet` för ett foto, eller undefined för en bild utan smal variant. */
+export function photoSet(src: string): string | undefined {
+  const smal = SMALA[src];
+  return smal ? `${smal.fil} ${smal.w}w, ${src} ${smal.full}w` : undefined;
+}
+
+/**
+ * `sizes` per plats på sidan: hur bred bilden faktiskt RITAS, inte hur bred
+ * rutan är. Alla fyra är beskurna med object-cover, så ett högt och smalt
+ * utsnitt ritar bilden bredare än skärmen (hjälten på mobil är 420 px hög och
+ * därmed 630 px bred). Fotona med parallax ritas dessutom 12 % större.
+ */
+export const photoSizes = {
+  hjalte: "(max-width: 767px) 630px, (max-aspect-ratio: 3/2) 150vh, 100vw",
+  gata: "(max-width: 767px) 640px, 1010px",
+  band: "(max-width: 767px) 620px, 100vw",
+  bord: "112vw"
+} as const;

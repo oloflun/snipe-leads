@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { LASROLL, LASROLL_FEL } from "@/lib/auth/lasroll";
-import { requireSnajpTenant, SnajpTenantError } from "@/lib/snajp/tenant";
+import { requireSnajpTenant, SnajpTenantError, svarForTenantfel } from "@/lib/snajp/tenant";
 import { proxyWithApiKey } from "./_lib";
 
 /**
@@ -62,7 +62,7 @@ export async function proxyAsTenant(path: string, init: RequestInit) {
       // `kod` går med, så att gränssnittet kan skilja "inte aktiverad ännu"
       // från "något gick sönder" utan att tolka svensk text.
       return NextResponse.json(
-        { error: error.message, kod: error.kod },
+        svarForTenantfel(error),
         { status: error.status }
       );
     }

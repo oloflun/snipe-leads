@@ -96,6 +96,28 @@ export class SnajpTenantError extends Error {
     super(message);
     this.name = "SnajpTenantError";
   }
+
+  /**
+   * Det KUNDEN får läsa. `message` är skriven för den som felsöker driften
+   * ("Kör scripts/railway_tenantnyckel.py ...", "SNAJP_MASTER_API_KEY är inte
+   * satt") och gick förut rakt ut i en röd rad hos kunden. Den loggas av den
+   * som svarar (svarForTenantfel) och stannar på servern.
+   */
+  get kundbesked(): string {
+    if (this.kod === "ej_inloggad") return this.message;
+    if (this.kod === "ej_aktiverad") {
+      return "Arbetsytan håller på att läggas upp. Det brukar ta någon minut. Ladda om sidan om en stund.";
+    }
+    return "Arbetsytan gick inte att öppna just nu. Felet ligger hos oss och är loggat. Försök igen om en stund.";
+  }
+}
+
+/** Felkroppen för ett tenantfel: kundens text ut, driftens text i loggen. */
+export function svarForTenantfel(error: SnajpTenantError): { error: string; kod: SnajpTenantKod } {
+  if (error.kod !== "ej_inloggad") {
+    console.error(`snajp-tenant (${error.status}, ${error.kod}): ${error.message}`);
+  }
+  return { error: error.kundbesked, kod: error.kod };
 }
 
 export type SnajpTenant = {

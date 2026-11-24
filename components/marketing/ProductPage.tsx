@@ -3,6 +3,8 @@ import { LandingPhoto } from "@/components/marketing/LandingPhoto";
 import { SupportShowcase } from "@/components/marketing/SupportShowcase";
 import { loadPublicEmailStudioData } from "@/lib/data/emails";
 import type { ProductKey } from "@/lib/routes";
+// Förladdar Source Serif 4 på marknadssidorna (lib/fonts-landning.ts säger varför).
+import "@/lib/fonts-landning";
 
 /**
  * One shell for /, /leads and /support. Only the initially selected

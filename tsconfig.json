@@ -41,6 +41,7 @@
     "email-studio/kopior",
     "snajp-support/frontend",
     "support-webb",
-    "marknad/video"
+    "marknad/video",
+    "tests/e2e"
   ]
 }

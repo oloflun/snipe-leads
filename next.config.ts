@@ -74,6 +74,25 @@ const nextConfig: NextConfig = {
          */
         source: "/widget.js",
         headers: [{ key: "Cache-Control", value: "public, max-age=300" }]
+      },
+      {
+        /**
+         * Foton, produktbilder, ikoner och delningskort ur public/.
+         *
+         * Next serverar dem med `max-age=0` (uppmätt 2026-11-23 mot
+         * produktionsbygget): varje besök, också ett återbesök en minut senare,
+         * frågade servern om alla fyra foton på startsidan innan de fick visas.
+         * Filerna har inget innehållshash i namnet, så `immutable` vore fel: en
+         * utbytt bild skulle sitta kvar hos besökaren. En vecka, och därefter
+         * visas den gamla medan en ny hämtas i bakgrunden.
+         */
+        source: "/:mapp(photos|produkt|images|icons|og|tenants)/:fil*",
+        headers: [{ key: "Cache-Control", value: "public, max-age=604800, stale-while-revalidate=86400" }]
+      },
+      {
+        /** Logotyperna i roten, samma skäl som ovan. */
+        source: "/:fil(snajp-[a-z0-9-]+\\.svg)",
+        headers: [{ key: "Cache-Control", value: "public, max-age=604800, stale-while-revalidate=86400" }]
       }
     ];
   },

@@ -805,6 +805,10 @@ html.lenis {
   pointer-events: none;
   /* Soluppgången, tills ljusmotorn tar över. */
   background: oklch(0.955 0.03 65);
+  /* Eget lager (2026-11-23). Utan det låg marken i dokumentets lager, och varje
+     färgbyte från ljusmotorn målade om hela sidan: 499 målningar av dokumentet
+     under en skroll. I ett eget lager är färgbytet en enfärgad yta som byts. */
+  will-change: transform;
 }
 
 /* Ljuslagret: skugga i multiply med fyra upplysta rutor som glider med
@@ -829,6 +833,9 @@ html.lenis {
   contain: strict;
   background: oklch(0.87 0.04 58);
   opacity: 0;
+  /* Ljusmotorn skriver opaciteten medan man skrollar; med will-change gör
+     kompositorn det utan att sidan målas om (samma skäl som marken ovan). */
+  will-change: opacity;
 }
 
 .landing .light__panes {
@@ -927,7 +934,8 @@ html.lenis {
   transform-origin: 50% 100%;
   filter: blur(14px);
   pointer-events: none;
-  will-change: transform;
+  /* opacity också: ljuset tonas in när namnet reser sig (useLandingMotion, kapitel). */
+  will-change: transform, opacity;
 }
 
 /* Supportagenten: samma fönster, ljuset från andra hållet. Skjuvningen utgår från

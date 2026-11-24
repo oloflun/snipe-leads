@@ -5,7 +5,7 @@ import { usePathname, useSearchParams } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { Cell, Nyckeltal, Tabell, Tomt, btnLiten, btnSecondary, meta, tabellRad } from "@/components/ui";
-import { felmeddelande, readJsonBody } from "@/lib/http/json";
+import { felmeddelande, kroppsbesked, readJsonBody } from "@/lib/http/json";
 import { useLocale, type Locale, type Localized } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { KorningensUtkast } from "./KorningensUtkast";
@@ -303,7 +303,7 @@ export function IrisKorningar({
       const kropp = await readJsonBody<{ korningar?: KorningsRad[]; detail?: string }>(response);
       if (!response.ok || !kropp?.korningar) {
         if ([401, 403, 404].includes(response.status)) setStoppad(true);
-        setFel(kropp?.detail ?? text(T.hamtaFel));
+        setFel(kroppsbesked(kropp) ?? text(T.hamtaFel));
         return;
       }
       setFel(null);
@@ -563,7 +563,7 @@ function Pagaende({
       );
       if (!response.ok) {
         const kropp = await readJsonBody<{ detail?: string }>(response);
-        setStyrFel(kropp?.detail ?? text(T.styrFel));
+        setStyrFel(kroppsbesked(kropp) ?? text(T.styrFel));
       }
       await onStyrd();
     } catch (cause) {
@@ -696,7 +696,7 @@ function Fortsatt({ rad, onStyrd }: Readonly<{ rad: KorningsRad; onStyrd: () => 
       );
       if (!response.ok) {
         const kropp = await readJsonBody<{ detail?: string }>(response);
-        setFel(kropp?.detail ?? text(T.fortsattFel));
+        setFel(kroppsbesked(kropp) ?? text(T.fortsattFel));
       }
       await onStyrd();
     } catch (cause) {

@@ -133,16 +133,20 @@ export function useLandingMotion({ root, lenis: lenisRef }: DomRefs, product: st
     let teardown: (() => void) | undefined;
 
     (async () => {
-      const [{ gsap, ScrollTrigger, SplitText, spring }, { default: lenis }] = await Promise.all([
+      const [{ gsap, ScrollTrigger, SplitText, spring }, { default: lenis, arMjuk, vidNativ }] = await Promise.all([
         import("@/gsap.js"),
         import("@/smooth-scroll.js")
       ]);
       const rootEl = root.current;
       if (cancelled || !rootEl) return;
-      lenisRef.current = lenis;
+      // Mjukscrollen kan lämna över till webbläsarens egen scroll (smooth-scroll.js). Då ska
+      // ankarlänkarna i LandingPhoto inte längre gå via Lenis.
+      lenisRef.current = arMjuk() ? lenis : null;
+      const slutaLyssna = vidNativ(() => { lenisRef.current = null; });
       const firstRun = first.current;
       first.current = false;
-      teardown = setup({ gsap, ScrollTrigger, SplitText, spring } as Gsap, rootEl, firstRun && !doorPlayed, lenis);
+      const riv = setup({ gsap, ScrollTrigger, SplitText, spring } as Gsap, rootEl, firstRun && !doorPlayed, () => (arMjuk() && lenis ? lenis.velocity : 0));
+      teardown = () => { slutaLyssna(); riv(); };
       if (firstRun) doorPlayed = true;
     })().catch((e: unknown) => {
       // Importen föll (nätet, en gammal webbläsare): sidan står synlig utan
@@ -185,7 +189,7 @@ const SVAV_GAP = 0.8;
 const SVAV_TEXT = 0.6;
 const SVAV_FAILSAFE_MS = 6000;
 
-function setup(G: Gsap, rootEl: HTMLElement, fullDoor: boolean, lenis: Lenis): () => void {
+function setup(G: Gsap, rootEl: HTMLElement, fullDoor: boolean, skrollfart: () => number): () => void {
   const { gsap, ScrollTrigger, SplitText, spring } = G;
   const ARRIVAL = spring(0.66, 0.95);
   const $ = <T extends HTMLElement = HTMLElement>(s: string, r: ParentNode = rootEl) => r.querySelector<T>(s);
@@ -194,6 +198,8 @@ function setup(G: Gsap, rootEl: HTMLElement, fullDoor: boolean, lenis: Lenis): (
   // Städning som inte är GSAP-objekt (ticker, lyssnare). Inte ctx.add inne i
   // kontextens egen funktion: den körs synkront medan `ctx` ännu är oinitierad.
   const cleanups: (() => void)[] = [];
+  // Sätts av städningen: ett pass i andra omgången (se nedan) får inte köra mot en riven uppsättning.
+  let avbruten = false;
 
   const ctx = gsap.context(() => {
     // ---------------------------------------------------------------- dörren
@@ -301,9 +307,17 @@ function setup(G: Gsap, rootEl: HTMLElement, fullDoor: boolean, lenis: Lenis): (
     // kompositorn kan återanvända det suddade lagret medan det bara flyttas och skalas.
     const PANE = 1000;
     let lastKey = "";
-    let lastGround = "";
     let lastBlur = -1;
-    let lastShade = "";
+    let lastTransform = "";
+    let lastOpacity = "";
+    // Färgerna skrivs i steg (2026-11-23). Förut skrevs markens och skuggans färg varje
+    // bildruta med fyra decimaler: under en hel skroll målades sidan om 499 gånger bara
+    // för en färg som ändrats i fjärde decimalen (uppmätt med scripts/mat_startsida_spar.mjs,
+    // 37 % av huvudtrådens tid gick till målning). FARGSTEG är avståndet i OKLab innan
+    // färgen skrivs igen. 0,0025 är en åttondel av det minsta ögat kan skilja mellan två
+    // ytor bredvid varandra, och här byts hela ytan på en gång, så steget syns inte.
+    const FARGSTEG = 0.0025;
+    let skrivet: number[] | null = null;
     function render() {
       if (!light || !panes || !keys.length) return;
       const vw = innerWidth;
@@ -315,20 +329,26 @@ function setup(G: Gsap, rootEl: HTMLElement, fullDoor: boolean, lenis: Lenis): (
       const v = sample(s);
       const [cx, cy, w, h, rot, skx, , blur] = v;
       const str = capStr(v);
-      panes.style.transform = `translate3d(${(cx - PANE / 2 - (1 - door.on) * 0.25 * vw).toFixed(2)}px, ${(cy - PANE / 2).toFixed(2)}px, 0) rotate(${rot.toFixed(3)}deg) skewX(${skx.toFixed(3)}deg) scale(${(w / PANE).toFixed(4)}, ${(h / PANE).toFixed(4)})`;
+      // Rutorna flyttas av kompositorn (will-change i CSS). En tiondels bildpunkt och en
+      // hundradels grad räcker: finare än så syns inte, och värdet skrivs bara när det ändrats.
+      const tf = `translate3d(${(cx - PANE / 2 - (1 - door.on) * 0.25 * vw).toFixed(1)}px, ${(cy - PANE / 2).toFixed(1)}px, 0) rotate(${rot.toFixed(2)}deg) skewX(${skx.toFixed(2)}deg) scale(${(w / PANE).toFixed(4)}, ${(h / PANE).toFixed(4)})`;
+      if (tf !== lastTransform) { panes.style.transform = tf; lastTransform = tf; }
       const bl = Math.round((blur + (1 - door.on) * 30) / 3) * 3;
       if (bl !== lastBlur) { panes.style.filter = `blur(${bl}px)`; lastBlur = bl; }
-      light.style.opacity = (str * door.on).toFixed(3);
-      const shade = ok(v[9], v[10], v[11]);
-      if (shade !== lastShade) { light.style.background = shade; lastShade = shade; }
-      const g = ok(v[12], v[13], v[14]);
-      if (g !== lastGround) {
+      const op = (str * door.on).toFixed(2);
+      if (op !== lastOpacity) { light.style.opacity = op; lastOpacity = op; }
+      // Mark, skugga och rutor byter färg i samma bildruta, så att det blir en målning.
+      let storst = skrivet ? 0 : 1;
+      if (skrivet) for (let i = 0; i < 6; i++) storst = Math.max(storst, Math.abs(v[9 + i] - skrivet[i]));
+      if (storst >= FARGSTEG) {
+        skrivet = v.slice(9, 15);
+        light.style.background = ok(v[9], v[10], v[11]);
+        const g = ok(v[12], v[13], v[14]);
         if (groundEl) groundEl.style.background = g;
         panes.style.setProperty("--pane", g); // rutorna är marken, oförändrad
-        lastGround = g;
       }
     }
-    const onRefresh = () => { computeKeys(); lastKey = ""; render(); };
+    const onRefresh = () => { computeKeys(); lastKey = ""; skrivet = null; render(); };
     gsap.ticker.add(render);
     ScrollTrigger.addEventListener("refresh", onRefresh);
     cleanups.push(() => { gsap.ticker.remove(render); ScrollTrigger.removeEventListener("refresh", onRefresh); });
@@ -340,6 +360,10 @@ function setup(G: Gsap, rootEl: HTMLElement, fullDoor: boolean, lenis: Lenis): (
       const show = shows.get(el);
       if (!show || revealed(el)) return;
       el.dataset.rv = "1";
+      // Ett visat element behöver inte bevakas längre. Förut stod alla sextio kvar hos
+      // båda observatörerna, och webbläsaren räknade om deras läge varje bildruta.
+      io.unobserve(el);
+      ioHel.unobserve(el);
       show();
     }
     const io = new IntersectionObserver((entries) => {
@@ -378,19 +402,32 @@ function setup(G: Gsap, rootEl: HTMLElement, fullDoor: boolean, lenis: Lenis): (
       return Math.min(slotN++, 6) * STEG_STEG;
     };
 
+    // EGNA LAGER FRÅN UPPSÄTTNINGEN (2026-11-23). Ett element som får ett eget kompositlager,
+    // eller lämnar tillbaka det, gör att webbläsaren delar om sidan i lager och målar om
+    // dokumentet. GSAP gör det av sig självt i början och slutet av varje rörelse, och med
+    // en rörelse per textrad blev det ett par hundra ommålningar av hela sidan under en
+    // skroll (uppmätt med scripts/mat_startsida_spar.mjs, OGILTIG=1). Nu får elementet sitt
+    // lager redan när det döljs, långt innan det syns, och lämnar tillbaka det en gång när
+    // det är framme. Under själva rörelsen gör kompositorn arbetet utan att sidan målas om.
+    const lyft = (el: HTMLElement | HTMLElement[], vad = "transform, opacity") => gsap.set(el, { willChange: vad });
+    const slapp = (el: HTMLElement | HTMLElement[]) => gsap.set(el, { clearProps: "willChange" });
     function fadeUp(el: HTMLElement, delay = 0) {
-      arm(el, () => gsap.set(el, { opacity: 0, y: 18 }),
-        () => gsap.to(el, { opacity: 1, y: 0, duration: 0.9, ease: "power3.out", delay }));
+      arm(el, () => { gsap.set(el, { opacity: 0, y: 18 }); lyft(el); },
+        () => gsap.to(el, { opacity: 1, y: 0, duration: 0.9, ease: "power3.out", delay, onComplete: () => slapp(el) }));
     }
     function splitLines(el: HTMLElement) {
       SplitText.create(el, {
         aria: /^H[1-6]$/.test(el.tagName) ? "auto" : "none",
         type: "lines", mask: "lines", linesClass: "ln", autoSplit: true, wordDelimiter: ORDSKILJE,
         // varje omspaltning: dolda rader bara om elementet ännu inte visats; ett visat element står i vila
-        onSplit(self) { if (!revealed(el)) gsap.set(self.lines, { yPercent: 120 }); }
+        onSplit(self) { if (!revealed(el)) { gsap.set(self.lines, { yPercent: 120 }); lyft(self.lines as HTMLElement[], "transform"); } }
       });
     }
-    const showLines = (el: HTMLElement, delay = 0) => gsap.to($$(".ln", el), { yPercent: 0, duration: 0.9, ease: "power4.out", stagger: 0.07, delay });
+    // Raderna lämnar tillbaka sina lager tillsammans när den sista är framme, inte en i taget.
+    const showLines = (el: HTMLElement, delay = 0) => {
+      const rader = $$(".ln", el);
+      return gsap.to(rader, { yPercent: 0, duration: 0.9, ease: "power4.out", stagger: 0.07, delay, onComplete: () => slapp(rader) });
+    };
     function headingLines(el: HTMLElement) {
       splitLines(el);
       // data-full (startsidans flöde): texten reser sig ur sina rader när den står helt i
@@ -460,12 +497,13 @@ function setup(G: Gsap, rootEl: HTMLElement, fullDoor: boolean, lenis: Lenis): (
     function steg(el: HTMLElement) {
       arm(el, () => {
         gsap.set(el, { opacity: 0, y: 20 });
+        lyft(el);
         el.dataset.armerad = "1";
       }, () => {
         gsap.to(el, {
           opacity: 1, y: 0, duration: STEG_TID, ease: "power3.out", delay: slot(),
           // RaknaUpp (AgentResultat) väntar på den här innan talen räknas.
-          onComplete: () => { el.dataset.visad = "1"; el.dispatchEvent(new Event("steg:visad")); }
+          onComplete: () => { slapp(el); el.dataset.visad = "1"; el.dispatchEvent(new Event("steg:visad")); }
         });
       }, "", true);
     }
@@ -486,11 +524,12 @@ function setup(G: Gsap, rootEl: HTMLElement, fullDoor: boolean, lenis: Lenis): (
       if (!namn) return;
       SplitText.create(namn, {
         aria: "none", type: "lines,chars", mask: "lines", linesClass: "ln", charsClass: "kb", autoSplit: true,
-        onSplit(self) { if (!revealed(namn)) gsap.set(self.chars, { yPercent: 118 }); }
+        onSplit(self) { if (!revealed(namn)) { gsap.set(self.chars, { yPercent: 118 }); lyft(self.chars as HTMLElement[], "transform"); } }
       });
       if (rad) splitLines(rad);
       arm(namn, () => { if (ljus) gsap.set(ljus, { opacity: 0 }); }, () => {
-        gsap.to($$(".kb", namn), { yPercent: 0, duration: 1.05, ease: "power4.out", stagger: 0.045 });
+        const tecken = $$(".kb", namn);
+        gsap.to(tecken, { yPercent: 0, duration: 1.05, ease: "power4.out", stagger: 0.045, onComplete: () => slapp(tecken) });
         if (ljus) gsap.to(ljus, { opacity: 1, duration: 1.8, ease: "power2.out" });
         if (rad) { rad.dataset.rv = "1"; showLines(rad, 0.45); }
       }, "", true);
@@ -549,7 +588,7 @@ function setup(G: Gsap, rootEl: HTMLElement, fullDoor: boolean, lenis: Lenis): (
       }
       const vila = (tid: number) => {
         if (!heroSyns) return;
-        const lugn = Math.max(0, 1 - Math.abs(lenis.velocity) / 6);
+        const lugn = Math.max(0, 1 - Math.abs(skrollfart()) / 6);
         lager.forEach((l, i) => {
           if (!l) return;
           l.styrka += ((landad[i] ? lugn : 0) - l.styrka) * 0.04;
@@ -599,6 +638,14 @@ function setup(G: Gsap, rootEl: HTMLElement, fullDoor: boolean, lenis: Lenis): (
       gsap.fromTo(el, { scaleX: 0 }, { scaleX: 1, ease: "none",
         scrollTrigger: { trigger: el, start: "top 94%", end: "top 62%", scrub: true } });
     }
+    // ------------------------------------------------ uppsättningen i två omgångar
+    // Förut ställdes hela sidan upp i ett svep: över sextio element spaltades och doldes
+    // i en enda uppgift som låste huvudtråden i över en sekund på en strypt telefon
+    // (uppmätt 2026-11-23: 1 137 ms vid fyra gångers strypning), mitt under dörren. Nu
+    // ställs det som ligger inom en och en halv skärm upp direkt, och resten i korta
+    // pass med plats för bildrutor emellan. Ordningen inom varje omgång är oförändrad.
+    type Jobb = { el: HTMLElement; kor: () => void; doljer: boolean };
+    const jobb: Jobb[] = [];
     const units = $$("[data-mo=\"lines\"], [data-mo=\"up\"], [data-mo=\"row\"], [data-mo=\"plate\"], [data-mo=\"band\"], [data-mo=\"words\"], [data-mo=\"rule\"]");
     const isUnit = new Set(units);
     for (const el of units) {
@@ -609,22 +656,27 @@ function setup(G: Gsap, rootEl: HTMLElement, fullDoor: boolean, lenis: Lenis): (
       }
       if (carried) continue;
       switch (el.dataset.mo) {
-        case "lines": headingLines(el); break;
-        case "words": words(el); break;
-        case "plate": plate(el); break;
-        case "band": band(el); break;
-        case "rule": rule(el); break;
+        case "lines": jobb.push({ el, kor: () => headingLines(el), doljer: true }); break;
+        case "words": jobb.push({ el, kor: () => words(el), doljer: false }); break;
+        case "plate": jobb.push({ el, kor: () => plate(el), doljer: false }); break;
+        case "band": jobb.push({ el, kor: () => band(el), doljer: false }); break;
+        case "rule": jobb.push({ el, kor: () => rule(el), doljer: false }); break;
         case "row": {
           const sib = el.parentElement ? [...el.parentElement.children].indexOf(el) : 0;
-          fadeUp(el, Math.min(sib, 5) * 0.07);
+          jobb.push({ el, kor: () => fadeUp(el, Math.min(sib, 5) * 0.07), doljer: true });
           break;
         }
-        default: fadeUp(el);
+        default: jobb.push({ el, kor: () => fadeUp(el), doljer: true });
       }
     }
-    $$("[data-case]:not([data-mo=\"svav\"])").forEach(caseEntry);
-    $$("[data-mo=\"steg\"]").forEach(steg);
-    $$("[data-mo=\"kapitel\"]").forEach(kapitel);
+    for (const el of $$("[data-case]:not([data-mo=\"svav\"])")) jobb.push({ el, kor: () => caseEntry(el), doljer: true });
+    for (const el of $$("[data-mo=\"steg\"]")) jobb.push({ el, kor: () => steg(el), doljer: true });
+    for (const el of $$("[data-mo=\"kapitel\"]")) jobb.push({ el, kor: () => kapitel(el), doljer: true });
+    // Ett läspass innan något skrivs: var står varje element nu? Därefter delas jobben.
+    const NARA = innerHeight * 1.5;
+    const toppar = jobb.map((j) => j.el.getBoundingClientRect().top);
+    const senare: Jobb[] = [];
+    jobb.forEach((j, i) => { if (toppar[i] < NARA) j.kor(); else senare.push(j); });
     svav($$("[data-mo=\"svav\"]"));
     // Startsidans ingress: radspaltad här, visad av dörren (visaIngress).
     if (hem && lede) {
@@ -660,9 +712,36 @@ function setup(G: Gsap, rootEl: HTMLElement, fullDoor: boolean, lenis: Lenis): (
     // (fasadbandet var helt framme en hel pinnlängd för tidigt, uppmätt 2026-10-19).
     ScrollTrigger.sort();
     ScrollTrigger.refresh();
+
+    // Andra omgången: det som ligger längre ned, i pass om högst åtta millisekunder.
+    // Den som hunnit skrolla dit innan passet kommit fram ser elementet stå färdigt:
+    // ett jobb som döljer hoppas över när elementet redan syns, så att ingenting
+    // försvinner framför läsaren för att sedan spelas in.
+    let nasta = 0;
+    const PASS_MS = 8;
+    const omgang = () => {
+      if (avbruten) return;
+      ctx.add(() => {
+        const slut = performance.now() + PASS_MS;
+        while (nasta < senare.length && performance.now() < slut) {
+          const j = senare[nasta++];
+          if (j.doljer) {
+            const r = j.el.getBoundingClientRect();
+            if (r.top < innerHeight && r.bottom > 0) { j.el.dataset.rv = "1"; continue; }
+          }
+          j.kor();
+        }
+        // Bara sortering när allt är uppställt. Ingen ny refresh: varje utlösare räknar sitt
+        // eget läge när den skapas, och en refresh av hela sidan mitt i en skroll rycker.
+        if (nasta >= senare.length) ScrollTrigger.sort();
+      });
+      if (nasta < senare.length) timers.push(window.setTimeout(omgang, 0));
+    };
+    if (senare.length) timers.push(window.setTimeout(omgang, 0));
   }, rootEl);
 
   return () => {
+    avbruten = true;
     timers.forEach((t) => window.clearTimeout(t));
     cleanups.forEach((fn) => fn());
     ctx.revert();

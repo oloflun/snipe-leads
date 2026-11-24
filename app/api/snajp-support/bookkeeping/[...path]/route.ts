@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { resolveDashboardState } from "@/lib/data/dashboard";
-import { requireSnajpTenant, SnajpTenantError } from "@/lib/snajp/tenant";
+import { requireSnajpTenant, SnajpTenantError, svarForTenantfel } from "@/lib/snajp/tenant";
 import { SNAJP_SUPPORT_URL } from "../../_lib";
 
 /**
@@ -69,7 +69,7 @@ async function vidarebefordra(
   } catch (error) {
     if (error instanceof SnajpTenantError) {
       return NextResponse.json(
-        { error: error.message, kod: error.kod },
+        svarForTenantfel(error),
         { status: error.status }
       );
     }

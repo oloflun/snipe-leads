@@ -41,6 +41,25 @@ användaren startade det, i den befintliga miljön och utan ny flik om det inte
 meddelande om att något "pågår i bakgrunden" räcker inte. Är det tveksamt om
 förloppet ska synas för kunden eller bara för plattformsadmin: fråga Anton.
 
+**En ny funktion byggs in i den befintliga ytan, aldrig ovanpå den (Antons
+regel 2026-11-24).** Lägg ALDRIG till en ruta, en rad tal eller en panel bara
+för att funktionen är ny. Börja i det som redan står på sidan: hör talet till
+en befintlig rad nyckeltal står det där, hör listan till de befintliga
+panelerna får den samma huvud, samma plats i rutnätet och samma röst som de.
+Resultatet ska vara logiskt och gå att förstå utan förklaring för den som
+använder sidan. Två rader tal i två stilar, eller två tal som säger nästan
+samma sak på samma sida, är tecknet på att funktionen lagts ovanpå. Fallet:
+konversationernas fyra tal låg i en egen ruta över Leads-översiktens fyra.
+Se `DESIGN.md` § App surfaces.
+
+**Titta ALLTID med egna ögon innan du committar en ändring som syns.** Rendera
+ytan, ta en bild och läs den: desktop och mobil. Typkontroll, tester och
+beräknade mått ersätter inte det. Kräver ytan inloggning eller backend, rendera
+den i en förhandsvisning under `app/forhandsvisning/` (anropen besvaras i
+webbläsaren, ingen databas) och lägg till en om den saknas. Går det inte att
+se ytan alls: committa inte, och säg varför. Under ~4 GB ledigt virtuellt minne
+startas en enda lokal server, och den stängs direkt efter bilderna.
+
 **Varje nytt beslut skrivs i [`docs/BESLUT.md`](docs/BESLUT.md) med
 beslutsfattarens resonemang** (Antons regel 2026-10-10), så att skälet går att
 följa efteråt. Nyaste överst; ett ersatt beslut stryks inte.

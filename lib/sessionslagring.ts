@@ -25,6 +25,18 @@ function nyttId(): string {
   }
 }
 
+/**
+ * Finns det redan en identitet under nyckeln? Skapar ingen. En identitet som
+ * inte fanns före sidladdningen kan inte ha något samtal att hämta.
+ */
+export function harSessionsId(nyckel: string): boolean {
+  try {
+    return !!window.sessionStorage.getItem(nyckel);
+  } catch {
+    return iMinnet.has(nyckel);
+  }
+}
+
 export function sessionsId(nyckel: string): string {
   try {
     const sparat = window.sessionStorage.getItem(nyckel);

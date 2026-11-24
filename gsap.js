@@ -3,49 +3,23 @@
 // gsap resolves to the machine's global install through `npm link gsap lenis`
 // (design skill: scripts/motion/link_motion.py). Never npm install gsap, never
 // register a plugin anywhere else.
-import {
-  gsap,
-  ScrollTrigger,
-  ScrollToPlugin,
-  ScrollSmoother,
-  SplitText,
-  ScrambleTextPlugin,
-  TextPlugin,
-  DrawSVGPlugin,
-  MorphSVGPlugin,
-  MotionPathPlugin,
-  MotionPathHelper,
-  Flip,
-  Draggable,
-  InertiaPlugin,
-  Observer,
-  CustomEase,
-  CustomBounce,
-  CustomWiggle,
-  EasePack,
-  Physics2DPlugin,
-} from "gsap/all";
+//
+// ONLY THE PLUGINS THE SITE USES (2026-11-23). This file used to import
+// "gsap/all" and register all eighteen plugins. A registered plugin cannot be
+// tree-shaken, so every visitor to the start page downloaded and evaluated
+// ScrollSmoother, MorphSVG, Draggable, Physics2D and the rest: 105 kB over the
+// wire of which 68 kB was never run (Lighthouse, unused-javascript), and part of
+// the 2.8 s this chunk cost a throttled phone at load. useLandingMotion uses
+// gsap, ScrollTrigger and SplitText and nothing else.
+//
+// Need another plugin? Import it from its own module ("gsap/Flip") and add it to
+// registerPlugin and the export list below, and to gsap.d.ts. Do not go back to
+// "gsap/all".
+import { gsap } from "gsap";
+import { ScrollTrigger } from "gsap/ScrollTrigger";
+import { SplitText } from "gsap/SplitText";
 
-gsap.registerPlugin(
-  ScrollTrigger,
-  ScrollToPlugin,
-  ScrollSmoother, // ponytail: registered, but never ScrollSmoother.create() on a page that runs Lenis - one scroll owner
-  SplitText,
-  ScrambleTextPlugin,
-  TextPlugin,
-  DrawSVGPlugin,
-  MorphSVGPlugin,
-  MotionPathPlugin,
-  MotionPathHelper,
-  Flip,
-  Draggable,
-  InertiaPlugin,
-  Observer,
-  CustomEase,
-  CustomBounce,
-  CustomWiggle,
-  Physics2DPlugin,
-);
+gsap.registerPlugin(ScrollTrigger, SplitText);
 
 // Apple's spring as a GSAP ease (apple-design § 4, Designing Fluid Interfaces):
 // two designer parameters instead of mass/stiffness/damping. `damping` < 1
@@ -65,25 +39,4 @@ export function spring(damping, response) {
   return { ease, duration };
 }
 
-export {
-  gsap,
-  ScrollTrigger,
-  ScrollToPlugin,
-  ScrollSmoother,
-  SplitText,
-  ScrambleTextPlugin,
-  TextPlugin,
-  DrawSVGPlugin,
-  MorphSVGPlugin,
-  MotionPathPlugin,
-  MotionPathHelper,
-  Flip,
-  Draggable,
-  InertiaPlugin,
-  Observer,
-  CustomEase,
-  CustomBounce,
-  CustomWiggle,
-  EasePack,
-  Physics2DPlugin,
-};
+export { gsap, ScrollTrigger, SplitText };

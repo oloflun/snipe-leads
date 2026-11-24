@@ -7,7 +7,7 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { sessionsId } from "./sessionslagring.ts";
+import { harSessionsId, sessionsId } from "./sessionslagring.ts";
 
 type Fonster = { sessionStorage: Storage };
 const globalt = globalThis as unknown as { window?: Fonster };
@@ -97,5 +97,31 @@ test("lagring som kastar vid skrivning (full kvot) ger ändå ett stabilt id", (
   medFonster(full, () => {
     const forsta = sessionsId("snajp.demo.session.full");
     assert.equal(sessionsId("snajp.demo.session.full"), forsta);
+  });
+});
+
+test("harSessionsId skapar ingen identitet, och ser en som finns", () => {
+  const lagring = minneslagring();
+  medFonster({ sessionStorage: lagring }, () => {
+    // En ny besökare har ingen: då finns inget samtal att hämta, och frågan
+    // till backenden ska inte gå (SupportChat, hämtningen vid sidladdning).
+    assert.equal(harSessionsId("snajp.demo.session.prov"), false);
+    assert.equal(lagring.getItem("snajp.demo.session.prov"), null);
+    const id = sessionsId("snajp.demo.session.prov");
+    assert.equal(harSessionsId("snajp.demo.session.prov"), true);
+    assert.equal(sessionsId("snajp.demo.session.prov"), id);
+  });
+});
+
+test("harSessionsId kastar inte när lagringen är blockerad", () => {
+  const blockerad = {
+    get sessionStorage(): Storage {
+      throw new DOMException("blockerad", "SecurityError");
+    }
+  } as Fonster;
+  medFonster(blockerad, () => {
+    assert.equal(harSessionsId("snajp.demo.session.blockerad"), false);
+    sessionsId("snajp.demo.session.blockerad");
+    assert.equal(harSessionsId("snajp.demo.session.blockerad"), true);
   });
 });
