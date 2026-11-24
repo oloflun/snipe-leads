@@ -81,6 +81,43 @@ dem inte heller: det är en lucka, inte ett beslut.
 
 ---
 
+## 2026-11-24 — Nya funktioner integreras i den befintliga ytan; egna ögon före commit (Anton)
+
+**Beslut.**
+1. En ny funktion byggs in i den befintliga designen, aldrig bara ovanpå den. Den ska
+   samspela med det som redan står på sidan och vara logisk och intuitiv för användaren.
+2. Varje synlig ändring granskas med egna ögon innan den committas.
+3. Leads › Översikt har en enda rad nyckeltal i trattens ordning: leads, utkast att
+   godkänna, skickade mejl, svar, bokade möten. Konversationernas tal står i den raden,
+   och "Konversationer som väntar" är en panel bredvid utkasten och körningen.
+
+**Resonemanget.** Anton 2026-11-24, om Leads-översikten: "ändra sedan den nya layouten
+med siffror för konversationer som byggts fult ovanpå siffrorna för leads-översikten och
+integrera det snyggare i den befintliga översikten, lägg till en regel om att ALDRIG
+enbart lägga till funktioner på det sättet, INTEGRERA alltid i den befintliga designen på
+ett sätt som samspelar och är logiskt och intuitivt för användaren, verifiera ALLTID med
+dina egna ögon innan du committar."
+
+Konversationerna (2026-11-22) kom in som en egen ruta med fyra tal överst på sidan. Under
+den stod översiktens egna fyra tal. Det gav två sifferrader i två stilar, och två tal som
+sa nästan samma sak: "Utkast väntar 3" över "Utkast att godkänna 200", "Nya svar 0" över
+"Svar från leads 10".
+
+Samma kväll hade två ändringar gått ut utan att någon sett dem i en körande app:
+maskinen hade för lite minne för en lokal server, och det fick ersätta granskningen.
+Regeln stänger den vägen. Går ytan inte att se committas den inte.
+
+**Vad det betyder i koden.** `components/leads/LeadsOversikt.tsx` (raden nyckeltal och
+panelernas ordning), `components/leads/Konversationer.tsx` (`KonversationsRuta` lämnar
+talen med `onTal` och visar bara det som väntar), `components/ui.tsx` (`Nyckeltal` rymmer
+fem poster). Förhandsvisningen `app/forhandsvisning/konversationer` visar hela översikten,
+så att den går att granska utan databas. Reglerna står i `CLAUDE.md` § Projektregler och
+`DESIGN.md` § App surfaces.
+
+**Öppet.** Talet "Utkast väntar" (svarsutkast i konversationer) har inget eget nyckeltal
+längre: det syns som etikett på raderna i panelen. Ska det räknas ihop med utkasten att
+godkänna är det en fråga om vad det talet betyder, inte om layout.
+
 ## 2026-11-23 — Tonläget in i onboardingen; bara onboardingen kopplar arbetsytan (Anton)
 
 **Beslut.**

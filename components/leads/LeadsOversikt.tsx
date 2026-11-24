@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useDashboard } from "@/components/dashboard/DashboardContext";
 import { IrisGranskning } from "@/components/leads/IrisGranskning";
-import { KonversationsRuta } from "@/components/leads/Konversationer";
+import { KonversationsRuta, type Konversationstal } from "@/components/leads/Konversationer";
 import {
   KORNINGSSTATUS,
   korningsTyp,
@@ -23,8 +23,8 @@ import { cn } from "@/lib/utils";
 /**
  * Leads › Översikt (Sebbes beställning 2026-10-06, omgjord 2026-10-07).
  *
- *   en rad nyckeltal (hårlinjer, inga kort)
- *   de tre senaste utkasten (expanderbar, skicka direkt) · körningarna
+ *   en rad nyckeltal (hårlinjer, inga kort): tratten från lead till bokat möte
+ *   konversationer som väntar och körningarna · de tre senaste utkasten
  *   Iris-leads i full bredd (tabellen från lg)
  *   listor och säljlista
  *
@@ -49,6 +49,8 @@ const T = {
   skickade: { sv: "Skickade mejl", en: "Emails sent" },
   svar: { sv: "Svar från leads", en: "Replies from leads" },
   leadsIListan: { sv: "Leads i listan", en: "Leads in the list" },
+  moten: { sv: "Möten bokade", en: "Meetings booked" },
+  ingenAterkomst: { sv: "inget att återkomma till i dag", en: "nothing to follow up today" },
   exempelLeads: { sv: "bland exempelleadsen", en: "among the example leads" },
   utkastRubrik: { sv: "Senaste utkasten", en: "Latest drafts" },
   pagaendeKorningar: { sv: "Pågående körningar", en: "Runs in progress" },
@@ -320,6 +322,9 @@ export function LeadsOversikt({
     godkanda: number;
   } | null>(null);
   const [antalUtkast, setAntalUtkast] = useState<number | null>(null);
+  // Konversationspanelen lämnar sina tal hit (KonversationsRuta.onTal), så
+  // att sidan har EN rad nyckeltal. Null tills de hämtats, och i demon.
+  const [konv, setKonv] = useState<Konversationstal | null>(null);
   // Körningsrutan vet om en Iris-körning pågår; tabellen går då i livetakt.
   const [pagaendeKorningar, setPagaendeKorningar] = useState(0);
 
@@ -329,6 +334,8 @@ export function LeadsOversikt({
 
   const fmt = (varde: number | null) => (varde === null ? "–" : varde.toLocaleString(locale === "en" ? "en-GB" : "sv-SE"));
   const senaste = text({ sv: `senaste ${PERIOD} veckorna`, en: `last ${PERIOD} weeks` });
+
+  const visaKonversationer = !arDemo && Boolean(onOppnaKonversation);
 
   const nyckeltal = [
     {
@@ -352,7 +359,35 @@ export function LeadsOversikt({
     },
     // Demon räknar ur sina exempelleads; arbetsytan ur utskicksloggen.
     { etikett: text(T.skickade), varde: fmt(antalLeads?.skickat ?? null), notis: arDemo ? text(T.exempelLeads) : senaste },
-    { etikett: text(T.svar), varde: fmt(antalLeads?.svarat ?? null), notis: arDemo ? text(T.exempelLeads) : senaste }
+    {
+      etikett: text(T.svar),
+      varde: fmt(antalLeads?.svarat ?? null),
+      // Olästa svar ur konversationerna står vid talet de hör till.
+      notis: arDemo
+        ? text(T.exempelLeads)
+        : konv?.nya_svar
+          ? text({
+              sv: `${senaste} · ${konv.nya_svar} ${konv.nya_svar === 1 ? "nytt" : "nya"}`,
+              en: `${senaste} · ${konv.nya_svar} new`
+            })
+          : senaste
+    },
+    // Trattens sista led, det kunderna köper (Anton 2026-11-22). Bara med
+    // konversationer: demon och ytor utan dem har fyra tal som förut.
+    ...(visaKonversationer
+      ? [
+          {
+            etikett: text(T.moten),
+            varde: fmt(konv?.moten ?? null),
+            notis: konv?.aterkom_idag
+              ? text({
+                  sv: `${konv.aterkom_idag} att återkomma till i dag`,
+                  en: `${konv.aterkom_idag} to follow up today`
+                })
+              : text(T.ingenAterkomst)
+          }
+        ]
+      : [])
   ];
 
   const kolumn = cn(kort, "relative min-w-0");
@@ -361,11 +396,23 @@ export function LeadsOversikt({
     // flex-kolumn, inte grid: ett grid-items min-width:auto lät tabellernas
     // minsta bredd växa hela sidan i sidled (uppmätt 1318 px vid 1280).
     <div className="flex min-w-0 flex-col gap-6">
-      {/* Konversationerna först (Anton 2026-11-22): det kunderna köper. */}
-      {arDemo || !onOppnaKonversation ? null : <KonversationsRuta onOppna={onOppnaKonversation} />}
+      {/* EN rad nyckeltal, i trattens ordning: lead, utkast, skickat, svar,
+          möte. Konversationernas tal står här och inte i en egen rad ovanför
+          (Anton 2026-11-24). NOT två sifferrader i två stilar. */}
       <Nyckeltal poster={nyckeltal} />
 
       <div className={cn("grid min-w-0 items-start gap-4", !arDemo && "lg:grid-cols-2")}>
+        {/* Vänsterspalten: det som väntar på någon, konversationerna först
+            (det kunderna köper), sedan körningen. Utkasten till höger är den
+            höga panelen. */}
+        {arDemo ? null : (
+          <div className="flex min-w-0 flex-col gap-4">
+            {visaKonversationer && onOppnaKonversation ? (
+              <KonversationsRuta onOppna={onOppnaKonversation} onTal={setKonv} />
+            ) : null}
+            <KorningsRuta onOppna={(jobId) => onOppnaKorningar?.(jobId)} onPagaende={setPagaendeKorningar} />
+          </div>
+        )}
         <section aria-labelledby="leads-utkastruta" className={cn(kort, "min-w-0")}>
           <h2 id="leads-utkastruta" className={cn(rubrikPanel, "mb-3")}>
             {text(T.utkastRubrik)}
@@ -373,7 +420,6 @@ export function LeadsOversikt({
           </h2>
           <IrisGranskning demo={arDemo} onAntal={setAntalUtkast} kompakt />
         </section>
-        {arDemo ? null : <KorningsRuta onOppna={(jobId) => onOppnaKorningar?.(jobId)} onPagaende={setPagaendeKorningar} />}
       </div>
 
       <section aria-labelledby="leads-iris" className={kolumn}>

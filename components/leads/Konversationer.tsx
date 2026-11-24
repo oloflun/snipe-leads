@@ -3,7 +3,7 @@
 import { ArrowLeft, Bell } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { KonversationsTrad } from "@/components/leads/KonversationsTrad";
-import { SkeletonRows, Talrad, Tomt, btnLiten, btnSecondary, chip, chipAktiv, chipInaktiv, chiplista, meta, rubrikPanel } from "@/components/ui";
+import { SkeletonRows, Tomt, btnSecondary, chip, chipAktiv, chipInaktiv, chiplista, meta, rubrikPanel } from "@/components/ui";
 import { felmeddelande } from "@/lib/http/json";
 import { useLocale, type Localized } from "@/lib/i18n";
 import {
@@ -222,43 +222,61 @@ export function Konversationer({
   );
 }
 
+/** Talen ur konversationerna som Leads › Översikt visar i sin rad nyckeltal. */
+export type Konversationstal = Konversationslista["sammanfattning"];
+
 /**
- * Rutan överst i Leads › Översikt: nya svar, utkast som väntar, bokade möten
- * och återkomster i dag, och de tre konversationer som behöver någon först.
+ * Panelen i Leads › Översikt: de tre konversationer som behöver någon först.
+ *
+ * Talen (nya svar, bokade möten, återkomster i dag) står INTE här. De hör till
+ * översiktens enda rad nyckeltal och lämnas dit med `onTal`, samma mönster som
+ * utkastrutans `onAntal` och körningsrutans `onPagaende`. Första versionen
+ * (2026-11-22) hade en egen rad med fyra tal ovanpå översiktens fyra: två
+ * sifferrader i två stilar, där "Utkast väntar 3" stod över "Utkast att
+ * godkänna 200" (Anton 2026-11-24: "byggts fult ovanpå").
  */
-export function KonversationsRuta({ onOppna }: Readonly<{ onOppna: (threadId: string | null) => void }>) {
-  const { text, locale } = useLocale();
+export function KonversationsRuta({
+  onOppna,
+  onTal
+}: Readonly<{ onOppna: (threadId: string | null) => void; onTal?: (tal: Konversationstal) => void }>) {
+  const { text } = useLocale();
   const { lista } = useKonversationer();
   const s = lista?.sammanfattning;
-  const forst = (lista?.konversationer ?? []).filter((r) => r.att_gora).slice(0, 3);
-  const fmt = (n: number | undefined) => (n === undefined ? "–" : n.toLocaleString(locale === "en" ? "en-GB" : "sv-SE"));
+  const vantar = (lista?.konversationer ?? []).filter((r) => r.att_gora);
+  const forst = vantar.slice(0, 3);
+
+  useEffect(() => {
+    if (s) onTal?.(s);
+    // Bara när talen ändras: föräldern skickar en ny funktion vid varje rendering.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [s?.nya_svar, s?.utkast_vantar, s?.moten, s?.aterkom_idag]);
 
   return (
     <section aria-labelledby="leads-konversationsruta" className="rounded-card border border-ink/12 bg-paper p-4 sm:p-5">
-      <div className="mb-4 flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2">
+      {/* Samma huvud som panelerna bredvid (Senaste utkasten, Senaste
+          körningen): rubrik med antalet, och vägen till hela vyn som en stilla
+          länk. Sidans enda knapp är Kör Iris. */}
+      <div className="mb-3 flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1">
         <h2 id="leads-konversationsruta" className={rubrikPanel}>
-          {text({ sv: "Konversationer", en: "Conversations" })}
+          {text({ sv: "Konversationer som väntar", en: "Conversations waiting" })}
+          {vantar.length ? <>{" "}<span className="num ml-1 font-normal tabular-nums text-ink-subtle">{vantar.length}</span></> : null}
         </h2>
-        <button type="button" onClick={() => onOppna(null)} className={cn(btnSecondary, btnLiten)}>
-          {text({ sv: "Öppna konversationerna", en: "Open conversations" })}
+        <button
+          type="button"
+          onClick={() => onOppna(null)}
+          className="focus-ring rounded-input text-[0.875rem] font-medium text-ink underline underline-offset-4 hover:text-warning"
+        >
+          {text({ sv: "Alla konversationer", en: "All conversations" })}
         </button>
       </div>
-      <Talrad
-        poster={[
-          { etikett: text({ sv: "Nya svar", en: "New replies" }), varde: fmt(s?.nya_svar) },
-          { etikett: text({ sv: "Utkast väntar", en: "Drafts waiting" }), varde: fmt(s?.utkast_vantar) },
-          { etikett: text({ sv: "Möten bokade", en: "Meetings booked" }), varde: fmt(s?.moten) },
-          { etikett: text({ sv: "Återkom i dag", en: "Follow up today" }), varde: fmt(s?.aterkom_idag) }
-        ]}
-      />
       {lista === null ? null : forst.length === 0 ? (
-        <p className={cn(meta, "mt-3")}>
+        <p className={meta}>
           {lista.konversationer.length
             ? text({ sv: "Inget väntar på dig just nu.", en: "Nothing is waiting for you right now." })
             : text({ sv: "Inga svar från leads än.", en: "No replies from leads yet." })}
         </p>
       ) : (
-        <ul className="mt-2 divide-y divide-ink/10">
+        <ul className="divide-y divide-ink/10 border-t border-ink/10">
           {forst.map((r) => (
             <li key={r.thread_id}>
               <button
