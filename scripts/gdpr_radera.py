@@ -98,6 +98,7 @@ _KONTAKT = "select id from contacts where lower(email) = lower(%s)"
 _PROSPEKT = "select id from prospects where lower(contact_email) = lower(%s)"
 _TRAD = f"select id from outreach_threads where prospect_id in ({_PROSPEKT})"
 _ARENDE = f"select id from ss_tickets where customer_id in ({_KUND})"
+_CRM_PERSON = "select id from crm_personer where lower(epost) = lower(%s)"
 
 #: Var en e-postadress kan förekomma. Kolumnnamnet är inte samma överallt,
 #: därför en explicit karta i stället för en gissning. Andra fältet är en
@@ -120,6 +121,9 @@ TABELLER = [
     ("demo_requests", "epost", "Demoförfrågan från webbplatsen."),
     ("ss_customer_contacts", "mejl", "Kontaktperson hos en kund i kundregistret."),
     ("ss_customers", f"id in ({_KUND})", "Chatt- och supportkund. Identifierare, ärenden, meddelanden, kundminne, chattläge och kanalkontakter kaskaderar härifrån."),
+    # Snajp CRM (migration 153). Källsystemets id först: det pekar på personen utan främmande nyckel.
+    ("crm_externa_id", f"objekt = 'person' and post_id in ({_CRM_PERSON})", "Källsystemets id för en kontaktperson i kundens CRM."),
+    ("crm_personer", "epost", "Kontaktperson i kundens CRM (Snajp CRM)."),
 ]
 
 #: Raderas ALDRIG. Se docstringen.
@@ -176,6 +180,8 @@ MANUELLT = [
     ("ss_customer_details", "faktureringsmejl", "Kundens faktureringsuppgifter. Avtal och fakturering — beslut per kund."),
     ("ss_mailboxes", "address", "Kundens kopplade brevlåda. Kopplas bort i kundens inställningar."),
     ("ss_sending_domains", "reply_to", "Kundens svarsadress för utskick."),
+    ("crm_bolag", "epost", "Bolag i kundens CRM med adressen som bolagets egen. För en enskild firma "
+                           "(enskild_firma) är hela raden personuppgifter: beslut per fall, i samråd med kunden."),
 ]
 
 #: Löptext där adressen kan stå utan egen kolumn. Söks bara med --fritext
@@ -205,6 +211,10 @@ FRITEXT = [
     ("demo_requests", "meddelande"),
     ("leads_sidcache", "innehall"),
     ("prompt_lager", "text"),
+    # Snajp CRM (153): kundens egna fält, och fältvärden som synken inte kunde tolka.
+    ("crm_bolag", "extra::text"),
+    ("crm_personer", "extra::text"),
+    ("crm_synkkorningar", "fel::text"),
 ]
 
 #: Tabeller som KAN bära adressen i löptext utan att ha en egen adresskolumn

@@ -18,6 +18,7 @@ import logging
 from datetime import datetime, timedelta, timezone
 
 from ..config import get_settings
+from ..crm import lagring as crm_lagring
 from ..storage.base import Storage
 from .autonomy import allowed_action, normalize
 from .send_decision import decide_send_action
@@ -200,7 +201,10 @@ async def _kor_send_guard(storage, tenant_id: str, thread: dict, message: dict, 
         # Supportens kundregister ÄR kundens kundlista: den som har ett ärende
         # hos tenantens support är en befintlig kund och ska inte kallmejlas.
         # Var frozenset() fram till 2026-09-20 — spärren fanns utan data.
-        egna_kunder=frozenset(await storage.list_customer_emails(tenant_id)),
+        # Sedan migration 153 också kunderna i Snajp CRM: bolagets egen adress
+        # och personerna hos bolag med relationen kund (app/crm/lagring.py).
+        egna_kunder=frozenset(await storage.list_customer_emails(tenant_id))
+        | frozenset(await crm_lagring.kundadresser(storage, tenant_id)),
     )
 
     return check_send_guard(

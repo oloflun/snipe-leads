@@ -55,6 +55,9 @@ async def require_api_key(
             "tenant_id": record["tenant_id"],
             "tenant_name": record["tenant_name"],
             "master": False,
+            # Nycklar från före migration 153 saknar kolumnen och når allt.
+            "omfang": list(record.get("omfang") or ["*"]),
+            "nyckel_id": str(record.get("id") or ""),
         }
     raise HTTPException(status_code=401, detail="Ogiltig API-nyckel.")
 
@@ -62,7 +65,32 @@ async def require_api_key(
 async def require_tenant(
     request: Request, x_api_key: str | None = Header(default=None)
 ) -> dict:
-    """Nyckel med tenant-koppling — krävs för alla kunddata-endpoints."""
+    """Nyckel med tenant-koppling — krävs för alla kunddata-endpoints.
+
+    En nyckel med omfång (app/crm/nycklar.py) når bara CRM-API:t. Den avvisas
+    HÄR, i den dependency varje kunddata-endpoint redan har, så att en ny
+    endpoint inte kan glömma kontrollen: nyckeln Buddy lägger i sitt CRM ska
+    inte kunna läsa inkorgen eller skicka utkast.
+    """
+    tenant = await require_api_key(request, x_api_key)
+    if not tenant["tenant_id"]:
+        raise HTTPException(
+            status_code=403,
+            detail="Master-nyckeln är administrativ och kan inte användas mot kunddata.",
+        )
+    if "*" not in tenant.get("omfang", ["*"]):
+        raise HTTPException(
+            status_code=403,
+            detail="Nyckeln gäller bara CRM-API:t under /api/crm/v1.",
+        )
+    return tenant
+
+
+async def require_crm_nyckel(
+    request: Request, x_api_key: str | None = Header(default=None)
+) -> dict:
+    """Nyckel med tenant-koppling, med eller utan omfång. Bara för CRM-API:t,
+    där varje endpoint själv kräver sitt omfång (app/api/crm_v1.py)."""
     tenant = await require_api_key(request, x_api_key)
     if not tenant["tenant_id"]:
         raise HTTPException(

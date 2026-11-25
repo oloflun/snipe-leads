@@ -2651,6 +2651,12 @@ class MemoryStorage:
                 for i in self.lead_list_items
                 if i["tenant_id"] == tenant_id
             ),
+            # Kundens CRM (migration 153), som i PostgresStorage.
+            *(
+                {"company_name": b["namn"], "orgnr": b.get("orgnr"), "kalla": "crm", "list_id": None}
+                for b in getattr(self, "_crm", {}).get("crm_bolag", {}).values()
+                if b["tenant_id"] == tenant_id and not b.get("raderad_at")
+            ),
         ]
 
     async def rensa_lead_list_items(self, tenant_id: str, list_id: str) -> int:

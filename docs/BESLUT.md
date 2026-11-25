@@ -9,6 +9,72 @@ möjligt), vad det betyder i koden.
 
 ---
 
+## 2026-11-25 — Snajp CRM: grunden och kundsynken in (Antons beställning, agentens val)
+
+**Beslut (Anton, 2026-11-24).** Buddy ska slippa ladda upp kundlistor: kunddatan synkas in
+över ett API och hålls aktuell, och kunderna hanteras i Snajp. API:t går åt båda hållen,
+och inflödets format ska vara lätt att anpassa per CRM-system. Kundsynken in byggs först.
+
+**Agentens val, som Anton kan ändra.** Koden: migration 153, `snajp-support/app/crm/`,
+`snajp-support/app/api/crm_v1.py` och `crm.py`. Guiden: `docs/crm/API.md`.
+
+- **Bolaget får en egen tabell med organisationsnumret som unik nyckel per kund.** Fram
+  till nu fanns ett bolag bara som rad i `prospects` eller `lead_list_items`, utan nyckel,
+  och "ett bolag, ett ställe" hölls av en läsning av alla kundens prospekt under lås.
+  Nyckeln är densamma som `app/leads/upptagna.py` räknar fram, så ett bolag i CRM:et är
+  samma bolag som i leads.
+- **Allt som finns i kundens CRM är upptaget för Iris och listbygget**, oavsett relation
+  (kund, tidigare kund, prospekt, partner, leverantör). Den som redan arbetar ett bolag
+  ska inte få det som kallt lead. `storage.lista_upptagna_bolag` bär raderna, och
+  sändspärren (`send_guard` regel 3) läser kundernas adresser ur CRM:et.
+- **En post känns igen på källans id, sedan organisationsnummer, sedan entydig domän,
+  sedan entydigt namn.** Två "Bygg AB" slås aldrig ihop på namnet, och gmail.com är aldrig
+  en bolagsdomän. Hellre en dubblett som en människa slår ihop än två bolag som blivit ett.
+- **Källan vinner som standard när källan och Snajp säger olika**, eftersom källan är
+  kundens register. Regeln väljs per anslutning (källan, Snajp eller nyast) och avgörs
+  fält för fält: fält som ändrats för hand i Snajp bokförs i `manuellt_andrade`. Ett fält
+  källan inte skickar rörs aldrig.
+- **Bara en full synk kan avgöra vad som försvunnit ur källan**, och en full synk utan en
+  enda post gör ingenting: ett tomt svar från källan är oftare ett fel än en tömd kundstock.
+- **Personnummer sparas inte**, i linje med beslutet 2026-11-23 om listimporten. En
+  enskild firma blir ett bolag utan nummer, märkt `enskild_firma`. Numret skrivs inte
+  heller i synkens fellogg.
+- **Radering är en papperskorg i 30 dagar, sedan töms raden på allt utom id och tider.**
+  Den som synkar ut måste kunna se att en post försvunnit, och den som raderat av misstag
+  ska kunna ångra sig, men papperskorgen får inte bli ett register över borttagna personer.
+  En adress med begränsad behandling (art. 18) töms inte.
+- **Dataminimering som i listimporten:** bara de egna fält kunden räknar upp i mappningen
+  följer med. Resten av posten sparas inte.
+- **Nycklar med omfång.** En nyckel som en kund lägger i sitt CRM når bara
+  `/api/crm/v1`. Kontrollen sitter i `require_tenant`, som varje kunddata-endpoint redan
+  har, så att en ny endpoint inte kan glömma den.
+- **API:t är versionerat, engelskt i fältnamnen och tvåspråkigt i felen.** Den som
+  integrerar sitter oftast med ett engelskt system på andra sidan. Specifikationen
+  (`docs/crm/openapi.json`) genereras ur koden, och ett test fäller om den glider.
+- **Synken är ett anrop kunden gör, inte ett jobb Snajp kör.** Då behövs ingen nyckel till
+  kundens system i Snajps databas, och inget pollande jobb som dubbleras i spegeln.
+  Varje anrop är en rad i liggaren `crm_synkkorningar`, så att förlopp och utfall finns
+  kvar efter omladdning och driftsättning (regeln 2026-10-10).
+- **CRM-tabellerna speglas inte till development än.** De står inte i `railway_synk.SYNK`.
+
+**Öppet, och Antons att avgöra** (utförligare i `docs/crm/underlag/snajp-07`, avsnitt 15):
+
+1. Ska CRM:ets bolag ersätta kundlistan (`lead_lists.kalla='crm'`) som den enda platsen
+   för befintliga kunder? I dag lever båda, och båda utesluts ur Iris.
+2. Ska tidigare kunder vara upptagna för Iris, som nu, eller fria att bearbeta?
+3. Uteslutningen fäller på namn ELLER organisationsnummer (`upptagna.upptagen`). Med en
+   stor kundstock utesluts då också andra bolag med samma namn. Ska CRM-bolag med nummer
+   bara uteslutas på numret?
+4. Lagringstid: CRM-data gallras inte av `gallra_tenant`. Är det kundens register på
+   kundens ansvar, eller ska det in i gallringen (24 månader)?
+5. Privatpersoner i en kunds register (en teleoperatör har konsumenter): filtreras bort,
+   sparas utan kontakt, eller kräver samtycke? I dag hoppas de över bara där källan
+   märker dem (Fortnox, Visma).
+6. Pris: ingår CRM:et och synken i Leads, eller är det ett tillägg? Ingen grind finns än.
+7. Biträdesavtalet saknar CRM-kopplingar (`docs/JURIDIK_ATGARDER.md` punkt 22), och
+   avtalsgrinden stoppar Buddys skrivningar tills avtalsdatum är registrerat.
+8. Ska synkens förlopp och fel synas för kunden eller bara för plattformsadmin?
+
 ## 2026-11-25 — Snajp CRM skrivs som egen kod; Twenty är förlaga, inte källa (Anton)
 
 **Beslut.** Snajp CRM byggs som Snajps egen kod efter en beteende- och

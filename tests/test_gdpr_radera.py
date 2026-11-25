@@ -47,6 +47,8 @@ UNDANTAG = {
     "ss_channel_connections.namn": "Kanalanslutningens namn.",
     "ss_channel_connections.hemlighetsnamn": "Namn på krypterade nycklar, inte värden.",
     "lead_vyer.namn": "Sparad filtervy.",
+    "crm_anslutningar.namn": "Anslutningens namn (källsystemet).",
+    "ss_api_keys.namn": "Nyckelns etikett.",
     "webbpool.company_name": "Bolagsnivå utan kontakter (INV-SEC-008).",
     "notification_preferences.email_enabled": "En boolesk inställning, ingen adress.",
     "email_events.generated_email_id": "Främmande nyckel; händelserna hör till generated_emails (MANUELLT), metadata söks med --fritext.",

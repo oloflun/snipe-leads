@@ -1,0 +1,2735 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Snajp CRM API",
+    "description": "Read and write the companies and people a Snajp customer keeps in Snajp CRM, and sync a customer\nregister in from another system.\n\n**Authentication.** Send the key in `X-API-Key`. Keys are created under CRM, Developers, and carry\nscopes: `crm:las` (read), `crm:skriv` (write), `crm:synk` (sync), `crm:admin` (connections).\n\n**Idempotency.** Any POST accepts `Idempotency-Key`. Within 24 hours the same key and body return\nthe stored response, with `Idempotent-Replayed: true`.\n\n**Pagination.** Lists return `next_cursor`. Pass it as `cursor` until it is `null`.\n\n**Rate limit.** 600 requests per minute and customer. `X-RateLimit-Remaining` is on every\nresponse; a 429 carries `Retry-After`.\n\n**Errors.** `{\"detail\": {\"code\", \"message\", \"meddelande\"}}`. `code` is stable, `message` is English,\n`meddelande` is Swedish.\n\n**Swedish formats.** Organisation numbers are checked with the Luhn digit and stored as\n`NNNNNN-NNNN`. Phone numbers are stored as E.164, Swedish postal codes as `NNN NN`, dates as ISO 8601.\n\n**Keeping a copy in sync.** List with `sort=updated&include_deleted=true&updated_since=<your last\nsync>`. Deleted records carry `deleted_at` and must be removed on your side as well.\n",
+    "version": "1.0.0"
+  },
+  "paths": {
+    "/api/crm/v1/me": {
+      "get": {
+        "tags": [
+          "Snajp CRM"
+        ],
+        "summary": "The key in use",
+        "description": "Which customer the key belongs to, its scopes and the rate limit.",
+        "operationId": "jag_api_crm_v1_me_get",
+        "parameters": [
+          {
+            "name": "x-api-key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Jag Api Crm V1 Me Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/crm/v1/companies": {
+      "get": {
+        "tags": [
+          "Snajp CRM"
+        ],
+        "summary": "List companies",
+        "operationId": "lista_bolag_api_crm_v1_companies_get",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 500,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "`next_cursor` from the previous page.",
+              "title": "Cursor"
+            },
+            "description": "`next_cursor` from the previous page."
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^(updated|name)$",
+              "description": "`updated` lists in change order, oldest first.",
+              "default": "updated",
+              "title": "Sort"
+            },
+            "description": "`updated` lists in change order, oldest first."
+          },
+          {
+            "name": "updated_since",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "ISO 8601 timestamp. Only records changed at or after it.",
+              "title": "Updated Since"
+            },
+            "description": "ISO 8601 timestamp. Only records changed at or after it."
+          },
+          {
+            "name": "include_deleted",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Include deleted records (`deleted_at` set). Use it when syncing out.",
+              "default": false,
+              "title": "Include Deleted"
+            },
+            "description": "Include deleted records (`deleted_at` set). Use it when syncing out."
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Free text search.",
+              "title": "Q"
+            },
+            "description": "Free text search."
+          },
+          {
+            "name": "relation",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "customer",
+                    "former_customer",
+                    "prospect",
+                    "partner",
+                    "supplier",
+                    "other"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Relation"
+            }
+          },
+          {
+            "name": "org_number",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Exact organisationsnummer, any accepted format.",
+              "title": "Org Number"
+            },
+            "description": "Exact organisationsnummer, any accepted format."
+          },
+          {
+            "name": "x-api-key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Lista Bolag Api Crm V1 Companies Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Snajp CRM"
+        ],
+        "summary": "Create a company, or update it by organisation number",
+        "description": "201 when created. 200 when a company with the same organisation number\nalready existed and was updated instead: one company, one record.",
+        "operationId": "skapa_bolag_api_crm_v1_companies_post",
+        "parameters": [
+          {
+            "name": "x-api-key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CompanyIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/crm/v1/companies/{company_id}": {
+      "get": {
+        "tags": [
+          "Snajp CRM"
+        ],
+        "summary": "Get a company",
+        "operationId": "hamta_bolag_api_crm_v1_companies__company_id__get",
+        "parameters": [
+          {
+            "name": "company_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Company Id"
+            }
+          },
+          {
+            "name": "include_deleted",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Include Deleted"
+            }
+          },
+          {
+            "name": "x-api-key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Hamta Bolag Api Crm V1 Companies  Company Id  Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "Snajp CRM"
+        ],
+        "summary": "Change a company",
+        "description": "Only the fields sent are changed; `null` clears a field. Fields changed\nhere count as edited by hand when the connection's conflict rule is applied.",
+        "operationId": "andra_bolag_api_crm_v1_companies__company_id__patch",
+        "parameters": [
+          {
+            "name": "company_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Company Id"
+            }
+          },
+          {
+            "name": "x-api-key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CompanyIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Andra Bolag Api Crm V1 Companies  Company Id  Patch"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Snajp CRM"
+        ],
+        "summary": "Delete a company",
+        "description": "The record can be restored for 30 days and is then emptied. What stays,\nreadable with `include_deleted=true`, is its id and `deleted_at`.",
+        "operationId": "radera_bolag_api_crm_v1_companies__company_id__delete",
+        "parameters": [
+          {
+            "name": "company_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Company Id"
+            }
+          },
+          {
+            "name": "permanent",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Empty the record at once instead of keeping it restorable for 30 days.",
+              "default": false,
+              "title": "Permanent"
+            },
+            "description": "Empty the record at once instead of keeping it restorable for 30 days."
+          },
+          {
+            "name": "x-api-key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/crm/v1/companies/{company_id}/restore": {
+      "post": {
+        "tags": [
+          "Snajp CRM"
+        ],
+        "summary": "Restore a deleted company",
+        "operationId": "aterstall_bolag_api_crm_v1_companies__company_id__restore_post",
+        "parameters": [
+          {
+            "name": "company_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Company Id"
+            }
+          },
+          {
+            "name": "x-api-key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Aterstall Bolag Api Crm V1 Companies  Company Id  Restore Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/crm/v1/people": {
+      "get": {
+        "tags": [
+          "Snajp CRM"
+        ],
+        "summary": "List people",
+        "operationId": "lista_personer_api_crm_v1_people_get",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 500,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "`next_cursor` from the previous page.",
+              "title": "Cursor"
+            },
+            "description": "`next_cursor` from the previous page."
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^(updated|name)$",
+              "description": "`updated` lists in change order, oldest first.",
+              "default": "updated",
+              "title": "Sort"
+            },
+            "description": "`updated` lists in change order, oldest first."
+          },
+          {
+            "name": "updated_since",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "ISO 8601 timestamp. Only records changed at or after it.",
+              "title": "Updated Since"
+            },
+            "description": "ISO 8601 timestamp. Only records changed at or after it."
+          },
+          {
+            "name": "include_deleted",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Include deleted records (`deleted_at` set). Use it when syncing out.",
+              "default": false,
+              "title": "Include Deleted"
+            },
+            "description": "Include deleted records (`deleted_at` set). Use it when syncing out."
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Free text search.",
+              "title": "Q"
+            },
+            "description": "Free text search."
+          },
+          {
+            "name": "company_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Company Id"
+            }
+          },
+          {
+            "name": "x-api-key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Lista Personer Api Crm V1 People Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Snajp CRM"
+        ],
+        "summary": "Create a person, or update by email",
+        "operationId": "skapa_person_api_crm_v1_people_post",
+        "parameters": [
+          {
+            "name": "x-api-key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PersonIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/crm/v1/people/{person_id}": {
+      "get": {
+        "tags": [
+          "Snajp CRM"
+        ],
+        "summary": "Get a person",
+        "operationId": "hamta_person_api_crm_v1_people__person_id__get",
+        "parameters": [
+          {
+            "name": "person_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Person Id"
+            }
+          },
+          {
+            "name": "include_deleted",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Include Deleted"
+            }
+          },
+          {
+            "name": "x-api-key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Hamta Person Api Crm V1 People  Person Id  Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "Snajp CRM"
+        ],
+        "summary": "Change a person",
+        "operationId": "andra_person_api_crm_v1_people__person_id__patch",
+        "parameters": [
+          {
+            "name": "person_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Person Id"
+            }
+          },
+          {
+            "name": "x-api-key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PersonIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Andra Person Api Crm V1 People  Person Id  Patch"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Snajp CRM"
+        ],
+        "summary": "Delete a person",
+        "description": "Use `permanent=true` when the person has asked to be erased (GDPR article 17).",
+        "operationId": "radera_person_api_crm_v1_people__person_id__delete",
+        "parameters": [
+          {
+            "name": "person_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Person Id"
+            }
+          },
+          {
+            "name": "permanent",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Empty the record at once instead of keeping it restorable for 30 days.",
+              "default": false,
+              "title": "Permanent"
+            },
+            "description": "Empty the record at once instead of keeping it restorable for 30 days."
+          },
+          {
+            "name": "x-api-key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/crm/v1/people/{person_id}/restore": {
+      "post": {
+        "tags": [
+          "Snajp CRM"
+        ],
+        "summary": "Restore a deleted person",
+        "operationId": "aterstall_person_api_crm_v1_people__person_id__restore_post",
+        "parameters": [
+          {
+            "name": "person_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Person Id"
+            }
+          },
+          {
+            "name": "x-api-key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Aterstall Person Api Crm V1 People  Person Id  Restore Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/crm/v1/connections/systems": {
+      "get": {
+        "tags": [
+          "Snajp CRM"
+        ],
+        "summary": "Supported source systems and their default mappings",
+        "description": "The default mapping per system, and the target fields a mapping can\npoint at. A connection's own `mapping` is laid on top, field by field.",
+        "operationId": "system_api_crm_v1_connections_systems_get",
+        "parameters": [
+          {
+            "name": "x-api-key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response System Api Crm V1 Connections Systems Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/crm/v1/connections": {
+      "get": {
+        "tags": [
+          "Snajp CRM"
+        ],
+        "summary": "List connections",
+        "operationId": "lista_anslutningar_api_crm_v1_connections_get",
+        "parameters": [
+          {
+            "name": "x-api-key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Lista Anslutningar Api Crm V1 Connections Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Snajp CRM"
+        ],
+        "summary": "Create a connection",
+        "operationId": "skapa_anslutning_api_crm_v1_connections_post",
+        "parameters": [
+          {
+            "name": "x-api-key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConnectionIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Skapa Anslutning Api Crm V1 Connections Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/crm/v1/connections/{connection}": {
+      "get": {
+        "tags": [
+          "Snajp CRM"
+        ],
+        "summary": "Get a connection",
+        "operationId": "hamta_anslutning_api_crm_v1_connections__connection__get",
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Connection"
+            }
+          },
+          {
+            "name": "x-api-key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Hamta Anslutning Api Crm V1 Connections  Connection  Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "Snajp CRM"
+        ],
+        "summary": "Change a connection or its mapping",
+        "operationId": "andra_anslutning_api_crm_v1_connections__connection__patch",
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Connection"
+            }
+          },
+          {
+            "name": "x-api-key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConnectionIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Andra Anslutning Api Crm V1 Connections  Connection  Patch"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Snajp CRM"
+        ],
+        "summary": "Delete a connection",
+        "description": "The companies and people stay. The source system's ids for them are forgotten.",
+        "operationId": "radera_anslutning_api_crm_v1_connections__connection__delete",
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Connection"
+            }
+          },
+          {
+            "name": "x-api-key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/crm/v1/connections/{connection}/preview": {
+      "post": {
+        "tags": [
+          "Snajp CRM"
+        ],
+        "summary": "Try a mapping without writing anything",
+        "description": "Shows what a batch WOULD do: which records are created, updated or\nskipped, and which fields could not be interpreted. Nothing is stored.",
+        "operationId": "forhandsgranska_api_crm_v1_connections__connection__preview_post",
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Connection"
+            }
+          },
+          {
+            "name": "x-api-key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Preview"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Forhandsgranska Api Crm V1 Connections  Connection  Preview Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/crm/v1/sync/runs": {
+      "post": {
+        "tags": [
+          "Snajp CRM"
+        ],
+        "summary": "Start a sync run",
+        "description": "Start a run, send batches to it and complete it. Use `mode: full` when\nthe batches together are everything the source has: only then can records\nthat have disappeared from the source be handled.",
+        "operationId": "starta_korning_api_crm_v1_sync_runs_post",
+        "parameters": [
+          {
+            "name": "x-api-key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Snajp CRM"
+        ],
+        "summary": "List sync runs, newest first",
+        "operationId": "lista_korningar_api_crm_v1_sync_runs_get",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "x-api-key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Lista Korningar Api Crm V1 Sync Runs Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/crm/v1/sync/runs/{run_id}": {
+      "get": {
+        "tags": [
+          "Snajp CRM"
+        ],
+        "summary": "Get a sync run with counts and errors",
+        "operationId": "hamta_korning_api_crm_v1_sync_runs__run_id__get",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          },
+          {
+            "name": "x-api-key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Hamta Korning Api Crm V1 Sync Runs  Run Id  Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/crm/v1/sync/runs/{run_id}/companies": {
+      "post": {
+        "tags": [
+          "Snajp CRM"
+        ],
+        "summary": "Send a batch of companies to a run",
+        "operationId": "sats_bolag_api_crm_v1_sync_runs__run_id__companies_post",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          },
+          {
+            "name": "x-api-key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "connection": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "Connection id or name. Required on /sync/companies and /sync/people.",
+                    "title": "Connection"
+                  },
+                  "items": {
+                    "description": "Records in the source system's own format. At most 500.",
+                    "items": {
+                      "additionalProperties": true,
+                      "type": "object"
+                    },
+                    "title": "Items",
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "items"
+                ],
+                "title": "Batch",
+                "type": "object"
+              }
+            },
+            "text/csv": {
+              "schema": {
+                "type": "string",
+                "description": "UTF-8 with a header row. Semicolon, comma or tab separated. Pass the connection as the query parameter `connection`."
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/crm/v1/sync/runs/{run_id}/people": {
+      "post": {
+        "tags": [
+          "Snajp CRM"
+        ],
+        "summary": "Send a batch of people to a run",
+        "description": "Send the companies first: a person is linked to its company through the\ncompany's id in the source system.",
+        "operationId": "sats_personer_api_crm_v1_sync_runs__run_id__people_post",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          },
+          {
+            "name": "x-api-key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "connection": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "Connection id or name. Required on /sync/companies and /sync/people.",
+                    "title": "Connection"
+                  },
+                  "items": {
+                    "description": "Records in the source system's own format. At most 500.",
+                    "items": {
+                      "additionalProperties": true,
+                      "type": "object"
+                    },
+                    "title": "Items",
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "items"
+                ],
+                "title": "Batch",
+                "type": "object"
+              }
+            },
+            "text/csv": {
+              "schema": {
+                "type": "string",
+                "description": "UTF-8 with a header row. Semicolon, comma or tab separated. Pass the connection as the query parameter `connection`."
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/crm/v1/sync/runs/{run_id}/complete": {
+      "post": {
+        "tags": [
+          "Snajp CRM"
+        ],
+        "summary": "Complete a run",
+        "description": "Closes the run. A full run then applies the connection's\n`missing_records` rule to what the source no longer has. A full run\nwithout a single item fails instead of emptying the register.",
+        "operationId": "slutfor_korning_api_crm_v1_sync_runs__run_id__complete_post",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          },
+          {
+            "name": "x-api-key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Slutfor Korning Api Crm V1 Sync Runs  Run Id  Complete Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/crm/v1/sync/companies": {
+      "post": {
+        "tags": [
+          "Snajp CRM"
+        ],
+        "summary": "Sync a batch of companies in one call",
+        "description": "The short way in: one batch, in the source system's own format, is one\ncompleted run. Records are matched on the source's id, then on organisation\nnumber, so sending the same batch again changes nothing.",
+        "operationId": "synka_bolag_api_crm_v1_sync_companies_post",
+        "parameters": [
+          {
+            "name": "x-api-key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "connection": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "Connection id or name. Required on /sync/companies and /sync/people.",
+                    "title": "Connection"
+                  },
+                  "items": {
+                    "description": "Records in the source system's own format. At most 500.",
+                    "items": {
+                      "additionalProperties": true,
+                      "type": "object"
+                    },
+                    "title": "Items",
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "items"
+                ],
+                "title": "Batch",
+                "type": "object"
+              }
+            },
+            "text/csv": {
+              "schema": {
+                "type": "string",
+                "description": "UTF-8 with a header row. Semicolon, comma or tab separated. Pass the connection as the query parameter `connection`."
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/crm/v1/sync/people": {
+      "post": {
+        "tags": [
+          "Snajp CRM"
+        ],
+        "summary": "Sync a batch of people in one call",
+        "operationId": "synka_personer_api_crm_v1_sync_people_post",
+        "parameters": [
+          {
+            "name": "x-api-key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "connection": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "Connection id or name. Required on /sync/companies and /sync/people.",
+                    "title": "Connection"
+                  },
+                  "items": {
+                    "description": "Records in the source system's own format. At most 500.",
+                    "items": {
+                      "additionalProperties": true,
+                      "type": "object"
+                    },
+                    "title": "Items",
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "items"
+                ],
+                "title": "Batch",
+                "type": "object"
+              }
+            },
+            "text/csv": {
+              "schema": {
+                "type": "string",
+                "description": "UTF-8 with a header row. Semicolon, comma or tab separated. Pass the connection as the query parameter `connection`."
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Address": {
+        "properties": {
+          "street": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Street",
+            "description": "Street address. Gatuadress."
+          },
+          "co": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Co",
+            "description": "c/o line."
+          },
+          "postal_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Postal Code",
+            "description": "Postal code. Swedish codes are stored as `NNN NN`."
+          },
+          "city": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "City",
+            "description": "Postort."
+          },
+          "country": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Country",
+            "description": "ISO 3166-1 alpha-2. Defaults to SE."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "Address"
+      },
+      "CompanyIn": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name",
+            "description": "Company name. Required when creating."
+          },
+          "org_number": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Org Number",
+            "description": "Swedish organisationsnummer. `556036-0793`, `5560360793`, `16556036-0793` and `SE556036079301` are all accepted. The check digit is verified. Unique per customer: posting an existing number updates that company."
+          },
+          "vat_number": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vat Number",
+            "description": "Momsregistreringsnummer, e.g. `SE556036079301`."
+          },
+          "legal_form": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Legal Form",
+            "description": "Bolagsform, e.g. AB."
+          },
+          "sni_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sni Code",
+            "description": "SNI industry code."
+          },
+          "website": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Website"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email",
+            "description": "The company's own address (info@, kontakt@)."
+          },
+          "phone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phone",
+            "description": "Stored as E.164. `08-123 456 78` becomes `+46812345678`."
+          },
+          "address": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Address"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "employees": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Employees"
+          },
+          "revenue_sek": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revenue Sek",
+            "description": "Annual revenue in SEK."
+          },
+          "relation": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "customer",
+                  "former_customer",
+                  "prospect",
+                  "partner",
+                  "supplier",
+                  "other"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Relation",
+            "description": "Defaults to `customer`."
+          },
+          "customer_since": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Customer Since",
+            "description": "ISO 8601 date."
+          },
+          "contract_end": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contract End",
+            "description": "ISO 8601 date. Avtalsslut."
+          },
+          "owner": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner",
+            "description": "Account owner in your organisation."
+          },
+          "do_not_contact": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Do Not Contact"
+          },
+          "custom": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Custom",
+            "description": "Your own fields, up to 50 scalar values."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "CompanyIn"
+      },
+      "ConnectionIn": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name",
+            "description": "Your name for the source, e.g. `hubspot`. Unique."
+          },
+          "system": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "generisk",
+                  "hubspot",
+                  "pipedrive",
+                  "lime",
+                  "lime_go",
+                  "upsales",
+                  "salesforce",
+                  "twenty",
+                  "superoffice",
+                  "dynamics",
+                  "fortnox",
+                  "visma"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "System",
+            "description": "Selects the default field mapping."
+          },
+          "mapping": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mapping",
+            "description": "Overrides on top of the system's default mapping, per object and target field. See GET /connections/systems for the defaults and the format."
+          },
+          "conflict_rule": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "source_wins",
+                  "snajp_wins",
+                  "newest_wins"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conflict Rule"
+          },
+          "missing_records": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "keep",
+                  "mark_former_customer",
+                  "delete"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Missing Records",
+            "description": "What a completed full sync does with records the source no longer has."
+          },
+          "default_relation": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "customer",
+                  "former_customer",
+                  "prospect",
+                  "partner",
+                  "supplier",
+                  "other"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Relation"
+          },
+          "active": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Active"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "ConnectionIn"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "PersonIn": {
+        "properties": {
+          "first_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Name"
+          },
+          "last_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Name"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email",
+            "description": "Unique per customer: posting an existing address updates that person."
+          },
+          "phone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phone"
+          },
+          "mobile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mobile"
+          },
+          "company_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Company Id",
+            "description": "Id of a company in Snajp CRM."
+          },
+          "legal_basis": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "contract",
+                  "legitimate_interest",
+                  "consent"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Legal Basis",
+            "description": "GDPR article 6 basis for holding the person."
+          },
+          "do_not_contact": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Do Not Contact"
+          },
+          "custom": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Custom"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "PersonIn"
+      },
+      "Preview": {
+        "properties": {
+          "object": {
+            "type": "string",
+            "enum": [
+              "company",
+              "person"
+            ],
+            "title": "Object",
+            "default": "company"
+          },
+          "items": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "mapping": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mapping",
+            "description": "Try a mapping without saving it."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "Preview"
+      },
+      "RunIn": {
+        "properties": {
+          "connection": {
+            "type": "string",
+            "title": "Connection",
+            "description": "Connection id or name."
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "delta",
+              "full"
+            ],
+            "title": "Mode",
+            "default": "delta"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "connection"
+        ],
+        "title": "RunIn"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    },
+    "securitySchemes": {
+      "ApiKey": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-API-Key"
+      }
+    }
+  },
+  "security": [
+    {
+      "ApiKey": []
+    }
+  ]
+}

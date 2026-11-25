@@ -235,7 +235,7 @@ jobs:
           GALLRING_TEST_WEB_DSN: postgresql://snajp_web:localweb@127.0.0.1:5432/railway
         run: pytest tests/db/test_gallring.py -v -rs -s
 
-      - name: databas - tenantisolering, rättighetsskriptet, åtkomstlogg, inloggning, roller, demo, tvåsteg
+      - name: databas - tenantisolering, rättighetsskriptet, åtkomstlogg, inloggning, roller, demo, tvåsteg, CRM-lagret
         # Ett överhoppat test räknas som fel: utan databasen bevisar de ingenting.
         if: ${{ !cancelled() && steps.omfang.outputs.kod == 'true' }}
         working-directory: snajp-support
@@ -247,7 +247,7 @@ jobs:
           DATABASE_URL: postgresql://postgres:localdev@127.0.0.1:5432/railway
         run: |
           set -o pipefail
-          pytest tests/db/test_rls_isolation.py tests/db/test_gdpr_radera_db.py tests/db/test_adminlogg.py tests/db/test_inloggningsforsok.py tests/db/test_snajp_web_rattigheter.py tests/db/test_demo_markering.py tests/db/test_tvafaktor.py -v -rs | tee /tmp/db-ut.txt
+          pytest tests/db/test_rls_isolation.py tests/db/test_gdpr_radera_db.py tests/db/test_adminlogg.py tests/db/test_inloggningsforsok.py tests/db/test_snajp_web_rattigheter.py tests/db/test_demo_markering.py tests/db/test_tvafaktor.py tests/db/test_crm_lagring.py -v -rs | tee /tmp/db-ut.txt
           if grep -qE "[0-9]+ skipped" /tmp/db-ut.txt; then echo "::error::ett databastest hoppades över"; exit 1; fi
 
       - uses: actions/setup-node@v7

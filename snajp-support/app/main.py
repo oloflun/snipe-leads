@@ -31,6 +31,8 @@ from .api import (
     bookkeeping,
     chat,
     chattar,
+    crm,
+    crm_v1,
     demo,
     drafts,
     drift,
@@ -494,6 +496,10 @@ app.include_router(bookkeeping.router)
 # Kvittohanteraren — produktytan som ersatte bokföringsagenten (2026-09-16).
 # Bokföringsroutern ovan står kvar som maskineri (SIE-exporten m.m.).
 app.include_router(kvitton.router)
+# Snajp CRM (migration 153): det publika, versionerade API:t och appens
+# egen yta för nycklar och översikt. Se api/crm_v1.py och api/crm.py.
+app.include_router(crm_v1.router)
+app.include_router(crm.router)
 
 # Ohanterade fel hamnar i platform_events i stället för att rulla förbi i
 # Renders stdout och försvinna vid nästa spin-down (migration 026).

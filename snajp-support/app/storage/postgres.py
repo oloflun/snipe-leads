@@ -3650,7 +3650,12 @@ class PostgresStorage:
                     where i.tenant_id = $1""",
                 tenant_id,
             )
-        return [_row(r) for r in records]
+        # Kundens CRM (migration 153): varje levande bolag där är upptaget.
+        # Egen läsning som tål att tabellen saknas, så att koden får ligga
+        # före migrationen.
+        from ..crm import lagring as crm_lagring
+
+        return [_row(r) for r in records] + await crm_lagring.upptagna_rader(self, tenant_id)
 
     async def rensa_lead_list_items(self, tenant_id: str, list_id: str) -> int:
         async with self._scoped(tenant_id) as conn:
