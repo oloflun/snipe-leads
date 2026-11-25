@@ -9,6 +9,49 @@ möjligt), vad det betyder i koden.
 
 ---
 
+## 2026-11-25 — Snajp CRM: appen, Astryx och temat (Antons beställning, agentens val)
+
+**Beslut (Anton).** CRM:et är en egen app bredvid arbetsytan, nådd via en länk, inte en
+flik. Gränssnittet byggs med Astryx (`meta/astryx`) för alla komponenter, med Snajps färger
+som tema.
+
+**Agentens val, som Anton kan ändra.** Koden: `app/crm/`, `components/crm/app/`,
+`lib/crm/`. Underlaget: `docs/crm/underlag/astryx-designsystemet.md`. Bilder:
+`docs/crm/bilder/app/`.
+
+- **Temat pekar på Snajps egna färgvariabler i stället för att skriva ut färger.** Då följer
+  mörkt läge och en kunds palett med utan en rad till, och det finns en sanning om varje färg.
+  Priset är att Astryx inte kan räkna ut kontrastroller ur ett värde det inte känner. De är
+  därför satta för hand och uppmätta (DESIGN.md § App surfaces).
+- **Tailwinds grundstilar ligger i ett kaskadlager under Astryx.** Astryx lägger sina stilar
+  i lager, och olagrad CSS slår alltid lagrad, så Tailwind 3 hade nollat varje knapp och kant.
+  Alternativen var att uppgradera hela Snajp till Tailwind 4 eller ge CRM:et en egen
+  rotlayout. Det första är ett eget, stort arbete och det andra hade laddat om sidan vid varje
+  steg mellan arbetsytan och CRM:et. Lagret ändrar inget för övriga sidor: nio befintliga
+  sidor är mätta element för element, i ljust och mörkt läge, före och efter.
+- **Primärknappen är bläck, inte ockra.** DESIGN.md nämner ockra för primär handling, men
+  arbetsytans knappar (`btnPrimary`) är bläck i dag, och två färger på samma sorts knapp i en
+  och samma produkt läser som två produkter. Ockran bär det valda, fokus och förlopp.
+- **Railen är bläck även i CRM:et**, arbetsytans enda tonala vändning. I mörkt läge är den
+  ljus med mörk text, som i resten av appen.
+- **Länken i arbetsytans meny syns bara för plattformsadmin** (`adminOnly` i
+  `lib/routes.ts`). Pris och tidpunkt för kunderna är inte avgjorda, och en ny menypost hos
+  varje kund är ett produktbeslut. En rad tas bort den dag den ska visas för alla.
+- **Astryx `init` är inte körd.** Den skriver ett block i `CLAUDE.md` och `AGENTS.md`, och
+  regelboken ändras inte utan Antons ja. CLI:t fungerar utan det.
+- **Bara stabila Astryx-paket.** Diagram, kalender med veckovy och nyckeltalsrutor finns bara
+  i förhandsutgåvor som kan gå sönder mellan två byggen. Tills de är stabila används Snajps
+  befintliga diagrambibliotek och egna komponenter där det behövs.
+- **Mobilen visar tabellerna som tabeller som rullar i sidled.** Det håller för en första
+  version. En kortvy per rad på mobil är inte byggd.
+
+**Öppet, och Antons att avgöra.**
+
+1. Primärknappen: bläck som nu, eller ockra som DESIGN.md nämner?
+2. När ska kunderna se länken till CRM:et, och ska den ligga i menyn eller på annan plats?
+3. Får `astryx init` skriva sitt block i `CLAUDE.md` och `AGENTS.md`?
+4. Får förhandsutgåvor av Astryx (diagram, kalender) användas i drift?
+
 ## 2026-11-25 — Snajp CRM: grunden och kundsynken in (Antons beställning, agentens val)
 
 **Beslut (Anton, 2026-11-24).** Buddy ska slippa ladda upp kundlistor: kunddatan synkas in

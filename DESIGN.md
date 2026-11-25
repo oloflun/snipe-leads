@@ -216,6 +216,35 @@ spacing, italic display headings and em-dashes anywhere in the app-surface sourc
 
 **Inputs never below 16px.** iOS Safari force-zooms a focused field under 16px and breaks the layout.
 
+**Snajp CRM is built with Astryx, in these tokens (2026-11-25).** The CRM (`app/crm`,
+`components/crm/app`) is the one app surface that does not use the primitives in
+`components/ui.tsx`: every component is Astryx (`@astryxdesign/core`), and the look comes from
+one theme, `lib/crm/astryx/snajpTema.ts`. The theme sets no colours of its own. Each Astryx role
+points at a token in this file (`oklch(var(--ink))`, `oklch(var(--paper2))`, and so on), so dark
+mode and a tenant palette reach the CRM through the same variables as the rest of the app. The
+same rules hold as on every app surface: Fraunces for the page title only, hairlines not
+shadows, ochre for the selected and for focus, the primary button in ink, and the rail as the
+one tonal inversion (ink in light mode, and the light `--ink` in dark mode, with `--paper` text).
+
+Three things a change here has to respect:
+
+1. **The cascade.** Astryx styles live in cascade layers, and unlayered CSS beats layered CSS
+   whatever the specificity. Tailwind's preflight and the element rules in `app/globals.css`
+   therefore sit in `@layer tw-base`, declared below the Astryx layers on the first line of that
+   file. Tailwind's utilities stay unlayered and still win. Measured on nine existing pages in
+   both modes: every element's computed style is the same before and after.
+2. **The built theme.** `snajp.css` and `snajp.js` beside the source are generated
+   (`astryx theme build lib/crm/astryx/snajpTema.ts`) and must be rebuilt after every edit and
+   every Astryx upgrade. The build warns that Snajp's variables are unknown to it; that is the
+   point of the mapping.
+3. **`<html data-theme>`.** Astryx's root theme removes the attribute when it unmounts. The
+   guard `TemaVakt` in `components/crm/app/CrmRam.tsx` puts the server's value back.
+
+Measured 2026-11-25 on Bolag, Synk, Utvecklare and the open dialog with a field error: the
+lowest text contrast is 4.69:1 in light mode, and no text is under 4.5:1 in dark. The red badge plate is
+`--danger` at 7 %, not 12 %: at 12 % `--danger` text on it measured 4.36:1. On touch, controls
+are 44 px and body text 16 px (the theme's `pointer: coarse` rule).
+
 ## Imagery
 
 Two sanctioned methods, both proven in the anti-slop-design demos:

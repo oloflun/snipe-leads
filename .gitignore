@@ -85,3 +85,4 @@ scripts/.kalla.env
 .playwright-utfall/
 .playwright-rapport/
 .playwright-live.log
+.playwright-mcp/

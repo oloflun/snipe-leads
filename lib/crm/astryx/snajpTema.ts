@@ -113,10 +113,11 @@ export const snajpTema = defineTheme({
     "--color-icon-disabled": c("--mineral"),
     "--color-icon-accent": c("--warning"),
 
-    // Hårlinjen är ink/12 som i panelKort (components/ui.tsx). Fältens kant ska hålla 3:1.
+    // Hårlinjen är ink/12 som i panelKort (components/ui.tsx). Fältens kant är
+    // den betonade linjen, ett steg starkare än faltTatt (ink/15). Astryx 0.7.17
+    // har ingen egen roll för fältkanter; den kommer i 0.7.18 (--color-border-control).
     "--color-border": c("--ink", 0.12),
     "--color-border-emphasized": c("--ink", 0.25),
-    "--color-border-control": c("--mineral"),
 
     "--color-skeleton": c("--ink", 0.08),
     "--color-track": c("--ink", 0.15),
@@ -130,7 +131,8 @@ export const snajpTema = defineTheme({
     "--color-text-success": c("--moss"),
     "--color-error": c("--danger"),
     "--color-on-error": c("--paper"),
-    "--color-error-muted": c("--danger", 0.12),
+    // 0.07, inte 0.12: fara som text mot en 12-procentig platta mätte 4.36:1.
+    "--color-error-muted": c("--danger", 0.07),
     "--color-on-error-muted": c("--danger"),
     "--color-text-error": c("--danger"),
     "--color-warning": c("--ochre"),
@@ -153,7 +155,7 @@ export const snajpTema = defineTheme({
     "--color-border-green": c("--moss"),
     "--color-icon-green": c("--moss"),
     "--color-text-green": c("--moss"),
-    "--color-background-red": c("--danger", 0.12),
+    "--color-background-red": c("--danger", 0.07),
     "--color-border-red": c("--danger"),
     "--color-icon-red": c("--danger"),
     "--color-text-red": c("--danger"),
