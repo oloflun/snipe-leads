@@ -9,6 +9,45 @@ möjligt), vad det betyder i koden.
 
 ---
 
+## 2026-11-25 — Snajp CRM skrivs som egen kod; Twenty är förlaga, inte källa (Anton)
+
+**Beslut.** Snajp CRM byggs som Snajps egen kod efter en beteende- och
+funktionsspecifikation (alternativ A). Twenty forkas inte. Ur `twentyhq/twenty` får bara
+de MIT-licensierade paketen återanvändas (`twenty-ui`, `twenty-shared`, SDK:erna), och
+aldrig en fil märkt `/* @license Enterprise */`, inte heller när den ligger i ett MIT-paket.
+
+**Resonemanget.** Anton beställde 2026-11-24 en fullständig CRM-svit "med Twenty som
+förlaga" i tron att Twenty är MIT. Det är det inte: kontrollen 2026-11-25 av `LICENSE`
+och varje pakets `package.json` visade att `twenty-server` och `twenty-front` är
+AGPL-3.0, att 842 filer är kommersiellt licensierade (SSO, radnivåbehörighet,
+postdelning, fakturering, användningsanalys, händelseloggar, egna domäner) och att MIT
+bara gäller verktygslådan och komponentbiblioteket. Valet lades fram som A (egen kod)
+eller B (fork som egen AGPL-tjänst i eget repo, kopplad enbart över API). Antons svar
+2026-11-25: "A".
+
+Agentens skäl för rekommendationen, som Anton följde: (1) CRM:et ska kunna byggas in i
+eller ersätta dashboarden senare, och det stänger B, eftersom Snajps kod då blir AGPL;
+(2) med B måste den svenska anpassningen och allt som läggs till publiceras för varje
+användare; (3) gränssnittet ska ändå byggas i Astryx och Snajps backend är
+FastAPI/Postgres medan Twentys är NestJS/TypeORM, så en fork ger en andra stack att
+drifta utan att spara gränssnittsarbetet; (4) det som är Enterprise i Twenty måste
+skrivas själv i båda fallen om inget ska skäras bort.
+
+**Öppet, och Antons att bedöma.** Var gränsen går mellan "arkitektur och struktur från
+originalet" och ett härlett verk är en juridisk bedömning. Den är inte prövad av jurist.
+
+**Vad det betyder i koden.**
+- Inventeringen av förlagan (`docs/crm/`) skrivs som ren funktionsbeskrivning: vad
+  användaren kan göra och hur systemet beter sig. Ingen källkod ur AGPL-paketen citeras
+  eller kopieras dit, och byggarbetet utgår från inventeringen, inte från Twentys filer.
+- Namn på tabeller, moduler och komponenter är Snajps egna och svenska där repot redan
+  är svenskt. Twentys varumärke används inte i produktnamn eller gränssnitt
+  (`.github/TRADEMARK.md` i förlagan).
+- CRM:et ligger i det här repot: backend under `snajp-support/app/crm/`, API under
+  `snajp-support/app/api/`, gränssnittet som egen app under `app/crm/`.
+- Kopplingen till en kunds Twenty-installation går över Twentys publicerade API. Det
+  täcks av deras tillägg till AGPL § 7 (Twenty Application Exception).
+
 ## 2026-11-23 — Listimporten hårdtestad; Listor är en egen flik med import i fyra steg (Anton)
 
 **Beslut.**
