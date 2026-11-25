@@ -2,6 +2,14 @@
 
 Kartläggning för Snajp CRM (2026-11-25), gjord mot grenen `claude/snajp-crm-dd0d83`
 (HEAD `9970d304`). Bara läsning; ingen befintlig fil är ändrad.
+Andra genomläsningen (2026-11-25, HEAD `859ba438`): radhänvisningarna i avsnitt 1–9
+kontrollerade mot koden igen (`deps.py`, `keys.py`, `rate_limit*.py`, `main.py`,
+`postgres.py` `_scoped`/`validate_api_key`/`create_api_key`/rate events/liggaren,
+`jobs/store.py`, `jobs/bakgrund.py`, `kvitton.py`, `avtalsgrind.py`, `integrationer/*`,
+`_auth.ts`, `_lib.ts`, `tenant.ts`, migrationerna 002, 003, 019, 022, 059, 063, 080);
+en hänvisning rättad (`inbox.py`). Tillägg: `bakgrund._pagaende` (en start per
+`tenant_id:slag`) är processlokal (`snajp-support/app/jobs/bakgrund.py:41-45`), och
+`dubbelstart` likaså (`dubbelstart.py:14-16`); kör api:t fler repliker räcker ingen av dem.
 
 **Läsanvisning.** Varje påstående om koden har `fil:rad`. Det som är
 **[ANTAGET]** eller **[EJ VERIFIERAT]** är märkt så; allt annat är läst i koden.
@@ -114,7 +122,7 @@ Ordningen (läst):
 |---|---|---|
 | `X-API-Key` | tenantens nyckel | `require_api_key` → tenant |
 | `X-Snajp-User` | `user.id` ur sessionen | bara användartimtaket (`rate_limit_db.scopes_for`) – kan bara *snäva* kvoten (`tenant.ts:127-133`) |
-| `X-Snajp-Demo: true` | `workspaces.is_demo` | lägre timtak (`chat.py:252`, `inbox.py:76`, `triage.py:79`) |
+| `X-Snajp-Demo: true` | `workspaces.is_demo` | lägre timtak (`chat.py:252`, `inbox.py:41, 94`, `triage.py:79`) |
 | `X-Snajp-Admin` | plattformsadminens id, bara när nyckeln är master-nyckeln | åtkomstloggen `audit_logs` (`_lib.ts:196-210`, `snajp-support/app/api/adminlogg.py:44`) |
 
 Övrigt i `_lib.ts`: GET görs om upp till 5 × 9 s, POST/PUT/PATCH en gång à 9 s
