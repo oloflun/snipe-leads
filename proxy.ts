@@ -92,6 +92,8 @@ export const config = {
     "/dashboard/:path*",
     "/settings/:path*",
     "/onboarding/:path*",
+    // Snajp CRM: egen app bredvid arbetsytan, samma inloggning.
+    "/crm/:path*",
     // /admin är tredje lagret, inte det bärande. Grinden som räknas är
     // getPlatformAdmin() i app/admin/layout.tsx, som svarar 404 — och
     // /api/admin, som proxyn medvetet INTE täcker (en redirect till /login

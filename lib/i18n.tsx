@@ -34,6 +34,7 @@ const commonCopy = {
   "nav.kvitton": { sv: "Kvitton", en: "Receipts" },
   "nav.inbox": { sv: "Svar", en: "Replies" },
   "nav.larande": { sv: "Lärande", en: "Learning" },
+  "nav.crm": { sv: "CRM", en: "CRM" },
   "nav.settings": { sv: "Inställningar", en: "Settings" },
   "state.loading": { sv: "Laddar arbetsyta", en: "Loading workspace" },
   "state.empty": { sv: "Inga poster ännu", en: "No records yet" },

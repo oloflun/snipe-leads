@@ -25,6 +25,10 @@ ROOT = Path(__file__).resolve().parents[2]
 APPYTOR = [
     *sorted((ROOT / "app" / "admin").rglob("*.tsx")),
     *sorted((ROOT / "app" / "dashboard").rglob("*.tsx")),
+    # Snajp CRM: egen app, men samma regler som arbetsytan. `components/crm/app`
+    # och inte hela `components/crm`: CrmDemo.tsx där är en marknadsyta.
+    *sorted((ROOT / "app" / "crm").rglob("*.tsx")),
+    *sorted((ROOT / "components" / "crm" / "app").rglob("*.tsx")),
     *sorted((ROOT / "app" / "settings").rglob("*.tsx")),
     *sorted((ROOT / "components" / "admin").rglob("*.tsx")),
     *sorted((ROOT / "components" / "dashboard").rglob("*.tsx")),

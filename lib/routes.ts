@@ -146,6 +146,11 @@ export const appRoutes: AppRoute[] = [
   // (migration 047), och en nyckel i databasen byter man inte namn på för att
   // produkten gjorde det. Grindas på entitlement som leads och support.
   { href: "/dashboard/kvitton", labelKey: "nav.kvitton", product: "bookkeeping" },
+  // Snajp CRM är en egen app (app/crm), inte en flik: posten är länken dit.
+  // Bara plattformsadmin ser den tills Anton avgjort pris och när kunderna
+  // ska få den (docs/BESLUT.md 2026-11-25). Ta bort `adminOnly` för att visa
+  // den för alla.
+  { href: "/crm", labelKey: "nav.crm", product: "shared", adminOnly: true },
   { href: "/settings", labelKey: "nav.settings", product: "shared" }
 ];
 
@@ -490,7 +495,7 @@ export const publicProductRoutes = ["/", "/leads", "/support"] as const;
 // Auth route guards (pure, no server dependencies — safe for middleware).
 // /leads, /support och /bokforing är INTE listade: de är publika produktsidor,
 // och en grind där hade studsat varje besökare till /login.
-export const protectedRoutePrefixes = ["/dashboard", "/settings", "/onboarding"] as const;
+export const protectedRoutePrefixes = ["/dashboard", "/settings", "/onboarding", "/crm"] as const;
 
 // /auth/callback är BORTA sedan Auth.js ersatte Supabase Auth (e376e71).
 // Routen raderades men stod kvar här och i proxyns matcher — en matcher som

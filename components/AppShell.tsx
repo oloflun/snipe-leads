@@ -2,6 +2,7 @@
 
 import {
   ArrowLeftRight,
+  Building2,
   FileText,
   LayoutDashboard,
   ListTodo,
@@ -111,6 +112,7 @@ export const RUTT_IKONER: Record<string, LucideIcon> = {
   "/dashboard/analytics": ArrowLeftRight,
   "/dashboard/assistant": MessagesSquare,
   "/dashboard/kvitton": ScanLine,
+  "/crm": Building2,
   "/settings": Settings
 };
 

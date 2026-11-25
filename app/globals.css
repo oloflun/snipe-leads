@@ -1,4 +1,18 @@
-@tailwind base;
+/* Kaskadlager (2026-11-25, Snajp CRM). Astryx, designsystemet CRM:et byggs med,
+   lägger sina stilar i lagren reset, astryx-base och astryx-theme. Olagrad CSS
+   slår alltid lagrad, oavsett specificitet, så Tailwinds grundstilar (som nollar
+   knappars bakgrund och alla kanter) och elementreglerna längre ner hade skrivit
+   över varje Astryx-komponent. De ligger därför i ett eget lager UNDER Astryx.
+   Ordningen måste deklareras här, först i den första stilmallen sidan laddar.
+
+   För sidor utan Astryx ändras ingenting: lagren ovanför tw-base är tomma där,
+   och Tailwinds klasser är fortfarande olagrade och vinner som förut. Astryx egen
+   CSS laddas bara av CRM:et (components/crm/CrmRam.tsx). */
+@layer reset, tw-base, astryx-base, astryx-theme;
+
+@layer tw-base {
+  @tailwind base;
+}
 @tailwind components;
 @tailwind utilities;
 
@@ -195,6 +209,8 @@
   );
 }
 
+/* Elementreglerna ligger i samma lager som Tailwinds grundstilar (se överst). */
+@layer tw-base {
 * {
   box-sizing: border-box;
 }
@@ -243,6 +259,7 @@ button {
 ::selection {
   background: oklch(var(--ochre) / 0.35);
 }
+} /* slut @layer tw-base */
 
 /* Även textmarkering på den mörka railen ska läsa som husets. Samma regel
    som bokforing-webb/app/globals.css — railen är arbetsytans skal här med. */
