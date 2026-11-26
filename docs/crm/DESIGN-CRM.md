@@ -1,0 +1,181 @@
+# Snajp CRM: designriktning (version 2, 2026-11-26)
+
+Den här filen är kontraktet för CRM-appens gränssnitt. Den ersätter utseendet i
+commit `b6c08ef2`, som Anton dömde ut 2026-11-26.
+
+## Antons dom och beställning (2026-11-26, ordagrant i sak)
+
+> De senaste skärmbilderna ser väldigt generiska ut, lika och nästan sämre än den
+> nuvarande dashboarden, inte i närheten av den polerade UI:n hos riktiga Twenty, och
+> inga tydliga element hämtade från Astryx. Det ser ut som det nuvarande utseendet i
+> dashboarden, fast i ett generiskt 00-tals-CRM. Jag förväntar mig en blandning av
+> det polerade, Apple-inspirerade utseendet hos Twenty, blandat med mer moderna,
+> lekfulla influenser och element från Astryx för lite större och rundade element
+> samt mer lekfulla dashboards, kombinerat med enbart färgpaletten och
+> serif-rubrikerna från Snajp, och satt ihop med designreglerna från vårt designsystem.
+
+Vad som var fel i version 1, uppmätt mot bilderna: en mörk rail och en naken tabell
+med text i celler. Inga postchips, inga avatarer, ingen vyrad, ingen översikt, inga
+kort, inga diagram, raka små kontroller. Av Astryx syntes bara tabellens ram.
+
+## Riktningen i en mening
+
+Twentys lugna registerprecision på Snajps varma papper, i Astryx mjuka, rundade
+ytor: ljus navigering, innehållet som ett upphöjt blad, poster som chips med
+avatarer, och en översikt med stora nyckeltal och diagram i ockra, mossa och blått.
+
+Läge: Operate (verktyg som används hundra gånger om dagen). Tier 0: tokens är låsta
+i `app/globals.css`. Ingen scrollkoreografi, inga uppräkningsanimationer.
+
+## Referenslås
+
+| Källa | Roll | Vad som tas | Vad som INTE tas |
+|---|---|---|---|
+| **Twenty** (dominant) | Struktur och finish | Ljus navigering med arbetsyteväxlare och färgade objektikoner. Sidhuvud med objektikon. Vyrad (vy till vänster, Filter, Sortera, Alternativ till höger). Tabell där varje post är ett chip (ikon eller avatar plus namn), länkar är piller, kolumnrubriker har en liten ikon per fälttyp, sista raden är "Lägg till" och foten räknar. Sidopanel till höger med flikar och fält i grupper (ikon, etikett, värde). Dashboard som rutnät av rundade kort. | Twentys kod (AGPL), dess blå accent, Inter 13 px, dess ikonuppsättning och texter. |
+| **Astryx** (sekundär) | Form och lekfullhet | `AppShell variant="elevated"`: tvättad bakgrund och innehållet som en upphöjd yta med stort rundat hörn. Pillerformade val (`SegmentedControl`, valda menyposter som mjuka plattor). Större kontroller (36 px). `Avatar`, `Token`, `Badge` som piller, `Card` i färgade varianter, `CommandPalette`, `MetadataList`, `HoverCard`, `StatusDot`, `Kbd`, `TableSelectionToolbar`. | Neutral-temats gråskala och typsnitt. Förhandsutgåvorna (charts, lab). |
+| **Snajp** | Färg, rubriker, regler | Hela paletten (`--ink`, `--paper`, `--paper2`, `--ochre`, `--moss`, `--danger`, `--mineral`, `--seal`, `--chart-blue`, `--chart-ramp-1..6`, de dämpade texttokens). Fraunces i rubriker. DESIGN.md:s regler: inga färger utanför tokens, inga kickers, inga versaler som etikett, inga em-streck, ingen kursiv rubrik, tvåspråkigt, 4,5:1, fält 16 px på pekskärm, 44 px tryckytor. | Den mörka railen, den täta 15 px-liggaren och hårlinjeasketismen från dagens arbetsyta. CRM:et är en egen app och får en egen form. |
+
+Aldrig den säkra snittmängden: där källorna drar isär vinner Twenty på struktur,
+Astryx på form, Snajp på färg och rubrik.
+
+## Tema (ändringar i `lib/crm/astryx/snajpTema.ts`)
+
+- **Ytor:** tvätten (`--color-background-body`) är `--paper2`, innehållsbladet
+  (`--color-background-surface`, `-card`, `-popover`) är `--paper`. Bladet lyfts med
+  en hårlinje och en mjuk skugga, inte med en mörk rail.
+- **Railen i bläck tas bort.** Ingen `MediaTheme` runt navigeringen. Vald menypost är
+  en mjuk platta (`ink/7`) med text i `--ink` och halvfet vikt.
+- **Radier (större, Astryx):** inre 6 px, element 10 px, behållare 16 px, sida 24 px.
+  Etiketter, tokens och segmentval är helt rundade.
+- **Kontroller:** 32 / 36 / 44 px (sm / md / lg) på skrivbord, 36 / 44 / 48 på pekskärm.
+- **Text:** 14 px bas på skrivbord (16 på pekskärm under 1024 px), Geist. Fraunces i
+  sidrubrik (1,625 rem, normal vikt), i postens namn i panelen (1,375 rem) och i
+  nyckeltalens siffror. Paneltitlar i Geist halvfet.
+- **Skuggor:** `--shadow-low` är en hårlinje. `--shadow-med` och `-high` är hårlinje
+  plus en mjuk, bred skugga i `--seal` med låg alfa (6 till 10 procent), för blad,
+  kort som svävar, menyer och dialoger.
+- **Accent:** ockra bär fokus, förlopp, det valda i diagram och en enda framhävd ruta
+  per sida. Primärknappen är bläck. Ockra som text är alltid `--warning`.
+- **Objektfärger** (ikonplattor och diagramserier), bara ur paletten:
+  Översikt ockra, Bolag `--chart-blue`, Personer `--moss`, Synk `--seal`,
+  Utvecklare `--mineral`. Plattan är färgen med 14 procents alfa, ikonen färgens
+  textsäkra ton.
+- Mörkt läge och kundpalett ska fortsätta följa med: bara `oklch(var(--token))`.
+
+## Skalet
+
+`AppShell variant="elevated"`, sidnavigering 248 px, hopfällbar.
+
+1. **Överst:** arbetsyteväxlare (rundad fyrkantig avatar i bläck med arbetsytans
+   initial, namnet halvfet, vinkel) som öppnar en meny: Till arbetsytan,
+   Inställningar. Till höger en ikonknapp som öppnar kommandopaletten.
+2. **Sök-rad:** "Sök eller hoppa till" med `Kbd` Ctrl K. Öppnar kommandopaletten.
+3. **Arbetsyta:** Översikt, Bolag, Personer. Bara det som finns: inga döda poster.
+4. **Data:** Synk, Utvecklare.
+5. **Nederst:** ett litet rundat kort med senaste synkens läge (statusprick, anslutning,
+   relativ tid, förloppsstapel om en körning pågår). Riktiga data ur `/oversikt`.
+   Därunder länken Till arbetsytan.
+
+Kommandopaletten (`CommandPalette`, Ctrl K och Cmd K): Gå till (de fem vyerna), Skapa
+(Nytt bolag, Ny anslutning, Ny nyckel), och Bolag (sökning mot `/v1/companies?q=`
+medan man skriver, träffar som postchips).
+
+## Sidhuvud och vyrad (alla listvyer)
+
+- Sidhuvud, 64 px: objektets ikonplatta (32 px, radie 10), Fraunces-rubrik, antalet
+  som en neutral etikett. Till höger: sidans primära handling (bläck, 36 px) och en
+  ikonknapp för fler val där det finns riktiga val.
+- Vyrad, 52 px, under en hårlinje: till vänster `SegmentedControl` med vyerna och
+  antal i dämpad ton. Till höger sökfält (36 px, 260 px brett, helt rundat) och
+  Sortera som ett kompakt val. Bara val som fungerar mot API:t.
+
+## Tabellen (Bolag, Personer, Synk, Utvecklare)
+
+Astryx `Table`, `density="balanced"` (rad cirka 44 px), radavdelare, hover.
+
+- **Kolumnrubrik:** liten dämpad ikon per fälttyp plus rubrik i 13 px halvfet dämpad.
+- **Postchip** (första kolumnen): avatar 22 px (fyrkantig med radie 6 för bolag, rund
+  för personer; initialer på en platta vars färg väljs ur objektfärgerna med namnets
+  hash) plus namn i 14 px halvfet. Hela chipet är en knapp med hover-platta och öppnar
+  postens panel. Fokusring i ockra.
+- **Länkpiller:** domän, e-post och telefon som piller (`Token`) som går att klicka.
+- **Relation:** etikett med statusprick: kund mossa, prospekt ockra, tidigare kund
+  mineral, partner och leverantör blå, övrigt grå.
+- **Person:** rund avatar 20 px plus namn. **Källa:** piller med kontaktikon.
+- **Tal och tider:** tabulära siffror, relativ tid dämpad, fullständig tid i tooltip.
+- **Markering:** kryssruta per rad och i huvudet. När något är markerat visas
+  `TableSelectionToolbar` med riktiga åtgärder (Bolag: Ändra relation, Ta bort till
+  papperskorgen; båda finns i API:t).
+- **Fot:** en räknerad som Twentys: antal, och för Bolag andelen kunder.
+- **Sista raden:** "Lägg till bolag" med plus, öppnar samma dialog som knappen.
+- **Tomläge:** `EmptyState` med ikon, en mening och den primära handlingen.
+- **Laddning:** `Skeleton`-rader i tabellens form, inte en naken förloppsstapel.
+- **Mobil (under 640 px):** ingen tabell som rullar i sidled. Posterna visas som en
+  lista av rader med chip, relation och en dämpad andra rad (ort, ansvarig).
+
+## Postens panel (Bolag)
+
+`Drawer` från höger, 520 px, byggd med `Layout` (huvud, innehåll, fot).
+
+- **Huvud:** avatar 44 px, namnet i Fraunces 1,375 rem, organisationsnummer dämpat,
+  relationens etikett. Ikonknappar: Redigera, Stäng.
+- **Snabbval:** en rad runda ikonknappar med tooltip för det som finns: Mejla, Ring,
+  Öppna webbplatsen. Saknas uppgiften är knappen avstängd med förklaring.
+- **Flikar:** Översikt, Personer (antal), Källa.
+- **Översikt:** fält i grupper som `MetadataList`: Allmänt, Affär, Kontakt, System.
+  Varje rad: liten ikon, etikett dämpad till vänster, värde till höger. Tomt värde
+  visas som dämpad text "Lägg till" som öppnar redigeringen på det fältet.
+- **Personer:** rader med rund avatar, namn, titel och piller för e-post och telefon.
+- **Källa:** anslutning som piller, externt id i kodstil, senast sedd.
+- **Redigera:** dialog med fälten (namn, organisationsnummer, relation, webbplats,
+  e-post, telefon, ansvarig, adress, kund sedan, avtalsslut, kontakta inte) som
+  sparar med `PATCH /v1/companies/{id}`. Fel från API:t visas vid rätt fält.
+
+## Översikten (`/crm`, ny startsida)
+
+Twentys dashboardrutnät i Astryx kort (`Grid` plus `Card`, radie 16, luftig marginal).
+Allt är riktiga tal ur API:t; förhandsvisningen har påhittade bolag.
+
+1. **Rubrik:** "Översikt" i Fraunces. Ingen ingress.
+2. **Nyckeltal, fyra kort:** Bolag, Kunder, Personer, Att rätta. Etikett i 13 px
+   dämpad överst, talet i Fraunces 2,5 rem med tabulära siffror, en dämpad rad under
+   (till exempel "46 av 73 är kunder"). Kortet Att rätta är det enda framhävda:
+   ockratonad platta (`Card variant="yellow"`), och länkar till Synk.
+3. **Bolag per relation:** ring med totalen i mitten och förklaring under, som Twentys,
+   i objektfärgerna. Exakta tal ur `/oversikt`.
+4. **Senaste synkarna:** de fem senaste körningarna som rader: statusprick,
+   anslutning, utfall i klartext, relativ tid. En pågående körning har förloppsstapel.
+5. **Störst orter:** liggande staplar med rundade ändar för de sex vanligaste orterna.
+   Räknas ur högst 500 hämtade bolag; är registret större står det i kortets fot.
+6. **Senast ändrade:** fem bolag som postchips med relation och tid. Öppnar panelen.
+
+Diagram ritas med `recharts` (finns redan i repot) eller ren SVG, i tokens. Läs
+`Skill(dataviz)` först. Astryx egna diagram är förhandsutgåvor och används inte.
+
+## Det som inte får hända
+
+- Ingen färg utanför tokens, i någon fil. Ingen `#`-färg, ingen `rgb()`.
+- Inga påhittade tal i appen. Förhandsvisningens data är märkt som exempel i koden,
+  aldrig i gränssnittet som riktiga kunder.
+- Ingen menypost, knapp eller flik som inte gör något.
+- Inga kickers, versaler som etikett, spärrad text, em-streck eller kursiva rubriker
+  (INV-UI-001). Varje synlig sträng på svenska och engelska (INV-COPY-001).
+- `xstyle` kräver StyleX-kompilatorn, som Snajp inte kör. Använd komponenternas egna
+  props, `className` och `style`, eller en omslutande `div` med Tailwind-klasser som
+  läser Snajps tokens (`bg-paper2`, `text-ink-muted`, `border-ink/12`).
+- Dialog och Drawer byggs med `Layout` (huvud, innehåll, fot), aldrig `padding={0}`.
+- Astryx rot-tema tar bort `<html data-theme>`: `TemaVakt` i `CrmRam.tsx` ska stå kvar.
+
+## Klart när
+
+Varje punkt granskas i bild av huvudsessionen, inte av den som byggt.
+
+1. Skalet, Översikt, Bolag (lista, markering, panel med tre flikar, redigering),
+   Personer, Synk och Utvecklare finns i förhandsvisningen `/forhandsvisning/crm/...`
+   och under `/crm/...`.
+2. Bilder i 1440 och 390 px, ljust och mörkt, av varje vy och av öppen panel, öppen
+   kommandopalett, markerade rader och en dialog med fältfel.
+3. Lägsta textkontrast 4,5:1 i båda lägena, uppmätt.
+4. Avgränsad typkontroll ren. INV-UI-001 och INV-COPY-001 gröna.
+5. Sidan går inte att förväxla med version 1: postchips, avatarer, upphöjt blad,
+   pillerval, kort och diagram syns vid första ögonkastet.
