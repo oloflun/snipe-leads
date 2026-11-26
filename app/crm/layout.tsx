@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { cookies } from "next/headers";
+import { notFound } from "next/navigation";
 import { CrmRam } from "@/components/crm/app/CrmRam";
 import { DashboardProvider } from "@/components/dashboard/DashboardContext";
 import { requireOnboarded } from "@/lib/auth/onboarding-gate";
@@ -23,6 +24,14 @@ export const metadata: Metadata = { title: "Snajp CRM" };
  */
 export default async function CrmLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   const state = await resolveDashboardState();
+  // Bara plattformsadmin når CRM:et tills Anton säger annat (hans svar
+  // 2026-11-26). `adminOnly` i lib/routes.ts döljer bara menyposten: utan den
+  // här grinden nådde varje inloggad kund sidan via adressen, vilket
+  // kartläggningen av skalet hittade. 404 och inte en omdirigering, som
+  // adminytan: en sida kunden inte har ska inte avslöja att den finns.
+  if (!state.isPlatformAdmin) {
+    notFound();
+  }
   if (state.vy !== "demo") {
     await requireOnboarded();
   }
