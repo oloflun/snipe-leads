@@ -18,6 +18,7 @@ import {
   LayoutGrid,
   Mail,
   MapPin,
+  Paperclip,
   Pencil,
   Phone,
   Plug,
@@ -45,12 +46,13 @@ import { Tab, TabList } from "@astryxdesign/core/TabList";
 import { Text } from "@astryxdesign/core/Text";
 import { Timestamp } from "@astryxdesign/core/Timestamp";
 import type { Bolagsfalt } from "@/components/crm/app/BolagFormular";
+import { Bilagor } from "@/components/crm/app/Bilagor";
 import { LEADLAGE, Tidslinje } from "@/components/crm/app/Tidslinje";
 import { Kallpiller, Lankpiller, Personchip, Privatpersonetikett, Relationsetikett, tonFor, tonklass, useSmal, utanBolagsform } from "@/components/crm/app/kit";
 import { SYSTEMNAMN, crmAnrop, orgnrVisning, type Bolag, type Person, type Sida as Svarssida } from "@/lib/crm/api";
 import { useLocale, type Localized } from "@/lib/i18n";
 
-type Flik = "oversikt" | "personer" | "kalla" | "historik";
+type Flik = "oversikt" | "personer" | "historik" | "filer" | "kalla";
 
 /** Bolagets leads hos Iris (`iris_ut` i crm_v1_tidslinje.py). */
 type Irislage = { leads: { id: string; name: string | null; status: string | null; created_at: string | null }[]; outcome: string | null; do_not_contact: boolean };
@@ -102,6 +104,8 @@ export function BolagPanel({
   const [personer, setPersoner] = useState<Person[] | null>(null);
   // Bolagets leads hos Iris och vad de betyder här (GET /v1/companies/{id}/iris).
   const [iris, setIris] = useState<Irislage | null>(null);
+  // Antalet filer står på fliken när den öppnats en gång; före det är fliken utan tal.
+  const [antalFiler, setAntalFiler] = useState<number | null>(null);
   const id = bolag?.id;
   const oppen = bolag != null || laddar;
 
@@ -134,6 +138,7 @@ export function BolagPanel({
   // Ett nytt bolag börjar alltid på Översikt.
   useEffect(() => {
     setFlik("oversikt");
+    setAntalFiler(null);
   }, [id]);
 
   const sprak = locale === "sv" ? "sv-SE" : "en-GB";
@@ -263,7 +268,7 @@ export function BolagPanel({
                   />
                 </div>
 
-                <div className="px-5">
+                <div className="crm-panelflikar px-5">
                   <TabList value={flik} onChange={(v) => setFlik(v as Flik)} hasDivider role="tablist">
                     <Tab value="oversikt" panelId="crm-panelflik" label={text({ sv: "Översikt", en: "Overview" })} icon={flikikon(LayoutGrid)} />
                     <Tab
@@ -273,8 +278,15 @@ export function BolagPanel({
                       icon={flikikon(Users)}
                       endContent={personer ? <span className="crm-flikantal tabular-nums">{personer.length}</span> : undefined}
                     />
-                    <Tab value="kalla" panelId="crm-panelflik" label={text({ sv: "Källa", en: "Source" })} icon={flikikon(Plug)} />
                     <Tab value="historik" panelId="crm-panelflik" label={text({ sv: "Historik", en: "History" })} icon={flikikon(History)} />
+                    <Tab
+                      value="filer"
+                      panelId="crm-panelflik"
+                      label={text({ sv: "Filer", en: "Files" })}
+                      icon={flikikon(Paperclip)}
+                      endContent={antalFiler ? <span className="crm-flikantal tabular-nums">{antalFiler}</span> : undefined}
+                    />
+                    <Tab value="kalla" panelId="crm-panelflik" label={text({ sv: "Källa", en: "Source" })} icon={flikikon(Plug)} />
                   </TabList>
                 </div>
 
@@ -451,6 +463,8 @@ export function BolagPanel({
                       </div>
                     )
                   ) : null}
+
+                  {flik === "filer" ? <Bilagor objekt="companies" id={bolag.id} andrat={setAntalFiler} /> : null}
 
                   {flik === "historik" ? <Tidslinje objekt="companies" id={bolag.id} andrad={bolag.updated_at} harLead={(iris?.leads.length ?? 0) > 0} bolagAndrat={uppdaterat} /> : null}
                 </div>

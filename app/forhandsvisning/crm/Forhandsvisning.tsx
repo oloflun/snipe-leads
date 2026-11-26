@@ -8,7 +8,7 @@ import { PersonerVy } from "@/components/crm/app/PersonerVy";
 import { SynkVy } from "@/components/crm/app/SynkVy";
 import { UtvecklareVy } from "@/components/crm/app/UtvecklareVy";
 import { DashboardProvider } from "@/components/dashboard/DashboardContext";
-import { orgnrVisning, type Anslutning, type Bolag, type Handelse, type Korning, type Leverans, type Nyckel, type Relation, type Webhook } from "@/lib/crm/api";
+import { BILAGA_MAX, BILAGETYPER, orgnrVisning, type Anslutning, type Bilaga, type Bolag, type Handelse, type Korning, type Leverans, type Nyckel, type Relation, type Webhook } from "@/lib/crm/api";
 import type { Affar, Affarssteg } from "@/lib/crm/affar";
 import type { DashboardState } from "@/lib/data/dashboard";
 import type { Personpost } from "@/lib/crm/person";
@@ -478,6 +478,20 @@ const LEADLAGEN: Record<string, string> = {};
 const UTFALLSKOD: Record<string, string> = { no_answer: "ej_svar", call_back: "aterkom", not_interested: "ej_intresserad", do_not_contact: "kontakta_inte", meeting_booked: "mote" };
 const UTFALLSLAGE: Record<string, string> = { not_interested: "lost", do_not_contact: "suppressed", meeting_booked: "meeting", won: "won" };
 
+// ---- Bilagor (bilaga_ut i crm_v1_objekt.py): metadata, aldrig innehåll ---------
+let bilagenummer = 1;
+const bilaga = (namn: string, typ: string, storlek: number, timmar: number, koppling: Partial<Bilaga>): Bilaga => ({
+  id: `f${bilagenummer++}`, filename: namn, content_type: typ, size: storlek, uploaded_by: "anvandare:exempel",
+  company_id: null, person_id: null, deal_id: null, note_id: null, created_at: iso(timmar), deleted_at: null, ...koppling
+});
+const BILAGOR: Bilaga[] = [
+  bilaga("Offert växel och mobiler.pdf", "application/pdf", 412_000, 20, { company_id: "b3" }),
+  bilaga("Avtalsutkast 2027.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", 86_300, 44, { company_id: "b3" }),
+  bilaga("Planritning nya kontoret.png", "image/png", 2_340_000, 24 * 6, { company_id: "b3" }),
+  bilaga("Prisbilaga tre år.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", 31_200, 30, { deal_id: "d8" }),
+  bilaga("Offert koncernen.pdf", "application/pdf", 655_000, 52, { deal_id: "d8" })
+];
+
 /** Uppgifter som bockats av i förhandsvisningen. */
 const KLARA: string[] = [];
 
@@ -791,6 +805,42 @@ async function svara(url: URL, init?: RequestInit): Promise<Response> {
     andraPerson(ny, kropp);
     PERSONER.unshift(ny);
     return json(ny, 201);
+  }
+  // ---- Bilagor -------------------------------------------------------------------
+  if (vag === "/v1/attachments" && metod === "GET") {
+    const p = url.searchParams;
+    const traffar = BILAGOR.filter(
+      (b) => !b.deleted_at && (!p.get("company_id") || b.company_id === p.get("company_id")) && (!p.get("person_id") || b.person_id === p.get("person_id")) && (!p.get("deal_id") || b.deal_id === p.get("deal_id"))
+    );
+    return json({ data: [...traffar].sort((x, y) => (y.created_at ?? "").localeCompare(x.created_at ?? "")), next_cursor: null });
+  }
+  if (vag === "/v1/attachments" && metod === "POST" && init?.body instanceof FormData) {
+    const fil = init.body.get("file");
+    if (!(fil instanceof File)) return json({ detail: { code: "invalid_body", message: "Send multipart/form-data with a file field.", meddelande: "Skicka multipart/form-data med fältet file." } }, 422);
+    // Samma gränser som objekt.skapa_bilaga, och en väntan så att förloppet syns.
+    await new Promise((r) => setTimeout(r, 900));
+    if (fil.size > BILAGA_MAX) return json({ detail: { code: "file_too_large", message: "The file is larger than 10 MB.", meddelande: "Filen är större än 10 MB." } }, 413);
+    if (!BILAGETYPER.includes(fil.name.slice(fil.name.lastIndexOf(".") + 1).toLowerCase())) {
+      return json({ detail: { code: "file_type_not_allowed", message: "The file type is not allowed.", meddelande: "Filtypen är inte tillåten." } }, 422);
+    }
+    const s = (n: string) => (typeof init.body === "object" && init.body instanceof FormData && typeof init.body.get(n) === "string" ? (init.body.get(n) as string) : null);
+    const ny = bilaga(fil.name, fil.type || "application/octet-stream", fil.size, 0, { company_id: s("company_id"), person_id: s("person_id"), deal_id: s("deal_id") });
+    BILAGOR.unshift(ny);
+    return json(ny, 201);
+  }
+  const bilagedel = vag.match(/^\/v1\/attachments\/([^/]+)(\/restore)?$/);
+  if (bilagedel) {
+    const b = BILAGOR.find((x) => x.id === decodeURIComponent(bilagedel[1]));
+    if (!b) return json({ detail: { code: "not_found", message: "The record does not exist.", meddelande: "Posten finns inte." } }, 404);
+    if (bilagedel[2] && metod === "POST") {
+      b.deleted_at = null;
+      return json(b);
+    }
+    if (metod === "DELETE") {
+      b.deleted_at = new Date().toISOString();
+      return json(null, 204);
+    }
+    if (metod === "GET") return json(b);
   }
   // ---- Tidslinjen och det som skrivs på den ------------------------------------
   const linje = vag.match(/^\/v1\/(companies|people|deals)\/([^/]+)\/timeline$/);

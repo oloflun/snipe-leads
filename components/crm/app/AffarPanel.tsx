@@ -12,6 +12,7 @@ import {
   History,
   LayoutGrid,
   Milestone,
+  Paperclip,
   Pencil,
   Percent,
   Trash2,
@@ -34,13 +35,14 @@ import { Tab, TabList } from "@astryxdesign/core/TabList";
 import { Text } from "@astryxdesign/core/Text";
 import { Timestamp } from "@astryxdesign/core/Timestamp";
 import type { Affarsfalt } from "@/components/crm/app/AffarFormular";
+import { Bilagor } from "@/components/crm/app/Bilagor";
 import { Tidslinje } from "@/components/crm/app/Tidslinje";
 import { Personchip, Postchip, Prick, tonklass, useSmal, type Ton } from "@/components/crm/app/kit";
 import { belopp, sannolikhet, type Affar, type Affarssteg, type Stegtyp } from "@/lib/crm/affar";
 import { crmAnrop, type Person } from "@/lib/crm/api";
 import { useLocale, type Localized } from "@/lib/i18n";
 
-type Flik = "oversikt" | "historik";
+type Flik = "oversikt" | "historik" | "filer";
 
 const ETIKETT_BRED = { position: "start" as const, width: 160 };
 const ETIKETT_SMAL = { position: "start" as const, width: 136 };
@@ -54,7 +56,7 @@ export const STEGTON: Record<Stegtyp, { ton: Ton; badge: "blue" | "green" | "neu
 
 /**
  * Affärens panel, i samma form som bolagets (DESIGN-CRM.md § Postens panel):
- * huvud med namn, steg och belopp, flikarna Översikt och Historik, fot med Ta bort.
+ * huvud med namn, steg och belopp, flikarna Översikt, Historik och Filer, fot med Ta bort.
  *
  * Steget byts här med en väljare: det är tangentbordets och telefonens väg till
  * samma flytt som dra och släpp gör på tavlan.
@@ -93,12 +95,14 @@ export function AffarPanel({
   const ETIKETT = smal ? ETIKETT_SMAL : ETIKETT_BRED;
   const [flik, setFlik] = useState<Flik>("oversikt");
   const [person, setPerson] = useState<string | null>(null);
+  const [antalFiler, setAntalFiler] = useState<number | null>(null);
   const id = affar?.id;
   const personId = affar?.person_id ?? null;
   const oppen = affar != null || laddar;
 
   useEffect(() => {
     setFlik("oversikt");
+    setAntalFiler(null);
   }, [id]);
 
   // Kontaktpersonens namn: tavlan bär bara id:t.
@@ -189,6 +193,13 @@ export function AffarPanel({
                     <TabList value={flik} onChange={(v) => setFlik(v as Flik)} hasDivider role="tablist">
                       <Tab value="oversikt" panelId="crm-affarsflik" label={text({ sv: "Översikt", en: "Overview" })} icon={flikikon(LayoutGrid)} />
                       <Tab value="historik" panelId="crm-affarsflik" label={text({ sv: "Historik", en: "History" })} icon={flikikon(History)} />
+                      <Tab
+                        value="filer"
+                        panelId="crm-affarsflik"
+                        label={text({ sv: "Filer", en: "Files" })}
+                        icon={flikikon(Paperclip)}
+                        endContent={antalFiler ? <span className="crm-flikantal tabular-nums">{antalFiler}</span> : undefined}
+                      />
                     </TabList>
                   </div>
 
@@ -282,6 +293,8 @@ export function AffarPanel({
                         </MetadataList>
                       </div>
                     ) : null}
+
+                    {flik === "filer" ? <Bilagor objekt="deals" id={affar.id} andrat={setAntalFiler} /> : null}
 
                     {flik === "historik" ? <Tidslinje objekt="deals" id={affar.id} andrad={affar.updated_at} /> : null}
                   </div>

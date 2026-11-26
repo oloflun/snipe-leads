@@ -833,6 +833,26 @@ button.crm-chip:active {
   border-top: 1px solid oklch(var(--ink) / 0.07);
 }
 
+/* Bolagets panel har fem flikar: med 9 px sidomarginal per flik ryms de på en rad i 520 px, utan rullpil. */
+@media (min-width: 640px) {
+  .crm-panelflikar [role="tab"] {
+    padding-inline: 9px;
+  }
+}
+
+/* Postens filer: rader med hårlinje emellan, och en ockraton när en fil dras in över ytan. */
+.crm-filrad + .crm-filrad {
+  border-top: 1px solid oklch(var(--ink) / 0.07);
+}
+.crm-bilagor {
+  border-radius: 16px;
+  transition: background-color 120ms var(--ease-out), box-shadow 120ms var(--ease-out);
+}
+.crm-bilagor[data-over="true"] {
+  background-color: oklch(var(--ochre) / 0.1);
+  box-shadow: 0 0 0 8px oklch(var(--ochre) / 0.1), 0 0 0 9.5px oklch(var(--ochre) / 0.5);
+}
+
 /* Vägen till posten som krockade: en textlänk i bläck med pil, under fältet. */
 .crm-krocklank {
   display: inline-flex;

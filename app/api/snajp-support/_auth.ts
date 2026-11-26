@@ -51,6 +51,23 @@ async function vidarebefordra(path: string, init: RequestInit) {
       return NextResponse.json({ error: LASROLL_FEL, kod: "lasroll" }, { status: 403 });
     }
 
+    // CRM:et har inget testläge: en skrivning där hade ändrat kundens riktiga
+    // register. Den som tittar som kund läser därför bara. Utan den här grinden
+    // lade raderna nedan `is_test` i kroppen, och CRM-API:t (som vägrar okända
+    // fält) svarade 422 utan att säga varför.
+    if (tenant.impersonerar && arSkrivning && backendPath.startsWith("/api/crm/")) {
+      return NextResponse.json(
+        {
+          detail: {
+            code: "impersonation_read_only",
+            message: "You are viewing as the customer. Nothing is written to the CRM in that mode.",
+            meddelande: "Du tittar som kunden. I det läget skrivs ingenting till CRM:et."
+          }
+        },
+        { status: 403 }
+      );
+    }
+
     if (tenant.impersonerar && arSkrivning) {
       // Admin som tittar som kund: allt som SKRIVS är test. Läsning måste
       // visa kundens riktiga inkorg — annars gömmer `?is_test=true` på GET

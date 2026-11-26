@@ -232,6 +232,43 @@ export async function crmAnrop<T>(vag: string, init?: RequestInit): Promise<T> {
     ...init,
     headers: init?.body ? { "Content-Type": "application/json", ...init.headers } : init?.headers
   });
+  return tolka<T>(svar);
+}
+
+/** En bilaga som API:t lämnar den (`bilaga_ut`): metadata, aldrig innehållet. */
+export type Bilaga = {
+  id: string;
+  filename: string | null;
+  content_type: string | null;
+  size: number | null;
+  uploaded_by: string | null;
+  company_id: string | null;
+  person_id: string | null;
+  deal_id: string | null;
+  note_id: string | null;
+  created_at: string | null;
+  deleted_at: string | null;
+};
+
+/** API:ts gränser för en bilaga (`objekt.MAX_BILAGA` och de tillåtna typerna), så att beskedet kommer före uppladdningen. */
+export const BILAGA_MAX = 10 * 1024 * 1024;
+export const BILAGETYPER = ["pdf", "png", "jpg", "jpeg", "webp", "gif", "txt", "csv", "docx", "xlsx", "pptx"];
+
+/**
+ * Laddar upp en fil och knyter den till en post (`POST /v1/attachments`,
+ * `multipart/form-data`). Webbläsaren sätter själv rubriken med gränsmärket,
+ * så anropet går inte genom `crmAnrop`, som skickar JSON.
+ */
+export async function crmLaddaUpp(fil: File, koppling: Partial<Record<"company_id" | "person_id" | "deal_id" | "note_id", string>>): Promise<Bilaga> {
+  const formular = new FormData();
+  formular.append("file", fil, fil.name);
+  for (const [falt, id] of Object.entries(koppling)) if (id) formular.append(falt, id);
+  const svar = await fetch("/api/snajp-support/crm/v1/attachments", { method: "POST", body: formular, cache: "no-store" });
+  return tolka<Bilaga>(svar);
+}
+
+/** Svaret som värde, eller ett `CrmFel` med API:ts text på båda språken. */
+async function tolka<T>(svar: Response): Promise<T> {
   if (svar.status === 204) return null as T;
   const kropp = (await svar.json().catch(() => null)) as (T & Felkropp) | null;
   if (!svar.ok) {

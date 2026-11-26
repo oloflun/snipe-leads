@@ -30,6 +30,7 @@ import { HStack } from "@astryxdesign/core/Stack";
 import { Text } from "@astryxdesign/core/Text";
 import { Timestamp } from "@astryxdesign/core/Timestamp";
 import { kallnamn } from "@/components/crm/app/BolagPanel";
+import { Bilagor } from "@/components/crm/app/Bilagor";
 import { Tidslinje } from "@/components/crm/app/Tidslinje";
 import type { Personfalt } from "@/components/crm/app/PersonFormular";
 import { Kallpiller, Lankpiller, Postchip, tonFor, tonklass, useSmal } from "@/components/crm/app/kit";
@@ -235,7 +236,14 @@ export function PersonPanel({
                         )}
                       </MetadataList>
 
-                      {/* Personens panel har inga flikar: historiken står sist, under samma slags rubrik som grupperna. */}
+                      {/* Personens panel har inga flikar: filerna och historiken står sist, under samma slags rubrik som grupperna. */}
+                      <section aria-labelledby="crm-personfiler" className="flex flex-col gap-3">
+                        <h3 id="crm-personfiler" className="crm-gruppnamn">
+                          {text({ sv: "Filer", en: "Files" })}
+                        </h3>
+                        <Bilagor objekt="people" id={person.id} />
+                      </section>
+
                       <section aria-labelledby="crm-personhistorik" className="flex flex-col gap-3">
                         <h3 id="crm-personhistorik" className="crm-gruppnamn">
                           {text({ sv: "Historik", en: "History" })}
