@@ -15,7 +15,7 @@ Lägen: **klart** (byggt och verifierat), **pågår**, **väntar** (på kvot ell
 | Sidofältet marinblått i båda lägena | klart | Byggt och granskat i bild 2026-11-26. Väntar på Antons dom |
 | Snajps logga i sidofältet | klart | Överst, leder till översikten. Väntar på Antons dom |
 | Ockra som accent | klart | Markör och ikon för vald menypost. Väntar på Antons dom |
-| Sökikon i mobilens toppfält | pågår | Försvann när loggan kom in. Byggs i gränssnittspasset för fas 3 |
+| Sökikon i mobilens toppfält | klart | Tillbaka i toppfältet (commit `bd1b5b81`) |
 
 ## Fas 1: kartläggning av den nuvarande appen
 
@@ -44,12 +44,9 @@ fas 4 respektive fas 5.
 
 | Del | Läge | Not |
 |---|---|---|
-| Områdena 1, 2, 4 | klart | Lästa och kontrollästa |
-| Område 3 | pågår | Läst, kontrolläsningen avbruten |
-| Områdena 5 till 12 | pågår | Lästa, inte kontrollästa |
-| Område 13, handboken som facit | inte påbörjat | |
-| Luckgranskning | inte påbörjat | |
-| Paritetslistan `PARITET.md` | inte påbörjat | |
+| Områdena 1 till 13 | klart | Lästa och kontrollästa mot källan, 3 666 funktionsrader. Område 13 är handboken som facit (commit `7b9f7b14`) |
+| Luckgranskning | klart | Tre granskare (front, server, facit). Fem verkliga luckor, fyllda med egna rader |
+| Paritetslistan `PARITET.md` | pågår | Tio av sexton delar har läge (2 581 rader: 83 verifierade, 50 byggda, 480 delvis, 1 856 inte gjorda, 112 avstår). Bara område 12 är kontrollerat. Stoppat av veckogränsen för Opus, som nollställs 2 december |
 | rea | klart | 484 operationer ur webbklienten. Servern gav inget |
 | craft-anything | klart | Hoppas över enligt Antons svar. Skäl i `docs/BESLUT.md` |
 
@@ -57,27 +54,29 @@ fas 4 respektive fas 5.
 
 | Del | Läge | Not |
 |---|---|---|
-| Kundsynken in som API | klart | `/api/crm/v1`, 136 tester i minnet. Development sammanslaget 2026-11-26; CRM-grunden heter nu migration 160 |
-| Databasvägen i drift (asyncpg) | väntar | Bara prövad i ett CI-jobb som inte körts, eftersom inget är pushat. De nya frågorna (161–163) är inte körda mot Postgres alls |
-| Gränssnitt: översikt, bolag, personer, synk, utvecklare | klart | Version 2, godkänd. Inte kört mot riktig backend |
-| Körning mot den lokala stacken | inte påbörjat | Kräver Postgres lokalt (Docker). Görs när byggarna inte håller en server igång: maskinen har 16 GB |
-| Tidigare kunder fria för Iris | klart i backend | `lagring.upptagen_rad`. Inte fri om posten säger kontakta inte. `tests/crm/test_beslut.py` |
-| Uteslutning på nummer när numret finns | klart i backend | Namnet fäller bara en kandidat som själv saknar nummer (agentens tillägg, `docs/BESLUT.md`) |
-| Privatpersoner hoppas över som standard | klart i backend, gränssnitt pågår | Migration 161. Påslagna: märkta, utan personnummer, aldrig kontaktbara (check-villkor) |
-| Kontakta inte i CRM:et stoppar utskick | klart i backend | Luckan fanns: märkningen lästes inte av sändspärren. Gäller också kampanjutskick |
-| Tillägget som grind, fritt under provperiod | klart i backend, gränssnitt pågår | `app/crm/tillgang.py`, tillägget `crm` (dolt för kunden). Ingen väg förbi för admin: tillägget slås på per kund |
-| Händelselogg och ändringsflöde | klart i backend, gränssnitt pågår | Migration 162. `GET /changes`, `/companies/{id}/history`. Bär fältens namn, aldrig värdena |
-| Webhooks ut | klart i backend, gränssnitt pågår | Signerade, sju försök, leveranslogg 30 dagar, omskick, avstängning efter tjugo fel. Inte kört mot en riktig mottagare |
-| Sortering nyast först, namn på felrader, papperskorg, krockens id | klart i backend, gränssnitt pågår | `sort=-updated`, `only_deleted`, `conflicting_id` |
-| Synkens två nivåer och underlag till supportärende | klart i backend, gränssnitt pågår | Migration 163. Se "Var supportsystemet kopplar in" nedan |
-| Affärer med tavla | pågår | Migration 164 byggs: steg, affärer, tavla |
-| Uppgifter, anteckningar, aktiviteter, bilagor | pågår | Samma bygge. Bilagor i databasen, 10 MB per fil och 500 MB per kund (agentens val, behöver Antons dom) |
-| Tidslinje mot leads, konversationer, samtal, ärenden | inte påbörjat | |
-| Utfall speglas åt båda håll | inte påbörjat | |
-| Samlad kundlista, Iris och Egna | inte påbörjat | |
-| Svensk standard i koden: SNI, SEK, bolagsform, register, NIX | pågår | Organisationsnummer, moms, telefon och postnummer klara |
+| Kundsynken in som API | klart | `/api/crm/v1`. 180 tester i minnet och 16 mot Postgres |
+| Migrationerna 160 till 164 mot Postgres | klart | Körda två gånger var mot PGlite (Postgres 17) genom psycopg2, och lagrets frågor prövade där |
+| Databasvägen i drift (asyncpg) | väntar | Hur asyncpg tolkar parametrarna är bara prövat i ett CI-jobb som inte körts, eftersom inget är pushat |
+| Körning med inloggning mot den lokala stacken | inte påbörjat | Kräver Docker med Postgres och hela migrationskedjan. Vyerna är bara sedda i förhandsvisningen |
+| Gränssnitt: översikt, bolag, personer, synk, utvecklare | klart | Version 2, godkänd |
+| Tidigare kunder fria för Iris, uteslutning på nummer | klart | Bara backend, ingen yta behövs. `tests/crm/test_beslut.py` |
+| Privatpersoner hoppas över som standard | klart | Migration 161 och växeln på anslutningen. Bilder i `docs/crm/bilder/fas3/` |
+| Kontakta inte i CRM:et stoppar utskick | klart | Gäller också kampanjutskick och personerna hos ett märkt bolag |
+| Tillägget som grind, fritt under provperiod | klart | `app/crm/tillgang.py`. Helsideläget när tillägget saknas är byggt. Ingen väg förbi för admin |
+| Händelselogg, ändringsflöde och historik i postpanelen | klart | Migration 162. Bär fältens namn, aldrig värdena |
+| Webhooks ut | klart | Backend och vyn under Utvecklare. Inte kört mot en riktig mottagare |
+| Sortering nyast först, papperskorg, krockens id, namn på felrader | klart | Backend och vyer |
+| Synkens två nivåer och underlag till supportärende | klart | Migration 163 och vyn. Se "Var supportsystemet kopplar in" nedan |
+| Affärer med steg och tavla | klart i backend | Migration 164, commit `2fa09eb3`. Granskat ur tre vinklar och rättat. **Inget gränssnitt än** |
+| Uppgifter, anteckningar, aktiviteter, bilagor | klart i backend | Samma commit. Bilagor i databasen, 10 MB per fil och 500 MB per kund (agentens val, behöver Antons dom). **Inget gränssnitt än** |
+| Tidslinje mot leads, mejl, samtal och ärenden | klart i backend | `tidslinje.py`. Komponeras vid läsning. **Inget gränssnitt än** |
+| Utfall speglas åt båda håll | klart i backend | `utfall.py`. **Inget gränssnitt än** |
+| Samlad kundlista, Iris och Egna | klart i backend | `kundlista.py`, `GET /customers`. **Inget gränssnitt än** |
+| Svensk standard i koden | pågår | Klart: organisationsnummer, moms, telefon, postnummer, bolagsform, SNI, privatperson. Inte gjort: SEK-format i hela ytan, registeruppslag, NIX |
+| Sammanställning: vad som ändras mot Twenty och varför | klart | `docs/crm/SVENSK-STANDARD.md`, 81 rader och tio frågor till Anton |
 | Bildgranskning av de svenska CRM-systemen | inte påbörjat | Texten finns i `svensk-03` |
-| Sammanställning: vad som ändras mot Twenty och varför | inte påbörjat | |
+| Oberoende granskning av gränssnittet i fas 3 del 1 | inte gjord | Byggaren stoppades av veckogränsen före sin rapport, och granskarna hann inte köra. Orkestratorn har läst 21 färska bilder och byggarens panelbilder |
+| Ett schemalagt jobb som tömmer papperskorgen | inte påbörjat | I dag töms den vid nästa skrivning hos kunden, så löftet om 30 dagar håller inte för en kund som aldrig skriver |
 | Bild på varje vy i Twentys hostade app | pågår | 17 bilder, mobilvyn gick inte att fånga |
 | Testkonton i källsystemen | väntar | Kräver Antons ja per konto |
 | Buddy | väntar | Inget avtalsdatum. Körs mot testkonto |

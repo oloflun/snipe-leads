@@ -46,10 +46,10 @@ ingenting i dem är påbörjat. Snajp har egen mejlhantering och egna agenter i 
 supporten, men de nås inte från CRM:et än och räknas därför inte här (fas 4 och 5).
 
 **Talen är läsarnas egna.** I det enda område som hann kontrolleras (12) prövades 126 rader
-mot koden och 15 fick ändrat läge, alltså ungefär var åttonde. Tre rader gick från
-verifierad till ett lägre läge och tolv från delvis till inte gjord. Räkna med samma
-felandel i de nio okontrollerade områdena, och med att felen oftare gör listan för snäll än
-för sträng.
+mot koden och 15 fick ändrat läge, alltså ungefär var åttonde. Efter kontrollen var de
+verifierade 29 i stället för 32, delvis 130 i stället för 139 och inte gjorda 92 i stället
+för 80. Räkna med samma felandel i de nio okontrollerade områdena, och med att felen oftare
+gör listan för snäll än för sträng.
 
 Läget är också taget medan två byggen pågick. Affärer med tavla, uppgifter, anteckningar,
 aktiviteter och bilagor är sedan dess committade i API:t (`2fa09eb3`), och gränssnittet för
