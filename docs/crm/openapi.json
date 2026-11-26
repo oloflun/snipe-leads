@@ -1246,7 +1246,12 @@
                 {
                   "enum": [
                     "company",
-                    "person"
+                    "person",
+                    "deal",
+                    "task",
+                    "note",
+                    "activity",
+                    "attachment"
                   ],
                   "type": "string"
                 },
@@ -2878,10 +2883,3575 @@
           }
         }
       }
+    },
+    "/api/crm/v1/deal-stages": {
+      "get": {
+        "tags": [
+          "Snajp CRM"
+        ],
+        "summary": "List deal stages in board order",
+        "description": "A workspace gets the Swedish default stages the first time they are read:\nNy, Kvalificerad, Möte bokat, Offert skickad, Förhandling, Vunnen, Förlorad.",
+        "operationId": "lista_steg_api_crm_v1_deal_stages_get",
+        "parameters": [
+          {
+            "name": "x-api-key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Lista Steg Api Crm V1 Deal Stages Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Snajp CRM"
+        ],
+        "summary": "Create a deal stage",
+        "description": "The new stage is placed last. Reorder with POST /deal-stages/reorder.",
+        "operationId": "skapa_steg_api_crm_v1_deal_stages_post",
+        "parameters": [
+          {
+            "name": "x-api-key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StageIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/crm/v1/deal-stages/reorder": {
+      "post": {
+        "tags": [
+          "Snajp CRM"
+        ],
+        "summary": "Put the deal stages in a new order",
+        "operationId": "ordna_steg_api_crm_v1_deal_stages_reorder_post",
+        "parameters": [
+          {
+            "name": "x-api-key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReorderIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Ordna Steg Api Crm V1 Deal Stages Reorder Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/crm/v1/deal-stages/{stage_id}": {
+      "patch": {
+        "tags": [
+          "Snajp CRM"
+        ],
+        "summary": "Rename or change a deal stage",
+        "operationId": "andra_steg_api_crm_v1_deal_stages__stage_id__patch",
+        "parameters": [
+          {
+            "name": "stage_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Stage Id"
+            }
+          },
+          {
+            "name": "x-api-key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StageIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Andra Steg Api Crm V1 Deal Stages  Stage Id  Patch"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Snajp CRM"
+        ],
+        "summary": "Delete a deal stage",
+        "description": "Refused with `stage_in_use` while the stage has deals, also deleted\ndeals that can still be restored, and with `stage_required` for the last\nopen, won or lost stage.",
+        "operationId": "radera_steg_api_crm_v1_deal_stages__stage_id__delete",
+        "parameters": [
+          {
+            "name": "stage_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Stage Id"
+            }
+          },
+          {
+            "name": "x-api-key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/crm/v1/deals": {
+      "get": {
+        "tags": [
+          "Snajp CRM"
+        ],
+        "summary": "List deals",
+        "operationId": "lista_affarer_api_crm_v1_deals_get",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 500,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "`next_cursor` from the previous page.",
+              "title": "Cursor"
+            },
+            "description": "`next_cursor` from the previous page."
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^(-?updated|name)$",
+              "description": "`updated` oldest change first, `-updated` newest first, `name` alphabetical.",
+              "default": "updated",
+              "title": "Sort"
+            },
+            "description": "`updated` oldest change first, `-updated` newest first, `name` alphabetical."
+          },
+          {
+            "name": "include_deleted",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Include deleted records (`deleted_at` set).",
+              "default": false,
+              "title": "Include Deleted"
+            },
+            "description": "Include deleted records (`deleted_at` set)."
+          },
+          {
+            "name": "only_deleted",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "The trash: only deleted records that can still be restored.",
+              "default": false,
+              "title": "Only Deleted"
+            },
+            "description": "The trash: only deleted records that can still be restored."
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Free text search.",
+              "title": "Q"
+            },
+            "description": "Free text search."
+          },
+          {
+            "name": "company_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Company Id"
+            }
+          },
+          {
+            "name": "person_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Person Id"
+            }
+          },
+          {
+            "name": "stage_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Stage Id"
+            }
+          },
+          {
+            "name": "x-api-key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Lista Affarer Api Crm V1 Deals Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Snajp CRM"
+        ],
+        "summary": "Create a deal",
+        "description": "Placed last in its stage. A deal created in a won or lost stage gets\n`closed_at` at once.",
+        "operationId": "skapa_affar_api_crm_v1_deals_post",
+        "parameters": [
+          {
+            "name": "x-api-key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DealIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/crm/v1/deals/board": {
+      "get": {
+        "tags": [
+          "Snajp CRM"
+        ],
+        "summary": "The deal board: every stage with its deals",
+        "description": "Stages in board order, each with its live deals in board order, their\ncount and the sum of their amounts. `amount_total` adds amounts as they\nare; `amount_by_currency` keeps the currencies apart.",
+        "operationId": "tavla_api_crm_v1_deals_board_get",
+        "parameters": [
+          {
+            "name": "x-api-key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Tavla Api Crm V1 Deals Board Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/crm/v1/deals/{deal_id}": {
+      "get": {
+        "tags": [
+          "Snajp CRM"
+        ],
+        "summary": "Get a deal",
+        "operationId": "hamta_affar_api_crm_v1_deals__deal_id__get",
+        "parameters": [
+          {
+            "name": "deal_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Deal Id"
+            }
+          },
+          {
+            "name": "include_deleted",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Include Deleted"
+            }
+          },
+          {
+            "name": "x-api-key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Hamta Affar Api Crm V1 Deals  Deal Id  Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "Snajp CRM"
+        ],
+        "summary": "Change a deal",
+        "description": "Only the fields sent are changed; `null` clears a field.",
+        "operationId": "andra_affar_api_crm_v1_deals__deal_id__patch",
+        "parameters": [
+          {
+            "name": "deal_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Deal Id"
+            }
+          },
+          {
+            "name": "x-api-key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DealIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Andra Affar Api Crm V1 Deals  Deal Id  Patch"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Snajp CRM"
+        ],
+        "summary": "Delete a deal",
+        "operationId": "radera_affar_api_crm_v1_deals__deal_id__delete",
+        "parameters": [
+          {
+            "name": "deal_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Deal Id"
+            }
+          },
+          {
+            "name": "permanent",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Empty the record at once instead of keeping it restorable for 30 days.",
+              "default": false,
+              "title": "Permanent"
+            },
+            "description": "Empty the record at once instead of keeping it restorable for 30 days."
+          },
+          {
+            "name": "x-api-key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/crm/v1/deals/{deal_id}/move": {
+      "post": {
+        "tags": [
+          "Snajp CRM"
+        ],
+        "summary": "Move a deal on the board",
+        "description": "To a stage, before or after another deal in it. Moving into a won or\nlost stage sets `closed_at`; moving back to an open stage clears it.",
+        "operationId": "flytta_affar_api_crm_v1_deals__deal_id__move_post",
+        "parameters": [
+          {
+            "name": "deal_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Deal Id"
+            }
+          },
+          {
+            "name": "x-api-key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MoveIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Flytta Affar Api Crm V1 Deals  Deal Id  Move Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/crm/v1/deals/{deal_id}/restore": {
+      "post": {
+        "tags": [
+          "Snajp CRM"
+        ],
+        "summary": "Restore a deleted deal",
+        "operationId": "aterstall_affar_api_crm_v1_deals__deal_id__restore_post",
+        "parameters": [
+          {
+            "name": "deal_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Deal Id"
+            }
+          },
+          {
+            "name": "x-api-key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Aterstall Affar Api Crm V1 Deals  Deal Id  Restore Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/crm/v1/deals/{deal_id}/history": {
+      "get": {
+        "tags": [
+          "Snajp CRM"
+        ],
+        "summary": "What has happened to a deal, newest first",
+        "operationId": "historik_affar_api_crm_v1_deals__deal_id__history_get",
+        "parameters": [
+          {
+            "name": "deal_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Deal Id"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 500,
+              "minimum": 1,
+              "default": 100,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "x-api-key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Historik Affar Api Crm V1 Deals  Deal Id  History Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/crm/v1/tasks": {
+      "get": {
+        "tags": [
+          "Snajp CRM"
+        ],
+        "summary": "List tasks",
+        "operationId": "lista_uppgifter_api_crm_v1_tasks_get",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 500,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "`next_cursor` from the previous page.",
+              "title": "Cursor"
+            },
+            "description": "`next_cursor` from the previous page."
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^(-?updated|due)$",
+              "description": "`updated`, `-updated`, or `due`: earliest due first, tasks without a due date last.",
+              "default": "updated",
+              "title": "Sort"
+            },
+            "description": "`updated`, `-updated`, or `due`: earliest due first, tasks without a due date last."
+          },
+          {
+            "name": "include_deleted",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Include deleted records (`deleted_at` set).",
+              "default": false,
+              "title": "Include Deleted"
+            },
+            "description": "Include deleted records (`deleted_at` set)."
+          },
+          {
+            "name": "only_deleted",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "The trash: only deleted records that can still be restored.",
+              "default": false,
+              "title": "Only Deleted"
+            },
+            "description": "The trash: only deleted records that can still be restored."
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Free text search.",
+              "title": "Q"
+            },
+            "description": "Free text search."
+          },
+          {
+            "name": "company_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Company Id"
+            }
+          },
+          {
+            "name": "person_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Person Id"
+            }
+          },
+          {
+            "name": "deal_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Deal Id"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "todo",
+                    "in_progress",
+                    "done"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "name": "owner",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Owner"
+            }
+          },
+          {
+            "name": "due_before",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "ISO 8601 timestamp. Only tasks due before it.",
+              "title": "Due Before"
+            },
+            "description": "ISO 8601 timestamp. Only tasks due before it."
+          },
+          {
+            "name": "x-api-key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Lista Uppgifter Api Crm V1 Tasks Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Snajp CRM"
+        ],
+        "summary": "Create a task",
+        "description": "A task may stand on its own or be linked to a company, a person and a deal.",
+        "operationId": "skapa_uppgift_api_crm_v1_tasks_post",
+        "parameters": [
+          {
+            "name": "x-api-key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TaskIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/crm/v1/tasks/{task_id}": {
+      "get": {
+        "tags": [
+          "Snajp CRM"
+        ],
+        "summary": "Get a task",
+        "operationId": "hamta_uppgift_api_crm_v1_tasks__task_id__get",
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Task Id"
+            }
+          },
+          {
+            "name": "include_deleted",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Include Deleted"
+            }
+          },
+          {
+            "name": "x-api-key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Hamta Uppgift Api Crm V1 Tasks  Task Id  Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "Snajp CRM"
+        ],
+        "summary": "Change a task",
+        "operationId": "andra_uppgift_api_crm_v1_tasks__task_id__patch",
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Task Id"
+            }
+          },
+          {
+            "name": "x-api-key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TaskIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Andra Uppgift Api Crm V1 Tasks  Task Id  Patch"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Snajp CRM"
+        ],
+        "summary": "Delete a task",
+        "operationId": "radera_uppgift_api_crm_v1_tasks__task_id__delete",
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Task Id"
+            }
+          },
+          {
+            "name": "permanent",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Empty the record at once instead of keeping it restorable for 30 days.",
+              "default": false,
+              "title": "Permanent"
+            },
+            "description": "Empty the record at once instead of keeping it restorable for 30 days."
+          },
+          {
+            "name": "x-api-key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/crm/v1/tasks/{task_id}/restore": {
+      "post": {
+        "tags": [
+          "Snajp CRM"
+        ],
+        "summary": "Restore a deleted task",
+        "operationId": "aterstall_uppgift_api_crm_v1_tasks__task_id__restore_post",
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Task Id"
+            }
+          },
+          {
+            "name": "x-api-key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Aterstall Uppgift Api Crm V1 Tasks  Task Id  Restore Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/crm/v1/notes": {
+      "get": {
+        "tags": [
+          "Snajp CRM"
+        ],
+        "summary": "List notes",
+        "operationId": "lista_anteckningar_api_crm_v1_notes_get",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 500,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "`next_cursor` from the previous page.",
+              "title": "Cursor"
+            },
+            "description": "`next_cursor` from the previous page."
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^-?updated$",
+              "default": "updated",
+              "title": "Sort"
+            }
+          },
+          {
+            "name": "include_deleted",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Include deleted records (`deleted_at` set).",
+              "default": false,
+              "title": "Include Deleted"
+            },
+            "description": "Include deleted records (`deleted_at` set)."
+          },
+          {
+            "name": "only_deleted",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "The trash: only deleted records that can still be restored.",
+              "default": false,
+              "title": "Only Deleted"
+            },
+            "description": "The trash: only deleted records that can still be restored."
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Free text search.",
+              "title": "Q"
+            },
+            "description": "Free text search."
+          },
+          {
+            "name": "company_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Company Id"
+            }
+          },
+          {
+            "name": "person_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Person Id"
+            }
+          },
+          {
+            "name": "deal_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Deal Id"
+            }
+          },
+          {
+            "name": "x-api-key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Lista Anteckningar Api Crm V1 Notes Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Snajp CRM"
+        ],
+        "summary": "Create a note",
+        "description": "A note is linked to at least one company, person or deal.",
+        "operationId": "skapa_anteckning_api_crm_v1_notes_post",
+        "parameters": [
+          {
+            "name": "x-api-key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NoteIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/crm/v1/notes/{note_id}": {
+      "get": {
+        "tags": [
+          "Snajp CRM"
+        ],
+        "summary": "Get a note",
+        "operationId": "hamta_anteckning_api_crm_v1_notes__note_id__get",
+        "parameters": [
+          {
+            "name": "note_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Note Id"
+            }
+          },
+          {
+            "name": "include_deleted",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Include Deleted"
+            }
+          },
+          {
+            "name": "x-api-key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Hamta Anteckning Api Crm V1 Notes  Note Id  Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "Snajp CRM"
+        ],
+        "summary": "Change a note",
+        "operationId": "andra_anteckning_api_crm_v1_notes__note_id__patch",
+        "parameters": [
+          {
+            "name": "note_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Note Id"
+            }
+          },
+          {
+            "name": "x-api-key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NoteIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Andra Anteckning Api Crm V1 Notes  Note Id  Patch"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Snajp CRM"
+        ],
+        "summary": "Delete a note",
+        "operationId": "radera_anteckning_api_crm_v1_notes__note_id__delete",
+        "parameters": [
+          {
+            "name": "note_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Note Id"
+            }
+          },
+          {
+            "name": "permanent",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Empty the record at once instead of keeping it restorable for 30 days.",
+              "default": false,
+              "title": "Permanent"
+            },
+            "description": "Empty the record at once instead of keeping it restorable for 30 days."
+          },
+          {
+            "name": "x-api-key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/crm/v1/notes/{note_id}/restore": {
+      "post": {
+        "tags": [
+          "Snajp CRM"
+        ],
+        "summary": "Restore a deleted note",
+        "operationId": "aterstall_anteckning_api_crm_v1_notes__note_id__restore_post",
+        "parameters": [
+          {
+            "name": "note_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Note Id"
+            }
+          },
+          {
+            "name": "x-api-key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Aterstall Anteckning Api Crm V1 Notes  Note Id  Restore Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/crm/v1/activities": {
+      "get": {
+        "tags": [
+          "Snajp CRM"
+        ],
+        "summary": "List logged activities",
+        "operationId": "lista_aktiviteter_api_crm_v1_activities_get",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 500,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "`next_cursor` from the previous page.",
+              "title": "Cursor"
+            },
+            "description": "`next_cursor` from the previous page."
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^-?updated$",
+              "default": "updated",
+              "title": "Sort"
+            }
+          },
+          {
+            "name": "include_deleted",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Include deleted records (`deleted_at` set).",
+              "default": false,
+              "title": "Include Deleted"
+            },
+            "description": "Include deleted records (`deleted_at` set)."
+          },
+          {
+            "name": "only_deleted",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "The trash: only deleted records that can still be restored.",
+              "default": false,
+              "title": "Only Deleted"
+            },
+            "description": "The trash: only deleted records that can still be restored."
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Free text search.",
+              "title": "Q"
+            },
+            "description": "Free text search."
+          },
+          {
+            "name": "company_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Company Id"
+            }
+          },
+          {
+            "name": "person_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Person Id"
+            }
+          },
+          {
+            "name": "deal_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Deal Id"
+            }
+          },
+          {
+            "name": "x-api-key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Lista Aktiviteter Api Crm V1 Activities Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Snajp CRM"
+        ],
+        "summary": "Log an activity: a call, meeting, email or visit",
+        "description": "Linked to at least one company, person or deal.",
+        "operationId": "skapa_aktivitet_api_crm_v1_activities_post",
+        "parameters": [
+          {
+            "name": "x-api-key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ActivityIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/crm/v1/activities/{activity_id}": {
+      "get": {
+        "tags": [
+          "Snajp CRM"
+        ],
+        "summary": "Get an activity",
+        "operationId": "hamta_aktivitet_api_crm_v1_activities__activity_id__get",
+        "parameters": [
+          {
+            "name": "activity_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Activity Id"
+            }
+          },
+          {
+            "name": "include_deleted",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Include Deleted"
+            }
+          },
+          {
+            "name": "x-api-key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Hamta Aktivitet Api Crm V1 Activities  Activity Id  Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "Snajp CRM"
+        ],
+        "summary": "Change an activity",
+        "operationId": "andra_aktivitet_api_crm_v1_activities__activity_id__patch",
+        "parameters": [
+          {
+            "name": "activity_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Activity Id"
+            }
+          },
+          {
+            "name": "x-api-key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ActivityIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Andra Aktivitet Api Crm V1 Activities  Activity Id  Patch"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Snajp CRM"
+        ],
+        "summary": "Delete an activity",
+        "operationId": "radera_aktivitet_api_crm_v1_activities__activity_id__delete",
+        "parameters": [
+          {
+            "name": "activity_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Activity Id"
+            }
+          },
+          {
+            "name": "permanent",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Empty the record at once instead of keeping it restorable for 30 days.",
+              "default": false,
+              "title": "Permanent"
+            },
+            "description": "Empty the record at once instead of keeping it restorable for 30 days."
+          },
+          {
+            "name": "x-api-key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/crm/v1/activities/{activity_id}/restore": {
+      "post": {
+        "tags": [
+          "Snajp CRM"
+        ],
+        "summary": "Restore a deleted activity",
+        "operationId": "aterstall_aktivitet_api_crm_v1_activities__activity_id__restore_post",
+        "parameters": [
+          {
+            "name": "activity_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Activity Id"
+            }
+          },
+          {
+            "name": "x-api-key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Aterstall Aktivitet Api Crm V1 Activities  Activity Id  Restore Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/crm/v1/attachments": {
+      "get": {
+        "tags": [
+          "Snajp CRM"
+        ],
+        "summary": "List attachments (metadata only)",
+        "operationId": "lista_bilagor_api_crm_v1_attachments_get",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 500,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "`next_cursor` from the previous page.",
+              "title": "Cursor"
+            },
+            "description": "`next_cursor` from the previous page."
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^-?updated$",
+              "default": "updated",
+              "title": "Sort"
+            }
+          },
+          {
+            "name": "include_deleted",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Include deleted records (`deleted_at` set).",
+              "default": false,
+              "title": "Include Deleted"
+            },
+            "description": "Include deleted records (`deleted_at` set)."
+          },
+          {
+            "name": "only_deleted",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "The trash: only deleted records that can still be restored.",
+              "default": false,
+              "title": "Only Deleted"
+            },
+            "description": "The trash: only deleted records that can still be restored."
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Free text search.",
+              "title": "Q"
+            },
+            "description": "Free text search."
+          },
+          {
+            "name": "company_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Company Id"
+            }
+          },
+          {
+            "name": "person_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Person Id"
+            }
+          },
+          {
+            "name": "deal_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Deal Id"
+            }
+          },
+          {
+            "name": "note_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Note Id"
+            }
+          },
+          {
+            "name": "x-api-key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Lista Bilagor Api Crm V1 Attachments Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Snajp CRM"
+        ],
+        "summary": "Upload an attachment",
+        "description": "`multipart/form-data` with `file` and at least one of `company_id`,\n`person_id`, `deal_id` and `note_id`. At most 10 MB per file and 500 MB\nper workspace. The type must match the file extension.",
+        "operationId": "ladda_upp_bilaga_api_crm_v1_attachments_post",
+        "parameters": [
+          {
+            "name": "x-api-key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "file"
+                ],
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "At most 10 MB. pdf, png, jpeg, webp, gif, txt, csv, docx, xlsx or pptx."
+                  },
+                  "company_id": {
+                    "type": "string"
+                  },
+                  "person_id": {
+                    "type": "string"
+                  },
+                  "deal_id": {
+                    "type": "string"
+                  },
+                  "note_id": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/crm/v1/attachments/{attachment_id}": {
+      "get": {
+        "tags": [
+          "Snajp CRM"
+        ],
+        "summary": "Get an attachment's metadata",
+        "operationId": "hamta_bilaga_api_crm_v1_attachments__attachment_id__get",
+        "parameters": [
+          {
+            "name": "attachment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Attachment Id"
+            }
+          },
+          {
+            "name": "include_deleted",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Include Deleted"
+            }
+          },
+          {
+            "name": "x-api-key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Hamta Bilaga Api Crm V1 Attachments  Attachment Id  Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Snajp CRM"
+        ],
+        "summary": "Delete an attachment",
+        "description": "Restorable for 30 days, then the file is emptied for good.",
+        "operationId": "radera_bilaga_api_crm_v1_attachments__attachment_id__delete",
+        "parameters": [
+          {
+            "name": "attachment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Attachment Id"
+            }
+          },
+          {
+            "name": "permanent",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Empty the record at once instead of keeping it restorable for 30 days.",
+              "default": false,
+              "title": "Permanent"
+            },
+            "description": "Empty the record at once instead of keeping it restorable for 30 days."
+          },
+          {
+            "name": "x-api-key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/crm/v1/attachments/{attachment_id}/content": {
+      "get": {
+        "tags": [
+          "Snajp CRM"
+        ],
+        "summary": "Download an attachment",
+        "description": "Always served as a download (`Content-Disposition: attachment`), never\nshown inline, and not cached.",
+        "operationId": "ladda_ned_bilaga_api_crm_v1_attachments__attachment_id__content_get",
+        "parameters": [
+          {
+            "name": "attachment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Attachment Id"
+            }
+          },
+          {
+            "name": "x-api-key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The file.",
+            "content": {
+              "application/octet-stream": {}
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/crm/v1/attachments/{attachment_id}/restore": {
+      "post": {
+        "tags": [
+          "Snajp CRM"
+        ],
+        "summary": "Restore a deleted attachment",
+        "operationId": "aterstall_bilaga_api_crm_v1_attachments__attachment_id__restore_post",
+        "parameters": [
+          {
+            "name": "attachment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Attachment Id"
+            }
+          },
+          {
+            "name": "x-api-key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Aterstall Bilaga Api Crm V1 Attachments  Attachment Id  Restore Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/crm/v1/companies/{company_id}/timeline": {
+      "get": {
+        "tags": [
+          "Snajp CRM"
+        ],
+        "summary": "Everything that has happened with a company, newest first",
+        "description": "The record's own changes, together with what has happened elsewhere\nin Snajp: Iris leads for the same organisation number (emails sent,\nreplies, calls, status changes, notes, tasks) and support tickets from\nthe company's people. Composed when read; nothing is copied.\n\nDrafts that were never sent are not history and are left out. Support\ntickets carry subject, channel and status, never the messages. A key\nwith scopes gets no excerpts (`text` is null): it learns that\nsomething happened and where, not what was written.",
+        "operationId": "tidslinje_bolag_api_crm_v1_companies__company_id__timeline_get",
+        "parameters": [
+          {
+            "name": "company_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Company Id"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 500,
+              "minimum": 1,
+              "default": 200,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "x-api-key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Tidslinje Bolag Api Crm V1 Companies  Company Id  Timeline Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/crm/v1/people/{person_id}/timeline": {
+      "get": {
+        "tags": [
+          "Snajp CRM"
+        ],
+        "summary": "Everything that has happened with a person, newest first",
+        "description": "Matched on the person's exact email address: leads where the person\nis the contact, and the person's own support tickets.",
+        "operationId": "tidslinje_person_api_crm_v1_people__person_id__timeline_get",
+        "parameters": [
+          {
+            "name": "person_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Person Id"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 500,
+              "minimum": 1,
+              "default": 200,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "x-api-key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Tidslinje Person Api Crm V1 People  Person Id  Timeline Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/crm/v1/companies/{company_id}/iris": {
+      "get": {
+        "tags": [
+          "Snajp CRM"
+        ],
+        "summary": "The company's leads in Iris and what they mean here",
+        "description": "`do_not_contact` is true when the record says so OR when one of the\ncompany's leads has asked not to be contacted: that outcome always\nwins over a value here that would reopen the lead.",
+        "operationId": "iris_bolag_api_crm_v1_companies__company_id__iris_get",
+        "parameters": [
+          {
+            "name": "company_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Company Id"
+            }
+          },
+          {
+            "name": "x-api-key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Iris Bolag Api Crm V1 Companies  Company Id  Iris Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/crm/v1/companies/{company_id}/outcome": {
+      "post": {
+        "tags": [
+          "Snajp CRM"
+        ],
+        "summary": "Set an outcome on a company and on its leads",
+        "description": "The outcome is carried out in the leads flow as well, by the same\nfunctions a call from the call list uses: pending sends are stopped,\nthe lead changes status, and `do_not_contact` blocks the address.\n`won` makes the company a customer. A company without a lead only\ngets the change on the record itself.",
+        "operationId": "satt_utfall_api_crm_v1_companies__company_id__outcome_post",
+        "parameters": [
+          {
+            "name": "company_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Company Id"
+            }
+          },
+          {
+            "name": "x-api-key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OutcomeIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Satt Utfall Api Crm V1 Companies  Company Id  Outcome Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/crm/v1/customers": {
+      "get": {
+        "tags": [
+          "Snajp CRM"
+        ],
+        "summary": "Your own customers and the ones Iris has won, in one list",
+        "description": "Composed when read: a won lead is not copied into the register. A\nlead that is the same company as one of your own customers is listed\nonce, as `own`, with `lead_id` beside it.",
+        "operationId": "kunder_api_crm_v1_customers_get",
+        "parameters": [
+          {
+            "name": "origin",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "all",
+                "own",
+                "iris"
+              ],
+              "type": "string",
+              "description": "`own` are the companies you keep here with the relation customer. `iris` are leads Iris has won.",
+              "default": "all",
+              "title": "Origin"
+            },
+            "description": "`own` are the companies you keep here with the relation customer. `iris` are leads Iris has won."
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 2000,
+              "minimum": 1,
+              "default": 200,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "x-api-key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Kunder Api Crm V1 Customers Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
     "schemas": {
+      "ActivityIn": {
+        "properties": {
+          "type": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "call",
+                  "meeting",
+                  "email",
+                  "visit",
+                  "other"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Type",
+            "description": "Defaults to `other`."
+          },
+          "subject": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subject",
+            "description": "Required when creating."
+          },
+          "body": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Body"
+          },
+          "occurred_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Occurred At",
+            "description": "ISO 8601 timestamp. Defaults to now."
+          },
+          "duration_minutes": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration Minutes"
+          },
+          "outcome": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Outcome"
+          },
+          "owner": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner"
+          },
+          "company_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Company Id"
+          },
+          "person_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Person Id"
+          },
+          "deal_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deal Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "ActivityIn"
+      },
       "Address": {
         "properties": {
           "street": {
@@ -3309,6 +6879,145 @@
         "type": "object",
         "title": "ConnectionIn"
       },
+      "DealIn": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name",
+            "description": "Required when creating."
+          },
+          "company_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Company Id"
+          },
+          "person_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Person Id"
+          },
+          "stage_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stage Id",
+            "description": "Defaults to the first open stage. Changing it puts the deal last in the new stage; use POST /deals/{id}/move to place it."
+          },
+          "amount": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Amount",
+            "description": "Whole units of `currency` (kronor for SEK)."
+          },
+          "currency": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Currency",
+            "description": "ISO 4217. Defaults to SEK."
+          },
+          "probability": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 100.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Probability",
+            "description": "Own win probability. `null` uses the stage's."
+          },
+          "expected_close_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Close Date",
+            "description": "ISO 8601 date."
+          },
+          "lost_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lost Reason"
+          },
+          "owner": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner"
+          },
+          "custom": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Custom",
+            "description": "Your own fields, up to 50 scalar values."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "DealIn"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -3321,6 +7030,177 @@
         },
         "type": "object",
         "title": "HTTPValidationError"
+      },
+      "MoveIn": {
+        "properties": {
+          "stage_id": {
+            "type": "string",
+            "title": "Stage Id",
+            "description": "The stage to move the deal to. May be its current stage."
+          },
+          "before_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Before Id",
+            "description": "Place the deal just before this deal in the stage."
+          },
+          "after_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "After Id",
+            "description": "Place the deal just after this deal. Without either, last."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "stage_id"
+        ],
+        "title": "MoveIn"
+      },
+      "NoteIn": {
+        "properties": {
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "body": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Body",
+            "description": "Plain text, at most 20000 characters."
+          },
+          "pinned": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pinned"
+          },
+          "author": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Author"
+          },
+          "company_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Company Id"
+          },
+          "person_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Person Id"
+          },
+          "deal_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deal Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "NoteIn"
+      },
+      "OutcomeIn": {
+        "properties": {
+          "outcome": {
+            "type": "string",
+            "enum": [
+              "no_answer",
+              "call_back",
+              "not_interested",
+              "do_not_contact",
+              "meeting_booked",
+              "won"
+            ],
+            "title": "Outcome"
+          },
+          "call_back_on": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Call Back On",
+            "description": "Required with `call_back`."
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "outcome"
+        ],
+        "title": "OutcomeIn"
       },
       "PersonIn": {
         "properties": {
@@ -3488,6 +7368,24 @@
         ],
         "title": "Preview"
       },
+      "ReorderIn": {
+        "properties": {
+          "ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Ids",
+            "description": "Every stage id, each once, in the new order."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "ids"
+        ],
+        "title": "ReorderIn"
+      },
       "RunIn": {
         "properties": {
           "connection": {
@@ -3511,6 +7409,171 @@
           "connection"
         ],
         "title": "RunIn"
+      },
+      "StageIn": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name",
+            "description": "Unique per workspace, at most 60 characters. Required when creating."
+          },
+          "probability": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 100.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Probability",
+            "description": "Default win probability in percent."
+          },
+          "type": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "open",
+                  "won",
+                  "lost"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Type",
+            "description": "`open`, `won` or `lost`. Defaults to `open`."
+          },
+          "color": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Color",
+            "description": "A colour token name, free text."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "StageIn"
+      },
+      "TaskIn": {
+        "properties": {
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title",
+            "description": "Required when creating."
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "todo",
+                  "in_progress",
+                  "done"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status",
+            "description": "Defaults to `todo`. `completed_at` is set when it becomes `done`."
+          },
+          "due_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Due At",
+            "description": "ISO 8601 timestamp."
+          },
+          "owner": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner"
+          },
+          "company_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Company Id"
+          },
+          "person_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Person Id"
+          },
+          "deal_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deal Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "TaskIn"
       },
       "ValidationError": {
         "properties": {

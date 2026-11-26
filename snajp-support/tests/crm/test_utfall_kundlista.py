@@ -6,20 +6,12 @@ from __future__ import annotations
 
 import pytest
 
-from app.api import crm_v1, crm_v1_tidslinje
 from app.crm import lagring
 
 from .conftest import ORGNR_A, ORGNR_B, ORGNR_C
 
 V1 = "/api/crm/v1"
 pytestmark = pytest.mark.anyio
-
-
-@pytest.fixture(autouse=True)
-def _vagar(app):
-    """Kopplas här tills `crm_v1.py` inkluderar routern själv."""
-    if not any(getattr(r, "path", "").endswith("/timeline") for r in app.routes):
-        app.include_router(crm_v1_tidslinje.koppla(crm_v1), prefix=V1)
 
 
 async def _lead(storage, tenant_id: str, namn: str, orgnr: str, epost: str, *, status: str | None = None) -> dict:

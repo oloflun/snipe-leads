@@ -57,8 +57,8 @@ annat i Snajp.
 
 | Omfång | Ger |
 |---|---|
-| `crm:las` | läsa bolag, personer, anslutningar och synkkörningar |
-| `crm:skriv` | skapa, ändra, radera och återställa bolag och personer |
+| `crm:las` | läsa bolag, personer, affärer, uppgifter, anteckningar, aktiviteter, bilagor, anslutningar och synkkörningar |
+| `crm:skriv` | skapa, ändra, radera och återställa allt det, och ändra affärens steg |
 | `crm:synk` | starta synkkörningar och skicka satser |
 | `crm:admin` | skapa och ändra anslutningar och fältmappning |
 
@@ -237,8 +237,10 @@ curl -X POST "$BAS/webhooks" -H "X-API-Key: $NYCKEL" -H "Content-Type: applicati
 ```
 
 Svaret bär `secret`, en enda gång. `events` är valfritt, utan det får ni allt.
-`GET /webhooks/events` räknar upp händelserna: `company.*` och `person.*` med `created`,
-`updated`, `deleted`, `restored` och `purged`, och `sync.completed` när en synk avslutats.
+`GET /webhooks/events` räknar upp händelserna: `company.*`, `person.*`, `deal.*`, `task.*`,
+`note.*`, `activity.*` och `attachment.*` med `created`, `updated`, `deleted`, `restored` och
+`purged`, och `sync.completed` när en synk avslutats. En bilagas händelse bär filens
+uppgifter, aldrig själva filen.
 Webhooks kräver omfånget `crm:admin` och en publik https-adress.
 
 Varje leverans är ett `POST` med händelsen som JSON:
@@ -270,6 +272,128 @@ statuskod och fel i 30 dagar. `POST /webhooks/{id}/deliveries/{leverans}/retry` 
 en, och `POST /webhooks/{id}/test` skickar en `ping`. En webhook som misslyckats tjugo
 leveranser i rad stängs av (`active: false`, `disabled_reason: for_manga_fel`). Slå på den
 igen med `PATCH` när mottagaren är uppe.
+
+## Affärer, uppgifter, anteckningar, aktiviteter och bilagor
+
+Det som händer med ett bolag bor bredvid det. Alla fem läses och skrivs som bolagen: samma
+listparametrar (`limit`, `cursor`, `sort`, `q`, `include_deleted`, `only_deleted`), samma
+papperskorg i 30 dagar, samma `restore`, och varje skrivning står i `GET /changes`.
+
+Kopplingarna heter `company_id`, `person_id` och `deal_id` (en bilaga har dessutom `note_id`),
+och varje lista filtrerar på dem. En koppling ska peka på en levande post hos er: annars
+`company_not_found`, `person_not_found`, `deal_not_found` eller `note_not_found`.
+
+### Affärer och tavlan
+
+```bash
+curl -X POST "$BAS/deals" -H "X-API-Key: $NYCKEL" -H "Content-Type: application/json" \
+  -d '{"name": "Takbyte Berggren", "company_id": "…", "amount": 125000, "expected_close_date": "2026-12-31"}'
+```
+
+`amount` är hela kronor (hela enheter av `currency`, som är `SEK` om inget annat sägs). En ny
+affär hamnar sist i det första öppna steget om ni inte anger `stage_id`.
+
+Stegen är era egna. Första gången de läses (`GET /deal-stages`) får ni en svensk standard:
+Ny (10 %), Kvalificerad (25), Möte bokat (40), Offert skickad (60), Förhandling (80), Vunnen
+(100) och Förlorad (0). Byt namn med `PATCH`, lägg till med `POST`, ordna om med
+`POST /deal-stages/reorder` och alla stegens id i den nya ordningen. Två regler håller tavlan
+användbar: ett steg med affärer i går inte att ta bort (`stage_in_use`, också om affärerna
+ligger i papperskorgen), och det finns alltid minst ett öppet, ett vunnet och ett förlorat steg
+(`stage_required`).
+
+`GET /deals/board` ger hela tavlan: stegen i ordning, var och ett med sina affärer i kortens
+ordning, `count` och `amount_total` (`amount_by_currency` håller isär valutorna). Flytta ett
+kort med
+
+```bash
+curl -X POST "$BAS/deals/$ID/move" -H "X-API-Key: $NYCKEL" -H "Content-Type: application/json" \
+  -d '{"stage_id": "…", "before_id": "…"}'
+```
+
+`before_id` eller `after_id` är kortet det ska stå intill; utan någon av dem hamnar det sist.
+När en affär når ett vunnet eller förlorat steg sätts `closed_at`, och flyttas den tillbaka
+till ett öppet steg nollas den. `GET /deals/{id}/history` visar affärens händelser.
+
+### Uppgifter
+
+En uppgift får stå fri eller kopplas till bolag, person och affär. `status` är `todo`,
+`in_progress` eller `done`, och `completed_at` sätts när den blir `done`. `sort=due` ger den
+som förfaller först överst och de utan dag sist; `status`, `owner` och `due_before` filtrerar.
+Tider lagras och lämnas ut i UTC.
+
+### Anteckningar och aktiviteter
+
+En anteckning (`title`, `body`, `pinned`) och en loggad aktivitet (`type`: `call`, `meeting`,
+`email`, `visit` eller `other`, med `subject`, `body`, `occurred_at`, `duration_minutes` och
+`outcome`) hör alltid till något: utan koppling svarar API:t `target_required`. En anteckning
+är högst 20 000 tecken.
+
+### Bilagor
+
+```bash
+curl -X POST "$BAS/attachments" -H "X-API-Key: $NYCKEL" \
+  -F "file=@offert.pdf;type=application/pdf" -F "company_id=…"
+```
+
+Högst 10 MB per fil (`file_too_large`) och 500 MB per arbetsyta, papperskorgen medräknad
+(`storage_quota_exceeded`). En raderad fil räknas tills papperskorgen töms efter 30 dagar;
+radera med `permanent=true` för att frigöra platsen direkt. Tillåtna typer är pdf, png, jpeg, webp, gif, txt, csv, docx, xlsx
+och pptx, och den angivna typen ska passa filändelsen (`file_type_not_allowed`). Filnamnet
+rensas från sökvägar och styrtecken.
+
+Listor och `GET /attachments/{id}` bär bara filens uppgifter. Själva filen hämtas från
+`content_url` (`GET /attachments/{id}/content`), alltid som nedladdning och aldrig sparad i
+en mellanlagring.
+
+### Töms ett bolag eller en person
+
+Raderas ett bolag eller en person för gott (`permanent=true`, eller efter 30 dagar i
+papperskorgen), töms också anteckningar, aktiviteter och bilagor som pekar på posten: de kan
+bära personuppgifter. Affärer och uppgifter är era egna och står kvar, men tappar kopplingen.
+Varje sådan ändring står i `GET /changes`.
+
+## Tidslinjen, utfall och den samlade kundlistan
+
+Det som knyter posten till resten av Snajp.
+
+**Tidslinjen.** `GET /companies/{id}/timeline` och `/people/{id}/timeline` ger allt som hänt,
+nyast först: postens egna ändringar, och det som hänt i Iris och hos supporten. Ett bolag
+hittar sina leads på organisationsnumret, eller på domänen när numret saknas. En person på
+exakt e-postadress. Supportärenden knyts bara på exakt adress.
+
+```json
+{"key": "msg:…", "type": "email_sent", "at": "2026-10-01T09:00:00+00:00", "origin": "iris",
+ "title": "Förslag", "text": null, "data": {}, "link": {"kind": "conversation", "id": "…"}}
+```
+
+`type` är `record_created`, `record_updated`, `record_deleted`, `record_restored`,
+`lead_created`, `lead_status`, `email_sent`, `followup_sent`, `reply_received`,
+`conversation_stage`, `meeting_booked`, `handed_over`, `call`, `note`, `task` eller
+`support_ticket`. Tidslinjen sätts ihop när den läses, och ingenting kopieras: ett mejl
+ligger kvar i konversationen och ett ärende hos supporten. Utkast som aldrig skickades är
+inte med. Ett supportärende står med ämne, kanal och läge, aldrig med meddelandena. En
+nyckel med omfång får inga utdrag (`text` är `null`): den får veta att något hänt och var.
+
+**Utfall.** Ett utfall på bolaget gäller också bolagets leads:
+
+```bash
+curl -X POST "$BAS/companies/$ID/outcome" -H "X-API-Key: $NYCKEL" -H "Content-Type: application/json" \
+  -d '{"outcome": "do_not_contact", "note": "Bad oss sluta höra av oss."}'
+```
+
+`outcome` är `no_answer`, `call_back` (kräver `call_back_on`), `not_interested`,
+`do_not_contact`, `meeting_booked` eller `won`. Väntande utskick till bolagets leads stoppas,
+leadet byter läge, och `do_not_contact` spärrar adressen. `won` gör bolaget till kund. Svaret
+bär posten och `lead_ids`, de leads som berördes.
+
+Åt andra hållet: `GET /companies/{id}/iris` visar bolagets leads och vad de betyder för
+posten. `do_not_contact` är sant där om posten säger det, eller om ett av bolagets leads har
+bett att slippa kontakt. Det utfallet vinner alltid över ett värde på posten.
+
+**Kundlistan.** `GET /customers` ger era egna kunder och de leads Iris har vunnit i en lista.
+`origin` är `own` eller `iris`, och `counts` säger hur många det finns av varje. Ett vunnet
+lead kopieras inte in i registret, och ett bolag som finns på båda ställen står en gång, som
+`own`, med `lead_id` bredvid. Filtrera med `origin=own|iris` och `q`.
 
 ## Radering och personuppgifter
 
@@ -320,14 +444,22 @@ engelska och `meddelande` på svenska.
 | 404 | `connection_not_found` | anslutningen finns inte (409 om en körnings anslutning tagits bort) |
 | 404 | `run_not_found` | synkkörningen finns inte |
 | 404 | `webhook_not_found`, `delivery_not_found` | webhooken eller leveransen finns inte |
+| 404 | `stage_not_found` | steget finns inte (422 när `stage_id` i en kropp pekar fel) |
 | 409 | `conflict` | organisationsnumret, adressen eller namnet tillhör redan en annan post. `conflicting_id` är den posten, när den går att peka ut |
 | 409 | `run_closed` | körningen är avslutad och tar inte emot fler satser |
 | 409 | `processing_restricted` | adressen har begränsad behandling (artikel 18) och får inte tömmas |
+| 409 | `stage_in_use` | steget har affärer i sig, också raderade som går att återställa |
+| 409 | `stage_required` | det sista öppna, vunna eller förlorade steget kan inte tas bort eller byta typ |
+| 409 | `storage_quota_exceeded` | arbetsytans 500 MB för bilagor är fyllda |
 | 410 | `permanently_deleted` | posten är tömd och går inte att återställa |
 | 413 | `body_too_large` | kroppen är större än 8 MB |
+| 413 | `file_too_large` | bilagan är större än 10 MB |
 | 422 | `invalid_fields` | fält som inte gick att tolka, uppräknade i `fields` |
 | 422 | `unknown_field` | ett fält som inte finns |
 | 422 | `company_not_found` | `company_id` pekar inte på ett bolag |
+| 422 | `person_not_found`, `deal_not_found`, `note_not_found` | `person_id`, `deal_id` eller `note_id` pekar inte på en levande post hos er |
+| 422 | `target_required` | en anteckning, aktivitet eller bilaga måste kopplas till minst ett bolag, en person eller en affär |
+| 422 | `file_type_not_allowed` | filtypen tas inte emot, eller passar inte filändelsen |
 | 422 | `connection_required` | `connection` saknas |
 | 422 | `empty_batch` | satsen är tom |
 | 422 | `too_many_items` | fler än 500 poster (50 i förhandsgranskningen) |
@@ -337,6 +469,7 @@ engelska och `meddelande` på svenska.
 | 422 | `invalid_events`, `too_many_webhooks` | okända händelser, eller fler än tio webhooks |
 | 503 | `webhooks_unavailable` | webhooks går inte att skapa just nu |
 | 422 | `invalid_parameter` | `cursor` eller `updated_since` gick inte att läsa |
+| 422 | `call_back_date_required` | utfallet `call_back` saknar `call_back_on` |
 | 422 | `idempotency_key_reused` | nyckeln har använts för ett annat anrop |
 | 422 | `idempotency_key_too_long` | nyckeln är längre än 200 tecken |
 | 429 | `rate_limited` | taket är nått; vänta enligt `Retry-After` |
@@ -352,6 +485,5 @@ sparas aldrig: det kan vara ett personnummer.
 
 ## Det som inte finns än
 
-- Affärer, aktiviteter och anteckningar. API:t bär bolag och personer.
 - Sammanslagna poster i källan (HubSpot, Pipedrive och Salesforce byter eller behåller id
   vid en sammanslagning). I dag syns den förlorande posten som raderad.

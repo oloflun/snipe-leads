@@ -52,7 +52,7 @@ logger = logging.getLogger("snajp-support.crm.webhooks")
 
 #: Händelser en webhook kan prenumerera på. `*` är alla.
 HANDELSETYPER = tuple(
-    f"{objekt}.{typ}" for objekt in ("company", "person", "deal", "task", "note")
+    f"{objekt}.{typ}" for objekt in ("company", "person", "deal", "task", "note", "activity", "attachment")
     for typ in ("created", "updated", "deleted", "restored", "purged")
 ) + ("sync.completed", "ping")
 

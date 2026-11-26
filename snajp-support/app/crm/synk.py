@@ -376,6 +376,7 @@ async def slutfor(
                     borttagna += 1
     for objekt in adaptrar.OBJEKT:
         await lagring.tom_papperskorg(storage, tenant_id, objekt, undanta=begransade)
+    await lagring.tom_papperskorgarna(storage, tenant_id)
     await lagring.uppdatera_anslutning(storage, tenant_id, anslutning["id"], senaste_synk_at=lagring.nu())
     await handelser.logga(storage, tenant_id, logg, kalla="synk", aktor=f"anslutning:{anslutning['namn']}")
     klar = await lagring.avsluta_korning(storage, tenant_id, korning["id"],
@@ -504,6 +505,7 @@ async def radera(
         await handelser.logga(storage, tenant_id, [handelser.Handelse(objekt, rad_id, "raderad", post=ny)],
                               kalla=via, aktor=aktor)
     await lagring.tom_papperskorg(storage, tenant_id, objekt, undanta=begransade)
+    await lagring.tom_papperskorgarna(storage, tenant_id)
     return True
 
 

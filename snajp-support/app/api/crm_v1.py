@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import sys
 from datetime import timedelta
 from typing import Any, Literal
 
@@ -368,12 +369,15 @@ def _sats_ut(svar: dict[str, Any], korning: dict[str, Any] | None) -> dict[str, 
 # -- Idempotens --------------------------------------------------------------
 
 
-async def _idempotent(request: Request, tenant: dict, arbete) -> Response:
+async def _idempotent(request: Request, tenant: dict, arbete, *, kroppshash: str | None = None) -> Response:
     """Kör `arbete` (→ (statuskod, svar)) högst en gång per Idempotency-Key.
 
     Samma nyckel med samma kropp ger det sparade svaret tillbaka. Samma nyckel
     med en annan kropp är ett fel hos anroparen och avvisas, i stället för att
     tyst ge svaret på ett annat anrop.
+
+    `kroppshash` ersätter hashen över den råa kroppen där den inte duger: en
+    multipart-kropp bär en gräns som klienten slumpar fram för varje anrop.
     """
     nyckel = (request.headers.get("Idempotency-Key") or "").strip()
     if len(nyckel) > 200:
@@ -383,7 +387,7 @@ async def _idempotent(request: Request, tenant: dict, arbete) -> Response:
     if not nyckel:
         status, svar = await arbete()
         return JSONResponse(svar, status_code=status)
-    kroppshash = hashlib.sha256(await request.body()).hexdigest()
+    kroppshash = kroppshash or hashlib.sha256(await request.body()).hexdigest()
     vag = f"{request.method} {request.url.path}"
     sparad = await lagring.las_idempotens(storage, tenant["tenant_id"], nyckel)
     if sparad:
@@ -692,14 +696,16 @@ async def andringar(
     request: Request, tenant: dict = Depends(kraev("crm:las")),
     cursor: int = Query(0, ge=0, description="`next_cursor` from your previous call. 0 reads from the beginning."),
     limit: int = Query(200, ge=1, le=1000),
-    object: Literal["company", "person"] | None = Query(None, description="Only this kind of record."),
+    object: Literal["company", "person", "deal", "task", "note", "activity", "attachment"] | None = Query(
+        None, description="Only this kind of record."),
 ) -> dict:
     """One feed for every object. Each write has a sequence number; read until
     the list is empty and keep `next_cursor`. Asking again with the same
     cursor returns only what has happened since. An event says which record
     and which fields changed: fetch the record to get the values."""
+    objekt_in = {en: sv for sv, en in handelser.OBJEKT_UT.items()}
     rader, nasta = await handelser.flode(request.app.state.storage, tenant["tenant_id"], efter=cursor, limit=limit,
-                                         objekt=_OBJEKT.get(object) if object else None)
+                                         objekt=objekt_in.get(object) if object else None)
     return {"data": [handelse_ut(r) for r in rader], "next_cursor": nasta}
 
 
@@ -1157,3 +1163,19 @@ def specifikation() -> dict[str, Any]:
 @router.get("/openapi.json", summary="This specification", include_in_schema=False)
 async def openapi(tenant: dict = Depends(kraev("crm:las"))) -> dict:
     return specifikation()
+
+
+# Affärer, uppgifter, anteckningar, aktiviteter och bilagor (migration 164).
+# Sist, eftersom modulen läser namnen ovan. Vägarna läggs in en och en i
+# stället för med include_router, som i FastAPI 0.139 lägger en inkluderad
+# router som ett eget objekt: router.routes ska vara vägar, för specifikationen
+# och för appen som i sin tur tar med router.
+from . import crm_v1_objekt  # noqa: E402
+
+router.routes.extend(crm_v1_objekt.router.routes)
+
+# Tidslinjen, utfallen och den samlade kundlistan: det som knyter posten till
+# resten av Snajp. Routern byggs med den här modulens egna grindar.
+from . import crm_v1_tidslinje  # noqa: E402
+
+router.routes.extend(crm_v1_tidslinje.koppla(sys.modules[__name__]).routes)

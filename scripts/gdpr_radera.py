@@ -99,6 +99,8 @@ _PROSPEKT = "select id from prospects where lower(contact_email) = lower(%s)"
 _TRAD = f"select id from outreach_threads where prospect_id in ({_PROSPEKT})"
 _ARENDE = f"select id from ss_tickets where customer_id in ({_KUND})"
 _CRM_PERSON = "select id from crm_personer where lower(epost) = lower(%s)"
+#: Anteckningar om CRM-personen (164). Deras bilagor räknas som personens.
+_CRM_ANTECKNING = f"select id from crm_anteckningar where person_id in ({_CRM_PERSON})"
 #: Felrapporterna ur Hjälprutan (156) bär ingen mejladress, bara rapportörens
 #: användar-id. Vägen från adressen går därför genom auth.users.
 _FELRAPPORT = (
@@ -131,6 +133,13 @@ TABELLER = [
     ("crm_externa_id", f"objekt = 'person' and post_id in ({_CRM_PERSON})", "Källsystemets id för en kontaktperson i kundens CRM."),
     # Webhook-leveranserna (162) bär en kopia av posten i 30 dagar. Före personen, som villkoret läser.
     ("crm_webhook_leveranser", "lower(kropp->'data'->'record'->>'email') = lower(%s)", "Kopia av en CRM-post i kön till kundens webhook."),
+    # Fritext och filer om personen (164). person_id är `on delete set null`, så
+    # de skulle annars stå kvar utan ägare när personen raderas. Samma kaskad
+    # som lagring.gor_gravsten gör i appen. Före personen, som villkoren läser.
+    ("crm_bilagor", f"person_id in ({_CRM_PERSON}) or anteckning_id in ({_CRM_ANTECKNING})",
+     "Fil kopplad till kontaktpersonen i kundens CRM, eller till en anteckning om personen."),
+    ("crm_anteckningar", f"person_id in ({_CRM_PERSON})", "Anteckning om kontaktpersonen i kundens CRM. Filerna på den kaskaderar."),
+    ("crm_aktiviteter", f"person_id in ({_CRM_PERSON})", "Loggat samtal, möte eller mejl med kontaktpersonen i kundens CRM."),
     ("crm_personer", "epost", "Kontaktperson i kundens CRM (Snajp CRM)."),
     ("plattformsarenden", f"id in ({_FELRAPPORT})", "Felrapport ur Hjälprutan (namn, fritext, bild). Händelserna kaskaderar härifrån."),
 ]
@@ -192,6 +201,9 @@ MANUELLT = [
     ("ss_sending_domains", "reply_to", "Kundens svarsadress för utskick."),
     ("crm_bolag", "epost", "Bolag i kundens CRM med adressen som bolagets egen. För en enskild firma "
                            "(enskild_firma) är hela raden personuppgifter: beslut per fall, i samråd med kunden."),
+    ("crm_affarer", f"person_id in ({_CRM_PERSON})",
+     "Affär kopplad till kontaktpersonen i kundens CRM. Affären är kundens egen; person_id nollas vid "
+     "radering, men namnet och de egna fälten kan bära personuppgifter."),
 ]
 
 #: Löptext där adressen kan stå utan egen kolumn. Söks bara med --fritext
@@ -225,6 +237,12 @@ FRITEXT = [
     ("crm_bolag", "extra::text"),
     ("crm_personer", "extra::text"),
     ("crm_synkkorningar", "fel::text"),
+    # Snajp CRM (164): anteckningarnas och aktiviteternas fritext, uppgifternas
+    # beskrivning och affärernas egna fält.
+    ("crm_anteckningar", "concat_ws(' ', titel, text)"),
+    ("crm_aktiviteter", "concat_ws(' ', rubrik, text, utfall)"),
+    ("crm_uppgifter", "concat_ws(' ', titel, beskrivning)"),
+    ("crm_affarer", "extra::text"),
 ]
 
 #: Tabeller som KAN bära adressen i löptext utan att ha en egen adresskolumn

@@ -74,7 +74,7 @@ def koppla(v1: Any) -> APIRouter:
     """Bygger ändpunkterna med `crm_v1`s egna grindar, på en ny router. `v1` är
     modulen `crm_v1` själv: härifrån importeras den inte, eftersom den
     inkluderar den här routern."""
-    router = APIRouter()
+    router = APIRouter(prefix=v1.router.prefix, tags=v1.router.tags)
     kraev, fel = v1.kraev, v1.fel
 
     async def _post(request: Request, tenant: dict, objekt: str, rad_id: str) -> dict[str, Any]:

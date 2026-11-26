@@ -457,6 +457,112 @@ async def test_webhookarnas_ko_reservation_och_logg_i_databasen(miljo, monkeypat
     webhooks.nollstall()
 
 
+# -- Migration 164: affärer, uppgifter, anteckningar, aktiviteter, bilagor ---
+
+
+async def test_affarer_steg_och_tavlan_i_databasen(miljo):
+    from app.crm import handelser, objekt
+
+    lager, a, b = miljo
+    steg = await objekt.lista_steg(lager, a)
+    assert [s["namn"] for s in steg] == [s[0] for s in objekt.STANDARDSTEG]
+    assert await objekt.lista_steg(lager, a) == steg                       # skapas en gång
+    assert len(await objekt.lista_steg(lager, b)) == len(steg)              # varje kund sin egen uppsättning
+    ny, vunnen = steg[0], next(s for s in steg if s["typ"] == "vunnen")
+    bolag, _ = await synk.skapa(lager, a, "bolag", {"namn": "Bygg AB", "orgnr": ORGNR_A}, kalla="api")
+    andras, _ = await synk.skapa(lager, b, "bolag", {"namn": "Annat AB"}, kalla="api")
+
+    ett = await objekt.skapa(lager, a, "affar", {"namn": "Ett", "bolag_id": bolag["id"], "belopp": 120000})
+    tva = await objekt.skapa(lager, a, "affar", {"namn": "Två", "belopp": 30000, "forvantat_avslut": "2026-12-31"})
+    tre = await objekt.skapa(lager, a, "affar", {"namn": "Tre"})
+    assert ett["steg_id"] == ny["id"] and ett["belopp"] == 120000 and ett["valuta"] == "SEK"
+    assert isinstance(ett["position"], float) and ett["position"] < tva["position"] < tre["position"]
+    assert tva["forvantat_avslut"] == "2026-12-31" and ett["avslutad_at"] is None
+    # En koppling till en annan kunds bolag avvisas.
+    with pytest.raises(objekt.ObjektFel):
+        await objekt.skapa(lager, a, "affar", {"namn": "Fel", "bolag_id": andras["id"]})
+
+    # Flytt: Tre överst, sedan mellan Ett och Två.
+    await objekt.flytta(lager, a, tre["id"], ny["id"], fore_id=ett["id"])
+    await objekt.flytta(lager, a, tre["id"], ny["id"], efter_id=ett["id"])
+    tavla = await objekt.tavla(lager, a)
+    assert [x["namn"] for x in tavla[0]["affarer"]] == ["Ett", "Tre", "Två"]
+    # Till vunnen sätter avslutet, tillbaka nollar det.
+    flyttad = await objekt.flytta(lager, a, ett["id"], vunnen["id"])
+    assert flyttad["steg_id"] == vunnen["id"] and flyttad["avslutad_at"]
+    assert (await objekt.flytta(lager, a, ett["id"], ny["id"]))["avslutad_at"] is None
+    # Ett steg med affärer i går inte att ta bort.
+    with pytest.raises(objekt.ObjektFel):
+        await objekt.ta_bort_steg(lager, a, ny["id"])
+
+    # Listan: sortering, sökning, filter och papperskorg.
+    poster, _ = await lagring.lista_poster(lager, a, "affar", ordning="namn")
+    assert [p["namn"] for p in poster] == ["Ett", "Tre", "Två"]
+    assert [p["namn"] for p in (await lagring.lista_poster(lager, a, "affar", q="tv"))[0]] == ["Två"]
+    assert [p["namn"] for p in (await lagring.lista_poster(lager, a, "affar", lika={"bolag_id": bolag["id"]}))[0]] == ["Ett"]
+    await objekt.radera(lager, a, "affar", tva["id"])
+    assert [p["namn"] for p in (await lagring.lista_poster(lager, a, "affar", ordning="raderad"))[0]] == ["Två"]
+    assert (await objekt.aterstall(lager, a, "affar", tva["id"]))["raderad_at"] is None
+    assert (await lagring.lista_poster(lager, b, "affar"))[0] == []
+    assert await objekt.hamta(lager, b, "affar", ett["id"]) is None
+    flode, _ = await handelser.flode(lager, a, objekt="affar")
+    assert [h["typ"] for h in flode][:3] == ["skapad", "skapad", "skapad"] and "raderad" in [h["typ"] for h in flode]
+
+
+async def test_uppgifter_anteckningar_aktiviteter_och_bilagor_i_databasen(miljo):
+    from app.crm import objekt
+
+    lager, a, b = miljo
+    bolag, _ = await synk.skapa(lager, a, "bolag", {"namn": "Bygg AB"}, kalla="api")
+    anna, _ = await synk.skapa(lager, a, "person", {"fornamn": "Anna", "epost": "anna@bygg.se",
+                                                   "bolag_id": bolag["id"]}, kalla="api")
+
+    sen = await objekt.skapa(lager, a, "uppgift", {"titel": "Senare", "forfaller_at": "2026-12-20T09:00:00+00:00"})
+    snart = await objekt.skapa(lager, a, "uppgift", {"titel": "Snart", "forfaller_at": "2026-12-01T09:00:00+00:00",
+                                                    "bolag_id": bolag["id"]})
+    utan = await objekt.skapa(lager, a, "uppgift", {"titel": "Utan dag"})
+    forfall, _ = await lagring.lista_poster(lager, a, "uppgift", ordning="forfaller")
+    assert [u["titel"] for u in forfall] == ["Snart", "Senare", "Utan dag"]
+    klar = await objekt.andra(lager, a, "uppgift", snart["id"], {"status": "klar"})
+    assert klar["status"] == "klar" and klar["klar_at"]
+    assert (await objekt.andra(lager, a, "uppgift", snart["id"], {"status": "pagar"}))["klar_at"] is None
+    assert sen["status"] == "att_gora" and utan["forfaller_at"] is None
+
+    anteckning = await objekt.skapa(lager, a, "anteckning", {"titel": "Möte", "text": "Vill ha offert på två platser.",
+                                                            "person_id": anna["id"], "fast": True})
+    assert anteckning["fast"] is True and anteckning["text"].startswith("Vill ha")
+    with pytest.raises(objekt.ObjektFel):
+        await objekt.skapa(lager, a, "anteckning", {"text": "Utan koppling"})
+    aktivitet = await objekt.skapa(lager, a, "aktivitet", {"typ": "samtal", "rubrik": "Ringde Anna",
+                                                          "varaktighet_min": 12, "person_id": anna["id"]})
+    assert aktivitet["typ"] == "samtal" and aktivitet["varaktighet_min"] == 12 and aktivitet["tid"]
+
+    fil = b"%PDF-1.7 " + bytes(range(256)) * 40                                 # binärt, med nollbyte
+    bilaga = await objekt.skapa_bilaga(lager, a, filnamn="..\\..\\Offert Bygg.pdf", typ="application/pdf",
+                                       innehall=fil, kopplingar={"person_id": anna["id"],
+                                                                 "anteckning_id": anteckning["id"]})
+    assert bilaga["filnamn"] == "Offert Bygg.pdf" and bilaga["storlek"] == len(fil) and "innehall" not in bilaga
+    assert bytes(await lagring.bilagans_innehall(lager, a, bilaga["id"])) == fil
+    assert await lagring.bilagans_innehall(lager, b, bilaga["id"]) is None
+    assert await lagring.bilagornas_storlek(lager, a) == len(fil) and await lagring.bilagornas_storlek(lager, b) == 0
+    listade, _ = await lagring.lista_poster(lager, a, "bilaga", lika={"person_id": anna["id"]})
+    assert [x["filnamn"] for x in listade] == ["Offert Bygg.pdf"] and "innehall" not in listade[0]
+
+    # Personen töms för gott (art. 17): anteckningen, aktiviteten och filen töms med henne.
+    assert await synk.radera(lager, a, "person", anna["id"], permanent=True)
+    async with lager._scoped(a) as conn:
+        rad = dict(await conn.fetchrow("select * from crm_anteckningar where id = $1::text::uuid", anteckning["id"]))
+        assert rad["kalla"] == "gravsten" and rad["text"] == "" and rad["titel"] is None and rad["raderad_at"]
+        rad = dict(await conn.fetchrow("select * from crm_aktiviteter where id = $1::text::uuid", aktivitet["id"]))
+        assert rad["kalla"] == "gravsten" and rad["text"] is None and "Anna" not in str(rad)
+        rad = dict(await conn.fetchrow("select filnamn, storlek, kalla, octet_length(innehall) as langd "
+                                       "from crm_bilagor where id = $1::text::uuid", bilaga["id"]))
+        assert rad["kalla"] == "gravsten" and rad["langd"] == 0 and "Offert" not in str(rad)
+    assert await lagring.bilagornas_storlek(lager, a) == 0
+    # Uppgiften på bolaget står kvar: den pekade inte på personen.
+    assert (await objekt.hamta(lager, a, "uppgift", snart["id"]))["bolag_id"] == bolag["id"]
+
+
 # -- Tidslinjen: frågan mot prospekten --------------------------------------
 
 
