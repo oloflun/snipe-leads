@@ -15,9 +15,17 @@ from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
-from ..crm import lagring, nycklar
-from .crm_v1 import korning_ut
-from .deps import kraev_uuid, require_tenant
+from ..crm import lagring, nycklar, tillgang
+from .crm_v1 import korning_ut, tillagg_saknas
+from .deps import kraev_uuid, require_tenant as _require_tenant
+
+
+async def require_tenant(request: Request, tenant: dict = Depends(_require_tenant)) -> dict:
+    """Kundens egen nyckel, och tillägget påslaget (app/crm/tillgang.py)."""
+    if not await tillgang.har_tillgang(request.app.state.storage, tenant["tenant_id"]):
+        raise tillagg_saknas()
+    return tenant
+
 
 router = APIRouter(prefix="/api/crm")
 

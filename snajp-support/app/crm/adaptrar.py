@@ -58,7 +58,7 @@ _STYRFALT = ("externt_id", "uppdaterad", "raderad", "hoppa_over")
 BOLAGSFALT = (
     "namn", "orgnr", "momsnr", "bolagsform", "sni", "webbplats", "epost", "telefon",
     "gatuadress", "co", "postnr", "postort", "land", "anstallda", "omsattning",
-    "relation", "kund_sedan", "avtalsslut", "ansvarig", "kontakta_inte",
+    "relation", "kund_sedan", "avtalsslut", "ansvarig", "kontakta_inte", "privatperson",
 )
 PERSONFALT = (
     "fornamn", "efternamn", "namn", "titel", "epost", "telefon", "mobil",
@@ -109,6 +109,7 @@ STANDARD: dict[str, dict[str, dict[str, Any]]] = {
             "avtalsslut": ["contract_end", "avtalsslut", "avtal_slutar", "bindningstid_slut"],
             "ansvarig": ["owner", "ansvarig", "saljare", "säljare", "kundansvarig"],
             "kontakta_inte": ["do_not_contact", "kontakta_inte"],
+            "privatperson": ["is_private_person", "private_person", "privatperson"],
             "extra": {"*": "custom"},
         },
         "person": {
@@ -431,7 +432,8 @@ STANDARD: dict[str, dict[str, dict[str, Any]]] = {
         "bolag": {
             "externt_id": "CustomerNumber",
             "raderad": {"fran": "Active", "uppslag": _INTE_AKTIV},
-            "hoppa_over": {"fran": "Type", "uppslag": {"private": True}},
+            # Privatkunder hoppas över om anslutningen inte slår på dem (synk.py).
+            "privatperson": {"fran": "Type", "uppslag": {"private": True, "company": False}},
             "namn": "Name",
             "orgnr": "OrganisationNumber",
             "momsnr": "VATNumber",
@@ -453,7 +455,7 @@ STANDARD: dict[str, dict[str, dict[str, Any]]] = {
             "externt_id": ["Id", "CustomerNumber"],
             "uppdaterad": "ChangedUtc",
             "raderad": {"fran": "IsActive", "uppslag": _INTE_AKTIV},
-            "hoppa_over": "IsPrivatePerson",
+            "privatperson": "IsPrivatePerson",
             "namn": "Name",
             "orgnr": "CorporateIdentityNumber",
             "momsnr": "VatNumber",
@@ -709,6 +711,14 @@ def mappa(post: Any, objekt: str, mappning: dict[str, dict[str, Any]]) -> Mappad
         if not _tomt(ra.get("land")):
             ut.falt["land"] = land
         satt("namn", lambda v: falt.text(v, max_langd=300))
+        # Källan säger att kunden är en privatperson. Synken avgör sedan om
+        # posten sparas alls (anslutningens `privatpersoner`). Numret är då ett
+        # personnummer och sparas aldrig, och posten är ingen enskild firma.
+        privat = not _tomt(ra.get("privatperson")) and _sann(ra["privatperson"])
+        if not _tomt(ra.get("privatperson")):
+            ut.falt["privatperson"] = privat
+        if privat:
+            ra["orgnr"] = ra["momsnr"] = None
         if not _tomt(ra.get("orgnr")):
             try:
                 visning, nyckel, enskild = falt.orgnr(ra["orgnr"])
@@ -770,6 +780,9 @@ def mappa(post: Any, objekt: str, mappning: dict[str, dict[str, Any]]) -> Mappad
                 pass
     if not _tomt(ra.get("kontakta_inte")):
         ut.falt["kontakta_inte"] = _sann(ra["kontakta_inte"])
+    if ut.falt.get("privatperson"):
+        # En privatperson står aldrig som kontaktbar (migration 161).
+        ut.falt["kontakta_inte"] = True
 
     for namn, sokvag in (regler.get("extra") or {}).items():
         varde = las(post, sokvag)

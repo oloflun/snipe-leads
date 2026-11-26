@@ -29,6 +29,12 @@ export default async function CrmLayout({ children }: Readonly<{ children: React
   // här grinden nådde varje inloggad kund sidan via adressen, vilket
   // kartläggningen av skalet hittade. 404 och inte en omdirigering, som
   // adminytan: en sida kunden inte har ska inte avslöja att den finns.
+  //
+  // Tillägget (`crm` i lib/addons.ts, fritt under provperioden) grindas inte
+  // här utan i backenden (snajp-support/app/crm/tillgang.py), eftersom CRM:et
+  // har ett publikt API som inte passerar webben. Vyerna visar backendens
+  // besked (`addon_missing`). Den dag kunderna släpps in tas raden nedan bort,
+  // och tillägget är då den grind som återstår.
   if (!state.isPlatformAdmin) {
     notFound();
   }

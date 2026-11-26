@@ -22,7 +22,11 @@ export const addonKeys = [
   // Leadslistor: databasens check-villkor uppdateras i migration 060 —
   // den migrationen är spegeln av den här raden. Glider de isär vägrar
   // databasen nyckeln som UI:t erbjuder.
-  "leadlists"
+  "leadlists",
+  // Snajp CRM (migration 161, Antons svar 2026-11-26): ett tillägg, med fri
+  // tillgång under provperioden. Regeln står i lib/crm/tillgang.ts och i
+  // backendens app/crm/tillgang.py, som är grinden som räknas.
+  "crm"
 ] as const;
 
 export type AddonKey = (typeof addonKeys)[number];
@@ -38,6 +42,11 @@ export type AddonSpec = {
   what: Localized;
   /** Varför det inte ingår. Ett tillägg utan skäl läser som godtycke. */
   why: Localized;
+  /**
+   * Inte lanserat: syns i adminens tilläggsväljare men inte för kunden. Ett
+   * tillägg kunden har påslaget visas alltid, också när det är dolt.
+   */
+  dold?: boolean;
 };
 
 export const addonCatalog: readonly AddonSpec[] = [
@@ -82,6 +91,14 @@ export const addonCatalog: readonly AddonSpec[] = [
     name: { sv: "Leadslistor", en: "Lead lists" },
     what: { sv: "Agenten bygger färdiga, granskningsbara leadslistor: verifierade svenska B2B-bolag med kontaktväg, källa och signal per rad, exporterbara som CSV. I tillägget ingår också en säljlista där ni håller ordning på bolagen ni ringt.", en: "The agent builds finished, reviewable lead lists: verified Swedish B2B companies with a contact path, source and signal per row, exportable as CSV. The add-on also includes a sales list where you keep track of the companies you have called." },
     why: { sv: "Volymkörningar med egen kvot och egen granskning. Det är ett eget arbetsflöde vid sidan av de riktade utskicken.", en: "Volume runs with their own quota and their own review. It is a separate workflow alongside the targeted outreach." }
+  },
+  {
+    key: "crm",
+    name: { sv: "Snajp CRM", en: "Snajp CRM" },
+    what: { sv: "Era kunder, kontaktpersoner och affärer på ett ställe, synkade från ert eget CRM eller affärssystem. Iris hämtar aldrig ett bolag som redan är er kund.", en: "Your customers, contacts and deals in one place, synced from your own CRM or business system. Iris never picks up a company that is already your customer." },
+    why: { sv: "Ett eget register med synk, API och lagring per kund. Det ingår fritt under provperioden.", en: "A register of its own with sync, API and storage per customer. It is included free during the trial." },
+    // Antons svar 2026-11-26: bara plattformsadmin ser CRM:et tills han säger annat.
+    dold: true
   }
 ];
 

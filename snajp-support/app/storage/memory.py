@@ -2694,6 +2694,8 @@ class MemoryStorage:
                 i["utkast"] = json.loads(json.dumps(utkast)) if utkast is not None else None
 
     async def lista_upptagna_bolag(self, tenant_id: str) -> list[dict[str, Any]]:
+        from ..crm.lagring import upptagen_rad as _crm_upptagen_rad
+
         crm = {r["id"] for r in self.lead_lists.get(tenant_id, []) if r.get("kalla") == "crm"}
         return [
             *(
@@ -2712,9 +2714,9 @@ class MemoryStorage:
             ),
             # Kundens CRM (migration 160), som i PostgresStorage.
             *(
-                {"company_name": b["namn"], "orgnr": b.get("orgnr"), "kalla": "crm", "list_id": None}
+                rad
                 for b in getattr(self, "_crm", {}).get("crm_bolag", {}).values()
-                if b["tenant_id"] == tenant_id and not b.get("raderad_at")
+                if b["tenant_id"] == tenant_id and (rad := _crm_upptagen_rad(b))
             ),
         ]
 

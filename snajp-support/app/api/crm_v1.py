@@ -38,7 +38,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 from ..avtalsgrind import avtal_saknas
-from ..crm import adaptrar, falt, lagring, nycklar, synk
+from ..crm import adaptrar, falt, lagring, nycklar, synk, tillgang
 from .deps import kraev_uuid, require_crm_nyckel
 from .rate_limit import RateLimitExceededError, RateLimitRule, SlidingWindowRateLimiter
 
@@ -60,13 +60,22 @@ def fel(status: int, kod: str, en: str, sv: str, **mer: Any) -> HTTPException:
     return HTTPException(status_code=status, detail={"code": kod, "message": en, "meddelande": sv, **mer})
 
 
+def tillagg_saknas() -> HTTPException:
+    return fel(403, "addon_missing",
+               "Snajp CRM is an add-on that is not enabled for this workspace. Contact Snajp.",
+               "Snajp CRM är ett tillägg som inte är påslaget för arbetsytan. Kontakta Snajp.")
+
+
 def kraev(omfang: str):
-    """Dependency: giltig nyckel med omfånget, inom taket."""
+    """Dependency: giltig nyckel med omfånget, tillägget påslaget, inom taket."""
 
     async def _beroende(request: Request, response: Response, tenant: dict = Depends(require_crm_nyckel)) -> dict:
         if not nycklar.tillater(tenant.get("omfang"), omfang):
             raise fel(403, "scope_missing", f"The key lacks the scope {omfang}.",
                       f"Nyckeln saknar omfånget {omfang}.", scope=omfang)
+        # CRM:et är ett tillägg, fritt under provperioden (app/crm/tillgang.py).
+        if not await tillgang.har_tillgang(request.app.state.storage, tenant["tenant_id"]):
+            raise tillagg_saknas()
         try:
             _begransare.check(f"crm:{tenant['tenant_id']}", _TAK)
         except RateLimitExceededError:
@@ -104,8 +113,8 @@ _BOLAG = {"name": "namn", "org_number": "orgnr", "vat_number": "momsnr", "legal_
           "sni_code": "sni", "website": "webbplats", "email": "epost", "phone": "telefon",
           "employees": "anstallda", "revenue_sek": "omsattning", "relation": "relation",
           "customer_since": "kund_sedan", "contract_end": "avtalsslut", "owner": "ansvarig",
-          "do_not_contact": "kontakta_inte"}
-_ADRESS = {"street": "gatuadress", "co": "co", "postal_code": "postnr", "city": "postort", "country": "land"}
+          "do_not_contact": "kontakta_inte", "private_person": "privatperson"}
+_ADRESS ={"street": "gatuadress", "co": "co", "postal_code": "postnr", "city": "postort", "country": "land"}
 _PERSON = {"first_name": "fornamn", "last_name": "efternamn", "title": "titel", "email": "epost",
            "phone": "telefon", "mobile": "mobil", "legal_basis": "rattslig_grund",
            "do_not_contact": "kontakta_inte", "company_id": "bolag_id"}
@@ -122,6 +131,7 @@ def bolag_ut(rad: dict[str, Any], externa: list[dict[str, Any]] | None = None) -
     ut["domain"] = rad.get("doman")
     ut["address"] = {en: rad.get(sv) for en, sv in _ADRESS.items()}
     ut["sole_proprietor"] = bool(rad.get("enskild_firma"))
+    ut["private_person"] = bool(rad.get("privatperson"))
     ut["custom"] = rad.get("extra") or {}
     ut["source"] = rad.get("kalla")
     ut["external_ids"] = externa or []
@@ -210,6 +220,9 @@ class CompanyIn(_Kropp):
     contract_end: str | None = Field(None, description="ISO 8601 date. Avtalsslut.")
     owner: str | None = Field(None, description="Account owner in your organisation.")
     do_not_contact: bool | None = None
+    private_person: bool | None = Field(
+        None, description="The customer is a private person, not a company. No personal identity number "
+        "is stored, and the record is always `do_not_contact`: it is left out of every send, list and Iris run.")
     custom: dict[str, Any] | None = Field(None, description="Your own fields, up to 50 scalar values.")
 
 
@@ -237,6 +250,9 @@ class ConnectionIn(_Kropp):
     missing_records: Literal["keep", "mark_former_customer", "delete"] | None = Field(
         None, description="What a completed full sync does with records the source no longer has.")
     default_relation: Relation | None = None
+    include_private_persons: bool | None = Field(
+        None, description="Off by default: records the source marks as private persons are skipped "
+        "(`reason: privatperson`). Turn it on to store them, marked `private_person` and `do_not_contact`.")
     active: bool | None = None
 
 
@@ -267,6 +283,7 @@ def anslutning_ut(rad: dict[str, Any]) -> dict[str, Any]:
         "conflict_rule": next(k for k, v in _KONFLIKT.items() if v == rad["konfliktregel"]),
         "missing_records": next(k for k, v in _SAKNADE.items() if v == rad["saknade"]),
         "default_relation": _RELATION_UT.get(rad["standardrelation"], "customer"),
+        "include_private_persons": bool(rad.get("privatpersoner")),
         "active": bool(rad["aktiv"]), "last_sync_at": rad.get("senaste_synk_at"),
         "created_at": rad.get("created_at"), "updated_at": rad.get("updated_at"),
     }
@@ -607,6 +624,8 @@ def _anslutningsfalt(kropp: ConnectionIn) -> dict[str, Any]:
         ut["saknade"] = _SAKNADE[data["missing_records"]]
     if data.get("default_relation"):
         ut["standardrelation"] = _RELATION_IN[data["default_relation"]]
+    if data.get("include_private_persons") is not None:
+        ut["privatpersoner"] = data["include_private_persons"]
     if data.get("active") is not None:
         ut["aktiv"] = data["active"]
     return ut

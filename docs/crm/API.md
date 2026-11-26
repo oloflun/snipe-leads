@@ -170,6 +170,29 @@ Ett fält som inte går att tolka hoppas över, inte posten: en kund med ett fel
 telefonnummer blir fortfarande en kund. Felet står i svaret som `field_errors` och sparas
 på körningen.
 
+## Privatpersoner
+
+Snajp är ett verktyg för företagsförsäljning. En post som källan märker som privatperson
+(`Type: PRIVATE` i Fortnox, `IsPrivatePerson` i Visma, eller det fält ni pekar ut som
+`privatperson` i mappningen) hoppas därför över, med `reason: privatperson`.
+
+Vill ni ha privatkunderna i registret slår ni på det på anslutningen:
+
+```bash
+curl -X PATCH "$BAS/connections/fortnox" -H "X-API-Key: $NYCKEL" -H "Content-Type: application/json" \
+  -d '{"include_private_persons": true}'
+```
+
+De sparas då som kunder med `private_person: true`. Personnumret sparas aldrig, och posten
+är alltid `do_not_contact`: den lämnas utanför varje utskick, lista och Iris-körning, och
+det går inte att ändra på posten.
+
+## Kunder som Iris inte hämtar
+
+Ett bolag i ert register hämtas inte som lead. Har bolaget organisationsnummer är det
+numret som avgör, så att ett annat bolag med samma namn inte utesluts. En tidigare kund
+(`relation: former_customer`) är fri att bearbeta igen, om inte posten är `do_not_contact`.
+
 ## Läsa tillbaka och hålla en kopia i fas
 
 ```bash
@@ -222,6 +245,7 @@ engelska och `meddelande` på svenska.
 | 401 | (ingen kod) | nyckeln saknas eller är ogiltig |
 | 403 | `scope_missing` | nyckeln saknar omfånget, som står i `scope` |
 | 403 | `agreement_missing` | biträdesavtalet är inte registrerat |
+| 403 | `addon_missing` | Snajp CRM är ett tillägg som inte är påslaget för arbetsytan, och provperioden är slut |
 | 404 | `not_found` | posten finns inte |
 | 404 | `connection_not_found` | anslutningen finns inte (409 om en körnings anslutning tagits bort) |
 | 404 | `run_not_found` | synkkörningen finns inte |
@@ -244,8 +268,8 @@ engelska och `meddelande` på svenska.
 | 429 | `rate_limited` | taket är nått; vänta enligt `Retry-After` |
 
 Skälen till att en post i en sats hoppades över (`reason`): `saknar_namn`,
-`saknar_namn_och_epost`, `hoppas_over_enligt_mappningen` (privatperson i ett
-ekonomisystem), `behandlingen_ar_begransad`, `redan_borta`. Konflikter:
+`saknar_namn_och_epost`, `hoppas_over_enligt_mappningen`, `privatperson` (se nedan),
+`behandlingen_ar_begransad`, `redan_borta`. Konflikter:
 `orgnr_tillhor_annat_bolag`, `finns_redan`.
 
 ## Det som inte finns än

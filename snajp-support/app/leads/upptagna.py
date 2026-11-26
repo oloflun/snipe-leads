@@ -10,6 +10,11 @@ En nyckel per bolag: orgnr när det finns, annars namnet utan bolagsform och
 skiljetecken ("Byggarna Berggren AB" och "byggarna berggren" är samma bolag).
 Mängden innehåller båda sorterna, så ett register-träff med orgnr fastnar
 även när namnet stavats annorlunda i kundens CRM.
+
+Två undantag för bolagen i Snajp CRM (Antons svar 2026-11-26, koden i
+app/crm/lagring.py:upptagen_rad): en tidigare kund är fri att bearbeta, och
+ett CRM-bolag som har organisationsnummer utesluter på numret. Dess namn
+fäller bara en kandidat som själv saknar nummer.
 """
 from __future__ import annotations
 
@@ -25,6 +30,9 @@ _BOLAGSFORMER = {
     "ek", "för", "ekonomisk", "förening", "ef", "enskild", "firma", "i", "likvidation",
 }
 _ORGNR = "orgnr:"
+#: Namnet på ett CRM-bolag som HAR organisationsnummer. Det fäller bara en
+#: kandidat som själv saknar nummer: har båda nummer avgör numren ensamma.
+_UTAN_NR = "namn_utan_nr:"
 
 
 def nyckel(namn: str | None) -> str:
@@ -53,25 +61,37 @@ def nycklar(uteslut: Iterable[str]) -> set[str]:
     for post in uteslut:
         if not post:
             continue
-        ut.add(post if post.startswith(_ORGNR) else nyckel(post))
+        ut.add(post if post.startswith((_ORGNR, _UTAN_NR)) else nyckel(post))
     return ut
 
 
 def bolagsnycklar(bolag: Iterable[dict[str, Any]]) -> set[str]:
-    """Nycklarna för rader med `company_name` och (valfritt) `orgnr`."""
+    """Nycklarna för rader med `company_name` och (valfritt) `orgnr`.
+
+    En rad märkt `bara_orgnr` (ett bolag i kundens CRM som har ett
+    organisationsnummer) utesluter på numret: det kan inte förväxlas, och med
+    en stor kundstock hade namnet fällt varje annat bolag som heter likadant
+    (docs/BESLUT.md 2026-11-26). Namnet står kvar bakom `_UTAN_NR` och fäller
+    bara en kandidat som själv saknar nummer, se `upptagen`."""
     ut: set[str] = set()
     for b in bolag:
-        if b.get("company_name"):
-            ut.add(nyckel(b["company_name"]))
         o = orgnr_nyckel(b.get("orgnr"))
         if o:
             ut.add(o)
+        if not b.get("company_name"):
+            continue
+        namn = nyckel(b["company_name"])
+        ut.add(f"{_UTAN_NR}{namn}" if o and b.get("bara_orgnr") else namn)
     return ut
 
 
 def upptagen(sedda: set[str], namn: str | None, orgnr: str | None = None) -> bool:
     o = orgnr_nyckel(orgnr)
-    return bool((namn and nyckel(namn) in sedda) or (o and o in sedda))
+    if (o and o in sedda) or (namn and nyckel(namn) in sedda):
+        return True
+    # Kandidaten har inget nummer att jämföra med: då får namnet avgöra också
+    # mot CRM-bolag som har ett.
+    return bool(namn and not o and f"{_UTAN_NR}{nyckel(namn)}" in sedda)
 
 
 def samma_bolag(rad: dict[str, Any], namn: str | None, orgnr: str | None = None) -> bool:

@@ -9,6 +9,36 @@ möjligt), vad det betyder i koden.
 
 ---
 
+## 2026-11-26 — Snajp CRM: Antons svar byggda, och fem val agenten gjorde på vägen (agenten)
+
+Antons svar i posten nedan är nu kod (migration 161, `snajp-support/app/crm/`,
+`tests/crm/test_beslut.py`). Fem saker avgjorde han inte, och de är agentens val:
+
+- **Namnet fäller fortfarande en kandidat som själv saknar nummer.** Beslutet var att ett
+  CRM-bolag med organisationsnummer utesluter på numret. Men sökningen hittar ibland bolag
+  utan nummer, och då finns bara namnet att jämföra med. Skäl: utan det hade en befintlig
+  kund kunnat hämtas som lead så fort källan saknade numret. Har båda nummer avgör numren
+  ensamma, som beslutat (`upptagna.upptagen`).
+- **En tidigare kund som är märkt kontakta inte är inte fri.** Skäl: en uttrycklig spärr på
+  posten går före en allmän regel om relationen.
+- **Kontakta inte i CRM:et stoppar utskick, också kampanjutskick.** Adresserna läggs till de
+  avregistrerade i sändspärren, inte till egna kunder, och gäller även personerna hos ett
+  bolag som är märkt. Skäl: det var en lucka. Märkningen fanns på posten men ingen läste den.
+- **Tilläggets grind sitter i backenden, utan undantag för plattformsadmin.** Skäl: CRM:et
+  har ett publikt API som inte passerar webben, och ett undantag i ett huvud hade varit en
+  väg förbi för var och en med en nyckel. Följd: också admin slår på tillägget på kunden
+  (Admin, kunden, Tillägg) för att se CRM:et där provperioden är slut. Ändringen slår igenom
+  inom en minut. En kund utan kopplad arbetsyta släpps igenom, som för bokföringen.
+- **Tillägget syns inte för kunden än.** `crm` står i tilläggskatalogen som dolt: adminens
+  väljare visar det, kundens lista under Inställningar gör det inte. Skäl: Antons svar att
+  bara plattformsadmin ser CRM:et tills vidare.
+
+Privatpersoner: källan märker dem (Fortnox `Type`, Visma `IsPrivatePerson`, eller fältet
+`privatperson` i en egen mappning). Databasen bär regeln att en privatperson aldrig är
+kontaktbar (`crm_bolag_privatperson_check`), så den gäller också kod som skrivs senare.
+
+Development hade hunnit få en egen migration 153. CRM-grunden heter därför 160.
+
 ## 2026-11-26 — Snajp CRM: version 2 godkänd, och Antons svar på de öppna frågorna (Anton)
 
 **Godkännandet.** "Perfekt, utseendet och gränssnittet var precis det jag föreställde mig.

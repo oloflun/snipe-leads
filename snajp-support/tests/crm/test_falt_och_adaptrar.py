@@ -226,11 +226,19 @@ def test_lime_go_bar_affarssystemets_kundnummer_som_eget_falt():
     assert m.extra == {"kundnummer_i_affarssystemet": "K-17"} and m.falt["ansvarig"] == "Henrik"
 
 
-def test_privatpersoner_i_ekonomisystemen_hoppas_over():
+def test_privatpersoner_i_ekonomisystemen_marks_och_bar_inget_personnummer():
+    """Mappningen märker posten; om den sparas avgör anslutningen (synk.py,
+    tests/crm/test_beslut.py). Personnumret följer aldrig med, och posten
+    står aldrig som kontaktbar."""
     regler = adaptrar.gallande_mappning("fortnox", None)
-    assert adaptrar.mappa({"CustomerNumber": "1", "Name": "Anna Berg", "Type": "PRIVATE"}, "bolag", regler).hoppa_over
+    m = adaptrar.mappa({"CustomerNumber": "1", "Name": "Anna Berg", "Type": "PRIVATE",
+                        "OrganisationNumber": "19850101-2384", "VATNumber": "SE850101238401"}, "bolag", regler)
+    assert m.falt["privatperson"] is True and m.falt["kontakta_inte"] is True and not m.hoppa_over
+    assert not {"orgnr", "orgnr_nyckel", "momsnr", "enskild_firma"} & set(m.falt) and m.fel == []
+    bolag = adaptrar.mappa({"CustomerNumber": "2", "Name": "Bolaget AB", "Type": "COMPANY"}, "bolag", regler)
+    assert bolag.falt["privatperson"] is False and "kontakta_inte" not in bolag.falt
     assert adaptrar.mappa({"Id": "1", "Name": "Anna Berg", "IsPrivatePerson": True}, "bolag",
-                          adaptrar.gallande_mappning("visma", None)).hoppa_over
+                          adaptrar.gallande_mappning("visma", None)).falt["privatperson"] is True
 
 
 def test_inaktiv_i_kallan_ar_raderad():

@@ -180,6 +180,12 @@ async def synka_sats(
         if m.hoppa_over:
             u.orsak = "hoppas_over_enligt_mappningen"
             continue
+        if objekt == "bolag" and m.falt.get("privatperson") and not anslutning.get("privatpersoner"):
+            # Antons svar 2026-11-26: privatpersoner hoppas över om inte
+            # anslutningen uttryckligen slår på dem. Snajp är ett B2B-verktyg,
+            # och det register som inte behövs ska inte finnas.
+            u.orsak = "privatperson"
+            continue
         extern = externa.get(m.externt_id) if m.externt_id else None
         post = kanda.get(extern["post_id"]) if extern else None
 
@@ -404,6 +410,11 @@ async def andra(storage: Any, tenant_id: str, objekt: str, rad_id: str, falten: 
                 skriv[foljer] = False if foljer == "enskild_firma" else None
     if objekt == "person" and "bolag_id" in falten and falten["bolag_id"] != post.get("bolag_id"):
         skriv["bolag_id"] = falten["bolag_id"]
+    if objekt == "bolag" and skriv.get("privatperson", post.get("privatperson")):
+        # En privatperson går inte att göra kontaktbar (migration 161).
+        skriv.pop("kontakta_inte", None)
+        if not post.get("kontakta_inte"):
+            skriv["kontakta_inte"] = True
     if isinstance(falten.get("extra"), dict):
         extra = {**(post.get("extra") or {}), **m.extra}
         extra = {k: v for k, v in extra.items() if falten["extra"].get(k, "") is not None}

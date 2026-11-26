@@ -197,7 +197,11 @@ async def _kor_send_guard(storage, tenant_id: str, thread: dict, message: dict, 
         senaste_kontakt_med_foretaget=await storage.last_contact_with_company(
             tenant_id, nyckel, utom_trad=thread.get("id")
         ),
-        suppressions=frozenset(await storage.list_suppressions(tenant_id)),
+        # Också det CRM:et märkt kontakta inte, dit varje privatperson hör
+        # (app/crm/lagring.py). De ligger här och inte bland egna kunder, så
+        # att de gäller också kampanjutskick.
+        suppressions=frozenset(await storage.list_suppressions(tenant_id))
+        | frozenset(await crm_lagring.kontakta_inte_adresser(storage, tenant_id)),
         # Trådens egna tidigare kontakter räknas inte som "tidigare kontaktad" —
         # det är hela poängen med en uppföljning. Regel 3 gäller nya trådar.
         tidigare_kontaktade=frozenset(),

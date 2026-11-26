@@ -29,7 +29,7 @@ export function AddonSettings() {
           samma vy. Sett i pixlar. */}
 
       <Radlista ariaLabel={text({ sv: "Tilläggstjänster", en: "Add-on services" })}>
-        {addonCatalog.map((addon) => {
+        {addonCatalog.filter((addon) => !addon.dold || addons.includes(addon.key)).map((addon) => {
           const active = addons.includes(addon.key);
           return (
             <Rad key={addon.key} className="min-w-0">

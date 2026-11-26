@@ -2336,6 +2336,18 @@
             ],
             "title": "Do Not Contact"
           },
+          "private_person": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Private Person",
+            "description": "The customer is a private person, not a company. No personal identity number is stored, and the record is always `do_not_contact`: it is left out of every send, list and Iris run."
+          },
           "custom": {
             "anyOf": [
               {
@@ -2458,6 +2470,18 @@
               }
             ],
             "title": "Default Relation"
+          },
+          "include_private_persons": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Include Private Persons",
+            "description": "Off by default: records the source marks as private persons are skipped (`reason: privatperson`). Turn it on to store them, marked `private_person` and `do_not_contact`."
           },
           "active": {
             "anyOf": [

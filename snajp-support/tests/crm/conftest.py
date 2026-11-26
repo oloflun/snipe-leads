@@ -12,7 +12,7 @@ from httpx import ASGITransport, AsyncClient
 
 from app import avtalsgrind
 from app.api import crm, crm_v1, integrationer
-from app.crm import nycklar
+from app.crm import nycklar, tillgang
 from app.storage.memory import MemoryStorage
 
 ALLA = ["crm:las", "crm:skriv", "crm:synk", "crm:admin"]
@@ -30,9 +30,11 @@ def anyio_backend():
 def _nollstallt():
     crm_v1.nollstall_tak()
     avtalsgrind.nollstall_cache()
+    tillgang.nollstall()
     yield
     crm_v1.nollstall_tak()
     avtalsgrind.nollstall_cache()
+    tillgang.nollstall()
 
 
 @pytest.fixture

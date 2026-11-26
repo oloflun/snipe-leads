@@ -30,7 +30,7 @@ TABELLER: dict[str, dict[str, str | None]] = {
     "crm_anslutningar": {
         "id": _UUID, "tenant_id": _UUID, "namn": None, "system": None, "mappning": _JSON,
         "konfliktregel": None, "saknade": None, "standardrelation": None, "aktiv": _BOOL,
-        "senaste_synk_at": _TID, "created_at": _TID, "updated_at": _TID,
+        "privatpersoner": _BOOL, "senaste_synk_at": _TID, "created_at": _TID, "updated_at": _TID,
     },
     "crm_bolag": {
         "id": _UUID, "tenant_id": _UUID, "namn": None, "namnnyckel": None, "orgnr": None,
@@ -38,7 +38,8 @@ TABELLER: dict[str, dict[str, str | None]] = {
         "sni": None, "webbplats": None, "doman": None, "epost": None, "telefon": None,
         "gatuadress": None, "co": None, "postnr": None, "postort": None, "land": None,
         "anstallda": _TAL, "omsattning": _TAL, "relation": None, "kund_sedan": _DATUM,
-        "avtalsslut": _DATUM, "ansvarig": None, "kontakta_inte": _BOOL, "extra": _JSON,
+        "avtalsslut": _DATUM, "ansvarig": None, "kontakta_inte": _BOOL, "privatperson": _BOOL,
+        "extra": _JSON,
         "manuellt_andrade": _JSON, "kalla": None, "prospect_id": _UUID,
         "created_at": _TID, "updated_at": _TID, "raderad_at": _TID,
     },
@@ -65,9 +66,10 @@ TABELLER: dict[str, dict[str, str | None]] = {
 #: Standardvärden som databasen sätter, speglade för minneslagret.
 _STANDARD: dict[str, dict[str, Any]] = {
     "crm_anslutningar": {"system": "generisk", "mappning": {}, "konfliktregel": "kallan_vinner",
-                         "saknade": "behall", "standardrelation": "kund", "aktiv": True},
+                         "saknade": "behall", "standardrelation": "kund", "aktiv": True,
+                         "privatpersoner": False},
     "crm_bolag": {"namnnyckel": "", "enskild_firma": False, "land": "SE", "relation": "kund",
-                  "kontakta_inte": False, "extra": {}, "manuellt_andrade": {}, "kalla": "manuell"},
+                  "kontakta_inte": False, "privatperson": False, "extra": {}, "manuellt_andrade": {}, "kalla": "manuell"},
     "crm_personer": {"kontakta_inte": False, "extra": {}, "manuellt_andrade": {}, "kalla": "manuell"},
     "crm_externa_id": {},
     "crm_synkkorningar": {"lage": "delta", "status": "processing", "startad_av": "api", "totalt": 0,
@@ -507,12 +509,71 @@ async def rakna_poster(storage: Any, tenant_id: str, objekt: str) -> dict[str, i
     return ut
 
 
+#: Relationer som INTE spärrar bolaget för Iris och listbygget. Antons svar
+#: 2026-11-26: tidigare kunder är fria att bearbeta.
+FRIA_RELATIONER = frozenset({"tidigare_kund"})
+
+
+def upptagen_rad(bolag: dict[str, Any]) -> dict[str, Any] | None:
+    """CRM-bolaget i formen `storage.lista_upptagna_bolag` lämnar, eller None
+    när bolaget är fritt att bearbeta.
+
+    Fritt är en tidigare kund, om inte posten säger kontakta inte: den spärren
+    går före. Ett bolag med organisationsnummer utesluter på numret
+    (`bara_orgnr`, läst av `upptagna.bolagsnycklar`): med en stor kundstock
+    fäller namnet annars varje annat bolag som heter likadant. Namnet avgör
+    för bolag utan nummer, och mot en kandidat som själv saknar nummer
+    (docs/BESLUT.md 2026-11-26).
+    """
+    if bolag.get("raderad_at") or bolag.get("kalla") == GRAVSTEN:
+        return None
+    if bolag.get("relation") in FRIA_RELATIONER and not bolag.get("kontakta_inte"):
+        return None
+    return {"company_name": bolag["namn"], "orgnr": bolag.get("orgnr"), "kalla": "crm", "list_id": None,
+            "bara_orgnr": bool(bolag.get("orgnr_nyckel"))}
+
+
+def far_bearbetas(bolag: dict[str, Any]) -> bool:
+    """Får bolaget bearbetas med utskick och Iris från CRM-miljön? Aldrig en
+    privatperson, aldrig en post som säger kontakta inte, aldrig en raderad."""
+    return not (bolag.get("raderad_at") or bolag.get("privatperson") or bolag.get("kontakta_inte"))
+
+
 async def upptagna_rader(storage: Any, tenant_id: str) -> list[dict[str, Any]]:
-    """Varje levande CRM-bolag i formen `storage.lista_upptagna_bolag` lämnar:
-    det som finns i kundens CRM ska varken Iris eller en lista hämta igen."""
+    """Varje CRM-bolag som varken Iris eller en lista får hämta igen."""
     rader = await _valj(storage, tenant_id, "crm_bolag", levande=True)
-    return [{"company_name": r["namn"], "orgnr": r.get("orgnr"), "kalla": "crm", "list_id": None}
-            for r in rader]
+    return [rad for rad in map(upptagen_rad, rader) if rad]
+
+
+async def kontakta_inte_adresser(storage: Any, tenant_id: str) -> set[str]:
+    """Adresser som aldrig får ett utskick enligt CRM:et: bolag och personer
+    märkta kontakta inte (dit hör varje privatperson), och personerna hos ett
+    sådant bolag. Sändspärren lägger dem till de avregistrerade, så att de
+    gäller också kampanjutskick."""
+    if _ar_postgres(storage):
+        try:
+            async with storage._scoped(tenant_id) as conn:
+                rader = await conn.fetch(
+                    """select lower(epost) as epost from crm_bolag
+                        where tenant_id = $1::text::uuid and raderad_at is null
+                          and kontakta_inte and epost is not null
+                       union
+                       select lower(p.epost) from crm_personer p
+                         left join crm_bolag b on b.id = p.bolag_id and b.raderad_at is null
+                        where p.tenant_id = $1::text::uuid and p.raderad_at is null and p.epost is not null
+                          and (p.kontakta_inte or coalesce(b.kontakta_inte, false))""", tenant_id)
+        except Exception as fel:
+            if _saknar_tabell(fel):
+                return set()
+            raise
+        return {r["epost"] for r in rader}
+    bolag = {b["id"]: b for b in _minne(storage, "crm_bolag").values()
+             if b["tenant_id"] == tenant_id and not b.get("raderad_at")}
+    ut = {b["epost"].lower() for b in bolag.values() if b.get("kontakta_inte") and b.get("epost")}
+    ut |= {p["epost"].lower() for p in _minne(storage, "crm_personer").values()
+           if p["tenant_id"] == tenant_id and not p.get("raderad_at") and p.get("epost")
+           and (p.get("kontakta_inte") or (bolag.get(p.get("bolag_id")) or {}).get("kontakta_inte"))}
+    return ut
 
 
 async def kundadresser(storage: Any, tenant_id: str) -> set[str]:
@@ -558,7 +619,7 @@ _TOMD: dict[str, dict[str, Any]] = {
     "bolag": {**{k: None for k in TABELLER["crm_bolag"]
                  if k not in ("id", "tenant_id", "created_at", "updated_at", "raderad_at")},
               "namn": "", "namnnyckel": "", "enskild_firma": False, "land": "SE", "relation": "ovrigt",
-              "kontakta_inte": False, "extra": {}, "manuellt_andrade": {}, "kalla": GRAVSTEN},
+              "kontakta_inte": False, "privatperson": False, "extra": {}, "manuellt_andrade": {}, "kalla": GRAVSTEN},
     "person": {**{k: None for k in TABELLER["crm_personer"]
                   if k not in ("id", "tenant_id", "created_at", "updated_at", "raderad_at")},
                "kontakta_inte": False, "extra": {}, "manuellt_andrade": {}, "kalla": GRAVSTEN},
