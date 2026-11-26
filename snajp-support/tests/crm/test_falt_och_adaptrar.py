@@ -75,7 +75,7 @@ def test_postnummer():
         falt.postnr("1112")
 
 
-@pytest.mark.parametrize("skrivet,tal", [("1 234 567 kr", 1234567), ("1.234,50", 1234), ("1,234.00", 1234),
+@pytest.mark.parametrize("skrivet,tal", [("1 234 567 kr", 1234567), ("1.234,50", 1235), ("1,234.00", 1234),
                                          ("12 000", 12000), (12000.0, 12000), ("45", 45)])
 def test_heltal_svenska_och_engelska_skrivsatt(skrivet, tal):
     assert falt.heltal(skrivet) == tal
@@ -275,6 +275,26 @@ def test_csv_med_semikolon_och_svenska_rubriker():
     assert m.fel == []
     assert m.falt["namn"] == "Buddy Kund AB" and m.falt["orgnr"] == "556036-0793"
     assert m.falt["epost"] == "info@kund.se" and m.falt["avtalsslut"] == "2027-03-31"
+
+
+def test_felen_ur_researchens_prov_ar_rattade():
+    """De fyra fel som provet i docs/crm/underlag/svensk-01 § 9.3 hittade."""
+    # Anknytningen hör inte till numret.
+    assert falt.telefon("08-678 55 00 ankn. 123") == "+4686785500"
+    assert falt.telefon("08-678 55 00 ext 12") == "+4686785500" and falt.telefon("031-12 34 56 x 7") == "+46311234 56".replace(" ", "")
+    # Excel har tappat mobilnumrets nolla.
+    assert falt.telefon("701234567") == "+46701234567"
+    with pytest.raises(falt.FaltFel):
+        falt.telefon("12345678")                      # åtta siffror utan nolla är fortfarande inget nummer
+    # Postnummerområdena 09 och 99 finns inte.
+    for trasigt in ("091 00", "99100", "00123"):
+        with pytest.raises(falt.FaltFel) as fel:
+            falt.postnr(trasigt)
+        assert fel.value.kod == "postnr_ogiltigt"
+    assert falt.postnr("SE-113 91") == "113 91" and falt.postnr("98100") == "981 00"
+    # Det typografiska minustecknet, och avrundning i stället för trunkering.
+    assert falt.heltal("−1 234") == -1234 and falt.heltal("1 234,56 kr") == 1235
+    assert falt.heltal("1 234,49") == 1234 and falt.heltal("1.234.567") == 1234567 and falt.heltal("-0,5") == -1
 
 
 def test_bolagsformen_skrivs_som_svenska_system_skriver_den():

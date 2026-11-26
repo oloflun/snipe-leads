@@ -205,6 +205,9 @@ def telefon(varde: object, *, land: str = "SE") -> str | None:
         return None
     # "08-123 456 78 (vxl)" och "070 123 45 67 / 08 12 34 56": första numret gäller.
     forsta = re.split(r"[/;,]|\b(?:eller|or)\b", ra)[0]
+    # Anknytningen hör inte till numret: "08-678 55 00 ankn. 123" är 08-678 55 00.
+    # Utan det här blev den ett längre nummer av giltig längd, alltså fel nummer.
+    forsta = re.split(r"(?i)\b(?:ankn\w*|anknytning|ext\w*|x)\b\.?\s*\d+", forsta)[0]
     plus = forsta.strip().startswith("+")
     siffror = re.sub(r"\D", "", forsta)
     if not siffror:
@@ -217,6 +220,11 @@ def telefon(varde: object, *, land: str = "SE") -> str | None:
         siffror = "46" + siffror[1:]
     elif land == "SE" and siffror.startswith("46") and len(siffror) >= 10:
         pass
+    elif land == "SE" and len(siffror) == 9 and siffror[0] == "7":
+        # Excel har tappat mobilnumrets inledande nolla. Listimporten räddar
+        # samma nummer (lib/leads/importvarden.ts), och samma fil ska ge samma
+        # utfall i listan och i CRM:et.
+        siffror = "46" + siffror
     elif land == "SE" and 7 <= len(siffror) <= 9:
         # Abonnentnummer utan riktnummer går inte att ringa: det sparas inte.
         raise FaltFel("telefon_saknar_riktnummer", ra)
@@ -269,7 +277,8 @@ def postnr(varde: object, *, land: str = "SE") -> str | None:
     if land != "SE":
         return ra.upper()
     siffror = re.sub(r"\D", "", ra.upper().removeprefix("SE"))
-    if len(siffror) != 5:
+    # Svenska postnummerområden är 10 till 98: 09 och 99 finns inte.
+    if len(siffror) != 5 or not 10 <= int(siffror[:2]) <= 98:
         raise FaltFel("postnr_ogiltigt", ra)
     return f"{siffror[:3]} {siffror[3:]}"
 
@@ -286,13 +295,18 @@ def heltal(varde: object) -> int | None:
     ra = text(varde, max_langd=40)
     if not ra:
         return None
-    kompakt = re.sub(r"[\s  ]|kr|sek", "", ra, flags=re.I)
-    # Sista skiljetecknet följt av en eller två siffror är decimaler.
+    # Det typografiska minustecknet (U+2212) är vad svensk talformatering ger.
+    kompakt = re.sub(r"[\s  ]|kr|sek", "", ra.replace("\u2212", "-"), flags=re.I)
+    # Sista skiljetecknet följt av en eller två siffror är decimaler: avrunda, trunkera inte.
+    decimaler = re.search(r"[.,](\d{1,2})$", kompakt)
     kompakt = re.sub(r"[.,]\d{1,2}$", "", kompakt)
     kompakt = re.sub(r"[.,]", "", kompakt)
     if not re.fullmatch(r"-?\d+", kompakt):
         raise FaltFel("tal_ogiltigt", ra)
-    return int(kompakt)
+    tal = int(kompakt)
+    if decimaler and int(decimaler.group(1).ljust(2, "0")) >= 50:
+        tal += -1 if kompakt.startswith("-") else 1
+    return tal
 
 
 _DATUMFORMAT = ("%Y-%m-%d", "%Y%m%d", "%d/%m/%Y", "%d.%m.%Y", "%Y/%m/%d", "%d-%m-%Y")

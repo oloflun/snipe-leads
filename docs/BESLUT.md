@@ -9,6 +9,50 @@ möjligt), vad det betyder i koden.
 
 ---
 
+## 2026-11-26 — Snajp CRM: tidslinjen, utfallen, kundlistan och svensk standard (agentens val)
+
+Inget av detta är Antons ord. Det är val agenten gjorde när resten av fas 3 byggdes, och
+Anton kan ändra vart och ett. Sammanställningen mot förlagan står i
+`docs/crm/SVENSK-STANDARD.md`, med tio frågor till honom.
+
+- **Tidslinjen komponeras vid läsning, ingenting kopieras in i CRM:et.** Ett mejl ligger
+  kvar i konversationen, ett samtal i samtalsloggen och ett ärende hos supporten. Skäl: en
+  kopia måste gallras och raderas på två ställen, och det ena glöms.
+- **Bolaget hittar sina leads på organisationsnumret**, eller på domänen när numret saknas
+  och domänen inte tillhör en e-postleverantör. Personen på exakt adress. **Supportärenden
+  knyts bara på exakt adress, aldrig på domän.** Skäl: tusentals små bolag skriver från
+  telia.com, och en privatpersons ärende ska inte hamna på ett bolag.
+- **En integrations nyckel får inga utdrag ur mejl, samtal och anteckningar på
+  tidslinjen**, bara att något hänt och var det finns. Appen får utdragen. Supportens
+  meddelandetext lämnas aldrig ut där. Skäl: dataminimering, och underlaget om supporten
+  (`snajp-03` § 6).
+- **Ett utfall på bolaget verkställs på bolagets leads genom leadsflödets egna funktioner**
+  (`samtal.registrera`), aldrig genom att CRM:et skriver i leadstabellerna. Skäl:
+  sidoeffekterna (stoppa kön, spärra adressen, flytta statusen) finns där och ska inte
+  byggas en gång till.
+- **Leadets "kontakta inte" vinner alltid över CRM-posten.** Det läses på posten när den
+  visas och går inte att slå av i CRM:et. Skäl: skyddet mot återkontakt.
+- **Ett vunnet lead kopieras inte in i registret.** Kundlistan visar egna kunder och vunna
+  leads tillsammans, och ett bolag som finns på båda ställen en gång. Skäl: Antons svar att
+  de hålls isär tills vidare.
+- **Bolagsformen sparas som svenska system skriver den** (AB, HB, KB, EF, EK, BRF), inte
+  som SCB:s tvåsiffriga kod. Skäl: källsystemen skickar namnet eller förkortningen, nästan
+  aldrig koden, och det är förkortningen användaren ska se. Koden godtas som indata. Att
+  dessutom lagra koden är ett förslag i sammanställningen.
+- **SNI lagras utan punkt, högst fem koder, huvudnäringen först.** Fritext i fältet blir
+  ett fältfel. Vilken version koden hör till (2007 eller 2025) sparas inte än.
+- **Affärernas standardsteg är svenska med sannolikhet**: Ny 10, Kvalificerad 25, Möte
+  bokat 40, Offert skickad 60, Förhandling 80, Vunnen 100, Förlorad 0. Kunden ändrar dem
+  fritt. Skäl: svenska system har steg med sannolikhet och avslut som vunnen eller
+  förlorad (`svensk-03`).
+- **Bilagor lagras i databasen**, högst 10 MB per fil och 500 MB per kund, med en lista
+  över tillåtna filtyper. Skäl: repot har ingen fillagring, och chattens bilagor och
+  felrapporternas bilder ligger redan i databasen. Det håller för avtal och offerter men
+  inte för stora arkiv. **Behöver Antons dom** innan kunder släpps in.
+- **Belopp som `1 234,50` avrundas till 1 235**, de kapas inte. Fyra fel ur researchens
+  prov av fälttolkningen är rättade: anknytning som blev en del av numret, mobilnummer där
+  Excel tappat nollan, postnummerområden som inte finns, och det typografiska minustecknet.
+
 ## 2026-11-26 — Snajp CRM: Antons svar byggda, och fem val agenten gjorde på vägen (agenten)
 
 Antons svar i posten nedan är nu kod (migration 161, `snajp-support/app/crm/`,
