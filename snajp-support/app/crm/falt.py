@@ -24,6 +24,7 @@ from ..leads.upptagna import nyckel as namnnyckel
 
 __all__ = [
     "FaltFel",
+    "bolagsform",
     "datum",
     "doman_ar_privat",
     "epost",
@@ -33,6 +34,8 @@ __all__ = [
     "namnnyckel",
     "orgnr",
     "postnr",
+    "sni",
+    "sni_visning",
     "telefon",
     "text",
     "webbplats",
@@ -108,6 +111,84 @@ def momsnr(varde: object) -> str | None:
     if not _MOMS_EU.match(kompakt):
         raise FaltFel("momsnr_ogiltigt", ra)
     return kompakt
+
+
+# -- Bolagsform och bransch --------------------------------------------------
+
+#: SCB:s och Skatteverkets tvåsiffriga kod för juridisk form till den
+#: förkortning svenska system visar (docs/crm/underlag/svensk-01, avsnitt 3.1).
+#: Juridisk form går INTE att läsa ur organisationsnumret (SKV 709), så den
+#: kommer alltid från källan.
+_FORM_FOR_KOD = {
+    "10": "EF", "21": "Enkelt bolag", "31": "HB", "41": "AB", "42": "AB", "43": "SE", "49": "AB",
+    "51": "EK", "53": "BRF", "61": "Ideell förening", "62": "Samfällighet", "63": "Trossamfund",
+    "71": "Stiftelse", "72": "Stiftelse", "81": "Stat", "82": "Kommun", "83": "Kommunalförbund",
+    "84": "Region", "91": "Dödsbo", "93": "Sparbank", "96": "Utländskt bolag",
+}
+_FORM_FOR_NAMN = {
+    "ab": "AB", "aktiebolag": "AB", "aktiebolag publ": "AB", "ab publ": "AB", "publikt aktiebolag": "AB",
+    "privat aktiebolag": "AB", "bankaktiebolag": "AB", "forsakringsaktiebolag": "AB", "ovriga aktiebolag": "AB",
+    "limited company": "AB", "limited liability company": "AB",
+    "hb": "HB", "handelsbolag": "HB", "kb": "KB", "kommanditbolag": "KB",
+    "ef": "EF", "enskild firma": "EF", "enskild naringsidkare": "EF", "enskild naringsverksamhet": "EF",
+    "fysisk person": "EF", "sole proprietorship": "EF", "sole trader": "EF",
+    "ek": "EK", "ek for": "EK", "ekonomisk forening": "EK",
+    "brf": "BRF", "bostadsrattsforening": "BRF",
+    "ideell forening": "Ideell förening", "stiftelse": "Stiftelse", "samfallighet": "Samfällighet",
+    "kommun": "Kommun", "region": "Region", "filial": "Filial", "se": "SE", "europabolag": "SE",
+    "enkelt bolag": "Enkelt bolag",
+}
+_TECKEN = str.maketrans("åäöé", "aaoe")
+
+
+def bolagsform(varde: object) -> str | None:
+    """Bolagsformen som svenska system skriver den: AB, HB, KB, EF, EK, BRF.
+
+    Godtar namnet (`Aktiebolag`, `Enskild firma`), förkortningen och SCB:s
+    tvåsiffriga kod (`49`). En form som inte känns igen sparas som den står:
+    `GmbH` och `Ltd` är inga fel, bara inga svenska former.
+    """
+    ra = text(varde, max_langd=60)
+    if not ra:
+        return None
+    if ra.isdigit():
+        return _FORM_FOR_KOD.get(ra.zfill(2), ra)
+    nyckel = re.sub(r"[^a-z0-9 ]+", " ", ra.casefold().translate(_TECKEN))
+    return _FORM_FOR_NAMN.get(re.sub(r"\s+", " ", nyckel).strip(), ra)
+
+
+#: Så många koder bär SCB:s företagsregister per bolag (Bransch1 till Bransch5).
+MAX_SNI = 5
+
+
+def sni(varde: object) -> str | None:
+    """SNI-koder utan punkt, huvudnäringen först, åtskilda med komma.
+
+    `62.010`, `62010` och `62 010` är samma kod. Flera koder godtas, åtskilda
+    med komma, semikolon eller snedstreck, och högst fem sparas, som i SCB:s
+    register. Två till fem siffror per kod: två är huvudgruppen, fem
+    detaljgruppen. Vilken version koden hör till (SNI 2007 eller SNI 2025, som
+    gäller sedan 8 december 2025) går inte att läsa ur koden och sägs inte här.
+    """
+    ra = text(varde, max_langd=200)
+    if not ra:
+        return None
+    koder: list[str] = []
+    for del_ in re.split(r"[,;/|]", ra):
+        kod = re.sub(r"[\s.]", "", del_)
+        if not kod:
+            continue
+        if not (kod.isdigit() and 2 <= len(kod) <= 5):
+            raise FaltFel("sni_ogiltig", ra)
+        if kod not in koder:
+            koder.append(kod)
+    return ",".join(koder[:MAX_SNI]) or None
+
+
+def sni_visning(kod: str | None) -> str:
+    """`62010` skrivs `62.010`, som i SCB:s egna exempel."""
+    kod = (kod or "").strip()
+    return f"{kod[:2]}.{kod[2:]}" if kod.isdigit() and len(kod) > 2 else kod
 
 
 # -- Kontaktvägar ------------------------------------------------------------

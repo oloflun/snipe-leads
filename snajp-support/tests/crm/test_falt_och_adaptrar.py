@@ -277,6 +277,39 @@ def test_csv_med_semikolon_och_svenska_rubriker():
     assert m.falt["epost"] == "info@kund.se" and m.falt["avtalsslut"] == "2027-03-31"
 
 
+def test_bolagsformen_skrivs_som_svenska_system_skriver_den():
+    for ra, vantat in [("Aktiebolag", "AB"), ("AB (publ)", "AB"), ("49", "AB"), ("Handelsbolag", "HB"),
+                       ("kommanditbolag", "KB"), ("Enskild näringsidkare", "EF"), ("10", "EF"),
+                       ("Ek. för.", "EK"), ("Bostadsrättsförening", "BRF"), ("Ideell förening", "Ideell förening"),
+                       ("72", "Stiftelse"), ("Sole proprietorship", "EF")]:
+        assert falt.bolagsform(ra) == vantat, ra
+    # En form som inte är svensk är inget fel: den står som den skrevs.
+    assert falt.bolagsform("GmbH") == "GmbH" and falt.bolagsform(" Ltd ") == "Ltd"
+    assert falt.bolagsform("") is None and falt.bolagsform(None) is None
+
+
+def test_sni_koder_utan_punkt_huvudnaringen_forst_hogst_fem():
+    assert falt.sni("62.010") == "62010" and falt.sni("62 010") == "62010" and falt.sni(62010) == "62010"
+    assert falt.sni("62.010, 62.020; 70220") == "62010,62020,70220"
+    assert falt.sni("62010,62010") == "62010"                                   # samma kod en gång
+    assert falt.sni("1;2;3".replace("1", "01").replace("2", "02").replace("3", "03")) == "01,02,03"
+    assert falt.sni(",".join(str(41000 + i) for i in range(8))).count(",") == 4  # högst fem
+    assert falt.sni("") is None
+    for trasig in ("IT-konsult", "6", "620100", "62.01a"):
+        with pytest.raises(falt.FaltFel) as fel:
+            falt.sni(trasig)
+        assert fel.value.kod == "sni_ogiltig"
+    assert falt.sni_visning("62010") == "62.010" and falt.sni_visning("62") == "62" and falt.sni_visning(None) == ""
+
+
+def test_mappningen_tolkar_bolagsform_och_sni_fran_kallan():
+    regler = adaptrar.gallande_mappning("generisk", None)
+    m = adaptrar.mappa({"name": "Bygg AB", "legal_form": "Aktiebolag", "sni_code": "41.200; 43.320"}, "bolag", regler)
+    assert m.falt["bolagsform"] == "AB" and m.falt["sni"] == "41200,43320" and m.fel == []
+    trasig = adaptrar.mappa({"name": "Bygg AB", "sni_code": "Byggverksamhet"}, "bolag", regler)
+    assert "sni" not in trasig.falt and trasig.fel == [{"falt": "sni", "kod": "sni_ogiltig", "varde": "Byggverksamhet"}]
+
+
 def test_csv_med_komma_och_for_manga_rader():
     assert adaptrar.tolka_csv("name,org_number\nA AB,556036-0793\n")[0] == {"name": "A AB", "org_number": "556036-0793"}
     with pytest.raises(adaptrar.MappningsFel):

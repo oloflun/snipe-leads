@@ -737,8 +737,8 @@ def mappa(post: Any, objekt: str, mappning: dict[str, dict[str, Any]]) -> Mappad
                 else:
                     ut.falt.update(orgnr=visning, orgnr_nyckel=nyckel, enskild_firma=False)
         satt("momsnr", falt.momsnr)
-        satt("bolagsform", lambda v: falt.text(v, max_langd=60))
-        satt("sni", lambda v: falt.text(v, max_langd=20))
+        satt("bolagsform", falt.bolagsform)
+        satt("sni", falt.sni)
         if not _tomt(ra.get("webbplats")):
             try:
                 url, doman = falt.webbplats(ra["webbplats"])
