@@ -304,3 +304,178 @@ async def test_varje_kolumn_i_koden_finns_i_databasen(miljo):
             assert set(kolumner) <= finns, (tabell, set(kolumner) - finns)
             assert finns - set(kolumner) <= {"synk_andrad_at"}, (tabell, finns - set(kolumner))
     assert set(adaptrar.BOLAGSFALT) <= set(lagring.TABELLER["crm_bolag"])
+
+
+# -- Migration 161: besluten -------------------------------------------------
+
+
+async def test_privatperson_kontakta_inte_och_fria_tidigare_kunder_i_databasen(miljo):
+    lager, a, b = miljo
+    privat, _ = await synk.skapa(lager, a, "bolag", {"namn": "Anna Berg", "privatperson": True,
+                                                    "epost": "anna@example.se"}, kalla="api")
+    assert privat["privatperson"] is True and privat["kontakta_inte"] is True
+    # Databasen bär regeln själv: en privatperson kan inte stå som kontaktbar.
+    with pytest.raises(asyncpg.CheckViolationError):
+        async with lager._scoped(a) as conn:
+            await conn.execute("update crm_bolag set kontakta_inte = false where id = $1::text::uuid", privat["id"])
+    tyst, _ = await synk.skapa(lager, a, "bolag", {"namn": "Tyst AB", "epost": "info@tyst.se",
+                                                  "kontakta_inte": True}, kalla="api")
+    await synk.skapa(lager, a, "person", {"epost": "vd@tyst.se", "bolag_id": tyst["id"]}, kalla="api")
+    await synk.skapa(lager, a, "person", {"epost": "nej@annat.se", "kontakta_inte": True}, kalla="api")
+    await synk.skapa(lager, a, "person", {"epost": "fri@annat.se"}, kalla="api")
+    assert await lagring.kontakta_inte_adresser(lager, a) == {
+        "anna@example.se", "info@tyst.se", "vd@tyst.se", "nej@annat.se"}
+    assert await lagring.kontakta_inte_adresser(lager, b) == set()
+
+    await synk.skapa(lager, a, "bolag", {"namn": "Gamla Kunden AB", "orgnr": ORGNR_A,
+                                         "relation": "tidigare_kund"}, kalla="api")
+    await synk.skapa(lager, a, "bolag", {"namn": "Kund AB", "orgnr": ORGNR_B}, kalla="api")
+    upptagna = {r["company_name"]: r for r in await lagring.upptagna_rader(lager, a)}
+    assert "Gamla Kunden AB" not in upptagna and upptagna["Kund AB"]["bara_orgnr"] is True
+    assert upptagna["Tyst AB"]["bara_orgnr"] is False
+
+    anslutning = await lagring.skapa_anslutning(lager, a, namn="fortnox", system="fortnox", privatpersoner=True)
+    assert anslutning["privatpersoner"] is True
+    assert (await lagring.skapa_anslutning(lager, a, namn="annan"))["privatpersoner"] is False
+
+
+async def test_senast_andrad_forst_och_papperskorgen_i_databasen(miljo):
+    lager, a, b = miljo
+    poster = [(await synk.skapa(lager, a, "bolag", {"namn": namn}, kalla="api"))[0]
+              for namn in ("Alfa AB", "Beta AB", "Gamma AB", "Delta AB")]
+    # Raderna delar transaktion och därmed now(): sätt tiderna för hand.
+    async with lager._scoped(a) as conn:
+        for i, post in enumerate(poster):
+            await conn.execute("update crm_bolag set updated_at = now() - make_interval(mins => $2) "
+                               "where id = $1::text::uuid", post["id"], 10 - i)
+    forsta, markor = await lagring.lista_poster(lager, a, "bolag", ordning="andrad_fallande", limit=3)
+    assert [p["namn"] for p in forsta] == ["Delta AB", "Gamma AB", "Beta AB"] and markor
+    resten, slut = await lagring.lista_poster(lager, a, "bolag", ordning="andrad_fallande", limit=3, markor=markor)
+    assert [p["namn"] for p in resten] == ["Alfa AB"] and slut is None
+
+    for post in poster[:3]:
+        await synk.radera(lager, a, "bolag", post["id"])
+    await synk.radera(lager, a, "bolag", poster[2]["id"], permanent=True)   # töms: hör inte till korgen
+    async with lager._scoped(a) as conn:
+        await conn.execute("update crm_bolag set raderad_at = now() - interval '2 days' where id = $1::text::uuid",
+                           poster[0]["id"])
+    korg, _ = await lagring.lista_poster(lager, a, "bolag", ordning="raderad")
+    assert [p["namn"] for p in korg] == ["Beta AB", "Alfa AB"]
+    sida, markor = await lagring.lista_poster(lager, a, "bolag", ordning="raderad", limit=1)
+    nasta, _ = await lagring.lista_poster(lager, a, "bolag", ordning="raderad", limit=1, markor=markor)
+    assert [p["namn"] for p in sida + nasta] == ["Beta AB", "Alfa AB"]
+    assert (await lagring.lista_poster(lager, b, "bolag", ordning="raderad"))[0] == []
+
+
+# -- Migration 162: händelser och webhooks ----------------------------------
+
+
+async def test_handelseloggen_och_flodet_i_databasen(miljo):
+    from app.crm import handelser
+
+    lager, a, b = miljo
+    bolag, _ = await synk.skapa(lager, a, "bolag", {"namn": "Bygg AB", "orgnr": ORGNR_A}, kalla="api",
+                                via="api", aktor="nyckel:prov")
+    await synk.andra(lager, a, "bolag", bolag["id"], {"telefon": "08-123 456 78", "postort": "Umeå"},
+                     via="app", aktor="anvandare:1")
+    await synk.radera(lager, a, "bolag", bolag["id"])
+    await synk.aterstall(lager, a, "bolag", bolag["id"])
+    flode, markor = await handelser.flode(lager, a)
+    assert [(h["objekt"], h["typ"], h["kalla"]) for h in flode] == [
+        ("bolag", "skapad", "api"), ("bolag", "andrad", "app"), ("bolag", "raderad", "api"),
+        ("bolag", "aterstalld", "api")]
+    assert flode[1]["falt"] == ["postort", "telefon"] and flode[1]["aktor"] == "anvandare:1"
+    assert isinstance(flode[0]["id"], int) and markor == flode[-1]["id"]
+    assert await handelser.flode(lager, a, efter=markor) == ([], markor)
+    assert [h["typ"] for h in (await handelser.flode(lager, a, efter=flode[1]["id"], limit=1))[0]] == ["raderad"]
+    assert (await handelser.flode(lager, a, objekt="person"))[0] == []
+    assert [h["typ"] for h in await handelser.for_post(lager, a, "bolag", bolag["id"])] == [
+        "aterstalld", "raderad", "andrad", "skapad"]
+    # Radskyddet: den andra kunden ser varken flödet eller postens historik.
+    assert (await handelser.flode(lager, b))[0] == []
+    assert await handelser.for_post(lager, b, "bolag", bolag["id"]) == []
+
+
+async def test_webhookarnas_ko_reservation_och_logg_i_databasen(miljo, monkeypatch):
+    from app.crm import webhooks
+
+    lager, a, b = miljo
+    webhooks.nollstall()
+    hake, hemlighet = await webhooks.skapa(lager, a, url="https://kund.example.se/snajp",
+                                           handelser=["company.created"], beskrivning="prov")
+    assert hemlighet.startswith("whsec_") and hake["handelser"] == ["company.created"] and hake["aktiv"] is True
+    assert hemlighet not in str(hake)
+    assert await webhooks.lista(lager, b) == [] and await webhooks.hamta(lager, b, hake["id"]) is None
+
+    await synk.skapa(lager, a, "bolag", {"namn": "Bygg AB"}, kalla="api")
+    await synk.skapa(lager, a, "person", {"epost": "anna@bygg.se"}, kalla="api")     # inte prenumererad
+    (leverans,) = await webhooks.leveranser(lager, a, hake["id"])
+    assert leverans["handelsetyp"] == "company.created" and leverans["status"] == "vantar"
+    assert leverans["kropp"]["data"]["object"] == "company" and leverans["forsok"] == 0
+
+    # Reservationen: samma leverans tas inte två gånger.
+    tagna = await webhooks._ta(lager, a, 10)
+    assert [t["id"] for t in tagna] == [leverans["id"]] and tagna[0]["forsok"] == 1
+    assert await webhooks._ta(lager, a, 10) == [] and await webhooks._ta(lager, b, 10) == []
+
+    # Leveransen: mottagaren svarar 500, sedan 200.
+    svar = {"status": 500}
+
+    async def anropa(metod, url, **kw):
+        class Svar:
+            status = svar["status"]
+            ok = 200 <= svar["status"] < 300
+        return Svar()
+
+    monkeypatch.setattr(webhooks.natvakt, "anropa", anropa)
+    async with lager._scoped(a) as conn:
+        await conn.execute("update crm_webhook_leveranser set nasta_forsok_at = now() - interval '1 second'")
+    assert await webhooks.leverera_for_kund(lager, a) == {"levererade": 0, "omforsok": 1, "misslyckade": 0}
+    (rad,) = await webhooks.leveranser(lager, a, hake["id"])
+    assert (rad["status"], rad["forsok"], rad["statuskod"], rad["fel"]) == ("vantar", 2, 500, "HTTP 500")
+    assert (await webhooks.hamta(lager, a, hake["id"]))["fel_i_rad"] == 1
+    svar["status"] = 200
+    assert (await webhooks.skicka_om(lager, a, hake["id"], rad["id"]))["forsok"] == 0
+    # Testet är en enda transaktion, så databasens now() står still på dess början.
+    async with lager._scoped(a) as conn:
+        await conn.execute("update crm_webhook_leveranser set nasta_forsok_at = now() - interval '1 second'")
+    assert await webhooks.leverera_for_kund(lager, a) == {"levererade": 1, "omforsok": 0, "misslyckade": 0}
+    (rad,) = await webhooks.leveranser(lager, a, hake["id"])
+    assert rad["status"] == "levererad" and rad["levererad_at"] and rad["statuskod"] == 200
+    klar = await webhooks.hamta(lager, a, hake["id"])
+    assert klar["fel_i_rad"] == 0 and klar["senast_ok_at"] and not await webhooks._har_ko(lager, a)
+
+    # Loggen gallras efter trettio dagar, och webhooken tar sina leveranser med sig.
+    async with lager._scoped(a) as conn:
+        await conn.execute("update crm_webhook_leveranser set created_at = now() - interval '31 days'")
+    await webhooks._gallra(lager, a)
+    assert await webhooks.leveranser(lager, a, hake["id"]) == []
+    await webhooks.prova(lager, a, hake["id"])
+    assert await webhooks.ta_bort(lager, a, hake["id"])
+    async with lager._scoped(a) as conn:
+        assert await conn.fetchval("select count(*) from crm_webhook_leveranser") == 0
+    webhooks.nollstall()
+
+
+# -- Migration 163: rapporten till supporten ---------------------------------
+
+
+async def test_supportrapporten_sparas_pa_korningen_i_databasen(miljo):
+    from app.crm import supportrapport
+
+    lager, a, b = miljo
+    anslutning = await lagring.skapa_anslutning(lager, a, namn="egen", system="generisk")
+    korning = await lagring.skapa_korning(lager, a, anslutning_id=anslutning["id"])
+    await synk.synka_sats(lager, a, anslutning, korning, "bolag", [
+        {"id": "1", "name": "Rent AB"}, {"id": "2", "name": "Fel Telefon AB", "phone": "12 34 56 7"}, {"id": "3"}])
+    klar = await synk.slutfor(lager, a, anslutning, korning)
+    assert klar["support_lamnad_at"] and klar["support_arende"] is None
+    rapport = klar["supportrapport"]
+    assert rapport["koder"] == {"saknar_namn": 1, "telefon_saknar_riktnummer": 1}
+    assert rapport["rader"][0]["faltfel"] == [{"falt": "telefon", "kod": "telefon_saknar_riktnummer", "form": "99 99 99 9"}]
+    assert rapport["anslutning"]["system"] == "generisk" and rapport["korning"]["raknare"]["totalt"] == 3
+    assert supportrapport.enkelt(klar) == [
+        {"sort": "ogiltigt_varde", "objekt": "bolag", "falt": "telefon", "antal": 1},
+        {"sort": "saknar_uppgift", "objekt": "bolag", "falt": None, "antal": 1}]
+    assert (await supportrapport.satt_arende(lager, a, klar["id"], "F-7KQ2"))["support_arende"] == "F-7KQ2"
+    assert await supportrapport.satt_arende(lager, b, klar["id"], "F-FEL") is None
