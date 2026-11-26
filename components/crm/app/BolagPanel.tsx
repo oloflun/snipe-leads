@@ -23,6 +23,7 @@ import {
   Plug,
   Receipt,
   Tag,
+  Target,
   Trash2,
   UserRound,
   Users,
@@ -44,12 +45,15 @@ import { Tab, TabList } from "@astryxdesign/core/TabList";
 import { Text } from "@astryxdesign/core/Text";
 import { Timestamp } from "@astryxdesign/core/Timestamp";
 import type { Bolagsfalt } from "@/components/crm/app/BolagFormular";
-import { Tidslinje } from "@/components/crm/app/Tidslinje";
+import { LEADLAGE, Tidslinje } from "@/components/crm/app/Tidslinje";
 import { Kallpiller, Lankpiller, Personchip, Privatpersonetikett, Relationsetikett, tonFor, tonklass, useSmal, utanBolagsform } from "@/components/crm/app/kit";
 import { SYSTEMNAMN, crmAnrop, orgnrVisning, type Bolag, type Person, type Sida as Svarssida } from "@/lib/crm/api";
 import { useLocale, type Localized } from "@/lib/i18n";
 
 type Flik = "oversikt" | "personer" | "kalla" | "historik";
+
+/** Bolagets leads hos Iris (`iris_ut` i crm_v1_tidslinje.py). */
+type Irislage = { leads: { id: string; name: string | null; status: string | null; created_at: string | null }[]; outcome: string | null; do_not_contact: boolean };
 
 /** Etikettkolumnen: en knapp tredjedel av panelen (Twentys rutnät), smalare på telefon. */
 const ETIKETT_BRED = { position: "start" as const, width: 160 };
@@ -76,7 +80,8 @@ export function BolagPanel({
   laddar,
   stang,
   redigera,
-  taBort
+  taBort,
+  uppdaterat
 }: Readonly<{
   bolag: Bolag | null;
   /** Sant medan bolaget hämtas (öppnat från en adress). */
@@ -84,6 +89,8 @@ export function BolagPanel({
   stang: () => void;
   redigera: (falt?: Bolagsfalt) => void;
   taBort: (b: Bolag) => void;
+  /** Ett utfall ändrade bolaget (kund, kontakta inte): listan bakom får den nya posten. */
+  uppdaterat?: (b: Bolag) => void;
 }>) {
   const { text, locale } = useLocale();
   const smal = useSmal();
@@ -93,6 +100,8 @@ export function BolagPanel({
   const flikikon = (i: LucideIcon) => (smal ? undefined : <Icon icon={i} size="sm" />);
   const [flik, setFlik] = useState<Flik>("oversikt");
   const [personer, setPersoner] = useState<Person[] | null>(null);
+  // Bolagets leads hos Iris och vad de betyder här (GET /v1/companies/{id}/iris).
+  const [iris, setIris] = useState<Irislage | null>(null);
   const id = bolag?.id;
   const oppen = bolag != null || laddar;
 
@@ -109,6 +118,19 @@ export function BolagPanel({
     };
   }, [id]);
 
+  // Läget hos Iris läses om när posten ändrats: ett utfall ändrar båda.
+  const andrad = bolag?.updated_at;
+  useEffect(() => {
+    if (!id) return setIris(null);
+    let aktuell = true;
+    crmAnrop<Irislage>(`/v1/companies/${encodeURIComponent(id)}/iris`)
+      .then((s) => aktuell && setIris(s))
+      .catch(() => aktuell && setIris(null));
+    return () => {
+      aktuell = false;
+    };
+  }, [id, andrad]);
+
   // Ett nytt bolag börjar alltid på Översikt.
   useEffect(() => {
     setFlik("oversikt");
@@ -116,13 +138,19 @@ export function BolagPanel({
 
   const sprak = locale === "sv" ? "sv-SE" : "en-GB";
   const namn = bolag?.name ?? text({ sv: "Namnlöst bolag", en: "Unnamed company" });
-  // En privatperson kontaktas aldrig, oavsett vad do_not_contact säger.
-  const kontaktaInte = bolag?.private_person === true || bolag?.do_not_contact === true;
+  // En privatperson kontaktas aldrig, oavsett vad do_not_contact säger. Ett lead hos Iris
+  // som bett att slippa kontakt spärrar också bolaget, även om posten inte är märkt.
+  const leadetSparrar = iris?.do_not_contact === true && bolag?.do_not_contact !== true && bolag?.private_person !== true;
+  const kontaktaInte = bolag?.private_person === true || bolag?.do_not_contact === true || iris?.do_not_contact === true;
   const sparrskal = !kontaktaInte
     ? undefined
     : bolag?.private_person
       ? text({ sv: "Privatpersoner kontaktas aldrig.", en: "Private persons are never contacted." })
-      : text({ sv: "Bolaget ska inte kontaktas.", en: "The company is not to be contacted." });
+      : leadetSparrar
+        ? text({ sv: "Bolagets lead hos Iris har bett att slippa kontakt.", en: "The company's lead with Iris has asked not to be contacted." })
+        : text({ sv: "Bolaget ska inte kontaktas.", en: "The company is not to be contacted." });
+  const lead = iris?.leads[0];
+  const leadlage = lead ? LEADLAGE[lead.status ?? ""] : undefined;
   const ikon = (i: LucideIcon) => <Icon icon={i} size="sm" color="inherit" />;
 
   /** Ett tomt värde är en dämpad "Lägg till" som öppnar redigeringen på fältet. */
@@ -283,12 +311,27 @@ export function BolagPanel({
                               <Badge variant="error" label={text({ sv: "Kontakta inte", en: "Do not contact" })} />
                               {bolag.private_person ? (
                                 <span className="text-[0.8125rem] text-ink-muted">{text({ sv: "Privatperson", en: "Private person" })}</span>
+                              ) : leadetSparrar ? (
+                                <span className="text-[0.8125rem] text-ink-muted">{text({ sv: "Leadet hos Iris bad om det", en: "The lead with Iris asked for it" })}</span>
                               ) : null}
                             </span>
                           ) : (
                             <span className="crm-varde text-ink-muted">{text({ sv: "Får kontaktas", en: "May be contacted" })}</span>
                           )
                         )}
+                        {/* Bara när bolaget är ett lead hos Iris: läget där, så att säljaren ser det utan att byta vy. */}
+                        {lead
+                          ? rad(
+                              { sv: "Hos Iris", en: "With Iris" },
+                              Target,
+                              <span className="crm-varde">
+                                {leadlage ? text(leadlage) : text({ sv: "Lead", en: "Lead" })}
+                                {iris && iris.leads.length > 1 ? (
+                                  <span className="ml-2 text-[0.8125rem] text-ink-muted">{text({ sv: `${iris.leads.length} leads`, en: `${iris.leads.length} leads` })}</span>
+                                ) : null}
+                              </span>
+                            )
+                          : null}
                       </MetadataList>
 
                       <MetadataList title={text({ sv: "Kontakt", en: "Contact" })} label={ETIKETT}>
@@ -409,7 +452,7 @@ export function BolagPanel({
                     )
                   ) : null}
 
-                  {flik === "historik" ? <Tidslinje objekt="companies" id={bolag.id} andrad={bolag.updated_at} /> : null}
+                  {flik === "historik" ? <Tidslinje objekt="companies" id={bolag.id} andrad={bolag.updated_at} harLead={(iris?.leads.length ?? 0) > 0} bolagAndrat={uppdaterat} /> : null}
                 </div>
               </>
             )}

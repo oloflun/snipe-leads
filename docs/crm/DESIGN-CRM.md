@@ -181,8 +181,8 @@ Astryx `Table`, `density="balanced"` (rad cirka 44 px), radavdelare, hover.
 Fliken Historik är postens hela tidslinje, i bolagets, personens och affärens panel
 (`Tidslinje.tsx`). En komponent, ingen flik till för anteckningar eller uppgifter.
 
-- **Skrivytan** överst: tre små sekundära knappar (Anteckning, Uppgift, Samtal eller
-  möte). Ett tryck öppnar formuläret på samma plats, i en tvättad ruta med 16 px radie
+- **Skrivytan** överst: små sekundära knappar (Anteckning, Uppgift, Aktivitet, och Utfall
+  för ett bolag som är ett lead hos Iris). Ett tryck öppnar formuläret på samma plats, i en tvättad ruta med 16 px radie
   (`.crm-skrivyta`), med Avbryt och Spara nere till höger.
 - **Att göra:** öppna uppgifter som rader med kryssruta, titel och förfallodag till
   höger (passerad dag i varningsfärg, och utsagt för skärmläsare). En öppen uppgift står

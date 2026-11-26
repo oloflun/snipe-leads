@@ -42,7 +42,7 @@ import { Timestamp } from "@astryxdesign/core/Timestamp";
 import { useToast } from "@astryxdesign/core/Toast";
 import { Objektikon, type Ton } from "@/components/crm/app/kit";
 import { belopp } from "@/lib/crm/affar";
-import { CrmFel, SYSTEMNAMN, crmAnrop } from "@/lib/crm/api";
+import { CrmFel, SYSTEMNAMN, crmAnrop, type Bolag } from "@/lib/crm/api";
 import { faltetikett, uppraknat } from "@/lib/crm/felkoder";
 import { useLocale, type Localized } from "@/lib/i18n";
 
@@ -59,7 +59,39 @@ export type Tidslinjepost = {
 };
 
 type Objekt = "companies" | "people" | "deals";
-type Skriver = "anteckning" | "uppgift" | "aktivitet";
+type Skriver = "anteckning" | "uppgift" | "aktivitet" | "utfall";
+type Utfallskod = "no_answer" | "call_back" | "not_interested" | "do_not_contact" | "meeting_booked" | "won";
+
+/**
+ * Utfallen som sätts på bolaget och verkställs i leadsflödet hos Iris
+ * (`POST /v1/companies/{id}/outcome`), med vad vart och ett leder till.
+ */
+const UTFALL: Record<Utfallskod, { namn: Localized; foljd: Localized }> = {
+  no_answer: {
+    namn: { sv: "Ej svar", en: "No answer" },
+    foljd: { sv: "Leadet kommer tillbaka i återkopplingslistan om två arbetsdagar.", en: "The lead returns to the follow-up list in two working days." }
+  },
+  call_back: {
+    namn: { sv: "Återkom", en: "Call back" },
+    foljd: { sv: "Leadet kommer tillbaka i återkopplingslistan den dagen.", en: "The lead returns to the follow-up list on that day." }
+  },
+  not_interested: {
+    namn: { sv: "Ej intresserad", en: "Not interested" },
+    foljd: { sv: "Väntande utskick till bolagets leads stoppas.", en: "Pending sends to the company's leads are stopped." }
+  },
+  do_not_contact: {
+    namn: { sv: "Kontakta inte", en: "Do not contact" },
+    foljd: { sv: "Alla utskick stoppas och adressen spärras. Bolaget märks Kontakta inte.", en: "All sends are stopped and the address is blocked. The company is marked Do not contact." }
+  },
+  meeting_booked: {
+    namn: { sv: "Möte bokat", en: "Meeting booked" },
+    foljd: { sv: "Väntande utskick stoppas och leadet står som möte bokat.", en: "Pending sends are stopped and the lead shows as meeting booked." }
+  },
+  won: {
+    namn: { sv: "Vunnen", en: "Won" },
+    foljd: { sv: "Bolaget blir kund här, och väntande utskick stoppas.", en: "The company becomes a customer here, and pending sends are stopped." }
+  }
+};
 type Aktivitetstyp = "call" | "meeting" | "email" | "visit" | "other";
 
 /** Fältet som knyter en ny anteckning, uppgift eller aktivitet till posten. */
@@ -84,7 +116,10 @@ const SAMTALSUTFALL: Record<string, Localized> = {
 };
 
 /** Leadets lägen hos Iris. Ett läge som saknas här skrivs inte ut som kod. */
-const LEADLAGE: Record<string, Localized> = {
+export const LEADLAGE: Record<string, Localized> = {
+  meeting: { sv: "Möte bokat", en: "Meeting booked" },
+  won: { sv: "Vunnen", en: "Won" },
+  lost: { sv: "Ej intresserad", en: "Not interested" },
   new: { sv: "Ny", en: "New" },
   ready: { sv: "Klar att skicka", en: "Ready to send" },
   recommended: { sv: "Rekommenderad", en: "Recommended" },
@@ -215,8 +250,23 @@ function varifran(p: Tidslinjepost, text: (l: Localized) => string): string | nu
  *
  * Överst skrivs nytt: en anteckning, en uppgift eller en aktivitet, knuten till
  * posten. Öppna uppgifter står kvar som en lista att bocka av tills de är klara.
+ * Ett bolag som är ett lead hos Iris får också Utfall, som verkställs i leadsflödet.
  */
-export function Tidslinje({ objekt, id, andrad }: Readonly<{ objekt: Objekt; id: string; andrad?: string | null }>) {
+export function Tidslinje({
+  objekt,
+  id,
+  andrad,
+  harLead = false,
+  bolagAndrat
+}: Readonly<{
+  objekt: Objekt;
+  id: string;
+  andrad?: string | null;
+  /** Bolaget har ett lead hos Iris: då går ett utfall att sätta, och det gäller leadet också. */
+  harLead?: boolean;
+  /** Utfallet ändrade bolaget (kund, kontakta inte): panelen bakom får den nya posten. */
+  bolagAndrat?: (b: Bolag) => void;
+}>) {
   const { text, locale } = useLocale();
   // Panelen ligger under <bas>/<vy>; en affär på tidslinjen öppnas i <bas>/affarer.
   const bas = (usePathname() ?? "/crm/bolag").replace(/\/[^/]+\/?$/, "");
@@ -232,6 +282,7 @@ export function Tidslinje({ objekt, id, andrad }: Readonly<{ objekt: Objekt; id:
   const [rubrik, setRubrik] = useState("");
   const [forfaller, setForfaller] = useState("");
   const [typ, setTyp] = useState<Aktivitetstyp>("call");
+  const [utfall, setUtfall] = useState<Utfallskod>("no_answer");
   const [saknas, setSaknas] = useState(false);
 
   useEffect(() => {
@@ -257,12 +308,14 @@ export function Tidslinje({ objekt, id, andrad }: Readonly<{ objekt: Objekt; id:
     setRubrik("");
     setForfaller("");
     setTyp("call");
+    setUtfall("no_answer");
     setSaknas(false);
   }, []);
 
   async function spara(e: React.FormEvent) {
     e.preventDefault();
     if (!skriver || sparar) return;
+    if (skriver === "utfall") return void sparaUtfall();
     const koppling = { [KOPPLING[objekt]]: id };
     let vag = "/v1/notes";
     let kropp: Record<string, unknown>;
@@ -288,6 +341,38 @@ export function Tidslinje({ objekt, id, andrad }: Readonly<{ objekt: Objekt; id:
       visa({
         type: "error",
         body: text(orsak instanceof CrmFel ? orsak.text : { sv: "Det gick inte att spara. Försök igen.", en: "Could not save. Try again." }),
+        uniqueID: "crm-tidslinje"
+      });
+    } finally {
+      setSparar(false);
+    }
+  }
+
+  /** Utfallet verkställs på bolagets leads hos Iris och på posten. Svaret säger hur många leads det gällde. */
+  async function sparaUtfall() {
+    if (utfall === "call_back" && !forfaller) return setSaknas(true);
+    setSparar(true);
+    try {
+      const svar = await crmAnrop<{ company: Bolag; lead_ids: string[] }>(`/v1/companies/${encodeURIComponent(id)}/outcome`, {
+        method: "POST",
+        body: JSON.stringify({ outcome: utfall, ...(utfall === "call_back" ? { call_back_on: forfaller } : {}), ...(brodtext.trim() ? { note: brodtext.trim() } : {}) })
+      });
+      const n = svar.lead_ids.length;
+      const namn = text(UTFALL[utfall].namn);
+      visa({
+        body:
+          n === 0
+            ? text({ sv: `${namn} är sparat på bolaget. Bolaget har inget lead hos Iris.`, en: `${namn} is saved on the company. The company has no lead with Iris.` })
+            : text({ sv: `${namn} är sparat, och gäller också ${n === 1 ? "bolagets lead" : `bolagets ${n} leads`} hos Iris.`, en: `${namn} is saved, and also applies to the company's ${n === 1 ? "lead" : `${n} leads`} with Iris.` }),
+        uniqueID: "crm-tidslinje"
+      });
+      bolagAndrat?.(svar.company);
+      stang();
+      setOmgang((x) => x + 1);
+    } catch (orsak) {
+      visa({
+        type: "error",
+        body: text(orsak instanceof CrmFel ? orsak.text : { sv: "Utfallet gick inte att spara. Försök igen.", en: "The outcome could not be saved. Try again." }),
         uniqueID: "crm-tidslinje"
       });
     } finally {
@@ -341,7 +426,8 @@ export function Tidslinje({ objekt, id, andrad }: Readonly<{ objekt: Objekt; id:
       <div className="flex flex-wrap gap-2">
         {knapp("anteckning", StickyNote, { sv: "Anteckning", en: "Note" })}
         {knapp("uppgift", ListTodo, { sv: "Uppgift", en: "Task" })}
-        {knapp("aktivitet", Phone, { sv: "Samtal eller möte", en: "Call or meeting" })}
+        {knapp("aktivitet", Phone, { sv: "Aktivitet", en: "Activity" })}
+        {objekt === "companies" && harLead ? knapp("utfall", Flag, { sv: "Utfall", en: "Outcome" }) : null}
       </div>
     ) : (
       <form onSubmit={spara} className="crm-skrivyta flex flex-col gap-3" noValidate>
@@ -409,6 +495,42 @@ export function Tidslinje({ objekt, id, andrad }: Readonly<{ objekt: Objekt; id:
                 hasAutoFocus
               />
             </div>
+            <TextArea label={text({ sv: "Anteckning", en: "Note" })} rows={3} value={brodtext} onChange={setBrodtext} width="100%" isOptional />
+          </>
+        ) : null}
+        {skriver === "utfall" ? (
+          <>
+            <div className={`grid grid-cols-1 gap-3 ${utfall === "call_back" ? "sm:grid-cols-2" : ""}`}>
+              <Selector
+                label={text({ sv: "Utfall", en: "Outcome" })}
+                value={utfall}
+                onChange={(v) => {
+                  if (!v) return;
+                  setUtfall(v as Utfallskod);
+                  setSaknas(false);
+                }}
+                options={(Object.keys(UTFALL) as Utfallskod[]).map((u) => ({ value: u, label: text(UTFALL[u].namn) }))}
+                width="100%"
+              />
+              {utfall === "call_back" ? (
+                <DateInput
+                  label={text({ sv: "Återkom den", en: "Call back on" })}
+                  value={iso(forfaller)}
+                  onChange={(v) => {
+                    setForfaller(v ?? "");
+                    setSaknas(false);
+                  }}
+                  weekStartsOn="mon"
+                  format="date"
+                  width="100%"
+                  status={saknas ? { type: "error" as const, message: text({ sv: "Välj en dag.", en: "Choose a day." }) } : undefined}
+                />
+              ) : null}
+            </div>
+            {/* Vad utfallet leder till, innan det sparas: det gäller bolagets leads hos Iris också. */}
+            <Text type="supporting" color="secondary">
+              {text(UTFALL[utfall].foljd)}
+            </Text>
             <TextArea label={text({ sv: "Anteckning", en: "Note" })} rows={3} value={brodtext} onChange={setBrodtext} width="100%" isOptional />
           </>
         ) : null}

@@ -750,6 +750,11 @@ export function BolagVy() {
         stang={() => sattPost(null)}
         redigera={(falt) => post && setFormular({ bolag: post, fokus: falt ?? null })}
         taBort={(b) => setRadera([b])}
+        uppdaterat={(b) => {
+          setPost(b);
+          setRader((forr) => forr.map((r) => (r.id === b.id ? b : r)));
+          void hamtaRakning();
+        }}
       />
 
       <BolagFormular

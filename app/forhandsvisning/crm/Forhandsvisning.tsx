@@ -471,6 +471,13 @@ function tidslinje(objekt: "companies" | "people" | "deals", id: string): Tidsra
     .sort((x, y) => y.at.localeCompare(x.at));
 }
 
+/** Bolag som är ett lead hos Iris i förhandsvisningen: samma urval som får en full tidslinje. */
+const harLead = (b: Bolag) => !b.private_person && !b.deleted_at && /^b\d+$/.test(b.id) && Number(b.id.slice(1)) % 3 !== 2;
+/** Leadets läge per bolag, efter ett utfall. Utan utfall har leadet svarat. */
+const LEADLAGEN: Record<string, string> = {};
+const UTFALLSKOD: Record<string, string> = { no_answer: "ej_svar", call_back: "aterkom", not_interested: "ej_intresserad", do_not_contact: "kontakta_inte", meeting_booked: "mote" };
+const UTFALLSLAGE: Record<string, string> = { not_interested: "lost", do_not_contact: "suppressed", meeting_booked: "meeting", won: "won" };
+
 /** Uppgifter som bockats av i förhandsvisningen. */
 const KLARA: string[] = [];
 
@@ -647,6 +654,37 @@ async function svara(url: URL, init?: RequestInit): Promise<Response> {
     // Ett bolag skapat för hand i förhandsvisningen har bara sin skapelse.
     if (b.source === "api") return json({ data: [{ seq: 1, object: "company", id: b.id, type: "created", fields: [], source: "app", actor: null, at: b.created_at }] });
     return json({ data: historik("company", b.id, b.created_at, b.updated_at, b.external_ids[0]?.connection) });
+  }
+  // ---- Bolaget hos Iris och utfallet (crm_v1_tidslinje.py) ----------------------
+  const irisdel = vag.match(/^\/v1\/companies\/([^/]+)\/(iris|outcome)$/);
+  if (irisdel) {
+    const b = BOLAG.find((x) => x.id === decodeURIComponent(irisdel[1]) && !x.deleted_at);
+    if (!b) return json({ detail: { code: "not_found", message: "The record does not exist.", meddelande: "Posten finns inte." } }, 404);
+    const lage = LEADLAGEN[b.id] ?? "replied";
+    if (irisdel[2] === "iris" && metod === "GET") {
+      return json({ leads: harLead(b) ? [{ id: "l1", name: b.name, status: lage, created_at: iso(24 * 9) }] : [], outcome: null, do_not_contact: b.do_not_contact === true || lage === "suppressed" });
+    }
+    if (irisdel[2] === "outcome" && metod === "POST") {
+      const utfall = String(kropp.outcome ?? "");
+      if (utfall === "call_back" && !kropp.call_back_on) {
+        return json({ detail: { code: "call_back_date_required", message: "call_back needs call_back_on.", meddelande: "Återkom kräver ett datum i call_back_on." } }, 422);
+      }
+      const at = new Date().toISOString();
+      if (harLead(b)) {
+        if (UTFALLSLAGE[utfall]) LEADLAGEN[b.id] = UTFALLSLAGE[utfall];
+        const rad: Tidsrad = utfall === "won"
+          ? { key: `st:ny${radnummer++}`, type: "lead_status", at, origin: "iris", title: null, text: null, data: { from: lage, to: "won" }, link: { kind: "lead", id: "l1" } }
+          : { key: `samtal:ny${radnummer++}`, type: "call", at, origin: "iris", title: null, text: kropp.note ? String(kropp.note) : null, data: { outcome: UTFALLSKOD[utfall], call_back_on: kropp.call_back_on ?? null }, link: { kind: "lead", id: "l1" } };
+        (SKRIVET[`companies:${b.id}`] ??= []).unshift(rad);
+      }
+      if (utfall === "do_not_contact") b.do_not_contact = true;
+      if (utfall === "won") {
+        b.relation = "customer";
+        b.customer_since ??= at.slice(0, 10);
+      }
+      if (utfall === "do_not_contact" || utfall === "won") b.updated_at = at;
+      return json({ company: b, lead_ids: harLead(b) ? ["l1"] : [] });
+    }
   }
   const bolagsdel = vag.match(/^\/v1\/companies\/([^/]+)(\/restore)?$/);
   if (bolagsdel) {

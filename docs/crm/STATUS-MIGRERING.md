@@ -71,7 +71,7 @@ fas 4 respektive fas 5.
 | Uppgifter, anteckningar, aktiviteter | klart, med luckor | Skrivs i historikfliken på bolag, person och affär (`e0a7cd21`). Uppgifter bockas av där. **Inte gjort:** ändra eller ta bort en anteckning, uppgift eller aktivitet i gränssnittet, en samlad uppgiftslista över alla poster, ansvarig på uppgiften |
 | Bilagor | klart i backend | Bilagor i databasen, 10 MB per fil och 500 MB per kund (agentens val, behöver Antons dom). **Inget gränssnitt än** |
 | Tidslinje mot leads, mejl, samtal och ärenden | klart | `tidslinje.py`, nu också med CRM:ets anteckningar, aktiviteter, uppgifter och affärer, och en tidslinje för affären (`35672915`). Historikfliken i de tre panelerna läser den (`e0a7cd21`). Raderna från Iris och supporten leder inte vidare till leadet, konversationen eller ärendet än |
-| Utfall speglas åt båda håll | klart i backend | `utfall.py`. **Inget gränssnitt än** |
+| Utfall speglas åt båda håll | klart | `utfall.py`. Sätts i historikens skrivyta på ett bolag som är ett lead hos Iris, och läget hos Iris står i bolagets översikt. Ett lead som bett att slippa kontakt spärrar bolagets snabbval. Sett i förhandsvisningen, inte kört mot leadsflödet |
 | Samlad kundlista, Iris och Egna | klart i backend | `kundlista.py`, `GET /customers`. **Inget gränssnitt än** |
 | Svensk standard i koden | pågår | Klart: organisationsnummer, moms, telefon, postnummer, bolagsform, SNI, privatperson. Inte gjort: SEK-format i hela ytan, registeruppslag, NIX |
 | Sammanställning: vad som ändras mot Twenty och varför | klart | `docs/crm/SVENSK-STANDARD.md`, 81 rader och tio frågor till Anton |

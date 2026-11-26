@@ -35,7 +35,15 @@ gränssnitt, och varje punkt går att ändra.
    och en rad som säger 70 procent bredvid Vunnen läses som ett fel.
 7. **Öppet värde och viktat värde står i vyraden, i räknefotens stil.** Inte som en egen rad
    nyckeltal över tavlan. Annan valuta än kronor räknas inte in i de två talen.
-8. **Byggcachen ligger på D:.** C: var full och en commit föll. Cachen för det här
+8. **Utfall sätts bara på ett bolag som är ett lead hos Iris.** Utfallet är leadsflödets
+   begrepp: utan lead ändrar Ej svar och Återkom ingenting, och knappen hade då sparat i
+   tomma luften. Kontakta inte och kund går att sätta på vilket bolag som helst under
+   Redigera. Skrivytans tredje knapp heter Aktivitet (samtal, möte, mejl, besök väljs i
+   formuläret), så att fyra knappar ryms på en rad och inte krockar med Utfall.
+9. **Ett lead som bett att slippa kontakt spärrar bolaget i panelen.** API:t säger det i
+   `GET /companies/{id}/iris`. Panelen stänger då Mejla och Ring och säger varför, även om
+   posten själv inte är märkt.
+10. **Byggcachen ligger på D:.** C: var full och en commit föll. Cachen för det här
    worktreet pekas till `D:\snajp-crm-next\cache`, med en länk till paketen bredvid och
    inte i cachen, så att en rensning av cachen aldrig kan följa länken in i paketen.
 
