@@ -457,6 +457,24 @@ async def test_webhookarnas_ko_reservation_och_logg_i_databasen(miljo, monkeypat
     webhooks.nollstall()
 
 
+# -- Tidslinjen: frågan mot prospekten --------------------------------------
+
+
+async def test_tidslinjens_prospektfraga_i_databasen(miljo):
+    """Bara om prospekttabellen har leadsflödets kolumner (hela kedjan rest):
+    frågan läser den genererade kolumnen foretagsnyckel."""
+    from app.crm import tidslinje
+
+    lager, a, b = miljo
+    async with lager._scoped(a) as conn:
+        kolumner = {r["column_name"] for r in await conn.fetch(
+            "select column_name from information_schema.columns where table_name = 'prospects'")}
+    if not {"foretagsnyckel", "contact_email", "origin", "company_name"} <= kolumner:
+        pytest.skip("prospects saknar leadsflödets kolumner i den här databasen")
+    assert await tidslinje._prospekt(lager, a, nycklar=["5560360793"], adresser=["ingen@ingenstans.se"]) == []
+    assert await tidslinje._prospekt(lager, b, nycklar=[], adresser=[]) == []
+
+
 # -- Migration 163: rapporten till supporten ---------------------------------
 
 
