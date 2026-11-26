@@ -110,18 +110,26 @@ export type Oversikt = {
   korningar: Korning[];
 };
 
+/**
+ * Ett fält som API:t inte kunde tolka (`detail.fields` vid 422 `invalid_fields`):
+ * fältets engelska namn (`org_number`, `address.postal_code`) och felkoden, som
+ * `lib/crm/felkoder.ts` (`FALTKODER`) översätter.
+ */
+export type Faltfel = { field: string; code: string };
+
 /** Ett fel från API:t, med texten på båda språken när API:t ger den. */
 export class CrmFel extends Error {
   constructor(
     readonly text: Localized,
     readonly status: number,
-    readonly kod: string | null
+    readonly kod: string | null,
+    readonly falt: Faltfel[] = []
   ) {
     super(text.sv);
   }
 }
 
-type Felkropp = { detail?: string | { code?: string; message?: string; meddelande?: string } };
+type Felkropp = { detail?: string | { code?: string; message?: string; meddelande?: string; fields?: Faltfel[] } };
 
 export async function crmAnrop<T>(vag: string, init?: RequestInit): Promise<T> {
   const svar = await fetch(`/api/snajp-support/crm${vag}`, {
@@ -136,7 +144,8 @@ export async function crmAnrop<T>(vag: string, init?: RequestInit): Promise<T> {
     const okant = { sv: `Anropet gick inte igenom (HTTP ${svar.status}).`, en: `The request failed (HTTP ${svar.status}).` };
     const text =
       typeof d === "string" ? { sv: d, en: d } : d ? { sv: d.meddelande ?? d.message ?? okant.sv, en: d.message ?? d.meddelande ?? okant.en } : okant;
-    throw new CrmFel(text, svar.status, typeof d === "object" && d ? (d.code ?? null) : null);
+    const objekt = typeof d === "object" && d ? d : null;
+    throw new CrmFel(text, svar.status, objekt?.code ?? null, Array.isArray(objekt?.fields) ? objekt.fields : []);
   }
   return kropp as T;
 }

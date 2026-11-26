@@ -221,10 +221,20 @@ spacing, italic display headings and em-dashes anywhere in the app-surface sourc
 `components/ui.tsx`: every component is Astryx (`@astryxdesign/core`), and the look comes from
 one theme, `lib/crm/astryx/snajpTema.ts`. The theme sets no colours of its own. Each Astryx role
 points at a token in this file (`oklch(var(--ink))`, `oklch(var(--paper2))`, and so on), so dark
-mode and a tenant palette reach the CRM through the same variables as the rest of the app. The
-same rules hold as on every app surface: Fraunces for the page title only, hairlines not
-shadows, ochre for the selected and for focus, the primary button in ink, and the rail as the
-one tonal inversion (ink in light mode, and the light `--ink` in dark mode, with `--paper` text).
+mode and a tenant palette reach the CRM through the same variables as the rest of the app.
+
+**The CRM has its own form (Anton 2026-11-26).** The first version carried the dashboard's dark
+rail and a bare table, and Anton rejected it as generic. The CRM now takes structure and finish
+from Twenty, form from Astryx and only palette, Fraunces headings and these rules from Snajp.
+The contract is `docs/crm/DESIGN-CRM.md`. What that means against the rest of this section:
+there is NO ink rail (the navigation is light, on the `--paper2` wash, and the content is a
+raised sheet in `--paper` with a 24 px corner); radii are 6/10/16/24, controls 32/36/44 px and
+body text 14 px on desktop; a record is a chip with an avatar, a link is a pill, a relation is
+a label with a status dot; Fraunces carries the page title, the record name in its panel and
+the numerals in the key-figure cards; cards and floating surfaces have a hairline plus a soft
+`--seal` shadow. Unchanged: colour only from tokens, ochre for focus, progress and one
+highlighted card per page, the primary button in ink, no kickers, no uppercase labels, no
+em-dashes, two languages, 4.5:1.
 
 Three things a change here has to respect:
 
@@ -240,10 +250,13 @@ Three things a change here has to respect:
 3. **`<html data-theme>`.** Astryx's root theme removes the attribute when it unmounts. The
    guard `TemaVakt` in `components/crm/app/CrmRam.tsx` puts the server's value back.
 
-Measured 2026-11-25 on Bolag, Synk, Utvecklare and the open dialog with a field error: the
-lowest text contrast is 4.69:1 in light mode, and no text is under 4.5:1 in dark. The red badge plate is
-`--danger` at 7 %, not 12 %: at 12 % `--danger` text on it measured 4.36:1. On touch, controls
-are 44 px and body text 16 px (the theme's `pointer: coarse` rule).
+Measured 2026-11-26 on Översikt, Bolag, the open company panel, Personer, Synk and Utvecklare,
+in both modes: the lowest text contrast is 4.69:1 in light mode and 4.90:1 in dark. Field and
+checkbox borders are `--ink` at 52 % (3.58:1 light, 4.68:1 dark), and the focus ring is
+`--warning` in light mode (5.62:1) and `--focus` in dark (8.40:1): ochre itself is 2.16:1 on
+paper and cannot carry a ring there. The red badge plate is `--danger` at 7 %, not 12 %: at
+12 % `--danger` text on it measured 4.36:1. On touch, controls are 44 px and body text 16 px
+(the theme's `pointer: coarse` rule).
 
 ## Imagery
 

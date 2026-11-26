@@ -1,61 +1,101 @@
 "use client";
 
+import { Badge } from "@astryxdesign/core/Badge";
 import { Banner } from "@astryxdesign/core/Banner";
 import { Heading } from "@astryxdesign/core/Heading";
 import { Layout, LayoutContent, LayoutHeader } from "@astryxdesign/core/Layout";
-import { HStack, VStack } from "@astryxdesign/core/Stack";
+import { VStack } from "@astryxdesign/core/Stack";
 import { Text } from "@astryxdesign/core/Text";
+import { Objektikon, type Objekt } from "@/components/crm/app/kit";
 import { CrmFel } from "@/lib/crm/api";
 import { useLocale } from "@/lib/i18n";
 
 /**
- * En CRM-sida: rubrik med antal till vänster, sidans åtgärder till höger, och
- * innehållet under en hårlinje. Samma huvud på varje vy, så att blicken hittar
- * rubrik, antal och åtgärd på samma ställe.
+ * Sidhuvudet (DESIGN-CRM.md § Sidhuvud och vyrad), 64 px: objektets ikonplatta,
+ * rubriken i Fraunces och antalet som en neutral etikett. Till höger sidans
+ * primära handling (bläck) och eventuella ikonknappar.
+ */
+export function Sidhuvud({
+  objekt,
+  rubrik,
+  antal,
+  atgarder
+}: Readonly<{ objekt?: Objekt; rubrik: string; antal?: string | number; atgarder?: React.ReactNode }>) {
+  return (
+    <div className="flex min-h-16 flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4 py-3 sm:px-6">
+      <div className="flex min-w-0 items-center gap-3">
+        {objekt ? <Objektikon objekt={objekt} storlek={32} /> : null}
+        <Heading level={1} maxLines={1}>
+          {rubrik}
+        </Heading>
+        {antal != null && antal !== "" ? <Badge variant="neutral" label={<span className="tabular-nums">{antal}</span>} /> : null}
+      </div>
+      {atgarder ? <div className="flex items-center gap-2">{atgarder}</div> : null}
+    </div>
+  );
+}
+
+/**
+ * Vyraden, 52 px under en hårlinje: vyerna till vänster (ett SegmentedControl),
+ * sök och sortering till höger. Bara val som fungerar mot API:t.
+ */
+export function Vyrad({ children, hoger }: Readonly<{ children?: React.ReactNode; hoger?: React.ReactNode }>) {
+  return (
+    <div className="flex min-h-[52px] flex-wrap items-center justify-between gap-x-4 gap-y-2 border-t border-ink/[0.08] px-4 py-2 sm:px-6">
+      <div className="flex min-w-0 items-center gap-2">{children}</div>
+      {hoger ? <div className="flex w-full items-center gap-2 sm:w-auto">{hoger}</div> : null}
+    </div>
+  );
+}
+
+/**
+ * En CRM-sida: sidhuvud, valfri vyrad och innehållet, som rullar under huvudet.
+ *
+ * `vyrad` (eller det äldre `verktyg`) hamnar i vyraden. `utfyllnad` styr
+ * innehållets marginal: `tabell` ger tabellen kant i kant med bladet (cellerna
+ * har egen marginal), `sida` ger 24 px runt, som översiktens rutnät.
  */
 export function Sida({
+  objekt,
   rubrik,
   antal,
   atgarder,
+  vyrad,
+  vyradHoger,
   verktyg,
+  utfyllnad = "tabell",
   children
 }: Readonly<{
+  objekt?: Objekt;
   rubrik: string;
-  antal?: string;
+  antal?: string | number;
   atgarder?: React.ReactNode;
+  vyrad?: React.ReactNode;
+  vyradHoger?: React.ReactNode;
+  /** Äldre namn på vyradens innehåll. Ritas i vyraden över hela bredden. */
   verktyg?: React.ReactNode;
+  utfyllnad?: "tabell" | "sida";
   children: React.ReactNode;
 }>) {
+  const harVyrad = vyrad != null || vyradHoger != null || verktyg != null;
   return (
     <Layout
-      defaultHasDividers
+      height="fill"
       header={
-        <LayoutHeader padding={4} paddingBlockEnd={verktyg ? 0 : 4}>
-          <VStack gap={3}>
-            <HStack justify="between" align="center" gap={4} wrap="wrap">
-              <HStack align="end" gap={3} wrap="wrap">
-                <Heading level={1}>{rubrik}</Heading>
-                {antal ? (
-                  <Text color="secondary" hasTabularNumbers>
-                    {antal}
-                  </Text>
-                ) : null}
-              </HStack>
-              {atgarder ? (
-                <HStack gap={2} align="center">
-                  {atgarder}
-                </HStack>
-              ) : null}
-            </HStack>
-            {verktyg}
-          </VStack>
+        <LayoutHeader padding={0}>
+          <Sidhuvud objekt={objekt} rubrik={rubrik} antal={antal} atgarder={atgarder} />
+          {harVyrad ? (
+            verktyg != null && vyrad == null && vyradHoger == null ? (
+              <div className="border-t border-ink/[0.08] px-4 pt-2 sm:px-6">{verktyg}</div>
+            ) : (
+              <Vyrad hoger={vyradHoger}>{vyrad}</Vyrad>
+            )
+          ) : null}
         </LayoutHeader>
       }
       content={
         <LayoutContent padding={0}>
-          {/* Tabellens celler har 8 px inre marginal. Med 8 px till här står
-              första kolumnens text i linje med sidans rubrik, på 16 px. */}
-          <div className="px-2">{children}</div>
+          <div className={utfyllnad === "sida" ? "px-4 pb-8 pt-2 sm:px-6" : "border-t border-ink/[0.08]"}>{children}</div>
         </LayoutContent>
       }
     />

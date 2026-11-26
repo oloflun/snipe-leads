@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 
-/** CRM:et öppnar på bolagen: det är registret allt annat hänger på. */
+/** CRM:et öppnar på översikten: registret, kunderna och synken i en blick. */
 export default function Page() {
-  redirect("/crm/bolag");
+  redirect("/crm/oversikt");
 }

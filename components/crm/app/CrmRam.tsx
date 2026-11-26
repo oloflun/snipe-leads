@@ -5,24 +5,35 @@
 import "@astryxdesign/core/reset.css";
 import "@astryxdesign/core/astryx.css";
 import "@/lib/crm/astryx/snajp.css";
+import "@/components/crm/app/crm.css";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import NextLink from "next/link";
 import { usePathname } from "next/navigation";
-import { ArrowLeft, Building2, KeyRound, RefreshCw, Users } from "lucide-react";
+import { ArrowLeft, Search, Settings } from "lucide-react";
 import { AppShell } from "@astryxdesign/core/AppShell";
+import { Avatar } from "@astryxdesign/core/Avatar";
 import { Icon } from "@astryxdesign/core/Icon";
 import { InternationalizationProvider } from "@astryxdesign/core/i18n";
+import { Kbd } from "@astryxdesign/core/Kbd";
 import { LinkProvider } from "@astryxdesign/core/Link";
 import svSE from "@astryxdesign/core/locales/sv-SE.generated.js";
+import { NavHeadingMenu, NavHeadingMenuItem } from "@astryxdesign/core/NavMenu";
+import { ProgressBar } from "@astryxdesign/core/ProgressBar";
 import { SideNav, SideNavHeading, SideNavItem, SideNavSection } from "@astryxdesign/core/SideNav";
-import { MediaTheme, Theme } from "@astryxdesign/core/theme";
+import { Text } from "@astryxdesign/core/Text";
+import { Timestamp } from "@astryxdesign/core/Timestamp";
+import { Theme } from "@astryxdesign/core/theme";
+import { Kommandopalett } from "@/components/crm/app/Kommandopalett";
+import { OBJEKT, Objektikon, Prick, type Objekt } from "@/components/crm/app/kit";
 import { snajpTheme } from "@/lib/crm/astryx/snajp";
 import { ASTRYX_SVENSKA } from "@/lib/crm/astryx/svenska";
+import { SynklageKalla, avslutar, klara, pagar, useSynklage } from "@/components/crm/app/synklage";
+import { SYSTEMNAMN } from "@/lib/crm/api";
 import { useLocale } from "@/lib/i18n";
 import { colorScheme, dataTheme, type Tema } from "@/lib/tema";
 
-export type CrmVy = "bolag" | "personer" | "synk" | "utvecklare";
+export type CrmVy = "oversikt" | "bolag" | "personer" | "synk" | "utvecklare";
 
 /**
  * Astryx rot-tema skriver `data-theme` på <html> och TAR BORT det när temat
@@ -49,7 +60,70 @@ function TemaVakt({ tema, children }: Readonly<{ tema: Tema; children: React.Rea
 }
 
 /**
- * Skalet runt varje CRM-sida: tema, språk, länkar och sidnavigeringen.
+ * Senaste synkens läge, längst ned i navigeringen. Läser det delade synkläget
+ * (synklage.tsx), så att kortet visar samma tal som Synk och Översikten.
+ */
+function Synkkort({ bas }: Readonly<{ bas: string }>) {
+  const { text } = useLocale();
+  const { korningar, anslutningar } = useSynklage();
+  const senaste = korningar?.[0];
+
+  if (!senaste) return null;
+  const igang = pagar(senaste);
+  const anslutning = senaste.connection_id ? anslutningar[senaste.connection_id] : undefined;
+  const rubrik = anslutning ? (SYSTEMNAMN[anslutning.system] ?? anslutning.name) : text({ sv: "Synk", en: "Sync" });
+  const lage =
+    senaste.status === "failed"
+      ? { ton: "fara" as const, text: text({ sv: "Misslyckades", en: "Failed" }) }
+      : avslutar(senaste)
+        ? { ton: "ockra" as const, text: text({ sv: "Avslutar", en: "Finishing" }) }
+        : igang
+          ? { ton: "ockra" as const, text: text({ sv: "Synkar nu", en: "Syncing now" }) }
+          : senaste.errors.length > 0 || senaste.counts.skipped > 0
+            ? { ton: "ockra" as const, text: text({ sv: "Klar, med poster att rätta", en: "Done, with records to fix" }) }
+            : { ton: "mossa" as const, text: text({ sv: "Klar", en: "Done" }) };
+  const tid = senaste.completed_at ?? senaste.created_at;
+
+  return (
+    <NextLink
+      href={`${bas}/synk?korning=${encodeURIComponent(senaste.id)}`}
+      className="crm-chip mx-1 mb-1 block rounded-[16px] bg-paper p-3 no-underline"
+      style={{ boxShadow: "0 0 0 1px oklch(var(--ink) / 0.09)", backgroundColor: "light-dark(oklch(var(--paper)), oklch(var(--paper2)))" }}
+    >
+      <span className="flex items-center gap-2">
+        <Prick ton={lage.ton} pulserar={igang} />
+        <span className="min-w-0 flex-1 truncate text-[0.8125rem] font-semibold text-ink">{rubrik}</span>
+        {tid ? <Timestamp value={tid} format="relative" isLive hasTooltip={false} /> : null}
+      </span>
+      <span className="mt-1 block text-[0.8125rem] text-ink-muted">{lage.text}</span>
+      <span className="sr-only">{text({ sv: "Öppna körningen i Synk.", en: "Open the run in Sync." })}</span>
+      {igang ? (
+        <span className="mt-2 block">
+          <ProgressBar
+            label={text({ sv: "Synkens förlopp", en: "Sync progress" })}
+            isLabelHidden
+            isIndeterminate={senaste.status === "queued" || senaste.counts.total === 0 || avslutar(senaste)}
+            value={klara(senaste)}
+            max={Math.max(senaste.counts.total, 1)}
+          />
+          <span className="mt-1 block text-[0.75rem] tabular-nums text-ink-muted">
+            {text({
+              sv: `${klara(senaste).toLocaleString("sv-SE")} av ${senaste.counts.total.toLocaleString("sv-SE")} poster`,
+              en: `${klara(senaste).toLocaleString("en-GB")} of ${senaste.counts.total.toLocaleString("en-GB")} records`
+            })}
+          </span>
+        </span>
+      ) : null}
+    </NextLink>
+  );
+}
+
+const HOPFALLD_NYCKEL = "snajp.crm.nav-hopfalld";
+
+/**
+ * Skalet runt varje CRM-sida (DESIGN-CRM.md § Skalet): tema, språk, länkar,
+ * den ljusa sidnavigeringen och kommandopaletten. Innehållet ligger som ett
+ * upphöjt blad bredvid navigeringen (AppShell `elevated`).
  *
  * `bas` är roten vyerna ligger under. Appen använder `/crm`, förhandsvisningen
  * `/forhandsvisning/crm`, och ramen är densamma i båda.
@@ -62,8 +136,38 @@ export function CrmRam({
 }: Readonly<{ tema: Tema; bas?: string; arbetsyta?: string; children: React.ReactNode }>) {
   const { locale, text } = useLocale();
   const vag = usePathname() ?? "";
-  const aktiv = (vag.startsWith(bas) ? vag.slice(bas.length).split("/")[1] : "") || "bolag";
+  const aktiv = ((vag.startsWith(bas) ? vag.slice(bas.length).split("/")[1] : "") || "oversikt") as Objekt;
   const morkt = tema === "morkt";
+  const [palett, setPalett] = useState(false);
+  const [hopfalld, setHopfalld] = useState(false);
+  const namn = arbetsyta || "Snajp";
+
+  // Hopfällningen är ett utseendeval per läsare: det får bo i webbläsaren.
+  useEffect(() => {
+    try {
+      setHopfalld(window.localStorage.getItem(HOPFALLD_NYCKEL) === "1");
+    } catch {
+      /* privat fönster: utfälld */
+    }
+  }, []);
+  const fallIhop = (varde: boolean) => {
+    setHopfalld(varde);
+    try {
+      window.localStorage.setItem(HOPFALLD_NYCKEL, varde ? "1" : "0");
+    } catch {
+      /* inget att spara i */
+    }
+  };
+
+  const post = (vy: Objekt) => (
+    <SideNavItem
+      key={vy}
+      label={text(OBJEKT[vy].namn)}
+      href={`${bas}/${vy}`}
+      icon={<Objektikon objekt={vy} storlek={24} />}
+      isSelected={aktiv === vy}
+    />
+  );
 
   return (
     <TemaVakt tema={tema}>
@@ -75,66 +179,70 @@ export function CrmRam({
           overrides={{ "sv-SE": ASTRYX_SVENSKA }}
         >
           <LinkProvider component={NextLink}>
+            <SynklageKalla>
             <AppShell
-              variant="section"
+              variant="elevated"
+              contentPadding={0}
+              mobileNav={{ breakpoint: "md" }}
               sideNav={
-                // Railen är bläck, arbetsytans enda tonala vändning. Temats
-                // roller för railen pekar på Snajps egna variabler (--ink som
-                // yta, --paper som text), och de byter själva plats i mörkt
-                // läge: där är railen ljus med mörk text, som i resten av appen.
-                // Temat har därför samma roller för båda ytorna (onDark, onLight).
-                <MediaTheme mode={morkt ? "light" : "dark"}>
-                  <SideNav
-                    collapsible
-                    header={
-                      <SideNavHeading
-                        heading={text({ sv: "Snajp CRM", en: "Snajp CRM" })}
-                        subheading={arbetsyta}
-                        headingHref={`${bas}/bolag`}
-                      />
-                    }
-                    footer={
-                      <SideNavItem
-                        label={text({ sv: "Till arbetsytan", en: "Back to workspace" })}
-                        href="/dashboard"
-                        icon={<Icon icon={ArrowLeft} />}
-                      />
-                    }
-                  >
-                    <SideNavSection title={text({ sv: "Register", en: "Records" })}>
-                      <SideNavItem
-                        label={text({ sv: "Bolag", en: "Companies" })}
-                        href={`${bas}/bolag`}
-                        isSelected={aktiv === "bolag"}
-                        icon={<Icon icon={Building2} />}
-                      />
-                      <SideNavItem
-                        label={text({ sv: "Personer", en: "People" })}
-                        href={`${bas}/personer`}
-                        isSelected={aktiv === "personer"}
-                        icon={<Icon icon={Users} />}
-                      />
-                    </SideNavSection>
-                    <SideNavSection title={text({ sv: "Data", en: "Data" })}>
-                      <SideNavItem
-                        label={text({ sv: "Synk", en: "Sync" })}
-                        href={`${bas}/synk`}
-                        isSelected={aktiv === "synk"}
-                        icon={<Icon icon={RefreshCw} />}
-                      />
-                      <SideNavItem
-                        label={text({ sv: "Utvecklare", en: "Developers" })}
-                        href={`${bas}/utvecklare`}
-                        isSelected={aktiv === "utvecklare"}
-                        icon={<Icon icon={KeyRound} />}
-                      />
-                    </SideNavSection>
-                  </SideNav>
-                </MediaTheme>
+                <SideNav
+                  className={hopfalld ? undefined : "crm-nav-bred"}
+                  // Knappens text kommer ur Astryx egna språkfiler (sv-SE och en).
+                  collapsible={{ isCollapsed: hopfalld, onCollapsedChange: fallIhop }}
+                  header={
+                    <SideNavHeading
+                      heading={namn}
+                      icon={<Avatar name={namn} size={24} shape="rounded" tooltip={false} className="crm-arbetsyta" />}
+                      menu={
+                        <NavHeadingMenu>
+                          <NavHeadingMenuItem label={text({ sv: "Till arbetsytan", en: "Back to workspace" })} href="/dashboard" icon={ArrowLeft} />
+                          <NavHeadingMenuItem label={text({ sv: "Inställningar", en: "Settings" })} href="/settings" icon={Settings} />
+                        </NavHeadingMenu>
+                      }
+                    />
+                  }
+                  topContent={
+                    hopfalld ? (
+                      <SideNavItem label={text({ sv: "Sök eller hoppa till", en: "Search or jump to" })} icon="search" onClick={() => setPalett(true)} />
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setPalett(true)}
+                        className="crm-sokrad mx-1 mt-1 flex h-9 w-[calc(100%-0.5rem)] items-center gap-2 rounded-[10px] px-2.5 text-left"
+                      >
+                        <Icon icon={Search} size="sm" color="secondary" />
+                        <Text color="secondary" maxLines={1}>
+                          {text({ sv: "Sök eller hoppa till", en: "Search or jump to" })}
+                        </Text>
+                        <span className="ml-auto">
+                          <Kbd keys="mod+k" />
+                        </span>
+                      </button>
+                    )
+                  }
+                  footer={
+                    <div className="flex flex-col gap-1">
+                      {hopfalld ? null : <Synkkort bas={bas} />}
+                      <SideNavItem label={text({ sv: "Till arbetsytan", en: "Back to workspace" })} href="/dashboard" icon={ArrowLeft} />
+                    </div>
+                  }
+                >
+                  <SideNavSection title={text({ sv: "Arbetsyta", en: "Workspace" })}>
+                    {post("oversikt")}
+                    {post("bolag")}
+                    {post("personer")}
+                  </SideNavSection>
+                  <SideNavSection title={text({ sv: "Data", en: "Data" })}>
+                    {post("synk")}
+                    {post("utvecklare")}
+                  </SideNavSection>
+                </SideNav>
               }
             >
               {children}
+              <Kommandopalett oppen={palett} setOppen={setPalett} bas={bas} />
             </AppShell>
+            </SynklageKalla>
           </LinkProvider>
         </InternationalizationProvider>
       </Theme>

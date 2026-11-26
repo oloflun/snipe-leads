@@ -1,0 +1,111 @@
+/*
+ * Snajp CRM: det Personer, Synk och Utvecklare behöver utöver crm.css.
+ * Bara Snajps tokens: oklch(var(--token)), aldrig en färg skriven för hand.
+ */
+
+/* Rund avatar 48 i personens panel: samma initialstorlek som bolagets. */
+.crm-avatar-rund .astryx-avatar-fallback {
+  font-size: 17px;
+}
+
+/* Panelens fokusmål vid öppning: tar fokus utan att rita en ring runt innehållet. */
+.crm-autofokus:focus,
+.crm-autofokus:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
+/* Systemets platta på anslutningskortet och i körningens panel. */
+.crm-avatar-system .astryx-avatar-fallback {
+  font-size: 14px;
+  border-radius: 12px;
+}
+
+/*
+ * En tabell som står i en yta på sidan (Synk, Utvecklare): samma anatomi som
+ * Bolags tabell, i en rundad ram med hårlinje i stället för kant i kant med bladet.
+ */
+.crm-tabellram {
+  overflow: hidden;
+  border-radius: 16px;
+  background-color: oklch(var(--paper));
+  box-shadow: inset 0 0 0 1px oklch(var(--ink) / 0.09);
+}
+.crm-tabellram .crm-tabell thead th {
+  background-color: oklch(var(--paper));
+}
+
+/* En tabell utan kryssrutor: foten börjar i första kolumnens textlinje. */
+.crm-tabell.crm-tabell-utan-val .crm-raknefot {
+  padding-inline: var(--crm-kant);
+}
+
+/* Rubriken över en del av sidan: Geist halvfet, som översiktens kort. */
+.crm-delrubrik {
+  font-family: var(--font-sans);
+  letter-spacing: normal;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: oklch(var(--ink));
+}
+
+/* Ett tal i körningens panel: etikett dämpad, talet i Fraunces. */
+.crm-talruta {
+  border-radius: 12px;
+  background-color: oklch(var(--ink) / 0.04);
+  padding: 10px 12px;
+}
+
+/* En rad att rätta: ikonen på en ockraplatta, texten, och var posten låg. */
+.crm-rattarad + .crm-rattarad {
+  border-top: 1px solid oklch(var(--ink) / 0.07);
+}
+
+/* Den nya nyckeln: en kodruta som bryter raden var som helst. */
+.crm-nyckelruta {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.875rem;
+  line-height: 1.5;
+  word-break: break-all;
+  border-radius: 10px;
+  padding: 10px 12px;
+  background-color: oklch(var(--paper));
+  box-shadow: inset 0 0 0 1px oklch(var(--ochre) / 0.35);
+  color: oklch(var(--ink));
+}
+
+/* Anslutningskortet: hela kortet lugnt, menyn i hörnet. */
+.crm-anslutning.astryx-card {
+  border-color: oklch(var(--ink) / 0.09);
+}
+/* Kortet "Ny anslutning" sist i rutnätet: streckad ram, platta vid hovring. */
+.crm-nytt-kort {
+  display: flex;
+  min-height: 180px;
+  height: 100%;
+  width: 100%;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  border-radius: 16px;
+  border: 1.5px dashed oklch(var(--ink) / 0.16);
+  color: oklch(var(--ink-muted));
+  font-size: 0.875rem;
+  font-weight: 500;
+  transition: background-color 100ms var(--ease-out), color 100ms var(--ease-out), border-color 100ms var(--ease-out);
+}
+@media (hover: hover) and (pointer: fine) {
+  .crm-nytt-kort:hover {
+    background-color: oklch(var(--ink) / 0.03);
+    border-color: oklch(var(--ink) / 0.26);
+    color: oklch(var(--ink));
+  }
+}
+.crm-nytt-kort:focus-visible {
+  outline: 2px solid var(--focus-outline-color);
+  outline-offset: 2px;
+}
+.crm-anslutning-pausad {
+  background-color: oklch(var(--ink) / 0.02);
+}

@@ -1,0 +1,625 @@
+/*
+ * Snajp CRM: det temat inte når (docs/crm/DESIGN-CRM.md).
+ *
+ * Astryx egen CSS ligger i kaskadlager (reset, astryx-base, astryx-theme). Den här
+ * filen ligger utanför lagren och vinner därför över dem utan specificitetsknep.
+ * Bara Snajps tokens: oklch(var(--token)), aldrig en färg skriven för hand.
+ * Laddas bara av CrmRam.tsx, alltså bara av CRM:et.
+ */
+
+/* ---------------------------------------------------------------------------
+ * Objektfärgerna. En ton är tre värden: färgen, plattan (14 procents alfa) och
+ * den textsäkra tonen för ikoner och initialer. --chart-blue klarar inte 4,5:1
+ * mot det ljusare bladet i mörkt läge; där bär rampens ljusa steg texten.
+ * ------------------------------------------------------------------------- */
+.crm-ton-ockra {
+  --crm-ton: oklch(var(--ochre));
+  --crm-ton-platta: oklch(var(--ochre) / 0.16);
+  --crm-ton-text: oklch(var(--warning));
+}
+.crm-ton-bla {
+  --crm-ton: oklch(var(--chart-blue));
+  --crm-ton-platta: oklch(var(--chart-blue) / 0.14);
+  /* Ljust: rampens mörkare steg (L 0,40); --chart-blue mätte 4,18:1 på avatarens platta. */
+  --crm-ton-text: light-dark(oklch(var(--chart-ramp-5)), oklch(var(--chart-ramp-5)));
+}
+.crm-ton-mossa {
+  --crm-ton: oklch(var(--moss));
+  --crm-ton-platta: oklch(var(--moss) / 0.14);
+  --crm-ton-text: oklch(var(--moss));
+}
+.crm-ton-sigill {
+  --crm-ton: oklch(var(--seal));
+  --crm-ton-platta: oklch(var(--seal) / 0.13);
+  --crm-ton-text: oklch(var(--seal));
+}
+.crm-ton-mineral {
+  --crm-ton: oklch(var(--mineral));
+  --crm-ton-platta: oklch(var(--mineral) / 0.15);
+  --crm-ton-text: light-dark(oklch(var(--ink2)), oklch(var(--ink)));
+}
+
+/* Ikonplattan: färgen med 14 procents alfa, ikonen i färgens textsäkra ton. */
+.crm-platta {
+  background-color: var(--crm-ton-platta);
+  color: var(--crm-ton-text);
+}
+
+/* Avatarens initialplatta (Astryx har ingen färgprop, se astryx-kokbok § Avatar).
+ * Roten har en egen grå platta under; den tas bort så att tonen står ren. */
+.crm-avatar.astryx-avatar {
+  background-color: transparent;
+}
+.crm-avatar .astryx-avatar-fallback {
+  /* Plattan är svagare i mörkt läge: en ljus ton på en tät platta av samma ton
+   * mätte under 4,5:1 (mossa 3,76:1). Målet är 4,5:1 för varje ton i båda lägena. */
+  background-color: light-dark(
+    color-mix(in oklab, var(--crm-ton) 18%, transparent),
+    color-mix(in oklab, var(--crm-ton) 12%, transparent)
+  );
+  color: var(--crm-ton-text);
+  font-weight: 600;
+}
+.crm-avatar[data-size="16"] .astryx-avatar-fallback {
+  font-size: 9px;
+}
+.crm-avatar[data-size="20"] .astryx-avatar-fallback {
+  font-size: 10px;
+}
+.crm-avatar[data-size="24"] .astryx-avatar-fallback {
+  font-size: 11px;
+}
+
+/* Arbetsytans avatar: bläck med initialen i papper. */
+.crm-arbetsyta .astryx-avatar-fallback {
+  background-color: oklch(var(--ink));
+  color: oklch(var(--paper));
+  font-weight: 600;
+}
+
+/* ---------------------------------------------------------------------------
+ * Skalet.
+ * ------------------------------------------------------------------------- */
+
+/*
+ * Innehållet som ett upphöjt blad (DESIGN-CRM.md § Tema). AppShell `elevated`
+ * rundar bara bladet när det finns en toppnavigering; CRM:et har ingen, så bladet
+ * ritas här: 8 px från fönstrets kanter, radie 24, hårlinje och en mjuk skugga.
+ * Under brytpunkten md är bladet hela skärmen under mobilens toppremsa.
+ */
+@media (min-width: 768px) {
+  .astryx-app-shell .astryx-layout-content[role="main"] {
+    margin: 8px 8px 8px 0;
+    border-radius: 24px;
+    box-shadow:
+      0 0 0 1px oklch(var(--ink) / 0.07),
+      0 1px 2px oklch(var(--seal) / 0.06),
+      0 12px 32px oklch(var(--seal) / 0.06);
+  }
+}
+
+/* 248 px utfällt (Astryx 260). Klassen sätts bara när navigeringen är utfälld. */
+.crm-nav-bred {
+  width: 248px;
+}
+
+/* Arbetsytans namn: 15 px halvfet (Astryx 17), så att ett vanligt bolagsnamn ryms. */
+.astryx-side-nav-heading span:not(.astryx-avatar *) {
+  font-size: 0.9375rem;
+}
+
+/* Sökradens kortkommando: små tangenter, så att hela "Sök eller hoppa till" ryms. */
+.crm-sokrad .astryx-kbd-key {
+  font-size: 11px;
+  min-width: 18px;
+  height: 18px;
+  padding-inline: 4px;
+}
+
+/* Sökraden i navigeringen: en platta som ser ut som ett fält och är en knapp. */
+.crm-sokrad {
+  background-color: oklch(var(--ink) / 0.05);
+  box-shadow: inset 0 0 0 1px oklch(var(--ink) / 0.06);
+  transition: background-color 100ms var(--ease-out);
+}
+@media (hover: hover) and (pointer: fine) {
+  .crm-sokrad:hover {
+    background-color: oklch(var(--ink) / 0.08);
+  }
+}
+.crm-sokrad:focus-visible {
+  outline: 2px solid var(--focus-outline-color);
+  outline-offset: 2px;
+}
+
+/* ---------------------------------------------------------------------------
+ * Fokus och rullister i hela CRM:et (också i dialoger och paneler, som Astryx
+ * lägger utanför skalet).
+ * ------------------------------------------------------------------------- */
+
+/*
+ * Appens globala fokusring (app/globals.css) ligger utanför kaskadlagren och
+ * vann därför över Astryx egna ringar, i --focus mörkad 18 %. I CRM:et bär
+ * temats färg ringen: den textsäkra ockran i ljust läge (5,6:1 mot papper),
+ * --focus i mörkt. En enda färg, 2 px, 2 px avstånd.
+ */
+:root:has(.astryx-app-shell) :where(a, button, input, textarea, select, [tabindex]):focus-visible {
+  outline-color: var(--focus-outline-color);
+}
+
+/*
+ * Rullisterna: tunna, rundade och utan pilknappar. Operativsystemets lister
+ * med pilar var den tydligaste standarddelen ingen bestämt över. Chromium läser
+ * pseudoelementen; Firefox de två egenskaperna.
+ */
+:root:has(.astryx-app-shell) ::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+:root:has(.astryx-app-shell) ::-webkit-scrollbar-track,
+:root:has(.astryx-app-shell) ::-webkit-scrollbar-corner {
+  background: transparent;
+}
+:root:has(.astryx-app-shell) ::-webkit-scrollbar-thumb {
+  /* 6 px synlig tumme: 2 px genomskinlig kant runt om. */
+  border: 2px solid transparent;
+  border-radius: 9999px;
+  background-color: oklch(var(--ink) / 0.18);
+  background-clip: content-box;
+}
+:root:has(.astryx-app-shell) ::-webkit-scrollbar-thumb:hover {
+  background-color: oklch(var(--ink) / 0.3);
+}
+:root:has(.astryx-app-shell) ::-webkit-scrollbar-button {
+  display: none;
+  width: 0;
+  height: 0;
+}
+@supports not selector(::-webkit-scrollbar) {
+  :root:has(.astryx-app-shell),
+  :root:has(.astryx-app-shell) * {
+    scrollbar-width: thin;
+    scrollbar-color: oklch(var(--ink) / 0.18) transparent;
+  }
+}
+
+/* Bladets rullyta reserverar listens plats även när inget rullar, så att
+ * tabellens kolumner står på samma x i tomläget som med rader. */
+.astryx-app-shell .astryx-layout-content {
+  scrollbar-gutter: stable;
+}
+
+/* Medan åtgärdsraden flyter längst ned rullas fokus aldrig in under den
+ * (WCAG 2.4.11): rad 52 + avstånd 20 + 20 luft. */
+:root:has(.crm-atgardsrad),
+:root:has(.crm-atgardsrad) .astryx-layout-content {
+  scroll-padding-bottom: 92px;
+}
+
+/* Kommandopalettens sökfält är fältet utan ram (Twentys huvud): appens globala
+ * fokusring för fält ritade en ruta i rutan. Fokus syns i markören och i att
+ * paletten är öppen; träffraderna har Astryx egen markering. */
+.astryx-command-palette-input input:focus-visible {
+  outline: none;
+}
+
+/* ---------------------------------------------------------------------------
+ * Postchip och länkpiller (Twentys två sorters piller, i Astryx form).
+ * ------------------------------------------------------------------------- */
+/* Postchipet är genomskinligt i vila (Twentys chip): namnet är det första ögat
+ * fastnar på, inte en grå platta. Plattan kommer vid hovring och fokus. */
+.crm-chip {
+  background-color: transparent;
+  transition: background-color 100ms var(--ease-out);
+}
+/* Ett kort som är en knapp (synkens senaste körning) behåller plattan i vila. */
+.crm-chip.crm-chip-platta {
+  background-color: oklch(var(--ink) / 0.05);
+}
+@media (hover: hover) and (pointer: fine) {
+  a.crm-chip:hover,
+  button.crm-chip:hover {
+    background-color: oklch(var(--ink) / 0.06);
+  }
+  a.crm-chip.crm-chip-platta:hover,
+  button.crm-chip.crm-chip-platta:hover {
+    background-color: oklch(var(--ink) / 0.09);
+  }
+}
+a.crm-chip:focus-visible,
+button.crm-chip:focus-visible {
+  background-color: oklch(var(--ink) / 0.06);
+}
+a.crm-chip:active,
+button.crm-chip:active {
+  background-color: oklch(var(--ink) / 0.1);
+}
+.crm-chip:focus-visible {
+  outline: 2px solid var(--focus-outline-color);
+  outline-offset: 2px;
+}
+
+/* Översiktens synkrader: hela raden är en länk till körningen. */
+.crm-synkrad {
+  color: inherit;
+  transition: background-color 100ms var(--ease-out);
+}
+@media (hover: hover) and (pointer: fine) {
+  .crm-synkrad:hover {
+    background-color: oklch(var(--ink) / 0.04);
+  }
+}
+.crm-synkrad:focus-visible {
+  outline: 2px solid var(--focus-outline-color);
+  outline-offset: 0;
+}
+
+/* Länkpillret: helt rundat, en hårlinje och ingen egen botten, så att det ser
+ * likadant ut på bladet i ljust och mörkt läge. Länkar som lämnar appen. */
+.crm-lankpiller.astryx-token {
+  background-color: transparent;
+  box-shadow: inset 0 0 0 1px oklch(var(--ink) / 0.14);
+  border-radius: 9999px;
+  color: oklch(var(--ink2));
+  font-weight: 400;
+  max-width: min(220px, 100%);
+  min-width: 0;
+}
+.crm-lankpiller.astryx-token * {
+  font-weight: 400;
+}
+/* Passivt piller (Kontakta inte): ingen linje, dämpad text, inget att klicka på. */
+.crm-lankpiller.crm-lankpiller-passiv.astryx-token {
+  box-shadow: none;
+  color: oklch(var(--ink-muted));
+  padding-inline-start: 0;
+}
+.crm-lankpiller.astryx-token > * {
+  min-width: 0;
+}
+.crm-lankpiller.astryx-token > span,
+.crm-lankpiller.astryx-token > button,
+.crm-lankpiller.astryx-token > a {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+
+/* Avatar 48 i panelens huvud. */
+.crm-avatar-stor .astryx-avatar-fallback {
+  font-size: 17px;
+  border-radius: 14px;
+}
+
+/* ---------------------------------------------------------------------------
+ * Tabellen (DESIGN-CRM.md § Tabellen; twenty-finish § 3 och § 9.3).
+ * ------------------------------------------------------------------------- */
+
+/* Kanten mot bladet: första och sista cellen får bladets marginal, så att
+ * tabellen flukter med sidhuvudet. */
+.crm-tabell {
+  --crm-kant: 16px;
+}
+@media (min-width: 640px) {
+  .crm-tabell {
+    --crm-kant: 20px;
+  }
+}
+.crm-tabell th:first-child,
+.crm-tabell td:first-child {
+  padding-inline-start: var(--crm-kant);
+}
+.crm-tabell th:last-child,
+.crm-tabell td:last-child {
+  padding-inline-end: var(--crm-kant);
+}
+.crm-tabell thead th {
+  height: 40px;
+  background-color: oklch(var(--paper));
+}
+.crm-tabell tbody td {
+  height: 44px;
+  padding-block: 0;
+}
+/* Markerad rad: en svag ockraton, inte Astryx accentplatta (som Astryx sätter
+ * inline på raden och därför bara går att ersätta med !important). */
+.crm-tabell tbody tr[aria-selected="true"] {
+  background-color: oklch(var(--ochre) / 0.09) !important;
+  --table-row-overlay: oklch(var(--ochre) / 0.09) !important;
+}
+.crm-tabell-laddar {
+  opacity: 0.6;
+  transition: opacity 100ms var(--ease-out);
+}
+
+/* Raden "Lägg till bolag": textlinjen i namnkolumnens chip. */
+.crm-lagg-till-rad {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  height: 44px;
+  padding-inline: var(--crm-lagg-till-start, 16px) 16px;
+  border-bottom: 1px solid oklch(var(--ink) / 0.07);
+  color: oklch(var(--ink-muted));
+  font-size: 0.875rem;
+  text-align: start;
+  transition: background-color 100ms var(--ease-out), color 100ms var(--ease-out);
+}
+.crm-tabell .crm-lagg-till-rad {
+  --crm-lagg-till-start: calc(var(--crm-kant) + 44px);
+}
+@media (hover: hover) and (pointer: fine) {
+  .crm-lagg-till-rad:hover {
+    background-color: oklch(var(--ink) / 0.03);
+    color: oklch(var(--ink));
+  }
+}
+.crm-lagg-till-rad:focus-visible {
+  outline: 2px solid var(--focus-outline-color);
+  outline-offset: -2px;
+}
+
+/* Räknefoten: etiketten dämpad, talet i bläck och halvfett (Twentys "Count all 5"). */
+.crm-raknefot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 24px;
+  min-height: 48px;
+  padding: 6px 16px;
+  font-size: 0.8125rem;
+}
+.crm-tabell .crm-raknefot {
+  padding-inline: calc(var(--crm-kant) + 44px) var(--crm-kant);
+}
+.crm-raknefot-etikett {
+  color: oklch(var(--ink-muted));
+}
+.crm-raknefot-tal {
+  color: oklch(var(--ink));
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Astryx fält ritar sin egen fokusring runt kontrollboxen. Appens globala ring
+ * för inmatningsfält ritade då en fyrkant i den rundade rutan; den tas bort här,
+ * bara i Astryx fält, så att ringen fortfarande syns en gång. */
+.astryx-field input:focus-visible,
+.astryx-field textarea:focus-visible,
+.astryx-text-input input:focus-visible {
+  outline: none;
+}
+/* Fältets egen ring bär fokus: 2 px (1 px kant plus 1 px inåt) i temats
+ * fokusfärg, som når 3:1 mot papper. Astryx ljusa ockra mätte 1,6:1. */
+.astryx-text-input:focus-within {
+  border-color: var(--focus-outline-color);
+  box-shadow: inset 0 0 0 1px var(--focus-outline-color);
+}
+
+/* Vyvalets antal: dämpat, tabulärt och 6 px från namnet (kit.tsx: Vyval). */
+.crm-vyval [data-antal]::after {
+  content: attr(data-antal);
+  margin-inline-start: 6px;
+  color: oklch(var(--ink-muted));
+  font-size: 0.8125rem;
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Sökfältet i vyraden: helt rundat. */
+.crm-sokfalt {
+  border-radius: 9999px;
+}
+
+/* Åtgärdsraden för markerade rader: flyter längst ned i bladet, helt rundad. */
+.crm-atgardsrad-plats {
+  position: sticky;
+  bottom: 20px;
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+  margin-top: 8px;
+  z-index: 3;
+}
+.crm-atgardsrad {
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  min-height: 52px;
+  padding: 6px 8px 6px 16px;
+  border-radius: 9999px;
+  background-color: light-dark(oklch(var(--paper)), oklch(var(--paper2)));
+  box-shadow:
+    0 0 0 1px oklch(var(--ink) / 0.1),
+    0 2px 4px oklch(var(--seal) / 0.08),
+    0 16px 40px oklch(var(--seal) / 0.14);
+}
+.crm-atgardsrad .astryx-toolbar {
+  gap: 4px;
+}
+/* Mobil: raden går kant i kant med 8 px luft och får ett rundat kort i stället
+ * för ett piller, eftersom den bryter på två rader. */
+@media (max-width: 639.98px) {
+  .crm-atgardsrad-plats {
+    bottom: 12px;
+    padding-inline: 8px;
+  }
+  .crm-atgardsrad {
+    width: 100%;
+    border-radius: 20px;
+    padding: 6px 8px;
+  }
+}
+
+/* Förstörande handling som spökknapp: text och ikon i fara. */
+.crm-farlig.astryx-button {
+  color: oklch(var(--danger));
+}
+
+/* ---------------------------------------------------------------------------
+ * Postens panel.
+ * ------------------------------------------------------------------------- */
+
+/* Panelen: rundad mot innehållet, som bladet, och lyft med en mjuk skugga. */
+@media (min-width: 640px) {
+  .astryx-drawer[data-side="end"] {
+    border-start-start-radius: 24px;
+    border-end-start-radius: 24px;
+    box-shadow:
+      0 0 0 1px oklch(var(--ink) / 0.08),
+      0 24px 64px oklch(var(--seal) / 0.16);
+  }
+}
+
+/* Namnet i Fraunces 1,375 rem. */
+.crm-postnamn {
+  font-family: var(--font-serif);
+  font-size: 1.375rem;
+  font-weight: 400;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+}
+
+/* Snabbvalen: runda ikonknappar på en mjuk platta. */
+.crm-snabbval.astryx-icon-button,
+.crm-snabbval {
+  border-radius: 9999px;
+}
+/* Avstängt snabbval: tydligt avstängt, men fokuserbart så att tipset säger varför. */
+.crm-snabbval[aria-disabled="true"] {
+  opacity: 0.4;
+}
+
+/* Antalet i en flik: en liten rund platta. */
+.crm-flikantal {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding-inline: 6px;
+  border-radius: 9999px;
+  background-color: oklch(var(--ink) / 0.07);
+  color: oklch(var(--ink2));
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+/* Fältraderna: 40 px, ikonen dämpad, etiketten dämpad, värdet i bläck. */
+.crm-panelinnehall .astryx-metadata-list > div:first-child {
+  margin-bottom: 4px;
+  color: oklch(var(--ink-muted));
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+.crm-panelinnehall dl {
+  row-gap: 0;
+  /* Etikett och värde är lika höga celler med centrerat innehåll; Astryx
+   * baslinjejustering sköt värdet 2-3 px under etiketten (ikonen bredvid). */
+  align-items: stretch;
+}
+.crm-panelinnehall dt,
+.crm-panelinnehall dd {
+  align-self: stretch;
+}
+.crm-panelinnehall dt,
+.crm-panelinnehall dd {
+  display: flex;
+  align-items: center;
+  min-height: 40px;
+  margin: 0;
+  padding-block: 4px;
+  line-height: 20px;
+}
+.crm-panelinnehall dt {
+  gap: 10px;
+  word-break: normal;
+  overflow-wrap: normal;
+  hyphens: auto;
+  color: oklch(var(--ink-muted));
+  font-size: 0.875rem;
+}
+.crm-panelinnehall dt svg {
+  color: oklch(var(--ink-subtle));
+}
+.crm-varde {
+  color: oklch(var(--ink));
+  font-size: 0.875rem;
+}
+
+/* Tomt värde: "Lägg till" i dämpad ton, klickbart, platta vid hovring. */
+.crm-lagg-till {
+  margin-inline-start: -6px;
+  padding: 3px 6px;
+  border-radius: 6px;
+  color: oklch(var(--ink-muted));
+  font-size: 0.875rem;
+  transition: background-color 100ms var(--ease-out), color 100ms var(--ease-out);
+}
+@media (hover: hover) and (pointer: fine) {
+  .crm-lagg-till:hover {
+    background-color: oklch(var(--ink) / 0.05);
+    color: oklch(var(--ink));
+  }
+}
+.crm-lagg-till:focus-visible {
+  outline: 2px solid var(--focus-outline-color);
+  outline-offset: 1px;
+}
+
+.crm-personrad + .crm-personrad {
+  border-top: 1px solid oklch(var(--ink) / 0.07);
+}
+
+.crm-kallkort {
+  background-color: oklch(var(--ink) / 0.03);
+  box-shadow: inset 0 0 0 1px oklch(var(--ink) / 0.07);
+}
+.crm-kod {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.8125rem;
+  padding: 2px 6px;
+  border-radius: 6px;
+  background-color: oklch(var(--ink) / 0.06);
+  color: oklch(var(--ink));
+}
+
+/* Fältetiketten har en fast höjd, så att fält i samma rad ligger på samma y
+ * oavsett om etiketten bär "Valfritt" (som ritades 3 px högre). */
+.astryx-field-label {
+  height: 20px;
+  line-height: 20px;
+}
+.astryx-field-label * {
+  line-height: 20px;
+}
+
+/* Dialogens grupper: ingen ram, bara rubriken. */
+.crm-formgrupp {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}
+
+/* ---------------------------------------------------------------------------
+ * Kort. Översiktens kort lyfts inte i vila: hårlinje och papper. Det framhävda
+ * kortet (Att rätta) är ockratonat och utan linje.
+ * ------------------------------------------------------------------------- */
+.crm-kort.astryx-card,
+.crm-kort.astryx-clickable-card {
+  border-color: oklch(var(--ink) / 0.09);
+}
+.crm-kort-framhavd.astryx-card,
+.crm-kort-framhavd.astryx-clickable-card {
+  box-shadow: inset 0 0 0 1px oklch(var(--ochre) / 0.28);
+}
+
+/* Fraunces med tabulära siffror, för nyckeltalen. */
+.crm-tal {
+  font-family: var(--font-serif);
+  font-variant-numeric: tabular-nums lining-nums;
+  font-weight: 400;
+}

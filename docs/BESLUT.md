@@ -9,6 +9,41 @@ möjligt), vad det betyder i koden.
 
 ---
 
+## 2026-11-26 — Snajp CRM får en egen form: Twenty, Astryx och Snajps palett (Anton)
+
+**Beslut (Anton, 2026-11-26).** Det första gränssnittet underkändes: "väldigt generiska ...
+nästan sämre än den nuvarande dashboarden, inte i närheten av den polerade UI:n hos riktiga
+Twenty, och inga tydliga element hämtade från Astryx ... ett generiskt 00-tals-CRM". Han
+beställde "en blandning av det polerade, Apple-inspirerade utseendet hos Twenty, blandat
+med mer moderna, lekfulla influenser och element från Astryx för lite större och rundade
+element samt mer lekfulla dashboards", kombinerat "med enbart färgpaletten och
+serif-rubrikerna från Snajp" och satt ihop "med designreglerna från vårt designsystem".
+
+**Vad det betyder.** Kontraktet är `docs/crm/DESIGN-CRM.md`, och DESIGN.md § App surfaces
+säger vad som skiljer CRM:et från arbetsytan. Det ersätter två val i posten 2026-11-25
+nedan: railen i bläck finns inte längre i CRM:et, och arbetsytans täta liggare är inte
+förlagan. Kvar står: temat pekar på Snajps färgvariabler, kaskadlagret, primärknappen i
+bläck, länken som bara plattformsadmin ser, och att bara stabila Astryx-paket används.
+
+**Agentens val inom beställningen, som Anton kan ändra.**
+
+- **En översikt är startsidan**, med fyra nyckeltal, bolag per relation som ring, senaste
+  synkarna, största orterna och senast ändrade bolag. Allt räknas ur API:t. Ingen tidsserie:
+  API:t har ingen historik att rita, och ett påhittat diagram är värre än inget.
+- **Diagrammen ritas med det bibliotek Snajp redan har**, inte med Astryx förhandsutgåvor.
+- **Fokusringen är den textsäkra ockran i ljust läge.** Ockran själv mäter 2,16:1 mot papper
+  och syns inte som ring. Fält och kryssrutor har en kant på 3,58:1.
+- **Bolagslistan har sju kolumner, inte åtta.** Källan står i postens panel. Med åtta
+  kolumner kapades organisationsnummer eller webbadress på en skärm om 1440 px.
+- **På mobil är listan en lista**, inte en tabell som rullar i sidled, med markeringsläge.
+- **Synkens läge hämtas på ett ställe** och visas lika i navigeringen, översikten och Synk.
+
+**Det gränssnittet inte kan göra förrän API:t ändras** (backend rördes inte i ombygget):
+sortera på senast ändrad med nyast först (API:t listar äldst först), visa vilket bolag en
+felrad i synken gäller (API:t sparar varken namn eller det felaktiga värdet, det senare med
+flit), och länka till den post som en ny person krockar med. En vy för papperskorgen saknas:
+borttaget går att ångra i tio sekunder, sedan bara över API:t.
+
 ## 2026-11-25 — Snajp CRM: appen, Astryx och temat (Antons beställning, agentens val)
 
 **Beslut (Anton).** CRM:et är en egen app bredvid arbetsytan, nådd via en länk, inte en
