@@ -44,7 +44,7 @@ import { Tab, TabList } from "@astryxdesign/core/TabList";
 import { Text } from "@astryxdesign/core/Text";
 import { Timestamp } from "@astryxdesign/core/Timestamp";
 import type { Bolagsfalt } from "@/components/crm/app/BolagFormular";
-import { Historik } from "@/components/crm/app/Historik";
+import { Tidslinje } from "@/components/crm/app/Tidslinje";
 import { Kallpiller, Lankpiller, Personchip, Privatpersonetikett, Relationsetikett, tonFor, tonklass, useSmal, utanBolagsform } from "@/components/crm/app/kit";
 import { SYSTEMNAMN, crmAnrop, orgnrVisning, type Bolag, type Person, type Sida as Svarssida } from "@/lib/crm/api";
 import { useLocale, type Localized } from "@/lib/i18n";
@@ -409,7 +409,7 @@ export function BolagPanel({
                     )
                   ) : null}
 
-                  {flik === "historik" ? <Historik objekt="companies" id={bolag.id} andrad={bolag.updated_at} /> : null}
+                  {flik === "historik" ? <Tidslinje objekt="companies" id={bolag.id} andrad={bolag.updated_at} /> : null}
                 </div>
               </>
             )}

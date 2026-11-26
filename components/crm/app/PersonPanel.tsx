@@ -30,7 +30,7 @@ import { HStack } from "@astryxdesign/core/Stack";
 import { Text } from "@astryxdesign/core/Text";
 import { Timestamp } from "@astryxdesign/core/Timestamp";
 import { kallnamn } from "@/components/crm/app/BolagPanel";
-import { Historik } from "@/components/crm/app/Historik";
+import { Tidslinje } from "@/components/crm/app/Tidslinje";
 import type { Personfalt } from "@/components/crm/app/PersonFormular";
 import { Kallpiller, Lankpiller, Postchip, tonFor, tonklass, useSmal } from "@/components/crm/app/kit";
 import { GRUNDER, personnamn, type Personpost } from "@/lib/crm/person";
@@ -240,7 +240,7 @@ export function PersonPanel({
                         <h3 id="crm-personhistorik" className="crm-gruppnamn">
                           {text({ sv: "Historik", en: "History" })}
                         </h3>
-                        <Historik objekt="people" id={person.id} andrad={person.updated_at} />
+                        <Tidslinje objekt="people" id={person.id} andrad={person.updated_at} />
                       </section>
                     </div>
                   </div>

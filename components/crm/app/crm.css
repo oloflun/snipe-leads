@@ -795,6 +795,44 @@ button.crm-chip:active {
   background-color: oklch(var(--ink) / 0.12);
 }
 
+/* Utdraget ur en anteckning, ett mejl eller ett samtal: brödtext i dämpad ton, högst fyra rader. */
+.crm-tidslinje-text {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+  color: oklch(var(--ink2));
+  font-size: 0.875rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+  white-space: pre-line;
+}
+/* En rad som leder till en annan post (affären): bläck med understrykning vid hovring. */
+.crm-tidslinje-lank {
+  overflow-wrap: anywhere;
+  text-decoration: none;
+}
+@media (hover: hover) and (pointer: fine) {
+  .crm-tidslinje-lank:hover {
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+}
+.crm-tidslinje-lank:focus-visible {
+  border-radius: 4px;
+  outline: 2px solid var(--focus-outline-color);
+  outline-offset: 2px;
+}
+/* Skrivytan överst i historiken: en tvättad ruta, som källkortet. */
+.crm-skrivyta {
+  border-radius: 16px;
+  background-color: oklch(var(--ink) / 0.035);
+  padding: 16px;
+}
+.crm-attgora + .crm-attgora {
+  border-top: 1px solid oklch(var(--ink) / 0.07);
+}
+
 /* Vägen till posten som krockade: en textlänk i bläck med pil, under fältet. */
 .crm-krocklank {
   display: inline-flex;

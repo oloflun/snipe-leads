@@ -34,7 +34,7 @@ import { Tab, TabList } from "@astryxdesign/core/TabList";
 import { Text } from "@astryxdesign/core/Text";
 import { Timestamp } from "@astryxdesign/core/Timestamp";
 import type { Affarsfalt } from "@/components/crm/app/AffarFormular";
-import { Historik } from "@/components/crm/app/Historik";
+import { Tidslinje } from "@/components/crm/app/Tidslinje";
 import { Personchip, Postchip, Prick, tonklass, useSmal, type Ton } from "@/components/crm/app/kit";
 import { belopp, sannolikhet, type Affar, type Affarssteg, type Stegtyp } from "@/lib/crm/affar";
 import { crmAnrop, type Person } from "@/lib/crm/api";
@@ -283,7 +283,7 @@ export function AffarPanel({
                       </div>
                     ) : null}
 
-                    {flik === "historik" ? <Historik objekt="deals" id={affar.id} andrad={affar.updated_at} /> : null}
+                    {flik === "historik" ? <Tidslinje objekt="deals" id={affar.id} andrad={affar.updated_at} /> : null}
                   </div>
                 </>
               )}

@@ -1,0 +1,550 @@
+"use client";
+
+import { useCallback, useEffect, useMemo, useState } from "react";
+import NextLink from "next/link";
+import { usePathname } from "next/navigation";
+import {
+  Activity,
+  CalendarCheck,
+  CalendarClock,
+  ClipboardCheck,
+  Eraser,
+  Flag,
+  Handshake,
+  History,
+  LifeBuoy,
+  ListTodo,
+  Mail,
+  MapPin,
+  Pencil,
+  Phone,
+  Plus,
+  Reply,
+  RotateCcw,
+  Send,
+  StickyNote,
+  Target,
+  Trash2,
+  type LucideIcon
+} from "lucide-react";
+import { Button } from "@astryxdesign/core/Button";
+import type { ISODateString } from "@astryxdesign/core/Calendar";
+import { CheckboxInput } from "@astryxdesign/core/CheckboxInput";
+import { DateInput } from "@astryxdesign/core/DateInput";
+import { EmptyState } from "@astryxdesign/core/EmptyState";
+import { Icon } from "@astryxdesign/core/Icon";
+import { Selector } from "@astryxdesign/core/Selector";
+import { Skeleton } from "@astryxdesign/core/Skeleton";
+import { Text } from "@astryxdesign/core/Text";
+import { TextArea } from "@astryxdesign/core/TextArea";
+import { TextInput } from "@astryxdesign/core/TextInput";
+import { Timestamp } from "@astryxdesign/core/Timestamp";
+import { useToast } from "@astryxdesign/core/Toast";
+import { Objektikon, type Ton } from "@/components/crm/app/kit";
+import { belopp } from "@/lib/crm/affar";
+import { CrmFel, SYSTEMNAMN, crmAnrop } from "@/lib/crm/api";
+import { faltetikett, uppraknat } from "@/lib/crm/felkoder";
+import { useLocale, type Localized } from "@/lib/i18n";
+
+/** En rad på tidslinjen som API:t lämnar den (`tidslinjepost_ut` i crm_v1_tidslinje.py). */
+export type Tidslinjepost = {
+  key: string;
+  type: string;
+  at: string;
+  origin: "crm" | "iris" | "support";
+  title: string | null;
+  text: string | null;
+  data: Record<string, unknown>;
+  link: { kind: string; id: string } | null;
+};
+
+type Objekt = "companies" | "people" | "deals";
+type Skriver = "anteckning" | "uppgift" | "aktivitet";
+type Aktivitetstyp = "call" | "meeting" | "email" | "visit" | "other";
+
+/** Fältet som knyter en ny anteckning, uppgift eller aktivitet till posten. */
+const KOPPLING: Record<Objekt, string> = { companies: "company_id", people: "person_id", deals: "deal_id" };
+
+const AKTIVITETER: Record<Aktivitetstyp, { ikon: LucideIcon; namn: Localized }> = {
+  call: { ikon: Phone, namn: { sv: "Samtal", en: "Call" } },
+  meeting: { ikon: CalendarCheck, namn: { sv: "Möte", en: "Meeting" } },
+  email: { ikon: Mail, namn: { sv: "Mejl", en: "Email" } },
+  visit: { ikon: MapPin, namn: { sv: "Besök", en: "Visit" } },
+  other: { ikon: Activity, namn: { sv: "Annat", en: "Other" } }
+};
+
+/** Samtalets utfall i leadsflödet (app/leads/samtal.py). */
+const SAMTALSUTFALL: Record<string, Localized> = {
+  ej_svar: { sv: "Ej svar", en: "No answer" },
+  aterkom: { sv: "Återkom", en: "Call back" },
+  ej_intresserad: { sv: "Ej intresserad", en: "Not interested" },
+  kontakta_inte: { sv: "Kontakta inte", en: "Do not contact" },
+  mote: { sv: "Möte bokat", en: "Meeting booked" },
+  vunnen: { sv: "Vunnen", en: "Won" }
+};
+
+/** Leadets lägen hos Iris. Ett läge som saknas här skrivs inte ut som kod. */
+const LEADLAGE: Record<string, Localized> = {
+  new: { sv: "Ny", en: "New" },
+  ready: { sv: "Klar att skicka", en: "Ready to send" },
+  recommended: { sv: "Rekommenderad", en: "Recommended" },
+  researching: { sv: "Under research", en: "Being researched" },
+  queued: { sv: "I kö", en: "Queued" },
+  contacted: { sv: "Kontaktad", en: "Contacted" },
+  replied: { sv: "Har svarat", en: "Has replied" },
+  suppressed: { sv: "Kontaktas inte", en: "Not contacted" }
+};
+
+const KALLA: Record<string, Localized> = {
+  api: { sv: "API", en: "API" },
+  app: { sv: "Appen", en: "The app" },
+  synk: { sv: "Synk", en: "Sync" },
+  system: { sv: "Systemet", en: "The system" }
+};
+
+const str = (v: unknown): string | null => (typeof v === "string" && v ? v : null);
+const iso = (v: string): ISODateString | undefined => (/^\d{4}-\d{2}-\d{2}$/.test(v) ? (v as ISODateString) : undefined);
+
+/** Radens ikon, färg och mening. Loggen bär fältnamn, aldrig värden. */
+function rad(p: Tidslinjepost, text: (l: Localized) => string, sprak: "sv" | "en"): { ikon: LucideIcon; ton: Ton; vad: string; under?: string } {
+  const titel = p.title ?? "";
+  /** "Mejl skickat: <ämnet>", eller bara etiketten när raden saknar rubrik. */
+  const med = (etikett: Localized) => (titel ? `${text(etikett)}: ${titel}` : text(etikett));
+  switch (p.type) {
+    case "record_created":
+      return { ikon: Plus, ton: "mossa", vad: text({ sv: "Skapades", en: "Created" }) };
+    case "record_updated": {
+      const falt = Array.isArray(p.data.fields) ? (p.data.fields as string[]) : [];
+      if (!falt.length) return { ikon: Pencil, ton: "bla", vad: text({ sv: "Ändrades", en: "Changed" }) };
+      const lista = uppraknat(falt.map((f) => text(faltetikett(f))), text({ sv: "och", en: "and" }));
+      return { ikon: Pencil, ton: "bla", vad: text({ sv: `${lista} ändrades`, en: `${lista} changed` }) };
+    }
+    case "record_deleted":
+      return { ikon: Trash2, ton: "mineral", vad: text({ sv: "Raderades", en: "Deleted" }) };
+    case "record_restored":
+      return { ikon: RotateCcw, ton: "ockra", vad: text({ sv: "Återställdes", en: "Restored" }) };
+    case "record_purged":
+      return { ikon: Eraser, ton: "mineral", vad: text({ sv: "Tömdes ur papperskorgen", en: "Emptied from the trash" }) };
+    case "note":
+      return { ikon: StickyNote, ton: "ockra", vad: titel || text({ sv: "Anteckning", en: "Note" }) };
+    case "task": {
+      const forfaller = str(p.data.due);
+      const under = p.data.done
+        ? text({ sv: "Klar", en: "Done" })
+        : forfaller
+          ? text({ sv: `Förfaller ${dag(forfaller, sprak)}`, en: `Due ${dag(forfaller, sprak)}` })
+          : undefined;
+      return { ikon: p.data.done ? ClipboardCheck : ListTodo, ton: "bla", vad: med({ sv: "Uppgift", en: "Task" }), under };
+    }
+    case "activity": {
+      const typ = AKTIVITETER[(str(p.data.activity_type) ?? "other") as Aktivitetstyp] ?? AKTIVITETER.other;
+      const minuter = typeof p.data.duration_minutes === "number" ? text({ sv: `${p.data.duration_minutes} min`, en: `${p.data.duration_minutes} min` }) : null;
+      return { ikon: typ.ikon, ton: "mossa", vad: titel || text(typ.namn), under: [text(typ.namn), minuter, str(p.data.result)].filter(Boolean).join(" · ") };
+    }
+    case "deal_created":
+    case "deal_closed": {
+      const pengar = typeof p.data.amount === "number" ? belopp(p.data.amount, str(p.data.currency), sprak) : null;
+      return {
+        ikon: Handshake,
+        ton: "sigill",
+        vad: p.type === "deal_created" ? med({ sv: "Affär skapad", en: "Deal created" }) : med({ sv: "Affär avslutad", en: "Deal closed" }),
+        under: [pengar, str(p.data.lost_reason)].filter(Boolean).join(" · ") || undefined
+      };
+    }
+    case "lead_created":
+      return { ikon: Target, ton: "ockra", vad: med({ sv: "Lead hos Iris", en: "Lead with Iris" }) };
+    case "lead_status": {
+      const till = LEADLAGE[str(p.data.to) ?? ""];
+      return { ikon: Flag, ton: "ockra", vad: till ? text({ sv: `Leadet är nu: ${text(till)}`, en: `The lead is now: ${text(till)}` }) : text({ sv: "Leadets läge ändrades", en: "The lead's status changed" }) };
+    }
+    case "email_sent":
+      return { ikon: Send, ton: "bla", vad: med({ sv: "Mejl skickat", en: "Email sent" }) };
+    case "followup_sent":
+      return { ikon: Send, ton: "bla", vad: med({ sv: "Uppföljning skickad", en: "Follow-up sent" }) };
+    case "reply_received":
+      return { ikon: Reply, ton: "mossa", vad: titel ? text({ sv: `Svar från ${titel}`, en: `Reply from ${titel}` }) : text({ sv: "Svar på mejlet", en: "Reply to the email" }) };
+    case "conversation_stage":
+      return { ikon: Flag, ton: "ockra", vad: text({ sv: "Konversationen bytte steg", en: "The conversation changed stage" }) };
+    case "meeting_booked":
+      return { ikon: CalendarCheck, ton: "mossa", vad: text({ sv: "Möte bokat", en: "Meeting booked" }) };
+    case "handed_over":
+      return { ikon: Handshake, ton: "sigill", vad: text({ sv: "Överlämnat till säljare", en: "Handed over to sales" }) };
+    case "call": {
+      const utfall = SAMTALSUTFALL[str(p.data.outcome) ?? ""];
+      const aterkom = str(p.data.call_back_on);
+      return {
+        ikon: Phone,
+        ton: "mossa",
+        vad: utfall ? text({ sv: `Samtal: ${text(utfall)}`, en: `Call: ${text(utfall)}` }) : text({ sv: "Samtal", en: "Call" }),
+        under: aterkom ? text({ sv: `Återkom ${dag(aterkom, sprak)}`, en: `Call back ${dag(aterkom, sprak)}` }) : undefined
+      };
+    }
+    case "support_ticket":
+      return { ikon: LifeBuoy, ton: "mineral", vad: med({ sv: "Supportärende", en: "Support ticket" }) };
+    default:
+      return { ikon: History, ton: "mineral", vad: titel || text({ sv: "Händelse", en: "Event" }) };
+  }
+}
+
+/** "1 dec." eller "1 dec. 2027". */
+function dag(v: string, sprak: "sv" | "en"): string {
+  const d = new Date(v.length <= 10 ? `${v}T12:00:00` : v);
+  const iAr = d.getFullYear() === new Date().getFullYear();
+  return d.toLocaleDateString(sprak === "sv" ? "sv-SE" : "en-GB", iAr ? { day: "numeric", month: "short" } : { day: "numeric", month: "short", year: "numeric" });
+}
+
+/** Var raden bor: Iris, Supporten, eller för CRM:ets egna rader vem eller vad som gjorde dem. Okänt skrivs inte ut. */
+function varifran(p: Tidslinjepost, text: (l: Localized) => string): string | null {
+  if (p.origin === "iris") return "Iris";
+  if (p.origin === "support") return text({ sv: "Supporten", en: "Support" });
+  const kalla = str(p.data.source);
+  const aktor = str(p.data.actor);
+  if (kalla === "synk" && aktor?.startsWith("anslutning:")) {
+    const namn = aktor.slice("anslutning:".length);
+    return text({ sv: `Synk från ${SYSTEMNAMN[namn] ?? namn}`, en: `Sync from ${SYSTEMNAMN[namn] ?? namn}` });
+  }
+  if (kalla) return text(KALLA[kalla] ?? { sv: kalla, en: kalla });
+  return str(p.data.author) ?? str(p.data.owner);
+}
+
+/**
+ * Postens historik (Twentys Timeline, i panelens form): allt som hänt med
+ * bolaget, personen eller affären på ett ställe, nyast först. CRM:ets egna
+ * ändringar, anteckningar, uppgifter och aktiviteter, och för bolag och
+ * personer det som hänt hos Iris och supporten (`GET /v1/<objekt>/{id}/timeline`).
+ *
+ * Överst skrivs nytt: en anteckning, en uppgift eller en aktivitet, knuten till
+ * posten. Öppna uppgifter står kvar som en lista att bocka av tills de är klara.
+ */
+export function Tidslinje({ objekt, id, andrad }: Readonly<{ objekt: Objekt; id: string; andrad?: string | null }>) {
+  const { text, locale } = useLocale();
+  // Panelen ligger under <bas>/<vy>; en affär på tidslinjen öppnas i <bas>/affarer.
+  const bas = (usePathname() ?? "/crm/bolag").replace(/\/[^/]+\/?$/, "");
+  const visa = useToast();
+  const [poster, setPoster] = useState<Tidslinjepost[] | null>(null);
+  const [fel, setFel] = useState<unknown>(null);
+  const [omgang, setOmgang] = useState(0);
+  const [skriver, setSkriver] = useState<Skriver | null>(null);
+  const [sparar, setSparar] = useState(false);
+  const [bockar, setBockar] = useState<string | null>(null);
+  // Formulärens fält. Tömda när något sparats eller avbrutits.
+  const [brodtext, setBrodtext] = useState("");
+  const [rubrik, setRubrik] = useState("");
+  const [forfaller, setForfaller] = useState("");
+  const [typ, setTyp] = useState<Aktivitetstyp>("call");
+  const [saknas, setSaknas] = useState(false);
+
+  useEffect(() => {
+    let aktuell = true;
+    setFel(null);
+    crmAnrop<{ data: Tidslinjepost[] }>(`/v1/${objekt}/${encodeURIComponent(id)}/timeline?limit=200`)
+      .then((s) => aktuell && setPoster(s.data))
+      .catch((e) => aktuell && setFel(e));
+    return () => {
+      aktuell = false;
+    };
+  }, [objekt, id, andrad, omgang]);
+
+  // En ny post börjar med stängda formulär.
+  useEffect(() => {
+    setPoster(null);
+    setSkriver(null);
+  }, [objekt, id]);
+
+  const stang = useCallback(() => {
+    setSkriver(null);
+    setBrodtext("");
+    setRubrik("");
+    setForfaller("");
+    setTyp("call");
+    setSaknas(false);
+  }, []);
+
+  async function spara(e: React.FormEvent) {
+    e.preventDefault();
+    if (!skriver || sparar) return;
+    const koppling = { [KOPPLING[objekt]]: id };
+    let vag = "/v1/notes";
+    let kropp: Record<string, unknown>;
+    if (skriver === "anteckning") {
+      if (!brodtext.trim()) return setSaknas(true);
+      kropp = { body: brodtext.trim(), ...koppling };
+    } else if (skriver === "uppgift") {
+      if (!rubrik.trim()) return setSaknas(true);
+      vag = "/v1/tasks";
+      // Förfallodagen är en dag: klockan nio på morgonen, lokal tid.
+      kropp = { title: rubrik.trim(), ...(forfaller ? { due_at: new Date(`${forfaller}T09:00:00`).toISOString() } : {}), ...koppling };
+    } else {
+      if (!rubrik.trim()) return setSaknas(true);
+      vag = "/v1/activities";
+      kropp = { type: typ, subject: rubrik.trim(), ...(brodtext.trim() ? { body: brodtext.trim() } : {}), ...koppling };
+    }
+    setSparar(true);
+    try {
+      await crmAnrop<unknown>(vag, { method: "POST", body: JSON.stringify(kropp) });
+      stang();
+      setOmgang((n) => n + 1);
+    } catch (orsak) {
+      visa({
+        type: "error",
+        body: text(orsak instanceof CrmFel ? orsak.text : { sv: "Det gick inte att spara. Försök igen.", en: "Could not save. Try again." }),
+        uniqueID: "crm-tidslinje"
+      });
+    } finally {
+      setSparar(false);
+    }
+  }
+
+  async function bocka(p: Tidslinjepost, klar: boolean) {
+    if (!p.link || bockar) return;
+    setBockar(p.key);
+    // Raden bockas direkt; API:ts svar avgör om den står kvar så.
+    setPoster((forr) => forr?.map((x) => (x.key === p.key ? { ...x, data: { ...x.data, done: klar } } : x)) ?? forr);
+    try {
+      await crmAnrop<unknown>(`/v1/tasks/${encodeURIComponent(p.link.id)}`, { method: "PATCH", body: JSON.stringify({ status: klar ? "done" : "todo" }) });
+    } catch (orsak) {
+      visa({
+        type: "error",
+        body: text(orsak instanceof CrmFel ? orsak.text : { sv: "Uppgiften gick inte att ändra.", en: "The task could not be changed." }),
+        uniqueID: "crm-tidslinje"
+      });
+    } finally {
+      setBockar(null);
+      setOmgang((n) => n + 1);
+    }
+  }
+
+  const attGora = useMemo(
+    () =>
+      (poster ?? [])
+        .filter((p) => p.type === "task" && p.origin === "crm" && p.data.done !== true && p.link)
+        .sort((a, b) => (str(a.data.due) ?? "9").localeCompare(str(b.data.due) ?? "9")),
+    [poster]
+  );
+  // Öppna uppgifter står i Att göra. I flödet står de först när de är klara, så att samma rad inte visas två gånger.
+  const flode = useMemo(() => (poster ?? []).filter((p) => !(p.type === "task" && p.origin === "crm" && p.data.done !== true && p.link)), [poster]);
+  const idag = new Date().toISOString();
+
+  const knapp = (slag: Skriver, ikon: LucideIcon, namn: Localized) => (
+    <Button size="sm" variant="secondary" label={text(namn)} icon={<Icon icon={ikon} size="sm" />} onClick={() => setSkriver(slag)} />
+  );
+  const fot = (
+    <div className="flex items-center justify-end gap-2">
+      <Button size="sm" variant="ghost" label={text({ sv: "Avbryt", en: "Cancel" })} onClick={stang} />
+      <Button size="sm" type="submit" variant="primary" label={text({ sv: "Spara", en: "Save" })} isLoading={sparar} />
+    </div>
+  );
+  const kravs = saknas ? { type: "error" as const, message: text({ sv: "Skriv något först.", en: "Write something first." }) } : undefined;
+
+  const skrivyta =
+    skriver == null ? (
+      <div className="flex flex-wrap gap-2">
+        {knapp("anteckning", StickyNote, { sv: "Anteckning", en: "Note" })}
+        {knapp("uppgift", ListTodo, { sv: "Uppgift", en: "Task" })}
+        {knapp("aktivitet", Phone, { sv: "Samtal eller möte", en: "Call or meeting" })}
+      </div>
+    ) : (
+      <form onSubmit={spara} className="crm-skrivyta flex flex-col gap-3" noValidate>
+        {skriver === "anteckning" ? (
+          <TextArea
+            label={text({ sv: "Ny anteckning", en: "New note" })}
+            placeholder={text({ sv: "Vad kom ni fram till?", en: "What did you agree on?" })}
+            rows={4}
+            value={brodtext}
+            onChange={(v) => {
+              setBrodtext(v);
+              setSaknas(false);
+            }}
+            width="100%"
+            status={kravs}
+            hasAutoFocus
+          />
+        ) : null}
+        {skriver === "uppgift" ? (
+          <>
+            <TextInput
+              label={text({ sv: "Ny uppgift", en: "New task" })}
+              placeholder={text({ sv: "Skicka offerten", en: "Send the quote" })}
+              value={rubrik}
+              onChange={(v) => {
+                setRubrik(v);
+                setSaknas(false);
+              }}
+              width="100%"
+              status={kravs}
+              hasAutoFocus
+            />
+            <DateInput
+              label={text({ sv: "Förfaller", en: "Due" })}
+              value={iso(forfaller)}
+              onChange={(v) => setForfaller(v ?? "")}
+              weekStartsOn="mon"
+              format="date"
+              hasClear
+              isOptional
+              width="100%"
+            />
+          </>
+        ) : null}
+        {skriver === "aktivitet" ? (
+          <>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-[150px_1fr]">
+              <Selector
+                label={text({ sv: "Slag", en: "Kind" })}
+                value={typ}
+                onChange={(v) => v && setTyp(v as Aktivitetstyp)}
+                options={(Object.keys(AKTIVITETER) as Aktivitetstyp[]).map((a) => ({ value: a, label: text(AKTIVITETER[a].namn) }))}
+                width="100%"
+              />
+              <TextInput
+                label={text({ sv: "Vad hände?", en: "What happened?" })}
+                placeholder={text({ sv: "Gick igenom offerten", en: "Went through the quote" })}
+                value={rubrik}
+                onChange={(v) => {
+                  setRubrik(v);
+                  setSaknas(false);
+                }}
+                width="100%"
+                status={kravs}
+                hasAutoFocus
+              />
+            </div>
+            <TextArea label={text({ sv: "Anteckning", en: "Note" })} rows={3} value={brodtext} onChange={setBrodtext} width="100%" isOptional />
+          </>
+        ) : null}
+        {fot}
+      </form>
+    );
+
+  let innehall: React.ReactNode;
+  if (fel && !poster) {
+    innehall = (
+      <div className="flex flex-col items-start gap-3 py-2">
+        <Text color="secondary">{text(fel instanceof CrmFel ? fel.text : { sv: "Historiken gick inte att hämta.", en: "The history could not be loaded." })}</Text>
+        <Button size="sm" variant="secondary" label={text({ sv: "Försök igen", en: "Try again" })} onClick={() => setOmgang((n) => n + 1)} />
+      </div>
+    );
+  } else if (!poster) {
+    innehall = (
+      <div className="flex flex-col gap-5 py-1" role="status" aria-busy="true" aria-label={text({ sv: "Hämtar historiken", en: "Loading the history" })}>
+        {Array.from({ length: 4 }, (_, i) => (
+          <div key={i} className="flex items-start gap-3">
+            <Skeleton width={24} height={24} radius={2} index={i} />
+            <span className="flex flex-1 flex-col gap-2 pt-1">
+              <Skeleton width={`${45 + ((i * 17) % 35)}%`} height={10} radius="rounded" index={i} />
+              <Skeleton width="30%" height={8} radius="rounded" index={i} />
+            </span>
+          </div>
+        ))}
+      </div>
+    );
+  } else if (flode.length === 0 && attGora.length > 0) {
+    innehall = null;
+  } else if (flode.length === 0) {
+    innehall = (
+      <EmptyState
+        isCompact
+        icon={<Icon icon={History} size="lg" color="secondary" />}
+        title={text({ sv: "Ingen händelse än", en: "No events yet" })}
+        description={text({
+          sv: "Anteckningar, uppgifter, samtal och varje ändring av posten samlas här.",
+          en: "Notes, tasks, calls and every change to the record are collected here."
+        })}
+      />
+    );
+  } else {
+    innehall = (
+      <ol className="crm-tidslinje" aria-label={text({ sv: "Historik, nyast först", en: "History, newest first" })}>
+        {flode.map((p) => {
+          const r = rad(p, text, locale);
+          const kalla = varifran(p, text);
+          const affar = p.link?.kind === "deal" ? `${bas}/affarer?affar=${encodeURIComponent(p.link.id)}` : null;
+          return (
+            <li key={p.key} className="crm-tidslinje-rad">
+              <span className="crm-tidslinje-ikon">
+                <Objektikon ikon={r.ikon} ton={r.ton} storlek={24} />
+              </span>
+              <span className="flex min-w-0 flex-1 flex-col gap-0.5 pb-4">
+                {affar ? (
+                  <NextLink href={affar} className="crm-tidslinje-lank text-[0.875rem] text-ink">
+                    {r.vad}
+                  </NextLink>
+                ) : (
+                  <span className="text-[0.875rem] text-ink [overflow-wrap:anywhere]">{r.vad}</span>
+                )}
+                {p.text ? <span className="crm-tidslinje-text">{p.text}</span> : null}
+                <span className="flex flex-wrap items-center gap-x-1.5 text-[0.8125rem] text-ink-muted">
+                  {r.under ? (
+                    <>
+                      <span>{r.under}</span>
+                      <span aria-hidden>·</span>
+                    </>
+                  ) : null}
+                  {kalla ? (
+                    <>
+                      <span>{kalla}</span>
+                      <span aria-hidden>·</span>
+                    </>
+                  ) : null}
+                  <Timestamp value={p.at} format="relative" />
+                </span>
+              </span>
+            </li>
+          );
+        })}
+      </ol>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-5">
+      {skrivyta}
+
+      {attGora.length > 0 ? (
+        <section aria-label={text({ sv: "Att göra", en: "To do" })} className="flex flex-col gap-1">
+          <Text type="label" color="secondary" weight="medium">
+            {text({ sv: "Att göra", en: "To do" })}
+          </Text>
+          <ul className="flex flex-col">
+            {attGora.map((p) => {
+              const forfallodag = str(p.data.due);
+              const sen = forfallodag != null && forfallodag < idag;
+              return (
+                <li key={p.key} className="crm-attgora flex items-center gap-2 py-1.5">
+                  <CheckboxInput
+                    label={text({ sv: `Klar: ${p.title ?? "uppgiften"}`, en: `Done: ${p.title ?? "the task"}` })}
+                    isLabelHidden
+                    value={false}
+                    isDisabled={bockar != null}
+                    onChange={(v) => void bocka(p, v)}
+                  />
+                  <span className="min-w-0 flex-1 truncate text-[0.875rem] text-ink">{p.title}</span>
+                  {forfallodag ? (
+                    <span className={`inline-flex shrink-0 items-center gap-1 text-[0.8125rem] tabular-nums ${sen ? "text-danger" : "text-ink-muted"}`}>
+                      <Icon icon={CalendarClock} size="xsm" color="inherit" />
+                      <span>{dag(forfallodag, locale)}</span>
+                      {sen ? <span className="sr-only">{text({ sv: ", har passerat", en: ", has passed" })}</span> : null}
+                    </span>
+                  ) : null}
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      ) : null}
+
+      {innehall}
+
+      {flode.length > 0 ? (
+        <Text type="supporting" color="secondary">
+          {objekt === "deals"
+            ? text({ sv: "Ändringar visas med vilka fält som ändrades. Värdena står i affärens uppgifter.", en: "Changes show which fields changed. The values are in the deal's details." })
+            : text({
+                sv: "Mejl, samtal och ärenden bor kvar hos Iris och supporten och visas här. Ändringar visas med vilka fält som ändrades.",
+                en: "Emails, calls and tickets stay with Iris and support and are shown here. Changes show which fields changed."
+              })}
+        </Text>
+      ) : null}
+    </div>
+  );
+}

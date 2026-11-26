@@ -404,6 +404,92 @@ function ogiltigAffar(k: Record<string, unknown>, ny: boolean): Response | null 
   return null;
 }
 
+// ---------------------------------------------------------------------------
+// Tidslinjen (tidslinjepost_ut i crm_v1_tidslinje.py)
+// ---------------------------------------------------------------------------
+
+type Tidsrad = { key: string; type: string; at: string; origin: "crm" | "iris" | "support"; title: string | null; text: string | null; data: Record<string, unknown>; link: { kind: string; id: string } | null };
+
+/** Det som skrivits i förhandsvisningen (anteckningar, uppgifter, aktiviteter), per post. */
+const SKRIVET: Record<string, Tidsrad[]> = {};
+let radnummer = 500;
+
+/** Postens egna ändringar i tidslinjens form. */
+const egna = (h: Handelse[]): Tidsrad[] =>
+  h.map((x) => ({ key: `crm:${x.id}:${x.seq}`, type: `record_${x.type}`, at: x.at ?? iso(1), origin: "crm", title: null, text: null, data: { fields: x.fields, source: x.source, actor: x.actor }, link: null }));
+
+/** Bolagets tidslinje: egna ändringar, arbetet i CRM:et, ett lead hos Iris och ett supportärende. Allt påhittat. */
+function bolagstidslinje(b: Bolag): Tidsrad[] {
+  const affarer = AFFARER.filter((a) => a.company_id === b.id && !a.deleted_at);
+  const rader: Tidsrad[] = [
+    ...egna(b.source === "api" ? [] : historik("company", b.id, b.created_at, b.updated_at, b.external_ids[0]?.connection)),
+    { key: `ant:${b.id}`, type: "note", at: iso(20), origin: "crm", title: "Efter mötet", text: "De vill samla telefonin hos en leverantör före årsskiftet. Offert på växel och tolv mobiler, och en fråga om bindningstid.", data: { author: ANSVARIGA[0] }, link: { kind: "note", id: `n-${b.id}` } },
+    { key: `akt:${b.id}`, type: "activity", at: iso(44), origin: "crm", title: "Gick igenom dagens lösning", text: null, data: { activity_type: "meeting", duration_minutes: 45, result: "Vill ha offert", owner: ANSVARIGA[0] }, link: { kind: "activity", id: `ak-${b.id}` } },
+    { key: `upp:${b.id}:1`, type: "task", at: iso(19), origin: "crm", title: "Skicka offerten", text: null, data: { done: false, due: "2026-11-20T08:00:00+00:00" }, link: { kind: "task", id: `t1-${b.id}` } },
+    { key: `upp:${b.id}:2`, type: "task", at: iso(18), origin: "crm", title: "Boka uppföljning i januari", text: null, data: { done: false, due: "2027-01-12T08:00:00+00:00" }, link: { kind: "task", id: `t2-${b.id}` } },
+    { key: `msg:${b.id}:2`, type: "reply_received", at: iso(70), origin: "iris", title: "Sara Modellén", text: "Hej! Det låter intressant, vi ser över telefonin i höst. Ring mig gärna på torsdag förmiddag.", data: {}, link: { kind: "conversation", id: "k1" } },
+    { key: `msg:${b.id}:1`, type: "email_sent", at: iso(96), origin: "iris", title: "Telefonin inför 2027", text: "Hej Sara, jag såg att ni öppnar ett nytt kontor i vår. Många i er situation passar på att samla växel och mobiler.", data: {}, link: { kind: "conversation", id: "k1" } },
+    { key: `samtal:${b.id}`, type: "call", at: iso(60), origin: "iris", title: null, text: "Bokade möte på kontoret.", data: { outcome: "mote" }, link: { kind: "lead", id: "l1" } },
+    { key: `t:${b.id}`, type: "support_ticket", at: iso(24 * 12), origin: "support", title: "Fakturan stämmer inte", text: null, data: { channel: "email", status: "resolved" }, link: { kind: "ticket", id: "a1" } },
+    { key: `p:${b.id}`, type: "lead_created", at: iso(24 * 9), origin: "iris", title: b.name, text: null, data: {}, link: { kind: "lead", id: "l1" } },
+    ...affarer.flatMap((a): Tidsrad[] => [
+      { key: `aff:${a.id}`, type: "deal_created", at: a.created_at ?? iso(100), origin: "crm", title: a.name, text: null, data: { amount: a.amount, currency: a.currency }, link: { kind: "deal", id: a.id } },
+      ...(a.closed_at ? [{ key: `aff:${a.id}:slut`, type: "deal_closed", at: a.closed_at, origin: "crm" as const, title: a.name, text: null, data: { amount: a.amount, currency: a.currency, lost_reason: a.lost_reason }, link: { kind: "deal", id: a.id } }] : [])
+    ])
+  ];
+  return rader;
+}
+
+/** Tidslinjen för en post: det skrivna och det påhittade, nyast först. Var tredje bolag är tomt på annat än sina egna ändringar. */
+function tidslinje(objekt: "companies" | "people" | "deals", id: string): Tidsrad[] | null {
+  let bas: Tidsrad[];
+  if (objekt === "companies") {
+    const b = BOLAG.find((x) => x.id === id);
+    if (!b) return null;
+    bas = b.private_person || Number(id.slice(1)) % 3 === 2 ? egna(historik("company", b.id, b.created_at, b.updated_at, b.external_ids[0]?.connection)) : bolagstidslinje(b);
+  } else if (objekt === "people") {
+    const p = PERSONER.find((x) => x.id === id);
+    if (!p) return null;
+    bas = egna(historik("person", p.id, p.created_at ?? null, p.updated_at, p.external_ids?.[0]?.connection));
+  } else {
+    const a = AFFARER.find((x) => x.id === id);
+    if (!a) return null;
+    const skapad: Tidsrad = { key: `crm:${a.id}:1`, type: "record_created", at: a.created_at ?? iso(100), origin: "crm", title: null, text: null, data: { source: "app", actor: "anvandare:exempel" }, link: null };
+    bas = Number(a.id.slice(1)) >= 100
+      ? [skapad]
+      : [
+          ...egna(historik("deal", a.id, a.created_at, a.updated_at).filter((h) => h.type === "updated").map((h) => (h.source === "synk" ? { ...h, source: "app", actor: "anvandare:exempel" } : h))),
+          { key: `ant:${a.id}`, type: "note", at: iso(30), origin: "crm", title: null, text: "Inköp vill ha tre års bindning om priset per användare går ned.", data: { author: ANSVARIGA[1] }, link: { kind: "note", id: `n-${a.id}` } },
+          { key: `upp:${a.id}`, type: "task", at: iso(28), origin: "crm", title: "Räkna om priset på tre år", text: null, data: { done: false, due: "2026-12-03T08:00:00+00:00" }, link: { kind: "task", id: `t-${a.id}` } },
+          skapad
+        ];
+  }
+  const skrivet = SKRIVET[`${objekt}:${id}`] ?? [];
+  const klara = new Set(KLARA);
+  return [...skrivet, ...bas]
+    .map((r) => (r.type === "task" && r.link && klara.has(r.link.id) ? { ...r, data: { ...r.data, done: true } } : r))
+    .sort((x, y) => y.at.localeCompare(x.at));
+}
+
+/** Uppgifter som bockats av i förhandsvisningen. */
+const KLARA: string[] = [];
+
+/** POST /v1/notes, /v1/tasks och /v1/activities: raden läggs på postens tidslinje. */
+function skriv(slag: "notes" | "tasks" | "activities", k: Record<string, unknown>): Response {
+  const [objekt, id] = k.company_id ? ["companies", String(k.company_id)] : k.person_id ? ["people", String(k.person_id)] : k.deal_id ? ["deals", String(k.deal_id)] : [null, ""];
+  if (!objekt) return json({ detail: { code: "target_required", message: "Link the record to at least one company, person or deal.", meddelande: "Koppla posten till minst ett bolag, en person eller en affär." } }, 422);
+  const nr = `ny${radnummer++}`;
+  const at = new Date().toISOString();
+  const rad: Tidsrad =
+    slag === "notes"
+      ? { key: `ant:${nr}`, type: "note", at, origin: "crm", title: null, text: String(k.body ?? ""), data: { source: "app" }, link: { kind: "note", id: nr } }
+      : slag === "tasks"
+        ? { key: `upp:${nr}`, type: "task", at, origin: "crm", title: String(k.title ?? ""), text: null, data: { done: false, due: k.due_at ?? null, source: "app" }, link: { kind: "task", id: nr } }
+        : { key: `akt:${nr}`, type: "activity", at, origin: "crm", title: String(k.subject ?? ""), text: k.body ? String(k.body) : null, data: { activity_type: k.type ?? "other", source: "app" }, link: { kind: "activity", id: nr } };
+  (SKRIVET[`${objekt}:${id}`] ??= []).unshift(rad);
+  return json({ id: nr }, 201);
+}
+
 const DBNAMN: Record<Relation, string> = { customer: "kund", former_customer: "tidigare_kund", prospect: "prospekt", partner: "partner", supplier: "leverantor", other: "ovrigt" };
 
 /** Luhn över tio siffror, som falt.orgnr kontrollerar. */
@@ -667,6 +753,21 @@ async function svara(url: URL, init?: RequestInit): Promise<Response> {
     andraPerson(ny, kropp);
     PERSONER.unshift(ny);
     return json(ny, 201);
+  }
+  // ---- Tidslinjen och det som skrivs på den ------------------------------------
+  const linje = vag.match(/^\/v1\/(companies|people|deals)\/([^/]+)\/timeline$/);
+  if (linje && metod === "GET") {
+    const rader = tidslinje(linje[1] as "companies" | "people" | "deals", decodeURIComponent(linje[2]));
+    return rader ? json({ data: rader }) : json({ detail: { code: "not_found", message: "The record does not exist.", meddelande: "Posten finns inte." } }, 404);
+  }
+  const skrivning = vag.match(/^\/v1\/(notes|tasks|activities)$/);
+  if (skrivning && metod === "POST") return skriv(skrivning[1] as "notes" | "tasks" | "activities", kropp);
+  const uppgift = vag.match(/^\/v1\/tasks\/([^/]+)$/);
+  if (uppgift && metod === "PATCH") {
+    const id = decodeURIComponent(uppgift[1]);
+    if (kropp.status === "done" && !KLARA.includes(id)) KLARA.push(id);
+    if (kropp.status === "todo" && KLARA.includes(id)) KLARA.splice(KLARA.indexOf(id), 1);
+    return json({ id, status: kropp.status });
   }
   // ---- Affärer (crm_v1_objekt.py) ---------------------------------------------
   if (vag === "/v1/deal-stages" && metod === "GET") return json({ data: STEG });
