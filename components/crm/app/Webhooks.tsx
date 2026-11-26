@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import { useSearchParams } from "next/navigation";
 import { Bell, Check, CircleDot, Clock, Copy, History, Plus, Power, PowerOff, RefreshCw, Send, Trash2, Webhook as WebhookIkon, X } from "lucide-react";
 import { AlertDialog } from "@astryxdesign/core/AlertDialog";
@@ -42,6 +42,9 @@ const OBJEKTORD: Record<string, Localized> = {
   deal: { sv: "Affär", en: "Deal" },
   task: { sv: "Uppgift", en: "Task" },
   note: { sv: "Anteckning", en: "Note" },
+  activity: { sv: "Aktivitet", en: "Activity" },
+  attachment: { sv: "Bilaga", en: "Attachment" },
+  suppression: { sv: "Spärr", en: "Block" },
   sync: { sv: "Synk", en: "Sync" }
 };
 const TYPORD: Record<string, Localized> = {
@@ -471,6 +474,9 @@ function Leveranspanel({
   const [hamtar, setHamtar] = useState(false);
   const [skickar, setSkickar] = useState<string | null>(null);
   const id = webhook?.id ?? null;
+  // Panelen kan byta webhook medan ett svar är på väg: ett svar för den förra kastas.
+  const visad = useRef(id);
+  visad.current = id;
 
   const hamta = useCallback(async () => {
     if (!id) return;
@@ -480,6 +486,7 @@ function Leveranspanel({
         crmAnrop<{ data: Leverans[] }>(`/v1/webhooks/${encodeURIComponent(id)}/deliveries?limit=50`),
         crmAnrop<Webhook>(`/v1/webhooks/${encodeURIComponent(id)}`)
       ]);
+      if (visad.current !== id) return;
       setLeveranser(l.data);
       uppdaterad(w);
       setFel(null);
@@ -702,7 +709,7 @@ function Leveranspanel({
             <LayoutFooter hasDivider>
               <HStack gap={2} vAlign="center" justify="between">
                 <Text type="supporting" color="secondary" maxLines={2}>
-                  {text({ sv: "Ett misslyckat försök görs om sju gånger under ett dygn. Loggen sparas i 30 dagar.", en: "A failed attempt is retried seven times over a day. The log is kept for 30 days." })}
+                  {text({ sv: "Ett anrop som misslyckas försöks sammanlagt sju gånger under drygt ett dygn. Loggen sparas i 30 dagar.", en: "A call that fails is tried seven times in all over a little more than a day. The log is kept for 30 days." })}
                 </Text>
               </HStack>
             </LayoutFooter>

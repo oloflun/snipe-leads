@@ -13,6 +13,7 @@ import {
   Eye,
   Factory,
   Globe,
+  Handshake,
   Hash,
   History,
   LayoutGrid,
@@ -46,13 +47,23 @@ import { Tab, TabList } from "@astryxdesign/core/TabList";
 import { Text } from "@astryxdesign/core/Text";
 import { Timestamp } from "@astryxdesign/core/Timestamp";
 import type { Bolagsfalt } from "@/components/crm/app/BolagFormular";
+import { STEGTON } from "@/components/crm/app/AffarPanel";
 import { Bilagor } from "@/components/crm/app/Bilagor";
 import { LEADLAGE, Tidslinje } from "@/components/crm/app/Tidslinje";
-import { Kallpiller, Lankpiller, Personchip, Privatpersonetikett, Relationsetikett, tonFor, tonklass, useSmal, utanBolagsform } from "@/components/crm/app/kit";
-import { SYSTEMNAMN, crmAnrop, orgnrVisning, type Bolag, type Person, type Sida as Svarssida } from "@/lib/crm/api";
+import { Kallpiller, Lankpiller, Personchip, Prick, Privatpersonetikett, Relationsetikett, tonFor, tonklass, useSmal, utanBolagsform } from "@/components/crm/app/kit";
+import { belopp, type Affar, type Affarssteg } from "@/lib/crm/affar";
+import { SYSTEMNAMN, crmAnrop, dagtext, orgnrVisning, type Bolag, type Person, type Sida as Svarssida } from "@/lib/crm/api";
 import { useLocale, type Localized } from "@/lib/i18n";
 
 type Flik = "oversikt" | "personer" | "historik" | "filer" | "kalla";
+
+/** Leadsflödets avslutande utfall, som API:t lämnar det i `outcome`. */
+const IRISUTFALL: Record<string, Localized> = {
+  do_not_contact: { sv: "Kontaktas inte", en: "Not contacted" },
+  won: { sv: "Vunnen", en: "Won" },
+  meeting_booked: { sv: "Möte bokat", en: "Meeting booked" },
+  not_interested: { sv: "Ej intresserad", en: "Not interested" }
+};
 
 /** Bolagets leads hos Iris (`iris_ut` i crm_v1_tidslinje.py). */
 type Irislage = { leads: { id: string; name: string | null; status: string | null; created_at: string | null }[]; outcome: string | null; do_not_contact: boolean };
@@ -97,13 +108,18 @@ export function BolagPanel({
   const { text, locale } = useLocale();
   const smal = useSmal();
   // Panelen ligger under <bas>/bolag; personerna öppnas i <bas>/personer.
-  const personerVag = (usePathname() ?? "/crm/bolag").replace(/\/bolag\/?$/, "/personer");
+  const vag = usePathname() ?? "/crm/bolag";
+  const personerVag = vag.replace(/\/bolag\/?$/, "/personer");
+  const affarerVag = vag.replace(/\/bolag\/?$/, "/affarer");
   const ETIKETT = smal ? ETIKETT_SMAL : ETIKETT_BRED;
   const flikikon = (i: LucideIcon) => (smal ? undefined : <Icon icon={i} size="sm" />);
   const [flik, setFlik] = useState<Flik>("oversikt");
   const [personer, setPersoner] = useState<Person[] | null>(null);
   // Bolagets leads hos Iris och vad de betyder här (GET /v1/companies/{id}/iris).
   const [iris, setIris] = useState<Irislage | null>(null);
+  // Bolagets affärer och stegen de står i, till raden Affärer i översikten.
+  const [affarer, setAffarer] = useState<Affar[] | null>(null);
+  const [steg, setSteg] = useState<Affarssteg[]>([]);
   // Antalet filer står på fliken när den öppnats en gång; före det är fliken utan tal.
   const [antalFiler, setAntalFiler] = useState<number | null>(null);
   const id = bolag?.id;
@@ -122,10 +138,38 @@ export function BolagPanel({
     };
   }, [id]);
 
-  // Läget hos Iris läses om när posten ändrats: ett utfall ändrar båda.
-  const andrad = bolag?.updated_at;
   useEffect(() => {
-    if (!id) return setIris(null);
+    setAffarer(null);
+    if (!id) return;
+    let aktuell = true;
+    Promise.all([
+      crmAnrop<Svarssida<Affar>>(`/v1/deals?${new URLSearchParams({ company_id: id, limit: "50", sort: "-updated" })}`),
+      crmAnrop<{ data: Affarssteg[] }>("/v1/deal-stages")
+    ])
+      .then(([a, s]) => {
+        if (!aktuell) return;
+        setSteg(s.data);
+        // Öppna affärer först: de är arbetet som pågår.
+        const typ = (x: Affar) => s.data.find((st) => st.id === x.stage_id)?.type ?? "open";
+        setAffarer([...a.data].sort((x, y) => Number(typ(x) !== "open") - Number(typ(y) !== "open")));
+      })
+      .catch(() => aktuell && setAffarer([]));
+    return () => {
+      aktuell = false;
+    };
+  }, [id]);
+
+  // Ett annat bolag börjar utan det förra bolagets läge: annars visas dess spärr och knappen Utfall en stund.
+  useEffect(() => {
+    setIris(null);
+  }, [id]);
+
+  // Läget hos Iris läses om när posten ändrats, och efter varje sparat utfall: de flesta utfall
+  // (ej svar, återkom, ej intresserad, möte bokat) ändrar bara leadet, inte posten här.
+  const andrad = bolag?.updated_at;
+  const [irisOmgang, setIrisOmgang] = useState(0);
+  useEffect(() => {
+    if (!id) return;
     let aktuell = true;
     crmAnrop<Irislage>(`/v1/companies/${encodeURIComponent(id)}/iris`)
       .then((s) => aktuell && setIris(s))
@@ -133,7 +177,7 @@ export function BolagPanel({
     return () => {
       aktuell = false;
     };
-  }, [id, andrad]);
+  }, [id, andrad, irisOmgang]);
 
   // Ett nytt bolag börjar alltid på Översikt.
   useEffect(() => {
@@ -154,8 +198,10 @@ export function BolagPanel({
       : leadetSparrar
         ? text({ sv: "Bolagets lead hos Iris har bett att slippa kontakt.", en: "The company's lead with Iris has asked not to be contacted." })
         : text({ sv: "Bolaget ska inte kontaktas.", en: "The company is not to be contacted." });
-  const lead = iris?.leads[0];
-  const leadlage = lead ? LEADLAGE[lead.status ?? ""] : undefined;
+  // Leadsflödets avslutande utfall går först (API:t väljer det starkaste). Annars det senaste leadets läge:
+  // listan står äldst först, och ett lead från i våras säger mindre än det från i höstas.
+  const lead = iris?.leads[iris.leads.length - 1];
+  const leadlage = iris?.outcome ? IRISUTFALL[iris.outcome] : lead ? LEADLAGE[lead.status ?? ""] : undefined;
   const ikon = (i: LucideIcon) => <Icon icon={i} size="sm" color="inherit" />;
 
   /** Ett tomt värde är en dämpad "Lägg till" som öppnar redigeringen på fältet. */
@@ -168,7 +214,8 @@ export function BolagPanel({
       <span className="crm-varde">{v}</span>
     );
 
-  const datum = (v: string | null) => (v ? <Timestamp value={v} format="date" hasTooltip={false} color="primary" /> : null);
+  /** Kund sedan och avtalsslut är dagar utan klockslag: de skrivs som de är, utan omräkning mellan tidszoner. */
+  const datum = (v: string | null) => (v ? dagtext(v, locale) : null);
   const kronor = (v: number | null) =>
     v == null ? null : new Intl.NumberFormat(sprak, { style: "currency", currency: "SEK", maximumFractionDigits: 0 }).format(v);
 
@@ -331,6 +378,41 @@ export function BolagPanel({
                             <span className="crm-varde text-ink-muted">{text({ sv: "Får kontaktas", en: "May be contacted" })}</span>
                           )
                         )}
+                        {/* Bolagets affärer: var och en leder till tavlan. En privatperson har inga affärer att lägga till. */}
+                        {affarer && (affarer.length > 0 || !bolag.private_person)
+                          ? rad(
+                              { sv: "Affärer", en: "Deals" },
+                              Handshake,
+                              <span className="crm-varde flex flex-col items-start gap-1.5">
+                                {affarer.map((a) => {
+                                  const st = steg.find((s) => s.id === a.stage_id);
+                                  const pengar = belopp(a.amount, a.currency, locale);
+                                  return (
+                                    <span key={a.id} className="flex min-w-0 max-w-full flex-col">
+                                      <NextLink href={`${affarerVag}?affar=${encodeURIComponent(a.id)}`} className="crm-tidslinje-lank truncate font-semibold text-ink">
+                                        {a.name ?? text({ sv: "Namnlös affär", en: "Unnamed deal" })}
+                                      </NextLink>
+                                      <span className="inline-flex items-center gap-1.5 text-[0.8125rem] text-ink-muted">
+                                        {st ? (
+                                          <>
+                                            <Prick ton={STEGTON[st.type].ton} />
+                                            <span>{st.name}</span>
+                                          </>
+                                        ) : null}
+                                        {st && pengar ? <span aria-hidden>·</span> : null}
+                                        {pengar ? <span className="tabular-nums">{pengar}</span> : null}
+                                      </span>
+                                    </span>
+                                  );
+                                })}
+                                {bolag.private_person ? null : (
+                                  <NextLink href={`${affarerVag}?nybolag=${encodeURIComponent(bolag.id)}`} className="crm-lagg-till no-underline">
+                                    {affarer.length ? text({ sv: "Ny affär", en: "New deal" }) : text({ sv: "Lägg till", en: "Add" })}
+                                  </NextLink>
+                                )}
+                              </span>
+                            )
+                          : null}
                         {/* Bara när bolaget är ett lead hos Iris: läget där, så att säljaren ser det utan att byta vy. */}
                         {lead
                           ? rad(
@@ -466,7 +548,12 @@ export function BolagPanel({
 
                   {flik === "filer" ? <Bilagor objekt="companies" id={bolag.id} andrat={setAntalFiler} /> : null}
 
-                  {flik === "historik" ? <Tidslinje objekt="companies" id={bolag.id} andrad={bolag.updated_at} harLead={(iris?.leads.length ?? 0) > 0} bolagAndrat={uppdaterat} /> : null}
+                  {flik === "historik" ? <Tidslinje objekt="companies" id={bolag.id} andrad={bolag.updated_at} harLead={(iris?.leads.length ?? 0) > 0}
+                      bolagAndrat={(b) => {
+                        uppdaterat?.(b);
+                        setIrisOmgang((n) => n + 1);
+                      }}
+                    /> : null}
                 </div>
               </>
             )}

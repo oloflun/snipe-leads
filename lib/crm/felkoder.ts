@@ -207,7 +207,14 @@ export const FALTKODER: Record<string, Localized> = {
   tidpunkt_ogiltig: { sv: "Tidpunkten går inte att läsa.", en: "The timestamp cannot be read." },
   relation_okand: { sv: "Relationen är okänd.", en: "The relation is unknown." },
   rattslig_grund_okand: { sv: "Den rättsliga grunden är okänd.", en: "The legal basis is unknown." },
-  post_inte_objekt: { sv: "Posten är inte ett objekt.", en: "The record is not an object." }
+  post_inte_objekt: { sv: "Posten är inte ett objekt.", en: "The record is not an object." },
+  // Affärens, uppgiftens och anteckningens regler (app/crm/objekt.py).
+  utanfor_intervall: { sv: "Talet är för stort eller för litet.", en: "The number is too large or too small." },
+  for_lang: { sv: "Texten är för lång.", en: "The text is too long." },
+  valuta_ogiltig: { sv: "Valutan är okänd. Skriv den med tre bokstäver, till exempel SEK.", en: "The currency is unknown. Use three letters, for example SEK." },
+  id_ogiltigt: { sv: "Posten som valts finns inte längre. Välj en annan.", en: "The selected record no longer exists. Choose another." },
+  forlustorsak_okand: { sv: "Förlustorsaken är okänd. Välj en ur listan.", en: "The lost reason is unknown. Choose one from the list." },
+  kalltyp_okand: { sv: "Källan är okänd. Välj en ur listan.", en: "The source is unknown. Choose one from the list." }
 };
 
 /** Körningens eget fel (`error`), när hela körningen föll. */

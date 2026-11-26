@@ -812,7 +812,9 @@ function Korningspanel({ korning, laddar, anslutning, stang }: Readonly<{ kornin
                       <p className="py-2 text-[0.875rem] text-ink2">
                         {pagar(k)
                           ? text({ sv: "Inget än. Poster som inte kommer in syns här medan körningen pågår.", en: "Nothing yet. Records that do not come in show here while the run is in progress." })
-                          : text({ sv: "Alla poster kom in.", en: "Every record came in." })}
+                          : k.status === "failed"
+                            ? text({ sv: "Körningen avbröts innan posterna lästes. Ingenting kom in.", en: "The run stopped before the records were read. Nothing came in." })
+                            : text({ sv: "Alla poster kom in.", en: "Every record came in." })}
                       </p>
                     ) : (
                       <ul className="flex flex-col">
@@ -870,10 +872,12 @@ function Korningspanel({ korning, laddar, anslutning, stang }: Readonly<{ kornin
                         })}
                         {utanSkal > 0 ? (
                           <li className="crm-rattarad py-3 text-[0.8125rem] text-ink-muted">
-                            {text({
-                              sv: `Ytterligare ${tal(utanSkal)} poster hoppades över utan att synken sparade ett skäl.`,
-                              en: `Another ${tal(utanSkal)} records were skipped without the sync storing a reason.`
-                            })}
+                            {utanSkal === 1
+                              ? text({ sv: "Ytterligare 1 post hoppades över utan att synken sparade ett skäl.", en: "Another 1 record was skipped without the sync storing a reason." })
+                              : text({
+                                  sv: `Ytterligare ${tal(utanSkal)} poster hoppades över utan att synken sparade ett skäl.`,
+                                  en: `Another ${tal(utanSkal)} records were skipped without the sync storing a reason.`
+                                })}
                           </li>
                         ) : null}
                       </ul>
@@ -976,7 +980,9 @@ function EnklaOrd({ k, utanSkal }: Readonly<{ k: Korning; utanSkal: number }>) {
           <p className="py-2 text-[0.875rem] text-ink2">
             {pagar(k)
               ? text({ sv: "Inget än. Det som inte kommer in syns här medan körningen pågår.", en: "Nothing yet. Anything that does not come in shows here while the run is in progress." })
-              : text({ sv: "Alla poster kom in.", en: "Every record came in." })}
+              : k.status === "failed"
+                            ? text({ sv: "Körningen avbröts innan posterna lästes. Ingenting kom in.", en: "The run stopped before the records were read. Nothing came in." })
+                            : text({ sv: "Alla poster kom in.", en: "Every record came in." })}
           </p>
         ) : (
           <>

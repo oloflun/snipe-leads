@@ -293,6 +293,24 @@ async function tolka<T>(svar: Response): Promise<T> {
   return kropp as T;
 }
 
+/**
+ * En dag utan klockslag (`2026-12-15`, eller början av en tidsstämpel) som text:
+ * "15 dec. 2026", och med `kort` utan årtal när det är i år. Dagen räknas aldrig
+ * om mellan tidszoner: en kalenderdag är samma dag var läsaren än sitter.
+ */
+export function dagtext(v: string, sprak: "sv" | "en", kort = false): string {
+  const [ar, manad, dag] = v.slice(0, 10).split("-").map(Number);
+  const d = new Date(ar, (manad || 1) - 1, dag || 1, 12);
+  const utanAr = kort && ar === new Date().getFullYear();
+  return d.toLocaleDateString(sprak === "sv" ? "sv-SE" : "en-GB", utanAr ? { day: "numeric", month: "short" } : { day: "numeric", month: "short", year: "numeric" });
+}
+
+/** Dagens datum i läsarens tidszon, som `ÅÅÅÅ-MM-DD`. Inte UTC: mellan midnatt och ett på natten är UTC fortfarande i går. */
+export function idagLokalt(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
 /** Koden API:t svarar med när arbetsytan varken har tillägget eller en pågående provperiod. */
 export const TILLAGG_SAKNAS = "addon_missing";
 

@@ -441,7 +441,7 @@ function bolagstidslinje(b: Bolag): Tidsrad[] {
 }
 
 /** Tidslinjen för en post: det skrivna och det påhittade, nyast först. Var tredje bolag är tomt på annat än sina egna ändringar. */
-function tidslinje(objekt: "companies" | "people" | "deals", id: string): Tidsrad[] | null {
+function tidslinje(objekt: "companies" | "people" | "deals", id: string, medBorttagna = false): Tidsrad[] | null {
   let bas: Tidsrad[];
   if (objekt === "companies") {
     const b = BOLAG.find((x) => x.id === id);
@@ -467,6 +467,8 @@ function tidslinje(objekt: "companies" | "people" | "deals", id: string): Tidsra
   const skrivet = SKRIVET[`${objekt}:${id}`] ?? [];
   const klara = new Set(KLARA);
   return [...skrivet, ...bas]
+    .filter((r) => medBorttagna || !r.link || !BORTTAGET.has(r.link.id))
+    .map((r) => (r.link && ANDRAT[r.link.id] ? { ...r, ...ANDRAT[r.link.id], data: { ...r.data, ...ANDRAT[r.link.id].data } } : r))
     .map((r) => (r.type === "task" && r.link && klara.has(r.link.id) ? { ...r, data: { ...r.data, done: true } } : r))
     .sort((x, y) => y.at.localeCompare(x.at));
 }
@@ -494,6 +496,20 @@ const BILAGOR: Bilaga[] = [
 
 /** Uppgifter som bockats av i förhandsvisningen. */
 const KLARA: string[] = [];
+/** Anteckningar, uppgifter och aktiviteter som ändrats eller tagits bort i förhandsvisningen, på länkens id. */
+const ANDRAT: Record<string, Partial<Tidsrad> & { data?: Record<string, unknown> }> = {};
+const BORTTAGET = new Set<string>();
+
+/** Raden bakom en anteckning, uppgift eller aktivitet, var den än står. */
+function hittaRad(id: string): Tidsrad | null {
+  for (const [objekt, lista] of [["companies", BOLAG], ["deals", AFFARER], ["people", PERSONER]] as const) {
+    for (const post of lista) {
+      const rad = (tidslinje(objekt, post.id, true) ?? []).find((r) => r.link?.id === id);
+      if (rad) return rad;
+    }
+  }
+  return null;
+}
 
 /** POST /v1/notes, /v1/tasks och /v1/activities: raden läggs på postens tidslinje. */
 function skriv(slag: "notes" | "tasks" | "activities", k: Record<string, unknown>): Response {
@@ -668,6 +684,23 @@ async function svara(url: URL, init?: RequestInit): Promise<Response> {
     // Ett bolag skapat för hand i förhandsvisningen har bara sin skapelse.
     if (b.source === "api") return json({ data: [{ seq: 1, object: "company", id: b.id, type: "created", fields: [], source: "app", actor: null, at: b.created_at }] });
     return json({ data: historik("company", b.id, b.created_at, b.updated_at, b.external_ids[0]?.connection) });
+  }
+  // ---- Den samlade kundlistan (GET /customers) ------------------------------------
+  if (vag === "/v1/customers" && metod === "GET") {
+    const q = (url.searchParams.get("q") ?? "").toLowerCase();
+    const origin = url.searchParams.get("origin") ?? "all";
+    const limit = Math.min(2000, Math.max(1, Number(url.searchParams.get("limit") ?? 200)));
+    const egna = BOLAG.filter((b) => !b.deleted_at && b.relation === "customer").map((b) => ({
+      origin: "own", company_id: b.id, lead_id: LEADLAGEN[b.id] === "won" ? "l1" : null, name: b.name, org_number: b.org_number, customer_since: b.customer_since, private_person: b.private_person === true
+    }));
+    // Påhittade leads som Iris vunnit: de finns inte i registret och har därför inget company_id.
+    const vunna = ["Påhittad Plåt AB", "Exempel Elektriska AB", "Låtsas Lackering AB", "Attrapp Åkeri AB", "Skiss Snickeri AB", "Modell Måleri AB"].map((namn, i) => ({
+      origin: "iris", company_id: null, lead_id: `lv${i}`, name: namn, org_number: medKontrollsiffra(String(559920000 + i * 37).slice(0, 9)), customer_since: `2026-${String(6 + i).padStart(2, "0")}-1${i}`, private_person: false
+    }));
+    const alla = [...(origin === "iris" ? [] : egna), ...(origin === "own" ? [] : vunna)]
+      .filter((k) => !q || [k.name, k.org_number, orgnrVisning(k.org_number)].some((v) => (v ?? "").toLowerCase().includes(q)))
+      .sort((x, y) => (x.name ?? "").localeCompare(y.name ?? "", "sv"));
+    return json({ data: alla.slice(0, limit), counts: { own: egna.length, iris: vunna.length } });
   }
   // ---- Bolaget hos Iris och utfallet (crm_v1_tidslinje.py) ----------------------
   const irisdel = vag.match(/^\/v1\/companies\/([^/]+)\/(iris|outcome)$/);
@@ -850,12 +883,42 @@ async function svara(url: URL, init?: RequestInit): Promise<Response> {
   }
   const skrivning = vag.match(/^\/v1\/(notes|tasks|activities)$/);
   if (skrivning && metod === "POST") return skriv(skrivning[1] as "notes" | "tasks" | "activities", kropp);
-  const uppgift = vag.match(/^\/v1\/tasks\/([^/]+)$/);
-  if (uppgift && metod === "PATCH") {
-    const id = decodeURIComponent(uppgift[1]);
-    if (kropp.status === "done" && !KLARA.includes(id)) KLARA.push(id);
-    if (kropp.status === "todo" && KLARA.includes(id)) KLARA.splice(KLARA.indexOf(id), 1);
-    return json({ id, status: kropp.status });
+  const skriven = vag.match(/^\/v1\/(notes|tasks|activities)\/([^/]+)(\/restore)?$/);
+  if (skriven) {
+    const id = decodeURIComponent(skriven[2]);
+    const rad = hittaRad(id);
+    if (!rad) return json({ detail: { code: "not_found", message: "The record does not exist.", meddelande: "Posten finns inte." } }, 404);
+    if (skriven[3] && metod === "POST") {
+      BORTTAGET.delete(id);
+      return json({ id });
+    }
+    if (metod === "DELETE") {
+      BORTTAGET.add(id);
+      return json(null, 204);
+    }
+    if (metod === "GET") {
+      // Postens hela innehåll, i API:ts form för sitt slag.
+      return json(
+        skriven[1] === "notes"
+          ? { id, title: rad.title, body: rad.text ?? "" }
+          : skriven[1] === "tasks"
+            ? { id, title: rad.title, due_at: rad.data.due ?? null, status: rad.data.done ? "done" : "todo" }
+            : { id, type: rad.data.activity_type ?? "other", subject: rad.title, body: rad.text }
+      );
+    }
+    if (metod === "PATCH") {
+      if (kropp.status === "done" && !KLARA.includes(id)) KLARA.push(id);
+      if (kropp.status === "todo" && KLARA.includes(id)) KLARA.splice(KLARA.indexOf(id), 1);
+      const forr = ANDRAT[id] ?? {};
+      ANDRAT[id] = {
+        ...forr,
+        ...("title" in kropp ? { title: (kropp.title as string) ?? null } : {}),
+        ...("subject" in kropp ? { title: (kropp.subject as string) ?? null } : {}),
+        ...("body" in kropp ? { text: (kropp.body as string) ?? null } : {}),
+        data: { ...forr.data, ...("due_at" in kropp ? { due: kropp.due_at ?? null } : {}), ...("type" in kropp ? { activity_type: kropp.type } : {}) }
+      };
+      return json({ id });
+    }
   }
   // ---- Affärer (crm_v1_objekt.py) ---------------------------------------------
   if (vag === "/v1/deal-stages" && metod === "GET") return json({ data: STEG });
@@ -863,7 +926,8 @@ async function svara(url: URL, init?: RequestInit): Promise<Response> {
   if (vag === "/v1/deals" && metod === "GET") {
     const q = (url.searchParams.get("q") ?? "").toLowerCase();
     const korgen = url.searchParams.get("only_deleted") === "true";
-    const traffar = AFFARER.filter((a) => (korgen ? !!a.deleted_at : !a.deleted_at) && (!q || (a.name ?? "").toLowerCase().includes(q)));
+    const bolagId = url.searchParams.get("company_id");
+    const traffar = AFFARER.filter((a) => (korgen ? !!a.deleted_at : !a.deleted_at) && (!bolagId || a.company_id === bolagId) && (!q || (a.name ?? "").toLowerCase().includes(q)));
     return json({ data: ordna(traffar, "-updated", (a) => a.name ?? "", korgen), next_cursor: null });
   }
   if (vag === "/v1/deals" && metod === "POST") {

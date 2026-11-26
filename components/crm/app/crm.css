@@ -840,6 +840,20 @@ button.crm-chip:active {
   }
 }
 
+/* Telefon: det som trycks på i postens panel får 44 px höjd (Lägg till, chips och länkar, raderna i Att göra). */
+@media (max-width: 639.98px) {
+  .crm-panelinnehall .crm-lagg-till,
+  .crm-panelinnehall .crm-chip,
+  .crm-panelinnehall .crm-tidslinje-lank {
+    display: inline-flex;
+    min-height: 44px;
+    align-items: center;
+  }
+  .crm-attgora {
+    min-height: 44px;
+  }
+}
+
 /* Postens filer: rader med hårlinje emellan, och en ockraton när en fil dras in över ytan. */
 .crm-filrad + .crm-filrad {
   border-top: 1px solid oklch(var(--ink) / 0.07);

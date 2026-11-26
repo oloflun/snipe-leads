@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import {
+  ArrowDown,
+  ArrowUp,
   Building2,
   CalendarCheck,
   CalendarClock,
@@ -11,6 +13,7 @@ import {
   Handshake,
   History,
   LayoutGrid,
+  ListOrdered,
   Milestone,
   Paperclip,
   Pencil,
@@ -38,8 +41,8 @@ import type { Affarsfalt } from "@/components/crm/app/AffarFormular";
 import { Bilagor } from "@/components/crm/app/Bilagor";
 import { Tidslinje } from "@/components/crm/app/Tidslinje";
 import { Personchip, Postchip, Prick, tonklass, useSmal, type Ton } from "@/components/crm/app/kit";
-import { belopp, sannolikhet, type Affar, type Affarssteg, type Stegtyp } from "@/lib/crm/affar";
-import { crmAnrop, type Person } from "@/lib/crm/api";
+import { STEGTYPER, belopp, sannolikhet, type Affar, type Affarssteg, type Stegtyp } from "@/lib/crm/affar";
+import { crmAnrop, dagtext, type Person } from "@/lib/crm/api";
 import { useLocale, type Localized } from "@/lib/i18n";
 
 type Flik = "oversikt" | "historik" | "filer";
@@ -69,6 +72,8 @@ export function AffarPanel({
   bolagVag,
   personVag,
   flyttar,
+  plats,
+  flyttaPlats,
   stang,
   redigera,
   flytta,
@@ -85,6 +90,10 @@ export function AffarPanel({
   personVag: string;
   /** Sant medan en flytt sparas. */
   flyttar: boolean;
+  /** Affärens plats i sitt steg (1 är överst) och hur många affärer steget har. */
+  plats: { plats: number; antal: number } | null;
+  /** Flyttar affären ett steg upp eller ned inom steget. */
+  flyttaPlats: (a: Affar, upp: boolean) => void;
   stang: () => void;
   redigera: (falt?: Affarsfalt) => void;
   flytta: (a: Affar, stegId: string) => void;
@@ -142,6 +151,8 @@ export function AffarPanel({
       <span className="crm-varde">{v}</span>
     );
   const datum = (v: string | null) => (v ? <Timestamp value={v} format="date" hasTooltip={false} color="primary" /> : null);
+  /** En dag utan klockslag (väntat avslut): skrivs som den är, utan omräkning mellan tidszoner. */
+  const dag = (v: string | null) => (v ? dagtext(v, locale) : null);
 
   return (
     <Drawer isOpen={oppen} onOpenChange={(o) => !o && stang()} label={affar ? namn : text({ sv: "Affärens uppgifter", en: "Deal details" })} width={520} hasScrim={false}>
@@ -163,6 +174,7 @@ export function AffarPanel({
               affar ? (
                 <span className="mt-1 inline-flex flex-wrap items-center gap-2">
                   {nuSteg ? <Badge variant={stil.badge} label={nuSteg.name} icon={<Prick ton={stil.ton} />} /> : null}
+                  {nuSteg && nuSteg.type !== "open" ? <span className="sr-only">{text(STEGTYPER[nuSteg.type])}</span> : null}
                   {summa ? <span className="text-[0.875rem] font-semibold tabular-nums text-ink">{summa}</span> : null}
                 </span>
               ) : undefined
@@ -216,11 +228,37 @@ export function AffarPanel({
                               size="sm"
                               variant="secondary"
                               value={affar.stage_id ?? undefined}
-                              isDisabled={flyttar}
                               onChange={(v) => v && v !== affar.stage_id && flytta(affar, v)}
-                              options={steg.map((s) => ({ value: s.id, label: s.name, icon: <Prick ton={STEGTON[s.type].ton} /> }))}
+                              // Stegets typ står i ord under namnet: pricken visar den bara med färg.
+                              options={steg.map((s) => ({ value: s.id, label: s.name, icon: <Prick ton={STEGTON[s.type].ton} />, description: s.type === "open" ? undefined : text(STEGTYPER[s.type]) }))}
                             />
                           )}
+                          {/* Ordningen inom steget utan att dra: samma flytt som på tavlan, för tangentbord och telefon. */}
+                          {plats && plats.antal > 1
+                            ? rad(
+                                { sv: "Plats i steget", en: "Place in the stage" },
+                                ListOrdered,
+                                <span className="crm-varde inline-flex items-center gap-1">
+                                  <span className="mr-1 tabular-nums">{text({ sv: `${plats.plats} av ${plats.antal}`, en: `${plats.plats} of ${plats.antal}` })}</span>
+                                  <IconButton
+                                    size="sm"
+                                    variant="ghost"
+                                    label={text({ sv: "Flytta upp i steget", en: "Move up in the stage" })}
+                                    icon={<Icon icon={ArrowUp} size="sm" />}
+                                    isDisabled={flyttar || plats.plats <= 1}
+                                    onClick={() => flyttaPlats(affar, true)}
+                                  />
+                                  <IconButton
+                                    size="sm"
+                                    variant="ghost"
+                                    label={text({ sv: "Flytta ned i steget", en: "Move down in the stage" })}
+                                    icon={<Icon icon={ArrowDown} size="sm" />}
+                                    isDisabled={flyttar || plats.plats >= plats.antal}
+                                    onClick={() => flyttaPlats(affar, false)}
+                                  />
+                                </span>
+                              )
+                            : null}
                           {rad({ sv: "Belopp", en: "Amount" }, Wallet, varde(summa ? <span className="tabular-nums">{summa}</span> : null, "amount"))}
                           {/* Sannolikheten säger något bara medan affären är öppen: en vunnen eller förlorad är avgjord. */}
                           {nuSteg && nuSteg.type !== "open"
@@ -239,7 +277,7 @@ export function AffarPanel({
                                   </span>
                                 )
                               )}
-                          {rad({ sv: "Väntat avslut", en: "Expected close" }, CalendarClock, varde(datum(affar.expected_close_date), "expected_close_date"))}
+                          {rad({ sv: "Väntat avslut", en: "Expected close" }, CalendarClock, varde(dag(affar.expected_close_date), "expected_close_date"))}
                           {affar.closed_at ? rad({ sv: "Avslutad", en: "Closed" }, CalendarCheck, <span className="crm-varde">{datum(affar.closed_at)}</span>) : null}
                           {nuSteg?.type === "lost" || affar.lost_reason
                             ? rad({ sv: "Förlustorsak", en: "Lost reason" }, CircleSlash, varde(affar.lost_reason, "lost_reason"))

@@ -126,6 +126,12 @@ export function AffarFormular({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [oppen, affar, fokus, forvalStegId, forvalBolagId]);
 
+  // Dialogen kan öppnas från en adress innan stegen hunnit hämtas: en ny affär får sitt första steg när de kommer.
+  useEffect(() => {
+    if (!oppen || !ny || !forstaSteg) return;
+    setV((f) => (f.stage_id ? f : { ...f, stage_id: forstaSteg }));
+  }, [oppen, ny, forstaSteg]);
+
   const satt = <K extends keyof Varden>(k: K, varde: Varden[K]) => {
     setV((f) => ({ ...f, [k]: varde }));
     setFalt((f) => (f[k as Affarsfalt] ? { ...f, [k]: undefined } : f));
@@ -153,7 +159,8 @@ export function AffarFormular({
   const tal = (s: string): number | null | undefined => {
     const ren = s.replace(/[\s  ]|kr|sek|%/gi, "");
     if (!ren) return null;
-    return /^\d+$/.test(ren) ? Number(ren) : undefined;
+    // API:t tar belopp upp till 10^15: ett längre tal är ett skrivfel, och visas som det direkt.
+    return /^\d{1,15}$/.test(ren) ? Number(ren) : undefined;
   };
 
   function kropp(): Record<string, unknown> | null {
@@ -251,11 +258,11 @@ export function AffarFormular({
         content={
           <LayoutContent>
             <form id="crm-affarsformular" ref={rot} onSubmit={spara} noValidate className="flex flex-col gap-6">
-              {allmant ? <Banner status="error" container="card" title={text({ sv: "Det gick inte att spara", en: "Could not save" })} description={text(allmant)} /> : null}
-              {/* Statusregionen finns från början, så att skärmläsaren annonserar när den fylls. */}
-              <div role="status" className="sr-only">
-                {fel > 0 ? felrad : ""}
+              {/* Ett fel som inte hör till ett fält annonseras: fokus står kvar på Spara, så annars hörs det aldrig. */}
+              <div role="alert">
+                {allmant ? <Banner status="error" container="card" title={text({ sv: "Det gick inte att spara", en: "Could not save" })} description={text(allmant)} /> : null}
               </div>
+              {/* Fältfelen annonseras av fälten själva när fokus flyttas dit: ingen dold statusrad som säger samma sak en gång till. */}
               {fel > 0 ? (
                 <Text color="secondary" type="supporting">
                   {felrad}

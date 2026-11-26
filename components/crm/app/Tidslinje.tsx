@@ -1,12 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import NextLink from "next/link";
 import { usePathname } from "next/navigation";
 import {
   Activity,
+  ArrowUpRight,
   CalendarCheck,
   CalendarClock,
+  CalendarX2,
   ClipboardCheck,
   Eraser,
   Flag,
@@ -16,6 +18,7 @@ import {
   ListTodo,
   Mail,
   MapPin,
+  MoreHorizontal,
   Pencil,
   Phone,
   Plus,
@@ -31,8 +34,10 @@ import { Button } from "@astryxdesign/core/Button";
 import type { ISODateString } from "@astryxdesign/core/Calendar";
 import { CheckboxInput } from "@astryxdesign/core/CheckboxInput";
 import { DateInput } from "@astryxdesign/core/DateInput";
+import { DropdownMenu } from "@astryxdesign/core/DropdownMenu";
 import { EmptyState } from "@astryxdesign/core/EmptyState";
 import { Icon } from "@astryxdesign/core/Icon";
+import { IconButton } from "@astryxdesign/core/IconButton";
 import { Selector } from "@astryxdesign/core/Selector";
 import { Skeleton } from "@astryxdesign/core/Skeleton";
 import { Text } from "@astryxdesign/core/Text";
@@ -69,11 +74,11 @@ type Utfallskod = "no_answer" | "call_back" | "not_interested" | "do_not_contact
 const UTFALL: Record<Utfallskod, { namn: Localized; foljd: Localized }> = {
   no_answer: {
     namn: { sv: "Ej svar", en: "No answer" },
-    foljd: { sv: "Leadet kommer tillbaka i återkopplingslistan om två arbetsdagar.", en: "The lead returns to the follow-up list in two working days." }
+    foljd: { sv: "Sparas på leadet hos Iris. Har leadet ett telefonnummer kommer det tillbaka i återkopplingslistan om två arbetsdagar.", en: "Saved on the lead with Iris. If the lead has a phone number it returns to the follow-up list in two working days." }
   },
   call_back: {
     namn: { sv: "Återkom", en: "Call back" },
-    foljd: { sv: "Leadet kommer tillbaka i återkopplingslistan den dagen.", en: "The lead returns to the follow-up list on that day." }
+    foljd: { sv: "Sparas på leadet hos Iris. Har leadet ett telefonnummer kommer det tillbaka i återkopplingslistan den dagen.", en: "Saved on the lead with Iris. If the lead has a phone number it returns to the follow-up list on that day." }
   },
   not_interested: {
     namn: { sv: "Ej intresserad", en: "Not interested" },
@@ -93,6 +98,19 @@ const UTFALL: Record<Utfallskod, { namn: Localized; foljd: Localized }> = {
   }
 };
 type Aktivitetstyp = "call" | "meeting" | "email" | "visit" | "other";
+
+/** Det som skrivs i CRM:et och går att ändra och ta bort härifrån: tidslinjens länk, API:ts väg och formuläret. */
+const SKRIVBART: Record<string, { vag: string; skriver: Exclude<Skriver, "utfall">; vad: Localized }> = {
+  note: { vag: "notes", skriver: "anteckning", vad: { sv: "Anteckningen", en: "The note" } },
+  task: { vag: "tasks", skriver: "uppgift", vad: { sv: "Uppgiften", en: "The task" } },
+  activity: { vag: "activities", skriver: "aktivitet", vad: { sv: "Aktiviteten", en: "The activity" } }
+};
+
+/** Dagen i läsarens tidszon, som `ÅÅÅÅ-MM-DD`. */
+function lokalDag(v: string): string {
+  const d = new Date(v);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
 
 /** Fältet som knyter en ny anteckning, uppgift eller aktivitet till posten. */
 const KOPPLING: Record<Objekt, string> = { companies: "company_id", people: "person_id", deals: "deal_id" };
@@ -275,6 +293,8 @@ export function Tidslinje({
   const [fel, setFel] = useState<unknown>(null);
   const [omgang, setOmgang] = useState(0);
   const [skriver, setSkriver] = useState<Skriver | null>(null);
+  // Posten som ändras i formuläret (`/v1/notes/<id>`). Tom när formuläret skriver något nytt.
+  const [redigerar, setRedigerar] = useState<string | null>(null);
   const [sparar, setSparar] = useState(false);
   const [bockar, setBockar] = useState<string | null>(null);
   // Formulärens fält. Tömda när något sparats eller avbrutits.
@@ -284,6 +304,20 @@ export function Tidslinje({
   const [typ, setTyp] = useState<Aktivitetstyp>("call");
   const [utfall, setUtfall] = useState<Utfallskod>("no_answer");
   const [saknas, setSaknas] = useState(false);
+  const knapprad = useRef<HTMLDivElement>(null);
+  const hadeFormular = useRef(false);
+
+  // När formuläret stängs (sparat eller avbrutet) går fokus tillbaka till skrivytans knappar,
+  // i stället för att försvinna med knappen som hade det.
+  useEffect(() => {
+    if (skriver) {
+      hadeFormular.current = true;
+      return;
+    }
+    if (!hadeFormular.current) return;
+    hadeFormular.current = false;
+    knapprad.current?.querySelector<HTMLElement>("button")?.focus();
+  }, [skriver]);
 
   useEffect(() => {
     let aktuell = true;
@@ -304,6 +338,7 @@ export function Tidslinje({
 
   const stang = useCallback(() => {
     setSkriver(null);
+    setRedigerar(null);
     setBrodtext("");
     setRubrik("");
     setForfaller("");
@@ -316,25 +351,36 @@ export function Tidslinje({
     e.preventDefault();
     if (!skriver || sparar) return;
     if (skriver === "utfall") return void sparaUtfall();
-    const koppling = { [KOPPLING[objekt]]: id };
     let vag = "/v1/notes";
     let kropp: Record<string, unknown>;
+    // En ändring skickar också tömda fält (null), en ny post bara det som fyllts i.
+    const tomt = redigerar ? null : undefined;
     if (skriver === "anteckning") {
       if (!brodtext.trim()) return setSaknas(true);
-      kropp = { body: brodtext.trim(), ...koppling };
+      kropp = { body: brodtext.trim() };
     } else if (skriver === "uppgift") {
       if (!rubrik.trim()) return setSaknas(true);
       vag = "/v1/tasks";
       // Förfallodagen är en dag: klockan nio på morgonen, lokal tid.
-      kropp = { title: rubrik.trim(), ...(forfaller ? { due_at: new Date(`${forfaller}T09:00:00`).toISOString() } : {}), ...koppling };
+      kropp = { title: rubrik.trim(), due_at: forfaller ? new Date(`${forfaller}T09:00:00`).toISOString() : tomt };
     } else {
       if (!rubrik.trim()) return setSaknas(true);
       vag = "/v1/activities";
-      kropp = { type: typ, subject: rubrik.trim(), ...(brodtext.trim() ? { body: brodtext.trim() } : {}), ...koppling };
+      kropp = { type: typ, subject: rubrik.trim(), body: brodtext.trim() || tomt };
     }
     setSparar(true);
     try {
-      await crmAnrop<unknown>(vag, { method: "POST", body: JSON.stringify(kropp) });
+      await crmAnrop<unknown>(redigerar ?? vag, {
+        method: redigerar ? "PATCH" : "POST",
+        body: JSON.stringify(redigerar ? kropp : { ...kropp, [KOPPLING[objekt]]: id })
+      });
+      // Utfallet sägs där det startades: formuläret stängs, och raden står sedan i historiken.
+      const vad: Record<Exclude<Skriver, "utfall">, Localized> = {
+        anteckning: { sv: "Anteckningen är sparad.", en: "The note is saved." },
+        uppgift: { sv: "Uppgiften är sparad.", en: "The task is saved." },
+        aktivitet: { sv: "Aktiviteten är sparad.", en: "The activity is saved." }
+      };
+      visa({ body: text(vad[skriver]), uniqueID: "crm-tidslinje" });
       stang();
       setOmgang((n) => n + 1);
     } catch (orsak) {
@@ -347,6 +393,75 @@ export function Tidslinje({
       setSparar(false);
     }
   }
+
+  /** Öppnar formuläret på en befintlig anteckning, uppgift eller aktivitet, med postens hela innehåll (tidslinjen bär bara ett utdrag). */
+  async function andra(p: Tidslinjepost) {
+    const slag = p.link ? SKRIVBART[p.link.kind] : undefined;
+    if (!p.link || !slag) return;
+    const vag = `/v1/${slag.vag}/${encodeURIComponent(p.link.id)}`;
+    try {
+      const post = await crmAnrop<Record<string, unknown>>(vag);
+      setBrodtext(str(post.body) ?? "");
+      setRubrik(str(post.title) ?? str(post.subject) ?? "");
+      setForfaller(str(post.due_at) ? lokalDag(str(post.due_at)!) : "");
+      setTyp(((str(post.type) ?? "other") in AKTIVITETER ? str(post.type) : "other") as Aktivitetstyp);
+      setSaknas(false);
+      setRedigerar(vag);
+      setSkriver(slag.skriver);
+    } catch (orsak) {
+      visa({ type: "error", body: text(orsak instanceof CrmFel ? orsak.text : { sv: "Posten gick inte att öppna.", en: "The record could not be opened." }), uniqueID: "crm-tidslinje" });
+    }
+  }
+
+  /** Tar bort en anteckning, uppgift eller aktivitet. Den ligger i papperskorgen i 30 dagar, och går att ta tillbaka direkt. */
+  async function taBort(p: Tidslinjepost) {
+    const slag = p.link ? SKRIVBART[p.link.kind] : undefined;
+    if (!p.link || !slag) return;
+    const vag = `/v1/${slag.vag}/${encodeURIComponent(p.link.id)}`;
+    try {
+      await crmAnrop<null>(vag, { method: "DELETE" });
+    } catch (orsak) {
+      visa({ type: "error", body: text(orsak instanceof CrmFel ? orsak.text : { sv: "Det gick inte att ta bort.", en: "Could not delete." }), uniqueID: "crm-tidslinje" });
+      return;
+    }
+    if (redigerar === vag) stang();
+    setOmgang((n) => n + 1);
+    const angra = async () => {
+      try {
+        await crmAnrop<unknown>(`${vag}/restore`, { method: "POST" });
+      } catch (orsak) {
+        visa({ type: "error", body: text(orsak instanceof CrmFel ? orsak.text : { sv: "Det gick inte att ta tillbaka.", en: "Could not restore." }), uniqueID: "crm-tidslinje" });
+      }
+      setOmgang((n) => n + 1);
+    };
+    visa({
+      body: text({ sv: `${text(slag.vad)} är borttagen.`, en: `${text(slag.vad)} is removed.` }),
+      endContent: <Button size="sm" variant="secondary" label={text({ sv: "Ångra", en: "Undo" })} onClick={() => void angra()} />,
+      autoHideDuration: 10000,
+      uniqueID: "crm-tidslinje"
+    });
+  }
+
+  /** Radens meny: Ändra och Ta bort, för det som skrivits i CRM:et. Mejl, samtal och ärenden bor hos Iris och supporten och ändras där. */
+  const meny = (p: Tidslinjepost) =>
+    p.origin === "crm" && p.link && SKRIVBART[p.link.kind] ? (
+      <DropdownMenu
+        placement="below"
+        renderTrigger={(props) => (
+          <IconButton
+            {...props}
+            size="sm"
+            variant="ghost"
+            icon={<Icon icon={MoreHorizontal} size="sm" />}
+            label={text({ sv: `Åtgärder för ${p.title ?? text(SKRIVBART[p.link!.kind].vad).toLocaleLowerCase(locale)}`, en: `Actions for ${p.title ?? text(SKRIVBART[p.link!.kind].vad).toLocaleLowerCase(locale)}` })}
+          />
+        )}
+        items={[
+          { label: text({ sv: "Ändra", en: "Edit" }), icon: <Icon icon={Pencil} size="sm" />, onClick: () => void andra(p) },
+          { label: text({ sv: "Ta bort", en: "Delete" }), icon: <Icon icon={Trash2} size="sm" />, onClick: () => void taBort(p) }
+        ]}
+      />
+    ) : null;
 
   /** Utfallet verkställs på bolagets leads hos Iris och på posten. Svaret säger hur många leads det gällde. */
   async function sparaUtfall() {
@@ -387,6 +502,15 @@ export function Tidslinje({
     setPoster((forr) => forr?.map((x) => (x.key === p.key ? { ...x, data: { ...x.data, done: klar } } : x)) ?? forr);
     try {
       await crmAnrop<unknown>(`/v1/tasks/${encodeURIComponent(p.link.id)}`, { method: "PATCH", body: JSON.stringify({ status: klar ? "done" : "todo" }) });
+      // En felbockning går att ta tillbaka: uppgiften står annars bara som klar i flödet, utan kryssruta.
+      visa({
+        body: klar
+          ? text({ sv: `${p.title ?? "Uppgiften"} är klar.`, en: `${p.title ?? "The task"} is done.` })
+          : text({ sv: `${p.title ?? "Uppgiften"} står under Att göra igen.`, en: `${p.title ?? "The task"} is back under To do.` }),
+        endContent: klar ? <Button size="sm" variant="secondary" label={text({ sv: "Ångra", en: "Undo" })} onClick={() => void bocka(p, false)} /> : undefined,
+        autoHideDuration: 8000,
+        uniqueID: "crm-tidslinje"
+      });
     } catch (orsak) {
       visa({
         type: "error",
@@ -423,17 +547,28 @@ export function Tidslinje({
 
   const skrivyta =
     skriver == null ? (
-      <div className="flex flex-wrap gap-2">
+      <div ref={knapprad} className="flex flex-wrap gap-2">
         {knapp("anteckning", StickyNote, { sv: "Anteckning", en: "Note" })}
         {knapp("uppgift", ListTodo, { sv: "Uppgift", en: "Task" })}
         {knapp("aktivitet", Phone, { sv: "Aktivitet", en: "Activity" })}
         {objekt === "companies" && harLead ? knapp("utfall", Flag, { sv: "Utfall", en: "Outcome" }) : null}
       </div>
     ) : (
-      <form onSubmit={spara} className="crm-skrivyta flex flex-col gap-3" noValidate>
+      <form
+        onSubmit={spara}
+        className="crm-skrivyta flex flex-col gap-3"
+        noValidate
+        // Escape avbryter skrivytan, inte hela panelen: annars stängs posten och det skrivna försvinner med den.
+        onKeyDown={(e) => {
+          if (e.key !== "Escape") return;
+          e.preventDefault();
+          e.stopPropagation();
+          stang();
+        }}
+      >
         {skriver === "anteckning" ? (
           <TextArea
-            label={text({ sv: "Ny anteckning", en: "New note" })}
+            label={redigerar ? text({ sv: "Ändra anteckningen", en: "Edit the note" }) : text({ sv: "Ny anteckning", en: "New note" })}
             placeholder={text({ sv: "Vad kom ni fram till?", en: "What did you agree on?" })}
             rows={4}
             value={brodtext}
@@ -449,7 +584,7 @@ export function Tidslinje({
         {skriver === "uppgift" ? (
           <>
             <TextInput
-              label={text({ sv: "Ny uppgift", en: "New task" })}
+              label={redigerar ? text({ sv: "Ändra uppgiften", en: "Edit the task" }) : text({ sv: "Ny uppgift", en: "New task" })}
               placeholder={text({ sv: "Skicka offerten", en: "Send the quote" })}
               value={rubrik}
               onChange={(v) => {
@@ -586,10 +721,13 @@ export function Tidslinje({
               <span className="crm-tidslinje-ikon">
                 <Objektikon ikon={r.ikon} ton={r.ton} storlek={24} />
               </span>
+              <span className="order-last -mr-1.5 -mt-1 shrink-0">{meny(p)}</span>
               <span className="flex min-w-0 flex-1 flex-col gap-0.5 pb-4">
                 {affar ? (
-                  <NextLink href={affar} className="crm-tidslinje-lank text-[0.875rem] text-ink">
-                    {r.vad}
+                  <NextLink href={affar} className="crm-tidslinje-lank inline-flex items-center gap-1 text-[0.875rem] text-ink">
+                    <span className="min-w-0">{r.vad}</span>
+                    {/* Pilen säger att raden leder till affären, också på pekskärm där inget hovras. */}
+                    <Icon icon={ArrowUpRight} size="xsm" color="secondary" />
                   </NextLink>
                 ) : (
                   <span className="text-[0.875rem] text-ink [overflow-wrap:anywhere]">{r.vad}</span>
@@ -637,17 +775,24 @@ export function Tidslinje({
                     label={text({ sv: `Klar: ${p.title ?? "uppgiften"}`, en: `Done: ${p.title ?? "the task"}` })}
                     isLabelHidden
                     value={false}
-                    isDisabled={bockar != null}
-                    onChange={(v) => void bocka(p, v)}
+                    onChange={(v, e) => {
+                      // Raden försvinner när den bockats: fokus går till nästa uppgift, annars till skrivytans knappar.
+                      const rad = e.target.closest("li");
+                      const granne = (rad?.nextElementSibling ?? rad?.previousElementSibling)?.querySelector<HTMLElement>("input");
+                      void bocka(p, v);
+                      window.setTimeout(() => (granne?.isConnected ? granne : knapprad.current?.querySelector<HTMLElement>("button"))?.focus(), 60);
+                    }}
                   />
                   <span className="min-w-0 flex-1 truncate text-[0.875rem] text-ink">{p.title}</span>
                   {forfallodag ? (
                     <span className={`inline-flex shrink-0 items-center gap-1 text-[0.8125rem] tabular-nums ${sen ? "text-danger" : "text-ink-muted"}`}>
-                      <Icon icon={CalendarClock} size="xsm" color="inherit" />
+                      {/* En passerad dag har en egen ikon: färgen ensam bär inte betydelsen. */}
+                      <Icon icon={sen ? CalendarX2 : CalendarClock} size="xsm" color="inherit" />
                       <span>{dag(forfallodag, locale)}</span>
                       {sen ? <span className="sr-only">{text({ sv: ", har passerat", en: ", has passed" })}</span> : null}
                     </span>
                   ) : null}
+                  <span className="-mr-1.5 shrink-0">{meny(p)}</span>
                 </li>
               );
             })}

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { ArrowDownAZ, Building2, Clock, Globe, Hash, MapPin, Plus, SearchX, Tag, Trash2, UserRound } from "lucide-react";
+import { ArrowDownAZ, Building2, Clock, Globe, Hash, MapPin, Plus, SearchX, Sparkles, Tag, Trash2, UserRound } from "lucide-react";
 import { AlertDialog } from "@astryxdesign/core/AlertDialog";
 import { Avatar } from "@astryxdesign/core/Avatar";
 import { Button } from "@astryxdesign/core/Button";
@@ -46,6 +46,7 @@ import {
   utanBolagsform,
   Vyval
 } from "@/components/crm/app/kit";
+import { Kundlista, type Kundsvar, type Kundursprung } from "@/components/crm/app/Kundlista";
 import { Papperskorg } from "@/components/crm/app/Papperskorg";
 import { Felruta, Sida } from "@/components/crm/app/Sida";
 import { CrmFel, RELATIONER, crmAnrop, orgnrVisning, type Bolag, type Ordning, type Oversikt, type Relation, type Sida as Svarssida } from "@/lib/crm/api";
@@ -129,6 +130,10 @@ export function BolagVy() {
   // Senast ändrad först: det man nyss arbetat med står överst.
   const [sortering, setSortering] = useState<Ordning>("-updated");
   const iKorgen = filter === "papperskorg";
+  // Vyn Kund kan visa mer än registret: kunder som Iris vunnit, eller båda i en lista (GET /v1/customers).
+  const [ursprung, setUrsprung] = useState<Kundursprung>("own");
+  const [kundantal, setKundantal] = useState<Kundsvar["counts"] | null>(null);
+  const samlad = filter === "customer" && ursprung !== "own";
   const [sok, setSok] = useState("");
   const [fraga, setFraga] = useState("");
   const [rader, setRader] = useState<Bolag[]>([]);
@@ -200,8 +205,8 @@ export function BolagVy() {
 
   const hamta = useCallback(
     async (markor: string | null) => {
-      // Papperskorgen hämtar sina egna rader (Papperskorg.tsx); räkningen i vyraden står kvar.
-      if (filter === "papperskorg") return;
+      // Papperskorgen och den samlade kundlistan hämtar sina egna rader; räkningen i vyraden står kvar.
+      if (filter === "papperskorg" || (filter === "customer" && ursprung !== "own")) return;
       const denna = ++omgang.current;
       if (markor) setLaddarFler(true);
       else setLaddar(true);
@@ -228,12 +233,27 @@ export function BolagVy() {
         }
       }
     },
-    [filter, fraga, sortering]
+    [filter, fraga, sortering, ursprung]
   );
 
   useEffect(() => {
     void hamta(null);
   }, [hamta]);
+
+  // Antalen till väljaren Ursprung hämtas när vyn Kund öppnas, och en annan vy börjar om på de egna.
+  useEffect(() => {
+    if (filter !== "customer") {
+      setUrsprung("own");
+      return;
+    }
+    let aktuell = true;
+    crmAnrop<Kundsvar>("/v1/customers?origin=iris&limit=1")
+      .then((s) => aktuell && setKundantal(s.counts))
+      .catch(() => undefined);
+    return () => {
+      aktuell = false;
+    };
+  }, [filter]);
 
   /** Bara räkningen i vyraden, efter en återställning ur papperskorgen. */
   const hamtaRakning = useCallback(async () => {
@@ -583,7 +603,7 @@ export function BolagVy() {
               controlClassName="crm-sokfalt"
             />
           </div>
-          {smal && !iKorgen ? (
+          {smal && !iKorgen && !samlad ? (
             <Button
               variant={valjer ? "secondary" : "ghost"}
               size="md"
@@ -594,8 +614,25 @@ export function BolagVy() {
               }}
             />
           ) : null}
-          {/* Papperskorgen står alltid senast raderad först: där finns inget att sortera. */}
-          {iKorgen ? null : (
+          {/* Bara i vyn Kund: egna kunder, kunder som Iris vunnit, eller alla i en lista. Visas först när Iris har vunnit någon. */}
+          {filter === "customer" && (kundantal?.iris ?? 0) > 0 ? (
+            <Selector
+              label={text({ sv: "Ursprung", en: "Origin" })}
+              isLabelHidden
+              variant="ghost"
+              size="md"
+              startIcon={Sparkles}
+              value={ursprung}
+              onChange={(v) => v && setUrsprung(v as Kundursprung)}
+              options={[
+                { value: "own", label: text({ sv: `Egna  ${tal(kundantal?.own ?? 0)}`, en: `Own  ${tal(kundantal?.own ?? 0)}` }), description: text({ sv: "Kunderna i registret", en: "The customers in the register" }) },
+                { value: "iris", label: text({ sv: `Vunna av Iris  ${tal(kundantal?.iris ?? 0)}`, en: `Won by Iris  ${tal(kundantal?.iris ?? 0)}` }), description: text({ sv: "Leads som blivit kunder", en: "Leads that became customers" }) },
+                { value: "all", label: text({ sv: `Alla  ${tal((kundantal?.own ?? 0) + (kundantal?.iris ?? 0))}`, en: `All  ${tal((kundantal?.own ?? 0) + (kundantal?.iris ?? 0))}` }), description: text({ sv: "Båda i en lista", en: "Both in one list" }) }
+              ]}
+            />
+          ) : null}
+          {/* Papperskorgen står alltid senast raderad först, och den samlade kundlistan i API:ts ordning: där finns inget att sortera. */}
+          {iKorgen || samlad ? null : (
             <Selector
               label={text({ sv: "Sortera", en: "Sort" })}
               isLabelHidden
@@ -619,6 +656,8 @@ export function BolagVy() {
             oppnaPost={(id) => sattPost(id)}
             aterstalld={() => void hamtaRakning()}
           />
+        ) : samlad ? (
+          <Kundlista ursprung={ursprung} fraga={fraga} oppnaPost={(id) => sattPost(id)} antal={setKundantal} />
         ) : fel ? (
           <div className="p-4 sm:p-6">
             <Felruta fel={fel} igen={<Button size="sm" label={text({ sv: "Försök igen", en: "Try again" })} onClick={() => void hamta(null)} />} />
@@ -696,7 +735,7 @@ export function BolagVy() {
         )}
 
         {/* Åtgärdsraden flyter längst ned i bladet medan något är markerat. */}
-        {!iKorgen && (!smal || valjer) && (selectionState.hasSelection || pagar) ? (
+        {!iKorgen && !samlad && (!smal || valjer) && (selectionState.hasSelection || pagar) ? (
           <div className="crm-atgardsrad-plats">
             <div className="crm-atgardsrad">
               {jobb ? (

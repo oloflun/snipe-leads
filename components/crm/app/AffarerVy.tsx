@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { CalendarClock, Plus, SearchX } from "lucide-react";
+import { CalendarClock, CalendarX2, Plus, SearchX } from "lucide-react";
 import { AlertDialog } from "@astryxdesign/core/AlertDialog";
 import { Avatar } from "@astryxdesign/core/Avatar";
 import { Badge } from "@astryxdesign/core/Badge";
@@ -19,8 +19,8 @@ import { AffarPanel, STEGTON } from "@/components/crm/app/AffarPanel";
 import { Postchip, Prick, tonFor, tonklass, useBestallning, useSmal, Vyval } from "@/components/crm/app/kit";
 import { Papperskorg } from "@/components/crm/app/Papperskorg";
 import { Felruta, Sida } from "@/components/crm/app/Sida";
-import { belopp, sannolikhet, summa, type Affar, type Affarssteg, type Tavelsteg, type Tavla } from "@/lib/crm/affar";
-import { CrmFel, crmAnrop, type Bolag, type Sida as Svarssida } from "@/lib/crm/api";
+import { STEGTYPER, belopp, sannolikhet, summa, type Affar, type Affarssteg, type Tavelsteg, type Tavla } from "@/lib/crm/affar";
+import { CrmFel, crmAnrop, dagtext, idagLokalt, type Bolag, type Sida as Svarssida } from "@/lib/crm/api";
 import { useLocale, type Localized } from "@/lib/i18n";
 
 type Vy = "tavla" | "papperskorg";
@@ -52,12 +52,8 @@ function flyttad(tavla: Tavla, id: string, mal: Mal): Tavla {
   };
 }
 
-/** "15 dec." i år, "15 dec. 2027" annars. Datumet är en dag, inte en tidpunkt. */
-function kortDatum(v: string, sprak: string): string {
-  const d = new Date(`${v.slice(0, 10)}T12:00:00`);
-  const iAr = d.getFullYear() === new Date().getFullYear();
-  return d.toLocaleDateString(sprak, iAr ? { day: "numeric", month: "short" } : { day: "numeric", month: "short", year: "numeric" });
-}
+/** Så många sidor bolagsnamn hämtas till korten och formulärets väljare (500 per sida). */
+const MAX_NAMNSIDOR = 10;
 
 /**
  * Affärerna som en tavla: stegen som kolumner, affärerna som kort i stegets
@@ -67,6 +63,7 @@ function kortDatum(v: string, sprak: string): string {
  * varandra, och steget byts i affärens panel.
  *
  * `?affar=<id>` öppnar panelen och `?ny=1` dialogen, som i Bolag och Personer.
+ * `?nybolag=<id>` öppnar dialogen med bolaget valt (från bolagets panel).
  */
 export function AffarerVy({ bas = "/crm" }: Readonly<{ bas?: string }>) {
   const { text, locale } = useLocale();
@@ -86,7 +83,7 @@ export function AffarerVy({ bas = "/crm" }: Readonly<{ bas?: string }>) {
   const [bolag, setBolag] = useState<{ id: string; namn: string }[]>([]);
   const [sok, setSok] = useState("");
   const [post, setPost] = useState<Affar | null>(null);
-  const [formular, setFormular] = useState<{ affar: Affar | null; fokus: Affarsfalt | null; stegId: string | null } | null>(null);
+  const [formular, setFormular] = useState<{ affar: Affar | null; fokus: Affarsfalt | null; stegId: string | null; bolagId?: string | null } | null>(null);
   const [radera, setRadera] = useState<Affar | null>(null);
   const [dras, setDras] = useState<string | null>(null);
   const [mal, setMal] = useState<Mal | null>(null);
@@ -111,15 +108,45 @@ export function AffarerVy({ bas = "/crm" }: Readonly<{ bas?: string }>) {
   }, [hamta]);
 
   // Bolagens namn, till korten och till formulärets väljare. Tavlan bär bara id:n.
+  // Listan hämtas sida för sida (en stor kundstock har fler än 500 bolag), och visas medan den växer.
   useEffect(() => {
     let aktuell = true;
-    crmAnrop<Svarssida<Bolag>>("/v1/companies?limit=500&sort=name")
-      .then((s) => aktuell && setBolag(s.data.map((b) => ({ id: b.id, namn: b.name ?? "" })).filter((b) => b.namn)))
-      .catch(() => undefined);
+    (async () => {
+      let markor: string | null = null;
+      for (let sida = 0; sida < MAX_NAMNSIDOR && aktuell; sida++) {
+        const q = new URLSearchParams({ limit: "500", sort: "name" });
+        if (markor) q.set("cursor", markor);
+        let svar: Svarssida<Bolag>;
+        try {
+          svar = await crmAnrop<Svarssida<Bolag>>(`/v1/companies?${q}`);
+        } catch {
+          return;
+        }
+        if (!aktuell) return;
+        const nya = svar.data.map((b) => ({ id: b.id, namn: b.name ?? "" })).filter((b) => b.namn);
+        setBolag((forr) => (sida === 0 ? nya : [...forr, ...nya]));
+        markor = svar.next_cursor;
+        if (!markor) return;
+      }
+    })();
     return () => {
       aktuell = false;
     };
   }, []);
+
+  // Ett bolag på tavlan som inte kom med i namnlistan (fler bolag än listan rymmer) hämtas för sig, en gång.
+  const efterfragade = useRef(new Set<string>());
+  useEffect(() => {
+    if (!tavla || bolag.length === 0) return;
+    const kanda = new Set(bolag.map((b) => b.id));
+    const saknas = [...new Set(tavla.stages.flatMap((s) => s.deals.map((a) => a.company_id)))].filter((id): id is string => !!id && !kanda.has(id) && !efterfragade.current.has(id));
+    for (const id of saknas.slice(0, 50)) {
+      efterfragade.current.add(id);
+      crmAnrop<Bolag>(`/v1/companies/${encodeURIComponent(id)}`)
+        .then((b) => b.name && setBolag((forr) => (forr.some((x) => x.id === b.id) ? forr : [...forr, { id: b.id, namn: b.name! }])))
+        .catch(() => undefined);
+    }
+  }, [tavla, bolag]);
 
   const bolagsnamn = useMemo(() => {
     const karta = new Map(bolag.map((b) => [b.id, b.namn]));
@@ -162,8 +189,20 @@ export function AffarerVy({ bas = "/crm" }: Readonly<{ bas?: string }>) {
   }, [postId]);
 
   useBestallning("ny", () => setFormular({ affar: null, fokus: null, stegId: null }));
+  // Från bolagets panel: en ny affär med bolaget redan valt (`?nybolag=<id>`).
+  useBestallning("nybolag", (bolagId) => setFormular({ affar: null, fokus: null, stegId: null, bolagId }));
+
+  // ---- Sökningen -------------------------------------------------------------
+
+  const fraga = sok.trim().toLocaleLowerCase(sprak);
+  const matchar = useCallback(
+    (a: Affar) => !fraga || [a.name, a.owner, a.company_id ? bolagsnamn(a.company_id) : null].some((v) => (v ?? "").toLocaleLowerCase(sprak).includes(fraga)),
+    [fraga, bolagsnamn, sprak]
+  );
 
   // ---- Flytt ----------------------------------------------------------------
+
+  const flyttarRef = useRef(false);
 
   const namnPa = useCallback((a: Affar | undefined) => a?.name ?? text({ sv: "Affären", en: "The deal" }), [text]);
 
@@ -173,24 +212,35 @@ export function AffarerVy({ bas = "/crm" }: Readonly<{ bas?: string }>) {
    */
   const flytta = useCallback(
     async (id: string, till: Mal, tyst = false) => {
-      if (!tavla || flyttar) return;
+      if (!tavla || flyttarRef.current) return;
       const fran = tavla.stages.find((s) => s.deals.some((a) => a.id === id));
       const affar = fran?.deals.find((a) => a.id === id);
       const mot = tavla.stages.find((s) => s.id === till.stegId);
       if (!fran || !affar || !mot || till.foreId === id) return;
       // Kortet som stod närmast under, för att kunna lägga tillbaka på samma plats.
       const gammalNasta = fran.deals[fran.deals.findIndex((a) => a.id === id) + 1]?.id ?? null;
-      if (fran.id === mot.id && gammalNasta === till.foreId) return;
+      // "Samma plats" avgörs bland korten som syns: med en sökning ligger dolda kort emellan, och ett
+      // släpp där kortet redan låg ska inte flytta det förbi dem.
+      const synligaKort = fran.deals.filter(matchar);
+      const synligNasta = synligaKort[synligaKort.findIndex((a) => a.id === id) + 1]?.id ?? null;
+      if (fran.id === mot.id && (gammalNasta === till.foreId || (fraga && synligNasta === till.foreId))) return;
 
-      const forut = tavla;
+      // Äldre tavelhämtningar kastas: de får inte skriva över flytten medan den sparas.
+      omgang.current += 1;
       setTavla(flyttad(tavla, id, till));
       setPost((nu) => (nu?.id === id ? { ...nu, stage_id: mot.id } : nu));
+      flyttarRef.current = true;
       setFlyttar(true);
+      const skicka = (kropp: Record<string, string>) => crmAnrop<Affar>(`/v1/deals/${encodeURIComponent(id)}/move`, { method: "POST", body: JSON.stringify(kropp) });
       try {
-        const sparad = await crmAnrop<Affar>(`/v1/deals/${encodeURIComponent(id)}/move`, {
-          method: "POST",
-          body: JSON.stringify(till.foreId ? { stage_id: mot.id, before_id: till.foreId } : { stage_id: mot.id })
-        });
+        let sparad: Affar;
+        try {
+          sparad = await skicka(till.foreId ? { stage_id: mot.id, before_id: till.foreId } : { stage_id: mot.id });
+        } catch (orsak) {
+          // Ångra pekar på kortet som låg under. Har det hunnit flyttas läggs affären sist i steget i stället.
+          if (!(tyst && till.foreId && orsak instanceof CrmFel && orsak.status === 422)) throw orsak;
+          sparad = await skicka({ stage_id: mot.id });
+        }
         setPost((nu) => (nu?.id === id ? sparad : nu));
         if (fran.id !== mot.id) {
           visa({
@@ -203,7 +253,7 @@ export function AffarerVy({ bas = "/crm" }: Readonly<{ bas?: string }>) {
           });
         }
       } catch (e) {
-        setTavla(forut);
+        // Tavlan hämtas om nedan: en gammal ögonblicksbild hade kunnat ta bort något som hunnit komma till.
         setPost((nu) => (nu?.id === id ? affar : nu));
         visa({
           type: "error",
@@ -211,17 +261,44 @@ export function AffarerVy({ bas = "/crm" }: Readonly<{ bas?: string }>) {
           uniqueID: "crm-affar-flytt"
         });
       } finally {
+        flyttarRef.current = false;
         setFlyttar(false);
         void hamta();
       }
     },
     // angra anropar flytta och flytta visar angra: den läses genom en ref.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [tavla, flyttar, hamta, namnPa, text, visa]
+    [tavla, hamta, namnPa, text, visa, matchar, fraga]
   );
   const flyttaRef = useRef(flytta);
   flyttaRef.current = flytta;
-  const angra = (id: string, till: Mal) => flyttaRef.current(id, till, true);
+  /** Ångra väntar ut en flytt som pågår (högst fem sekunder), så att den inte försvinner utan besked. */
+  const angra = async (id: string, till: Mal) => {
+    for (let i = 0; i < 50 && flyttarRef.current; i++) await new Promise((klar) => window.setTimeout(klar, 100));
+    await flyttaRef.current(id, till, true);
+  };
+
+  /** Ett steg upp eller ned inom steget: tangentbordets och telefonens väg till samma ordning som dragningen ger. */
+  const flyttaPlats = (a: Affar, upp: boolean) => {
+    const s = tavla?.stages.find((x) => x.deals.some((d) => d.id === a.id));
+    if (!s) return;
+    const i = s.deals.findIndex((d) => d.id === a.id);
+    if (upp ? i <= 0 : i >= s.deals.length - 1) return;
+    void flytta(a.id, { stegId: s.id, foreId: upp ? s.deals[i - 1].id : (s.deals[i + 2]?.id ?? null) });
+  };
+  const platsFor = (a: Affar | null) => {
+    const s = a ? tavla?.stages.find((x) => x.deals.some((d) => d.id === a.id)) : undefined;
+    return s && a ? { plats: s.deals.findIndex((d) => d.id === a.id) + 1, antal: s.deals.length } : null;
+  };
+
+  /** Stänger panelen och lämnar fokus på affärens kort (som kan ha bytt kolumn), annars på Ny affär. */
+  const stangPanel = (id: string | null) => {
+    sattPost(null);
+    window.setTimeout(() => {
+      const kort = id ? document.querySelector<HTMLElement>(`[data-kort="${CSS.escape(id)}"]`) : null;
+      (kort ?? document.querySelector<HTMLElement>("[data-ny-affar] button, button[data-ny-affar]"))?.focus();
+    }, 80);
+  };
 
   // ---- Dra och släpp --------------------------------------------------------
 
@@ -250,7 +327,7 @@ export function AffarerVy({ bas = "/crm" }: Readonly<{ bas?: string }>) {
       visa({ type: "error", body: text(feltext(e)), uniqueID: "crm-affar-radera" });
       return;
     }
-    if (post?.id === a.id) sattPost(null);
+    if (post?.id === a.id) stangPanel(null);
     const aterstall = async () => {
       try {
         await crmAnrop<Affar>(`/v1/deals/${encodeURIComponent(a.id)}/restore`, { method: "POST" });
@@ -271,11 +348,6 @@ export function AffarerVy({ bas = "/crm" }: Readonly<{ bas?: string }>) {
 
   // ---- Det som visas --------------------------------------------------------
 
-  const fraga = sok.trim().toLocaleLowerCase(sprak);
-  const matchar = useCallback(
-    (a: Affar) => !fraga || [a.name, a.owner, a.company_id ? bolagsnamn(a.company_id) : null].some((v) => (v ?? "").toLocaleLowerCase(sprak).includes(fraga)),
-    [fraga, bolagsnamn, sprak]
-  );
   const synliga = useMemo(() => (tavla?.stages ?? []).map((s) => (fraga ? raknat(s, s.deals.filter(matchar)) : s)), [tavla, fraga, matchar]);
   const traffar = synliga.reduce((n, s) => n + s.count, 0);
 
@@ -286,7 +358,7 @@ export function AffarerVy({ bas = "/crm" }: Readonly<{ bas?: string }>) {
   const oppetVarde = sek.reduce((n, { a }) => n + (a.amount ?? 0), 0);
   const viktat = Math.round(sek.reduce((n, { a, s }) => n + ((a.amount ?? 0) * (sannolikhet(a, s) ?? 0)) / 100, 0));
 
-  const idag = new Date().toISOString().slice(0, 10);
+  const idag = idagLokalt();
   const nyAffar = (stegId: string | null = null) => setFormular({ affar: null, fokus: null, stegId });
 
   const kort = (a: Affar, s: Tavelsteg) => {
@@ -304,7 +376,6 @@ export function AffarerVy({ bas = "/crm" }: Readonly<{ bas?: string }>) {
         data-vald={post?.id === a.id || undefined}
         className="crm-tavla-kort"
         draggable={!smal && !flyttar}
-        aria-label={text({ sv: `Öppna ${namn}`, en: `Open ${namn}` })}
         onClick={() => {
           setPost(a);
           sattPost(a.id);
@@ -323,7 +394,10 @@ export function AffarerVy({ bas = "/crm" }: Readonly<{ bas?: string }>) {
         onDragEnd={slapp}
       >
         <span className="flex items-start gap-2">
-          <span className="line-clamp-2 min-w-0 flex-1 text-[0.875rem] font-semibold leading-5 text-ink">{namn}</span>
+          <span className="line-clamp-2 min-w-0 flex-1 text-[0.875rem] font-semibold leading-5 text-ink">
+            <span className="sr-only">{text({ sv: "Öppna ", en: "Open " })}</span>
+            {namn}
+          </span>
           {a.owner ? (
             <span className="inline-flex shrink-0" title={text({ sv: `Ansvarig: ${a.owner}`, en: `Owner: ${a.owner}` })}>
               <span aria-hidden className="inline-flex">
@@ -342,8 +416,9 @@ export function AffarerVy({ bas = "/crm" }: Readonly<{ bas?: string }>) {
                 className={`inline-flex items-center gap-1 tabular-nums ${sen ? "text-danger" : "text-ink-muted"}`}
                 title={sen ? text({ sv: "Väntat avslut har passerat", en: "The expected close date has passed" }) : text({ sv: "Väntat avslut", en: "Expected close" })}
               >
-                <Icon icon={CalendarClock} size="xsm" color="inherit" />
-                <span>{kortDatum(a.expected_close_date, sprak)}</span>
+                {/* Ett passerat datum har en egen ikon: färgen ensam bär inte betydelsen. */}
+                <Icon icon={sen ? CalendarX2 : CalendarClock} size="xsm" color="inherit" />
+                <span>{dagtext(a.expected_close_date, locale, true)}</span>
                 {sen ? <span className="sr-only">{text({ sv: ", har passerat", en: ", has passed" })}</span> : null}
               </span>
             ) : null}
@@ -385,6 +460,8 @@ export function AffarerVy({ bas = "/crm" }: Readonly<{ bas?: string }>) {
           <Prick ton={STEGTON[s.type].ton} />
           <Text as="h2" weight="semibold" maxLines={1}>
             {s.name}
+            {/* Stegets typ sägs i ord för skärmläsaren: pricken visar den bara med färg. */}
+            {s.type !== "open" ? <span className="sr-only">{`, ${text(STEGTYPER[s.type]).toLocaleLowerCase(sprak)}`}</span> : null}
           </Text>
           <Badge variant="neutral" label={<span className="tabular-nums">{s.count}</span>} />
           <span className="ml-auto whitespace-nowrap text-[0.8125rem] tabular-nums text-ink-muted">{s.count ? summa(s.amount_by_currency, locale) : ""}</span>
@@ -439,7 +516,11 @@ export function AffarerVy({ bas = "/crm" }: Readonly<{ bas?: string }>) {
       utfyllnad={vy === "tavla" ? "tavla" : "tabell"}
       rubrik={text({ sv: "Affärer", en: "Deals" })}
       antal={tavla ? oppnaAntal.toLocaleString(sprak) : undefined}
-      atgarder={<Button variant="primary" label={text({ sv: "Ny affär", en: "New deal" })} icon={<Icon icon={Plus} size="sm" />} onClick={() => nyAffar()} />}
+      atgarder={
+        <span data-ny-affar>
+          <Button variant="primary" label={text({ sv: "Ny affär", en: "New deal" })} icon={<Icon icon={Plus} size="sm" />} onClick={() => nyAffar()} />
+        </span>
+      }
       vyrad={
         smal ? (
           <Selector
@@ -526,7 +607,9 @@ export function AffarerVy({ bas = "/crm" }: Readonly<{ bas?: string }>) {
         bolagVag={`${bas}/bolag`}
         personVag={`${bas}/personer`}
         flyttar={flyttar}
-        stang={() => sattPost(null)}
+        plats={platsFor(post)}
+        flyttaPlats={flyttaPlats}
+        stang={() => stangPanel(post?.id ?? null)}
         redigera={(falt) => post && setFormular({ affar: post, fokus: falt ?? null, stegId: null })}
         flytta={(a, stegId) => void flytta(a.id, { stegId, foreId: null })}
         taBort={(a) => setRadera(a)}
@@ -538,6 +621,7 @@ export function AffarerVy({ bas = "/crm" }: Readonly<{ bas?: string }>) {
         steg={steg}
         bolag={bolag}
         forvalStegId={formular?.stegId}
+        forvalBolagId={formular?.bolagId}
         fokus={formular?.fokus}
         stang={() => setFormular(null)}
         sparat={(a, ny) => {
@@ -561,8 +645,8 @@ export function AffarerVy({ bas = "/crm" }: Readonly<{ bas?: string }>) {
         onOpenChange={(o) => !o && setRadera(null)}
         title={text({ sv: `Ta bort ${radera?.name ?? "affären"}?`, en: `Delete ${radera?.name ?? "the deal"}?` })}
         description={text({
-          sv: "Affären flyttas till papperskorgen och kan återställas i 30 dagar. Därefter töms den, med sina anteckningar och bilagor.",
-          en: "The deal moves to the trash and can be restored for 30 days. After that it is emptied, with its notes and attachments."
+          sv: "Affären flyttas till papperskorgen och kan återställas i 30 dagar. Därefter töms den.",
+          en: "The deal moves to the trash and can be restored for 30 days. After that it is emptied."
         })}
         actionLabel={text({ sv: "Ta bort", en: "Delete" })}
         cancelLabel={text({ sv: "Avbryt", en: "Cancel" })}
