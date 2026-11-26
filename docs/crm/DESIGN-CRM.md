@@ -3,6 +3,41 @@
 Den här filen är kontraktet för CRM-appens gränssnitt. Den ersätter utseendet i
 commit `b6c08ef2`, som Anton dömde ut 2026-11-26.
 
+## GODKÄND OCH LÅST (Anton 2026-11-26)
+
+> Perfekt, utseendet och gränssnittet var precis det jag föreställde mig. Lås in precis
+> alla delar av det som framtida referens att bygga utifrån.
+
+Version 2 i commit `d438ff84` är referensen. Allt nytt i CRM:et, och allt som flyttas
+dit från den nuvarande appen, byggs i den här formen. Det som är låst:
+
+| Del | Var referensen ligger |
+|---|---|
+| Hur det ser ut | Bilderna i `docs/crm/bilder/app/` (översikt, bolag, panel, personer, synk, utvecklare, palett, mörkt läge, mobil) |
+| Riktning och anatomi | Den här filen, avsnitten nedan |
+| Tema och tokens | `lib/crm/astryx/snajpTema.ts` (källa) och de byggda `snajp.css`, `snajp.js` |
+| Skal | `components/crm/app/CrmRam.tsx` och `crm.css` |
+| Verktygslåda | `components/crm/app/kit.tsx`: Postchip, Personchip, Lankpiller, Relationsetikett, Objektikon, Kolumnrubrik, Tabellskelett, Nyckeltalskort. Ny yta importerar härifrån och uppfinner inga egna varianter |
+| Sidans ram | `components/crm/app/Sida.tsx`: Sidhuvud, Vyrad, Sida |
+| Mönstervyer | Lista med markering och åtgärdsrad: `BolagVy.tsx`. Postens panel: `BolagPanel.tsx`. Formulär med fältfel: `BolagFormular.tsx`. Kort och diagram: `OversiktVy.tsx`. Förlopp och utfall: `SynkVy.tsx` |
+| Recept för Astryx | `docs/crm/underlag/astryx-kokbok.md` |
+| Mått att hålla | `docs/crm/underlag/twenty-finish.md` |
+
+En ändring av något låst kräver Antons ord. En ny vy som inte går att bygga med
+verktygslådan utökar verktygslådan, i samma form.
+
+### Ändringar Anton beställde i samma besked (2026-11-26)
+
+1. **Sidofältet är marinblått (Snajps bläck) i båda lägena.** Det ska inte bli ljust i
+   mörkt läge, som railen i version 1 blev. Färgen är fast: `--ink` byter värde i mörkt
+   läge och kan därför inte bära den. Sidofältet får egna, fasta tokens.
+2. **Snajps logga står i sidofältet.**
+3. **Ockra som accent där det passar**, så att varumärket känns igen: det valda i
+   sidofältet, loggan, fokus, förlopp och den framhävda rutan.
+
+Det ersätter punkten "Railen i bläck tas bort" under Tema nedan. Resten står kvar:
+upphöjt blad, radier, chips, kort, piller, kommandopalett.
+
 ## Antons dom och beställning (2026-11-26, ordagrant i sak)
 
 > De senaste skärmbilderna ser väldigt generiska ut, lika och nästan sämre än den

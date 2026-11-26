@@ -9,6 +9,61 @@ möjligt), vad det betyder i koden.
 
 ---
 
+## 2026-11-26 — Snajp CRM: version 2 godkänd, och Antons svar på de öppna frågorna (Anton)
+
+**Godkännandet.** "Perfekt, utseendet och gränssnittet var precis det jag föreställde mig.
+Lås in precis alla delar av det som framtida referens att bygga utifrån." Version 2
+(commit d438ff84) är låst som referens i `docs/crm/DESIGN-CRM.md`.
+
+**Antons svar, i hans ordning.** Där han skrev "gör vad som är bäst enligt ditt omdöme"
+står agentens val och skäl.
+
+- **Sidofältet** ska vara Snajp-blått (bläck, marin) och behålla färgen i mörkt läge, med
+  Snajps logga och ockra som accent där det passar. Skäl: varumärket ska kännas igen.
+- **craft-anything hoppas över** om arkitektur och funktion hos Twenty bedöms fångade.
+  Agentens bedömning: ja. Källkoden är läst område för område (tolv av tretton filer, 1,5
+  MB), den körande appen är genomgången (17 bilder, 208 anrop) och rea gav 484 operationer.
+  Det verktyget hade tillfört är en besökarvy, och den finns i bilderna. Villkoret är att
+  inventeringen kontrolläses klart; det står kvar som arbete.
+- **Kunderna ser inte länken till CRM:et än.** Bara plattformsadmin.
+- **Astryx färdiga komponenter får användas som utgångspunkt**, också förhandsutgåvorna
+  (diagram, kalender), så länge licensen tillåter att vi ändrar dem. Den är MIT. `astryx
+  init` körs fortfarande inte: frågan om `CLAUDE.md` besvarades inte.
+- **Buddy har inget avtalsdatum än.** Synken körs mot ett testkonto, och data ska prövas
+  från testkonton i olika CRM-system.
+- **CRM:ets kunder och Iris kunder hålls isär nu**, men CRM:et förbereds för att visa båda
+  i en samlad kundlista, uppdelad på Iris och Egna. Mer om det senare.
+- **Tidigare kunder är fria att bearbeta.** De ska inte längre räknas som upptagna för
+  Iris. Det ska gå att bearbeta dem direkt i CRM-miljön, med samma funktioner som Leads har
+  i dag och en egen översikt över alla körningar.
+- **Uteslutning på nummer eller namn (agentens val):** ett CRM-bolag som har
+  organisationsnummer utesluter bara på numret. Namnet avgör bara för bolag utan nummer.
+  Skäl: med en stor kundstock fäller namnet annars varje annat bolag som heter likadant,
+  och numret är den nyckel som inte kan förväxlas.
+- **Lagringstid (agentens val):** CRM-registret är kundens register. Kunden är
+  personuppgiftsansvarig och Snajp biträde, så det gallras inte efter 24 månader som
+  leads gör. Det som gäller är: papperskorg i 30 dagar, allt raderas när avtalet upphör,
+  och personer utan någon händelse på 24 månader läggs i en lista som kunden får ta
+  ställning till. Skäl: att tyst radera en kunds kundregister är ett större fel än att
+  behålla det, men lagringsminimering kräver att frågan ställs.
+- **Privatpersoner (agentens val):** synken hoppar över privatpersoner om inte
+  anslutningen uttryckligen slår på dem. Påslagna sparas de som kund utan personnummer,
+  märks som privatperson och utesluts ur alla utskick, listor och Iris-körningar. Skäl:
+  Snajp är ett B2B-verktyg, marknadsföring till konsumenter kräver samtycke och
+  NIX-kontroll, och det register som inte behövs ska inte finnas.
+- **Pris:** CRM:et är ett tillägg, med fri tillgång under provperioden.
+- **Synkens förlopp visas för kunden.** Fel visas i enkla ord, med beskedet att de har
+  gått vidare till supporten. Alla felkoder och hela rapporten blir ett supportärende. En
+  annan session bygger det systemet; CRM:et ska lämna underlaget dit.
+
+**Vad det ändrar i det som redan är byggt.** `upptagna` ska sluta räkna tidigare kunder
+och sluta fälla på namn när numret finns. Synkvyn visar i dag koder översatta till klartext
+för alla: den ska ha en enkel nivå för kunden och den fulla för plattformsadmin. Tillägget
+behöver en grind. Inget av det är gjort än; det står i `docs/crm/STATUS-MIGRERING.md`.
+
+**Hela appen flyttas till det nya gränssnittet** i ett eget worktree, så att development
+behåller dagens funktion tills det nya är färdigt. Planen: `docs/crm/PLAN-MIGRERING.md`.
+
 ## 2026-11-26 — Snajp CRM får en egen form: Twenty, Astryx och Snajps palett (Anton)
 
 **Beslut (Anton, 2026-11-26).** Det första gränssnittet underkändes: "väldigt generiska ...
