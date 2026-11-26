@@ -15,7 +15,7 @@ Lägen: **klart** (byggt och verifierat), **pågår**, **väntar** (på kvot ell
 | Sidofältet marinblått i båda lägena | klart | Byggt och granskat i bild 2026-11-26. Väntar på Antons dom |
 | Snajps logga i sidofältet | klart | Överst, leder till översikten. Väntar på Antons dom |
 | Ockra som accent | klart | Markör och ikon för vald menypost. Väntar på Antons dom |
-| Sökikon i mobilens toppfält | inte påbörjat | Försvann när loggan kom in. Sökningen finns i lådan |
+| Sökikon i mobilens toppfält | pågår | Försvann när loggan kom in. Byggs i gränssnittspasset för fas 3 |
 
 ## Fas 1: kartläggning av den nuvarande appen
 
@@ -57,19 +57,21 @@ fas 4 respektive fas 5.
 
 | Del | Läge | Not |
 |---|---|---|
-| Kundsynken in som API | klart | `/api/crm/v1`, 110 tester i minnet, 9 mot SQL |
-| Databasvägen i drift (asyncpg) | väntar | Bara prövad i ett CI-jobb som inte körts, eftersom inget är pushat |
+| Kundsynken in som API | klart | `/api/crm/v1`, 136 tester i minnet. Development sammanslaget 2026-11-26; CRM-grunden heter nu migration 160 |
+| Databasvägen i drift (asyncpg) | väntar | Bara prövad i ett CI-jobb som inte körts, eftersom inget är pushat. De nya frågorna (161–163) är inte körda mot Postgres alls |
 | Gränssnitt: översikt, bolag, personer, synk, utvecklare | klart | Version 2, godkänd. Inte kört mot riktig backend |
-| Körning mot den lokala stacken | inte påbörjat | |
-| Tidigare kunder fria för Iris | inte påbörjat | Ändring i `upptagna` |
-| Uteslutning på nummer när numret finns | inte påbörjat | |
-| Privatpersoner hoppas över som standard | inte påbörjat | |
-| Tillägget som grind, fritt under provperiod | inte påbörjat | |
-| Synkens två nivåer och underlag till supportärende | inte påbörjat | Supportsystemet byggs av en annan session |
-| Webhooks ut | inte påbörjat | |
-| Sortering nyast först, namn på felrader, papperskorg | inte påbörjat | |
-| Affärer med tavla | inte påbörjat | |
-| Uppgifter, anteckningar, aktiviteter, bilagor | inte påbörjat | |
+| Körning mot den lokala stacken | inte påbörjat | Kräver Postgres lokalt (Docker). Görs när byggarna inte håller en server igång: maskinen har 16 GB |
+| Tidigare kunder fria för Iris | klart i backend | `lagring.upptagen_rad`. Inte fri om posten säger kontakta inte. `tests/crm/test_beslut.py` |
+| Uteslutning på nummer när numret finns | klart i backend | Namnet fäller bara en kandidat som själv saknar nummer (agentens tillägg, `docs/BESLUT.md`) |
+| Privatpersoner hoppas över som standard | klart i backend, gränssnitt pågår | Migration 161. Påslagna: märkta, utan personnummer, aldrig kontaktbara (check-villkor) |
+| Kontakta inte i CRM:et stoppar utskick | klart i backend | Luckan fanns: märkningen lästes inte av sändspärren. Gäller också kampanjutskick |
+| Tillägget som grind, fritt under provperiod | klart i backend, gränssnitt pågår | `app/crm/tillgang.py`, tillägget `crm` (dolt för kunden). Ingen väg förbi för admin: tillägget slås på per kund |
+| Händelselogg och ändringsflöde | klart i backend, gränssnitt pågår | Migration 162. `GET /changes`, `/companies/{id}/history`. Bär fältens namn, aldrig värdena |
+| Webhooks ut | klart i backend, gränssnitt pågår | Signerade, sju försök, leveranslogg 30 dagar, omskick, avstängning efter tjugo fel. Inte kört mot en riktig mottagare |
+| Sortering nyast först, namn på felrader, papperskorg, krockens id | klart i backend, gränssnitt pågår | `sort=-updated`, `only_deleted`, `conflicting_id` |
+| Synkens två nivåer och underlag till supportärende | klart i backend, gränssnitt pågår | Migration 163. Se "Var supportsystemet kopplar in" nedan |
+| Affärer med tavla | pågår | Migration 164 byggs: steg, affärer, tavla |
+| Uppgifter, anteckningar, aktiviteter, bilagor | pågår | Samma bygge. Bilagor i databasen, 10 MB per fil och 500 MB per kund (agentens val, behöver Antons dom) |
 | Tidslinje mot leads, konversationer, samtal, ärenden | inte påbörjat | |
 | Utfall speglas åt båda håll | inte påbörjat | |
 | Samlad kundlista, Iris och Egna | inte påbörjat | |
@@ -79,6 +81,31 @@ fas 4 respektive fas 5.
 | Bild på varje vy i Twentys hostade app | pågår | 17 bilder, mobilvyn gick inte att fånga |
 | Testkonton i källsystemen | väntar | Kräver Antons ja per konto |
 | Buddy | väntar | Inget avtalsdatum. Körs mot testkonto |
+
+### Var supportsystemet kopplar in
+
+CRM:et lämnar ifrån sig en rapport för varje synkkörning som slutar med fel. Sessionen som
+bygger supportärendena läser den här och svarar med ärendets nummer:
+
+- `GET /api/admin/crm/supportrapporter?utan_arende=true` (huvudnyckeln): rapporter som inget
+  ärende tagit emot än, hos alla kunder, nyast först.
+- `GET /api/admin/crm/supportrapporter/{kund}/{körning}`: hela rapporten. Räknare,
+  anslutningens inställningar och gällande mappning, antal per felkod och varje felrad
+  med kod. Felaktiga värden står med sin form (`99 99 99 9`), aldrig med innehållet.
+- `POST /api/admin/crm/supportrapporter/{kund}/{körning}/arende` med `{"nummer": "F-7KQ2"}`:
+  numret visas sedan för kunden på körningen.
+
+Plattformsärendena (migration 156) kräver i dag en rapportör och en arbetsyta ur en
+inloggad session, och synken har ingen: den startas av en API-nyckel. Därför skapar CRM:et
+inget ärende själv. Antingen får ärendetabellen en systemrapportör, eller så hämtar ett
+jobb på supportsidan rapporterna härifrån. Det valet är supportsessionens.
+Kod: `snajp-support/app/crm/supportrapport.py`, `snajp-support/app/api/admin_crm.py`.
+
+### Det Anton behöver veta om tillägget
+
+Också plattformsadmin möts av "tillägget saknas" i CRM:et för en kund vars provperiod är
+slut. Slå på tillägget Snajp CRM på kunden under Admin, kunden, Tillägg. Det slår igenom
+inom en minut. Kunderna ser inte tillägget i sin lista förrän CRM:et öppnas för dem.
 
 ## Fas 4: Leads i CRM-miljön
 
