@@ -30,6 +30,7 @@ import { HStack } from "@astryxdesign/core/Stack";
 import { Text } from "@astryxdesign/core/Text";
 import { Timestamp } from "@astryxdesign/core/Timestamp";
 import { kallnamn } from "@/components/crm/app/BolagPanel";
+import { Historik } from "@/components/crm/app/Historik";
 import type { Personfalt } from "@/components/crm/app/PersonFormular";
 import { Kallpiller, Lankpiller, Postchip, tonFor, tonklass, useSmal } from "@/components/crm/app/kit";
 import { GRUNDER, personnamn, type Personpost } from "@/lib/crm/person";
@@ -233,6 +234,14 @@ export function PersonPanel({
                           person.updated_at ? <Timestamp value={person.updated_at} format="relative" color="primary" /> : <span className="crm-varde text-ink-muted">-</span>
                         )}
                       </MetadataList>
+
+                      {/* Personens panel har inga flikar: historiken står sist, under samma slags rubrik som grupperna. */}
+                      <section aria-labelledby="crm-personhistorik" className="flex flex-col gap-3">
+                        <h3 id="crm-personhistorik" className="crm-gruppnamn">
+                          {text({ sv: "Historik", en: "History" })}
+                        </h3>
+                        <Historik objekt="people" id={person.id} andrad={person.updated_at} />
+                      </section>
                     </div>
                   </div>
                 </>

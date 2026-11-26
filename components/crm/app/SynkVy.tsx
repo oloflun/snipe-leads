@@ -2,14 +2,16 @@
 
 import "@/components/crm/app/crm-vyer.css";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import {
   AlertTriangle,
   CalendarClock,
   Check,
   CircleDot,
   Clock,
+  Info,
   Layers,
+  LifeBuoy,
   Pause,
   Play,
   Plug,
@@ -19,6 +21,7 @@ import {
   Tag,
   Trash2,
   Unplug,
+  UserX,
   type LucideIcon
 } from "lucide-react";
 import { AlertDialog } from "@astryxdesign/core/AlertDialog";
@@ -41,16 +44,18 @@ import { ProgressBar } from "@astryxdesign/core/ProgressBar";
 import { Selector } from "@astryxdesign/core/Selector";
 import { Skeleton } from "@astryxdesign/core/Skeleton";
 import { HStack } from "@astryxdesign/core/Stack";
+import { Switch } from "@astryxdesign/core/Switch";
 import { Table, pixel, proportional, type TableColumn } from "@astryxdesign/core/Table";
 import { Text } from "@astryxdesign/core/Text";
 import { TextInput } from "@astryxdesign/core/TextInput";
 import { Timestamp } from "@astryxdesign/core/Timestamp";
 import { useToast } from "@astryxdesign/core/Toast";
-import { Kolumnrubrik, Kopierbar, Postchip, Prick, Relationsetikett, Tabellskelett, tonFor, tonklass, useBestallning, useSmal, Vyval, type Ton } from "@/components/crm/app/kit";
+import { Kolumnrubrik, Kopierbar, Krocklank, Postchip, Prick, Relationsetikett, Tabellskelett, tonFor, tonklass, useBestallning, useSmal, Vyval, type Ton } from "@/components/crm/app/kit";
 import { Felruta, Sida } from "@/components/crm/app/Sida";
 import { CrmFel, RELATIONER, SYSTEMNAMN, crmAnrop, type Anslutning, type Korning, type Relation } from "@/lib/crm/api";
 import { SYNKPULS, avslutar, klara, pagar, useAktuell, useSynklage } from "@/components/crm/app/synklage";
-import { FALTKODER, KORNINGSFEL, ORSAKER, kodtext } from "@/lib/crm/felkoder";
+import { FALTKODER, KORNINGSFEL, ORSAKER, UPPLYSNING, arFel, attRatta, enkelMening, kodtext } from "@/lib/crm/felkoder";
+import { useDashboard } from "@/components/dashboard/DashboardContext";
 import { useLocale, type Localized } from "@/lib/i18n";
 
 // ---------------------------------------------------------------------------
@@ -67,6 +72,17 @@ const SAKNADE: Record<Anslutning["missing_records"], { namn: Localized; vad: Loc
   mark_former_customer: { namn: { sv: "Blir tidigare kunder", en: "Become former customers" }, vad: { sv: "Bolagen får relationen tidigare kund.", en: "The companies get the relation former customer." } },
   delete: { namn: { sv: "Tas bort", en: "Deleted" }, vad: { sv: "Posterna tas bort ur Snajp.", en: "The records are deleted from Snajp." } }
 };
+/** Anslutningens val för privatpersoner (`include_private_persons`). */
+const PRIVATPERSONER: Record<"true" | "false", { namn: Localized; vad: Localized }> = {
+  false: {
+    namn: { sv: "Hoppas över", en: "Skipped" },
+    vad: { sv: "Poster som källan märker som privatpersoner kommer inte in.", en: "Records the source marks as private persons do not come in." }
+  },
+  true: {
+    namn: { sv: "Sparas märkta", en: "Stored, marked" },
+    vad: { sv: "De sparas märkta som privatpersoner, utan personnummer, och går aldrig att kontakta.", en: "They are stored marked as private persons, without personal identity numbers, and can never be contacted." }
+  }
+};
 const STATUS: Record<Korning["status"], { text: Localized; badge: "neutral" | "yellow" | "green" | "red"; prick: Ton | "fara" | null }> = {
   queued: { text: { sv: "Köad", en: "Queued" }, badge: "neutral", prick: null },
   processing: { text: { sv: "Pågår", en: "Running" }, badge: "yellow", prick: "ockra" },
@@ -76,8 +92,6 @@ const STATUS: Record<Korning["status"], { text: Localized; badge: "neutral" | "y
 
 type Filter = "alla" | "pagar" | "ratta" | "fel";
 
-/** Samma räkning som översiktens kort Att rätta: felposterna, och hoppade poster utöver dem. */
-const attRatta = (k: Korning) => k.errors.length + Math.max(0, k.counts.skipped - k.errors.length);
 const systemnamn = (s: string) => SYSTEMNAMN[s] ?? s;
 
 /** Körningens utfall i en mening, på läsarens språk. */
@@ -212,7 +226,7 @@ export function SynkVy({ utvecklarvag = "/crm/utvecklare" }: Readonly<{ utveckla
 
   // ---- Ändra en anslutning --------------------------------------------------
 
-  async function andra(a: Anslutning, falt: Partial<Pick<Anslutning, "active" | "conflict_rule" | "missing_records">>, klart: Localized) {
+  async function andra(a: Anslutning, falt: Partial<Pick<Anslutning, "active" | "conflict_rule" | "missing_records" | "include_private_persons">>, klart: Localized) {
     setAndrar(a.id);
     try {
       const ny = await crmAnrop<Anslutning>(`/v1/connections/${encodeURIComponent(a.id)}`, { method: "PATCH", body: JSON.stringify(falt) });
@@ -554,7 +568,7 @@ function Anslutningskort({
   a: Anslutning;
   senaste: Korning | null;
   arbetar: boolean;
-  andra: (falt: Partial<Pick<Anslutning, "active" | "conflict_rule" | "missing_records">>, klart: Localized) => void;
+  andra: (falt: Partial<Pick<Anslutning, "active" | "conflict_rule" | "missing_records" | "include_private_persons">>, klart: Localized) => void;
   taBort: () => void;
   oppnaKorning: (id: string) => void;
 }>) {
@@ -586,6 +600,22 @@ function Anslutningskort({
         description: text(SAKNADE[r].vad),
         endContent: bock(a.missing_records === r),
         onClick: () => andra({ missing_records: r }, { sv: `${namn}: försvunna poster ${SAKNADE[r].namn.sv.toLowerCase()}.`, en: `${namn}: missing records ${SAKNADE[r].namn.en.toLowerCase()}.` })
+      }))
+    },
+    {
+      label: text({ sv: "Privatpersoner", en: "Private persons" }),
+      icon: UserX,
+      items: [false, true].map((pa) => ({
+        label: text(PRIVATPERSONER[String(pa) as "true" | "false"].namn),
+        description: text(PRIVATPERSONER[String(pa) as "true" | "false"].vad),
+        endContent: bock((a.include_private_persons ?? false) === pa),
+        onClick: () =>
+          andra(
+            { include_private_persons: pa },
+            pa
+              ? { sv: `${namn}: privatpersoner sparas märkta.`, en: `${namn}: private persons are stored, marked.` }
+              : { sv: `${namn}: privatpersoner hoppas över.`, en: `${namn}: private persons are skipped.` }
+          )
       }))
     },
     { type: "divider" },
@@ -621,6 +651,9 @@ function Anslutningskort({
             </MetadataListItem>
             <MetadataListItem label={text({ sv: "Nya bolag blir", en: "New companies are" })} icon={ikon(Tag)}>
               <Relationsetikett relation={a.default_relation as Relation} />
+            </MetadataListItem>
+            <MetadataListItem label={text({ sv: "Privatpersoner", en: "Private persons" })} icon={ikon(UserX)}>
+              <span className="crm-varde">{text(PRIVATPERSONER[String(a.include_private_persons ?? false) as "true" | "false"].namn)}</span>
             </MetadataListItem>
             <MetadataListItem label={text({ sv: "Senaste synk", en: "Last sync" })} icon={ikon(CalendarClock)}>
               {a.last_sync_at ? <Timestamp value={a.last_sync_at} format="relative" color="primary" /> : <span className="crm-varde text-ink-muted">{text({ sv: "Aldrig", en: "Never" })}</span>}
@@ -675,6 +708,14 @@ function Korningspanel({ korning, laddar, anslutning, stang }: Readonly<{ kornin
   const namn = anslutning ? systemnamnFor(anslutning) : text({ sv: "Körning", en: "Run" });
   const ratta = k ? attRatta(k) : 0;
   const utanSkal = k ? Math.max(0, k.counts.skipped - k.errors.length) : 0;
+  // Två nivåer (Antons beslut): kunden ser förloppet och felen i enkla ord,
+  // plattformsadmin koderna och hela rapporten, med en växel till kundens nivå.
+  const admin = useDashboard().isPlatformAdmin;
+  const [somKund, setSomKund] = useState(false);
+  const visaRapport = admin && !somKund;
+  // Panelen ligger under <bas>/synk; posterna öppnas i <bas>/bolag och <bas>/personer.
+  const bas = (usePathname() ?? "/crm/synk").replace(/\/synk\/?$/, "");
+  const postvag = (objekt: string) => (objekt === "person" ? `${bas}/personer?person=` : `${bas}/bolag?bolag=`);
 
   const talruta = (etikett: Localized, varde: number, framhavd = false) => (
     <div className="crm-talruta" style={framhavd ? { backgroundColor: "oklch(var(--ochre) / 0.16)" } : undefined}>
@@ -714,6 +755,17 @@ function Korningspanel({ korning, laddar, anslutning, stang }: Readonly<{ kornin
                 </div>
               ) : (
                 <div className="flex flex-col gap-6 border-t border-ink/[0.08] px-5 pb-6 pt-5">
+                  {admin ? (
+                    // Plattformsadmin ser koderna och hela rapporten; växeln visar kundens nivå.
+                    <div className="crm-nivavaxel flex flex-col items-start gap-2 rounded-[10px] px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
+                      <span className="text-[0.8125rem] text-ink-muted">
+                        {somKund
+                          ? text({ sv: "Du ser körningen som kunden ser den.", en: "You see the run as the customer sees it." })
+                          : text({ sv: "Du ser hela rapporten med koder. Kunden ser enkla ord.", en: "You see the full report with codes. The customer sees plain words." })}
+                      </span>
+                      <Switch size="sm" className="shrink-0 whitespace-nowrap" label={text({ sv: "Visa som kunden ser det", en: "Show as the customer sees it" })} value={somKund} onChange={(v) => setSomKund(v)} />
+                    </div>
+                  ) : null}
                   {k.status === "processing" || k.status === "queued" ? (
                     <div className="flex flex-col gap-2" role="status" aria-live="polite">
                       <div className="flex items-baseline justify-between gap-3">
@@ -751,6 +803,7 @@ function Korningspanel({ korning, laddar, anslutning, stang }: Readonly<{ kornin
                     {talruta({ sv: "Att rätta", en: "To fix" }, ratta, ratta > 0)}
                   </section>
 
+                  {visaRapport ? (
                   <section aria-labelledby="crm-att-ratta" className="flex flex-col gap-1">
                     <h3 id="crm-att-ratta" className="font-sans text-[0.8125rem] font-semibold tracking-normal text-ink-muted">
                       {text({ sv: "Poster att rätta i källan", en: "Records to fix in the source" })}
@@ -765,31 +818,52 @@ function Korningspanel({ korning, laddar, anslutning, stang }: Readonly<{ kornin
                       <ul className="flex flex-col">
                         {k.errors.map((f, i) => {
                           const skal = [...(f.orsak ? [text(kodtext(ORSAKER, f.orsak))] : []), ...(f.faltfel ?? []).map((x) => text(kodtext(FALTKODER, x.kod)))];
+                          const koder = [...(f.orsak ? [f.orsak] : []), ...(f.faltfel ?? []).map((x) => x.kod)];
                           const falt = (f.faltfel ?? []).map((x) => (x.varde ? `${x.falt} ${x.varde}` : x.falt)).join(", ");
-                          // Synken sparar inte postens namn, och aldrig ett felaktigt
-                          // organisationsnummer (det kan vara ett personnummer). Det som
-                          // hittar posten i källan är dess id; därför står det först och går att kopiera.
+                          // Bolagets namn står först när synken sparat det (aldrig för en
+                          // privatperson). Källans id hittar posten i källan; det går att kopiera.
                           const slag = f.objekt === "person" ? text({ sv: "Person", en: "Person" }) : text({ sv: "Bolag", en: "Company" });
                           const plats = text({ sv: `post ${f.index + 1} i satsen`, en: `record ${f.index + 1} in the batch` });
+                          const medFlit = !arFel(f);
                           return (
                             <li key={`${f.objekt}:${f.index}:${i}`} className="crm-rattarad flex items-start gap-3 py-3">
-                              <span aria-hidden className="crm-platta crm-ton-ockra mt-0.5 inline-flex size-7 shrink-0 items-center justify-center rounded-[8px]">
-                                <Icon icon={AlertTriangle} size="sm" color="inherit" />
+                              <span
+                                aria-hidden
+                                className={`crm-platta ${medFlit ? "crm-ton-mineral" : "crm-ton-ockra"} mt-0.5 inline-flex size-7 shrink-0 items-center justify-center rounded-[8px]`}
+                              >
+                                <Icon icon={medFlit ? Info : AlertTriangle} size="sm" color="inherit" />
                               </span>
                               <span className="flex min-w-0 flex-1 flex-col gap-1">
                                 <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-[0.875rem] text-ink">
                                   <span className="font-semibold">
-                                    {f.externt_id ? text({ sv: `${slag} med id`, en: `${slag} with id` }) : text({ sv: `${slag} utan id i källan`, en: `${slag} without an id in the source` })}
+                                    {f.namn ?? (f.externt_id ? text({ sv: `${slag} med id`, en: `${slag} with id` }) : text({ sv: `${slag} utan id i källan`, en: `${slag} without an id in the source` }))}
                                   </span>
                                   {f.externt_id ? (
                                     <Kopierbar varde={f.externt_id} label={text({ sv: `Kopiera id ${f.externt_id}`, en: `Copy id ${f.externt_id}` })} />
                                   ) : null}
                                 </span>
                                 <span className="text-[0.875rem] text-ink2">{skal.join(" ") || text({ sv: "Posten kom inte in.", en: "The record did not come in." })}</span>
-                                <span className="text-[0.8125rem] text-ink-muted">{(() => {
-                                  const rad = [falt ? text({ sv: `Fält ${falt}`, en: `Field ${falt}` }) : null, plats].filter(Boolean).join(", ");
-                                  return rad.charAt(0).toLocaleUpperCase() + rad.slice(1);
-                                })()}</span>
+                                <span className="flex flex-wrap items-center gap-1.5 text-[0.8125rem] text-ink-muted">
+                                  {koder.map((kod) => (
+                                    <code key={kod} className="crm-kod">
+                                      {kod}
+                                    </code>
+                                  ))}
+                                  <span>{(() => {
+                                    const rad = [falt ? text({ sv: `Fält ${falt}`, en: `Field ${falt}` }) : null, plats].filter(Boolean).join(", ");
+                                    return rad.charAt(0).toLocaleUpperCase() + rad.slice(1);
+                                  })()}</span>
+                                </span>
+                                {f.krockar_med ? (
+                                  <Krocklank
+                                    href={`${postvag(f.objekt)}${encodeURIComponent(f.krockar_med)}`}
+                                    etikett={
+                                      f.objekt === "person"
+                                        ? text({ sv: "Öppna personen som redan har adressen", en: "Open the person who already has the address" })
+                                        : text({ sv: "Öppna bolaget som redan har numret", en: "Open the company that already has the number" })
+                                    }
+                                  />
+                                ) : null}
                               </span>
                             </li>
                           );
@@ -804,7 +878,11 @@ function Korningspanel({ korning, laddar, anslutning, stang }: Readonly<{ kornin
                         ) : null}
                       </ul>
                     )}
+                    {k.support ? <Supportbesked support={k.support} /> : null}
                   </section>
+                  ) : (
+                    <EnklaOrd k={k} utanSkal={utanSkal} />
+                  )}
                 </div>
               )}
             </div>
@@ -839,6 +917,134 @@ function Korningspanel({ korning, laddar, anslutning, stang }: Readonly<{ kornin
 }
 
 // ---------------------------------------------------------------------------
+// Kundens nivå: felen i enkla ord
+// ---------------------------------------------------------------------------
+
+/**
+ * Att rapporten gått vidare till Snajps support, med tid och ärendets nummer
+ * när supporten öppnat ett. Står likadant på kundens och adminens nivå.
+ */
+function Supportbesked({ support }: Readonly<{ support: NonNullable<Korning["support"]> }>) {
+  const { text } = useLocale();
+  return (
+    <div className="crm-kallkort mt-3 flex items-start gap-3 rounded-[16px] p-4" role="status">
+      <span aria-hidden className="crm-platta crm-ton-sigill inline-flex size-7 shrink-0 items-center justify-center rounded-[8px]">
+        <Icon icon={LifeBuoy} size="sm" color="inherit" />
+      </span>
+      <span className="flex min-w-0 flex-col gap-0.5">
+        <span className="text-[0.875rem] font-semibold text-ink">
+          {text({ sv: "Rapporten har gått vidare till Snajps support", en: "The report has gone to Snajp's support" })}
+        </span>
+        <span className="flex flex-wrap items-center gap-x-1.5 text-[0.8125rem] text-ink-muted">
+          <Timestamp value={support.forwarded_at} format="date_time" hasTooltip={false} />
+          {support.ticket ? (
+            <>
+              <span aria-hidden>·</span>
+              <span>{text({ sv: `Ärende ${support.ticket}`, en: `Case ${support.ticket}` })}</span>
+            </>
+          ) : null}
+        </span>
+      </span>
+    </div>
+  );
+}
+
+/**
+ * Körningens fel som kunden ser dem (Antons beslut): korta meningar ur
+ * `issues`, störst först, utan koder, radnummer eller källans id. Det som
+ * hoppats över med flit (privatpersoner, mappningens undantag) står för sig,
+ * som upplysning. Under felen: att rapporten gått vidare till supporten, och
+ * att kunden inte behöver göra mer än att rätta i källan.
+ */
+function EnklaOrd({ k, utanSkal }: Readonly<{ k: Korning; utanSkal: number }>) {
+  const { text } = useLocale();
+  const n = (x: number) => ({ sv: x.toLocaleString("sv-SE"), en: x.toLocaleString("en-GB") });
+  const fragor = k.issues ?? [];
+  const fel = fragor.filter((f) => !UPPLYSNING.includes(f.kind));
+  const upplysning = fragor.filter((f) => UPPLYSNING.includes(f.kind));
+  // Äldre körningar saknar `issues`: då räknas felraderna, utan att visa dem.
+  const utanOrd = k.issues ? 0 : k.errors.filter(arFel).length;
+  const nagotFel = fel.length > 0 || utanOrd > 0 || utanSkal > 0;
+
+  return (
+    <div className="flex flex-col gap-5">
+      <section aria-labelledby="crm-enkla-fel" className="flex flex-col gap-1">
+        <h3 id="crm-enkla-fel" className="font-sans text-[0.8125rem] font-semibold tracking-normal text-ink-muted">
+          {text({ sv: "Det som inte kom in", en: "What did not come in" })}
+        </h3>
+        {!nagotFel ? (
+          <p className="py-2 text-[0.875rem] text-ink2">
+            {pagar(k)
+              ? text({ sv: "Inget än. Det som inte kommer in syns här medan körningen pågår.", en: "Nothing yet. Anything that does not come in shows here while the run is in progress." })
+              : text({ sv: "Alla poster kom in.", en: "Every record came in." })}
+          </p>
+        ) : (
+          <>
+            <ul className="flex flex-col">
+              {fel.map((f) => (
+                <li key={`${f.kind}:${f.object}:${f.field ?? ""}`} className="crm-rattarad flex items-start gap-3 py-2.5">
+                  <span aria-hidden className="crm-platta crm-ton-ockra inline-flex size-7 shrink-0 items-center justify-center rounded-[8px]">
+                    <Icon icon={AlertTriangle} size="sm" color="inherit" />
+                  </span>
+                  <span className="pt-1 text-[0.875rem] text-ink">{text(enkelMening(f, n(f.count)))}</span>
+                </li>
+              ))}
+              {utanOrd + utanSkal > 0 ? (
+                <li className="crm-rattarad flex items-start gap-3 py-2.5">
+                  <span aria-hidden className="crm-platta crm-ton-ockra inline-flex size-7 shrink-0 items-center justify-center rounded-[8px]">
+                    <Icon icon={AlertTriangle} size="sm" color="inherit" />
+                  </span>
+                  <span className="pt-1 text-[0.875rem] text-ink">
+                    {utanOrd + utanSkal === 1
+                      ? text({ sv: "1 post kom inte in", en: "1 record did not come in" })
+                      : text({ sv: `${n(utanOrd + utanSkal).sv} poster kom inte in`, en: `${n(utanOrd + utanSkal).en} records did not come in` })}
+                  </span>
+                </li>
+              ) : null}
+            </ul>
+            <p className="pt-1 text-[0.875rem] text-ink2">
+              {text({
+                sv: "Rätta uppgifterna i ert källsystem, så kommer posterna in vid nästa synk. Mer behöver ni inte göra.",
+                en: "Correct the details in your source system and the records come in on the next sync. You do not need to do anything else."
+              })}
+            </p>
+          </>
+        )}
+        {k.support ? <Supportbesked support={k.support} /> : null}
+      </section>
+
+      {upplysning.length > 0 ? (
+        <section aria-labelledby="crm-enkla-upplysning" className="flex flex-col gap-1">
+          <h3 id="crm-enkla-upplysning" className="font-sans text-[0.8125rem] font-semibold tracking-normal text-ink-muted">
+            {text({ sv: "Hoppades över med avsikt", en: "Skipped on purpose" })}
+          </h3>
+          <ul className="flex flex-col">
+            {upplysning.map((f) => (
+              <li key={`${f.kind}:${f.object}`} className="crm-rattarad flex items-start gap-3 py-2.5">
+                <span aria-hidden className="crm-platta crm-ton-mineral inline-flex size-7 shrink-0 items-center justify-center rounded-[8px]">
+                  <Icon icon={Info} size="sm" color="inherit" />
+                </span>
+                <span className="flex flex-col gap-0.5 pt-1">
+                  <span className="text-[0.875rem] text-ink">{text(enkelMening(f, n(f.count)))}</span>
+                  {f.kind === "privatperson" ? (
+                    <span className="text-[0.8125rem] text-ink-muted">
+                      {text({
+                        sv: "Anslutningen synkar inte privatpersoner. Det är ett val, inte ett fel, och ändras under Privatpersoner på anslutningen.",
+                        en: "The connection does not sync private persons. It is a choice, not a fault, and is changed under Private persons on the connection."
+                      })}
+                    </span>
+                  ) : null}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Dialogen Ny anslutning
 // ---------------------------------------------------------------------------
 
@@ -849,6 +1055,8 @@ function NyAnslutning({ oppen, stang, skapad }: Readonly<{ oppen: boolean; stang
   const [konflikt, setKonflikt] = useState<Anslutning["conflict_rule"]>("source_wins");
   const [saknade, setSaknade] = useState<Anslutning["missing_records"]>("keep");
   const [relation, setRelation] = useState<Relation>("customer");
+  // Av som standard: privatpersoner hoppas över.
+  const [privatpersoner, setPrivatpersoner] = useState(false);
   const [sparar, setSparar] = useState(false);
   const [namnfel, setNamnfel] = useState<Localized | null>(null);
   const [allmant, setAllmant] = useState<Localized | null>(null);
@@ -860,6 +1068,7 @@ function NyAnslutning({ oppen, stang, skapad }: Readonly<{ oppen: boolean; stang
       setKonflikt("source_wins");
       setSaknade("keep");
       setRelation("customer");
+      setPrivatpersoner(false);
       setNamnfel(null);
       setAllmant(null);
     }
@@ -878,7 +1087,14 @@ function NyAnslutning({ oppen, stang, skapad }: Readonly<{ oppen: boolean; stang
     try {
       const a = await crmAnrop<Anslutning>("/v1/connections", {
         method: "POST",
-        body: JSON.stringify({ name: namn.trim(), system, conflict_rule: konflikt, missing_records: saknade, default_relation: relation })
+        body: JSON.stringify({
+          name: namn.trim(),
+          system,
+          conflict_rule: konflikt,
+          missing_records: saknade,
+          default_relation: relation,
+          include_private_persons: privatpersoner
+        })
       });
       skapad(a);
     } catch (orsak) {
@@ -953,6 +1169,15 @@ function NyAnslutning({ oppen, stang, skapad }: Readonly<{ oppen: boolean; stang
                     onChange={(v) => v && setRelation(v as Relation)}
                     options={(Object.keys(RELATIONER) as Relation[]).map((r) => ({ value: r, label: text(RELATIONER[r]) }))}
                     width="100%"
+                  />
+                  <Switch
+                    label={text({ sv: "Synka privatpersoner", en: "Sync private persons" })}
+                    description={text({
+                      sv: "Av: poster som källan märker som privatpersoner hoppas över. På: de sparas märkta, utan personnummer, och går aldrig att kontakta.",
+                      en: "Off: records the source marks as private persons are skipped. On: they are stored marked, without personal identity numbers, and can never be contacted."
+                    })}
+                    value={privatpersoner}
+                    onChange={(v) => setPrivatpersoner(v)}
                   />
                 </div>
               </fieldset>

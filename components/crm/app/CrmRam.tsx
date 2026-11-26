@@ -20,7 +20,8 @@ import { LinkProvider } from "@astryxdesign/core/Link";
 import svSE from "@astryxdesign/core/locales/sv-SE.generated.js";
 import { NavHeadingMenu, NavHeadingMenuItem } from "@astryxdesign/core/NavMenu";
 import { ProgressBar } from "@astryxdesign/core/ProgressBar";
-import { SideNav, SideNavHeading, SideNavItem, SideNavSection } from "@astryxdesign/core/SideNav";
+import { IconButton } from "@astryxdesign/core/IconButton";
+import { SideNav, SideNavHeading, SideNavItem, SideNavSection, useSideNavRenderMode } from "@astryxdesign/core/SideNav";
 import { Text } from "@astryxdesign/core/Text";
 import { Timestamp } from "@astryxdesign/core/Timestamp";
 import { Theme } from "@astryxdesign/core/theme";
@@ -30,7 +31,9 @@ import { OBJEKT, Objektikon, Prick, type Objekt } from "@/components/crm/app/kit
 import { snajpTheme } from "@/lib/crm/astryx/snajp";
 import { ASTRYX_SVENSKA } from "@/lib/crm/astryx/svenska";
 import { SynklageKalla, avslutar, klara, pagar, useSynklage } from "@/components/crm/app/synklage";
+import { TillaggSaknas, TillgangKalla, useTillgang } from "@/components/crm/app/Tillagg";
 import { SYSTEMNAMN } from "@/lib/crm/api";
+import { attRatta } from "@/lib/crm/felkoder";
 import { useLocale } from "@/lib/i18n";
 import { colorScheme, dataTheme, type Tema } from "@/lib/tema";
 
@@ -80,7 +83,7 @@ function Synkkort({ bas }: Readonly<{ bas: string }>) {
         ? { ton: "ockra" as const, text: text({ sv: "Avslutar", en: "Finishing" }) }
         : igang
           ? { ton: "ockra" as const, text: text({ sv: "Synkar nu", en: "Syncing now" }) }
-          : senaste.errors.length > 0 || senaste.counts.skipped > 0
+          : attRatta(senaste) > 0
             ? { ton: "ockra" as const, text: text({ sv: "Klar, med poster att rätta", en: "Done, with records to fix" }) }
             : { ton: "mossa" as const, text: text({ sv: "Klar", en: "Done" }) };
   const tid = senaste.completed_at ?? senaste.created_at;
@@ -116,6 +119,32 @@ function Synkkort({ bas }: Readonly<{ bas: string }>) {
       ) : null}
     </NextLink>
   );
+}
+
+/**
+ * Sökningen i mobilens toppfält. Toppfältet ritar bara rubriken och
+ * `footerIcons`, så sökraden under rubriken når inte dit; utan knappen fanns
+ * kommandopaletten bara i lådan. Knappen syns bara i toppfältet: på skrivbordet
+ * finns sökraden, och i lådan står den överst.
+ */
+function MobilSok({ oppna }: Readonly<{ oppna: () => void }>) {
+  const { text } = useLocale();
+  if (useSideNavRenderMode() !== "topbar") return null;
+  return (
+    <IconButton
+      label={text({ sv: "Sök eller hoppa till", en: "Search or jump to" })}
+      icon={<Icon icon={Search} size="sm" />}
+      variant="ghost"
+      size="md"
+      className="crm-mobilsok"
+      onClick={oppna}
+    />
+  );
+}
+
+/** Vyn, eller helsidan om arbetsytan saknar tillägget (Tillagg.tsx). Avgörs en gång, i skalet. */
+function Innehall({ children }: Readonly<{ children: React.ReactNode }>) {
+  return useTillgang() === "saknas" ? <TillaggSaknas /> : children;
 }
 
 const HOPFALLD_NYCKEL = "snajp.crm.nav-hopfalld";
@@ -179,6 +208,7 @@ export function CrmRam({
           overrides={{ "sv-SE": ASTRYX_SVENSKA }}
         >
           <LinkProvider component={NextLink}>
+            <TillgangKalla>
             <SynklageKalla>
             <AppShell
               variant="elevated"
@@ -235,6 +265,7 @@ export function CrmRam({
                       <SideNavItem label={text({ sv: "Till arbetsytan", en: "Back to workspace" })} href="/dashboard" icon={ArrowLeft} />
                     </div>
                   }
+                  footerIcons={<MobilSok oppna={() => setPalett(true)} />}
                 >
                   <SideNavSection title={text({ sv: "Arbetsyta", en: "Workspace" })}>
                     {post("oversikt")}
@@ -248,10 +279,11 @@ export function CrmRam({
                 </SideNav>
               }
             >
-              {children}
+              <Innehall>{children}</Innehall>
               <Kommandopalett oppen={palett} setOppen={setPalett} bas={bas} />
             </AppShell>
             </SynklageKalla>
+            </TillgangKalla>
           </LinkProvider>
         </InternationalizationProvider>
       </Theme>

@@ -756,6 +756,70 @@ button.crm-chip:active {
   outline-offset: 1px;
 }
 
+/* En grupprubrik i panelen som inte är en MetadataList (personens historik):
+ * samma storlek, vikt och ton som listornas titlar ovan. */
+.crm-gruppnamn {
+  font-family: var(--font-sans);
+  letter-spacing: normal;
+  color: oklch(var(--ink-muted));
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+/* Postens tidslinje: ikonplattan per händelse och en tunn linje mellan dem. */
+.crm-tidslinje {
+  display: flex;
+  flex-direction: column;
+}
+.crm-tidslinje-rad {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+.crm-tidslinje-ikon {
+  position: relative;
+  display: inline-flex;
+  flex-shrink: 0;
+}
+.crm-tidslinje-rad:not(:last-child)::before {
+  content: "";
+  position: absolute;
+  top: 28px;
+  bottom: 4px;
+  inset-inline-start: 11.5px;
+  width: 1px;
+  background-color: oklch(var(--ink) / 0.12);
+}
+
+/* Vägen till posten som krockade: en textlänk i bläck med pil, under fältet. */
+.crm-krocklank {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 6px;
+  margin-inline-start: -6px;
+  padding: 3px 6px;
+  border-radius: 6px;
+  color: oklch(var(--ink));
+  font-size: 0.8125rem;
+  font-weight: 600;
+  text-decoration: underline;
+  text-decoration-color: oklch(var(--ink) / 0.3);
+  text-underline-offset: 3px;
+  transition: background-color 100ms var(--ease-out);
+}
+@media (hover: hover) and (pointer: fine) {
+  .crm-krocklank:hover {
+    background-color: oklch(var(--ink) / 0.05);
+    text-decoration-color: oklch(var(--ink) / 0.6);
+  }
+}
+.crm-krocklank:focus-visible {
+  outline: 2px solid var(--focus-outline-color);
+  outline-offset: 1px;
+}
+
 .crm-personrad + .crm-personrad {
   border-top: 1px solid oklch(var(--ink) / 0.07);
 }

@@ -19,14 +19,15 @@ import { Timestamp } from "@astryxdesign/core/Timestamp";
 import { useToast } from "@astryxdesign/core/Toast";
 import { PersonFormular, type Personfalt } from "@/components/crm/app/PersonFormular";
 import { PersonPanel, personensKalla } from "@/components/crm/app/PersonPanel";
-import { Kallpiller, Kolumnrubrik, Lankpiller, Personchip, Postchip, Tabellskelett, tonFor, tonklass, useBestallning, useSmal } from "@/components/crm/app/kit";
+import { Kallpiller, Kolumnrubrik, Lankpiller, ORDNINGAR, Personchip, Postchip, Tabellskelett, tonFor, tonklass, useBestallning, useKolumnsortering, useSmal, Vyval } from "@/components/crm/app/kit";
+import { Papperskorg } from "@/components/crm/app/Papperskorg";
 import { Felruta, Sida } from "@/components/crm/app/Sida";
-import { CrmFel, crmAnrop, type Bolag, type Oversikt, type Sida as Svarssida } from "@/lib/crm/api";
+import { CrmFel, crmAnrop, type Bolag, type Ordning, type Oversikt, type Sida as Svarssida } from "@/lib/crm/api";
 import { iMangd } from "@/lib/crm/mangd";
 import { personnamn, type Personpost } from "@/lib/crm/person";
 import { useLocale, type Localized } from "@/lib/i18n";
 
-type Sortering = "name" | "updated";
+type Vy = "personer" | "papperskorg";
 type Massjobb = { slag: "radera" | "kontakta_inte"; klara: number; totalt: number };
 
 const SIDSTORLEK = 50;
@@ -58,7 +59,10 @@ export function PersonerVy({ bas = "/crm" }: Readonly<{ bas?: string }>) {
 
   const [sok, setSok] = useState("");
   const [fraga, setFraga] = useState("");
-  const [sortering, setSortering] = useState<Sortering>("name");
+  // Senast ändrad först, som Bolag.
+  const [sortering, setSortering] = useState<Ordning>("-updated");
+  const [vy, setVy] = useState<Vy>("personer");
+  const iKorgen = vy === "papperskorg";
   const [bolagsval, setBolagsval] = useState<string>(ALLA);
   const [rader, setRader] = useState<Personpost[]>([]);
   const [nasta, setNasta] = useState<string | null>(null);
@@ -146,6 +150,7 @@ export function PersonerVy({ bas = "/crm" }: Readonly<{ bas?: string }>) {
 
   const hamta = useCallback(
     async (markor: string | null) => {
+      if (vy === "papperskorg") return;
       const denna = ++omgang.current;
       if (markor) setLaddarFler(true);
       else setLaddar(true);
@@ -172,12 +177,21 @@ export function PersonerVy({ bas = "/crm" }: Readonly<{ bas?: string }>) {
         }
       }
     },
-    [fraga, sortering, bolagsval]
+    [fraga, sortering, bolagsval, vy]
   );
 
   useEffect(() => {
     void hamta(null);
   }, [hamta]);
+
+  /** Bara antalet i sidhuvudet, efter en återställning ur papperskorgen. */
+  const hamtaRakning = useCallback(async () => {
+    try {
+      setTotalt((await crmAnrop<Oversikt>("/oversikt")).personer);
+    } catch {
+      /* antalet står kvar som det var */
+    }
+  }, []);
 
   useEffect(() => {
     setValda(new Set());
@@ -187,6 +201,7 @@ export function PersonerVy({ bas = "/crm" }: Readonly<{ bas?: string }>) {
 
   const { selectionConfig, selectionState } = useTableSelectionState<Personpost>({ data: rader, idKey: "id", selectedKeys: valda, setSelectedKeys: setValda });
   const markering = useTableSelection<Personpost>({ ...selectionConfig, getRowLabel: (p) => namnPa(p) });
+  const kolumnsortering = useKolumnsortering<Personpost>(sortering, setSortering);
 
   const fallna = useCallback(
     (fall: { id: string; fel: unknown }[]) => {
@@ -273,6 +288,7 @@ export function PersonerVy({ bas = "/crm" }: Readonly<{ bas?: string }>) {
         key: "name",
         header: <Kolumnrubrik ikon={UserRound}>{text({ sv: "Namn", en: "Name" })}</Kolumnrubrik>,
         width: proportional(1, { minWidth: 200 }),
+        sortable: true,
         // Kontakta inte står i namnkolumnen, som i mobillistan, och gör personens
         // e-post och telefon passiva: uppgiften får inte försvinna vid en viss bredd.
         renderCell: (p) => (
@@ -337,6 +353,7 @@ export function PersonerVy({ bas = "/crm" }: Readonly<{ bas?: string }>) {
         key: "updated_at",
         header: <Kolumnrubrik ikon={Clock}>{text({ sv: "Ändrad", en: "Updated" })}</Kolumnrubrik>,
         width: pixel(158),
+        sortable: true,
         renderCell: (p) => (p.updated_at ? <Timestamp value={p.updated_at} format="relative" /> : null)
       }
     ],
@@ -346,6 +363,11 @@ export function PersonerVy({ bas = "/crm" }: Readonly<{ bas?: string }>) {
   // ---- Delarna --------------------------------------------------------------
 
   const nyPerson = () => setFormular({ person: null, fokus: null });
+  // Vyraden: personerna, och papperskorgen sist (som i Bolag). Korgen har inget tal i översikten.
+  const vyval: { v: Vy; namn: string; antal?: string }[] = [
+    { v: "personer", namn: text({ sv: "Alla", en: "All" }), antal: totalt == null ? undefined : tal(totalt) },
+    { v: "papperskorg", namn: text({ sv: "Papperskorg", en: "Trash" }) }
+  ];
   const ettBolag = bolagsval !== ALLA ? (bolagsnamn[bolagsval] ?? null) : null;
 
   const tomt = fraga ? (
@@ -439,7 +461,24 @@ export function PersonerVy({ bas = "/crm" }: Readonly<{ bas?: string }>) {
       rubrik={text({ sv: "Personer", en: "People" })}
       antal={totalt == null ? undefined : tal(totalt)}
       atgarder={<Button variant="primary" label={text({ sv: "Ny person", en: "New person" })} icon={<Icon icon={Plus} size="sm" />} onClick={nyPerson} />}
-      vyrad={bolagsvaljare}
+      vyrad={
+        <>
+          {smal ? (
+            <Selector
+              label={text({ sv: "Vy", en: "View" })}
+              isLabelHidden
+              variant="secondary"
+              size="md"
+              value={vy}
+              onChange={(v) => v && setVy(v as Vy)}
+              options={vyval.map((f) => ({ value: f.v, label: f.antal ? `${f.namn}  ${f.antal}` : f.namn }))}
+            />
+          ) : (
+            <Vyval value={vy} onChange={setVy} label={text({ sv: "Vy", en: "View" })} val={vyval} />
+          )}
+          {iKorgen ? null : bolagsvaljare}
+        </>
+      }
       vyradHoger={
         <>
           <div className="min-w-0 flex-1 sm:w-[260px] sm:flex-none">
@@ -456,28 +495,35 @@ export function PersonerVy({ bas = "/crm" }: Readonly<{ bas?: string }>) {
               controlClassName="crm-sokfalt"
             />
           </div>
-          <Selector
-            label={text({ sv: "Sortera", en: "Sort" })}
-            isLabelHidden
-            variant="ghost"
-            size="md"
-            startIcon={sortering === "name" ? ArrowDownAZ : Clock}
-            value={sortering}
-            onChange={(v) => v && setSortering(v as Sortering)}
-            options={[
-              { value: "name", label: text({ sv: "Efternamn", en: "Last name" }), description: text({ sv: "A till Ö", en: "A to Z" }) },
-              {
-                value: "updated",
-                label: text({ sv: "Ändringsordning", en: "Change order" }),
-                description: text({ sv: "Äldst ändrade först, som API:t listar", en: "Oldest change first, as the API lists" })
-              }
-            ]}
-          />
+          {iKorgen ? null : (
+            <Selector
+              label={text({ sv: "Sortera", en: "Sort" })}
+              isLabelHidden
+              variant="ghost"
+              size="md"
+              startIcon={sortering === "name" ? ArrowDownAZ : Clock}
+              value={sortering}
+              onChange={(v) => v && setSortering(v as Ordning)}
+              options={ORDNINGAR.map((o) =>
+                o.v === "name"
+                  ? { value: o.v, label: text({ sv: "Efternamn", en: "Last name" }), description: text(o.vad) }
+                  : { value: o.v, label: text(o.namn), description: text(o.vad) }
+              )}
+            />
+          )}
         </>
       }
     >
       <div className="crm-personer">
-        {fel ? (
+        {iKorgen ? (
+          <Papperskorg<Personpost>
+            objekt="people"
+            fraga={fraga}
+            namnPa={(p) => namnPa(p)}
+            oppnaPost={(id) => sattPost(id)}
+            aterstalld={() => void hamtaRakning()}
+          />
+        ) : fel ? (
           <div className="p-4 sm:p-6">
             <Felruta fel={fel} igen={<Button size="sm" label={text({ sv: "Försök igen", en: "Try again" })} onClick={() => void hamta(null)} />} />
           </div>
@@ -521,7 +567,7 @@ export function PersonerVy({ bas = "/crm" }: Readonly<{ bas?: string }>) {
               dividers="rows"
               hasHover
               textOverflow="truncate"
-              plugins={{ selection: markering }}
+              plugins={{ selection: markering, sort: kolumnsortering }}
               rowCount={iUrvalet ?? undefined}
               emptyState={<div className="py-12">{tomt}</div>}
             />
@@ -534,7 +580,7 @@ export function PersonerVy({ bas = "/crm" }: Readonly<{ bas?: string }>) {
           </div>
         )}
 
-        {!smal && (selectionState.hasSelection || jobb) ? (
+        {!iKorgen && !smal && (selectionState.hasSelection || jobb) ? (
           <div className="crm-atgardsrad-plats">
             <div className="crm-atgardsrad">
               {jobb ? (
@@ -598,6 +644,10 @@ export function PersonerVy({ bas = "/crm" }: Readonly<{ bas?: string }>) {
         bolag={bolagen}
         fokus={formular?.fokus}
         stang={() => setFormular(null)}
+        oppnaPost={(id) => {
+          setFormular(null);
+          sattPost(id);
+        }}
         sparat={(p, ny) => {
           setFormular(null);
           setRader((forr) => forr.map((r) => (r.id === p.id ? p : r)));

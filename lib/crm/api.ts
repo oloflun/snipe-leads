@@ -29,12 +29,19 @@ export type Bolag = {
   owner: string | null;
   do_not_contact: boolean | null;
   sole_proprietor: boolean;
+  /**
+   * Kunden är en privatperson, inte ett bolag. Inget personnummer sparas, och
+   * posten är alltid `do_not_contact`: den lämnas utanför varje utskick och lista.
+   */
+  private_person: boolean;
   address: { street: string | null; co: string | null; postal_code: string | null; city: string | null; country: string | null };
   source: string | null;
   external_ids: { connection: string; id: string; last_seen_at: string | null }[];
   created_at: string | null;
   updated_at: string | null;
   deleted_at: string | null;
+  /** När en raderad post töms för gott (30 dagar efter raderingen). Null för en levande post. */
+  purge_at?: string | null;
 };
 
 export type Person = {
@@ -49,9 +56,15 @@ export type Person = {
   do_not_contact: boolean | null;
   source: string | null;
   updated_at: string | null;
+  deleted_at?: string | null;
+  /** När en raderad person töms för gott. Null för en levande post. */
+  purge_at?: string | null;
 };
 
 export type Sida<T> = { data: T[]; next_cursor: string | null };
+
+/** Listornas ordning i API:t: ändringsordning (äldst först), senast ändrad först, eller namn. */
+export type Ordning = "updated" | "-updated" | "name";
 
 export type Anslutning = {
   id: string;
@@ -60,6 +73,12 @@ export type Anslutning = {
   conflict_rule: "source_wins" | "snajp_wins" | "newest_wins";
   missing_records: "keep" | "mark_former_customer" | "delete";
   default_relation: Relation;
+  /**
+   * Av som standard: poster som källan märker som privatpersoner hoppas över
+   * (`orsak: privatperson`). På: de sparas märkta, utan personnummer, och
+   * går aldrig att kontakta.
+   */
+  include_private_persons?: boolean;
   active: boolean;
   last_sync_at: string | null;
   created_at: string | null;
@@ -75,9 +94,28 @@ export type Korningsfel = {
   objekt: "bolag" | "person";
   index: number;
   externt_id: string | null;
+  /** Bolagets namn, så att den som läser felen ser vilken rad det gäller. Saknas för privatpersoner. */
+  namn?: string;
   orsak?: string;
+  /** Id på posten i Snajp som redan har numret eller adressen, när krocken går att peka ut. */
+  krockar_med?: string;
   faltfel?: { falt: string; kod: string; varde?: string }[];
 };
+
+/**
+ * Körningens fel i enkla ord (`issues`), grupperade efter sort, objekt och
+ * fält, störst först. Appen sätter orden (`lib/crm/felkoder.ts`: `ENKLA`).
+ */
+export type Korningsfraga = {
+  kind: "ogiltigt_varde" | "saknar_uppgift" | "dubblett" | "begransad" | "privatperson" | "undantagen" | "redan_borta" | "annat" | (string & {});
+  object: "company" | "person" | (string & {});
+  /** API:ts fältnamn (`phone`, `address.postal_code`) för `ogiltigt_varde` och `saknar_uppgift`. */
+  field: string | null;
+  count: number;
+};
+
+/** Satt när körningen hade fel: rapporten har då gått vidare till Snajps support. */
+export type Supportbesked = { forwarded_at: string; ticket: string | null };
 
 export type Korning = {
   id: string;
@@ -88,9 +126,62 @@ export type Korning = {
   counts: { total: number; created: number; updated: number; unchanged: number; skipped: number; conflicts: number; removed: number };
   errors: Korningsfel[];
   error: string | null;
+  /** Samma fel i enkla ord, för kunden. Äldre svar saknar fältet. */
+  issues?: Korningsfraga[];
+  support?: Supportbesked | null;
   created_at: string | null;
   completed_at: string | null;
 };
+
+/** En händelse i postens historik eller ändringsflödet (`handelse_ut`). Loggen bär aldrig värdena. */
+export type Handelse = {
+  seq: number;
+  object: "company" | "person" | (string & {});
+  id: string;
+  type: "created" | "updated" | "deleted" | "restored" | "purged";
+  /** API:ts fältnamn för det som ändrades. Tomt för skapad och raderad. */
+  fields: string[];
+  /** `api`, `app`, `synk` eller `system`. */
+  source: string | null;
+  /** `anslutning:<namn>`, `anvandare:<id>`, `nyckel:<id>` eller inget. */
+  actor: string | null;
+  at: string | null;
+};
+
+/** En webhook (`webhook_ut`). `secret` finns bara i svaret när den skapas. */
+export type Webhook = {
+  id: string;
+  url: string;
+  description: string | null;
+  events: string[];
+  active: boolean;
+  consecutive_failures: number;
+  last_success_at: string | null;
+  last_failure_at: string | null;
+  last_error: string | null;
+  /** `for_manga_fel` när Snajp stängt av den efter tjugo fel i rad. */
+  disabled_reason: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+  secret?: string;
+};
+
+/** En leverans i webhookens logg (`leverans_ut`). */
+export type Leverans = {
+  id: string;
+  event: string;
+  status: "pending" | "delivered" | "failed";
+  attempts: number;
+  status_code: number | null;
+  error: string | null;
+  next_attempt_at: string | null;
+  created_at: string | null;
+  delivered_at: string | null;
+  payload: Record<string, unknown>;
+};
+
+/** `GET /v1/me`: vilken kund nyckeln hör till. */
+export type Jag = { tenant: string; scopes: string[]; rate_limit: { requests: number; window_seconds: number }; api_version: string };
 
 export type Nyckel = {
   id: string;
@@ -123,13 +214,17 @@ export class CrmFel extends Error {
     readonly text: Localized,
     readonly status: number,
     readonly kod: string | null,
-    readonly falt: Faltfel[] = []
+    readonly falt: Faltfel[] = [],
+    /** Vid 409 `conflict`: id på posten som redan har numret eller adressen, när API:t kan peka ut den. */
+    readonly krockarMed: string | null = null
   ) {
     super(text.sv);
   }
 }
 
-type Felkropp = { detail?: string | { code?: string; message?: string; meddelande?: string; fields?: Faltfel[] } };
+type Felkropp = {
+  detail?: string | { code?: string; message?: string; meddelande?: string; fields?: Faltfel[]; conflicting_id?: string };
+};
 
 export async function crmAnrop<T>(vag: string, init?: RequestInit): Promise<T> {
   const svar = await fetch(`/api/snajp-support/crm${vag}`, {
@@ -145,10 +240,24 @@ export async function crmAnrop<T>(vag: string, init?: RequestInit): Promise<T> {
     const text =
       typeof d === "string" ? { sv: d, en: d } : d ? { sv: d.meddelande ?? d.message ?? okant.sv, en: d.message ?? d.meddelande ?? okant.en } : okant;
     const objekt = typeof d === "object" && d ? d : null;
-    throw new CrmFel(text, svar.status, objekt?.code ?? null, Array.isArray(objekt?.fields) ? objekt.fields : []);
+    const fel = new CrmFel(
+      text,
+      svar.status,
+      objekt?.code ?? null,
+      Array.isArray(objekt?.fields) ? objekt.fields : [],
+      typeof objekt?.conflicting_id === "string" ? objekt.conflicting_id : null
+    );
+    // Tillägget saknas: skalet byter vyn mot sitt helsidesläge (CrmRam, Tillagg.tsx).
+    if (fel.kod === TILLAGG_SAKNAS && typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent(TILLAGG_SAKNAS));
+    }
+    throw fel;
   }
   return kropp as T;
 }
+
+/** Koden API:t svarar med när arbetsytan varken har tillägget eller en pågående provperiod. */
+export const TILLAGG_SAKNAS = "addon_missing";
 
 export const RELATIONER: Record<Relation, Localized> = {
   customer: { sv: "Kund", en: "Customer" },

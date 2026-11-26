@@ -10,6 +10,7 @@ import { Selector } from "@astryxdesign/core/Selector";
 import { HStack } from "@astryxdesign/core/Stack";
 import { Text } from "@astryxdesign/core/Text";
 import { TextInput } from "@astryxdesign/core/TextInput";
+import { Krocklank } from "@/components/crm/app/kit";
 import { CrmFel, crmAnrop } from "@/lib/crm/api";
 import { FALTKODER, kodtext } from "@/lib/crm/felkoder";
 import { GRUNDER, personnamn, type Personpost, type RattsligGrund } from "@/lib/crm/person";
@@ -68,7 +69,8 @@ export function PersonFormular({
   bolag,
   fokus,
   stang,
-  sparat
+  sparat,
+  oppnaPost
 }: Readonly<{
   oppen: boolean;
   /** Personen som ändras, eller `null` för en ny. */
@@ -78,12 +80,15 @@ export function PersonFormular({
   fokus?: Personfalt | null;
   stang: () => void;
   sparat: (p: Personpost, ny: boolean) => void;
+  /** Öppnar en annan person: den som redan har adressen vid en krock. */
+  oppnaPost?: (id: string) => void;
 }>) {
   const { text } = useLocale();
   const [v, setV] = useState<Varden>(() => varden(person));
   const [falt, setFalt] = useState<Partial<Record<Personfalt, Localized>>>({});
   const [allmant, setAllmant] = useState<Localized | null>(null);
   const [sparar, setSparar] = useState(false);
+  const [krock, setKrock] = useState<string | null>(null);
   const rot = useRef<HTMLFormElement>(null);
   const ursprung = useRef<Varden>(varden(person));
   const ny = person == null;
@@ -95,6 +100,7 @@ export function PersonFormular({
     setV(start);
     setFalt({});
     setAllmant(null);
+    setKrock(null);
     const t = window.setTimeout(() => {
       const mal = rot.current?.querySelector<HTMLElement>(`[data-falt="${fokus ?? "first_name"}"] input, [data-falt="${fokus ?? "first_name"}"] button`);
       mal?.focus();
@@ -154,6 +160,7 @@ export function PersonFormular({
     setSparar(true);
     setFalt({});
     setAllmant(null);
+    setKrock(null);
     try {
       const svar = person == null
         ? await crmAnrop<Personpost>("/v1/people", { method: "POST", body: JSON.stringify(k) })
@@ -165,6 +172,7 @@ export function PersonFormular({
       } else if (orsak instanceof CrmFel && orsak.status === 409) {
         // Det som kan krocka på en person är e-postadressen. API:ts text gäller
         // både bolag och personer; här står det som gäller just personen.
+        setKrock(orsak.krockarMed);
         visaFel({
           email: {
             sv: "En annan person har redan den här e-postadressen. Ändra adressen eller sök upp den personen.",
@@ -257,7 +265,21 @@ export function PersonFormular({
               {grupp(
                 text({ sv: "Kontakt", en: "Contact" }),
                 <>
-                  {hel("email", textfalt("email", { sv: "E-post", en: "Email" }, { type: "email" }))}
+                  {hel(
+                    "email",
+                    <>
+                      {textfalt("email", { sv: "E-post", en: "Email" }, { type: "email" })}
+                      {krock && falt.email && oppnaPost ? (
+                        <Krocklank
+                          etikett={text({ sv: "Öppna personen som redan har adressen", en: "Open the person who already has the address" })}
+                          onClick={() => {
+                            stang();
+                            oppnaPost(krock);
+                          }}
+                        />
+                      ) : null}
+                    </>
+                  )}
                   {halv("mobile", textfalt("mobile", { sv: "Mobil", en: "Mobile" }, { type: "tel" }))}
                   {halv("phone", textfalt("phone", { sv: "Telefon", en: "Phone" }, { type: "tel" }))}
                 </>

@@ -12,6 +12,7 @@ import { Selector } from "@astryxdesign/core/Selector";
 import { HStack } from "@astryxdesign/core/Stack";
 import { Text } from "@astryxdesign/core/Text";
 import { TextInput } from "@astryxdesign/core/TextInput";
+import { Krocklank } from "@/components/crm/app/kit";
 import { CrmFel, RELATIONER, crmAnrop, orgnrVisning, type Bolag, type Relation } from "@/lib/crm/api";
 import { FALTKODER, kodtext } from "@/lib/crm/felkoder";
 import { useLocale, type Localized } from "@/lib/i18n";
@@ -103,7 +104,8 @@ export function BolagFormular({
   bolag,
   fokus,
   stang,
-  sparat
+  sparat,
+  oppnaPost
 }: Readonly<{
   oppen: boolean;
   /** Bolaget som ändras, eller `null` för ett nytt. */
@@ -112,15 +114,20 @@ export function BolagFormular({
   fokus?: Bolagsfalt | null;
   stang: () => void;
   sparat: (b: Bolag, nytt: boolean) => void;
+  /** Öppnar en annan post: den som redan har numret vid en krock. */
+  oppnaPost?: (id: string) => void;
 }>) {
   const { text } = useLocale();
   const [v, setV] = useState<Varden>(() => varden(bolag));
   const [falt, setFalt] = useState<Partial<Record<Bolagsfalt, Localized>>>({});
   const [allmant, setAllmant] = useState<Localized | null>(null);
   const [sparar, setSparar] = useState(false);
+  /** Vid 409: posten som redan har numret, när API:t kan peka ut den. */
+  const [krock, setKrock] = useState<string | null>(null);
   const rot = useRef<HTMLFormElement>(null);
   const ursprung = useRef<Varden>(varden(bolag));
   const nytt = bolag == null;
+  const privatperson = bolag?.private_person === true;
 
   useEffect(() => {
     if (!oppen) return;
@@ -129,6 +136,7 @@ export function BolagFormular({
     setV(start);
     setFalt({});
     setAllmant(null);
+    setKrock(null);
     // Panelens "Lägg till" pekar ut ett fält: fokus dit när dialogen hunnit montera.
     const t = window.setTimeout(() => {
       const mal = rot.current?.querySelector<HTMLElement>(`[data-falt="${fokus ?? "name"}"] input, [data-falt="${fokus ?? "name"}"] button`);
@@ -208,6 +216,7 @@ export function BolagFormular({
     setSparar(true);
     setFalt({});
     setAllmant(null);
+    setKrock(null);
     try {
       const svar = bolag == null
         ? await crmAnrop<Bolag>("/v1/companies", { method: "POST", body: JSON.stringify(k) })
@@ -218,6 +227,7 @@ export function BolagFormular({
         visaFel(Object.fromEntries(orsak.falt.map((f) => [dialogfalt(f.field), kodtext(FALTKODER, f.code)])));
       } else if (orsak instanceof CrmFel && orsak.status === 409) {
         // Det enda som kan krocka på ett bolag är organisationsnumret.
+        setKrock(orsak.krockarMed);
         visaFel({
           org_number: {
             sv: "Ett annat bolag har redan det här organisationsnumret. Ändra numret eller sök upp det bolaget.",
@@ -294,11 +304,22 @@ export function BolagFormular({
                   {hel("name", textfalt("name", { sv: "Bolagsnamn", en: "Company name" }, { isRequired: true }))}
                   {halv(
                     "org_number",
-                    textfalt(
-                      "org_number",
-                      { sv: "Organisationsnummer", en: "Organisation number" },
-                      { inputMode: "numeric", placeholder: "556036-0793", isOptional: true }
-                    )
+                    <>
+                      {textfalt(
+                        "org_number",
+                        { sv: "Organisationsnummer", en: "Organisation number" },
+                        { inputMode: "numeric", placeholder: "556036-0793", isOptional: true }
+                      )}
+                      {krock && falt.org_number && oppnaPost ? (
+                        <Krocklank
+                          etikett={text({ sv: "Öppna posten som redan har numret", en: "Open the record that already has the number" })}
+                          onClick={() => {
+                            stang();
+                            oppnaPost(krock);
+                          }}
+                        />
+                      ) : null}
+                    </>
                   )}
                   {halv(
                     "relation",
@@ -358,15 +379,29 @@ export function BolagFormular({
                   )}
                   {hel(
                     "do_not_contact",
-                    <CheckboxInput
-                      label={text({ sv: "Kontakta inte", en: "Do not contact" })}
-                      description={text({
-                        sv: "Bolaget tas inte med i utskick och leadslistor.",
-                        en: "The company is left out of mailings and lead lists."
-                      })}
-                      value={v.do_not_contact}
-                      onChange={(x) => satt("do_not_contact", x)}
-                    />
+                    privatperson ? (
+                      // En privatperson kontaktas aldrig: API:t håller spärren på, och rutan går inte att slå av.
+                      <CheckboxInput
+                        label={text({ sv: "Kontakta inte", en: "Do not contact" })}
+                        description={text({
+                          sv: "Posten är en privatperson och kontaktas aldrig. Spärren går inte att slå av.",
+                          en: "The record is a private person and is never contacted. The block cannot be turned off."
+                        })}
+                        disabledMessage={text({ sv: "Privatpersoner kontaktas aldrig.", en: "Private persons are never contacted." })}
+                        value
+                        isDisabled
+                      />
+                    ) : (
+                      <CheckboxInput
+                        label={text({ sv: "Kontakta inte", en: "Do not contact" })}
+                        description={text({
+                          sv: "Bolaget tas inte med i utskick och leadslistor.",
+                          en: "The company is left out of mailings and lead lists."
+                        })}
+                        value={v.do_not_contact}
+                        onChange={(x) => satt("do_not_contact", x)}
+                      />
+                    )
                   )}
                 </>
               )}

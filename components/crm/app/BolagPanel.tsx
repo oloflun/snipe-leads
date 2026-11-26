@@ -14,6 +14,7 @@ import {
   Factory,
   Globe,
   Hash,
+  History,
   LayoutGrid,
   Mail,
   MapPin,
@@ -43,11 +44,12 @@ import { Tab, TabList } from "@astryxdesign/core/TabList";
 import { Text } from "@astryxdesign/core/Text";
 import { Timestamp } from "@astryxdesign/core/Timestamp";
 import type { Bolagsfalt } from "@/components/crm/app/BolagFormular";
-import { Kallpiller, Lankpiller, Personchip, Relationsetikett, tonFor, tonklass, useSmal, utanBolagsform } from "@/components/crm/app/kit";
+import { Historik } from "@/components/crm/app/Historik";
+import { Kallpiller, Lankpiller, Personchip, Privatpersonetikett, Relationsetikett, tonFor, tonklass, useSmal, utanBolagsform } from "@/components/crm/app/kit";
 import { SYSTEMNAMN, crmAnrop, orgnrVisning, type Bolag, type Person, type Sida as Svarssida } from "@/lib/crm/api";
 import { useLocale, type Localized } from "@/lib/i18n";
 
-type Flik = "oversikt" | "personer" | "kalla";
+type Flik = "oversikt" | "personer" | "kalla" | "historik";
 
 /** Etikettkolumnen: en knapp tredjedel av panelen (Twentys rutnät), smalare på telefon. */
 const ETIKETT_BRED = { position: "start" as const, width: 160 };
@@ -114,6 +116,13 @@ export function BolagPanel({
 
   const sprak = locale === "sv" ? "sv-SE" : "en-GB";
   const namn = bolag?.name ?? text({ sv: "Namnlöst bolag", en: "Unnamed company" });
+  // En privatperson kontaktas aldrig, oavsett vad do_not_contact säger.
+  const kontaktaInte = bolag?.private_person === true || bolag?.do_not_contact === true;
+  const sparrskal = !kontaktaInte
+    ? undefined
+    : bolag?.private_person
+      ? text({ sv: "Privatpersoner kontaktas aldrig.", en: "Private persons are never contacted." })
+      : text({ sv: "Bolaget ska inte kontaktas.", en: "The company is not to be contacted." });
   const ikon = (i: LucideIcon) => <Icon icon={i} size="sm" color="inherit" />;
 
   /** Ett tomt värde är en dämpad "Lägg till" som öppnar redigeringen på fältet. */
@@ -164,6 +173,8 @@ export function BolagPanel({
                 <span className="mt-1 inline-flex flex-wrap items-center gap-2">
                   {bolag.org_number ? <span className="text-[0.8125rem] tabular-nums text-ink-muted">{orgnrVisning(bolag.org_number)}</span> : null}
                   <Relationsetikett relation={bolag.relation} />
+                  {bolag.private_person ? <Privatpersonetikett /> : null}
+                  {kontaktaInte ? <Badge variant="error" label={text({ sv: "Kontakta inte", en: "Do not contact" })} /> : null}
                 </span>
               ) : undefined
             }
@@ -190,23 +201,27 @@ export function BolagPanel({
               </div>
             ) : (
               <>
-                {/* Snabbval: avstängda med förklaring när uppgiften saknas. */}
+                {/* Snabbval: avstängda med förklaring när uppgiften saknas eller posten inte får kontaktas. */}
                 <div className="flex items-center gap-2 px-5 pb-4">
                   <IconButton
                     label={bolag.email ? text({ sv: `Mejla ${bolag.email}`, en: `Email ${bolag.email}` }) : text({ sv: "Mejla", en: "Email" })}
                     icon={<Icon icon={Mail} size="sm" />}
                     className="crm-snabbval"
-                    href={bolag.email ? `mailto:${bolag.email}` : undefined}
-                    isDisabled={!bolag.email}
-                    tooltip={bolag.email ? undefined : text({ sv: "E-post saknas. Lägg till den under Redigera.", en: "No email. Add it under Edit." })}
+                    href={bolag.email && !kontaktaInte ? `mailto:${bolag.email}` : undefined}
+                    isDisabled={!bolag.email || kontaktaInte}
+                    tooltip={
+                      sparrskal ?? (bolag.email ? undefined : text({ sv: "E-post saknas. Lägg till den under Redigera.", en: "No email. Add it under Edit." }))
+                    }
                   />
                   <IconButton
                     label={bolag.phone ? text({ sv: `Ring ${bolag.phone}`, en: `Call ${bolag.phone}` }) : text({ sv: "Ring", en: "Call" })}
                     icon={<Icon icon={Phone} size="sm" />}
                     className="crm-snabbval"
-                    href={bolag.phone ? `tel:${bolag.phone}` : undefined}
-                    isDisabled={!bolag.phone}
-                    tooltip={bolag.phone ? undefined : text({ sv: "Telefon saknas. Lägg till den under Redigera.", en: "No phone. Add it under Edit." })}
+                    href={bolag.phone && !kontaktaInte ? `tel:${bolag.phone}` : undefined}
+                    isDisabled={!bolag.phone || kontaktaInte}
+                    tooltip={
+                      sparrskal ?? (bolag.phone ? undefined : text({ sv: "Telefon saknas. Lägg till den under Redigera.", en: "No phone. Add it under Edit." }))
+                    }
                   />
                   <IconButton
                     label={text({ sv: "Öppna webbplatsen", en: "Open the website" })}
@@ -231,6 +246,7 @@ export function BolagPanel({
                       endContent={personer ? <span className="crm-flikantal tabular-nums">{personer.length}</span> : undefined}
                     />
                     <Tab value="kalla" panelId="crm-panelflik" label={text({ sv: "Källa", en: "Source" })} icon={flikikon(Plug)} />
+                    <Tab value="historik" panelId="crm-panelflik" label={text({ sv: "Historik", en: "History" })} icon={flikikon(History)} />
                   </TabList>
                 </div>
 
@@ -262,8 +278,13 @@ export function BolagPanel({
                         {rad(
                           { sv: "Kontakta inte", en: "Do not contact" },
                           Ban,
-                          bolag.do_not_contact ? (
-                            <Badge variant="error" label={text({ sv: "Kontakta inte", en: "Do not contact" })} />
+                          kontaktaInte ? (
+                            <span className="inline-flex flex-wrap items-center gap-2">
+                              <Badge variant="error" label={text({ sv: "Kontakta inte", en: "Do not contact" })} />
+                              {bolag.private_person ? (
+                                <span className="text-[0.8125rem] text-ink-muted">{text({ sv: "Privatperson", en: "Private person" })}</span>
+                              ) : null}
+                            </span>
                           ) : (
                             <span className="crm-varde text-ink-muted">{text({ sv: "Får kontaktas", en: "May be contacted" })}</span>
                           )
@@ -387,6 +408,8 @@ export function BolagPanel({
                       </div>
                     )
                   ) : null}
+
+                  {flik === "historik" ? <Historik objekt="companies" id={bolag.id} andrad={bolag.updated_at} /> : null}
                 </div>
               </>
             )}

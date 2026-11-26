@@ -17,7 +17,8 @@ import { Tooltip } from "@astryxdesign/core/Tooltip";
 import { Nyckeltalskort, Panelkort, Postchip, Prick, Relationsetikett, type Ton } from "@/components/crm/app/kit";
 import { Felruta, Sida } from "@/components/crm/app/Sida";
 import { SYSTEMNAMN, crmAnrop, type Anslutning, type Bolag, type Korning, type Oversikt, type Sida as Svarssida } from "@/lib/crm/api";
-import { KORNINGSFEL, kodtext } from "@/lib/crm/felkoder";
+// Samma räkning som Synk-vyns kolumn Att rätta (felkoder.ts: attRatta).
+import { KORNINGSFEL, attRatta, kodtext } from "@/lib/crm/felkoder";
 import { useLocale, type Localized } from "@/lib/i18n";
 
 /** Så många bolag räknas orterna ur. Är registret större står det i kortets fot. */
@@ -36,9 +37,6 @@ const RING: { nyckel: string; namn: Localized; farg: string; ton: Ton | null }[]
   { nyckel: "leverantor", namn: { sv: "Leverantör", en: "Supplier" }, farg: "oklch(var(--chart-ramp-3))", ton: "bla" },
   { nyckel: "ovrigt", namn: { sv: "Övrigt", en: "Other" }, farg: "oklch(var(--ink) / 0.3)", ton: null }
 ];
-
-/** Samma räkning som Synk-vyns kolumn Att rätta: felposterna, och hoppade poster utöver dem. */
-const attRatta = (k: Korning) => k.errors.length + Math.max(0, k.counts.skipped - k.errors.length);
 
 type Data = {
   oversikt: Oversikt;
@@ -383,6 +381,14 @@ function Synkrad({ k, namn, href }: Readonly<{ k: Korning; namn: string; href: s
         >
           <span className="sr-only">{`${status}. `}</span>
           {utfall}
+          {/* Har körningen gått vidare till supporten står det på samma rad, inget mer. */}
+          {k.support ? (
+            <span>
+              {k.support.ticket
+                ? text({ sv: `, hos supporten (ärende ${k.support.ticket})`, en: `, with support (case ${k.support.ticket})` })
+                : text({ sv: ", hos supporten", en: ", with support" })}
+            </span>
+          ) : null}
         </span>
         {tid ? (
           <span className="col-start-3 row-start-1 whitespace-nowrap text-right sm:col-start-auto sm:row-start-auto">

@@ -10,10 +10,11 @@
  * läser Snajps tokens.
  */
 
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import NextLink from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
+  ArrowRight,
   Building2,
   Check,
   Code2,
@@ -36,9 +37,10 @@ import { IconButton } from "@astryxdesign/core/IconButton";
 import { SegmentedControl, SegmentedControlItem } from "@astryxdesign/core/SegmentedControl";
 import { Skeleton } from "@astryxdesign/core/Skeleton";
 import { HStack, StackItem, VStack } from "@astryxdesign/core/Stack";
+import { useTableSortable, type TableSortState } from "@astryxdesign/core/Table";
 import { Text } from "@astryxdesign/core/Text";
 import { Token } from "@astryxdesign/core/Token";
-import { RELATIONER, type Relation } from "@/lib/crm/api";
+import { RELATIONER, type Ordning, type Relation } from "@/lib/crm/api";
 import { useLocale, type Localized } from "@/lib/i18n";
 
 // ---------------------------------------------------------------------------
@@ -274,6 +276,29 @@ export function Kopierbar({ varde, label }: Readonly<{ varde: string; label?: st
 }
 
 /**
+ * Vägen till posten som redan har numret eller adressen, under ett fält eller
+ * en rad som krockade (409 `conflict` med `conflicting_id`). En textlänk med
+ * pil, inte en knapp: den leder bort, den ändrar ingenting.
+ */
+export function Krocklank({ etikett, onClick, href }: Readonly<{ etikett: string; onClick?: () => void; href?: string }>) {
+  const innehall = (
+    <>
+      <span>{etikett}</span>
+      <Icon icon={ArrowRight} size="xsm" color="inherit" />
+    </>
+  );
+  return href ? (
+    <NextLink href={href} onClick={onClick} className="crm-krocklank">
+      {innehall}
+    </NextLink>
+  ) : (
+    <button type="button" onClick={onClick} className="crm-krocklank">
+      {innehall}
+    </button>
+  );
+}
+
+/**
  * Vyvalet ovanför en lista: namnet, och antalet i dämpad ton bredvid
  * (DESIGN-CRM.md § Sidhuvud och vyrad). SegmentedControlItem tar bara en
  * sträng som etikett, så antalet ritas av crm.css ur `data-antal`.
@@ -354,9 +379,60 @@ export function Relationsetikett({ relation }: Readonly<{ relation: Relation }>)
   return <Badge variant={stil.badge} label={text(RELATIONER[relation])} icon={<Prick ton={stil.prick} />} />;
 }
 
+/**
+ * En privatperson, i relationsetikettens form. Privatpersoner kontaktas
+ * aldrig: etiketten säger det också, i en dold rad för skärmläsare och i
+ * tipset, så att märkningen aldrig står utan sin följd.
+ */
+export function Privatpersonetikett() {
+  const { text } = useLocale();
+  return (
+    <span title={text({ sv: "Privatperson. Kontaktas aldrig.", en: "Private person. Never contacted." })} className="inline-flex">
+      <Badge variant="neutral" label={text({ sv: "Privatperson", en: "Private person" })} icon={<Prick ton="mineral" />} />
+      <span className="sr-only">{text({ sv: ", kontaktas aldrig", en: ", never contacted" })}</span>
+    </span>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Tabellens delar
 // ---------------------------------------------------------------------------
+
+/** Sorteringens val i vyraden (Bolag, Personer). Samma ordning som kolumnrubrikerna ger. */
+export const ORDNINGAR: { v: Ordning; namn: Localized; vad: Localized }[] = [
+  { v: "-updated", namn: { sv: "Senast ändrad", en: "Last changed" }, vad: { sv: "Det som ändrades senast står först", en: "What changed last comes first" } },
+  { v: "updated", namn: { sv: "Ändringsordning", en: "Change order" }, vad: { sv: "Det som ändrades för längst sedan står först", en: "What changed longest ago comes first" } },
+  { v: "name", namn: { sv: "Namn", en: "Name" }, vad: { sv: "A till Ö", en: "A to Z" } }
+];
+
+/**
+ * Sorterbara kolumnrubriker för en lista som API:t sorterar (Bolag, Personer).
+ * Rubriken med `sortable: true` och nyckeln `name` ger `name`; nyckeln
+ * `updated_at` vänds mellan senast ändrad först (`-updated`) och äldst först
+ * (`updated`). API:t har ingen omvänd namnordning, så namnet står kvar A till Ö.
+ * Pluginet sorterar inga rader: vyn hämtar om när ordningen byts.
+ */
+export function useKolumnsortering<T extends Record<string, unknown>>(ordning: Ordning, satt: (o: Ordning) => void) {
+  const sort = useMemo<TableSortState>(
+    () =>
+      ordning === "name"
+        ? [{ sortKey: "name", direction: "ascending" }]
+        : [{ sortKey: "updated_at", direction: ordning === "-updated" ? "descending" : "ascending" }],
+    [ordning]
+  );
+  return useTableSortable<T>({
+    sort,
+    allowUnsortedState: false,
+    onSortChange: (ny) => {
+      const forsta = ny[0];
+      if (!forsta) satt("-updated");
+      else if (forsta.sortKey === "name") satt("name");
+      // Från namnordningen börjar Ändrad med det senast ändrade, som listan öppnar med.
+      else if (ordning === "name") satt("-updated");
+      else satt(forsta.direction === "descending" ? "-updated" : "updated");
+    }
+  });
+}
 
 /** Kolumnrubrik: liten dämpad ikon per fälttyp plus rubriken. Svagare än datan under. */
 export function Kolumnrubrik({ ikon, children }: Readonly<{ ikon: LucideIcon; children: string }>) {

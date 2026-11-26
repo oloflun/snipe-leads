@@ -11,9 +11,14 @@ import "@/lib/fonts-rubrik";
  */
 const VYER: CrmVy[] = ["oversikt", "bolag", "personer", "synk", "utvecklare"];
 
-export default async function Page({ params }: Readonly<{ params: Promise<{ vy?: string[] }> }>) {
+export default async function Page({
+  params,
+  searchParams
+}: Readonly<{ params: Promise<{ vy?: string[] }>; searchParams: Promise<Record<string, string | string[] | undefined>> }>) {
   const forst = (await params).vy?.[0];
   const vy = VYER.find((v) => v === forst) ?? "oversikt";
   const tema = parseTema((await cookies()).get(TEMA_COOKIE)?.value);
-  return <CrmForhandsvisning tema={tema} vy={vy} />;
+  // ?vy=kund: kundens nivå (annars plattformsadmin). ?tillagg=saknas: arbetsytan saknar tillägget.
+  const fraga = await searchParams;
+  return <CrmForhandsvisning tema={tema} vy={vy} kund={fraga.vy === "kund"} utanTillagg={fraga.tillagg === "saknas"} />;
 }

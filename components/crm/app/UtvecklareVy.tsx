@@ -26,6 +26,7 @@ import { Timestamp } from "@astryxdesign/core/Timestamp";
 import { useToast } from "@astryxdesign/core/Toast";
 import { Kolumnrubrik, Kopierbar, Objektikon, Panelkort, Prick, Tabellskelett, useBestallning, useSmal, Vyval } from "@/components/crm/app/kit";
 import { Felruta, Sida } from "@/components/crm/app/Sida";
+import { Webhooks } from "@/components/crm/app/Webhooks";
 import { CrmFel, crmAnrop, type Nyckel } from "@/lib/crm/api";
 import { useLocale, type Localized } from "@/lib/i18n";
 
@@ -286,6 +287,11 @@ export function UtvecklareVy() {
           </div>
         </div>
       )}
+
+      {/* Webhooks: samma form som nycklarna ovan, i en egen del av sidan. */}
+      <div className="pb-6">
+        <Webhooks />
+      </div>
 
       {/* API:ts uppgifter */}
       <div className="border-t border-ink/[0.08] px-4 pb-8 pt-6 sm:px-6">

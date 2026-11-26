@@ -30,30 +30,33 @@ import { BolagPanel } from "@/components/crm/app/BolagPanel";
 import {
   Kolumnrubrik,
   Lankpiller,
+  ORDNINGAR,
   Personchip,
   Postchip,
   Prick,
+  Privatpersonetikett,
   RELATIONSTON,
   Relationsetikett,
   Tabellskelett,
   tonFor,
   tonklass,
   useBestallning,
+  useKolumnsortering,
   useSmal,
   utanBolagsform,
   Vyval
 } from "@/components/crm/app/kit";
+import { Papperskorg } from "@/components/crm/app/Papperskorg";
 import { Felruta, Sida } from "@/components/crm/app/Sida";
-import { CrmFel, RELATIONER, crmAnrop, orgnrVisning, type Bolag, type Oversikt, type Relation, type Sida as Svarssida } from "@/lib/crm/api";
+import { CrmFel, RELATIONER, crmAnrop, orgnrVisning, type Bolag, type Ordning, type Oversikt, type Relation, type Sida as Svarssida } from "@/lib/crm/api";
 import { useLocale, type Localized } from "@/lib/i18n";
 
-type Filter = "alla" | Relation;
-type Sortering = "name" | "updated";
+type Filter = "alla" | Relation | "papperskorg";
 
-/** Vyerna i vyraden. Partner, leverantör och övrigt visas bara när de har bolag. */
+/** Vyerna i vyraden. Partner, leverantör och övrigt visas bara när de har bolag; papperskorgen står alltid sist. */
 const ALLTID: Filter[] = ["alla", "customer", "prospect", "former_customer"];
 const IBLAND: Filter[] = ["partner", "supplier", "other"];
-/** Översiktens nycklar är databasens (svenska) relationsnamn. */
+/** Översiktens nycklar är databasens (svenska) relationsnamn. Papperskorgen räknas inte där. */
 const RAKNENYCKEL: Record<Filter, string> = {
   alla: "alla",
   customer: "kund",
@@ -61,7 +64,8 @@ const RAKNENYCKEL: Record<Filter, string> = {
   prospect: "prospekt",
   partner: "partner",
   supplier: "leverantor",
-  other: "ovrigt"
+  other: "ovrigt",
+  papperskorg: ""
 };
 
 const SIDSTORLEK = 50;
@@ -110,12 +114,21 @@ export function BolagVy() {
   const visa = useToast();
   const smal = useSmal();
   const params = useSearchParams();
-  const postId = params?.get("bolag") ?? null;
+  const adressensPost = params?.get("bolag") ?? null;
+  // Panelen följer adressen men hålls också i eget läge, som i Personer: replaceState
+  // når inte alltid useSearchParams, och en länk till en annan post (krocken,
+  // papperskorgen) ska byta panelen direkt.
+  const [postId, setPostId] = useState<string | null>(adressensPost);
+  useEffect(() => {
+    setPostId(adressensPost);
+  }, [adressensPost]);
   const sprak = locale === "sv" ? "sv-SE" : "en-GB";
   const tal = useCallback((n: number) => n.toLocaleString(sprak), [sprak]);
 
   const [filter, setFilter] = useState<Filter>("alla");
-  const [sortering, setSortering] = useState<Sortering>("name");
+  // Senast ändrad först: det man nyss arbetat med står överst.
+  const [sortering, setSortering] = useState<Ordning>("-updated");
+  const iKorgen = filter === "papperskorg";
   const [sok, setSok] = useState("");
   const [fraga, setFraga] = useState("");
   const [rader, setRader] = useState<Bolag[]>([]);
@@ -137,6 +150,7 @@ export function BolagVy() {
 
   /** Byter `?bolag=` utan ny sidladdning; Next läser historiken och useSearchParams följer med. */
   const sattPost = useCallback((id: string | null) => {
+    setPostId(id);
     const q = new URLSearchParams(window.location.search);
     if (id) q.set("bolag", id);
     else q.delete("bolag");
@@ -186,6 +200,8 @@ export function BolagVy() {
 
   const hamta = useCallback(
     async (markor: string | null) => {
+      // Papperskorgen hämtar sina egna rader (Papperskorg.tsx); räkningen i vyraden står kvar.
+      if (filter === "papperskorg") return;
       const denna = ++omgang.current;
       if (markor) setLaddarFler(true);
       else setLaddar(true);
@@ -219,6 +235,15 @@ export function BolagVy() {
     void hamta(null);
   }, [hamta]);
 
+  /** Bara räkningen i vyraden, efter en återställning ur papperskorgen. */
+  const hamtaRakning = useCallback(async () => {
+    try {
+      setAntal((await crmAnrop<Oversikt>("/oversikt")).bolag);
+    } catch {
+      /* räkningen står kvar som den var */
+    }
+  }, []);
+
   // En ny lista är ett nytt urval: markeringen gäller inte längre.
   useEffect(() => {
     setValda(new Set());
@@ -236,6 +261,7 @@ export function BolagVy() {
     ...selectionConfig,
     getRowLabel: (b) => b.name ?? b.id
   });
+  const kolumnsortering = useKolumnsortering<Bolag>(sortering, setSortering);
 
   const namnPa = useCallback(
     (id: string) => rader.find((r) => r.id === id)?.name ?? (post?.id === id ? post.name : null) ?? text({ sv: "Namnlöst bolag", en: "Unnamed company" }),
@@ -362,6 +388,7 @@ export function BolagVy() {
         // Kolumnbredderna summerar till 1 094 px plus kryssrutan, så att tabellen
         // ryms i bladet vid 1 440 px utan att någon kolumn trycks ihop.
         width: proportional(1, { minWidth: 200 }),
+        sortable: true,
         renderCell: (b) => (
           <Postchip
             namn={b.name ?? text({ sv: "Namnlöst bolag", en: "Unnamed company" })}
@@ -380,7 +407,9 @@ export function BolagVy() {
         key: "relation",
         header: <Kolumnrubrik ikon={Tag}>{text({ sv: "Relation", en: "Relation" })}</Kolumnrubrik>,
         width: pixel(138),
-        renderCell: (b) => <Relationsetikett relation={b.relation} />
+        // En privatperson visar sin märkning i relationens plats (som i mobillistan):
+        // bredvid namnet kapade etiketten namnet. Relationen står kvar i panelen.
+        renderCell: (b) => (b.private_person ? <Privatpersonetikett /> : <Relationsetikett relation={b.relation} />)
       },
       {
         key: "website",
@@ -407,6 +436,7 @@ export function BolagVy() {
         key: "updated_at",
         header: <Kolumnrubrik ikon={Clock}>{text({ sv: "Ändrad", en: "Updated" })}</Kolumnrubrik>,
         width: pixel(152),
+        sortable: true,
         renderCell: (b) => (b.updated_at ? <Timestamp value={b.updated_at} format="relative" /> : null)
       }
     ],
@@ -416,11 +446,14 @@ export function BolagVy() {
   // ---- Räkningen ------------------------------------------------------------
 
   const totalt = antal?.alla;
-  const iFiltret = antal && !fraga ? (antal[RAKNENYCKEL[filter]] ?? 0) : null;
+  const iFiltret = antal && !fraga && !iKorgen ? (antal[RAKNENYCKEL[filter]] ?? 0) : null;
   const kunder = antal?.kund ?? 0;
-  const vyer = [...ALLTID, ...IBLAND.filter((f) => (antal?.[RAKNENYCKEL[f]] ?? 0) > 0)];
-  const vynamn = (f: Filter) => (f === "alla" ? text({ sv: "Alla", en: "All" }) : text(RELATIONER[f]));
-  const vyetikett = (f: Filter) => (antal ? `${vynamn(f)}  ${tal(antal[RAKNENYCKEL[f]] ?? 0)}` : vynamn(f));
+  const vyer: Filter[] = [...ALLTID, ...IBLAND.filter((f) => (antal?.[RAKNENYCKEL[f]] ?? 0) > 0), "papperskorg"];
+  const vynamn = (f: Filter) =>
+    f === "alla" ? text({ sv: "Alla", en: "All" }) : f === "papperskorg" ? text({ sv: "Papperskorg", en: "Trash" }) : text(RELATIONER[f]);
+  // Papperskorgen har inget tal i översikten: den står utan antal.
+  const vyantal = (f: Filter) => (antal && f !== "papperskorg" ? tal(antal[RAKNENYCKEL[f]] ?? 0) : undefined);
+  const vyetikett = (f: Filter) => (vyantal(f) ? `${vynamn(f)}  ${vyantal(f)}` : vynamn(f));
 
   const nyttBolag = () => setFormular({ bolag: null, fokus: null });
 
@@ -530,7 +563,7 @@ export function BolagVy() {
             value={filter}
             onChange={setFilter}
             label={text({ sv: "Vy", en: "View" })}
-            val={vyer.map((f) => ({ v: f, namn: vynamn(f), antal: antal ? tal(antal[RAKNENYCKEL[f]] ?? 0) : undefined }))}
+            val={vyer.map((f) => ({ v: f, namn: vynamn(f), antal: vyantal(f) }))}
           />
         )
       }
@@ -550,7 +583,7 @@ export function BolagVy() {
               controlClassName="crm-sokfalt"
             />
           </div>
-          {smal ? (
+          {smal && !iKorgen ? (
             <Button
               variant={valjer ? "secondary" : "ghost"}
               size="md"
@@ -561,28 +594,32 @@ export function BolagVy() {
               }}
             />
           ) : null}
-          <Selector
-            label={text({ sv: "Sortera", en: "Sort" })}
-            isLabelHidden
-            variant="ghost"
-            size="md"
-            startIcon={sortering === "name" ? ArrowDownAZ : Clock}
-            value={sortering}
-            onChange={(v) => v && setSortering(v as Sortering)}
-            options={[
-              { value: "name", label: text({ sv: "Namn", en: "Name" }), description: text({ sv: "A till Ö", en: "A to Z" }) },
-              {
-                value: "updated",
-                label: text({ sv: "Ändringsordning", en: "Change order" }),
-                description: text({ sv: "Det som ändrades för längst sedan står först", en: "What changed longest ago comes first" })
-              }
-            ]}
-          />
+          {/* Papperskorgen står alltid senast raderad först: där finns inget att sortera. */}
+          {iKorgen ? null : (
+            <Selector
+              label={text({ sv: "Sortera", en: "Sort" })}
+              isLabelHidden
+              variant="ghost"
+              size="md"
+              startIcon={sortering === "name" ? ArrowDownAZ : Clock}
+              value={sortering}
+              onChange={(v) => v && setSortering(v as Ordning)}
+              options={ORDNINGAR.map((o) => ({ value: o.v, label: text(o.namn), description: text(o.vad) }))}
+            />
+          )}
         </>
       }
     >
       <div className="crm-bolag">
-        {fel ? (
+        {iKorgen ? (
+          <Papperskorg<Bolag>
+            objekt="companies"
+            fraga={fraga}
+            namnPa={(b) => b.name ?? text({ sv: "Namnlöst bolag", en: "Unnamed company" })}
+            oppnaPost={(id) => sattPost(id)}
+            aterstalld={() => void hamtaRakning()}
+          />
+        ) : fel ? (
           <div className="p-4 sm:p-6">
             <Felruta fel={fel} igen={<Button size="sm" label={text({ sv: "Försök igen", en: "Try again" })} onClick={() => void hamta(null)} />} />
           </div>
@@ -622,7 +659,8 @@ export function BolagVy() {
                           </span>
                         )
                       }
-                      endContent={<Relationsetikett relation={b.relation} />}
+                      // En privatperson visar sin märkning i relationens plats: den bär följden att posten aldrig kontaktas.
+                      endContent={b.private_person ? <Privatpersonetikett /> : <Relationsetikett relation={b.relation} />}
                       onClick={() => (valjer ? vaxla(!vald) : oppna(b))}
                       isSelected={valjer ? false : post?.id === b.id}
                     />
@@ -644,7 +682,7 @@ export function BolagVy() {
               dividers="rows"
               hasHover
               textOverflow="truncate"
-              plugins={{ selection: markering }}
+              plugins={{ selection: markering, sort: kolumnsortering }}
               rowCount={iFiltret ?? undefined}
               emptyState={<div className="py-12">{tomt}</div>}
             />
@@ -658,7 +696,7 @@ export function BolagVy() {
         )}
 
         {/* Åtgärdsraden flyter längst ned i bladet medan något är markerat. */}
-        {(!smal || valjer) && (selectionState.hasSelection || pagar) ? (
+        {!iKorgen && (!smal || valjer) && (selectionState.hasSelection || pagar) ? (
           <div className="crm-atgardsrad-plats">
             <div className="crm-atgardsrad">
               {jobb ? (
@@ -719,6 +757,10 @@ export function BolagVy() {
         bolag={formular?.bolag ?? null}
         fokus={formular?.fokus}
         stang={() => setFormular(null)}
+        oppnaPost={(id) => {
+          setFormular(null);
+          sattPost(id);
+        }}
         sparat={(b, nytt) => {
           setFormular(null);
           setRader((forr) => forr.map((r) => (r.id === b.id ? b : r)));
