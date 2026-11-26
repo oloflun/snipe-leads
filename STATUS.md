@@ -30,14 +30,14 @@ Reglerna står i `CLAUDE.md` (§ Leads 23–24, § Hjälprutan) och valen i `doc
 | Nodetester | 421 gröna |
 | Databastester mot riktig Postgres | gröna |
 | Migrationerna 153 och 156–159 | går igenom från noll och ovanpå en äldre databas |
-| Typkontroll | ren, avgränsad till de ändrade filerna |
+| Typkontroll | ren för hela projektet |
 | Bilder på desktop och mobil | varje synlig ändring sedd |
 
 **Kvar**
 
-- **Kontrollera att jobbet `migrera` blev grönt** efter pushen. Det kör 153 och 156–159 mot development.
+- **Migrationerna 153 och 156–159 är körda mot development:** jobbet `migrera` blev grönt 2026-11-26.
 - **Hjälprutan svarar "inte påslagen"** tills hjälpens kund och nyckel är skapade per miljö (kommandona står i handoffen).
-- **e2e och hela typkontrollen** är inte körda.
+- **e2e** är inte körda.
 - **Mindre rester:**
   - rå feltext i snabbsöket, körningsformuläret och utskicksjobben
   - ett stoppat utkasts skäl på svenska i den engelska ytan

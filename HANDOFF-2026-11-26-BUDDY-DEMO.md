@@ -304,14 +304,12 @@ Detaljerat läge per punkt står i [`STATUS.md`](STATUS.md) (posten 2026-11-26).
 | Nodetester (`node --test "lib/**/*.test.ts"`) | 421 gröna |
 | Databastester mot lokal Postgres 16 i WSL, i CI:s ordning | 16 + 39 gröna, inga överhoppade; plus `test_demorattningar_db.py`, 6 gröna |
 | Migrationerna 153 och 156–159 | går igenom från noll (169 migrationer) och ovanpå en databas som stod på 068 (89 ovanpå 117), och tål att köras två gånger |
-| Typkontroll | ren på de 61 ändrade och nya TypeScript-filerna (avgränsad tsconfig) |
+| Typkontroll | ren för hela projektet (`tsc --noEmit`) efter rättningen i `lib/snajp/hjalp.test.ts`: CI:s första körning fällde tre typfel i testfilen, som den avgränsade kontrollen inte tog med |
 | Bilder, 1280 och 375 px | varje synlig ändring sedd: felrapportens bild och felläge, det fallna utkastjobbet (svenska, engelska, känd och okänd kod), påfyllt lead, kunskapsbasen, Hjälprutan, körningarna |
 
 ### Inte gjort eller inte prövat
 
-- **Hela projektets typkontroll** är inte körd efter andra rundan; minnet räckte bara till den avgränsade.
-- **Railway:** pushen till `development` kör migrationerna 153 och 156–159 där
-  (`.github/workflows/migrera.yml`). Kontrollera att jobbet `migrera` blev grönt.
+- **CI:** migrationsjobbet `migrera` körde 153 och 156–159 mot development och blev grönt 2026-11-26 07:52. `Verify` föll första gången på tre typfel i `lib/snajp/hjalp.test.ts`, rättade i nästa commit.
 - **Hjälprutan svarar "inte påslagen"** tills hjälpens kund och nyckel finns i miljön:
   ```bash
   cd snajp-support && python -m app.tenants.snajp_hjalp

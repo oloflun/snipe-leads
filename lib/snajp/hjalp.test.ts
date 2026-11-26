@@ -250,6 +250,9 @@ type G = {
   __svar?: string;
 };
 const g = globalThis as G;
+/** Senaste anropet till backenden. En funktion, så att TypeScript inte låser
+ * fältet till `undefined` efter en tilldelning (stubben skriver det, inte testet). */
+const senasteAnrop = (): G["__anrop"] => g.__anrop;
 
 function sessionFor(id: { userId: string; workspaceId: string; tenantSlug: string }) {
   return {
@@ -318,9 +321,9 @@ test("ägarkontrollen: rätt användare får sitt jobb, annan användare och man
   g.__svar = JSON.stringify({ status: "completed", result: { svar: "Så här." } });
   const egen = await polla(token);
   assert.equal(egen.status, 200);
-  assert.equal(g.__anrop?.path, `/api/jobs/${JOBB}`);
-  assert.equal(g.__anrop?.key, "hjalpnyckel");
-  assert.equal(g.__anrop?.user, ID.userId);
+  assert.equal(senasteAnrop()?.path, `/api/jobs/${JOBB}`);
+  assert.equal(senasteAnrop()?.key, "hjalpnyckel");
+  assert.equal(senasteAnrop()?.user, ID.userId);
 
   // En annan kund med Adas token: 404, och backenden nås aldrig.
   g.__context = sessionFor(ANNAN);
