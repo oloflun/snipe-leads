@@ -67,13 +67,21 @@ async def test_oversikten_raknar_ej_aktuell_och_kundlistan_tar_inte_med_bolaget(
                                               "relation": "not_relevant"})
         oversikt = (await k.get("/api/crm/oversikt")).json()
         assert oversikt["bolag"] == {"kund": 1, "ej_aktuell": 1, "alla": 2}
-    # Ett vunnet lead för samma bolag står kvar under Iris: relationen gör det inte till en egen kund.
+    # Ett vunnet lead för samma bolag döljs: kundens egen märkning går före leadets utfall.
     lead = await storage.create_prospect(buddy.id, company_name="Nej Tack AB", contact_email="vd@nejtack.se")
     await storage.update_prospect(buddy.id, lead["id"], orgnr=ORGNR_A, status="won")
+    # Ett vunnet lead för ett annat bolag står kvar under Iris.
+    annat = await storage.create_prospect(buddy.id, company_name="Ja Gärna AB", contact_email="vd@jagarna.se")
+    await storage.update_prospect(buddy.id, annat["id"], orgnr=ORGNR_B, status="won")
     async with buddy.klient() as k:
         lista = (await k.get(f"{V1}/customers")).json()
         assert lista["counts"] == {"own": 1, "iris": 1}
-        assert [(r["origin"], r["name"]) for r in lista["data"]] == [("own", "Kund AB"), ("iris", "Nej Tack AB")]
+        assert [(r["origin"], r["name"]) for r in lista["data"]] == [("iris", "Ja Gärna AB"), ("own", "Kund AB")]
+    # Hos en annan kund påverkar märkningen ingenting.
+    hos_annan = await storage.create_prospect(annan.id, company_name="Nej Tack AB", contact_email="vd@nejtack.se")
+    await storage.update_prospect(annan.id, hos_annan["id"], orgnr=ORGNR_A, status="won")
+    async with annan.klient() as k:
+        assert [r["name"] for r in (await k.get(f"{V1}/customers")).json()["data"]] == ["Nej Tack AB"]
     async with annan.klient("snajp_live_annans_egen") as k:
         assert (await k.get("/api/crm/oversikt")).json()["bolag"] == {"alla": 0}
 
@@ -139,6 +147,18 @@ async def test_okand_forlustorsak_avvisas(buddy):
         assert falten == [{"field": "lost_reason_code", "code": "forlustorsak_okand"}]
 
 
+@pytest.mark.parametrize("varde", ["pris", "PRICE", " price", "Price"])
+async def test_api_tar_bara_sina_egna_forlustorsaker(buddy, varde):
+    # CRM:ets tolkning tar svenska namn och versaler; det publika API:t gör det inte.
+    async with buddy.klient() as k:
+        falten = _faltfel(await k.post(f"{V1}/deals", json={"name": "Växel", "lost_reason_code": varde}))
+        assert falten == [{"field": "lost_reason_code", "code": "forlustorsak_okand"}]
+        affar = (await k.post(f"{V1}/deals", json={"name": "Växel"})).json()
+        falten = _faltfel(await k.patch(f"{V1}/deals/{affar['id']}", json={"lost_reason_code": varde}))
+        assert falten == [{"field": "lost_reason_code", "code": "forlustorsak_okand"}]
+        assert (await k.get(f"{V1}/deals/{affar['id']}")).json()["lost_reason_code"] is None
+
+
 async def test_tidslinjens_avslutade_affar_bar_koden(buddy):
     async with buddy.klient() as k:
         bolag = (await k.post(f"{V1}/companies", json={"name": "Kund AB"})).json()
@@ -199,6 +219,45 @@ async def test_okand_kalltyp_avvisas(buddy):
         assert falten == [{"field": "source_type", "code": "kalltyp_okand"}]
 
 
+@pytest.mark.parametrize("varde", ["website", "kund", "webbplats", "bolagets_webbplats", "SYNC", "Sync"])
+async def test_api_tar_bara_sina_egna_kalltyper(buddy, varde):
+    # Synkens tolkning tar svenska namn och synonymer; det publika API:t gör det inte.
+    async with buddy.klient() as k:
+        falten = _faltfel(await k.post(f"{V1}/people", json={"email": "a@kund.se", "source_type": varde}))
+        assert falten == [{"field": "source_type", "code": "kalltyp_okand"}]
+        person = (await k.post(f"{V1}/people", json={"email": "a@kund.se"})).json()
+        falten = _faltfel(await k.patch(f"{V1}/people/{person['id']}", json={"source_type": varde}))
+        assert falten == [{"field": "source_type", "code": "kalltyp_okand"}]
+        assert (await k.get(f"{V1}/people/{person['id']}")).json()["source_type"] is None
+
+
+def test_specifikationen_raknar_upp_kalltyp_och_forlustorsak():
+    from app.api import crm_v1
+
+    scheman = crm_v1.specifikation()["components"]["schemas"]
+
+    def uppraknat(schema: dict) -> list:
+        return next(d["enum"] for d in schema["anyOf"] if d.get("type") == "string")
+
+    assert uppraknat(scheman["PersonIn"]["properties"]["source_type"]) == [
+        "company_website", "registry", "customer_provided", "sync", "manual", "other"]
+    assert uppraknat(scheman["DealIn"]["properties"]["lost_reason_code"]) == [
+        "price", "competitor", "timing", "no_need", "no_budget", "no_response", "other"]
+
+
+async def test_synken_byter_kallans_namn_nar_typen_saknas(buddy):
+    async with buddy.klient() as k:
+        await k.post(f"{V1}/connections", json={
+            "name": "lime", "system": "generisk",
+            "mapping": {"person": {"kalla_typ": "kalltyp", "kalla_namn": "kallnamn"}}})
+        svar = (await k.post(f"{V1}/sync/people", json={"connection": "lime", "items": [
+            {"id": "p1", "email": "a@kund.se", "kalltyp": "rykten", "kallnamn": "Bolagsverket"},
+            {"id": "p2", "email": "b@kund.se", "kallnamn": "Mässan"}]})).json()
+        for post in svar["items"]:
+            person = (await k.get(f"{V1}/people/{post['id']}")).json()
+            assert (person["source_type"], person["source_name"]) == ("sync", "lime")
+
+
 async def test_synken_satter_kallan_och_skriver_aldrig_over_den(buddy, storage):
     async with buddy.klient() as k:
         svar = await k.post(f"{V1}/connections", json={
@@ -245,6 +304,60 @@ async def test_okand_kalltyp_i_synken_tappar_faltet_inte_posten(buddy):
         assert post["field_errors"][0]["falt"] == "kalla_typ" and post["field_errors"][0]["kod"] == "kalltyp_okand"
         # Utan giltig uppgift från källan blir källan synken.
         assert (await k.get(f"{V1}/people/{post['id']}")).json()["source_type"] == "sync"
+
+
+# -- Koden före schemat ------------------------------------------------------
+
+
+class _SaknadKolumn(Exception):
+    sqlstate = "42703"
+
+
+class _GammaltSchema:
+    """Ett Postgres-lager där migration 165 inte har körts: en sats som nämner
+    någon av dess kolumner faller med 42703, som asyncpg gör."""
+
+    def __init__(self) -> None:
+        self.pool = object()
+        self.satser: list[str] = []
+        self.saknade = ("kalla_typ", "kalla_namn", "insamlad_at", "forlustorsak_kod")
+
+    def _scoped(self, tenant_id):
+        lager = self
+
+        class _Anslutning:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *fel):
+                return False
+
+            async def fetchrow(self, sql, *varden):
+                lager.satser.append(sql)
+                if any(k in sql for k in lager.saknade):
+                    raise _SaknadKolumn("column does not exist")
+                return {"id": "00000000-0000-0000-0000-000000000001", "tenant_id": tenant_id}
+
+        return _Anslutning()
+
+
+async def test_skrivning_fore_migrationen_tappar_bara_de_sena_kolumnerna(caplog):
+    lager = _GammaltSchema()
+    tenant = "00000000-0000-0000-0000-0000000000aa"
+    with caplog.at_level("WARNING", logger="snajp-support.crm.lagring"):
+        post = await lagring.skapa_post(lager, tenant, "person", {
+            "epost": "a@kund.se", "kalla": "api", "kalla_typ": "register", "insamlad_at": lagring.nu()})
+        assert post["id"]
+        assert await lagring.uppdatera_post(lager, tenant, "affar", post["id"], {"forlustorsak_kod": "pris"})
+    assert len(lager.satser) == 4
+    assert "insamlad_at" not in lager.satser[1] and "epost" in lager.satser[1]
+    assert "forlustorsak_kod" not in lager.satser[3] and "updated_at" in lager.satser[3]
+    # Loggen bär kolumnernas namn, aldrig värdena.
+    assert "kalla_typ" in caplog.text and "register" not in caplog.text and "a@kund.se" not in caplog.text
+    # Ett annat fel, eller en saknad kolumn utanför listan, går upp som förut.
+    lager.saknade = ("namnnyckel",)
+    with pytest.raises(_SaknadKolumn):
+        await lagring.skapa_post(lager, tenant, "bolag", {"namn": "X AB", "namnnyckel": "x"})
 
 
 async def test_gravstenen_nollar_kallan(buddy, storage):

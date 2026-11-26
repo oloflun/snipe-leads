@@ -18,9 +18,12 @@ from __future__ import annotations
 
 import base64
 import json
+import logging
 import uuid
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Iterable
+
+logger = logging.getLogger("snajp-support.crm.lagring")
 
 #: Kolumnernas typer där de inte är text. Styr hur värdet skickas till
 #: Postgres och hur det läses tillbaka.
@@ -161,6 +164,28 @@ def _saknar_tabell(fel: BaseException) -> bool:
     return getattr(fel, "sqlstate", None) in ("42P01", "42703")
 
 
+#: Kolumner som koden skriver innan migrationen som lägger till dem säkert har
+#: körts. Migreringsjobbet och Railways deploy startar av samma push, och
+#: ingenting låter Railway vänta på jobbet. Under det fönstret skrivs posten
+#: utan de här kolumnerna i stället för att falla med 42703, och loggen säger
+#: vilka (namnen, aldrig värdena). Stryk en rad när migrationen gått i main.
+SENA_KOLUMNER: dict[str, tuple[str, ...]] = {
+    "crm_personer": ("kalla_typ", "kalla_namn", "insamlad_at"),  # migration 165
+    "crm_affarer": ("forlustorsak_kod",),  # migration 165
+}
+
+
+def _utan_sena(tabell: str, falt: dict[str, Any], fel: BaseException) -> dict[str, Any] | None:
+    """Fälten utan de sena kolumnerna, när felet är en saknad kolumn och
+    skrivningen bär någon av dem. Annars `None`: felet ska då upp."""
+    sena = [k for k in SENA_KOLUMNER.get(tabell, ()) if k in falt]
+    if getattr(fel, "sqlstate", None) != "42703" or not sena:
+        return None
+    logger.warning("crm: %s saknar %s, migrationen har inte körts; posten skrivs utan dem",
+                   tabell, ", ".join(sena))
+    return {k: v for k, v in falt.items() if k not in sena}
+
+
 def _unik_krock(fel: BaseException) -> bool:
     return getattr(fel, "sqlstate", None) == "23505"
 
@@ -240,20 +265,13 @@ async def _in(storage: Any, tenant_id: str, tabell: str, falt: dict[str, Any]) -
     _kraev(tabell, falt)
     falt = {**falt, "tenant_id": tenant_id}
     if _ar_postgres(storage):
-        kolumner = list(falt)
-        platser = [_plats(tabell, k, i + 1) for i, k in enumerate(kolumner)]
         try:
-            async with storage._scoped(tenant_id) as conn:
-                rad = await conn.fetchrow(
-                    f"insert into {tabell} ({', '.join(kolumner)}) values ({', '.join(platser)}) "
-                    f"returning {_urval(tabell)}",
-                    *[_varde(tabell, k, falt[k]) for k in kolumner],
-                )
+            return await _in_postgres(storage, tenant_id, tabell, falt)
         except Exception as fel:
-            if _unik_krock(fel):
-                raise FinnsRedan(str(fel)) from None
-            raise
-        return _rad(rad, tabell)
+            utan = _utan_sena(tabell, falt, fel)
+            if utan is None:
+                raise
+            return await _in_postgres(storage, tenant_id, tabell, utan)
     tid = nu()
     rad = {k: None for k in TABELLER[tabell]}
     rad.update(json.loads(json.dumps(_STANDARD[tabell])))
@@ -265,6 +283,42 @@ async def _in(storage: Any, tenant_id: str, tabell: str, falt: dict[str, Any]) -
     _minnets_unika(storage, tabell, rad)
     _minne(storage, tabell)[rad["id"]] = rad
     return _utan_bytes(tabell, rad)
+
+
+async def _in_postgres(storage: Any, tenant_id: str, tabell: str, falt: dict[str, Any]) -> dict[str, Any]:
+    kolumner = list(falt)
+    platser = [_plats(tabell, k, i + 1) for i, k in enumerate(kolumner)]
+    try:
+        async with storage._scoped(tenant_id) as conn:
+            rad = await conn.fetchrow(
+                f"insert into {tabell} ({', '.join(kolumner)}) values ({', '.join(platser)}) "
+                f"returning {_urval(tabell)}",
+                *[_varde(tabell, k, falt[k]) for k in kolumner],
+            )
+    except Exception as fel:
+        if _unik_krock(fel):
+            raise FinnsRedan(str(fel)) from None
+        raise
+    return _rad(rad, tabell)
+
+
+async def _upp_postgres(
+    storage: Any, tenant_id: str, tabell: str, rad_id: str, falt: dict[str, Any]
+) -> dict[str, Any] | None:
+    kolumner = list(falt)
+    satser = [f"{k} = {_plats(tabell, k, i + 3)}" for i, k in enumerate(kolumner)]
+    try:
+        async with storage._scoped(tenant_id) as conn:
+            rad = await conn.fetchrow(
+                f"update {tabell} set {', '.join(satser)} "
+                f"where tenant_id = $1::text::uuid and id = $2::text::uuid returning {_urval(tabell)}",
+                tenant_id, rad_id, *[_varde(tabell, k, falt[k]) for k in kolumner],
+            )
+    except Exception as fel:
+        if _unik_krock(fel):
+            raise FinnsRedan(str(fel)) from None
+        raise
+    return _rad(rad, tabell)
 
 
 def _minnets_unika(storage: Any, tabell: str, rad: dict[str, Any]) -> None:
@@ -300,20 +354,14 @@ async def _upp(
     if not falt:
         return await _hamta(storage, tenant_id, tabell, rad_id)
     if _ar_postgres(storage):
-        kolumner = list(falt)
-        satser = [f"{k} = {_plats(tabell, k, i + 3)}" for i, k in enumerate(kolumner)]
         try:
-            async with storage._scoped(tenant_id) as conn:
-                rad = await conn.fetchrow(
-                    f"update {tabell} set {', '.join(satser)} "
-                    f"where tenant_id = $1::text::uuid and id = $2::text::uuid returning {_urval(tabell)}",
-                    tenant_id, rad_id, *[_varde(tabell, k, falt[k]) for k in kolumner],
-                )
+            return await _upp_postgres(storage, tenant_id, tabell, rad_id, falt)
         except Exception as fel:
-            if _unik_krock(fel):
-                raise FinnsRedan(str(fel)) from None
-            raise
-        return _rad(rad, tabell)
+            utan = _utan_sena(tabell, falt, fel)
+            if utan is None:
+                raise
+            # updated_at står alltid kvar, så satsen har minst en kolumn.
+            return await _upp_postgres(storage, tenant_id, tabell, rad_id, utan)
     rad = _minne(storage, tabell).get(rad_id)
     if not rad or rad["tenant_id"] != tenant_id:
         return None

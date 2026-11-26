@@ -15,11 +15,11 @@ from __future__ import annotations
 
 import hashlib
 import uuid
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
-from pydantic import Field
+from pydantic import Field, WithJsonSchema
 from starlette.datastructures import UploadFile
 
 from ..crm import falt, handelser, lagring, objekt
@@ -56,6 +56,9 @@ _VARDEN_IN = {"typ": {**{v: k for k, v in _STEGTYP_UT.items()}, **{v: k for k, v
               "status": {v: k for k, v in _STATUS_UT.items()},
               "forlustorsak_kod": {v: k for k, v in objekt.FORLUSTORSAKER.items()}}
 ForlustorsakKod = Literal["price", "competitor", "timing", "no_need", "no_budget", "no_response", "other"]
+#: Kroppens förlustorsak: en uppräkning i specifikationen, men prövad i `_in`,
+#: så att ett okänt värde ger `invalid_fields` med koden `forlustorsak_okand`.
+ForlustorsakKodIn = Annotated[str, WithJsonSchema({"type": "string", "enum": list(objekt.FORLUSTORSAKER.values())})]
 
 # Händelseloggen och historiken visar de nya fälten med API:ts namn. "typ" är
 # en aktivitets `type`; en bilaga ändras aldrig fält för fält.
@@ -126,6 +129,12 @@ def _in(objekt_: str, data: dict[str, Any]) -> dict[str, Any]:
     modell (`extra="forbid"`), så okända fält når aldrig hit."""
     karta = _KARTA[objekt_] if objekt_ in _KARTA else _STEG
     ut = {karta[en]: varde for en, varde in data.items() if en in karta}
+    kod = ut.get("forlustorsak_kod")
+    if kod is not None and kod not in _VARDEN_IN["forlustorsak_kod"]:
+        # Bara API:ts egna namn: CRM:ets tolkning tar också de svenska.
+        raise fel(422, "invalid_fields", "One or more fields could not be interpreted.",
+                  "Ett eller flera fält gick inte att tolka.",
+                  fields=[{"field": "lost_reason_code", "code": "forlustorsak_okand"}])
     for sv, oversattning in _VARDEN_IN.items():
         if ut.get(sv) is not None:
             ut[sv] = oversattning.get(ut[sv], ut[sv])
@@ -219,7 +228,7 @@ class DealIn(_Kropp):
     expected_close_date: str | None = Field(None, description="ISO 8601 date.")
     lost_reason: str | None = Field(None, description="Free text, at most 500 characters. The fallback beside "
                                     "`lost_reason_code`, and may be set with any code.")
-    lost_reason_code: str | None = Field(
+    lost_reason_code: ForlustorsakKodIn | None = Field(
         None, description="Why the deal was lost, from a fixed list: `price`, `competitor`, `timing`, `no_need`, "
         "`no_budget`, `no_response` or `other`. Any other value is refused with `invalid_fields` "
         "(code `forlustorsak_okand`). `null` clears it.")

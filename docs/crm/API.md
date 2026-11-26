@@ -219,8 +219,12 @@ och `insamlad_at`. En senare synk skriver aldrig över en källa som redan står
 bara ett tomt fält. Med API:t går källan att rätta som vilket fält som helst.
 
 `GET /people?source_type=company_website` filtrerar på källan och
-`GET /people?missing_source=true` ger personerna som saknar den. Ett okänt värde avvisas
-med `invalid_fields` och fältkoden `kalltyp_okand`.
+`GET /people?missing_source=true` ger personerna som saknar den. API:t tar bara värdena i
+tabellen, exakt så som de står där. Varje annat värde avvisas med `invalid_fields` och
+fältkoden `kalltyp_okand`, också ett svenskt namn eller versaler. Synkens mappning är
+mildare: där tolkas också de svenska namnen, och ett okänt värde tappar bara fältet. Får en
+ny person ingen giltig källtyp ur synken blir källan `sync` med anslutningens namn, också
+när källan skickade ett eget `kalla_namn`, så att typ och namn alltid hör ihop.
 
 ## Läsa tillbaka och hålla en kopia i fas
 
@@ -346,7 +350,8 @@ till ett öppet steg nollas den. `GET /deals/{id}/history` visar affärens händ
 Varför en affär förlorades anges ur en lista, så att det går att räkna på:
 `lost_reason_code` är `price`, `competitor`, `timing`, `no_need`, `no_budget`, `no_response`
 eller `other`. Fritexten `lost_reason` står kvar som reserv och får sättas med vilken kod som
-helst. Ett annat värde avvisas med `invalid_fields` och fältkoden `forlustorsak_okand`, och
+helst. Ett annat värde, också ett svenskt namn som `pris` eller versaler som `PRICE`, avvisas
+med `invalid_fields` och fältkoden `forlustorsak_okand`, och
 `null` tömmer koden. `GET /deals?lost_reason_code=price` ger affärerna som förlorades på
 priset, och tidslinjens `deal_closed` bär koden i `data.lost_reason_code`.
 
@@ -437,7 +442,9 @@ bett att slippa kontakt. Det utfallet vinner alltid över ett värde på posten.
 **Kundlistan.** `GET /customers` ger era egna kunder och de leads Iris har vunnit i en lista.
 `origin` är `own` eller `iris`, och `counts` säger hur många det finns av varje. Ett vunnet
 lead kopieras inte in i registret, och ett bolag som finns på båda ställen står en gång, som
-`own`, med `lead_id` bredvid. Filtrera med `origin=own|iris` och `q`.
+`own`, med `lead_id` bredvid. Ett bolag ni märkt `not_relevant` står inte i listan, inte heller
+under `iris` när Iris tidigare har vunnit det: er egen märkning går före. Filtrera med
+`origin=own|iris` och `q`.
 
 ## Radering och personuppgifter
 

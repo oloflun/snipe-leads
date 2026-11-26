@@ -7134,7 +7134,16 @@
           "lost_reason_code": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "string",
+                "enum": [
+                  "price",
+                  "competitor",
+                  "timing",
+                  "no_need",
+                  "no_budget",
+                  "no_response",
+                  "other"
+                ]
               },
               {
                 "type": "null"
@@ -7468,7 +7477,15 @@
           "source_type": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "string",
+                "enum": [
+                  "company_website",
+                  "registry",
+                  "customer_provided",
+                  "sync",
+                  "manual",
+                  "other"
+                ]
               },
               {
                 "type": "null"

@@ -32,12 +32,12 @@ import hashlib
 import json
 import sys
 from datetime import timedelta
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from fastapi.openapi.utils import get_openapi
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, WithJsonSchema
 
 from ..avtalsgrind import avtal_saknas
 from ..crm import adaptrar, falt, handelser, lagring, nycklar, supportrapport, synk, tillgang, webhooks
@@ -212,7 +212,13 @@ def _in(objekt: str, kropp: dict[str, Any]) -> dict[str, Any]:
     if ut.get("rattslig_grund") is not None:
         ut["rattslig_grund"] = _GRUND_IN.get(ut["rattslig_grund"], ut["rattslig_grund"])
     if ut.get("kalla_typ") is not None:
-        ut["kalla_typ"] = _KALLTYP_IN.get(ut["kalla_typ"], ut["kalla_typ"])
+        # Bara API:ts egna namn. Synkens tolkning (adaptrar._kalltyp) tar också
+        # svenska namn och synonymer, men det publika anropet gör det inte.
+        if ut["kalla_typ"] not in _KALLTYP_IN:
+            raise fel(422, "invalid_fields", "One or more fields could not be interpreted.",
+                      "Ett eller flera fält gick inte att tolka.",
+                      fields=[{"field": "source_type", "code": "kalltyp_okand"}])
+        ut["kalla_typ"] = _KALLTYP_IN[ut["kalla_typ"]]
     return ut
 
 
@@ -241,6 +247,10 @@ class Address(_Kropp):
 
 Relation = Literal["customer", "former_customer", "prospect", "partner", "supplier", "other", "not_relevant"]
 KallTyp = Literal["company_website", "registry", "customer_provided", "sync", "manual", "other"]
+#: Kroppens källtyp: en uppräkning i specifikationen, men prövad i `_in`, så
+#: att ett okänt värde ger `invalid_fields` med koden `kalltyp_okand` och inte
+#: ramverkets eget valideringsfel.
+KallTypIn = Annotated[str, WithJsonSchema({"type": "string", "enum": list(adaptrar.KALLTYPER.values())})]
 SystemNamn = Literal.__getitem__(adaptrar.SYSTEM)
 
 
@@ -283,7 +293,7 @@ class PersonIn(_Kropp):
     legal_basis: Literal["contract", "legitimate_interest", "consent"] | None = Field(
         None, description="GDPR article 6 basis for holding the person.")
     do_not_contact: bool | None = None
-    source_type: str | None = Field(
+    source_type: KallTypIn | None = Field(
         None, description="Where the information about the person first came from (GDPR article 14): "
         "`company_website`, `registry`, `customer_provided` (the customer gave it), `sync`, `manual` or `other`. "
         "Any other value is refused with `invalid_fields` (code `kalltyp_okand`). Optional: leave it out when "

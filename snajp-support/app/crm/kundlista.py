@@ -7,9 +7,11 @@ uppdelad på Iris och Egna. "Mer om det senare."
 Därför komponeras listan vid läsning, och ingenting flyttas:
 
 - **Egna** är bolagen i CRM:et med relationen kund. Ett bolag med relationen
-  ej aktuell (migration 165) är aldrig en egen kund, och det döljer inte ett
-  vunnet lead för samma bolag: leadet står kvar under Iris, eftersom ett vunnet
-  lead är ett utfall och relationen kundens egen märkning.
+  ej aktuell (migration 165) är aldrig en kund i listan: det är bolaget som
+  sagt nej eller inte passar (SVENSK-STANDARD fråga 9), och kundens egen
+  märkning går före ett vunnet lead för samma bolag, som då inte heller står
+  under Iris. Valet är gjort efter granskningen 2026-11-27 och väntar på
+  Antons bekräftelse.
 - **Iris** är leads som vunnits (status `won`) och som inte redan är en egen
   kund. Ett lead som delar nyckel med en egen kund visas en gång, som egen, med
   leadets id bredvid.
@@ -58,10 +60,16 @@ async def lista(
     egna = await lagring._valj(storage, tenant_id, "crm_bolag", lika={"relation": "kund"}, levande=True,
                                ordning="namn", limit=MAX)
     per_nyckel = {n: b for b in egna for n in tidslinje.nycklar_for_bolag(b)}
+    ej_aktuella = {n for b in await lagring._valj(storage, tenant_id, "crm_bolag", lika={"relation": "ej_aktuell"},
+                                                   levande=True, limit=MAX)
+                   for n in tidslinje.nycklar_for_bolag(b)}
     leadets: dict[str, str] = {}
     iris: list[dict[str, Any]] = []
     for lead in await _vunna(storage, tenant_id):
         nyckel = tidslinje._minnesnyckel(lead)
+        if nyckel and nyckel in ej_aktuella and nyckel not in per_nyckel:
+            # Kundens egen, senare märkning går före leadets utfall.
+            continue
         bolag = per_nyckel.get(nyckel) if nyckel else None
         if bolag is not None:
             leadets.setdefault(bolag["id"], str(lead["id"]))

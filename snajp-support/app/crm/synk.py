@@ -273,11 +273,12 @@ async def synka_sats(
             if objekt == "bolag":
                 ny.setdefault("relation", anslutning.get("standardrelation") or "kund")
             else:
-                # Utan uppgift från källan är källan synken från anslutningen,
-                # och uppgiften samlades in nu.
+                # Utan giltig källtyp från källan är källan synken från
+                # anslutningen, och uppgiften samlades in nu. Källans namn
+                # ersätts då också: typ och namn ska beskriva samma ursprung.
                 if not ny.get("kalla_typ"):
                     ny["kalla_typ"] = "synk"
-                    ny.setdefault("kalla_namn", anslutning.get("namn"))
+                    ny["kalla_namn"] = anslutning.get("namn")
                 ny.setdefault("insamlad_at", lagring.nu())
             try:
                 post = await lagring.skapa_post(storage, tenant_id, objekt, ny)
