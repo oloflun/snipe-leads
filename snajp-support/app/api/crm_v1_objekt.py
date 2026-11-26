@@ -37,8 +37,8 @@ _KOPPLING = {"company_id": "bolag_id", "person_id": "person_id", "deal_id": "aff
 _STEG = {"name": "namn", "probability": "sannolikhet", "type": "typ", "color": "farg"}
 _AFFAR = {"name": "namn", "company_id": "bolag_id", "person_id": "person_id", "stage_id": "steg_id",
           "amount": "belopp", "currency": "valuta", "probability": "sannolikhet",
-          "expected_close_date": "forvantat_avslut", "lost_reason": "forlustorsak", "owner": "ansvarig",
-          "custom": "extra"}
+          "expected_close_date": "forvantat_avslut", "lost_reason": "forlustorsak",
+          "lost_reason_code": "forlustorsak_kod", "owner": "ansvarig", "custom": "extra"}
 _UPPGIFT = {"title": "titel", "description": "beskrivning", "status": "status", "due_at": "forfaller_at",
             "owner": "ansvarig", **_KOPPLING}
 _ANTECKNING = {"title": "titel", "body": "text", "pinned": "fast", "author": "forfattare", **_KOPPLING}
@@ -53,7 +53,9 @@ _STATUS_UT = {"att_gora": "todo", "pagar": "in_progress", "klar": "done"}
 _AKTIVITET_UT = {"samtal": "call", "mote": "meeting", "mejl": "email", "besok": "visit", "ovrigt": "other"}
 #: Värden som översätts in, per CRM-fält.
 _VARDEN_IN = {"typ": {**{v: k for k, v in _STEGTYP_UT.items()}, **{v: k for k, v in _AKTIVITET_UT.items()}},
-              "status": {v: k for k, v in _STATUS_UT.items()}}
+              "status": {v: k for k, v in _STATUS_UT.items()},
+              "forlustorsak_kod": {v: k for k, v in objekt.FORLUSTORSAKER.items()}}
+ForlustorsakKod = Literal["price", "competitor", "timing", "no_need", "no_budget", "no_response", "other"]
 
 # Händelseloggen och historiken visar de nya fälten med API:ts namn. "typ" är
 # en aktivitets `type`; en bilaga ändras aldrig fält för fält.
@@ -82,7 +84,9 @@ def affar_ut(rad: dict[str, Any]) -> dict[str, Any]:
             "person_id": rad.get("person_id"), "stage_id": rad.get("steg_id"), "amount": rad.get("belopp"),
             "currency": rad.get("valuta"), "probability": rad.get("sannolikhet"),
             "expected_close_date": rad.get("forvantat_avslut"), "closed_at": rad.get("avslutad_at"),
-            "lost_reason": rad.get("forlustorsak"), "owner": rad.get("ansvarig"), "position": rad.get("position"),
+            "lost_reason": rad.get("forlustorsak"),
+            "lost_reason_code": objekt.FORLUSTORSAKER.get(rad.get("forlustorsak_kod") or ""),
+            "owner": rad.get("ansvarig"), "position": rad.get("position"),
             "custom": rad.get("extra") or {}, **_tider(rad)}
 
 
@@ -213,7 +217,12 @@ class DealIn(_Kropp):
     currency: str | None = Field(None, description="ISO 4217. Defaults to SEK.")
     probability: int | None = Field(None, ge=0, le=100, description="Own win probability. `null` uses the stage's.")
     expected_close_date: str | None = Field(None, description="ISO 8601 date.")
-    lost_reason: str | None = None
+    lost_reason: str | None = Field(None, description="Free text, at most 500 characters. The fallback beside "
+                                    "`lost_reason_code`, and may be set with any code.")
+    lost_reason_code: str | None = Field(
+        None, description="Why the deal was lost, from a fixed list: `price`, `competitor`, `timing`, `no_need`, "
+        "`no_budget`, `no_response` or `other`. Any other value is refused with `invalid_fields` "
+        "(code `forlustorsak_okand`). `null` clears it.")
     owner: str | None = None
     custom: dict[str, Any] | None = Field(None, description="Your own fields, up to 50 scalar values.")
 
@@ -429,8 +438,10 @@ async def lista_affarer(
                       description="`updated` oldest change first, `-updated` newest first, `name` alphabetical."),
     include_deleted: bool = _INCLUDE_DELETED, only_deleted: bool = _ONLY_DELETED, q: str | None = _Q,
     company_id: str | None = None, person_id: str | None = None, stage_id: str | None = None,
+    lost_reason_code: ForlustorsakKod | None = Query(None, description="Only deals lost for this reason."),
 ) -> dict:
-    lika = {**_koppling_filter(company_id, person_id), "steg_id": _id(stage_id, "Steget") if stage_id else None}
+    lika = {**_koppling_filter(company_id, person_id), "steg_id": _id(stage_id, "Steget") if stage_id else None,
+            "forlustorsak_kod": _VARDEN_IN["forlustorsak_kod"][lost_reason_code] if lost_reason_code else None}
     lika.pop("affar_id")
     return await _lista(request, tenant, "affar", limit=limit, cursor=cursor, sort=sort,
                         include_deleted=include_deleted, only_deleted=only_deleted, q=q, lika=lika)

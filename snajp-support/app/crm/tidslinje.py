@@ -236,7 +236,8 @@ async def _arbete(storage: Any, tenant_id: str, objekt: str, post_id: str) -> li
             if rad.get("avslutad_at"):
                 ut.append(_post(f"crmaff:{rad['id']}:slut", "affar_avslutad", rad["avslutad_at"], "crm",
                                 rubrik=rad.get("namn"), lank=("affar", rad["id"]), belopp=rad.get("belopp"),
-                                valuta=rad.get("valuta"), forlustorsak=rad.get("forlustorsak")))
+                                valuta=rad.get("valuta"), forlustorsak=rad.get("forlustorsak"),
+                                forlustorsak_kod=rad.get("forlustorsak_kod")))
     return ut
 
 

@@ -6,7 +6,10 @@ uppdelad på Iris och Egna. "Mer om det senare."
 
 Därför komponeras listan vid läsning, och ingenting flyttas:
 
-- **Egna** är bolagen i CRM:et med relationen kund.
+- **Egna** är bolagen i CRM:et med relationen kund. Ett bolag med relationen
+  ej aktuell (migration 165) är aldrig en egen kund, och det döljer inte ett
+  vunnet lead för samma bolag: leadet står kvar under Iris, eftersom ett vunnet
+  lead är ett utfall och relationen kundens egen märkning.
 - **Iris** är leads som vunnits (status `won`) och som inte redan är en egen
   kund. Ett lead som delar nyckel med en egen kund visas en gång, som egen, med
   leadets id bredvid.

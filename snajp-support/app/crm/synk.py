@@ -57,6 +57,12 @@ _TYSTA = (*_HARLEDDA, "manuellt_andrade", "raderad_at", "updated_at")
 _UTAN_NAMN = ("privatperson", "behandlingen_ar_begransad")
 
 
+#: Personens källa (GDPR art. 14, migration 165): var uppgiften FÖRST kom
+#: ifrån, och när. En synk fyller ett tomt fält men skriver aldrig över ett
+#: som redan står, vad konfliktregeln än säger.
+KALLFALT = ("kalla_typ", "kalla_namn", "insamlad_at")
+
+
 def _andrade(skriv: dict[str, Any]) -> list[str]:
     return [k for k in skriv if k not in _TYSTA]
 
@@ -112,6 +118,8 @@ def _andringar(
     behallna: list[str] = []
     for namn, nytt in m.falt.items():
         if namn in _HARLEDDA or namn not in lagring.TABELLER[_tabell(post)] or post.get(namn) == nytt:
+            continue
+        if namn in KALLFALT and post.get(namn) is not None:
             continue
         hand = manuellt.get(namn)
         if hand and regel == "snajp_vinner":
@@ -264,6 +272,13 @@ async def synka_sats(
             ny = {**m.falt, "extra": m.extra, "kalla": "synk"}
             if objekt == "bolag":
                 ny.setdefault("relation", anslutning.get("standardrelation") or "kund")
+            else:
+                # Utan uppgift från källan är källan synken från anslutningen,
+                # och uppgiften samlades in nu.
+                if not ny.get("kalla_typ"):
+                    ny["kalla_typ"] = "synk"
+                    ny.setdefault("kalla_namn", anslutning.get("namn"))
+                ny.setdefault("insamlad_at", lagring.nu())
             try:
                 post = await lagring.skapa_post(storage, tenant_id, objekt, ny)
             except lagring.FinnsRedan:
@@ -438,7 +453,12 @@ async def skapa(
     befintlig = (await lagring.hitta_poster(storage, tenant_id, objekt, kolumn, [varde]))[:1] if varde else []
     if befintlig:
         return await andra(storage, tenant_id, objekt, befintlig[0]["id"], falten, via=via, aktor=aktor), False
-    post = await lagring.skapa_post(storage, tenant_id, objekt, {**m.falt, "extra": m.extra, "kalla": kalla})
+    ny = {**m.falt, "extra": m.extra, "kalla": kalla}
+    if objekt == "person":
+        # Källans typ anges av den som skriver, eller lämnas tom: det ska gå
+        # att se vilka personer som saknar källa. Insamlingsdagen är i dag.
+        ny.setdefault("insamlad_at", lagring.nu())
+    post = await lagring.skapa_post(storage, tenant_id, objekt, ny)
     await handelser.logga(storage, tenant_id, [handelser.Handelse(objekt, post["id"], "skapad", post=post)],
                           kalla=via, aktor=aktor)
     return post, True

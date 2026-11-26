@@ -55,6 +55,12 @@ STANDARDSTEG = (
     ("Offert skickad", 60, "oppen"), ("Förhandling", 80, "oppen"),
     ("Vunnen", 100, "vunnen"), ("Förlorad", 0, "forlorad"),
 )
+#: Förlustorsaken ur listan (migration 165), med API:ts namn. Fritexten
+#: `forlustorsak` står kvar som reserv och får sättas med vilken kod som helst.
+FORLUSTORSAKER = {"pris": "price", "konkurrent": "competitor", "tidpunkt": "timing",
+                  "inget_behov": "no_need", "ingen_budget": "no_budget", "inget_svar": "no_response",
+                  "annat": "other"}
+_FORLUSTORSAK_IN = {**{sv: sv for sv in FORLUSTORSAKER}, **{en: sv for sv, en in FORLUSTORSAKER.items()}}
 UPPGIFTSSTATUS = ("att_gora", "pagar", "klar")
 AKTIVITETSTYPER = ("samtal", "mote", "mejl", "besok", "ovrigt")
 
@@ -177,6 +183,14 @@ def _tolka(objekt: str, falten: dict[str, Any], *, ny: bool) -> dict[str, Any]:
                 skriv[namn] = _heltal(varde, 0, 100)
             elif objekt == "affar" and namn == "forvantat_avslut":
                 skriv[namn] = falt.datum(varde)
+            elif objekt == "affar" and namn == "forlustorsak_kod":
+                if varde is None:
+                    skriv[namn] = None
+                else:
+                    kod = _FORLUSTORSAK_IN.get(str(varde).strip().casefold())
+                    if not kod:
+                        raise falt.FaltFel("forlustorsak_okand")
+                    skriv[namn] = kod
             elif objekt == "affar" and namn == "extra":
                 if varde is not None and not isinstance(varde, dict):
                     raise falt.FaltFel("ska_vara_objekt")

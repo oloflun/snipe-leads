@@ -193,6 +193,35 @@ Ett bolag i ert register hämtas inte som lead. Har bolaget organisationsnummer 
 numret som avgör, så att ett annat bolag med samma namn inte utesluts. En tidigare kund
 (`relation: former_customer`) är fri att bearbeta igen, om inte posten är `do_not_contact`.
 
+Ett bolag som sagt nej, eller som inte passar, märks `relation: not_relevant` (ej aktuell).
+Det skiljer det från ett prospekt, och till skillnad från en tidigare kund står det kvar
+bland de bolag Iris inte hämtar. Synken översätter källornas motsvarighet dit: `notinterested`
+och `declined` i Lime, `disqualified` i Upsales, och värdena `ej aktuell` och `not_relevant`
+i en egen fil. Filtrera med `GET /companies?relation=not_relevant`.
+
+## Personens källa (GDPR artikel 14)
+
+En person bär varifrån uppgiften om personen först kom, och när:
+
+| Fält | Värde |
+|---|---|
+| `source_type` | `company_website` (bolagets webbplats), `registry` (ett register), `customer_provided` (ni har själva fått uppgiften av personen), `sync` (synken), `manual`, `other`, eller `null` när den inte är känd |
+| `source_name` | källan med namn: webbadressen, registret eller anslutningen. Högst 300 tecken |
+| `collected_at` | när uppgiften samlades in (ISO 8601) |
+
+`source` är något annat: vilken väg posten kom in i Snajp (`manuell`, `api`, `synk`).
+
+En person som skapas genom synken utan egen uppgift om källan får `source_type: sync`,
+anslutningens namn som `source_name` och dagens tid. En person som skapas genom API:t eller
+appen får dagens tid, men `source_type` lämnas tom om ni inte anger den: det ska gå att se
+vilka som saknar källa. Peka ut källan i mappningen med målfälten `kalla_typ`, `kalla_namn`
+och `insamlad_at`. En senare synk skriver aldrig över en källa som redan står; den fyller
+bara ett tomt fält. Med API:t går källan att rätta som vilket fält som helst.
+
+`GET /people?source_type=company_website` filtrerar på källan och
+`GET /people?missing_source=true` ger personerna som saknar den. Ett okänt värde avvisas
+med `invalid_fields` och fältkoden `kalltyp_okand`.
+
 ## Läsa tillbaka och hålla en kopia i fas
 
 ```bash
@@ -313,6 +342,13 @@ curl -X POST "$BAS/deals/$ID/move" -H "X-API-Key: $NYCKEL" -H "Content-Type: app
 `before_id` eller `after_id` är kortet det ska stå intill; utan någon av dem hamnar det sist.
 När en affär når ett vunnet eller förlorat steg sätts `closed_at`, och flyttas den tillbaka
 till ett öppet steg nollas den. `GET /deals/{id}/history` visar affärens händelser.
+
+Varför en affär förlorades anges ur en lista, så att det går att räkna på:
+`lost_reason_code` är `price`, `competitor`, `timing`, `no_need`, `no_budget`, `no_response`
+eller `other`. Fritexten `lost_reason` står kvar som reserv och får sättas med vilken kod som
+helst. Ett annat värde avvisas med `invalid_fields` och fältkoden `forlustorsak_okand`, och
+`null` tömmer koden. `GET /deals?lost_reason_code=price` ger affärerna som förlorades på
+priset, och tidslinjens `deal_closed` bär koden i `data.lost_reason_code`.
 
 ### Uppgifter
 
@@ -481,6 +517,10 @@ engelska och `meddelande` på svenska.
 | 422 | `idempotency_key_reused` | nyckeln har använts för ett annat anrop |
 | 422 | `idempotency_key_too_long` | nyckeln är längre än 200 tecken |
 | 429 | `rate_limited` | taket är nått; vänta enligt `Retry-After` |
+
+Fältkoderna i `fields` för ett värde utanför sin lista: `relation_okand` (`relation`),
+`rattslig_grund_okand` (`legal_basis`), `kalltyp_okand` (`source_type`) och
+`forlustorsak_okand` (`lost_reason_code`).
 
 Skälen till att en post i en sats hoppades över (`reason`): `saknar_namn`,
 `saknar_namn_och_epost`, `hoppas_over_enligt_mappningen`, `privatperson` (se nedan),

@@ -21,7 +21,7 @@ from typing import Any, Literal
 from fastapi import APIRouter, Depends, Query, Request
 from pydantic import BaseModel, ConfigDict, Field
 
-from ..crm import kundlista, lagring, tidslinje, utfall
+from ..crm import kundlista, lagring, objekt, tidslinje, utfall
 from .deps import kraev_uuid
 
 _TYP_UT = {
@@ -41,7 +41,7 @@ _DETALJ_UT = {"fran": "from", "till": "to", "ursprung": "origin", "klass": "repl
               "via": "source", "aktor": "actor",
               "slag": "activity_type", "resultat": "result", "minuter": "duration_minutes", "ansvarig": "owner",
               "forfattare": "author", "fast": "pinned", "belopp": "amount", "valuta": "currency",
-              "forlustorsak": "lost_reason"}
+              "forlustorsak": "lost_reason", "forlustorsak_kod": "lost_reason_code"}
 _AKTIVITET_UT = {"samtal": "call", "mote": "meeting", "mejl": "email", "besok": "visit", "ovrigt": "other"}
 
 _UTFALL_IN = {"no_answer": "ej_svar", "call_back": "aterkom", "not_interested": "ej_intresserad",
@@ -63,6 +63,8 @@ def tidslinjepost_ut(post: dict[str, Any], falt_ut: dict[str, str]) -> dict[str,
     data = {_DETALJ_UT[k]: v for k, v in post["detalj"].items() if k in _DETALJ_UT}
     if "activity_type" in data:
         data["activity_type"] = _AKTIVITET_UT.get(data["activity_type"], "other")
+    if "lost_reason_code" in data:
+        data["lost_reason_code"] = objekt.FORLUSTORSAKER.get(data["lost_reason_code"], "other")
     if post["detalj"].get("falt"):
         data["fields"] = [falt_ut.get(f, f) for f in post["detalj"]["falt"]]
     return {"key": post["nyckel"], "type": _TYP_UT.get(post["typ"], post["typ"]), "at": post["tid"],

@@ -183,7 +183,8 @@
                     "prospect",
                     "partner",
                     "supplier",
-                    "other"
+                    "other",
+                    "not_relevant"
                   ],
                   "type": "string"
                 },
@@ -699,6 +700,44 @@
               ],
               "title": "Company Id"
             }
+          },
+          {
+            "name": "source_type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "company_website",
+                    "registry",
+                    "customer_provided",
+                    "sync",
+                    "manual",
+                    "other"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only people whose information came from this source.",
+              "title": "Source Type"
+            },
+            "description": "Only people whose information came from this source."
+          },
+          {
+            "name": "missing_source",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Only people without a `source_type` (GDPR article 14).",
+              "default": false,
+              "title": "Missing Source"
+            },
+            "description": "Only people without a `source_type` (GDPR article 14)."
           },
           {
             "name": "x-api-key",
@@ -3314,6 +3353,33 @@
               ],
               "title": "Stage Id"
             }
+          },
+          {
+            "name": "lost_reason_code",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "price",
+                    "competitor",
+                    "timing",
+                    "no_need",
+                    "no_budget",
+                    "no_response",
+                    "other"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only deals lost for this reason.",
+              "title": "Lost Reason Code"
+            },
+            "description": "Only deals lost for this reason."
           },
           {
             "name": "x-api-key",
@@ -6732,7 +6798,8 @@
                   "prospect",
                   "partner",
                   "supplier",
-                  "other"
+                  "other",
+                  "not_relevant"
                 ]
               },
               {
@@ -6740,7 +6807,7 @@
               }
             ],
             "title": "Relation",
-            "description": "Defaults to `customer`."
+            "description": "Defaults to `customer`. `not_relevant` is a company that has said no or does not fit: unlike `former_customer` it stays excluded from Iris runs and lists."
           },
           "customer_since": {
             "anyOf": [
@@ -6915,7 +6982,8 @@
                   "prospect",
                   "partner",
                   "supplier",
-                  "other"
+                  "other",
+                  "not_relevant"
                 ]
               },
               {
@@ -7060,7 +7128,20 @@
                 "type": "null"
               }
             ],
-            "title": "Lost Reason"
+            "title": "Lost Reason",
+            "description": "Free text, at most 500 characters. The fallback beside `lost_reason_code`, and may be set with any code."
+          },
+          "lost_reason_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lost Reason Code",
+            "description": "Why the deal was lost, from a fixed list: `price`, `competitor`, `timing`, `no_need`, `no_budget`, `no_response` or `other`. Any other value is refused with `invalid_fields` (code `forlustorsak_okand`). `null` clears it."
           },
           "owner": {
             "anyOf": [
@@ -7383,6 +7464,42 @@
               }
             ],
             "title": "Do Not Contact"
+          },
+          "source_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Type",
+            "description": "Where the information about the person first came from (GDPR article 14): `company_website`, `registry`, `customer_provided` (the customer gave it), `sync`, `manual` or `other`. Any other value is refused with `invalid_fields` (code `kalltyp_okand`). Optional: leave it out when it is not known. Not the same as `source`, which says how the record came into Snajp."
+          },
+          "source_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Name",
+            "description": "The source by name, e.g. the web address or the register. At most 300 characters."
+          },
+          "collected_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Collected At",
+            "description": "ISO 8601 timestamp the information was collected. Defaults to when the person is created."
           },
           "custom": {
             "anyOf": [

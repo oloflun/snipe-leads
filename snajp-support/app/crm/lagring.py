@@ -50,6 +50,10 @@ TABELLER: dict[str, dict[str, str | None]] = {
         "id": _UUID, "tenant_id": _UUID, "bolag_id": _UUID, "fornamn": None, "efternamn": None,
         "titel": None, "epost": None, "telefon": None, "mobil": None, "rattslig_grund": None,
         "kontakta_inte": _BOOL, "extra": _JSON, "manuellt_andrade": _JSON, "kalla": None,
+        # Varifrån uppgiften om personen först kom, och när (GDPR art. 14,
+        # migration 165). Inte samma sak som `kalla`, som säger vilken väg
+        # posten kom in i Snajp (manuell, api, synk).
+        "kalla_typ": None, "kalla_namn": None, "insamlad_at": _TID,
         "created_at": _TID, "updated_at": _TID, "raderad_at": _TID,
     },
     "crm_externa_id": {
@@ -88,7 +92,7 @@ TABELLER: dict[str, dict[str, str | None]] = {
     "crm_affarer": {
         "id": _UUID, "tenant_id": _UUID, "namn": None, "bolag_id": _UUID, "person_id": _UUID,
         "steg_id": _UUID, "belopp": _TAL, "valuta": None, "sannolikhet": _TAL, "forvantat_avslut": _DATUM,
-        "avslutad_at": _TID, "forlustorsak": None, "ansvarig": None, "position": _FLYT, "extra": _JSON,
+        "avslutad_at": _TID, "forlustorsak": None, "forlustorsak_kod": None, "ansvarig": None, "position": _FLYT, "extra": _JSON,
         "kalla": None, "created_at": _TID, "updated_at": _TID, "raderad_at": _TID,
     },
     "crm_uppgifter": {
@@ -507,6 +511,7 @@ async def lista_poster(
     lika: dict[str, Any] | None = None,
     q: str | None = None,
     fore: dict[str, str] | None = None,
+    tomma: Iterable[str] = (),
 ) -> tuple[list[dict[str, Any]], str | None]:
     """En sida poster och markören till nästa (None på sista sidan).
 
@@ -520,11 +525,14 @@ async def lista_poster(
 
     `fore` är tidskolumner som ska ligga före en tidpunkt (`forfaller_at`
     före `due_before`). En post utan värde i kolumnen kommer inte med.
+
+    `tomma` är kolumner som ska sakna värde (personer utan källa).
     """
     tabell = _OBJEKTTABELL[objekt]
     lika = {k: v for k, v in (lika or {}).items() if v is not None}
     fore = {k: v for k, v in (fore or {}).items() if v is not None}
-    _kraev(tabell, [*lika, *fore])
+    tomma = list(tomma)
+    _kraev(tabell, [*lika, *fore, *tomma])
     limit = max(1, min(int(limit), 500))
     efter = las_markor(markor)
     namnkol, sokkolumner = _LISTA[objekt]
@@ -540,6 +548,7 @@ async def lista_poster(
         for kol, varde in fore.items():
             varden.append(str(varde))
             villkor.append(f"{kol} < ${len(varden)}::text::timestamptz")
+        villkor.extend(f"{kol} is null" for kol in tomma)
         if korg:
             varden.append(GRAVSTEN)
             villkor.append(f"raderad_at is not null and kalla <> ${len(varden)}")
@@ -581,6 +590,8 @@ async def lista_poster(
             if not korg and rad.get("raderad_at") and not med_raderade:
                 continue
             if any(rad.get(k) != v for k, v in lika.items()):
+                continue
+            if any(rad.get(k) is not None for k in tomma):
                 continue
             if any(not rad.get(k) or _tid(rad[k]) >= _tid(v) for k, v in fore.items()):
                 continue
@@ -641,7 +652,9 @@ async def rakna_poster(storage: Any, tenant_id: str, objekt: str) -> dict[str, i
 
 
 #: Relationer som INTE spärrar bolaget för Iris och listbygget. Antons svar
-#: 2026-11-26: tidigare kunder är fria att bearbeta.
+#: 2026-11-26: tidigare kunder är fria att bearbeta. Relationen `ej_aktuell`
+#: (migration 165, ett bolag som sagt nej eller inte passar) är det inte: den
+#: står kvar bland de upptagna.
 FRIA_RELATIONER = frozenset({"tidigare_kund"})
 
 

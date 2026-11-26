@@ -49,8 +49,14 @@ SYSTEM = (
     "twenty", "superoffice", "dynamics", "fortnox", "visma",
 )
 OBJEKT = ("bolag", "person")
-RELATIONER = ("kund", "tidigare_kund", "prospekt", "partner", "leverantor", "ovrigt")
+#: `ej_aktuell` (migration 165) är ett bolag som sagt nej eller inte passar.
+#: Det är inte fritt för Iris, till skillnad från `tidigare_kund`.
+RELATIONER = ("kund", "tidigare_kund", "prospekt", "partner", "leverantor", "ovrigt", "ej_aktuell")
 RATTSLIGA_GRUNDER = ("avtal", "berattigat_intresse", "samtycke")
+#: Varifrån uppgiften om en person först kom (GDPR art. 14.2 f, migration 165),
+#: med API:ts namn. `kunden` är att kunden själv lämnat uppgiften.
+KALLTYPER = {"bolagets_webbplats": "company_website", "register": "registry", "kunden": "customer_provided",
+             "synk": "sync", "manuell": "manual", "annan": "other"}
 
 #: Styrfält som inte lagras på posten.
 _STYRFALT = ("externt_id", "uppdaterad", "raderad", "hoppa_over")
@@ -63,6 +69,7 @@ BOLAGSFALT = (
 PERSONFALT = (
     "fornamn", "efternamn", "namn", "titel", "epost", "telefon", "mobil",
     "bolag_externt_id", "bolag_orgnr", "rattslig_grund", "kontakta_inte",
+    "kalla_typ", "kalla_namn", "insamlad_at",
 )
 MALFALT = {"bolag": BOLAGSFALT, "person": PERSONFALT}
 
@@ -77,6 +84,8 @@ _RELATION_ALLMAN = {
     "partner": "partner", "leverantor": "leverantor", "leverantör": "leverantor",
     "supplier": "leverantor", "vendor": "leverantor",
     "ovrigt": "ovrigt", "övrigt": "ovrigt", "other": "ovrigt",
+    "ej_aktuell": "ej_aktuell", "ej aktuell": "ej_aktuell", "inte aktuell": "ej_aktuell",
+    "not_relevant": "ej_aktuell", "not relevant": "ej_aktuell",
 }
 _INTE_AKTIV = {"false": True, "0": True, "true": False, "1": False}
 
@@ -216,7 +225,7 @@ STANDARD: dict[str, dict[str, dict[str, Any]]] = {
             "land": "country",
             "relation": {"fran": ["buyingstatus.key", "buyingstatus"], "uppslag": {
                 "active": "kund", "customer": "kund", "excustomer": "tidigare_kund",
-                "prospect": "prospekt", "notinterested": "ovrigt", "declined": "ovrigt",
+                "prospect": "prospekt", "notinterested": "ej_aktuell", "declined": "ej_aktuell",
                 "none": "ovrigt"}},
             "ansvarig": ["coworker.name", "coworker"],
         },
@@ -277,7 +286,7 @@ STANDARD: dict[str, dict[str, dict[str, Any]]] = {
             "relation": {"fran": "journeyStep", "uppslag": {
                 "customer": "kund", "lost_customer": "tidigare_kund", "lead": "prospekt",
                 "mql": "prospekt", "assigned": "prospekt", "sql": "prospekt",
-                "pipeline": "prospekt", "lost_opportunity": "prospekt", "disqualified": "ovrigt"}},
+                "pipeline": "prospekt", "lost_opportunity": "prospekt", "disqualified": "ej_aktuell"}},
             "ansvarig": ["users.0.name", "users.0.id"],
         },
         "person": {
@@ -772,6 +781,9 @@ def mappa(post: Any, objekt: str, mappning: dict[str, dict[str, Any]]) -> Mappad
         satt("telefon", falt.telefon)
         satt("mobil", falt.telefon)
         satt("rattslig_grund", _rattslig_grund)
+        satt("kalla_typ", _kalltyp)
+        satt("kalla_namn", lambda v: falt.text(v, max_langd=300))
+        satt("insamlad_at", falt.tidpunkt)
         satt("bolag_externt_id", lambda v: falt.text(v, max_langd=200))
         if not _tomt(ra.get("bolag_orgnr")):
             try:
@@ -812,6 +824,19 @@ def _rattslig_grund(varde: Any) -> str:
     if nyckel not in RATTSLIGA_GRUNDER:
         raise falt.FaltFel("rattslig_grund_okand", varde)
     return nyckel
+
+
+_KALLTYP_IN = {**{en: sv for sv, en in KALLTYPER.items()}, **{sv: sv for sv in KALLTYPER},
+               "bolagets webbplats": "bolagets_webbplats", "webbplats": "bolagets_webbplats",
+               "website": "bolagets_webbplats", "registry": "register", "kund": "kunden"}
+
+
+def _kalltyp(varde: Any) -> str:
+    """Källans typ, på svenska eller med API:ts namn. Okänt värde är ett fel."""
+    traff = _KALLTYP_IN.get(str(varde).strip().casefold())
+    if not traff:
+        raise falt.FaltFel("kalltyp_okand", varde)
+    return traff
 
 
 _LANDER = {

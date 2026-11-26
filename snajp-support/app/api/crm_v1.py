@@ -117,10 +117,11 @@ async def _avtal(request: Request, tenant: dict) -> None:
 # -- Fältnamnen ut och in ----------------------------------------------------
 
 _RELATION_UT = {"kund": "customer", "tidigare_kund": "former_customer", "prospekt": "prospect",
-                "partner": "partner", "leverantor": "supplier", "ovrigt": "other"}
+                "partner": "partner", "leverantor": "supplier", "ovrigt": "other", "ej_aktuell": "not_relevant"}
 _RELATION_IN = {v: k for k, v in _RELATION_UT.items()}
 _GRUND_UT = {"avtal": "contract", "berattigat_intresse": "legitimate_interest", "samtycke": "consent"}
 _GRUND_IN = {v: k for k, v in _GRUND_UT.items()}
+_KALLTYP_IN = {v: k for k, v in adaptrar.KALLTYPER.items()}
 
 _BOLAG = {"name": "namn", "org_number": "orgnr", "vat_number": "momsnr", "legal_form": "bolagsform",
           "sni_code": "sni", "website": "webbplats", "email": "epost", "phone": "telefon",
@@ -130,7 +131,10 @@ _BOLAG = {"name": "namn", "org_number": "orgnr", "vat_number": "momsnr", "legal_
 _ADRESS ={"street": "gatuadress", "co": "co", "postal_code": "postnr", "city": "postort", "country": "land"}
 _PERSON = {"first_name": "fornamn", "last_name": "efternamn", "title": "titel", "email": "epost",
            "phone": "telefon", "mobile": "mobil", "legal_basis": "rattslig_grund",
-           "do_not_contact": "kontakta_inte", "company_id": "bolag_id"}
+           "do_not_contact": "kontakta_inte", "company_id": "bolag_id",
+           # Varifrån uppgiften om personen först kom (GDPR art. 14, migration 165).
+           # Inte `source`, som säger vilken väg posten kom in i Snajp.
+           "source_type": "kalla_typ", "source_name": "kalla_namn", "collected_at": "insamlad_at"}
 
 
 def _externa(rader: list[dict[str, Any]], anslutningar: dict[str, str]) -> list[dict[str, Any]]:
@@ -163,6 +167,7 @@ def _toms(rad: dict[str, Any]) -> str | None:
 def person_ut(rad: dict[str, Any], externa: list[dict[str, Any]] | None = None) -> dict[str, Any]:
     ut = {"id": rad["id"], **{en: rad.get(sv) for en, sv in _PERSON.items()}}
     ut["legal_basis"] = _GRUND_UT.get(rad.get("rattslig_grund"))
+    ut["source_type"] = adaptrar.KALLTYPER.get(rad.get("kalla_typ") or "")
     ut["custom"] = rad.get("extra") or {}
     ut["source"] = rad.get("kalla")
     ut["external_ids"] = externa or []
@@ -206,6 +211,8 @@ def _in(objekt: str, kropp: dict[str, Any]) -> dict[str, Any]:
         ut["relation"] = _RELATION_IN.get(ut["relation"], ut["relation"])
     if ut.get("rattslig_grund") is not None:
         ut["rattslig_grund"] = _GRUND_IN.get(ut["rattslig_grund"], ut["rattslig_grund"])
+    if ut.get("kalla_typ") is not None:
+        ut["kalla_typ"] = _KALLTYP_IN.get(ut["kalla_typ"], ut["kalla_typ"])
     return ut
 
 
@@ -232,7 +239,8 @@ class Address(_Kropp):
     country: str | None = Field(None, description="ISO 3166-1 alpha-2. Defaults to SE.")
 
 
-Relation = Literal["customer", "former_customer", "prospect", "partner", "supplier", "other"]
+Relation = Literal["customer", "former_customer", "prospect", "partner", "supplier", "other", "not_relevant"]
+KallTyp = Literal["company_website", "registry", "customer_provided", "sync", "manual", "other"]
 SystemNamn = Literal.__getitem__(adaptrar.SYSTEM)
 
 
@@ -251,7 +259,9 @@ class CompanyIn(_Kropp):
     address: Address | None = None
     employees: int | None = None
     revenue_sek: int | None = Field(None, description="Annual revenue in SEK.")
-    relation: Relation | None = Field(None, description="Defaults to `customer`.")
+    relation: Relation | None = Field(
+        None, description="Defaults to `customer`. `not_relevant` is a company that has said no or does not fit: "
+        "unlike `former_customer` it stays excluded from Iris runs and lists.")
     customer_since: str | None = Field(None, description="ISO 8601 date.")
     contract_end: str | None = Field(None, description="ISO 8601 date. Avtalsslut.")
     owner: str | None = Field(None, description="Account owner in your organisation.")
@@ -273,6 +283,15 @@ class PersonIn(_Kropp):
     legal_basis: Literal["contract", "legitimate_interest", "consent"] | None = Field(
         None, description="GDPR article 6 basis for holding the person.")
     do_not_contact: bool | None = None
+    source_type: str | None = Field(
+        None, description="Where the information about the person first came from (GDPR article 14): "
+        "`company_website`, `registry`, `customer_provided` (the customer gave it), `sync`, `manual` or `other`. "
+        "Any other value is refused with `invalid_fields` (code `kalltyp_okand`). Optional: leave it out when "
+        "it is not known. Not the same as `source`, which says how the record came into Snajp.")
+    source_name: str | None = Field(None, description="The source by name, e.g. the web address or the register. "
+                                    "At most 300 characters.")
+    collected_at: str | None = Field(None, description="ISO 8601 timestamp the information was collected. "
+                                     "Defaults to when the person is created.")
     custom: dict[str, Any] | None = None
 
 
@@ -422,7 +441,7 @@ _ORDNING = {"updated": "andrad", "-updated": "andrad_fallande", "name": "namn"}
 
 async def _lista(request: Request, tenant: dict, objekt: str, *, limit: int, cursor: str | None,
                  sort: str, updated_since: str | None, include_deleted: bool, q: str | None,
-                 lika: dict[str, Any], only_deleted: bool = False) -> dict:
+                 lika: dict[str, Any], only_deleted: bool = False, tomma: tuple[str, ...] = ()) -> dict:
     storage = request.app.state.storage
     try:
         if updated_since:
@@ -430,7 +449,7 @@ async def _lista(request: Request, tenant: dict, objekt: str, *, limit: int, cur
         poster, nasta = await lagring.lista_poster(
             storage, tenant["tenant_id"], objekt, limit=limit, markor=cursor,
             ordning="raderad" if only_deleted else _ORDNING[sort], andrad_sedan=updated_since,
-            med_raderade=include_deleted, lika=lika, q=q)
+            med_raderade=include_deleted, lika=lika, q=q, tomma=tomma)
     except ValueError:
         raise fel(422, "invalid_parameter", "cursor or updated_since could not be read.",
                   "cursor eller updated_since gick inte att läsa.") from None
@@ -629,11 +648,14 @@ async def lista_personer(
     include_deleted: bool = _LISTPARAMETRAR["include_deleted"], q: str | None = _LISTPARAMETRAR["q"],
     only_deleted: bool = _LISTPARAMETRAR["only_deleted"],
     company_id: str | None = None,
+    source_type: KallTyp | None = Query(None, description="Only people whose information came from this source."),
+    missing_source: bool = Query(False, description="Only people without a `source_type` (GDPR article 14)."),
 ) -> dict:
-    lika = {"bolag_id": kraev_uuid(company_id, "Bolaget") if company_id else None}
+    lika = {"bolag_id": kraev_uuid(company_id, "Bolaget") if company_id else None,
+            "kalla_typ": _KALLTYP_IN[source_type] if source_type else None}
     return await _lista(request, tenant, "person", limit=limit, cursor=cursor, sort=sort,
                         updated_since=updated_since, include_deleted=include_deleted, q=q, lika=lika,
-                        only_deleted=only_deleted)
+                        only_deleted=only_deleted, tomma=("kalla_typ",) if missing_source else ())
 
 
 @router.post("/people", status_code=201, summary="Create a person, or update by email")

@@ -603,3 +603,71 @@ async def test_supportrapporten_sparas_pa_korningen_i_databasen(miljo):
         {"sort": "saknar_uppgift", "objekt": "bolag", "falt": None, "antal": 1}]
     assert (await supportrapport.satt_arende(lager, a, klar["id"], "F-7KQ2"))["support_arende"] == "F-7KQ2"
     assert await supportrapport.satt_arende(lager, b, klar["id"], "F-FEL") is None
+
+
+async def test_ej_aktuell_ar_upptagen_och_raknas_i_databasen(miljo):
+    """Migration 165: relationen ej_aktuell tas emot av check-villkoret, står
+    kvar bland de upptagna och räknas för sig i översikten."""
+    lager, a, b = miljo
+    await synk.skapa(lager, a, "bolag", {"namn": "Nej Tack AB", "orgnr": ORGNR_A, "relation": "ej_aktuell"},
+                     kalla="api")
+    await synk.skapa(lager, a, "bolag", {"namn": "Gammal AB", "orgnr": ORGNR_B, "relation": "tidigare_kund"},
+                     kalla="api")
+    assert [r["company_name"] for r in await lagring.upptagna_rader(lager, a)] == ["Nej Tack AB"]
+    assert await lagring.rakna_poster(lager, a, "bolag") == {"ej_aktuell": 1, "tidigare_kund": 1, "alla": 2}
+    assert await lagring.upptagna_rader(lager, b) == []
+    with pytest.raises(asyncpg.CheckViolationError):
+        await lagring.skapa_post(lager, a, "bolag", {"namn": "Fel AB", "relation": "pagaende"})
+
+
+async def test_forlustorsak_kod_i_databasen(miljo):
+    from app.crm import objekt
+
+    lager, a, b = miljo
+    forlorad = next(s for s in await objekt.lista_steg(lager, a) if s["typ"] == "forlorad")
+    affar = await objekt.skapa(lager, a, "affar", {"namn": "Växel", "steg_id": forlorad["id"],
+                                                   "forlustorsak_kod": "price", "forlustorsak": "Billigare"})
+    assert affar["forlustorsak_kod"] == "pris" and affar["forlustorsak"] == "Billigare"
+    await objekt.skapa(lager, a, "affar", {"namn": "Öppen"})
+    poster, _ = await lagring.lista_poster(lager, a, "affar", lika={"forlustorsak_kod": "pris"})
+    assert [p["id"] for p in poster] == [affar["id"]]
+    assert (await lagring.lista_poster(lager, b, "affar", lika={"forlustorsak_kod": "pris"}))[0] == []
+    with pytest.raises(asyncpg.CheckViolationError):
+        await lagring.uppdatera_post(lager, a, "affar", affar["id"], {"forlustorsak_kod": "vadret"})
+    await lagring.gor_gravsten(lager, a, "affar", affar["id"])
+    assert (await lagring.hamta_post(lager, a, "affar", affar["id"], med_raderade=True))["forlustorsak_kod"] is None
+
+
+async def test_personens_kalla_i_databasen(miljo):
+    """Källan sätts av synken, skrivs inte över av nästa synk, filtreras och
+    töms med gravstenen."""
+    lager, a, b = miljo
+    anslutning = await lagring.skapa_anslutning(lager, a, namn="lime", system="generisk",
+                                                mappning={"person": {"kalla_typ": "kalltyp"}})
+    korning = await lagring.skapa_korning(lager, a, anslutning_id=anslutning["id"])
+    svar = await synk.synka_sats(lager, a, anslutning, korning, "person", [
+        {"id": "p1", "email": "anna@kund.se"}, {"id": "p2", "email": "bo@kund.se", "kalltyp": "register"}])
+    anna_id, bo_id = (p["id"] for p in svar["poster"])
+    anna = await lagring.hamta_post(lager, a, "person", anna_id)
+    assert (anna["kalla_typ"], anna["kalla_namn"], anna["kalla"]) == ("synk", "lime", "synk") and anna["insamlad_at"]
+    bo = await lagring.hamta_post(lager, a, "person", bo_id)
+    assert bo["kalla_typ"] == "register" and bo["kalla_namn"] is None
+    await synk.synka_sats(lager, a, anslutning, korning, "person", [
+        {"id": "p1", "email": "anna@kund.se", "first_name": "Anna", "kalltyp": "kunden"}])
+    anna_efter = await lagring.hamta_post(lager, a, "person", anna_id)
+    assert anna_efter["fornamn"] == "Anna" and anna_efter["kalla_typ"] == "synk"
+    assert anna_efter["insamlad_at"] == anna["insamlad_at"]
+
+    utan, _ = await synk.skapa(lager, a, "person", {"epost": "cecilia@kund.se"}, kalla="api")
+    assert utan["kalla_typ"] is None and utan["insamlad_at"]
+    saknar, _ = await lagring.lista_poster(lager, a, "person", tomma=["kalla_typ"])
+    assert [p["id"] for p in saknar] == [utan["id"]]
+    register, _ = await lagring.lista_poster(lager, a, "person", lika={"kalla_typ": "register"})
+    assert [p["id"] for p in register] == [bo_id]
+    assert (await lagring.lista_poster(lager, b, "person", tomma=["kalla_typ"]))[0] == []
+    with pytest.raises(asyncpg.CheckViolationError):
+        await lagring.uppdatera_post(lager, a, "person", utan["id"], {"kalla_typ": "rykten"})
+
+    await lagring.gor_gravsten(lager, a, "person", bo_id)
+    tomd = await lagring.hamta_post(lager, a, "person", bo_id, med_raderade=True)
+    assert (tomd["kalla_typ"], tomd["kalla_namn"], tomd["insamlad_at"]) == (None, None, None)
