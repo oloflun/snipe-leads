@@ -62,6 +62,16 @@ CATEGORY_LABELS = {
     "ovrigt": "Övrigt",
 }
 
+# Kunskapsbasens kategorier: supportens fack plus "salj" (sv "Erbjudande och
+# säljfakta", en "Offer and sales facts"), kundens tjänster, målgrupp, bevis
+# och pris för leadsagenten Iris (kunddemon 2026-11-24). "salj" är INGET
+# ärendefack: triage, ärenden, regler och agentens verktyg läser CATEGORIES
+# ovan och får aldrig välja det. Därför står det inte heller i
+# CATEGORY_LABELS (api/leads.py väljer ärendefack ur den). MÅSTE matcha
+# ss_knowledge_base_category_check (migration 153).
+KB_SALJ = "salj"
+KB_CATEGORIES = (*CATEGORIES, KB_SALJ)
+
 # Miljöer som bär eller speglar riktig kunddata. `development` står med MED
 # FLIT: Railway-miljön development är en spegel av produktionen (se CLAUDE.md),
 # alltså riktiga kunders mejladresser och ärenden. En "det är bara dev"-
@@ -515,6 +525,11 @@ class Settings(BaseSettings):
     semantic_cache: str = "off"
     snajp_master_api_key: str = "snajp_master_dev_key_change_me"
     snajp_demo_api_key: str = "snajp_demo_2f8c1a9e4b7d"
+    # Hjälprutan (docs/PLAN-HJALPRUTAN-2026-11-25.md): hjälpens egen kund i
+    # systemet, skild från "snajp" som marknadssidans anonyma demo använder.
+    # Hjälpsamtalet och plattformsärendena svarar 404 för varje nyckel vars
+    # tenant inte har den här sluggen (app/api/hjalp.py).
+    hjalp_tenant_slug: str = "snajp-hjalp"
 
     # Email-pipeline
     inbox_poll_seconds: int = 0  # 0 = ingen bakgrundspolling (mock triggas manuellt)

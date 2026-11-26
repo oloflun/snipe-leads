@@ -26,7 +26,7 @@ const NOT_FOUND = NextResponse.json({ error: "Hittades inte." }, { status: 404 }
 
 type Params = { params: Promise<{ path: string[] }> };
 
-async function forward(request: NextRequest, path: string[], method: "GET") {
+async function forward(request: NextRequest, path: string[], method: "GET" | "POST", body?: string) {
   if (!(await getPlatformAdmin())) {
     return NOT_FOUND;
   }
@@ -47,7 +47,12 @@ async function forward(request: NextRequest, path: string[], method: "GET") {
   }
 
   const backendPath = `/api/admin/${path.map(encodeURIComponent).join("/")}${request.nextUrl.search}`;
-  return komprimera(request, await proxyWithApiKey(backendPath, { method }, masterKey));
+  const svar = await proxyWithApiKey(backendPath, { method, body }, masterKey);
+  // Proxyn bygger ett eget JSON-svar och tar bara med ett par av backendens
+  // huvuden. Adminsvaren bär kunddata (felrapportens bild bland annat):
+  // `private, no-store` sätter proxyWithApiKey, och typen ska aldrig gissas om.
+  svar.headers.set("X-Content-Type-Options", "nosniff");
+  return komprimera(request, svar);
 }
 
 export async function GET(request: NextRequest, { params }: Params) {
@@ -55,6 +60,25 @@ export async function GET(request: NextRequest, { params }: Params) {
   return forward(request, path, "GET");
 }
 
-// Ingen POST/PUT/PATCH/DELETE. Adminvyn LÄSER. En adminvy som kan ändra
-// kunddata gör det förr eller senare av misstag, och den enda ändring som
-// faktiskt behövs (autonomi, ICP) gör kunden själv i sin egen vy.
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Den ENDA skrivningen genom adminproxyn: lägesbytet på en felrapport ur
+ * Hjälprutan (docs/PLAN-HJALPRUTAN-2026-11-25.md). Felrapporterna är Snajps
+ * egna ärenden, inte en kunds data, och ett läge måste sättas av en människa
+ * hos Snajp. Sökvägen är en vitlista: allt annat svarar 404.
+ */
+export async function POST(request: NextRequest, { params }: Params) {
+  const { path } = await params;
+  const arLagesbyte =
+    path.length === 3 && path[0] === "plattformsarenden" && UUID.test(path[1]) && path[2] === "status";
+  if (!arLagesbyte) {
+    return NOT_FOUND;
+  }
+  return forward(request, path, "POST", await request.text());
+}
+
+// Ingen PUT/PATCH/DELETE, och ingen annan POST än den ovan. Adminvyn LÄSER
+// kunddata. En adminvy som kan ändra kunddata gör det förr eller senare av
+// misstag, och den enda ändring som faktiskt behövs (autonomi, ICP) gör kunden
+// själv i sin egen vy.

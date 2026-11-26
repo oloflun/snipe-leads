@@ -8,6 +8,8 @@ import { LeadslistorView } from "@/components/leads/LeadslistorView";
  * Skapa utkast och Processa om, förloppet i listan och status per rad.
  * Syntetiska bolag och svar, ingen databas; samma mönster som
  * /forhandsvisning/kundinstallningar.
+ *
+ * 2026-11-25: provkörningens ringlista med antal anställda i radens signal.
  */
 
 const LISTA = {
@@ -25,6 +27,26 @@ const RADER = [
   { id: "00000000-0000-4000-a000-0000000000b1", company_name: "Provsnickarn i Holmsund AB", ort: "Holmsund", signal: "Byggnadssnickerier, 1 anställd", source_name: "merinfo", contact_phone: "+46 70 000 00 01", contact_name: "VD", contact_role: "VD" },
   { id: "00000000-0000-4000-a000-0000000000b2", company_name: "Exempelrör Norr AB", ort: "Luleå", signal: "VVS-installationer, 4 anställda", source_name: "merinfo" },
   { id: "00000000-0000-4000-a000-0000000000b3", company_name: "Testmåleri AB", ort: "Umeå", signal: "Måleri, 2 anställda", source_name: "merinfo" }
+] as Record<string, unknown>[];
+
+/** Provkörningens ringlista (2026-11-24, api/leads.py:_ringlistrad): antal
+ *  anställda i `extra` (Antons regel 15: visas alltid, även okänt). Fasta tider. */
+const RINGLISTA = {
+  id: "00000000-0000-4000-a000-0000000000ab",
+  titel: "Ringlista, Iris 2026-11-24",
+  antal: 3,
+  status: "klar",
+  item_count: 3,
+  kalla: "sok",
+  is_test: true,
+  created_at: "2026-11-24T09:00:00Z",
+  completed_at: "2026-11-24T09:20:00Z"
+};
+
+const RINGRADER = [
+  { id: "00000000-0000-4000-a000-0000000000d1", company_name: "Ringbara Rör AB", ort: "Umeå", contact_name: "Per Persson", contact_role: "VD", contact_phone: "+46 70 000 00 11", signal: "ring", source_name: "merinfo", extra: { anstallda: 3, omsattning: 2400000 } },
+  { id: "00000000-0000-4000-a000-0000000000d2", company_name: "Telefonbygg i Norr AB", ort: "Luleå", contact_name: "Eva Ek", contact_role: "VD", contact_phone: "+46 70 000 00 12", signal: "ring", source_name: "merinfo", extra: { anstallda: 1, omsattning: null } },
+  { id: "00000000-0000-4000-a000-0000000000d3", company_name: "Okänd Storlek AB", ort: "Piteå", contact_name: "Ola Ohlsson", contact_role: "VD", contact_phone: "+46 70 000 00 13", signal: "ring", source_name: "merinfo", extra: { anstallda: null, omsattning: null } }
 ] as Record<string, unknown>[];
 
 function svar(kropp: unknown, status = 200) {
@@ -77,7 +99,8 @@ function installeraFetch() {
       return svar({ count: ids.length, rader: ids.length, processering: processering() }, 202);
     }
     if (url.endsWith(`/listor/${LISTA.id}`)) return svar({ list: { ...LISTA, processering: processering() }, items: RADER });
-    if (url.endsWith("/leads/listor")) return svar({ lists: [LISTA] });
+    if (url.endsWith(`/listor/${RINGLISTA.id}`)) return svar({ list: RINGLISTA, items: RINGRADER });
+    if (url.endsWith("/leads/listor")) return svar({ lists: [RINGLISTA, LISTA] });
     return svar({});
   };
 }

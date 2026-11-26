@@ -43,7 +43,22 @@ MINSTA_ANVANDBARA_LANGD = 120
 
 
 class MissingBusinessContextError(RuntimeError):
-    """Körningen avbröts därför att produktbeskrivningen saknas eller är för tunn."""
+    """Körningen avbröts därför att produktbeskrivningen saknas eller är för tunn.
+
+    `kod` är en stabil kod som ytan översätter (lib/leads/suite.ts), när
+    beskedet har en; texten är svensk, som resten av API:t."""
+
+    def __init__(self, text: str, *, kod: str | None = None) -> None:
+        super().__init__(text)
+        self.kod = kod
+
+
+#: Koden för en saknad eller för kort beskrivning av vad kunden säljer. Ytan
+#: översätter den (lib/leads/felkoder.ts). Jobbposten bär bara texten, så
+#: app/api/chat.py känner igen felet på inledningen nedan: båda beskeden
+#: börjar med den, och det andra bär ett tal som varierar.
+SAKNAR_BESKRIVNING = "saknar_beskrivning"
+BESKRIVNING_INLEDNING = "Beskrivningen av vad ni säljer"
 
 
 async def require_business_context(storage, tenant_id: str) -> str:
@@ -55,20 +70,49 @@ async def require_business_context(storage, tenant_id: str) -> str:
         # Texten visas för kunden som utkastets anteckning (draft_note). Förut
         # pekade den på product_marketing och TENANTS.md, som bara vi kan läsa.
         raise MissingBusinessContextError(
-            "Beskrivningen av vad ni säljer saknas, och utan den blir ett mejl "
+            f"{BESKRIVNING_INLEDNING} saknas, och utan den blir ett mejl "
             "bara allmän text. Fyll i den under Inställningar, Vad ni säljer, "
-            "och kör sedan leadet igen."
+            "och kör sedan leadet igen.",
+            kod=SAKNAR_BESKRIVNING,
         )
 
     if len(innehall) < MINSTA_ANVANDBARA_LANGD:
         raise MissingBusinessContextError(
-            f"Beskrivningen av vad ni säljer är {len(innehall)} tecken, och det är "
+            f"{BESKRIVNING_INLEDNING} är {len(innehall)} tecken, och det är "
             f"för lite att skriva ett mejl på (minst {MINSTA_ANVANDBARA_LANGD}). "
             "Skriv vad ni säljer, till vem och vad som skiljer er från andra, "
-            "under Inställningar, Vad ni säljer."
+            "under Inställningar, Vad ni säljer.",
+            kod=SAKNAR_BESKRIVNING,
         )
 
     return innehall
+
+
+#: Koden för en tom produktlista. Ytan översätter den (lib/leads/suite.ts:
+#: KUNDFELKODER); texten nedan är den svenska reserven.
+SAKNAR_PRODUKT = "saknar_produkt"
+
+#: Beskedet när produktlistan är tom. Produkterna ställs in under
+#: Inställningar › Iris › Målgrupp och automation (IrisInstallningar).
+EGEN_PRODUKT_SAKNAS = (
+    "Iris vet inte vilken av era produkter mejlen ska sälja. Lägg till minst en "
+    "produkt under Inställningar › Målgrupp och automation innan Iris skriver utkast."
+)
+
+
+async def require_egen_produkt(storage, tenant_id: str) -> list[dict[str, str]]:
+    """Kundens produkter, eller ett begripligt fel när listan är tom.
+
+    Kunddemon 2026-11-24: med tom produktlista valdes varken produkt eller
+    erbjudande, och modellen lånade Snajps Supportagent ur skrivstilens
+    exempel. Spärren går före modellen, så att körningen stannar innan
+    research kostar något."""
+    from ..agent.leads_research_v2 import las_produkter
+
+    produkter = las_produkter(await storage.get_agent_settings(tenant_id, agent_type="leads"))
+    if not produkter:
+        raise MissingBusinessContextError(EGEN_PRODUKT_SAKNAS, kod=SAKNAR_PRODUKT)
+    return produkter
 
 
 def ar_ifyllt(innehall: object) -> bool:

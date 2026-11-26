@@ -1,4 +1,4 @@
-"""Lagringen för CRM:et (tabellerna crm_*, migration 153).
+"""Lagringen för CRM:et (tabellerna crm_*, migration 160).
 
 Egen modul i stället för metoder på Storage-protokollet, i samma mönster som
 app/integrationer/lagring.py: Postgres via `storage._scoped(tenant_id)`, så att
@@ -184,7 +184,7 @@ async def _in(storage: Any, tenant_id: str, tabell: str, falt: dict[str, Any]) -
 
 
 def _minnets_unika(storage: Any, tabell: str, rad: dict[str, Any]) -> None:
-    """Minneslagrets motsvarighet till de unika indexen i migration 153."""
+    """Minneslagrets motsvarighet till de unika indexen i migration 160."""
     andra = [r for r in _minne(storage, tabell).values()
              if r["tenant_id"] == rad["tenant_id"] and r["id"] != rad["id"]]
     if tabell == "crm_anslutningar":
@@ -343,7 +343,7 @@ async def uppdatera_anslutning(storage: Any, tenant_id: str, rad_id: str, **falt
 
 async def ta_bort_anslutning(storage: Any, tenant_id: str, rad_id: str) -> bool:
     if not _ar_postgres(storage):
-        # Kaskaden i migration 153: källsystemens id följer anslutningen.
+        # Kaskaden i migration 160: källsystemens id följer anslutningen.
         externa = _minne(storage, "crm_externa_id")
         for eid in [k for k, r in externa.items() if r["anslutning_id"] == rad_id]:
             del externa[eid]

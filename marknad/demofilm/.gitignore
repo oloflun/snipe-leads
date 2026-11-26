@@ -1,0 +1,6 @@
+node_modules/
+out/
+tmp/
+explore/
+# Reelerna renderas (Iris, ur ../video) eller läggs in för hand (kundtjänst). De checkas inte in.
+public/*.mp4

@@ -50,7 +50,10 @@ const TILLATNA: { monster: RegExp; skal: string }[] = [
   // Webbläsaren frågar själv efter en favicon som appen serverar som ikonfil.
   { monster: /^404 \/favicon\.ico/, skal: "webbläsarens egen förfrågan" },
   // Sidan för nästa steg förhämtas av Next; en avbruten förhämtning är inget fel.
-  { monster: /^(401|403) \/api\/auth\/session/, skal: "sessionsfråga utan session, före inloggning" }
+  { monster: /^(401|403) \/api\/auth\/session/, skal: "sessionsfråga utan session, före inloggning" },
+  // Identitetskontrollen (INV-SEC-014) efter en utloggning: 401:an är just det
+  // som får en öppen flik att ladda om till inloggningen.
+  { monster: /^401 \/api\/snajp-support\/identitet/, skal: "identitetskontrollen utan session" }
 ];
 
 function vakta(page: Page): Fynd[] {
@@ -278,7 +281,7 @@ test("varje vy i arbetsytan öppnas utan fel", async () => {
   }
 });
 
-test("isolering: en annan kunds id ger 404 och adminytan finns inte", async ({ browser }) => {
+test("isolering: en annan kunds id ger 404 och adminytan skickar kunden hem", async ({ browser }) => {
   // Påhittade id:n i varje väg som tar ett: svaret ska vara 404, aldrig 200
   // och aldrig 500. Anropen går via en egen begäran så att de avsiktliga
   // 404:orna inte räknas som fel i sidan.
@@ -304,9 +307,15 @@ test("isolering: en annan kunds id ger 404 och adminytan finns inte", async ({ b
   }
   await anonym.close();
 
-  // Plattformsadmin finns inte för en kund: 404, inte en omdirigering dit.
+  // Adminytan för en kund: tillbaka till den egna arbetsytan, aldrig en
+  // felsida (ändrat 2026-11-24 efter kunddemon; förut 404). Bakåtknappen efter
+  // ett kontobyte landar annars på "Sidan finns inte".
   const admin = await api.get("/admin", { maxRedirects: 0 });
-  expect(admin.status()).toBe(404);
+  expect([303, 307, 308], `/admin svarade ${admin.status()}`).toContain(admin.status());
+  expect(new URL(admin.headers()["location"] ?? "", "http://x").pathname).toBe("/dashboard");
+  await page.goto("/admin/arbetsyta", { waitUntil: "networkidle" });
+  expect(new URL(page.url()).pathname).toBe("/dashboard");
+  await expect(page.getByText("Sidan finns inte")).toHaveCount(0);
 });
 
 test("kunskapsbasen: spara, och för lång text ger en begriplig mening", async () => {
@@ -410,26 +419,58 @@ test("Iris: körformuläret öppnas, och en körning ger leads med utkast", asyn
   await kravRenText(page, "körningarna efter en körning");
 });
 
-test("sessionen: utloggning, skyddad sida utan session, inloggning igen", async () => {
-  await page.goto("/dashboard", { waitUntil: "networkidle" });
-  const loggaUt = page.getByRole("button", { name: "Logga ut" }).first();
-  if (!(await loggaUt.isVisible().catch(() => false))) {
+async function loggaUt(flik: Page) {
+  const knapp = flik.getByRole("button", { name: "Logga ut" }).first();
+  if (!(await knapp.isVisible().catch(() => false))) {
     // Smala skärmar har utloggningen i kontomenyn.
-    await page.getByRole("button", { name: /Konto|Meny|Menu/ }).first().click();
+    await flik.getByRole("button", { name: /Konto|Meny|Menu/ }).first().click();
   }
-  await page.getByRole("button", { name: "Logga ut" }).first().click();
-  await page.waitForURL((u) => u.pathname === "/login", { timeout: 30_000 });
+  await flik.getByRole("button", { name: "Logga ut" }).first().click();
+  await flik.waitForURL((u) => u.pathname === "/login", { timeout: 30_000 });
+}
+
+async function loggaIn(flik: Page, epost: string, losen: string) {
+  await flik.getByPlaceholder("du@bolag.se").fill(epost);
+  await flik.getByPlaceholder("•".repeat(8)).fill(losen);
+  await flik.getByRole("button", { name: /Logga in/ }).last().click();
+}
+
+test("sessionen: utloggning, skyddad sida utan session, inloggning igen", async () => {
+  await page.goto("/dashboard/leads", { waitUntil: "networkidle" });
+  await page.goto("/dashboard", { waitUntil: "networkidle" });
+  await loggaUt(page);
+
+  // Bakåt efter utloggningen: inloggningen, aldrig en felsida (kunddemon
+  // 2026-11-24). Utloggningen ersatte /dashboard i historiken, så bakåt går
+  // till /dashboard/leads, som utan session ska leda till /login.
+  await page.goBack({ waitUntil: "networkidle" });
+  expect(new URL(page.url()).pathname).toBe("/login");
+  await expect(page.getByText("Sidan finns inte")).toHaveCount(0);
 
   // En skyddad sida utan session leder till en vänlig inloggning, inte till ett fel.
   await page.goto("/dashboard/leads", { waitUntil: "networkidle" });
   expect(new URL(page.url()).pathname).toBe("/login");
   await kravRenText(page, "inloggningen efter utgången session");
 
+  // Adminytan utan session: samma inloggning, med vägen tillbaka i next.
+  await page.goto("/admin/arbetsyta?vy=korningar", { waitUntil: "networkidle" });
+  const inloggning = new URL(page.url());
+  expect(inloggning.pathname).toBe("/login");
+  expect(inloggning.searchParams.get("next")).toBe("/admin/arbetsyta?vy=korningar");
+  await expect(page.getByText("Sidan finns inte")).toHaveCount(0);
+  await page.goto("/admin", { waitUntil: "networkidle" });
+  expect(new URL(page.url()).pathname).toBe("/login");
+
+  // En kund som loggar in med next under /admin landar i sin arbetsyta.
+  await page.goto("/login?next=/admin/arbetsyta", { waitUntil: "networkidle" });
+  await loggaIn(page, kund.epost, kund.losen);
+  await page.waitForURL((u) => u.pathname.startsWith("/dashboard"), { timeout: 45_000 });
+  await expect(page.getByText("Sidan finns inte")).toHaveCount(0);
+  await loggaUt(page);
+
   // ?next= får aldrig leda bort från sajten (öppen omdirigering).
   await page.goto("/login?next=https://example.org/", { waitUntil: "networkidle" });
-  await page.getByPlaceholder("du@bolag.se").fill(kund.epost);
-  await page.getByPlaceholder("•".repeat(8)).fill(kund.losen);
-  await page.getByRole("button", { name: /Logga in/ }).last().click();
+  await loggaIn(page, kund.epost, kund.losen);
   await page.waitForURL((u) => u.pathname.startsWith("/dashboard"), { timeout: 45_000 });
   expect(new URL(page.url()).host).toBe(new URL(test.info().project.use.baseURL!).host);
 
@@ -438,4 +479,86 @@ test("sessionen: utloggning, skyddad sida utan session, inloggning igen", async 
   const svar = await andra.goto("/dashboard", { waitUntil: "networkidle" });
   expect(svar?.status()).toBeLessThan(400);
   await andra.close();
+});
+
+/**
+ * Tvåfliksfallet från kunddemon 2026-11-24 (INV-SEC-014). Flik A visar kundens
+ * arbetsyta. Sedan blir plattformsadminens session den aktiva i webbläsaren,
+ * utan att flik A säger något. Nästa mjuka navigering i A ska ladda om sidan,
+ * så att skalet och raderna tillhör samma identitet: aldrig kundens skal över
+ * adminens data.
+ *
+ * Bytet görs med cookies, inte med en inloggning i flik B: då prövas
+ * jämförelsen i A och inte BroadcastChannel, som en inloggning i B också hade
+ * väckt. Adminens session hämtas ur ett eget kontext. Kanalvägen prövas i
+ * nästa test. Kräver ett syntetiskt adminkonto i lokal_stack (QA_ADMIN_EPOST,
+ * QA_ADMIN_LOSEN); utan båda hoppas testet över. Pekas aldrig mot
+ * development-spegeln.
+ */
+const adminEpost = process.env.QA_ADMIN_EPOST;
+const adminLosen = process.env.QA_ADMIN_LOSEN;
+const UTAN_ADMIN = "kräver ett syntetiskt adminkonto i lokal_stack (QA_ADMIN_EPOST och QA_ADMIN_LOSEN)";
+
+test("identitetsbyte i en annan flik: mjuk navigering laddar om den gamla fliken", async ({ browser }) => {
+  test.skip(!adminEpost || !adminLosen, UTAN_ADMIN);
+
+  // Flik A: kunden.
+  await page.goto("/dashboard", { waitUntil: "networkidle" });
+  await expect(page.getByText(kund.foretag).first()).toBeVisible();
+
+  // Adminens session i ett eget kontext, sedan in i webbläsarens cookies.
+  const adminKontext = await browser.newContext();
+  const adminFlik = await adminKontext.newPage();
+  await adminFlik.goto("/login", { waitUntil: "networkidle" });
+  await loggaIn(adminFlik, adminEpost!, adminLosen!);
+  await adminFlik.waitForURL((u) => !u.pathname.startsWith("/login"), { timeout: 45_000 });
+  const adminKakor = await adminKontext.cookies();
+  await adminKontext.close();
+  await context.clearCookies();
+  await context.addCookies(adminKakor);
+
+  // Mjuk navigering i A: ett klick i menyn, ingen page.goto.
+  const laddning = page.waitForEvent("load", { timeout: 30_000 });
+  await page.getByRole("link", { name: /Leads/ }).first().click();
+  await laddning;
+  await page.waitForLoadState("networkidle");
+
+  // Efter omladdningen hör hela sidan till adminen: layouten skickar den till
+  // /admin, och kundens namn står varken i skalet eller i raderna.
+  expect(new URL(page.url()).pathname.startsWith("/admin")).toBe(true);
+  await expect(page.getByText(kund.foretag)).toHaveCount(0);
+  await kravRenText(page, "flik A efter identitetsbytet");
+});
+
+/**
+ * Samma fall som demon, med kanalen: admin loggar in i flik B i SAMMA kontext.
+ * Inloggningen postar på BroadcastChannel("snajp-identitet"), och flik A ska
+ * ladda om utan att själv navigera.
+ */
+test("identitetsbyte via inloggning i flik B: flik A laddar om utan egen navigering", async () => {
+  test.skip(!adminEpost || !adminLosen, UTAN_ADMIN);
+
+  // Flik A: kunden igen (förra testet lämnade adminens session i kontextet).
+  await context.clearCookies();
+  await page.goto("/login", { waitUntil: "networkidle" });
+  await loggaIn(page, kund.epost, kund.losen);
+  await page.waitForURL((u) => u.pathname.startsWith("/dashboard"), { timeout: 45_000 });
+  await page.waitForLoadState("networkidle");
+  await expect(page.getByText(kund.foretag).first()).toBeVisible();
+
+  // Flik B: kundens cookie bort i tysthet, sedan adminens inloggning. Flik A
+  // får ingen händelse av cookiebytet, bara av meddelandet på kanalen.
+  const flikB = await context.newPage();
+  await context.clearCookies();
+  await flikB.goto("/login", { waitUntil: "networkidle" });
+  const laddning = page.waitForEvent("load", { timeout: 30_000 });
+  await loggaIn(flikB, adminEpost!, adminLosen!);
+  await flikB.waitForURL((u) => !u.pathname.startsWith("/login"), { timeout: 45_000 });
+  await laddning;
+  await page.waitForLoadState("networkidle");
+
+  expect(new URL(page.url()).pathname.startsWith("/admin")).toBe(true);
+  await expect(page.getByText(kund.foretag)).toHaveCount(0);
+  await kravRenText(page, "flik A efter inloggningen i flik B");
+  await flikB.close();
 });

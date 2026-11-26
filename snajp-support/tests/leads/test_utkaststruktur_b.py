@@ -195,6 +195,8 @@ async def _forbered(storage: MemoryStorage) -> tuple[str, str]:
     storage.tenants[TENANT] = {
         **(storage.tenants.get(TENANT) or {}),
         "id": TENANT,
+        # Snajp själv: snajp_produkt_hos_kund (2026-11-24) gäller bara andra kunder.
+        "slug": "snajp",
         "name": "Snajp",
         "company_name": "Snajp AB",
         "orgnr": "559000-0000",

@@ -92,6 +92,16 @@ async def test_kornngar_raknas_per_agent_och_test_flaggas_bort():
     assert denna_vecka["support_runs"] == 1, "is_test-körningen ska inte räknas som kundvolym."
 
 
+async def test_ringlistans_bolag_ar_inga_nya_leads():
+    """Ringlistans bolag är obearbetade (ingen research, inget utkast) och
+    räknas inte som nya leads (Antons regel 2026-11-24)."""
+    storage = MemoryStorage()
+    await storage.create_prospect("tenant-r", company_name="Lead AB", origin="iris")
+    await storage.create_prospect("tenant-r", company_name="Ring AB", origin="ring")
+    denna_vecka = (await storage.weekly_analytics("tenant-r", weeks=2))["weeks"][-1]
+    assert denna_vecka["new_leads"] == 1
+
+
 async def test_veckoantalet_klamps():
     storage = MemoryStorage()
 

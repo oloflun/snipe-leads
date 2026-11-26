@@ -95,7 +95,19 @@ type ForslagKort = {
   fel?: Localized | null;
 };
 
-type FeedItem = ChatMessage | KbForhandsvisningKort | ForslagKort;
+/**
+ * Hjälprutans kort (kunskapskortet, felkortet) i samma flöde som bubblorna.
+ * Kortets innehåll och tillstånd ägs av HjalpRuta; flödet bär bara platsen.
+ */
+type HjalpKortPlats = { id: string; role: "hjalp-kort" };
+
+type FeedItem = ChatMessage | KbForhandsvisningKort | ForslagKort | HjalpKortPlats;
+
+/** Hjälpen saknar sin nyckel i miljön (lib/snajp/hjalp.ts, kod "hjalp_av"). */
+export const HJALP_AV_TEXT: Localized = {
+  sv: "Hjälpen är inte påslagen här ännu. Skriv till snajpsupport@gmail.com så länge.",
+  en: "Help is not switched on here yet. Write to snajpsupport@gmail.com in the meantime."
+};
 
 /** Rått svar från GET /api/agent/forslag — se components/leads/AgentLarande.tsx,
  * som listar samma resurs i lärande-vyn och tolkar samma content-form. */
@@ -170,7 +182,7 @@ const testPrompts: Localized[] = [
   { sv: "Hur kommer jag i kontakt med er?", en: "How do I get in touch with you?" }
 ];
 
-async function downscaleImage(file: File, maxSize = 1024): Promise<string> {
+export async function downscaleImage(file: File, maxSize = 1024): Promise<string> {
   const dataUrl = await new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(String(reader.result));
@@ -225,6 +237,27 @@ export type SupportChatProps = {
    * hade lämnat ett dött fält under fältet. Ingen funktionsskillnad i övrigt.
    */
   layout?: "kort" | "fyll";
+  /**
+   * Hjälprutan (components/snajp/HjalpRuta.tsx, planen 2026-11-25 del 1):
+   * den inloggade kundens samtal med SNAJPS egen supportagent. Default AV.
+   * Går mot app/api/snajp-support/hjalp/*, där servern sätter identiteten
+   * och hjälpens nyckel. Historiken hämtas från servern vid varje montering,
+   * inte ur sessionStorage, så samtalet finns kvar efter omladdning och i en
+   * ny flik. Rutan har eget huvud, så chattens huvud och meny ritas inte.
+   */
+  hjalpMode?: boolean;
+  /** Bara i hjalpMode: tomt läge (startvalen). */
+  hjalpTomt?: (handlingar: { skicka: (fraga: string) => void; fokusera: () => void }) => React.ReactNode;
+  /** Bara i hjalpMode: kort som står fast överst (ärenden som väntar på kunden). */
+  hjalpFast?: React.ReactNode;
+  /** Bara i hjalpMode: id:n för HjalpRutas kort. Ett nytt id läggs sist i flödet. */
+  hjalpKort?: readonly string[];
+  /** Bara i hjalpMode: ritar kortet med ett id ur hjalpKort. */
+  renderHjalpKort?: (id: string) => React.ReactNode;
+  /** Bara i hjalpMode: en fråga som skickas vid monteringen. */
+  hjalpStartFraga?: string;
+  /** Bara i hjalpMode: rutans genvägar ovanför fältet när samtalet har innehåll. */
+  hjalpVerktyg?: React.ReactNode;
 };
 
 /**
@@ -339,7 +372,14 @@ export function SupportChat({
   session,
   testMode = false,
   workspaceLabel,
-  layout = "kort"
+  layout = "kort",
+  hjalpMode = false,
+  hjalpTomt,
+  hjalpFast,
+  hjalpKort,
+  renderHjalpKort,
+  hjalpStartFraga,
+  hjalpVerktyg
 }: SupportChatProps = {}) {
   // Demons varumärke och exempelfrågor gäller demon. På en kunds supportsida är
   // "Nordlys Handel" och frågor om felkoder i kassan direkt vilseledande — de
@@ -386,6 +426,7 @@ export function SupportChat({
   const [mode, setMode] = useState<"unknown" | "simulation" | "live" | "offline">("unknown");
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   // Testchatt-läget bara nedanför:
   const kbFileRef = useRef<HTMLInputElement>(null);
   const [feedbackByMsg, setFeedbackByMsg] = useState<Record<string, FeedbackLage>>({});
@@ -411,13 +452,18 @@ export function SupportChat({
 
   /** Samma identitet och samma route-familj som send() använder. */
   const hamtaSamtal = useCallback(async (): Promise<SamtalsSvar | null> => {
-    const sessionId = testMode ? testchattSessionId() : (session ?? demoSessionId());
-    const url = testMode ? "/api/snajp-support/testchatt/samtal" : "/api/snajp-support/chat/samtal";
+    // Hjälprutan: servern vet vem som frågar; kroppen bär ingen identitet.
+    const sessionId = hjalpMode ? "" : testMode ? testchattSessionId() : (session ?? demoSessionId());
+    const url = hjalpMode
+      ? "/api/snajp-support/hjalp/samtal"
+      : testMode
+        ? "/api/snajp-support/testchatt/samtal"
+        : "/api/snajp-support/chat/samtal";
     try {
       const response = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ customer_email: `${sessionId}@session.snajp.se`, tenant })
+        body: hjalpMode ? "{}" : JSON.stringify({ customer_email: `${sessionId}@session.snajp.se`, tenant })
       });
       if (!response.ok) return null;
       return (await readJsonBody<SamtalsSvar>(response)) ?? null;
@@ -425,7 +471,7 @@ export function SupportChat({
       // En missad hämtning är ingenting kunden behöver se — nästa varv försöker igen.
       return null;
     }
-  }, [session, tenant, testMode]);
+  }, [session, tenant, testMode, hjalpMode]);
 
   const startaPollning = useCallback(() => {
     if (pollTimerRef.current) return;
@@ -465,24 +511,43 @@ export function SupportChat({
     // (där chatten ligger långt ned): ett onödigt anrop per besök, och ett rött
     // konsolfel hos besökaren om backenden just då startade om. En sessionslänk
     // (`session`) hämtas alltid.
-    if (!session && !harSessionsId(testMode ? TESTCHATTSESSION : DEMOSESSION)) return;
+    // Hjälprutans samtal bor på servern under den inloggades identitet och
+    // hämtas alltid: det ska finnas kvar efter omladdning och i en ny flik.
+    if (!hjalpMode && !session && !harSessionsId(testMode ? TESTCHATTSESSION : DEMOSESSION)) return;
     let avbruten = false;
     void (async () => {
       const svar = await hamtaSamtal();
       if (avbruten || !svar?.meddelanden?.length) return;
       const rader = svar.meddelanden;
       rader.forEach((rad) => visadeRaderRef.current.add(rad.id));
-      setMessages((current) =>
-        current.length
-          ? current
-          : rader.map((rad) => ({ id: rad.id, role: tillChattRoll(rad.author), content: rad.content }))
-      );
+      setMessages((current) => {
+        const historik = rader.map((rad) => ({ id: rad.id, role: tillChattRoll(rad.author), content: rad.content }));
+        if (!current.length) return historik;
+        // Ett kort som hjälprutan öppnade innan historiken kom ställs efter den.
+        if (hjalpMode && current.every((item) => item.role === "hjalp-kort")) return [...historik, ...current];
+        return current;
+      });
       if (svar.overlamnad) startaPollning();
     })();
     return () => {
       avbruten = true;
     };
-  }, [hamtaSamtal, startaPollning, session, testMode]);
+  }, [hamtaSamtal, startaPollning, session, testMode, hjalpMode]);
+
+  // Hjälprutans kort läggs sist i flödet när de öppnas, i den ordning de kom.
+  // Ett kort som rutan tagit bort (avbrutet) tas bort också här, så att ingen
+  // tom plats blir kvar och tomt läge kommer tillbaka när flödet är tomt.
+  useEffect(() => {
+    if (!hjalpMode) return;
+    const onskade = new Set(hjalpKort ?? []);
+    setMessages((current) => {
+      const kvar = current.filter((item) => item.role !== "hjalp-kort" || onskade.has(item.id));
+      const finns = new Set(kvar.map((item) => item.id));
+      const nya = (hjalpKort ?? []).filter((id) => !finns.has(id));
+      if (!nya.length && kvar.length === current.length) return current;
+      return [...kvar, ...nya.map((id): HjalpKortPlats => ({ id, role: "hjalp-kort" }))];
+    });
+  }, [hjalpMode, hjalpKort]);
 
 
   useEffect(() => {
@@ -520,6 +585,26 @@ export function SupportChat({
           // ur sessionen (proxyAsTenant), inte ur en slug som klienten
           // skickar — den publika /chat-routen är anonym med flit
           // (INV-SEC-010) och löser bara kända, konfigurerade tenants.
+          //
+          // Hjälprutan har sin egen väg med samma resonemang, och servern
+          // skriver om kroppen (lib/snajp/hjalp.ts): bara texten och bilden
+          // följer med härifrån.
+          if (hjalpMode) {
+            const response = await fetch("/api/snajp-support/hjalp", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ message: trimmed, attachments })
+            });
+            const payload =
+              (await readJsonBody<{
+                offline?: boolean;
+                error?: string;
+                detail?: string;
+                job_id?: string;
+                kod?: string;
+              }>(response)) ?? {};
+            return { response, payload };
+          }
           const chatUrl = testMode ? "/api/snajp-support/testchatt" : "/api/snajp-support/chat";
           const sessionId = testMode ? testchattSessionId() : (session ?? demoSessionId());
           const response = await fetch(chatUrl, {
@@ -554,6 +639,7 @@ export function SupportChat({
                *  via `error`. Båda ska nå användaren — se throw nedan. */
               detail?: string;
               job_id?: string;
+              kod?: string;
             }>(response)) ?? {};
           return { response, payload };
         };
@@ -591,6 +677,10 @@ export function SupportChat({
           ]);
           return;
         }
+        if (hjalpMode && payload.kod === "hjalp_av") {
+          // Hjälpens nyckel saknas i miljön: ett läge, inte "försök igen".
+          throw new VisbartFel(HJALP_AV_TEXT[localeRef.current]);
+        }
         if (!response.ok || !payload.job_id) {
           // 429 bär backendens egen, väl formulerade text. Allt annat får en
           // kuraterad mening — payload.error kan i värsta fall vara teknisk.
@@ -614,7 +704,9 @@ export function SupportChat({
           // den pollar vi demo-tenanten där jobbet inte finns. Testchatten
           // har sin egen, autentiserade pollningsroute (session avgör
           // tenanten, ingen ?tenant= behövs eller godtas där).
-          const jobUrl = testMode
+          const jobUrl = hjalpMode
+            ? `/api/snajp-support/hjalp/jobb/${encodeURIComponent(payload.job_id)}`
+            : testMode
             ? `/api/snajp-support/testchatt/jobb/${payload.job_id}`
             : tenant
               ? `/api/snajp-support/jobs/${payload.job_id}?tenant=${encodeURIComponent(tenant)}`
@@ -716,8 +808,16 @@ export function SupportChat({
     // varje rendering, inte bara en saknad lint-rad. send() anropar den
     // ändå korrekt, eftersom anropet sker långt efter att hela komponenten
     // (och därmed uppdateraForslag) har initierats klart.
-    [attachment, busy, testMode, startaPollning]
+    [attachment, busy, testMode, hjalpMode, startaPollning]
   );
+
+  // Förhandsvisningen öppnar rutan mitt i en fråga. En gång per montering.
+  const startFragaSkickadRef = useRef(false);
+  useEffect(() => {
+    if (!hjalpMode || !hjalpStartFraga || startFragaSkickadRef.current) return;
+    startFragaSkickadRef.current = true;
+    void send(hjalpStartFraga);
+  }, [hjalpMode, hjalpStartFraga, send]);
 
   const onFile = useCallback(async (file: File | undefined) => {
     if (!file) {
@@ -1039,6 +1139,8 @@ export function SupportChat({
         layout === "fyll" ? "flex h-full min-h-0 flex-col" : "rounded-card"
       )}
     >
+      {/* Hjälprutan bär huvudet själv (namnet, AI-upplysningen och flikarna). */}
+      {hjalpMode ? null : (
       <div className="flex items-center justify-between gap-4 bg-paper2/70 px-5 py-4">
         <div className="flex items-center gap-3">
           <span className="relative flex h-2.5 w-2.5">
@@ -1073,15 +1175,23 @@ export function SupportChat({
           <AgentMenu yta="kundservice" kontext={tenant ? `tenant=${tenant}` : "demo"} />
         </div>
       </div>
+      )}
 
       <div
         ref={scrollRef}
         className={cn(
-          "space-y-4 overflow-y-auto px-5 py-6",
+          hjalpMode ? "space-y-4 overflow-y-auto px-4 py-4" : "space-y-4 overflow-y-auto px-5 py-6",
           layout === "fyll" ? "min-h-0 flex-1" : "h-[420px]"
         )}
       >
-        {messages.length === 0 ? (
+        {hjalpMode && hjalpFast ? hjalpFast : null}
+
+        {hjalpMode && messages.length === 0 ? (
+          hjalpTomt?.({
+            skicka: (fraga) => void send(fraga),
+            fokusera: () => inputRef.current?.focus()
+          }) ?? null
+        ) : messages.length === 0 ? (
           // m-auto i stället för justify-center: i en scrollcontainer gör
           // justify-center att överskottet ovanför blir oåtkomligt, och vid 320px
           // kapades introtextens första rad. Auto-marginaler centrerar när det
@@ -1112,6 +1222,9 @@ export function SupportChat({
         ) : null}
 
         {messages.map((message) => {
+          if (message.role === "hjalp-kort") {
+            return hjalpMode && renderHjalpKort ? <div key={message.id}>{renderHjalpKort(message.id)}</div> : null;
+          }
           if (message.role === "kb-forhandsvisning") {
             return <KbForhandsvisningKortVy key={message.id} kort={message} onLaggTill={() => void laggTillIKb(message.id)} />;
           }
@@ -1206,7 +1319,8 @@ export function SupportChat({
         ) : null}
       </div>
 
-      <div className="bg-paper2/40 px-5 py-4">
+      <div className={hjalpMode ? "border-t border-ink/10 bg-paper2/40 px-4 py-3" : "bg-paper2/40 px-5 py-4"}>
+        {hjalpMode && messages.length > 0 ? hjalpVerktyg : null}
         {attachment ? (
           <div className="mb-3 inline-flex items-center gap-2 rounded-input bg-paper p-1.5 pr-2">
             {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -1281,6 +1395,7 @@ export function SupportChat({
             </>
           ) : null}
           <textarea
+            ref={inputRef}
             value={input}
             onChange={(event) => setInput(event.target.value)}
             onKeyDown={(event) => {

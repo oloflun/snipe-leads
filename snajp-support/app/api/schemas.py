@@ -51,6 +51,10 @@ class CreateKeyRequest(BaseModel):
     #: interna tenants vars data inte är en kunds personuppgifter. Påverkar
     #: aldrig en tenant som redan finns.
     kraver_avtal: bool | None = None
+    #: Nordlys Handels exempelbas i en testarbetsyta (`testkund-*`). Bara när
+    #: anroparen ber om det: en kund med egen webbplats får sin bas ur
+    #: skanningen, inte ett annat bolags artiklar (kunddemon 2026-11-24).
+    exempel_kb: bool = False
 
 
 class KbArticle(BaseModel):
@@ -63,6 +67,21 @@ class KbArticle(BaseModel):
     #: men portalens lista visar den så att kunden kan byta ut den.
     source_url: str | None = Field(default=None, max_length=2048)
     giltig_till: date | None = None
+
+    @field_validator("category")
+    @classmethod
+    def _kand_kategori(cls, varde: str) -> str:
+        # Databasen har ett CHECK-villkor på kategorin
+        # (ss_knowledge_base_category_check). Utan kontrollen här blev en okänd
+        # kategori ett serverfel i stället för ett besked till anroparen, och
+        # minneslagret i testerna släppte igenom den (funnet 2026-11-25, när
+        # databastesterna kördes mot en riktig Postgres).
+        from ..config import KB_CATEGORIES
+
+        varde = (varde or "").strip() or "ovrigt"
+        if varde not in KB_CATEGORIES:
+            raise ValueError("okänd kategori för kunskapsbasen")
+        return varde
 
     @field_validator("source_url")
     @classmethod
@@ -864,3 +883,97 @@ class OmformuleraDraftRequest(BaseModel):
 class CategoryRuleRequest(BaseModel):
     category: str
     mode: str = Field(..., pattern="^(auto|draft|escalate)$")
+
+
+# -- Hjälprutan (docs/PLAN-HJALPRUTAN-2026-11-25.md) --------------------------
+#
+# Plattformsärendena: kundens felrapporter till Snajp. Rapportör, arbetsyta,
+# kund, vy, roll och besöket sätts av Next-servern ur sessionen; från klienten
+# kommer bara sökvägen, de tre fälten och bilden (app/api/plattformsarenden.py).
+
+#: Statusvärdena, spegel av check-villkoret i migration 156 (och av
+#: app/storage/base.PLATTFORMSARENDE_STATUSAR).
+PlattformsarendeStatus = Literal[
+    "mottagen", "undersoks", "rattning_pagar", "redo_att_testa", "kund_godkand",
+    "i_development", "i_main", "behover_mer", "stangd",
+]
+
+
+class PlattformsarendeRequest(BaseModel):
+    rapportor_user_id: str = Field(..., min_length=32, max_length=40)
+    rapportor_namn: str | None = Field(default=None, max_length=200)
+    kund_workspace_id: str = Field(..., min_length=32, max_length=40)
+    kund_tenant_slug: str = Field(..., min_length=1, max_length=100)
+    vy: str = Field(..., min_length=1, max_length=40)
+    roll: str = Field(..., min_length=1, max_length=40)
+    besok_av_admin: bool = False
+    #: Bara sökvägen, aldrig adressen med frågesträng: en frågesträng kan bära
+    #: ett lead-id, en sökterm eller en mejladress.
+    sida: str = Field(..., min_length=1, max_length=300)
+    gjorde: str = Field(..., min_length=1, max_length=4000)
+    hande: str = Field(..., min_length=1, max_length=4000)
+    vantade: str = Field(default="", max_length=4000)
+    #: Data-URL, samma tak och samma kontroll som chattens bilagor (chat.py).
+    bild: str | None = None
+
+    @field_validator("sida")
+    @classmethod
+    def _bara_sokvag(cls, varde: str) -> str:
+        varde = varde.strip()
+        if (
+            not varde.startswith("/")
+            or varde.startswith("//")
+            or any(tecken in varde for tecken in "?#")
+            or any(tecken.isspace() for tecken in varde)
+        ):
+            raise ValueError("sida ska vara en sökväg som börjar med /, utan frågesträng")
+        return varde
+
+    @field_validator("rapportor_user_id", "kund_workspace_id")
+    @classmethod
+    def _uuid(cls, varde: str) -> str:
+        from uuid import UUID
+
+        try:
+            return str(UUID(varde))
+        except ValueError as fel:
+            raise ValueError("måste vara ett uuid") from fel
+
+
+class PlattformsarendeSvarRequest(BaseModel):
+    rapportor_user_id: str = Field(..., min_length=32, max_length=40)
+    text: str = Field(..., min_length=1, max_length=4000)
+
+
+class PlattformsarendeUtslagRequest(BaseModel):
+    rapportor_user_id: str = Field(..., min_length=32, max_length=40)
+    fungerar: bool
+    kommentar: str | None = Field(default=None, max_length=4000)
+
+
+class PlattformsarendeStatusRequest(BaseModel):
+    status: PlattformsarendeStatus
+    meddelande_till_kund: str | None = Field(default=None, max_length=4000)
+    testversion_url: str | None = Field(default=None, max_length=2048)
+
+    @field_validator("testversion_url")
+    @classmethod
+    def _bara_https(cls, varde: str | None) -> str | None:
+        if varde is None or not varde.strip():
+            return None
+        varde = varde.strip()
+        delar = urlparse(varde)
+        if delar.scheme.lower() != "https" or not delar.netloc or any(t.isspace() for t in varde):
+            raise ValueError("testversion_url måste vara en https-adress")
+        return varde
+
+
+class KbForslagChattRequest(BaseModel):
+    """POST /api/kb/forslag — text ur Hjälprutans samtal som ett väntande
+    förslag i kundens egen kunskapsbas. Samma längder som KbArticle; förslaget
+    blir en artikel först när kunden lägger till det (INV-LEARN-001)."""
+
+    title: str = Field(..., min_length=3, max_length=200)
+    content: str = Field(..., min_length=10, max_length=8000)
+    category: str | None = None
+    kalla: Literal["chatt"]

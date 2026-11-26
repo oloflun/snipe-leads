@@ -188,7 +188,7 @@ export async function fyllStandardinstallningar(
     rost
   });
 
-  if (utfall.produktbeskrivning || utfall.rostdokument || utfall.icp || utfall.erbjudanden) {
+  if (utfall.produktbeskrivning || utfall.rostdokument || utfall.icp || utfall.erbjudanden || utfall.produkter) {
     console.info(
       `[provisionering] standardinställningar för ${workspace.slug ?? workspace.id}:`,
       utfall

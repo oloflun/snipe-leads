@@ -38,6 +38,25 @@ def test_ska_kora_en_gang_per_vardag():
     assert autopilot.ska_kora(PA, manuell, TISDAG_09)
 
 
+def test_en_vilande_autopilotkorning_ar_kundens_dagliga_forsok():
+    """En vilande körning (korning.vila) står kvar i processing och väcks en
+    gång per dygn. Autopiloten startar ingen ny bredvid den: annars samlas en
+    vilande körning per dag på hög i en målgrupp som inte räcker."""
+    igar = datetime(2026, 10, 12, 7, 0, tzinfo=timezone.utc).isoformat()
+    vilande = [{"status": "processing", "created_at": igar,
+                "korning": {"autopilot": True, "vilande": {"sedan": igar, "skal": "registret"}}}]
+    assert not autopilot.ska_kora(PA, vilande, TISDAG_09)
+    # En vaken autopilotkörning som pågår hindrar också.
+    pagar = [{"status": "processing", "created_at": igar, "korning": {"autopilot": True}}]
+    assert not autopilot.ska_kora(PA, pagar, TISDAG_09)
+    # När den vilande nått målet (eller fällts) är vägen fri igen.
+    klar = [{"status": "completed", "created_at": igar, "korning": {"autopilot": True}}]
+    assert autopilot.ska_kora(PA, klar, TISDAG_09)
+    # En kunds egen vilande körning (inte autopilotens) hindrar inte autopiloten.
+    egen = [{"status": "processing", "created_at": igar, "korning": {"vilande": {"sedan": igar, "skal": "registret"}}}]
+    assert autopilot.ska_kora(PA, egen, TISDAG_09)
+
+
 @pytest.mark.anyio
 async def test_svep_kraver_miljoflaggan(monkeypatch):
     storage = MemoryStorage()

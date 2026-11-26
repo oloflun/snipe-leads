@@ -86,6 +86,21 @@ def test_tenanten_laser_aldrig_cookien_sjalv():
     assert "cookies(" not in kod
 
 
+def test_tenanten_lases_aldrig_ur_header_query_eller_cookie():
+    """requireSnajpTenant härleder tenanten ur sessionen och ingenting annat.
+
+    Utökad 2026-11-24 efter kunddemon där en flik visade fel arbetsytas data:
+    servern visade sig ha svarat rätt, och det här testet ser till att det
+    förblir så. En tenant-override via ett huvud, en query-parameter eller en
+    egen cookie vore en väg in som klienten styr. Svarshuvudet
+    X-Snajp-Identitet (INV-SEC-014) SÄTTS av proxyn och läses aldrig här.
+    """
+    kod = _kod(TENANT)
+    for forbjudet in ("headers(", "searchParams", "nextUrl", "cookies(", "request.headers", ".get(\"x-"):
+        assert forbjudet not in kod, f"tenant.ts läser {forbjudet} — tenanten får bara komma ur sessionen"
+    assert "getWorkspaceContext()" in kod
+
+
 def test_demogrenen_nar_exakt_en_tenant():
     """Det här är inte generell impersonation, och ska inte gå att göra till det."""
     kod = _kod(VY)

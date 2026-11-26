@@ -1,7 +1,6 @@
 "use server";
 
 import { cookies } from "next/headers";
-import { redirect } from "next/navigation";
 import { getPlatformAdmin } from "@/lib/auth/admin";
 import { sqlAsUser } from "@/lib/db";
 import { VY_COOKIE, kundVyVarde } from "@/lib/vy";
@@ -18,11 +17,17 @@ import { VY_COOKIE, kundVyVarde } from "@/lib/vy";
  * här är en SKRIVNING: utan kontrollen kunde vem som helst sätta cookien via
  * ett formulär, och även om läsvägen ändå hade svarat `admin` vore det en
  * spärr som bara finns på ett ställe.
+ *
+ * Ingen redirect() sedan kunddemon 2026-11-24 (INV-SEC-014): en server
+ * action-redirect är en mjuk navigering, och fliken behöll då förra vyns state
+ * och routercache. Adressen går tillbaka till klienten, som säger till de andra
+ * flikarna och öppnar den med window.location.replace
+ * (DashboardContext.tsx:bytVyOchOppna). `url: null` betyder att inget bytts.
  */
-export async function bytVy(formData: FormData): Promise<void> {
+export async function bytVy(formData: FormData): Promise<{ url: string | null }> {
   const admin = await getPlatformAdmin();
   if (!admin) {
-    return;
+    return { url: null };
   }
 
   const val = String(formData.get("vy") ?? "");
@@ -40,7 +45,7 @@ export async function bytVy(formData: FormData): Promise<void> {
   if (val.startsWith("kund:")) {
     const slug = val.slice("kund:".length);
     if (!/^[a-z0-9][a-z0-9-]{0,62}$/.test(slug)) {
-      return;
+      return { url: null };
     }
 
     (await cookies()).set(VY_COOKIE, kundVyVarde(slug), {
@@ -50,9 +55,8 @@ export async function bytVy(formData: FormData): Promise<void> {
       maxAge: 60 * 60 * 24 * 30
     });
 
-    // Loggen skrivs INNAN redirect. En redirect i Next kastar internt, och en
-    // loggning efter den hade aldrig körts — vilket hade gett ett besök utan
-    // spår, alltså precis det loggen finns för.
+    // Loggen skrivs innan adressen lämnas tillbaka, så att inget besök blir
+    // utan spår, alltså precis det loggen finns för.
     //
     // Ett misslyckat skriv får inte blockera besöket: funktionen är
     // fail-closed på behörighet men vi vill inte att en full disk gör
@@ -63,7 +67,7 @@ export async function bytVy(formData: FormData): Promise<void> {
       console.error("log_admin_impersonation:", (error as Error).message);
     }
 
-    redirect("/dashboard");
+    return { url: "/dashboard" };
   }
 
   const till = val === "demo" ? "demo" : "admin";
@@ -74,5 +78,5 @@ export async function bytVy(formData: FormData): Promise<void> {
     maxAge: 60 * 60 * 24 * 30
   });
 
-  redirect(till === "demo" ? "/dashboard" : "/admin");
+  return { url: till === "demo" ? "/dashboard" : "/admin" };
 }

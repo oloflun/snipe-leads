@@ -16,6 +16,9 @@ from ..redisnycklar import nyckel
 # 161–277 s i provet 2026-11-18 och föll på den gamla gränsen. Chattens steg
 # har egna, kortare gränser (llm_timeout_chatt_s) och berörs inte i praktiken.
 JOB_TIMEOUT_SECONDS = 600
+#: Felet på ett jobb som passerat tidsgränsen. En konstant, eftersom
+#: app/api/chat.py härleder felkoden "tidsgrans" ur exakt den här texten.
+TIDSGRANS_FEL = "Tidsgräns överskriden (10 min)."
 JOB_TTL_SECONDS = 3600
 
 #: Fält som `get()` alltid skriver ut explicit (och som därför inte ska
@@ -49,7 +52,7 @@ class MemoryJobStore:
                 "started", job["created"]
             ) > JOB_TIMEOUT_SECONDS:
                 job["status"] = "failed"
-                job["error"] = "Tidsgräns överskriden (10 min)."
+                job["error"] = TIDSGRANS_FEL
 
     async def create(self, *, tenant_id: str | None = None, status: str = "processing") -> str:
         self._sweep()
@@ -166,8 +169,8 @@ class RedisJobStore:
         if job.get("status") == "processing" and time.time() - job.get(
             "started", job.get("created", 0)
         ) > JOB_TIMEOUT_SECONDS:
-            await self.fail(job_id, "Tidsgräns överskriden (10 min).")
-            job.update(status="failed", error="Tidsgräns överskriden (10 min).")
+            await self.fail(job_id, TIDSGRANS_FEL)
+            job.update(status="failed", error=TIDSGRANS_FEL)
         return {
             "status": job["status"],
             "result": job.get("result"),

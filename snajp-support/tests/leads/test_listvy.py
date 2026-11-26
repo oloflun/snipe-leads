@@ -220,6 +220,23 @@ async def test_skickat_rakningen_ger_samma_tal_som_listan():
     assert antal["svarat"] == sum(1 for r in i_fonstret if r["svarat"]) == 1
 
 
+def test_ett_obedomt_ringbolag_syns_inte_i_leadslistan():
+    """Antons regel 2026-11-24: inget oprocessat lead i leadslistan. Demons
+    provkörning hade 36 ringbolag med origin 'test', utan bedömning och utan
+    mejl, i listan och i nyckeltalet. Ett Iris-lead under research (har mejl)
+    syns fortfarande."""
+    rader = [
+        {"id": "ring-test", "origin": "test", "contact_phone": "031-1"},
+        {"id": "iris-pagar", "origin": "test", "contact_email": "info@a.se"},
+        {"id": "bedomd", "origin": "test", "niva": "B", "score_total": 70},
+        {"id": "manuell", "origin": "manual"},
+    ]
+    synliga = listvy.synliga(rader, tenant_id="00000000-0000-4000-a000-0000000000aa", kopplade=set())
+    assert [p["id"] for p in synliga] == ["iris-pagar", "bedomd", "manuell"]
+    # Fördelningen läser det skyddet behöver.
+    assert {"score_total", "icp_fit", "niva", "contact_email"} <= set(listvy.FORDELNINGSKOLUMNER)
+
+
 def test_projektionen_vagrar_okanda_kolumner():
     assert _prospektkolumner(None) == "*"
     assert _prospektkolumner(("company_name", "status")) == "id, company_name, status"

@@ -4,11 +4,13 @@ import { useCallback, useEffect, useState } from "react";
 import { EmailStudioEditor } from "@/components/email/EmailStudioEditor";
 import { MejlSvans, type Signatur } from "@/components/leads/IrisGranskning";
 import { StrukturVal, useStruktur } from "@/components/leads/StrukturVal";
+import { pafyllnadSkal } from "@/components/leads/pafyllnad";
 import { Tidslinje } from "@/components/leads/Tidslinje";
 import { SkeletonRows, btnPrimary, btnSecondary, flik, flikAktiv, flikInaktiv, fliklista } from "@/components/ui";
 import { mejlaOss } from "@/components/marketing/copy";
 import { addonSpec } from "@/lib/addons";
 import { offertForUtkast } from "@/lib/leads/offert";
+import { JobbFel, jobbfel } from "@/lib/leads/felkoder";
 import { UTKAST_TON, meddelaLeadsUppdaterade, utkastText, type UtkastStatus } from "@/lib/leads/utkast";
 import type { EmailStudioData } from "@/lib/data/emails";
 import { demoOversiktSvar, demoTidslinje } from "@/lib/demo/oversikt";
@@ -56,6 +58,10 @@ type Prospekt = {
   niva?: "A" | "B" | "C" | null;
   motivering?: string | null;
   jev?: JevData | null;
+  /** Fyllde på kvoten (migration 158, Antons regel 2026-11-24): bedömningen
+   *  står kvar, märkningen visas i bedömningscellen. */
+  pafylld?: boolean | null;
+  pafylld_skal?: string | null;
 };
 
 type JevData = {
@@ -114,6 +120,7 @@ const T = {
   bedomning: { sv: "Bedömning", en: "Assessment" },
   kallor: { sv: "Källor", en: "Sources" },
   motivering: { sv: "Motivering", en: "Reasoning" },
+  pafyllt: { sv: "Påfyllt", en: "Filled in" },
   kriterier: { sv: "Kriterier", en: "Criteria" },
   kalla: { sv: "källa", en: "source" },
   researchPagar: {
@@ -353,6 +360,8 @@ const KONTAKTJAKT_PAUS_MS = 5_000;
 async function pollaLeadsJobb(jobId: string, locale: Locale): Promise<{
   status?: string;
   error?: string;
+  /** Känd felkod (GET /api/jobs/{id}), översätts med lib/leads/felkoder.ts. */
+  error_kod?: string;
   result?: {
     body?: string;
     subject?: string;
@@ -366,6 +375,7 @@ async function pollaLeadsJobb(jobId: string, locale: Locale): Promise<{
     const jobb = await snajpAnrop<{
       status?: string;
       error?: string;
+      error_kod?: string;
       result?: {
         body?: string;
         subject?: string;
@@ -600,7 +610,11 @@ export function LeadDetail({
       if (koat.job_id && (koat.fase === "skriver" || !koat.body)) {
         const klart = await pollaLeadsJobb(koat.job_id, locale);
         if (klart.status !== "completed" || !klart.result) {
-          throw new Error(klart.error || text(T.utkastKundeInte));
+          // En känd kod på användarens språk; backendens svenska text når
+          // aldrig den engelska rutan (lib/leads/felkoder.ts).
+          throw new JobbFel(
+            klart.status === "timeout" ? T.utkastTogForLang : jobbfel(klart.error_kod, klart.error, T.utkastKundeInte)
+          );
         }
         svar = klart.result;
       }
@@ -651,7 +665,10 @@ export function LeadDetail({
         brodtext: svar.body
       });
     } catch (error) {
-      setUtkastLage({ fas: "fel", meddelande: samma(felmeddelande(error)) });
+      setUtkastLage({
+        fas: "fel",
+        meddelande: error instanceof JobbFel ? error.besked : samma(felmeddelande(error))
+      });
     }
   }, [locale, text, struktur]);
 
@@ -707,12 +724,22 @@ export function LeadDetail({
         </div>
         <div>
           <dt className="kicker text-mineral">{text(T.bedomning)}</dt>
-          <dd className={cn("mt-1 text-[15px]", p.niva === "C" && "text-danger")}>
+          {/* Ett påfyllt lead: "Bortvald" i rött bredvid ett utkast som väntar
+              på ja säger emot sig självt. Etiketten säger vad leadet är, och
+              skälet och "Varför bortvald" nedan bär bedömningen. */}
+          <dd className={cn("mt-1 text-[15px]", p.pafylld ? "text-ochre-ink" : p.niva === "C" && "text-danger")}>
             {researchPagar(p)
               ? text(T.researchar)
-              : p.niva
-                ? nivaEtikett(p.niva, locale)
-                : statusEtikett(p.status, locale)}
+              : p.pafylld
+                ? text(T.pafyllt)
+                : p.niva
+                  ? nivaEtikett(p.niva, locale)
+                  : statusEtikett(p.status, locale)}
+            {p.pafylld && p.pafylld_skal ? (
+              <span className="mt-1 block text-[14px] leading-6 text-ink-muted">
+                {text(pafyllnadSkal(p.pafylld_skal) ?? { sv: p.pafylld_skal, en: p.pafylld_skal })}
+              </span>
+            ) : null}
           </dd>
         </div>
         <div>

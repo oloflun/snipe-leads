@@ -25,6 +25,11 @@ TABELLER: list[tuple[str, tuple[str, ...]]] = [
     ("agent_context_docs", ("kind", "content", "source", "version")),
 ]
 
+#: Rader som INTE följer med till den riktiga kunden. Exempelbasen
+#: (`is_placeholder`, seed_kb.ensure_tenant_kb) är Nordlys Handels artiklar;
+#: i en riktig kunds bas är de ett annat bolags villkor som kundens egna.
+URVAL: dict[str, str] = {"ss_knowledge_base": "and not is_placeholder"}
+
 PROSPEKT_KOLUMNER: tuple[str, ...] = (
     "company_name",
     "contact_name",
@@ -65,7 +70,7 @@ async def _tenant_med_slug(storage: Storage, slug: str) -> dict[str, Any] | None
 
 
 async def sammanfatta(storage: Storage, fran_id: str, till_id: str) -> dict[str, Any]:
-    kb_fran = await storage.list_kb(fran_id)
+    kb_fran = [a for a in await storage.list_kb(fran_id) if not a.get("is_placeholder")]
     kb_till = await storage.list_kb(till_id)
     docs_fran = await storage.list_context_docs(fran_id)
     docs_till = await storage.list_context_docs(till_id)
@@ -184,6 +189,7 @@ async def _verkstall_minne(
     storage.kb[till_id] = [
         {**copy.deepcopy(rad), "id": str(uuid.uuid4()), "tenant_id": till_id}
         for rad in storage.kb.get(fran_id, [])
+        if not rad.get("is_placeholder")
     ]
     storage.context_docs[till_id] = [
         {**copy.deepcopy(rad), "id": str(uuid.uuid4()), "tenant_id": till_id}
@@ -256,7 +262,8 @@ async def _verkstall_postgres(
                 )
                 await conn.execute(
                     f"""insert into public.{tabell} (tenant_id, {kol})
-                        select $1, {kol} from public.{tabell} where tenant_id = $2""",
+                        select $1, {kol} from public.{tabell}
+                         where tenant_id = $2 {URVAL.get(tabell, "")}""",
                     till_id,
                     fran_id,
                 )

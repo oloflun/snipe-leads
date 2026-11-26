@@ -14,6 +14,7 @@ import { demoOversiktSvar } from "@/lib/demo/oversikt";
 import { felmeddelande, readJsonBody } from "@/lib/http/json";
 import { sv, useLocale, type Locale, type Localized } from "@/lib/i18n";
 import { offertForUtkast } from "@/lib/leads/offert";
+import { JobbFel, jobbfel } from "@/lib/leads/felkoder";
 import { ICP_ETIKETTER } from "@/lib/leads/icpLabels";
 import { kriterier } from "@/lib/prospekt";
 import { cn } from "@/lib/utils";
@@ -292,6 +293,8 @@ async function hamtaOffertsammanfattning(): Promise<string> {
 async function pollaLeadsJobb(jobId: string, locale: Locale): Promise<{
   status?: string;
   error?: string;
+  /** Känd felkod (GET /api/jobs/{id}), översätts med lib/leads/felkoder.ts. */
+  error_kod?: string;
   result?: {
     body?: string;
     subject?: string;
@@ -305,6 +308,7 @@ async function pollaLeadsJobb(jobId: string, locale: Locale): Promise<{
     const jobb = await snajpAnrop<{
       status?: string;
       error?: string;
+      error_kod?: string;
       result?: {
         body?: string;
         subject?: string;
@@ -541,7 +545,11 @@ export function Bolagssida({ id, demo = false }: Readonly<{ id: string; demo?: b
       if (koat.job_id && (koat.fase === "skriver" || !koat.body)) {
         const klart = await pollaLeadsJobb(koat.job_id, locale);
         if (klart.status !== "completed" || !klart.result) {
-          throw new Error(klart.error || text(T.utkastKundeInte));
+          // En känd kod på användarens språk; backendens svenska text når
+          // aldrig den engelska rutan (lib/leads/felkoder.ts).
+          throw new JobbFel(
+            klart.status === "timeout" ? T.utkastTogForLang : jobbfel(klart.error_kod, klart.error, T.utkastKundeInte)
+          );
         }
         svar = klart.result;
       }
@@ -566,7 +574,10 @@ export function Bolagssida({ id, demo = false }: Readonly<{ id: string; demo?: b
         queueItemId: svar.queue_item_id ?? null
       });
     } catch (cause) {
-      setUtkastLage({ fas: "fel", meddelande: samma(felmeddelande(cause)) });
+      setUtkastLage({
+        fas: "fel",
+        meddelande: cause instanceof JobbFel ? cause.besked : samma(felmeddelande(cause))
+      });
     }
   }, [lage, locale, text, struktur]);
 

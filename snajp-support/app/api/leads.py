@@ -2927,21 +2927,25 @@ async def _andra_korningars_bolag(storage, tenant_id: str, batch_id: str) -> set
     men förbrukade ändå en av sina rundor. Nycklar som upptagna.nyckel."""
     ut: set[str] = set()
     try:
-        # Bara de ANDRA pågående körningarna, med arbetsminnet: körningens
-        # eget tillstånd (flera MB vid 200) lästes förut här för varje runda.
-        rader = await storage.list_leads_korningar(
-            tenant_id, limit=20, arbetsminne=True, status="processing", utom=batch_id
-        )
+        # Bara bolagens namn och org.nr ur de ANDRA pågående körningarna, inte
+        # deras arbetsminne: en vilande körning (regel 23) bär varje prövat bolag
+        # och lästes förut i sin helhet i varje runda. Ingen cache mellan rundor:
+        # en aktiv körning som tar ett bolag nu ska synas i nästa läsning.
+        rader = await storage.list_andra_korningars_bolag(tenant_id, utom=batch_id, limit=20)
     except Exception:  # noqa: BLE001 — utan läsningen gäller bara det sparade
         logger.exception("Kunde inte läsa de andra körningarna för %s.", tenant_id)
         return ut
     for rad in rader:
-        k = rad.get("korning") or {}
-        if rad.get("job_id") == batch_id or rad.get("status") != "processing" or not k or k.get("klar"):
+        if rad.get("job_id") == batch_id:
             continue
-        ut |= upptagna.bolagsnycklar(k.get("kandidater") or [])
-        ut |= upptagna.bolagsnycklar(k.get("listspar") or [])
-        ut |= upptagna.nycklar(str(t.get("namn") or "") for t in k.get("tratt") or [])
+        ut |= upptagna.bolagsnycklar(rad.get("kandidater") or [])
+        if rad.get("vilande"):
+            # En vilande körning (påfyllnaden, 2026-11-24) söker inte: dess
+            # tratt och listspår håller inga bolag åt den (lagringen skickar
+            # dem inte heller).
+            continue
+        ut |= upptagna.bolagsnycklar(rad.get("listspar") or [])
+        ut |= upptagna.nycklar(str(n or "") for n in rad.get("tratt") or [])
     return ut
 
 
@@ -3032,8 +3036,11 @@ _STYRNING = {"pausa": "paus", "aterupta": None, "avbryt": "avbruten"}
 AVBRUTEN_KORNING = "Körningen avbröts innan researchen startade."
 
 #: Slutets fält som nollas när en körning fortsätter (styr_korning "fortsatt").
+#: "rundor", "rundor_tak" och "sokfel" sedan 2026-11-24: en körning som
+#: stannade på max_rundor stannade annars igen direkt efter Fortsätt.
 _SLUTFALT = ("slut_orsak", "flaskhals", "sammanfattning", "stopp", "tomma_rundor",
-             "dubblettrundor", "listspar_sparad", "listspar_lista", "fordelning")
+             "dubblettrundor", "rundor", "rundor_tak", "sokfel",
+             "listspar_sparad", "listspar_lista", "listspar_ringlista", "fordelning")
 
 
 def _kan_fortsatta(rad: dict) -> bool:
@@ -3108,7 +3115,7 @@ async def _fortsatt_korning(app_state, tenant: dict, job_id: str) -> dict:
         for falt in _SLUTFALT:
             k.pop(falt, None)
         # Samma form som en ny körning (korning.ny_korning).
-        k.update(slut_orsak=None, flaskhals=None)
+        k.update(slut_orsak=None, flaskhals=None, rundor=0)
         k["klar"] = False
         k["pagaende"] = 0
         k["styrning"] = None
@@ -3206,15 +3213,37 @@ async def _kor_sokrunda(app_state, tenant: dict, batch_id: str, u: dict) -> dict
     try:
         # Sökningen och Jev-triagen loggas som en egen post (Fas 7).
         async with samla_anrop(storage, tenant["tenant_id"], is_test=u["is_test"], input_text=f"sökrunda {u['rundor'] + 1}"):
-            await iris_korning.sokrunda(u["profil"], u["sok_icp"], tmp, uteslut=u["uteslut"])
+            if u.get("omprova"):
+                await _omprova_listspar(u, tmp)
+            else:
+                await iris_korning.sokrunda(u["profil"], u["sok_icp"], tmp, uteslut=u["uteslut"])
     except DiscoveryError:
         logger.warning("Sökrundan i körning %s misslyckades.", batch_id)
         fel = "discovery"
     except Exception:  # noqa: BLE001 — en trasig runda får inte lämna körningen i "söker"
         logger.exception("Sökrundan i körning %s föll.", batch_id)
         fel = "discovery"
-    tmp["rundor"] = max(int(tmp["rundor"]), int(u["rundor"]) + 1)
-    return {"tmp": tmp, "skrap": skrap, "slut": bool(skrap.slut or skrap.webb_slut), "fel": fel}
+    # Påfyllnadens omprövning (steg 2) är ingen sökrunda och räknas inte.
+    tmp["rundor"] = int(u["rundor"]) if u.get("omprova") else max(int(tmp["rundor"]), int(u["rundor"]) + 1)
+    return {"tmp": tmp, "skrap": skrap, "slut": bool(skrap.slut or skrap.webb_slut), "fel": fel,
+            "omprova": bool(u.get("omprova"))}
+
+
+async def _omprova_listspar(u: dict, tmp: dict) -> None:
+    """Påfyllnadens steg 2 (Antons regel 2026-11-24): sajterna utan hittad
+    kontakt (listspårets "prova_om") prövas om i samma körning, med samma
+    sökning och fördelning som Processa om (leads/omprova.py). En hittad
+    mejladress gör bolaget till en Iris-kandidat; resten står kvar."""
+    from ..leads import omprova
+
+    par = [(rad, await omprova.hamta_bolag(rad)) for rad in u["omprova"]]
+    for (rad, _), (kandidat, kontakt) in zip(par, await omprova.sok_alla(par)):
+        spar, _skal, ny = omprova.planera(rad, kandidat, kontakt)
+        if spar == "iris" and ny and not iris_korning.far_fyllas_pa(
+            ny, profil=u["profil"], kontaktade=u.get("kontaktade") or set(), sparrade=u.get("sparrade") or set()
+        ):
+            tmp["kandidater"].append(ny)
+            tmp.setdefault("flyttade", []).append(rad.get("company_name"))
 
 
 async def _sla_in_sokrunda(app_state, tenant: dict, batch_id: str, rond: dict) -> None:
@@ -3247,7 +3276,15 @@ async def _sla_in_sokrunda(app_state, tenant: dict, batch_id: str, rond: dict) -
     # slutet på målgruppen, i stället för ett fast antal rundor.
     # En runda där en parallell körning tog alla bolag säger inget om
     # målgruppen och räknas inte som tom (fyra körningar samtidigt 2026-10-15).
-    if tmp["kandidater"]:
+    if rond.get("omprova"):
+        # Steg 2 räknas inte som en sökrunda. De som blev Iris-kandidater
+        # lämnar listspåret, så att de inte också räknas som "prövas om".
+        flyttade = set(tmp.get("flyttade") or [])
+        k["listspar"] = [
+            r for r in k.get("listspar") or []
+            if not (r.get("spar") == "prova_om" and r.get("company_name") in flyttade)
+        ]
+    elif tmp["kandidater"]:
         k["tomma_rundor"] = 0
     elif not tagna and not rond["fel"] and not k.get("bred") and merinfo.aktiv():
         # Kundens egna branscher är genomsökta i området: nästa runda söker
@@ -3267,13 +3304,15 @@ async def _sla_in_sokrunda(app_state, tenant: dict, batch_id: str, rond: dict) -
     k["skrap"] = sidhamtning.summera(k.get("skrap"), rond["skrap"])
     k.pop("soker_sedan", None)
     k.pop("soker_process", None)
-    if rond["fel"]:
+    if rond["fel"] and not rond.get("omprova"):
         # Räknas för slutorsaken: fyra "tomma" rundor som i själva verket
         # var fyra fallna sökningar ska heta "sökningen föll", inte "inga
         # träffar — kontrollera stavningen" (main 2026-10-21: tre körningar
         # à 70 leads skyllde på kundens ortnamn när Gemini-vägen var död).
         k["sokfel"] = int(k.get("sokfel") or 0) + 1
-    if rond["fel"] and k["rundor"] >= iris_korning.max_rundor(k["mal"]):
+    if rond.get("omprova"):
+        pass
+    elif rond["fel"] and k["rundor"] >= _rundtak(k):
         k["stopp"] = "sokningen_foll"
     elif rond["slut"] and not tmp["kandidater"]:
         # Även webbsidornas tak: utan dem blir en ny runda bara betalda
@@ -3282,6 +3321,38 @@ async def _sla_in_sokrunda(app_state, tenant: dict, batch_id: str, rond: dict) -
     resultat.update(korning=k, jobs=k["jobs"], count=len(k["jobs"]))
     await app_state.jobs.complete(batch_id, resultat)
     await _spara_korning(app_state, tenant["tenant_id"], batch_id, k)
+
+
+def _rundtak(k: dict) -> int:
+    """Sökrundornas skyddsnät: max_rundor(mal), eller det förlängda taket."""
+    return int(k.get("rundor_tak") or iris_korning.max_rundor(k["mal"]))
+
+
+async def _forlang_tak(storage, tenant_id: str, batch_id: str, k: dict, vilket: str) -> None:
+    """Förlänger taket ("tak") eller rundtaket ("rundor") med det återstående
+    behovet × TAK_FAKTOR, samma formel som _fortsatt_korning, och loggar det
+    som platform_event. Kastar aldrig."""
+    behov = max(1, int(k["mal"]) - int(k.get("levererade") or 0))
+    if vilket == "tak":
+        fore = int(k.get("tak") or 0)
+        k["tak"] = int(k.get("undersokta") or 0) + int(k.get("pagaende") or 0) + behov * iris_korning.TAK_FAKTOR
+        efter = k["tak"]
+    else:
+        fore = _rundtak(k)
+        k["rundor_tak"] = int(k.get("rundor") or 0) + iris_korning.max_rundor(behov)
+        efter = k["rundor_tak"]
+    k["forlangningar"] = int(k.get("forlangningar") or 0) + 1
+    try:
+        await storage.log_platform_event(
+            level="info",
+            source="leads",
+            message=f"Körningens {'tak' if vilket == 'tak' else 'rundtak'} förlängdes under målet",
+            tenant_id=tenant_id,
+            detail={"job_id": batch_id, "vilket": vilket, "fore": fore, "efter": efter,
+                    "mal": k["mal"], "levererade": k.get("levererade"), "undersokta": k.get("undersokta")},
+        )
+    except Exception:  # noqa: BLE001 — händelseloggen får inte stoppa körningen
+        logger.warning("Kunde inte logga takförlängningen för körning %s.", batch_id)
 
 
 async def _fyll_pa_last(app_state, tenant: dict, batch_id: str) -> dict | None:
@@ -3304,7 +3375,24 @@ async def _fyll_pa_last(app_state, tenant: dict, batch_id: str) -> dict | None:
         await jobs.complete(batch_id, resultat)
         await _spara_korning(app_state, tenant_id, batch_id, k)
         return
+    if k.get("vilande"):
+        # En vilande körning (korning.vila) prövas igen en gång per dygn av
+        # väckaren. Däremellan rör ingen väckning den, utom kundens Avbryt.
+        if iris_korning.ska_vackas(k):
+            iris_korning.vakna(k)
+            # Ett nytt dygn får ett nytt sidtak, annars vilar en körning som
+            # stannade på kredittaket för alltid.
+            k["sidtak_extra"] = int(k.get("sidtak_extra") or 0) + iris_korning.korningstak(k["mal"])
+            for falt in ("listspar_sparad", "listspar_lista", "listspar_ringlista", "fordelning"):
+                k.pop(falt, None)
+        elif await _styrning(app_state, tenant_id, batch_id) == "avbruten":
+            k.pop("vilande", None)
+        else:
+            return None
     profil, sok_icp = await _korningens_profil(storage, tenant_id, k.get("overrides"))
+    # Påfyllnadens storleksvidgning (steg 4) gäller sökningens filter; antalet
+    # anställda bär också körningens overrides till researchen.
+    profil.update((k.get("pafyllnad") or {}).get("vidgad") or {})
     orsak = None
     styr = None
     # En annan worker kör sökrundan: köa det som finns, avsluta aldrig.
@@ -3316,8 +3404,10 @@ async def _fyll_pa_last(app_state, tenant: dict, batch_id: str) -> dict | None:
         if styr:
             break
         if k["undersokta"] + k["pagaende"] >= k["tak"]:
-            orsak = "tak"
-            break
+            # Taket är ett kostnadslarm, inte ett slut (demon 2026-11-24: 8 av
+            # 10 med 118 undersökta, fast registret hade 1 169 bolag kvar).
+            # Loopen körs bara under målet, så taket förlängs alltid här.
+            await _forlang_tak(storage, tenant_id, batch_id, k, "tak")
         if not k["kandidater"]:
             if k.get("stopp"):
                 orsak = k["stopp"]
@@ -3326,9 +3416,13 @@ async def _fyll_pa_last(app_state, tenant: dict, batch_id: str) -> dict | None:
                 vantar_pa_sokning = True
                 break
             if (
-                k["rundor"] >= iris_korning.max_rundor(k["mal"])
-                or int(k.get("tomma_rundor") or 0) >= iris_korning.TOMMA_RUNDOR
+                k["rundor"] >= _rundtak(k)
+                and int(k.get("tomma_rundor") or 0) < iris_korning.TOMMA_RUNDOR
             ):
+                # Samma sak för rundtaket: det enda målgruppsslutet är
+                # TOMMA_RUNDOR (efter breddningen).
+                await _forlang_tak(storage, tenant_id, batch_id, k, "rundor")
+            if int(k.get("tomma_rundor") or 0) >= iris_korning.TOMMA_RUNDOR:
                 # "Slut på kandidater" förutsätter att sökningen gick att
                 # genomföra. Föll hämtningarna hos tjänsten (kredit, kvot,
                 # 429) eller själva sökrundorna (DiscoveryError, k["sokfel"])
@@ -3359,6 +3453,12 @@ async def _fyll_pa_last(app_state, tenant: dict, batch_id: str) -> dict | None:
             } | {str(r.get("company_name") or "") for r in k.get("listspar") or []} | (
                 await _andra_korningars_bolag(storage, tenant_id, batch_id)
             ) | await _nyligen_bortvalda(storage, tenant_id, batch_id)
+            # Storleksvidgningen (påfyllnadens steg 4) släpper de bortval som
+            # ligger inom den vidgade gränsen.
+            fria = set((k.get("pafyllnad") or {}).get("fria") or [])
+            if fria:
+                fria |= upptagna.nycklar(fria)
+                uteslut = {n for n in uteslut if n not in fria}
             # Kredittaket gäller hela körningen (plan 2026-10-05): varje runda
             # får det som återstår, och summan står i liggaren (Körningar).
             # Taket skalar med beställningen (Sebbe 2026-10-07: Iris måste
@@ -3369,7 +3469,7 @@ async def _fyll_pa_last(app_state, tenant: dict, batch_id: str) -> dict | None:
             # 40 räckte till ~29 granskade bolag i en målgrupp där tre av
             # fyra saknar webbplats — en 2-beställning svalt ändå. 30 per
             # beställt lead med golvet 60 ger småbeställningar en ärlig chans.
-            korningstak = iris_korning.korningstak(k["mal"])
+            korningstak = iris_korning.korningstak(k["mal"]) + int(k.get("sidtak_extra") or 0)
             # Bolagens webbsidor har ett eget tak (Antons regel 12,
             # 2026-10-07): förut delade de taket med merinfo-sidorna, och när
             # det tog slut blev resten "Ingen kontaktmejl" i listspåret.
@@ -3420,6 +3520,11 @@ async def _fyll_pa_last(app_state, tenant: dict, batch_id: str) -> dict | None:
             k["tratt"].append({"namn": kandidat.get("company_name"), "steg": "dubblett",
                                "skal": "Finns redan: bolaget står redan i en lista eller som lead"})
             continue
+        # Ett bolag som bara kom med för att storleken vidgades (steg 4) märks
+        # som påfyllt när det levereras (_rapportera_till_korning).
+        vidgat = iris_korning.utanfor_ursprung(k.get("pafyllnad") or {}, kandidat)
+        if vidgat:
+            k["pafyllnad"].setdefault("vantande", {})[str(prospect["id"])] = vidgat
         barn = await _lagg_prospektjobb(
             app_state,
             tenant,
@@ -3454,18 +3559,33 @@ async def _fyll_pa_last(app_state, tenant: dict, batch_id: str) -> dict | None:
                     if (tjanstefel or sokfel) and k["levererade"] == 0
                     else "slut_pa_kandidater"
                 )
-            iris_korning.avsluta(k, "klar" if k["levererade"] >= k["mal"] else (orsak or "slut_pa_kandidater"))
+            if k["levererade"] < k["mal"]:
+                # Antons regel 2026-11-24: aldrig under beställt antal. Nästa
+                # påfyllnadssteg, och är alla tömda vilar körningen i stället
+                # för att bli klar under målet (korning.py § Påfyllnaden).
+                steg = iris_korning.nasta_pafyllnad(k, orsak)
+                if steg:
+                    uppdrag = await _starta_pafyllnad(
+                        app_state, tenant, batch_id, k, steg, profil=profil, sok_icp=sok_icp
+                    )
+                    resultat.update(korning=k, jobs=k["jobs"], count=len(k["jobs"]))
+                    await jobs.complete(batch_id, resultat)
+                    await _spara_korning(app_state, tenant_id, batch_id, k)
+                    return uppdrag or await _fyll_pa_last(app_state, tenant, batch_id)
+                iris_korning.vila(k, iris_korning.vilans_skal(k, orsak))
+                logger.info("Körning %s vilar på %s av %s (%s).", batch_id, k["levererade"], k["mal"],
+                            k["vilande"]["skal"])
+                await _spara_listspar(storage, tenant_id, k)
+                _starta_webbpool(storage, tenant_id, k)
+                k["sammanfattning"] = iris_korning.sammanfatta(k)
+                resultat.update(korning=k, jobs=k["jobs"], count=len(k["jobs"]))
+                await jobs.complete(batch_id, resultat)
+                await _spara_korning(app_state, tenant_id, batch_id, k)
+                return None
+            iris_korning.avsluta(k, "klar")
         # Före sammanfattningen: den läser fördelningen listspåret sparade.
         await _spara_listspar(storage, tenant_id, k)
-        if k.get("webbpool") and not k.get("webbpool_startad"):
-            # Webbpoolen (plan 2026-10-08): körningens bolag bedöms och
-            # fördelas till webbyråerna i en egen uppgift som aldrig kastar.
-            # Flaggan följer tillståndet till liggaren, så att en väckning
-            # efter deploy inte startar den två gånger.
-            from ..leads import webbpool
-
-            k["webbpool_startad"] = True
-            asyncio.create_task(webbpool.efter_korning(storage, dict(k), tenant_id))
+        _starta_webbpool(storage, tenant_id, k)
         k["sammanfattning"] = iris_korning.sammanfatta(k)
     resultat.update(korning=k, jobs=k["jobs"], count=len(k["jobs"]))
     await jobs.complete(batch_id, resultat)
@@ -3473,12 +3593,216 @@ async def _fyll_pa_last(app_state, tenant: dict, batch_id: str) -> dict | None:
     return None
 
 
+def _starta_webbpool(storage, tenant_id: str, k: dict) -> None:
+    """Webbpoolen (plan 2026-10-08): körningens bolag bedöms och fördelas
+    till webbyråerna i en egen uppgift som aldrig kastar. Startas när
+    körningen är klar eller lägger sig att vila (2026-11-24). Flaggan följer
+    tillståndet till liggaren, så att en väckning efter deploy inte startar
+    den två gånger."""
+    if k.get("webbpool") and not k.get("webbpool_startad"):
+        from ..leads import webbpool
+
+        k["webbpool_startad"] = True
+        asyncio.create_task(webbpool.efter_korning(storage, dict(k), tenant_id))
+
+
+async def _pafyllnadens_sparrar(storage, tenant_id: str) -> tuple[set[str], set[str]]:
+    """(kontaktade, sparrade) till korning.far_fyllas_pa, hämtade en gång per
+    steg: bolag kunden redan mejlat (Skickat) eller fått Kontakta inte om i
+    ett samtal, och adresserna på suppressionslistan. Prospektets egen status
+    (contacted, suppressed …) läser spärren ur raden."""
+    sparrade = {str(s).strip().casefold() for s in await storage.list_suppressions(tenant_id) if s}
+    kontaktade = upptagna.bolagsnycklar(await storage.list_skickade(tenant_id, limit=500))
+    for samtal in await storage.list_lead_samtal(tenant_id):
+        if samtal.get("utfall") != "kontakta_inte" or not samtal.get("prospect_id"):
+            continue
+        rad = await storage.get_prospect(tenant_id, str(samtal["prospect_id"]))
+        if rad:
+            kontaktade |= upptagna.bolagsnycklar([rad])
+            if rad.get("contact_email"):
+                sparrade.add(str(rad["contact_email"]).strip().casefold())
+    return kontaktade, sparrade
+
+
+async def _starta_pafyllnad(
+    app_state, tenant: dict, batch_id: str, k: dict, steg: str, *, profil: dict, sok_icp: dict
+) -> dict | None:
+    """Kör påfyllnadssteget `steg` (korning.PAFYLLNADSSTEG) på körningen, under
+    dess lås. Köar prospektjobb direkt (steg 1, 3, 5), vidgar storleken och
+    öppnar sökningen igen (steg 4), eller returnerar ett sökuppdrag som
+    _fyll_pa kör utanför låset (steg 2). Ett steg står som klart först när
+    det inte har något kvar att pröva; varje bolag går genom
+    korning.far_fyllas_pa."""
+    storage = app_state.storage
+    tenant_id = tenant["tenant_id"]
+    p = k.setdefault("pafyllnad", {})
+    klara = p.setdefault("klara", [])
+    behov = max(0, int(k["mal"]) - int(k["levererade"]) - int(k["pagaende"]))
+    logger.info("Körning %s fyller på: steg %s, %s kvar till målet.", batch_id, steg, behov)
+
+    async def koa(rad: dict) -> None:
+        barn = await _lagg_prospektjobb(
+            app_state, tenant, [rad], scope=k["scope"], overrides=k.get("overrides"),
+            is_test=bool(k.get("is_test")), limit=1, batch_id=batch_id,
+            struktur=utkaststruktur.normalisera(k.get("struktur")),
+        )
+        k["jobs"].extend({**b, "company_name": rad.get("company_name")} for b in barn)
+        k["pagaende"] += len(barn)
+
+    async def egna_prospekt(hoppa_over: list[str]) -> list[dict]:
+        """Körningens egna researchade bolag (k["jobs"]): researchens bortval
+        står sig i 30 dagar och är upptagna, så en ny sökning hittar dem aldrig."""
+        kontaktade, sparrade = await _pafyllnadens_sparrar(storage, tenant_id)
+        ut: list[dict] = []
+        sedda = set(hoppa_over)
+        for j in k.get("jobs") or []:
+            pid = str(j.get("prospect_id") or "")
+            if not pid or pid in sedda:
+                continue
+            sedda.add(pid)
+            rad = await storage.get_prospect(tenant_id, pid)
+            if rad and not iris_korning.far_fyllas_pa(rad, profil=profil, kontaktade=kontaktade, sparrade=sparrade):
+                ut.append(rad)
+        return ut
+
+    if steg == "omforsok":
+        fallna = {
+            str(t.get("namn")) for t in k.get("tratt") or []
+            if t.get("steg") == "research" and str(t.get("skal") or "").startswith(iris_korning.TJANSTEFEL)
+        }
+        forsokta = p.setdefault("omforsokta", [])
+        kvar = [
+            r for r in await egna_prospekt(forsokta)
+            if r.get("company_name") in fallna and r.get("niva") not in ("A", "B")
+        ]
+        for rad in kvar[:behov]:
+            forsokta.append(str(rad["id"]))
+            await koa(rad)
+        if int(k.get("sokfel") or 0) and not p.get("sokrundor_omkorda"):
+            # Fallna sökrundor körs om en gång.
+            p["sokrundor_omkorda"] = True
+            if k.get("stopp") == "sokningen_foll":
+                k.pop("stopp", None)
+            k["tomma_rundor"] = 0
+        if len(kvar) <= behov:
+            klara.append(steg)
+        return None
+    if steg == "prova_om":
+        klara.append(steg)
+        provade = p.setdefault("omprovade", [])
+        rader = [
+            r for r in k.get("listspar") or []
+            if r.get("spar") == "prova_om" and r.get("company_name") not in provade
+        ]
+        if not rader:
+            return None
+        provade.extend(str(r.get("company_name")) for r in rader)
+        from ..jobs.stream import consumer_name
+
+        k["soker_sedan"] = datetime.now(timezone.utc).isoformat()
+        k["soker_process"] = consumer_name()
+        korningstak = iris_korning.korningstak(k["mal"]) + int(k.get("sidtak_extra") or 0)
+        webb_betalda = int((k.get("skrap") or {}).get("webb") or 0)
+        kontaktade, sparrade = await _pafyllnadens_sparrar(storage, tenant_id)
+        return {
+            "omprova": rader, "kontaktade": kontaktade, "sparrade": sparrade,
+            "profil": profil, "sok_icp": sok_icp, "uteslut": set(),
+            "tak": korningstak - (sidhamtning.betalda(k.get("skrap")) - webb_betalda),
+            "webb_tak": korningstak - webb_betalda,
+            "mal": k["mal"], "levererade": k["levererade"], "rundor": k["rundor"],
+            "bred": bool(k.get("bred")), "is_test": bool(k.get("is_test")),
+        }
+    if steg in ("bortval", "belagt_nej"):
+        grupper = iris_korning.BORTVALSGRUPPER if steg == "bortval" else ("nej",)
+        anvanda = p.setdefault("anvanda", [])
+        rangordnade = iris_korning.rangordna_bortval(await egna_prospekt(anvanda), grupper=grupper)
+        for rad in rangordnade[:behov]:
+            # Bedömningen står kvar som den är (nivå, poäng, skäl); flaggan
+            # släpper leadet förbi grindarna som annars döljer eller spärrar
+            # ett bortval (_leverbarhet, listvy.synliga, scheduler).
+            skal = iris_korning.pafyllnadsskal(rad, iris_korning.bortvalsgrupp(rad))
+            await storage.spara_bedomning(tenant_id, str(rad["id"]), bedomning={"pafylld": True, "pafylld_skal": skal})
+            anvanda.append(str(rad["id"]))
+            await koa(rad)
+        if len(rangordnade) <= behov:
+            klara.append(steg)
+        return None
+    # Steg 4: storleken vidgas närmast gränsen. Sökningen öppnas igen med den
+    # vidgade gränsen, och bortvalen inom den släpps ur uteslutningen.
+    klara.append(steg)
+    andel = iris_korning.VIDGNING[steg]
+    ursprung = p.setdefault(
+        "ursprung", {f: profil.get(f) for f in ("anstallda_min", "anstallda_max", "omsattning_min", "omsattning_max")}
+    )
+    inom: list[tuple[str, str]] = []
+    for t in k.get("tratt") or []:
+        tolkat = iris_korning.tolka_storleksskal(t.get("skal")) if t.get("steg") in ("register", "förfilter") else None
+        if not tolkat or ursprung.get(tolkat[0]) is None:
+            continue
+        tolkat = (tolkat[0], tolkat[1], int(ursprung[tolkat[0]]))
+        if iris_korning.inom_vidgning(tolkat, andel):
+            inom.append((str(t.get("namn")), tolkat[0]))
+    if not inom:
+        return None
+    vidgad = dict(p.get("vidgad") or {})
+    for falt in {f for _, f in inom}:
+        vidgad[falt] = iris_korning.vidgad_grans(falt, int(ursprung[falt]), andel)
+    p["vidgad"] = vidgad
+    p["fria"] = sorted(set(p.get("fria") or []) | {n for n, _ in inom})
+    # Researchens storleksrad läser körningens overrides: utan samma vidgning
+    # där fälls bolagen igen (bedomning._storlek_rad).
+    anstallda = {f: v for f, v in vidgad.items() if f.startswith("anstallda")}
+    if anstallda:
+        k["overrides"] = {**(k.get("overrides") or {}), **anstallda}
+    k["tomma_rundor"] = 0
+    k.pop("stopp", None)
+    return None
+
+
+#: En ringlisterad i en lista (provkörning, 2026-11-24): bara det
+#: lead_list_items har kolumner för. Antal anställda och omsättning står i
+#: `extra` (migration 152), så att regel 15 ("antal anställda visas alltid")
+#: gäller också i listan.
+_RINGLISTFALT = (
+    "company_name", "website", "ort", "postnr", "orgnr", "contact_name", "contact_role",
+    "contact_phone", "contact_level", "signal_detalj", "source_name", "source_url",
+)
+
+
+def _ringlistrad(rad: dict) -> dict:
+    return {
+        **{f: rad.get(f) for f in _RINGLISTFALT},
+        "signal": "ring",
+        "extra": {"anstallda": rad.get("anstallda"), "omsattning": rad.get("omsattning")},
+    }
+
+
+async def _skriv_sparlista(storage, tenant_id: str, *, titel: str, rader: list[dict], is_test: bool) -> str:
+    """En lista per spår och körning under Listor. Returnerar list-id."""
+    lista = await storage.create_lead_list(
+        tenant_id,
+        titel=f"{titel}, Iris {datetime.now(timezone.utc):%Y-%m-%d}",
+        icp={},
+        antal=min(len(rader), 200),
+        is_test=is_test,
+    )
+    for rad in rader:
+        await storage.add_lead_list_item(tenant_id, list_id=lista["id"], **rad)
+    await storage.set_lead_list_status(tenant_id, lista["id"], status="klar")
+    return lista["id"]
+
+
 async def _spara_listspar(storage, tenant_id: str, k: dict) -> None:
     """Fördelningen efter kontaktsökningen (Antons regler 12–16, 2026-10-07;
     spåren sätts av sources/merinfo.fordela):
 
-    * ringlistan: ett prospekt med origin 'ring' per bolag (VD, telefon,
-      antal anställda), ingen research och inget utkast;
+    * ringlistan, provkörning (k["is_test"]): en lista per körning,
+      "Ringlista, Iris <datum>", aldrig prospekt. Antons regel 2026-11-24:
+      inga oprocessade leads i leadslistan och aldrig fler än beställt (demons
+      provkörning lade 36 ringbolag som origin 'test' i leadslistan);
+    * ringlistan, skarp körning: ett prospekt med origin 'ring' per bolag (VD,
+      telefon, antal anställda), ingen research och inget utkast, för
+      Samtal › Ringlista. Om även de ska bli en lista väntar på Anton;
     * ej kvalificerade: en lista per körning, "Ej kvalificerade, Iris <datum>",
       med skälet i signal_detalj;
     * prövas om (sajt utan hittad kontakt, eller stoppad av sidtaket):
@@ -3490,11 +3814,13 @@ async def _spara_listspar(storage, tenant_id: str, k: dict) -> None:
     if k.get("listspar_sparad") or k.get("listspar_lista"):
         return
     fordelning = {"ring": 0, "ej_kvalificerade": 0, "prova_om": 0, "tak": 0}
+    is_test = bool(k.get("is_test"))
     try:
         # Ett bolag som redan står i en lista, är ett prospekt eller kundens
         # CRM-kund ska inte komma tillbaka.
         sedda = await upptagna.hamta(storage, tenant_id)
         rader: list[dict] = []
+        ringrader: list[dict] = []
         for rad in k.get("listspar") or []:
             spar = rad.get("spar") or "ej_kvalificerad"
             if spar == "prova_om":
@@ -3504,25 +3830,22 @@ async def _spara_listspar(storage, tenant_id: str, k: dict) -> None:
                 continue
             sedda |= upptagna.bolagsnycklar([rad])
             if spar == "ring":
-                await _skapa_prospekt_ur_kandidat(
-                    storage, tenant_id, rad, "test" if k.get("is_test") else "ring"
-                )
+                if is_test:
+                    ringrader.append(_ringlistrad(rad))
+                else:
+                    await _skapa_prospekt_ur_kandidat(storage, tenant_id, rad, "ring")
                 fordelning["ring"] += 1
             else:
                 rader.append(rad)
         fordelning["ej_kvalificerade"] = len(rader)
-        if rader:
-            lista = await storage.create_lead_list(
-                tenant_id,
-                titel=f"Ej kvalificerade, Iris {datetime.now(timezone.utc):%Y-%m-%d}",
-                icp={},
-                antal=min(len(rader), 200),
-                is_test=bool(k.get("is_test")),
+        if ringrader:
+            k["listspar_ringlista"] = await _skriv_sparlista(
+                storage, tenant_id, titel="Ringlista", rader=ringrader, is_test=is_test
             )
-            for rad in rader:
-                await storage.add_lead_list_item(tenant_id, list_id=lista["id"], **rad)
-            await storage.set_lead_list_status(tenant_id, lista["id"], status="klar")
-            k["listspar_lista"] = lista["id"]
+        if rader:
+            k["listspar_lista"] = await _skriv_sparlista(
+                storage, tenant_id, titel="Ej kvalificerade", rader=rader, is_test=is_test
+            )
         k["listspar_sparad"] = True
     except Exception:  # noqa: BLE001
         logger.exception("Listspåret för körningen gick inte att spara.")
@@ -3566,6 +3889,16 @@ async def _rapportera_till_korning(
                 if ny:
                     rapporterade.append(job_id)
                     iris_korning.registrera_utfall(k, namn=namn, leverbar=leverbar, skal=skal, undersokt=undersokt)
+                    # Levererat tack vare den vidgade storleken (påfyllnadens
+                    # steg 4): märks som påfyllt, med skälet.
+                    vantande = (k.get("pafyllnad") or {}).get("vantande") or {}
+                    pid = next((str(j.get("prospect_id")) for j in k.get("jobs") or []
+                                if j.get("job_id") == job_id), None)
+                    vidgat = vantande.pop(pid, None) if pid else None
+                    if vidgat and leverbar:
+                        await app_state.storage.spara_bedomning(
+                            tenant["tenant_id"], pid, bedomning={"pafylld": True, "pafylld_skal": vidgat}
+                        )
                     if skrap:
                         k["skrap"] = sidhamtning.summera(k.get("skrap"), skrap)
                     resultat["korning"] = k
@@ -3601,7 +3934,11 @@ async def vack_stillastaende_korningar(app_state) -> int:
     antal = 0
     for tenant in await storage.list_tenants():
         try:
-            rader = await storage.list_leads_korningar(tenant["id"], limit=10)
+            # Bara pågående rader, inte de tio senaste (2026-11-24): kundens
+            # avslutade körningar och listbyggen trängde annars undan en
+            # stillastående körning, som städaren sedan fällde. Scope filtreras
+            # nedan; protokollets list_leads_korningar har inget scope-filter.
+            rader = await storage.list_leads_korningar(tenant["id"], status="processing", limit=500)
         except Exception:  # noqa: BLE001 — en tenant stoppar inte de andra
             logger.exception("Kunde inte läsa körningarna för %s.", tenant.get("id"))
             continue
@@ -3610,6 +3947,9 @@ async def vack_stillastaende_korningar(app_state) -> int:
             if rad.get("status") != "processing" or rad.get("scope") != "batch" or not k or k.get("klar"):
                 continue
             if k.get("pagaende") or k.get("styrning") == "paus" or _soker(k) or rad["job_id"] in aktiva():
+                continue
+            # En vilande körning (korning.vila) väcks en gång per dygn, inte varje minut.
+            if k.get("vilande") and not iris_korning.ska_vackas(k):
                 continue
             logger.info("Körning %s stod still; väcks.", rad["job_id"])
             asyncio.create_task(
@@ -3783,6 +4123,13 @@ async def _starta_batch(request: Request, payload: LeadsBatchRequest, tenant: di
     _require_live_llm()
     await _kraev_leads_budget(request.app.state.storage, tenant["tenant_id"])
     await _validera_batch_kan_starta(request.app.state.storage, tenant, payload)
+    if payload.scope == "research_and_draft":  # ingen egen produkt, inget utkast (2026-11-24)
+        from ..leads.business_context import require_egen_produkt
+        try:
+            await require_egen_produkt(request.app.state.storage, tenant["tenant_id"])
+        except MissingBusinessContextError as fel:
+            # En stabil kod bredvid den svenska texten: ytan översätter koden.
+            raise HTTPException(status_code=422, detail={"message": str(fel), "kod": fel.kod}) from fel
 
     overrides = (
         payload.overrides.model_dump(exclude_none=True)
@@ -3848,12 +4195,18 @@ def _leverbarhet(rad: dict, result: dict, regler: dict) -> str | None:
     Sebbes beslut 2026-10-07 (ersätter namn- och telefonkravet): kontakten
     som krävs är en kontaktmejl till bolaget som utkastet kan nå fram till
     (discovery.mottagare) — en namngiven person föredras, info@ duger, en
-    telefon ensam räcker inte."""
+    telefon ensam räcker inte.
+
+    Ett påfyllt lead (`pafylld`, Antons regel 2026-11-24, korning.py §
+    Påfyllnaden) släpps förbi kvalificeringen och tröskeln men behåller sin
+    riktiga bedömning, och mottagaren och lägesbeskrivningen gäller som för
+    alla andra."""
     from ..leads.discovery import mottagare
 
-    if not result.get("qualified"):
+    pafylld = bool(rad.get("pafylld"))
+    if not pafylld and not result.get("qualified"):
         return (result.get("disqualifiers") or ["Uppfyllde inte kriterierna"])[0]
-    if eskalering.under_troskel(regler, qualified=True, icp_fit=result.get("icp_fit")):
+    if not pafylld and eskalering.under_troskel(regler, qualified=True, icp_fit=result.get("icp_fit")):
         # Tröskeln jämför träffsäkerheten (icp_fit), inte rangpoängen i
         # score_total (app/leads/rangpoang.py) — skälet ska citera samma tal.
         try:
@@ -3957,9 +4310,15 @@ async def _run_batch_prospect(
         # inget att skriva ur och får den vanliga kedjan; det har ingen
         # bedömning som kan gå förlorad.
         skriv = scope in ("research_and_draft", "utkast")
+        # Ett påfyllt lead i en körning (korning.py § Påfyllnaden) är redan
+        # researchat: utkastet skrivs ur den sparade researchen, och
+        # bedömningen står kvar som den är.
+        pafylld = bool(batch_id) and bool(
+            (await storage.get_prospect(tenant["tenant_id"], prospect_id) or {}).get("pafylld")
+        )
         sparad = (
             await sparad_research.las(storage, tenant["tenant_id"], prospect_id)
-            if scope == "utkast"
+            if scope == "utkast" or pafylld
             else None
         )
         bara_utkast = sparad is not None
@@ -3984,6 +4343,16 @@ async def _run_batch_prospect(
         _regler = eskalering.normalisera(installningar.get("eskalering"))
         utfall["namn"] = str(_rad.get("company_name") or "")
         _skal = _leverbarhet(_rad, result, _regler)
+        if pafylld:
+            # Grinden är redan passerad med flaggan; utkastet ska inte stoppas
+            # av samma bortval igen.
+            result.pop("stopped_early", None)
+            if _skal:
+                # Påfyllningen gick inte (ingen lägesbeskrivning, ingen
+                # mottagare): märkningen tas bort, bolaget är ett bortval igen.
+                await storage.spara_bedomning(
+                    tenant["tenant_id"], prospect_id, bedomning={"pafylld": False, "pafylld_skal": ""}
+                )
         if _skal:
             utfall["skal"] = _skal
         if _skal and not bara_utkast:
@@ -4010,6 +4379,7 @@ async def _run_batch_prospect(
         regler = eskalering.normalisera(installningar.get("eskalering"))
         if (
             scope == "research_and_draft"
+            and not pafylld
             and not result.get("stopped_early")
             and eskalering.under_troskel(
                 regler, qualified=bool(result.get("qualified")), icp_fit=result.get("icp_fit")
@@ -4191,6 +4561,8 @@ async def _run_batch_prospect(
                         )
                 except MissingBusinessContextError as fel:
                     result["draft_note"] = str(fel)
+                    if fel.kod:  # ytan översätter koden (lib/leads/suite.ts)
+                        result["draft_note_kod"] = fel.kod
                 except Exception as fel:  # noqa: BLE001 — researchen är klar, utkastet är bonus
                     # Researchen är sparad, så jobbet blir completed — men
                     # anteckningen bar tidigare f"...: {fel}", alltså

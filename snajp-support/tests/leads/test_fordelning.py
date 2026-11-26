@@ -181,6 +181,53 @@ async def test_ringlistan_och_ej_kvalificerade_sparas(monkeypatch):
     assert len(await lager.list_prospects(TENANT)) == 1
 
 
+def _ringrad(**andring) -> dict:
+    rad = m.ringrad(_kandidat(omsattning=1200, sni="43", jev_triage={"beslut": "behall"}),
+                    {"contact_phone": "031-12 34 56"})
+    return {**rad, **andring}
+
+
+async def test_provkorningens_ringlista_blir_en_lista_inte_prospekt():
+    """Antons regel 2026-11-24: inga oprocessade leads i leadslistan och
+    aldrig fler än beställt. Demons provkörning lade 36 ringbolag som
+    origin 'test'-prospekt i leadslistan ("Researchar", 44 i stället för 8)."""
+    lager = MemoryStorage()
+    k = korning.ny_korning(mal=1, scope="research_and_draft", overrides=None, is_test=True)
+    k["listspar"] = [_ringrad()]
+    await _spara_listspar(lager, TENANT, k)
+
+    assert await lager.list_prospects(TENANT) == []
+    [lista] = await lager.list_lead_lists(TENANT)
+    assert lista["titel"].startswith("Ringlista, Iris ")
+    assert lista["is_test"] is True
+    assert k["listspar_ringlista"] == lista["id"]
+    [rad] = await lager.list_lead_list_items(TENANT, lista["id"])
+    assert (rad["company_name"], rad["contact_name"], rad["contact_role"], rad["contact_phone"]) == (
+        "Alfa Bygg AB", "Test Testsson", "VD", "031-12 34 56")
+    assert (rad["signal"], rad["orgnr"], rad["contact_level"]) == ("ring", "556000-0001", "named_role_match")
+    # Regel 15: antal anställda visas alltid; raden bär det i extra.
+    assert rad["extra"] == {"anstallda": 4, "omsattning": 1200}
+    assert k["fordelning"]["ring"] == 1
+    # Sammanfattningen säger var bolagen finns.
+    k["levererade"] = 1
+    assert "1 i ringlistan under Listor" in korning.sammanfatta(k)
+    # Listspåret körs en gång.
+    await _spara_listspar(lager, TENANT, k)
+    assert len(await lager.list_lead_lists(TENANT)) == 1
+
+
+async def test_skarp_korning_behaller_ringprospektet():
+    """Skarpa körningar: valet väntar på Anton (Samtal › Ringlista)."""
+    lager = MemoryStorage()
+    k = korning.ny_korning(mal=1, scope="research_and_draft", overrides=None, is_test=False)
+    k["listspar"] = [_ringrad()]
+    await _spara_listspar(lager, TENANT, k)
+    [ring] = await lager.list_prospects(TENANT)
+    assert ring["origin"] == "ring"
+    assert await lager.list_lead_lists(TENANT) == []
+    assert "listspar_ringlista" not in k
+
+
 def test_sammanfattningen_raknar_ur_listsparet_fore_sparningen():
     k = korning.ny_korning(mal=2, scope="research", overrides=None, is_test=False)
     k["listspar"] = [

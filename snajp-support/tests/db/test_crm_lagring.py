@@ -1,4 +1,4 @@
-"""CRM-lagret mot en riktig Postgres (migration 153).
+"""CRM-lagret mot en riktig Postgres (migration 160).
 
 Testerna i tests/crm går mot minneslagret. De visar att logiken stämmer, men
 inte att SQL:en gör det: typomvandlingarna, de unika indexen, RLS-policyn och

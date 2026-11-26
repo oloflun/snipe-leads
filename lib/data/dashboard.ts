@@ -6,6 +6,7 @@ import { isAddonKey, type AddonKey } from "@/lib/addons";
 import { hamtaTillagg } from "@/lib/actions/tillagg";
 import { listTenants, unwrap } from "@/lib/data/admin";
 import { DEMO_ARBETSYTA, aktivVy, type Vy } from "@/lib/vy";
+import { snajpIdentitet } from "@/lib/snajp/tenant";
 import { cookies } from "next/headers";
 import { cache } from "react";
 
@@ -78,6 +79,13 @@ export type DashboardState = {
    * "support", inte en tom vy.
    */
   initialScope: Scope;
+  /**
+   * Vem trädet renderades för: samma opaka värde som proxyns svarshuvud
+   * X-Snajp-Identitet (lib/snajp/tenant.ts:snajpIdentitet, INV-SEC-014).
+   * DashboardProvider laddar om fliken när de skiljer sig. Saknas på de
+   * publika demosidorna, som inte har någon session att jämföra med.
+   */
+  identitet?: string;
 };
 
 /**
@@ -169,6 +177,13 @@ async function tillaggForKundbesok(
  * identiska svar per sidbyte är inte fel, bara betalda två gånger.
  */
 export const resolveDashboardState = cache(async function resolveDashboardState(): Promise<DashboardState> {
+  const state = await tillstandUtanIdentitet();
+  // Ett fel i uppslaget ger ingen identitet, alltså ingen kontroll, i stället
+  // för en identitet som aldrig stämmer och en flik som laddar om.
+  return { ...state, identitet: await snajpIdentitet().catch(() => undefined) };
+});
+
+async function tillstandUtanIdentitet(): Promise<DashboardState> {
   if (!hasDatabase()) {
     return ANONYMOUS;
   }
@@ -279,7 +294,7 @@ export const resolveDashboardState = cache(async function resolveDashboardState(
     arLasare: (context.profile.role ?? "") === "viewer",
     initialScope: await scopeFranCookie(synliga)
   };
-});
+}
 
 /**
  * `workspaceHasData` och `variant` är BORTA, och det var inte en förenkling.

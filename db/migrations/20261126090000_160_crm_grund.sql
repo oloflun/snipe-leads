@@ -1,4 +1,4 @@
--- 153: Snajp CRM, grunden och kundsynken in (Antons beställning 2026-11-24).
+-- 160: Snajp CRM, grunden och kundsynken in (Antons beställning 2026-11-24).
 --
 -- Buddy vill inte ladda upp sin kundlista för hand: kunddatan ska synkas in
 -- över ett API och hållas aktuell, och kunderna ska gå att hantera i Snajp.
@@ -262,17 +262,17 @@ alter table public.ss_api_keys add column if not exists namn text;
 alter table public.ss_api_keys add column if not exists revoked_at timestamptz;
 
 comment on table public.crm_bolag is
-  'Snajp CRM: bolag per kund (migration 153). orgnr_nyckel är samma nyckel som '
+  'Snajp CRM: bolag per kund (migration 160). orgnr_nyckel är samma nyckel som '
   'app/leads/upptagna.py; varje levande rad utesluts ur Iris-körningarna. '
   'Skrivs av app/crm/, läses av app/api/crm_v1.py.';
 comment on column public.crm_bolag.orgnr is
   'Organisationsnummer NNNNNN-NNNN för juridiska personer. En enskild firmas nummer '
   'är ett personnummer och sparas inte: raden har då enskild_firma = true.';
 comment on table public.crm_personer is
-  'Snajp CRM: kontaktpersoner per kund (migration 153). Personuppgifter som kunden '
+  'Snajp CRM: kontaktpersoner per kund (migration 160). Personuppgifter som kunden '
   'är ansvarig för och Snajp biträde för.';
 comment on table public.crm_synkkorningar is
-  'Liggaren över varje kundsynk in (migration 153). Förlopp och utfall läses härifrån.';
+  'Liggaren över varje kundsynk in (migration 160). Förlopp och utfall läses härifrån.';
 comment on column public.ss_api_keys.omfang is
   'Vad nyckeln når. ''{*}'' är allt (kundens egen backendnyckel). En nyckel med '
   'bara crm-omfång når enbart /api/crm/v1 (app/api/deps.py).';

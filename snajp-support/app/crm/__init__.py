@@ -1,4 +1,4 @@
-"""Snajp CRM: bolag, personer och kundsynken in (migration 153).
+"""Snajp CRM: bolag, personer och kundsynken in (migration 160).
 
 Antons beställning 2026-11-24, efter demon för Buddy: kunddatan ska synkas in
 över ett API i stället för att laddas upp som lista, och kunderna ska gå att

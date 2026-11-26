@@ -42,6 +42,7 @@
     "snajp-support/frontend",
     "support-webb",
     "marknad/video",
+    "marknad/demofilm",
     "tests/e2e"
   ]
 }

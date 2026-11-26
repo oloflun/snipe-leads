@@ -159,7 +159,10 @@ async def _kor_send_guard(storage, tenant_id: str, thread: dict, message: dict, 
         # ett färdigt utkast och ingenting som hindrade ett godkännande från
         # att bli ett utskick. Kundens egna bolag (origin 'manual', listor)
         # berörs inte: där har kunden själv pekat ut mottagaren.
-        if origin == "iris" and prospect.get("niva") not in ("A", "B"):
+        # Ett påfyllt lead (Antons regel 2026-11-24, korning.py § Påfyllnaden)
+        # är bedömt mot källmaterialet och behåller sin nivå; flaggan är det
+        # uttryckliga, märkta undantaget (INV-LEADS-EXIST-001).
+        if origin == "iris" and prospect.get("niva") not in ("A", "B") and not prospect.get("pafylld"):
             return GuardBeslut(
                 SG_BLOCKERA,
                 "ej_styrkt",
@@ -201,7 +204,7 @@ async def _kor_send_guard(storage, tenant_id: str, thread: dict, message: dict, 
         # Supportens kundregister ÄR kundens kundlista: den som har ett ärende
         # hos tenantens support är en befintlig kund och ska inte kallmejlas.
         # Var frozenset() fram till 2026-09-20 — spärren fanns utan data.
-        # Sedan migration 153 också kunderna i Snajp CRM: bolagets egen adress
+        # Sedan migration 160 också kunderna i Snajp CRM: bolagets egen adress
         # och personerna hos bolag med relationen kund (app/crm/lagring.py).
         egna_kunder=frozenset(await storage.list_customer_emails(tenant_id))
         | frozenset(await crm_lagring.kundadresser(storage, tenant_id)),

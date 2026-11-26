@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { LeadDetail } from "@/components/leads/IrisBolag";
 import { IrisGranskning } from "@/components/leads/IrisGranskning";
 import { KorningensUtkast } from "@/components/leads/KorningensUtkast";
 
@@ -34,6 +35,66 @@ const KO = {
 
 let utskicksvarv = 0;
 
+/**
+ * Läget "fallet utkastjobb" (2026-11-25): `?lage=fallet-utkastjobb` visar
+ * Iris-bolagets ruta (LeadDetail) där "Skapa utkast" startar ett jobb som
+ * faller. `&kod=` väljer felkoden i jobbsvaret (standard saknar_produkt;
+ * `kod=okand` ger en kod tabellen inte känner). Byt språk för att se att den
+ * engelska rutan aldrig får backendens svenska text (lib/leads/felkoder.ts).
+ */
+const FALLET_PROSPEKT = {
+  id: "p-fel",
+  company_name: "Provbygget AB",
+  contact_name: null,
+  contact_email: "info@provbygget.example",
+  status: "ready",
+  origin: null,
+  ort: "Umeå",
+  sni: null,
+  website: "https://provbygget.example",
+  orgnr: null,
+  score_total: 72,
+  icp_fit: 0.7,
+  qualified: true,
+  disqualifiers: null,
+  score_breakdown: null,
+  niva: "B",
+  motivering: "Exempeltext i förhandsvisningen."
+};
+
+/** Backendens svenska text för koden, så som jobbposten lagrar den. */
+const FALLET_TEXT: Record<string, string> = {
+  saknar_produkt:
+    "Iris vet inte vilken av era produkter mejlen ska sälja. Lägg till minst en produkt under Inställningar › Målgrupp och automation innan Iris skriver utkast.",
+  okand: "Ett internt fel som ytan inte har någon kod för."
+};
+
+let fallKod: string | null = null;
+
+/** Next skickar en server action som en POST med rubriken Next-Action. */
+function arServerAction(init?: RequestInit): boolean {
+  try {
+    return new Headers(init?.headers).has("next-action");
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Erbjudandet (lasOffertForUtkast) läses med en server action före utkastet.
+ * Utan inloggning svarar den ok: false; svaret skickas vidare med resultatet
+ * utbytt, så att flödet når jobbet. Raden i flight-formatet är vanlig JSON.
+ */
+async function offertUtanInloggning(riktigt: Promise<Response>): Promise<Response> {
+  const res = await riktigt;
+  const kropp = await res.text();
+  const ersatt = kropp.replace(
+    /\{"ok":false,"fel":\{"sv":"[^"]*","en":"[^"]*"\}\}/,
+    JSON.stringify({ ok: true, text: "Exempelerbjudande i förhandsvisningen." })
+  );
+  return new Response(ersatt, { status: res.status, headers: res.headers });
+}
+
 function svar(kropp: unknown, status = 200) {
   return Promise.resolve(
     new Response(JSON.stringify(kropp), { status, headers: { "Content-Type": "application/json" } })
@@ -46,7 +107,21 @@ function installeraFetch() {
   const riktig = window.fetch.bind(window);
   window.fetch = (input, init) => {
     const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+    if (fallKod && arServerAction(init)) return offertUtanInloggning(riktig(input, init));
     if (!url.includes("/api/snajp-support/")) return riktig(input, init);
+    if (fallKod) {
+      if (url.endsWith("/leads/prospects/p-fel")) return svar({ prospect: FALLET_PROSPEKT, sources: [] });
+      if (url.endsWith("/leads/prospects/p-fel/utkast")) return svar({ utkast: null });
+      if (url.endsWith("/leads/outreach/draft")) return svar({ job_id: "utkast-fel", fase: "skriver" }, 202);
+      if (url.endsWith("/leads/jobb/utkast-fel")) {
+        return svar({
+          status: "failed",
+          result: null,
+          error: FALLET_TEXT[fallKod] ?? FALLET_TEXT.okand,
+          ...(fallKod === "okand" ? {} : { error_kod: fallKod })
+        });
+      }
+    }
     // Massutskicket går som ett jobb (lib/leads/utskicksjobb.ts): starten
     // svarar med ett id, och pollningen visar förloppet i tre varv.
     if (url.endsWith("/utkast/skicka-jobb")) {
@@ -92,7 +167,22 @@ export default function KorningensUtkastForhandsvisning() {
     installeraFetch();
     return true;
   });
+  // Läget läses efter hydreringen, så att servern och klienten renderar lika.
+  const [fallet, setFallet] = useState(false);
+  useEffect(() => {
+    const parametrar = new URLSearchParams(window.location.search);
+    if (parametrar.get("lage") !== "fallet-utkastjobb") return;
+    fallKod = parametrar.get("kod") || "saknar_produkt";
+    setFallet(true);
+  }, []);
   if (!redo) return null;
+  if (fallet) {
+    return (
+      <main className="mx-auto grid max-w-3xl gap-12 px-4 py-10">
+        <LeadDetail id="p-fel" demo={false} />
+      </main>
+    );
+  }
   return (
     <main className="mx-auto grid max-w-3xl gap-12 px-4 py-10">
       <KorningensUtkast jobId="forhandsvisning" />

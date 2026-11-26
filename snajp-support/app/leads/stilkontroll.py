@@ -593,6 +593,35 @@ _IRIS_FEL_SAK = re.compile(
 )
 
 
+#: Snajps egna namn, per stam (produktstam): agenterna, tillägget och bolaget.
+_SNAJPS_NAMN = (
+    ("supportagent", re.compile(r"\bsupportagent\w*", re.IGNORECASE)),
+    ("iris", re.compile(r"\biris\b", re.IGNORECASE)),
+    ("kvittohanterare", re.compile(r"\bkvittohanterar\w*", re.IGNORECASE)),
+    ("snajp", re.compile(r"\bsnajp\w*", re.IGNORECASE)),
+)
+
+
+def snajp_produkt_hos_kund(text: str, *, slug: str | None, produkter: Sequence[dict]) -> list[Anmarkning]:
+    """Snajps produktnamn i en annan kunds utkast (kunddemon 2026-11-24: en ny
+    kund utan produktlista fick "Vår Supportagent svarar på de frågorna …",
+    skrivstilens exempel). Fyndet stoppar köningen. Hos Snajp ("snajp") och
+    när namnet är kundens egen produkt är det inget fynd. Hälsningsraden räknas
+    inte: Iris är också ett förnamn."""
+    if slug == "snajp":
+        return []
+    egna = " ".join(str(p.get("namn") or "") for p in produkter if isinstance(p, dict)).casefold()
+    brod = " ".join(_meningar(_brodtext(text or "")))
+    namn = [stam for stam, monster in _SNAJPS_NAMN if monster.search(brod) and stam not in egna]
+    if not namn:
+        return []
+    return [Anmarkning(
+        "snajp_produkt_hos_kund",
+        f"Stil: mejlet nämner Snajps egna namn ({', '.join(namn)}), inte kundens produkt; utkastet köas inte",
+        allvarlig=True,
+    )]
+
+
 def produktslag(produkt: str | None) -> str | None:
     """"support" eller "leads" för Snajps två agenter, annars None (en annan
     kunds produkt, där frågans moment inte går att avgöra i kod)."""

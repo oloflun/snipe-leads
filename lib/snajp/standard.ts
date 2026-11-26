@@ -97,7 +97,36 @@ export type Standardutfall = {
   rostdokument: boolean;
   icp: boolean;
   erbjudanden: boolean;
+  produkter: boolean;
 };
+
+/**
+ * Kundens första produkt ur onboardingens obligatoriska "Vad vi säljer"
+ * (raden i produkttexten, lib/actions/onboarding.ts). Formen är backendens
+ * `ProduktRequest`: namnet är textens första mening, nyttan hela texten.
+ *
+ * Kunddemon 2026-11-24: onboardingen skrev aldrig `settings.produkter`, Iris
+ * valde då varken produkt eller erbjudande, och utkastet sålde Snajps
+ * Supportagent ur skrivstilens exempel.
+ *
+ * Äldre kunder (före 400fa150, 2026-08-17) sparade fri text utan raden, och 9
+ * av 10 kunder i produktionen saknade produktlista 2026-11-25. Saknas raden är
+ * den första egna raden kundens ord om vad de säljer. Onboardingens
+ * etikettrader (företag, orgnr, webbplats …) är inte det, och utan en egen
+ * rad blir det ingen produkt: hellre spärrens besked än en gissad rad.
+ */
+const ETIKETTRAD = /^(Vårt företag|Organisationsnummer|Webbplats|Vad vi säljer|Särskilt fokus|Kontaktperson):/i;
+
+function forstaProdukt(underlag: Underlag): { namn: string; nytta: string } | null {
+  const produkttext = rent(underlag.produkt);
+  const rad = /^Vad vi säljer:/im.test(produkttext)
+    ? produkttext.match(/^Vad vi säljer:[ \t]*(.*)$/im)?.[1]
+    : produkttext.split("\n").find((r) => r.trim() && !ETIKETTRAD.test(r.trim()));
+  const text = (rad ?? "").trim();
+  if (!text) return null;
+  const namn = (text.split(/[.:\n]/)[0] ?? "").trim().slice(0, 80);
+  return namn ? { namn, nytta: text.slice(0, 400) } : null;
+}
 
 /**
  * Onboardingens erbjudanden som erbjudandeinställningar
@@ -275,7 +304,13 @@ export async function sattStandardinstallningar(
   apiKey: string,
   underlag: Underlag
 ): Promise<Standardutfall> {
-  const utfall: Standardutfall = { produktbeskrivning: false, rostdokument: false, icp: false, erbjudanden: false };
+  const utfall: Standardutfall = {
+    produktbeskrivning: false,
+    rostdokument: false,
+    icp: false,
+    erbjudanden: false,
+    produkter: false
+  };
 
   if (rent(underlag.produkt)) {
     try {
@@ -358,11 +393,29 @@ export async function sattStandardinstallningar(
     }
   }
 
+  const produkt = forstaProdukt(underlag);
+  if (produkt) {
+    try {
+      // Bara när listan är tom: samma regel som fälten ovan. Körs också vid
+      // inloggning, så äldre kunder utan produkter får raden.
+      const svar = await anrop<{ produkter?: unknown[] }>(apiKey, "/api/leads/config");
+      if (svar && !(svar.produkter ?? []).length) {
+        await anrop(apiKey, "/api/leads/config", {
+          method: "PUT",
+          body: JSON.stringify({ produkter: [produkt] })
+        });
+        utfall.produkter = true;
+      }
+    } catch (error) {
+      console.error("[standard] produkten kunde inte skrivas:", error);
+    }
+  }
+
   // Iris-profilen kompileras direkt ur det som just skrevs, så att den är klar
   // när kunden först öppnar leads. Väntas INTE in: kompileringen kan gå genom
   // en LLM, och kunden ska inte sitta kvar i uppstarten för den. Uteblir den
   // kompileras profilen ändå vid första läsningen (sakerstall_profil).
-  if (utfall.icp || utfall.produktbeskrivning) {
+  if (utfall.icp || utfall.produktbeskrivning || utfall.produkter) {
     void anrop(apiKey, "/api/leads/profil").catch((error) => {
       console.error("[standard] Iris-profilen kunde inte kompileras:", error);
     });

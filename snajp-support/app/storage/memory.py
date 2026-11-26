@@ -788,9 +788,14 @@ class MemoryStorage:
         return [
             {"id": a["id"], "title": a["title"], "content": a["content"],
              "category": a["category"], "source_url": a.get("source_url"),
-             "giltig_till": a.get("giltig_till"), "created_at": a["created_at"]}
+             "giltig_till": a.get("giltig_till"), "is_placeholder": bool(a.get("is_placeholder")),
+             "created_at": a["created_at"]}
             for a in self.kb.get(tenant_id, [])
         ]
+
+    def _rensa_exempel(self, tenant_id: str) -> None:
+        """Eget innehåll kom in: tenantens exempelrader går (Storage.add_kb_article)."""
+        self.kb[tenant_id] = [a for a in self.kb.get(tenant_id, []) if not a.get("is_placeholder")]
 
     async def add_kb_article(
         self,
@@ -802,16 +807,29 @@ class MemoryStorage:
         embedding: list[float] | None = None,
         source_url: str | None = None,
         giltig_till: date | None = None,
+        is_placeholder: bool = False,
     ) -> dict[str, Any]:
+        # Samma gräns som databasens ss_knowledge_base_category_check, så att
+        # ett test mot minneslagret faller där Postgres hade fallit.
+        from ..config import KB_CATEGORIES
+
+        if category not in KB_CATEGORIES:
+            raise ValueError(f"okänd kategori för kunskapsbasen: {category!r}")
         row = _kb_row(tenant_id, {"title": title, "content": content, "category": category})
         row["embedding"] = embedding
         row["source_url"] = source_url
         # ISO-sträng, samma form som Postgres-vägens _row ger för en date-kolumn.
         row["giltig_till"] = str(giltig_till) if giltig_till else None
+        row["is_placeholder"] = is_placeholder
+        # Ingen await mellan rensningen och tillägget: atomiskt, som
+        # transaktionen i Postgres-vägen.
+        if not is_placeholder:
+            self._rensa_exempel(tenant_id)
         self.kb.setdefault(tenant_id, []).append(row)
         return {
             "id": row["id"], "title": title, "category": category,
             "source_url": source_url, "giltig_till": row["giltig_till"],
+            "is_placeholder": is_placeholder,
         }
 
     async def delete_kb_article(self, tenant_id: str, artikel_id: str) -> bool:
@@ -903,15 +921,23 @@ class MemoryStorage:
         # händelseloop, som transaktionen i Postgres-vägen.
         for f in self.kb_forslag.get(tenant_id, []):
             if f["id"] == str(forslag_id) and f["status"] == "vantar":
+                from ..config import KB_CATEGORIES
+
+                # Databasens gräns gäller artikeln, inte förslaget (se add_kb_article).
+                if f["category"] not in KB_CATEGORIES:
+                    raise ValueError(f"okänd kategori för kunskapsbasen: {f['category']!r}")
                 row = _kb_row(tenant_id, {"title": f["title"], "content": f["content"], "category": f["category"]})
                 row["embedding"] = embedding
                 row["source_url"] = f.get("source_url")
                 row["giltig_till"] = None
+                row["is_placeholder"] = False
+                self._rensa_exempel(tenant_id)
                 self.kb.setdefault(tenant_id, []).append(row)
                 f.update(status="tillagd", artikel_id=str(row["id"]),
                          beslutad_at=datetime.now(timezone.utc).isoformat())
                 return {"id": row["id"], "title": f["title"], "category": f["category"],
-                        "source_url": f.get("source_url"), "giltig_till": None}
+                        "source_url": f.get("source_url"), "giltig_till": None,
+                        "is_placeholder": False}
         return None
 
     async def satt_kb_vektor(self, tenant_id: str, artikel_id: str, embedding: list[float]) -> None:
@@ -2190,6 +2216,7 @@ class MemoryStorage:
         prospect = await self.get_prospect(tenant_id, prospect_id)
         if not prospect:
             return None
+        # Påfyllnadens märkning (migration 158) står i BEDOMNINGSFALT, som i postgres.py.
         for falt in BEDOMNINGSFALT:
             if bedomning.get(falt) is not None:
                 prospect[falt] = bedomning[falt]
@@ -2409,6 +2436,38 @@ class MemoryStorage:
         if sammandrag:
             return [{**r, "korning": korning_sammandrag(r.get("korning"))} for r in latta]
         return latta
+
+    async def list_andra_korningars_bolag(
+        self, tenant_id: str, *, utom: str, limit: int = 20
+    ) -> list[dict[str, Any]]:
+        def _bolag(rader: Any) -> list[dict[str, Any]]:
+            return [
+                {"company_name": r.get("company_name"), "orgnr": r.get("orgnr")}
+                for r in (rader if isinstance(rader, list) else []) if isinstance(r, dict)
+            ]
+
+        rader = [
+            r for r in self.leads_job_ledger.values()
+            if r["tenant_id"] == tenant_id and r["scope"] in ("batch", "lista")
+            and r["status"] == "processing" and r["job_id"] != utom
+        ]
+        rader.reverse()
+        rader.sort(key=lambda r: r["created_at"], reverse=True)
+        ut: list[dict[str, Any]] = []
+        for r in rader[:limit]:
+            k = r.get("korning")
+            if not isinstance(k, dict) or not k or k.get("klar"):
+                continue
+            vilande = bool(k.get("vilande"))
+            tratt = k.get("tratt") if not vilande and isinstance(k.get("tratt"), list) else []
+            ut.append({
+                "job_id": r["job_id"],
+                "vilande": vilande,
+                "kandidater": _bolag(k.get("kandidater")),
+                "listspar": [] if vilande else _bolag(k.get("listspar")),
+                "tratt": [t.get("namn") for t in tratt if isinstance(t, dict)],
+            })
+        return ut
 
     async def get_sidcache(self, tenant_id: str, url: str) -> dict[str, Any] | None:
         rad = self.__dict__.setdefault("sidcache", {}).get((tenant_id, url))
@@ -2651,7 +2710,7 @@ class MemoryStorage:
                 for i in self.lead_list_items
                 if i["tenant_id"] == tenant_id
             ),
-            # Kundens CRM (migration 153), som i PostgresStorage.
+            # Kundens CRM (migration 160), som i PostgresStorage.
             *(
                 {"company_name": b["namn"], "orgnr": b.get("orgnr"), "kalla": "crm", "list_id": None}
                 for b in getattr(self, "_crm", {}).get("crm_bolag", {}).values()
@@ -2682,18 +2741,37 @@ class MemoryStorage:
     ) -> list[str]:
         # Speglar UPDATE ... RETURNING i postgres.py: samma statusar, samma
         # klocka (updated_at), pausade körningar orörda, completed_at sätts.
+        from ..jobs.stadare import HANGFEL_JOBB, VACKNING_RESERV_MINUTER
+
         grans = datetime.now(timezone.utc) - timedelta(minutes=aldre_an_minuter)
+        reserv = datetime.now(timezone.utc) - timedelta(minutes=VACKNING_RESERV_MINUTER)
         undantag = set(utom or ())
         stadade: list[str] = []
         for rad in self.leads_job_ledger.values():
+            k = rad.get("korning")
+            senast = datetime.fromisoformat(rad.get("updated_at") or rad["created_at"])
+            # Väcks i stället (se postgres.py): processing, inom reservgränsen,
+            # ej klar, inget listjobb, inget i research.
+            vackbar = (
+                rad["status"] == "processing"
+                # En vilande körning (korning.vila) fälls aldrig.
+                and (senast >= reserv or (isinstance(k, dict) and isinstance(k.get("vilande"), dict)))
+                and rad.get("scope") == "batch"
+                and isinstance(k, dict)
+                and k.get("klar") is not True
+                and k.get("kalla") != "lista"
+                and not k.get("pagaende")
+            )
             if (
                 rad["tenant_id"] == tenant_id
                 and rad["status"] in ("queued", "processing")
                 and rad["job_id"] not in undantag
-                and (rad.get("korning") or {}).get("styrning") != "paus"
-                and datetime.fromisoformat(rad.get("updated_at") or rad["created_at"]) < grans
+                and (k or {}).get("styrning") != "paus"
+                and not vackbar
+                and senast < grans
             ):
                 rad["status"] = "failed"
+                rad["error"] = rad.get("error") or HANGFEL_JOBB
                 rad["completed_at"] = _now()
                 stadade.append(rad["job_id"])
         return stadade
@@ -2899,7 +2977,7 @@ class MemoryStorage:
                     ),
                     "new_leads": len(
                         [p for p in i_veckan(self.prospects.get(tenant_id, []), "created_at")
-                         if p.get("origin") not in ("example", "test")]
+                         if p.get("origin") not in ("example", "test", "ring")]
                     ),
                 }
             )
@@ -4153,3 +4231,142 @@ class MemoryStorage:
 
     async def close(self) -> None:
         return None
+
+    # -- Hjälprutan: plattformsärenden och förslag ur chatten (migration 156, 157)
+    #
+    # Lagren skapas vid första användningen i stället för i __init__, så att
+    # sektionen står samlad här. Tabellerna saknar tenant_id i Postgres; här
+    # ligger de därför utanför varje tenants nyckel, precis som där.
+
+    def _plattformsarenden(self) -> dict[str, dict[str, Any]]:
+        return self.__dict__.setdefault("plattformsarenden_lager", {})
+
+    def _plattformsarende_ut(self, rad: dict[str, Any]) -> dict[str, Any]:
+        # Bilden lämnar aldrig lagringen i listor och uppslag, som i Postgres:
+        # den kan väga flera MB. `har_bild` räcker; adminen hämtar bilden för
+        # ett ärende i taget genom `hamta_plattformsarende_bild`.
+        ut = {k: v for k, v in rad.items() if k not in ("_ordning", "bild")}
+        ut["har_bild"] = rad.get("bild") is not None
+        ut["handelser"] = [dict(h) for h in rad["handelser"]]
+        return ut
+
+    async def skapa_plattformsarende(self, falt: dict[str, Any]) -> dict[str, Any]:
+        from .base import nytt_arendenummer
+
+        lager = self._plattformsarenden()
+        tagna = {rad["nummer"] for rad in lager.values()}
+        nummer = nytt_arendenummer()
+        for _ in range(20):
+            if nummer not in tagna:
+                break
+            nummer = nytt_arendenummer()
+        else:  # samma utfall som Postgres efter sina försök
+            raise RuntimeError("Inget ledigt ärendenummer.")
+        nu = _now()
+        arende_id = str(uuid.uuid4())
+        rad = {
+            "id": arende_id,
+            "nummer": nummer,
+            "status": "mottagen",
+            "rapportor_user_id": str(falt["rapportor_user_id"]),
+            "rapportor_namn": falt.get("rapportor_namn"),
+            "kund_workspace_id": str(falt["kund_workspace_id"]),
+            "kund_tenant_slug": falt["kund_tenant_slug"],
+            "vy": falt["vy"],
+            "roll": falt["roll"],
+            "besok_av_admin": bool(falt.get("besok_av_admin")),
+            "sida": falt["sida"],
+            "gjorde": falt["gjorde"],
+            "hande": falt["hande"],
+            "vantade": falt.get("vantade") or "",
+            "bild": falt.get("bild"),
+            "testversion_url": None,
+            "created_at": nu,
+            "updated_at": nu,
+            "_ordning": len(lager),
+            "handelser": [{
+                "id": str(uuid.uuid4()), "arende_id": arende_id, "tid": nu, "typ": "skapad",
+                "status": "mottagen", "meddelande": None, "synlig_for_kund": True, "aktor": "kund",
+            }],
+        }
+        lager[arende_id] = rad
+        return self._plattformsarende_ut(rad)
+
+    async def hamta_plattformsarende(self, arende_id: str) -> dict[str, Any] | None:
+        rad = self._plattformsarenden().get(str(arende_id))
+        return self._plattformsarende_ut(rad) if rad else None
+
+    async def hamta_plattformsarende_bild(self, arende_id: str) -> str | None:
+        rad = self._plattformsarenden().get(str(arende_id))
+        return rad.get("bild") if rad else None
+
+    async def list_plattformsarenden(
+        self, *, rapportor_user_id: str | None = None, status: str | None = None, limit: int = 200
+    ) -> list[dict[str, Any]]:
+        rader = [
+            rad for rad in self._plattformsarenden().values()
+            if (rapportor_user_id is None or rad["rapportor_user_id"] == str(rapportor_user_id))
+            and (status is None or rad["status"] == status)
+        ]
+        rader.sort(key=lambda r: (r["created_at"], r["_ordning"]), reverse=True)
+        return [self._plattformsarende_ut(r) for r in rader[:limit]]
+
+    async def andra_plattformsarende(
+        self,
+        arende_id: str,
+        *,
+        status: str,
+        handelse: dict[str, Any],
+        kraver_status: tuple[str, ...] | None = None,
+        rapportor_user_id: str | None = None,
+        testversion_url: str | None = None,
+        satt_testversion: bool = False,
+    ) -> dict[str, Any] | None:
+        from .base import kontrollera_plattformsarende_status
+
+        kontrollera_plattformsarende_status(status)
+        # Ingen await mellan kontrollen och skrivningen: atomiskt i en
+        # händelseloop, som villkoret i Postgres-vägens update.
+        rad = self._plattformsarenden().get(str(arende_id))
+        if rad is None:
+            return None
+        if kraver_status is not None and rad["status"] not in kraver_status:
+            return None
+        if rapportor_user_id is not None and rad["rapportor_user_id"] != str(rapportor_user_id):
+            return None
+        nu = _now()
+        rad["status"] = status
+        rad["updated_at"] = nu
+        if satt_testversion:
+            rad["testversion_url"] = testversion_url
+        rad["handelser"].append({
+            "id": str(uuid.uuid4()), "arende_id": rad["id"], "tid": nu,
+            "typ": handelse["typ"], "status": status, "meddelande": handelse.get("meddelande"),
+            "synlig_for_kund": bool(handelse.get("synlig_for_kund")), "aktor": handelse["aktor"],
+        })
+        return self._plattformsarende_ut(rad)
+
+    async def skapa_kb_forslag(
+        self,
+        tenant_id: str,
+        *,
+        title: str,
+        content: str,
+        category: str,
+        kalla: str,
+        kalla_ref: str | None = None,
+        skapad_av: str | None = None,
+    ) -> dict[str, Any]:
+        from .base import KB_FORSLAG_KALLOR
+
+        if kalla not in KB_FORSLAG_KALLOR:
+            raise ValueError(f"Okänd källa för ett förslag: {kalla!r}")
+        rad = {
+            "id": str(uuid.uuid4()), "tenant_id": tenant_id, "skanning_id": None,
+            "title": title, "content": content, "category": category,
+            "source_url": None, "confidence": None, "varningar": [], "status": "vantar",
+            "artikel_id": None, "created_at": _now(), "beslutad_at": None,
+            "kalla": kalla, "kalla_ref": kalla_ref, "skapad_av": skapad_av,
+        }
+        self.kb_forslag.setdefault(tenant_id, []).append(rad)
+        return dict(rad)

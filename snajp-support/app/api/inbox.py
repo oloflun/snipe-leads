@@ -92,7 +92,19 @@ async def seed_mock_inbox(
     borttagna = await storage.delete_mock_emails(tenant_id, category=kategori)
 
     ar_testarbetsyta = (x_snajp_demo or "").lower() == "true"
-    seedade_artiklar = await ensure_tenant_kb(storage, tenant_id) if ar_testarbetsyta else 0
+    # Bara en helt tom bas utan webbplatsskanning (kunddemon 2026-11-24).
+    # ensure_tenant_kb jämför per rubrik, så varje klick lade förut tillbaka de
+    # Nordlys-artiklar kunden raderat; och en skannad testarbetsyta väntar på
+    # förslag ur sin egen webbplats, inte på ett annat bolags artiklar.
+    # En bas som tömts efter att kunden lagt till eget innehåll fylls inte
+    # heller på: ensure_tenant_kb vägrar då (har_haft_eget_innehall).
+    seedade_artiklar = (
+        await ensure_tenant_kb(storage, tenant_id)
+        if ar_testarbetsyta
+        and not await storage.list_kb(tenant_id)
+        and not await storage.senaste_kb_skanning(tenant_id)
+        else 0
+    )
     kb_tom = not await storage.list_kb(tenant_id)
 
     kb = await storage.list_kb(tenant_id)

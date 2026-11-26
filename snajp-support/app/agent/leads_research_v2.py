@@ -40,7 +40,7 @@ from ..config import get_settings
 from ..leads import erbjudanden
 from ..leads import stilkontroll as stil
 from ..leads import utkaststruktur
-from ..leads.business_context import require_business_context
+from ..leads.business_context import require_business_context, require_egen_produkt
 from ..leads.grounding_gate import build_permitted_facts
 from ..leads.language_gate import last_humanizer_variant
 from ..leads.outreach_playbook import OUTREACH_V2
@@ -1108,6 +1108,10 @@ async def run_outreach_draft_v2(
     erbjudandeblocket mot sitt eget, hoppar över personaliseringen av
     ingången och prövas mot sina egna stilregler."""
     await require_business_context(storage, tenant_id)
+    # Kunddemon 2026-11-24: utan egen produkt lånade modellen Snajps. Här och
+    # inte bara vid körstarten: autopiloten, inkorgsleads och Skapa om utkast
+    # går förbi den.
+    await require_egen_produkt(storage, tenant_id)
 
     started = time.monotonic()
     settings = get_settings()
@@ -1601,6 +1605,13 @@ async def run_outreach_draft_v2(
                     "gissningar_after": list(slutgissningar),
                 }
 
+        # Snajps produktnamn hos en annan kund stoppar köningen (kunddemon
+        # 2026-11-24), på den exakta text som annars köats.
+        snajpfynd = stil.snajp_produkt_hos_kund(
+            f"{koad_amne}\n\n{body}",
+            slug=((await storage.get_tenant(tenant_id)) or {}).get("slug"),
+            produkter=las_produkter(leads_installningar),
+        )
         if not grounding["ok"]:
             await _request_human_handoff_impl(context, stoppskal_grundning(grounding))
         elif escalated_steps:
@@ -1608,6 +1619,8 @@ async def run_outreach_draft_v2(
                 context,
                 f"Utdatakontraktet brast i {', '.join(escalated_steps)} — utkastet köas inte.",
             )
+        elif snajpfynd:
+            await _request_human_handoff_impl(context, "; ".join(a.beskrivning for a in snajpfynd))
         else:
             queue_result = json.loads(
                 await _queue_outreach_draft_impl(

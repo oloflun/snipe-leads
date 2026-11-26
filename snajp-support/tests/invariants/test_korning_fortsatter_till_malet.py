@@ -86,6 +86,28 @@ async def test_en_korning_under_malet_fortsatter_till_malet(monkeypatch):
     assert "Prövad Redan" not in namn and {"Bra Fyra", "Bra Fem"} <= set(namn)
 
 
+async def test_en_korning_som_stannade_pa_rundtaket_nar_malet_efter_fortsatt(monkeypatch):
+    """Demon 2026-11-24: 8 av 10 med 118 undersökta stannade på max_rundor,
+    och Fortsätt stannade igen direkt: `rundor` nollades aldrig."""
+    pool = [_bolag(n) for n in ("Bra Fyra", "Bra Fem")]
+    _installera(monkeypatch, pool, bra={"Bra Fyra", "Bra Fem"})
+    storage = MemoryStorage()
+    app_state = SimpleNamespace(jobs=MemoryJobStore(), storage=storage, leadsstrom=None)
+    await _avslutad_under_malet(storage, "b-rundor", orsak="slut_pa_kandidater")
+    rad = await storage.get_leads_korning(TENANT["tenant_id"], "b-rundor")
+    k = dict(rad["korning"])
+    k.update(rundor=korningsmodul.max_rundor(3), sokfel=1, tomma_rundor=0)
+    await storage.set_leads_job_status(
+        TENANT["tenant_id"], job_id="b-rundor", status="completed", scope="batch", korning=k, is_test=True
+    )
+
+    await leads_api._fortsatt_korning(app_state, TENANT, "b-rundor")
+
+    klar = await _vanta_klar(storage, "b-rundor")
+    assert klar["korning"]["slut_orsak"] == "klar", klar["korning"]
+    assert klar["korning"]["levererade"] == 3
+
+
 @pytest.mark.parametrize(
     "rad",
     [

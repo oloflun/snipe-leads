@@ -278,9 +278,61 @@ Kod för 12–17: `sources/merinfo.py:fordela` (fördelningen),
     Snajps värden och storleken 1–200 står i `scripts/snajp_malgrupp.py`.
     Skäl: `docs/BESLUT.md` 2026-10-30.
 
+**Ändring 2026-11-24 (Anton) — beställt antal och obeställda leads. Går före
+regel 8, 10 och 12 och före kravet att bara ett belagt ja blir ett lead, där de
+krockar:**
+
+23. **Iris levererar aldrig under beställt antal.** Antons ord: "Iris får
+    aldrig, under inga omständigheter leverera under beställt antal, i värsta
+    fall får man ta ett av de (mest kvalificerade) bortsorterade bolagen för
+    att fylla ut kvoten." Räknetaken (`TAK_FAKTOR`, rundtaket) avslutar inte en
+    körning under målet: de förlängs och loggas. Hittas inte nog fullt
+    kvalificerade bolag fylls kvoten i bestämd ordning
+    (`korning.PAFYLLNADSSTEG`): bolag vars hämtning föll researchas om, sajter
+    utan hittad kontakt prövas om, researchens bortval tas i rangordning,
+    storleksgränsen vidgas stegvis och sist tas bolag med belagt nej
+    (`PAFYLL_BELAGT_NEJ`). Ett påfyllt lead går hela kedjan (kontaktmejl,
+    research, utkast), behåller sin riktiga bedömning och märks "Påfyllt" med
+    skälet. **Fylls aldrig på** (`korning.far_fyllas_pa`): avvecklade bolag,
+    enskilda firmor, Kontakta inte, redan kontaktade, bolag utan mottagaradress,
+    bolag kundens profil utesluter, och listspårets ring- och ej
+    kvalificerade-bolag. **Geografin vidgas aldrig** (beslutet 2026-10-23 står
+    kvar). Är allt uttömt, eller stoppar kredittaket, blir körningen vilande
+    och letar vidare en gång per dygn (`korning.vila`): utfallet "Klar, under
+    målet" finns inte längre för en Iris-körning. Gäller även provkörningar,
+    inte listjobb.
+24. **Inga obeställda och inga obedömda leads i leadslistan.** Antons ord: "det
+    är också strängt förbjudet, både att lägga oprocessade leads i listan, samt
+    lägga till fler leads än det som beställts, det är ingen bonus utan äter
+    ofta på kundens budget." En körning skapar bara de Iris-leads som räknas mot
+    beställningen. Ringlistans bolag (regel 15) är inte leads i listan: i en
+    provkörning skrivs de till listan "Ringlista, Iris <datum>" under Listor, i
+    en skarp körning ligger de i Samtal › Ringlista som förut (om även de ska
+    till Listor är Antons beslut, inte fattat). `listvy.synliga` visar aldrig
+    ett prospekt utan bedömning och utan mejl ur ring- eller provspåret, och
+    veckoanalysen räknar inte ringbolag som nya leads.
+
 Koden: `snajp-support/app/leads/sources/merinfo.py` (filtret, `lage="iris"`
 och `lage="lista"`), `app/leads/discovery.py:hamta_person_kontakt`
 (kontaktkontrollen; `hamta_vd_kontakt` är listspårets strängare VD-variant).
+För 23–24: `app/leads/korning.py` (påfyllnaden, spärren, vilan),
+`app/api/leads.py:_fyll_pa_last` och `_spara_listspar`, `app/leads/listvy.py`.
+
+## Hjälprutan och felrapporter (Antons beställning 2026-11-25)
+
+Planen står i [`docs/PLAN-HJALPRUTAN-2026-11-25.md`](docs/PLAN-HJALPRUTAN-2026-11-25.md).
+Tre regler som varje ändring där ska hålla:
+
+1. **Hjälpen går under sin egen nyckel** (`SNAJP_KEY_SNAJP_HJALP`, kunden
+   `snajp-hjalp`). Aldrig kundens nyckel, aldrig `proxyAsTenant`, aldrig
+   `arbetsyta` i anropet (INV-HJALP-001 och 002). Kundens kunskapsbas skrivs
+   bara genom kundens egen väg, efter kundens klick.
+2. **Kundens text når aldrig en kodande agent direkt.** En människa hos Snajp
+   godkänner först ett underlag utan namn, adresser och kunddata. Agenten får
+   bara öppna en ändringsbegäran mot `development`, och inget av kundens ord
+   skrivs till GitHub.
+3. **Kundens ja är information.** Det släpper ingenting: `development` och
+   `main` går som alltid.
 
 ## Dataskydd: DeepSeek får inte se kunddata
 

@@ -6,7 +6,7 @@ import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { Logo } from "@/components/Logo";
 import { etikett } from "@/components/ui";
 import { saveBusinessContext } from "@/lib/actions/onboarding";
-import { signOut } from "@/lib/actions/auth";
+import { loggaUtOchOppna } from "@/components/dashboard/DashboardContext";
 import { BRANSCHER, type Bransch } from "@/lib/bransch";
 import { useLocale, type Localized } from "@/lib/i18n";
 import { formateraOrgnr, orgnrFel } from "@/lib/orgnr";
@@ -627,7 +627,7 @@ export function OnboardingWizard({
           </Link>
           {/* Mobilen saknade vägen ut: utloggningen stod bara i sidospalten,
               som inte finns under md. */}
-          <form action={signOut} className="md:hidden">
+          <form action={loggaUtOchOppna} className="md:hidden">
             <button
               type="submit"
               className="focus-ring min-h-11 rounded-input px-2 text-[0.875rem] font-medium text-ink-muted hover:text-ink"
@@ -706,7 +706,7 @@ export function OnboardingWizard({
           </div>
         </div>
 
-        <form action={signOut} className="mt-8 hidden md:block">
+        <form action={loggaUtOchOppna} className="mt-8 hidden md:block">
           <button
             type="submit"
             className="focus-ring inline-flex min-h-8 items-center rounded-input text-[0.875rem] font-medium text-ink-muted hover:text-ink"

@@ -1,11 +1,10 @@
 "use server";
 
-import { redirect } from "next/navigation";
 import { AuthError, CredentialsSignin } from "next-auth";
 
 import { randomBytes, randomUUID } from "node:crypto";
 
-import { headers } from "next/headers";
+import { cookies, headers } from "next/headers";
 
 import { auth, ensureWorkspace, signIn, signOut as authSignOut } from "@/lib/auth";
 import { arSparrad, registreraForsok } from "@/lib/auth/inloggningsforsok";
@@ -13,6 +12,7 @@ import { SPARRKOD, TVAFAKTOR_FEL, TVAFAKTOR_KRAVS } from "@/lib/auth/sparrkod";
 import { sql, sqlAsUser } from "@/lib/db";
 import { hashPassword } from "@/lib/password";
 import { sakerNasta } from "@/lib/auth/nasta";
+import { VY_COOKIE } from "@/lib/vy";
 
 export type AuthActionResult = {
   success: boolean;
@@ -24,6 +24,12 @@ export type AuthActionResult = {
    * `tvafaktor_kravs` / `tvafaktor_fel`: andra steget (lib/auth/tvafaktor.ts).
    */
   kod?: typeof SPARRKOD | typeof TVAFAKTOR_KRAVS | typeof TVAFAKTOR_FEL;
+  /**
+   * Vart klienten ska efter en lyckad inloggning, eller providerns adress för
+   * OAuth. Klienten öppnar den med window.location (INV-SEC-014): ingen
+   * server-redirect, som hade varit en mjuk navigering med förra kontots state.
+   */
+  url?: string;
 };
 
 const KANDA_KODER = new Set<string>([SPARRKOD, TVAFAKTOR_KRAVS, TVAFAKTOR_FEL]);
@@ -138,7 +144,11 @@ export async function signInWithPassword(
     await ensureWorkspace(userId);
   }
 
-  redirect(await startsidaFor(userId, sakerNasta(nextPath)));
+  // Förra kontots vy (Demo, ett kundbesök) följer aldrig med in i nästa
+  // inloggning i samma webbläsare.
+  (await cookies()).delete(VY_COOKIE);
+
+  return { success: true, url: await startsidaFor(userId, sakerNasta(nextPath)) };
 }
 
 async function anvandarId(email: string): Promise<string | null> {
@@ -167,18 +177,28 @@ async function anvandarId(email: string): Promise<string | null> {
  * Ett UTTRYCKLIGT `?next=` respekteras alltid. Den som klickat på en länk till
  * en skyddad sida ska tillbaka dit efter inloggningen, även som admin — annars
  * blir varje delad länk till arbetsytan värdelös för just den personen.
+ *
+ * Undantaget är ett `next` under /admin för den som inte är admin
+ * (kunddemon 2026-11-24): bakåt efter en utloggning gav
+ * /login?next=/admin/arbetsyta, och en kund som loggade in där landade på
+ * adminytan. Kunden går till /dashboard, och en admin som stoppas av
+ * tvåfaktorn till inrullningen.
  */
 async function startsidaFor(userId: string | null, nextPath: string): Promise<string> {
-  if (!userId || nextPath !== "/dashboard") {
+  const tillAdmin = /^\/admin(?:[/?#]|$)/.test(nextPath);
+  if (!userId || (nextPath !== "/dashboard" && !tillAdmin)) {
     return nextPath;
   }
   const { isPlatformAdmin, saknarKravdTvafaktor } = await import("@/lib/auth/admin");
   if (!(await isPlatformAdmin(userId))) {
-    return nextPath;
+    return tillAdmin ? "/dashboard" : nextPath;
   }
   // Med tvånget påslaget (TVAFAKTOR_KRAVS_FOR_PLATTFORMSADMIN) har en admin
   // utan tvåfaktor ingen adminrätt förrän inrullningen är gjord.
-  return (await saknarKravdTvafaktor(userId)) ? "/settings/tvafaktor" : "/admin";
+  if (await saknarKravdTvafaktor(userId)) {
+    return "/settings/tvafaktor";
+  }
+  return tillAdmin ? nextPath : "/admin";
 }
 
 export async function signUpWithPassword(
@@ -494,6 +514,15 @@ export async function signInWithOAuth(
   };
 }
 
-export async function signOut(): Promise<void> {
-  await authSignOut({ redirectTo: "/login" });
+/**
+ * Utloggning. Ingen server-redirect sedan kunddemon 2026-11-24 (INV-SEC-014):
+ * klienten öppnar adressen med window.location.replace
+ * (DashboardContext.tsx:loggaUtOchOppna), som tömmer flikens state och
+ * routercache, och säger till de andra flikarna. Vy-cookien rensas, så att
+ * ett admintillstånd aldrig följer med till nästa inloggning.
+ */
+export async function signOut(): Promise<{ url: string }> {
+  (await cookies()).delete(VY_COOKIE);
+  await authSignOut({ redirect: false });
+  return { url: "/login" };
 }

@@ -317,11 +317,62 @@ def arendelank(bas_url: str, ticket_id: str) -> str:
     return f"{bas}/admin/kunder?arende={ticket_id}"
 
 
+# -- Hjälprutans felrapporter (docs/PLAN-HJALPRUTAN-2026-11-25.md, del 5) ----
+
+#: Rubriken för en ny felrapport. Ämnesraden blir "[PRIORITERAT] Ny felrapport".
+FELRAPPORT_RUBRIK = "Ny felrapport"
+
+
+def felrapportlank(bas_url: str, arende_id: str) -> str:
+    """Direktlänken till felrapporten i adminytans översikt, där listan står
+    (components/admin/FelOchEskaleringar.tsx). Tom bas-URL ger tom länk, som
+    `arendelank`."""
+    bas = (bas_url or "").strip().rstrip("/")
+    if not bas or not arende_id:
+        return ""
+    return f"{bas}/admin?felrapport={arende_id}"
+
+
+def felrapportmejl(*, nummer: str, arende_id: str, tenant_id: str, bas_url: str) -> PrioriteratMejl:
+    """Mejlet om en ny felrapport: numret och länken, ALDRIG kundens text,
+    namn eller arbetsyta. `tenant_id` är hjälpens egen kund, inte
+    rapportörens. Den som ska agera läser rapporten i adminytan."""
+    return PrioriteratMejl(
+        rubrik=FELRAPPORT_RUBRIK,
+        tenant_id=tenant_id,
+        vad=f"Felrapport {nummer} har kommit in från Hjälprutan.",
+        varfor="En kund har rapporterat ett fel i Snajp och väntar på ett första besked.",
+        lank=felrapportlank(bas_url, arende_id),
+    )
+
+
+async def skicka_felrapport(*, nummer: str, arende_id: str, tenant_id: str) -> bool:
+    """Skickar mejlet om en ny felrapport. Kastar aldrig, som `skicka_prioriterat`."""
+    mejl = felrapportmejl(
+        nummer=nummer,
+        arende_id=arende_id,
+        tenant_id=tenant_id,
+        bas_url=get_settings().publik_bas_url,
+    )
+    return await skicka_prioriterat(
+        mejl.rubrik,
+        tenant_id=mejl.tenant_id,
+        vad=mejl.vad,
+        varfor=mejl.varfor,
+        lank=mejl.lank,
+        nyckel=f"felrapport:{arende_id}",
+    )
+
+
 __all__ = [
+    "FELRAPPORT_RUBRIK",
     "MOTTAGARE",
     "PRIORITETSMARKOR",
     "PrioriteratMejl",
     "arendelank",
+    "felrapportlank",
+    "felrapportmejl",
+    "skicka_felrapport",
     "har_konfiguration",
     "nollstall_dubblettminne",
     "skicka_prioriterat",

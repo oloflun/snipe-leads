@@ -99,6 +99,12 @@ _PROSPEKT = "select id from prospects where lower(contact_email) = lower(%s)"
 _TRAD = f"select id from outreach_threads where prospect_id in ({_PROSPEKT})"
 _ARENDE = f"select id from ss_tickets where customer_id in ({_KUND})"
 _CRM_PERSON = "select id from crm_personer where lower(epost) = lower(%s)"
+#: Felrapporterna ur Hjälprutan (156) bär ingen mejladress, bara rapportörens
+#: användar-id. Vägen från adressen går därför genom auth.users.
+_FELRAPPORT = (
+    "select id from plattformsarenden where rapportor_user_id in "
+    "(select id from auth.users where lower(email) = lower(%s))"
+)
 
 #: Var en e-postadress kan förekomma. Kolumnnamnet är inte samma överallt,
 #: därför en explicit karta i stället för en gissning. Andra fältet är en
@@ -121,9 +127,10 @@ TABELLER = [
     ("demo_requests", "epost", "Demoförfrågan från webbplatsen."),
     ("ss_customer_contacts", "mejl", "Kontaktperson hos en kund i kundregistret."),
     ("ss_customers", f"id in ({_KUND})", "Chatt- och supportkund. Identifierare, ärenden, meddelanden, kundminne, chattläge och kanalkontakter kaskaderar härifrån."),
-    # Snajp CRM (migration 153). Källsystemets id först: det pekar på personen utan främmande nyckel.
+    # Snajp CRM (migration 160). Källsystemets id först: det pekar på personen utan främmande nyckel.
     ("crm_externa_id", f"objekt = 'person' and post_id in ({_CRM_PERSON})", "Källsystemets id för en kontaktperson i kundens CRM."),
     ("crm_personer", "epost", "Kontaktperson i kundens CRM (Snajp CRM)."),
+    ("plattformsarenden", f"id in ({_FELRAPPORT})", "Felrapport ur Hjälprutan (namn, fritext, bild). Händelserna kaskaderar härifrån."),
 ]
 
 #: Raderas ALDRIG. Se docstringen.
@@ -163,6 +170,7 @@ KASKAD = [
     ("customer_memory", f"customer_id in ({_KUND})", "ss_customers"),
     ("ss_chat_state", f"customer_id in ({_KUND})", "ss_customers"),
     ("ss_channel_contacts", f"customer_id in ({_KUND})", "ss_customers"),
+    ("plattformsarende_handelser", f"arende_id in ({_FELRAPPORT})", "plattformsarenden"),
 ]
 
 #: Hittas och lämnas ut, men raderas INTE av skriptet: kräver manuellt beslut.
@@ -211,7 +219,7 @@ FRITEXT = [
     ("demo_requests", "meddelande"),
     ("leads_sidcache", "innehall"),
     ("prompt_lager", "text"),
-    # Snajp CRM (153): kundens egna fält, och fältvärden som synken inte kunde tolka.
+    # Snajp CRM (160): kundens egna fält, och fältvärden som synken inte kunde tolka.
     ("crm_bolag", "extra::text"),
     ("crm_personer", "extra::text"),
     ("crm_synkkorningar", "fel::text"),

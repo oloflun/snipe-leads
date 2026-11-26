@@ -55,7 +55,7 @@ async def require_api_key(
             "tenant_id": record["tenant_id"],
             "tenant_name": record["tenant_name"],
             "master": False,
-            # Nycklar från före migration 153 saknar kolumnen och når allt.
+            # Nycklar från före migration 160 saknar kolumnen och når allt.
             "omfang": list(record.get("omfang") or ["*"]),
             "nyckel_id": str(record.get("id") or ""),
         }

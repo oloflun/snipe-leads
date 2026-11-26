@@ -107,6 +107,18 @@ async def _vanta_klar(storage: MemoryStorage, job_id: str) -> dict:
     raise AssertionError(f"körningen blev aldrig klar i liggaren: {rad}")
 
 
+async def _vanta_slut(storage: MemoryStorage, job_id: str) -> dict:
+    """Klar, eller vilande under målet (Antons regel 2026-11-24: en
+    Iris-körning blir aldrig klar under beställt antal)."""
+    for _ in range(300):
+        rad = await storage.get_leads_korning(TENANT["tenant_id"], job_id)
+        k = (rad or {}).get("korning") or {}
+        if k.get("klar") or (k.get("vilande") and not k.get("pagaende")):
+            return rad
+        await asyncio.sleep(0.02)
+    raise AssertionError(f"körningen blev aldrig klar eller vilande i liggaren: {rad}")
+
+
 async def test_tillstandet_overlever_att_jobbstoret_toms(monkeypatch):
     """(a) + (b)."""
     pool = [_bolag(n) for n in ("Dålig Ett", "Bra Ett", "Bra Två")]
@@ -208,9 +220,10 @@ async def test_ett_uppgivet_barnjobb_laser_inte_korningen(monkeypatch):
     barn = await storage.get_leads_korning(t, "barn-1")
     assert barn is None  # prospektjobb är inte körningar
     rad = await storage.get_leads_korning(t, batch_id)
-    assert rad["status"] != "processing", rad
-    assert rad["korning"]["klar"] is True
+    # Inte låst: inget barn väntas, och körningen är klar eller vilar under
+    # målet (Antons regel 2026-11-24). Bolaget utan mottagare fylls inte på.
     assert rad["korning"]["pagaende"] == 0
+    assert rad["korning"]["klar"] is True or rad["korning"]["vilande"], rad
     assert any("gavs upp" in x["skal"] for x in rad["korning"]["tratt"])
 
 
@@ -236,10 +249,11 @@ async def test_atertag_fortsatter_ur_liggaren_utan_jobbstore(monkeypatch):
     await leads_api.hantera_leads_jobb(app_state, _payload("b-deploy", 1))
 
     rad = await storage.get_leads_korning(t, "b-deploy")
-    assert rad["korning"]["klar"] is True and rad["status"] == "completed"
-    # Ingen sökning gav något bolag: sedan 2026-10-07 heter det inga_traffar
-    # (app/leads/korning.py, avsluta), inte "slut på kandidater".
-    assert rad["korning"]["slut_orsak"] == "inga_traffar"
+    # Ingen sökning gav något bolag: körningen vilar med skälet inga_traffar
+    # (korning.vilans_skal) i stället för att bli klar under målet (Antons
+    # regel 2026-11-24), och står kvar i 'processing' för väckaren.
+    assert rad["korning"]["klar"] is False and rad["status"] == "processing"
+    assert rad["korning"]["vilande"]["skal"] == "inga_traffar"
 
 
 async def test_fallna_sokrundor_heter_sokningen_foll(monkeypatch):
@@ -267,10 +281,96 @@ async def test_fallna_sokrundor_heter_sokningen_foll(monkeypatch):
     # luckan där felet gömde sig.
     await leads_api._run_batch(app_state, _payload(job_id, 8))
 
-    klar = await _vanta_klar(storage, job_id)
-    assert klar["korning"]["slut_orsak"] == "sokningen_foll", klar["korning"]
+    # Under målet vilar körningen (Antons regel 2026-11-24) och skälet är
+    # sökningen, inte målgruppen.
+    klar = await _vanta_slut(storage, job_id)
+    assert klar["korning"]["vilande"]["skal"] == "sokningen_foll", klar["korning"]
     assert klar["korning"]["sokfel"] >= 1
     assert "stavningen" not in (klar["korning"]["sammanfattning"] or "")
+    assert "Sökningen gick inte att genomföra" in klar["korning"]["sammanfattning"]
+
+
+def _tyst(storage: MemoryStorage, job_id: str, minuter: int = 120) -> None:
+    from datetime import datetime, timedelta, timezone
+
+    gammal = (datetime.now(timezone.utc) - timedelta(minutes=minuter)).isoformat()
+    storage.leads_job_ledger[job_id]["created_at"] = storage.leads_job_ledger[job_id]["updated_at"] = gammal
+
+
+async def test_vackaren_ser_en_korning_bortom_de_tio_senaste(monkeypatch):
+    """Väckaren läste limit=10 rader per kund, listbyggen inräknade: en
+    stillastående körning bakom tio nyare listor väcktes aldrig och fälldes
+    efter en timme ("Misslyckades" + "Letar fler bolag", 2026-11-15)."""
+    storage = MemoryStorage()
+    tenant = await storage.create_tenant(slug="vackare-test", name="Väckartest")
+    t = tenant["id"]
+    k = korningsmodul.ny_korning(mal=2, scope="research", overrides=None, is_test=True)
+    await storage.set_leads_job_status(t, job_id="b-gammal", status="processing", scope="batch", korning=k)
+    _tyst(storage, "b-gammal")
+    for i in range(12):
+        await storage.set_leads_job_status(t, job_id=f"l-{i}", status="completed", scope="lista")
+    vackta: list[str] = []
+
+    async def _vacka(_state, _tenant, batch_id):
+        vackta.append(batch_id)
+
+    monkeypatch.setattr(leads_api, "_vacka_korning", _vacka)
+    app_state = SimpleNamespace(jobs=MemoryJobStore(), storage=storage, leadsstrom=None)
+    assert await leads_api.vack_stillastaende_korningar(app_state) == 1
+    await asyncio.sleep(0)
+    assert vackta == ["b-gammal"]
+
+
+async def test_stadaren_faller_inte_en_tyst_korning_som_kan_vackas():
+    """En körning med klar=false och inget i research väcks av väckaren i
+    stället för att fällas: motorn har sitt tillstånd i liggaren."""
+    storage = MemoryStorage()
+    t = TENANT["tenant_id"]
+    k = korningsmodul.ny_korning(mal=2, scope="research", overrides=None, is_test=True)
+    await storage.set_leads_job_status(t, job_id="b-tyst", status="processing", scope="batch", korning=k)
+    _tyst(storage, "b-tyst")
+    assert await storage.stada_hangande_leadsjobb(t, aldre_an_minuter=60) == []
+    assert await storage.get_leads_job_status(t, "b-tyst") == "processing"
+
+
+async def test_en_vackbar_korning_falls_efter_reservgransen():
+    """Undantaget har en yttersta gräns: en körning som väckaren inte fått
+    i gång på ett dygn ligger inte kvar som 'Pågår' för alltid."""
+    from app.jobs import stadare
+
+    storage = MemoryStorage()
+    t = TENANT["tenant_id"]
+    k = korningsmodul.ny_korning(mal=2, scope="research", overrides=None, is_test=True)
+    await storage.set_leads_job_status(t, job_id="b-evig", status="processing", scope="batch", korning=k)
+    _tyst(storage, "b-evig", minuter=stadare.VACKNING_RESERV_MINUTER + 5)
+    assert await storage.stada_hangande_leadsjobb(t, aldre_an_minuter=60) == ["b-evig"]
+    rad = await storage.get_leads_korning(t, "b-evig")
+    assert rad["status"] == "failed" and rad["error"] == stadare.HANGFEL_JOBB
+
+
+async def test_en_koad_korning_undantas_inte():
+    """Väckaren läser bara status 'processing': en köad rad med ett
+    korning-objekt väcks aldrig och får därför inget undantag."""
+    storage = MemoryStorage()
+    t = TENANT["tenant_id"]
+    k = korningsmodul.ny_korning(mal=2, scope="research", overrides=None, is_test=True)
+    await storage.set_leads_job_status(t, job_id="b-kod", status="queued", scope="batch", korning=k)
+    _tyst(storage, "b-kod")
+    assert await storage.stada_hangande_leadsjobb(t, aldre_an_minuter=60) == ["b-kod"]
+
+
+async def test_en_falld_rad_har_felorsak_i_liggaren():
+    """INV-JOB-003: varje fel skriver error i klartext. Städaren skrev det
+    bara i Redis-posten, och listvyn läser liggaren."""
+    from app.jobs import stadare
+
+    storage = MemoryStorage()
+    t = TENANT["tenant_id"]
+    await storage.set_leads_job_status(t, job_id="b-dod", status="processing", scope="batch")
+    _tyst(storage, "b-dod")
+    assert await storage.stada_hangande_leadsjobb(t, aldre_an_minuter=60) == ["b-dod"]
+    rad = await storage.get_leads_korning(t, "b-dod")
+    assert rad["status"] == "failed" and rad["error"] == stadare.HANGFEL_JOBB
 
 
 async def test_kandidatpoolen_lamnar_aldrig_apiet():

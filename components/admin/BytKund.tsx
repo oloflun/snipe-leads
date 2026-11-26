@@ -1,8 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useDashboard } from "@/components/dashboard/DashboardContext";
-import { bytVy } from "@/lib/actions/vy";
+import { bytVyOchOppna, useDashboard } from "@/components/dashboard/DashboardContext";
 import { readJsonBody } from "@/lib/http/json";
 import { FlyttTillMain } from "@/components/admin/FlyttTillMain";
 import { useLocale } from "@/lib/i18n";
@@ -121,7 +120,7 @@ export function BytKund({ ton = "ljus" }: Readonly<{ ton?: "ljus" | "rail" }> = 
           <ul className="mt-1 max-h-64 overflow-y-auto">
             {filtrerade.map((kund) => (
               <li key={kund.slug}>
-                <form action={bytVy}>
+                <form action={bytVyOchOppna}>
                   <button
                     type="submit"
                     name="vy"

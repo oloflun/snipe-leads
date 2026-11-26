@@ -247,7 +247,7 @@ jobs:
           DATABASE_URL: postgresql://postgres:localdev@127.0.0.1:5432/railway
         run: |
           set -o pipefail
-          pytest tests/db/test_rls_isolation.py tests/db/test_gdpr_radera_db.py tests/db/test_adminlogg.py tests/db/test_inloggningsforsok.py tests/db/test_snajp_web_rattigheter.py tests/db/test_demo_markering.py tests/db/test_tvafaktor.py tests/db/test_crm_lagring.py -v -rs | tee /tmp/db-ut.txt
+          pytest tests/db/test_rls_isolation.py tests/db/test_gdpr_radera_db.py tests/db/test_adminlogg.py tests/db/test_inloggningsforsok.py tests/db/test_snajp_web_rattigheter.py tests/db/test_demo_markering.py tests/db/test_tvafaktor.py tests/db/test_kb_forslag_atomisk.py tests/db/test_plattformsarenden_db.py tests/db/test_demorattningar_db.py tests/db/test_crm_lagring.py -v -rs | tee /tmp/db-ut.txt
           if grep -qE "[0-9]+ skipped" /tmp/db-ut.txt; then echo "::error::ett databastest hoppades över"; exit 1; fi
 
       - uses: actions/setup-node@v7

@@ -580,10 +580,12 @@ def kontrollera(b: dict[str, Any], icp: dict[str, Any], profil: dict[str, Any] |
     hi_oms = (profil or {}).get("omsattning_max", storlek.get("omsattning_max"))
     oms = b.get("omsattning")
     if isinstance(oms, int):
+        # Gränsen står i skälet (2026-11-24), som för storleken ovan: påfyllnaden
+        # vidgar närmast gränsen först (korning.tolka_storleksskal).
         if hi_oms is not None and oms > hi_oms:
-            return f"För hög omsättning: {oms} kr."
+            return f"För hög omsättning: {oms} kr (högst {hi_oms} kr)."
         if lo_oms is not None and oms < lo_oms:
-            return f"För låg omsättning: {oms} kr."
+            return f"För låg omsättning: {oms} kr (minst {lo_oms} kr)."
     return None
 
 

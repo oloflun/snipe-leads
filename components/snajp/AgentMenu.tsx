@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useLocale } from "@/lib/i18n";
 import type { Localized } from "@/lib/i18n";
 import { etikett, rubrikPanel } from "@/components/ui";
+import { HjalpRuta, useHjalpArenden } from "@/components/snajp/HjalpRuta";
 import { cn } from "@/lib/utils";
 
 /**
@@ -23,6 +24,14 @@ import { cn } from "@/lib/utils";
  * En mailto öppnar användarens egen e-postklient med ärendet förifyllt. Den
  * levererar på riktigt, den kräver ingen infrastruktur, och användaren SER att
  * mejlet skickas. Byt till ett API-anrop den dag en riktig sändväg finns.
+ *
+ * ## Hjälp och fel (den inloggade ytan, 2026-11-25)
+ *
+ * Med `hjalp` ersätts mailto-raden av "Hjälp och fel", som öppnar Hjälprutan
+ * (components/snajp/HjalpRuta.tsx): Snajps egen supportagent, kontext till
+ * kundens kunskapsbas och felrapporter som ärenden. Bara inloggat, eftersom
+ * rutan går mot sessionsgrindade vägar. Den publika chatten (kundens kunder)
+ * och adminytan behåller mailto-raden.
  */
 
 export const SNAJP_SUPPORT_EPOST = "snajpsupport@gmail.com";
@@ -36,6 +45,13 @@ const copy = {
   gdpr: { sv: "Dataskydd", en: "Data protection" },
   sprak: { sv: "Språk", en: "Language" },
   eskalera: { sv: "Anmäl felaktigt svar", en: "Report an incorrect answer" },
+  hjalp: { sv: "Hjälp och fel", en: "Help and issues" },
+  hjalpRubrik: { sv: "Behöver du hjälp?", en: "Need help?" },
+  hjalpBody: {
+    sv: "Fråga om Snajp, lär agenten om er, eller säg till när något inte fungerar.",
+    en: "Ask about Snajp, teach the agent about you, or tell us when something does not work."
+  },
+  vantar: { sv: "Ett ärende väntar på dig", en: "A case is waiting for you" },
 
   kontaktRubrik: { sv: "Snajp", en: "Snajp" },
   kontaktBody: {
@@ -87,7 +103,8 @@ function lokal(v: Localized, locale: "sv" | "en") {
 export function AgentMenu({
   yta,
   kontext,
-  ton = "ljus"
+  ton = "ljus",
+  hjalp = false
 }: Readonly<{
   /** "rail": mörk variant för adminens sidopanel; panelen fäller då uppåt. */
   ton?: "ljus" | "rail";
@@ -95,11 +112,18 @@ export function AgentMenu({
   yta: "kundservice" | "leads";
   /** Fritt fält som hamnar i eskaleringens tekniska uppgifter (t.ex. sessions-id). */
   kontext?: string;
+  /** Inloggad yta: "Hjälp och fel" öppnar Hjälprutan i stället för mailto-raden. */
+  hjalp?: boolean;
 }>) {
   const { locale, setLocale, text } = useLocale();
   const [oppen, setOppen] = useState(false);
   const [flik, setFlik] = useState<Flik>(null);
+  const [hjalpOppen, setHjalpOppen] = useState(false);
   const boxRef = useRef<HTMLDivElement>(null);
+  const knappRef = useRef<HTMLButtonElement>(null);
+  // Pricken på Meny: något väntar på kunden. Hämtas bara på den inloggade ytan;
+  // den lugna pollningen medan rutan är öppen sköter rutan själv.
+  const { vantar } = useHjalpArenden(hjalp, false);
 
   // Escape stänger, och klick utanför stänger. Utan det ligger panelen kvar
   // över chatten på mobil, där den täcker precis det man ville läsa.
@@ -138,12 +162,13 @@ export function AgentMenu({
   return (
     <div ref={boxRef} className="relative">
       <button
+        ref={knappRef}
         type="button"
         onClick={() => setOppen((v) => !v)}
         aria-expanded={oppen}
         aria-haspopup="dialog"
         className={cn(
-          "focus-ring inline-flex items-center gap-2 rounded-input border px-3 text-sm font-medium transition-colors",
+          "focus-ring relative inline-flex items-center gap-2 rounded-input border px-3 text-sm font-medium transition-colors",
           ton === "rail"
             ? "min-h-9 border-paper/15 text-paper-muted hover:bg-paper/5 hover:text-paper"
             : "min-h-11 border-ink/15 text-ink-muted hover:bg-paper2"
@@ -155,6 +180,12 @@ export function AgentMenu({
           <span className="block h-[2px] w-4 bg-current" />
         </span>
         {text(copy.meny as Localized)}
+        {hjalp && vantar > 0 ? (
+          <>
+            <span aria-hidden="true" className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full bg-ochre" />
+            <span className="sr-only">{text(copy.vantar as Localized)}</span>
+          </>
+        ) : null}
       </button>
 
       {oppen ? (
@@ -253,19 +284,53 @@ export function AgentMenu({
             </div>
           ) : null}
 
-          <div className="border-t border-ink/10 bg-paper2/60 px-4 py-4">
-            <p className={rubrikPanel}>{text(copy.eskaleraRubrik as Localized)}</p>
-            <p className="mt-1.5 text-[0.9375rem] leading-[1.55] text-ink-muted">
-              {text(copy.eskaleraBody as Localized)}
-            </p>
-            <a
-              href={eskaleringsLank}
-              className="focus-ring mt-3 inline-flex min-h-11 items-center rounded-input bg-ink px-4 text-[0.875rem] font-semibold text-paper transition-colors hover:bg-ink2"
-            >
-              {text(copy.eskalera as Localized)}
-            </a>
-          </div>
+          {hjalp ? (
+            <div className="border-t border-ink/10 bg-paper2/60 px-4 py-4">
+              <p className={rubrikPanel}>{text(copy.hjalpRubrik as Localized)}</p>
+              <p className="mt-1.5 text-[0.9375rem] leading-[1.55] text-ink-muted">
+                {text(copy.hjalpBody as Localized)}
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  setOppen(false);
+                  setHjalpOppen(true);
+                }}
+                aria-haspopup="dialog"
+                className="focus-ring relative mt-3 inline-flex min-h-11 items-center gap-2 rounded-input bg-ink px-4 text-[0.875rem] font-semibold text-paper transition-colors hover:bg-ink2"
+              >
+                {text(copy.hjalp as Localized)}
+                {vantar > 0 ? (
+                  <span className="num inline-flex min-w-[1.25rem] items-center justify-center rounded-full bg-ochre px-1.5 text-[0.75rem] font-semibold leading-5 text-ink">
+                    {vantar}
+                  </span>
+                ) : null}
+              </button>
+            </div>
+          ) : (
+            <div className="border-t border-ink/10 bg-paper2/60 px-4 py-4">
+              <p className={rubrikPanel}>{text(copy.eskaleraRubrik as Localized)}</p>
+              <p className="mt-1.5 text-[0.9375rem] leading-[1.55] text-ink-muted">
+                {text(copy.eskaleraBody as Localized)}
+              </p>
+              <a
+                href={eskaleringsLank}
+                className="focus-ring mt-3 inline-flex min-h-11 items-center rounded-input bg-ink px-4 text-[0.875rem] font-semibold text-paper transition-colors hover:bg-ink2"
+              >
+                {text(copy.eskalera as Localized)}
+              </a>
+            </div>
+          )}
         </div>
+      ) : null}
+
+      {hjalp && hjalpOppen ? (
+        <HjalpRuta
+          onStang={() => {
+            setHjalpOppen(false);
+            knappRef.current?.focus();
+          }}
+        />
       ) : null}
     </div>
   );

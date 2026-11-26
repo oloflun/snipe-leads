@@ -1,7 +1,8 @@
 # Fältkartan: vilket fält ändrar vad
 
 Varje ifyllbart fält i produkten, var det lagras, vem som läser det, och **var i
-prompten det hamnar**. Läget per 2026-08-24, efter migration 049.
+prompten det hamnar**. Läget per 2026-08-24, efter migration 049. Kunskapsbasens
+säljfakta och Hjälprutans tabeller är tillagda 2026-11-25 (migration 153, 156 och 157).
 
 Kartan finns för att frågan "jag ändrade X, varför hände ingenting?" hade fyra
 olika svar och inget ställe att slå upp dem på. Tre av svaren var buggar.
@@ -54,8 +55,18 @@ ett svar som inte är modellens omskrivning.
 | Röstdokument (SOUL) | `/settings/soul` · `/admin/kunder/<id>` | `agent_context_docs` kind=`soul` | `leads/soul.py:load_soul` | user, wrappad |
 | Affärskontext | `/settings/affarskontext` · `/admin/kunder/<id>` | `agent_context_docs` kind=`product_marketing` | `leads/context_pack.py` (leads), `agent/support_agent.py` (support) | user, wrappad |
 | Kunskapsbas | `/settings/kunskapsbas` | `ss_knowledge_base` | `storage.search_kb` | user, **enda faktakällan** |
+| Kunskapsbas, säljfakta | `/settings/kunskapsbas`, kategorin Erbjudande och säljfakta | `ss_knowledge_base` category=`salj` (migration 153) | `leads/context_pack.py:_kb_salj` (leads), dessutom `storage.search_kb` som alla artiklar | user, i kontextpaketet under "Kundens egna fakta ur kunskapsbasen", **inte** inramad |
+| Förslag till kunskapsbasen | `/settings/kunskapsbas` (skanningen) · Hjälprutan (ur samtalet) | `ss_kb_forslag`, med `kalla` (`skanning`/`chatt`/`agent`), `kalla_ref` och `skapad_av` (migration 157) | ingen agent: bara kundens beslut lägger till en artikel (INV-LEARN-001) | når **aldrig** prompten |
 | Tonläge | `/admin/kunder/<id>` | `agent_configs.tone` | `agent/support_agent.py` | user (ärendekontext) |
 | Kanalton (default) | — (seed) | `ss_channel_configs.tone` | samma | user (ärendekontext) |
+
+**Säljfakta når leadskedjan bara när kunden lagt till dem.** `_kb_salj` läser
+`list_kb`, alltså kundens tillagda artiklar i kategorin `salj`, och hoppar över
+en artikel vars `giltig_till` passerat. Ett förslag i `ss_kb_forslag` som
+kunden inte lagt till läses aldrig. Texten ramas inte in, med flit: kunden har
+granskat den, och ramens slumpade id hade annars blivit siffror i
+grundningsgrindens tillåtna mängd. Ärendenas fack rörs inte: triagen får
+aldrig välja `salj` (`config.CATEGORIES` mot `config.KB_CATEGORIES`).
 
 Tonen har två källor med en tydlig ordning: kundens egen `agent_configs.tone`
 vinner, kanalens `ss_channel_configs.tone` gäller när den är tom.
@@ -85,6 +96,7 @@ missförstånd — man ändrar dem och letar sedan efter en skillnad i texten.
 | Tema | `/settings/tema` | cookie | bara den här webbläsaren |
 | Plan och tillägg | `/settings/billing`, `/settings/addons` | `workspaces.products`, `.addons` | vilka vyer och produkter som finns |
 | Spårningsnivå | — | `agent_configs.settings.trace_verbose` | om `agent_runs.step_log` bär hela prompttexten |
+| Felrapport (plattformsärende) | Hjälprutan · `/admin`, Kunder › Fel & eskaleringar › Felrapporter (Snajps svar och läge) | `plattformsarenden` och `plattformsarende_handelser` (migration 156), utan `tenant_id` | ett ärende med nummer och förlopp som finns kvar efter omladdning. Rapportör, arbetsyta, vy och roll sätts av Next-servern ur sessionen, aldrig ur kroppen. Nås bara utan tenantkontext, under hjälpens nyckel eller master-nyckeln (INV-HJALP-001, INV-HJALP-002); `synlig_for_kund` skiljer kundens förlopp från Snajps anteckningar. Når ingen kunds prompt |
 
 ---
 

@@ -1,4 +1,4 @@
-"""API-nycklar med omfång (ss_api_keys, migration 153).
+"""API-nycklar med omfång (ss_api_keys, migration 160).
 
 Fram till nu fanns en sorts nyckel: kundens egen backendnyckel, som når varje
 endpoint. Den går inte att lämna till en extern part. En nyckel som Buddy
@@ -85,7 +85,7 @@ async def lista(storage: Any, tenant_id: str) -> list[dict[str, Any]]:
                     "select * from ss_api_keys where tenant_id = $1::text::uuid "
                     "and not ('*' = any(omfang)) order by created_at desc", tenant_id)]
         except Exception as fel:
-            if getattr(fel, "sqlstate", None) == "42703":  # kolumnen omfang saknas före 153
+            if getattr(fel, "sqlstate", None) == "42703":  # kolumnen omfang saknas före 160
                 return []
             raise
     else:

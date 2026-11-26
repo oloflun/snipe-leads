@@ -77,6 +77,28 @@ async def test_listan_returnerar_aldrig_ett_bortvalt_bolag():
     assert any(p["id"] == skapad["id"] for p in bortvalda)
 
 
+@pytest.mark.anyio
+async def test_ett_pafyllt_lead_ar_ett_markt_undantag():
+    """Antons regel 2026-11-24: ett påfyllt bortval står i listan med sin
+    riktiga nivå och sin märkning. Bara flaggan släpper det; samma bolag utan
+    flaggan är dolt som förut."""
+    async with app.router.lifespan_context(app):
+        storage = app.state.storage
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            skapad = (await client.post("/api/leads/prospects", headers=DEMO,
+                                        json={"company_name": "Påfyllt AB"})).json()["prospect"]
+            await storage.spara_bedomning(DEFAULT_TENANT_ID, skapad["id"], bedomning={
+                "niva": "C", "qualified": False, "pafylld": True,
+                "pafylld_skal": "c",  # koden; gränssnittet översätter (pafyllnad.ts)
+            })
+            rader = (await client.get("/api/leads/prospects", headers=DEMO)).json()["prospects"]
+            await storage.spara_bedomning(DEFAULT_TENANT_ID, skapad["id"], bedomning={"pafylld": False})
+            utan = (await client.get("/api/leads/prospects", headers=DEMO)).json()["prospects"]
+    rad = next(p for p in rader if p["id"] == skapad["id"])
+    assert rad["niva"] == "C" and rad["pafylld"] is True and rad["pafylld_skal"]
+    assert all(p["id"] != skapad["id"] for p in utan)
+
+
 @pytest.fixture
 def anyio_backend():
     return "asyncio"

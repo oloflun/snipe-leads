@@ -57,6 +57,9 @@ export type Korning = {
   jobs_antal?: number;
   /** Kundens styrning: satt av pausa/avbryt, borta när körningen går. */
   styrning?: "paus" | "avbruten" | null;
+  /** Under målet och alla påfyllnadssteg tömda (Antons regel 2026-11-24,
+   *  korning.vila): körningen vilar och prövas igen en gång per dygn. */
+  vilande?: { sedan: string; skal: string } | null;
 };
 
 export type KorningsRad = {
@@ -133,6 +136,10 @@ const T = {
   styrFel: { sv: "Körningen gick inte att styra.", en: "The run could not be controlled." },
   stannade: { sv: "Stannade utan leads", en: "Stalled without leads" },
   underMalet: { sv: "Klar, under målet", en: "Done, under target" },
+  letarVidare: { sv: "letar vidare", en: "still searching" },
+  // Statuscellen för en vilande körning (korning.vila): den väntar på nästa
+  // dygnsväckning, den arbetar inte just nu. Skälet står i utfallscellen.
+  vilar: { sv: "Letar vidare", en: "Still looking" },
   fortsatt: { sv: "Fortsätt körningen", en: "Continue the run" },
   fortsattFel: { sv: "Körningen gick inte att fortsätta.", en: "The run could not be continued." }
 } satisfies Record<string, Localized>;
@@ -196,9 +203,12 @@ export const KORNINGSSTATUS: Record<KorningsRad["status"], Localized> = {
 /** Motorns slutorsaker (app/leads/korning.py) i kundens ord. */
 const SLUT_ETIKETT: Record<string, Localized> = {
   klar: { sv: "Målet nått", en: "Target reached" },
+  // Gamla rader: taket på antalet undersökta bolag. Sedan 2026-11-24 förlängs
+  // det under målet och är inget slut längre, och talet har ändrats; därför
+  // inget tal här.
   tak: {
-    sv: "Taket nått: fyra gånger så många bolag undersökta som beställda",
-    en: "Cap reached: four times as many companies researched as ordered"
+    sv: "Taket för antalet undersökta bolag nåddes",
+    en: "The cap on the number of companies researched was reached"
   },
   slut_pa_kandidater: { sv: "Inga fler bolag att pröva i målgruppen", en: "No more companies to try in the target group" },
   sokningen_foll: { sv: "Sökningen gick inte att genomföra", en: "The search could not be completed" },
@@ -217,6 +227,37 @@ const SLUT_ETIKETT: Record<string, Localized> = {
   },
   avbruten: { sv: "Avbruten", en: "Cancelled" }
 };
+
+/** Vad som håller en vilande körning (app/leads/korning.py:vilans_skal). */
+const VILA_SKAL: Record<string, Localized> = {
+  registret: {
+    sv: "inga fler bolag i målgruppen just nu, Iris prövar igen i morgon",
+    en: "no more companies in the target group right now, Iris tries again tomorrow"
+  },
+  kredittak: {
+    sv: "körningens tak för sidhämtningar är nått, Iris fortsätter i morgon",
+    en: "the run's cap on page fetches was reached, Iris continues tomorrow"
+  },
+  sokningen_foll: {
+    sv: "sökningen gick inte att genomföra, Iris försöker igen i morgon",
+    en: "the search could not be completed, Iris tries again tomorrow"
+  },
+  ingen_malgrupp: {
+    sv: "ingen målgrupp att söka i. Fyll i målgrupp under Inställningar",
+    en: "no target group to search in. Fill in your target group under Settings"
+  },
+  inga_traffar: {
+    sv: "sökningen hittade inga bolag. Kontrollera orterna eller bredda bransch eller område",
+    en: "the search found no companies. Check the locations or widen the industry or area"
+  }
+};
+
+/** "8 av 10, letar vidare: <skäl>" för en vilande körning, annars null. */
+export function vilaText(k: Korning | null | undefined, text: (l: Localized) => string): string | null {
+  if (!k?.vilande) return null;
+  const skal = VILA_SKAL[k.vilande.skal] ?? VILA_SKAL.registret;
+  return `${k.levererade} ${text(T.av)} ${k.mal}, ${text(T.letarVidare)}: ${text(skal)}`;
+}
 
 /**
  * Hur gick det? En avslutad körning utan ett enda lead är ett MISSLYCKANDE
@@ -246,6 +287,7 @@ export function statusText(rad: KorningsRad): Localized {
   }
   if (rad.korning?.styrning === "paus") return T.pausad;
   if (rad.korning?.styrning === "avbruten") return T.avbryter;
+  if (rad.korning?.vilande) return T.vilar;
   return T.pagar;
 }
 
@@ -324,7 +366,8 @@ export function IrisKorningar({
   // Poll bara när något pågår, och nästa hämtning schemaläggs först när den
   // förra svarat: ett intervall överlappade sig självt vid kallstart (proxyn
   // tillåter 60 s) och kunde skriva ett äldre svar över ett nyare.
-  const nagotPagar = !demo && !stoppad && (rader ?? []).some(pagar);
+  // En vilande körning väcks en gång per dygn: den pollas inte var tredje sekund.
+  const nagotPagar = !demo && !stoppad && (rader ?? []).some((r) => pagar(r) && !r.korning?.vilande);
   useEffect(() => {
     if (!nagotPagar) return;
     let timer = 0;
@@ -410,6 +453,10 @@ export function IrisKorningar({
         {(tak && !visaAlla ? rader.slice(0, tak) : rader).map((rad) => {
           const k = rad.korning;
           const arOppen = oppen === rad.job_id;
+          const vila = vilaText(k, text);
+          // En vilande körning arbetar inte just nu: dämpad text och en tom
+          // ring i stället för Pågårs fyllda ochre.
+          const vilar = Boolean(vila) && pagar(rad) && !rad.error;
           return (
             <RadMedDetalj
               key={rad.job_id}
@@ -438,9 +485,11 @@ export function IrisKorningar({
                     "inline-flex items-center gap-1.5",
                     rad.status === "failed" || utfallston(rad) === "stannade"
                       ? "text-danger"
-                      : pagar(rad) || utfallston(rad) === "under"
-                        ? "text-warning"
-                        : "text-ink"
+                      : vilar
+                        ? "text-ink-muted"
+                        : pagar(rad) || utfallston(rad) === "under"
+                          ? "text-warning"
+                          : "text-ink"
                   )}
                 >
                   <span
@@ -449,9 +498,11 @@ export function IrisKorningar({
                       "h-1.5 w-1.5 rounded-full",
                       rad.status === "failed" || utfallston(rad) === "stannade"
                         ? "bg-danger"
-                        : pagar(rad) || utfallston(rad) === "under"
-                          ? "bg-ochre"
-                          : "bg-moss"
+                        : vilar
+                          ? "border border-ochre"
+                          : pagar(rad) || utfallston(rad) === "under"
+                            ? "bg-ochre"
+                            : "bg-moss"
                     )}
                   />
                   {text(statusText(rad))}
@@ -460,7 +511,9 @@ export function IrisKorningar({
               <Cell className="text-ink-muted">
                 {rad.error
                   ? rad.error
-                  : k?.klar
+                  : vila
+                    ? vila
+                    : k?.klar
                     ? (k.sammanfattning ?? (SLUT_ETIKETT[k.slut_orsak ?? ""] ? text(SLUT_ETIKETT[k.slut_orsak ?? ""]) : text(T.klar)))
                     : k
                       ? k.pagaende

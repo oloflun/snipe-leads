@@ -32,6 +32,11 @@ export type SuiteProspekt = {
   webbrevision?: { modernitet?: number | null; brister?: string[] | null } | null;
   /** Arkiverad (migration 107): dold i Iris-listan, nåbar under Arkiverade. */
   arkiverad_at?: string | null;
+  /** Påfyllt lead (migration 158, BEDOMNINGSFALT): levererat under målet ur
+   *  körningens bortval. Skälet är en kod som components/leads/pafyllnad.ts
+   *  översätter. */
+  pafylld?: boolean | null;
+  pafylld_skal?: string | null;
 } & Utkastfalt;
 
 export type Uppgift = {
@@ -88,6 +93,11 @@ export type Samtalsrad = {
   nasta: string | null;
   ring_idag: boolean;
 };
+
+/** Backendens felkoder (`detail.kod`, `draft_note_kod`, `error_kod`) på
+ *  kundens språk. Tabellen och hjälpfunktionerna bor i `./felkoder` (utan
+ *  körtidsimporter, så att node --test kan läsa dem). */
+export { JOBBFEL_ALLMANT, JobbFel, KUNDFELKODER, jobbfel, kundfelkod } from "@/lib/leads/felkoder";
 
 /** Ett fel från backenden: meddelandet ur `detail` när det finns, och läget
  *  "arbetsytan aktiveras" (409 `ej_aktiverad`) som egen flagga. */
