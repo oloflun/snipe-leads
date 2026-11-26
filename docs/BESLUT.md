@@ -9,6 +9,41 @@ möjligt), vad det betyder i koden.
 
 ---
 
+## 2026-11-26 — Snajp CRM: affärstavlan och postens historik (agentens val)
+
+Inget av detta är Antons ord. Det är val agenten gjorde när affärerna och tidslinjen fick
+gränssnitt, och varje punkt går att ändra.
+
+1. **Historik är postens hela tidslinje, inte en flik till.** Fliken visade bara vilka fält
+   som ändrats. Tidslinjen i API:t är en övermängd av det, så en ny flik bredvid hade visat
+   nästan samma sak två gånger (regeln 2026-11-24). Fliken heter kvar Historik, som i Lime,
+   och läser nu allt: ändringar, anteckningar, uppgifter, aktiviteter, affärer, och för
+   bolag och personer det som hänt hos Iris och supporten.
+2. **Anteckning, uppgift och aktivitet skrivs där de sedan syns.** Överst i historiken, inte
+   i egna flikar som i Twenty. Fem flikar ryms inte i panelens bredd på telefon, och en
+   säljare skriver sin anteckning i samma rörelse som den läser den förra.
+3. **En öppen uppgift står en gång.** I listan Att göra tills den bockas av, och först
+   därefter i flödet som klar.
+4. **CRM:ets eget arbete hör till tidslinjen i API:t.** Anteckningar, aktiviteter, uppgifter
+   och affärer fanns i API:t men inte på postens tidslinje. Nu står de där med `origin: crm`,
+   och affären har en egen tidslinje. Raderade poster står inte med: papperskorgen är inte
+   historik.
+5. **Tavlan flyttar direkt och lägger tillbaka vid fel.** Kortet står i det nya steget medan
+   API:t sparar, och ett stegbyte går att ångra i åtta sekunder. På telefon finns ingen
+   dragning: steget byts i affärens panel, vilket också är tangentbordets väg.
+6. **Sannolikheten döljs på en avslutad affär.** En vunnen eller förlorad affär är avgjord,
+   och en rad som säger 70 procent bredvid Vunnen läses som ett fel.
+7. **Öppet värde och viktat värde står i vyraden, i räknefotens stil.** Inte som en egen rad
+   nyckeltal över tavlan. Annan valuta än kronor räknas inte in i de två talen.
+8. **Byggcachen ligger på D:.** C: var full och en commit föll. Cachen för det här
+   worktreet pekas till `D:\snajp-crm-next\cache`, med en länk till paketen bredvid och
+   inte i cachen, så att en rensning av cachen aldrig kan följa länken in i paketen.
+
+Kod: `components/crm/app/AffarerVy.tsx`, `AffarPanel.tsx`, `AffarFormular.tsx`,
+`Tidslinje.tsx`, `snajp-support/app/crm/tidslinje.py`.
+
+---
+
 ## 2026-11-26 — Snajp CRM: tidslinjen, utfallen, kundlistan och svensk standard (agentens val)
 
 Inget av detta är Antons ord. Det är val agenten gjorde när resten av fas 3 byggdes, och

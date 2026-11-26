@@ -54,7 +54,7 @@ fas 4 respektive fas 5.
 
 | Del | Läge | Not |
 |---|---|---|
-| Kundsynken in som API | klart | `/api/crm/v1`. 180 tester i minnet och 16 mot Postgres |
+| Kundsynken in som API | klart | `/api/crm/v1`. 181 tester i minnet och 16 mot Postgres |
 | Migrationerna 160 till 164 mot Postgres | klart | Körda två gånger var mot PGlite (Postgres 17) genom psycopg2, och lagrets frågor prövade där |
 | Databasvägen i drift (asyncpg) | väntar | Hur asyncpg tolkar parametrarna är bara prövat i ett CI-jobb som inte körts, eftersom inget är pushat |
 | Körning med inloggning mot den lokala stacken | inte påbörjat | Kräver Docker med Postgres och hela migrationskedjan. Vyerna är bara sedda i förhandsvisningen |
@@ -67,9 +67,10 @@ fas 4 respektive fas 5.
 | Webhooks ut | klart | Backend och vyn under Utvecklare. Inte kört mot en riktig mottagare |
 | Sortering nyast först, papperskorg, krockens id, namn på felrader | klart | Backend och vyer |
 | Synkens två nivåer och underlag till supportärende | klart | Migration 163 och vyn. Se "Var supportsystemet kopplar in" nedan |
-| Affärer med steg och tavla | klart i backend | Migration 164, commit `2fa09eb3`. Granskat ur tre vinklar och rättat. **Inget gränssnitt än** |
-| Uppgifter, anteckningar, aktiviteter, bilagor | klart i backend | Samma commit. Bilagor i databasen, 10 MB per fil och 500 MB per kund (agentens val, behöver Antons dom). **Inget gränssnitt än** |
-| Tidslinje mot leads, mejl, samtal och ärenden | klart i backend | `tidslinje.py`. Komponeras vid läsning. **Inget gränssnitt än** |
+| Affärer med steg och tavla | klart | Migration 164 (`2fa09eb3`) och vyn Affärer (`7fc9da8b`): tavla med dra och släpp, affärens panel, formulär, papperskorg. Sedd i förhandsvisningen, 1440 ljust och mörkt samt 390. Stegen går inte att ändra i gränssnittet än (namn, ordning, nya steg) |
+| Uppgifter, anteckningar, aktiviteter | klart, med luckor | Skrivs i historikfliken på bolag, person och affär (`e0a7cd21`). Uppgifter bockas av där. **Inte gjort:** ändra eller ta bort en anteckning, uppgift eller aktivitet i gränssnittet, en samlad uppgiftslista över alla poster, ansvarig på uppgiften |
+| Bilagor | klart i backend | Bilagor i databasen, 10 MB per fil och 500 MB per kund (agentens val, behöver Antons dom). **Inget gränssnitt än** |
+| Tidslinje mot leads, mejl, samtal och ärenden | klart | `tidslinje.py`, nu också med CRM:ets anteckningar, aktiviteter, uppgifter och affärer, och en tidslinje för affären (`35672915`). Historikfliken i de tre panelerna läser den (`e0a7cd21`). Raderna från Iris och supporten leder inte vidare till leadet, konversationen eller ärendet än |
 | Utfall speglas åt båda håll | klart i backend | `utfall.py`. **Inget gränssnitt än** |
 | Samlad kundlista, Iris och Egna | klart i backend | `kundlista.py`, `GET /customers`. **Inget gränssnitt än** |
 | Svensk standard i koden | pågår | Klart: organisationsnummer, moms, telefon, postnummer, bolagsform, SNI, privatperson. Inte gjort: SEK-format i hela ytan, registeruppslag, NIX |
@@ -77,6 +78,7 @@ fas 4 respektive fas 5.
 | Bildgranskning av de svenska CRM-systemen | inte påbörjat | Texten finns i `svensk-03` |
 | Oberoende granskning av gränssnittet i fas 3 del 1 | inte gjord | Byggaren stoppades av veckogränsen före sin rapport, och granskarna hann inte köra. Orkestratorn har läst 21 färska bilder och byggarens panelbilder |
 | Ett schemalagt jobb som tömmer papperskorgen | inte påbörjat | I dag töms den vid nästa skrivning hos kunden, så löftet om 30 dagar håller inte för en kund som aldrig skriver |
+| Bolagets affärer i bolagets panel | inte påbörjat | Affären syns på bolagets tidslinje och leder till tavlan, men panelen har ingen lista över bolagets affärer |
 | Bild på varje vy i Twentys hostade app | pågår | 17 bilder, mobilvyn gick inte att fånga |
 | Testkonton i källsystemen | väntar | Kräver Antons ja per konto |
 | Buddy | väntar | Inget avtalsdatum. Körs mot testkonto |
@@ -99,6 +101,18 @@ inloggad session, och synken har ingen: den startas av en API-nyckel. Därför s
 inget ärende själv. Antingen får ärendetabellen en systemrapportör, eller så hämtar ett
 jobb på supportsidan rapporterna härifrån. Det valet är supportsessionens.
 Kod: `snajp-support/app/crm/supportrapport.py`, `snajp-support/app/api/admin_crm.py`.
+
+### Disken på C: (2026-11-26)
+
+C: var full (0 MB) när affärstavlan skulle committas, och committen föll. Sessionen tog
+bort sin egen byggcache (`.next` i det här worktreet, 846 MB) och lade därefter cachen på
+D: genom en länk: `.next` pekar på `D:\snajp-crm-next\cache`, och `D:\snajp-crm-next\node_modules`
+pekar tillbaka på worktreets paket så att byggstegen hittar dem. C: har omkring 0,8 GB
+ledigt, vilket inte räcker för en full `tsc` eller en `next dev` i ett annat worktree.
+Två andra byggcachar ligger kvar orörda och går att återskapa: `snipe-leads\.next`
+(0,52 GB) och `.claude\worktrees\sharp-hermann-8c9577\.next` (0,5 GB). Mappen
+`D:\snajp-crm-next-cache` (255 MB) är en överbliven första variant som gick inte att ta
+bort härifrån.
 
 ### Det Anton behöver veta om tillägget
 

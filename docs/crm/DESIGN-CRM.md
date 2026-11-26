@@ -176,6 +176,37 @@ Astryx `Table`, `density="balanced"` (rad cirka 44 px), radavdelare, hover.
   e-post, telefon, ansvarig, adress, kund sedan, avtalsslut, kontakta inte) som
   sparar med `PATCH /v1/companies/{id}`. Fel från API:t visas vid rätt fält.
 
+### Historik (tillagt 2026-11-26, inte sett av Anton än)
+
+Fliken Historik är postens hela tidslinje, i bolagets, personens och affärens panel
+(`Tidslinje.tsx`). En komponent, ingen flik till för anteckningar eller uppgifter.
+
+- **Skrivytan** överst: tre små sekundära knappar (Anteckning, Uppgift, Samtal eller
+  möte). Ett tryck öppnar formuläret på samma plats, i en tvättad ruta med 16 px radie
+  (`.crm-skrivyta`), med Avbryt och Spara nere till höger.
+- **Att göra:** öppna uppgifter som rader med kryssruta, titel och förfallodag till
+  höger (passerad dag i varningsfärg, och utsagt för skärmläsare). En öppen uppgift står
+  bara här, och i flödet först när den är klar.
+- **Flödet:** `ol.crm-tidslinje`, en rad per händelse: ikonplatta 24 px i radens ton,
+  meningen i 0,875 rem, utdrag i dämpad brödtext (högst fyra rader), och sist en dämpad
+  rad med detalj, källa och tid. Källan skrivs bara när den är känd.
+
+## Affärstavlan (tillagt 2026-11-26, inte sett av Anton än)
+
+Vyn Affärer (`AffarerVy.tsx`) är en tavla inuti bladet, med samma sidhuvud och vyrad som
+listorna. Antalet i sidhuvudet är öppna affärer. Vyraden bär Tavla och Papperskorg, och
+öppet och viktat värde i räknefotens stil.
+
+- **Kolumnen** (`.crm-tavla-kolumn`): 288 px, 16 px radie, tvättad yta. Huvud: prick i
+  stegets ton (öppet blått, vunnet mossa, förlorat mineral), namnet i Geist halvfet,
+  antal som neutral etikett och summan dämpad till höger.
+- **Kortet** (`.crm-tavla-kort`): blad med hårlinje och 12 px radie. Namnet i Geist
+  halvfet, den ansvarigas avatar uppe till höger, bolaget som lugnt postchip, och en rad
+  med beloppet till vänster och väntat avslut till höger.
+- **Dra och släpp:** kolumnen under pekaren tonas ockra, och en 3 px ockralinje visar
+  platsen. På telefon står stegen under varandra utan dragning.
+- **Affärens panel** har bolagets form: steget som väljare överst i gruppen Affär.
+
 ## Översikten (`/crm`, ny startsida)
 
 Twentys dashboardrutnät i Astryx kort (`Grid` plus `Card`, radie 16, luftig marginal).

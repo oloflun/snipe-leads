@@ -53,15 +53,19 @@ gör listan för snäll än för sträng.
 
 Läget är också taget medan två byggen pågick. Affärer med tavla, uppgifter, anteckningar,
 aktiviteter och bilagor är sedan dess committade i API:t (`2fa09eb3`), och gränssnittet för
-synkens två nivåer, webhooks, papperskorg och historik likaså (`bd1b5b81`). Rader som
-gäller dem kan stå för lågt.
+synkens två nivåer, webhooks, papperskorg och historik likaså (`bd1b5b81`). Därefter har
+affärstavlan (`7fc9da8b`) och postens samlade historik med anteckning, uppgift och aktivitet
+(`35672915`, `e0a7cd21`) fått gränssnitt. Rader som gäller dem står för lågt tills områdena
+lästs om.
 
 ## De största luckorna
 
 Det en användare av Twenty skulle sakna mest, ur områdesfilernas egna sammanfattningar:
 
-1. **Affärer, uppgifter, anteckningar, aktiviteter och bilagor finns bara i API:t.** Ingen
-   tavla att dra affärer på, ingen uppgiftslista, ingen anteckning i postpanelen.
+1. **Bilagor finns bara i API:t, och arbetet runt affärerna är halvt.** Tavlan med dra och
+   släpp, affärens panel, anteckningar, uppgifter och aktiviteter i postens historik är
+   byggda (2026-11-26). Kvar: bilagor i gränssnittet, ändra och ta bort en anteckning eller
+   uppgift, en samlad uppgiftslista, egna steg på tavlan, och bolagets affärer i bolagets panel.
 2. **Inga sparade vyer.** Filter och sortering försvinner vid omladdning, och det finns
    ingen filterbyggare, ingen gruppering, inget kolumnval och ingen summering.
 3. **Ingen postsida.** Posten öppnas i en panel med fasta flikar.
