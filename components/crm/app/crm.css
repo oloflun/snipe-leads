@@ -732,6 +732,9 @@ button.crm-chip:active {
   color: oklch(var(--ink-subtle));
 }
 .crm-varde {
+  /* Värdekolumnen är en flexrad: utan min-width 0 växer ett långt chip ut ur panelen på telefon. */
+  min-width: 0;
+  max-width: 100%;
   color: oklch(var(--ink));
   font-size: 0.875rem;
 }

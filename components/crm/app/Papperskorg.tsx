@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Building2, CalendarX2, Clock, RotateCcw, Trash2, UserRound } from "lucide-react";
+import { Building2, CalendarX2, Clock, Handshake, RotateCcw, Trash2, UserRound } from "lucide-react";
 import { Button } from "@astryxdesign/core/Button";
 import { EmptyState } from "@astryxdesign/core/EmptyState";
 import { Icon } from "@astryxdesign/core/Icon";
@@ -9,7 +9,7 @@ import { List, ListItem } from "@astryxdesign/core/List";
 import { Table, pixel, proportional, type TableColumn } from "@astryxdesign/core/Table";
 import { Timestamp } from "@astryxdesign/core/Timestamp";
 import { useToast } from "@astryxdesign/core/Toast";
-import { Kolumnrubrik, Krocklank, Personchip, Postchip, Tabellskelett, useSmal } from "@/components/crm/app/kit";
+import { Kolumnrubrik, Krocklank, Objektikon, Personchip, Postchip, Tabellskelett, useSmal } from "@/components/crm/app/kit";
 import { Felruta } from "@/components/crm/app/Sida";
 import { CrmFel, crmAnrop, type Sida as Svarssida } from "@/lib/crm/api";
 import { useLocale, type Localized } from "@/lib/i18n";
@@ -32,7 +32,7 @@ function tomsOm(purge: string | null, text: (l: Localized) => string): string {
 }
 
 /**
- * Papperskorgen för bolag eller personer: en vy i listans vyrad, hämtad med
+ * Papperskorgen för bolag, personer eller affärer: en vy i listans vyrad, hämtad med
  * `only_deleted=true` (senast raderad först). Varje rad visar namnet, när
  * posten raderades och när den töms, med åtgärden Återställ. Krockar
  * återställningen (409: numret eller adressen finns nu på en annan post)
@@ -45,7 +45,7 @@ export function Papperskorg<T extends Raderad>({
   oppnaPost,
   aterstalld
 }: Readonly<{
-  objekt: "companies" | "people";
+  objekt: "companies" | "people" | "deals";
   /** Sökningen i vyraden. */
   fraga: string;
   namnPa: (post: T) => string;
@@ -59,6 +59,7 @@ export function Papperskorg<T extends Raderad>({
   const smal = useSmal();
   const tal = useCallback((n: number) => n.toLocaleString(locale === "sv" ? "sv-SE" : "en-GB"), [locale]);
   const bolag = objekt === "companies";
+  const affar = objekt === "deals";
   const [rader, setRader] = useState<T[]>([]);
   const [nasta, setNasta] = useState<string | null>(null);
   const [laddar, setLaddar] = useState(true);
@@ -177,11 +178,24 @@ export function Papperskorg<T extends Raderad>({
     () => [
       {
         key: "namn",
-        header: <Kolumnrubrik ikon={bolag ? Building2 : UserRound}>{bolag ? text({ sv: "Bolag", en: "Company" }) : text({ sv: "Namn", en: "Name" })}</Kolumnrubrik>,
+        header: (
+          <Kolumnrubrik ikon={bolag ? Building2 : affar ? Handshake : UserRound}>
+            {bolag ? text({ sv: "Bolag", en: "Company" }) : affar ? text({ sv: "Affär", en: "Deal" }) : text({ sv: "Namn", en: "Name" })}
+          </Kolumnrubrik>
+        ),
         width: proportional(1, { minWidth: 220 }),
         renderCell: (r) => (
           <span className="flex min-w-0 flex-col items-start py-1.5">
-            {bolag ? <Postchip namn={r.namn} vikt="stark" /> : <Personchip namn={r.namn} vikt="stark" />}
+            {bolag ? (
+              <Postchip namn={r.namn} vikt="stark" />
+            ) : affar ? (
+              <span className="inline-flex h-7 min-w-0 max-w-full items-center gap-2">
+                <Objektikon objekt="affarer" storlek={20} />
+                <span className="min-w-0 truncate text-[0.875rem] font-semibold leading-5 text-ink">{r.namn}</span>
+              </span>
+            ) : (
+              <Personchip namn={r.namn} vikt="stark" />
+            )}
             {krockrad(r.id)}
           </span>
         )
@@ -211,7 +225,7 @@ export function Papperskorg<T extends Raderad>({
       }
     ],
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [text, bolag, krockar, arbetar, locale]
+    [text, bolag, affar, krockar, arbetar, locale]
   );
 
   const tomt = (
@@ -221,7 +235,9 @@ export function Papperskorg<T extends Raderad>({
       description={
         bolag
           ? text({ sv: "Ett borttaget bolag ligger här i 30 dagar och kan återställas. Därefter töms det.", en: "A deleted company stays here for 30 days and can be restored. After that it is emptied." })
-          : text({ sv: "En borttagen person ligger här i 30 dagar och kan återställas. Därefter töms den.", en: "A deleted person stays here for 30 days and can be restored. After that it is emptied." })
+          : affar
+            ? text({ sv: "En borttagen affär ligger här i 30 dagar och kan återställas. Därefter töms den.", en: "A deleted deal stays here for 30 days and can be restored. After that it is emptied." })
+            : text({ sv: "En borttagen person ligger här i 30 dagar och kan återställas. Därefter töms den.", en: "A deleted person stays here for 30 days and can be restored. After that it is emptied." })
       }
     />
   );

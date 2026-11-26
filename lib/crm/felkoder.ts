@@ -87,7 +87,17 @@ export const FALT: Record<string, Faltord> = {
   title: { etikett: { sv: "Titel", en: "Title" }, naken: { sv: "titel", en: "title" }, obest: { sv: "en titel", en: "a title" } },
   company_id: { etikett: { sv: "Bolag", en: "Company" }, naken: { sv: "bolag", en: "company" }, obest: { sv: "en bolagskoppling", en: "a company link" } },
   legal_basis: { etikett: { sv: "Rättslig grund", en: "Legal basis" }, naken: { sv: "rättslig grund", en: "legal basis" }, obest: { sv: "en rättslig grund", en: "a legal basis" } },
-  custom: { etikett: { sv: "Egna fält", en: "Custom fields" }, naken: { sv: "egna fält", en: "custom fields" }, obest: { sv: "ett eget fält", en: "a custom field" } }
+  custom: { etikett: { sv: "Egna fält", en: "Custom fields" }, naken: { sv: "egna fält", en: "custom fields" }, obest: { sv: "ett eget fält", en: "a custom field" } },
+  // Affärens fält (historiken i affärens panel).
+  stage_id: { etikett: { sv: "Steg", en: "Stage" }, naken: { sv: "steg", en: "stage" }, obest: { sv: "ett steg", en: "a stage" } },
+  amount: { etikett: { sv: "Belopp", en: "Amount" }, naken: { sv: "belopp", en: "amount" }, obest: { sv: "ett belopp", en: "an amount" } },
+  currency: { etikett: { sv: "Valuta", en: "Currency" }, naken: { sv: "valuta", en: "currency" }, obest: { sv: "en valuta", en: "a currency" } },
+  probability: { etikett: { sv: "Sannolikhet", en: "Probability" }, naken: { sv: "sannolikhet", en: "probability" }, obest: { sv: "en sannolikhet", en: "a probability" } },
+  expected_close_date: { etikett: { sv: "Väntat avslut", en: "Expected close" }, naken: { sv: "väntat avslut", en: "expected close" }, obest: { sv: "ett väntat avslut", en: "an expected close date" } },
+  closed_at: { etikett: { sv: "Avslutad", en: "Closed" }, naken: { sv: "avslutsdag", en: "close date" }, obest: { sv: "en avslutsdag", en: "a close date" } },
+  lost_reason: { etikett: { sv: "Förlustorsak", en: "Lost reason" }, naken: { sv: "förlustorsak", en: "lost reason" }, obest: { sv: "en förlustorsak", en: "a lost reason" } },
+  person_id: { etikett: { sv: "Person", en: "Person" }, naken: { sv: "person", en: "person" }, obest: { sv: "en personkoppling", en: "a person link" } },
+  position: { etikett: { sv: "Plats på tavlan", en: "Place on the board" }, naken: { sv: "plats på tavlan", en: "place on the board" }, obest: { sv: "en plats på tavlan", en: "a place on the board" } }
 };
 
 /** Ett fälts etikett, eller fältnamnet som det står när tabellen saknar det. */

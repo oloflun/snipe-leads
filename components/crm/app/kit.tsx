@@ -20,6 +20,7 @@ import {
   Code2,
   Copy,
   Globe,
+  Handshake,
   LayoutDashboard,
   Mail,
   Phone,
@@ -51,12 +52,14 @@ import { useLocale, type Localized } from "@/lib/i18n";
 export type Ton = "ockra" | "bla" | "mossa" | "sigill" | "mineral";
 
 /** CRM:ets vyer. Samma nycklar som adressen: `/crm/<vy>`. */
-export type Objekt = "oversikt" | "bolag" | "personer" | "synk" | "utvecklare";
+export type Objekt = "oversikt" | "bolag" | "personer" | "affarer" | "synk" | "utvecklare";
 
 export const OBJEKT: Record<Objekt, { ton: Ton; ikon: LucideIcon; namn: Localized }> = {
   oversikt: { ton: "ockra", ikon: LayoutDashboard, namn: { sv: "Översikt", en: "Overview" } },
   bolag: { ton: "bla", ikon: Building2, namn: { sv: "Bolag", en: "Companies" } },
   personer: { ton: "mossa", ikon: Users, namn: { sv: "Personer", en: "People" } },
+  // Sigill, som Synk: de står i var sin sektion av navigeringen och möts aldrig.
+  affarer: { ton: "sigill", ikon: Handshake, namn: { sv: "Affärer", en: "Deals" } },
   synk: { ton: "sigill", ikon: RefreshCw, namn: { sv: "Synk", en: "Sync" } },
   utvecklare: { ton: "mineral", ikon: Code2, namn: { sv: "Utvecklare", en: "Developers" } }
 };

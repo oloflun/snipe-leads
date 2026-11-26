@@ -1,5 +1,6 @@
 "use client";
 
+import { AffarerVy } from "@/components/crm/app/AffarerVy";
 import { BolagVy } from "@/components/crm/app/BolagVy";
 import { CrmRam, type CrmVy } from "@/components/crm/app/CrmRam";
 import { OversiktVy } from "@/components/crm/app/OversiktVy";
@@ -8,6 +9,7 @@ import { SynkVy } from "@/components/crm/app/SynkVy";
 import { UtvecklareVy } from "@/components/crm/app/UtvecklareVy";
 import { DashboardProvider } from "@/components/dashboard/DashboardContext";
 import { orgnrVisning, type Anslutning, type Bolag, type Handelse, type Korning, type Leverans, type Nyckel, type Relation, type Webhook } from "@/lib/crm/api";
+import type { Affar, Affarssteg } from "@/lib/crm/affar";
 import type { DashboardState } from "@/lib/data/dashboard";
 import type { Personpost } from "@/lib/crm/person";
 import type { Tema } from "@/lib/tema";
@@ -224,10 +226,15 @@ const KORNINGAR: Korning[] = [
 // ---------------------------------------------------------------------------
 
 /** Postens historik, påhittad men i API:ts form och ordning (nyast först). Fälten bär aldrig värden. */
-function historik(objekt: "company" | "person", id: string, skapad: string | null, andrad: string | null, kalla?: string): Handelse[] {
+function historik(objekt: "company" | "person" | "deal", id: string, skapad: string | null, andrad: string | null, kalla?: string): Handelse[] {
   const synk = `anslutning:${kalla ?? "hubspot"}`;
   const t = (timmar: number) => new Date(new Date(andrad ?? iso(10)).getTime() - timmar * 36e5).toISOString();
-  const falt = objekt === "company" ? [["phone", "address.city"], ["owner"], ["email", "website"]] : [["title"], ["mobile", "email"], ["company_id"]];
+  const falt =
+    objekt === "company"
+      ? [["phone", "address.city"], ["owner"], ["email", "website"]]
+      : objekt === "deal"
+        ? [["stage_id"], ["amount", "expected_close_date"], ["owner"]]
+        : [["title"], ["mobile", "email"], ["company_id"]];
   return [
     { seq: 9, object: objekt, id, type: "updated", fields: falt[0], source: "synk", actor: synk, at: t(0) },
     { seq: 7, object: objekt, id, type: "updated", fields: falt[1], source: "app", actor: "anvandare:exempel", at: t(26) },
@@ -279,6 +286,123 @@ const NYCKLAR: Nyckel[] = [
   { id: "n2", namn: "Fortnox", prefix: "snajp_crm_91c0", omfang: ["crm:synk"], created_at: iso(24 * 12), last_used_at: iso(27), revoked_at: null },
   { id: "n3", namn: "Provnyckel", prefix: "snajp_crm_07be", omfang: ["crm:las"], created_at: iso(24 * 70), last_used_at: null, revoked_at: iso(24 * 60) }
 ];
+
+// ---------------------------------------------------------------------------
+// Affärer och steg (steg_ut, affar_ut i crm_v1_objekt.py)
+// ---------------------------------------------------------------------------
+
+/** Standardstegen en arbetsyta får första gången (objekt.STANDARDSTEG). */
+const STEG: Affarssteg[] = [
+  { id: "s1", name: "Ny", position: 1, probability: 10, type: "open", color: null },
+  { id: "s2", name: "Kvalificerad", position: 2, probability: 25, type: "open", color: null },
+  { id: "s3", name: "Möte bokat", position: 3, probability: 40, type: "open", color: null },
+  { id: "s4", name: "Offert skickad", position: 4, probability: 60, type: "open", color: null },
+  { id: "s5", name: "Förhandling", position: 5, probability: 80, type: "open", color: null },
+  { id: "s6", name: "Vunnen", position: 6, probability: 100, type: "won", color: null },
+  { id: "s7", name: "Förlorad", position: 7, probability: 0, type: "lost", color: null }
+];
+
+/** Påhittade affärer: [steg, namn, belopp, väntat avslut, bolagets plats i listan]. */
+const AFFARSRADER: [string, string, number | null, string | null, number][] = [
+  ["s1", "Växel för nya kontoret", 48_000, "2027-01-29", 0],
+  ["s1", "Mobilabonnemang, 12 anställda", 86_400, null, 3],
+  ["s1", "Kundtjänst på kvällstid", null, "2027-02-12", 7],
+  ["s2", "Telefoniavtal 2027", 240_000, "2026-12-18", 1],
+  ["s2", "Svarsgrupp för supporten", 64_000, "2027-01-15", 9],
+  ["s3", "Uppgradering till fiber", 132_000, "2026-11-14", 4],
+  ["s3", "Supportagent på webben", 96_000, "2026-12-09", 12],
+  ["s3", "Samtalsstatistik", 28_000, null, 15],
+  ["s4", "Treårsavtal, hela koncernen", 720_000, "2026-12-22", 2],
+  ["s4", "Leadslistor, första kvartalet", 54_000, "2026-12-04", 18],
+  ["s5", "Förlängning av avtalet", 310_000, "2026-12-01", 6],
+  ["s6", "Växel och mobiler", 188_000, "2026-11-10", 10],
+  ["s6", "Supportagent, pilot", 36_000, "2026-10-28", 13],
+  ["s7", "Callcenterlösning", 420_000, "2026-11-03", 21]
+];
+
+type Affarspost = Affar & { purge_at: string | null };
+
+const AFFARER: Affarspost[] = AFFARSRADER.map(([steg, namn, summa, avslut, plats], i) => {
+  const b = LEVANDE_BOLAG[plats % LEVANDE_BOLAG.length];
+  const stangd = steg === "s6" || steg === "s7";
+  return {
+    id: `d${i}`,
+    name: namn,
+    company_id: b.id,
+    person_id: PERSONER.find((p) => p.company_id === b.id && !p.deleted_at)?.id ?? null,
+    stage_id: steg,
+    amount: summa,
+    currency: "SEK",
+    // Två affärer har en egen sannolikhet; de andra följer stegets.
+    probability: i === 3 ? 35 : i === 8 ? 70 : null,
+    expected_close_date: avslut,
+    closed_at: stangd ? iso(24 * (6 + i)) : null,
+    lost_reason: steg === "s7" ? "Valde en leverantör med egen växel" : null,
+    owner: i % 5 === 2 ? null : ANSVARIGA[i % ANSVARIGA.length],
+    position: (i + 1) * 1000,
+    created_at: iso(24 * (20 + i * 2)),
+    updated_at: iso(3 + i * 7),
+    deleted_at: null,
+    purge_at: null
+  };
+});
+{
+  const raderad = nu - 5 * 864e5;
+  AFFARER.push({
+    ...AFFARER[0], id: "rd1", name: "Gammalt telefoniavtal", stage_id: "s2", position: 99_000,
+    deleted_at: new Date(raderad).toISOString(), purge_at: new Date(raderad + 30 * 864e5).toISOString()
+  });
+}
+
+/** Tavlan som crm_v1_objekt.tavla: stegen i ordning, levande affärer i tavlans ordning, antal och summor. */
+function tavlan() {
+  return {
+    stages: STEG.map((s) => {
+      const deals = AFFARER.filter((a) => !a.deleted_at && a.stage_id === s.id).sort((x, y) => (x.position ?? 0) - (y.position ?? 0));
+      const per: Record<string, number> = {};
+      for (const a of deals) per[a.currency || "SEK"] = (per[a.currency || "SEK"] ?? 0) + (a.amount ?? 0);
+      return { ...s, deals, count: deals.length, amount_total: Object.values(per).reduce((x, y) => x + y, 0), amount_by_currency: per };
+    })
+  };
+}
+
+/** Lägger affären i ett steg, före en annan affär eller sist, som objekt.flytta. Stängda steg sätter closed_at. */
+function placera(a: Affarspost, stegId: string, foreId: string | null) {
+  const iSteget = AFFARER.filter((x) => x !== a && !x.deleted_at && x.stage_id === stegId).sort((x, y) => (x.position ?? 0) - (y.position ?? 0));
+  const plats = foreId ? iSteget.findIndex((x) => x.id === foreId) : -1;
+  const ordning = plats < 0 ? [...iSteget, a] : [...iSteget.slice(0, plats), a, ...iSteget.slice(plats)];
+  ordning.forEach((x, i) => (x.position = (i + 1) * 1000));
+  if (a.stage_id !== stegId) {
+    const typ = STEG.find((s) => s.id === stegId)?.type ?? "open";
+    a.closed_at = typ === "open" ? null : new Date().toISOString();
+  }
+  a.stage_id = stegId;
+  a.updated_at = new Date().toISOString();
+}
+
+/** Skriver in anropets fält i en affär: bara de fält som skickats, null tömmer. */
+function andraAffar(a: Affarspost, k: Record<string, unknown>) {
+  const falt = ["name", "company_id", "person_id", "amount", "currency", "probability", "expected_close_date", "lost_reason", "owner"] as const;
+  const mal = a as unknown as Record<string, unknown>;
+  for (const f of falt) if (f in k) mal[f] = k[f] ?? null;
+  if (typeof k.stage_id === "string" && k.stage_id !== a.stage_id) placera(a, k.stage_id, null);
+  a.updated_at = new Date().toISOString();
+}
+
+/** Affärens fält som API:t inte tar emot, i samma form som crm_v1_objekt._objektfel. */
+function ogiltigAffar(k: Record<string, unknown>, ny: boolean): Response | null {
+  const fel: { field: string; code: string }[] = [];
+  if (ny && !String(k.name ?? "").trim()) fel.push({ field: "name", code: "saknas" });
+  if (typeof k.expected_close_date === "string" && !/^\d{4}-\d{2}-\d{2}$/.test(k.expected_close_date)) fel.push({ field: "expected_close_date", code: "datum_ogiltigt" });
+  if (fel.length) return json({ detail: { code: "invalid_fields", message: "One or more fields could not be interpreted.", meddelande: "Ett eller flera fält gick inte att tolka.", fields: fel } }, 422);
+  if (k.company_id && !BOLAG.some((b) => b.id === k.company_id && !b.deleted_at)) {
+    return json({ detail: { code: "company_not_found", message: "company_id does not point at a company.", meddelande: "company_id pekar inte på något bolag." } }, 422);
+  }
+  if (k.stage_id && !STEG.some((s) => s.id === k.stage_id)) {
+    return json({ detail: { code: "stage_not_found", message: "stage_id does not point at a deal stage.", meddelande: "stage_id pekar inte på något steg." } }, 422);
+  }
+  return null;
+}
 
 const DBNAMN: Record<Relation, string> = { customer: "kund", former_customer: "tidigare_kund", prospect: "prospekt", partner: "partner", supplier: "leverantor", other: "ovrigt" };
 
@@ -544,6 +668,68 @@ async function svara(url: URL, init?: RequestInit): Promise<Response> {
     PERSONER.unshift(ny);
     return json(ny, 201);
   }
+  // ---- Affärer (crm_v1_objekt.py) ---------------------------------------------
+  if (vag === "/v1/deal-stages" && metod === "GET") return json({ data: STEG });
+  if (vag === "/v1/deals/board" && metod === "GET") return json(tavlan());
+  if (vag === "/v1/deals" && metod === "GET") {
+    const q = (url.searchParams.get("q") ?? "").toLowerCase();
+    const korgen = url.searchParams.get("only_deleted") === "true";
+    const traffar = AFFARER.filter((a) => (korgen ? !!a.deleted_at : !a.deleted_at) && (!q || (a.name ?? "").toLowerCase().includes(q)));
+    return json({ data: ordna(traffar, "-updated", (a) => a.name ?? "", korgen), next_cursor: null });
+  }
+  if (vag === "/v1/deals" && metod === "POST") {
+    const fel = ogiltigAffar(kropp, true);
+    if (fel) return fel;
+    const ny: Affarspost = {
+      id: `d${100 + AFFARER.length}`, name: null, company_id: null, person_id: null, stage_id: null, amount: null, currency: "SEK", probability: null,
+      expected_close_date: null, closed_at: null, lost_reason: null, owner: null, position: null,
+      created_at: new Date().toISOString(), updated_at: new Date().toISOString(), deleted_at: null, purge_at: null
+    };
+    AFFARER.push(ny);
+    andraAffar(ny, { ...kropp, stage_id: kropp.stage_id ?? "s1" });
+    return json(ny, 201);
+  }
+  const affarshistorik = vag.match(/^\/v1\/deals\/([^/]+)\/history$/);
+  if (affarshistorik) {
+    const a = AFFARER.find((x) => x.id === decodeURIComponent(affarshistorik[1]));
+    if (!a) return json({ detail: { code: "not_found", message: "The record does not exist.", meddelande: "Posten finns inte." } }, 404);
+    // En affär skapad i förhandsvisningen har bara sin skapelse. Affärer synkas inte in: allt är gjort i appen eller över API:t.
+    const skapad = { seq: 1, object: "deal", id: a.id, type: "created", fields: [], source: "app", actor: "anvandare:exempel", at: a.created_at };
+    if (Number(a.id.slice(1)) >= 100) return json({ data: [skapad] });
+    const andringar = historik("deal", a.id, a.created_at, a.updated_at)
+      .filter((h) => h.type === "updated")
+      .map((h) => (h.source === "synk" ? { ...h, source: "app", actor: "anvandare:exempel" } : h));
+    return json({ data: [...andringar, skapad] });
+  }
+  const affarsdel = vag.match(/^\/v1\/deals\/([^/]+)(\/restore|\/move)?$/);
+  if (affarsdel) {
+    const a = AFFARER.find((x) => x.id === decodeURIComponent(affarsdel[1]));
+    if (!a || (a.deleted_at && affarsdel[2] !== "/restore")) return json({ detail: { code: "not_found", message: "The record does not exist.", meddelande: "Posten finns inte." } }, 404);
+    if (affarsdel[2] === "/restore" && metod === "POST") {
+      a.deleted_at = null;
+      a.purge_at = null;
+      a.updated_at = new Date().toISOString();
+      return json(a);
+    }
+    if (affarsdel[2] === "/move" && metod === "POST") {
+      const stegId = String(kropp.stage_id ?? "");
+      if (!STEG.some((s) => s.id === stegId)) return json({ detail: { code: "stage_not_found", message: "stage_id does not point at a deal stage.", meddelande: "stage_id pekar inte på något steg." } }, 422);
+      placera(a, stegId, typeof kropp.before_id === "string" ? kropp.before_id : null);
+      return json(a);
+    }
+    if (metod === "GET") return json(a);
+    if (metod === "DELETE") {
+      a.deleted_at = new Date().toISOString();
+      a.purge_at = new Date(Date.now() + 30 * 864e5).toISOString();
+      return json(null, 204);
+    }
+    if (metod === "PATCH") {
+      const fel = ogiltigAffar(kropp, false);
+      if (fel) return fel;
+      andraAffar(a, kropp);
+      return json(a);
+    }
+  }
   if (vag === "/v1/connections" && metod === "GET") return json({ data: ANSLUTNINGAR });
   const anslutningsdel = vag.match(/^\/v1\/connections\/([^/]+)$/);
   if (anslutningsdel && anslutningsdel[1] !== "systems") {
@@ -748,6 +934,7 @@ export function CrmForhandsvisning({ tema, vy, kund, utanTillagg }: Readonly<{ t
         {vy === "oversikt" ? <OversiktVy bas="/forhandsvisning/crm" /> : null}
         {vy === "bolag" ? <BolagVy /> : null}
         {vy === "personer" ? <PersonerVy bas="/forhandsvisning/crm" /> : null}
+        {vy === "affarer" ? <AffarerVy bas="/forhandsvisning/crm" /> : null}
         {vy === "synk" ? <SynkVy utvecklarvag="/forhandsvisning/crm/utvecklare" /> : null}
         {vy === "utvecklare" ? <UtvecklareVy /> : null}
       </CrmRam>

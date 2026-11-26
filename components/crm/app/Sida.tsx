@@ -53,7 +53,9 @@ export function Vyrad({ children, hoger }: Readonly<{ children?: React.ReactNode
  *
  * `vyrad` (eller det äldre `verktyg`) hamnar i vyraden. `utfyllnad` styr
  * innehållets marginal: `tabell` ger tabellen kant i kant med bladet (cellerna
- * har egen marginal), `sida` ger 24 px runt, som översiktens rutnät.
+ * har egen marginal), `sida` ger 24 px runt, som översiktens rutnät, och `tavla`
+ * låter innehållet fylla bladets höjd, så att tavlans rullningslist i sidled
+ * ligger i bladets nederkant.
  */
 export function Sida({
   objekt,
@@ -74,7 +76,7 @@ export function Sida({
   vyradHoger?: React.ReactNode;
   /** Äldre namn på vyradens innehåll. Ritas i vyraden över hela bredden. */
   verktyg?: React.ReactNode;
-  utfyllnad?: "tabell" | "sida";
+  utfyllnad?: "tabell" | "sida" | "tavla";
   children: React.ReactNode;
 }>) {
   const harVyrad = vyrad != null || vyradHoger != null || verktyg != null;
@@ -95,7 +97,17 @@ export function Sida({
       }
       content={
         <LayoutContent padding={0}>
-          <div className={utfyllnad === "sida" ? "px-4 pb-8 pt-2 sm:px-6" : "border-t border-ink/[0.08]"}>{children}</div>
+          <div
+            className={
+              utfyllnad === "sida"
+                ? "px-4 pb-8 pt-2 sm:px-6"
+                : utfyllnad === "tavla"
+                  ? "flex min-h-full flex-col border-t border-ink/[0.08]"
+                  : "border-t border-ink/[0.08]"
+            }
+          >
+            {children}
+          </div>
         </LayoutContent>
       }
     />

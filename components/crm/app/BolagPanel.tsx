@@ -189,7 +189,7 @@ export function BolagPanel({
         content={
           <LayoutContent padding={0}>
             {/* Fokus vid öppning landar i innehållet, inte på stängknappen (som annars visar sitt tips). */}
-            <div data-autofocus tabIndex={-1} className="outline-none">
+            <div data-autofocus tabIndex={-1} className="crm-autofokus">
             {!bolag ? (
               <div className="flex flex-col gap-4 px-5 py-4" role="status" aria-busy="true" aria-label={text({ sv: "Hämtar bolaget", en: "Loading the company" })}>
                 {Array.from({ length: 7 }, (_, i) => (

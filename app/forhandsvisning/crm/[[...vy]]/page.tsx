@@ -7,9 +7,9 @@ import "@/lib/fonts-rubrik";
 /**
  * Förhandsvisning (2026-11-25): Snajp CRM med påhittade bolag, ingen databas
  * och ingen inloggning. /forhandsvisning/crm/oversikt (start), /bolag,
- * /personer, /synk och /utvecklare. Temat följer samma cookie som resten av appen.
+ * /personer, /affarer, /synk och /utvecklare. Temat följer samma cookie som resten av appen.
  */
-const VYER: CrmVy[] = ["oversikt", "bolag", "personer", "synk", "utvecklare"];
+const VYER: CrmVy[] = ["oversikt", "bolag", "personer", "affarer", "synk", "utvecklare"];
 
 export default async function Page({
   params,

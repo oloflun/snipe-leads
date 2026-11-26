@@ -53,7 +53,7 @@ function varifran(h: Handelse, text: (l: Localized) => string): string {
  * `GET /v1/companies/{id}/history` eller `/v1/people/{id}/history`, och igen
  * när posten ändrats (`andrad`), så att en sparad ändring syns direkt.
  */
-export function Historik({ objekt, id, andrad }: Readonly<{ objekt: "companies" | "people"; id: string; andrad?: string | null }>) {
+export function Historik({ objekt, id, andrad }: Readonly<{ objekt: "companies" | "people" | "deals"; id: string; andrad?: string | null }>) {
   const { text } = useLocale();
   const [handelser, setHandelser] = useState<Handelse[] | null>(null);
   const [fel, setFel] = useState<unknown>(null);
