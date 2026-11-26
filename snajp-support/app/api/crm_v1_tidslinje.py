@@ -1,21 +1,27 @@
-"""Snajp CRM: postens tidslinje i det publika API:t (/api/crm/v1).
+"""Snajp CRM i det publika API:t: tidslinjen, utfallen och den samlade kundlistan.
 
-Egen fil för att `crm_v1.py` inte ska växa sig oläslig. Routern inkluderas
-därifrån, så specifikationen och grindarna är desamma.
+Det som knyter CRM-posten till resten av Snajp. Egen fil för att `crm_v1.py`
+inte ska växa sig oläslig. Routern byggs av `koppla(crm_v1)` och inkluderas
+därifrån, så grindarna (nyckel, omfång, tillägg, tak, avtal) är desamma.
 
-Tidslinjen komponeras vid läsning ur CRM:ets händelser, leadsflödet och
-supporten (app/crm/tidslinje.py). Appen (kundens egen nyckel) får utdrag ur
-mejl, samtal och anteckningar. En integrations nyckel får veta att något hänt
-och var det finns, men inte vad som skrevs.
+- Tidslinjen komponeras vid läsning ur CRM:ets händelser, leadsflödet och
+  supporten (app/crm/tidslinje.py). Appen (kundens egen nyckel) får utdrag ur
+  mejl, samtal och anteckningar. En integrations nyckel får veta att något hänt
+  och var det finns, men inte vad som skrevs.
+- Ett utfall som sätts på bolaget verkställs också på bolagets leads, och
+  leadens läge läses tillbaka på posten (app/crm/utfall.py).
+- Kundlistan visar egna kunder och Iris kunder i en lista (app/crm/kundlista.py).
 """
 
 from __future__ import annotations
 
-from typing import Any
+from datetime import date
+from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, Query, Request
+from pydantic import BaseModel, ConfigDict, Field
 
-from ..crm import lagring, tidslinje
+from ..crm import kundlista, lagring, tidslinje, utfall
 from .deps import kraev_uuid
 
 _TYP_UT = {
@@ -32,6 +38,20 @@ _DETALJ_UT = {"fran": "from", "till": "to", "ursprung": "origin", "klass": "repl
               "kanal": "channel", "kategori": "category", "status": "status", "prioritet": "priority",
               "via": "source", "aktor": "actor"}
 
+_UTFALL_IN = {"no_answer": "ej_svar", "call_back": "aterkom", "not_interested": "ej_intresserad",
+              "do_not_contact": "kontakta_inte", "meeting_booked": "mote", "won": "vunnen"}
+_UTFALL_UT = {v: k for k, v in _UTFALL_IN.items()}
+_URSPRUNG_IN = {"all": "alla", "own": "egna", "iris": "iris"}
+_URSPRUNG_UT = {"egna": "own", "iris": "iris"}
+
+
+class OutcomeIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    outcome: Literal["no_answer", "call_back", "not_interested", "do_not_contact", "meeting_booked", "won"]
+    call_back_on: date | None = Field(None, description="Required with `call_back`.")
+    note: str | None = Field(None, max_length=2000)
+
 
 def tidslinjepost_ut(post: dict[str, Any], falt_ut: dict[str, str]) -> dict[str, Any]:
     data = {_DETALJ_UT[k]: v for k, v in post["detalj"].items() if k in _DETALJ_UT}
@@ -43,21 +63,34 @@ def tidslinjepost_ut(post: dict[str, Any], falt_ut: dict[str, str]) -> dict[str,
             if post["lank"] else None}
 
 
-def koppla(kraev, fel, falt_ut: dict[str, str]) -> APIRouter:
-    """Bygger ändpunkterna med `crm_v1`s egna grindar, på en ny router. Anropas
-    från `crm_v1.py`, så att grindarna inte kan glida isär."""
-    router = APIRouter()
+def iris_ut(lage: dict[str, Any]) -> dict[str, Any]:
+    return {"leads": [{"id": lead["id"], "name": lead["namn"], "status": lead["status"],
+                       "created_at": lead["created_at"]} for lead in lage["leads"]],
+            "outcome": _UTFALL_UT.get(lage["utfall"]) if lage["utfall"] else None,
+            "do_not_contact": lage["kontakta_inte"]}
 
-    async def _linje(request: Request, tenant: dict, objekt: str, rad_id: str, limit: int) -> dict:
-        storage = request.app.state.storage
-        post = await lagring.hamta_post(storage, tenant["tenant_id"], objekt, kraev_uuid(rad_id, "Posten"))
+
+def koppla(v1: Any) -> APIRouter:
+    """Bygger ändpunkterna med `crm_v1`s egna grindar, på en ny router. `v1` är
+    modulen `crm_v1` själv: härifrån importeras den inte, eftersom den
+    inkluderar den här routern."""
+    router = APIRouter()
+    kraev, fel = v1.kraev, v1.fel
+
+    async def _post(request: Request, tenant: dict, objekt: str, rad_id: str) -> dict[str, Any]:
+        post = await lagring.hamta_post(request.app.state.storage, tenant["tenant_id"], objekt,
+                                        kraev_uuid(rad_id, "Posten"))
         if post is None:
             raise fel(404, "not_found", "The record does not exist.", "Posten finns inte.")
+        return post
+
+    async def _linje(request: Request, tenant: dict, objekt: str, rad_id: str, limit: int) -> dict:
+        post = await _post(request, tenant, objekt, rad_id)
         bygg = tidslinje.for_bolag if objekt == "bolag" else tidslinje.for_person
         # Kundens egen nyckel är appen. En nyckel med omfång är en integration.
         med_text = "*" in tenant.get("omfang", ["*"])
-        poster = await bygg(storage, tenant["tenant_id"], post, limit=limit, med_text=med_text)
-        return {"data": [tidslinjepost_ut(p, falt_ut) for p in poster]}
+        poster = await bygg(request.app.state.storage, tenant["tenant_id"], post, limit=limit, med_text=med_text)
+        return {"data": [tidslinjepost_ut(p, v1._FALT_UT) for p in poster]}
 
     @router.get("/companies/{company_id}/timeline", summary="Everything that has happened with a company, newest first")
     async def tidslinje_bolag(request: Request, company_id: str, limit: int = Query(200, ge=1, le=500),
@@ -79,5 +112,50 @@ def koppla(kraev, fel, falt_ut: dict[str, str]) -> APIRouter:
         """Matched on the person's exact email address: leads where the person
         is the contact, and the person's own support tickets."""
         return await _linje(request, tenant, "person", person_id, limit)
+
+    @router.get("/companies/{company_id}/iris", summary="The company's leads in Iris and what they mean here")
+    async def iris_bolag(request: Request, company_id: str, tenant: dict = Depends(kraev("crm:las"))) -> dict:
+        """`do_not_contact` is true when the record says so OR when one of the
+        company's leads has asked not to be contacted: that outcome always
+        wins over a value here that would reopen the lead."""
+        bolag = await _post(request, tenant, "bolag", company_id)
+        return iris_ut(await utfall.iris_lage(request.app.state.storage, tenant["tenant_id"], bolag))
+
+    @router.post("/companies/{company_id}/outcome", summary="Set an outcome on a company and on its leads")
+    async def satt_utfall(request: Request, company_id: str, kropp: OutcomeIn,
+                          tenant: dict = Depends(kraev("crm:skriv"))) -> dict:
+        """The outcome is carried out in the leads flow as well, by the same
+        functions a call from the call list uses: pending sends are stopped,
+        the lead changes status, and `do_not_contact` blocks the address.
+        `won` makes the company a customer. A company without a lead only
+        gets the change on the record itself."""
+        await v1._avtal(request, tenant)
+        bolag = await _post(request, tenant, "bolag", company_id)
+        try:
+            svar = await utfall.registrera(
+                request.app.state.storage, tenant["tenant_id"], bolag, utfall=_UTFALL_IN[kropp.outcome],
+                aterkom_datum=kropp.call_back_on, anteckning=kropp.note, **v1._ursprung(request, tenant))
+        except utfall.OgiltigtUtfall:
+            raise fel(422, "call_back_date_required", "call_back needs call_back_on.",
+                      "Återkom kräver ett datum i call_back_on.") from None
+        return {"company": v1.bolag_ut(svar["bolag"]), "lead_ids": svar["leads"]}
+
+    @router.get("/customers", summary="Your own customers and the ones Iris has won, in one list")
+    async def kunder(
+        request: Request, tenant: dict = Depends(kraev("crm:las")),
+        origin: Literal["all", "own", "iris"] = Query("all", description="`own` are the companies you keep here "
+                                                      "with the relation customer. `iris` are leads Iris has won."),
+        q: str | None = Query(None, max_length=200),
+        limit: int = Query(200, ge=1, le=2000),
+    ) -> dict:
+        """Composed when read: a won lead is not copied into the register. A
+        lead that is the same company as one of your own customers is listed
+        once, as `own`, with `lead_id` beside it."""
+        svar = await kundlista.lista(request.app.state.storage, tenant["tenant_id"],
+                                     ursprung=_URSPRUNG_IN[origin], q=q, limit=limit)
+        return {"data": [{"origin": _URSPRUNG_UT[r["ursprung"]], "company_id": r["bolag_id"], "lead_id": r["lead_id"],
+                          "name": r["namn"], "org_number": r["orgnr"], "customer_since": r["kund_sedan"],
+                          "private_person": r["privatperson"]} for r in svar["kunder"]],
+                "counts": {"own": svar["antal"]["egna"], "iris": svar["antal"]["iris"]}}
 
     return router

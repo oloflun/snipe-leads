@@ -76,6 +76,25 @@ def _minnesnyckel(prospekt: dict[str, Any]) -> str | None:
     return adress.rsplit("@", 1)[1].lower() if "@" in adress else None
 
 
+#: Det enda som läses ur ett prospekt. Uttryckligt, så att ett nytt hemligt
+#: fält på prospektet inte kan följa med av misstag.
+PROSPEKTFALT = ("id", "company_name", "contact_name", "contact_email", "orgnr", "status", "origin", "created_at")
+
+
+def nycklar_for_bolag(bolag: dict[str, Any]) -> list[str]:
+    """Nyckeln bolaget delar med sina leads: organisationsnumret, eller domänen
+    när numret saknas och domänen inte är en e-postleverantörs."""
+    if bolag.get("orgnr_nyckel"):
+        return [bolag["orgnr_nyckel"]]
+    if bolag.get("doman") and not falt.doman_ar_privat(bolag["doman"]):
+        return [bolag["doman"]]
+    return []
+
+
+async def prospekt_for_bolag(storage: Any, tenant_id: str, bolag: dict[str, Any]) -> list[dict[str, Any]]:
+    return await _prospekt(storage, tenant_id, nycklar=nycklar_for_bolag(bolag), adresser=[])
+
+
 async def _prospekt(storage: Any, tenant_id: str, *, nycklar: list[str], adresser: list[str]) -> list[dict[str, Any]]:
     nycklar = sorted({n for n in nycklar if n})
     adresser = sorted({a.lower() for a in adresser if a})
@@ -86,7 +105,7 @@ async def _prospekt(storage: Any, tenant_id: str, *, nycklar: list[str], adresse
             async with storage._scoped(tenant_id) as conn:
                 rader = await conn.fetch(
                     # Uttrycklig kolumnlista: bedömningen av bolagets sajt ska aldrig kunna följa med.
-                    "select id, company_name, contact_name, contact_email, origin, created_at from prospects "
+f"select {', '.join(PROSPEKTFALT)} from prospects "
                     "where tenant_id = $1::text::uuid and coalesce(origin, '') not in ('example', 'test') "
                     "and (foretagsnyckel = any($2::text[]) or lower(contact_email) = any($3::text[])) "
                     f"order by created_at limit {MAX_PROSPEKT}", tenant_id, nycklar, adresser)
@@ -100,7 +119,7 @@ async def _prospekt(storage: Any, tenant_id: str, *, nycklar: list[str], adresse
         if p.get("origin") in ("example", "test"):
             continue
         if _minnesnyckel(p) in nycklar or str(p.get("contact_email") or "").lower() in adresser:
-            ut.append({k: p.get(k) for k in ("id", "company_name", "contact_name", "contact_email", "origin", "created_at")})
+            ut.append({k: p.get(k) for k in PROSPEKTFALT})
     return sorted(ut, key=lambda p: str(p.get("created_at") or ""))[:MAX_PROSPEKT]
 
 
@@ -182,13 +201,11 @@ async def _egna(storage: Any, tenant_id: str, objekt: str, post_id: str) -> list
 async def for_bolag(storage: Any, tenant_id: str, bolag: dict[str, Any], *, limit: int = 200,
                     med_text: bool = True) -> list[dict[str, Any]]:
     """Bolagets tidslinje, nyast först."""
-    nycklar = [bolag["orgnr_nyckel"]] if bolag.get("orgnr_nyckel") else (
-        [bolag["doman"]] if bolag.get("doman") and not falt.doman_ar_privat(bolag["doman"]) else [])
     personer = await lagring._valj(storage, tenant_id, "crm_personer", lika={"bolag_id": bolag["id"]},
                                    levande=True, limit=MAX_PERSONER)
     adresser = [p["epost"] for p in personer if p.get("epost")] + ([bolag["epost"]] if bolag.get("epost") else [])
     poster = await _egna(storage, tenant_id, "bolag", bolag["id"])
-    for prospekt in await _prospekt(storage, tenant_id, nycklar=nycklar, adresser=[]):
+    for prospekt in await prospekt_for_bolag(storage, tenant_id, bolag):
         poster += await _leads(storage, tenant_id, prospekt)
     poster += await _arenden(storage, tenant_id, adresser)
     return _ordna(poster, limit, med_text)

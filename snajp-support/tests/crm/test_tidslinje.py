@@ -21,7 +21,7 @@ pytestmark = pytest.mark.anyio
 def _vagar(app):
     """Tidslinjens vägar. Kopplas här tills `crm_v1.py` inkluderar dem själv."""
     if not any(getattr(r, "path", "").endswith("/timeline") for r in app.routes):
-        app.include_router(crm_v1_tidslinje.koppla(crm_v1.kraev, crm_v1.fel, crm_v1._FALT_UT), prefix=V1)
+        app.include_router(crm_v1_tidslinje.koppla(crm_v1), prefix=V1)
 
 
 async def _lead(storage, tenant_id: str, namn: str, *, orgnr: str | None = None, epost: str | None = None,
@@ -166,6 +166,7 @@ def test_prospektet_lases_med_en_uttrycklig_kolumnlista():
 
     kalla = inspect.getsource(tidslinje._prospekt)
     assert "select *" not in kalla and kalla.count("select ") == 1
-    assert "select id, company_name, contact_name, contact_email, origin, created_at from prospects" in kalla
-    # Och minneslagret plockar samma sex fält, inget annat ur prospektet.
-    assert '("id", "company_name", "contact_name", "contact_email", "origin", "created_at")' in kalla
+    # Båda lagren läser samma uppräknade fält, och inget av dem hör till bedömningen av sajten.
+    assert kalla.count("PROSPEKTFALT") == 2
+    assert set(tidslinje.PROSPEKTFALT) == {"id", "company_name", "contact_name", "contact_email", "orgnr",
+                                           "status", "origin", "created_at"}
