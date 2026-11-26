@@ -12,9 +12,10 @@ Lägen: **klart** (byggt och verifierat), **pågår**, **väntar** (på kvot ell
 |---|---|---|
 | Version 2 låst som referens | klart | `DESIGN-CRM.md`, minnesanteckning, bilder i `docs/crm/bilder/app/` |
 | Antons tretton svar som beslut | klart | `docs/BESLUT.md` 2026-11-26 |
-| Sidofältet marinblått i båda lägena | pågår | Byggs 2026-11-26 |
-| Snajps logga i sidofältet | pågår | |
-| Ockra som accent | pågår | |
+| Sidofältet marinblått i båda lägena | klart | Byggt och granskat i bild 2026-11-26. Väntar på Antons dom |
+| Snajps logga i sidofältet | klart | Överst, leder till översikten. Väntar på Antons dom |
+| Ockra som accent | klart | Markör och ikon för vald menypost. Väntar på Antons dom |
+| Sökikon i mobilens toppfält | inte påbörjat | Försvann när loggan kom in. Sökningen finns i lådan |
 
 ## Fas 1: kartläggning av den nuvarande appen
 

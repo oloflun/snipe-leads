@@ -25,7 +25,13 @@ const config: Config = {
         "ink-muted": "oklch(var(--ink-muted) / <alpha-value>)",
         "ink-subtle": "oklch(var(--ink-subtle) / <alpha-value>)",
         "paper-muted": "oklch(var(--paper-muted) / <alpha-value>)",
-        "paper-subtle": "oklch(var(--paper-subtle) / <alpha-value>)"
+        "paper-subtle": "oklch(var(--paper-subtle) / <alpha-value>)",
+        rail: "oklch(var(--rail) / <alpha-value>)",
+        "rail-2": "oklch(var(--rail-2) / <alpha-value>)",
+        "rail-text": "oklch(var(--rail-text) / <alpha-value>)",
+        "rail-muted": "oklch(var(--rail-muted) / <alpha-value>)",
+        "rail-subtle": "oklch(var(--rail-subtle) / <alpha-value>)",
+        "rail-ochre": "oklch(var(--rail-ochre) / <alpha-value>)"
       },
       fontFamily: {
         // Fraunces is reachable only through `font-display`, and DESIGN.md limits

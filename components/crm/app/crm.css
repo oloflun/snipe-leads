@@ -91,15 +91,195 @@
   .astryx-app-shell .astryx-layout-content[role="main"] {
     margin: 8px 8px 8px 0;
     border-radius: 24px;
+    /* I mörkt läge ligger ett mörkt blad på marinblått: hårlinjen bär gränsen. */
     box-shadow:
-      0 0 0 1px oklch(var(--ink) / 0.07),
+      0 0 0 1px light-dark(oklch(var(--ink) / 0.07), oklch(var(--rail-text) / 0.12)),
       0 1px 2px oklch(var(--seal) / 0.06),
       0 12px 32px oklch(var(--seal) / 0.06);
   }
 }
 
+/* ---------------------------------------------------------------------------
+ * Sidofältet i marinblått (Anton 2026-11-26, DESIGN-CRM.md § Ändringar).
+ *
+ * Samma bläck i ljust och mörkt läge: fasta --rail-tokens, aldrig --ink, som
+ * blir ljust i mörkt läge. Tvätten bakom bladet är marinblå (utförande a), så att
+ * bladet med sitt rundade hörn ligger på samma yta som navigeringen.
+ *
+ * Astryx komponenter läser sina färger ur --color-*; de deklareras om här, på
+ * sidofältet, och ärvs av allt i det. Menyer och tips som Astryx lägger utanför
+ * skalet ligger utanför sidofältet och behåller bladets färger.
+ * ------------------------------------------------------------------------- */
+.astryx-app-shell,
+.astryx-app-shell .astryx-app-shell-sidenav,
+.astryx-app-shell .astryx-app-shell-header,
+.astryx-app-shell-sidenav .crm-rail,
+.astryx-app-shell-header .crm-rail,
+.astryx-mobile-nav-drawer {
+  background-color: oklch(var(--rail));
+}
+/* Mobilens toppfält: loggan till vänster, arbetsyteväxlaren bredvid. */
+.crm-rail-huvud {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.crm-rail[data-mode="topbar"] .crm-rail-huvud {
+  flex-direction: row;
+  align-items: center;
+  gap: 4px;
+}
+.crm-rail[data-mode="topbar"] .crm-logga {
+  align-self: center;
+  padding-inline: 0 4px;
+}
+.crm-rail,
+.astryx-app-shell .astryx-app-shell-header {
+  --color-text-primary: oklch(var(--rail-text));
+  --color-text-secondary: oklch(var(--rail-muted));
+  --color-icon-primary: oklch(var(--rail-text));
+  --color-icon-secondary: oklch(var(--rail-muted));
+  --color-border: oklch(var(--rail-text) / 0.1);
+  --color-border-emphasized: oklch(var(--rail-text) / 0.3);
+  --color-neutral: oklch(var(--rail-text) / 0.1);
+  --color-background-gray: oklch(var(--rail-text) / 0.1);
+  --color-background-muted: oklch(var(--rail-text) / 0.1);
+  --color-overlay-hover: oklch(var(--rail-text) / 0.06);
+  --color-overlay-pressed: oklch(var(--rail-text) / 0.12);
+  --color-accent: oklch(var(--rail-ochre));
+  --focus-outline-color: oklch(var(--rail-ochre));
+  /* Ingen bakgrund här: i mobilen är navigeringen själv lådans helskärmsdialog,
+   * och ytan målas av kolumnen, toppfältet och lådan ovan. */
+  color: oklch(var(--rail-text));
+}
+/* Arbetsyteväxlarens meny öppnas som ett lager inne i sidofältet men ritas på
+ * bladets papper: där gäller temats egna färger igen. */
+.crm-rail [data-astryx-layer-root],
+.astryx-app-shell-header [data-astryx-layer-root] {
+  --color-text-primary: oklch(var(--ink));
+  --color-text-secondary: oklch(var(--ink-muted));
+  --color-icon-primary: oklch(var(--ink));
+  --color-icon-secondary: oklch(var(--ink-muted));
+  --color-border: oklch(var(--ink) / 0.1);
+  --color-border-emphasized: oklch(var(--ink) / 0.52);
+  --color-neutral: oklch(var(--ink) / 0.07);
+  --color-background-gray: oklch(var(--ink) / 0.07);
+  --color-background-muted: light-dark(oklch(var(--paper2)), oklch(var(--paper)));
+  --color-overlay-hover: oklch(var(--ink) / 0.05);
+  --color-overlay-pressed: oklch(var(--ink) / 0.1);
+  --color-accent: oklch(var(--ochre));
+  --focus-outline-color: light-dark(oklch(var(--warning)), oklch(var(--focus)));
+  color: oklch(var(--ink));
+}
+
+/* Loggan överst: Snajps vita lockup, eller bara märket när fältet är hopfällt. */
+.crm-logga {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  height: 40px;
+  padding-inline: 8px;
+  border-radius: 10px;
+}
+.crm-logga img {
+  height: 22px;
+}
+/* Hopfällt: märket ensamt, centrerat i den smala kolumnen. */
+.crm-logga.crm-logga-mark {
+  align-self: center;
+  justify-content: center;
+  width: 36px;
+  padding-inline: 0;
+}
+.crm-logga.crm-logga-mark img {
+  height: 22px;
+  max-width: none;
+}
+.crm-logga:focus-visible {
+  outline: 2px solid oklch(var(--rail-ochre));
+  outline-offset: 0;
+}
+
+/* Menyposterna: hovring är en svag platta, vald post en lyft platta med en
+ * smal ockramarkör mot kanten. */
+.crm-rail .astryx-side-nav-item {
+  position: relative;
+  color: oklch(var(--rail-text));
+}
+@media (hover: hover) and (pointer: fine) {
+  .crm-rail .astryx-side-nav-item:hover {
+    background-color: oklch(var(--rail-text) / 0.06);
+  }
+}
+.crm-rail .astryx-side-nav-item[data-selected] {
+  background-color: oklch(var(--rail-text) / 0.1);
+  color: oklch(var(--rail-text));
+  font-weight: 600;
+}
+.crm-rail .astryx-side-nav-item[data-selected]::before {
+  content: "";
+  position: absolute;
+  inset-block: 9px;
+  inset-inline-start: -8px;
+  width: 3px;
+  border-radius: 9999px;
+  background-color: oklch(var(--rail-ochre));
+}
+
+/* Objektikonernas plattor på marinblått: tonen ljusad mot papper (ikonen), och
+ * plattan samma ljusa ton med låg alfa. Ockra har en egen fast ton. */
+.crm-rail .crm-ton-ockra {
+  --crm-ton: oklch(var(--rail-ochre));
+}
+.crm-rail .crm-ton-bla {
+  --crm-ton: color-mix(in oklch, oklch(var(--chart-blue)) 40%, oklch(var(--rail-text)));
+}
+.crm-rail .crm-ton-mossa {
+  --crm-ton: color-mix(in oklch, oklch(var(--moss)) 40%, oklch(var(--rail-text)));
+}
+.crm-rail .crm-ton-sigill {
+  --crm-ton: color-mix(in oklch, oklch(var(--seal)) 40%, oklch(var(--rail-text)));
+}
+.crm-rail .crm-ton-mineral {
+  --crm-ton: oklch(var(--rail-muted));
+}
+.crm-rail .crm-platta {
+  background-color: color-mix(in oklch, var(--crm-ton) 20%, transparent);
+  color: var(--crm-ton);
+}
+
+/* Arbetsytans avatar på marinblått: en ljus platta med initialen i papper. */
+.crm-rail .crm-arbetsyta .astryx-avatar-fallback {
+  background-color: oklch(var(--rail-text) / 0.14);
+  color: oklch(var(--rail-text));
+}
+
+/* Synkkortet nederst: lyft platta i --rail-2, förloppet i ockra. */
+.crm-synkkort {
+  background-color: oklch(var(--rail-2));
+  box-shadow: inset 0 0 0 1px oklch(var(--rail-text) / 0.08);
+  color: oklch(var(--rail-text));
+  transition: background-color 100ms var(--ease-out);
+}
+@media (hover: hover) and (pointer: fine) {
+  .crm-synkkort:hover {
+    background-color: color-mix(in oklch, oklch(var(--rail-2)) 88%, oklch(var(--rail-text)));
+  }
+}
+.crm-synkkort:focus-visible {
+  outline: 2px solid oklch(var(--rail-ochre));
+  outline-offset: 2px;
+}
+.crm-synkkort .astryx-progress-bar,
+.crm-synkkort [role="progressbar"] {
+  --color-accent: oklch(var(--rail-ochre));
+}
+
 /* 248 px utfällt (Astryx 260). Klassen sätts bara när navigeringen är utfälld. */
-.crm-nav-bred {
+/* Bara i skrivbordets kolumn: i mobilens toppfält och låda fyller navigeringen
+ * sin yta (en fast bredd sköt lådans innehåll 72 px utanför skärmen). */
+.astryx-app-shell-sidenav .crm-nav-bred {
   width: 248px;
 }
 
@@ -116,20 +296,27 @@
   padding-inline: 4px;
 }
 
-/* Sökraden i navigeringen: en platta som ser ut som ett fält och är en knapp. */
+/* Sökraden i navigeringen: en ljus platta med låg alfa som ser ut som ett fält
+ * och är en knapp. Tangenterna är ljusa plattor med text i papper. */
 .crm-sokrad {
-  background-color: oklch(var(--ink) / 0.05);
-  box-shadow: inset 0 0 0 1px oklch(var(--ink) / 0.06);
+  background-color: oklch(var(--rail-text) / 0.07);
+  box-shadow: inset 0 0 0 1px oklch(var(--rail-text) / 0.1);
   transition: background-color 100ms var(--ease-out);
 }
 @media (hover: hover) and (pointer: fine) {
   .crm-sokrad:hover {
-    background-color: oklch(var(--ink) / 0.08);
+    background-color: oklch(var(--rail-text) / 0.11);
   }
 }
 .crm-sokrad:focus-visible {
-  outline: 2px solid var(--focus-outline-color);
+  outline: 2px solid oklch(var(--rail-ochre));
   outline-offset: 2px;
+}
+.crm-sokrad .astryx-kbd-key {
+  background-color: oklch(var(--rail-text) / 0.12);
+  box-shadow: none;
+  border-color: oklch(var(--rail-text) / 0.16);
+  color: oklch(var(--rail-text));
 }
 
 /* ---------------------------------------------------------------------------

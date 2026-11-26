@@ -24,6 +24,7 @@ import { SideNav, SideNavHeading, SideNavItem, SideNavSection } from "@astryxdes
 import { Text } from "@astryxdesign/core/Text";
 import { Timestamp } from "@astryxdesign/core/Timestamp";
 import { Theme } from "@astryxdesign/core/theme";
+import { Logo } from "@/components/Logo";
 import { Kommandopalett } from "@/components/crm/app/Kommandopalett";
 import { OBJEKT, Objektikon, Prick, type Objekt } from "@/components/crm/app/kit";
 import { snajpTheme } from "@/lib/crm/astryx/snajp";
@@ -87,15 +88,14 @@ function Synkkort({ bas }: Readonly<{ bas: string }>) {
   return (
     <NextLink
       href={`${bas}/synk?korning=${encodeURIComponent(senaste.id)}`}
-      className="crm-chip mx-1 mb-1 block rounded-[16px] bg-paper p-3 no-underline"
-      style={{ boxShadow: "0 0 0 1px oklch(var(--ink) / 0.09)", backgroundColor: "light-dark(oklch(var(--paper)), oklch(var(--paper2)))" }}
+      className="crm-synkkort mx-1 mb-1 block rounded-[16px] p-3 no-underline"
     >
       <span className="flex items-center gap-2">
         <Prick ton={lage.ton} pulserar={igang} />
-        <span className="min-w-0 flex-1 truncate text-[0.8125rem] font-semibold text-ink">{rubrik}</span>
+        <span className="min-w-0 flex-1 truncate text-[0.8125rem] font-semibold text-rail-text">{rubrik}</span>
         {tid ? <Timestamp value={tid} format="relative" isLive hasTooltip={false} /> : null}
       </span>
-      <span className="mt-1 block text-[0.8125rem] text-ink-muted">{lage.text}</span>
+      <span className="mt-1 block text-[0.8125rem] text-rail-muted">{lage.text}</span>
       <span className="sr-only">{text({ sv: "Öppna körningen i Synk.", en: "Open the run in Sync." })}</span>
       {igang ? (
         <span className="mt-2 block">
@@ -106,7 +106,7 @@ function Synkkort({ bas }: Readonly<{ bas: string }>) {
             value={klara(senaste)}
             max={Math.max(senaste.counts.total, 1)}
           />
-          <span className="mt-1 block text-[0.75rem] tabular-nums text-ink-muted">
+          <span className="mt-1 block text-[0.75rem] tabular-nums text-rail-muted">
             {text({
               sv: `${klara(senaste).toLocaleString("sv-SE")} av ${senaste.counts.total.toLocaleString("sv-SE")} poster`,
               en: `${klara(senaste).toLocaleString("en-GB")} of ${senaste.counts.total.toLocaleString("en-GB")} records`
@@ -186,20 +186,29 @@ export function CrmRam({
               mobileNav={{ breakpoint: "md" }}
               sideNav={
                 <SideNav
-                  className={hopfalld ? undefined : "crm-nav-bred"}
+                  className={hopfalld ? "crm-rail" : "crm-rail crm-nav-bred"}
                   // Knappens text kommer ur Astryx egna språkfiler (sv-SE och en).
                   collapsible={{ isCollapsed: hopfalld, onCollapsedChange: fallIhop }}
                   header={
-                    <SideNavHeading
-                      heading={namn}
-                      icon={<Avatar name={namn} size={24} shape="rounded" tooltip={false} className="crm-arbetsyta" />}
-                      menu={
-                        <NavHeadingMenu>
-                          <NavHeadingMenuItem label={text({ sv: "Till arbetsytan", en: "Back to workspace" })} href="/dashboard" icon={ArrowLeft} />
-                          <NavHeadingMenuItem label={text({ sv: "Inställningar", en: "Settings" })} href="/settings" icon={Settings} />
-                        </NavHeadingMenu>
-                      }
-                    />
+                    <div className="crm-rail-huvud">
+                      <NextLink
+                        href={`${bas}/oversikt`}
+                        className={hopfalld ? "crm-logga crm-logga-mark" : "crm-logga"}
+                        aria-label={text({ sv: "Snajp, till översikten", en: "Snajp, to the overview" })}
+                      >
+                        <Logo compact={hopfalld} tone="paper" />
+                      </NextLink>
+                      <SideNavHeading
+                        heading={namn}
+                        icon={<Avatar name={namn} size={24} shape="rounded" tooltip={false} className="crm-arbetsyta" />}
+                        menu={
+                          <NavHeadingMenu>
+                            <NavHeadingMenuItem label={text({ sv: "Till arbetsytan", en: "Back to workspace" })} href="/dashboard" icon={ArrowLeft} />
+                            <NavHeadingMenuItem label={text({ sv: "Inställningar", en: "Settings" })} href="/settings" icon={Settings} />
+                          </NavHeadingMenu>
+                        }
+                      />
+                    </div>
                   }
                   topContent={
                     hopfalld ? (

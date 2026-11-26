@@ -38,6 +38,16 @@ verktygslådan utökar verktygslådan, i samma form.
 Det ersätter punkten "Railen i bläck tas bort" under Tema nedan. Resten står kvar:
 upphöjt blad, radier, chips, kort, piller, kommandopalett.
 
+**Så är det byggt (2026-11-26, väntar på Antons dom).** Tokens `--rail`, `--rail-2`,
+`--rail-text`, `--rail-muted`, `--rail-subtle` och `--rail-ochre` i `app/globals.css` är
+fasta i båda lägena. Hela tvätten bakom bladet är marinblå, så att det ljusa bladet med
+sitt rundade hörn ligger på samma bläck som navigeringen. Utförandet med bara en marinblå
+kolumn prövades och föll: en beige ram på 8 px runt bladet klippte av sidofältet. Loggan
+(`Logo tone="paper"`) står överst och leder till översikten, med arbetsyteväxlaren under.
+Vald menypost är en platta på 10 procent med en smal ockramarkör mot kanten och ikonen i
+ockra. Mobilens toppfält och låda är marinblå. Uppmätt i båda lägena: all text i
+sidofältet minst 5,84:1, ikoner och markörer minst 4,07:1. Bilder: `docs/crm/bilder/app/`.
+
 ## Antons dom och beställning (2026-11-26, ordagrant i sak)
 
 > De senaste skärmbilderna ser väldigt generiska ut, lika och nästan sämre än den

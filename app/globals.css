@@ -74,6 +74,19 @@
      redan klarar 7.56:1 och --warning bara ger 3.44:1. */
   --warning: 0.50 0.16 64;
 
+  /* Sidofältet i CRM:et (Anton 2026-11-26: marinblått i båda lägena). Fasta
+     värden som med flit INTE står i :root[data-theme="dark"]: --ink blir ljust i
+     mörkt läge och kan därför inte bära en yta som ska vara bläck i båda.
+     --rail är --ink i ljust läge, --rail-2 dess lyfta platta (--ink2). Texten är
+     samma par som DESIGN.md mätt för den mörka railen: --rail-text (papper),
+     --rail-muted 7,29:1, --rail-subtle 4,97:1, --rail-ochre 7,56:1 mot --rail. */
+  --rail: 0.20 0.018 252;
+  --rail-2: 0.28 0.018 252;
+  --rail-text: 0.965 0.008 88;
+  --rail-muted: 0.72 0.008 88;
+  --rail-subtle: 0.62 0.008 88;
+  --rail-ochre: 0.74 0.16 64;
+
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
   /* Alias — ~40 existing usages reference the old name. Same curve, no churn. */
   --ease-editorial: var(--ease-out);

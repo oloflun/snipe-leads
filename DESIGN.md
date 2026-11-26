@@ -227,8 +227,12 @@ mode and a tenant palette reach the CRM through the same variables as the rest o
 rail and a bare table, and Anton rejected it as generic. The CRM now takes structure and finish
 from Twenty, form from Astryx and only palette, Fraunces headings and these rules from Snajp.
 The contract is `docs/crm/DESIGN-CRM.md`. What that means against the rest of this section:
-there is NO ink rail (the navigation is light, on the `--paper2` wash, and the content is a
-raised sheet in `--paper` with a 24 px corner); radii are 6/10/16/24, controls 32/36/44 px and
+the sidebar and the wash behind the sheet are Snajp's navy in BOTH modes (Anton 2026-11-26: it
+must not turn light in dark mode, as the rail did in version 1), drawn from the fixed tokens
+`--rail`, `--rail-2`, `--rail-text`, `--rail-muted`, `--rail-subtle` and `--rail-ochre` in
+`app/globals.css`, because `--ink` changes value in dark mode and cannot carry a fixed colour;
+the Snajp logo stands at the top of the sidebar and the selected item carries an ochre marker;
+the content is a raised sheet in `--paper` with a 24 px corner, lying on the navy; radii are 6/10/16/24, controls 32/36/44 px and
 body text 14 px on desktop; a record is a chip with an avatar, a link is a pill, a relation is
 a label with a status dot; Fraunces carries the page title, the record name in its panel and
 the numerals in the key-figure cards; cards and floating surfaces have a hairline plus a soft
