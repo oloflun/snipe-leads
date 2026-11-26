@@ -1,0 +1,30 @@
+{
+  "name": "snajp-demofilm",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Click-through-filmen om Snajp (Leads, sedan kundtjanst). Fristaende Remotion-projekt, ingen del av appen.",
+  "type": "module",
+  "scripts": {
+    "spela-in": "node rec/record-leads.mjs",
+    "stillbilder": "node verktyg/stills.mjs",
+    "tider": "node verktyg/tider.mjs",
+    "bygg": "bash bygg.sh",
+    "studio": "remotion studio src/index.ts",
+    "typkoll": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@remotion/bundler": "4.0.535",
+    "@remotion/cli": "4.0.535",
+    "@remotion/fonts": "4.0.535",
+    "@remotion/renderer": "4.0.535",
+    "@remotion/transitions": "4.0.535",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "remotion": "4.0.535"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.60.0",
+    "@types/react": "19.2.7",
+    "typescript": "5.9.3"
+  }
+}

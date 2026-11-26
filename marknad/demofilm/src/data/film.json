@@ -1,0 +1,181 @@
+[
+  {
+    "kind": "clip",
+    "file": "reel.mp4",
+    "frames": 795,
+    "w": 1080,
+    "h": 1350
+  },
+  {
+    "kind": "title",
+    "text": "Så här jobbar Iris åt er",
+    "bars": 1.5
+  },
+  {
+    "kind": "desktop",
+    "file": "01.png",
+    "w": 1920,
+    "h": 1080,
+    "caption": "Ni beskriver er drömkund en enda gång",
+    "cursor": {
+      "x": 1485,
+      "y": 422
+    },
+    "click": false,
+    "bars": 2
+  },
+  {
+    "kind": "desktop",
+    "file": "02.png",
+    "w": 1920,
+    "h": 1080,
+    "caption": "Ett klick, sedan gör Iris jobbet",
+    "cursor": {
+      "x": 591,
+      "y": 641
+    },
+    "click": true,
+    "bars": 2
+  },
+  {
+    "kind": "desktop",
+    "file": "03.png",
+    "w": 1920,
+    "h": 1080,
+    "caption": "Iris hittar bolagen, läser på och skriver mejlen",
+    "cursor": {
+      "x": 806,
+      "y": 770
+    },
+    "click": false,
+    "bars": 2
+  },
+  {
+    "kind": "desktop",
+    "file": "04.png",
+    "w": 1920,
+    "h": 1080,
+    "caption": "Ni får bolagen rankade efter hur väl de passar",
+    "cursor": {
+      "x": 725,
+      "y": 650
+    },
+    "click": true,
+    "bars": 2
+  },
+  {
+    "kind": "desktop",
+    "file": "05.png",
+    "w": 1920,
+    "h": 1080,
+    "caption": "Varje bolag kommer med skäl, citat och källa",
+    "cursor": {
+      "x": 1286,
+      "y": 761
+    },
+    "click": false,
+    "bars": 2,
+    "anchor": "right"
+  },
+  {
+    "kind": "desktop",
+    "file": "06.png",
+    "w": 1920,
+    "h": 1080,
+    "caption": "Mejlet utgår från något som hänt hos just dem",
+    "cursor": {
+      "x": 1214,
+      "y": 711
+    },
+    "click": false,
+    "bars": 2,
+    "anchor": "right"
+  },
+  {
+    "kind": "desktop",
+    "file": "07.png",
+    "w": 1920,
+    "h": 1080,
+    "caption": "Vill ni ändra texten räcker ett klick",
+    "cursor": {
+      "x": 556,
+      "y": 851
+    },
+    "click": true,
+    "bars": 2
+  },
+  {
+    "kind": "desktop",
+    "file": "08.png",
+    "w": 1920,
+    "h": 1080,
+    "caption": "Inget går ut förrän ni har sagt ja",
+    "cursor": {
+      "x": 659,
+      "y": 759
+    },
+    "click": true,
+    "bars": 2
+  },
+  {
+    "kind": "desktop",
+    "file": "09.png",
+    "w": 1920,
+    "h": 1080,
+    "caption": "Uteblir svaret följer Iris upp av sig själv",
+    "cursor": {
+      "x": 476,
+      "y": 520
+    },
+    "click": false,
+    "bars": 2,
+    "center": true,
+    "zoom": 1.12
+  },
+  {
+    "kind": "desktop",
+    "file": "10.png",
+    "w": 1920,
+    "h": 1080,
+    "caption": "Hela vägen till svar eller bokat möte",
+    "cursor": {
+      "x": 1630,
+      "y": 466
+    },
+    "click": false,
+    "bars": 2,
+    "zoom": 1.65,
+    "focus": {
+      "x": 1314,
+      "y": 0
+    }
+  },
+  {
+    "kind": "title",
+    "text": "Datasäkerhet",
+    "bars": 3,
+    "lines": [
+      "All drift, lagring av kunddata och behandling i språkmodeller sker inom EU",
+      "Varje kunds data är avskild på databasnivå",
+      "Alla underleverantörer står med namn i integritetspolicyn"
+    ]
+  },
+  {
+    "kind": "title",
+    "text": "Vad ni får",
+    "bars": 3.5,
+    "lines": [
+      "Bolag som passar er målgrupp, med skäl och källor",
+      "Ett första mejl till varje bolag, skrivet på svenska",
+      "Uppföljning fram till svar eller bokat möte",
+      "Ni godkänner varje mejl innan det skickas"
+    ]
+  },
+  {
+    "kind": "title",
+    "text": "Kostnadsfri pilot i två månader",
+    "bars": 3,
+    "sub": "snajp.se",
+    "invert": true
+  }
+]
