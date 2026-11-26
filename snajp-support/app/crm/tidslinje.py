@@ -1,5 +1,9 @@
 """Postens tidslinje: det som hänt i CRM:et och i resten av Snajp, på ett ställe.
 
+Bolagets, personens och affärens egna ändringar, det arbete som knutits till
+posten i CRM:et (anteckningar, aktiviteter, uppgifter och, på bolaget och
+personen, affärerna), leadsflödet hos Iris och supportens ärenden.
+
 Tidslinjen KOMPONERAS vid läsning ur källorna. Ingenting kopieras in i CRM:et:
 ett mejl ligger kvar i konversationen, ett samtal i samtalsloggen och ett
 ärende hos supporten, och gallras där det bor. Samma princip som leadets egen
@@ -42,7 +46,12 @@ from . import falt, handelser, lagring
 
 MAX_PROSPEKT = 20
 MAX_PERSONER = 50
+#: Hur många anteckningar, aktiviteter, uppgifter och affärer som läses per post och slag.
+MAX_ARBETE = 200
 UTDRAG = 280
+
+#: Kolumnen som knyter en anteckning, aktivitet eller uppgift till posten.
+_KOPPLING = {"bolag": "bolag_id", "person": "person_id", "affar": "affar_id"}
 
 #: Leadshändelser som hör hemma på postens tidslinje. Resten (utkast och
 #: genereringar) är arbetsdetaljer som visas i konversationen.
@@ -195,6 +204,42 @@ async def _egna(storage: Any, tenant_id: str, objekt: str, post_id: str) -> list
             for h in await handelser.for_post(storage, tenant_id, objekt, post_id)]
 
 
+async def _arbete(storage: Any, tenant_id: str, objekt: str, post_id: str) -> list[dict[str, Any] | None]:
+    """Det som knutits till posten i CRM:et: anteckningar, aktiviteter och
+    uppgifter, och på bolaget och personen deras affärer. Raderade står inte
+    med: papperskorgen är inte historik."""
+    kolumn = _KOPPLING[objekt]
+
+    async def rader(tabell: str) -> list[dict[str, Any]]:
+        return await lagring._valj(storage, tenant_id, tabell, lika={kolumn: post_id}, levande=True,
+                                   fallande=True, limit=MAX_ARBETE)
+
+    ut: list[dict[str, Any] | None] = []
+    for rad in await rader("crm_anteckningar"):
+        ut.append(_post(f"crmant:{rad['id']}", "anteckning", rad["created_at"], "crm", rubrik=rad.get("titel"),
+                        text=rad.get("text"), lank=("anteckning", rad["id"]), fast=True if rad.get("fast") else None,
+                        forfattare=rad.get("forfattare")))
+    for rad in await rader("crm_aktiviteter"):
+        ut.append(_post(f"crmakt:{rad['id']}", "aktivitet", rad.get("tid") or rad["created_at"], "crm",
+                        rubrik=rad.get("rubrik"), text=rad.get("text"), lank=("aktivitet", rad["id"]),
+                        slag=rad.get("typ"), resultat=rad.get("utfall"), minuter=rad.get("varaktighet_min"),
+                        ansvarig=rad.get("ansvarig")))
+    for rad in await rader("crm_uppgifter"):
+        ut.append(_post(f"crmupp:{rad['id']}", "uppgift", rad["created_at"], "crm", rubrik=rad.get("titel"),
+                        text=rad.get("beskrivning"), lank=("uppgift", rad["id"]), klar=rad.get("status") == "klar",
+                        forfaller=_tid(rad["forfaller_at"]).isoformat() if rad.get("forfaller_at") else None,
+                        ansvarig=rad.get("ansvarig")))
+    if objekt != "affar":
+        for rad in await rader("crm_affarer"):
+            ut.append(_post(f"crmaff:{rad['id']}", "affar_skapad", rad["created_at"], "crm", rubrik=rad.get("namn"),
+                            lank=("affar", rad["id"]), belopp=rad.get("belopp"), valuta=rad.get("valuta")))
+            if rad.get("avslutad_at"):
+                ut.append(_post(f"crmaff:{rad['id']}:slut", "affar_avslutad", rad["avslutad_at"], "crm",
+                                rubrik=rad.get("namn"), lank=("affar", rad["id"]), belopp=rad.get("belopp"),
+                                valuta=rad.get("valuta"), forlustorsak=rad.get("forlustorsak")))
+    return ut
+
+
 # -- Tidslinjen -------------------------------------------------------------
 
 
@@ -205,6 +250,7 @@ async def for_bolag(storage: Any, tenant_id: str, bolag: dict[str, Any], *, limi
                                    levande=True, limit=MAX_PERSONER)
     adresser = [p["epost"] for p in personer if p.get("epost")] + ([bolag["epost"]] if bolag.get("epost") else [])
     poster = await _egna(storage, tenant_id, "bolag", bolag["id"])
+    poster += await _arbete(storage, tenant_id, "bolag", bolag["id"])
     for prospekt in await prospekt_for_bolag(storage, tenant_id, bolag):
         poster += await _leads(storage, tenant_id, prospekt)
     poster += await _arenden(storage, tenant_id, adresser)
@@ -216,9 +262,19 @@ async def for_person(storage: Any, tenant_id: str, person: dict[str, Any], *, li
     """Personens tidslinje, nyast först."""
     adresser = [person["epost"]] if person.get("epost") else []
     poster = await _egna(storage, tenant_id, "person", person["id"])
+    poster += await _arbete(storage, tenant_id, "person", person["id"])
     for prospekt in await _prospekt(storage, tenant_id, nycklar=[], adresser=adresser):
         poster += await _leads(storage, tenant_id, prospekt)
     poster += await _arenden(storage, tenant_id, adresser)
+    return _ordna(poster, limit, med_text)
+
+
+async def for_affar(storage: Any, tenant_id: str, affar: dict[str, Any], *, limit: int = 200,
+                    med_text: bool = True) -> list[dict[str, Any]]:
+    """Affärens tidslinje, nyast först: dess egna ändringar och det arbete som
+    knutits till den. Leads och ärenden hör till bolaget och personen."""
+    poster = await _egna(storage, tenant_id, "affar", affar["id"])
+    poster += await _arbete(storage, tenant_id, "affar", affar["id"])
     return _ordna(poster, limit, med_text)
 
 

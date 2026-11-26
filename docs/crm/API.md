@@ -356,10 +356,14 @@ Varje sådan ändring står i `GET /changes`.
 
 Det som knyter posten till resten av Snajp.
 
-**Tidslinjen.** `GET /companies/{id}/timeline` och `/people/{id}/timeline` ger allt som hänt,
-nyast först: postens egna ändringar, och det som hänt i Iris och hos supporten. Ett bolag
-hittar sina leads på organisationsnumret, eller på domänen när numret saknas. En person på
-exakt e-postadress. Supportärenden knyts bara på exakt adress.
+**Tidslinjen.** `GET /companies/{id}/timeline`, `/people/{id}/timeline` och
+`/deals/{id}/timeline` ger allt som hänt, nyast först: postens egna ändringar, arbetet som
+knutits till posten här (anteckningar, aktiviteter, uppgifter och, på bolaget och personen,
+affärerna), och det som hänt i Iris och hos supporten. `origin` säger var raden bor: `crm`,
+`iris` eller `support`. Ett bolag hittar sina leads på organisationsnumret, eller på domänen
+när numret saknas. En person på exakt e-postadress. Supportärenden knyts bara på exakt
+adress. Affärens tidslinje bär bara det som hör till affären själv: leads och ärenden står
+på bolaget och personen.
 
 ```json
 {"key": "msg:…", "type": "email_sent", "at": "2026-10-01T09:00:00+00:00", "origin": "iris",
@@ -368,8 +372,12 @@ exakt e-postadress. Supportärenden knyts bara på exakt adress.
 
 `type` är `record_created`, `record_updated`, `record_deleted`, `record_restored`,
 `lead_created`, `lead_status`, `email_sent`, `followup_sent`, `reply_received`,
-`conversation_stage`, `meeting_booked`, `handed_over`, `call`, `note`, `task` eller
-`support_ticket`. Tidslinjen sätts ihop när den läses, och ingenting kopieras: ett mejl
+`conversation_stage`, `meeting_booked`, `handed_over`, `call`, `note`, `task`,
+`support_ticket`, `activity`, `deal_created` eller `deal_closed`. En anteckning eller uppgift
+från CRM:et har `origin: "crm"` och länken `note` eller `task`; samma typ från ett lead har
+`origin: "iris"` och länken `lead`. En aktivitet bär `activity_type` (`call`, `meeting`,
+`email`, `visit`, `other`), `duration_minutes` och `result` i `data`. Raderade anteckningar,
+aktiviteter och uppgifter står inte med. Tidslinjen sätts ihop när den läses, och ingenting kopieras: ett mejl
 ligger kvar i konversationen och ett ärende hos supporten. Utkast som aldrig skickades är
 inte med. Ett supportärende står med ämne, kanal och läge, aldrig med meddelandena. En
 nyckel med omfång får inga utdrag (`text` är `null`): den får veta att något hänt och var.

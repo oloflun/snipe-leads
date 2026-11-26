@@ -152,6 +152,66 @@ async def test_exempel_och_testprospekt_hor_inte_till_tidslinjen(buddy, storage)
     assert [p["typ"] for p in await tidslinje.for_bolag(storage, buddy.id, post)] == ["post_skapad"]
 
 
+async def test_crm_arbetet_star_pa_bolagets_personens_och_affarens_tidslinje(buddy, storage):
+    """Anteckningar, aktiviteter, uppgifter och affärer som knutits till posten
+    i CRM:et hör till samma tidslinje som leads och ärenden, med ursprunget crm."""
+    async with buddy.klient() as k:
+        bolag = (await k.post(f"{V1}/companies", json={"name": "Bygg AB", "org_number": ORGNR_A})).json()
+        person = (await k.post(f"{V1}/people", json={"first_name": "Anna", "email": "anna@bygg.se",
+                                                     "company_id": bolag["id"]})).json()
+        steg = (await k.get(f"{V1}/deal-stages")).json()["data"]
+        affar = (await k.post(f"{V1}/deals", json={"name": "Växel 2027", "company_id": bolag["id"],
+                                                   "amount": 120000})).json()
+        anteckning = (await k.post(f"{V1}/notes", json={"title": "Efter mötet", "body": "Vill ha offert i januari.",
+                                                        "company_id": bolag["id"], "deal_id": affar["id"]})).json()
+        raderad = (await k.post(f"{V1}/notes", json={"body": "Fel bolag.", "company_id": bolag["id"]})).json()
+        assert (await k.delete(f"{V1}/notes/{raderad['id']}")).status_code == 204
+        await k.post(f"{V1}/activities", json={"type": "call", "subject": "Ringde Anna", "duration_minutes": 12,
+                                               "outcome": "Återkommer", "company_id": bolag["id"],
+                                               "person_id": person["id"]})
+        uppgift = (await k.post(f"{V1}/tasks", json={"title": "Skicka offert", "due_at": "2026-12-01T09:00:00+00:00",
+                                                     "company_id": bolag["id"]})).json()
+        vunnen = next(s for s in steg if s["type"] == "won")
+        assert (await k.post(f"{V1}/deals/{affar['id']}/move", json={"stage_id": vunnen["id"]})).status_code == 200
+
+    await storage.create_api_key(buddy.id, tenant_name="Buddy", raw_key="snajp_live_appens_egen_nyckel")
+    async with buddy.klient("snajp_live_appens_egen_nyckel") as k:
+        linje = (await k.get(f"{V1}/companies/{bolag['id']}/timeline")).json()["data"]
+        personens = (await k.get(f"{V1}/people/{person['id']}/timeline")).json()["data"]
+        affarens = (await k.get(f"{V1}/deals/{affar['id']}/timeline")).json()["data"]
+        saknas = await k.get(f"{V1}/deals/00000000-0000-4000-8000-000000000000/timeline")
+
+    def en(lista, typ):
+        traffar = [p for p in lista if p["type"] == typ and p["origin"] == "crm"]
+        assert len(traffar) == 1, (typ, [p["type"] for p in lista])
+        return traffar[0]
+
+    ant = en(linje, "note")
+    assert ant["title"] == "Efter mötet" and ant["text"] == "Vill ha offert i januari."
+    assert ant["link"] == {"kind": "note", "id": anteckning["id"]}
+    assert "Fel bolag." not in json.dumps(linje)
+    akt = en(linje, "activity")
+    assert akt["title"] == "Ringde Anna"
+    assert akt["data"]["activity_type"] == "call" and akt["data"]["duration_minutes"] == 12
+    assert akt["data"]["result"] == "Återkommer"
+    upp = en(linje, "task")
+    assert upp["link"] == {"kind": "task", "id": uppgift["id"]}
+    assert upp["data"]["done"] is False and upp["data"]["due"].startswith("2026-12-01")
+    skapad, slut = en(linje, "deal_created"), en(linje, "deal_closed")
+    assert skapad["title"] == slut["title"] == "Växel 2027"
+    assert skapad["link"] == {"kind": "deal", "id": affar["id"]} and skapad["data"]["amount"] == 120000
+    # Nyast först: affären avslutades efter att den skapades.
+    assert linje.index(slut) < linje.index(skapad)
+
+    # Personen: bara det som knutits till just den.
+    assert [p["type"] for p in personens if p["origin"] == "crm" and not p["type"].startswith("record_")] == ["activity"]
+    # Affären: sina egna ändringar och anteckningen som knutits till den, inte bolagets uppgift.
+    egna = [p["type"] for p in affarens]
+    assert "record_created" in egna and "note" in egna and "task" not in egna and "deal_created" not in egna
+    assert all(p["origin"] == "crm" for p in affarens)
+    assert saknas.status_code == 404
+
+
 def test_prospektet_lases_med_en_uttrycklig_kolumnlista():
     """Webbplatsbedömningen är hemlig: frågan får aldrig bli `select *`."""
     import inspect

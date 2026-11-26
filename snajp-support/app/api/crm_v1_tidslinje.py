@@ -31,12 +31,18 @@ _TYP_UT = {
     "uppfoljning_skickad": "followup_sent", "svar": "reply_received", "steg": "conversation_stage",
     "mote_bokat": "meeting_booked", "overlamnat": "handed_over", "samtal": "call",
     "anteckning": "note", "uppgift": "task", "supportarende": "support_ticket",
+    "aktivitet": "activity", "affar_skapad": "deal_created", "affar_avslutad": "deal_closed",
 }
-_LANK_UT = {"lead": "lead", "konversation": "conversation", "arende": "ticket"}
+_LANK_UT = {"lead": "lead", "konversation": "conversation", "arende": "ticket",
+            "anteckning": "note", "uppgift": "task", "aktivitet": "activity", "affar": "deal"}
 _DETALJ_UT = {"fran": "from", "till": "to", "ursprung": "origin", "klass": "reply_class", "nummer": "number",
               "utfall": "outcome", "aterkom": "call_back_on", "klar": "done", "forfaller": "due",
               "kanal": "channel", "kategori": "category", "status": "status", "prioritet": "priority",
-              "via": "source", "aktor": "actor"}
+              "via": "source", "aktor": "actor",
+              "slag": "activity_type", "resultat": "result", "minuter": "duration_minutes", "ansvarig": "owner",
+              "forfattare": "author", "fast": "pinned", "belopp": "amount", "valuta": "currency",
+              "forlustorsak": "lost_reason"}
+_AKTIVITET_UT = {"samtal": "call", "mote": "meeting", "mejl": "email", "besok": "visit", "ovrigt": "other"}
 
 _UTFALL_IN = {"no_answer": "ej_svar", "call_back": "aterkom", "not_interested": "ej_intresserad",
               "do_not_contact": "kontakta_inte", "meeting_booked": "mote", "won": "vunnen"}
@@ -55,6 +61,8 @@ class OutcomeIn(BaseModel):
 
 def tidslinjepost_ut(post: dict[str, Any], falt_ut: dict[str, str]) -> dict[str, Any]:
     data = {_DETALJ_UT[k]: v for k, v in post["detalj"].items() if k in _DETALJ_UT}
+    if "activity_type" in data:
+        data["activity_type"] = _AKTIVITET_UT.get(data["activity_type"], "other")
     if post["detalj"].get("falt"):
         data["fields"] = [falt_ut.get(f, f) for f in post["detalj"]["falt"]]
     return {"key": post["nyckel"], "type": _TYP_UT.get(post["typ"], post["typ"]), "at": post["tid"],
@@ -86,7 +94,7 @@ def koppla(v1: Any) -> APIRouter:
 
     async def _linje(request: Request, tenant: dict, objekt: str, rad_id: str, limit: int) -> dict:
         post = await _post(request, tenant, objekt, rad_id)
-        bygg = tidslinje.for_bolag if objekt == "bolag" else tidslinje.for_person
+        bygg = {"bolag": tidslinje.for_bolag, "person": tidslinje.for_person, "affar": tidslinje.for_affar}[objekt]
         # Kundens egen nyckel är appen. En nyckel med omfång är en integration.
         med_text = "*" in tenant.get("omfang", ["*"])
         poster = await bygg(request.app.state.storage, tenant["tenant_id"], post, limit=limit, med_text=med_text)
@@ -95,10 +103,12 @@ def koppla(v1: Any) -> APIRouter:
     @router.get("/companies/{company_id}/timeline", summary="Everything that has happened with a company, newest first")
     async def tidslinje_bolag(request: Request, company_id: str, limit: int = Query(200, ge=1, le=500),
                               tenant: dict = Depends(kraev("crm:las"))) -> dict:
-        """The record's own changes, together with what has happened elsewhere
+        """The record's own changes, the work linked to it here (notes,
+        activities, tasks and deals), together with what has happened elsewhere
         in Snajp: Iris leads for the same organisation number (emails sent,
         replies, calls, status changes, notes, tasks) and support tickets from
-        the company's people. Composed when read; nothing is copied.
+        the company's people. Composed when read; nothing is copied. `origin`
+        says where an entry lives: `crm`, `iris` or `support`.
 
         Drafts that were never sent are not history and are left out. Support
         tickets carry subject, channel and status, never the messages. A key
@@ -112,6 +122,13 @@ def koppla(v1: Any) -> APIRouter:
         """Matched on the person's exact email address: leads where the person
         is the contact, and the person's own support tickets."""
         return await _linje(request, tenant, "person", person_id, limit)
+
+    @router.get("/deals/{deal_id}/timeline", summary="Everything that has happened with a deal, newest first")
+    async def tidslinje_affar(request: Request, deal_id: str, limit: int = Query(200, ge=1, le=500),
+                              tenant: dict = Depends(kraev("crm:las"))) -> dict:
+        """The deal's own changes and the notes, activities and tasks linked to
+        it. Leads and support tickets belong to the company and the person."""
+        return await _linje(request, tenant, "affar", deal_id, limit)
 
     @router.get("/companies/{company_id}/iris", summary="The company's leads in Iris and what they mean here")
     async def iris_bolag(request: Request, company_id: str, tenant: dict = Depends(kraev("crm:las"))) -> dict:

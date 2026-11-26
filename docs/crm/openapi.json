@@ -5951,7 +5951,7 @@
           "Snajp CRM"
         ],
         "summary": "Everything that has happened with a company, newest first",
-        "description": "The record's own changes, together with what has happened elsewhere\nin Snajp: Iris leads for the same organisation number (emails sent,\nreplies, calls, status changes, notes, tasks) and support tickets from\nthe company's people. Composed when read; nothing is copied.\n\nDrafts that were never sent are not history and are left out. Support\ntickets carry subject, channel and status, never the messages. A key\nwith scopes gets no excerpts (`text` is null): it learns that\nsomething happened and where, not what was written.",
+        "description": "The record's own changes, the work linked to it here (notes,\nactivities, tasks and deals), together with what has happened elsewhere\nin Snajp: Iris leads for the same organisation number (emails sent,\nreplies, calls, status changes, notes, tasks) and support tickets from\nthe company's people. Composed when read; nothing is copied. `origin`\nsays where an entry lives: `crm`, `iris` or `support`.\n\nDrafts that were never sent are not history and are left out. Support\ntickets carry subject, channel and status, never the messages. A key\nwith scopes gets no excerpts (`text` is null): it learns that\nsomething happened and where, not what was written.",
         "operationId": "tidslinje_bolag_api_crm_v1_companies__company_id__timeline_get",
         "parameters": [
           {
@@ -6074,6 +6074,79 @@
                   "type": "object",
                   "additionalProperties": true,
                   "title": "Response Tidslinje Person Api Crm V1 People  Person Id  Timeline Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/crm/v1/deals/{deal_id}/timeline": {
+      "get": {
+        "tags": [
+          "Snajp CRM"
+        ],
+        "summary": "Everything that has happened with a deal, newest first",
+        "description": "The deal's own changes and the notes, activities and tasks linked to\nit. Leads and support tickets belong to the company and the person.",
+        "operationId": "tidslinje_affar_api_crm_v1_deals__deal_id__timeline_get",
+        "parameters": [
+          {
+            "name": "deal_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Deal Id"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 500,
+              "minimum": 1,
+              "default": 200,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "x-api-key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Tidslinje Affar Api Crm V1 Deals  Deal Id  Timeline Get"
                 }
               }
             }
