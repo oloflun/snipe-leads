@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Snajp CRM API",
-    "description": "Read and write the companies and people a Snajp customer keeps in Snajp CRM, and sync a customer\nregister in from another system.\n\n**Authentication.** Send the key in `X-API-Key`. Keys are created under CRM, Developers, and carry\nscopes: `crm:las` (read), `crm:skriv` (write), `crm:synk` (sync), `crm:admin` (connections).\n\n**Idempotency.** Any POST accepts `Idempotency-Key`. Within 24 hours the same key and body return\nthe stored response, with `Idempotent-Replayed: true`.\n\n**Pagination.** Lists return `next_cursor`. Pass it as `cursor` until it is `null`.\n\n**Rate limit.** 600 requests per minute and customer. `X-RateLimit-Remaining` is on every\nresponse; a 429 carries `Retry-After`.\n\n**Errors.** `{\"detail\": {\"code\", \"message\", \"meddelande\"}}`. `code` is stable, `message` is English,\n`meddelande` is Swedish.\n\n**Swedish formats.** Organisation numbers are checked with the Luhn digit and stored as\n`NNNNNN-NNNN`. Phone numbers are stored as E.164, Swedish postal codes as `NNN NN`, dates as ISO 8601.\n\n**Keeping a copy in sync.** List with `sort=updated&include_deleted=true&updated_since=<your last\nsync>`. Deleted records carry `deleted_at` and must be removed on your side as well.\n",
+    "description": "Read and write the companies and people a Snajp customer keeps in Snajp CRM, and sync a customer\nregister in from another system.\n\n**Authentication.** Send the key in `X-API-Key`. Keys are created under CRM, Developers, and carry\nscopes: `crm:las` (read), `crm:skriv` (write), `crm:synk` (sync), `crm:admin` (connections).\n\n**Idempotency.** Any POST accepts `Idempotency-Key`. Within 24 hours the same key and body return\nthe stored response, with `Idempotent-Replayed: true`.\n\n**Pagination.** Lists return `next_cursor`. Pass it as `cursor` until it is `null`.\n\n**Rate limit.** 600 requests per minute and customer. `X-RateLimit-Remaining` is on every\nresponse; a 429 carries `Retry-After`.\n\n**Errors.** `{\"detail\": {\"code\", \"message\", \"meddelande\"}}`. `code` is stable, `message` is English,\n`meddelande` is Swedish.\n\n**Swedish formats.** Organisation numbers are checked with the Luhn digit and stored as\n`NNNNNN-NNNN`. Phone numbers are stored as E.164, Swedish postal codes as `NNN NN`, dates as ISO 8601.\n\n**Keeping a copy in sync.** Read `GET /changes` from your last `next_cursor`: one feed for every\nobject, in order. Or have Snajp call you: register a webhook under `/webhooks`. Listing with\n`sort=updated&include_deleted=true&updated_since=<your last sync>` works as before. Deleted\nrecords carry `deleted_at` and must be removed on your side as well.\n\n**Webhooks.** Each delivery is a POST with `X-Snajp-Signature: t=<unix time>,v1=<hex>`, where `v1`\nis HMAC-SHA256 over `\"{t}.{body}\"` with the webhook's secret. Answer 2xx within ten seconds.\nAnything else is retried seven times over about a day.\n",
     "version": "1.0.0"
   },
   "paths": {
@@ -102,12 +102,12 @@
             "required": false,
             "schema": {
               "type": "string",
-              "pattern": "^(updated|name)$",
-              "description": "`updated` lists in change order, oldest first.",
+              "pattern": "^(-?updated|name)$",
+              "description": "`updated` lists in change order, oldest first (use it when syncing out). `-updated` lists the most recently changed first. `name` is alphabetical.",
               "default": "updated",
               "title": "Sort"
             },
-            "description": "`updated` lists in change order, oldest first."
+            "description": "`updated` lists in change order, oldest first (use it when syncing out). `-updated` lists the most recently changed first. `name` is alphabetical."
           },
           {
             "name": "updated_since",
@@ -157,6 +157,18 @@
               "title": "Q"
             },
             "description": "Free text search."
+          },
+          {
+            "name": "only_deleted",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "The trash: only deleted records that can still be restored, most recently deleted first. `purge_at` says when each is emptied for good.",
+              "default": false,
+              "title": "Only Deleted"
+            },
+            "description": "The trash: only deleted records that can still be restored, most recently deleted first. `purge_at` says when each is emptied for good."
           },
           {
             "name": "relation",
@@ -604,12 +616,12 @@
             "required": false,
             "schema": {
               "type": "string",
-              "pattern": "^(updated|name)$",
-              "description": "`updated` lists in change order, oldest first.",
+              "pattern": "^(-?updated|name)$",
+              "description": "`updated` lists in change order, oldest first (use it when syncing out). `-updated` lists the most recently changed first. `name` is alphabetical.",
               "default": "updated",
               "title": "Sort"
             },
-            "description": "`updated` lists in change order, oldest first."
+            "description": "`updated` lists in change order, oldest first (use it when syncing out). `-updated` lists the most recently changed first. `name` is alphabetical."
           },
           {
             "name": "updated_since",
@@ -659,6 +671,18 @@
               "title": "Q"
             },
             "description": "Free text search."
+          },
+          {
+            "name": "only_deleted",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "The trash: only deleted records that can still be restored, most recently deleted first. `purge_at` says when each is emptied for good.",
+              "default": false,
+              "title": "Only Deleted"
+            },
+            "description": "The trash: only deleted records that can still be restored, most recently deleted first. `purge_at` says when each is emptied for good."
           },
           {
             "name": "company_id",
@@ -1017,6 +1041,792 @@
                   "type": "object",
                   "additionalProperties": true,
                   "title": "Response Aterstall Person Api Crm V1 People  Person Id  Restore Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/crm/v1/companies/{company_id}/history": {
+      "get": {
+        "tags": [
+          "Snajp CRM"
+        ],
+        "summary": "What has happened to a company, newest first",
+        "description": "Each write as an event: who or what changed the record, and which\nfields. The values themselves are not kept in the log.",
+        "operationId": "historik_bolag_api_crm_v1_companies__company_id__history_get",
+        "parameters": [
+          {
+            "name": "company_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Company Id"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 500,
+              "minimum": 1,
+              "default": 100,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "x-api-key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Historik Bolag Api Crm V1 Companies  Company Id  History Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/crm/v1/people/{person_id}/history": {
+      "get": {
+        "tags": [
+          "Snajp CRM"
+        ],
+        "summary": "What has happened to a person, newest first",
+        "operationId": "historik_person_api_crm_v1_people__person_id__history_get",
+        "parameters": [
+          {
+            "name": "person_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Person Id"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 500,
+              "minimum": 1,
+              "default": 100,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "x-api-key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Historik Person Api Crm V1 People  Person Id  History Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/crm/v1/changes": {
+      "get": {
+        "tags": [
+          "Snajp CRM"
+        ],
+        "summary": "Everything that has changed, in order",
+        "description": "One feed for every object. Each write has a sequence number; read until\nthe list is empty and keep `next_cursor`. Asking again with the same\ncursor returns only what has happened since. An event says which record\nand which fields changed: fetch the record to get the values.",
+        "operationId": "andringar_api_crm_v1_changes_get",
+        "parameters": [
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "`next_cursor` from your previous call. 0 reads from the beginning.",
+              "default": 0,
+              "title": "Cursor"
+            },
+            "description": "`next_cursor` from your previous call. 0 reads from the beginning."
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 1000,
+              "minimum": 1,
+              "default": 200,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "object",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "company",
+                    "person"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only this kind of record.",
+              "title": "Object"
+            },
+            "description": "Only this kind of record."
+          },
+          {
+            "name": "x-api-key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Andringar Api Crm V1 Changes Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/crm/v1/webhooks/events": {
+      "get": {
+        "tags": [
+          "Snajp CRM"
+        ],
+        "summary": "The event types a webhook can subscribe to",
+        "operationId": "webhookhandelser_api_crm_v1_webhooks_events_get",
+        "parameters": [
+          {
+            "name": "x-api-key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Webhookhandelser Api Crm V1 Webhooks Events Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/crm/v1/webhooks": {
+      "get": {
+        "tags": [
+          "Snajp CRM"
+        ],
+        "summary": "List webhooks",
+        "operationId": "lista_webhooks_api_crm_v1_webhooks_get",
+        "parameters": [
+          {
+            "name": "x-api-key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Lista Webhooks Api Crm V1 Webhooks Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Snajp CRM"
+        ],
+        "summary": "Create a webhook",
+        "description": "The response carries `secret`, once. Every delivery is signed with it:\n`X-Snajp-Signature: t=<unix time>,v1=<hex>` where `v1` is HMAC-SHA256 over\n`\"{t}.{body}\"`. Reject deliveries older than five minutes.",
+        "operationId": "skapa_webhook_api_crm_v1_webhooks_post",
+        "parameters": [
+          {
+            "name": "x-api-key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WebhookIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Skapa Webhook Api Crm V1 Webhooks Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/crm/v1/webhooks/{webhook_id}": {
+      "get": {
+        "tags": [
+          "Snajp CRM"
+        ],
+        "summary": "Get a webhook",
+        "operationId": "hamta_webhook_api_crm_v1_webhooks__webhook_id__get",
+        "parameters": [
+          {
+            "name": "webhook_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Webhook Id"
+            }
+          },
+          {
+            "name": "x-api-key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Hamta Webhook Api Crm V1 Webhooks  Webhook Id  Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "Snajp CRM"
+        ],
+        "summary": "Change a webhook",
+        "operationId": "andra_webhook_api_crm_v1_webhooks__webhook_id__patch",
+        "parameters": [
+          {
+            "name": "webhook_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Webhook Id"
+            }
+          },
+          {
+            "name": "x-api-key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WebhookIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Andra Webhook Api Crm V1 Webhooks  Webhook Id  Patch"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Snajp CRM"
+        ],
+        "summary": "Delete a webhook and its delivery log",
+        "operationId": "radera_webhook_api_crm_v1_webhooks__webhook_id__delete",
+        "parameters": [
+          {
+            "name": "webhook_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Webhook Id"
+            }
+          },
+          {
+            "name": "x-api-key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/crm/v1/webhooks/{webhook_id}/test": {
+      "post": {
+        "tags": [
+          "Snajp CRM"
+        ],
+        "summary": "Send a ping to the webhook",
+        "description": "Queues a `ping` delivery. Read the outcome under the webhook's deliveries.",
+        "operationId": "prova_webhook_api_crm_v1_webhooks__webhook_id__test_post",
+        "parameters": [
+          {
+            "name": "webhook_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Webhook Id"
+            }
+          },
+          {
+            "name": "x-api-key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Prova Webhook Api Crm V1 Webhooks  Webhook Id  Test Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/crm/v1/webhooks/{webhook_id}/deliveries": {
+      "get": {
+        "tags": [
+          "Snajp CRM"
+        ],
+        "summary": "The delivery log, newest first",
+        "description": "Kept for 30 days. A failed delivery is retried seven times over about\na day, and can then be sent again by hand.",
+        "operationId": "lista_leveranser_api_crm_v1_webhooks__webhook_id__deliveries_get",
+        "parameters": [
+          {
+            "name": "webhook_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Webhook Id"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "x-api-key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Lista Leveranser Api Crm V1 Webhooks  Webhook Id  Deliveries Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/crm/v1/webhooks/{webhook_id}/deliveries/{delivery_id}/retry": {
+      "post": {
+        "tags": [
+          "Snajp CRM"
+        ],
+        "summary": "Send a delivery again",
+        "operationId": "skicka_om_leverans_api_crm_v1_webhooks__webhook_id__deliveries__delivery_id__retry_post",
+        "parameters": [
+          {
+            "name": "webhook_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Webhook Id"
+            }
+          },
+          {
+            "name": "delivery_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Delivery Id"
+            }
+          },
+          {
+            "name": "x-api-key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Skicka Om Leverans Api Crm V1 Webhooks  Webhook Id  Deliveries  Delivery Id  Retry Post"
                 }
               }
             }
@@ -2741,6 +3551,64 @@
           "type"
         ],
         "title": "ValidationError"
+      },
+      "WebhookIn": {
+        "properties": {
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url",
+            "description": "A public https address. Required when creating."
+          },
+          "events": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Events",
+            "description": "Event types to receive, e.g. `company.updated`. `*` (the default) is all of them. GET /webhooks/events lists them."
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "active": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Active",
+            "description": "Turning a disabled webhook on again resets its failure count."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "WebhookIn"
       }
     },
     "securitySchemes": {

@@ -376,6 +376,13 @@ async def lifespan(app: FastAPI):
 
         trial_task = asyncio.create_task(run_trial_paminnare(app.state))
 
+    # CRM:ets webhooks ut (migration 162): skickar köade leveranser med
+    # omförsök. Se app/crm/webhooks.py. Körs alltid: utan webhooks är varvet
+    # en läsning ur minnet.
+    from .crm.webhooks import run_webhookjobb
+
+    webhook_task = asyncio.create_task(run_webhookjobb(app.state))
+
     # Gallringen: raderar kunddata äldre än kundens beslutade period, högst en
     # gång per dygn; i en spegel bara det synken inte för över. AV som
     # standard (GALLRING_AKTIV). Se app/jobs/gallring.py och migration 119, 133.
@@ -402,7 +409,7 @@ async def lifespan(app: FastAPI):
     uppgifter = [
         t
         for t in (poller_task, send_scheduler_task, stadare_task, trial_task, gallring_task, vertex_task,
-                  *chat_worker_tasks, *leads_worker_tasks)
+                  webhook_task, *chat_worker_tasks, *leads_worker_tasks)
         if t is not None
     ]
     for task in uppgifter:

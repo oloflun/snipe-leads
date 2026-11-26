@@ -45,11 +45,20 @@ import json
 from dataclasses import dataclass, field
 from typing import Any
 
-from . import adaptrar, falt, lagring
+from . import adaptrar, falt, handelser, lagring
 
 #: Styr och härledda fält som inte jämförs mot källan.
 _HARLEDDA = ("namnnyckel", "orgnr_nyckel", "enskild_firma", "doman")
 _HOR_IHOP = {"orgnr": ("orgnr_nyckel", "enskild_firma"), "webbplats": ("doman",), "namn": ("namnnyckel",)}
+#: Fält som inte nämns i händelseloggen: de följer av andra fält eller är bokföring.
+_TYSTA = (*_HARLEDDA, "manuellt_andrade", "raderad_at", "updated_at")
+#: Skäl där raden inte får bära ett namn i felloggen: posten är en privatperson
+#: eller hör till någon som begärt begränsad behandling.
+_UTAN_NAMN = ("privatperson", "behandlingen_ar_begransad")
+
+
+def _andrade(skriv: dict[str, Any]) -> list[str]:
+    return [k for k in skriv if k not in _TYSTA]
 
 #: Mappning där källans nycklar ÄR målfälten. För poster som redan har
 #: CRM:ets egna fältnamn (API:t och appen), så att samma kontroller gäller.
@@ -70,11 +79,18 @@ class Utfall:
     #: Fält där Snajps värde stod kvar enligt konfliktregeln.
     behallna: list[str] = field(default_factory=list)
     fel: list[dict[str, Any]] = field(default_factory=list)
+    #: Bolagets namn, så att den som läser felen ser vilken rad det gäller.
+    #: Sätts aldrig för en person eller en privatperson.
+    namn: str | None = None
+    #: Posten som redan har nyckeln, vid en konflikt.
+    krockar_med: str | None = None
 
     def som_dict(self) -> dict[str, Any]:
         ut = {"index": self.index, "status": self.status, "id": self.id, "externt_id": self.externt_id}
         if self.orsak:
             ut["orsak"] = self.orsak
+        if self.krockar_med:
+            ut["krockar_med"] = self.krockar_med
         if self.behallna:
             ut["behallna_falt"] = self.behallna
         if self.fel:
@@ -174,9 +190,12 @@ async def synka_sats(
             storage, tenant_id, "bolag", "orgnr_nyckel", [m.falt.get("bolag_orgnr_nyckel") for m in mappade])}
 
     utfall: list[Utfall] = []
+    logg: list[handelser.Handelse] = []
     for index, m in enumerate(mappade):
         u = Utfall("hoppad", index, externt_id=m.externt_id, fel=m.fel)
         utfall.append(u)
+        if objekt == "bolag" and not m.falt.get("privatperson"):
+            u.namn = m.falt.get("namn")
         if m.hoppa_over:
             u.orsak = "hoppas_over_enligt_mappningen"
             continue
@@ -194,6 +213,7 @@ async def synka_sats(
             pa_orgnr = per_orgnr.get(nyckel) if nyckel else None
             if post and pa_orgnr and pa_orgnr["id"] != post["id"]:
                 u.status, u.id, u.orsak = "konflikt", post["id"], "orgnr_tillhor_annat_bolag"
+                u.krockar_med = pa_orgnr["id"]
                 continue
             if post is None:
                 post = pa_orgnr
@@ -225,6 +245,7 @@ async def synka_sats(
                     await lagring.uppdatera_post(storage, tenant_id, objekt, post["id"],
                                                  {"raderad_at": lagring.nu()})
                     post["raderad_at"] = lagring.nu()
+                    logg.append(handelser.Handelse(objekt, post["id"], "raderad", post=post))
             else:
                 u.orsak, u.id = "redan_borta", post["id"] if post else None
             await _markera(storage, tenant_id, anslutning, korning, objekt, m, extern, post, torrkorning)
@@ -249,6 +270,7 @@ async def synka_sats(
                 # En annan sats hann före med samma orgnr eller adress.
                 u.status, u.orsak = "konflikt", "finns_redan"
                 continue
+            logg.append(handelser.Handelse(objekt, post["id"], "skapad", post=post))
         else:
             u.id = post["id"]
             if extern and extern.get("innehallshash") == ny_hash and not post.get("raderad_at"):
@@ -264,6 +286,9 @@ async def synka_sats(
                     except lagring.FinnsRedan:
                         u.status, u.orsak = "konflikt", "finns_redan"
                         continue
+                    logg.append(handelser.Handelse(
+                        objekt, post["id"], "aterstalld" if "raderad_at" in skriv else "andrad",
+                        falt=_andrade(skriv), post=post))
         u.id = post["id"] if post else None
         # Senare poster i samma sats ska se den här: två rader för samma bolag
         # i en fil blir en post, inte en krock.
@@ -285,10 +310,14 @@ async def synka_sats(
                   "hoppad": "hoppade", "konflikt": "konflikter", "raderad": "borttagna"}[u.status]
         delta[nyckel] = delta.get(nyckel, 0) + 1
     fel = [{"objekt": objekt, "index": u.index, "externt_id": u.externt_id,
-            **({"orsak": u.orsak} if u.orsak else {}), **({"faltfel": u.fel} if u.fel else {})}
+            **({"namn": u.namn} if u.namn and u.orsak not in _UTAN_NAMN else {}),
+            **({"orsak": u.orsak} if u.orsak else {}),
+            **({"krockar_med": u.krockar_med} if u.krockar_med else {}),
+            **({"faltfel": u.fel} if u.fel else {})}
            for u in utfall if u.fel or u.status in ("hoppad", "konflikt")]
     if not torrkorning:
         await lagring.rakna_korning(storage, tenant_id, korning["id"], delta, fel)
+        await handelser.logga(storage, tenant_id, logg, kalla="synk", aktor=f"anslutning:{anslutning['namn']}")
     return {"summering": delta, "poster": [u.som_dict() for u in utfall]}
 
 
@@ -322,6 +351,7 @@ async def slutfor(
     korning = await lagring.hamta_korning(storage, tenant_id, korning["id"]) or korning
     _, begransade = await _sparrar(storage, tenant_id)
     borttagna, fel = 0, None
+    logg: list[handelser.Handelse] = []
     regel = anslutning.get("saknade") or "behall"
     if korning["lage"] == "full" and regel != "behall":
         if not korning["totalt"]:
@@ -339,13 +369,25 @@ async def slutfor(
                         andring = {"relation": "tidigare_kund"}
                     else:
                         continue
-                    await lagring.uppdatera_post(storage, tenant_id, objekt, post["id"], andring)
+                    ny = await lagring.uppdatera_post(storage, tenant_id, objekt, post["id"], andring) or post
+                    logg.append(handelser.Handelse(
+                        objekt, post["id"], "raderad" if regel == "ta_bort" else "andrad",
+                        falt=_andrade(andring), post=ny))
                     borttagna += 1
     for objekt in adaptrar.OBJEKT:
         await lagring.tom_papperskorg(storage, tenant_id, objekt, undanta=begransade)
     await lagring.uppdatera_anslutning(storage, tenant_id, anslutning["id"], senaste_synk_at=lagring.nu())
-    return await lagring.avsluta_korning(storage, tenant_id, korning["id"],
+    await handelser.logga(storage, tenant_id, logg, kalla="synk", aktor=f"anslutning:{anslutning['namn']}")
+    klar = await lagring.avsluta_korning(storage, tenant_id, korning["id"],
                                          status="failed" if fel else "completed", error=fel, borttagna=borttagna)
+    if klar:
+        from . import webhooks
+
+        await webhooks.koa(storage, tenant_id, [("sync.completed", {
+            "object": "sync_run", "id": klar["id"], "connection": anslutning["namn"], "mode": klar["lage"],
+            "status": klar["status"], "error": klar.get("error"),
+            "counts": {k: klar[k] for k in lagring.RAKNARE}})])
+    return klar
 
 
 # -- Poster som skrivs för hand (API:t och appen) ----------------------------
@@ -376,7 +418,10 @@ def _tolka(objekt: str, falten: dict[str, Any]) -> adaptrar.Mappad:
     return m
 
 
-async def skapa(storage: Any, tenant_id: str, objekt: str, falten: dict[str, Any], *, kalla: str) -> tuple[dict, bool]:
+async def skapa(
+    storage: Any, tenant_id: str, objekt: str, falten: dict[str, Any], *, kalla: str,
+    via: str = "api", aktor: str | None = None,
+) -> tuple[dict, bool]:
     """(posten, skapad). Ett bolag med ett organisationsnummer som redan finns,
     eller en person med en adress som redan finns, uppdateras i stället:
     ett bolag, en rad."""
@@ -389,12 +434,17 @@ async def skapa(storage: Any, tenant_id: str, objekt: str, falten: dict[str, Any
                      else ("epost", m.falt.get("epost")))
     befintlig = (await lagring.hitta_poster(storage, tenant_id, objekt, kolumn, [varde]))[:1] if varde else []
     if befintlig:
-        return await andra(storage, tenant_id, objekt, befintlig[0]["id"], falten), False
+        return await andra(storage, tenant_id, objekt, befintlig[0]["id"], falten, via=via, aktor=aktor), False
     post = await lagring.skapa_post(storage, tenant_id, objekt, {**m.falt, "extra": m.extra, "kalla": kalla})
+    await handelser.logga(storage, tenant_id, [handelser.Handelse(objekt, post["id"], "skapad", post=post)],
+                          kalla=via, aktor=aktor)
     return post, True
 
 
-async def andra(storage: Any, tenant_id: str, objekt: str, rad_id: str, falten: dict[str, Any]) -> dict | None:
+async def andra(
+    storage: Any, tenant_id: str, objekt: str, rad_id: str, falten: dict[str, Any], *,
+    via: str = "api", aktor: str | None = None,
+) -> dict | None:
     """Ändrar de fält som skickas. Varje ändrat fält märks som ändrat för hand,
     så att konfliktregeln vet om det vid nästa synk. `None` tömmer fältet."""
     post = await lagring.hamta_post(storage, tenant_id, objekt, rad_id)
@@ -425,10 +475,17 @@ async def andra(storage: Any, tenant_id: str, objekt: str, rad_id: str, falten: 
     tid = lagring.nu()
     skriv["manuellt_andrade"] = {**(post.get("manuellt_andrade") or {}),
                                  **{k: tid for k in skriv if k not in _HARLEDDA and k != "extra"}}
-    return await lagring.uppdatera_post(storage, tenant_id, objekt, rad_id, skriv)
+    ny = await lagring.uppdatera_post(storage, tenant_id, objekt, rad_id, skriv)
+    if ny:
+        await handelser.logga(storage, tenant_id, [
+            handelser.Handelse(objekt, rad_id, "andrad", falt=_andrade(skriv), post=ny)], kalla=via, aktor=aktor)
+    return ny
 
 
-async def radera(storage: Any, tenant_id: str, objekt: str, rad_id: str, *, permanent: bool = False) -> bool:
+async def radera(
+    storage: Any, tenant_id: str, objekt: str, rad_id: str, *, permanent: bool = False,
+    via: str = "api", aktor: str | None = None,
+) -> bool:
     """Mjuk radering: posten ligger i papperskorgen i 30 dagar och går att
     återställa. `permanent` tömmer den direkt. I båda fallen finns id och
     raderingstid kvar som gravsten för den som synkar ut."""
@@ -439,9 +496,11 @@ async def radera(storage: Any, tenant_id: str, objekt: str, rad_id: str, *, perm
     if permanent:
         if (post.get("epost") or "").casefold() in begransade:
             raise BegransadBehandling()
-        await lagring.gor_gravsten(storage, tenant_id, objekt, rad_id)
+        await lagring.gor_gravsten(storage, tenant_id, objekt, rad_id, via=via, aktor=aktor)
     else:
-        await lagring.uppdatera_post(storage, tenant_id, objekt, rad_id, {"raderad_at": lagring.nu()})
+        ny = await lagring.uppdatera_post(storage, tenant_id, objekt, rad_id, {"raderad_at": lagring.nu()})
+        await handelser.logga(storage, tenant_id, [handelser.Handelse(objekt, rad_id, "raderad", post=ny)],
+                              kalla=via, aktor=aktor)
     await lagring.tom_papperskorg(storage, tenant_id, objekt, undanta=begransade)
     return True
 
@@ -455,7 +514,9 @@ class RedanTomd(ValueError):
     """Posten är permanent raderad och går inte att återställa."""
 
 
-async def aterstall(storage: Any, tenant_id: str, objekt: str, rad_id: str) -> dict | None:
+async def aterstall(
+    storage: Any, tenant_id: str, objekt: str, rad_id: str, *, via: str = "api", aktor: str | None = None,
+) -> dict | None:
     """Tar tillbaka en post ur papperskorgen. Höjer `lagring.FinnsRedan` om
     organisationsnumret eller adressen hunnit tas av en annan post."""
     post = await lagring.hamta_post(storage, tenant_id, objekt, rad_id, med_raderade=True)
@@ -463,4 +524,7 @@ async def aterstall(storage: Any, tenant_id: str, objekt: str, rad_id: str) -> d
         return post
     if post.get("kalla") == lagring.GRAVSTEN:
         raise RedanTomd()
-    return await lagring.uppdatera_post(storage, tenant_id, objekt, rad_id, {"raderad_at": None})
+    ny = await lagring.uppdatera_post(storage, tenant_id, objekt, rad_id, {"raderad_at": None})
+    await handelser.logga(storage, tenant_id, [handelser.Handelse(objekt, rad_id, "aterstalld", post=ny)],
+                          kalla=via, aktor=aktor)
+    return ny

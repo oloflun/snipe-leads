@@ -61,6 +61,19 @@ TABELLER: dict[str, dict[str, str | None]] = {
         "oforandrade": _TAL, "hoppade": _TAL, "konflikter": _TAL, "borttagna": _TAL,
         "fel": _JSON, "error": None, "created_at": _TID, "updated_at": _TID, "completed_at": _TID,
     },
+    # Webhooks ut (migration 162). Händelseloggen crm_handelser har löpnummer
+    # som id och skrivs i satser: den har egna funktioner i app/crm/handelser.py.
+    "crm_webhooks": {
+        "id": _UUID, "tenant_id": _UUID, "url": None, "beskrivning": None, "handelser": _JSON,
+        "hemlighet": None, "aktiv": _BOOL, "fel_i_rad": _TAL, "senast_ok_at": _TID,
+        "senast_fel_at": _TID, "senast_fel": None, "avstangd_av": None,
+        "created_at": _TID, "updated_at": _TID,
+    },
+    "crm_webhook_leveranser": {
+        "id": _UUID, "tenant_id": _UUID, "webhook_id": _UUID, "handelsetyp": None, "kropp": _JSON,
+        "status": None, "forsok": _TAL, "nasta_forsok_at": _TID, "statuskod": _TAL, "fel": None,
+        "created_at": _TID, "updated_at": _TID, "levererad_at": _TID,
+    },
 }
 
 #: Standardvärden som databasen sätter, speglade för minneslagret.
@@ -75,6 +88,8 @@ _STANDARD: dict[str, dict[str, Any]] = {
     "crm_synkkorningar": {"lage": "delta", "status": "processing", "startad_av": "api", "totalt": 0,
                           "skapade": 0, "uppdaterade": 0, "oforandrade": 0, "hoppade": 0,
                           "konflikter": 0, "borttagna": 0, "fel": []},
+    "crm_webhooks": {"handelser": ["*"], "aktiv": True, "fel_i_rad": 0},
+    "crm_webhook_leveranser": {"status": "vantar", "forsok": 0},
 }
 
 RAKNARE = ("totalt", "skapade", "uppdaterade", "oforandrade", "hoppade", "konflikter", "borttagna")
@@ -176,7 +191,7 @@ async def _in(storage: Any, tenant_id: str, tabell: str, falt: dict[str, Any]) -
     rad = {k: None for k in TABELLER[tabell]}
     rad.update(json.loads(json.dumps(_STANDARD[tabell])))
     rad.update({"id": str(uuid.uuid4())})
-    for k in ("created_at", "updated_at", "senast_sedd_at"):
+    for k in ("created_at", "updated_at", "senast_sedd_at", "nasta_forsok_at"):
         if k in TABELLER[tabell]:
             rad[k] = tid
     rad.update(json.loads(json.dumps(falt, default=str)))
@@ -414,7 +429,10 @@ async def lista_poster(
 
     `ordning="andrad"` går i ändringsordning, äldst först: den som synkar ut
     läser tills markören tar slut och börjar nästa gång från sin senaste tid.
-    `ordning="namn"` är för listan i appen.
+    `ordning="andrad_fallande"` är samma ordning baklänges, senast ändrad
+    först, för listan i appen. `ordning="namn"` är bokstavsordning.
+    `ordning="raderad"` är papperskorgen: bara raderade poster som går att
+    återställa, senast raderad först.
     """
     tabell = _OBJEKTTABELL[objekt]
     lika = {k: v for k, v in (lika or {}).items() if v is not None}
@@ -422,6 +440,9 @@ async def lista_poster(
     limit = max(1, min(int(limit), 500))
     efter = las_markor(markor)
     namnkol = "namn" if objekt == "bolag" else "efternamn"
+    korg = ordning == "raderad"
+    fallande = ordning in ("andrad_fallande", "raderad")
+    tidskolumn = {"andrad": "updated_at", "andrad_fallande": "updated_at", "raderad": "raderad_at"}.get(ordning)
     sokkolumner = (("namn", "orgnr", "orgnr_nyckel", "doman", "postort") if objekt == "bolag"
                    else ("fornamn", "efternamn", "epost", "titel"))
     if _ar_postgres(storage):
@@ -429,7 +450,10 @@ async def lista_poster(
         for kol, varde in lika.items():
             varden.append(_varde(tabell, kol, varde))
             villkor.append(f"{kol} = {_plats(tabell, kol, len(varden))}")
-        if not med_raderade:
+        if korg:
+            varden.append(GRAVSTEN)
+            villkor.append(f"raderad_at is not null and kalla <> ${len(varden)}")
+        elif not med_raderade:
             villkor.append("raderad_at is null")
         if andrad_sedan:
             varden.append(andrad_sedan)
@@ -437,16 +461,18 @@ async def lista_poster(
         if q:
             varden.append(f"%{q.strip()}%")
             villkor.append("(" + " or ".join(f"{k} ilike ${len(varden)}" for k in sokkolumner) + ")")
-        sortering = "updated_at" if ordning == "andrad" else f"lower(coalesce({namnkol}, ''))"
+        sortering = tidskolumn or f"lower(coalesce({namnkol}, ''))"
+        hall = " desc" if fallande else ""
         if efter:
             varden.extend(efter)
-            typ = "::text::timestamptz" if ordning == "andrad" else ""
-            villkor.append(f"({sortering}, id) > (${len(varden) - 1}{typ}, ${len(varden)}::text::uuid)")
+            typ = "::text::timestamptz" if tidskolumn else ""
+            villkor.append(f"({sortering}, id) {'<' if fallande else '>'} "
+                           f"(${len(varden) - 1}{typ}, ${len(varden)}::text::uuid)")
         try:
             async with storage._scoped(tenant_id) as conn:
                 rader = await conn.fetch(
                     f"select * from {tabell} where {' and '.join(villkor)} "
-                    f"order by {sortering}, id limit {limit + 1}", *varden)
+                    f"order by {sortering}{hall}, id{hall} limit {limit + 1}", *varden)
         except Exception as fel:
             if _saknar_tabell(fel):
                 return [], None
@@ -454,11 +480,15 @@ async def lista_poster(
         poster = [_rad(r, tabell) for r in rader]
     else:
         def nyckel(r: dict[str, Any]) -> str:
-            return r["updated_at"] if ordning == "andrad" else (r.get(namnkol) or "").lower()
+            return r[tidskolumn] if tidskolumn else (r.get(namnkol) or "").lower()
 
         poster = []
         for rad in _minne(storage, tabell).values():
-            if rad["tenant_id"] != tenant_id or (rad.get("raderad_at") and not med_raderade):
+            if rad["tenant_id"] != tenant_id:
+                continue
+            if korg and (not rad.get("raderad_at") or rad["kalla"] == GRAVSTEN):
+                continue
+            if not korg and rad.get("raderad_at") and not med_raderade:
                 continue
             if any(rad.get(k) != v for k, v in lika.items()):
                 continue
@@ -466,17 +496,16 @@ async def lista_poster(
                 continue
             if q and not any(q.strip().lower() in str(rad.get(k) or "").lower() for k in sokkolumner):
                 continue
-            if efter and (nyckel(rad), rad["id"]) <= efter:
+            if efter and ((nyckel(rad), rad["id"]) >= efter if fallande else (nyckel(rad), rad["id"]) <= efter):
                 continue
             poster.append(dict(rad))
-        poster.sort(key=lambda r: (nyckel(r), r["id"]))
+        poster.sort(key=lambda r: (nyckel(r), r["id"]), reverse=fallande)
         poster = poster[: limit + 1]
     if len(poster) <= limit:
         return poster, None
     poster = poster[:limit]
     sist = poster[-1]
-    return poster, _markor(sist["updated_at"] if ordning == "andrad" else (sist.get(namnkol) or "").lower(),
-                           sist["id"])
+    return poster, _markor(sist[tidskolumn] if tidskolumn else (sist.get(namnkol) or "").lower(), sist["id"])
 
 
 def _tid(varde: str) -> datetime:
@@ -626,7 +655,9 @@ _TOMD: dict[str, dict[str, Any]] = {
 }
 
 
-async def gor_gravsten(storage: Any, tenant_id: str, objekt: str, rad_id: str) -> None:
+async def gor_gravsten(
+    storage: Any, tenant_id: str, objekt: str, rad_id: str, *, via: str = "system", aktor: str | None = None
+) -> None:
     """Tömmer posten för gott. Källsystemens id för den glöms, så att en ny
     synk skapar en ny post i stället för att väcka den raderade."""
     post = await _hamta(storage, tenant_id, _OBJEKTTABELL[objekt], rad_id)
@@ -636,6 +667,9 @@ async def gor_gravsten(storage: Any, tenant_id: str, objekt: str, rad_id: str) -
                {**_TOMD[objekt], "raderad_at": post.get("raderad_at") or nu()})
     for extern in (await externa_for_poster(storage, tenant_id, objekt, [rad_id])).get(rad_id, []):
         await _ta_bort(storage, tenant_id, "crm_externa_id", extern["id"])
+    from . import handelser  # sen import: handelser läser den här modulen
+
+    await handelser.logga(storage, tenant_id, [handelser.Handelse(objekt, rad_id, "tomd")], kalla=via, aktor=aktor)
 
 
 async def tom_papperskorg(

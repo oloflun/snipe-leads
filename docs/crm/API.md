@@ -203,10 +203,80 @@ curl "$BAS/companies?sort=updated&include_deleted=true&updated_since=2026-11-24T
 Följ `next_cursor` tills den är `null`, och börja nästa gång från tidpunkten för er
 senaste läsning. Raderade poster bär `deleted_at` och ska tas bort hos er också.
 
+`sort=updated` går äldst först, för den som synkar ut. `sort=-updated` ger det senast
+ändrade först, och `sort=name` bokstavsordning.
+
+### Ändringsflödet
+
+Ett flöde för allt, i den ordning det hände:
+
+```bash
+curl "$BAS/changes?cursor=0&limit=1000" -H "X-API-Key: $NYCKEL"
+```
+
+```json
+{"data": [{"seq": 4117, "object": "company", "id": "…", "type": "updated",
+           "fields": ["phone", "address.city"], "source": "synk", "actor": "anslutning:hubspot",
+           "at": "2026-11-26T09:14:02+00:00"}],
+ "next_cursor": 4117}
+```
+
+Läs tills listan är tom och spara `next_cursor`. Samma markör igen ger bara det som hänt
+sedan dess. `type` är `created`, `updated`, `deleted`, `restored` eller `purged` (posten är
+tömd för gott). Flödet säger vilken post och vilka fält som ändrades, inte värdena: hämta
+posten för dem. `GET /companies/{id}/history` och `/people/{id}/history` ger samma
+händelser för en enda post, nyast först.
+
+## Webhooks
+
+Vill ni hellre att Snajp säger till, registrera en adress:
+
+```bash
+curl -X POST "$BAS/webhooks" -H "X-API-Key: $NYCKEL" -H "Content-Type: application/json" \
+  -d '{"url": "https://ert-system.se/snajp", "events": ["company.created", "company.updated"]}'
+```
+
+Svaret bär `secret`, en enda gång. `events` är valfritt, utan det får ni allt.
+`GET /webhooks/events` räknar upp händelserna: `company.*` och `person.*` med `created`,
+`updated`, `deleted`, `restored` och `purged`, och `sync.completed` när en synk avslutats.
+Webhooks kräver omfånget `crm:admin` och en publik https-adress.
+
+Varje leverans är ett `POST` med händelsen som JSON:
+
+```json
+{"id": "<leveransens id>", "type": "company.updated", "created_at": "2026-11-26T09:14:02+00:00",
+ "data": {"object": "company", "id": "…", "record": { … hela posten … }}}
+```
+
+**Kontrollera signaturen.** Rubriken `X-Snajp-Signature: t=<unixtid>,v1=<hex>` bär en
+HMAC-SHA256 över `"{t}.{kroppen}"` med er hemlighet. Räkna om den på den råa kroppen,
+jämför i konstant tid och avvisa anrop som är äldre än fem minuter:
+
+```python
+import hashlib, hmac, time
+
+def akta(hemlighet: str, rubrik: str, kropp: bytes) -> bool:
+    delar = dict(d.split("=", 1) for d in rubrik.split(","))
+    vantat = hmac.new(hemlighet.encode(), f"{delar['t']}.".encode() + kropp, hashlib.sha256).hexdigest()
+    return hmac.compare_digest(vantat, delar["v1"]) and abs(time.time() - int(delar["t"])) < 300
+```
+
+**Svara snabbt.** Ett svar med status 2xx inom tio sekunder är en lyckad leverans. Allt
+annat försöks igen efter 1, 5 och 30 minuter och 2, 6 och 24 timmar. Gör arbetet efter att
+ni svarat, och tåla att samma leverans kommer två gånger: `X-Snajp-Delivery` är dess id.
+
+**Följ leveranserna.** `GET /webhooks/{id}/deliveries` visar varje leverans med försök,
+statuskod och fel i 30 dagar. `POST /webhooks/{id}/deliveries/{leverans}/retry` skickar om
+en, och `POST /webhooks/{id}/test` skickar en `ping`. En webhook som misslyckats tjugo
+leveranser i rad stängs av (`active: false`, `disabled_reason: for_manga_fel`). Slå på den
+igen med `PATCH` när mottagaren är uppe.
+
 ## Radering och personuppgifter
 
 `DELETE` lägger posten i papperskorgen. Den går att återställa i 30 dagar med
 `POST /companies/{id}/restore`, och töms sedan på allt utom id och tider.
+`GET /companies?only_deleted=true` (och `/people`) är papperskorgen: det som går att
+återställa, senast raderat först, med `purge_at` som säger när posten töms.
 
 Har en person bett att bli raderad (GDPR artikel 17), radera direkt:
 
@@ -249,7 +319,8 @@ engelska och `meddelande` på svenska.
 | 404 | `not_found` | posten finns inte |
 | 404 | `connection_not_found` | anslutningen finns inte (409 om en körnings anslutning tagits bort) |
 | 404 | `run_not_found` | synkkörningen finns inte |
-| 409 | `conflict` | organisationsnumret, adressen eller namnet tillhör redan en annan post |
+| 404 | `webhook_not_found`, `delivery_not_found` | webhooken eller leveransen finns inte |
+| 409 | `conflict` | organisationsnumret, adressen eller namnet tillhör redan en annan post. `conflicting_id` är den posten, när den går att peka ut |
 | 409 | `run_closed` | körningen är avslutad och tar inte emot fler satser |
 | 409 | `processing_restricted` | adressen har begränsad behandling (artikel 18) och får inte tömmas |
 | 410 | `permanently_deleted` | posten är tömd och går inte att återställa |
@@ -262,6 +333,9 @@ engelska och `meddelande` på svenska.
 | 422 | `too_many_items` | fler än 500 poster (50 i förhandsgranskningen) |
 | 422 | `invalid_json`, `invalid_body`, `invalid_encoding` | kroppen går inte att läsa |
 | 422 | `invalid_mapping` | mappningen har fel form; `meddelande` säger var |
+| 422 | `invalid_url` | webhookens adress är inte en publik https-adress |
+| 422 | `invalid_events`, `too_many_webhooks` | okända händelser, eller fler än tio webhooks |
+| 503 | `webhooks_unavailable` | webhooks går inte att skapa just nu |
 | 422 | `invalid_parameter` | `cursor` eller `updated_since` gick inte att läsa |
 | 422 | `idempotency_key_reused` | nyckeln har använts för ett annat anrop |
 | 422 | `idempotency_key_too_long` | nyckeln är längre än 200 tecken |
@@ -270,11 +344,14 @@ engelska och `meddelande` på svenska.
 Skälen till att en post i en sats hoppades över (`reason`): `saknar_namn`,
 `saknar_namn_och_epost`, `hoppas_over_enligt_mappningen`, `privatperson` (se nedan),
 `behandlingen_ar_begransad`, `redan_borta`. Konflikter:
-`orgnr_tillhor_annat_bolag`, `finns_redan`.
+`orgnr_tillhor_annat_bolag` (med `conflicting_id`), `finns_redan`.
+
+Körningens fel (`errors`) bär bolagets namn, så att raden går att hitta i källan. Namnet
+står aldrig med för en person eller en privatperson, och ett felaktigt organisationsnummer
+sparas aldrig: det kan vara ett personnummer.
 
 ## Det som inte finns än
 
-- Webhooks ut från Snajp. Tills vidare läser ni ändringar med `updated_since`.
 - Affärer, aktiviteter och anteckningar. API:t bär bolag och personer.
 - Sammanslagna poster i källan (HubSpot, Pipedrive och Salesforce byter eller behåller id
   vid en sammanslagning). I dag syns den förlorande posten som raderad.

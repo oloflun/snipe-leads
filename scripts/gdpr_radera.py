@@ -129,6 +129,8 @@ TABELLER = [
     ("ss_customers", f"id in ({_KUND})", "Chatt- och supportkund. Identifierare, ärenden, meddelanden, kundminne, chattläge och kanalkontakter kaskaderar härifrån."),
     # Snajp CRM (migration 160). Källsystemets id först: det pekar på personen utan främmande nyckel.
     ("crm_externa_id", f"objekt = 'person' and post_id in ({_CRM_PERSON})", "Källsystemets id för en kontaktperson i kundens CRM."),
+    # Webhook-leveranserna (162) bär en kopia av posten i 30 dagar. Före personen, som villkoret läser.
+    ("crm_webhook_leveranser", "lower(kropp->'data'->'record'->>'email') = lower(%s)", "Kopia av en CRM-post i kön till kundens webhook."),
     ("crm_personer", "epost", "Kontaktperson i kundens CRM (Snajp CRM)."),
     ("plattformsarenden", f"id in ({_FELRAPPORT})", "Felrapport ur Hjälprutan (namn, fritext, bild). Händelserna kaskaderar härifrån."),
 ]

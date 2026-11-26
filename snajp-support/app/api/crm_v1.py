@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from datetime import timedelta
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
@@ -38,7 +39,8 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 from ..avtalsgrind import avtal_saknas
-from ..crm import adaptrar, falt, lagring, nycklar, synk, tillgang
+from ..crm import adaptrar, falt, handelser, lagring, nycklar, synk, tillgang, webhooks
+from ..integrationer import hemligheter
 from .deps import kraev_uuid, require_crm_nyckel
 from .rate_limit import RateLimitExceededError, RateLimitRule, SlidingWindowRateLimiter
 
@@ -94,6 +96,16 @@ def kraev(omfang: str):
     return _beroende
 
 
+def _ursprung(request: Request, tenant: dict) -> dict[str, Any]:
+    """Vem som skrev, för händelseloggen. Kundens egen nyckel (omfång *) är
+    appen, och webben skickar då användarens id i X-Snajp-User. En nyckel med
+    omfång är en integration."""
+    if "*" in tenant.get("omfang", ["*"]):
+        anvandare = (request.headers.get("X-Snajp-User") or "").strip()[:80]
+        return {"via": "app", "aktor": f"anvandare:{anvandare}" if anvandare else None}
+    return {"via": "api", "aktor": f"nyckel:{tenant.get('nyckel_id') or ''}"}
+
+
 async def _avtal(request: Request, tenant: dict) -> None:
     if await avtal_saknas(request.app.state.storage, tenant["tenant_id"]):
         raise fel(403, "agreement_missing",
@@ -136,7 +148,15 @@ def bolag_ut(rad: dict[str, Any], externa: list[dict[str, Any]] | None = None) -
     ut["source"] = rad.get("kalla")
     ut["external_ids"] = externa or []
     ut.update(created_at=rad.get("created_at"), updated_at=rad.get("updated_at"), deleted_at=rad.get("raderad_at"))
+    ut["purge_at"] = _toms(rad)
     return ut
+
+
+def _toms(rad: dict[str, Any]) -> str | None:
+    """När en raderad post töms för gott: trettio dagar efter raderingen."""
+    if not rad.get("raderad_at") or rad.get("kalla") == lagring.GRAVSTEN:
+        return None
+    return (lagring._tid(rad["raderad_at"]) + timedelta(days=lagring.PAPPERSKORG_DAGAR)).isoformat()
 
 
 def person_ut(rad: dict[str, Any], externa: list[dict[str, Any]] | None = None) -> dict[str, Any]:
@@ -146,7 +166,22 @@ def person_ut(rad: dict[str, Any], externa: list[dict[str, Any]] | None = None) 
     ut["source"] = rad.get("kalla")
     ut["external_ids"] = externa or []
     ut.update(created_at=rad.get("created_at"), updated_at=rad.get("updated_at"), deleted_at=rad.get("raderad_at"))
+    ut["purge_at"] = _toms(rad)
     return ut
+
+
+handelser.registrera_form("bolag", bolag_ut)
+handelser.registrera_form("person", person_ut)
+
+#: CRM:ets fältnamn till API:ts, för fälten som nämns i händelseloggen.
+_FALT_UT = {**{sv: en for en, sv in _BOLAG.items()}, **{sv: en for en, sv in _PERSON.items()},
+            **{sv: f"address.{en}" for en, sv in _ADRESS.items()}, "extra": "custom"}
+
+
+def handelse_ut(rad: dict[str, Any]) -> dict[str, Any]:
+    return {"seq": rad["id"], "object": handelser.OBJEKT_UT.get(rad["objekt"], rad["objekt"]), "id": rad["post_id"],
+            "type": handelser.TYP_UT[rad["typ"]], "fields": [_FALT_UT.get(f, f) for f in rad.get("falt") or []],
+            "source": rad.get("kalla"), "actor": rad.get("aktor"), "at": rad.get("created_at")}
 
 
 def _in(objekt: str, kropp: dict[str, Any]) -> dict[str, Any]:
@@ -316,6 +351,7 @@ def _sats_ut(svar: dict[str, Any], korning: dict[str, Any] | None) -> dict[str, 
         "items": [{"index": p["index"], "status": _STATUS_UT[p["status"]], "id": p["id"],
                    "external_id": p["externt_id"],
                    **({"reason": p["orsak"]} if p.get("orsak") else {}),
+                   **({"conflicting_id": p["krockar_med"]} if p.get("krockar_med") else {}),
                    **({"kept_fields": p["behallna_falt"]} if p.get("behallna_falt") else {}),
                    **({"field_errors": p["faltfel"]} if p.get("faltfel") else {})}
                   for p in svar["poster"]],
@@ -370,16 +406,19 @@ async def jag(tenant: dict = Depends(kraev("crm:las"))) -> dict:
 # -- Bolag och personer ------------------------------------------------------
 
 
+_ORDNING = {"updated": "andrad", "-updated": "andrad_fallande", "name": "namn"}
+
+
 async def _lista(request: Request, tenant: dict, objekt: str, *, limit: int, cursor: str | None,
                  sort: str, updated_since: str | None, include_deleted: bool, q: str | None,
-                 lika: dict[str, Any]) -> dict:
+                 lika: dict[str, Any], only_deleted: bool = False) -> dict:
     storage = request.app.state.storage
     try:
         if updated_since:
             updated_since = lagring._tid(updated_since).isoformat()
         poster, nasta = await lagring.lista_poster(
             storage, tenant["tenant_id"], objekt, limit=limit, markor=cursor,
-            ordning="namn" if sort == "name" else "andrad", andrad_sedan=updated_since,
+            ordning="raderad" if only_deleted else _ORDNING[sort], andrad_sedan=updated_since,
             med_raderade=include_deleted, lika=lika, q=q)
     except ValueError:
         raise fel(422, "invalid_parameter", "cursor or updated_since could not be read.",
@@ -410,15 +449,36 @@ async def _skapa(request: Request, tenant: dict, objekt: str, kropp: BaseModel) 
         try:
             if objekt == "person" and falten.get("bolag_id"):
                 await _kraev_bolag(storage, tenant, falten["bolag_id"])
-            post, skapad = await synk.skapa(storage, tenant["tenant_id"], objekt, falten, kalla="api")
+            post, skapad = await synk.skapa(storage, tenant["tenant_id"], objekt, falten, kalla="api",
+                                            **_ursprung(request, tenant))
         except synk.OgiltigPost as orsak:
             raise _ogiltig(orsak) from None
         except lagring.FinnsRedan:
-            raise fel(409, "conflict", "Another record already has this organisation number or email.",
-                      "En annan post har redan det här organisationsnumret eller den här adressen.") from None
+            raise await _krock(storage, tenant, objekt, falten) from None
         return (201 if skapad else 200), (bolag_ut if objekt == "bolag" else person_ut)(post)
 
     return await _idempotent(request, tenant, arbete)
+
+
+async def _krock(storage: Any, tenant: dict, objekt: str, falten: dict[str, Any], egen: str | None = None) -> HTTPException:
+    """409, med id på posten som redan har numret eller adressen när den går
+    att peka ut. Utan det kunde anroparen se att något krockade men inte med vad."""
+    annan = None
+    try:
+        if objekt == "bolag" and falten.get("orgnr"):
+            traffar = await lagring.hitta_poster(storage, tenant["tenant_id"], "bolag", "orgnr_nyckel",
+                                                 [falt.orgnr(falten["orgnr"])[1]])
+        elif objekt == "person" and falten.get("epost"):
+            traffar = await lagring.hitta_poster(storage, tenant["tenant_id"], "person", "epost",
+                                                 [falt.epost(falten["epost"])])
+        else:
+            traffar = []
+        annan = next((t["id"] for t in traffar if t["id"] != egen), None)
+    except falt.FaltFel:
+        pass
+    return fel(409, "conflict", "Another record already has this organisation number or email.",
+               "En annan post har redan det här organisationsnumret eller den här adressen.",
+               **({"conflicting_id": annan} if annan else {}))
 
 
 async def _kraev_bolag(storage: Any, tenant: dict, bolag_id: str) -> None:
@@ -434,12 +494,12 @@ async def _andra(request: Request, tenant: dict, objekt: str, rad_id: str, kropp
     try:
         if objekt == "person" and falten.get("bolag_id"):
             await _kraev_bolag(storage, tenant, falten["bolag_id"])
-        post = await synk.andra(storage, tenant["tenant_id"], objekt, kraev_uuid(rad_id, "Posten"), falten)
+        post = await synk.andra(storage, tenant["tenant_id"], objekt, kraev_uuid(rad_id, "Posten"), falten,
+                                **_ursprung(request, tenant))
     except synk.OgiltigPost as orsak:
         raise _ogiltig(orsak) from None
     except lagring.FinnsRedan:
-        raise fel(409, "conflict", "Another record already has this organisation number or email.",
-                  "En annan post har redan det här organisationsnumret eller den här adressen.") from None
+        raise await _krock(storage, tenant, objekt, falten, rad_id) from None
     if post is None:
         raise fel(404, "not_found", "The record does not exist.", "Posten finns inte.")
     return (bolag_ut if objekt == "bolag" else person_ut)(post)
@@ -449,7 +509,7 @@ async def _radera(request: Request, tenant: dict, objekt: str, rad_id: str, perm
     await _avtal(request, tenant)
     try:
         fanns = await synk.radera(request.app.state.storage, tenant["tenant_id"], objekt,
-                                  kraev_uuid(rad_id, "Posten"), permanent=permanent)
+                                  kraev_uuid(rad_id, "Posten"), permanent=permanent, **_ursprung(request, tenant))
     except synk.BegransadBehandling:
         raise fel(409, "processing_restricted",
                   "Processing of this address is restricted (GDPR article 18). The record can be "
@@ -463,15 +523,16 @@ async def _radera(request: Request, tenant: dict, objekt: str, rad_id: str, perm
 
 async def _aterstall(request: Request, tenant: dict, objekt: str, rad_id: str) -> dict:
     await _avtal(request, tenant)
+    storage = request.app.state.storage
     try:
-        post = await synk.aterstall(request.app.state.storage, tenant["tenant_id"], objekt,
-                                    kraev_uuid(rad_id, "Posten"))
+        post = await synk.aterstall(storage, tenant["tenant_id"], objekt, kraev_uuid(rad_id, "Posten"),
+                                    **_ursprung(request, tenant))
     except synk.RedanTomd:
         raise fel(410, "permanently_deleted", "The record is permanently deleted and cannot be restored.",
                   "Posten är permanent raderad och går inte att återställa.") from None
     except lagring.FinnsRedan:
-        raise fel(409, "conflict", "Another record now has this organisation number or email.",
-                  "En annan post har nu det här organisationsnumret eller den här adressen.") from None
+        raderad = await lagring.hamta_post(storage, tenant["tenant_id"], objekt, rad_id, med_raderade=True) or {}
+        raise await _krock(storage, tenant, objekt, raderad, rad_id) from None
     if post is None:
         raise fel(404, "not_found", "The record does not exist.", "Posten finns inte.")
     return (bolag_ut if objekt == "bolag" else person_ut)(post)
@@ -483,10 +544,14 @@ _PERMANENT = Query(False, description="Empty the record at once instead of keepi
 _LISTPARAMETRAR = dict(
     limit=Query(50, ge=1, le=500),
     cursor=Query(None, description="`next_cursor` from the previous page."),
-    sort=Query("updated", pattern="^(updated|name)$", description="`updated` lists in change order, oldest first."),
+    sort=Query("updated", pattern="^(-?updated|name)$",
+               description="`updated` lists in change order, oldest first (use it when syncing out). "
+               "`-updated` lists the most recently changed first. `name` is alphabetical."),
     updated_since=Query(None, description="ISO 8601 timestamp. Only records changed at or after it."),
     include_deleted=Query(False, description="Include deleted records (`deleted_at` set). Use it when syncing out."),
     q=Query(None, max_length=200, description="Free text search."),
+    only_deleted=Query(False, description="The trash: only deleted records that can still be restored, "
+                       "most recently deleted first. `purge_at` says when each is emptied for good."),
 )
 
 
@@ -496,6 +561,7 @@ async def lista_bolag(
     limit: int = _LISTPARAMETRAR["limit"], cursor: str | None = _LISTPARAMETRAR["cursor"],
     sort: str = _LISTPARAMETRAR["sort"], updated_since: str | None = _LISTPARAMETRAR["updated_since"],
     include_deleted: bool = _LISTPARAMETRAR["include_deleted"], q: str | None = _LISTPARAMETRAR["q"],
+    only_deleted: bool = _LISTPARAMETRAR["only_deleted"],
     relation: Relation | None = None,
     org_number: str | None = Query(None, description="Exact organisationsnummer, any accepted format."),
 ) -> dict:
@@ -506,7 +572,8 @@ async def lista_bolag(
         except falt.FaltFel:
             return {"data": [], "next_cursor": None}
     return await _lista(request, tenant, "bolag", limit=limit, cursor=cursor, sort=sort,
-                        updated_since=updated_since, include_deleted=include_deleted, q=q, lika=lika)
+                        updated_since=updated_since, include_deleted=include_deleted, q=q, lika=lika,
+                        only_deleted=only_deleted)
 
 
 @router.post("/companies", status_code=201, summary="Create a company, or update it by organisation number")
@@ -549,11 +616,13 @@ async def lista_personer(
     limit: int = _LISTPARAMETRAR["limit"], cursor: str | None = _LISTPARAMETRAR["cursor"],
     sort: str = _LISTPARAMETRAR["sort"], updated_since: str | None = _LISTPARAMETRAR["updated_since"],
     include_deleted: bool = _LISTPARAMETRAR["include_deleted"], q: str | None = _LISTPARAMETRAR["q"],
+    only_deleted: bool = _LISTPARAMETRAR["only_deleted"],
     company_id: str | None = None,
 ) -> dict:
     lika = {"bolag_id": kraev_uuid(company_id, "Bolaget") if company_id else None}
     return await _lista(request, tenant, "person", limit=limit, cursor=cursor, sort=sort,
-                        updated_since=updated_since, include_deleted=include_deleted, q=q, lika=lika)
+                        updated_since=updated_since, include_deleted=include_deleted, q=q, lika=lika,
+                        only_deleted=only_deleted)
 
 
 @router.post("/people", status_code=201, summary="Create a person, or update by email")
@@ -583,6 +652,179 @@ async def radera_person(request: Request, person_id: str, permanent: bool = _PER
 @router.post("/people/{person_id}/restore", summary="Restore a deleted person")
 async def aterstall_person(request: Request, person_id: str, tenant: dict = Depends(kraev("crm:skriv"))) -> dict:
     return await _aterstall(request, tenant, "person", person_id)
+
+
+# -- Historik och ändringsflöde ----------------------------------------------
+
+
+async def _historik(request: Request, tenant: dict, objekt: str, rad_id: str, limit: int) -> dict:
+    storage = request.app.state.storage
+    if await lagring.hamta_post(storage, tenant["tenant_id"], objekt, kraev_uuid(rad_id, "Posten"),
+                                med_raderade=True) is None:
+        raise fel(404, "not_found", "The record does not exist.", "Posten finns inte.")
+    rader = await handelser.for_post(storage, tenant["tenant_id"], objekt, rad_id, limit=limit)
+    return {"data": [handelse_ut(r) for r in rader]}
+
+
+@router.get("/companies/{company_id}/history", summary="What has happened to a company, newest first")
+async def historik_bolag(request: Request, company_id: str, limit: int = Query(100, ge=1, le=500),
+                         tenant: dict = Depends(kraev("crm:las"))) -> dict:
+    """Each write as an event: who or what changed the record, and which
+    fields. The values themselves are not kept in the log."""
+    return await _historik(request, tenant, "bolag", company_id, limit)
+
+
+@router.get("/people/{person_id}/history", summary="What has happened to a person, newest first")
+async def historik_person(request: Request, person_id: str, limit: int = Query(100, ge=1, le=500),
+                          tenant: dict = Depends(kraev("crm:las"))) -> dict:
+    return await _historik(request, tenant, "person", person_id, limit)
+
+
+@router.get("/changes", summary="Everything that has changed, in order")
+async def andringar(
+    request: Request, tenant: dict = Depends(kraev("crm:las")),
+    cursor: int = Query(0, ge=0, description="`next_cursor` from your previous call. 0 reads from the beginning."),
+    limit: int = Query(200, ge=1, le=1000),
+    object: Literal["company", "person"] | None = Query(None, description="Only this kind of record."),
+) -> dict:
+    """One feed for every object. Each write has a sequence number; read until
+    the list is empty and keep `next_cursor`. Asking again with the same
+    cursor returns only what has happened since. An event says which record
+    and which fields changed: fetch the record to get the values."""
+    rader, nasta = await handelser.flode(request.app.state.storage, tenant["tenant_id"], efter=cursor, limit=limit,
+                                         objekt=_OBJEKT.get(object) if object else None)
+    return {"data": [handelse_ut(r) for r in rader], "next_cursor": nasta}
+
+
+# -- Webhooks ----------------------------------------------------------------
+
+
+class WebhookIn(_Kropp):
+    url: str | None = Field(None, description="A public https address. Required when creating.")
+    events: list[str] | None = Field(
+        None, description="Event types to receive, e.g. `company.updated`. `*` (the default) is all of them. "
+        "GET /webhooks/events lists them.")
+    description: str | None = Field(None, max_length=200)
+    active: bool | None = Field(None, description="Turning a disabled webhook on again resets its failure count.")
+
+
+_LEVERANSSTATUS = {"vantar": "pending", "levererad": "delivered", "misslyckad": "failed"}
+
+
+def webhook_ut(rad: dict[str, Any], hemlighet: str | None = None) -> dict[str, Any]:
+    ut = {"id": rad["id"], "url": rad["url"], "description": rad.get("beskrivning"),
+          "events": rad.get("handelser") or ["*"], "active": bool(rad["aktiv"]),
+          "consecutive_failures": rad.get("fel_i_rad") or 0, "last_success_at": rad.get("senast_ok_at"),
+          "last_failure_at": rad.get("senast_fel_at"), "last_error": rad.get("senast_fel"),
+          "disabled_reason": rad.get("avstangd_av"),
+          "created_at": rad.get("created_at"), "updated_at": rad.get("updated_at")}
+    if hemlighet:
+        ut["secret"] = hemlighet
+    return ut
+
+
+def leverans_ut(rad: dict[str, Any]) -> dict[str, Any]:
+    return {"id": rad["id"], "event": rad["handelsetyp"], "status": _LEVERANSSTATUS[rad["status"]],
+            "attempts": rad["forsok"], "status_code": rad.get("statuskod"), "error": rad.get("fel"),
+            "next_attempt_at": rad.get("nasta_forsok_at") if rad["status"] == "vantar" else None,
+            "created_at": rad.get("created_at"), "delivered_at": rad.get("levererad_at"),
+            "payload": {"id": rad["id"], **(rad.get("kropp") or {})}}
+
+
+def _webhookfel(orsak: webhooks.WebhookFel) -> HTTPException:
+    return fel(422, orsak.kod, str(orsak), str(orsak))
+
+
+async def _webhook(request: Request, tenant: dict, webhook_id: str) -> dict[str, Any]:
+    rad = await webhooks.hamta(request.app.state.storage, tenant["tenant_id"], kraev_uuid(webhook_id, "Webhooken"))
+    if rad is None:
+        raise fel(404, "webhook_not_found", "The webhook does not exist.", "Webhooken finns inte.")
+    return rad
+
+
+@router.get("/webhooks/events", summary="The event types a webhook can subscribe to")
+async def webhookhandelser(tenant: dict = Depends(kraev("crm:las"))) -> dict:
+    return {"events": [h for h in webhooks.HANDELSETYPER if h != "ping"], "signature_header": "X-Snajp-Signature"}
+
+
+@router.get("/webhooks", summary="List webhooks")
+async def lista_webhooks(request: Request, tenant: dict = Depends(kraev("crm:admin"))) -> dict:
+    return {"data": [webhook_ut(w) for w in await webhooks.lista(request.app.state.storage, tenant["tenant_id"])]}
+
+
+@router.post("/webhooks", status_code=201, summary="Create a webhook")
+async def skapa_webhook(request: Request, kropp: WebhookIn, tenant: dict = Depends(kraev("crm:admin"))) -> dict:
+    """The response carries `secret`, once. Every delivery is signed with it:
+    `X-Snajp-Signature: t=<unix time>,v1=<hex>` where `v1` is HMAC-SHA256 over
+    `"{t}.{body}"`. Reject deliveries older than five minutes."""
+    await _avtal(request, tenant)
+    if not kropp.url:
+        raise fel(422, "invalid_url", "url is required.", "url krävs.")
+    try:
+        rad, hemlighet = await webhooks.skapa(request.app.state.storage, tenant["tenant_id"], url=kropp.url,
+                                              handelser=kropp.events, beskrivning=kropp.description)
+    except webhooks.WebhookFel as orsak:
+        raise _webhookfel(orsak) from None
+    except hemligheter.IngenNyckelError:
+        raise fel(503, "webhooks_unavailable", "Webhooks cannot be created right now. Contact Snajp.",
+                  "Webhooks går inte att skapa just nu. Kontakta Snajp.") from None
+    return webhook_ut(rad, hemlighet)
+
+
+@router.get("/webhooks/{webhook_id}", summary="Get a webhook")
+async def hamta_webhook(request: Request, webhook_id: str, tenant: dict = Depends(kraev("crm:admin"))) -> dict:
+    return webhook_ut(await _webhook(request, tenant, webhook_id))
+
+
+@router.patch("/webhooks/{webhook_id}", summary="Change a webhook")
+async def andra_webhook(request: Request, webhook_id: str, kropp: WebhookIn,
+                        tenant: dict = Depends(kraev("crm:admin"))) -> dict:
+    await _avtal(request, tenant)
+    rad = await _webhook(request, tenant, webhook_id)
+    data = kropp.model_dump(exclude_unset=True)
+    try:
+        ny = await webhooks.andra(request.app.state.storage, tenant["tenant_id"], rad["id"], url=data.get("url"),
+                                  handelser=data.get("events"), beskrivning=data.get("description"),
+                                  aktiv=data.get("active"))
+    except webhooks.WebhookFel as orsak:
+        raise _webhookfel(orsak) from None
+    return webhook_ut(ny or rad)
+
+
+@router.delete("/webhooks/{webhook_id}", status_code=204, summary="Delete a webhook and its delivery log")
+async def radera_webhook(request: Request, webhook_id: str, tenant: dict = Depends(kraev("crm:admin"))) -> Response:
+    rad = await _webhook(request, tenant, webhook_id)
+    await webhooks.ta_bort(request.app.state.storage, tenant["tenant_id"], rad["id"])
+    return Response(status_code=204)
+
+
+@router.post("/webhooks/{webhook_id}/test", status_code=202, summary="Send a ping to the webhook")
+async def prova_webhook(request: Request, webhook_id: str, tenant: dict = Depends(kraev("crm:admin"))) -> dict:
+    """Queues a `ping` delivery. Read the outcome under the webhook's deliveries."""
+    rad = await _webhook(request, tenant, webhook_id)
+    return leverans_ut(await webhooks.prova(request.app.state.storage, tenant["tenant_id"], rad["id"]))
+
+
+@router.get("/webhooks/{webhook_id}/deliveries", summary="The delivery log, newest first")
+async def lista_leveranser(request: Request, webhook_id: str, limit: int = Query(50, ge=1, le=200),
+                           tenant: dict = Depends(kraev("crm:admin"))) -> dict:
+    """Kept for 30 days. A failed delivery is retried seven times over about
+    a day, and can then be sent again by hand."""
+    rad = await _webhook(request, tenant, webhook_id)
+    rader = await webhooks.leveranser(request.app.state.storage, tenant["tenant_id"], rad["id"], limit=limit)
+    return {"data": [leverans_ut(r) for r in rader]}
+
+
+@router.post("/webhooks/{webhook_id}/deliveries/{delivery_id}/retry", status_code=202,
+             summary="Send a delivery again")
+async def skicka_om_leverans(request: Request, webhook_id: str, delivery_id: str,
+                             tenant: dict = Depends(kraev("crm:admin"))) -> dict:
+    rad = await _webhook(request, tenant, webhook_id)
+    ny = await webhooks.skicka_om(request.app.state.storage, tenant["tenant_id"], rad["id"],
+                                  kraev_uuid(delivery_id, "Leveransen"))
+    if ny is None:
+        raise fel(404, "delivery_not_found", "The delivery does not exist.", "Leveransen finns inte.")
+    return leverans_ut(ny)
 
 
 # -- Anslutningar och fältmappning -------------------------------------------
@@ -886,8 +1128,14 @@ response; a 429 carries `Retry-After`.
 **Swedish formats.** Organisation numbers are checked with the Luhn digit and stored as
 `NNNNNN-NNNN`. Phone numbers are stored as E.164, Swedish postal codes as `NNN NN`, dates as ISO 8601.
 
-**Keeping a copy in sync.** List with `sort=updated&include_deleted=true&updated_since=<your last
-sync>`. Deleted records carry `deleted_at` and must be removed on your side as well.
+**Keeping a copy in sync.** Read `GET /changes` from your last `next_cursor`: one feed for every
+object, in order. Or have Snajp call you: register a webhook under `/webhooks`. Listing with
+`sort=updated&include_deleted=true&updated_since=<your last sync>` works as before. Deleted
+records carry `deleted_at` and must be removed on your side as well.
+
+**Webhooks.** Each delivery is a POST with `X-Snajp-Signature: t=<unix time>,v1=<hex>`, where `v1`
+is HMAC-SHA256 over `"{t}.{body}"` with the webhook's secret. Answer 2xx within ten seconds.
+Anything else is retried seven times over about a day.
 """
 
 
