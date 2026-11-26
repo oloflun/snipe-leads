@@ -1,7 +1,7 @@
 "use client";
 
 import { useTransition } from "react";
-import { signOut } from "@/lib/actions/auth";
+import { loggaUtOchOppna } from "@/components/dashboard/DashboardContext";
 import { btnSecondary } from "@/components/ui";
 import { useLocale } from "@/lib/i18n";
 
@@ -15,6 +15,9 @@ import { useLocale } from "@/lib/i18n";
  *
  * Tvåspråkig sedan 2026-11-18: den stod på svenska i det engelska
  * gränssnittet, och INV-COPY-001 såg det inte eftersom texten saknar å, ä och ö.
+ *
+ * Sedan kunddemon 2026-11-24 öppnas /login hårt och de andra flikarna får veta
+ * (INV-SEC-014): förra kontots state ska inte följa med.
  */
 export function SignOutButton() {
   const [pending, startTransition] = useTransition();
@@ -24,7 +27,7 @@ export function SignOutButton() {
     <button
       type="button"
       disabled={pending}
-      onClick={() => startTransition(() => void signOut())}
+      onClick={() => startTransition(loggaUtOchOppna)}
       className={btnSecondary}
     >
       {pending ? text({ sv: "Loggar ut…", en: "Signing out…" }) : text({ sv: "Logga ut", en: "Sign out" })}

@@ -36,7 +36,12 @@ motorn säger klar, och efter första sökrundan körs den inte längre "i den h
 processen". Sedan migration 080 skriver motorn liggaren efter varje steg och
 `updated_at` följer med, så tröskeln (default 60 min) mäter tystnad, inte
 ålder. En pausad körning (`korning.styrning = 'paus'`) är tyst med flit och
-städas aldrig. Två skydd gör en felaktig städning självläkande i stället för
+städas aldrig. En Iris-körning som inte är klar och inte har något bolag i
+research städas inte heller (2026-11-24): den väcks av
+`vack_stillastaende_korningar`, som körs före städningen i varje varv. Undantaget
+gäller bara status 'processing' (det väckaren läser) och bara i
+VACKNING_RESERV_MINUTER. En rad
+som ändå fälls får HANGFEL_JOBB som `error` i liggaren (INV-JOB-003). Två skydd gör en felaktig städning självläkande i stället för
 skadlig:
 
   * Jobb som körs i DEN HÄR processen står i `_aktiva` och städas aldrig.
@@ -64,6 +69,10 @@ HANGFEL_JOBB = (
     "Körningen avbröts innan den blev klar — troligen av en omstart hos oss — "
     "och har markerats som misslyckad. Kör om den."
 )
+
+#: Yttersta gräns för undantaget för väckbara körningar: en körning som
+#: väckaren inte fått i gång på ett dygn fälls ändå, med HANGFEL_JOBB.
+VACKNING_RESERV_MINUTER = 24 * 60
 
 #: Listans felorsak efter städning. "Inga halvfärdiga rader sparades" är ett
 #: löfte städningen håller (raderna tas bort i samma svep).
@@ -195,13 +204,15 @@ async def run_leads_stadare(app_state: Any) -> None:
     senast = float("-inf")
     while True:
         try:
-            if time.monotonic() - senast >= intervall:
-                await stada_alla(app_state)
-                senast = time.monotonic()
             from ..api.leads import vack_stillastaende_korningar
             from ..leads import autopilot
 
+            # Väck FÖRE städningen (2026-11-24): i första varvet efter en
+            # omstart fälldes annars en tyst körning innan någon hann väcka den.
             await vack_stillastaende_korningar(app_state)
+            if time.monotonic() - senast >= intervall:
+                await stada_alla(app_state)
+                senast = time.monotonic()
             await autopilot.svep(app_state)
         except asyncio.CancelledError:
             raise

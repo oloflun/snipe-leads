@@ -4,6 +4,7 @@ import { RefreshCw, Send } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import { useDashboard } from "@/components/dashboard/DashboardContext";
 import { EmailStudioEditor } from "@/components/email/EmailStudioEditor";
 import { DemoKorning } from "@/components/leads/DemoKorning";
 import { StrukturVal, useStruktur } from "@/components/leads/StrukturVal";
@@ -14,6 +15,7 @@ import { useLocale, type Locale, type Localized } from "@/lib/i18n";
 import { icpEtiketter } from "@/lib/leads/icpLabels";
 import { taligHamtning } from "@/lib/leads/pollning";
 import type { Struktur } from "@/lib/leads/struktur";
+import { kundfelkod } from "@/lib/leads/suite";
 import { cn } from "@/lib/utils";
 
 /**
@@ -312,7 +314,11 @@ export function LeadsRunForm({
   // Snajp Suite (2026-10-03), oavsett om formuläret står i Leads eller i
   // adminens Testkörningar.
   const bas = pathname.replace(/\/(leads|iris|testkorningar)(\/.*)?$/, "");
-  const korningsNyckel = `snipra:korning:${pathname.startsWith("/admin") ? "admin" : "kund"}`;
+  // Nycklad på identiteten (INV-SEC-014): ett körnings-id följer aldrig med
+  // till ett annat konto, en annan vy eller ett annat kundbesök i samma
+  // webbläsare. Utan identitet (de publika demosidorna) gäller den gamla nyckeln.
+  const { identitet } = useDashboard();
+  const korningsNyckel = `snipra:korning:${identitet ?? (pathname.startsWith("/admin") ? "admin" : "kund")}`;
 
   function glomKorning() {
     try {
@@ -392,6 +398,10 @@ export function LeadsRunForm({
     });
     const kropp = (await readJsonBody<T & { error?: string; detail?: unknown }>(response)) ?? ({} as T);
     if (!response.ok) {
+      // En känd felkod (t.ex. saknar_produkt) på kundens språk; backendens
+      // text är svensk.
+      const kod = kundfelkod(kropp);
+      if (kod) throw new Error(text(kod));
       const k = kropp as { error?: string; detail?: unknown };
       // Pydantics 422 lägger en LISTA av valideringsfel i `detail`. Ett rakt
       // `new Error(detail)` renderade "[object Object]" — plocka ut `msg`-

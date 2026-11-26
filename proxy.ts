@@ -41,7 +41,8 @@ export async function proxy(request: NextRequest) {
     if (isProtectedRoute(pathname)) {
       const loginUrl = request.nextUrl.clone();
       loginUrl.pathname = "/login";
-      loginUrl.searchParams.set("next", pathname);
+      loginUrl.search = "";
+      loginUrl.searchParams.set("next", pathname + request.nextUrl.search);
       return NextResponse.redirect(loginUrl);
     }
     return NextResponse.next({ request });
@@ -56,7 +57,10 @@ export async function proxy(request: NextRequest) {
   if (isProtectedRoute(pathname) && !token) {
     const loginUrl = request.nextUrl.clone();
     loginUrl.pathname = "/login";
-    loginUrl.searchParams.set("next", pathname);
+    // Söksträngen följer med (?vy=korningar), men nollställs först i klonen:
+    // annars bar /login också sidans egna parametrar.
+    loginUrl.search = "";
+    loginUrl.searchParams.set("next", pathname + request.nextUrl.search);
     return NextResponse.redirect(loginUrl);
   }
 
@@ -92,10 +96,12 @@ export const config = {
     "/dashboard/:path*",
     "/settings/:path*",
     "/onboarding/:path*",
-    // /admin är tredje lagret, inte det bärande. Grinden som räknas är
-    // getPlatformAdmin() i app/admin/layout.tsx, som svarar 404 — och
-    // /api/admin, som proxyn medvetet INTE täcker (en redirect till /login
-    // är fel svarsform för ett API-anrop och skulle dölja 404:an).
+    // /admin: proxyn skickar en besökare utan session till /login?next=…,
+    // som för /dashboard (protectedRoutePrefixes, INV-AUTH-002). Den gjorde
+    // förut ingenting här, och en utgången session fick layoutens 404.
+    // Behörigheten avgörs i app/admin/layout.tsx; /api/admin täcks medvetet
+    // INTE (en redirect till /login är fel svarsform för ett API-anrop och
+    // skulle dölja 404:an där).
     "/admin/:path*",
     "/login",
     // Publik, men behöver per-tenant CSP frame-ancestors (se embed-grenen

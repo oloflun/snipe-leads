@@ -490,7 +490,10 @@ export const publicProductRoutes = ["/", "/leads", "/support"] as const;
 // Auth route guards (pure, no server dependencies — safe for middleware).
 // /leads, /support och /bokforing är INTE listade: de är publika produktsidor,
 // och en grind där hade studsat varje besökare till /login.
-export const protectedRoutePrefixes = ["/dashboard", "/settings", "/onboarding"] as const;
+// /admin sedan kunddemon 2026-11-24: den stod i proxyns matcher men inte här,
+// så en utgången session på /admin/** fick layoutens 404 i stället för
+// inloggningen (INV-AUTH-002, tests/invariants/test_inv_auth_002.py).
+export const protectedRoutePrefixes = ["/dashboard", "/settings", "/onboarding", "/admin"] as const;
 
 // /auth/callback är BORTA sedan Auth.js ersatte Supabase Auth (e376e71).
 // Routen raderades men stod kvar här och i proxyns matcher — en matcher som

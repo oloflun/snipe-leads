@@ -17,6 +17,9 @@ import { LeadsTabell } from "@/components/leads/LeadsTabell";
  *
  * 2026-11-02: de svarade utskicken bär konversationen (utskicket och svaret,
  * ett med citerat originalmejl), så att Svarat visar svaren.
+ *
+ * 2026-11-25: två påfyllda leads (nivå C, "Påfyllt: <skäl>" under namnet)
+ * bredvid ett vanligt.
  */
 
 /** Regel 1:s besked, så som send_guard skriver det. */
@@ -42,7 +45,12 @@ const PROSPEKT = [
   { id: "p8", company_name: "Provkörda Bygg AB", status: "new", niva: "B", score_total: 69, ort: "Göteborg", origin: "test", created_at: iso(9), contact_email: "info@provkorda.example", utkast_status: "stoppat", queue_item_id: "q8", utkast_regel: "testkorning", utkast_skal: "Prospektet kommer från en egen provkörning och kan aldrig kontaktas." },
   { id: "p9", company_name: "Testade Tak AB", status: "new", niva: "B", score_total: 66, ort: "Göteborg", origin: "test", created_at: iso(9), contact_email: "info@testadetak.example", utkast_status: "vantar", queue_item_id: "q9" },
   { id: "p10", company_name: "Fotlösa Fasader AB", status: "new", niva: "A", score_total: 72, ort: "Mölndal", origin: "iris", created_at: iso(10), contact_email: "info@fotlosa.example", utkast_status: "stoppat", queue_item_id: "q10", utkast_regel: "1_avsandaridentifikation", utkast_skal: SIDFOT },
-  { id: "p11", company_name: "Saknad Sidfot AB", status: "new", niva: "B", score_total: 61, ort: "Kungälv", origin: "iris", created_at: iso(11), contact_email: "info@sidfot.example", utkast_status: "vantar", queue_item_id: "q11" }
+  { id: "p11", company_name: "Saknad Sidfot AB", status: "new", niva: "B", score_total: 61, ort: "Kungälv", origin: "iris", created_at: iso(11), contact_email: "info@sidfot.example", utkast_status: "vantar", queue_item_id: "q11" },
+  // Påfyllda leads (Antons regel 2026-11-24): nivå C, märkta med skälets kod
+  // (components/leads/pafyllnad.ts). Fasta tider. Bredvid ett vanligt lead.
+  { id: "p13", company_name: "Påfyllda Plattor AB", status: "new", niva: "C", score_total: 44, ort: "Umeå", origin: "iris", created_at: "2026-11-24T09:00:00Z", contact_email: "info@plattor.example", utkast_status: "vantar", queue_item_id: "q13", motivering: "Bolaget lägger plattor åt privatpersoner och mindre bostadsrättsföreningar.", pafylld: true, pafylld_skal: "b" },
+  { id: "p14", company_name: "Vidgade Verkstan AB", status: "new", niva: "C", score_total: 41, ort: "Skellefteå", origin: "iris", created_at: "2026-11-24T09:05:00Z", contact_email: "info@verkstan.example", utkast_status: "vantar", queue_item_id: "q14", motivering: "Mekanisk verkstad med egen lackering.", pafylld: true, pafylld_skal: "storlek:anstallda:max:55:49" },
+  { id: "p15", company_name: "Vanliga Verktyg AB", status: "new", niva: "B", score_total: 64, ort: "Umeå", origin: "iris", created_at: "2026-11-24T09:10:00Z", contact_email: "info@verktyg.example", utkast_status: "vantar", queue_item_id: "q15", motivering: "Verktygshandel som just öppnat en andra butik i Umeå." }
 ];
 
 const SIGNATUR = "Vänliga hälsningar,\nSebastian Bergman\nSnajp Support | AI för leads och kundtjänst\n\nUmeå & Göteborg\nwww.snajp.se\n\nSnajp AB";

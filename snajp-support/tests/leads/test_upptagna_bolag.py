@@ -170,6 +170,21 @@ async def test_listsparet_hoppar_over_bolag_som_redan_star_i_en_lista():
     assert [i["company_name"] for i in items] == ["Ny Utan Sajt AB"]
 
 
+async def test_ett_ringlistat_bolag_ar_upptaget_nasta_korning():
+    """Provkörningens ringlista är en lista (2026-11-24), inte prospekt: dess
+    bolag ska ändå inte komma tillbaka i nästa körning."""
+    storage = MemoryStorage()
+    k = {"is_test": True, "listspar": [
+        {"company_name": "Ringbolaget AB", "orgnr": "556333-4444", "contact_phone": "031-1",
+         "signal": "ring", "signal_detalj": "Bara telefon på sajten", "spar": "ring", "anstallda": 3},
+    ]}
+    await _spara_listspar(storage, TENANT, k)
+    assert await storage.list_prospects(TENANT) == []
+    sedda = await upptagna.hamta(storage, TENANT)
+    assert upptagna.upptagen(sedda, "Ringbolaget")
+    assert upptagna.upptagen(sedda, "Annat Namn AB", "5563334444")
+
+
 # -- CRM-kundlistan över HTTP -------------------------------------------------
 
 

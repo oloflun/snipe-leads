@@ -85,6 +85,8 @@ _PROSPEKT_LASKOLUMNER = frozenset(
         "status", "created_at", "icp_fit", "qualified", "disqualifiers", "score_breakdown",
         "score_total", "foretagsnyckel", "origin", "motivering", "niva", "profil_version",
         "jev", "lagesbeskrivning", "signaler", "webbrevision", "arkiverad_at", "synk_andrad_at",
+        # Migration 158: påfyllnadens märkning (Antons regel 2026-11-24).
+        "pafylld", "pafylld_skal",
     }
     | _PROSPEKT_PROFILFALT
 )
@@ -161,6 +163,9 @@ def _forslag_rad(record: asyncpg.Record) -> dict[str, Any]:
         rad["varningar"] = json.loads(rad["varningar"])
     if rad.get("confidence") is not None:
         rad["confidence"] = round(float(rad["confidence"]), 2)
+    # skapad_av (157) är uuid men slutar inte på _id: text, som i minneslagret.
+    if rad.get("skapad_av") is not None:
+        rad["skapad_av"] = str(rad["skapad_av"])
     return rad
 
 
@@ -1076,7 +1081,7 @@ class PostgresStorage:
         async with self._scoped(tenant_id) as conn:
             records = await conn.fetch(
                 """
-                select id, title, content, category, source_url, giltig_till, created_at
+                select id, title, content, category, source_url, giltig_till, is_placeholder, created_at
                 from ss_knowledge_base where tenant_id = $1 order by created_at
                 """,
                 tenant_id,
@@ -1093,17 +1098,24 @@ class PostgresStorage:
         embedding: list[float] | None = None,
         source_url: str | None = None,
         giltig_till: date | None = None,
+        is_placeholder: bool = False,
     ) -> dict[str, Any]:
         # asyncpg kräver ett date-objekt för en date-kolumn, aldrig en sträng.
         if isinstance(giltig_till, str):
             giltig_till = date.fromisoformat(giltig_till)
         async with self._scoped(tenant_id) as conn:
+            if not is_placeholder:
+                # Eget innehåll: exempelraderna går i samma transaktion.
+                await conn.execute(
+                    "delete from ss_knowledge_base where tenant_id = $1 and is_placeholder",
+                    tenant_id,
+                )
             record = await conn.fetchrow(
                 """
                 insert into ss_knowledge_base
-                  (tenant_id, title, content, category, embedding, source_url, giltig_till)
-                values ($1, $2, $3, $4, $5, $6, $7)
-                returning id, title, category, source_url, giltig_till
+                  (tenant_id, title, content, category, embedding, source_url, giltig_till, is_placeholder)
+                values ($1, $2, $3, $4, $5, $6, $7, $8)
+                returning id, title, category, source_url, giltig_till, is_placeholder
                 """,
                 tenant_id,
                 title,
@@ -1112,6 +1124,7 @@ class PostgresStorage:
                 embedding,
                 source_url,
                 giltig_till,
+                is_placeholder,
             )
         return _row(record)
 
@@ -1275,11 +1288,17 @@ class PostgresStorage:
             )
             if not forslag:
                 return None
+            # Ett godkänt förslag är eget innehåll: exemplen går i samma
+            # transaktion. Ett väntande förslag rör dem inte.
+            await conn.execute(
+                "delete from ss_knowledge_base where tenant_id = $1 and is_placeholder",
+                tenant_id,
+            )
             artikel = await conn.fetchrow(
                 """
                 insert into ss_knowledge_base (tenant_id, title, content, category, embedding, source_url)
                 values ($1, $2, $3, $4, $5, $6)
-                returning id, title, category, source_url, giltig_till
+                returning id, title, category, source_url, giltig_till, is_placeholder
                 """,
                 tenant_id, forslag["title"], forslag["content"], forslag["category"],
                 embedding, forslag["source_url"],
@@ -3054,6 +3073,9 @@ class PostgresStorage:
     async def spara_bedomning(
         self, tenant_id: str, prospect_id: str, *, bedomning: dict[str, Any]
     ) -> dict[str, Any] | None:
+        # Påfyllnadens märkning (migration 158, Antons regel 2026-11-24): ett
+        # påfyllt lead behåller sin bedömning och bär flaggan och skälet
+        # (pafylld, pafylld_skal står i BEDOMNINGSFALT, base.py).
         fields = {f: bedomning[f] for f in BEDOMNINGSFALT if bedomning.get(f) is not None}
         for falt in ("score_breakdown", "jev", "signaler", "webbrevision"):
             if falt in fields:
@@ -3359,6 +3381,49 @@ class PostgresStorage:
                 sql + " order by created_at desc limit $2", tenant_id, limit, status, utom
             )
         return [_avkoda_jsonb(_row(r), "korning") for r in records]
+
+    #: Dubblettskyddets fråga (base.list_andra_korningars_bolag): bara namn och
+    #: org.nr lämnar databasen, inte de andra körningarnas hela arbetsminne.
+    #: `_SANT` är Pythons sanningsvärde för ett jsonb-fält (klar, vilande).
+    _SANT = (
+        "coalesce(korning -> '{f}', 'null'::jsonb) not in "
+        "('null'::jsonb, 'false'::jsonb, '0'::jsonb, '\"\"'::jsonb, '[]'::jsonb, '{{}}'::jsonb)"
+    )
+    _ANDRA_KORNINGARS_BOLAG_SQL = """
+        with rad as (
+          select job_id, created_at, korning, {vilande} as vilande
+            from leads_job_ledger
+           where tenant_id = $1 and scope in ('batch', 'lista') and status = 'processing'
+             and job_id <> $2
+           order by created_at desc
+           limit $3
+        )
+        select job_id, vilande,
+               coalesce((select jsonb_agg(jsonb_build_object('company_name', e -> 'company_name',
+                                                             'orgnr', e -> 'orgnr'))
+                           from jsonb_array_elements(case when jsonb_typeof(korning -> 'kandidater') = 'array'
+                                                          then korning -> 'kandidater' else '[]'::jsonb end) e
+                          where jsonb_typeof(e) = 'object'), '[]'::jsonb) as kandidater,
+               coalesce((select jsonb_agg(jsonb_build_object('company_name', e -> 'company_name',
+                                                             'orgnr', e -> 'orgnr'))
+                           from jsonb_array_elements(case when not vilande and jsonb_typeof(korning -> 'listspar') = 'array'
+                                                          then korning -> 'listspar' else '[]'::jsonb end) e
+                          where jsonb_typeof(e) = 'object'), '[]'::jsonb) as listspar,
+               coalesce((select jsonb_agg(e -> 'namn')
+                           from jsonb_array_elements(case when not vilande and jsonb_typeof(korning -> 'tratt') = 'array'
+                                                          then korning -> 'tratt' else '[]'::jsonb end) e
+                          where jsonb_typeof(e) = 'object'), '[]'::jsonb) as tratt
+          from rad
+         where korning is not null and korning <> '{{}}'::jsonb and not {klar}
+         order by created_at desc
+    """.format(vilande=_SANT.format(f="vilande"), klar=_SANT.format(f="klar"))
+
+    async def list_andra_korningars_bolag(
+        self, tenant_id: str, *, utom: str, limit: int = 20
+    ) -> list[dict[str, Any]]:
+        async with self._scoped(tenant_id) as conn:
+            records = await conn.fetch(self._ANDRA_KORNINGARS_BOLAG_SQL, tenant_id, utom, limit)
+        return [_avkoda_jsonb(_row(r), "kandidater", "listspar", "tratt") for r in records]
 
     async def get_sidcache(self, tenant_id: str, url: str) -> dict[str, Any] | None:
         async with self._scoped(tenant_id) as conn:
@@ -3679,11 +3744,15 @@ class PostgresStorage:
     async def stada_hangande_leadsjobb(
         self, tenant_id: str, *, aldre_an_minuter: int, utom: list[str] | None = None
     ) -> list[str]:
+        from ..jobs.stadare import HANGFEL_JOBB, VACKNING_RESERV_MINUTER
+
         async with self._scoped(tenant_id) as conn:
             records = await conn.fetch(
                 """
                 update leads_job_ledger set
                   status = 'failed',
+                  -- INV-JOB-003: felet i klartext i liggaren, som listvyn läser.
+                  error = coalesce(nullif(error, ''), $4),
                   completed_at = now()
                 where tenant_id = $1
                   and status in ('queued', 'processing')
@@ -3691,12 +3760,35 @@ class PostgresStorage:
                   -- liggaren efter varje steg och får leva längre än en timme.
                   and updated_at < now() - make_interval(mins => $2)
                   and coalesce(korning ->> 'styrning', '') <> 'paus'
+                  -- En Iris-körning som inte är klar och inte har något bolag
+                  -- i research väcks av vack_stillastaende_korningar i stället
+                  -- (2026-11-24): motorn har sitt tillstånd här och kan alltid
+                  -- fortsätta. Listjobb ('kalla' = 'lista') städas som förut.
+                  -- Bara 'processing' (det väckaren läser), och bara i $5
+                  -- minuter: en körning väckaren inte får i gång fälls ändå.
+                  and not (
+                    -- coalesce: ett null här gör hela villkoret null och raden ostädad.
+                    status = 'processing'
+                    -- En vilande körning (korning.vila, 2026-11-24) väcks en gång
+                    -- per dygn och fälls aldrig av städaren.
+                    and (
+                      updated_at >= now() - make_interval(mins => $5)
+                      or coalesce(jsonb_typeof(korning -> 'vilande'), '') = 'object'
+                    )
+                    and coalesce(scope, '') = 'batch'
+                    and coalesce(jsonb_typeof(korning), '') = 'object'
+                    and coalesce(korning ->> 'klar', 'false') <> 'true'
+                    and coalesce(korning ->> 'kalla', '') <> 'lista'
+                    and coalesce(korning ->> 'pagaende', '0') in ('0', '0.0')
+                  )
                   and not (job_id = any($3::text[]))
                 returning job_id
                 """,
                 tenant_id,
                 int(aldre_an_minuter),
                 list(utom or ()),
+                HANGFEL_JOBB,
+                int(VACKNING_RESERV_MINUTER),
             )
         return [str(r["job_id"]) for r in records]
 
@@ -3941,7 +4033,8 @@ class PostgresStorage:
                 nya as (
                   select date_trunc('week', p.created_at) as vecka, count(*) as nya_leads
                     from prospects p
-                   where p.tenant_id = $1 and coalesce(p.origin, '') not in ('example', 'test')
+                   -- 'ring': obearbetade ringlistebolag är inga nya leads (2026-11-24).
+                   where p.tenant_id = $1 and coalesce(p.origin, '') not in ('example', 'test', 'ring')
                    group by 1
                 ),
                 arenden as (
@@ -5788,3 +5881,223 @@ class PostgresStorage:
 
     async def close(self) -> None:
         await self.pool.close()
+
+    # -- Hjälprutan: plattformsärenden och förslag ur chatten (migration 156, 157)
+    #
+    # plattformsarenden och plattformsarende_handelser saknar tenant_id: de är
+    # Snajps egna ärenden om plattformen. De nås OSKOPAT (ingen app.tenant_id),
+    # och radskyddet i migration 156 släpper bara igenom snajp_app utan
+    # tenant-kontext. En kundskopad anslutning (_scoped) ser alltså inga rader.
+    # Bilden väljs aldrig ut här (den kan väga flera MB); `har_bild` räcker.
+
+    _ARENDE_KOLUMNER = """
+        a.id, a.nummer, a.status, a.rapportor_user_id, a.rapportor_namn,
+        a.kund_workspace_id, a.kund_tenant_slug, a.vy, a.roll, a.besok_av_admin,
+        a.sida, a.gjorde, a.hande, a.vantade, (a.bild is not null) as har_bild,
+        a.testversion_url, a.created_at, a.updated_at
+    """
+
+    async def _plattformsarenden_med_handelser(
+        self, conn, arenden: list[asyncpg.Record]
+    ) -> list[dict[str, Any]]:
+        if not arenden:
+            return []
+        ider = [r["id"] for r in arenden]
+        handelser = await conn.fetch(
+            """
+            select id, arende_id, tid, typ, status, meddelande, synlig_for_kund, aktor
+              from plattformsarende_handelser
+             where arende_id = any($1::uuid[])
+             order by tid, id
+            """,
+            ider,
+        )
+        per_arende: dict[str, list[dict[str, Any]]] = {}
+        for h in handelser:
+            per_arende.setdefault(str(h["arende_id"]), []).append(_row(h))
+        ut = []
+        for r in arenden:
+            rad = _row(r)
+            rad["handelser"] = per_arende.get(rad["id"], [])
+            ut.append(rad)
+        return ut
+
+    async def skapa_plattformsarende(self, falt: dict[str, Any]) -> dict[str, Any]:
+        from .base import nytt_arendenummer
+
+        async with self.pool.acquire() as conn:
+            for forsok in range(8):
+                try:
+                    async with conn.transaction():
+                        arende = await conn.fetchrow(
+                            """
+                            insert into plattformsarenden
+                              (nummer, rapportor_user_id, rapportor_namn, kund_workspace_id,
+                               kund_tenant_slug, vy, roll, besok_av_admin, sida, gjorde, hande,
+                               vantade, bild)
+                            values ($1, $2::uuid, $3, $4::uuid, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+                            returning id
+                            """,
+                            nytt_arendenummer(),
+                            str(falt["rapportor_user_id"]),
+                            falt.get("rapportor_namn"),
+                            str(falt["kund_workspace_id"]),
+                            falt["kund_tenant_slug"],
+                            falt["vy"],
+                            falt["roll"],
+                            bool(falt.get("besok_av_admin")),
+                            falt["sida"],
+                            falt["gjorde"],
+                            falt["hande"],
+                            falt.get("vantade") or "",
+                            falt.get("bild"),
+                        )
+                        await conn.execute(
+                            """
+                            insert into plattformsarende_handelser
+                              (arende_id, typ, status, meddelande, synlig_for_kund, aktor)
+                            values ($1, 'skapad', 'mottagen', null, true, 'kund')
+                            """,
+                            arende["id"],
+                        )
+                    break
+                except asyncpg.exceptions.UniqueViolationError:
+                    # Numret var taget (ett på ~234 000 per befintligt ärende).
+                    if forsok == 7:
+                        raise
+            rad = await conn.fetchrow(
+                f"select {self._ARENDE_KOLUMNER} from plattformsarenden a where a.id = $1",
+                arende["id"],
+            )
+            return (await self._plattformsarenden_med_handelser(conn, [rad]))[0]
+
+    async def hamta_plattformsarende(self, arende_id: str) -> dict[str, Any] | None:
+        try:
+            uuid.UUID(str(arende_id))
+        except ValueError:
+            return None
+        async with self.pool.acquire() as conn:
+            rad = await conn.fetchrow(
+                f"select {self._ARENDE_KOLUMNER} from plattformsarenden a where a.id = $1::uuid",
+                str(arende_id),
+            )
+            if rad is None:
+                return None
+            return (await self._plattformsarenden_med_handelser(conn, [rad]))[0]
+
+    async def hamta_plattformsarende_bild(self, arende_id: str) -> str | None:
+        # Den enda frågan som väljer ut bilden: ett ärende, på adminens begäran.
+        try:
+            uuid.UUID(str(arende_id))
+        except ValueError:
+            return None
+        async with self.pool.acquire() as conn:
+            return await conn.fetchval(
+                "select a.bild from plattformsarenden a where a.id = $1::uuid", str(arende_id)
+            )
+
+    async def list_plattformsarenden(
+        self, *, rapportor_user_id: str | None = None, status: str | None = None, limit: int = 200
+    ) -> list[dict[str, Any]]:
+        async with self.pool.acquire() as conn:
+            rader = await conn.fetch(
+                f"""
+                select {self._ARENDE_KOLUMNER} from plattformsarenden a
+                 where ($1::uuid is null or a.rapportor_user_id = $1::uuid)
+                   and ($2::text is null or a.status = $2)
+                 order by a.created_at desc, a.id
+                 limit $3
+                """,
+                rapportor_user_id,
+                status,
+                limit,
+            )
+            return await self._plattformsarenden_med_handelser(conn, list(rader))
+
+    async def andra_plattformsarende(
+        self,
+        arende_id: str,
+        *,
+        status: str,
+        handelse: dict[str, Any],
+        kraver_status: tuple[str, ...] | None = None,
+        rapportor_user_id: str | None = None,
+        testversion_url: str | None = None,
+        satt_testversion: bool = False,
+    ) -> dict[str, Any] | None:
+        from .base import kontrollera_plattformsarende_status
+
+        kontrollera_plattformsarende_status(status)
+        try:
+            uuid.UUID(str(arende_id))
+        except ValueError:
+            return None
+        async with self.pool.acquire() as conn:
+            async with conn.transaction():
+                # Villkoren står i samma update som bytet: två samtidiga klick
+                # på "Fungerade det?" kan inte båda gå igenom.
+                andrad = await conn.fetchrow(
+                    """
+                    update plattformsarenden
+                       set status = $2,
+                           updated_at = now(),
+                           testversion_url = case when $5 then $6 else testversion_url end
+                     where id = $1::uuid
+                       and ($3::text[] is null or status = any($3::text[]))
+                       and ($4::uuid is null or rapportor_user_id = $4::uuid)
+                    returning id
+                    """,
+                    str(arende_id),
+                    status,
+                    list(kraver_status) if kraver_status is not None else None,
+                    rapportor_user_id,
+                    satt_testversion,
+                    testversion_url,
+                )
+                if andrad is None:
+                    return None
+                await conn.execute(
+                    """
+                    insert into plattformsarende_handelser
+                      (arende_id, typ, status, meddelande, synlig_for_kund, aktor)
+                    values ($1, $2, $3, $4, $5, $6)
+                    """,
+                    andrad["id"],
+                    handelse["typ"],
+                    status,
+                    handelse.get("meddelande"),
+                    bool(handelse.get("synlig_for_kund")),
+                    handelse["aktor"],
+                )
+            rad = await conn.fetchrow(
+                f"select {self._ARENDE_KOLUMNER} from plattformsarenden a where a.id = $1",
+                andrad["id"],
+            )
+            return (await self._plattformsarenden_med_handelser(conn, [rad]))[0]
+
+    async def skapa_kb_forslag(
+        self,
+        tenant_id: str,
+        *,
+        title: str,
+        content: str,
+        category: str,
+        kalla: str,
+        kalla_ref: str | None = None,
+        skapad_av: str | None = None,
+    ) -> dict[str, Any]:
+        from .base import KB_FORSLAG_KALLOR
+
+        if kalla not in KB_FORSLAG_KALLOR:
+            raise ValueError(f"Okänd källa för ett förslag: {kalla!r}")
+        async with self._scoped(tenant_id) as conn:
+            record = await conn.fetchrow(
+                """
+                insert into ss_kb_forslag
+                  (tenant_id, skanning_id, title, content, category, kalla, kalla_ref, skapad_av)
+                values ($1, null, $2, $3, $4, $5, $6, $7::uuid)
+                returning *
+                """,
+                tenant_id, title, content, category, kalla, kalla_ref, skapad_av,
+            )
+        return _forslag_rad(record)

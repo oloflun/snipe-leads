@@ -26,6 +26,7 @@ from .api import (
     admin_webbpool,
     admin_kunddata,
     admin_listor,
+    admin_plattformsarenden,
     admin_profil,
     analytics,
     bookkeeping,
@@ -34,6 +35,7 @@ from .api import (
     demo,
     drafts,
     drift,
+    hjalp,
     inbox,
     integrationer,
     kanaler,
@@ -46,6 +48,7 @@ from .api import (
     leads_massatgard,
     leads_suite,
     leads_uppfoljningar,
+    plattformsarenden,
     rules,
     sending_domains_api,
     support_config,
@@ -485,6 +488,11 @@ app.include_router(admin_webbpool.router)
 app.include_router(admin_utkastsvep.router)
 # Kopiera eller flytta en leadslista till en annan kund; se api/admin_listor.py.
 app.include_router(admin_listor.router)
+# Hjälprutan (docs/PLAN-HJALPRUTAN-2026-11-25.md): hjälpsamtalet och
+# felrapporterna under hjälpens egen nyckel, adminlistan under master-nyckeln.
+app.include_router(hjalp.router)
+app.include_router(plattformsarenden.router)
+app.include_router(admin_plattformsarenden.router)
 app.include_router(analytics.router)
 app.include_router(support_oversikt.router)
 # Journalens tenant-scopade förbrukning (Livrustning-piloten) — samma fråga

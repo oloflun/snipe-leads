@@ -95,10 +95,11 @@ async def _kor(mal: int) -> dict:
     for _ in range(200):
         post = await app_state.jobs.get(job_id)
         k = (post.get("result") or {}).get("korning") or {}
-        if k.get("klar"):
+        # Klar, eller vilande under målet (Antons regel 2026-11-24).
+        if k.get("klar") or (k.get("vilande") and not k.get("pagaende")):
             return k
         await asyncio.sleep(0.02)
-    raise AssertionError(f"körningen blev aldrig klar: {k}")
+    raise AssertionError(f"körningen blev aldrig klar eller vilande: {k}")
 
 
 async def test_n_leverbara_trots_underkanda_kandidater(monkeypatch):
@@ -111,23 +112,71 @@ async def test_n_leverbara_trots_underkanda_kandidater(monkeypatch):
     assert k["sammanfattning"]
 
 
-async def test_slut_pa_kandidater_namnger_flaskhalsen(monkeypatch):
+async def test_slut_pa_kandidater_ger_en_vilande_korning(monkeypatch):
+    """Var test_slut_pa_kandidater_namnger_flaskhalsen. Antons regel
+    2026-11-24: en Iris-körning blir aldrig klar under målet. Är målgruppen
+    tom (TOMMA_RUNDOR) och går inget bortval att fylla på med (här saknar de
+    lägesbeskrivning) vilar körningen, med skälet."""
     pool = [_bolag(n) for n in ("Dålig Ett", "Dålig Två")]
     rundor = _installera(monkeypatch, pool, bra=set())
     k = await _kor(2)
     assert k["levererade"] == 0
-    assert k["klar"] and k["slut_orsak"] in ("slut_pa_kandidater", "tak")
-    assert k["flaskhals"] == "Storlek"
+    assert not k["klar"] and k["slut_orsak"] is None
+    assert k["vilande"]["skal"] == "registret"
+    assert int(k["tomma_rundor"]) >= korningsmodul.TOMMA_RUNDOR
     # Nya sökrundor kördes i nästa geo-ring innan den gav upp.
     assert rundor == list(range(len(rundor))) and len(rundor) >= 2
 
 
-async def test_taket_hindrar_en_skenande_korning(monkeypatch):
+async def test_taket_ar_ett_larm_inte_ett_slut(monkeypatch):
+    """Var test_taket_hindrar_en_skenande_korning (undersokta <= TAK_FAKTOR).
+    Demon 2026-11-24: 8 av 10 med 118 undersökta, fast registret hade 1 169
+    bolag kvar. Taket förlängs nu och körningen slutar först när målgruppen
+    är tom (TOMMA_RUNDOR)."""
     pool = [_bolag(f"Dålig {i}") for i in range(30)]
     _installera(monkeypatch, pool, bra=set())
     k = await _kor(1)
-    assert k["undersokta"] <= korningsmodul.TAK_FAKTOR * 1
-    assert k["klar"]
+    # Alla 30 researchades (och prövades sedan som påfyllnad): taket stoppade
+    # inte. Utan ett leverbart bortval vilar körningen (2026-11-24).
+    assert k["undersokta"] >= 30 > korningsmodul.TAK_FAKTOR
+    assert not k["klar"] and k["vilande"]["skal"] == "registret"
+
+
+async def test_en_snal_pool_fortsatter_forbi_rundtaket(monkeypatch):
+    """En pool som ger färre än MAX_PER_RUNDA kandidater per runda: förr tog
+    max_rundor slut långt innan registret, nu fortsätter körningen tills den
+    hittat leadet (eller TOMMA_RUNDOR)."""
+    pool = [_bolag(f"Dålig {i}") for i in range(20)] + [_bolag("Bra Sist")]
+    rundor: list[int] = []
+
+    async def _hitta(icp, antal, *, uteslut_namn=None, ring=0, **_k):
+        rundor.append(ring)
+        uteslut = {n.casefold() for n in (uteslut_namn or set())}
+        return [b for b in pool if b["company_name"].casefold() not in uteslut][:2]
+
+    _installera(monkeypatch, [], bra={"Bra Sist"})
+    monkeypatch.setattr(korningsmodul, "hitta_bolag", _hitta)
+    k = await _kor(1)
+    assert k["levererade"] == 1 and k["slut_orsak"] == "klar", k
+    assert len(rundor) > korningsmodul.max_rundor(1)
+    assert k["undersokta"] > korningsmodul.TAK_FAKTOR
+
+
+def test_flaskhalsen_raknar_inte_registrets_gratisbortval():
+    """Demon 2026-11-24: "för stort" (621 gratis storleksbortval i registret)
+    stod som strypare fast taket var det som stoppade."""
+    k = korningsmodul.ny_korning(mal=2, scope="research", overrides=None, is_test=True)
+    k["tratt"] = [{"namn": f"R{i}", "steg": "register", "skal": "För stort: 700 anställda"} for i in range(5)]
+    k["tratt"] += [{"namn": f"J{i}", "steg": "jev", "skal": "Fel bransch: bilhandel"} for i in range(3)]
+    k["tratt"].append({"namn": "X", "steg": "research", "skal": "Ingen kontaktmejl till bolaget"})
+    korningsmodul.avsluta(k, "slut_pa_kandidater")
+    assert k["flaskhals"] == "Ingen kontaktmejl till bolaget"
+    # Ett tak som stoppade namnges.
+    t = korningsmodul.ny_korning(mal=2, scope="research", overrides=None, is_test=True)
+    t["tratt"] = [{"namn": "R", "steg": "register", "skal": "För stort: 700 anställda"}]
+    korningsmodul.avsluta(t, "kredittak")
+    assert t["flaskhals"] == "Sidtaket"
+    assert "strypte mest: sidtaket" in korningsmodul.sammanfatta(t)
 
 
 def test_leverbart_kraver_kontaktperson_kontaktvag_och_lagesbeskrivning():

@@ -98,6 +98,12 @@ _KONTAKT = "select id from contacts where lower(email) = lower(%s)"
 _PROSPEKT = "select id from prospects where lower(contact_email) = lower(%s)"
 _TRAD = f"select id from outreach_threads where prospect_id in ({_PROSPEKT})"
 _ARENDE = f"select id from ss_tickets where customer_id in ({_KUND})"
+#: Felrapporterna ur Hjälprutan (156) bär ingen mejladress, bara rapportörens
+#: användar-id. Vägen från adressen går därför genom auth.users.
+_FELRAPPORT = (
+    "select id from plattformsarenden where rapportor_user_id in "
+    "(select id from auth.users where lower(email) = lower(%s))"
+)
 
 #: Var en e-postadress kan förekomma. Kolumnnamnet är inte samma överallt,
 #: därför en explicit karta i stället för en gissning. Andra fältet är en
@@ -120,6 +126,7 @@ TABELLER = [
     ("demo_requests", "epost", "Demoförfrågan från webbplatsen."),
     ("ss_customer_contacts", "mejl", "Kontaktperson hos en kund i kundregistret."),
     ("ss_customers", f"id in ({_KUND})", "Chatt- och supportkund. Identifierare, ärenden, meddelanden, kundminne, chattläge och kanalkontakter kaskaderar härifrån."),
+    ("plattformsarenden", f"id in ({_FELRAPPORT})", "Felrapport ur Hjälprutan (namn, fritext, bild). Händelserna kaskaderar härifrån."),
 ]
 
 #: Raderas ALDRIG. Se docstringen.
@@ -159,6 +166,7 @@ KASKAD = [
     ("customer_memory", f"customer_id in ({_KUND})", "ss_customers"),
     ("ss_chat_state", f"customer_id in ({_KUND})", "ss_customers"),
     ("ss_channel_contacts", f"customer_id in ({_KUND})", "ss_customers"),
+    ("plattformsarende_handelser", f"arende_id in ({_FELRAPPORT})", "plattformsarenden"),
 ]
 
 #: Hittas och lämnas ut, men raderas INTE av skriptet: kräver manuellt beslut.

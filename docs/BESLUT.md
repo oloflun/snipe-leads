@@ -9,6 +9,201 @@ möjligt), vad det betyder i koden.
 
 ---
 
+## 2026-11-25 — Resterna efter demorättningarna: fyra val som är agentens och väntar på Antons dom (agenten)
+
+**Beslut.** Inget av detta är Antons ord. Det är val agenten gjorde när demorättningarnas
+rester rättades, och de gäller tills Anton säger annat.
+
+1. **Ett hjälpjobb går bara att läsa av den som startade det.** Jobb-id:t som klienten får
+   är signerat med användare och arbetsyta. Fel användare, en kollega i samma arbetsyta och
+   ett manipulerat id får samma 404.
+2. **Felrapportens bild lämnas ut till plattformsadmin på begäran**, en läsning per ärende,
+   aldrig med listan. Inlämningen tar bara emot PNG, JPEG, WebP och GIF.
+3. **Ett fallet utkastjobb utan känd felkod visar backendens svenska text på svenska och en
+   allmän text på engelska.**
+4. **Kunskapsbasens kategori kontrolleras där artikeln tas emot**, och minneslagret i
+   testerna är lika strängt som databasen.
+
+**Resonemanget.**
+
+1. Alla kunders hjälpfrågor går under samma hjälpkund (INV-HJALP-001), så kundgränsen
+   skiljer dem inte åt. Den som fick tag på ett jobb-id kunde läsa en annan kunds fråga och
+   svar. Signaturen sitter i Next eftersom backendens jobbläsning bara känner kunden, inte
+   användaren. Följden: en plattformsadmin som byter vy mitt i en fråga får "finns inte" på
+   den frågan, och pågående frågor faller om `AUTH_SECRET` byts.
+2. Admin kunde se att en bild fanns men inte bilden, alltså inte det kunden visade. Bilden
+   kan visa kunddata: därför ett klick, ingen cache, och en rad i åtkomstloggen utan
+   innehåll (INV-SEC-013). En SVG kan bära skript och lagras därför inte alls.
+3. Granskaren ville ha en allmän text på båda språken. Den svenska texten behölls eftersom
+   den bär diagnosen och redan är rensad från programfel (`_jobbfeltext`); en allmän text
+   hade gömt vad kunden ska göra. Den engelska ytan får aldrig rå svensk text. De vanligaste
+   felen har fått egna koder (`saknar_produkt`, `saknar_beskrivning`) och översätts.
+4. Databasprovet 2026-11-25 visade att en okänd kategori gav serverfel i stället för ett
+   besked, och att tre tester använde en kategori som databasen avvisar utan att något föll.
+
+**Vad provet mot en riktig databas gav.** Migrationerna 153 och 156–159 är körda mot en
+lokal Postgres, från noll och ovanpå en databas som stod på 068, och de fem nya två gånger.
+Två fel syntes bara där: kategorin ovan, och att `skapad_av` på ett kunskapsförslag kom ut
+som en databastyp i stället för text, vilket hade gett serverfel i drift när ett förslag
+från hjälpchatten lästes. Varje ändrad databasfråga körs nu genom approllen i
+`tests/db/test_demorattningar_db.py`, som också står i CI:s databassteg.
+
+**Inte gjort.** Rå feltext visas fortfarande i snabbsöket, i körningsformulärets rader och
+i utskicksjobben. Skälet på ett stoppat utkast visas ordagrant på svenska i den engelska
+ytan. Åtkomstloggens rad för en bildläsning säger vilket ärende men inte vilken kund.
+
+**I koden.** `lib/snajp/hjalp.ts` (`signeraJobb`, `lasJobb`),
+`app/api/snajp-support/hjalp/jobb/[jobId]/route.ts`,
+`snajp-support/app/api/admin_plattformsarenden.py` (bildläsningen),
+`snajp-support/app/api/plattformsarenden.py` (`_validera_bild`), `lib/leads/felkoder.ts`,
+`snajp-support/app/api/chat.py` (`_felkod`), `snajp-support/app/api/schemas.py`
+(`KbArticle._kand_kategori`), `snajp-support/app/storage/postgres.py` (`_forslag_rad`,
+`list_andra_korningars_bolag`).
+
+---
+
+## 2026-11-25 — Hjälprutan: supportagenten i dashboarden, felrapporter som ärenden, testversion per kund (Anton)
+
+**Beslut.**
+1. Snajps egen supportagent finns som en ruta i den inloggade dashboarden. Kunden kan fråga
+   om hjälp, ge kontext till sin kunskapsbas och rapportera fel.
+2. En felrapport blir ett ärende hos Snajp och går vidare till en kodande agent, som bygger
+   en testversion med rättningen som bara den kundens inlogg når, innan rättningen går vidare.
+3. Gamla exempelartiklar tas bort automatiskt när kunskapsbasen fylls på.
+4. Genomförandet nedan är agentens val, inte Antons ord, och kan ändras av honom.
+
+**Resonemanget.** Anton 2026-11-25, dagen efter en kunddemo: "Vår inbyggda supportagent ska
+finnas som en chattruta där kunderna kan ge kontext till kunskapsbasen och be om hjälp, men
+även direkt feedback på fel, vilket skapas som supporttickets och skickas vidare till vår
+agent och som bygger en spegel med fixen enbart för deras inlogg för att testa innan det
+pushas vidare." Och: "se till att gamla exempelartiklar tas bort automatiskt när
+kunskapsbasen fylls på."
+
+**Agentens val.** Hela planen står i `docs/PLAN-HJALPRUTAN-2026-11-25.md`, sammanvägd ur tre
+oberoende arkitekturförslag.
+- **Ingången är Meny, inte en flytande bubbla.** Raden "Anmäl felaktigt svar" var bara ett
+  mejl. Den blev "Hjälp och fel" (regeln 2026-11-24 om att bygga in i befintlig yta).
+- **Hjälpen är en egen kund i systemet** (`snajp-hjalp`, nyckeln `SNAJP_KEY_SNAJP_HJALP`),
+  skild från `snajp` som marknadssidans anonyma demo använder. Annars kan trafik på
+  marknadssidan stänga kundernas hjälp, och den anonyma vägen når samma samtal.
+- **Kunskapsbasen skrivs bara genom kundens egen väg, efter kundens klick.** Snajps agent
+  skriver aldrig över gränsen mellan kunder.
+- **Felrapporten går inte genom agentens eskalering.** En eskalering tystar chatten i upp
+  till ett dygn, och kunden ska kunna fortsätta fråga medan felet rättas. Ärendet skapas av
+  kundens klick, aldrig av modellens klassning.
+- **Kunden ser bara sina egna rapporter**, i sex lägen utan interna steg (Mottaget, Vi
+  undersöker, Rättning på gång, Redo att testa, Godkänd och granskas av oss, Ute i Snajp).
+  Hur mycket kunden ska se är enligt regeln 2026-10-10 Antons fråga; detta är förvalet.
+- **Kundens text når aldrig den kodande agenten direkt.** En människa hos Snajp godkänner
+  först ett underlag utan namn och kunddata. Skälet: kundens text är opålitlig indata till en
+  agent med skrivrätt i repot, och repot är publikt.
+- **Testversionen bär bara den kundens data** och släpper bara in den kundens inlogg, via en
+  engångslänk. Development kopieras aldrig dit: den bär alla kunders data.
+- **Kundens ja är information.** Development och main går som alltid, main på Antons ord.
+- **Adminproxyn fick sin första skrivning:** lägesbytet på en felrapport, och inget annat.
+  Felrapporterna är Snajps egna ärenden, inte en kunds data. Regeln att adminvyn inte ändrar
+  kunddata står kvar.
+- **Exempelartiklarna rensas i lagringslagret**, i samma transaktion som kundens eget
+  innehåll läggs in, så att det gäller varje väg. Eget innehåll är en tillagd artikel eller
+  ett godkänt förslag; att skanningen lämnat förslag räcker inte, för då stod basen tom.
+
+**Byggt 2026-11-25:** fas 1 och 2 (rutan, vägarna, felrapporterna, adminlistan) och
+exempelrensningen. **Inte byggt:** den kodande agenten och testversionen (fas 3 och 4). De
+väntar på Antons beslut om dataskydd (får agenten läsa underlaget, får en kunds arbetsyta
+kopieras till en egen miljö), kostnaden hos Railway och en egen GitHub-identitet för agenten.
+Tills dess sköter en människa de stegen bakom samma lägen i rutan.
+
+**I koden.** `components/snajp/HjalpRuta.tsx`, `lib/snajp/hjalp.ts`,
+`app/api/snajp-support/hjalp/`, `snajp-support/app/api/plattformsarenden.py`,
+`admin_plattformsarenden.py`, `hjalp.py`, `snajp-support/app/tenants/snajp_hjalp.py`,
+`components/admin/Felrapporter.tsx`, migrationerna 156 och 157, INV-HJALP-001 och 002.
+
+## 2026-11-24 — Efter kunddemon: beställt antal, obeställda leads, identitetsbyte, utkast utan produkt (Anton)
+
+**Beslut.**
+1. Iris levererar aldrig under beställt antal.
+2. Inga obearbetade leads i listan, och inga fler leads än beställt.
+3. En felsida får inte dyka upp när man backar; har sessionen gått ut kommer man till
+   inloggningen.
+4. Att en annan arbetsytas tal visades i ett kundkonto ska gås till botten och lösas.
+5. Kunskapsbasen ska bära det leadsagenten behöver, inte bara supportens fakta.
+6. Genomförandet nedan är agentens val, inte Antons ord, och kan ändras av honom.
+
+**Resonemanget.** Anton 2026-11-24, efter en demo där en provkörning på 10 gav 8 leads och 36
+rader utan bedömning i leadslistan: "Iris får aldrig, under inga omständigheter leverera under
+beställt antal, i värsta fall får man ta ett av de (mest kvalificerade) bortsorterade bolagen
+för att fylla ut kvoten, om inga fullt kvalificerade hittas." Och: "det är också strängt
+förbjudet, både att lägga oprocessade leads i listan, samt lägga till fler leads än det som
+beställts, det är ingen bonus utan äter ofta på kundens budget." Om felsidan: "det får inte
+hända, är det så att sessionen gått ut ska man komma till inloggningssidan." Om kunskapsbasen:
+"allt var väldigt anpassat för supportagenten och hade inte tolkat någon information anpassat
+för leadsagenten."
+
+**Vad utredningen visade** (fem utredare, varje fynd prövat av en granskare).
+- **8 av 10:** körningen stannade på rundtaket (15 rundor, 118 undersökta), inte för att
+  registret var slut. Bekräftat i produktionens liggare.
+- **De 36 raderna:** ringlistans bolag. I en provkörning fick de samma märkning som riktiga
+  leads och visades därför i listan.
+- **Fel arbetsytas tal:** ingen väg på servern hittad. Sidan behöll kundens ram medan nya
+  anrop gick med plattformsadmins inloggning i samma webbläsare; åtkomstloggen visar att admin
+  var inloggad de minuterna. Inte fullt bevisat: servern loggar inte varje läsning.
+- **Felsidan:** `/admin` saknades bland de skyddade adresserna.
+- **Exempelinnehållet i kunskapsbasen:** varje testarbetsyta seedades med flit med en påhittad
+  e-handels artiklar. Inte en annan kunds data.
+- **Utkastet som sålde Snajps supportagent:** onboardingen skrev aldrig någon produktlista, och
+  utan produkt tog modellen exemplet ur skrivstilen.
+
+**Agentens val.**
+- **Påfyllnaden har en bestämd ordning** (`korning.PAFYLLNADSSTEG`): fallna hämtningar
+  researchas om, sajter utan hittad kontakt prövas om, researchens bortval tas i rangordning,
+  storleksgränsen vidgas stegvis, och sist tas bolag med belagt nej. Det sista steget är min
+  läsning av "de mest kvalificerade bortsorterade" och ligger bakom en namngiven konstant
+  (`PAFYLL_BELAGT_NEJ`), så att det går att stänga av utan att röra resten.
+- **Detta upphäver, för påfyllda leads, kravet 2026-10-06 att bara ett belagt ja blir ett
+  lead** (INV-LEADS-EXIST-001). Ett påfyllt lead behåller sin riktiga bedömning och märks
+  "Påfyllt" med skälet, så att den som godkänner utkastet ser vad det är. Ett bolag hittas
+  aldrig på.
+- **Geografin vidgas aldrig.** Beslutet 2026-10-23 står kvar.
+- **Aldrig påfyllda:** avvecklade bolag, enskilda firmor, Kontakta inte, redan kontaktade,
+  bolag utan mottagaradress, bolag kundens profil utesluter.
+- **En körning under målet vilar** och letar vidare en gång per dygn, i stället för "Klar,
+  under målet". Det gäller också när kredittaket stoppar den.
+- **En vilande autopilotkörning är kundens dagliga försök.** Autopiloten startar ingen ny
+  bredvid den. Granskningen pekade på två fel åt var sitt håll: räknas den vilande som
+  pågående får kunden ingen ny dagskörning förrän den nått målet, och räknas den inte samlas
+  en vilande körning per dag på hög, var och en med en väckning om dygnet. Jag valde det
+  första, eftersom den vilande redan letar i samma målgrupp varje dygn. Valet är mitt.
+- **Räknetaken är larm, inte slut.** De förlängs under målet och loggas.
+- **Ringlistan:** i provkörningar en lista under Listor. I skarpa körningar ligger bolagen kvar
+  i Samtal › Ringlista (regel 15 från 2026-10-07). Om även de ska till Listor är inte beslutat.
+- **Städjobbet fäller inte en körning som går att väcka**, och en rad som ändå fälls får en
+  feltext. Körningen 2026-11-15 som stod "Misslyckades" utan text var fälld så; varför den
+  stod tyst är inte utrett.
+- **Identitetsbyte:** varje svar bär en identitet, klienten jämför vid navigering, fokus och
+  synlighet och laddar om när den skiljer sig, andra flikar får veta, och in- och utloggning
+  och vybyte öppnar adressen på riktigt (INV-SEC-014). Utloggningens formulär kräver därmed
+  JavaScript.
+- **`/admin` för en inloggad kund ger dashboarden i stället för 404.** Det ändrar ett tidigare
+  säkerhetsval att dölja adminytan, eftersom felsidan annars inte går att undvika när någon
+  backar efter ett kontobyte. API:t under `/api/admin` svarar fortfarande 404.
+- **Onboardingen skriver kundens första produkt**, och ett utkast skrivs inte utan en produkt.
+  I produktionen saknade 9 av 10 kunder produktlista 2026-11-25; därför fylls den på ur
+  kundens egna ord om vad de säljer vid nästa inloggning.
+- **Snajps egna produktnamn stoppas i andra kunders utkast** av en kodgrind, inte av prompten.
+- **Exempelartiklarna läggs inte in när kunden angett en webbplats.**
+- **Säljfakta är en kategori i samma kunskapsbas** (tjänster, målgrupp, bevis, pris), i samma
+  lista som supportartiklarna, och leadskedjan läser de artiklar kunden lagt till.
+
+**Gjort i produktionen 2026-11-25, med Antons ja:** de 36 obedömda raderna i demons testkonto
+arkiverade (inte raderade) och de 28 exempelartiklarna där raderade.
+
+**I koden.** `snajp-support/app/leads/korning.py`, `app/api/leads.py`, `app/leads/listvy.py`,
+`app/jobs/stadare.py`, `components/dashboard/DashboardContext.tsx`, `lib/snajp/tenant.ts`,
+`app/api/snajp-support/identitet/`, `lib/routes.ts`, `proxy.ts`, `app/admin/layout.tsx`,
+`lib/snajp/standard.ts`, `app/leads/business_context.py`, `app/leads/stilkontroll.py`,
+`app/kb_skanning.py`, `app/leads/context_pack.py`, migrationerna 153 och 158. CLAUDE.md § Leads
+regel 23 och 24.
+
 ## 2026-11-23 — Listimporten hårdtestad; Listor är en egen flik med import i fyra steg (Anton)
 
 **Beslut.**

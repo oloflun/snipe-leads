@@ -5,6 +5,7 @@ import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } f
 import { EjAktiverad } from "@/components/EjAktiverad";
 import { Badge, Cell, SkeletonRows, Tabell, Tomt, btnPrimary, btnSecondary, etikett, btnLiten, faltDiskret, faltTatt, chip, chipAktiv, chipInaktiv, chiplista, meta, rubrikPanel, tabellRad } from "@/components/ui";
 import { useSmal } from "@/components/leads/smal";
+import { pafyllnadSkal } from "@/components/leads/pafyllnad";
 import { Sidvaljare, tillListansTopp, useBredSkarm, useSida, useSidaFor } from "@/components/leads/sidindelning";
 import { SkickatLista, type SkickatRad } from "@/components/leads/SkickatLista";
 import { skapaUppfoljningar } from "@/components/leads/Uppfoljningar";
@@ -109,6 +110,7 @@ const T = {
   statusAndrad: { sv: "Status ändrad till", en: "Status changed to" },
   exempel: { sv: "Exempel", en: "Example" },
   provkorning: { sv: "Provkörning", en: "Test run" },
+  pafyllt: { sv: "Påfyllt", en: "Filled in" },
   provkorningHjalp: {
     sv: "Hittat i en provkörning. Mejlas bara om du flyttar över det till dina riktiga leads, vilket du kan göra när du skickar.",
     en: "Found in a test run. Emailed only if you move it to your real leads, which you can do when you send."
@@ -220,6 +222,17 @@ function domanAv(url: string | null | undefined): string | null {
   } catch {
     return url;
   }
+}
+
+/** Påfyllnadens märkning (migration 158, Antons regel 2026-11-24): listvyn
+ *  bär fälten (listvy.LISTKOLUMNER); typen i lib/leads/suite.ts gör det inte än. */
+type MedPafyllnad = SuiteProspekt & { pafylld?: boolean | null; pafylld_skal?: string | null };
+
+/** Skälet ("Påfyllt: <skäl>") för ett lead som fyllde på kvoten: tomt utan
+ *  skäl, null för ett vanligt lead. Koden översätts i pafyllnad.ts. */
+function pafylltSkal(p: SuiteProspekt): Localized | "" | null {
+  const m = p as MedPafyllnad;
+  return m.pafylld ? (pafyllnadSkal(m.pafylld_skal) ?? "") : null;
 }
 
 /** Motiveringens första mening: raden ska gå att skumma, detaljen bär resten. */
@@ -1181,7 +1194,10 @@ export function LeadsTabell({
 
   const bolag = (p: SuiteProspekt) => {
     const doman = domanAv(p.website);
-    const motivering = forstaMening(p);
+    // Ett påfyllt lead visar sin märkning där motiveringen står, inte i en ny kolumn.
+    const pafyllt = pafylltSkal(p);
+    const motivering =
+      pafyllt !== null ? `${text(T.pafyllt)}${pafyllt ? `: ${text(pafyllt)}` : ""}` : forstaMening(p);
     return (
       <div className="min-w-0">
         <div className="flex flex-wrap items-baseline gap-x-2">
@@ -1227,7 +1243,12 @@ export function LeadsTabell({
     ) : (
       <span className="inline-flex flex-col items-end leading-tight">
         <span className="num font-semibold tabular-nums">{poangAv(p)}</span>
-        {p.niva ? (
+        {/* Ett påfyllt lead ligger i listan för att fylla kvoten: "Bortvald" i
+            rött bredvid ett utkast som väntar på ja säger emot sig självt.
+            Poängen står kvar, etiketten säger vad leadet är. */}
+        {(p as MedPafyllnad).pafylld ? (
+          <span className="text-[0.8125rem] text-ochre-ink">{text(T.pafyllt)}</span>
+        ) : p.niva ? (
           <span className={cn("text-[0.8125rem]", p.niva === "C" ? "text-danger" : "text-ink-subtle")}>
             {nivaEtikett(p.niva, locale)}
           </span>

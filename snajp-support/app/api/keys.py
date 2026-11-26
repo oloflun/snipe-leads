@@ -52,8 +52,13 @@ async def create_key(
     # en riktig kunds bas vore de ett ANNAT bolags villkor, presenterade som
     # kundens egna — precis den korsning egna tenants finns för att stoppa.
     # Riktiga kunder seedas ur sin egen modul i app/tenants/ via seed_kb.py.
+    #
+    # Och bara när anroparen ber om det (`exempel_kb`). Kunddemon 2026-11-24:
+    # en testarbetsyta med egen webbplats fick Nordlys artiklar om PostNord och
+    # paket i sin bas. Onboardingen kräver webbplats och startar skanningen,
+    # vars förslag är kundens egen bas.
     kb_seeded = 0
-    if new_tenant["slug"].startswith(TESTKUND_PREFIX):
+    if payload.exempel_kb and new_tenant["slug"].startswith(TESTKUND_PREFIX):
         try:
             from ..scripts.seed_kb import ensure_tenant_kb
 

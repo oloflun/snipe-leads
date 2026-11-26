@@ -41,7 +41,10 @@ async def test_andra_korningen_lagger_inte_till_dubbletter():
 
 @pytest.mark.anyio
 async def test_bas_som_saknar_en_artikel_far_just_den():
-    """Kärnan: en delvis fylld bas ska kompletteras, inte lämnas som den är."""
+    """Kärnan: en delvis fylld EXEMPELbas ska kompletteras, inte lämnas som den
+    är. Raderna är märkta som exempel, som en tidigare seedning (och migration
+    159) lämnar dem; en bas med kundens eget innehåll fylls aldrig på
+    (tests/api/test_kb_exempelrensning.py)."""
     lagring = MemoryStorage()
     for artikel in KB_ARTICLES[:-3]:
         await lagring.add_kb_article(
@@ -50,6 +53,7 @@ async def test_bas_som_saknar_en_artikel_far_just_den():
             content=artikel["content"],
             category=artikel["category"],
             embedding=None,
+            is_placeholder=True,
         )
 
     assert await ensure_tenant_kb(lagring, TENANT) == 3

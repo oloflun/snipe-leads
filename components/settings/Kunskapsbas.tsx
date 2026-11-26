@@ -9,7 +9,7 @@ import { Rad, Radlista, btnPrimary, btnSecondary } from "@/components/ui";
 import { felmeddelande, kroppsbesked, readJsonBody } from "@/lib/http/json";
 import { cn } from "@/lib/utils";
 import { useLocale, type Localized } from "@/lib/i18n";
-import { WebbplatsForslag } from "@/components/settings/WebbplatsForslag";
+import { KATEGORI, WebbplatsForslag } from "@/components/settings/WebbplatsForslag";
 
 const ord = (s: string): Localized => ({ sv: s, en: s });
 
@@ -39,7 +39,18 @@ type Artikel = {
   content: string;
   category?: string | null;
   created_at?: string;
+  /** Exempelbasen i en testarbetsyta. Försvinner när eget innehåll läggs till. */
+  is_placeholder?: boolean;
 };
+
+const EXEMPEL: Localized = { sv: "Exempel", en: "Example" };
+
+/**
+ * Kategorin som etikett i artikellistan och förslagslistan. Definitionen bor i
+ * WebbplatsForslag.tsx, som den här filen redan importerar: åt andra hållet
+ * hade importen blivit cirkulär. Exporten här står kvar för befintliga anrop.
+ */
+export { KATEGORI };
 
 /**
  * Exporterade: Testchatt-fliken (components/snajp/SupportChat.tsx, Fas 5.4)
@@ -407,7 +418,19 @@ export function KunskapsbasPanel() {
           <Radlista ariaLabel={loc.text({ sv: "Dokument i kunskapsbasen", en: "Documents in the knowledge base" })} className="mt-4">
             {artiklar.map((artikel, index) => (
               <Rad key={artikel.id ?? `${artikel.title}-${index}`}>
-                <p className="text-[15px] font-medium">{artikel.title}</p>
+                <p className="text-[15px] font-medium">
+                  {artikel.title}
+                  {(artikel.category && KATEGORI[artikel.category]) || artikel.is_placeholder ? (
+                    <span className="ml-2 text-[13px] font-normal text-ink-subtle">
+                      {[
+                        artikel.category && KATEGORI[artikel.category] ? loc.text(KATEGORI[artikel.category]) : null,
+                        artikel.is_placeholder ? loc.text(EXEMPEL) : null
+                      ]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    </span>
+                  ) : null}
+                </p>
                 <p className="mt-1 line-clamp-2 max-w-[80ch] text-[14px] leading-6 text-ink-muted">
                   {artikel.content}
                 </p>

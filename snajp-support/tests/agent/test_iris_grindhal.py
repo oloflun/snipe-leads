@@ -156,6 +156,8 @@ async def _med_amnen(storage, amnen: list[str]) -> str:
         TENANT,
         agent_type="leads",
         settings={
+            # Behåll fixturens produkter: utkaststeget kräver en (2026-11-24).
+            **(await storage.get_agent_settings(TENANT, agent_type="leads") or {}),
             "erbjudanden": {
                 "aktiva": [{"nyckel": "pilot", "vikt": 1}],
                 "villkor": {"pilot": {"Supportagenten": "Kostnadsfri pilot i tre månader."}},

@@ -58,6 +58,11 @@ def ska_kora(regler: dict[str, Any], korningar: list[dict[str, Any]], nu: dateti
                 continue
         if k.get("autopilot") and isinstance(skapad, datetime) and skapad.astimezone(STOCKHOLM).date() == idag:
             return False
+        # En vilande körning (korning.vila) står kvar i processing tills den
+        # når målet, och väcks en gång per dygn: den ÄR kundens dagliga försök.
+        # Autopiloten startar därför ingen ny bredvid den. Annars samlas en
+        # vilande körning per dag på hög i en målgrupp som inte räcker, och var
+        # och en kostar en väckning om dygnet (beslut 2026-11-25, BESLUT.md).
         if rad.get("status") in ("queued", "processing") and k.get("autopilot"):
             return False
     return True

@@ -176,8 +176,26 @@ function paus(attempt: number): Promise<void> {
  * Vidarebefordran med en REDAN upplöst nyckel. Inloggade routes går hit via
  * proxyAsTenant i _auth.ts; anonyma går via proxyToBackend nedan, som slår upp
  * nyckeln ur en slug först.
+ *
+ * Svaret är privat för den som frågade: `Cache-Control: private, no-store` och
+ * `Vary: Cookie` på varje utgång, så att ingen webbläsare och ingen
+ * mellanlagring återanvänder det åt en annan session (kunddemon 2026-11-24,
+ * INV-SEC-014). Ett extra skydd: klienterna hämtar redan med no-store.
  */
 export async function proxyWithApiKey(
+  path: string,
+  init: RequestInit,
+  apiKey: string,
+  userId?: string,
+  isDemo?: boolean
+) {
+  const svar = await vidarebefordraMedNyckel(path, init, apiKey, userId, isDemo);
+  svar.headers.set("Cache-Control", "private, no-store");
+  svar.headers.set("Vary", "Cookie");
+  return svar;
+}
+
+async function vidarebefordraMedNyckel(
   path: string,
   init: RequestInit,
   apiKey: string,

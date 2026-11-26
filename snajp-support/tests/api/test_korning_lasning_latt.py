@@ -66,14 +66,30 @@ async def test_pauskollen_laser_bara_styrningen():
 
 @pytest.mark.anyio
 async def test_andra_korningar_laser_inte_den_egna():
+    """Dubblettskyddet läser bara bolagens namn och org.nr ur de ANDRA
+    körningarna (2026-11-25): aldrig den egna, och aldrig arbetsminnet, som
+    en vilande körning bär i sin helhet."""
     s = _lager_med_korning("egen")
-    anrop = []
-    original = s.list_leads_korningar
+    smala, tunga = [], []
+    smal = s.list_andra_korningars_bolag
+    tung = s.list_leads_korningar
 
-    async def spion(tenant_id, **kw):
-        anrop.append(kw)
-        return await original(tenant_id, **kw)
+    async def spion_smal(tenant_id, **kw):
+        smala.append(kw)
+        return await smal(tenant_id, **kw)
 
-    s.list_leads_korningar = spion  # type: ignore[method-assign]
+    async def spion_tung(tenant_id, **kw):
+        tunga.append(kw)
+        return await tung(tenant_id, **kw)
+
+    s.list_andra_korningars_bolag = spion_smal  # type: ignore[method-assign]
+    s.list_leads_korningar = spion_tung  # type: ignore[method-assign]
     assert await leads_api._andra_korningars_bolag(s, TENANT, "egen") == set()
-    assert anrop == [{"limit": 20, "arbetsminne": True, "status": "processing", "utom": "egen"}]
+    assert smala == [{"utom": "egen", "limit": 20}]
+    assert not [kw for kw in tunga if kw.get("arbetsminne")], tunga
+
+    # En annan pågående körning syns, den egna gör det fortfarande inte.
+    s.leads_job_ledger["annan"] = {**s.leads_job_ledger["egen"], "job_id": "annan"}
+    ut = await leads_api._andra_korningars_bolag(s, TENANT, "egen")
+    assert ut and ut == await leads_api._andra_korningars_bolag(s, TENANT, "egen")
+    assert await leads_api._andra_korningars_bolag(s, TENANT, "annan") == ut

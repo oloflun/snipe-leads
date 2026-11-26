@@ -22,7 +22,7 @@ import asyncio
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-from app.config import get_settings
+from app.config import DEFAULT_TENANT_ID, get_settings
 from app.main import app
 
 DEMO = {"X-API-Key": get_settings().snajp_demo_api_key}
@@ -195,6 +195,16 @@ async def test_testkorningen_startar_pa_de_inladdade_bolagen(live_llm, monkeypat
 
             body = await _ladda_exempelbolag(client, limit=3)
             exempel_id = {p["id"] for p in body["created"]}
+            # Körstarten kräver kundens egen produkt (require_egen_produkt, 2026-11-24).
+            storage = app.state.storage
+            await storage.set_agent_settings(
+                DEFAULT_TENANT_ID,
+                agent_type="leads",
+                settings={
+                    **(await storage.get_agent_settings(DEFAULT_TENANT_ID, agent_type="leads") or {}),
+                    "produkter": [{"namn": "Supportagent", "nytta": "svarar på kundfrågor"}],
+                },
+            )
 
             korning = await client.post(
                 "/api/leads/runs/batch",

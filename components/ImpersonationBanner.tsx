@@ -1,8 +1,7 @@
 "use client";
 
 import { Eye } from "lucide-react";
-import { useDashboard } from "@/components/dashboard/DashboardContext";
-import { bytVy } from "@/lib/actions/vy";
+import { bytVyOchOppna, useDashboard } from "@/components/dashboard/DashboardContext";
 import { useLocale } from "@/lib/i18n";
 
 /**
@@ -54,7 +53,7 @@ export function ImpersonationBanner() {
           })}
         </p>
 
-        <form action={bytVy} className="ml-auto">
+        <form action={bytVyOchOppna} className="ml-auto">
           <button
             type="submit"
             name="vy"

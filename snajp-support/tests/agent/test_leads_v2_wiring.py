@@ -365,6 +365,21 @@ async def _prepare_outreach(storage) -> str:
         ),
         source="test",
     )
+    # Utkaststeget kräver kundens egen produkt (require_egen_produkt, 2026-11-24).
+    # Två produkter som varken research eller erbjudande nämner: då väljer
+    # erbjudanden.produkt_nu ingen (en ensam produkt väljs alltid), och
+    # utkastkedjan går exakt som innan spärren fanns.
+    await storage.set_agent_settings(
+        TENANT,
+        agent_type="leads",
+        settings={
+            **(await storage.get_agent_settings(TENANT, agent_type="leads") or {}),
+            "produkter": [
+                {"namn": "Konsulttimmar", "nytta": "hjälp när det behövs"},
+                {"namn": "Utbildningsdag", "nytta": "kunnigare personal"},
+            ]
+        },
+    )
     prospect = await storage.create_prospect(TENANT, company_name="Exempelbolaget")
     thread = await storage.ensure_outreach_thread(TENANT, prospect_id=prospect["id"])
     return thread["id"]
@@ -639,7 +654,10 @@ async def _med_erbjudande(storage, villkor: dict) -> None:
     await storage.set_agent_settings(
         TENANT,
         agent_type="leads",
-        settings={"erbjudanden": {"aktiva": [{"nyckel": "gratis_prov", "vikt": 1}], "villkor": villkor}},
+        settings={
+            **(await storage.get_agent_settings(TENANT, agent_type="leads") or {}),
+            "erbjudanden": {"aktiva": [{"nyckel": "gratis_prov", "vikt": 1}], "villkor": villkor},
+        },
     )
 
 

@@ -108,8 +108,12 @@ const T = {
     en: "which draft structure you last chose."
   },
   korning: {
-    sv: "en pågående leadskörning.",
-    en: "an ongoing leads run."
+    sv: "en pågående leadskörning. Det som följer på kolonet är en kod för kontot och vyn, inte ditt namn eller din e-postadress, så att en körning aldrig följer med till ett annat konto i samma webbläsare.",
+    en: "an ongoing leads run. What follows the colon is a code for the account and view, not your name or email address, so that a run never carries over to another account in the same browser."
+  },
+  identitetsbyte: {
+    sv: "att fliken redan har laddats om en gång efter ett kontobyte, så att den inte laddar om i en slinga. Innehåller bara två koder för kontona.",
+    en: "that the tab has already reloaded once after an account switch, so that it does not reload in a loop. Contains only two codes for the accounts."
   },
   pagaende: {
     sv: "en pågående kvittoskanning eller ett pågående utskick.",
@@ -238,8 +242,10 @@ export function CookiesSida() {
           <strong>snajp:leads-struktur</strong> ({text(T.lokal)}): {text(T.struktur)}
         </li>
         <li>
-          <strong>snipra:korning:kund</strong>, <strong>snipra:korning:admin</strong> ({text(T.lokal)}):{" "}
-          {text(T.korning)}
+          <strong>snipra:korning:…</strong> ({text(T.lokal)}): {text(T.korning)}
+        </li>
+        <li>
+          <strong>snajp:identitet-omladdning</strong> ({text(T.sessionslagring)}): {text(T.identitetsbyte)}
         </li>
         <li>
           <strong>snajp:kvittoskanning</strong>, <strong>snajp:utskick:…</strong> ({text(T.sessionslagring)}):{" "}

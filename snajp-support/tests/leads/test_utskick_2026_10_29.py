@@ -136,6 +136,8 @@ async def test_kon_far_amnesraden_ur_listan_for_vald_produkt(monkeypatch):
         TENANT,
         agent_type="leads",
         settings={
+            # Behåll fixturens produkter: utkaststeget kräver en (2026-11-24).
+            **(await storage.get_agent_settings(TENANT, agent_type="leads") or {}),
             "erbjudanden": {
                 "aktiva": [{"nyckel": "pilot", "vikt": 1}],
                 "villkor": {"pilot": {"Supportagenten": PILOT.replace("Iris", "Supportagenten")}},

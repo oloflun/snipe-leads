@@ -48,8 +48,11 @@ export type PlatformAdmin = {
 
 /**
  * Returnerar admin-identiteten, eller null. Anroparen avgör vad ett null
- * betyder — `/admin/layout.tsx` svarar 404, inte 403, eftersom ett 403 bekräftar
- * att ytan finns.
+ * betyder. `/admin/layout.tsx` frågar först `auth()` (ingen session →
+ * /login?next=/admin) och skickar sedan ett null vidare: en admin som stoppas
+ * av tvåfaktorn till /settings/tvafaktor, en inloggad icke-admin till
+ * /dashboard (ändrat från 404 2026-11-24, INV-AUTH-002). `/api/admin` svarar
+ * fortfarande 404, eftersom ett API inte omdirigeras.
  */
 export const getPlatformAdmin = cache(async function getPlatformAdmin(): Promise<PlatformAdmin | null> {
   const admin = await getPlatformAdminUtanTvafaktorkrav();

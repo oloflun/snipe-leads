@@ -526,7 +526,11 @@ export async function saveBusinessContext(input: OnboardingInput): Promise<Onboa
         // Backenden skapar tenanten (`POST /api/keys`), och nyckeln sparas i
         // `workspace_tenant_keys` genom en security definer-funktion.
         // Migration 040 förklarar varför den inte får ligga i `workspaces`.
-        const tenant = await skapaTesttenant(payload.workspace_id, `Testarbetsyta ${webbplats}`);
+        // Företagets namn, inte "Testarbetsyta <webbadress>": namnet står i
+        // Iris prompt och signatur (kunddemon 2026-11-24). Testmärket bärs av
+        // sluggen och is_demo. Ingen exempelbas (exempel_kb): webbplatsen är
+        // obligatorisk, och kundens bas kommer ur skanningen nedan.
+        const tenant = await skapaTesttenant(payload.workspace_id, foretag);
         // Nekas kopplingen hann en parallell begäran före. Nyckeln som då står
         // i tabellen är den rätta, och den läses strax nedan.
         await sqlAsUser(user.id, "select public.link_test_tenant($1, $2, $3)", [

@@ -114,8 +114,38 @@ type ListRad = {
   utkast_status?: Utkastfalt | null;
   /** Avtalets slutdatum (ÅÅÅÅ-MM-DD) och filens extra kolumner (import, migration 152). */
   avtalsslut?: string | null;
-  extra?: Record<string, string> | null;
+  /** Ringlistans rader (provkörningar, api/leads.py:_ringlistrad) bär
+   *  `anstallda` och `omsattning` här, som tal eller null. */
+  extra?: Record<string, string | number | null> | null;
 };
+
+/** Ringlistans kända extrafält (api/leads.py:_ringlistrad) på användarens
+ *  språk, i raden och som CSV-rubrik. Övriga nycklar är kundens egna
+ *  kolumnnamn ur en import och står som de är. */
+const KANDA_EXTRA: Record<string, Localized> = {
+  anstallda: { sv: "Anställda", en: "Employees" },
+  omsattning: { sv: "Omsättning", en: "Revenue" }
+};
+
+/** Ett känt extrafält i raden. Antal anställda visas alltid, även okänt
+ *  (Antons regel 15): numret kan gå till någon annan än VD. */
+function extraText(nyckel: string, varde: string | number | null, text: (s: Localized) => string): string | null {
+  if (nyckel === "anstallda") {
+    if (varde === null || varde === "") return text({ sv: "anställda okänt", en: "employees unknown" });
+    if (Number(varde) === 1) return text({ sv: "1 anställd", en: "1 employee" });
+    return text({ sv: `${varde} anställda`, en: `${varde} employees` });
+  }
+  if (nyckel === "omsattning") {
+    if (varde === null || varde === "") return null;
+    const tal = Number(varde);
+    if (!Number.isFinite(tal)) return `${text(KANDA_EXTRA.omsattning)}: ${varde}`;
+    return text({
+      sv: `omsättning ${tal.toLocaleString("sv-SE")} kr`,
+      en: `revenue SEK ${tal.toLocaleString("en-GB")}`
+    });
+  }
+  return varde === null || varde === "" ? null : `${nyckel}: ${varde}`;
+}
 
 /** Sant från md (768px) och uppåt; null innan fönstret mätts.
  *  Tabellen (md+) och korten (under md) står båda i DOM:en; bolagsknappens
@@ -447,12 +477,17 @@ function signaltext(rad: ListRad, text?: (s: Localized) => string): string {
   const signal = [rad.signal, rad.signal_detalj].filter(Boolean).join(" — ");
   // CSV-filen (utan `text`) bär avtalsslutet och extrakolumnerna i egna kolumner.
   if (!text) return signal || "—";
+  // Ringlistans signal är en kod (api/leads.py:_ringlistrad), inte text.
+  const visadSignal =
+    rad.signal === "ring" ? [text({ sv: "Ring", en: "Call" }), rad.signal_detalj].filter(Boolean).join(" — ") : signal;
   // En importerad rad: avtalsslutet och kundens egna kolumner är dess signal.
   const avtal = rad.avtalsslut ? text({ sv: `Avtalet går ut ${rad.avtalsslut}`, en: `Contract ends ${rad.avtalsslut}` }) : null;
+  // Ringlistans kända fält först, så att antal anställda aldrig skärs bort.
   const extra = Object.entries(rad.extra ?? {})
+    .sort(([a], [b]) => Number(b in KANDA_EXTRA) - Number(a in KANDA_EXTRA))
     .slice(0, 3)
-    .map(([rubrik, varde]) => `${rubrik}: ${varde}`);
-  return [avtal, signal, ...extra].filter(Boolean).join(" · ") || "—";
+    .map(([rubrik, varde]) => extraText(rubrik, varde, text));
+  return [avtal, visadSignal, ...extra].filter(Boolean).join(" · ") || "—";
 }
 
 /** RFC 4180-citering. Semikolon som avgränsare och BOM först: svensk Excel
@@ -470,7 +505,11 @@ function byggCsv(items: ListRad[], locale: Locale): string {
   const medAvtal = items.some((rad) => rad.avtalsslut);
   const extrarubriker = [...new Set(items.flatMap((rad) => Object.keys(rad.extra ?? {})))];
   const rader = [
-    [...CSV_RUBRIKER.map((rubrik) => rubrik[locale]), ...(medAvtal ? [AVTALSSLUT[locale]] : []), ...extrarubriker],
+    [
+      ...CSV_RUBRIKER.map((rubrik) => rubrik[locale]),
+      ...(medAvtal ? [AVTALSSLUT[locale]] : []),
+      ...extrarubriker.map((rubrik) => KANDA_EXTRA[rubrik]?.[locale] ?? rubrik)
+    ],
     ...items.map((rad) => [
       rad.company_name,
       rad.orgnr ?? "",
@@ -484,7 +523,7 @@ function byggCsv(items: ListRad[], locale: Locale): string {
       rad.website ?? "",
       rad.contact_email ?? "",
       ...(medAvtal ? [rad.avtalsslut ?? ""] : []),
-      ...extrarubriker.map((rubrik) => rad.extra?.[rubrik] ?? "")
+      ...extrarubriker.map((rubrik) => String(rad.extra?.[rubrik] ?? ""))
     ])
   ];
   return "\uFEFF" + rader.map((rad) => rad.map(csvFalt).join(";")).join("\r\n");

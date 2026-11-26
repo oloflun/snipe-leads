@@ -1,7 +1,22 @@
 import { NextResponse } from "next/server";
 import { LASROLL, LASROLL_FEL } from "@/lib/auth/lasroll";
-import { requireSnajpTenant, SnajpTenantError, svarForTenantfel } from "@/lib/snajp/tenant";
+import { requireSnajpTenant, SnajpTenantError, snajpIdentitet, svarForTenantfel } from "@/lib/snajp/tenant";
 import { proxyWithApiKey } from "./_lib";
+
+/** Svarshuvudet som säger vilken identitet svaret gäller (INV-SEC-014). */
+export const IDENTITET_HUVUD = "X-Snajp-Identitet";
+
+/**
+ * Varje svar bär identiteten, även felsvaren: en utgången session svarar 401,
+ * och det är just då en gammal flik ska märka bytet och ladda om
+ * (components/dashboard/DashboardContext.tsx). Ett fel i uppslaget ger ett
+ * tomt värde, som klienten läser som "okänt" och inte laddar om för.
+ */
+export async function proxyAsTenant(path: string, init: RequestInit) {
+  const svar = await vidarebefordra(path, init);
+  svar.headers.set(IDENTITET_HUVUD, await snajpIdentitet().catch(() => ""));
+  return svar;
+}
 
 /**
  * Vidarebefordran för INLOGGAD trafik: inkorg, utkast, regler, kunskapsbas,
@@ -17,7 +32,7 @@ import { proxyWithApiKey } from "./_lib";
  * omdirigering till /login, vilket är fel form för ett API-anrop och skulle
  * dölja 401:an nedan. Grinden hör hemma i routen.
  */
-export async function proxyAsTenant(path: string, init: RequestInit) {
+async function vidarebefordra(path: string, init: RequestInit) {
   try {
     const tenant = await requireSnajpTenant();
 

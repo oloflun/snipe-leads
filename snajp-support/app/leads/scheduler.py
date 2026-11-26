@@ -158,7 +158,10 @@ async def _kor_send_guard(storage, tenant_id: str, thread: dict, message: dict, 
         # ett färdigt utkast och ingenting som hindrade ett godkännande från
         # att bli ett utskick. Kundens egna bolag (origin 'manual', listor)
         # berörs inte: där har kunden själv pekat ut mottagaren.
-        if origin == "iris" and prospect.get("niva") not in ("A", "B"):
+        # Ett påfyllt lead (Antons regel 2026-11-24, korning.py § Påfyllnaden)
+        # är bedömt mot källmaterialet och behåller sin nivå; flaggan är det
+        # uttryckliga, märkta undantaget (INV-LEADS-EXIST-001).
+        if origin == "iris" and prospect.get("niva") not in ("A", "B") and not prospect.get("pafylld"):
             return GuardBeslut(
                 SG_BLOCKERA,
                 "ej_styrkt",

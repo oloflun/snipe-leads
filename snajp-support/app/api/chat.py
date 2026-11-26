@@ -22,6 +22,13 @@ from ..kvotfel import (
     larma_kreditslut,
     oversatt_felstext,
 )
+from ..jobs.store import TIDSGRANS_FEL
+from ..leads.business_context import (
+    BESKRIVNING_INLEDNING,
+    EGEN_PRODUKT_SAKNAS,
+    SAKNAR_BESKRIVNING,
+    SAKNAR_PRODUKT,
+)
 from . import rate_limit_db
 from .deps import require_tenant
 from .schemas import ChatRequest, SamtalRequest
@@ -365,6 +372,28 @@ _FASER = {
 }
 
 
+#: Jobbfelets text (efter `oversatt_felstext`) → stabil kod som ytan
+#: översätter (lib/leads/felkoder.ts:KUNDFELKODER). Jobbposten lagrar bara
+#: texten, så koden härleds här vid läsning, gamla lagrade fel inräknade.
+#: Tidsgränstexten skrivs av app/jobs/store.py.
+_FELKODER = {
+    EGEN_PRODUKT_SAKNAS: SAKNAR_PRODUKT,
+    KUNDTEXT_KREDITSLUT: "kreditslut",
+    KUNDTEXT_KVOT: "kvot",
+    TIDSGRANS_FEL: "tidsgrans",
+}
+
+
+def _felkod(fel: str | None) -> str | None:
+    """Kodens väg ur texten. Beskrivningsfelet bär ett tal som varierar och
+    känns därför igen på sin inledning, de övriga på hela texten."""
+    if not fel:
+        return None
+    if fel.startswith(BESKRIVNING_INLEDNING):
+        return SAKNAR_BESKRIVNING
+    return _FELKODER.get(fel)
+
+
 @router.get("/api/jobs/{job_id}")
 async def get_job(
     request: Request, job_id: str, tenant: dict = Depends(require_tenant)
@@ -376,11 +405,17 @@ async def get_job(
     # leverantören ("Error code: 429 - [{'error': ...}]") har nått kundytan
     # den här vägen. Översättningen här täcker varje pollande yta på en
     # gång — gamla redan-lagrade fel inräknade. Icke-kvotfel passerar orörda.
+    fel = oversatt_felstext(job.get("error"))
     svar = {
         "status": job["status"],
         "result": utan_stegtexter(job.get("result")),
-        "error": oversatt_felstext(job.get("error")),
+        "error": fel,
     }
+    # Ett känt fel bär sin kod bredvid den svenska texten; ytan översätter
+    # koden (lib/leads/felkoder.ts). Additivt: `error` är oförändrat.
+    kod = _felkod(fel)
+    if kod:
+        svar["error_kod"] = kod
     if job.get("steg") and job["status"] not in ("completed", "failed"):
         svar["fas"] = _FASER.get(str(job["steg"]), "arbetar")
     # Arbete som räknar sig fram (massutskick: `klara` av `totalt`), se

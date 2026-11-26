@@ -1,5 +1,61 @@
 # Snipra Status
 
+## 2026-11-26 — Claude — felen från Buddy-demon rättade, Hjälprutan fas 1–2, CRM-sessionen självständig
+
+Hela underlaget står i [`HANDOFF-2026-11-26-BUDDY-DEMO.md`](HANDOFF-2026-11-26-BUDDY-DEMO.md): Antons första
+meddelande ordagrant, tolkningen av hans 19 bilder, grundorsakerna, planerna och sessionens rapporter. Planer,
+utredningar och byggrapporter ligger i [`handoffs/2026-11-26-buddy-demo/`](handoffs/2026-11-26-buddy-demo/).
+Reglerna står i `CLAUDE.md` (§ Leads 23–24, § Hjälprutan) och valen i `docs/BESLUT.md` (2026-11-24 och 2026-11-25).
+
+**Byggt och pushat till development**
+
+- **Iris levererar aldrig under beställt antal.** Räknetaken avslutar inte en körning under målet. Kvoten fylls på
+  i bestämd ordning, och en uttömd körning vilar och letar vidare en gång per dygn.
+- **Inga obeställda eller obedömda leads i leadslistan.** En provkörnings ringbolag går till Listor.
+- **Identitetsbytet laddar om sidan.** Admindata kan inte ligga kvar i ett kundkonto.
+- **Bakåt från inloggat läge** leder till inloggningen, inte till felsidan.
+- **Inga utkast utan kundens egen produkt.** Snajps produktnamn spärras i andra kunders utkast.
+- **Kunskapsbasen får säljfakta,** och exempelartiklarna försvinner av sig själva när kundens eget innehåll kommer in.
+- **Hjälprutan under Meny:** frågor till Snajps egen agent, kontext till kundens kunskapsbas och felrapporter som
+  ärenden, med Mina ärenden och adminlistan Felrapporter.
+- **Rester:** felkoderna översätts, felrapportens bild går att öppna för admin, hjälpens jobb är låsta till den som
+  startade dem, och vilande körningar läses smalt.
+
+**Verifierat:**
+
+| Kontroll | Utfall |
+|---|---|
+| Backend | 4 738 gröna |
+| Roten | 1 009 gröna |
+| Nodetester | 421 gröna |
+| Databastester mot riktig Postgres | gröna |
+| Migrationerna 153 och 156–159 | går igenom från noll och ovanpå en äldre databas |
+| Typkontroll | ren, avgränsad till de ändrade filerna |
+| Bilder på desktop och mobil | varje synlig ändring sedd |
+
+**Kvar**
+
+- **Kontrollera att jobbet `migrera` blev grönt** efter pushen. Det kör 153 och 156–159 mot development.
+- **Hjälprutan svarar "inte påslagen"** tills hjälpens kund och nyckel är skapade per miljö (kommandona står i handoffen).
+- **e2e och hela typkontrollen** är inte körda.
+- **Mindre rester:**
+  - rå feltext i snabbsöket, körningsformuläret och utskicksjobben
+  - ett stoppat utkasts skäl på svenska i den engelska ytan
+  - adminloggen saknar kunden vid en bildläsning
+- **Väntar på Anton:**
+  - repot är publikt, med `docs/compliance/` incheckad
+  - ringlistan i skarpa körningar
+  - Hjälprutan fas 3–5: dataskyddet, kostnaden hos Railway och en GitHub-identitet för agenten
+  - exempelartiklarna i en föräldralös testarbetsyta
+
+**CRM-sessionen** ("Snajp CRM: komplett svit efter Twenty, med API", grenen `claude/snajp-crm-dd0d83`, eget
+worktree) är självständig sedan 2026-11-26. Den har fått besked att fortsätta och att själv schemalägga en
+återupptagning när användningsgränsen återställs.
+
+- Senaste commit: `d438ff84`, gränssnittet ombyggt.
+- Inget är pushat, och vyerna väntar på Antons dom.
+- Licensvalet för Twenty (AGPLv3 med MIT-delar) är Antons.
+
 ## 2026-11-23 — Claude — Iris-konversationer, signaturen i första mejlet, återkontakt, inkorgen hämtar öppnade mejl
 
 Leads har fått flikarna Konversationer och Uppföljningar, notiser i railen och bolagssök (migration 149). Varje

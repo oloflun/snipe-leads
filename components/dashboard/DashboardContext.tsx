@@ -1,11 +1,127 @@
 "use client";
 
-import { createContext, useCallback, useContext, useMemo, useState } from "react";
+import { Suspense, createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { usePathname, useSearchParams } from "next/navigation";
+import { signOut } from "@/lib/actions/auth";
+import { bytVy } from "@/lib/actions/vy";
 import type { DashboardState } from "@/lib/data/dashboard";
 import type { ProductKey, Scope } from "@/lib/routes";
 import { SCOPE_COOKIE, productKeys } from "@/lib/routes";
 
 export type { Scope };
+
+/**
+ * Identitetsbyten (INV-SEC-014, kunddemon 2026-11-24).
+ *
+ * En flik som renderats för en identitet får aldrig visa data för en annan.
+ * Demon visade kundens skal med adminens paneler: sessionen i webbläsaren hade
+ * bytts i en annan flik, och den gamla fliken hämtade vidare med den nya
+ * cookien. Tre delar håller ihop det, alla här:
+ *
+ *  - Den flik där bytet görs (inloggning, utloggning, vybyte) öppnar adressen
+ *    med `window.location.replace`, som tömmer flikens state och routercache.
+ *  - Den säger till de andra flikarna på kanalen nedan.
+ *  - Varje flik med ett inloggat träd jämför layoutens identitet med
+ *    `/api/snajp-support/identitet` vid varje navigering, vid fokus och när
+ *    fliken blir synlig, och laddar om när de skiljer sig.
+ */
+const IDENTITETSKANAL = "snajp-identitet";
+const IDENTITET_HUVUD = "X-Snajp-Identitet";
+/** Skydd mot omladdningsloop: högst en omladdning per byte från A till B. */
+const OMLADDNING_NYCKEL = "snajp:identitet-omladdning";
+
+// EN kanal per flik, för både att posta och lyssna: en BroadcastChannel får
+// aldrig sina egna meddelanden, så fliken som gör bytet laddar inte om sig själv
+// mitt i sin egen navigering.
+let kanal: BroadcastChannel | null = null;
+function identitetskanal(): BroadcastChannel | null {
+  if (typeof BroadcastChannel === "undefined") return null;
+  kanal ??= new BroadcastChannel(IDENTITETSKANAL);
+  return kanal;
+}
+
+/** Efter ett lyckat identitetsbyte: säg till de andra flikarna och öppna adressen hårt. */
+export function oppnaEfterIdentitetsbyte(url: string): void {
+  identitetskanal()?.postMessage("bytt");
+  window.location.replace(url);
+}
+
+/** Formulärets action för Admin | Demo, Byt kund, Öppna och Tillbaka till adminytan. */
+export async function bytVyOchOppna(formData: FormData): Promise<void> {
+  const { url } = await bytVy(formData);
+  if (url) oppnaEfterIdentitetsbyte(url);
+}
+
+/** Formulärets action för utloggningen. */
+export async function loggaUtOchOppna(): Promise<void> {
+  const { url } = await signOut();
+  oppnaEfterIdentitetsbyte(url);
+}
+
+function laddaOmVidByte(fran: string, till: string): void {
+  const byte = `${fran}>${till}`;
+  try {
+    if (window.sessionStorage.getItem(OMLADDNING_NYCKEL) === byte) return;
+    window.sessionStorage.setItem(OMLADDNING_NYCKEL, byte);
+  } catch {
+    // Utan sessionStorage (privat läge) finns inget loopskydd att lita på;
+    // en omladdning är ändå rätt svar på ett verkligt byte.
+  }
+  window.location.reload();
+}
+
+function glomOmladdning(): void {
+  try {
+    window.sessionStorage.removeItem(OMLADDNING_NYCKEL);
+  } catch {
+    // Inget sparat att glömma.
+  }
+}
+
+/**
+ * Jämförelsen. Egen komponent i en Suspense-gräns: useSearchParams kräver det
+ * på sidor som renderas statiskt, och kontrollen ritar ingenting.
+ */
+function Identitetskontroll({ identitet }: Readonly<{ identitet: string }>) {
+  const pathname = usePathname();
+  const sokning = useSearchParams().toString();
+
+  const kontrollera = useCallback(async () => {
+    try {
+      const svar = await fetch("/api/snajp-support/identitet", { cache: "no-store" });
+      const aktuell = svar.headers.get(IDENTITET_HUVUD);
+      // Tomt eller saknat värde är "okänt" (uppslaget föll), inte ett byte.
+      if (aktuell && aktuell !== identitet) laddaOmVidByte(identitet, aktuell);
+      // Stämmer det igen är bytet klart: nästa byte, även tillbaka, får ladda om.
+      if (aktuell === identitet) glomOmladdning();
+    } catch {
+      // Nätfel: nästa navigering eller nästa fokus frågar igen.
+    }
+  }, [identitet]);
+
+  useEffect(() => {
+    void kontrollera();
+  }, [kontrollera, pathname, sokning]);
+
+  useEffect(() => {
+    const vidSynlig = () => {
+      if (document.visibilityState === "visible") void kontrollera();
+    };
+    const vidFokus = () => void kontrollera();
+    const vidMeddelande = () => void kontrollera();
+    const lyssnare = identitetskanal();
+    window.addEventListener("focus", vidFokus);
+    document.addEventListener("visibilitychange", vidSynlig);
+    lyssnare?.addEventListener("message", vidMeddelande);
+    return () => {
+      window.removeEventListener("focus", vidFokus);
+      document.removeEventListener("visibilitychange", vidSynlig);
+      lyssnare?.removeEventListener("message", vidMeddelande);
+    };
+  }, [kontrollera]);
+
+  return null;
+}
 
 type DashboardContextValue = DashboardState & {
   scope: Scope;
@@ -77,7 +193,16 @@ export function DashboardProvider({
     [state, scope, setScope, shows]
   );
 
-  return <DashboardContext.Provider value={value}>{children}</DashboardContext.Provider>;
+  return (
+    <DashboardContext.Provider value={value}>
+      {state.identitet ? (
+        <Suspense fallback={null}>
+          <Identitetskontroll identitet={state.identitet} />
+        </Suspense>
+      ) : null}
+      {children}
+    </DashboardContext.Provider>
+  );
 }
 
 /**

@@ -59,7 +59,7 @@ async def _kund_med_utkast(agare: asyncpg.Connection, status: str = "vantar") ->
     forslag = await agare.fetchval(
         """
         insert into ss_kb_forslag (tenant_id, skanning_id, title, content, category, status)
-        values ($1, $2, 'Retur och byte', 'Trettio dagars öppet köp.', 'allmant', $3) returning id
+        values ($1, $2, 'Retur och byte', 'Trettio dagars öppet köp.', 'ovrigt', $3) returning id
         """,
         str(tid), skanning, status,
     )

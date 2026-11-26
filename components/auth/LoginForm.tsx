@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useState, useTransition } from "react";
 import { useSearchParams } from "next/navigation";
 import { Logo } from "@/components/Logo";
+import { oppnaEfterIdentitetsbyte } from "@/components/dashboard/DashboardContext";
 import { btnPrimary, btnSecondary, etikett, flik, flikAktiv, flikInaktiv, fliklista } from "@/components/ui";
 import {
   requestPasswordReset,
@@ -230,6 +231,10 @@ export function LoginSida({ oauth }: Readonly<{ oauth: OAuthUtbud }>) {
       setFaltFel({});
       startTransition(async () => {
         const result = await signInWithPassword(email.trim(), password, nextPath, tvaKod.trim());
+        if (result.success && result.url) {
+          oppnaEfterIdentitetsbyte(result.url);
+          return;
+        }
         if (!result.success) {
           setTvaKod("");
           setError(svarsfel(result, T.inloggningFel));
@@ -258,12 +263,18 @@ export function LoginSida({ oauth }: Readonly<{ oauth: OAuthUtbud }>) {
         return;
       }
       if (mode === "signup") {
-        // Lyckas det skickar servern vidare till /onboarding.
+        // Lyckas det svarar servern med /onboarding, som öppnas hårt
+        // (INV-SEC-014: ingen mjuk navigering vid ett identitetsbyte).
         const result = await signUpWithPassword(email.trim(), password, fullName.trim());
-        if (!result.success) setError(besked(result.error, T.nagotFel));
+        if (result.success && result.url) oppnaEfterIdentitetsbyte(result.url);
+        else if (!result.success) setError(besked(result.error, T.nagotFel));
         return;
       }
       const result = await signInWithPassword(email.trim(), password, nextPath);
+      if (result.success && result.url) {
+        oppnaEfterIdentitetsbyte(result.url);
+        return;
+      }
       if (result.kod === TVAFAKTOR_KRAVS) {
         setTvaSteg(true);
         // Fältet finns först efter nästa rendering.

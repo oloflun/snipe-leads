@@ -26,7 +26,7 @@ import {
 import { EjAktiverad, arEjAktiverad } from "@/components/EjAktiverad";
 import { demoOversiktSvar } from "@/lib/demo/oversikt";
 import { felmeddelande, readJsonBody } from "@/lib/http/json";
-import { allaProspekt, leadsAnrop } from "@/lib/leads/suite";
+import { allaProspekt, jobbfel, kundfelkod, leadsAnrop } from "@/lib/leads/suite";
 import { offertForUtkast } from "@/lib/leads/offert";
 import { cn } from "@/lib/utils";
 import { sv, useLocale, type Localized } from "@/lib/i18n";
@@ -190,11 +190,15 @@ async function hamtaOffertsammanfattning(): Promise<string> {
 type LeadsJobbSvar = {
   status?: string;
   error?: string;
+  /** Känd felkod (GET /api/jobs/{id}), översätts med lib/leads/felkoder.ts. */
+  error_kod?: string;
   result?: {
     body?: string;
     escalated?: boolean;
     escalation_reason?: string | null;
     draft_note?: string;
+    /** Känd kod för anteckningen (t.ex. saknar_produkt), samma tabell. */
+    draft_note_kod?: string;
     prospect_id?: string;
   };
   /** Ett fel vi själva formulerat (timeout, felstatus), på båda språken. */
@@ -210,11 +214,13 @@ async function pollaLeadsJobb(jobId: string): Promise<LeadsJobbSvar> {
     const kropp = await readJsonBody<LeadsJobbSvar>(response).catch(() => null);
     if (!response.ok) {
       const detalj = extraheraFelmeddelande((kropp as { detail?: unknown } | null)?.detail);
+      // Backendens text är svensk: den engelska rutan får statusraden.
       return {
         status: "failed",
-        fel: detalj
-          ? ordagrant(detalj)
-          : { sv: `Jobbet svarade ${response.status}.`, en: `The job responded ${response.status}.` }
+        fel: jobbfel(null, detalj, {
+          sv: `Jobbet svarade ${response.status}.`,
+          en: `The job responded ${response.status}.`
+        })
       };
     }
     if (kropp?.status === "completed" || kropp?.status === "failed") {
@@ -542,14 +548,23 @@ export function Bolagsregister({ demo = false }: Readonly<{ demo?: boolean }>) {
               resultat.push({ id: p.id, company_name: p.company_name, ok: true });
               continue;
             }
-            const jobbText = klart.error || utkast?.escalation_reason || utkast?.draft_note;
+            const kundeInte: Localized = { sv: "Kunde inte skapa utkast.", en: "Could not create a draft." };
+            // Ett fallet jobb och en anteckning går genom felkodstabellen
+            // (lib/leads/felkoder.ts): backendens svenska text når aldrig
+            // den engelska rutan.
+            const jobbBesked =
+              klart.status === "failed" && klart.error
+                ? jobbfel(klart.error_kod, klart.error, kundeInte)
+                : utkast?.escalation_reason
+                  ? ordagrant(utkast.escalation_reason)
+                  : utkast?.draft_note
+                    ? jobbfel(utkast.draft_note_kod, utkast.draft_note, kundeInte)
+                    : jobbfel(klart.error_kod, klart.error, kundeInte);
             resultat.push({
               id: p.id,
               company_name: p.company_name,
               ok: false,
-              meddelande:
-                klart.fel ??
-                (jobbText ? ordagrant(jobbText) : { sv: "Kunde inte skapa utkast.", en: "Could not create a draft." })
+              meddelande: klart.fel ?? jobbBesked
             });
             continue;
           }
@@ -558,12 +573,12 @@ export function Bolagsregister({ demo = false }: Readonly<{ demo?: boolean }>) {
             continue;
           }
           const backendFel = kropp?.escalation_reason || extraheraFelmeddelande(kropp?.detail);
-          const meddelande: Localized = backendFel
+          const meddelande: Localized = kundfelkod(kropp) ?? (backendFel
             ? ordagrant(backendFel)
             : {
                 sv: `Kunde inte skapa utkast (status ${response.status}).`,
                 en: `Could not create a draft (status ${response.status}).`
-              };
+              });
           resultat.push({ id: p.id, company_name: p.company_name, ok: false, meddelande });
         } catch (error) {
           resultat.push({
@@ -617,12 +632,13 @@ export function Bolagsregister({ demo = false }: Readonly<{ demo?: boolean }>) {
       }>(response).catch(() => null);
       if (!response.ok || !kropp?.jobs?.length) {
         const backendFel = extraheraFelmeddelande(kropp?.detail);
-        const orsak: Localized = backendFel
+        // En känd felkod (detail.kod) går före backendens svenska text.
+        const orsak: Localized = kundfelkod(kropp) ?? (backendFel
           ? ordagrant(backendFel)
           : {
               sv: `Kunde inte bearbeta om (status ${response.status}).`,
               en: `Could not reprocess (status ${response.status}).`
-            };
+            });
         setUtkastResultat(
           kandidater.map((p) => ({ id: p.id, company_name: p.company_name, ok: false, meddelande: orsak }))
         );
@@ -640,7 +656,8 @@ export function Bolagsregister({ demo = false }: Readonly<{ demo?: boolean }>) {
             id,
             company_name: namnRad,
             ok: !note,
-            meddelande: note ? ordagrant(note) : undefined
+            // Anteckningens kod (draft_note_kod) på användarens språk.
+            meddelande: note ? jobbfel(klart.result?.draft_note_kod, note) : undefined
           });
         } else {
           resultat.push({
@@ -649,7 +666,7 @@ export function Bolagsregister({ demo = false }: Readonly<{ demo?: boolean }>) {
             ok: false,
             meddelande:
               klart.fel ??
-              (klart.error ? ordagrant(klart.error) : { sv: "Bearbetningen misslyckades.", en: "Processing failed." })
+              jobbfel(klart.error_kod, klart.error, { sv: "Bearbetningen misslyckades.", en: "Processing failed." })
           });
         }
       }

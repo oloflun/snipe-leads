@@ -4,7 +4,11 @@ Två listor över samma sorts arbete, att ringa ett bolag:
 
 * **Återkoppling:** Iris-leads som fått mejl (status `contacted`) och har ett
   telefonnummer, äldst kontakt först.
-* **Ringlista:** bolag med bara telefon och namngiven VD (`origin='ring'`).
+* **Ringlista:** bolag med bara telefon och namngiven VD (`origin='ring'`),
+  ur skarpa körningar. En provkörnings ringbolag blir sedan 2026-11-24 en
+  lista under Listor, "Ringlista, Iris <datum>", och hamnar inte här
+  (api/leads.py:_spara_listspar). Om skarpa körningar ska göra likadant
+  väntar på Antons beslut.
 
 Varje samtal sparas i `lead_samtal` (migration 107) med ett utfall. Utfallet
 flyttar prospektets status i samma anrop, så att mejlflödet och listorna

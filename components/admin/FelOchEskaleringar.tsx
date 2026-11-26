@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 
+import { Felrapporter, useFelrapporter } from "@/components/admin/Felrapporter";
 import { Panelrubrik } from "@/components/dashboard/OversiktPaneler";
 import { Rad, Radlista, Tomt, etikett, meta, rubrikPanel, panelKort } from "@/components/ui";
 import { kallnamn, tolkaHandelse } from "@/lib/admin/handelsetext";
@@ -46,6 +47,10 @@ export function FelOchEskaleringar({
   nu: number;
 }>) {
   const { locale, text } = useLocale();
+  // Felrapporterna (Hjälprutan, 2026-11-25) hämtas i webbläsaren genom
+  // adminproxyn. Antalet öppna går in i samma rad nyckeltal som felen, och
+  // listan står under topplistan i samma sektion: ingen egen panel.
+  const felrapporter = useFelrapporter();
 
   // `nu` från servern och inte `Date.now()`: sektionen är en klientkomponent
   // och renderas två gånger. En händelse som ligger precis på sjudagarsgränsen
@@ -96,6 +101,12 @@ export function FelOchEskaleringar({
       etikett: a("eskaleradeArenden", locale),
       varde: String(eskalerade),
       notis: a("allaKunderTotalt", locale)
+    },
+    {
+      id: "felrapporter",
+      etikett: a("frOppna", locale),
+      varde: felrapporter.oppna === null ? "-" : String(felrapporter.oppna),
+      varning: (felrapporter.oppna ?? 0) > 0
     }
   ];
 
@@ -113,7 +124,7 @@ export function FelOchEskaleringar({
           </Link>
         }
       />
-      <dl className="grid grid-cols-3 gap-3 border-b border-ink/10 pb-4">
+      <dl className="grid grid-cols-2 gap-3 border-b border-ink/10 pb-4 sm:grid-cols-4">
         {tal.map((t) => (
           <div key={t.id} className="min-w-0">
             <dt className={cn(etikett, "line-clamp-2")}>{t.etikett}</dt>
@@ -178,6 +189,8 @@ export function FelOchEskaleringar({
           })}
         </Radlista>
       )}
+
+      <Felrapporter state={felrapporter} />
     </section>
   );
 }

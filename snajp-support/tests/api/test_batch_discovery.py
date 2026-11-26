@@ -298,6 +298,16 @@ async def test_strukturvalet_vid_kor_iris_nar_varje_barnjobb(live_llm, monkeypat
     monkeypatch.setattr(leads_api, "_run_batch_prospect", _spion)
 
     async with app.router.lifespan_context(app):
+        # Körstarten kräver kundens egen produkt (require_egen_produkt, 2026-11-24).
+        storage = app.state.storage
+        await storage.set_agent_settings(
+            DEFAULT_TENANT_ID,
+            agent_type="leads",
+            settings={
+                **(await storage.get_agent_settings(DEFAULT_TENANT_ID, agent_type="leads") or {}),
+                "produkter": [{"namn": "Supportagent", "nytta": "svarar på kundfrågor"}],
+            },
+        )
         async with _client() as client:
             for struktur in ("b", None):
                 svar = await client.post(

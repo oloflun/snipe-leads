@@ -79,8 +79,9 @@ async def ensure_tenant_kb(storage, tenant_id: str) -> int:
     första fallet, och tills vidare det enda.
 
     **Anropas bara för testarbetsytor**, från `POST /api/keys` när sluggen
-    börjar på `testkund-` och från `POST /api/inbox/mock` bakom
-    `X-Snajp-Demo`. Artiklarna är Nordlys Handels, alltså ett annat bolags
+    börjar på `testkund-` och anroparen ber om `exempel_kb`, och från
+    `POST /api/inbox/mock` bakom `X-Snajp-Demo` när basen är helt tom och ingen
+    webbplatsskanning har körts (kunddemon 2026-11-24). Artiklarna är Nordlys Handels, alltså ett annat bolags
     villkor; i en riktig kunds bas är de fel svar presenterade som kundens egna.
     Riktiga kunder seedas ur sin egen modul i `app/tenants/` via `seed_tenant`.
 
@@ -105,8 +106,17 @@ async def ensure_tenant_kb(storage, tenant_id: str) -> int:
     För en riktig kund körs den här funktionen aldrig (se ovan), så en kund som
     medvetet raderat en artikel får den inte tillbaka av oss.
 
+    Artiklarna märks `is_placeholder` (Anton 2026-11-25). Det är den ENDA
+    vägen som märker något: lagringslagret raderar märkta rader i samma
+    transaktion som kundens eget innehåll kommer in (en artikel kunden lägger
+    till, ett förslag kunden godkänner). Därför fylls en bas där kunden har
+    eller har haft eget innehåll aldrig på igen; annars kom exemplen tillbaka
+    efter att kunden raderat sin sista artikel.
+
     Returnerar antalet nya artiklar.
     """
+    if await har_haft_eget_innehall(storage, tenant_id):
+        return 0
     befintliga = {
         (artikel.get("title") or "").strip().lower()
         for artikel in await storage.list_kb(tenant_id)
@@ -122,9 +132,21 @@ async def ensure_tenant_kb(storage, tenant_id: str) -> int:
             content=article["content"],
             category=article["category"],
             embedding=None,
+            is_placeholder=True,
         )
         tillagda += 1
     return tillagda
+
+
+async def har_haft_eget_innehall(storage, tenant_id: str) -> bool:
+    """Sant när basen har en artikel som inte är exempel, eller när kunden
+    någon gång lagt till ett förslag (även om artikeln sedan raderats).
+
+    En handskriven artikel som raderats lämnar inget spår: en bas som tömts
+    helt på det sättet räknas som tom."""
+    if any(not artikel.get("is_placeholder") for artikel in await storage.list_kb(tenant_id)):
+        return True
+    return bool(await storage.list_kb_forslag(tenant_id, status="tillagd"))
 
 
 async def seed_tenant(storage, tenant_slug: str, *, embeddings=None) -> int:

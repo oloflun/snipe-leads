@@ -9,9 +9,8 @@ import { BytKund } from "@/components/admin/BytKund";
 import { VyVaxel } from "@/components/VyVaxel";
 import { Rail } from "@/components/shell/Rail";
 import type { RailNavGroup } from "@/components/shell/Rail";
-import { useDashboard } from "@/components/dashboard/DashboardContext";
+import { loggaUtOchOppna, useDashboard } from "@/components/dashboard/DashboardContext";
 import { AgentMenu } from "@/components/snajp/AgentMenu";
-import { signOut } from "@/lib/actions/auth";
 import { useLocale } from "@/lib/i18n";
 import { useNotisantal } from "@/lib/leads/konversationer";
 import { arVilande, routesForProducts, tillAdminvag } from "@/lib/routes";
@@ -228,14 +227,14 @@ export function AdminShell({
               {/* Utloggning fanns inte alls i adminytan från början. signOut()
                   var skriven och fungerande, men ingen komponent i skalet
                   anropade den — samma lucka som en gång saknade länken TILL
-                  /admin. Formulär och inte onClick: signOut är en server
-                  action och fungerar utan JS. */}
+                  /admin. Sedan 2026-11-24 öppnas /login hårt efter
+                  utloggningen och de andra flikarna får veta (INV-SEC-014). */}
               {/* Utloggning och språkval på EN rad. Som två rader åt de en hel
                   radhöjd ur railen, och navigationen ovanför klipptes: Iris
                   undersidor och Kundtjänst hamnade under kanten på en 1080-skärm.
                   Under lg (ikonrail) staplas de, bredden räcker inte till två. */}
               <div className="flex flex-col items-center gap-1 lg:flex-row lg:justify-between">
-                <form action={signOut} className="w-full lg:w-auto lg:flex-1">
+                <form action={loggaUtOchOppna} className="w-full lg:w-auto lg:flex-1">
                   <button
                     type="submit"
                     title={text({ sv: "Logga ut", en: "Sign out" })}

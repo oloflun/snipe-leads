@@ -38,7 +38,7 @@ def _utkast(*titlar: str) -> list[dict]:
         {
             "title": titel,
             "content": f"Text om {titel.lower()}.",
-            "category": "allmant",
+            "category": "ovrigt",
             "source_url": "https://lingonkudden.se/info",
             "confidence": 0.8,
             "varningar": [],
@@ -102,7 +102,7 @@ async def test_sparad_skanning_kompletterar_och_skriver_aldrig_over(monkeypatch)
             # Kundens egen artikel, med en egen text, finns före skanningen.
             egen = await c.post(
                 "/api/kb",
-                json={"articles": [{"title": "Öppettider", "content": "Kundens egen text.", "category": "allmant"}]},
+                json={"articles": [{"title": "Öppettider", "content": "Kundens egen text.", "category": "ovrigt"}]},
                 headers=DEMO,
             )
             assert egen.status_code == 201, egen.text

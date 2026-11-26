@@ -39,25 +39,50 @@ def _client():
     return AsyncClient(transport=ASGITransport(app=app), base_url="http://test")
 
 
-async def _skapa_tenant(client, slug: str) -> dict:
+async def _skapa_tenant(client, slug: str, **extra) -> dict:
     svar = await client.post(
-        "/api/keys", headers=MASTER, json={"tenant_name": f"Test {slug}", "slug": slug}
+        "/api/keys", headers=MASTER, json={"tenant_name": f"Test {slug}", "slug": slug, **extra}
     )
     assert svar.status_code == 201, svar.text
     return svar.json()
 
 
 @pytest.mark.anyio
-async def test_testarbetsyta_far_kunskapsbas_vid_skapandet():
+async def test_testarbetsyta_far_ingen_exempelbas_utan_att_be_om_den():
+    """Kunddemon 2026-11-24: en ny kund med egen webbplats fick Nordlys Handels
+    artiklar om PostNord och paket i sin kunskapsbas. Exempelbasen läggs bara
+    in när anroparen ber om den (`exempel_kb`); kundens egen bas kommer ur
+    webbplatsskanningens förslag."""
     async with app.router.lifespan_context(app):
         async with _client() as client:
             skapad = await _skapa_tenant(client, "testkund-a1b2c3d4")
+
+            assert skapad["kb_seeded"] == 0
+
+            kb = await client.get("/api/kb", headers={"X-API-Key": skapad["api_key"]})
+            assert kb.status_code == 200
+            assert kb.json()["articles"] == []
+
+
+@pytest.mark.anyio
+async def test_testarbetsyta_far_exempelbasen_nar_den_ber_om_den():
+    async with app.router.lifespan_context(app):
+        async with _client() as client:
+            skapad = await _skapa_tenant(client, "testkund-a1b2c3d5", exempel_kb=True)
 
             assert skapad["kb_seeded"] > 0
 
             kb = await client.get("/api/kb", headers={"X-API-Key": skapad["api_key"]})
             assert kb.status_code == 200
             assert len(kb.json()["articles"]) == skapad["kb_seeded"]
+
+
+@pytest.mark.anyio
+async def test_exempel_kb_ger_aldrig_en_riktig_kund_frammande_artiklar():
+    async with app.router.lifespan_context(app):
+        async with _client() as client:
+            skapad = await _skapa_tenant(client, "kund-a1b2c3d6", exempel_kb=True)
+            assert skapad["kb_seeded"] == 0
 
 
 @pytest.mark.anyio
@@ -121,7 +146,7 @@ async def test_seedningen_ar_idempotent():
     som redan har artiklar orörd."""
     async with app.router.lifespan_context(app):
         async with _client() as client:
-            skapad = await _skapa_tenant(client, "testkund-99887766")
+            skapad = await _skapa_tenant(client, "testkund-99887766", exempel_kb=True)
             nyckel = {"X-API-Key": skapad["api_key"]}
             forst = len((await client.get("/api/kb", headers=nyckel)).json()["articles"])
 
@@ -132,6 +157,46 @@ async def test_seedningen_ar_idempotent():
 
             efter = len((await client.get("/api/kb", headers=nyckel)).json()["articles"])
             assert efter == forst
+
+
+@pytest.mark.anyio
+async def test_testmail_lagger_inte_tillbaka_en_raderad_artikel():
+    """Inbox-mocken jämförde per rubrik: varje klick på "Hämta testmail" lade
+    tillbaka de Nordlys-artiklar kunden raderat. Den seedar nu bara en helt tom
+    bas."""
+    async with app.router.lifespan_context(app):
+        async with _client() as client:
+            skapad = await _skapa_tenant(client, "testkund-55667788", exempel_kb=True)
+            nyckel = {"X-API-Key": skapad["api_key"]}
+            demo = {**nyckel, "X-Snajp-Demo": "true"}
+            artiklar = (await client.get("/api/kb", headers=nyckel)).json()["articles"]
+            raderad = next(a for a in artiklar if a["title"] == "Leveranstider och fraktalternativ")
+            assert (await client.delete(f"/api/kb/{raderad['id']}", headers=nyckel)).status_code == 200
+
+            svar = await client.post("/api/inbox/mock", headers=demo)
+            assert svar.status_code == 201, svar.text
+            assert svar.json()["kb_seeded"] == 0
+
+            titlar = {a["title"] for a in (await client.get("/api/kb", headers=nyckel)).json()["articles"]}
+            assert "Leveranstider och fraktalternativ" not in titlar
+
+
+@pytest.mark.anyio
+async def test_testmail_seedar_inte_nar_webbplatsen_skannats():
+    """En testarbetsyta med egen webbplats väntar på skanningens förslag. En
+    tom bas där är kundens, och Nordlys hör inte hemma i den."""
+    async with app.router.lifespan_context(app):
+        async with _client() as client:
+            skapad = await _skapa_tenant(client, "testkund-11223344")
+            nyckel = {"X-API-Key": skapad["api_key"]}
+            await app.state.storage.skapa_kb_skanning(
+                skapad["tenant_id"], webbplats="https://buddy.se", startad_av="onboarding"
+            )
+
+            svar = await client.post("/api/inbox/mock", headers={**nyckel, "X-Snajp-Demo": "true"})
+            assert svar.status_code == 201, svar.text
+            assert svar.json()["kb_seeded"] == 0
+            assert (await client.get("/api/kb", headers=nyckel)).json()["articles"] == []
 
 
 def test_snajp_kb_bar_grundarna_och_arbetsytan():

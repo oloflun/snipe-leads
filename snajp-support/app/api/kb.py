@@ -16,7 +16,13 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from ..config import get_settings
 from . import rate_limit_db
 from .deps import require_tenant
-from .schemas import KbArticleRequest, KbExtraheraRequest, KbForslagBeslutRequest, KbSkannaRequest
+from .schemas import (
+    KbArticleRequest,
+    KbExtraheraRequest,
+    KbForslagBeslutRequest,
+    KbForslagChattRequest,
+    KbSkannaRequest,
+)
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -167,9 +173,16 @@ def nya_forslag(utkast: list[dict], befintliga_titlar: Iterable[str]) -> tuple[l
     return nya, len(utkast) - len(nya)
 
 
+async def _egna_titlar(storage, tenant_id: str) -> list[str]:
+    """Rubrikerna på kundens EGNA artiklar. Exempelraderna (`is_placeholder`)
+    räknas inte: de försvinner när eget innehåll kommer in, och en
+    exempelrubrik får aldrig hindra kundens egen artikel med samma rubrik."""
+    return [a.get("title", "") for a in await storage.list_kb(tenant_id) if not a.get("is_placeholder")]
+
+
 async def _spara_utfall(storage, tenant_id: str, skanning_id: str, resultat: dict) -> None:
     """Sparar skanningens utkast som förslag, utan dubbletter, och avslutar raden."""
-    befintliga = [a.get("title", "") for a in await storage.list_kb(tenant_id)]
+    befintliga = await _egna_titlar(storage, tenant_id)
     befintliga += [f.get("title", "") for f in await storage.list_kb_forslag(tenant_id)]
     nya, redan_fanns = nya_forslag(resultat.get("artiklar") or [], befintliga)
     await storage.add_kb_forslag(tenant_id, skanning_id, nya)
@@ -332,7 +345,64 @@ async def kb_forslag(request: Request, tenant: dict = Depends(require_tenant)) -
         tenant["tenant_id"]
     )
     forslag = await storage.list_kb_forslag(tenant["tenant_id"], status="vantar")
+    for rad in forslag:
+        # Rader från före migration 157 (och minneslagrets skanningsrader)
+        # saknar kolumnen; de kom alla ur skanningen.
+        rad.setdefault("kalla", "skanning")
     return {"skanning": skanning, "forslag": forslag}
+
+
+@router.post("/api/kb/forslag", status_code=201)
+async def skapa_kb_forslag(
+    request: Request, payload: KbForslagChattRequest, tenant: dict = Depends(require_tenant)
+) -> dict:
+    """Text ur Hjälprutans samtal som ett VÄNTANDE förslag i nyckelns egen
+    kunskapsbas (docs/PLAN-HJALPRUTAN-2026-11-25.md, del 3).
+
+    Kundens nyckel, kundens tenant: Snajps agent skriver aldrig över gränsen
+    mellan kunder. Förslaget blir en artikel först när kunden lägger till det
+    på den vanliga beslutsvägen (INV-LEARN-001). Samma kontroller som övriga
+    skrivningar här: längderna i schemat, kategorin mot kunskapsbasens fack,
+    och ingen dubblett av en artikel eller ett väntande förslag med samma
+    rubrik (`titelnyckel`).
+    """
+    from uuid import UUID
+
+    from ..config import KB_CATEGORIES
+
+    storage = request.app.state.storage
+    tenant_id = tenant["tenant_id"]
+    kategori = (payload.category or "ovrigt").strip() or "ovrigt"
+    if kategori not in KB_CATEGORIES:
+        raise HTTPException(status_code=422, detail="Okänd kategori för kunskapsbasen.")
+    titel = payload.title.strip()
+    innehall = payload.content.strip()
+    if len(titel) < 3 or len(innehall) < 10:
+        raise HTTPException(status_code=422, detail="Rubriken eller texten är för kort.")
+    nyckel = titelnyckel(titel)
+    if not nyckel:
+        raise HTTPException(status_code=422, detail="Rubriken behöver minst ett ord.")
+    if nyckel in {titelnyckel(t) for t in await _egna_titlar(storage, tenant_id)}:
+        raise HTTPException(status_code=409, detail="Det finns redan en artikel med den rubriken.")
+    if nyckel in {titelnyckel(f.get("title", "")) for f in await storage.list_kb_forslag(tenant_id, status="vantar")}:
+        raise HTTPException(status_code=409, detail="Ett förslag med den rubriken väntar redan.")
+    # Vem som lade förslaget: X-Snajp-User sätts av Next-proxyn ur sessionen.
+    # Ett värde som inte är ett uuid sparas inte.
+    skapad_av = None
+    try:
+        skapad_av = str(UUID(request.headers.get("x-snajp-user") or ""))
+    except ValueError:
+        skapad_av = None
+    forslag = await storage.skapa_kb_forslag(
+        tenant_id,
+        title=titel,
+        content=innehall,
+        category=kategori,
+        kalla=payload.kalla,
+        skapad_av=skapad_av,
+    )
+    forslag.setdefault("kalla", payload.kalla)
+    return forslag
 
 
 @router.post("/api/kb/forslag/beslut")
@@ -351,7 +421,7 @@ async def besluta_kb_forslag(
     tillagda: list[str] = []
     avvisade: list[str] = []
     fanns_redan: list[str] = []
-    titlar = {titelnyckel(a.get("title", "")) for a in await storage.list_kb(tenant_id)}
+    titlar = {titelnyckel(t) for t in await _egna_titlar(storage, tenant_id)}
 
     for forslag_id in dict.fromkeys(payload.ids):
         if payload.beslut == "avvisa":

@@ -46,6 +46,9 @@ LISTKOLUMNER: tuple[str, ...] = (
     "disqualifiers",
     "webbrevision",
     "arkiverad_at",
+    # Påfyllnaden (migration 158): synlighetsfiltret och nivå-/motiveringscellen.
+    "pafylld",
+    "pafylld_skal",
 )
 
 #: Det fördelningen (Översiktens munkdiagram) räknar på: status, kontaktväg
@@ -59,6 +62,11 @@ FORDELNINGSKOLUMNER: tuple[str, ...] = (
     "arkiverad_at",
     "contact_email",
     "contact_phone",
+    # Skyddet mot obedömda ringbolag i synliga() (2026-11-24).
+    "score_total",
+    "icp_fit",
+    # Ett påfyllt lead räknas som synligt (migration 158).
+    "pafylld",
 )
 
 #: Raden visar motiveringens första mening, avklippt i två rader (LeadsTabell:
@@ -81,6 +89,16 @@ def forsta_mening(text: Any) -> str | None:
     return text[:MENINGSTAK]
 
 
+def _obedomt_ringbolag(p: dict[str, Any]) -> bool:
+    return (
+        p.get("origin") in ("test", "ring")
+        and p.get("niva") is None
+        and p.get("score_total") is None
+        and p.get("icp_fit") is None
+        and not str(p.get("contact_email") or "").strip()
+    )
+
+
 def synliga(
     prospects: Iterable[dict[str, Any]],
     *,
@@ -95,6 +113,11 @@ def synliga(
 
     - exempelbolag bara hos demotenanten,
     - aldrig ringlistans bolag (origin 'ring', leadsregel 15),
+    - aldrig ett obedömt ringbolag ur en provkörning (origin 'test' utan
+      nivå, poäng, icp_fit och mejl). Antons regel 2026-11-24: inga
+      oprocessade leads i leadslistan. Demons provkörning lade 36 sådana i
+      listan och nyckeltalet; ett Iris-lead under research har mejl och syns,
+      _spara_listspar skapar inga nya,
     - aldrig en listas bakgrundsprospekt (migration 110),
     - arkiverade bara på begäran (`arkiverade`), och då alla arkiverade,
     - bortvalda (nivå C eller underkända) bara på begäran (`bortvalda`).
@@ -105,11 +128,16 @@ def synliga(
             continue
         if p.get("origin") == "ring":
             continue
+        if _obedomt_ringbolag(p):
+            continue
         if str(p["id"]) in kopplade:
             continue
         if bool(p.get("arkiverad_at")) != arkiverade:
             continue
-        if not arkiverade and (p.get("niva") == "C" or p.get("qualified") is False) != bortvalda:
+        # Ett påfyllt lead (Antons regel 2026-11-24) behåller sin nivå C men
+        # är ett levererat lead: det står i listan, märkt, inte bland bortvalda.
+        bortvalt = (p.get("niva") == "C" or p.get("qualified") is False) and not p.get("pafylld")
+        if not arkiverade and bortvalt != bortvalda:
             continue
         ut.append(p)
     return ut

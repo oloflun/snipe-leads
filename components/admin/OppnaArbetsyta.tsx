@@ -2,7 +2,7 @@
 
 import { Eye } from "lucide-react";
 import { radLank } from "@/components/ui";
-import { bytVy } from "@/lib/actions/vy";
+import { bytVyOchOppna } from "@/components/dashboard/DashboardContext";
 import { useLocale } from "@/lib/i18n";
 
 /**
@@ -18,12 +18,13 @@ import { useLocale } from "@/lib/i18n";
  *    som glöms tar användaren tillbaka till fel yta mitt i ett flöde. Samma
  *    resonemang som `useArbetsvag()` finns för.
  *
- * Knappen fungerar utan JavaScript, precis som VyVaxel och utloggningen.
+ * Adressen öppnas hårt efter bytet (bytVyOchOppna, INV-SEC-014): kundens
+ * arbetsyta ska inte ärva adminytans state.
  */
 export function OppnaArbetsyta({ slug, namn }: Readonly<{ slug: string; namn: string }>) {
   const { text } = useLocale();
   return (
-    <form action={bytVy}>
+    <form action={bytVyOchOppna}>
       <button
         type="submit"
         name="vy"

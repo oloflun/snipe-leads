@@ -20,21 +20,43 @@
  * felgren kastar `body stream already read` och döljer det ursprungliga felet.
  */
 
+import type { Localized } from "@/lib/i18n";
+
 export class HttpJsonError extends Error {
-  constructor(
-    message: string,
-    readonly status: number,
-    readonly body?: unknown
-  ) {
+  // Utskrivna fält, inte parameteregenskaper: då kan node --test ladda filen
+  // (lib/http/json.test.ts).
+  readonly status: number;
+  readonly body?: unknown;
+
+  constructor(message: string, status: number, body?: unknown) {
     super(message);
     this.name = "HttpJsonError";
+    this.status = status;
+    this.body = body;
   }
+}
+
+/**
+ * 403 är inte en utgången session: sessionen finns, men kontot får inte göra
+ * det här. Förut fick båda samma text, och "logga in igen" hjälpte inte.
+ */
+const SAKNAR_BEHORIGHET: Localized = {
+  sv: "Du saknar behörighet för det här. Be den som administrerar kontot om åtkomst om du behöver den.",
+  en: "You do not have permission for this. Ask the person who administers the account for access if you need it."
+};
+
+/** Sidans språk (LocaleProvider sätter `<html lang>`); svenska utanför webbläsaren. */
+function sidansSprak(): keyof Localized {
+  return typeof document !== "undefined" && document.documentElement?.lang === "en" ? "en" : "sv";
 }
 
 /** Begripligt på svenska, och säger vad användaren kan GÖRA. */
 function meddelandeForStatus(status: number, tomKropp: boolean): string {
-  if (status === 401 || status === 403) {
+  if (status === 401) {
     return "Din session har gått ut. Ladda om sidan och logga in igen.";
+  }
+  if (status === 403) {
+    return SAKNAR_BEHORIGHET[sidansSprak()];
   }
   if (status === 404) {
     return "Tjänsten kunde inte hittas. Kontakta support om det upprepas.";
@@ -97,8 +119,58 @@ export async function readJsonBody<T = unknown>(response: Response): Promise<T |
   return parsed as T;
 }
 
+type Navigering = (url: string) => void;
+
+const standardnavigering: Navigering = (url) => window.location.assign(url);
+let navigera: Navigering = standardnavigering;
+let omdirigerad = false;
+
+/** Byter navigeringen vid 401 (testet), eller återställer den med null. */
+export function sattInloggningsnavigering(fn: Navigering | null): void {
+  navigera = fn ?? standardnavigering;
+  omdirigerad = false;
+}
+
+/**
+ * Bara Next-sidans eget 401 betyder att sessionen är borta: det bär
+ * `kod: "ej_inloggad"` (lib/snajp/tenant.ts:svarForTenantfel,
+ * lib/snajp/hjalp.ts:ejInloggadSvar). Proxyn skickar backendens 401 vidare
+ * oförändrat ("Ogiltig API-nyckel", "X-API-Key saknas"), och det är ett
+ * driftfel: inloggningen hade skickat vidare till /dashboard (proxyn ser en
+ * giltig token) och tappat både sidan och förklaringen.
+ */
+function arUtloggad(kropp: unknown): boolean {
+  return (
+    !!kropp && typeof kropp === "object" && (kropp as Record<string, unknown>).kod === "ej_inloggad"
+  );
+}
+
+/**
+ * Ett 401 med `ej_inloggad` betyder att sessionen är borta. Då leder vi till inloggningen med
+ * sidan man stod på i `next`, i stället för att bara visa "logga in igen" i
+ * en ruta. Bara i webbläsaren (på servern finns ingen sida att lämna), aldrig
+ * från /login själv, och högst en gång per sidladdning: flera paneler som
+ * får 401 samtidigt ska inte starta flera navigeringar.
+ *
+ * Bara `readJson`, inte `readJsonBody`: den senare är för anropare med egen
+ * felsemantik i kroppen, och de avgör själva vad ett 401 betyder.
+ */
+function tillInloggningen(): void {
+  if (omdirigerad || typeof window === "undefined" || !window.location) {
+    return;
+  }
+  const { pathname, search } = window.location;
+  if (pathname === "/login" || pathname.startsWith("/login/")) {
+    return;
+  }
+  omdirigerad = true;
+  navigera(`/login?next=${encodeURIComponent(`${pathname}${search}`)}`);
+}
+
 /**
  * Returnerar den tolkade kroppen, eller `null` för ett korrekt tomt svar (204).
+ * Ett 401 med `kod: "ej_inloggad"` i webbläsaren leder dessutom till
+ * inloggningen (`tillInloggningen`); andra 401 blir bara ett fel.
  * Kastar `HttpJsonError` med ett meddelande som går att visa för en användare —
  * även vid felstatus.
  *
@@ -107,6 +179,10 @@ export async function readJsonBody<T = unknown>(response: Response): Promise<T |
  */
 export async function readJson<T = unknown>(response: Response): Promise<T | null> {
   const parsed = await readJsonBody<T>(response);
+
+  if (response.status === 401 && arUtloggad(parsed)) {
+    tillInloggningen();
+  }
 
   if (!response.ok) {
     const kropp: unknown = parsed;
@@ -125,7 +201,7 @@ export async function readJson<T = unknown>(response: Response): Promise<T | nul
 }
 
 // Egen fil: testet (node --test) kan inte ladda den här filens parameteregenskaper.
-export { kroppsbesked } from "./besked";
+export { kroppsbesked } from "./besked.ts";
 
 /** Meddelande som går att visa för en användare, oavsett vad som kastades. */
 export function felmeddelande(error: unknown, reserv = "Något gick fel. Försök igen."): string {

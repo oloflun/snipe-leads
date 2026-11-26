@@ -96,6 +96,10 @@ BEDOMNINGSFALT = (
     "anstallda",
     # Migration 094 (plan 2026-10-05, fas 3): PageSpeed och bildbedömningen.
     "webbrevision",
+    # Migration 158 (Antons regel 2026-11-24): ett påfyllt lead behåller sin
+    # bedömning och bär flaggan och skälets kod (korning.pafyllnadsskal).
+    "pafylld",
+    "pafylld_skal",
 )
 
 #: Fälten Processa om får skriva på en listrad (app/leads/omprova.py).
@@ -410,8 +414,9 @@ class Storage(Protocol):
         ...
 
     async def list_kb(self, tenant_id: str) -> list[dict[str, Any]]:
-        """Portalens lista: ALLA artiklar, även utgångna, med `source_url` och
-        `giltig_till`, så att kunden ser vad som gått ut och kan byta ut det."""
+        """Portalens lista: ALLA artiklar, även utgångna, med `source_url`,
+        `giltig_till` och `is_placeholder`, så att kunden ser vad som gått ut
+        och vad som bara är exempel."""
         ...
 
     async def add_kb_article(
@@ -424,7 +429,13 @@ class Storage(Protocol):
         embedding: list[float] | None = None,
         source_url: str | None = None,
         giltig_till: date | None = None,
-    ) -> dict[str, Any]: ...
+        is_placeholder: bool = False,
+    ) -> dict[str, Any]:
+        """Lägger in en artikel. `is_placeholder` sätts BARA av seedningen av
+        exempelbasen (`seed_kb.ensure_tenant_kb`). En artikel utan den är eget
+        innehåll, och då raderas tenantens exempelrader i samma transaktion
+        (Anton 2026-11-25: exemplen ska försvinna när basen fylls på)."""
+        ...
 
     async def delete_kb_article(self, tenant_id: str, artikel_id: str) -> bool:
         """Tar bort EN artikel i tenantens egen bas. False om den inte finns
@@ -495,9 +506,11 @@ class Storage(Protocol):
         self, tenant_id: str, forslag_id: str, *, embedding: list[float] | None
     ) -> dict[str, Any] | None:
         """Gör ett väntande utkast till en ny artikel: artikeln, `tillagd` och
-        artikel_id skrivs i EN transaktion. Returnerar artikeln, eller None om
-        utkastet inte (längre) väntar. Ett avbrott lämnar utkastet väntande
-        och ingen artikel, så att kunden kan försöka igen."""
+        artikel_id skrivs i EN transaktion, och i samma transaktion raderas
+        tenantens exempelrader (`is_placeholder`), som i add_kb_article.
+        Returnerar artikeln, eller None om utkastet inte (längre) väntar. Ett
+        avbrott lämnar utkastet väntande, ingen artikel och exemplen kvar, så
+        att kunden kan försöka igen."""
         ...
 
     # -- Agentens föreslagna lärdomar (självlärning, 2026-08-26) -------------
@@ -1100,6 +1113,19 @@ class Storage(Protocol):
         `sammandrag=True` (körningslistan i vyerna): dessutom utan `tratt` och
         `jobs`, med `tratt_antal` och `jobs_antal` i stället
         (app/leads/listvy.py:korning_sammandrag)."""
+        ...
+
+    async def list_andra_korningars_bolag(
+        self, tenant_id: str, *, utom: str, limit: int = 20
+    ) -> list[dict[str, Any]]:
+        """Bara bolagsidentiteterna i kundens ANDRA pågående körningar (status
+        'processing', inte klara, med tillstånd), nyast först, för dubblettskyddet
+        i api/leads.py:_andra_korningars_bolag. Per rad: job_id, vilande (bool),
+        kandidater och listspar som [{company_name, orgnr}], tratt som [namn].
+        En vilande körnings tratt och listspår skickas inte (tomma listor): den
+        söker inte, och dess tratt är varje bolag den någonsin prövat. Ersätter
+        list_leads_korningar(arbetsminne=True), som avkodade hela arbetsminnet
+        för varje annan körning i varje sökrunda."""
         ...
 
     async def get_sidcache(self, tenant_id: str, url: str) -> dict[str, Any] | None:
@@ -2220,6 +2246,74 @@ class Storage(Protocol):
 
     async def close(self) -> None: ...
 
+    # -- Hjälprutan: plattformsärenden och förslag ur chatten (migration 156, 157)
+    #
+    # Plattformsärendena är kundernas felrapporter till SNAJP, inte en kunds
+    # data i en kunds tenant: tabellerna saknar tenant_id och nås bara
+    # oskopat, av backendens roll (se migration 156). Vägarna ovanför
+    # (app/api/plattformsarenden.py) filtrerar alltid på rapportören.
+
+    async def skapa_plattformsarende(self, falt: dict[str, Any]) -> dict[str, Any]:
+        """Sparar en ny felrapport med status 'mottagen', ett unikt nummer
+        (`nytt_arendenummer`) och händelsen 'skapad'. `falt` bär kolumnerna
+        ur PlattformsarendeRequest. Returnerar ärendet med `handelser`."""
+        ...
+
+    async def hamta_plattformsarende(self, arende_id: str) -> dict[str, Any] | None:
+        """Ärendet med ALLA händelser, äldst först. None för okänt id."""
+        ...
+
+    async def hamta_plattformsarende_bild(self, arende_id: str) -> str | None:
+        """Kundens bild till ärendet som den lagrades (en data-URL), eller None
+        när ärendet saknas eller inte har någon bild. Bara adminvägen
+        (admin_plattformsarenden.py) läser den, ett ärende i taget och på
+        begäran: listor och uppslag bär bara `har_bild`. Typen prövas av
+        anroparen innan bilden lämnas ut."""
+        ...
+
+    async def list_plattformsarenden(
+        self, *, rapportor_user_id: str | None = None, status: str | None = None, limit: int = 200
+    ) -> list[dict[str, Any]]:
+        """Ärenden med händelser, nyast först. `rapportor_user_id` None ger
+        alla (bara adminvägen gör så)."""
+        ...
+
+    async def andra_plattformsarende(
+        self,
+        arende_id: str,
+        *,
+        status: str,
+        handelse: dict[str, Any],
+        kraver_status: tuple[str, ...] | None = None,
+        rapportor_user_id: str | None = None,
+        testversion_url: str | None = None,
+        satt_testversion: bool = False,
+    ) -> dict[str, Any] | None:
+        """Byter status och skriver händelsen i SAMMA skrivning.
+
+        Villkoren (`kraver_status`, `rapportor_user_id`) prövas i samma steg
+        som bytet, så två samtidiga klick inte båda går igenom. None när
+        ärendet saknas eller ett villkor inte håller; anroparen avgör vilket.
+        `handelse` bär typ, meddelande, synlig_for_kund och aktor; status
+        sätts till den nya. `satt_testversion` skriver `testversion_url`
+        (även None, som tömmer den)."""
+        ...
+
+    async def skapa_kb_forslag(
+        self,
+        tenant_id: str,
+        *,
+        title: str,
+        content: str,
+        category: str,
+        kalla: str,
+        kalla_ref: str | None = None,
+        skapad_av: str | None = None,
+    ) -> dict[str, Any]:
+        """Ett väntande förslag i tenantens kunskapsbas från en annan källa än
+        skanningen (migration 157). Beslutas på den vanliga vägen."""
+        ...
+
 
 # Värdemängden för agent_runs.agent_type, spegel av check-villkoret i
 # migration 025. Bor här, inte i respektive lagring, av ett skäl som kostade
@@ -2465,6 +2559,47 @@ def kontrollera_samtalslage(lage: str, misslyckade_i_rad: int) -> None:
         raise ValueError(f"Okänt samtalsläge: {lage!r}")
     if misslyckade_i_rad < 0:
         raise ValueError("misslyckade_i_rad kan inte vara negativ.")
+
+
+# -- Hjälprutan: plattformsärenden (migration 156) ---------------------------
+
+#: Spegel av check-villkoret i migration 156. Samma läxa som AGENT_RUN_TYPES:
+#: minnet får aldrig ta emot mer än databasen.
+PLATTFORMSARENDE_STATUSAR = (
+    "mottagen",
+    "undersoks",
+    "rattning_pagar",
+    "redo_att_testa",
+    "kund_godkand",
+    "i_development",
+    "i_main",
+    "behover_mer",
+    "stangd",
+)
+
+#: Lägena där ärendet väntar på kunden (kontraktet: `vantar_pa_kund`).
+PLATTFORMSARENDE_VANTAR_PA_KUND = ("behover_mer", "redo_att_testa")
+
+#: Ärendenumrets tecken: inga som förväxlas när de läses upp eller skrivs av
+#: (0/O, 1/I/L, 2/Z, 5/S, 8/B, G/6). 22^4 ≈ 234 000 nummer.
+ARENDENUMMER_ALFABET = "ACDEFHJKMNPRTUVWXY3479"
+
+
+def nytt_arendenummer() -> str:
+    """`F-` och fyra slumpade tecken ur ARENDENUMMER_ALFABET. Unikheten
+    garanteras av lagringen (unikt index och ett nytt försök)."""
+    import secrets
+
+    return "F-" + "".join(secrets.choice(ARENDENUMMER_ALFABET) for _ in range(4))
+
+
+def kontrollera_plattformsarende_status(status: str) -> None:
+    if status not in PLATTFORMSARENDE_STATUSAR:
+        raise ValueError(f"Okänd status för plattformsärende: {status!r}")
+
+
+#: Källorna för ett förslag i kunskapsbasen, spegel av migration 157.
+KB_FORSLAG_KALLOR = ("skanning", "chatt", "agent")
 
 
 # Framåtriktade statusövergångar, som i referensrepot (forward-only).

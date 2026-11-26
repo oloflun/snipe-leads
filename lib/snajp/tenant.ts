@@ -1,7 +1,32 @@
+import { createHash } from "node:crypto";
 import { sqlAsUser } from "@/lib/db";
 import { getWorkspaceContext } from "@/lib/workspace";
 import { getTenant } from "@/lib/tenants";
 import { DEMO_TENANT_SLUG, aktivVy } from "@/lib/vy";
+
+/**
+ * Vem svaret gäller: en opak hash av användaren, vyn och tenantens slug.
+ *
+ * Kunddemon 2026-11-24 visade kundens skal med adminens data i en gammal flik:
+ * sessionen i webbläsaren hade bytts i en annan flik, och klienten märkte det
+ * aldrig (INV-SEC-014). Proxyn sätter värdet som X-Snajp-Identitet på varje
+ * svar och layouten lägger det i DashboardState. Båda räknar HÄR, så att de
+ * aldrig kan räkna olika; skiljer de sig laddar fliken om.
+ *
+ * Samma källor som `requireSnajpTenant` nedan (sessionen och `aktivVy()`),
+ * aldrig något klienten skickar. Utan session blir det en fast identitet för
+ * "utloggad", så att en flik vars session gått ut också märker bytet.
+ */
+export async function snajpIdentitet(): Promise<string> {
+  const context = await getWorkspaceContext();
+  let delar = ["utloggad"];
+  if (context) {
+    const lage = await aktivVy();
+    const slug = lage.vy === "admin" ? (context.workspace.slug ?? context.workspace.id) : lage.slug;
+    delar = [context.user.id, lage.vy, slug];
+  }
+  return createHash("sha256").update(delar.join("\n")).digest("base64url").slice(0, 32);
+}
 
 /**
  * Arbetsytans egen backend-nyckel, för tenants utan configfil.

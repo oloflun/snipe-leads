@@ -279,6 +279,11 @@ kontroll före skrivningen. `lib/snajp/tenant.requireSnajpTenant()` frågar
 `aktivVy()` och läser aldrig cookien själv. Modulen är `import "server-only"`,
 så villkoret kan inte hamna i klientbundeln. Demogrenen når exakt EN tenant,
 `DEMO_TENANT_SLUG`, hårdkodad i `lib/vy.ts`.
+Tillägg 2026-11-24, efter kunddemon där en flik visade fel arbetsytas data:
+`requireSnajpTenant` (`lib/snajp/tenant.ts`) läser aldrig tenanten ur ett
+huvud, en query-parameter eller en egen cookie, bara ur sessionen
+(`getWorkspaceContext()`) och `aktivVy()`. Svarshuvudet `X-Snajp-Identitet`
+(INV-SEC-014) sätts av proxyn och läses aldrig där.
 Varför: en cookie är något klienten skickar, och tenanten härleds annars ur
 sessionen med flit (INV-SEC-002). Utan grinden vore raden `snajp.vy=demo` ett
 tenant-byte via devtools — vilket är exakt det fel `requireSnajpTenant`
@@ -893,30 +898,70 @@ värdelöst). Sändspärren
 blockerar ett Iris-lead utan godkänd bedömning (`app/leads/scheduler.py`).
 Det sista undantaget från INV-LEADS-PROFIL-001: "inget källmaterial" fäller i
 kod, inte modellen.
+Undantag 2026-11-24, ett påfyllt lead (Antons regel samma dag: "Iris får
+aldrig, under inga omständigheter leverera under beställt antal, i värsta fall
+får man ta ett av de (mest kvalificerade) bortsorterade bolagen för att fylla
+ut kvoten, om inga fullt kvalificerade hittas"): när en Iris-körning inte når
+målet får den fylla på med sina EGNA researchade bortval, i rangordning
+(`korning.py` § Påfyllnaden, `korning.rangordna_bortval`). Ett sådant lead är
+ett uttryckligt, märkt undantag: det behåller sin riktiga bedömning (nivå,
+poäng, skäl), bär `pafylld` och `pafylld_skal` (migration 158), och bara den
+flaggan släpper det förbi leadslistan (`listvy.synliga`), `_leverbarhet` och
+sändspärren. Kunden ser märkningen ("Påfyllt: …" / "Filled in: …") i nivå- och
+motiveringscellen, på sitt språk (`pafylld_skal` är en kod som
+`components/leads/pafyllnad.ts` översätter), aldrig webbrevisionens fält. Ett bolag hittas aldrig på:
+påfyllnaden tar bara bolag som styrkts av samma grind och researchats i
+körningen (även de nya kandidaterna efter storleksvidgningen), och
+spärren `korning.far_fyllas_pa` fäller avvecklade bolag, enskilda firmor,
+Kontakta inte (status, suppressionslistan och samtalens utfall), redan
+kontaktade (status och Skickat; hämtade av `leads._pafyllnadens_sparrar`),
+bolag utan mottagaradress, uteslutna,
+offentlig sektor som profilen inte pekar ut, listspårets ring och ej
+kvalificerade, och bolag utanför området. Ett vanligt nivå C-lead är dolt och
+spärrat som förut.
 Varför: provkörningen 2026-10-05 gav tre bolag som inte finns ("Exempel
 E-handel AB", "Detaljhandel Design AB", "Byggmästarna i Göteborg AB") med
 påhittade domäner, poäng 100, status Redo och färdiga utkast. De kom ur den
 grounded sökningen, och ingenting mellan sökningen och utkastet kontrollerade
 att bolaget fanns.
 Test: snajp-support/tests/invariants/test_inv_leads_exist_001.py
-Införd: 2026-10-06 · Upphävs endast genom waiver
+Införd: 2026-10-06 · Undantaget för påfyllda leads 2026-11-24 · Upphävs endast genom waiver
 
-### INV-LEADS-N-001 — En körning levererar N leverbara leads eller säger ärligt varför inte
+### INV-LEADS-N-001 — En körning levererar N leverbara leads, eller vilar och letar vidare
 En Iris-körning utan egna bolagsnamn räknar LEVERBARA leads (kvalificerade,
 över kundens tröskel, med mejlväg) — inte kandidater. `_fyll_pa`
 (`app/api/leads.py`, motorn i `app/leads/korning.py`) fyller på med nya
-kandidater och nya sökrundor i nästa geo-ring tills målet är nått, eller tills
-poolen, taket (4×N undersökta) eller dygnsbudgeten tar slut — och avslutar
-då med en tratt som namnger det strypande kriteriet.
+kandidater och nya sökrundor i nästa geo-ring tills målet är nått. Omskriven
+2026-11-24 efter Antons regel samma dag ("Iris får aldrig, under inga
+omständigheter leverera under beställt antal, i värsta fall får man ta ett av
+de (mest kvalificerade) bortsorterade bolagen för att fylla ut kvoten, om inga
+fullt kvalificerade hittas"): en Iris-körning blir aldrig klar under målet.
+Taket (TAK_FAKTOR×N undersökta) och rundtaket förlängs under målet och loggas
+som platform_event. När målgruppen är tom (TOMMA_RUNDOR efter breddningen),
+kredittaket är nått eller sökningen föll körs påfyllnadsstegen i bestämd
+ordning (`korning.nasta_pafyllnad`, tillståndet i `korning["pafyllnad"]`):
+1 researcha om tjänstefelen och kör om fallna sökrundor, 2 pröva om sajterna
+utan hittad kontakt, 3 researchens bortval i rangordning, 4 storleken vidgad
+stegvis (+25/+50/+100 %), 5 belagt nej (bakom `PAFYLL_BELAGT_NEJ`). Geografin
+vidgas aldrig. Är alla steg tömda VILAR körningen (`korning.vila`): status kvar
+i 'processing', undantagen från städaren, väckt en gång per dygn, och
+Körningar visar "8 av 10, letar vidare" med skälet. Gäller även provkörningar,
+men inte listjobb (`kalla='lista'`). Ett påfyllt lead följer
+INV-LEADS-EXIST-001:s undantag: ett bolag hittas aldrig på.
 Varför: uppmätt 2026-09-29 — 3 beställda leads blev 3 kandidater som Iris
 själv underkände, inga utkast, och körningen stannade vid "1/3 jobb".
-Leverbart är skärpt 2026-10-02 (Antons krav, plan del C): kvalificerat, över
-tröskeln, NAMNGIVEN kontaktperson (rollen föredras men krävs inte sedan
-Sebbes revidering 2026-10-07 — en namngiven anställd duger i sista hand),
-telefon ELLER arbetsmejl, och en
-lägesbeskrivning (migration 083) — `_leverbarhet` i `app/api/leads.py`.
+Leverbart (`_leverbarhet` i `app/api/leads.py`) är kvalificerat, över
+kundens tröskel, en kontaktmejl till bolaget som utkastet kan nå
+(`discovery.mottagare`; Sebbes beslut 2026-10-07 ersatte kravet på namngiven
+kontaktperson och telefon, och en telefon ensam räcker inte) och en
+lägesbeskrivning (migration 083). Ett påfyllt lead släpps förbi
+kvalificeringen och tröskeln men inte mottagaren eller lägesbeskrivningen.
+Demon 2026-11-24: 8 av 10 med "Klar, under målet" fast registret hade 1 169
+bolag kvar. Påfyllnaden, vilan och väckningen prövas också i
+snajp-support/tests/invariants/test_inv_leads_n_002.py och
+snajp-support/tests/leads/test_pafyllnad.py.
 Test: snajp-support/tests/invariants/test_inv_leads_n_001.py
-Införd: 2026-09-30 · Upphävs endast genom waiver
+Införd: 2026-09-30 · Omskriven 2026-11-24 · Upphävs endast genom waiver
 
 ### INV-JOB-003 — En körnings tillstånd finns i liggaren efter varje steg; Redis-TTL är aldrig enda platsen
 Iris-motorn (`_fyll_pa`, `_rapportera_till_korning` i `app/api/leads.py`)
@@ -926,6 +971,17 @@ motorn säger `klar`, och varje fel skriver `error` i klartext. Kunden läser
 `GET /api/leads/korningar` (vyn Iris › Körningar) och kan följa, lämna och
 återvända till en körning; körformuläret återupptar en pågående körning ur
 liggaren efter omladdning.
+Städaren (`app/jobs/stadare.py`, `stada_hangande_leadsjobb` i båda
+lagringarna) skriver sin feltext `HANGFEL_JOBB` i liggarens `error`, inte bara
+i Redis-posten, eftersom listvyn läser liggaren. En väckbar körning (status
+'processing', batchjobb, inte klar, inget listjobb, inget bolag i research)
+fälls inte förrän den varit tyst längre än `VACKNING_RESERV_MINUTER` (ett
+dygn): `vack_stillastaende_korningar` väcker den i stället, och läser varje
+körning i 'processing', inte bara kundens tio senaste rader. En vilande
+körning (INV-LEADS-N-001) fälls aldrig. En köad rad undantas inte. Tillägg
+2026-11-24 efter kunddemon och fallet 2026-11-15, då en stillastående körning
+bakom tio nyare listbyggen aldrig väcktes och visades som "Misslyckades"
+utan orsak i liggaren.
 Varför: Anton startade en körning 2026-09-30 som inte hann bli klar; när han
 kom tillbaka fanns inget spår — tillståndet bodde bara i Redis (TTL 3 600 s)
 och i körformulärets React-state, och liggarens batchrad sattes till
@@ -1153,6 +1209,80 @@ Varför: ingen kod skrev i `audit_logs`, så ingen admins åtkomst till kunddata
 gick att granska i efterhand (ISO 27001 A.8.15, A.5.15–A.5.18; GDPR art. 32).
 Test: tests/invariants/test_inv_sec_013.py
 Införd: 2026-11-18 · Upphävs endast genom waiver
+
+### INV-SEC-014 — Klienten märker ett identitetsbyte och laddar om
+Identiteten (konto, vy och arbetsyta) räknas av EN funktion,
+`lib/snajp/tenant.ts:snajpIdentitet()`, som en opak hash. Varje svar från
+`proxyAsTenant` (`app/api/snajp-support/_auth.ts`) bär den i huvudet
+`X-Snajp-Identitet`, även felsvaren, och proxyns svar är `private, no-store`
+med `Vary: Cookie`. Layoutens `DashboardState.identitet` bär samma värde, och
+`GET /api/snajp-support/identitet` svarar med det. `DashboardProvider`
+(`components/dashboard/DashboardContext.tsx`) jämför vid varje navigering,
+vid fokus och när fliken blir synlig, lyssnar på
+`BroadcastChannel("snajp-identitet")` och laddar om vid skillnad, högst en
+gång per byte. Inloggning, utloggning och vybyte gör ingen `redirect()` på
+servern: de returnerar en adress som klienten öppnar hårt
+(`window.location.replace`) efter att ha sagt till de andra flikarna. Ett
+pågående körnings-id i webbläsaren är nycklat på identiteten
+(`snipra:korning:<identitet>`).
+Varför: kunddemon 2026-11-24. En flik hade renderat /dashboard som kunden,
+sedan blev plattformsadminens session den aktiva i webbläsaren, och varje mjuk
+navigering i den gamla fliken hämtade paneldata med adminens cookie under
+kundens skal. Servern svarade rätt för den aktiva sessionen (INV-SEC-011);
+felet var att klienten aldrig märkte bytet.
+Test: tests/invariants/test_inv_sec_014.py
+Införd: 2026-11-24 · Upphävs endast genom waiver
+
+### INV-AUTH-002 — En inloggad yta utan session går till inloggningen, aldrig till en felsida
+Varje autentiserat prefix i proxyns matcher (`proxy.ts`, exporten `config`)
+finns bland `protectedRoutePrefixes` i `lib/routes.ts`; bara `/login` och
+`/embed` är publika med flit. Proxyn skickar en besökare utan session till
+`/login` med sökväg och söksträng i `next`. Admin-layouten
+(`app/admin/layout.tsx`) frågar `auth()` FÖRE behörighetsgrenen: ingen session
+→ `/login?next=/admin`, en admin som stoppas av tvåfaktorn →
+`/settings/tvafaktor`, en inloggad icke-admin → `/dashboard` (inte längre en
+404). Inloggningen skickar aldrig en icke-admin till ett `next` under
+`/admin`. `/api/admin` svarar fortfarande 404.
+Varför: kunddemon 2026-11-24. Efter utloggningen tog bakåtknappen tillbaka till
+/admin/arbetsyta och sidan svarade "Sidan finns inte": matchern tog med
+/admin men prefixlistan gjorde det inte, så proxyn släppte besökaren vidare
+till layoutens `notFound()`.
+Test: tests/invariants/test_inv_auth_002.py
+Införd: 2026-11-24 · Upphävs endast genom waiver
+
+### INV-HJALP-001 — Hjälprutans Next-vägar går under hjälpens egen nyckel
+Varje väg under `app/api/snajp-support/hjalp/` anropar backenden med hjälpens
+nyckel `SNAJP_KEY_SNAJP_HJALP`, aldrig med kundens nyckel: ingen av dem går
+genom `proxyAsTenant`, `proxyToBackend`, `apiKeyForTenant` eller
+`requireSnajpTenant`. Fältet `arbetsyta` sätts aldrig (under hjälpens nyckel
+hade agenten fått Snajps egna nyckeltal). Vägarna grindar på sessionen och
+lämnar kroppen till `lib/snajp/hjalp.ts`, som bygger identiteten på servern
+(avsändare, rapportör, arbetsyta, roll, kundbesök); klientens kropp kan inte
+sätta den. Ett ärende-id valideras innan det hamnar i sökvägen.
+Varför: Hjälprutan (docs/PLAN-HJALPRUTAN-2026-11-25.md, del 2 och 5) är
+kundens väg in till Snajps EGEN supportagent och plattformsärendena.
+Tenantgränsen är hela poängen: hjälpens nyckel får aldrig nå en kunds data, och
+kundens nyckel får aldrig nå plattformsärendena.
+Test: tests/invariants/test_inv_hjalp_001.py
+Införd: 2026-11-25 · Upphävs endast genom waiver
+
+### INV-HJALP-002 — Backendens hjälpvägar når bara hjälpens kund
+Varje route under `/api/hjalp` och `/api/plattformsarenden` har
+`require_hjalp_tenant` (`app/api/hjalp.py`) i sitt beroendeträd och svarar 404
+för varje nyckel vars kund inte är hjälpens; master-nyckeln, som saknar
+tenant, får 403 och kommer inte heller in. Varje route under
+`/api/admin/plattformsarenden` kräver `require_master_key`. En rapportör ser
+bara sina egna ärenden (prövat i
+snajp-support/tests/api/test_plattformsarenden.py). `/api/hjalp/samtal`
+godtar bara avsändare på `@kund.snajp.se`, och den anonyma
+`/api/chat/samtal` avvisar dem. Tabellerna `plattformsarenden` och
+`plattformsarende_handelser` (migration 156) nås bara utan tenantkontext
+(snajp-support/tests/db/test_plattformsarenden_db.py).
+Varför: samma tenantgräns som INV-HJALP-001, sedd från backenden: en ny väg
+med en egen grind, eller ingen, hade öppnat plattformsärendena för varje kund
+eller hjälpens agent för varje nyckel.
+Test: snajp-support/tests/invariants/test_inv_hjalp_002.py
+Införd: 2026-11-25 · Upphävs endast genom waiver
 
 ## Roadmap
 

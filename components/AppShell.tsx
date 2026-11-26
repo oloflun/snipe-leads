@@ -22,7 +22,7 @@ import { AgentMenu } from "@/components/snajp/AgentMenu";
 import { useDashboard } from "@/components/dashboard/DashboardContext";
 import { Rail, RailRad } from "@/components/shell/Rail";
 import type { RailNavItem } from "@/components/shell/Rail";
-import { signOut } from "@/lib/actions/auth";
+import { loggaUtOchOppna } from "@/components/dashboard/DashboardContext";
 import { DEMO_NAV, demoSektionsVag } from "@/lib/demo/sektioner";
 import { BytKund } from "@/components/admin/BytKund";
 import { ImpersonationBanner } from "@/components/ImpersonationBanner";
@@ -433,14 +433,19 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
                     <VyVaxel ton="rail" />
                   </div>
                 ) : null}
-                <AgentMenu yta="leads" kontext={`dashboard${pathname ? `:${pathname}` : ""}`} ton="rail" />
+                <AgentMenu
+                  yta="leads"
+                  kontext={`dashboard${pathname ? `:${pathname}` : ""}`}
+                  ton="rail"
+                  hjalp={signedIn && !demolage}
+                />
                 {userEmail && !demolage ? (
                   <p title={userEmail} className="truncate px-1 pt-0.5 text-[0.75rem] text-paper-subtle">{userEmail}</p>
                 ) : null}
               </div>
               <div className="hidden flex-col items-center gap-1 lg:flex lg:flex-row lg:justify-between">
                 {signedIn ? (
-                  <form action={signOut} className="w-full lg:w-auto lg:flex-1">
+                  <form action={loggaUtOchOppna} className="w-full lg:w-auto lg:flex-1">
                     <button
                       type="submit"
                       className="focus-ring flex min-h-11 w-full items-center gap-1.5 rounded-input px-3 text-sm font-medium text-paper-muted transition-colors hover:bg-paper/5 hover:text-paper lg:justify-start"
@@ -493,7 +498,11 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
                 {workspaceName}
               </span>
 
-              <AgentMenu yta="leads" kontext={`dashboard${pathname ? `:${pathname}` : ""}`} />
+              <AgentMenu
+                yta="leads"
+                kontext={`dashboard${pathname ? `:${pathname}` : ""}`}
+                hjalp={signedIn && !demolage}
+              />
               <button
                 type="button"
                 onClick={toggleLocale}
@@ -502,11 +511,11 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
                 {locale === "sv" ? "EN" : "SV"}
               </button>
 
-              {/* Utloggning. Formulär och inte onClick: signOut är en server
-                  action, och ett formulär gör att den fungerar även innan
-                  JavaScript laddat. */}
+              {/* Utloggning. Sedan kunddemon 2026-11-24 öppnas /login hårt och
+                  de andra flikarna får veta (INV-SEC-014): förra kontots state
+                  får inte följa med till nästa inloggning. */}
               {signedIn ? (
-                <form action={signOut}>
+                <form action={loggaUtOchOppna}>
                   <button
                     type="submit"
                     aria-label={text({ sv: "Logga ut", en: "Sign out" })}

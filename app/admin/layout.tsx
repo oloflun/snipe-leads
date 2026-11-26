@@ -1,5 +1,6 @@
-import { notFound, redirect } from "next/navigation";
-import { getPlatformAdmin } from "@/lib/auth/admin";
+import { redirect } from "next/navigation";
+import { auth } from "@/lib/auth";
+import { getPlatformAdmin, getPlatformAdminUtanTvafaktorkrav } from "@/lib/auth/admin";
 import { AdminShell } from "@/components/admin/AdminShell";
 import { DashboardProvider } from "@/components/dashboard/DashboardContext";
 import { resolveDashboardState } from "@/lib/data/dashboard";
@@ -11,8 +12,21 @@ export const dynamic = "force-dynamic";
 /**
  * Adminytan, grindad server-side — och en SUPERSET av kundens arbetsyta.
  *
- * `notFound()` och inte en redirect till /login: ett 403 eller en redirect
- * bekräftar att /admin finns och vem den är till för. En 404 säger ingenting.
+ * Tre utfall, i den här ordningen (ändrat säkerhetsval 2026-11-24, Antons
+ * krav efter kunddemon: en felsida får inte dyka upp, och har sessionen gått
+ * ut ska man till inloggningen):
+ *
+ *  1. Ingen session → /login?next=/admin. Avgörs med `auth()`, inte med
+ *     admin-uppslaget: det svarar null både utan session och för icke-admin,
+ *     och då blandades fallen ihop. Proxyn gör samma sak först; det här är
+ *     skyddsnätet för en återkallad eller trasig session (INV-AUTH-002).
+ *  2. En admin som stoppas av tvåfaktorn → /settings/tvafaktor.
+ *  3. En inloggad icke-admin → /dashboard, sin egen arbetsyta. Förut var det
+ *     en 404, för att inte bekräfta att /admin finns. Men en kund som backade
+ *     till /admin/** efter ett kontobyte fick då en felsida, och historiken går
+ *     inte att tömma. Omdirigeringen säger bara att sökvägen är speciell; vad
+ *     som finns där skyddas fortfarande av grindarna nedan. /api/admin
+ *     behåller sin 404, eftersom ett API inte ska omdirigeras.
  *
  * Det här är grind ETT av tre. De andra två är `/api/admin/*`-proxyns egen
  * kontroll och backendens `require_master_key`. Ingen av dem litar på att de
@@ -39,9 +53,14 @@ export const dynamic = "force-dynamic";
 export default async function AdminLayout({
   children
 }: Readonly<{ children: React.ReactNode }>) {
+  const session = await auth();
+  if (!session?.user?.id) {
+    redirect("/login?next=/admin");
+  }
+
   const admin = await getPlatformAdmin();
   if (!admin) {
-    notFound();
+    redirect((await getPlatformAdminUtanTvafaktorkrav()) ? "/settings/tvafaktor" : "/dashboard");
   }
 
   const state = await resolveDashboardState();

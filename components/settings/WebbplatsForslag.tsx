@@ -39,6 +39,25 @@ export type Forslag = {
   source_url: string | null;
   confidence: number | null;
   varningar: string[];
+  /** Var förslaget kom ifrån (migration 157). "chatt" = Hjälprutan. */
+  kalla?: "skanning" | "chatt" | "agent";
+};
+
+/**
+ * Kategorin som etikett i artikellistan (Kunskapsbas.tsx) och förslagslistan
+ * här. "salj" är säljfakta för Iris ur webbplatsskanningen (kunddemon
+ * 2026-11-24); de övriga är supportens fack (`config.KB_CATEGORIES`).
+ */
+export const KATEGORI: Record<string, Localized> = {
+  salj: { sv: "Erbjudande och säljfakta", en: "Offer and sales facts" },
+  teknisk_support: { sv: "Teknisk support", en: "Technical support" },
+  garanti: { sv: "Garanti", en: "Warranty" },
+  leverans: { sv: "Leverans", en: "Delivery" },
+  utbildning: { sv: "Utbildning", en: "Training" },
+  retur_reklamation: { sv: "Reklamation & retur", en: "Complaints & returns" },
+  betalning: { sv: "Betalning", en: "Payment" },
+  orderstatus: { sv: "Orderstatus", en: "Order status" },
+  ovrigt: { sv: "Övrigt", en: "Other" }
 };
 
 type Lage = { skanning: Skanning | null; forslag: Forslag[] };
@@ -183,6 +202,12 @@ export function useWebbplatsskanning(aktiv = true) {
 
 const T = {
   rubrik: { sv: "Förslag från er webbplats", en: "Suggestions from your website" },
+  rubrikUtanSkanning: { sv: "Förslag till kunskapsbasen", en: "Suggestions for the knowledge base" },
+  ingressUtanSkanning: {
+    sv: "De blir artiklar först när ni lägger till dem, och era egna texter ändras inte.",
+    en: "They become articles only when you add them, and your own texts are never changed."
+  },
+  franHjalprutan: { sv: "Från Hjälprutan", en: "From the help panel" },
   pagar: {
     sv: "Vi läser {sajt} och skriver förslag till kunskapsbasen. Det brukar ta en till tre minuter, och ni kan lämna sidan under tiden.",
     en: "We are reading {sajt} and writing suggestions for the knowledge base. It usually takes one to three minutes, and you can leave this page meanwhile."
@@ -304,36 +329,43 @@ export function WebbplatsForslag({ onAndrat }: Readonly<{ onAndrat: () => void }
   // före den, eller en där starten föll, hade ingen väg hit: panelen visades
   // inte alls och kunskapsbasen stod tom utan förklaring (produktion
   // 2026-11-23). Kunden startar den första inläsningen själv här.
-  if (!skanning && !fel) {
+  const startformular = (
+    <form
+      className="mt-4 flex flex-wrap items-end gap-3"
+      onSubmit={(e) => {
+        e.preventDefault();
+        void skanna(adress);
+      }}
+    >
+      <label className="grid min-w-0 flex-1 gap-1.5 sm:max-w-[360px]">
+        <span className={etikett}>{text(T.startAdress)}</span>
+        <input
+          value={adress}
+          onChange={(e) => setAdress(e.target.value)}
+          placeholder={text(T.startExempel)}
+          inputMode="url"
+          autoComplete="url"
+          className={cn(faltTatt, "w-full")}
+        />
+      </label>
+      <button type="submit" disabled={upptagen !== null || !adress.trim()} className={btnPrimary}>
+        {upptagen === "skanna" ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
+        {text(T.startKnapp)}
+      </button>
+    </form>
+  );
+
+  // Förslag ur Hjälprutan kan finnas utan skanning: då visas listan, och
+  // startformuläret står kvar under den i samma panel (annars gick den
+  // första inläsningen inte att starta förrän alla förslag var beslutade).
+  if (!skanning && !fel && forslag.length === 0) {
     return (
       <section aria-labelledby="webbplatsforslag" className="rounded-card border border-ink/15 bg-paper p-5">
         <h3 id="webbplatsforslag" className={rubrikPanel}>
           {text(T.startRubrik)}
         </h3>
         <p className="mt-2 max-w-[70ch] text-[0.9375rem] leading-6 text-ink-muted">{text(T.startText)}</p>
-        <form
-          className="mt-4 flex flex-wrap items-end gap-3"
-          onSubmit={(e) => {
-            e.preventDefault();
-            void skanna(adress);
-          }}
-        >
-          <label className="grid min-w-0 flex-1 gap-1.5 sm:max-w-[360px]">
-            <span className={etikett}>{text(T.startAdress)}</span>
-            <input
-              value={adress}
-              onChange={(e) => setAdress(e.target.value)}
-              placeholder={text(T.startExempel)}
-              inputMode="url"
-              autoComplete="url"
-              className={cn(faltTatt, "w-full")}
-            />
-          </label>
-          <button type="submit" disabled={upptagen !== null || !adress.trim()} className={btnPrimary}>
-            {upptagen === "skanna" ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
-            {text(T.startKnapp)}
-          </button>
-        </form>
+        {startformular}
         {atgardsfel ? (
           <p role="alert" className="mt-2 break-words text-[0.9375rem] text-danger">
             {text(atgardsfel)}
@@ -347,7 +379,7 @@ export function WebbplatsForslag({ onAndrat }: Readonly<{ onAndrat: () => void }
     <section aria-labelledby="webbplatsforslag" className="rounded-card border border-ink/15 bg-paper p-5">
       <div className="flex flex-wrap items-baseline justify-between gap-3">
         <h3 id="webbplatsforslag" className={rubrikPanel}>
-          {text(T.rubrik)}
+          {text(skanning ? T.rubrik : T.rubrikUtanSkanning)}
           {forslag.length ? ` (${forslag.length})` : ""}
         </h3>
         {forslag.length > 1 ? (
@@ -419,13 +451,27 @@ export function WebbplatsForslag({ onAndrat }: Readonly<{ onAndrat: () => void }
 
       {forslag.length ? (
         <>
-          <p className="mt-2 max-w-[70ch] text-[0.9375rem] leading-6 text-ink-muted">{fyll(text(T.ingress), { sajt })}</p>
-          <Radlista ariaLabel={text(T.rubrik)} className="mt-4">
-            {forslag.map((f) => (
+          <p className="mt-2 max-w-[70ch] text-[0.9375rem] leading-6 text-ink-muted">
+            {skanning ? fyll(text(T.ingress), { sajt }) : text(T.ingressUtanSkanning)}
+          </p>
+          <Radlista ariaLabel={text(skanning ? T.rubrik : T.rubrikUtanSkanning)} className="mt-4">
+            {forslag.map((f) => {
+              // Samma etikettplats som artikellistan: kategorin, och källan
+              // när förslaget kom ur Hjälprutan.
+              const etiketter = [
+                KATEGORI[f.category] ? text(KATEGORI[f.category]) : null,
+                f.kalla === "chatt" ? text(T.franHjalprutan) : null
+              ].filter(Boolean);
+              return (
               <Rad key={f.id}>
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div className="min-w-0">
-                    <p className="text-[0.9375rem] font-medium">{f.title}</p>
+                    <p className="text-[0.9375rem] font-medium">
+                      {f.title}
+                      {etiketter.length ? (
+                        <span className="ml-2 text-[13px] font-normal text-ink-subtle">{etiketter.join(" · ")}</span>
+                      ) : null}
+                    </p>
                     <p className="mt-1 line-clamp-3 max-w-[80ch] text-[0.875rem] leading-6 text-ink-muted">
                       {klartext(f.content)}
                     </p>
@@ -479,11 +525,19 @@ export function WebbplatsForslag({ onAndrat }: Readonly<{ onAndrat: () => void }
                   </div>
                 </div>
               </Rad>
-            ))}
+              );
+            })}
           </Radlista>
         </>
       ) : null}
 
+      {!skanning && forslag.length ? (
+        <div className="mt-5 border-t border-ink/15 pt-4">
+          <p className="text-[0.9375rem] font-medium">{text(T.startRubrik)}</p>
+          <p className="mt-1 max-w-[70ch] text-[0.9375rem] leading-6 text-ink-muted">{text(T.startText)}</p>
+          {startformular}
+        </div>
+      ) : null}
     </section>
   );
 }

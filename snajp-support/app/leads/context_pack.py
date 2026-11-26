@@ -37,6 +37,7 @@ def render_context_pack(
     retention_playbook: str | None = None,
     gap_notice: str = "",
     icp: str = "",
+    kb_salj: str = "",
 ) -> str:
     """Textinjektionen som kompletterar filmaterialiseringen. Rubriceras med
     samma sökväg skillens eget kontrakt refererar till.
@@ -65,7 +66,39 @@ def render_context_pack(
     if retention_playbook:
         parts.append("### Kontextpaket: retentionsplaybook (mk:churn-prevention)")
         parts.append(retention_playbook)
+    if kb_salj:
+        parts.append(f"### {KB_SALJ_RUBRIK}")
+        parts.append(kb_salj)
     return "\n\n".join(parts)
+
+
+#: Rubriken på avsnittet med kundens tillagda säljfakta (kategorin "salj").
+KB_SALJ_RUBRIK = "Kundens egna fakta ur kunskapsbasen"
+
+
+async def _kb_salj(storage, tenant_id: str) -> str:
+    """Kundens TILLAGDA artiklar i kategorin "salj" (kunddemon 2026-11-24).
+
+    Bara list_kb: förslag kunden inte lagt till ligger i ss_kb_forslag och
+    läses aldrig. Supportartiklarna hör till supportagenten och tas inte med.
+    En utgången artikel (giltig_till passerad) är inte underlag, samma regel
+    som kunskapsbasens sökning. Texten är kundens egen och granskad av kunden
+    (som product_marketing) och ramas därför inte in: ramens slumpade id
+    skulle annars bli siffror i grundningsgrindens tillåtna mängd."""
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    from ..config import KB_SALJ
+
+    idag = str(datetime.now(ZoneInfo("Europe/Stockholm")).date())
+    artiklar = [
+        a
+        for a in await storage.list_kb(tenant_id)
+        if a.get("category") == KB_SALJ and not (a.get("giltig_till") and str(a["giltig_till"]) < idag)
+    ]
+    if not artiklar:
+        return ""
+    return "\n\n".join(f"#### {a['title']}\n{a['content']}" for a in artiklar)
 
 
 def _med_overrides(icp: dict | None, overrides: dict | None) -> dict | None:
@@ -171,5 +204,6 @@ async def build_context_pack(
         retention_playbook=docs["retention_playbook"]["content"] if docs["retention_playbook"] else None,
         gap_notice=render_gap_notice(luckor),
         icp=render_icp(_med_overrides(settings.get("icp"), overrides)),
+        kb_salj=await _kb_salj(storage, tenant_id),
     )
     return rendered, state.missing

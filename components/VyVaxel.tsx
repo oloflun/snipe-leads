@@ -1,16 +1,15 @@
 "use client";
 
 import { Eye, ShieldCheck } from "lucide-react";
-import { useDashboard } from "@/components/dashboard/DashboardContext";
-import { bytVy } from "@/lib/actions/vy";
+import { bytVyOchOppna, useDashboard } from "@/components/dashboard/DashboardContext";
 import { cn } from "@/lib/utils";
 
 /**
  * Admin / Demo. Bara synlig för plattformsadmin, och den enda adminkontroll
  * som finns kvar i demovyn — annars vore den inte en demo av kundens produkt.
  *
- * Formulär och inte onClick, av samma skäl som utloggningen i AppShell:
- * `bytVy` är en server action, och knappen fungerar innan JavaScript laddat.
+ * Formulär och inte onClick: `bytVyOchOppna` kör server actionen `bytVy` och
+ * öppnar adressen hårt (INV-SEC-014), så att förra vyns state inte följer med.
  * Två submit-knappar i samma formulär, var och en med `name="vy"` — den som
  * trycks är den som hamnar i FormData.
  *
@@ -55,7 +54,7 @@ export function VyVaxel({ ton = "ljus" }: Readonly<{ ton?: "ljus" | "rail" }> = 
 
   return (
     <form
-      action={bytVy}
+      action={bytVyOchOppna}
       className={cn(
         "flex items-center gap-0.5 rounded-input p-0.5",
         ton === "rail" ? "bg-paper/[0.06]" : "bg-paper2"
