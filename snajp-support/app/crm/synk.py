@@ -45,7 +45,7 @@ import json
 from dataclasses import dataclass, field
 from typing import Any
 
-from . import adaptrar, falt, handelser, lagring
+from . import adaptrar, falt, handelser, lagring, supportrapport
 
 #: Styr och härledda fält som inte jämförs mot källan.
 _HARLEDDA = ("namnnyckel", "orgnr_nyckel", "enskild_firma", "doman")
@@ -381,6 +381,8 @@ async def slutfor(
     klar = await lagring.avsluta_korning(storage, tenant_id, korning["id"],
                                          status="failed" if fel else "completed", error=fel, borttagna=borttagna)
     if klar:
+        # Fel går vidare till supporten med hela rapporten (migration 163).
+        klar = await supportrapport.lamna(storage, tenant_id, anslutning, klar)
         from . import webhooks
 
         await webhooks.koa(storage, tenant_id, [("sync.completed", {

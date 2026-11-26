@@ -39,7 +39,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 from ..avtalsgrind import avtal_saknas
-from ..crm import adaptrar, falt, handelser, lagring, nycklar, synk, tillgang, webhooks
+from ..crm import adaptrar, falt, handelser, lagring, nycklar, supportrapport, synk, tillgang, webhooks
 from ..integrationer import hemligheter
 from .deps import kraev_uuid, require_crm_nyckel
 from .rate_limit import RateLimitExceededError, RateLimitRule, SlidingWindowRateLimiter
@@ -332,6 +332,13 @@ def korning_ut(rad: dict[str, Any]) -> dict[str, Any]:
                    "unchanged": rad["oforandrade"], "skipped": rad["hoppade"], "conflicts": rad["konflikter"],
                    "removed": rad["borttagna"]},
         "errors": rad.get("fel") or [], "error": rad.get("error"),
+        # Samma fel i enkla ord, för den som inte ska behöva läsa koder.
+        "issues": [{"kind": r["sort"], "object": handelser.OBJEKT_UT.get(r["objekt"], r["objekt"]),
+                    "field": _FALT_UT.get(r["falt"], r["falt"]) if r["falt"] else None, "count": r["antal"]}
+                   for r in supportrapport.enkelt(rad)],
+        # Satt när körningen hade fel: rapporten har då gått vidare till Snajps support.
+        "support": ({"forwarded_at": rad["support_lamnad_at"], "ticket": rad.get("support_arende")}
+                    if rad.get("support_lamnad_at") else None),
         "created_at": rad.get("created_at"), "updated_at": rad.get("updated_at"),
         "completed_at": rad.get("completed_at"),
     }
@@ -1070,7 +1077,8 @@ async def slutfor_korning(request: Request, run_id: str, tenant: dict = Depends(
     if korning["status"] != "processing":
         return korning_ut(korning)
     if not korning.get("anslutning_id"):
-        return korning_ut(await lagring.avsluta_korning(storage, tenant["tenant_id"], korning["id"], status="completed"))
+        klar = await lagring.avsluta_korning(storage, tenant["tenant_id"], korning["id"], status="completed")
+        return korning_ut(await supportrapport.lamna(storage, tenant["tenant_id"], None, klar))
     anslutning = await _anslutning(request, tenant, korning["anslutning_id"])
     return korning_ut(await synk.slutfor(storage, tenant["tenant_id"], anslutning, korning))
 

@@ -25,6 +25,7 @@ from .api import (
     admin_utkastsvep,
     admin_webbpool,
     admin_kunddata,
+    admin_crm,
     admin_listor,
     admin_plattformsarenden,
     admin_profil,
@@ -515,6 +516,8 @@ app.include_router(kvitton.router)
 # egen yta för nycklar och översikt. Se api/crm_v1.py och api/crm.py.
 app.include_router(crm_v1.router)
 app.include_router(crm.router)
+# Supportens sida av synkens felrapporter (migration 163); se api/admin_crm.py.
+app.include_router(admin_crm.router)
 
 # Ohanterade fel hamnar i platform_events i stället för att rulla förbi i
 # Renders stdout och försvinna vid nästa spin-down (migration 026).

@@ -60,6 +60,8 @@ TABELLER: dict[str, dict[str, str | None]] = {
         "startad_av": None, "totalt": _TAL, "skapade": _TAL, "uppdaterade": _TAL,
         "oforandrade": _TAL, "hoppade": _TAL, "konflikter": _TAL, "borttagna": _TAL,
         "fel": _JSON, "error": None, "created_at": _TID, "updated_at": _TID, "completed_at": _TID,
+        # Rapporten till supporten (migration 163, app/crm/supportrapport.py).
+        "supportrapport": _JSON, "support_lamnad_at": _TID, "support_arende": None,
     },
     # Webhooks ut (migration 162). Händelseloggen crm_handelser har löpnummer
     # som id och skrivs i satser: den har egna funktioner i app/crm/handelser.py.
