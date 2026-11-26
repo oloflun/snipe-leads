@@ -2,7 +2,7 @@
 
 Området gäller allt en utvecklare eller integratör möter i Twenty: REST- och GraphQL-API:t för poster och schema, API-nycklar, webhooks, hastighetsgränser, OpenAPI, OAuth, MCP-servern för AI-klienter, appplattformen med SDK, CLI och marknadsplats, och Zapier-kopplingen. Snajp CRM har ett eget REST-API under `/api/crm/v1` med nycklar med omfång, synk in, ändringsflöde och signerade webhooks, men ingen GraphQL, ingen OAuth, ingen MCP-server och ingen appplattform.
 
-Antal per läge (räknat i tabellen nedan, 351 rader): verifierad 25, byggd 1, delvis 41, inte gjord 264, avstår 20.
+Antal per läge (räknat i tabellen nedan, 351 rader): verifierad 23, byggd 3, delvis 42, inte gjord 263, avstår 20.
 
 ## De största luckorna
 
@@ -44,12 +44,12 @@ Antal per läge (räknat i tabellen nedan, 351 rader): verifierad 25, byggd 1, d
 | API-021 | Integratören begränsar svaret till valda fält. | inte gjord | Svaret bär alltid hela posten. | ej planerad |
 | API-022 | Ett objekt med mycket många fält ger ett standardurval när fälten inte anges. | avstår | Ersätts av fasta fält plus högst 50 egna värden i `custom` (`snajp-support/app/crm/synk.py`): inget objekt blir så brett att ett urval behövs. |  |
 | API-023 | Integratören väljer om relaterade poster ska följa med i svaret. | inte gjord | Svaret bär bara relationens id (`company_id`); den relaterade posten hämtas för sig. | ej planerad |
-| API-024 | Integratören styr sidans storlek med `limit`, med standardvärde och tak. | verifierad | `limit` 1 till 500, standard 50, annat ger 422 (`crm_v1.py:_LISTPARAMETRAR`); `test_api.py::test_sidindelning_med_markor`. |  |
+| API-024 | Integratören styr sidans storlek med `limit`, med standardvärde och tak. | byggd | `limit` 1 till 500, standard 50, annat ger 422 (`crm_v1.py:_LISTPARAMETRAR`). `test_api.py::test_sidindelning_med_markor` använder `limit` 3 och 500, men inget test prövar standardvärdet eller att ett värde över taket ger 422. |  |
 | API-025 | Integratören bläddrar framåt och bakåt med markörer. | delvis | Finns: framåt med `cursor` och `next_cursor`, en oläslig markör ger 422 (`test_api.py::test_sidindelning_med_markor`). Saknas: bakåt. | ej planerad |
 | API-026 | Integratören sorterar på valfritt fält och riktning, med stabil ordning. | delvis | Finns: `sort` med `updated`, `-updated` och `name`, och egna ordningar för affärer och uppgifter (`test_handelser_webhooks.py::test_senast_andrad_forst_med_sidindelning`, `test_objekt_ovriga.py::test_uppgifter_sorteras_pa_forfallodag_och_filtreras`). Saknas: valfritt fält och val av var tomma värden hamnar. | ej planerad |
-| API-027 | Integratören filtrerar med fält, jämförare och värde. | delvis | Finns: fasta filter som `q`, `relation`, `org_number`, `company_id`, `updated_since`, och uppgifternas `status`, `owner` och `due_before` (`test_objekt_ovriga.py::test_uppgifter_sorteras_pa_forfallodag_och_filtreras`). Saknas: ett filterspråk med jämförare. | ej planerad |
+| API-027 | Integratören filtrerar med fält, jämförare och värde. | delvis | Finns: fasta filter som `q`, `relation`, `org_number`, `company_id`, `updated_since`, personernas `source_type`, affärernas `stage_id` och `lost_reason_code`, och uppgifternas `status`, `owner` och `due_before` (`test_objekt_ovriga.py::test_uppgifter_sorteras_pa_forfallodag_och_filtreras`). Saknas: ett filterspråk med jämförare. | ej planerad |
 | API-028 | Integratören kombinerar filtervillkor med and, or och not. | inte gjord | De fasta filtren slås alltid ihop med och; inget filterspråk. | ej planerad |
-| API-029 | Integratören filtrerar på en lista av värden och på tomt eller ifyllt. | inte gjord | Varken `in` eller tomt/ifyllt finns i API:t. | ej planerad |
+| API-029 | Integratören filtrerar på en lista av värden och på tomt eller ifyllt. | delvis | Finns: ett fast tomt-filter, `missing_source` på `GET /people` (personer utan källa; `crm_v1.py:lista_personer`; inget test prövar just filtret). Saknas: `in` mot en lista av värden och tomt/ifyllt på valfritt fält. | ej planerad |
 | API-030 | Vilka jämförare som går att använda beror på fältets typ. | inte gjord | Inget filterspråk. | ej planerad |
 | API-031 | Varje fälttyp valideras och normaliseras innan något skrivs, och ett fel namnger fältet. | verifierad | `snajp-support/app/crm/falt.py` (organisationsnummer, telefon, postnummer, datum, belopp); `test_api.py::test_ogiltiga_falt_ger_422_med_faltnamn`. |  |
 | API-032 | En för tung fråga avvisas med ett komplexitetstak. | avstår | Ersätts av fasta tak i `crm_v1.py`: inga nästlade frågor, `limit` högst 500, satser högst 500 poster och 8 MB (`MAX_SATS`, `MAX_KROPP`). |  |
@@ -96,13 +96,13 @@ Antal per läge (räknat i tabellen nedan, 351 rader): verifierad 25, byggd 1, d
 | API-087 | Driftpersonal skapar en nyckel från serverns kommandorad. | avstår | Gäller bara egen drift av Twenty. I Snajp skapar kunden nyckeln under CRM › Utvecklare (`components/crm/app/UtvecklareVy.tsx`). |  |
 | API-088 | Nyckelfel har egna koder och meddelanden. | delvis | Finns: 401 utan nyckel och 403 `scope_missing` (`crm_v1.py:kraev`, `test_api.py::test_varje_omfang_oppnar_bara_sitt`). Saknas: egna koder för återkallad och utgången nyckel. | ej planerad |
 | API-090 | Administratören skapar en webhook med adress, händelser, beskrivning och hemlighet. | verifierad | `POST /webhooks` (`snajp-support/app/crm/webhooks.py:skapa`), hemligheten genereras och visas en gång; `test_handelser_webhooks.py::test_webhooken_far_handelsen_signerad`. Ingen roll och ingen egen hemlighet. |  |
-| API-091 | Administratören listar, ändrar och raderar webhooks. | verifierad | `GET`, `PATCH` och `DELETE /webhooks/{id}` (`crm_v1.py`); `test_handelser_webhooks.py::test_webhook_som_bara_misslyckas_stangs_av_och_sager_det`, `test_bara_publika_https_adresser_och_kanda_handelser`. Raderingen är permanent och tar loggen med. |  |
+| API-091 | Administratören listar, ändrar och raderar webhooks. | byggd | `GET /webhooks`, `GET`, `PATCH` och `DELETE /webhooks/{id}` (`crm_v1.py:lista_webhooks`, `andra_webhook`, `radera_webhook`). Raderingen är permanent och tar loggen med. Testen prövar bara delar: `PATCH` av `active` (`test_handelser_webhooks.py::test_webhook_som_bara_misslyckas_stangs_av_och_sager_det`) och listan (`test_webhooken_far_handelsen_signerad`); `DELETE` och ändring av adress eller händelser prövas av inget test. |  |
 | API-092 | Webhooken filtreras per objekt och händelse, med jokertecken. | delvis | Finns: exakta händelsenamn eller `*` (`webhooks._vill_ha`, `test_handelser_webhooks.py::test_webhooken_far_handelsen_signerad`). Saknas: jokertecken för en del, som `company.*` eller `*.created`. | ej planerad |
 | API-093 | Webhooks för ändringar i schemat. | inte gjord | Inget schema att ändra; den enda händelsen utanför posterna är `sync.completed`. | ej planerad |
 | API-094 | Webhooken ser bara det dess roll får läsa. | delvis | Finns: en webhook får bara sin egen kunds händelser (`test_handelser_webhooks.py::test_webhooken_far_handelsen_signerad`). Saknas: roll per webhook. | ej planerad |
 | API-095 | Leveransen bär händelsens id, namn, tid och posten. | delvis | Finns: `id` (samma vid omförsök), `type`, `created_at` och `data` med objekt, id och post (`handelser._data`, `test_handelser_webhooks.py::test_webhooken_far_handelsen_signerad`). Saknas: ändrade fält och vem som ändrade. | ej planerad |
 | API-096 | Mottagaren kontrollerar en HMAC-signatur över tid och kropp. | verifierad | `X-Snajp-Signature: t=..,v1=..`, HMAC-SHA256 över `{t}.{kropp}` (`webhooks.signera`); `test_handelser_webhooks.py::test_webhooken_far_handelsen_signerad`. Ingen nonce. |  |
-| API-097 | Leveransen har en tidsgräns, 2xx räknas som lyckat och interna adresser blockeras. | verifierad | Tio sekunder (`webhooks.TIDSGRANS`) genom nätvakten (`snajp-support/app/integrationer/natvakt.py`); `test_handelser_webhooks.py::test_misslyckad_leverans_forsoks_igen_och_gar_att_skicka_om`, `test_adressen_provas_igen_nar_leveransen_gar`. |  |
+| API-097 | Leveransen har en tidsgräns, 2xx räknas som lyckat och interna adresser blockeras. | byggd | Tio sekunder (`webhooks.TIDSGRANS`) genom nätvakten (`snajp-support/app/integrationer/natvakt.py`). Testen prövar att 204 räknas som levererad och att ett namn som pekas inåt blockeras (`test_handelser_webhooks.py::test_misslyckad_leverans_forsoks_igen_och_gar_att_skicka_om`, `test_adressen_provas_igen_nar_leveransen_gar`); inget test prövar tidsgränsen. |  |
 | API-098 | Varje leverans loggas med status och utfall. | verifierad | Leveransloggen i 30 dagar, `GET /webhooks/{id}/deliveries`; `test_handelser_webhooks.py::test_webhooken_far_handelsen_signerad`. |  |
 | API-099 | En misslyckad leverans görs om. | verifierad | Sju försök över drygt ett dygn (`webhooks.VANTETIDER`) och omskick för hand; `test_handelser_webhooks.py::test_misslyckad_leverans_forsoks_igen_och_gar_att_skicka_om`. |  |
 | API-100 | Webhookanropen har en hastighetsgräns per arbetsyta. | delvis | Finns: jobbet skickar högst 50 leveranser per kund och varv, ett varv var tionde sekund, och resten väntar i kön (`webhooks.leverera_for_kund`, `run_webhookjobb`). Saknas: en uttalad gräns; inget kastas. | ej planerad |
@@ -228,7 +228,7 @@ Antal per läge (räknat i tabellen nedan, 351 rader): verifierad 25, byggd 1, d
 | API-260 | Utvecklarsidan har flikar för API, webhooks, appar och CLI. | delvis | Finns: sidan Utvecklare med nycklar och webhooks (`components/crm/app/UtvecklareVy.tsx`, `Webhooks.tsx`; bilden `docs/crm/bilder/app/utvecklare-1440.png` visar nyckeldelen). Saknas: appar och CLI. | ej planerad |
 | API-261 | Användaren skapar en API-nyckel i gränssnittet och ser den en gång. | delvis | Finns: dialogen Ny nyckel med namn och omfång, nyckeln visas en gång med kopiering (`UtvecklareVy.tsx`), tabellen i bilden `utvecklare-1440.png`. Saknas: utgång och roll. | ej planerad |
 | API-262 | Användaren regenererar eller raderar en nyckel från dess sida. | delvis | Finns: återkalla med bekräftelse (`UtvecklareVy.tsx`). Saknas: regenerera, byta roll och en egen sida per nyckel. | ej planerad |
-| API-263 | Användaren skapar och redigerar webhooks i gränssnittet. | delvis | Finns: ny webhook med adress, beskrivning och alla eller valda händelser, hemligheten en gång, slå av och på, ta bort, leveranslogg med omskick och testanrop (`components/crm/app/Webhooks.tsx`). Saknas: ändra adress och händelser i gränssnittet, och en godkänd bild. | 3 |
+| API-263 | Användaren skapar och redigerar webhooks i gränssnittet. | delvis | Finns: ny webhook med adress, beskrivning och alla eller valda händelser, hemligheten en gång, slå av och på, ta bort, leveranslogg med omskick och testanrop (`components/crm/app/Webhooks.tsx`). Bilderna `docs/crm/bilder/fas3/panel-webhooks-lista-390.png`, `panel-webhooks-logg-1440.png` och `panel-webhooks-skapad-1440.png` visar lista, logg och hemlighet. Saknas: ändra adress och händelser i gränssnittet. | 3 |
 | API-264 | Användaren provkör API:t i en playground. | inte gjord | Ingen playground. | ej planerad |
 | API-265 | En CLI-flik visar färdiga kommandon att kopiera. | inte gjord | Inget CLI. | ej planerad |
 | API-266 | En appflik visar arbetsytans egna appar och anspråk. | inte gjord | Ingen appplattform. | ej planerad |
@@ -282,7 +282,7 @@ Antal per läge (räknat i tabellen nedan, 351 rader): verifierad 25, byggd 1, d
 | API-340 | En apps logghändelser syns i arbetsytans logg. | inte gjord | Ingen appplattform. | ej planerad |
 | API-341 | Appar testas och paketeras med en färdig mall. | inte gjord | Ingen appplattform. | ej planerad |
 | API-342 | Appar översätts med extraherade strängkataloger. | inte gjord | Ingen appplattform. | ej planerad |
-| API-343 | Användarna har en sida som förklarar webhooks. | byggd | `docs/crm/API.md` § Webhooks (signatur, omförsök, leveranslogg, avstängning) och förklaringen i `components/crm/app/Webhooks.tsx`. |  |
+| API-343 | Användarna har en sida som förklarar webhooks. | verifierad | `docs/crm/API.md` § Webhooks (signatur, omförsök, leveranslogg, avstängning) och förklaringen i `components/crm/app/Webhooks.tsx`; bilderna `docs/crm/bilder/fas3/panel-webhooks-lista-390.png` och `panel-webhooks-logg-1440.png` visar förklaringen under rubriken Webhooks och i loggens fot. |  |
 | API-344 | En app deklarerar egna objekt. | inte gjord | Ingen appplattform och inga egna objekt. | ej planerad |
 | API-345 | En app deklarerar relationer mellan objekt. | inte gjord | Ingen appplattform. | ej planerad |
 | API-346 | En app refererar systemfält och systemvyer med härledda id. | inte gjord | Ingen appplattform. | ej planerad |
@@ -372,3 +372,17 @@ Antal per läge (räknat i tabellen nedan, 351 rader): verifierad 25, byggd 1, d
 | API-430 | Händelseströmmen skickas med behörighetsfilter per mottagare. | inte gjord | Ingen händelseström. | ej planerad |
 | API-431 | Förlagan deklarerar 75 AI-verktyg för metadata. | inte gjord | Inga AI-verktyg i CRM:et. | ej planerad |
 | API-432 | En AI-agent startas av en posthändelse eller ett schema. | inte gjord | Inga AI-agenter i CRM:et. | ej planerad |
+
+## Rättat vid kontroll 2026-11-27
+
+Kontrollen räknade 351 ID:n i underlaget (tabellraderna ovanför "Rättat vid kontroll") och 351 i den här filen; inga saknades. Prövade mot koden: alla 25 rader som stod som verifierade, raden som stod som byggd, alla 41 som stod som delvis och ett femtiotal rader som stod som inte gjorda och handlar om affärer, tidslinje, papperskorg, webhooks, händelser, bilagor och spärrar (bland dem API-011, 014, 016, 018, 019, 021, 023, 028, 029, 056, 069, 070, 093, 101, 207, 304, 347, 424 och 430). Spärrlistan (`/suppressions`, `sparr.py`) finns ännu inte i koden och har ingen rad här.
+
+| ID | Från | Till | Varför |
+|---|---|---|---|
+| API-024 | verifierad | byggd | Testet använder bara `limit` 3 och 500; standardvärdet 50 och 422 över taket prövas av inget test. |
+| API-091 | verifierad | byggd | `DELETE /webhooks/{id}` och ändring av adress eller händelser prövas av inget test; testen visar bara `PATCH` av `active` och listan. |
+| API-097 | verifierad | byggd | Tidsgränsen på tio sekunder prövas av inget test; 2xx och blockerade adresser prövas. |
+| API-343 | byggd | verifierad | Bilderna `panel-webhooks-lista-390.png` och `panel-webhooks-logg-1440.png` visar förklaringen i gränssnittet. |
+| API-029 | inte gjord | delvis | `missing_source` på `GET /people` är ett fast tomt-filter (inget test). |
+| API-027 | delvis | delvis | Texten saknade filtren `source_type`, `stage_id` och `lost_reason_code` (de två senare prövade i `test_kalla_forlustorsak.py`). |
+| API-263 | delvis | delvis | Texten sa att en bild saknades; bilderna finns under `docs/crm/bilder/fas3/panel-webhooks-*`. |
