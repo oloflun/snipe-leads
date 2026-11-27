@@ -770,7 +770,8 @@ function Kontroll({ oppen, stang }: Readonly<{ oppen: boolean; stang: () => void
       const id = new Set(kontroll.suppression_ids ?? []);
       let traffar: Sparr[] = [];
       if (id.size) {
-        const sokord = slag === "email" ? (v.split("@")[1] ?? v).toLowerCase() : v.replace(/\D/g, "").replace(/^(0046|46|0)/, "");
+        const siffror = v.replace(/\D/g, "");
+        const sokord = slag === "email" ? (v.split("@")[1] ?? v).toLowerCase() : slag === "phone" ? siffror.replace(/^(0046|46|0)/, "") : siffror;
         const sida = await crmAnrop<Svarssida<Sparr>>(`/v1/suppressions?limit=100&q=${encodeURIComponent(sokord)}`).catch(() => null);
         traffar = (sida?.data ?? []).filter((s) => id.has(s.id));
       }
