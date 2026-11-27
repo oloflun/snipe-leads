@@ -17,6 +17,7 @@ import { Text } from "@astryxdesign/core/Text";
 import { TextArea } from "@astryxdesign/core/TextArea";
 import { TextInput } from "@astryxdesign/core/TextInput";
 import { Prick } from "@/components/crm/app/kit";
+import { StrukturVal } from "@/components/crm/app/iris/StrukturVal";
 import { delaMejl } from "@/lib/crm/iris/mejl";
 import { CrmFel } from "@/lib/crm/api";
 import {
@@ -560,16 +561,7 @@ export function Utkastredigerare({
         <div className="crm-skrivyta flex flex-col gap-3 rounded-[16px] p-4">
           {skrivOm?.struktur ? (
             <div className="max-w-[320px]">
-              <Selector
-                label={text({ sv: "Mejlens struktur", en: "Email structure" })}
-                value={omskrivning.struktur}
-                onChange={(v) => (v === "a" || v === "b") && setOmskrivning((o) => (o ? { ...o, struktur: v } : o))}
-                options={[
-                  { value: "a", label: text({ sv: "A, utförlig", en: "A, detailed" }), description: text({ sv: "En ingång om dem, vad agenten gör, erbjudandet och en inbjudan", en: "An opening about them, what the agent does, the offer and an invitation" }) },
-                  { value: "b", label: text({ sv: "B, kort och rakt på", en: "B, short and direct" }), description: text({ sv: "Kort, slutar med en fråga om vad agenten kan ge dem", en: "Short, ends with a question about what the agent can do for them" }) }
-                ]}
-                width="100%"
-              />
+              <StrukturVal value={omskrivning.struktur} onChange={(v) => setOmskrivning((o) => (o ? { ...o, struktur: v } : o))} />
             </div>
           ) : null}
           {skrivOm?.onskemal ? (

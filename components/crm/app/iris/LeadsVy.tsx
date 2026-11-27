@@ -49,6 +49,7 @@ import { SIDSTORLEK, useSida, useSidaFor } from "@/components/leads/sidindelning
 import { pafyllnadSkal } from "@/components/leads/pafyllnad";
 import { Bekraftelse } from "@/components/crm/app/iris/Bekraftelse";
 import { LeadPanel } from "@/components/crm/app/iris/LeadPanel";
+import { StrukturVal } from "@/components/crm/app/iris/StrukturVal";
 import { Kolumnrubrik, Postchip, Prick, Tabellskelett, Vyval, grannfokus, tonFor, tonklass, useSkrivratt, useSmal, utanBolagsform } from "@/components/crm/app/kit";
 import { Felruta, Sida } from "@/components/crm/app/Sida";
 import { useDashboard } from "@/components/dashboard/DashboardContext";
@@ -1249,19 +1250,12 @@ export function LeadsVy({ bas = "/crm" }: Readonly<{ bas?: string }>) {
 
   // Utkastets struktur, A eller B, vid varje Skapa utkast, Skapa om och Bearbeta om (LR-074). Minns per webbläsare.
   const strukturval = (
-    <Selector
-      label={text({ sv: "Utkastets struktur", en: "Draft structure" })}
+    <StrukturVal
       value={struktur}
       onChange={(v) => {
-        if (v !== "a" && v !== "b") return;
         setStruktur(v);
         void import("@/lib/leads/struktur").then((m) => m.sparaStruktur(v));
       }}
-      options={[
-        { value: "a", label: text({ sv: "A, standardmejlet", en: "A, the standard email" }) },
-        { value: "b", label: text({ sv: "B, kort med en fråga", en: "B, short with a question" }) }
-      ]}
-      width="100%"
     />
   );
 

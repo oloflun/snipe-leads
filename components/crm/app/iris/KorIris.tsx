@@ -13,7 +13,9 @@ import { Text } from "@astryxdesign/core/Text";
 import { TextArea } from "@astryxdesign/core/TextArea";
 import { TextInput } from "@astryxdesign/core/TextInput";
 import { useDashboard } from "@/components/dashboard/DashboardContext";
+import { StrukturVal } from "@/components/crm/app/iris/StrukturVal";
 import { PROXYKODER } from "@/lib/crm/felkoder";
+import { kundfelkod } from "@/lib/leads/felkoder";
 import { lista, rader, type Overskrivningar, type Startad, type Startsvar } from "@/lib/crm/iris/korning";
 import { useLocale, type Localized } from "@/lib/i18n";
 import { icpEtiketter, type IcpNyckel } from "@/lib/leads/icpLabels";
@@ -174,6 +176,12 @@ export function KorIris({ oppen, stang, startad }: Readonly<{ oppen: boolean; st
       });
       const kropp = (await svar.json().catch(() => null)) as (Startsvar & { detail?: unknown; error?: string; kod?: string }) | null;
       if (!svar.ok) {
+        // En känd felkod (saknar_produkt, saknar_beskrivning) på kundens språk; serverns text är svensk.
+        const kod = kundfelkod(kropp);
+        if (kod) {
+          setAllmant(text(kod));
+          return;
+        }
         const { falt, ovrigt } = serverfel(kropp?.detail);
         const proxy = kropp?.kod ? PROXYKODER[kropp.kod] : undefined;
         if (Object.keys(falt).length) visaFel(falt);
@@ -296,16 +304,7 @@ export function KorIris({ oppen, stang, startad }: Readonly<{ oppen: boolean; st
                   {omfattning === "research_and_draft" ? (
                     <div data-falt="struktur" className="sm:col-span-2">
                       {/* LK-135: A eller B, senaste valet minns per webbläsare. */}
-                      <Selector
-                        label={text({ sv: "Mejlens struktur", en: "Email structure" })}
-                        value={struktur}
-                        onChange={(v) => (v === "a" || v === "b") && setStruktur(v)}
-                        options={[
-                          { value: "a", label: text({ sv: "A, utförlig", en: "A, detailed" }), description: text({ sv: "En ingång om dem, vad agenten gör, erbjudandet och en inbjudan.", en: "An opening about them, what the agent does, the offer and an invitation." }) },
-                          { value: "b", label: text({ sv: "B, kort och rakt på", en: "B, short and direct" }), description: text({ sv: "Ett kort mejl som slutar med en fråga. Samma signatur, fot och granskning som A.", en: "A short email that ends with a question. Same signature, footer and review as A." }) }
-                        ]}
-                        width="100%"
-                      />
+                      <StrukturVal value={struktur} onChange={setStruktur} />
                     </div>
                   ) : null}
                 </div>

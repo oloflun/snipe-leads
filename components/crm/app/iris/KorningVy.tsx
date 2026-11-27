@@ -30,7 +30,8 @@ import { Felruta, Sida } from "@/components/crm/app/Sida";
 import { CrmFel } from "@/lib/crm/api";
 import { LEADS_UPPDATERADE, PANELENS_KALLA, allaLeads, irisAnrop, meddelaLeadsUppdaterade } from "@/lib/crm/iris/anrop";
 import type { Lead } from "@/lib/crm/iris/lead";
-import { forstaMening } from "@/lib/crm/iris/mejl";
+import { delaMejl, forstaMening } from "@/lib/crm/iris/mejl";
+import { STRUKTURNAMN } from "@/components/crm/app/iris/StrukturVal";
 import {
   LETAR_FRASER,
   RESEARCH_FRASER,
@@ -42,12 +43,16 @@ import {
   antalBortvalda,
   antalJobb,
   arbetar,
+  LAGE,
+  lage as lageFor,
   kanFortsatta,
+  kanPausas,
   kanStyras,
   korningsTyp,
   pagar,
   vilaText,
   type KorningsLead,
+  type Lage,
   type KorningsRad,
   type KorningsUtkastSvar,
   type Tratt
@@ -68,9 +73,23 @@ const PULS = 3000;
 const SKRIV_MS = 5000;
 const SKRIV_VARV = 60;
 const skrivnyckel = (id: string) => `crm-iris-skriver:${id}`;
+/** Avsändaren på sidans egna signaler: sidan läser redan om efter sina egna handlingar och lyssnar inte på dem. */
+const KORNINGENS_KALLA = "crm-iris-korning";
+/** Lägger fokus på ett element som står kvar när det som hade fokus försvann (rubriken blir fokuserbar vid behov). */
+function fokusera(...valjare: string[]) {
+  window.setTimeout(() => {
+    for (const v of valjare) {
+      const el = document.querySelector<HTMLElement>(v);
+      if (!el || el.matches(":disabled")) continue;
+      if (!el.matches("a, button, input, select, textarea, [tabindex]")) el.setAttribute("tabindex", "-1");
+      el.focus();
+      return;
+    }
+  }, 80);
+}
 const feltext = (e: unknown): Localized => (e instanceof CrmFel ? e.text : e instanceof Error ? { sv: e.message, en: e.message } : { sv: "Okänt fel.", en: "Unknown error." });
 
-/** Lägesfraserna roterar var tionde sekund (LK-027). Bytet sägs inte upp: regionen bredvid bär talen. */
+/** Lägesfraserna roterar var tionde sekund (LK-027). Bytet sägs inte upp: sidans statusregion säger läget och leads klara. */
 function Roterande({ fraser }: Readonly<{ fraser: Localized[] }>) {
   const { text } = useLocale();
   const [i, setI] = useState(0);
@@ -191,25 +210,38 @@ export function KorningVy({ id, bas = "/crm" }: Readonly<{ id: string; bas?: str
   const [utkast, setUtkast] = useState<(KorningsUtkastSvar & { signatur?: Signatur | null }) | null>(null);
   const [utkastFel, setUtkastFel] = useState<unknown>(null);
   const [leadrader, setLeadrader] = useState<Map<string, Lead> | null>(null);
+  // Påfyllnadens märke kunde inte läsas: sägs i stället för att tyst saknas (regel 23).
+  const [leadraderFel, setLeadraderFel] = useState(false);
   const harJobb = rad?.scope === "batch" && antalJobb(rad.korning) > 0;
+  // Egna bolag: sökjobbet lade ett researchjobb per bolag och körningen har inget motortillstånd (LK-005, LK-014).
+  const egnaBolag = rad != null && rad.scope === "batch" && rad.korning == null && !pagar(rad) && rad.status !== "failed";
+  const utkastNr = useRef(0);
   const hamtaUtkast = useCallback(async () => {
+    // Bara det senaste svaret får skriva: hämtningar som korsar varandra kommer annars i fel ordning.
+    const mitt = ++utkastNr.current;
     try {
       const s = await irisAnrop<KorningsUtkastSvar & { signatur?: Signatur | null }>(`/leads/korningar/${encodeURIComponent(id)}/utkast`);
+      if (mitt !== utkastNr.current) return s;
       setUtkast(s);
       setUtkastFel(null);
       return s;
     } catch (e) {
-      setUtkastFel(e);
+      if (mitt === utkastNr.current) setUtkastFel(e);
       return null;
     }
   }, [id]);
   // Iris-listans rader bär påfyllnaden och ger leadets panel ett huvud direkt. Körningens utkastsvar bär den inte.
+  const leadNr = useRef(0);
   const hamtaLeadrader = useCallback(async () => {
+    const mitt = ++leadNr.current;
     try {
       const alla = await allaLeads<Lead>();
+      if (mitt !== leadNr.current) return;
       setLeadrader(new Map(alla.map((p) => [p.id, p])));
+      setLeadraderFel(false);
     } catch {
-      setLeadrader((m) => m ?? new Map());
+      // Står kvar som det var (null hämtas om vid nästa öppning eller händelse), och felet sägs vid listan.
+      if (mitt === leadNr.current) setLeadraderFel(true);
     }
   }, []);
   const behoverLeads = flik === "leads" || leadId != null || utkastId != null;
@@ -219,16 +251,24 @@ export function KorningVy({ id, bas = "/crm" }: Readonly<{ id: string; bas?: str
     // Läses om när körningen rört sig, så att en pågående körnings leads fylls på medan man tittar.
   }, [harJobb, behoverLeads, hamtaUtkast, rad?.updated_at]);
   useEffect(() => {
-    if (behoverLeads && leadrader == null) void hamtaLeadrader();
+    if (behoverLeads && (leadrader == null || leadraderFel)) void hamtaLeadrader();
+    // leadraderFel med flit utanför: ett fel prövas igen vid nästa öppning, inte i en slinga.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [behoverLeads, leadrader, hamtaLeadrader]);
 
-  // Ändras leads eller utkast någon annanstans (panelen, Iris-listan, Utkast) läses allt om.
+  // Ändras leads eller utkast någon annanstans (panelen, Iris-listan, Utkast) läses allt om. Vyns egna
+  // signaler (körningslistans och den här sidans) läser den redan om själv.
+  const behoverLeadsRef = useRef(behoverLeads);
+  behoverLeadsRef.current = behoverLeads;
   useEffect(() => {
     const uppdatera = (e: Event) => {
-      if ((e as CustomEvent).detail === KORNINGARNAS_KALLA) return;
+      const kalla = (e as CustomEvent).detail;
+      if (kalla === KORNINGARNAS_KALLA || kalla === KORNINGENS_KALLA) return;
       void hamta();
       if (harJobb) void hamtaUtkast();
-      void hamtaLeadrader();
+      // Hela Iris-listan läses bara om när något på sidan visar den; annars nästa gång den behövs.
+      if (behoverLeadsRef.current) void hamtaLeadrader();
+      else setLeadrader(null);
     };
     window.addEventListener(LEADS_UPPDATERADE, uppdatera);
     window.addEventListener("snipra:leads-korning-klar", uppdatera);
@@ -246,6 +286,23 @@ export function KorningVy({ id, bas = "/crm" }: Readonly<{ id: string; bas?: str
     setStatusbesked(b.text);
     visa({ type: b.fel ? "error" : undefined, body: b.text, uniqueID: "crm-korning" });
   };
+  // Medan körningen går sägs bara två saker upp: när ett lead blir klart och när läget byts.
+  // Talrutorna (undersökta, bortvalda) byter nästan varje varv och läses inte upp.
+  const forraLaget = useRef<{ lev: number; lage: Lage } | null>(null);
+  useEffect(() => {
+    if (!rad) return;
+    const nu = { lev: rad.korning?.levererade ?? 0, lage: lageFor(rad) };
+    const forr = forraLaget.current;
+    forraLaget.current = nu;
+    if (!forr) return;
+    const mal = rad.korning?.mal ?? 0;
+    if (forr.lage !== nu.lage) {
+      const namn = text(LAGE[nu.lage].namn);
+      setStatusbesked(text({ sv: `Körningens läge: ${namn}.`, en: `The run's status: ${namn}.` }));
+    } else if (forr.lev !== nu.lev) {
+      setStatusbesked(mal === 1 ? text({ sv: `${nu.lev} av ${mal} lead klart.`, en: `${nu.lev} of ${mal} lead done.` }) : text({ sv: `${nu.lev} av ${mal} leads klara.`, en: `${nu.lev} of ${mal} leads done.` }));
+    }
+  }, [rad, text]);
 
   // ---- Styrningen (LK-028, LK-029, LK-030) ------------------------------------------------
   const [styr, setStyr] = useState<Atgard | null>(null);
@@ -266,13 +323,16 @@ export function KorningVy({ id, bas = "/crm" }: Readonly<{ id: string; bas?: str
                 ? text({ sv: "Avbryts. Körningen avslutas när bolagen som redan researchas är klara.", en: "Cancelling. The run ends once the companies already in research are done." })
                 : text({ sv: "Körningen fortsätter. Iris letar efter de leads som återstår.", en: "The run continues. Iris is looking for the remaining leads." })
       });
-      window.dispatchEvent(new CustomEvent("snipra:leads-korning-steg", { detail: "crm-iris-korning" }));
+      window.dispatchEvent(new CustomEvent("snipra:leads-korning-steg", { detail: KORNINGENS_KALLA }));
     } catch (e) {
       const t = e instanceof CrmFel && e.status === 404 ? { sv: "Körningen finns inte.", en: "The run does not exist." } : feltext(e);
       saga({ fel: true, text: a === "fortsatt" ? text({ sv: `Körningen gick inte att fortsätta. ${text(t)}`, en: `The run could not be continued. ${text(t)}` }) : text({ sv: `Körningen gick inte att styra. ${text(t)}`, en: `The run could not be controlled. ${text(t)}` }) });
     } finally {
       setStyr(null);
       await hamta();
+      // Knappen som hade fokus kan vara borta (Pausa blir Återuppta, Avbryt tar bort gruppen, Fortsätt
+      // tar bort rutan): fokus går till styrningen som står kvar, annars till Förloppets rubrik.
+      fokusera("#crm-korning-styrning button:not([disabled])", "#crm-korning-forlopp");
     }
   }
 
@@ -295,7 +355,7 @@ export function KorningVy({ id, bas = "/crm" }: Readonly<{ id: string; bas?: str
     } catch {
       /* inget att glömma */
     }
-    meddelaLeadsUppdaterade("crm-iris-korning");
+    meddelaLeadsUppdaterade(KORNINGENS_KALLA);
   }, [hamtaUtkast, id]);
   // Skrivningen som pågick före en omladdning följs vidare (högst fem minuter gammal).
   useEffect(() => {
@@ -358,7 +418,7 @@ export function KorningVy({ id, bas = "/crm" }: Readonly<{ id: string; bas?: str
             : `${delar.join(", ")}.`,
           orsaker: stoppade
         });
-        meddelaLeadsUppdaterade("crm-iris-korning");
+        meddelaLeadsUppdaterade(KORNINGENS_KALLA);
       } catch (e) {
         saga({ fel: true, text: text(feltext(e)) });
       } finally {
@@ -387,37 +447,65 @@ export function KorningVy({ id, bas = "/crm" }: Readonly<{ id: string; bas?: str
     }
   }
 
-  // ---- Utkastets panel (LK-035, LK-036): kön har texten utan signatur och svansen ----------
-  const [kopost, setKopost] = useState<Kopost | null>(null);
+  // ---- Utkastets panel (LK-035, LK-036) -------------------------------------------------------
+  // Utkastet står i körningens eget svar (ämne, text, queue_item_id), så panelen byggs ur det. Kön
+  // (`GET /leads/queue`) ger bara de 200 nyaste väntande utkasten: där utkastet står där kommer
+  // bolagets bakgrund för AI-hjälpen och serverns delning av brödtext och svans med, annars delas
+  // texten här med samma signatur. Det finns ingen hämtning av ett enskilt utkast per id.
+  const [koRik, setKoRik] = useState<Kopost | null>(null);
+  const [koKlar, setKoKlar] = useState(false);
   const [koSignatur, setKoSignatur] = useState<Signatur | null>(null);
   const [offer, setOffer] = useState<string | null>(null);
   useEffect(() => {
     void offertForUtkast().then(setOffer, () => setOffer(null));
   }, []);
   useEffect(() => {
-    setKopost(null);
+    setKoRik(null);
+    setKoKlar(false);
     if (!utkastId) return;
     let aktuell = true;
     irisAnrop<Kosvar>("/leads/queue")
       .then((s) => {
         if (!aktuell) return;
-        const k = (s?.items ?? []).find((x) => x.id === utkastId) ?? null;
         if (s?.signatur) setKoSignatur(s.signatur);
-        if (k) setKopost(k);
-        else {
-          oppnaUtkast(null);
-          visa({ type: "error", body: text({ sv: "Utkastet väntar inte längre på granskning.", en: "The draft is no longer awaiting review." }), uniqueID: "crm-korning" });
-        }
+        setKoRik((s?.items ?? []).find((x) => x.id === utkastId) ?? null);
+        setKoKlar(true);
       })
-      .catch((e) => aktuell && saga({ fel: true, text: text(feltext(e)) }));
+      .catch(() => aktuell && setKoKlar(true));
     return () => {
       aktuell = false;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [utkastId]);
+  const signatur = koSignatur ?? utkast?.signatur ?? null;
+  const korningsPost = utkastId ? ((utkast?.leads ?? []).find((l) => l.status === "vantar" && l.queue_item_id === utkastId) ?? null) : null;
+  const kopost = useMemo<Kopost | null>(() => {
+    if (!utkastId) return null;
+    if (koRik) return koRik;
+    if (!korningsPost) return null;
+    const [brodtext, svans] = delaMejl(korningsPost.body ?? "", signatur);
+    return {
+      id: utkastId,
+      subject: korningsPost.subject,
+      body: korningsPost.body ?? null,
+      brodtext,
+      svans,
+      prospect_email: korningsPost.contact_email,
+      prospect_id: korningsPost.prospect_id,
+      company_name: korningsPost.company_name
+    };
+  }, [utkastId, koRik, korningsPost, signatur]);
+  // Står utkastet varken i kön eller bland körningens väntande när båda svarat, väntar det inte längre.
+  const koBesvarad = koKlar && (utkast != null || utkastFel != null || (rad != null && !harJobb));
+  useEffect(() => {
+    if (!utkastId || !koBesvarad || kopost) return;
+    oppnaUtkast(null);
+    if (utkastFel && !utkast) saga({ fel: true, text: text(feltext(utkastFel)) });
+    else visa({ type: "error", body: text({ sv: "Utkastet väntar inte längre på granskning.", en: "The draft is no longer awaiting review." }), uniqueID: "crm-korning" });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [utkastId, koBesvarad, kopost]);
   const efterUtkast = () => {
     void hamtaUtkast();
-    meddelaLeadsUppdaterade("crm-iris-korning");
+    meddelaLeadsUppdaterade(KORNINGENS_KALLA);
   };
   async function godkann(k: Kopost): Promise<Besked | null> {
     const s = await irisAnrop<Sandutfall>(`/leads/queue/${encodeURIComponent(k.id)}/approve`, { method: "POST" });
@@ -447,9 +535,10 @@ export function KorningVy({ id, bas = "/crm" }: Readonly<{ id: string; bas?: str
   }
   async function spara(k: Kopost, amne: string, brodtext: string) {
     await irisAnrop(`/leads/queue/${encodeURIComponent(k.id)}`, { method: "PUT", body: JSON.stringify({ subject: amne, brodtext }) });
-    const s = await irisAnrop<Kosvar>("/leads/queue");
+    const s = await irisAnrop<Kosvar>("/leads/queue").catch(() => null);
     const ny = (s?.items ?? []).find((x) => x.id === k.id);
-    if (ny) setKopost(ny);
+    // Utanför köns 200 nyaste: den sparade texten står kvar här tills körningens svar läses om.
+    setKoRik(ny ?? { ...k, subject: amne, brodtext, body: null });
     efterUtkast();
   }
 
@@ -572,9 +661,13 @@ export function KorningVy({ id, bas = "/crm" }: Readonly<{ id: string; bas?: str
   // På telefon står bara tiden: "Körning" och tiden ryms inte på en rad i Fraunces.
   const rubrik = rad && smal ? korningstid(rad.created_at, locale) : rad ? text({ sv: `Körning ${korningstid(rad.created_at, locale)}`, en: `Run ${korningstid(rad.created_at, locale)}` }) : text({ sv: "Körning", en: "Run" });
   const nBortvalda = antalBortvalda(k);
-  const nLeads = utkast ? leads.length : antalJobb(k);
+  // Antalet leads står först när körningens svar finns: barnjobben räknar också dem researchen valde bort.
+  const nLeads = utkast && harJobb ? leads.length : undefined;
   const av = { isDisabled: !skriv.far, tooltip: skriv.skal ?? undefined };
   const tillbaka = <Button variant="ghost" label={text({ sv: "Alla körningar", en: "All runs" })} icon={<Icon icon={ArrowLeft} size="sm" />} href={listvag} />;
+  const leadsvag = `${bas}/iris/leads`;
+  const levererat = (lev: number, mal: number) =>
+    mal === 1 ? text({ sv: `${tal(lev)} av ${tal(mal)} lead`, en: `${tal(lev)} of ${tal(mal)} lead` }) : text({ sv: `${tal(lev)} av ${tal(mal)} leads`, en: `${tal(lev)} of ${tal(mal)} leads` });
   const vyer: { v: Flik; namn: Localized; antal?: number }[] = [
     { v: "oversikt", namn: { sv: "Översikt", en: "Overview" } },
     { v: "leads", namn: { sv: "Leads", en: "Leads" }, antal: rad?.scope === "batch" ? nLeads : undefined },
@@ -603,7 +696,18 @@ export function KorningVy({ id, bas = "/crm" }: Readonly<{ id: string; bas?: str
           </ul>
         ) : undefined
       }
-      endContent={<Button size="sm" variant="ghost" label={text({ sv: "Stäng", en: "Close" })} onClick={() => setBesked(null)} />}
+      endContent={
+        <Button
+          size="sm"
+          variant="ghost"
+          label={text({ sv: "Stäng", en: "Close" })}
+          onClick={() => {
+            setBesked(null);
+            // Rutan som hade fokus försvinner: fokus går till flikvalet, som står kvar.
+            fokusera("[data-flikval] [aria-checked='true']", "[data-flikval] [aria-selected='true']", "[data-flikval] button", "#crm-korning-forlopp");
+          }}
+        />
+      }
     />
   ) : null;
 
@@ -646,11 +750,12 @@ export function KorningVy({ id, bas = "/crm" }: Readonly<{ id: string; bas?: str
         <Panelkort
           id="crm-korning-forlopp"
           titel={pagar(rad) ? text({ sv: "Förlopp", en: "Progress" }) : text({ sv: "Utfall", en: "Outcome" })}
-          hoger={<span className="text-[0.875rem] tabular-nums text-ink-muted">{text({ sv: `${tal(k.levererade)} av ${tal(k.mal)} leads`, en: `${tal(k.levererade)} of ${tal(k.mal)} leads` })}</span>}
+          hoger={<span className="text-[0.875rem] tabular-nums text-ink-muted">{levererat(k.levererade, k.mal)}</span>}
         >
           <div className="flex flex-col gap-4">
             <ProgressBar label={text({ sv: "Leads klara av beställt antal", en: "Leads done of the ordered number" })} isLabelHidden value={k.levererade} max={Math.max(k.mal, 1)} />
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4" role="status" aria-live="polite">
+            {/* Ingen live-region här: talen byter nästan varje varv. Leads klara och läget sägs i sidans statusregion. */}
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
               {talruta({ sv: "Leads klara", en: "Leads done" }, text({ sv: `${tal(k.levererade)} av ${tal(k.mal)}`, en: `${tal(k.levererade)} of ${tal(k.mal)}` }))}
               {talruta({ sv: "Bolag undersökta", en: "Companies researched" }, tal(k.undersokta), k.tak ? text({ sv: `tak ${tal(k.tak)}`, en: `cap ${tal(k.tak)}` }) : null)}
               {talruta({ sv: "Bortvalda", en: "Dropped" }, tal(nBortvalda))}
@@ -685,10 +790,10 @@ export function KorningVy({ id, bas = "/crm" }: Readonly<{ id: string; bas?: str
               </p>
             ) : null}
             {kanStyras(rad) ? (
-              <div role="group" aria-label={text({ sv: "Styr körningen", en: "Control the run" })} className="flex flex-wrap gap-2">
+              <div id="crm-korning-styrning" role="group" aria-label={text({ sv: "Styr körningen", en: "Control the run" })} className="flex flex-wrap gap-2">
                 {k.styrning === "paus" ? (
                   <Button variant="secondary" size="md" label={text({ sv: "Återuppta", en: "Resume" })} icon={<Icon icon={Play} size="sm" />} isLoading={styr === "aterupta"} {...av} isDisabled={av.isDisabled || styr != null} onClick={() => void styrKorning("aterupta")} />
-                ) : (
+                ) : !kanPausas(rad) ? null : (
                   <Button variant="secondary" size="md" label={text({ sv: "Pausa", en: "Pause" })} icon={<Icon icon={Pause} size="sm" />} isLoading={styr === "pausa"} {...av} isDisabled={av.isDisabled || styr != null} onClick={() => void styrKorning("pausa")} />
                 )}
                 <Button variant="secondary" size="md" className="crm-farlig" label={text({ sv: "Avbryt körningen", en: "Cancel the run" })} icon={<Icon icon={Square} size="sm" />} isLoading={styr === "avbryt"} {...av} isDisabled={av.isDisabled || styr != null} onClick={() => setFragaAvbryt(true)} />
@@ -698,6 +803,17 @@ export function KorningVy({ id, bas = "/crm" }: Readonly<{ id: string; bas?: str
         </Panelkort>
       ) : rad.scope === "lista" ? (
         <Banner status="info" container="card" title={text({ sv: "En leadslista", en: "A lead list" })} description={text({ sv: "Listans rader står under Listor, inte här.", en: "The list's rows are under Lists, not here." })} />
+      ) : egnaBolag ? (
+        <Banner
+          status="info"
+          container="card"
+          title={text({ sv: "Körningen gällde egna bolag", en: "The run covered your own companies" })}
+          description={text({
+            sv: "Iris researchade bolagen du skrev in, utan sökning och utan tratt. Bolagen och deras utkast står under Leads.",
+            en: "Iris researched the companies you entered, without a search and without a funnel. The companies and their drafts are under Leads."
+          })}
+          endContent={<Button size="sm" variant="secondary" label={text({ sv: "Till Leads", en: "To Leads" })} href={leadsvag} />}
+        />
       ) : pagar(rad) ? (
         <Panelkort id="crm-korning-forlopp" titel={text({ sv: "Förlopp", en: "Progress" })}>
           <div className="flex flex-col gap-3" role="status">
@@ -777,12 +893,27 @@ export function KorningVy({ id, bas = "/crm" }: Readonly<{ id: string; bas?: str
           <span className="crm-raknefot-etikett">{text({ sv: "Iris skriver, listan uppdateras var femte sekund", en: "Iris is writing, the list updates every five seconds" })}</span>
         </span>
       ) : null}
+      {leadraderFel ? (
+        <span className="inline-flex items-center gap-2">
+          <span className="crm-raknefot-etikett text-danger">{text({ sv: "Märket Påfyllt gick inte att läsa just nu", en: "The Filled in mark could not be loaded right now" })}</span>
+          <Button size="sm" variant="ghost" label={text({ sv: "Försök igen", en: "Try again" })} onClick={() => void hamtaLeadrader()} />
+        </span>
+      ) : null}
     </div>
   );
 
   const leadsInnehall = !rad ? null : rad.scope === "lista" ? (
     <div className="py-10">
       <EmptyState icon={<Icon icon={Radar} size="lg" color="secondary" />} title={text({ sv: "Raderna finns under Listor", en: "The rows are under Lists" })} description={text({ sv: "En leadslista har inga leads i körningen. Listan öppnas under Listor.", en: "A lead list has no leads in the run. The list opens under Lists." })} />
+    </div>
+  ) : egnaBolag ? (
+    <div className="py-10">
+      <EmptyState
+        icon={<Icon icon={Radar} size="lg" color="secondary" />}
+        title={text({ sv: "Bolagen står under Leads", en: "The companies are under Leads" })}
+        description={text({ sv: "Körningen gällde egna bolag. Iris researchade dem ett och ett, och de öppnas i Iris-listan.", en: "The run covered your own companies. Iris researched them one by one, and they open in the Iris list." })}
+        actions={<Button variant="secondary" label={text({ sv: "Till Leads", en: "To Leads" })} href={leadsvag} />}
+      />
     </div>
   ) : !harJobb ? (
     <div className="py-10">
@@ -930,11 +1061,14 @@ export function KorningVy({ id, bas = "/crm" }: Readonly<{ id: string; bas?: str
       utfyllnad={flik === "oversikt" ? "sida" : "tabell"}
       vyrad={
         rad ? (
-          smal ? (
-            <Selector label={text({ sv: "Visa", en: "Show" })} isLabelHidden variant="secondary" size="md" value={flik} onChange={(v) => v && setFlik(v as Flik)} options={vyer.map((v) => ({ value: v.v, label: v.antal != null ? `${text(v.namn)}  ${tal(v.antal)}` : text(v.namn) }))} />
-          ) : (
-            <Vyval value={flik} onChange={setFlik} label={text({ sv: "Visa", en: "Show" })} val={vyer.map((v) => ({ v: v.v, namn: text(v.namn), antal: v.antal != null ? tal(v.antal) : undefined }))} />
-          )
+          // `contents`: omslaget påverkar inte layouten, det märker bara flikvalet för fokus när beskedet stängs.
+          <div data-flikval className="contents">
+            {smal ? (
+              <Selector label={text({ sv: "Visa", en: "Show" })} isLabelHidden variant="secondary" size="md" value={flik} onChange={(v) => v && setFlik(v as Flik)} options={vyer.map((v) => ({ value: v.v, label: v.antal != null ? `${text(v.namn)}  ${tal(v.antal)}` : text(v.namn) }))} />
+            ) : (
+              <Vyval value={flik} onChange={setFlik} label={text({ sv: "Visa", en: "Show" })} val={vyer.map((v) => ({ v: v.v, namn: text(v.namn), antal: v.antal != null ? tal(v.antal) : undefined }))} />
+            )}
+          </div>
         ) : undefined
       }
       vyradHoger={
@@ -985,7 +1119,7 @@ export function KorningVy({ id, bas = "/crm" }: Readonly<{ id: string; bas?: str
       <LeadPanel id={leadId} listrad={leadId ? (leadrader?.get(leadId) ?? null) : null} bas={bas} stang={() => oppnaLead(null)} andrat={() => meddelaLeadsUppdaterade(PANELENS_KALLA)} />
       <UtkastPanel
         post={kopost ? { slag: "granska", ko: kopost } : null}
-        signatur={koSignatur ?? utkast?.signatur ?? null}
+        signatur={signatur}
         offer={offer}
         bas={bas}
         skriv={skriv}
@@ -1034,7 +1168,7 @@ function KordesMed({ rad }: Readonly<{ rad: KorningsRad }>) {
   const rader: [string, string][] = [
     [text({ sv: "Beställt", en: "Ordered" }), k.mal === 1 ? text({ sv: "1 lead", en: "1 lead" }) : text({ sv: `${k.mal} leads`, en: `${k.mal} leads` })],
     [text({ sv: "Omfattning", en: "Scope" }), k.scope === "research_and_draft" ? text({ sv: "Research och utkast", en: "Research and drafts" }) : text({ sv: "Bara research", en: "Research only" })],
-    ...(k.scope === "research_and_draft" ? ([[text({ sv: "Mejlens struktur", en: "Email structure" }), k.struktur === "b" ? text({ sv: "B, kort och rakt på", en: "B, short and direct" }) : text({ sv: "A, utförlig", en: "A, detailed" })]] as [string, string][]) : []),
+    ...(k.scope === "research_and_draft" ? ([[text({ sv: "Mejlens struktur", en: "Email structure" }), text(STRUKTURNAMN[k.struktur === "b" ? "b" : "a"])]] as [string, string][]) : []),
     ...(rad.is_test ? ([[text({ sv: "Märkt", en: "Marked" }), text({ sv: "Testkörning", en: "Test run" })]] as [string, string][]) : [])
   ];
   const filter: [string, string][] = o

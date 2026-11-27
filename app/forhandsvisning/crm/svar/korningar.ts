@@ -135,6 +135,8 @@ const LIGGAREN: Liggarrad[] = [
     error: "Körningen avbröts innan den blev klar, troligen av en omstart hos oss, och har markerats som misslyckad. Kör om den.",
     korning: korning({ mal: 4, levererade: 0, undersokta: 2, rundor: 1, tratt: tratt(2, 8) })
   },
+  // Egna bolag: sökjobbet lade ett researchjobb per bolag och raden har inget motortillstånd (leads.py:_run_batch).
+  { job_id: "00000000-0000-4000-7000-000000000009", status: "completed", scope: "batch", is_test: false, created_at: iso(220), updated_at: iso(219), completed_at: iso(219), error: null, korning: null },
   { job_id: "00000000-0000-4000-7000-000000000006", status: "completed", scope: "lista", is_test: false, created_at: iso(240), updated_at: iso(239), completed_at: iso(239), error: null, korning: null },
   {
     job_id: "00000000-0000-4000-7000-000000000007",
@@ -395,8 +397,8 @@ export function svaraKorningar(url: URL, init?: RequestInit): Promise<Response> 
   if (metod === "POST" && (del === "pausa" || del === "aterupta" || del === "avbryt")) {
     return vanta(() => {
       const gar = k && !k.klar && rad.status !== "failed";
-      if (!gar || k.styrning === "avbruten") return json({ detail: "Körningen pågår inte och kan inte styras." }, 409);
-      if (k.vilande && del !== "avbryt") return json({ detail: "Körningen pågår inte och kan inte styras." }, 409);
+      // Som storage.set_korning_styrning: en pågående (också vilande) körning går att styra; en klar svarar 409.
+      if (!gar) return json({ detail: "Körningen pågår inte och kan inte styras." }, 409);
       k.styrning = del === "pausa" ? "paus" : del === "avbryt" ? "avbruten" : null;
       if (del === "avbryt" && k.vilande) {
         Object.assign(k, { vilande: null, klar: true, slut_orsak: "avbruten" });

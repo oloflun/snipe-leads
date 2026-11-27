@@ -7,11 +7,11 @@ import { Button } from "@astryxdesign/core/Button";
 import { CheckboxInput } from "@astryxdesign/core/CheckboxInput";
 import { EmptyState } from "@astryxdesign/core/EmptyState";
 import { Icon } from "@astryxdesign/core/Icon";
-import { Selector } from "@astryxdesign/core/Selector";
 import { Skeleton } from "@astryxdesign/core/Skeleton";
 import { Text } from "@astryxdesign/core/Text";
 import { Utkastredigerare } from "@/components/crm/app/iris/Utkastredigerare";
 import { useSkrivratt } from "@/components/crm/app/kit";
+import { StrukturVal } from "@/components/crm/app/iris/StrukturVal";
 import { CrmFel } from "@/lib/crm/api";
 import { irisAnrop } from "@/lib/crm/iris/anrop";
 import { UTKASTTON, kanSkickas, obedomd, utkastText, type Lead, type LeadPost, type Utkastsvar } from "@/lib/crm/iris/lead";
@@ -286,19 +286,12 @@ export function LeadUtkast({
       {utanUtkast || status === "avvisat" ? (
         <div className="flex flex-col gap-3">
           <div className="max-w-[280px]">
-            <Selector
-              label={text({ sv: "Struktur", en: "Structure" })}
+            <StrukturVal
               value={struktur}
               onChange={(v) => {
-                if (v !== "a" && v !== "b") return;
                 setStruktur(v);
                 sparaStruktur(v);
               }}
-              options={[
-                { value: "a", label: text({ sv: "A, standardmejlet", en: "A, the standard email" }) },
-                { value: "b", label: text({ sv: "B, kort med en fråga", en: "B, short with a question" }) }
-              ]}
-              width="100%"
             />
           </div>
           <div>

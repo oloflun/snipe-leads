@@ -273,7 +273,8 @@ export function KorningarVy({ bas = "/crm" }: Readonly<{ bas?: string }>) {
     if (start.fas === "soker") setStatusbesked(text({ sv: "Körningen är startad. Iris letar bolag som matchar målgruppen.", en: "The run has started. Iris is looking for companies that match the target group." }));
     else if (start.fas === "igang") setStatusbesked(text({ sv: "Iris har hittat bolag och körningen är igång.", en: "Iris has found companies and the run is under way." }));
     else if (start.fas === "fel") setStatusbesked(text({ sv: `Körningen startade inte. ${start.fel}`, en: `The run did not start. ${start.fel}` }));
-    else if (start.fas === "klar") setStatusbesked(text({ sv: `Klart: ${start.klara} bolag researchade.`, en: `Done: ${start.klara} companies researched.` }));
+    else if (start.fas === "klar")
+      setStatusbesked(start.klara === 1 ? text({ sv: "Klart: 1 bolag researchat.", en: "Done: 1 company researched." }) : text({ sv: `Klart: ${start.klara} bolag researchade.`, en: `Done: ${start.klara} companies researched.` }));
   }, [start, text]);
 
   function startad(s: Startad) {
@@ -393,7 +394,17 @@ export function KorningarVy({ bas = "/crm" }: Readonly<{ bas?: string }>) {
   );
 
   // ---- Delarna ---------------------------------------------------------------------------
-  const korIris = <Button variant="primary" label={text({ sv: "Kör Iris", en: "Run Iris" })} icon={<Icon icon={Radar} size="sm" />} isDisabled={!skriv.far} tooltip={skriv.skal ?? undefined} onClick={() => setNy(true)} />;
+  const korIrisRef = useRef<HTMLButtonElement>(null);
+  const korIris = <Button ref={korIrisRef} variant="primary" label={text({ sv: "Kör Iris", en: "Run Iris" })} icon={<Icon icon={Radar} size="sm" />} isDisabled={!skriv.far} tooltip={skriv.skal ?? undefined} onClick={() => setNy(true)} />;
+  // Stäng tar bort raden som hade fokus: fokus går till Kör Iris, annars till listans första körning.
+  const stangStart = () => {
+    setStart(null);
+    window.setTimeout(() => {
+      const knapp = korIrisRef.current;
+      if (knapp && !knapp.disabled) knapp.focus();
+      else document.querySelector<HTMLElement>(".crm-tabell a")?.focus();
+    }, 80);
+  };
   const laddar = rader == null;
 
   const startrad = start ? (
@@ -436,7 +447,7 @@ export function KorningarVy({ bas = "/crm" }: Readonly<{ bas?: string }>) {
           container="card"
           title={text({ sv: "Körningen startade inte", en: "The run did not start" })}
           description={start.fel}
-          endContent={<Button size="sm" variant="ghost" label={text({ sv: "Stäng", en: "Close" })} onClick={() => setStart(null)} />}
+          endContent={<Button size="sm" variant="ghost" label={text({ sv: "Stäng", en: "Close" })} onClick={stangStart} />}
         />
       ) : (
         <Banner
@@ -446,8 +457,12 @@ export function KorningarVy({ bas = "/crm" }: Readonly<{ bas?: string }>) {
             start.fas === "igang"
               ? text({ sv: "Körningen är igång", en: "The run is under way" })
               : start.misslyckade
-                ? text({ sv: `Klart: ${tal(start.klara)} bolag researchade, ${tal(start.misslyckade)} misslyckades`, en: `Done: ${tal(start.klara)} companies researched, ${tal(start.misslyckade)} failed` })
-                : text({ sv: `Klart: ${tal(start.klara)} bolag researchade`, en: `Done: ${tal(start.klara)} companies researched` })
+                ? start.klara === 1
+                  ? text({ sv: `Klart: 1 bolag researchat, ${tal(start.misslyckade)} misslyckades`, en: `Done: 1 company researched, ${tal(start.misslyckade)} failed` })
+                  : text({ sv: `Klart: ${tal(start.klara)} bolag researchade, ${tal(start.misslyckade)} misslyckades`, en: `Done: ${tal(start.klara)} companies researched, ${tal(start.misslyckade)} failed` })
+                : start.klara === 1
+                  ? text({ sv: "Klart: 1 bolag researchat", en: "Done: 1 company researched" })
+                  : text({ sv: `Klart: ${tal(start.klara)} bolag researchade`, en: `Done: ${tal(start.klara)} companies researched` })
           }
           description={
             start.fas === "igang"
@@ -457,7 +472,7 @@ export function KorningarVy({ bas = "/crm" }: Readonly<{ bas?: string }>) {
           endContent={
             <span className="flex items-center gap-1">
               {start.fas === "igang" ? <Button size="sm" variant="secondary" label={text({ sv: "Följ körningen", en: "Follow the run" })} href={vag(start.s.jobbId)} /> : <Button size="sm" variant="secondary" label={text({ sv: "Till Leads", en: "To Leads" })} href={`${bas}/iris/leads`} />}
-              <Button size="sm" variant="ghost" label={text({ sv: "Stäng", en: "Close" })} onClick={() => setStart(null)} />
+              <Button size="sm" variant="ghost" label={text({ sv: "Stäng", en: "Close" })} onClick={stangStart} />
             </span>
           }
         />
@@ -538,7 +553,16 @@ export function KorningarVy({ bas = "/crm" }: Readonly<{ bas?: string }>) {
                   key={r.job_id}
                   startContent={<Objektikon objekt="korningar" storlek={28} />}
                   label={<span className="font-semibold tabular-nums text-ink">{korningstid(r.created_at, locale)}</span>}
-                  description={[typ(r), r.korning ? text({ sv: `${tal(r.korning.levererade)} av ${tal(r.korning.mal)} leads`, en: `${tal(r.korning.levererade)} of ${tal(r.korning.mal)} leads` }) : null].filter(Boolean).join(" · ")}
+                  description={[
+                    typ(r),
+                    r.korning
+                      ? r.korning.mal === 1
+                        ? text({ sv: `${tal(r.korning.levererade)} av 1 lead`, en: `${tal(r.korning.levererade)} of 1 lead` })
+                        : text({ sv: `${tal(r.korning.levererade)} av ${tal(r.korning.mal)} leads`, en: `${tal(r.korning.levererade)} of ${tal(r.korning.mal)} leads` })
+                      : null
+                  ]
+                    .filter(Boolean)
+                    .join(" · ")}
                   endContent={<Korningsstatus rad={r} />}
                   onClick={() => router.push(vag(r.job_id))}
                 />

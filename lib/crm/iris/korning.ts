@@ -256,6 +256,14 @@ export function kanFortsatta(rad: KorningsRad): boolean {
 /** Går den att styra (pausa, återuppta, avbryta)? Bara en pågående Iris-körning som inte redan avbryts. */
 export const kanStyras = (rad: KorningsRad) => rad.scope === "batch" && pagar(rad) && Boolean(rad.korning) && rad.korning?.styrning !== "avbruten";
 
+/**
+ * Går den att pausa? Inte när den vilar: en vilande körning arbetar inte, och servern
+ * (leads.py:styr_korning) väcker motorn direkt vid Återuppta, utanför vilans takt på en
+ * gång per dygn. Avbryt står kvar för en vilande körning (sluta leta), och en redan
+ * pausad vilande körning kan återupptas.
+ */
+export const kanPausas = (rad: KorningsRad) => kanStyras(rad) && !rad.korning?.vilande && rad.korning?.styrning !== "paus";
+
 export const antalBortvalda = (k: Korning | null | undefined) => k?.tratt?.length ?? k?.tratt_antal ?? 0;
 export const antalJobb = (k: Korning | null | undefined) => k?.jobs?.length ?? k?.jobs_antal ?? 0;
 
