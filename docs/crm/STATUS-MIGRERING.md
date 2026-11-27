@@ -1,7 +1,7 @@
 # Status: hela Snajp i det nya gränssnittet
 
 Uppdateras efter varje arbetspass. Planen: [`PLAN-MIGRERING.md`](PLAN-MIGRERING.md).
-Senast uppdaterad: 2026-11-26.
+Senast uppdaterad: 2026-11-27.
 
 Lägen: **klart** (byggt och verifierat), **pågår**, **väntar** (på kvot eller på Anton),
 **inte påbörjat**.
@@ -67,18 +67,21 @@ fas 4 respektive fas 5.
 | Webhooks ut | klart | Backend och vyn under Utvecklare. Inte kört mot en riktig mottagare |
 | Sortering nyast först, papperskorg, krockens id, namn på felrader | klart | Backend och vyer |
 | Synkens två nivåer och underlag till supportärende | klart | Migration 163 och vyn. Se "Var supportsystemet kopplar in" nedan |
-| Affärer med steg och tavla | klart | Migration 164 (`2fa09eb3`) och vyn Affärer (`7fc9da8b`): tavla med dra och släpp, affärens panel, formulär, papperskorg. Sedd i förhandsvisningen, 1440 ljust och mörkt samt 390. Stegen går inte att ändra i gränssnittet än (namn, ordning, nya steg) |
-| Uppgifter, anteckningar, aktiviteter | klart, med luckor | Skrivs i historikfliken på bolag, person och affär (`e0a7cd21`). Uppgifter bockas av där. **Inte gjort:** ändra eller ta bort en anteckning, uppgift eller aktivitet i gränssnittet, en samlad uppgiftslista över alla poster, ansvarig på uppgiften |
-| Bilagor | klart i backend | Bilagor i databasen, 10 MB per fil och 500 MB per kund (agentens val, behöver Antons dom). **Inget gränssnitt än** |
-| Tidslinje mot leads, mejl, samtal och ärenden | klart | `tidslinje.py`, nu också med CRM:ets anteckningar, aktiviteter, uppgifter och affärer, och en tidslinje för affären (`35672915`). Historikfliken i de tre panelerna läser den (`e0a7cd21`). Raderna från Iris och supporten leder inte vidare till leadet, konversationen eller ärendet än |
+| Affärer med steg och tavla | klart | Migration 164 (`2fa09eb3`) och vyn Affärer (`7fc9da8b`): tavla med dra och släpp, affärens panel, formulär, papperskorg. Sedd i förhandsvisningen, 1440 ljust och mörkt samt 390. Egna steg (namn, ordning, sannolikhet, typ, nya och borttagna) ändras under Anpassa stegen (`1b51e2e5`) |
+| Uppgifter, anteckningar, aktiviteter | klart | Skrivs i historikfliken på bolag, person och affär (`e0a7cd21`), och ändras och tas bort där (`b7e93ea3`). Vyn Uppgifter samlar alla uppgifter, med ansvarig och beskrivning (`0d5257f9`). I den samlade listan väljs bara bolag för en ny uppgift |
+| Bilagor | klart | Bilagor i databasen, 10 MB per fil och 500 MB per kund (Antons ja 2026-11-27). Fliken Filer i bolagets och affärens panel och i personens, med en binärsäker väg genom proxyn (`6fbd9c5d`). Proxyvägen är typkontrollerad men inte körd mot backenden |
+| Tidslinje mot leads, mejl, samtal och ärenden | klart | `tidslinje.py`, nu också med CRM:ets anteckningar, aktiviteter, uppgifter och affärer, och en tidslinje för affären (`35672915`). Historikfliken i de tre panelerna läser den (`e0a7cd21`). Raderna från Iris leder till leadet och konversationen i Leads (`7509e4c9`). Supportärenden har ingen adress att länka till än |
 | Utfall speglas åt båda håll | klart | `utfall.py`. Sätts i historikens skrivyta på ett bolag som är ett lead hos Iris, och läget hos Iris står i bolagets översikt. Ett lead som bett att slippa kontakt spärrar bolagets snabbval. Sett i förhandsvisningen, inte kört mot leadsflödet |
-| Samlad kundlista, Iris och Egna | klart i backend | `kundlista.py`, `GET /customers`. **Inget gränssnitt än** |
-| Svensk standard i koden | pågår | Klart: organisationsnummer, moms, telefon, postnummer, bolagsform, SNI, privatperson. Inte gjort: SEK-format i hela ytan, registeruppslag, NIX |
+| Samlad kundlista, Iris och Egna | klart | `kundlista.py`, `GET /customers`, och väljaren Ursprung i vyn Kund (`b7e93ea3`). Ett vunnet lead för ett bolag märkt Ej aktuell visas inte (väntar på Antons bekräftelse) |
+| Svensk standard i koden | pågår | Klart: organisationsnummer, moms, telefon, postnummer, bolagsform, SNI, privatperson, relationen Ej aktuell, förlustorsak ur lista, personens källa och insamlingsdag, spärrlista med NIX-uppladdning. Pågår: uppslag i SCB:s företagsregister. Inte gjort: SEK-format i hela ytan |
+| Gemensam spärrlista för alla kanaler | klart | Migration 166, `sparr.py`, `/v1/suppressions` (`69b8537e`, `a4e2c742`) och vyn Spärrar (`04badf37`, `b5173b30`). Sändspärren och ringlistorna i leadsflödet läser listan. 304 tester gröna för CRM, utskick och ringlistor. Sedd i förhandsvisningen |
+| Tunna webhooks för personer och enskilda firmor | klart | Id, objekt, typ, tid och fältnamn, aldrig posten (`69b8537e`) |
+| Hjälprutan i CRM:et | klart | Samma komponent som i arbetsytan, från sidofältets fot (`80db6b8c`). Sedd mot förhandsvisningens svar, inte mot hjälpens backend |
 | Sammanställning: vad som ändras mot Twenty och varför | klart | `docs/crm/SVENSK-STANDARD.md`, 81 rader och tio frågor till Anton |
 | Bildgranskning av de svenska CRM-systemen | inte påbörjat | Texten finns i `svensk-03` |
-| Oberoende granskning av gränssnittet i fas 3 del 1 | inte gjord | Byggaren stoppades av veckogränsen före sin rapport, och granskarna hann inte köra. Orkestratorn har läst 21 färska bilder och byggarens panelbilder |
-| Ett schemalagt jobb som tömmer papperskorgen | inte påbörjat | I dag töms den vid nästa skrivning hos kunden, så löftet om 30 dagar håller inte för en kund som aldrig skriver |
-| Bolagets affärer i bolagets panel | inte påbörjat | Affären syns på bolagets tidslinje och leder till tavlan, men panelen har ingen lista över bolagets affärer |
+| Oberoende granskning av gränssnittet | gjord en gång | Tre granskare på Opus (kod, användbarhet, tillgänglighet) gav 36 fynd på affärstavlan, historiken och filerna, och de som gällde gränssnittet är rättade (`b7e93ea3`). Vyerna Spärrar, Uppgifter och stegdialogen är inte granskade av någon annan än orkestratorn |
+| Ett jobb som tömmer papperskorgen | klart | `stadning.py` (`9967d7f1`): ett varv efter uppstart och ett per dygn, en kund i taget, av med `CRM_STADJOBB=0`. Raderar för gott efter 30 dagar, som utlovat i gränssnittet |
+| Bolagets affärer i bolagets panel | klart | Raden Affärer i bolagets översikt, med länk till tavlan och Ny affär (`b7e93ea3`) |
 | Bild på varje vy i Twentys hostade app | pågår | 17 bilder, mobilvyn gick inte att fånga |
 | Testkonton i källsystemen | väntar | Kräver Antons ja per konto |
 | Buddy | väntar | Inget avtalsdatum. Körs mot testkonto |
@@ -108,7 +111,7 @@ C: var full (0 MB) när affärstavlan skulle committas, och committen föll. Ses
 bort sin egen byggcache (`.next` i det här worktreet, 846 MB) och lade därefter cachen på
 D: genom en länk: `.next` pekar på `D:\snajp-crm-next\cache`, och `D:\snajp-crm-next\node_modules`
 pekar tillbaka på worktreets paket så att byggstegen hittar dem. C: har omkring 0,8 GB
-ledigt, vilket inte räcker för en full `tsc` eller en `next dev` i ett annat worktree.
+ledigt (1,6 GB den 27 november), vilket inte räcker för en full `tsc` eller en `next dev` i ett annat worktree.
 Två andra byggcachar ligger kvar orörda och går att återskapa: `snipe-leads\.next`
 (0,52 GB) och `.claude\worktrees\sharp-hermann-8c9577\.next` (0,5 GB). Mappen
 `D:\snajp-crm-next-cache` (255 MB) är en överbliven första variant som gick inte att ta
