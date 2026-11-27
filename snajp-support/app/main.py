@@ -384,6 +384,14 @@ async def lifespan(app: FastAPI):
 
     webhook_task = asyncio.create_task(run_webhookjobb(app.state))
 
+    # CRM:ets papperskorgar töms efter 30 dagar av ett jobb, en gång per dygn,
+    # också hos en kund som aldrig skriver igen. Se app/crm/stadning.py.
+    stadjobb_task = None
+    if settings.crm_stadjobb:
+        from .crm.stadning import run_stadjobb
+
+        stadjobb_task = asyncio.create_task(run_stadjobb(app.state))
+
     # Gallringen: raderar kunddata äldre än kundens beslutade period, högst en
     # gång per dygn; i en spegel bara det synken inte för över. AV som
     # standard (GALLRING_AKTIV). Se app/jobs/gallring.py och migration 119, 133.
@@ -410,7 +418,7 @@ async def lifespan(app: FastAPI):
     uppgifter = [
         t
         for t in (poller_task, send_scheduler_task, stadare_task, trial_task, gallring_task, vertex_task,
-                  webhook_task, *chat_worker_tasks, *leads_worker_tasks)
+                  webhook_task, stadjobb_task, *chat_worker_tasks, *leads_worker_tasks)
         if t is not None
     ]
     for task in uppgifter:

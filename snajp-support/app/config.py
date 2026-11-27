@@ -513,6 +513,10 @@ class Settings(BaseSettings):
     # databasen), tidigast den här timmen. Loopen tittar en gång i timmen.
     gallring_timme: int = 3
     gallring_kontroll_sekunder: int = 3600
+    # CRM:ets städjobb (app/crm/stadning.py): tömmer papperskorgarna efter 30
+    # dagar, en gång per dygn, också hos en kund som inte skriver något. PÅ
+    # som standard; CRM_STADJOBB=0 stänger av det.
+    crm_stadjobb: bool = True
     # Fas R2 (bd snipe-cku): semantisk svarscache. "off" (default): cachen
     # rörs aldrig — varken lookup eller store, inte ens ett embedding-anrop.
     # "shadow": lookup+store körs, men en TRÄFF ändrar inget i svaret, bara

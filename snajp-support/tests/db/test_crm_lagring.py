@@ -775,3 +775,43 @@ async def test_posten_och_sandsparrens_mangd_i_databasen(miljo):
     assert svar["kallor"] == ["posten"] and svar["sparr_id"] == []
     assert not (await sparr.ar_sparrad(lager, a, epost="fri@annat.se", kanal="alla"))["sparrad"]
     assert await lagring.kontakta_inte_adresser(lager, b) == set()
+
+
+# -- Städjobbet: papperskorgen töms utan en skrivning -------------------------
+
+
+async def test_stadjobbets_systemlasning_och_tomning_i_databasen(miljo):
+    """Systemläsningen ger bara kundernas id, och frågan om något ska tömmas
+    ställs inom varje kunds radskydd: B:s fråga ser aldrig A:s rader."""
+    from app.crm import stadning
+
+    lager, a, b = miljo
+
+    async def list_tenants():
+        return [{"id": a}, {"id": b}]
+
+    lager.list_tenants = list_tenants
+    gammal, _ = await synk.skapa(lager, a, "bolag", {"namn": "Gammal AB", "orgnr": ORGNR_A}, kalla="api")
+    ung, _ = await synk.skapa(lager, b, "bolag", {"namn": "Ung AB", "orgnr": ORGNR_B}, kalla="api")
+    uppgift = await lagring.skapa_post(lager, a, "uppgift", {"titel": "Ring tillbaka"})
+    async with lager._scoped(a) as conn:
+        await conn.execute("update crm_bolag set raderad_at = now() - interval '31 days' where id = $1::text::uuid",
+                           gammal["id"])
+        await conn.execute("update crm_uppgifter set raderad_at = now() - interval '40 days' where id = $1::text::uuid",
+                           uppgift["id"])
+    async with lager._scoped(b) as conn:
+        await conn.execute("update crm_bolag set raderad_at = now() - interval '29 days' where id = $1::text::uuid",
+                           ung["id"])
+        # Radskyddet: B:s anslutning ser inte A:s raderade bolag.
+        assert await conn.fetchval("select count(*) from crm_bolag where raderad_at is not null") == 1
+
+    assert await stadning.har_utgangna(lager, a) is True
+    assert await stadning.har_utgangna(lager, b) is False
+    assert await stadning.kunder_att_tomma(lager) == [a]
+
+    assert await stadning.kor_varv(lager) == {"bolag": 1, "uppgift": 1}
+    tomd = await lagring.hamta_post(lager, a, "bolag", gammal["id"], med_raderade=True)
+    assert tomd["kalla"] == "gravsten" and tomd["namn"] == "" and tomd["orgnr"] is None
+    assert (await lagring.hamta_post(lager, a, "uppgift", uppgift["id"], med_raderade=True))["titel"] == ""
+    assert (await lagring.hamta_post(lager, b, "bolag", ung["id"], med_raderade=True))["namn"] == "Ung AB"
+    assert await stadning.kunder_att_tomma(lager) == []
