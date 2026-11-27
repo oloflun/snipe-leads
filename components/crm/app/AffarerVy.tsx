@@ -2,13 +2,14 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { CalendarClock, CalendarX2, Plus, SearchX } from "lucide-react";
+import { CalendarClock, CalendarX2, Columns3, Plus, SearchX } from "lucide-react";
 import { AlertDialog } from "@astryxdesign/core/AlertDialog";
 import { Avatar } from "@astryxdesign/core/Avatar";
 import { Badge } from "@astryxdesign/core/Badge";
 import { Button } from "@astryxdesign/core/Button";
 import { EmptyState } from "@astryxdesign/core/EmptyState";
 import { Icon } from "@astryxdesign/core/Icon";
+import { IconButton } from "@astryxdesign/core/IconButton";
 import { Selector } from "@astryxdesign/core/Selector";
 import { Skeleton } from "@astryxdesign/core/Skeleton";
 import { Text } from "@astryxdesign/core/Text";
@@ -19,6 +20,7 @@ import { AffarPanel, STEGTON } from "@/components/crm/app/AffarPanel";
 import { Postchip, Prick, tonFor, tonklass, useBestallning, useSmal, Vyval } from "@/components/crm/app/kit";
 import { Papperskorg } from "@/components/crm/app/Papperskorg";
 import { Felruta, Sida } from "@/components/crm/app/Sida";
+import { Stegdialog } from "@/components/crm/app/Stegdialog";
 import { STEGTYPER, belopp, sannolikhet, summa, type Affar, type Affarssteg, type Tavelsteg, type Tavla } from "@/lib/crm/affar";
 import { CrmFel, crmAnrop, dagtext, idagLokalt, type Bolag, type Sida as Svarssida } from "@/lib/crm/api";
 import { useLocale, type Localized } from "@/lib/i18n";
@@ -88,6 +90,7 @@ export function AffarerVy({ bas = "/crm" }: Readonly<{ bas?: string }>) {
   const [dras, setDras] = useState<string | null>(null);
   const [mal, setMal] = useState<Mal | null>(null);
   const [flyttar, setFlyttar] = useState(false);
+  const [stegOppen, setStegOppen] = useState(false);
   const omgang = useRef(0);
 
   // ---- Hämtning -------------------------------------------------------------
@@ -467,7 +470,10 @@ export function AffarerVy({ bas = "/crm" }: Readonly<{ bas?: string }>) {
           <Text as="h2" weight="semibold" maxLines={1}>
             {s.name}
             {/* Stegets typ sägs i ord för skärmläsaren: pricken visar den bara med färg. */}
-            {s.type !== "open" ? <span className="sr-only">{`, ${text(STEGTYPER[s.type]).toLocaleLowerCase(sprak)}`}</span> : null}
+            {/* Typen läses upp när stegets namn inte redan säger den ("Vunnen, vunnen"). */}
+            {s.type !== "open" && s.name.trim().toLocaleLowerCase(sprak) !== text(STEGTYPER[s.type]).toLocaleLowerCase(sprak) ? (
+              <span className="sr-only">{`, ${text(STEGTYPER[s.type]).toLocaleLowerCase(sprak)}`}</span>
+            ) : null}
           </Text>
           <Badge variant="neutral" label={<span className="tabular-nums">{s.count}</span>} />
           <span className="ml-auto whitespace-nowrap text-[0.8125rem] tabular-nums text-ink-muted">{s.count ? summa(s.amount_by_currency, locale) : ""}</span>
@@ -523,9 +529,16 @@ export function AffarerVy({ bas = "/crm" }: Readonly<{ bas?: string }>) {
       rubrik={text({ sv: "Affärer", en: "Deals" })}
       antal={tavla ? oppnaAntal.toLocaleString(sprak) : undefined}
       atgarder={
-        <span data-ny-affar>
-          <Button variant="primary" label={text({ sv: "Ny affär", en: "New deal" })} icon={<Icon icon={Plus} size="sm" />} onClick={() => nyAffar()} />
-        </span>
+        <>
+          {vy !== "tavla" || !tavla ? null : smal ? (
+            <IconButton variant="ghost" icon={<Icon icon={Columns3} size="sm" />} label={text({ sv: "Anpassa stegen", en: "Edit the stages" })} onClick={() => setStegOppen(true)} />
+          ) : (
+            <Button variant="ghost" label={text({ sv: "Anpassa stegen", en: "Edit the stages" })} icon={<Icon icon={Columns3} size="sm" />} onClick={() => setStegOppen(true)} />
+          )}
+          <span data-ny-affar>
+            <Button variant="primary" label={text({ sv: "Ny affär", en: "New deal" })} icon={<Icon icon={Plus} size="sm" />} onClick={() => nyAffar()} />
+          </span>
+        </>
       }
       vyrad={
         smal ? (
@@ -621,6 +634,16 @@ export function AffarerVy({ bas = "/crm" }: Readonly<{ bas?: string }>) {
         taBort={(a) => setRadera(a)}
       />
 
+      <Stegdialog
+        oppen={stegOppen}
+        steg={tavla?.stages ?? []}
+        stang={() => setStegOppen(false)}
+        sparat={(andrat) => {
+          if (!andrat) return;
+          visa({ body: text({ sv: "Stegen är sparade.", en: "The stages are saved." }), uniqueID: "crm-steg" });
+          void hamta();
+        }}
+      />
       <AffarFormular
         oppen={formular != null}
         affar={formular?.affar ?? null}

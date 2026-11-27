@@ -1027,6 +1027,41 @@ async function svara(url: URL, init?: RequestInit): Promise<Response> {
   }
   // ---- Affärer (crm_v1_objekt.py) ---------------------------------------------
   if (vag === "/v1/deal-stages" && metod === "GET") return json({ data: STEG });
+  // Stegens egna ändpunkter, med API:ts regler: unika namn, inget steg med affärer tas bort, alltid ett av varje typ.
+  const typerFinns = (lista: Affarssteg[]) => (["open", "won", "lost"] as const).every((t) => lista.some((s) => s.type === t));
+  const stegfel = (status: number, code: string, sv: string) => json({ detail: { code, message: sv, meddelande: sv } }, status);
+  if (vag === "/v1/deal-stages" && metod === "POST") {
+    const namn = String(kropp.name ?? "").trim();
+    if (STEG.some((s) => s.name.toLowerCase() === namn.toLowerCase())) return stegfel(409, "conflict", "Det finns redan ett steg med det namnet.");
+    const ny: Affarssteg = { id: `s${100 + STEG.length}`, name: namn, position: STEG.length + 1, probability: Number(kropp.probability ?? 0), type: (kropp.type as Affarssteg["type"]) ?? "open", color: null };
+    STEG.push(ny);
+    return json(ny, 201);
+  }
+  if (vag === "/v1/deal-stages/reorder" && metod === "POST") {
+    const ids = (kropp.ids as string[]) ?? [];
+    STEG.sort((a, b) => ids.indexOf(a.id) - ids.indexOf(b.id));
+    STEG.forEach((s, i) => (s.position = i + 1));
+    return json({ data: STEG });
+  }
+  const stegvag = vag.match(/^\/v1\/deal-stages\/([^/]+)$/);
+  if (stegvag) {
+    const s = STEG.find((x) => x.id === decodeURIComponent(stegvag[1]));
+    if (!s) return stegfel(404, "stage_not_found", "Steget finns inte.");
+    if (metod === "PATCH") {
+      const namn = "name" in kropp ? String(kropp.name ?? "").trim() : s.name;
+      if (STEG.some((x) => x !== s && x.name.toLowerCase() === namn.toLowerCase())) return stegfel(409, "conflict", "Det finns redan ett steg med det namnet.");
+      const typ = (kropp.type as Affarssteg["type"]) ?? s.type;
+      if (!typerFinns(STEG.map((x) => (x === s ? { ...x, type: typ } : x)))) return stegfel(409, "stage_required", "Det måste alltid finnas minst ett öppet, ett vunnet och ett förlorat steg.");
+      Object.assign(s, { name: namn, type: typ, probability: "probability" in kropp ? Number(kropp.probability) : s.probability });
+      return json(s);
+    }
+    if (metod === "DELETE") {
+      if (AFFARER.some((a) => a.stage_id === s.id)) return stegfel(409, "stage_in_use", "Steget har affärer. Flytta dem först.");
+      if (!typerFinns(STEG.filter((x) => x !== s))) return stegfel(409, "stage_required", "Det måste alltid finnas minst ett öppet, ett vunnet och ett förlorat steg.");
+      STEG.splice(STEG.indexOf(s), 1);
+      return json(null, 204);
+    }
+  }
   if (vag === "/v1/deals/board" && metod === "GET") return json(tavlan());
   if (vag === "/v1/deals" && metod === "GET") {
     const q = (url.searchParams.get("q") ?? "").toLowerCase();

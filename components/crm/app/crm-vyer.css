@@ -235,3 +235,57 @@
     min-height: 44px;
   }
 }
+
+/* Stegen på tavlan (Stegdialog): en rad per steg med hårlinje emellan. Flyttknapparna, namnet,
+   sannolikheten, typen och papperskorgen står på en rad; på telefon står namnet för sig överst. */
+.crm-stegrad {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) 88px 148px auto;
+  grid-template-areas: "flytt namn tal typ bort";
+  align-items: start;
+  gap: 8px;
+  padding-block: 10px;
+}
+.crm-stegrad + .crm-stegrad {
+  border-top: 1px solid oklch(var(--ink) / 0.07);
+}
+.crm-stegrad-flytt {
+  grid-area: flytt;
+  display: inline-flex;
+  padding-top: 2px;
+}
+.crm-stegrad-namn {
+  grid-area: namn;
+  min-width: 0;
+}
+.crm-stegrad-tal {
+  grid-area: tal;
+  position: relative;
+}
+/* Procenttecknet står i fältets högerkant: fältets etikett är dold, så enheten måste synas. */
+.crm-stegrad-tal::after {
+  content: "%";
+  position: absolute;
+  inset-block: 0;
+  right: 12px;
+  display: flex;
+  align-items: center;
+  color: oklch(var(--ink-muted));
+  font-size: 0.875rem;
+  pointer-events: none;
+}
+.crm-stegrad-typ {
+  grid-area: typ;
+}
+.crm-stegrad-bort {
+  grid-area: bort;
+  padding-top: 2px;
+}
+@media (max-width: 639.98px) {
+  .crm-stegrad {
+    grid-template-columns: auto 88px minmax(0, 1fr) auto;
+    grid-template-areas:
+      "namn namn namn namn"
+      "flytt tal typ bort";
+  }
+}
