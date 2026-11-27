@@ -183,6 +183,11 @@ handelser.registrera_form("person", person_ut)
 _FALT_UT = {**{sv: en for en, sv in _BOLAG.items()}, **{sv: en for en, sv in _PERSON.items()},
             **{sv: f"address.{en}" for en, sv in _ADRESS.items()}, "extra": "custom"}
 
+# Personer, enskilda firmor och privatpersoner går ut som tunna händelser:
+# fältnamnen, aldrig posten (app/crm/handelser.py: ar_tunn).
+handelser.registrera_faltnamn("bolag", _FALT_UT)
+handelser.registrera_faltnamn("person", _FALT_UT)
+
 
 def handelse_ut(rad: dict[str, Any]) -> dict[str, Any]:
     return {"seq": rad["id"], "object": handelser.OBJEKT_UT.get(rad["objekt"], rad["objekt"]), "id": rad["post_id"],
@@ -728,7 +733,7 @@ async def andringar(
     request: Request, tenant: dict = Depends(kraev("crm:las")),
     cursor: int = Query(0, ge=0, description="`next_cursor` from your previous call. 0 reads from the beginning."),
     limit: int = Query(200, ge=1, le=1000),
-    object: Literal["company", "person", "deal", "task", "note", "activity", "attachment"] | None = Query(
+    object: Literal["company", "person", "deal", "task", "note", "activity", "attachment", "suppression"] | None = Query(
         None, description="Only this kind of record."),
 ) -> dict:
     """One feed for every object. Each write has a sequence number; read until
@@ -1181,7 +1186,13 @@ records carry `deleted_at` and must be removed on your side as well.
 
 **Webhooks.** Each delivery is a POST with `X-Snajp-Signature: t=<unix time>,v1=<hex>`, where `v1`
 is HMAC-SHA256 over `"{t}.{body}"` with the webhook's secret. Answer 2xx within ten seconds.
-Anything else is retried seven times over about a day.
+Anything else is retried seven times over about a day. Events for people, sole proprietors and
+private persons are thin: `id`, `object`, `type`, `occurred_at` and the changed `fields`, never the
+record. Fetch it with your key.
+
+**Suppressions.** One block for every channel: `/suppressions` holds emails, domains, phone numbers
+and organisation numbers that must not be contacted, with channel, reason and date.
+`POST /suppressions/check` answers whether anything in Snajp blocks a contact.
 """
 
 
@@ -1211,3 +1222,8 @@ router.routes.extend(crm_v1_objekt.router.routes)
 from . import crm_v1_tidslinje  # noqa: E402
 
 router.routes.extend(crm_v1_tidslinje.koppla(sys.modules[__name__]).routes)
+
+# Den gemensamma spärren för alla kanaler och NIX-importen (migration 166).
+from . import crm_v1_sparr  # noqa: E402
+
+router.routes.extend(crm_v1_sparr.koppla(sys.modules[__name__]).routes)

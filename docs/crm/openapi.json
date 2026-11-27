@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Snajp CRM API",
-    "description": "Read and write the companies and people a Snajp customer keeps in Snajp CRM, and sync a customer\nregister in from another system.\n\n**Authentication.** Send the key in `X-API-Key`. Keys are created under CRM, Developers, and carry\nscopes: `crm:las` (read), `crm:skriv` (write), `crm:synk` (sync), `crm:admin` (connections).\n\n**Idempotency.** Any POST accepts `Idempotency-Key`. Within 24 hours the same key and body return\nthe stored response, with `Idempotent-Replayed: true`.\n\n**Pagination.** Lists return `next_cursor`. Pass it as `cursor` until it is `null`.\n\n**Rate limit.** 600 requests per minute and customer. `X-RateLimit-Remaining` is on every\nresponse; a 429 carries `Retry-After`.\n\n**Errors.** `{\"detail\": {\"code\", \"message\", \"meddelande\"}}`. `code` is stable, `message` is English,\n`meddelande` is Swedish.\n\n**Swedish formats.** Organisation numbers are checked with the Luhn digit and stored as\n`NNNNNN-NNNN`. Phone numbers are stored as E.164, Swedish postal codes as `NNN NN`, dates as ISO 8601.\n\n**Keeping a copy in sync.** Read `GET /changes` from your last `next_cursor`: one feed for every\nobject, in order. Or have Snajp call you: register a webhook under `/webhooks`. Listing with\n`sort=updated&include_deleted=true&updated_since=<your last sync>` works as before. Deleted\nrecords carry `deleted_at` and must be removed on your side as well.\n\n**Webhooks.** Each delivery is a POST with `X-Snajp-Signature: t=<unix time>,v1=<hex>`, where `v1`\nis HMAC-SHA256 over `\"{t}.{body}\"` with the webhook's secret. Answer 2xx within ten seconds.\nAnything else is retried seven times over about a day.\n",
+    "description": "Read and write the companies and people a Snajp customer keeps in Snajp CRM, and sync a customer\nregister in from another system.\n\n**Authentication.** Send the key in `X-API-Key`. Keys are created under CRM, Developers, and carry\nscopes: `crm:las` (read), `crm:skriv` (write), `crm:synk` (sync), `crm:admin` (connections).\n\n**Idempotency.** Any POST accepts `Idempotency-Key`. Within 24 hours the same key and body return\nthe stored response, with `Idempotent-Replayed: true`.\n\n**Pagination.** Lists return `next_cursor`. Pass it as `cursor` until it is `null`.\n\n**Rate limit.** 600 requests per minute and customer. `X-RateLimit-Remaining` is on every\nresponse; a 429 carries `Retry-After`.\n\n**Errors.** `{\"detail\": {\"code\", \"message\", \"meddelande\"}}`. `code` is stable, `message` is English,\n`meddelande` is Swedish.\n\n**Swedish formats.** Organisation numbers are checked with the Luhn digit and stored as\n`NNNNNN-NNNN`. Phone numbers are stored as E.164, Swedish postal codes as `NNN NN`, dates as ISO 8601.\n\n**Keeping a copy in sync.** Read `GET /changes` from your last `next_cursor`: one feed for every\nobject, in order. Or have Snajp call you: register a webhook under `/webhooks`. Listing with\n`sort=updated&include_deleted=true&updated_since=<your last sync>` works as before. Deleted\nrecords carry `deleted_at` and must be removed on your side as well.\n\n**Webhooks.** Each delivery is a POST with `X-Snajp-Signature: t=<unix time>,v1=<hex>`, where `v1`\nis HMAC-SHA256 over `\"{t}.{body}\"` with the webhook's secret. Answer 2xx within ten seconds.\nAnything else is retried seven times over about a day. Events for people, sole proprietors and\nprivate persons are thin: `id`, `object`, `type`, `occurred_at` and the changed `fields`, never the\nrecord. Fetch it with your key.\n\n**Suppressions.** One block for every channel: `/suppressions` holds emails, domains, phone numbers\nand organisation numbers that must not be contacted, with channel, reason and date.\n`POST /suppressions/check` answers whether anything in Snajp blocks a contact.\n",
     "version": "1.0.0"
   },
   "paths": {
@@ -1290,7 +1290,8 @@
                     "task",
                     "note",
                     "activity",
-                    "attachment"
+                    "attachment",
+                    "suppression"
                   ],
                   "type": "string"
                 },
@@ -6459,6 +6460,392 @@
           }
         }
       }
+    },
+    "/api/crm/v1/suppressions": {
+      "get": {
+        "tags": [
+          "Snajp CRM"
+        ],
+        "summary": "List suppressions, newest first",
+        "description": "The suppression list. Records marked do-not-contact, unsubscribed\naddresses and leads that asked not to be contacted also block, but are\nnot listed here: ask `POST /suppressions/check`.",
+        "operationId": "lista_api_crm_v1_suppressions_get",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 500,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "name": "channel",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "email",
+                    "phone",
+                    "all"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only suppressions in this channel.",
+              "title": "Channel"
+            },
+            "description": "Only suppressions in this channel."
+          },
+          {
+            "name": "reason",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "objection",
+                    "unsubscribe",
+                    "nix",
+                    "customer_request",
+                    "bounce",
+                    "other"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Reason"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Part of the value.",
+              "title": "Q"
+            },
+            "description": "Part of the value."
+          },
+          {
+            "name": "include_lifted",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Lifted suppressions are kept as a record but no longer block anything.",
+              "default": false,
+              "title": "Include Lifted"
+            },
+            "description": "Lifted suppressions are kept as a record but no longer block anything."
+          },
+          {
+            "name": "x-api-key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Lista Api Crm V1 Suppressions Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Snajp CRM"
+        ],
+        "summary": "Block an email, domain, phone number or organisation number",
+        "description": "201 with the new suppression, or 200 with the one that already blocks\nthe same value in the same channel. Sends `suppression.created`.",
+        "operationId": "skapa_api_crm_v1_suppressions_post",
+        "parameters": [
+          {
+            "name": "x-api-key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SuppressionIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/crm/v1/suppressions/import": {
+      "post": {
+        "tags": [
+          "Snajp CRM"
+        ],
+        "summary": "Add many suppressions in one call, e.g. your NIX check",
+        "description": "Upload the outcome of your own NIX check with `channel: phone,\nreason: nix`. `added + already_blocked + len(invalid)` is the number of\nvalues sent; a duplicate within the call counts as already blocked.\n`invalid` gives the position and the reason, never the value.",
+        "operationId": "importera_api_crm_v1_suppressions_import_post",
+        "parameters": [
+          {
+            "name": "x-api-key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ImportIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/crm/v1/suppressions/{suppression_id}": {
+      "delete": {
+        "tags": [
+          "Snajp CRM"
+        ],
+        "summary": "Lift a suppression",
+        "description": "The suppression stays as a record with `lifted_at`, and no longer\nblocks. Lifting it again changes nothing. Sends `suppression.lifted`.",
+        "operationId": "hav_api_crm_v1_suppressions__suppression_id__delete",
+        "parameters": [
+          {
+            "name": "suppression_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Suppression Id"
+            }
+          },
+          {
+            "name": "x-api-key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/crm/v1/suppressions/check": {
+      "post": {
+        "tags": [
+          "Snajp CRM"
+        ],
+        "summary": "Is a contact blocked anywhere in Snajp?",
+        "description": "Reads every source together: the suppression list (including domain\nand `all` blocks), records marked do-not-contact (every private person\nis), unsubscribed addresses (email only) and leads that asked not to be\ncontacted. `sources` says which ones blocked: `suppression_list`,\n`record`, `unsubscribed`, `lead`. Nothing about the contact is returned.",
+        "operationId": "kontrollera_api_crm_v1_suppressions_check_post",
+        "parameters": [
+          {
+            "name": "x-api-key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CheckIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Kontrollera Api Crm V1 Suppressions Check Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -6657,6 +7044,62 @@
         "additionalProperties": false,
         "type": "object",
         "title": "Address"
+      },
+      "CheckIn": {
+        "properties": {
+          "channel": {
+            "type": "string",
+            "enum": [
+              "email",
+              "phone",
+              "all"
+            ],
+            "title": "Channel",
+            "description": "`all` asks whether anything blocks in any channel."
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 320
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "phone": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 40
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phone"
+          },
+          "org_number": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 40
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Org Number"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "channel"
+        ],
+        "title": "CheckIn"
       },
       "CompanyIn": {
         "properties": {
@@ -7194,6 +7637,65 @@
         "type": "object",
         "title": "HTTPValidationError"
       },
+      "ImportIn": {
+        "properties": {
+          "channel": {
+            "type": "string",
+            "enum": [
+              "email",
+              "phone",
+              "all"
+            ],
+            "title": "Channel"
+          },
+          "reason": {
+            "type": "string",
+            "enum": [
+              "objection",
+              "unsubscribe",
+              "nix",
+              "customer_request",
+              "bounce",
+              "other"
+            ],
+            "title": "Reason"
+          },
+          "values": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Values",
+            "description": "At most 10000 per call."
+          },
+          "kind": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "email",
+                  "phone",
+                  "domain",
+                  "org_number"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Kind",
+            "description": "Without it: a value with @ is an email, otherwise a domain on `email` and a phone number on `phone` and `all`."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "channel",
+          "reason",
+          "values"
+        ],
+        "title": "ImportIn"
+      },
       "MoveIn": {
         "properties": {
           "stage_id": {
@@ -7678,6 +8180,72 @@
         "additionalProperties": false,
         "type": "object",
         "title": "StageIn"
+      },
+      "SuppressionIn": {
+        "properties": {
+          "channel": {
+            "type": "string",
+            "enum": [
+              "email",
+              "phone",
+              "all"
+            ],
+            "title": "Channel",
+            "description": "`email`, `phone` or `all` (every channel)."
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "email",
+              "phone",
+              "domain",
+              "org_number"
+            ],
+            "title": "Kind",
+            "description": "What `value` is. An email or domain block belongs to `email` or `all`, a phone block to `phone` or `all`; an organisation number blocks the company in any channel."
+          },
+          "value": {
+            "type": "string",
+            "maxLength": 320,
+            "title": "Value",
+            "description": "Stored normalised: email and domain in lower case, phone as E.164, organisation number as NNNNNN-NNNN."
+          },
+          "reason": {
+            "type": "string",
+            "enum": [
+              "objection",
+              "unsubscribe",
+              "nix",
+              "customer_request",
+              "bounce",
+              "other"
+            ],
+            "title": "Reason",
+            "description": "`objection` is GDPR art. 21, `nix` a hit in your NIX check."
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note",
+            "description": "Never sent in a webhook or written to a log."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "channel",
+          "kind",
+          "value",
+          "reason"
+        ],
+        "title": "SuppressionIn"
       },
       "TaskIn": {
         "properties": {

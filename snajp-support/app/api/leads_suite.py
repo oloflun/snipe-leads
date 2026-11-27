@@ -18,6 +18,7 @@ from typing import Any, Literal
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel, Field
 
+from ..crm import sparr as crm_sparr
 from ..leads import crm_synk, samtal, upptagna
 from .deps import kraev_uuid, require_tenant
 
@@ -218,9 +219,12 @@ async def samtalslista(
     request: Request, lista: Literal["aterkoppling", "ring"] = "aterkoppling", tenant: dict = Depends(require_tenant)
 ) -> dict:
     """Återkopplingen eller ringlistan, de som ska ringas i dag först."""
-    prospekter, alla_samtal, forsta, aterkom = await _samtalsunderlag(request.app.state.storage, tenant["tenant_id"])
+    prospekter, alla_samtal, forsta, aterkom, sparrar = await _samtalsunderlag(
+        request.app.state.storage, tenant["tenant_id"]
+    )
     rader = samtal.samtalslista(
-        prospekter, alla_samtal, forsta, lista=lista, idag=datetime.now(timezone.utc).date(), aterkom=aterkom
+        prospekter, alla_samtal, forsta, lista=lista, idag=datetime.now(timezone.utc).date(), aterkom=aterkom,
+        **sparrar,
     )
     return {"rader": rader, "ring_idag": sum(1 for r in rader if r["ring_idag"])}
 
@@ -231,32 +235,42 @@ async def samtalsantal(request: Request, tenant: dict = Depends(require_tenant))
 
     Att göra hämtade förut båda listorna hela, alltså tenantens prospekt två
     gånger per sidvisning, för att räkna rader. Samma underlag, en läsning."""
-    prospekter, alla_samtal, forsta, aterkom = await _samtalsunderlag(request.app.state.storage, tenant["tenant_id"])
+    prospekter, alla_samtal, forsta, aterkom, sparrar = await _samtalsunderlag(
+        request.app.state.storage, tenant["tenant_id"]
+    )
     idag = datetime.now(timezone.utc).date()
     return {
         lista: sum(
             1
-            for r in samtal.samtalslista(prospekter, alla_samtal, forsta, lista=lista, idag=idag, aterkom=aterkom)
+            for r in samtal.samtalslista(
+                prospekter, alla_samtal, forsta, lista=lista, idag=idag, aterkom=aterkom, **sparrar
+            )
             if r["ring_idag"]
         )
         for lista in ("aterkoppling", "ring")
     }
 
 
-async def _samtalsunderlag(storage: Any, tenant_id: str) -> tuple[list, list, dict[str, Any], dict[str, Any]]:
+async def _samtalsunderlag(
+    storage: Any, tenant_id: str
+) -> tuple[list, list, dict[str, Any], dict[str, Any], dict[str, set[str]]]:
     # ponytail: hela tenantens prospekt, samtal och utskick läses och filtreras
     # här; en SQL-vy när en kund har tusentals leads.
-    prospekter, alla_samtal, skickade, aterkom = await asyncio.gather(
+    prospekter, alla_samtal, skickade, aterkom, nummer, orgnr = await asyncio.gather(
         storage.list_prospects(tenant_id, limit=20_000),
         storage.list_lead_samtal(tenant_id),
         storage.list_skickade(tenant_id, limit=500),
         _aterkom(storage, tenant_id),
+        # Den gemensamma spärren för telefon (migration 166): NIX-tvättens
+        # nummer, spärrlistan och CRM-poster märkta kontakta inte.
+        crm_sparr.sparrade_nummer(storage, tenant_id),
+        crm_sparr.sparrade_orgnr(storage, tenant_id),
     )
     forsta: dict[str, Any] = {}
     for m in skickade:  # nyast först: den sista vi ser per prospekt är den första
         if m.get("prospect_id"):
             forsta[str(m["prospect_id"])] = m.get("sent_at")
-    return prospekter, alla_samtal, forsta, aterkom
+    return prospekter, alla_samtal, forsta, aterkom, {"sparrade_nummer": nummer, "sparrade_orgnr": orgnr}
 
 
 async def _aterkom(storage: Any, tenant_id: str) -> dict[str, Any]:

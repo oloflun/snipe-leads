@@ -118,6 +118,13 @@ TABELLER: dict[str, dict[str, str | None]] = {
         "uppladdad_av": None, "bolag_id": _UUID, "person_id": _UUID, "affar_id": _UUID,
         "anteckning_id": _UUID, "kalla": None, "created_at": _TID, "updated_at": _TID, "raderad_at": _TID,
     },
+    # Den gemensamma spärren (migration 166, reglerna i app/crm/sparr.py). En
+    # spärr hävs (havd_at), den raderas inte och ändras inte.
+    "crm_sparrar": {
+        "id": _UUID, "tenant_id": _UUID, "kanal": None, "slag": None, "varde": None, "orsak": None,
+        "anteckning": None, "kalla": None, "bolag_id": _UUID, "person_id": _UUID, "created_at": _TID,
+        "havd_at": _TID, "havd_av": None,
+    },
 }
 
 #: Standardvärden som databasen sätter, speglade för minneslagret.
@@ -140,6 +147,7 @@ _STANDARD: dict[str, dict[str, Any]] = {
     "crm_anteckningar": {"text": "", "fast": False, "kalla": "manuell"},
     "crm_aktiviteter": {"typ": "ovrigt", "kalla": "manuell"},
     "crm_bilagor": {"kalla": "manuell"},
+    "crm_sparrar": {"orsak": "annat", "kalla": "app"},
 }
 
 RAKNARE = ("totalt", "skapade", "uppdaterade", "oforandrade", "hoppade", "konflikter", "borttagna")
@@ -339,6 +347,10 @@ def _minnets_unika(storage: Any, tabell: str, rad: dict[str, Any]) -> None:
                     == (rad["anslutning_id"], rad["objekt"], rad["externt_id"]) for r in andra)
     elif tabell == "crm_affarssteg":
         krock = any(r["namn"].lower() == rad["namn"].lower() for r in andra)
+    elif tabell == "crm_sparrar":
+        krock = not rad.get("havd_at") and any(
+            (r["kanal"], r["slag"], r["varde"]) == (rad["kanal"], rad["slag"], rad["varde"]) and not r.get("havd_at")
+            for r in andra)
     else:
         krock = False
     if krock:
@@ -741,7 +753,35 @@ async def kontakta_inte_adresser(storage: Any, tenant_id: str) -> set[str]:
     """Adresser som aldrig får ett utskick enligt CRM:et: bolag och personer
     märkta kontakta inte (dit hör varje privatperson), och personerna hos ett
     sådant bolag. Sändspärren lägger dem till de avregistrerade, så att de
-    gäller också kampanjutskick."""
+    gäller också kampanjutskick.
+
+    Sedan migration 166 också spärrlistans e-postadresser i kanalen mejl och
+    alla (app/crm/sparr.py). Domänspärrarna prövas för sig i sändspärren
+    (app/leads/scheduler.py), eftersom en mängd adresser inte kan bära dem."""
+    return await _kontakta_inte_poster(storage, tenant_id) | await sparrade_varden(
+        storage, tenant_id, kanaler=("mejl", "alla"), slag="epost")
+
+
+async def sparrade_varden(storage: Any, tenant_id: str, *, kanaler: Iterable[str], slag: str) -> set[str]:
+    """Spärrlistans gällande värden av ett slag i kanalerna (migration 166).
+    Hävda spärrar räknas inte."""
+    kanaler = sorted(set(kanaler))
+    if _ar_postgres(storage):
+        try:
+            async with storage._scoped(tenant_id) as conn:
+                rader = await conn.fetch(
+                    "select varde from crm_sparrar where tenant_id = $1::text::uuid and havd_at is null "
+                    "and slag = $2 and kanal = any($3::text[])", tenant_id, slag, kanaler)
+        except Exception as fel:
+            if _saknar_tabell(fel):
+                return set()
+            raise
+        return {r["varde"] for r in rader}
+    return {r["varde"] for r in _minne(storage, "crm_sparrar").values()
+            if r["tenant_id"] == tenant_id and not r.get("havd_at") and r["slag"] == slag and r["kanal"] in kanaler}
+
+
+async def _kontakta_inte_poster(storage: Any, tenant_id: str) -> set[str]:
     if _ar_postgres(storage):
         try:
             async with storage._scoped(tenant_id) as conn:

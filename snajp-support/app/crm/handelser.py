@@ -22,22 +22,43 @@ from typing import Any, Callable
 
 from . import lagring
 
-TYPER = ("skapad", "andrad", "raderad", "aterstalld", "tomd")
+#: `havd` (migration 166) är en spärr som hävts: den står kvar men gäller inte.
+TYPER = ("skapad", "andrad", "raderad", "aterstalld", "tomd", "havd")
 KALLOR = ("api", "app", "synk", "system")
 
 #: Objektens namn i det publika API:t. Nya objekt läggs till här när de byggs.
 OBJEKT_UT = {"bolag": "company", "person": "person", "affar": "deal", "uppgift": "task",
-             "anteckning": "note", "aktivitet": "activity", "bilaga": "attachment"}
+             "anteckning": "note", "aktivitet": "activity", "bilaga": "attachment",
+             "sparr": "suppression"}
 TYP_UT = {"skapad": "created", "andrad": "updated", "raderad": "deleted",
-          "aterstalld": "restored", "tomd": "purged"}
+          "aterstalld": "restored", "tomd": "purged", "havd": "lifted"}
 
 #: Hur en post skrivs ut i en webhook. API-lagret registrerar sina funktioner
 #: (`registrera_form`), så att loggen inte behöver känna API:ts fältnamn.
 _FORM: dict[str, Callable[[dict[str, Any]], dict[str, Any]]] = {}
+#: CRM:ets fältnamn till API:ts, för de tunna händelserna (`registrera_faltnamn`).
+_FALTNAMN: dict[str, dict[str, str]] = {}
 
 
 def registrera_form(objekt: str, form: Callable[[dict[str, Any]], dict[str, Any]]) -> None:
     _FORM[objekt] = form
+
+
+def registrera_faltnamn(objekt: str, karta: dict[str, str]) -> None:
+    _FALTNAMN[objekt] = karta
+
+
+def ar_tunn(objekt: str, post: dict[str, Any] | None) -> bool:
+    """Bär webhooken bara id, typ och fältnamn (Antons beslut 2026-11-27)?
+
+    Ja för en person, och för ett bolag som är en enskild firma eller en
+    privatperson: där är posten en människas uppgifter. En felriktad webhook
+    läcker då mindre, och en radering eller en begränsning som skett efter
+    händelsen respekteras när mottagaren hämtar posten med sin nyckel
+    (docs/crm/underlag/svensk-02 § 8.2). Ett vanligt bolag bär hela posten."""
+    if objekt == "person":
+        return True
+    return objekt == "bolag" and bool(post) and bool(post.get("enskild_firma") or post.get("privatperson"))
 
 
 @dataclass
@@ -90,12 +111,21 @@ async def logga(
                           "kalla": kalla, "aktor": aktor, "created_at": lagring.nu()})
     from . import webhooks  # sen import: webhooks läser den här modulen
 
+    tid = lagring.nu()
     await webhooks.koa(storage, tenant_id, [
-        (handelsetyp(h.objekt, h.typ), _data(h)) for h in handelser])
+        (handelsetyp(h.objekt, h.typ), _data(h, tid)) for h in handelser])
 
 
-def _data(h: Handelse) -> dict[str, Any]:
-    """Det en webhook bär om händelsen. En tömd post lämnar bara sitt id."""
+def _data(h: Handelse, tid: str | None = None) -> dict[str, Any]:
+    """Det en webhook bär om händelsen. En tömd post lämnar bara sitt id.
+
+    Den tunna formen (`ar_tunn`) avgörs här och ingen annanstans: id, objekt,
+    typ, tid och fältnamnen som ändrades, aldrig posten."""
+    if ar_tunn(h.objekt, h.post):
+        karta = _FALTNAMN.get(h.objekt, {})
+        return {"id": h.post_id, "object": OBJEKT_UT.get(h.objekt, h.objekt),
+                "type": handelsetyp(h.objekt, h.typ), "occurred_at": tid or lagring.nu(),
+                "fields": sorted({karta.get(f, f) for f in h.falt})}
     data: dict[str, Any] = {"object": OBJEKT_UT.get(h.objekt, h.objekt), "id": h.post_id}
     form = _FORM.get(h.objekt)
     if h.post is not None and form is not None and h.typ != "tomd":

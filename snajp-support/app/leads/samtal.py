@@ -85,6 +85,8 @@ def samtalslista(
     lista: Literal["aterkoppling", "ring"],
     idag: date,
     aterkom: dict[str, Any] | None = None,
+    sparrade_nummer: frozenset[str] | set[str] = frozenset(),
+    sparrade_orgnr: frozenset[str] | set[str] = frozenset(),
 ) -> list[dict[str, Any]]:
     """Raderna i en lista, de som ska ringas i dag först, sedan äldst först.
 
@@ -92,7 +94,12 @@ def samtalslista(
     prospekt-id → första skickade mejlets tid. `aterkom` är prospekt-id →
     konversationens återkomdatum (migration 149): ett lead som svarat
     "återkom" och har telefon står i återkopplingen från det datumet, så att
-    konversationen och samtalen är samma arbetslista."""
+    konversationen och samtalen är samma arbetslista.
+
+    `sparrade_nummer` (E.164) och `sparrade_orgnr` (tio siffror) är den
+    gemensamma spärren för telefon (app/crm/sparr.py, migration 166): ett lead
+    vars nummer eller organisationsnummer står där faller bort ur båda
+    listorna. Där hör NIX-tvättens nummer hemma."""
     aterkom = aterkom or {}
     per_prospekt: dict[str, list[dict[str, Any]]] = {}
     for rad in samtal:
@@ -110,6 +117,8 @@ def samtalslista(
             or not p.get("contact_phone")
             or not (p.get("status") == "contacted" or (p.get("status") == "replied" and str(p["id"]) in aterkom))
         ):
+            continue
+        if (sparrade_nummer or sparrade_orgnr) and _sparrad_for_telefon(p, sparrade_nummer, sparrade_orgnr):
             continue
         pid = str(p["id"])
         historik = per_prospekt.get(pid, [])
@@ -151,6 +160,26 @@ def samtalslista(
     for r in rader:
         del r["_ordning"], r["_nasta"]
     return rader
+
+
+def _sparrad_for_telefon(p: dict[str, Any], nummer: frozenset[str] | set[str], orgnr: frozenset[str] | set[str]) -> bool:
+    """Står leadets nummer eller organisationsnummer i telefonspärren? Ett
+    värde som inte går att tolka kan inte matcha en spärr."""
+    from ..crm import falt as crm_falt
+
+    if nummer and p.get("contact_phone"):
+        try:
+            if crm_falt.telefon(p["contact_phone"]) in nummer:
+                return True
+        except crm_falt.FaltFel:
+            pass
+    if orgnr and p.get("orgnr"):
+        try:
+            if crm_falt.orgnr(p["orgnr"])[1] in orgnr:
+                return True
+        except crm_falt.FaltFel:
+            pass
+    return False
 
 
 async def registrera(

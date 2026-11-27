@@ -16,7 +16,8 @@ CRM:et skriver i leadstabellerna:
 
 På CRM-posten: kontakta inte märker bolaget (och stoppar därmed utskick till
 dess personer, `lagring.kontakta_inte_adresser`), och vunnen gör bolaget till
-kund.
+kund. Kontakta inte lägger dessutom spärrar i alla kanaler för bolagets
+e-post, telefon och organisationsnummer (`sparr.lagg_till`, källan `utfall`).
 
 ## Från leadsflödet till CRM:et: `iris_lage`
 
@@ -33,7 +34,7 @@ from typing import Any
 
 from ..leads import samtal
 from ..leads.scheduler import avbryt_utskick_for_prospekt
-from . import synk, tidslinje
+from . import sparr, synk, tidslinje
 
 #: Utfallen CRM:et kan sätta. De fem första är samtalets egna (leadsregel 17).
 UTFALL = ("ej_svar", "aterkom", "ej_intresserad", "kontakta_inte", "mote", "vunnen")
@@ -86,7 +87,26 @@ async def registrera(
     ny = bolag
     if andring:
         ny = await synk.andra(storage, tenant_id, "bolag", bolag["id"], andring, via=via, aktor=aktor) or bolag
+    if utfall == "kontakta_inte":
+        await _sparra_bolaget(storage, tenant_id, ny, via=via, aktor=aktor)
     return {"bolag": ny, "leads": berorda}
+
+
+async def _sparra_bolaget(storage: Any, tenant_id: str, bolag: dict[str, Any], *, via: str, aktor: str | None) -> None:
+    """Kontakta inte lägger spärrar i alla kanaler för bolagets e-post, telefon
+    och organisationsnummer (migration 166), så att invändningen står kvar med
+    orsak och datum också om posten ändras eller raderas. En spärr som redan
+    gäller lämnas som den är."""
+    for slag, varde in (("epost", bolag.get("epost")), ("telefon", bolag.get("telefon")),
+                        ("orgnr", bolag.get("orgnr_nyckel"))):
+        if not varde:
+            continue
+        try:
+            await sparr.lagg_till(storage, tenant_id, kanal="alla", slag=slag, varde=varde, orsak="kunden_bad",
+                                  kalla="utfall", bolag_id=bolag["id"], via=via, aktor=aktor)
+        except sparr.OgiltigSparr:
+            # Ett äldre värde som inte går att normalisera: posten spärrar ändå.
+            continue
 
 
 async def iris_lage(storage: Any, tenant_id: str, bolag: dict[str, Any]) -> dict[str, Any]:

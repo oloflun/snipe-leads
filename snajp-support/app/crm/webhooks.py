@@ -54,7 +54,7 @@ logger = logging.getLogger("snajp-support.crm.webhooks")
 HANDELSETYPER = tuple(
     f"{objekt}.{typ}" for objekt in ("company", "person", "deal", "task", "note", "activity", "attachment")
     for typ in ("created", "updated", "deleted", "restored", "purged")
-) + ("sync.completed", "ping")
+) + ("suppression.created", "suppression.lifted", "sync.completed", "ping")
 
 MAX_PER_KUND = 10
 #: Sekunder före försök 2 till 7. Efter det sista står leveransen som misslyckad.

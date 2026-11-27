@@ -671,3 +671,104 @@ async def test_personens_kalla_i_databasen(miljo):
     await lagring.gor_gravsten(lager, a, "person", bo_id)
     tomd = await lagring.hamta_post(lager, a, "person", bo_id, med_raderade=True)
     assert (tomd["kalla_typ"], tomd["kalla_namn"], tomd["insamlad_at"]) == (None, None, None)
+
+
+# -- Migration 166: den gemensamma spärren -----------------------------------
+
+
+async def test_sparren_och_det_unika_indexet_i_databasen(miljo):
+    from app.crm import handelser, sparr
+
+    lager, a, b = miljo
+    rad, skapad = await sparr.lagg_till(lager, a, kanal="alla", slag="epost", varde="VD@Bygg.se",
+                                        orsak="invandning", kalla="api", anteckning="Bad oss sluta.",
+                                        via="api", aktor="nyckel:prov")
+    assert skapad and rad["varde"] == "vd@bygg.se" and rad["havd_at"] is None and rad["created_at"]
+    igen, skapad = await sparr.lagg_till(lager, a, kanal="alla", slag="epost", varde="vd@bygg.se",
+                                         orsak="annat", kalla="app")
+    assert not skapad and igen["id"] == rad["id"]
+    # Det unika indexet gäller de ohävda: databasen säger nej till en andra.
+    with pytest.raises(lagring.FinnsRedan):
+        await lagring._in(lager, a, "crm_sparrar", {"kanal": "alla", "slag": "epost", "varde": "vd@bygg.se",
+                                                    "orsak": "annat", "kalla": "app"})
+    # Samma värde i en annan kanal är en annan spärr, och den andra kunden har ett eget index.
+    assert (await sparr.lagg_till(lager, a, kanal="mejl", slag="epost", varde="vd@bygg.se",
+                                  orsak="annat", kalla="app"))[1]
+    assert (await sparr.lagg_till(lager, b, kanal="alla", slag="epost", varde="vd@bygg.se",
+                                  orsak="annat", kalla="app"))[1]
+    # Hävd står kvar, och då går samma spärr att lägga igen.
+    havd = await sparr.hav(lager, a, rad["id"], via="api", aktor="nyckel:prov")
+    assert havd["havd_at"] and havd["havd_av"] == "nyckel:prov"
+    assert (await sparr.hav(lager, a, rad["id"]))["havd_at"] == havd["havd_at"]
+    assert (await sparr.lagg_till(lager, a, kanal="alla", slag="epost", varde="vd@bygg.se",
+                                  orsak="invandning", kalla="app"))[1]
+    # Villkoren i tabellen: tio siffror för organisationsnumret, kända kanaler.
+    for falt in ({"kanal": "alla", "slag": "orgnr", "varde": "556036-0793"},
+                 {"kanal": "sms", "slag": "telefon", "varde": "+46701234567"}):
+        with pytest.raises(asyncpg.CheckViolationError):
+            async with lager._scoped(a) as conn:
+                await conn.execute(
+                    "insert into crm_sparrar (tenant_id, kanal, slag, varde) values ($1::text::uuid, $2, $3, $4)",
+                    a, falt["kanal"], falt["slag"], falt["varde"])
+    # Händelserna står i loggen med typen havd, utan värdet och anteckningen.
+    flode, _ = await handelser.flode(lager, a, objekt="sparr")
+    assert [h["typ"] for h in flode] == ["skapad", "skapad", "havd", "skapad"]
+    assert "vd@bygg.se" not in str(flode) and "Bad oss" not in str(flode)
+    # Radskyddet: den andra kunden ser bara sin egen.
+    alla_b, _ = await sparr.lista(lager, b)
+    assert len(alla_b) == 1 and alla_b[0]["tenant_id"] == b
+
+
+async def test_sparrens_lista_import_och_grind_i_databasen(miljo):
+    from app.crm import sparr
+
+    lager, a, b = miljo
+    ut = await sparr.importera(lager, a, kanal="telefon", orsak="nix",
+                               varden=["070-123 45 67", "+46701234567", "123", "08-555 666 77"])
+    assert ut == {"tillagda": 2, "redan_sparrade": 1, "ogiltiga": [{"index": 2, "kod": "telefon_saknar_landskod"}]}
+    igen = await sparr.importera(lager, a, kanal="telefon", orsak="nix", varden=["0701234567"])
+    assert igen == {"tillagda": 0, "redan_sparrade": 1, "ogiltiga": []}
+    await sparr.lagg_till(lager, a, kanal="mejl", slag="doman", varde="konkurrent.se", orsak="annat", kalla="app")
+    await sparr.lagg_till(lager, a, kanal="alla", slag="orgnr", varde=ORGNR_A, orsak="kunden_bad", kalla="utfall")
+    # Listan, senast lagd först, med markör; filtret på kanal och sökningen.
+    async with lager._scoped(a) as conn:
+        await conn.execute("update crm_sparrar set created_at = now() - make_interval(mins => 10) "
+                           "where tenant_id = $1::text::uuid and orsak = 'nix'", a)
+    forsta, markor = await sparr.lista(lager, a, limit=2)
+    # De två senaste delar now() i testets transaktion: ordningen mellan dem går på id.
+    assert {r["slag"] for r in forsta} == {"doman", "orgnr"}
+    resten, slut = await sparr.lista(lager, a, limit=2, markor=markor)
+    assert {r["orsak"] for r in resten} == {"nix"} and slut is None
+    assert len((await sparr.lista(lager, a, kanal="telefon"))[0]) == 2
+    assert [r["varde"] for r in (await sparr.lista(lager, a, q="KONKURRENT"))[0]] == ["konkurrent.se"]
+    # Grinden: listan, kanalerna och domänen.
+    assert (await sparr.ar_sparrad(lager, a, telefon="0701234567", kanal="telefon"))["kallor"] == ["sparrlistan"]
+    assert not (await sparr.ar_sparrad(lager, a, telefon="0701234567", kanal="mejl"))["sparrad"]
+    assert (await sparr.ar_sparrad(lager, a, epost="vd@konkurrent.se", kanal="mejl"))["sparrad"]
+    assert (await sparr.ar_sparrad(lager, a, orgnr=ORGNR_A, kanal="telefon"))["sparrad"]
+    assert not (await sparr.ar_sparrad(lager, b, orgnr=ORGNR_A, kanal="alla"))["sparrad"]
+    # Mängderna sändspärren och ringlistan läser.
+    assert await sparr.sparrade_domaner(lager, a) == {"konkurrent.se"}
+    assert await sparr.sparrade_nummer(lager, a) == {"+46701234567", "+46855566677"}
+    assert await sparr.sparrade_orgnr(lager, a) == {"5560360793"}
+    assert await sparr.sparrade_nummer(lager, b) == set()
+
+
+async def test_posten_och_sandsparrens_mangd_i_databasen(miljo):
+    from app.crm import sparr
+
+    lager, a, b = miljo
+    tyst, _ = await synk.skapa(lager, a, "bolag", {"namn": "Tyst AB", "orgnr": ORGNR_B, "telefon": "08-123 456 78",
+                                                  "kontakta_inte": True}, kalla="api")
+    await synk.skapa(lager, a, "person", {"epost": "vd@tyst.se", "mobil": "070-111 22 33",
+                                          "bolag_id": tyst["id"]}, kalla="api")
+    await synk.skapa(lager, a, "person", {"epost": "fri@annat.se", "telefon": "070-999 88 77"}, kalla="api")
+    await sparr.lagg_till(lager, a, kanal="mejl", slag="epost", varde="lista@bygg.se", orsak="annat", kalla="app")
+    await sparr.lagg_till(lager, a, kanal="telefon", slag="telefon", varde="070-222 33 44", orsak="nix", kalla="app")
+    assert await lagring.kontakta_inte_adresser(lager, a) == {"vd@tyst.se", "lista@bygg.se"}
+    assert await sparr.sparrade_nummer(lager, a) == {"+46812345678", "+46701112233", "+46702223344"}
+    assert ORGNR_B.replace("-", "") in await sparr.sparrade_orgnr(lager, a)
+    svar = await sparr.ar_sparrad(lager, a, telefon="0701112233", kanal="telefon")
+    assert svar["kallor"] == ["posten"] and svar["sparr_id"] == []
+    assert not (await sparr.ar_sparrad(lager, a, epost="fri@annat.se", kanal="alla"))["sparrad"]
+    assert await lagring.kontakta_inte_adresser(lager, b) == set()

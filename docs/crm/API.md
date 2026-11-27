@@ -256,7 +256,7 @@ curl "$BAS/changes?cursor=0&limit=1000" -H "X-API-Key: $NYCKEL"
 
 Läs tills listan är tom och spara `next_cursor`. Samma markör igen ger bara det som hänt
 sedan dess. `type` är `created`, `updated`, `deleted`, `restored` eller `purged` (posten är
-tömd för gott). Flödet säger vilken post och vilka fält som ändrades, inte värdena: hämta
+tömd för gott), och för en spärr (`object: suppression`) `created` eller `lifted`. Flödet säger vilken post och vilka fält som ändrades, inte värdena: hämta
 posten för dem. `GET /companies/{id}/history` och `/people/{id}/history` ger samma
 händelser för en enda post, nyast först.
 
@@ -272,8 +272,9 @@ curl -X POST "$BAS/webhooks" -H "X-API-Key: $NYCKEL" -H "Content-Type: applicati
 Svaret bär `secret`, en enda gång. `events` är valfritt, utan det får ni allt.
 `GET /webhooks/events` räknar upp händelserna: `company.*`, `person.*`, `deal.*`, `task.*`,
 `note.*`, `activity.*` och `attachment.*` med `created`, `updated`, `deleted`, `restored` och
-`purged`, och `sync.completed` när en synk avslutats. En bilagas händelse bär filens
-uppgifter, aldrig själva filen.
+`purged`, `suppression.created` och `suppression.lifted` (se Spärren nedan), och
+`sync.completed` när en synk avslutats. En bilagas händelse bär filens uppgifter, aldrig
+själva filen.
 Webhooks kräver omfånget `crm:admin` och en publik https-adress.
 
 Varje leverans är ett `POST` med händelsen som JSON:
@@ -282,6 +283,21 @@ Varje leverans är ett `POST` med händelsen som JSON:
 {"id": "<leveransens id>", "type": "company.updated", "created_at": "2026-11-26T09:14:02+00:00",
  "data": {"object": "company", "id": "…", "record": { … hela posten … }}}
 ```
+
+**Personer går ut tunna.** En händelse om en person, och om ett bolag som är en enskild
+firma eller en privatperson, bär aldrig posten. Den bär vilken post, vad som hände, när och
+namnen på fälten som ändrades:
+
+```json
+{"id": "<leveransens id>", "type": "person.updated", "created_at": "2026-11-27T10:02:11+00:00",
+ "data": {"id": "…", "object": "person", "type": "person.updated",
+          "occurred_at": "2026-11-27T10:02:11+00:00", "fields": ["phone", "title"]}}
+```
+
+Hämta posten med `GET /people/{id}` (eller `/companies/{id}`) när ni behöver värdena. Skälen:
+en webhook som av misstag går till fel adress läcker då bara ett id, och har personen hunnit
+raderas eller begränsas efter händelsen respekteras det när ni hämtar, i stället för att en
+gammal kopia redan ligger hos er. Ett vanligt bolag bär hela posten som förut.
 
 **Kontrollera signaturen.** Rubriken `X-Snajp-Signature: t=<unixtid>,v1=<hex>` bär en
 HMAC-SHA256 över `"{t}.{kroppen}"` med er hemlighet. Räkna om den på den råa kroppen,
@@ -305,6 +321,83 @@ statuskod och fel i 30 dagar. `POST /webhooks/{id}/deliveries/{leverans}/retry` 
 en, och `POST /webhooks/{id}/test` skickar en `ping`. En webhook som misslyckats tjugo
 leveranser i rad stängs av (`active: false`, `disabled_reason: for_manga_fel`). Slå på den
 igen med `PATCH` när mottagaren är uppe.
+
+## Spärren
+
+En invändning mot direktmarknadsföring (GDPR artikel 21) gäller i varje kanal. Spärren är
+en lista per arbetsyta över e-postadresser, domäner, telefonnummer och organisationsnummer
+som inte får kontaktas, med kanal, orsak och datum. Snajps mejlutskick, uppföljningar och
+kampanjer stoppas i sändögonblicket, och ringlistan och återkopplingen tappar spärrade
+nummer.
+
+```bash
+curl -X POST "$BAS/suppressions" -H "X-API-Key: $NYCKEL" -H "Content-Type: application/json" \
+  -d '{"channel": "all", "kind": "email", "value": "vd@bolaget.se", "reason": "objection"}'
+```
+
+| Fält | Värden |
+|---|---|
+| `channel` | `email`, `phone` eller `all` (varje kanal) |
+| `kind` | `email`, `domain`, `phone` eller `org_number`. E-post och domän hör till `email` eller `all`, telefon till `phone` eller `all`. Ett organisationsnummer spärrar bolaget i vilken kanal som helst |
+| `value` | sparas normaliserat: e-post och domän i gemener, telefon i E.164, organisationsnummer `NNNNNN-NNNN`. En enskild firmas nummer är ett personnummer och tas inte emot |
+| `reason` | `objection` (artikel 21), `unsubscribe`, `nix`, `customer_request`, `bounce`, `other` |
+| `note` | valfri, högst 500 tecken. Skickas aldrig i en webhook och skrivs aldrig i en logg |
+| `source` | `app`, `api`, `outcome` (utfallet kontakta inte), `import`, `sync` |
+
+Svaret är `201` med spärren, eller `200` med den som redan gäller för samma kanal, slag och
+värde. En domänspärr stoppar varje adress på domänen, men inte underdomäner.
+
+- `GET /suppressions` listar spärrarna, senast lagd först, med `channel`, `reason`, `q`
+  (del av värdet), `limit`, `cursor` och `include_lifted`.
+- `DELETE /suppressions/{id}` häver spärren (`204`). Den står kvar med `lifted_at` och
+  `lifted_by` som bevis, men stoppar ingenting. Att häva igen ändrar ingenting.
+- `POST /suppressions/import` lägger många i ett anrop, högst 10 000. Så laddar ni upp
+  utfallet av er egen NIX-tvätt:
+
+```bash
+curl -X POST "$BAS/suppressions/import" -H "X-API-Key: $NYCKEL" -H "Content-Type: application/json" \
+  -d '{"channel": "phone", "reason": "nix", "values": ["070-123 45 67", "08-555 666 77", "123"]}'
+```
+
+```json
+{"added": 2, "already_blocked": 0, "invalid": [{"index": 2, "code": "telefon_saknar_landskod"}]}
+```
+
+`added`, `already_blocked` och antalet i `invalid` är tillsammans antalet värden ni skickade.
+En dubblett i samma anrop räknas som redan spärrad, och `invalid` säger platsen och skälet,
+aldrig värdet. Utan `kind` är ett värde med @ en e-postadress, och annars en domän i kanalen
+`email` och ett telefonnummer i `phone` och `all`.
+
+**Är kontakten spärrad?** Fyra källor spärrar, och kontrollen läser dem tillsammans:
+
+```bash
+curl -X POST "$BAS/suppressions/check" -H "X-API-Key: $NYCKEL" -H "Content-Type: application/json" \
+  -d '{"channel": "phone", "phone": "070-123 45 67", "org_number": "556036-0793"}'
+```
+
+```json
+{"blocked": true, "sources": ["suppression_list", "lead"], "suppression_ids": ["…"]}
+```
+
+| `sources` | Källan |
+|---|---|
+| `suppression_list` | spärrlistan ovan, också domän- och `all`-spärrar |
+| `record` | ett bolag eller en person märkt `do_not_contact` (varje privatperson är det), eller en person hos ett sådant bolag |
+| `unsubscribed` | adressen har avregistrerat sig från era utskick (bara `email`) |
+| `lead` | ett lead hos Iris på samma adress eller organisationsnummer har bett att slippa kontakt |
+
+`channel: all` frågar om något alls spärrar, i någon kanal. Svaret säger vilken källa som
+spärrade, aldrig vad den visste. Ingenting kopieras mellan källorna: `do_not_contact` på en
+post läses från posten. Utfallet `do_not_contact` på ett bolag (`POST
+/companies/{id}/outcome`) lägger däremot spärrar i alla kanaler för bolagets e-post,
+telefon och organisationsnummer, så att invändningen står kvar med datum också om posten
+ändras.
+
+Läsning och kontrollen kräver `crm:las`, att lägga, importera och häva `crm:skriv`.
+`suppression.created` och `suppression.lifted` går ut som webhooks och står i
+ändringsflödet (`object: suppression`). Händelsen bär `id`, `channel`, `kind`, `reason`,
+`source`, `created_at` och `lifted_at`, aldrig `value` eller `note`: hämta spärren med
+`GET /suppressions` om ni behöver adressen.
 
 ## Affärer, uppgifter, anteckningar, aktiviteter och bilagor
 
@@ -495,6 +588,7 @@ engelska och `meddelande` på svenska.
 | 404 | `connection_not_found` | anslutningen finns inte (409 om en körnings anslutning tagits bort) |
 | 404 | `run_not_found` | synkkörningen finns inte |
 | 404 | `webhook_not_found`, `delivery_not_found` | webhooken eller leveransen finns inte |
+| 404 | `suppression_not_found` | spärren finns inte |
 | 404 | `stage_not_found` | steget finns inte (422 när `stage_id` i en kropp pekar fel) |
 | 409 | `conflict` | organisationsnumret, adressen eller namnet tillhör redan en annan post. `conflicting_id` är den posten, när den går att peka ut |
 | 409 | `run_closed` | körningen är avslutad och tar inte emot fler satser |
@@ -513,7 +607,7 @@ engelska och `meddelande` på svenska.
 | 422 | `file_type_not_allowed` | filtypen tas inte emot, eller passar inte filändelsen |
 | 422 | `connection_required` | `connection` saknas |
 | 422 | `empty_batch` | satsen är tom |
-| 422 | `too_many_items` | fler än 500 poster (50 i förhandsgranskningen) |
+| 422 | `too_many_items` | fler än 500 poster (50 i förhandsgranskningen, 10 000 värden i en import av spärrar) |
 | 422 | `invalid_json`, `invalid_body`, `invalid_encoding` | kroppen går inte att läsa |
 | 422 | `invalid_mapping` | mappningen har fel form; `meddelande` säger var |
 | 422 | `invalid_url` | webhookens adress är inte en publik https-adress |
@@ -528,6 +622,10 @@ engelska och `meddelande` på svenska.
 Fältkoderna i `fields` för ett värde utanför sin lista: `relation_okand` (`relation`),
 `rattslig_grund_okand` (`legal_basis`), `kalltyp_okand` (`source_type`) och
 `forlustorsak_okand` (`lost_reason_code`).
+
+Fältkoderna för en spärr: `slag_passar_inte_kanalen` (`kind`), `varde_saknas`,
+`doman_ogiltig`, `orgnr_ar_personnummer` och samma koder som för bolagets och personens
+e-post, telefon och organisationsnummer (`value`).
 
 Skälen till att en post i en sats hoppades över (`reason`): `saknar_namn`,
 `saknar_namn_och_epost`, `hoppas_over_enligt_mappningen`, `privatperson` (se nedan),

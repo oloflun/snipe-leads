@@ -141,6 +141,18 @@ async def _kor_send_guard(storage, tenant_id: str, thread: dict, message: dict, 
                 "Mottagaren har begärt begränsning av behandlingen (GDPR art. 18). "
                 "Inget utskick förrän begränsningen hävts.",
             )
+        # Den gemensamma spärren (migration 166): en spärrad domän stoppar
+        # varje adress på den. Spärrlistans enskilda adresser följer med
+        # kontakta_inte_adresser in i regel 3 nedan.
+        if "@" in mottagare:
+            from ..crm import sparr as crm_sparr
+
+            if mottagare.rsplit("@", 1)[1] in await crm_sparr.sparrade_domaner(storage, tenant_id):
+                return GuardBeslut(
+                    SG_BLOCKERA,
+                    "sparrad_doman",
+                    "Mottagarens domän står i kundens spärrlista för mejl.",
+                )
     prospect_id = thread.get("prospect_id")
     if prospect_id:
         prospect = await storage.get_prospect(tenant_id, prospect_id) or {}

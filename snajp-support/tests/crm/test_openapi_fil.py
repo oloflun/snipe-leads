@@ -21,10 +21,10 @@ def test_varje_felkod_i_koden_ar_stabil_och_dokumenterad():
     """Felkoderna är en del av kontraktet: en integration grenar på dem."""
     import re
 
-    from app.api import crm_v1_objekt, crm_v1_tidslinje
+    from app.api import crm_v1_objekt, crm_v1_sparr, crm_v1_tidslinje
 
     kalla = "".join(Path(m.__file__).read_text(encoding="utf-8")
-                    for m in (crm_v1, crm_v1_objekt, crm_v1_tidslinje))
+                    for m in (crm_v1, crm_v1_objekt, crm_v1_tidslinje, crm_v1_sparr))
     koder = set(re.findall(r'fel\(\s*\d{3},\s*"([a-z_]+)"', kalla)) | {"rate_limited"}
     guide = (FIL.parent / "API.md").read_text(encoding="utf-8")
     saknas = sorted(k for k in koder if f"`{k}`" not in guide)
