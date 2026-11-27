@@ -206,6 +206,40 @@ listorna. Antalet i sidhuvudet är öppna affärer. Vyraden bär Tavla och Pappe
 - **Dra och släpp:** kolumnen under pekaren tonas ockra, och en 3 px ockralinje visar
   platsen. På telefon står stegen under varandra utan dragning.
 - **Affärens panel** har bolagets form: steget som väljare överst i gruppen Affär.
+- **Stegen på tavlan** (`Stegdialog.tsx`, tillagt 2026-11-27): knappen Anpassa stegen i
+  sidhuvudet öppnar en dialog med en rad per steg (`.crm-stegrad`): flyttknappar upp och
+  ned, namnet, sannolikheten med procenttecken i fältets högerkant, typen med stegets
+  prick, och papperskorgen. Hårlinje mellan raderna. Felet står vid radens namn, och
+  regeln som gäller hela tavlan i en ruta överst. På telefon står namnet för sig överst.
+
+## Uppgifter (tillagt 2026-11-27, inte sett av Anton än)
+
+Vyn Uppgifter (`UppgifterVy.tsx`) är en listvy som de andra: sidhuvud med Ny uppgift,
+vyraden Att göra, Försenade och Klara, och sökfältet till höger.
+
+- **Raden:** kryssruta, titeln i Geist halvfet med beskrivningen dämpad under, posterna
+  uppgiften hör till som lugna chip (bolag eller person, och affären med sin ikonplatta),
+  förfallodagen och den ansvariga. En passerad dag står i varningsfärg med egen ikon,
+  dagens dag halvfet som "I dag".
+- **Klar** stryker titeln och byter kolumnen Förfaller mot när den blev klar.
+- **Telefon:** en rad per uppgift med kryssrutan till vänster, och dag och poster under
+  titeln. Chippen bryter rad i stället för att kapas.
+
+## Spärrar (tillagt 2026-11-27, inte sett av Anton än)
+
+Vyn Spärrar (`SparrarVy.tsx`) ligger under Data. Sidhuvud: Kontrollera (spöke), Ladda upp
+lista (sekundär) och Ny spärr (primär). Vyraden: Alla, Mejl, Telefon och Hävda.
+
+- **Raden:** slagets ikon (kuvert, glob, lur, nummertecken) och värdet i Geist halvfet,
+  kanalen som etikett (Alla kanaler i varningsfärg, en kanal neutral), orsaken med
+  anteckningen dämpad under, källan, när, och knappen Häv.
+- **Hävda** stryker värdet och byter kolumnen Tillagd mot Hävd. Ingen knapp.
+- **Räknefoten** säger vad listan inte visar (poster märkta Kontakta inte,
+  avregistreringar, leads), och bär länken till den senaste uppladdningens utfall.
+- **Uppladdningen** visar förlopp i rutan och slutar i ett utfall: en ruta med antalen,
+  och raderna som inte gick att läsa med radnummer, värdet i kodstil och skälet.
+- **Kontrollen** svarar i en ruta under fältet: grön när inget spärrar, varningsfärg med
+  källan när något gör det.
 
 ## Översikten (`/crm`, ny startsida)
 

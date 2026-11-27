@@ -715,7 +715,16 @@ export function Tidslinje({
         {flode.map((p) => {
           const r = rad(p, text, locale);
           const kalla = varifran(p, text);
-          const affar = p.link?.kind === "deal" ? `${bas}/affarer?affar=${encodeURIComponent(p.link.id)}` : null;
+          // Raden leder vidare dit saken finns: affären i CRM:et, leadet och konversationen i Leads.
+          const iLeads = p.link?.kind === "lead" || p.link?.kind === "conversation";
+          const affar =
+            p.link?.kind === "deal"
+              ? `${bas}/affarer?affar=${encodeURIComponent(p.link.id)}`
+              : p.link?.kind === "lead"
+                ? `/dashboard/leads?lead=${encodeURIComponent(p.link.id)}`
+                : p.link?.kind === "conversation"
+                  ? `/dashboard/leads?vy=konversationer&trad=${encodeURIComponent(p.link.id)}`
+                  : null;
           return (
             <li key={p.key} className="crm-tidslinje-rad">
               <span className="crm-tidslinje-ikon">
@@ -724,10 +733,15 @@ export function Tidslinje({
               <span className="order-last -mr-1.5 -mt-1 shrink-0">{meny(p)}</span>
               <span className="flex min-w-0 flex-1 flex-col gap-0.5 pb-4">
                 {affar ? (
-                  <NextLink href={affar} className="crm-tidslinje-lank inline-flex items-center gap-1 text-[0.875rem] text-ink">
+                  <NextLink
+                    href={affar}
+                    className="crm-tidslinje-lank inline-flex items-center gap-1 text-[0.875rem] text-ink"
+                    title={iLeads ? text({ sv: "Öppna i Leads", en: "Open in Leads" }) : undefined}
+                  >
                     <span className="min-w-0">{r.vad}</span>
-                    {/* Pilen säger att raden leder till affären, också på pekskärm där inget hovras. */}
+                    {/* Pilen säger att raden leder vidare, också på pekskärm där inget hovras. */}
                     <Icon icon={ArrowUpRight} size="xsm" color="secondary" />
+                    {iLeads ? <span className="sr-only">{text({ sv: ", öppnas i Leads", en: ", opens in Leads" })}</span> : null}
                   </NextLink>
                 ) : (
                   <span className="text-[0.875rem] text-ink [overflow-wrap:anywhere]">{r.vad}</span>
