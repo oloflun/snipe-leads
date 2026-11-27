@@ -108,6 +108,11 @@ registret: ett tomt svar från källan är oftare ett fel än en tömd kundstock
 Körningen går att följa medan den pågår och efteråt: `GET /sync/runs/{id}` ger räknarna
 och de fel som uppstått. Den syns också i Snajp under CRM › Synk.
 
+Har körningen fel som behöver rättas går hela rapporten vidare till Snajps support, och
+`support` på körningen säger när (`forwarded_at`). `support.ticket` sätts nu av sig självt till
+supportärendets nummer, och en anslutning som faller igen med ett ärende öppet får samma
+nummer. Poster som hoppas över med flit, som privatpersoner, är inga fel och går inte vidare.
+
 ## Fältmappning per system
 
 Varje system har en standardmappning: `GET /connections/systems` visar dem alla.

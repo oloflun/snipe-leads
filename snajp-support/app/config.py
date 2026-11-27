@@ -517,6 +517,11 @@ class Settings(BaseSettings):
     # dagar, en gång per dygn, också hos en kund som inte skriver något. PÅ
     # som standard; CRM_STADJOBB=0 stänger av det.
     crm_stadjobb: bool = True
+    # En synkkörning med fel blir ett plattformsärende (app/crm/supportrapport.py,
+    # `skapa_arende`), med numret på körningen. PÅ som standard;
+    # CRM_SUPPORTARENDEN=0 stänger av det, och rapporten väntar då på ett nummer
+    # för hand (POST /api/admin/crm/supportrapporter/.../arende).
+    crm_supportarenden: bool = True
     # SCB:s företagsregister (app/crm/scb.py), bara bolagsnivå. Nyckeln är
     # personlig, hämtas i SCB:s Registreringsportal och skickas i X-API-Key
     # (det nya API:t, apiafr.scb.se; de gamla certifikaten gäller inte).
