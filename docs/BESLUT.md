@@ -9,6 +9,96 @@ möjligt), vad det betyder i koden.
 
 ---
 
+## 2026-11-27 — Snajp CRM: spärrar, uppgifter, egna steg och det byggarna valde (agentens val)
+
+Inget av detta är Antons ord. Det är val agenten och byggarna gjorde när förslagen i posten
+nedan blev kod, och varje punkt går att ändra.
+
+1. **Spärrar är en egen vy under Data.** Inte en flik under Utvecklare och inte en ruta på
+   översikten. Skäl: det är en lista kunden arbetar i (lägger till, laddar upp, häver),
+   precis som Synk, och den som letar efter "får jag ringa det här numret" ska hitta den i
+   navigeringen.
+2. **Utfallet Kontakta inte lägger också spärrar i listan**, i alla kanaler, för bolagets
+   e-post, telefon och organisationsnummer. Skäl: invändningen ska stå kvar med orsak och
+   datum också om posten ändras eller raderas.
+3. **Leadsflödet läser spärrlistan.** Sändspärren stoppar en spärrad adress, en spärrad
+   domän och ett spärrat organisationsnummer, och ringlistan, återkopplingen och
+   provkörningens ringlista tappar spärrade nummer och organisationsnummer. Det är en
+   ändring i leadsflödets kod (`app/leads/samtal.py`, `scheduler.py`, `app/api/leads.py`,
+   `leads_suite.py`) och gäller varje kund. En tom spärrlista ändrar ingenting, och
+   läsningen tål att tabellen saknas.
+4. **En hävd spärr står kvar som bevis.** Den syns under Hävda och gäller inte. Ångra efter
+   en hävning lägger en ny spärr med samma innehåll: den hävda väcks inte till liv, så att
+   det går att se när spärren inte gällde.
+5. **Kontrollen svarar med källan, aldrig med något om kontakten.** Spärrlistan, en post
+   märkt Kontakta inte, en avregistrering eller ett lead hos Iris. Webhooks om spärrar bär
+   varken värdet eller anteckningen.
+6. **Uppladdningens utfall står kvar efter en omladdning, i webbläsaren.** Nya, redan
+   spärrade och rader som inte gick att läsa står i rutan, och det senaste utfallet går att
+   öppna igen från listans fot. Det sparas per arbetsyta i webbläsaren, med radnummer och
+   skäl men utan värdena (ett oläst nummer kan vara en personuppgift). Det följer alltså
+   inte med till en annan dator: en logg över uppladdningar i API:t saknas och är nästa
+   steg om kunderna behöver den.
+7. **Webhooks om personer, enskilda firmor och privatpersoner bär fältnamn, aldrig värden.**
+   Mottagaren får id, objekt, typ, tid och vilka fält som ändrats, och hämtar posten själv
+   med sin nyckel.
+8. **Uppgifter är en egen vy under Arbetsyta.** Samma uppgifter som under Att göra i
+   bolagets, personens och affärens panel, inga nya. En uppgift är försenad när dagen har
+   passerat: en uppgift som förfaller i dag är inte sen förrän i morgon. I den samlade
+   listan väljs bara bolag när en uppgift läggs till; person och affär väljs från posten.
+9. **Egna steg på tavlan sparas som ett utkast med ett klick.** Ordningen byts med knappar,
+   inte bara med dragning, och API:ts regler prövas i rutan innan något skickas: olika namn,
+   minst ett öppet, ett vunnet och ett förlorat steg, och inget steg med affärer tas bort.
+10. **Hjälprutan nås också från CRM:et**, från sidofältets fot, med samma komponent som i
+    arbetsytan. Reglerna från 2026-11-25 gäller oförändrade: hjälpen går under sin egen
+    nyckel, aldrig kundens.
+11. **Postens filer har en egen flik**, och bolagets panel har därmed fem flikar. Den
+    samlade kundlistan (egna kunder och vunna Iris-leads) ligger i vyn Kund, inte i en egen
+    vy. Vyraden i Bolag visar de fasta relationerna och en till; resten ligger under Fler.
+12. **Den som agerar som en kund (plattformsadmin i kundens vy) har läsläge i CRM:et.**
+    En skrivning ger 403 med ett tydligt besked. Skäl: proxyn märkte anropen som prov, och
+    CRM:ets API tar inte emot okända fält.
+
+**Väntar på Antons bekräftelse** (byggarens val, lätta att vända):
+
+- Ett vunnet Iris-lead för ett bolag som kunden själv märkt Ej aktuell visas inte i
+  kundlistan. Skäl: kundens egen, senare märkning är den mer bestämda uppgiften.
+- Utfallet Ej intresserad sätter inte relationen Ej aktuell. Det vore en naturlig koppling,
+  men den var inte beställd.
+
+Kod: `components/crm/app/SparrarVy.tsx`, `UppgifterVy.tsx`, `Stegdialog.tsx`,
+`snajp-support/app/crm/sparr.py`, `app/api/crm_v1_sparr.py`, migration 166.
+
+---
+
+## 2026-11-27 — Snajp CRM: Antons ja till sexton förslag (Anton)
+
+Agenten ställde sexton frågor i klartext, var och en med ett förslag. Antons svar:
+"Gränsen är återställd, fortsätt med bygget enligt förslagen. Vänta med att testa synken
+för kontona till imorgon, men bygg ut allt så långt som möjligt." Förslagen är agentens,
+beslutet att följa dem är hans. Underlaget står i `docs/crm/SVENSK-STANDARD.md` § 4.
+
+1. **Paritetslistans läsare får köras på Sonnet**, granskare och byggare stannar på Opus.
+   Tillståndet gäller bara paritetslistan.
+2. **De två främmande byggcacherna får tas bort** för att frigöra disk på C:.
+3. **Bygg vidare på de nya mönstren** (filer i panelen, den samlade kundlistan).
+4. **Bilagor lagras i databasen**, högst 10 MB per fil och 500 MB per kund.
+5. **Testkonton i källsystemen: ja, men vänta till i morgon.** Inga konton skapas och ingen
+   synk provas den 27 november.
+6. **Astryx init får inte skriva i CLAUDE.md eller AGENTS.md.**
+7. **En gemensam spärrlista för alla kanaler**, med kanal, orsak och datum.
+8. **Varje person bär sin källa och sin insamlingsdag** (GDPR artikel 14).
+9. **Tunna webhooks för personer och enskilda firmor** (id och typ), hela posten för bolag.
+10. **Berikning från SCB: ja, bara på bolagsnivå.** Aldrig personer.
+11. **Språkmodell i CRM:et bara som kundens val, och bara inom EU.**
+12. **Kunden gör NIX-tvätten själv och laddar upp utfallet.** Snajp tvättar inte åt kunden.
+13. **Enskilda firmor är helt spärrade i ringlistan**, som förut.
+14. **Synken mot Fortnox och Visma går bara inåt.** Snajp skriver inte i kundens bokföring.
+15. **Relationen Ej aktuell läggs till.** Pågående väntar.
+16. **Förlustorsak väljs ur en lista**, med fri kommentar bredvid. Uppskjuten väntar.
+
+---
+
 ## 2026-11-26 — Snajp CRM: affärstavlan och postens historik (agentens val)
 
 Inget av detta är Antons ord. Det är val agenten gjorde när affärerna och tidslinjen fick

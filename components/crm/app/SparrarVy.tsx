@@ -21,6 +21,7 @@ import { Timestamp } from "@astryxdesign/core/Timestamp";
 import { useToast } from "@astryxdesign/core/Toast";
 import { Kolumnrubrik, Tabellskelett, useBestallning, useSmal, Vyval } from "@/components/crm/app/kit";
 import { Felruta, Sida } from "@/components/crm/app/Sida";
+import { useDashboard } from "@/components/dashboard/DashboardContext";
 import { CrmFel, crmAnrop, orgnrVisning, type Sida as Svarssida } from "@/lib/crm/api";
 import { FALTKODER, kodtext, uppraknat } from "@/lib/crm/felkoder";
 import {
@@ -81,7 +82,12 @@ export function SparrarVy() {
   const [laddarFler, setLaddarFler] = useState(false);
   const [fel, setFel] = useState<unknown>(null);
   const [haver, setHaver] = useState<string | null>(null);
-  const [dialog, setDialog] = useState<"ny" | "lista" | "kontroll" | null>(null);
+  const [dialog, setDialog] = useState<"ny" | "lista" | "senaste" | "kontroll" | null>(null);
+  // Senaste uppladdningens utfall står kvar efter en omladdning: det sparas i webbläsaren, per arbetsyta, utan värdena.
+  const lage = useDashboard();
+  const nyckel = `${SENASTE_NYCKEL}:${lage.impersonation?.slug ?? lage.workspaceName ?? ""}`;
+  const [senaste, setSenaste] = useState<Importutfall | null>(null);
+  useEffect(() => setSenaste(lasSenaste(nyckel)), [nyckel]);
   const omgang = useRef(0);
 
   useEffect(() => {
@@ -270,6 +276,20 @@ export function SparrarVy() {
               en: "Do not contact on a company or person, unsubscribes and leads that asked not to be contacted also block. They are on their records."
             })}
       </span>
+      {senaste?.nar && !havda ? (
+        <button type="button" className="crm-raknefot-etikett underline decoration-dotted underline-offset-4 hover:decoration-solid" onClick={() => setDialog("senaste")}>
+          {text({ sv: "Senaste uppladdningen: ", en: "Latest upload: " })}
+          <span className="crm-raknefot-tal">{tal(senaste.tillagda)}</span>
+          {text({ sv: " nya", en: " new" })}
+          {senaste.ogiltiga.length ? (
+            <>
+              {", "}
+              <span className="crm-raknefot-tal">{tal(senaste.ogiltiga.length)}</span>
+              {senaste.ogiltiga.length === 1 ? text({ sv: " oläst rad", en: " unread row" }) : text({ sv: " olästa rader", en: " unread rows" })}
+            </>
+          ) : null}
+        </button>
+      ) : null}
       {nasta ? (
         <span className="ml-auto">
           <Button size="sm" variant="secondary" label={text({ sv: "Visa fler", en: "Show more" })} isLoading={laddarFler} onClick={() => void hamta(nasta)} />
@@ -361,7 +381,15 @@ export function SparrarVy() {
       )}
 
       <NySparr oppen={dialog === "ny"} stang={() => setDialog(null)} sparad={() => void hamta(null)} />
-      <Listuppladdning oppen={dialog === "lista"} stang={() => setDialog(null)} klar={() => void hamta(null)} />
+      <Listuppladdning
+        oppen={dialog === "lista" || dialog === "senaste"}
+        visa={dialog === "senaste" ? senaste : null}
+        stang={() => setDialog(null)}
+        klar={(ut) => {
+          setSenaste(sparaSenaste(nyckel, ut));
+          if (ut.tillagda > 0) void hamta(null);
+        }}
+      />
       <Kontroll oppen={dialog === "kontroll"} stang={() => setDialog(null)} />
 
     </Sida>
@@ -509,9 +537,39 @@ function NySparr({ oppen, stang, sparad }: Readonly<{ oppen: boolean; stang: () 
 // Ladda upp en lista (till exempel NIX-utfallet)
 // ---------------------------------------------------------------------------
 
-type Importutfall = { tillagda: number; redan: number; ogiltiga: { rad: number; varde: string; kod: string }[]; fel: Localized | null };
+type Importutfall = { tillagda: number; redan: number; ogiltiga: { rad: number; varde: string; kod: string }[]; fel: Localized | null; nar?: string };
 
-function Listuppladdning({ oppen, stang, klar }: Readonly<{ oppen: boolean; stang: () => void; klar: () => void }>) {
+const SENASTE_NYCKEL = "snajp.crm.sparrimport";
+/** Så många olästa rader sparas med radnummer och skäl. Resten räknas bara. */
+const MAX_SPARADE_RADER = 200;
+
+function lasSenaste(nyckel: string): Importutfall | null {
+  try {
+    const ra = window.localStorage.getItem(nyckel);
+    const ut = ra ? (JSON.parse(ra) as Importutfall) : null;
+    return ut && typeof ut.tillagda === "number" && Array.isArray(ut.ogiltiga) ? ut : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Sparar utfallet utan värdena: radnummer och skäl räcker för att hitta raden i den egna filen. */
+function sparaSenaste(nyckel: string, ut: Importutfall): Importutfall {
+  const sparat: Importutfall = { ...ut, nar: new Date().toISOString(), ogiltiga: ut.ogiltiga.slice(0, MAX_SPARADE_RADER).map((o) => ({ rad: o.rad, varde: "", kod: o.kod })) };
+  try {
+    window.localStorage.setItem(nyckel, JSON.stringify(sparat));
+  } catch {
+    // Utan lagring står utfallet kvar tills sidan laddas om.
+  }
+  return { ...sparat, ogiltiga: ut.ogiltiga };
+}
+
+function Listuppladdning({
+  oppen,
+  visa,
+  stang,
+  klar
+}: Readonly<{ oppen: boolean; visa: Importutfall | null; stang: () => void; klar: (ut: Importutfall) => void }>) {
   const { text, locale } = useLocale();
   const sprak = locale === "sv" ? "sv-SE" : "en-GB";
   const [kanal, setKanal] = useState<Sparrkanal>("phone");
@@ -527,7 +585,9 @@ function Listuppladdning({ oppen, stang, klar }: Readonly<{ oppen: boolean; stan
     setOrsak("nix");
     setLista("");
     setForlopp(null);
-    setUtfall(null);
+    // Öppnad från räknefoten: senaste uppladdningens utfall, inte en ny uppladdning.
+    setUtfall(visa);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [oppen]);
 
   // Ett värde per rad. I en CSV-fil räknas första kolumnen, och en rubrikrad utan siffror och utan @ hoppas över av API:t som ogiltig.
@@ -567,7 +627,7 @@ function Listuppladdning({ oppen, stang, klar }: Readonly<{ oppen: boolean; stan
     }
     setForlopp(null);
     setUtfall(ut);
-    if (ut.tillagda > 0) klar();
+    klar(ut);
   }
 
   const pagar = forlopp != null;
@@ -576,8 +636,12 @@ function Listuppladdning({ oppen, stang, klar }: Readonly<{ oppen: boolean; stan
       <Layout
         header={
           <DialogHeader
-            title={text({ sv: "Ladda upp en lista", en: "Upload a list" })}
-            subtitle={text({ sv: "Till exempel utfallet av er egen kontroll mot NIX-registret.", en: "For example the result of your own check against the NIX registry." })}
+            title={visa ? text({ sv: "Senaste uppladdningen", en: "Latest upload" }) : text({ sv: "Ladda upp en lista", en: "Upload a list" })}
+            subtitle={
+              visa?.nar
+                ? new Date(visa.nar).toLocaleString(sprak, { dateStyle: "medium", timeStyle: "short" })
+                : text({ sv: "Till exempel utfallet av er egen kontroll mot NIX-registret.", en: "For example the result of your own check against the NIX registry." })
+            }
             onOpenChange={(o) => !o && !pagar && stang()}
           />
         }
@@ -620,7 +684,7 @@ function Listuppladdning({ oppen, stang, klar }: Readonly<{ oppen: boolean; stan
                         {utfall.ogiltiga.slice(0, 20).map((o) => (
                           <li key={o.rad} className="crm-filrad flex items-baseline gap-3 py-2 text-[0.875rem]">
                             <span className="w-16 shrink-0 tabular-nums text-ink-muted">{text({ sv: `Rad ${o.rad}`, en: `Row ${o.rad}` })}</span>
-                            <code className="crm-kod min-w-0 truncate">{o.varde}</code>
+                            {o.varde ? <code className="crm-kod min-w-0 truncate">{o.varde}</code> : null}
                             <span className="ml-auto shrink-0 text-ink-muted">{text(kodtext(FALTKODER, o.kod))}</span>
                           </li>
                         ))}
