@@ -964,3 +964,72 @@ button.crm-chip:active {
   font-variant-numeric: tabular-nums lining-nums;
   font-weight: 400;
 }
+
+/* ---------------------------------------------------------------------------
+ * Skalets förutsättningar (steg 4.1): klockans tal och banderollen.
+ * ------------------------------------------------------------------------- */
+
+/* Klockans tal i sidhuvudet: samma ockra piller som railens tal, uppe till höger
+ * på ikonknappen. Fast bläck på fast ockra, så det läses i båda lägena. */
+.crm-klocktal {
+  position: absolute;
+  top: -4px;
+  right: -6px;
+  min-width: 18px;
+  height: 18px;
+  padding-inline: 5px;
+  font-size: 0.6875rem;
+  pointer-events: none;
+}
+
+/*
+ * Banderollen överst i bladet (Banderoll.tsx): Astryx Banner som sektion, utan
+ * egen rundning, med en hårlinje mot vyn under. Rubrik och förklaring på EN rad
+ * på bred skärm, under varandra på telefon. Bladets rundade hörn klipper den.
+ */
+.crm-banderoll {
+  flex: none;
+}
+.crm-banderoll .astryx-banner {
+  border-radius: 0;
+  border-inline: 0;
+  border-top: 0;
+  box-shadow: none;
+}
+@media (min-width: 768px) {
+  .crm-banderoll {
+    overflow: hidden;
+    border-top-left-radius: 24px;
+    border-top-right-radius: 24px;
+  }
+}
+.crm-banderoll-besok .astryx-banner,
+.crm-banderoll-demo .astryx-banner {
+  background-color: light-dark(oklch(var(--ochre) / 0.2), oklch(var(--ochre) / 0.14));
+  border-bottom: 1px solid oklch(var(--ochre) / 0.5);
+  color: oklch(var(--ink));
+}
+.crm-banderoll-lasroll .astryx-banner {
+  background-color: light-dark(oklch(var(--paper2)), oklch(var(--ink) / 0.06));
+  border-bottom: 1px solid oklch(var(--ink) / 0.12);
+  color: oklch(var(--ink));
+}
+.crm-banderoll-besok .astryx-banner svg,
+.crm-banderoll-demo .astryx-banner svg {
+  color: oklch(var(--warning));
+}
+.crm-banderoll-lasroll .astryx-banner svg {
+  color: oklch(var(--mineral));
+}
+/* En rad på bred skärm: rubriken och förklaringen bredvid varandra, och raden bryter om den inte ryms. */
+@media (min-width: 1024px) {
+  .crm-banderoll .astryx-banner-message {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: baseline;
+    column-gap: 8px;
+  }
+  .crm-banderoll .astryx-banner {
+    align-items: center;
+  }
+}

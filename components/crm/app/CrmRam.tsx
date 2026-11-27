@@ -7,10 +7,10 @@ import "@astryxdesign/core/astryx.css";
 import "@/lib/crm/astryx/snajp.css";
 import "@/components/crm/app/crm.css";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import NextLink from "next/link";
-import { usePathname } from "next/navigation";
-import { ArrowLeft, LifeBuoy, Search, Settings } from "lucide-react";
+import { usePathname, useRouter } from "next/navigation";
+import { ArrowLeft, LifeBuoy, Search } from "lucide-react";
 import { AppShell } from "@astryxdesign/core/AppShell";
 import { Avatar } from "@astryxdesign/core/Avatar";
 import { Icon } from "@astryxdesign/core/Icon";
@@ -18,7 +18,6 @@ import { InternationalizationProvider } from "@astryxdesign/core/i18n";
 import { Kbd } from "@astryxdesign/core/Kbd";
 import { LinkProvider } from "@astryxdesign/core/Link";
 import svSE from "@astryxdesign/core/locales/sv-SE.generated.js";
-import { NavHeadingMenu, NavHeadingMenuItem } from "@astryxdesign/core/NavMenu";
 import { ProgressBar } from "@astryxdesign/core/ProgressBar";
 import { IconButton } from "@astryxdesign/core/IconButton";
 import { SideNav, SideNavHeading, SideNavItem, SideNavSection, useSideNavRenderMode } from "@astryxdesign/core/SideNav";
@@ -27,17 +26,28 @@ import { Timestamp } from "@astryxdesign/core/Timestamp";
 import { Theme } from "@astryxdesign/core/theme";
 import { Logo } from "@/components/Logo";
 import { HjalpRuta, useHjalpArenden } from "@/components/snajp/HjalpRuta";
+import { Arbetsytemeny, Skaldialoger, type Skaldialog } from "@/components/crm/app/Arbetsytemeny";
+import { Banderoll } from "@/components/crm/app/Banderoll";
 import { Kommandopalett } from "@/components/crm/app/Kommandopalett";
-import { OBJEKT, Objektikon, Prick, type Objekt } from "@/components/crm/app/kit";
+import { NotisKalla, notistal, useNotiser } from "@/components/crm/app/Notiser";
+import { SkaletsAtgarder, type Skalatgarder } from "@/components/crm/app/Skalet";
+import { Objektikon, Prick } from "@/components/crm/app/kit";
+import { ArbetsytanAktiveras, Sida } from "@/components/crm/app/Sida";
+import { useDashboard } from "@/components/dashboard/DashboardContext";
 import { snajpTheme } from "@/lib/crm/astryx/snajp";
 import { ASTRYX_SVENSKA } from "@/lib/crm/astryx/svenska";
 import { SynklageKalla, avslutar, klara, pagar, useSynklage } from "@/components/crm/app/synklage";
 import { TillaggSaknas, TillgangKalla, useTillgang } from "@/components/crm/app/Tillagg";
 import { SYSTEMNAMN } from "@/lib/crm/api";
 import { attRatta } from "@/lib/crm/felkoder";
+import { narbar, postForVag, synligaGrupper, synligaPoster, type Navpost } from "@/lib/crm/navigering";
 import { useLocale } from "@/lib/i18n";
-import { colorScheme, dataTheme, type Tema } from "@/lib/tema";
+import { TEMA_COOKIE, colorScheme, dataTheme, type Tema } from "@/lib/tema";
 
+/**
+ * De vyer som fanns före navigeringsregistret. Nya vyer står bara i registret
+ * (lib/crm/navigering.ts), med vägar i flera led (`iris/leads`).
+ */
 export type CrmVy = "oversikt" | "bolag" | "personer" | "affarer" | "uppgifter" | "synk" | "sparrar" | "utvecklare";
 
 /**
@@ -143,17 +153,74 @@ function MobilSok({ oppna }: Readonly<{ oppna: () => void }>) {
   );
 }
 
-/** Vyn, eller helsidan om arbetsytan saknar tillägget (Tillagg.tsx). Avgörs en gång, i skalet. */
+/**
+ * Vyn, eller helsidan om arbetsytan saknar tillägget (Tillagg.tsx) eller inte är
+ * kopplad till agenterna än (SK-157). Avgörs en gång, i skalet.
+ */
 function Innehall({ children }: Readonly<{ children: React.ReactNode }>) {
-  return useTillgang() === "saknas" ? <TillaggSaknas /> : children;
+  const tillgang = useTillgang();
+  if (tillgang === "saknas") return <TillaggSaknas />;
+  if (tillgang === "aktiveras") {
+    return (
+      <Sida rubrik="Snajp CRM" utfyllnad="sida">
+        <div className="pt-4">
+          <ArbetsytanAktiveras yta="Snajp CRM" />
+        </div>
+      </Sida>
+    );
+  }
+  return children;
+}
+
+/**
+ * Bladet: banderollen (kundbesök, läsroll, demo) som en fast rad överst, och
+ * vyn under den. Vyn fyller resten av höjden och rullar själv, så banderollen
+ * står kvar när man rullar.
+ */
+function Blad({ children }: Readonly<{ children: React.ReactNode }>) {
+  return (
+    <div className="flex h-full min-h-0 flex-col">
+      <Banderoll />
+      <div className="min-h-0 flex-1">
+        <Innehall>{children}</Innehall>
+      </div>
+    </div>
+  );
+}
+
+/** En post ur registret i sidofältet, med sitt tal (Leads: olästa notiser) när den har ett. */
+function Menypost({ post, bas, vald }: Readonly<{ post: Navpost; bas: string; vald: boolean }>) {
+  const { text } = useLocale();
+  const { antal } = useNotiser();
+  const tal = post.raknare === "leadsnotiser" ? antal : 0;
+  return (
+    <SideNavItem
+      label={text(post.namn)}
+      href={`${bas}/${post.nyckel}`}
+      icon={<Objektikon ikon={post.ikon} ton={post.ton} storlek={24} />}
+      isSelected={vald}
+      endContent={
+        tal > 0 ? (
+          <span className="crm-railtal tabular-nums">
+            {notistal(tal)}
+            <span className="sr-only">{tal === 1 ? text({ sv: " oläst", en: " unread" }) : text({ sv: " olästa", en: " unread" })}</span>
+          </span>
+        ) : undefined
+      }
+    />
+  );
 }
 
 const HOPFALLD_NYCKEL = "snajp.crm.nav-hopfalld";
 
+
 /**
  * Skalet runt varje CRM-sida (DESIGN-CRM.md § Skalet): tema, språk, länkar,
- * den ljusa sidnavigeringen och kommandopaletten. Innehållet ligger som ett
- * upphöjt blad bredvid navigeringen (AppShell `elevated`).
+ * den marinblå sidnavigeringen, banderollen, notiserna och kommandopaletten.
+ * Innehållet ligger som ett upphöjt blad bredvid navigeringen (AppShell `elevated`).
+ *
+ * Navigeringen ritas ur registret (lib/crm/navigering.ts): grupper med de poster
+ * den som tittar får se, och bara poster som gör något.
  *
  * `bas` är roten vyerna ligger under. Appen använder `/crm`, förhandsvisningen
  * `/forhandsvisning/crm`, och ramen är densamma i båda.
@@ -163,6 +230,8 @@ export function CrmRam({
   bas = "/crm",
   arbetsyta,
   hjalp = false,
+  notiser = false,
+  atgarder,
   children
 }: Readonly<{
   tema: Tema;
@@ -174,15 +243,26 @@ export function CrmRam({
    * Av i demoläget och utan inloggning, som i arbetsytan.
    */
   hjalp?: boolean;
+  /** Leadsnotiserna (Notiser.tsx). Av utan inloggning och i demoarbetsytor; skalet kräver dessutom produkten Leads. */
+  notiser?: boolean;
+  /** Förhandsvisningens egna åtgärder för vyväxeln och utloggningen (Skalet.tsx). */
+  atgarder?: Partial<Skalatgarder>;
   children: React.ReactNode;
 }>) {
   const { locale, text } = useLocale();
+  const router = useRouter();
   const vag = usePathname() ?? "";
-  const aktiv = ((vag.startsWith(bas) ? vag.slice(bas.length).split("/")[1] : "") || "oversikt") as Objekt;
-  const morkt = tema === "morkt";
+  const { products, addons, isPlatformAdmin } = useDashboard();
+  const lage = useMemo(() => ({ products, addons, isPlatformAdmin }), [products, addons, isPlatformAdmin]);
+  const grupper = useMemo(() => synligaGrupper(lage), [lage]);
+  const aktiv = postForVag(vag, bas);
+  // Temat kan bytas i menyn: samma cookie som Inställningar › Tema, och <html> byts direkt.
+  const [temaNu, setTemaNu] = useState<Tema>(tema);
+  const morkt = temaNu === "morkt";
   const [palett, setPalett] = useState(false);
   const [hopfalld, setHopfalld] = useState(false);
   const [hjalpOppen, setHjalpOppen] = useState(false);
+  const [dialog, setDialog] = useState<Skaldialog>(null);
   // Ärenden som väntar på kunden (ett svar, eller att prova en rättning) syns som ett tal på raden.
   const { vantar } = useHjalpArenden(hjalp, false);
   const namn = arbetsyta || "Snajp";
@@ -204,18 +284,28 @@ export function CrmRam({
     }
   };
 
-  const post = (vy: Objekt) => (
-    <SideNavItem
-      key={vy}
-      label={text(OBJEKT[vy].namn)}
-      href={`${bas}/${vy}`}
-      icon={<Objektikon objekt={vy} storlek={24} />}
-      isSelected={aktiv === vy}
-    />
-  );
+  const valjTema = (nytt: Tema) => {
+    setTemaNu(nytt);
+    const rot = document.documentElement;
+    const varde = dataTheme(nytt);
+    if (varde) rot.setAttribute("data-theme", varde);
+    else rot.removeAttribute("data-theme");
+    rot.style.colorScheme = colorScheme(nytt);
+    document.cookie = `${TEMA_COOKIE}=${nytt}; path=/; max-age=31536000; samesite=lax`;
+  };
+
+  /**
+   * Skydd mot att bli strandad (SK-071): står man på en vy som arbetsytan inte
+   * når (produkten saknas, eller bara plattformsadmin ser den), går man till
+   * översikten. En vy som inte är byggd än har ingen sida och svarar 404 som förut.
+   */
+  const strandad = aktiv != null && aktiv.byggd && !narbar(aktiv, lage);
+  useEffect(() => {
+    if (strandad) router.replace(`${bas}/oversikt`);
+  }, [strandad, router, bas]);
 
   return (
-    <TemaVakt tema={tema}>
+    <TemaVakt tema={temaNu}>
       {/* Aldrig mode="system": då tar Astryx bort <html data-theme>, som Snajps mörka läge läser. */}
       <Theme theme={snajpTheme} mode={morkt ? "dark" : "light"}>
         <InternationalizationProvider
@@ -224,8 +314,10 @@ export function CrmRam({
           overrides={{ "sv-SE": ASTRYX_SVENSKA }}
         >
           <LinkProvider component={NextLink}>
+            <SkaletsAtgarder atgarder={atgarder}>
             <TillgangKalla>
             <SynklageKalla>
+            <NotisKalla pa={notiser && products.includes("leads")} bas={bas}>
             <AppShell
               variant="elevated"
               contentPadding={0}
@@ -248,10 +340,12 @@ export function CrmRam({
                         heading={namn}
                         icon={<Avatar name={namn} size={24} shape="rounded" tooltip={false} className="crm-arbetsyta" />}
                         menu={
-                          <NavHeadingMenu>
-                            <NavHeadingMenuItem label={text({ sv: "Till arbetsytan", en: "Back to workspace" })} href="/dashboard" icon={ArrowLeft} />
-                            <NavHeadingMenuItem label={text({ sv: "Inställningar", en: "Settings" })} href="/settings" icon={Settings} />
-                          </NavHeadingMenu>
+                          <Arbetsytemeny
+                            tema={temaNu}
+                            valjTema={valjTema}
+                            oppna={setDialog}
+                            oppnaHjalp={hjalp ? () => setHjalpOppen(true) : undefined}
+                          />
                         }
                       />
                     </div>
@@ -300,27 +394,31 @@ export function CrmRam({
                   }
                   footerIcons={<MobilSok oppna={() => setPalett(true)} />}
                 >
-                  <SideNavSection title={text({ sv: "Arbetsyta", en: "Workspace" })}>
-                    {post("oversikt")}
-                    {post("bolag")}
-                    {post("personer")}
-                    {post("affarer")}
-                    {post("uppgifter")}
-                  </SideNavSection>
-                  <SideNavSection title={text({ sv: "Data", en: "Data" })}>
-                    {post("synk")}
-                    {post("sparrar")}
-                    {post("utvecklare")}
-                  </SideNavSection>
+                  {grupper.map((g) => (
+                    <SideNavSection key={g.nyckel} title={text(g.namn)}>
+                      {g.poster.map((p) => (
+                        <Menypost key={p.nyckel} post={p} bas={bas} vald={aktiv?.nyckel === p.nyckel} />
+                      ))}
+                    </SideNavSection>
+                  ))}
                 </SideNav>
               }
             >
-              <Innehall>{children}</Innehall>
-              <Kommandopalett oppen={palett} setOppen={setPalett} bas={bas} />
+              <Blad>{children}</Blad>
+              <Kommandopalett
+                oppen={palett}
+                setOppen={setPalett}
+                bas={bas}
+                poster={synligaPoster(lage)}
+                bytKund={isPlatformAdmin ? () => setDialog("bytkund") : undefined}
+              />
+              <Skaldialoger dialog={dialog} stang={() => setDialog(null)} />
               {hjalp && hjalpOppen ? <HjalpRuta onStang={() => setHjalpOppen(false)} /> : null}
             </AppShell>
+            </NotisKalla>
             </SynklageKalla>
             </TillgangKalla>
+            </SkaletsAtgarder>
           </LinkProvider>
         </InternationalizationProvider>
       </Theme>

@@ -2,7 +2,9 @@
 
 import { AffarerVy } from "@/components/crm/app/AffarerVy";
 import { BolagVy } from "@/components/crm/app/BolagVy";
-import { CrmRam, type CrmVy } from "@/components/crm/app/CrmRam";
+import { CrmRam } from "@/components/crm/app/CrmRam";
+import type { Skalatgarder } from "@/components/crm/app/Skalet";
+import { svaraSkalet } from "./svar/skalet";
 import { OversiktVy } from "@/components/crm/app/OversiktVy";
 import { PersonerVy } from "@/components/crm/app/PersonerVy";
 import { SparrarVy } from "@/components/crm/app/SparrarVy";
@@ -1442,47 +1444,100 @@ function fangaAnrop() {
     const url = new URL(typeof in_ === "string" ? in_ : in_ instanceof URL ? in_.href : in_.url, window.location.origin);
     const iForhandsvisning = window.location.pathname.startsWith("/forhandsvisning/");
     if (iForhandsvisning && url.pathname.startsWith("/api/snajp-support/hjalp")) return svaraHjalp(url, init);
+    const skalet = iForhandsvisning ? svaraSkalet(url, init) : null;
+    if (skalet) return skalet;
     const galler = iForhandsvisning && url.pathname.startsWith("/api/snajp-support/crm");
     return galler ? svara(url, init) : riktig(in_, init);
   };
 }
 
+/** Lägena förhandsvisningen kan visa, ur adressen (se `[[...vy]]/page.tsx`). */
+export type Forhandslage = {
+  /** `?vy=kund`: kundens nivå (synkens enkla ord, tilläggets besked). */
+  kund: boolean;
+  /** `?besok=1`: plattformsadmin i kundbesök hos Exempelbolaget AB. */
+  besok: boolean;
+  /** `?roll=lasare`: en kund med läsroll. */
+  lasare: boolean;
+  /** `?demo=1`: adminens demovy. `?demo=yta`: en demoarbetsyta. */
+  demo: "vy" | "yta" | null;
+  /** `?produkter=support`: arbetsytans produkter (kommaseparerade). Standard: leads och support. */
+  produkter: string[] | null;
+};
+
 /**
  * Vem som tittar. Plattformsadmin som standard (CRM:et släpps bara till admin i
- * dag); `?vy=kund` visar kundens nivå (synkens enkla ord, tilläggets besked).
+ * dag); lägena ovan ger kundens nivå, kundbesöket, läsrollen och demon.
  * Ett påhittat läge, aldrig en riktig session: ingen identitet att jämföra mot.
  */
-function lage(kund: boolean): DashboardState {
+function lage(l: Forhandslage): DashboardState {
+  const admin = !l.kund && !l.lasare && l.demo !== "yta";
+  const produkter = (l.produkter ?? ["leads", "support"]).filter((p): p is "leads" | "support" | "bookkeeping" => p === "leads" || p === "support" || p === "bookkeeping");
   return {
-    products: ["leads", "support"],
+    products: produkter,
     addons: [],
-    workspaceName: "Exempelbolaget AB",
-    userEmail: null,
-    signedIn: false,
-    isDemo: false,
-    isPlatformAdmin: !kund,
-    vy: "admin",
-    impersonation: null,
-    arLasare: false,
+    workspaceName: l.demo === "vy" ? "Demokontot" : "Exempelbolaget AB",
+    userEmail: l.besok || l.demo === "vy" ? null : "kim@exempelbolaget.test",
+    signedIn: true,
+    isDemo: l.demo === "yta",
+    isPlatformAdmin: admin || l.besok,
+    vy: l.besok ? "kund" : l.demo === "vy" ? "demo" : "admin",
+    impersonation: l.besok ? { slug: "exempelbolaget", namn: "Exempelbolaget AB" } : null,
+    arLasare: l.lasare,
     initialScope: "both"
   };
 }
 
-export function CrmForhandsvisning({ tema, vy, kund, utanTillagg }: Readonly<{ tema: Tema; vy: CrmVy; kund: boolean; utanTillagg: boolean }>) {
+/**
+ * Vyväxeln och utloggningen i förhandsvisningen: ingen server action (den
+ * kräver en inloggad plattformsadmin), utan läget byts i adressen, så att
+ * banderollen och menyn går att följa. Utloggningen gör ingenting här.
+ */
+const FORHANDSATGARDER: Partial<Skalatgarder> = {
+  async bytVy(varde) {
+    const url = new URL(window.location.href);
+    for (const p of ["besok", "demo", "vy", "roll"]) url.searchParams.delete(p);
+    if (varde === "demo") url.searchParams.set("demo", "1");
+    else if (varde.startsWith("kund:")) url.searchParams.set("besok", "1");
+    window.location.replace(url.toString());
+    return true;
+  },
+  async loggaUt() {}
+};
+
+/** Vyerna förhandsvisningen kan visa. En ny vy läggs till här och i renderingen nedan. */
+const KANDA_VYER = ["oversikt", "bolag", "personer", "affarer", "uppgifter", "synk", "sparrar", "utvecklare"];
+
+export function CrmForhandsvisning({
+  tema,
+  vy,
+  lagen,
+  utanTillagg
+}: Readonly<{ tema: Tema; vy: string; lagen: Forhandslage; utanTillagg: boolean }>) {
   tillaggSaknas = utanTillagg;
   fangaAnrop();
+  const state = lage(lagen);
+  // En väg som ingen vy här visar än faller tillbaka på översikten, som förut.
+  const visad = KANDA_VYER.includes(vy) ? vy : "oversikt";
 
   return (
-    <DashboardProvider state={lage(kund)}>
-      <CrmRam tema={tema} bas="/forhandsvisning/crm" arbetsyta="Exempelbolaget AB" hjalp>
-        {vy === "oversikt" ? <OversiktVy bas="/forhandsvisning/crm" /> : null}
-        {vy === "bolag" ? <BolagVy /> : null}
-        {vy === "personer" ? <PersonerVy bas="/forhandsvisning/crm" /> : null}
-        {vy === "affarer" ? <AffarerVy bas="/forhandsvisning/crm" /> : null}
-        {vy === "uppgifter" ? <UppgifterVy bas="/forhandsvisning/crm" /> : null}
-        {vy === "synk" ? <SynkVy utvecklarvag="/forhandsvisning/crm/utvecklare" /> : null}
-        {vy === "sparrar" ? <SparrarVy /> : null}
-        {vy === "utvecklare" ? <UtvecklareVy /> : null}
+    <DashboardProvider state={state}>
+      <CrmRam
+        tema={tema}
+        bas="/forhandsvisning/crm"
+        arbetsyta={state.workspaceName ?? undefined}
+        hjalp={!state.isDemo && state.vy !== "demo"}
+        notiser={!state.isDemo}
+        atgarder={FORHANDSATGARDER}
+      >
+        {visad === "oversikt" ? <OversiktVy bas="/forhandsvisning/crm" /> : null}
+        {visad === "bolag" ? <BolagVy /> : null}
+        {visad === "personer" ? <PersonerVy bas="/forhandsvisning/crm" /> : null}
+        {visad === "affarer" ? <AffarerVy bas="/forhandsvisning/crm" /> : null}
+        {visad === "uppgifter" ? <UppgifterVy bas="/forhandsvisning/crm" /> : null}
+        {visad === "synk" ? <SynkVy utvecklarvag="/forhandsvisning/crm/utvecklare" /> : null}
+        {visad === "sparrar" ? <SparrarVy /> : null}
+        {visad === "utvecklare" ? <UtvecklareVy /> : null}
       </CrmRam>
     </DashboardProvider>
   );

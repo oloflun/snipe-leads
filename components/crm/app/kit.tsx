@@ -43,6 +43,7 @@ import { HStack, StackItem, VStack } from "@astryxdesign/core/Stack";
 import { useTableSortable, type TableSortState } from "@astryxdesign/core/Table";
 import { Text } from "@astryxdesign/core/Text";
 import { Token } from "@astryxdesign/core/Token";
+import { useDashboard } from "@/components/dashboard/DashboardContext";
 import { RELATIONER, type Ordning, type Relation } from "@/lib/crm/api";
 import { useLocale, type Localized } from "@/lib/i18n";
 
@@ -591,6 +592,44 @@ export function Panelkort({
       </section>
     </Card>
   );
+}
+
+// ---------------------------------------------------------------------------
+// Skrivrätt
+// ---------------------------------------------------------------------------
+
+/**
+ * Får den som tittar skriva, och varför inte (SK-039, AD-008). Varje vy stänger
+ * av sina skrivande knappar med `far` och visar `skal` som förklaring (knappens
+ * `tooltip`), i stället för att låta anropet falla på proxyns 403.
+ *
+ * - Läsrollen skriver ingenting, någonstans.
+ * - Under ett kundbesök beror det på vad knappen ändrar. `stangt` (standard):
+ *   kundens riktiga uppgifter, som CRM:ets register, där proxyn vägrar
+ *   (`impersonation_read_only`). `test`: agenternas körningar och utkast, som
+ *   proxyn märker som test och släpper igenom.
+ *
+ * Det här är hövlighet. Spärren sitter i proxyn (app/api/snajp-support/_auth.ts).
+ */
+export function useSkrivratt(underBesok: "stangt" | "test" = "stangt"): { far: boolean; skal: string | null } {
+  const { text } = useLocale();
+  const { arLasare, impersonation } = useDashboard();
+  if (arLasare) {
+    return {
+      far: false,
+      skal: text({ sv: "Du har läsbehörighet. Du kan följa allt, men inte ändra något.", en: "You have read access. You can follow everything, but not change anything." })
+    };
+  }
+  if (impersonation && underBesok === "stangt") {
+    return {
+      far: false,
+      skal: text({
+        sv: "Du tittar som kunden. Under ett kundbesök ändras ingenting i kundens riktiga uppgifter.",
+        en: "You are viewing as the customer. Nothing in the customer's real records changes during a customer visit."
+      })
+    };
+  }
+  return { far: true, skal: null };
 }
 
 // ---------------------------------------------------------------------------

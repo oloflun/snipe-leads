@@ -6,8 +6,10 @@ import { Heading } from "@astryxdesign/core/Heading";
 import { Layout, LayoutContent, LayoutHeader } from "@astryxdesign/core/Layout";
 import { VStack } from "@astryxdesign/core/Stack";
 import { Text } from "@astryxdesign/core/Text";
+import { Clock } from "lucide-react";
 import { Objektikon, type Objekt } from "@/components/crm/app/kit";
-import { CrmFel } from "@/lib/crm/api";
+import { NotisKlocka } from "@/components/crm/app/Notiser";
+import { CrmFel, EJ_AKTIVERAD, LASROLL } from "@/lib/crm/api";
 import { useLocale } from "@/lib/i18n";
 
 /**
@@ -30,7 +32,11 @@ export function Sidhuvud({
         </Heading>
         {antal != null && antal !== "" ? <Badge variant="neutral" label={<span className="tabular-nums">{antal}</span>} /> : null}
       </div>
-      {atgarder ? <div className="flex items-center gap-2">{atgarder}</div> : null}
+      <div className="flex items-center gap-2">
+        {atgarder}
+        {/* Skalets klocka (Notiser.tsx): syns bara när arbetsytan har Leads. */}
+        <NotisKlocka />
+      </div>
     </div>
   );
 }
@@ -114,13 +120,43 @@ export function Sida({
   );
 }
 
+/** Svarade proxyn att arbetsytan inte är kopplad till agenterna än (409 `ej_aktiverad`, SK-157). */
+export const arEjAktiverad = (fel: unknown) => fel instanceof CrmFel && fel.status === 409 && fel.kod === EJ_AKTIVERAD;
+
+/**
+ * "Din arbetsyta aktiveras" (SK-157): det en ny kund möter i stället för ett
+ * tekniskt 409, i varje vy som får svaret `ej_aktiverad`. Neutral, inte
+ * larmande: inget är trasigt och kunden behöver inte göra något. `Felruta` visar
+ * den av sig själv; en vy som inte använder `Felruta` visar den när `arEjAktiverad(fel)`.
+ * Ett 409 utan koden (kopplad kund utan nyckel) är ett driftfel och visas som fel.
+ */
+export function ArbetsytanAktiveras({ yta }: Readonly<{ yta?: string }>) {
+  const { text } = useLocale();
+  return (
+    <div role="status" className="crm-kallkort flex items-start gap-3 rounded-[16px] p-5">
+      <Objektikon ikon={Clock} ton="mineral" storlek={32} />
+      <div className="min-w-0">
+        <p className="text-[0.9375rem] font-semibold text-ink">{text({ sv: "Din arbetsyta aktiveras", en: "Your workspace is being activated" })}</p>
+        <p className="mt-1 max-w-[62ch] text-[0.875rem] leading-relaxed text-ink2">
+          {yta
+            ? text({ sv: `${yta} är redo när vi kopplat er till agenterna.`, en: `${yta} is ready once we have connected you to the agents.` })
+            : text({ sv: "Vyn är redo när vi kopplat er till agenterna.", en: "The view is ready once we have connected you to the agents." })}
+        </p>
+      </div>
+    </div>
+  );
+}
+
 /** Ett fel från API:t, på läsarens språk, med ett sätt att försöka igen. */
 export function Felruta({ fel, igen }: Readonly<{ fel: unknown; igen?: React.ReactNode }>) {
   const { text } = useLocale();
+  if (arEjAktiverad(fel)) return <ArbetsytanAktiveras />;
   const beskrivning =
-    fel instanceof CrmFel
-      ? text(fel.text)
-      : text({ sv: "Något gick fel när sidan hämtade data.", en: "Something went wrong while the page loaded its data." });
+    fel instanceof CrmFel && fel.kod === LASROLL
+      ? text({ sv: "Du har läsbehörighet. Du kan följa allt, men inte ändra något.", en: "You have read access. You can follow everything, but not change anything." })
+      : fel instanceof CrmFel
+        ? text(fel.text)
+        : text({ sv: "Något gick fel när sidan hämtade data.", en: "Something went wrong while the page loaded its data." });
   return (
     <Banner
       status="error"

@@ -21,6 +21,18 @@ export const metadata: Metadata = { title: "Snajp CRM" };
  * Plattformsadmin skickas INTE vidare till /admin här, till skillnad från
  * app/dashboard/layout.tsx: CRM:et har ingen adminvariant, och adminen ser den
  * kund som vyväxeln pekar på.
+ *
+ * Grindarna (SK-038 till SK-042), så att layouten aldrig är svagare än arbetsytans:
+ * - Plattformsadmin avgörs fail closed i `resolveDashboardState()` (`getPlatformAdmin`).
+ * - Läsrollen och kundbesöket spärras i proxyn (`proxyAsTenant`: 403 `lasroll`,
+ *   `impersonation_read_only` för CRM:et och `is_test` för agenterna). Skalet visar
+ *   banderollen och vyerna stänger av skrivande knappar (`useSkrivratt` i kit.tsx).
+ * - Onboardinggrinden körs som i arbetsytan och hoppas över i demovyn.
+ * - Tillståndet avgörs en gång per request och lämnas till klienten via `DashboardProvider`.
+ * - SK-041 (admin i skarpt läge flyttas till /admin) gäller inte här: CRM:et är ett
+ *   enda skal för både kunden och adminen, som visar den arbetsyta vyväxeln pekar på
+ *   och banderollen för kundbesöket utifrån sessionen (MIGRERING-FUNKTIONSLISTA.md
+ *   § Navigeringen).
  */
 export default async function CrmLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   const state = await resolveDashboardState();
@@ -45,7 +57,12 @@ export default async function CrmLayout({ children }: Readonly<{ children: React
 
   return (
     <DashboardProvider state={state}>
-      <CrmRam tema={tema} arbetsyta={state.workspaceName ?? undefined} hjalp={state.signedIn && !state.isDemo && state.vy !== "demo"}>
+      <CrmRam
+        tema={tema}
+        arbetsyta={state.workspaceName ?? undefined}
+        hjalp={state.signedIn && !state.isDemo && state.vy !== "demo"}
+        notiser={state.signedIn && !state.isDemo}
+      >
         {children}
       </CrmRam>
     </DashboardProvider>

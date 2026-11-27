@@ -229,7 +229,18 @@ export class CrmFel extends Error {
 
 type Felkropp = {
   detail?: string | { code?: string; message?: string; meddelande?: string; fields?: Faltfel[]; conflicting_id?: string };
+  /**
+   * Proxyns egna besked (app/api/snajp-support/_auth.ts) står utanför `detail`:
+   * `{ error, kod }`, till exempel `lasroll` och `ej_aktiverad`.
+   */
+  error?: string;
+  kod?: string;
 };
+
+/** Proxyns kod när arbetsytan saknar backend-kund ännu (SK-157). Visas som väntläge, inte som fel. */
+export const EJ_AKTIVERAD = "ej_aktiverad";
+/** Proxyns kod när läsrollen försöker skriva (SK-039). */
+export const LASROLL = "lasroll";
 
 export async function crmAnrop<T>(vag: string, init?: RequestInit): Promise<T> {
   const svar = await fetch(`/api/snajp-support/crm${vag}`, {
@@ -280,12 +291,18 @@ async function tolka<T>(svar: Response): Promise<T> {
     const d = kropp?.detail;
     const okant = { sv: `Anropet gick inte igenom (HTTP ${svar.status}).`, en: `The request failed (HTTP ${svar.status}).` };
     const text =
-      typeof d === "string" ? { sv: d, en: d } : d ? { sv: d.meddelande ?? d.message ?? okant.sv, en: d.message ?? d.meddelande ?? okant.en } : okant;
+      typeof d === "string"
+        ? { sv: d, en: d }
+        : d
+          ? { sv: d.meddelande ?? d.message ?? okant.sv, en: d.message ?? d.meddelande ?? okant.en }
+          : typeof kropp?.error === "string"
+            ? { sv: kropp.error, en: kropp.error }
+            : okant;
     const objekt = typeof d === "object" && d ? d : null;
     const fel = new CrmFel(
       text,
       svar.status,
-      objekt?.code ?? null,
+      objekt?.code ?? (typeof kropp?.kod === "string" ? kropp.kod : null),
       Array.isArray(objekt?.fields) ? objekt.fields : [],
       typeof objekt?.conflicting_id === "string" ? objekt.conflicting_id : null
     );

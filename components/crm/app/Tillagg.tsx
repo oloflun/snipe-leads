@@ -8,11 +8,15 @@ import { Icon } from "@astryxdesign/core/Icon";
 import { Objektikon } from "@/components/crm/app/kit";
 import { Sida } from "@/components/crm/app/Sida";
 import { useDashboard } from "@/components/dashboard/DashboardContext";
-import { CrmFel, TILLAGG_SAKNAS, crmAnrop, type Jag } from "@/lib/crm/api";
+import { CrmFel, EJ_AKTIVERAD, TILLAGG_SAKNAS, crmAnrop, type Jag } from "@/lib/crm/api";
 import { useLocale } from "@/lib/i18n";
 
-/** Arbetsytans tillgång till CRM:et: okänd tills `/v1/me` svarat, sedan ja eller saknas. */
-export type Tillgang = "okand" | "ja" | "saknas";
+/**
+ * Arbetsytans tillgång till CRM:et: okänd tills `/v1/me` svarat, sedan ja eller
+ * saknas, eller `aktiveras` när arbetsytan inte är kopplad till en backend-kund än
+ * (proxyns 409 `ej_aktiverad`, SK-157).
+ */
+export type Tillgang = "okand" | "ja" | "saknas" | "aktiveras";
 
 const Kontext = createContext<Tillgang>("okand");
 
@@ -37,6 +41,7 @@ export function TillgangKalla({ children }: Readonly<{ children: React.ReactNode
         if (!aktuell) return;
         // Bara beskedet om tillägget stänger CRM:et; andra fel visar varje vy själv.
         if (e instanceof CrmFel && e.kod === TILLAGG_SAKNAS) setTillgang("saknas");
+        else if (e instanceof CrmFel && e.status === 409 && e.kod === EJ_AKTIVERAD) setTillgang("aktiveras");
         else setTillgang((t) => (t === "saknas" ? t : "ja"));
       });
     const saknas = () => setTillgang("saknas");

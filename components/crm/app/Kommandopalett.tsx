@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { Ban, KeyRound, Plus, RefreshCw, type LucideIcon } from "lucide-react";
+import { Ban, KeyRound, Plus, RefreshCw, Repeat, type LucideIcon } from "lucide-react";
 import { Avatar } from "@astryxdesign/core/Avatar";
 import { CommandPalette, CommandPaletteInput } from "@astryxdesign/core/CommandPalette";
 import { useHotkeys } from "@astryxdesign/core/hooks";
@@ -10,29 +10,30 @@ import { Icon } from "@astryxdesign/core/Icon";
 import { HStack, StackItem } from "@astryxdesign/core/Stack";
 import { Text } from "@astryxdesign/core/Text";
 import type { SearchSource, SearchableItem } from "@astryxdesign/core/Typeahead";
-import { OBJEKT, Objektikon, tonFor, tonklass, utanBolagsform, type Objekt } from "@/components/crm/app/kit";
+import { Objektikon, tonFor, tonklass, utanBolagsform, type Ton } from "@/components/crm/app/kit";
 import { crmAnrop, type Bolag, type Sida } from "@/lib/crm/api";
+import type { Navpost } from "@/lib/crm/navigering";
 import { useLocale } from "@/lib/i18n";
 
 /** Varje träff bär sin grupp och vad ett val ska göra. */
 type Traff = SearchableItem<{
   group: string;
-  slag: "ga" | "skapa" | "bolag";
+  slag: "ga" | "skapa" | "bolag" | "gor";
   mal: string;
-  objekt?: Objekt;
+  /** Gå till: postens ikon och ton ur navigeringsregistret. */
+  ton?: Ton;
   ikon?: LucideIcon;
   ort?: string | null;
 }>;
-
-const VYER: Objekt[] = ["oversikt", "bolag", "personer", "affarer", "uppgifter", "synk", "sparrar", "utvecklare"];
 
 /** Gemener utan accenter, så att "oversikt" hittar Översikt. */
 const enkel = (s: string) => s.toLocaleLowerCase("sv").normalize("NFD").replace(/[̀-ͯ]/g, "");
 
 /**
- * Kommandopaletten (DESIGN-CRM.md § Skalet), Ctrl K och Cmd K: Gå till (de åtta
- * vyerna), Skapa (nytt bolag, ny affär, ny uppgift, ny anslutning, ny spärr, ny nyckel) och Bolag, som söks mot
- * `/v1/companies?q=` medan man skriver.
+ * Kommandopaletten (DESIGN-CRM.md § Skalet), Ctrl K och Cmd K: Gå till (samma
+ * poster som sidofältet, ur navigeringsregistret), Skapa (nytt bolag, ny affär, ny
+ * uppgift, ny anslutning, ny spärr, ny nyckel), för plattformsadmin Byt kund, och
+ * Bolag, som söks mot `/v1/companies?q=` medan man skriver.
  *
  * Skapa och bolagsträffar beställer av vyn genom adressen (`?ny=1`,
  * `?bolag=<id>`, se `useBestallning` i kit.tsx), så att det fungerar från vilken
@@ -41,8 +42,18 @@ const enkel = (s: string) => s.toLocaleLowerCase("sv").normalize("NFD").replace(
 export function Kommandopalett({
   oppen,
   setOppen,
-  bas
-}: Readonly<{ oppen: boolean; setOppen: (oppen: boolean) => void; bas: string }>) {
+  bas,
+  poster,
+  bytKund
+}: Readonly<{
+  oppen: boolean;
+  setOppen: (oppen: boolean) => void;
+  bas: string;
+  /** Vyerna den som tittar ser (lib/crm/navigering.ts: synligaPoster). */
+  poster: Navpost[];
+  /** Öppnar Byt kund. Bara för plattformsadmin. */
+  bytKund?: () => void;
+}>) {
   const { text } = useLocale();
   const router = useRouter();
 
@@ -56,19 +67,22 @@ export function Kommandopalett({
     const ga = text({ sv: "Gå till", en: "Go to" });
     const ny = text({ sv: "Skapa", en: "Create" });
     return [
-      ...VYER.map<Traff>((v) => ({
-        id: `ga:${v}`,
-        label: text(OBJEKT[v].namn),
-        auxiliaryData: { group: ga, slag: "ga", mal: `${bas}/${v}`, objekt: v }
+      ...poster.map<Traff>((p) => ({
+        id: `ga:${p.nyckel}`,
+        label: text(p.namn),
+        auxiliaryData: { group: ga, slag: "ga", mal: `${bas}/${p.nyckel}`, ikon: p.ikon, ton: p.ton }
       })),
       { id: "skapa:bolag", label: text({ sv: "Nytt bolag", en: "New company" }), auxiliaryData: { group: ny, slag: "skapa", mal: `${bas}/bolag?ny=1`, ikon: Plus } },
       { id: "skapa:affar", label: text({ sv: "Ny affär", en: "New deal" }), auxiliaryData: { group: ny, slag: "skapa", mal: `${bas}/affarer?ny=1`, ikon: Plus } },
       { id: "skapa:uppgift", label: text({ sv: "Ny uppgift", en: "New task" }), auxiliaryData: { group: ny, slag: "skapa", mal: `${bas}/uppgifter?ny=1`, ikon: Plus } },
       { id: "skapa:anslutning", label: text({ sv: "Ny anslutning", en: "New connection" }), auxiliaryData: { group: ny, slag: "skapa", mal: `${bas}/synk?ny=1`, ikon: RefreshCw } },
       { id: "skapa:sparr", label: text({ sv: "Ny spärr", en: "New block" }), auxiliaryData: { group: ny, slag: "skapa", mal: `${bas}/sparrar?ny=1`, ikon: Ban } },
-      { id: "skapa:nyckel", label: text({ sv: "Ny nyckel", en: "New key" }), auxiliaryData: { group: ny, slag: "skapa", mal: `${bas}/utvecklare?ny=1`, ikon: KeyRound } }
+      { id: "skapa:nyckel", label: text({ sv: "Ny nyckel", en: "New key" }), auxiliaryData: { group: ny, slag: "skapa", mal: `${bas}/utvecklare?ny=1`, ikon: KeyRound } },
+      ...(bytKund
+        ? [{ id: "gor:bytkund", label: text({ sv: "Byt kund", en: "Switch customer" }), auxiliaryData: { group: text({ sv: "Plattform", en: "Platform" }), slag: "gor" as const, mal: "", ikon: Repeat } }]
+        : [])
     ];
-  }, [text, bas]);
+  }, [text, bas, poster, bytKund]);
 
   // Stabil källa: en ny källa medan paletten är öppen kör om sökningen.
   const kalla = useMemo<SearchSource<Traff>>(() => {
@@ -131,8 +145,8 @@ export function Kommandopalett({
                 tooltip={false}
                 className={`crm-avatar ${tonklass(tonFor(utanBolagsform(item.label)))}`}
               />
-            ) : d?.objekt ? (
-              <Objektikon objekt={d.objekt} storlek={24} />
+            ) : d?.slag === "ga" && d.ikon ? (
+              <Objektikon ikon={d.ikon} ton={d.ton} storlek={24} />
             ) : (
               <span aria-hidden className="inline-flex size-6 shrink-0 items-center justify-center rounded-[6px] bg-ink/[0.06] text-ink-muted">
                 {d?.ikon ? <Icon icon={d.ikon} size="sm" color="inherit" /> : null}
@@ -154,6 +168,10 @@ export function Kommandopalett({
       // Enter och klick landar båda här, och paletten stänger sig själv efteråt.
       onValueChange={(id) => {
         const vald = kommandon.find((k) => k.id === id);
+        if (vald?.auxiliaryData?.slag === "gor") {
+          if (id === "gor:bytkund") bytKund?.();
+          return;
+        }
         if (vald?.auxiliaryData) {
           router.push(vald.auxiliaryData.mal);
           return;
