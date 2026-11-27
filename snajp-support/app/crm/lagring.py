@@ -932,17 +932,23 @@ async def tom_papperskorg(
     raderas och när en synk avslutas; högst 200 poster per varv. Adresserna i
     `undanta` (begränsad behandling, art. 18) töms inte: den som begärt
     begränsning har bett oss behålla uppgifterna orörda."""
-    undanta = {str(a).casefold() for a in undanta}
+    undanta = {str(a).strip().casefold() for a in undanta}
     tabell = _OBJEKTTABELL[objekt]
     grans = datetime.now(timezone.utc) - timedelta(days=dagar)
-    # Bara bolag och personer bär en adress som kan vara begränsad.
-    epost = "epost" if "epost" in TABELLER[tabell] else "null::text as epost"
+    # Bara bolag och personer bär en adress som kan vara begränsad. De
+    # begränsade sorteras bort INNAN taket på 200, så att de aldrig tar
+    # platserna: annars kunde samma begränsade rader komma tillbaka varje
+    # varv medan de vanliga utgångna aldrig nåddes.
+    har_epost = "epost" in TABELLER[tabell]
     if _ar_postgres(storage):
+        epost, villkor = ("epost", " and lower(btrim(coalesce(epost, ''))) <> all($4::text[])") if har_epost \
+            else ("null::text as epost", "")
         try:
             async with storage._scoped(tenant_id) as conn:
                 rader = await conn.fetch(
                     f"select id, {epost} from {tabell} where tenant_id = $1::text::uuid "
-                    "and raderad_at < $2 and kalla <> $3 limit 200", tenant_id, grans, GRAVSTEN)
+                    f"and raderad_at < $2 and kalla <> $3{villkor} limit 200",
+                    tenant_id, grans, GRAVSTEN, *([sorted(undanta)] if har_epost else []))
         except Exception as fel:
             if _saknar_tabell(fel):
                 return 0
@@ -951,8 +957,9 @@ async def tom_papperskorg(
     else:
         kandidater = [(r["id"], r.get("epost")) for r in _minne(storage, tabell).values()
                       if r["tenant_id"] == tenant_id and r.get("raderad_at") and r["kalla"] != GRAVSTEN
-                      and _tid(r["raderad_at"]) < grans][:200]
-    utgangna = [rad_id for rad_id, epost in kandidater if (epost or "").casefold() not in undanta]
+                      and _tid(r["raderad_at"]) < grans
+                      and (r.get("epost") or "").strip().casefold() not in undanta][:200]
+    utgangna = [rad_id for rad_id, epost in kandidater if (epost or "").strip().casefold() not in undanta]
     for rad_id in utgangna:
         await gor_gravsten(storage, tenant_id, objekt, rad_id)
     return len(utgangna)

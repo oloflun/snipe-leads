@@ -454,6 +454,13 @@ class PostgresStorage:
             )
         return [_row(r) for r in records]
 
+    async def list_alla_tenant_ids(self) -> list[str]:
+        # Som list_tenants utan tenant-kontext (tenant_lookup), men bara id:t
+        # och även inaktiva kunder: städjobbets löfte gäller en pausad kund också.
+        async with self.pool.acquire() as conn:
+            records = await conn.fetch("select id from ss_tenants order by created_at")
+        return [str(r["id"]) for r in records]
+
     # -- Inkorgar -----------------------------------------------------------
 
     async def list_mailboxes(self, tenant_id: str) -> list[dict[str, Any]]:

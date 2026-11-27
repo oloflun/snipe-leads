@@ -8,8 +8,10 @@ som slutat skriva låg raderade personer kvar hur länge som helst.
 Jobbet går en gång strax efter uppstart och sedan en gång per dygn, i samma
 form som webhookarbetaren (`webhooks.run_webhookjobb`):
 
-- Kunderna tas ur `storage.list_tenants()`, systemläsningen som bara ger
-  kundernas id. CRM-tabellerna läses aldrig tvärs över kunder: varje fråga
+- Kunderna tas ur `storage.list_alla_tenant_ids()`, systemläsningen som bara
+  ger kundernas id, även pausade och avstängda kunders: löftet om 30 dagar
+  gäller en kund som inte är aktiv också (`list_tenants()` ger bara de
+  aktiva). CRM-tabellerna läses aldrig tvärs över kunder: varje fråga
   går genom `storage._scoped(tenant_id)`, där radskyddet gäller, och bär
   `tenant_id` uttryckligen.
 - En kund i taget. Ett fel hos en kund loggas och stoppar inte nästa.
@@ -36,10 +38,11 @@ logger = logging.getLogger("snajp-support.crm.stadning")
 #: först: deras kaskad tömmer anteckningar, aktiviteter och bilagor som pekar
 #: på dem, och de räknas då inte en gång till.
 OBJEKT = ("bolag", "person", *lagring.OBJEKT_164)
-#: `tom_papperskorg` tar högst så här många per anrop. Jobbet anropar igen
-#: tills korgen är tom, men aldrig fler än `MAX_VARV` gånger per objekt och
-#: kund, så att en enda stor kund inte håller jobbet i timmar.
-_PER_ANROP = 200
+#: `tom_papperskorg` tömmer högst 200 per anrop. Jobbet anropar igen tills
+#: ett anrop inte tömmer något, men aldrig fler än `MAX_VARV` gånger per objekt
+#: och kund, så att en enda stor kund inte håller jobbet i timmar. Slutet är
+#: noll, inte "färre än 200": då kan inga begränsade poster bland kandidaterna
+#: avsluta varvet medan vanliga utgångna poster ligger kvar.
 MAX_VARV = 50
 DYGN = 24 * 3600.0
 #: Väntan efter uppstart, så att jobbet inte trängs med allt annat som startar.
@@ -76,8 +79,7 @@ async def kunder_att_tomma(storage: Any) -> list[str]:
     """Kundernas id där något ska tömmas. Systemläsningen ger bara id:n; frågan
     om det finns något att tömma ställs sedan inom varje kunds radskydd."""
     ut = []
-    for kund in await storage.list_tenants():
-        tenant_id = str(kund["id"])
+    for tenant_id in await storage.list_alla_tenant_ids():
         try:
             if await har_utgangna(storage, tenant_id):
                 ut.append(tenant_id)
@@ -102,7 +104,7 @@ async def tom_for_kund(storage: Any, tenant_id: str) -> dict[str, int]:
         for _ in range(MAX_VARV):
             tomda = await lagring.tom_papperskorg(storage, tenant_id, objekt, undanta=undanta or ())
             summa += tomda
-            if tomda < _PER_ANROP:
+            if not tomda:
                 break
         if summa:
             antal[objekt] = summa

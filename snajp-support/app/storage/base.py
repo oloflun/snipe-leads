@@ -138,6 +138,13 @@ class Storage(Protocol):
 
     async def list_tenants(self) -> list[dict[str, Any]]: ...
 
+    async def list_alla_tenant_ids(self) -> list[str]:
+        """Varje kunds id, även pausade och avstängda, och inget annat ur
+        kundraden. Systemläsningen för jobb som ska hålla ett löfte oavsett
+        kundens status, som CRM:ets städjobb (papperskorgen töms efter 30
+        dagar även hos en pausad kund)."""
+        ...
+
     async def set_tenant_active(self, tenant_id: str, *, active: bool) -> dict[str, Any] | None:
         """Slår på eller av kundens konto. None när tenanten inte finns.
 

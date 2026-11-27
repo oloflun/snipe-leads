@@ -366,6 +366,9 @@ class MemoryStorage:
     async def list_tenants(self) -> list[dict[str, Any]]:
         return [t for t in self.tenants.values() if t.get("active", True)]
 
+    async def list_alla_tenant_ids(self) -> list[str]:
+        return [str(t["id"]) for t in self.tenants.values()]
+
     # -- Inkorgar -----------------------------------------------------------
 
     async def spegel_info(self) -> dict[str, Any] | None:

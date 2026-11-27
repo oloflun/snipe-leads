@@ -594,8 +594,9 @@ uppslaget inte konfigurerat för Snajp än svarar båda vägarna 503 `enrichment
 
 `DELETE` lägger posten i papperskorgen. Den går att återställa i 30 dagar med
 `POST /companies/{id}/restore`, och töms sedan på allt utom id och tider. Tömningen görs av
-ett jobb som går en gång per dygn, också hos en arbetsyta som inte skriver något, så en post
-kan ligga upp till ett dygn efter `purge_at` innan den är tömd.
+ett jobb som går en gång per dygn, också hos en arbetsyta som inte skriver något och hos en
+arbetsyta som är pausad eller avstängd, så en post kan ligga upp till ett dygn efter `purge_at`
+innan den är tömd.
 `GET /companies?only_deleted=true` (och `/people`) är papperskorgen: det som går att
 återställa, senast raderat först, med `purge_at` som säger när posten töms.
 

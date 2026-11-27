@@ -100,6 +100,37 @@ async def test_fler_an_tvahundra_toms_i_samma_varv(storage, buddy):
     assert await stadning.tom_for_kund(storage, buddy.id) == {"aktivitet": 205}
 
 
+async def test_en_pausad_kunds_papperskorg_toms_ocksa(storage, buddy, annan):
+    """Löftet om 30 dagar gäller även en kund som pausats eller stängts av:
+    `list_tenants()` ger bara aktiva kunder, jobbet läser alla."""
+    person = await _raderad(storage, annan.id, "person", {"fornamn": "Eva", "epost": "eva@annan.se"}, 31)
+    await storage.set_tenant_active(annan.id, active=False)
+    assert annan.id not in {str(t["id"]) for t in await storage.list_tenants()}
+
+    assert await stadning.kunder_att_tomma(storage) == [annan.id]
+    assert await stadning.kor_varv(storage) == {"person": 1}
+    tomd = await lagring.hamta_post(storage, annan.id, "person", person, med_raderade=True)
+    assert tomd["epost"] is None and tomd["kalla"] == lagring.GRAVSTEN
+
+
+async def test_begransade_poster_tar_inte_platserna_for_de_vanliga(storage, buddy):
+    """Taket på 200 per anrop gäller efter att de begränsade sorterats bort.
+    Förut kunde 30 begränsade bland de 200 första avsluta varvet efter 170, och
+    200 begränsade gjorde att de vanliga aldrig nåddes."""
+    for i in range(200):
+        await _raderad(storage, buddy.id, "person", {"fornamn": f"B{i}", "epost": f"b{i}@x.se"}, 31)
+        storage.behandlingsbegransningar.append({"email": f"B{i}@x.se", "havd_at": None})
+    vanliga = [await _raderad(storage, buddy.id, "person", {"fornamn": f"V{i}", "epost": f"v{i}@x.se"}, 31)
+               for i in range(230)]
+
+    assert await stadning.tom_for_kund(storage, buddy.id) == {"person": 230}
+    for rad_id in vanliga:
+        assert (await lagring.hamta_post(storage, buddy.id, "person", rad_id, med_raderade=True))["epost"] is None
+    # De begränsade står orörda, och ett nytt varv har inget att tömma.
+    assert await lagring.tom_papperskorg(storage, buddy.id, "person",
+                                         undanta=await storage.list_begransade(buddy.id)) == 0
+
+
 async def test_jobbet_kor_ett_varv_och_overlever_ett_fel(storage, monkeypatch):
     varv = []
 

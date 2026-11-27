@@ -35,15 +35,35 @@ def anyio_backend():
     return "asyncio"
 
 
+class _Pool:
+    """`pool.acquire()` som PostgresStorage använder för oskopade läsningar.
+    En poolad anslutning utan kund har `app.tenant_id` = '' (se migration 028),
+    så det sätts här inom en egen sparpunkt: annars hade testets tidigare
+    `_scoped` lämnat kvar en kund och läsningen inte varit oskopad."""
+
+    def __init__(self, conn: asyncpg.Connection) -> None:
+        self.conn = conn
+
+    @asynccontextmanager
+    async def acquire(self):
+        async with self.conn.transaction():
+            await self.conn.fetchval("select set_config('app.tenant_id', '', true)")
+            yield self.conn
+
+
 class Lager:
     """Det av PostgresStorage som CRM-lagret använder, på EN anslutning, så att
     allt hamnar i testets transaktion."""
 
-    pool = True
-
     def __init__(self, conn: asyncpg.Connection) -> None:
         self.conn = conn
         self._nycklar: dict = {}
+        self.pool = _Pool(conn)
+
+    # Den riktiga systemläsningen, så att SQL:en och policyn tenant_lookup provas.
+    from app.storage.postgres import PostgresStorage as _PG
+    list_alla_tenant_ids = _PG.list_alla_tenant_ids
+    del _PG
 
     @asynccontextmanager
     async def _scoped(self, tenant_id: str):
@@ -781,16 +801,23 @@ async def test_posten_och_sandsparrens_mangd_i_databasen(miljo):
 
 
 async def test_stadjobbets_systemlasning_och_tomning_i_databasen(miljo):
-    """Systemläsningen ger bara kundernas id, och frågan om något ska tömmas
-    ställs inom varje kunds radskydd: B:s fråga ser aldrig A:s rader."""
+    """Den riktiga systemläsningen (`PostgresStorage.list_alla_tenant_ids`) ger
+    bara kundernas id, även en pausad kunds, som appens roll utan kund satt.
+    Frågan om något ska tömmas ställs sedan inom varje kunds radskydd: B:s
+    fråga ser aldrig A:s rader."""
     from app.crm import stadning
 
     lager, a, b = miljo
+    # Kund A pausas: dess papperskorg ska tömmas ändå.
+    await lager.conn.execute("reset role")
+    await lager.conn.execute("update ss_tenants set active = false where id = $1::text::uuid", a)
+    await lager.conn.execute("set local role snajp_app")
+    ids = await lager.list_alla_tenant_ids()
+    assert {a, b} <= set(ids) and all(isinstance(i, str) for i in ids)
+    # Med en kund satt släpper policyn bara igenom den kundens egen rad.
+    async with lager._scoped(b) as conn:
+        assert [str(r["id"]) for r in await conn.fetch("select id from ss_tenants")] == [b]
 
-    async def list_tenants():
-        return [{"id": a}, {"id": b}]
-
-    lager.list_tenants = list_tenants
     gammal, _ = await synk.skapa(lager, a, "bolag", {"namn": "Gammal AB", "orgnr": ORGNR_A}, kalla="api")
     ung, _ = await synk.skapa(lager, b, "bolag", {"namn": "Ung AB", "orgnr": ORGNR_B}, kalla="api")
     uppgift = await lagring.skapa_post(lager, a, "uppgift", {"titel": "Ring tillbaka"})
@@ -815,6 +842,16 @@ async def test_stadjobbets_systemlasning_och_tomning_i_databasen(miljo):
     assert (await lagring.hamta_post(lager, a, "uppgift", uppgift["id"], med_raderade=True))["titel"] == ""
     assert (await lagring.hamta_post(lager, b, "bolag", ung["id"], med_raderade=True))["namn"] == "Ung AB"
     assert await stadning.kunder_att_tomma(lager) == []
+
+    # De begränsade sorteras bort i SQL:en, före taket på 200.
+    begransad = await lagring.skapa_post(lager, a, "person", {"fornamn": "B", "epost": "b@x.se"})
+    vanlig = await lagring.skapa_post(lager, a, "person", {"fornamn": "V", "epost": "v@x.se"})
+    async with lager._scoped(a) as conn:
+        await conn.execute("update crm_personer set raderad_at = now() - interval '31 days' "
+                           "where id = any($1::text[]::uuid[])", [begransad["id"], vanlig["id"]])
+    assert await lagring.tom_papperskorg(lager, a, "person", undanta={"B@x.se"}) == 1
+    assert (await lagring.hamta_post(lager, a, "person", begransad["id"], med_raderade=True))["epost"] == "b@x.se"
+    assert (await lagring.hamta_post(lager, a, "person", vanlig["id"], med_raderade=True))["epost"] is None
 
 
 # -- Migration 167: registrets status på bolaget ------------------------------
