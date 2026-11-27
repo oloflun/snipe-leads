@@ -5,6 +5,7 @@ import { BolagVy } from "@/components/crm/app/BolagVy";
 import { CrmRam, type CrmVy } from "@/components/crm/app/CrmRam";
 import { OversiktVy } from "@/components/crm/app/OversiktVy";
 import { PersonerVy } from "@/components/crm/app/PersonerVy";
+import { SparrarVy } from "@/components/crm/app/SparrarVy";
 import { SynkVy } from "@/components/crm/app/SynkVy";
 import { UtvecklareVy } from "@/components/crm/app/UtvecklareVy";
 import { DashboardProvider } from "@/components/dashboard/DashboardContext";
@@ -12,6 +13,7 @@ import { BILAGA_MAX, BILAGETYPER, orgnrVisning, type Anslutning, type Bilaga, ty
 import type { Affar, Affarssteg } from "@/lib/crm/affar";
 import type { DashboardState } from "@/lib/data/dashboard";
 import type { Personpost } from "@/lib/crm/person";
+import { SLAG_I_KANAL, gissaSlag, type Sparr, type Sparrkanal, type Sparrorsak, type Sparrslag } from "@/lib/crm/sparr";
 import type { Tema } from "@/lib/tema";
 
 /**
@@ -295,6 +297,41 @@ const NYCKLAR: Nyckel[] = [
   { id: "n2", namn: "Fortnox", prefix: "snajp_crm_91c0", omfang: ["crm:synk"], created_at: iso(24 * 12), last_used_at: iso(27), revoked_at: null },
   { id: "n3", namn: "Provnyckel", prefix: "snajp_crm_07be", omfang: ["crm:las"], created_at: iso(24 * 70), last_used_at: null, revoked_at: iso(24 * 60) }
 ];
+
+// ---------------------------------------------------------------------------
+// Spärrlistan (sparr_ut i crm_v1_sparr.py). Påhittade adresser och nummer:
+// domänen .test och PTS nummerserie för fiktion (070-174 06 xx).
+// ---------------------------------------------------------------------------
+
+const sparr = (i: number, channel: Sparrkanal, kind: Sparrslag, value: string, reason: Sparrorsak, source: string, timmar: number, note: string | null = null, havd: number | null = null): Sparr => ({
+  id: `sp${i}`, channel, kind, value, reason, note, source, company_id: null, person_id: null, created_at: iso(timmar), lifted_at: havd == null ? null : iso(havd)
+});
+
+const SPARRAR: Sparr[] = [
+  sparr(1, "all", "email", "inkop@fiktivtelefoni.test", "objection", "outcome", 5, "Sa nej i samtal, vill inte ha fler mejl."),
+  sparr(2, "phone", "phone", "+46701740611", "nix", "import", 26),
+  sparr(3, "phone", "phone", "+46701740624", "nix", "import", 26),
+  sparr(4, "phone", "phone", "+46701740638", "nix", "import", 26),
+  sparr(5, "email", "domain", "latsaslogistik.test", "customer_request", "app", 49, "Hela bolaget, enligt deras vd."),
+  sparr(6, "email", "email", "anna@hittepabygg.test", "unsubscribe", "api", 74),
+  sparr(7, "email", "email", "info@skenbarredovisning.test", "bounce", "sync", 120),
+  sparr(8, "all", "org_number", "5560000019", "customer_request", "app", 190, "Avslutad kund."),
+  sparr(9, "phone", "phone", "+46701740652", "objection", "outcome", 240),
+  sparr(10, "email", "email", "kontakt@kulissevent.test", "other", "app", 300, "Tvist om faktura, vänta tills den är löst."),
+  sparr(11, "email", "email", "vd@modellverket.test", "customer_request", "app", 500, null, 30),
+  sparr(12, "phone", "phone", "+46701740699", "nix", "import", 700, null, 200)
+];
+let sparrlopnr = 100;
+
+/** Samma skrivsätt som API:t sparar: gemener, och telefon i E.164. Returnerar null när värdet inte går att läsa. */
+function sparrvarde(slag: Sparrslag, varde: string): string | null {
+  const v = varde.trim();
+  if (slag === "email") return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v) ? v.toLowerCase() : null;
+  if (slag === "domain") return /^[a-z0-9-]+(\.[a-z0-9-]+)+$/i.test(v) ? v.toLowerCase() : null;
+  const siffror = v.replace(/[^\d+]/g, "");
+  if (slag === "phone") return /^(\+\d{8,15}|0\d{6,12})$/.test(siffror) ? siffror.replace(/^0/, "+46") : null;
+  return /^\d{10}$/.test(siffror.replace("+", "")) ? siffror.replace("+", "") : null;
+}
 
 // ---------------------------------------------------------------------------
 // Affärer och steg (steg_ut, affar_ut i crm_v1_objekt.py)
@@ -1075,6 +1112,64 @@ async function svara(url: URL, init?: RequestInit): Promise<Response> {
     if (n) n.revoked_at = new Date().toISOString();
     return json(null, 204);
   }
+  // ---- Spärrlistan (crm_v1_sparr.py) ------------------------------------------
+  if (vag === "/v1/suppressions" && metod === "GET") {
+    const q = (url.searchParams.get("q") ?? "").toLowerCase();
+    const kanal = url.searchParams.get("channel");
+    const medHavda = url.searchParams.get("include_lifted") === "true";
+    const start = Number(url.searchParams.get("cursor") ?? 0);
+    const limit = Math.min(500, Math.max(1, Number(url.searchParams.get("limit") ?? 50)));
+    const traffar = SPARRAR.filter((s) => (medHavda || !s.lifted_at) && (!kanal || s.channel === kanal) && (!q || s.value.includes(q))).sort((a, b) => (b.created_at ?? "").localeCompare(a.created_at ?? ""));
+    return json({ data: traffar.slice(start, start + limit), next_cursor: start + limit < traffar.length ? String(start + limit) : null });
+  }
+  if (vag === "/v1/suppressions" && metod === "POST") {
+    const kanal = String(kropp.channel ?? "all") as Sparrkanal;
+    const slag = String(kropp.kind ?? "") as Sparrslag;
+    const ogiltig = (field: string, code: string) => json({ detail: { code: "validation_failed", message: "The record is invalid.", meddelande: "Posten är ogiltig.", fields: [{ field, code }] } }, 422);
+    if (!SLAG_I_KANAL[kanal]?.includes(slag)) return ogiltig("kind", "slag_passar_inte_kanalen");
+    const varde = sparrvarde(slag, String(kropp.value ?? ""));
+    if (!varde) return ogiltig("value", slag === "email" ? "epost_ogiltig" : slag === "domain" ? "doman_ogiltig" : slag === "phone" ? "telefon_ogiltig" : "orgnr_fel_langd");
+    const redan = SPARRAR.find((s) => !s.lifted_at && s.channel === kanal && s.kind === slag && s.value === varde);
+    if (redan) return json(redan, 200);
+    const ny = sparr(++sparrlopnr, kanal, slag, varde, String(kropp.reason ?? "other") as Sparrorsak, "app", 0, kropp.note ? String(kropp.note) : null);
+    ny.created_at = new Date().toISOString();
+    SPARRAR.unshift(ny);
+    return json(ny, 201);
+  }
+  if (vag === "/v1/suppressions/import" && metod === "POST") {
+    const kanal = String(kropp.channel ?? "phone") as Sparrkanal;
+    const varden = Array.isArray(kropp.values) ? (kropp.values as unknown[]).map(String) : [];
+    const ut = { added: 0, already_blocked: 0, invalid: [] as { index: number; code: string }[] };
+    varden.forEach((ratt, index) => {
+      const slag = gissaSlag(ratt);
+      const varde = SLAG_I_KANAL[kanal].includes(slag) ? sparrvarde(slag, ratt) : null;
+      if (!varde) return void ut.invalid.push({ index, code: kanal === "phone" ? "telefon_ogiltig" : slag === "email" ? "epost_ogiltig" : "slag_passar_inte_kanalen" });
+      if (SPARRAR.some((s) => !s.lifted_at && s.kind === slag && s.value === varde && (s.channel === kanal || s.channel === "all"))) return void (ut.already_blocked += 1);
+      const ny = sparr(++sparrlopnr, kanal, slag, varde, String(kropp.reason ?? "nix") as Sparrorsak, "import", 0);
+      ny.created_at = new Date().toISOString();
+      SPARRAR.unshift(ny);
+      ut.added += 1;
+    });
+    return json(ut);
+  }
+  if (vag === "/v1/suppressions/check" && metod === "POST") {
+    const kanal = String(kropp.channel ?? "all");
+    const [slag, ratt] = kropp.email ? ["email", String(kropp.email)] : kropp.phone ? ["phone", String(kropp.phone)] : ["org_number", String(kropp.org_number ?? "")];
+    const varde = sparrvarde(slag as Sparrslag, ratt) ?? ratt.toLowerCase();
+    const doman = slag === "email" ? varde.split("@")[1] : null;
+    const traffar = SPARRAR.filter((s) => !s.lifted_at && (kanal === "all" || s.channel === "all" || s.channel === kanal) && ((s.kind === slag && s.value === varde) || (s.kind === "domain" && s.value === doman)));
+    // Bolag och personer märkta Kontakta inte spärrar också, utan att stå i listan.
+    const post = BOLAG.some((b) => !b.deleted_at && b.do_not_contact && (b.org_number === varde || b.phone === varde || (doman != null && b.domain === doman))) || PERSONER.some((p) => !p.deleted_at && p.do_not_contact && (p.email === varde || p.phone === varde || p.mobile === varde));
+    const sources = [...(traffar.length ? ["suppression_list"] : []), ...(post ? ["record"] : [])];
+    return json({ blocked: sources.length > 0, sources, suppression_ids: traffar.map((s) => s.id) });
+  }
+  const sparrvag = vag.match(/^\/v1\/suppressions\/([^/]+)$/);
+  if (sparrvag && metod === "DELETE") {
+    const s = SPARRAR.find((x) => x.id === decodeURIComponent(sparrvag[1]) && !x.lifted_at);
+    if (!s) return json({ detail: { code: "suppression_not_found", message: "The suppression does not exist.", meddelande: "Spärren finns inte." } }, 404);
+    s.lifted_at = new Date().toISOString();
+    return json(null, 204);
+  }
   // ---- Webhooks (crm_v1.py, Webhooks) ----------------------------------------
   if (vag === "/v1/webhooks/events") return json({ events: HANDELSETYPER, signature_header: "X-Snajp-Signature" });
   if (vag === "/v1/webhooks" && metod === "GET") return json({ data: WEBHOOKAR });
@@ -1231,6 +1326,7 @@ export function CrmForhandsvisning({ tema, vy, kund, utanTillagg }: Readonly<{ t
         {vy === "personer" ? <PersonerVy bas="/forhandsvisning/crm" /> : null}
         {vy === "affarer" ? <AffarerVy bas="/forhandsvisning/crm" /> : null}
         {vy === "synk" ? <SynkVy utvecklarvag="/forhandsvisning/crm/utvecklare" /> : null}
+        {vy === "sparrar" ? <SparrarVy /> : null}
         {vy === "utvecklare" ? <UtvecklareVy /> : null}
       </CrmRam>
     </DashboardProvider>

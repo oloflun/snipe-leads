@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { KeyRound, Plus, RefreshCw, type LucideIcon } from "lucide-react";
+import { Ban, KeyRound, Plus, RefreshCw, type LucideIcon } from "lucide-react";
 import { Avatar } from "@astryxdesign/core/Avatar";
 import { CommandPalette, CommandPaletteInput } from "@astryxdesign/core/CommandPalette";
 import { useHotkeys } from "@astryxdesign/core/hooks";
@@ -24,14 +24,14 @@ type Traff = SearchableItem<{
   ort?: string | null;
 }>;
 
-const VYER: Objekt[] = ["oversikt", "bolag", "personer", "affarer", "synk", "utvecklare"];
+const VYER: Objekt[] = ["oversikt", "bolag", "personer", "affarer", "synk", "sparrar", "utvecklare"];
 
 /** Gemener utan accenter, så att "oversikt" hittar Översikt. */
 const enkel = (s: string) => s.toLocaleLowerCase("sv").normalize("NFD").replace(/[̀-ͯ]/g, "");
 
 /**
- * Kommandopaletten (DESIGN-CRM.md § Skalet), Ctrl K och Cmd K: Gå till (de sex
- * vyerna), Skapa (nytt bolag, ny affär, ny anslutning, ny nyckel) och Bolag, som söks mot
+ * Kommandopaletten (DESIGN-CRM.md § Skalet), Ctrl K och Cmd K: Gå till (de sju
+ * vyerna), Skapa (nytt bolag, ny affär, ny anslutning, ny spärr, ny nyckel) och Bolag, som söks mot
  * `/v1/companies?q=` medan man skriver.
  *
  * Skapa och bolagsträffar beställer av vyn genom adressen (`?ny=1`,
@@ -64,6 +64,7 @@ export function Kommandopalett({
       { id: "skapa:bolag", label: text({ sv: "Nytt bolag", en: "New company" }), auxiliaryData: { group: ny, slag: "skapa", mal: `${bas}/bolag?ny=1`, ikon: Plus } },
       { id: "skapa:affar", label: text({ sv: "Ny affär", en: "New deal" }), auxiliaryData: { group: ny, slag: "skapa", mal: `${bas}/affarer?ny=1`, ikon: Plus } },
       { id: "skapa:anslutning", label: text({ sv: "Ny anslutning", en: "New connection" }), auxiliaryData: { group: ny, slag: "skapa", mal: `${bas}/synk?ny=1`, ikon: RefreshCw } },
+      { id: "skapa:sparr", label: text({ sv: "Ny spärr", en: "New block" }), auxiliaryData: { group: ny, slag: "skapa", mal: `${bas}/sparrar?ny=1`, ikon: Ban } },
       { id: "skapa:nyckel", label: text({ sv: "Ny nyckel", en: "New key" }), auxiliaryData: { group: ny, slag: "skapa", mal: `${bas}/utvecklare?ny=1`, ikon: KeyRound } }
     ];
   }, [text, bas]);

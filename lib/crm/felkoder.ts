@@ -219,7 +219,17 @@ export const FALTKODER: Record<string, Localized> = {
   valuta_ogiltig: { sv: "Valutan är okänd. Skriv den med tre bokstäver, till exempel SEK.", en: "The currency is unknown. Use three letters, for example SEK." },
   id_ogiltigt: { sv: "Posten som valts finns inte längre. Välj en annan.", en: "The selected record no longer exists. Choose another." },
   forlustorsak_okand: { sv: "Förlustorsaken är okänd. Välj en ur listan.", en: "The lost reason is unknown. Choose one from the list." },
-  kalltyp_okand: { sv: "Källan är okänd. Välj en ur listan.", en: "The source is unknown. Choose one from the list." }
+  kalltyp_okand: { sv: "Källan är okänd. Välj en ur listan.", en: "The source is unknown. Choose one from the list." },
+  // Spärrlistans regler (app/crm/sparr.py).
+  slag_okant: { sv: "Slaget är okänt. Välj ett ur listan.", en: "The kind is unknown. Choose one from the list." },
+  varde_saknas: { sv: "Skriv det som ska spärras.", en: "Enter what to block." },
+  doman_ogiltig: { sv: "Domänen går inte att läsa. Skriv den som exempel.se.", en: "The domain cannot be read. Write it as example.com." },
+  kanal_okand: { sv: "Kanalen är okänd. Välj en ur listan.", en: "The channel is unknown. Choose one from the list." },
+  orsak_okand: { sv: "Orsaken är okänd. Välj en ur listan.", en: "The reason is unknown. Choose one from the list." },
+  kalla_okand: { sv: "Källan är okänd.", en: "The source is unknown." },
+  slag_passar_inte_kanalen: { sv: "Det slaget går inte att spärra i den kanalen.", en: "That kind cannot be blocked in that channel." },
+  anteckning_for_lang: { sv: "Anteckningen är för lång.", en: "The note is too long." },
+  for_manga: { sv: "Listan är för lång för ett anrop.", en: "The list is too long for one request." }
 };
 
 /** Körningens eget fel (`error`), när hela körningen föll. */

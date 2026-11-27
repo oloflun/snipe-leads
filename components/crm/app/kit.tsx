@@ -15,6 +15,7 @@ import NextLink from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   ArrowRight,
+  Ban,
   Building2,
   Check,
   Code2,
@@ -52,7 +53,7 @@ import { useLocale, type Localized } from "@/lib/i18n";
 export type Ton = "ockra" | "bla" | "mossa" | "sigill" | "mineral";
 
 /** CRM:ets vyer. Samma nycklar som adressen: `/crm/<vy>`. */
-export type Objekt = "oversikt" | "bolag" | "personer" | "affarer" | "synk" | "utvecklare";
+export type Objekt = "oversikt" | "bolag" | "personer" | "affarer" | "synk" | "sparrar" | "utvecklare";
 
 export const OBJEKT: Record<Objekt, { ton: Ton; ikon: LucideIcon; namn: Localized }> = {
   oversikt: { ton: "ockra", ikon: LayoutDashboard, namn: { sv: "Översikt", en: "Overview" } },
@@ -61,6 +62,8 @@ export const OBJEKT: Record<Objekt, { ton: Ton; ikon: LucideIcon; namn: Localize
   // Sigill, som Synk: de står i var sin sektion av navigeringen och möts aldrig.
   affarer: { ton: "sigill", ikon: Handshake, namn: { sv: "Affärer", en: "Deals" } },
   synk: { ton: "sigill", ikon: RefreshCw, namn: { sv: "Synk", en: "Sync" } },
+  // Ockra, som Översikt: också de står i var sin sektion.
+  sparrar: { ton: "ockra", ikon: Ban, namn: { sv: "Spärrar", en: "Blocks" } },
   utvecklare: { ton: "mineral", ikon: Code2, namn: { sv: "Utvecklare", en: "Developers" } }
 };
 
