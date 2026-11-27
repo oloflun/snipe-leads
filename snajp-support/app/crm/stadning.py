@@ -81,7 +81,7 @@ async def kunder_att_tomma(storage: Any) -> list[str]:
         try:
             if await har_utgangna(storage, tenant_id):
                 ut.append(tenant_id)
-        except Exception:  # noqa: BLE001 — en kunds fel får inte stoppa de andras
+        except Exception:  # noqa: BLE001 (en kunds fel får inte stoppa de andras)
             logger.exception("Papperskorgen gick inte att läsa för en kund. Fortsätter med nästa.")
     return ut
 
@@ -117,7 +117,7 @@ async def kor_varv(storage: Any) -> dict[str, int]:
     for tenant_id in kunder:
         try:
             antal = await tom_for_kund(storage, tenant_id)
-        except Exception:  # noqa: BLE001 — en kunds fel får inte stoppa nästa
+        except Exception:  # noqa: BLE001 (en kunds fel får inte stoppa nästa)
             logger.exception("Papperskorgen gick inte att tömma för en kund. Fortsätter med nästa.")
             continue
         for objekt, n in antal.items():
@@ -139,6 +139,6 @@ async def run_stadjobb(
             await kor_varv(app_state.storage)
         except asyncio.CancelledError:
             raise
-        except Exception:  # noqa: BLE001 — jobbet får aldrig dö
+        except Exception:  # noqa: BLE001 (jobbet får aldrig dö)
             logger.exception("Oväntat fel i städjobbet. Försöker igen nästa dygn.")
         await asyncio.sleep(intervall)

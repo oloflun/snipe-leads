@@ -151,6 +151,10 @@ def bolag_ut(rad: dict[str, Any], externa: list[dict[str, Any]] | None = None) -
     ut["private_person"] = bool(rad.get("privatperson"))
     ut["custom"] = rad.get("extra") or {}
     ut["source"] = rad.get("kalla")
+    # Vad SCB:s företagsregister senast sa (migration 167). Skrivs bara av
+    # POST /companies/{id}/enrich; null tills bolaget berikats.
+    ut["registry_status"] = rad.get("registerstatus")
+    ut["registry_checked_at"] = rad.get("registret_last_at")
     ut["external_ids"] = externa or []
     ut.update(created_at=rad.get("created_at"), updated_at=rad.get("updated_at"), deleted_at=rad.get("raderad_at"))
     ut["purge_at"] = _toms(rad)
@@ -181,7 +185,8 @@ handelser.registrera_form("person", person_ut)
 
 #: CRM:ets fältnamn till API:ts, för fälten som nämns i händelseloggen.
 _FALT_UT = {**{sv: en for en, sv in _BOLAG.items()}, **{sv: en for en, sv in _PERSON.items()},
-            **{sv: f"address.{en}" for en, sv in _ADRESS.items()}, "extra": "custom"}
+            **{sv: f"address.{en}" for en, sv in _ADRESS.items()}, "extra": "custom",
+            "registerstatus": "registry_status"}
 
 # Personer, enskilda firmor och privatpersoner går ut som tunna händelser:
 # fältnamnen, aldrig posten (app/crm/handelser.py: ar_tunn).
@@ -1193,6 +1198,10 @@ record. Fetch it with your key.
 **Suppressions.** One block for every channel: `/suppressions` holds emails, domains, phone numbers
 and organisation numbers that must not be contacted, with channel, reason and date.
 `POST /suppressions/check` answers whether anything in Snajp blocks a contact.
+
+**SCB's business register.** `GET /lookup/companies?org_number=` looks a company up without saving,
+and `POST /companies/{id}/enrich` fills its empty fields. Company level only, never people, and a
+sole proprietorship is not looked up.
 """
 
 
@@ -1227,3 +1236,8 @@ router.routes.extend(crm_v1_tidslinje.koppla(sys.modules[__name__]).routes)
 from . import crm_v1_sparr  # noqa: E402
 
 router.routes.extend(crm_v1_sparr.koppla(sys.modules[__name__]).routes)
+
+# Bolagsuppgifter ur SCB:s företagsregister, bara bolagsnivå (migration 167).
+from . import crm_v1_berikning  # noqa: E402
+
+router.routes.extend(crm_v1_berikning.koppla(sys.modules[__name__]).routes)

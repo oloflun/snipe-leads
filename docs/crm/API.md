@@ -543,6 +543,53 @@ lead kopieras inte in i registret, och ett bolag som finns på båda ställen st
 under `iris` när Iris tidigare har vunnit det: er egen märkning går före. Filtrera med
 `origin=own|iris` och `q`.
 
+## Bolagsuppgifter ur SCB:s företagsregister
+
+Skriv ett organisationsnummer och få resten: namn, juridisk form, status, SNI, säte, postadress,
+antal anställda som storleksklass och reklamspärr. Bara bolagsnivå. Registret ger aldrig personer
+här: inga firmatecknare, ingen styrelse, inga namn på innehavare. En enskild firma slås inte upp
+alls, eftersom numret är innehavarens personnummer (422 `not_a_company`). Detsamma gäller ett
+dödsbo.
+
+```bash
+# Slå upp utan att spara (crm:las)
+curl "$BAS/lookup/companies?org_number=556036-0793" -H "X-API-Key: $NYCKEL"
+
+# Fyll bolagets tomma fält (crm:skriv)
+curl -X POST "$BAS/companies/$ID/enrich" -H "X-API-Key: $NYCKEL"
+```
+
+Uppslaget svarar `{"data": {...}}` med `org_number`, `name`, `legal_form` (AB, HB, EK …),
+`legal_form_code` (SCB:s tvåsiffriga kod), `registry_status`, `sni_codes` (huvudnäringen först),
+`registered_office` (`municipality`, `county`, som registret skriver dem), `postal_address`
+(`street`, `co`, `postal_code`, `city`), `employee_class` (`code` och `label`, till exempel
+`10-19`), `advertising_block` och `codes` (registrets råa koder för status och reklamspärr).
+
+Berikningen fyller `name`, `legal_form`, `sni_code` och adressen där de är tomma, och svarar med
+bolaget och två listor:
+
+| Fält | Betyder |
+|---|---|
+| `company` | bolaget efter berikningen |
+| `filled` | fälten som fylldes |
+| `skipped` | fält där registret säger något annat men bolagets eget värde stod kvar |
+| `registry_status` | `active`, `inactive`, `never_active`, `deregistered` eller `unknown` |
+| `deregistered` | `true` när registret säger att bolaget är avregistrerat, avfört, upplöst, eller att konkursen eller likvidationen är avslutad |
+| `advertising_block` | `true` när bolaget har frånsagt sig reklam, `false` när det tar emot, `null` när koden inte är känd |
+| `registry` | hela uppslaget, som ovan |
+
+Ett fält som redan har ett värde skrivs aldrig över. Med `?overwrite=true` skrivs det över,
+utom ett fält som någon ändrat för hand i Snajp. Berikningen märker inte sina egna fält som
+ändrade för hand. Antal anställda skrivs inte: registret ger en storleksklass, och `employees`
+är ett antal. Bolaget bär efteråt `registry_status` och `registry_checked_at`.
+
+**Reklamspärren gör inte bolaget till kontakta inte.** Den står i svaret, och vill ni att den
+ska spärra lägger ni en spärr under `/suppressions` (kanalen `all` eller `phone`, slaget
+`org_number`).
+
+Svarar SCB inte får ni 502 `registry_unavailable`, aldrig ett 500, och bolaget är orört. Är
+uppslaget inte konfigurerat för Snajp än svarar båda vägarna 503 `enrichment_not_configured`.
+
 ## Radering och personuppgifter
 
 `DELETE` lägger posten i papperskorgen. Den går att återställa i 30 dagar med
@@ -596,6 +643,7 @@ engelska och `meddelande` på svenska.
 | 404 | `webhook_not_found`, `delivery_not_found` | webhooken eller leveransen finns inte |
 | 404 | `suppression_not_found` | spärren finns inte |
 | 404 | `stage_not_found` | steget finns inte (422 när `stage_id` i en kropp pekar fel) |
+| 404 | `company_not_in_registry` | organisationsnumret finns inte i SCB:s företagsregister |
 | 409 | `conflict` | organisationsnumret, adressen eller namnet tillhör redan en annan post. `conflicting_id` är den posten, när den går att peka ut |
 | 409 | `run_closed` | körningen är avslutad och tar inte emot fler satser |
 | 409 | `processing_restricted` | adressen har begränsad behandling (artikel 18) och får inte tömmas |
@@ -621,6 +669,10 @@ engelska och `meddelande` på svenska.
 | 503 | `webhooks_unavailable` | webhooks går inte att skapa just nu |
 | 422 | `invalid_parameter` | `cursor` eller `updated_since` gick inte att läsa |
 | 422 | `call_back_date_required` | utfallet `call_back` saknar `call_back_on` |
+| 422 | `org_number_required` | bolaget saknar organisationsnummer att slå upp i registret |
+| 422 | `not_a_company` | en enskild firma, ett dödsbo eller en privatperson slås inte upp i registret |
+| 502 | `registry_unavailable` | SCB:s företagsregister svarade inte; försök igen senare |
+| 503 | `enrichment_not_configured` | uppslag i SCB:s företagsregister är inte konfigurerade än |
 | 422 | `idempotency_key_reused` | nyckeln har använts för ett annat anrop |
 | 422 | `idempotency_key_too_long` | nyckeln är längre än 200 tecken |
 | 429 | `rate_limited` | taket är nått; vänta enligt `Retry-After` |

@@ -517,6 +517,12 @@ class Settings(BaseSettings):
     # dagar, en gång per dygn, också hos en kund som inte skriver något. PÅ
     # som standard; CRM_STADJOBB=0 stänger av det.
     crm_stadjobb: bool = True
+    # SCB:s företagsregister (app/crm/scb.py), bara bolagsnivå. Nyckeln är
+    # personlig, hämtas i SCB:s Registreringsportal och skickas i X-API-Key
+    # (det nya API:t, apiafr.scb.se; de gamla certifikaten gäller inte).
+    # Tom nyckel = uppslaget är inte konfigurerat (503 enrichment_not_configured).
+    scb_api_nyckel: str = ""
+    scb_bas_url: str = "https://apiafr.scb.se"
     # Fas R2 (bd snipe-cku): semantisk svarscache. "off" (default): cachen
     # rörs aldrig — varken lookup eller store, inte ens ett embedding-anrop.
     # "shadow": lookup+store körs, men en TRÄFF ändrar inget i svaret, bara

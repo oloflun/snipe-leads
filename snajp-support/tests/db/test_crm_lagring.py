@@ -815,3 +815,28 @@ async def test_stadjobbets_systemlasning_och_tomning_i_databasen(miljo):
     assert (await lagring.hamta_post(lager, a, "uppgift", uppgift["id"], med_raderade=True))["titel"] == ""
     assert (await lagring.hamta_post(lager, b, "bolag", ung["id"], med_raderade=True))["namn"] == "Ung AB"
     assert await stadning.kunder_att_tomma(lager) == []
+
+
+# -- Migration 167: registrets status på bolaget ------------------------------
+
+
+async def test_registrets_status_och_berikningen_i_databasen(miljo):
+    from app.api.crm_v1_berikning import berika
+    from app.crm import scb
+
+    lager, a, b = miljo
+    bolag, _ = await synk.skapa(lager, a, "bolag", {"namn": "Berggren", "orgnr": ORGNR_A, "postort": "Solna"},
+                                kalla="api")
+    uppgifter = scb.tolka(ORGNR_A, {"namn": "Byggarna Berggren AB", "jurform": "49", "bolStat": "52", "ftgStat": "9",
+                                    "postAdress": {"gatuAdress": "Storgatan 1", "postNr": "11122", "postOrt": "STOCKHOLM"},
+                                    "naringsgrenar": [{"rangordning": 1, "naringsgren": "41200"}]})
+    skriv, fyllda, hoppade = berika(bolag, uppgifter, overwrite=False)
+    assert fyllda == ["bolagsform", "sni", "gatuadress", "postnr"] and hoppade == ["namn", "postort"]
+    ny = await lagring.uppdatera_post(lager, a, "bolag", bolag["id"], skriv)
+    assert ny["registerstatus"] == "deregistered" and ny["registret_last_at"]
+    assert ny["bolagsform"] == "AB" and ny["sni"] == "41200" and ny["postnr"] == "111 22" and ny["postort"] == "Solna"
+    # Bara de kända värdena tas emot.
+    with pytest.raises(asyncpg.CheckViolationError):
+        await lagring.uppdatera_post(lager, a, "bolag", bolag["id"], {"registerstatus": "kanske"})
+    # Den andra kunden når inte raden.
+    assert await lagring.uppdatera_post(lager, b, "bolag", bolag["id"], {"registerstatus": "active"}) is None
