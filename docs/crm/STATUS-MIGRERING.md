@@ -80,7 +80,7 @@ fas 4 respektive fas 5.
 | Hjälprutan i CRM:et | klart | Samma komponent som i arbetsytan, från sidofältets fot (`80db6b8c`). Sedd mot förhandsvisningens svar, inte mot hjälpens backend |
 | Sammanställning: vad som ändras mot Twenty och varför | klart | `docs/crm/SVENSK-STANDARD.md`, 81 rader och tio frågor till Anton |
 | Bildgranskning av de svenska CRM-systemen | inte påbörjat | Texten finns i `svensk-03` |
-| Oberoende granskning av gränssnittet | gjord en gång | Tre granskare på Opus (kod, användbarhet, tillgänglighet) gav 36 fynd på affärstavlan, historiken och filerna, och de som gällde gränssnittet är rättade (`b7e93ea3`). Vyerna Spärrar, Uppgifter och stegdialogen är inte granskade av någon annan än orkestratorn |
+| Oberoende granskning av gränssnittet | gjord en gång | Tre granskare på Opus (kod, användbarhet, tillgänglighet) gav 36 fynd på affärstavlan, historiken och filerna, och de som gällde gränssnittet är rättade (`b7e93ea3`). En andra omgång på Spärrar, Uppgifter, stegdialogen och registret gav 40 fynd, rättade i `494eaea4` och i backendbygge 5. Inte rättat: kryssrutans tryckyta på telefon, en logg över uppladdningar i API:t, och namnen direkt i svaret från `/tasks` |
 | Ett jobb som tömmer papperskorgen | klart | `stadning.py` (`9967d7f1`): ett varv efter uppstart och ett per dygn, en kund i taget, av med `CRM_STADJOBB=0`. Raderar för gott efter 30 dagar, som utlovat i gränssnittet |
 | Bolagets affärer i bolagets panel | klart | Raden Affärer i bolagets översikt, med länk till tavlan och Ny affär (`b7e93ea3`) |
 | Bild på varje vy i Twentys hostade app | pågår | 17 bilder, mobilvyn gick inte att fånga |

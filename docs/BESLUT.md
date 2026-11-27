@@ -27,7 +27,7 @@ nedan blev kod, och varje punkt går att ändra.
    ändring i leadsflödets kod (`app/leads/samtal.py`, `scheduler.py`, `app/api/leads.py`,
    `leads_suite.py`) och gäller varje kund. En tom spärrlista ändrar ingenting, och
    läsningen tål att tabellen saknas.
-4. **En hävd spärr står kvar som bevis.** Den syns under Hävda och gäller inte. Ångra efter
+4. **En hävd spärr står kvar som bevis.** Den syns under Upphävda och gäller inte. Ångra efter
    en hävning lägger en ny spärr med samma innehåll: den hävda väcks inte till liv, så att
    det går att se när spärren inte gällde.
 5. **Kontrollen svarar med källan, aldrig med något om kontakten.** Spärrlistan, en post
@@ -88,6 +88,33 @@ nedan blev kod, och varje punkt går att ändra.
     är ett lead, blir den en aktivitet på bolaget. Förut föll den bort.
 20. **En affär som töms tar med sig sina anteckningar, aktiviteter och filer.** Uppgifterna
     står kvar utan affär: en uppgift kan fortfarande vara något som ska göras.
+
+**Efter den oberoende granskningen av de nya vyerna** (tre granskare på Opus, 40 fynd, rättade
+i `494eaea4` och i backendbygge 5):
+
+21. **Vyn heter Upphävda, inte Hävda**, som lästes som verbet. Orsaken heter Bad att slippa
+    kontakt (förut Egen begäran, som lästes som säljarens egen), och Adressen fungerar inte
+    (förut Studs).
+22. **Vyerna Mejl och Telefon visar det som stoppar kanalen**, alltså också spärrar i Alla
+    kanaler. Förut syntes inte en adress spärrad i alla kanaler under Mejl.
+23. **Stegen sparas i en ordning där tavlan hela tiden är giltig.** API:t tar en ändring i
+    taget. Två steg som byter typ med varandra går inte att spara i ett svep: dialogen säger
+    det innan något skickas, i stället för att lämna tavlan halvt ändrad.
+24. **Skriv över med registrets frågar först**, eftersom det inte går att ångra (historiken
+    bär fältens namn, inte värdena). Ett fält som ändrats för hand skrivs aldrig över, och
+    rutan säger det i stället för att visa samma knapp igen.
+25. **Registrets reklamspärr sparas på bolaget** (migration 168) och står kvar efter en
+    omladdning. Den sätter fortfarande aldrig Kontakta inte.
+26. **Kontrollen läser också leadets telefonnummer.** Ett nummer vars lead fått utfallet
+    Kontakta inte på ringlistan svarade förut "inte spärrad".
+27. **Uppladdningens läge sparas efter varje omgång**, och webbläsaren varnar om fliken
+    stängs mitt i. Det ligger fortfarande i webbläsaren och inte i API:t.
+28. **Anteckningen på en spärr lovar inte mer än API:t håller**: den följer aldrig med i en
+    webhook eller en logg, men den som läser spärrlistan ser den, också med en API-nyckel.
+
+Inte rättat efter granskningen: kryssrutans tryckyta på telefon, en logg över
+uppladdningar i API:t, och uppgifternas namn direkt i svaret från `/tasks` (namnen hämtas i
+stället fyra åt gången).
 
 **Väntar på Antons bekräftelse** (byggarens val, lätta att vända):
 

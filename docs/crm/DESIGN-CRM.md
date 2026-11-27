@@ -210,13 +210,14 @@ listorna. Antalet i sidhuvudet är öppna affärer. Vyraden bär Tavla och Pappe
   sidhuvudet öppnar en dialog med en rad per steg (`.crm-stegrad`): flyttknappar upp och
   ned, namnet, sannolikheten med procenttecken i fältets högerkant, typen med stegets
   prick, och papperskorgen. Hårlinje mellan raderna. Felet står vid radens namn, och
-  regeln som gäller hela tavlan i en ruta överst. På telefon står namnet för sig överst.
+  regeln som gäller hela tavlan i en ruta överst. På telefon står flyttknapparna, namnet
+  och papperskorgen på en rad och sannolikheten och typen under.
 
 ### Registret i fliken Källa (tillagt 2026-11-27, inte sett av Anton än)
 
 Under anslutningarnas kort står ett kort till i samma form (`Registret.tsx`,
 `.crm-kallkort`): Register, Status som etikett (verksamt grön, avregistrerat varningsfärg)
-och Senast hämtad. Under raderna en sekundär knapp, Hämta ur registret, och en dämpad rad
+Reklamspärr när registret svarat om den, och Senast hämtad. Under raderna en sekundär knapp, Hämta ur registret, och en dämpad rad
 om vad knappen gör. Utfallet står som brödtext i kortet: vad som hämtades, vad registret
 säger annorlunda (med spökknappen Skriv över med registrets), och reklamspärren med en
 länk till Spärrar. I formuläret står samma knapp under organisationsnumret.
@@ -228,7 +229,8 @@ vyraden Att göra, Försenade och Klara, och sökfältet till höger.
 
 - **Raden:** kryssruta, titeln i Geist halvfet med beskrivningen dämpad under, posterna
   uppgiften hör till som lugna chip (bolag eller person, och affären med sin ikonplatta),
-  förfallodagen och den ansvariga. En passerad dag står i varningsfärg med egen ikon,
+  förfallodagen och den ansvariga. Titeln öppnar Ändra och har en tunn prickad linje
+  under sig (`.crm-uppgiftstitel`). En passerad dag står i varningsfärg med egen ikon,
   dagens dag halvfet som "I dag".
 - **Klar** stryker titeln och byter kolumnen Förfaller mot när den blev klar.
 - **Telefon:** en rad per uppgift med kryssrutan till vänster, och dag och poster under
@@ -237,12 +239,12 @@ vyraden Att göra, Försenade och Klara, och sökfältet till höger.
 ## Spärrar (tillagt 2026-11-27, inte sett av Anton än)
 
 Vyn Spärrar (`SparrarVy.tsx`) ligger under Data. Sidhuvud: Kontrollera (spöke), Ladda upp
-lista (sekundär) och Ny spärr (primär). Vyraden: Alla, Mejl, Telefon och Hävda.
+lista (sekundär) och Ny spärr (primär). Vyraden: Alla, Mejl, Telefon och Upphävda.
 
 - **Raden:** slagets ikon (kuvert, glob, lur, nummertecken) och värdet i Geist halvfet,
   kanalen som etikett (Alla kanaler i varningsfärg, en kanal neutral), orsaken med
   anteckningen dämpad under, källan, när, och knappen Häv.
-- **Hävda** stryker värdet och byter kolumnen Tillagd mot Hävd. Ingen knapp.
+- **Upphävda** stryker värdet och byter kolumnen Tillagd mot Upphävd. Ingen knapp.
 - **Räknefoten** säger vad listan inte visar (poster märkta Kontakta inte,
   avregistreringar, leads), och bär länken till den senaste uppladdningens utfall.
 - **Uppladdningen** visar förlopp i rutan och slutar i ett utfall: en ruta med antalen,
