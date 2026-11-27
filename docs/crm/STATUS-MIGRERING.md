@@ -55,7 +55,7 @@ fas 4 respektive fas 5.
 | Del | Läge | Not |
 |---|---|---|
 | Kundsynken in som API | klart | `/api/crm/v1`. 181 tester i minnet och 16 mot Postgres |
-| Migrationerna 160 till 164 mot Postgres | klart | Körda två gånger var mot PGlite (Postgres 17) genom psycopg2, och lagrets frågor prövade där |
+| Migrationerna 160 till 168 mot Postgres | klart lokalt | Körda två gånger var mot PGlite (Postgres 17) genom psycopg2, och lagrets frågor prövade där. Inte körda mot Railway. Migration 168 lägger också ett partiellt index på leadsflödets tabell `prospects` (kundens spärrade leads), utan `concurrently`: skrivningar låses kort medan det byggs |
 | Databasvägen i drift (asyncpg) | väntar | Hur asyncpg tolkar parametrarna är bara prövat i ett CI-jobb som inte körts, eftersom inget är pushat |
 | Körning med inloggning mot den lokala stacken | inte påbörjat | Kräver Docker med Postgres och hela migrationskedjan. Vyerna är bara sedda i förhandsvisningen |
 | Gränssnitt: översikt, bolag, personer, synk, utvecklare | klart | Version 2, godkänd |
@@ -75,12 +75,12 @@ fas 4 respektive fas 5.
 | Samlad kundlista, Iris och Egna | klart | `kundlista.py`, `GET /customers`, och väljaren Ursprung i vyn Kund (`b7e93ea3`). Ett vunnet lead för ett bolag märkt Ej aktuell visas inte (väntar på Antons bekräftelse) |
 | Svensk standard i koden | pågår | Klart: organisationsnummer, moms, telefon, postnummer, bolagsform, SNI, privatperson, relationen Ej aktuell, förlustorsak ur lista, personens källa och insamlingsdag, spärrlista med NIX-uppladdning. Inte gjort: SEK-format i hela ytan |
 | Bolagsuppgifter ur SCB:s företagsregister | klart, utan nyckel | `scb.py`, `/v1/lookup/companies` och `/v1/companies/{id}/enrich`, migration 167 (`05c16340`, `d8a29aaf`), och rutan i fliken Källa samt Hämta ur registret i Nytt bolag (`a0b35b45`). Bara bolagsnivå. **Inte prövat mot SCB:** `SCB_API_NYCKEL` finns inte, och utan den svarar uppslagen 503. Se beslutsloggen om nyckelns villkor |
-| Gemensam spärrlista för alla kanaler | klart | Migration 166, `sparr.py`, `/v1/suppressions` (`69b8537e`, `a4e2c742`) och vyn Spärrar (`04badf37`, `b5173b30`). Sändspärren och ringlistorna i leadsflödet läser listan. 304 tester gröna för CRM, utskick och ringlistor. Sedd i förhandsvisningen |
+| Gemensam spärrlista för alla kanaler | klart | Migration 166, `sparr.py`, `/v1/suppressions` (`69b8537e`, `a4e2c742`) och vyn Spärrar (`04badf37`, `b5173b30`). Sändspärren och ringlistorna i leadsflödet läser listan, och kontrollen läser också leadets telefonnummer. 359 tester gröna för CRM, utskick, ringlistor och ärenden. Sedd i förhandsvisningen |
 | Tunna webhooks för personer och enskilda firmor | klart | Id, objekt, typ, tid och fältnamn, aldrig posten (`69b8537e`) |
 | Hjälprutan i CRM:et | klart | Samma komponent som i arbetsytan, från sidofältets fot (`80db6b8c`). Sedd mot förhandsvisningens svar, inte mot hjälpens backend |
 | Sammanställning: vad som ändras mot Twenty och varför | klart | `docs/crm/SVENSK-STANDARD.md`, 81 rader och tio frågor till Anton |
 | Bildgranskning av de svenska CRM-systemen | inte påbörjat | Texten finns i `svensk-03` |
-| Oberoende granskning av gränssnittet | gjord en gång | Tre granskare på Opus (kod, användbarhet, tillgänglighet) gav 36 fynd på affärstavlan, historiken och filerna, och de som gällde gränssnittet är rättade (`b7e93ea3`). En andra omgång på Spärrar, Uppgifter, stegdialogen och registret gav 40 fynd, rättade i `494eaea4` och i backendbygge 5. Inte rättat: kryssrutans tryckyta på telefon, en logg över uppladdningar i API:t, och namnen direkt i svaret från `/tasks` |
+| Oberoende granskning av gränssnittet | gjord en gång | Tre granskare på Opus (kod, användbarhet, tillgänglighet) gav 36 fynd på affärstavlan, historiken och filerna, och de som gällde gränssnittet är rättade (`b7e93ea3`). En andra omgång på Spärrar, Uppgifter, stegdialogen och registret gav 40 fynd, rättade i `494eaea4` och i backendbygge 5 (`d005b36f`, `83ed8c57`, migration 168). Inte rättat: kryssrutans tryckyta på telefon, en logg över uppladdningar i API:t, och namnen direkt i svaret från `/tasks` |
 | Ett jobb som tömmer papperskorgen | klart | `stadning.py` (`9967d7f1`): ett varv efter uppstart och ett per dygn, en kund i taget, av med `CRM_STADJOBB=0`. Raderar för gott efter 30 dagar, som utlovat i gränssnittet |
 | Bolagets affärer i bolagets panel | klart | Raden Affärer i bolagets översikt, med länk till tavlan och Ny affär (`b7e93ea3`) |
 | Bild på varje vy i Twentys hostade app | pågår | 17 bilder, mobilvyn gick inte att fånga |
