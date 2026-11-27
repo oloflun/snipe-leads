@@ -7,7 +7,7 @@ import "@astryxdesign/core/astryx.css";
 import "@/lib/crm/astryx/snajp.css";
 import "@/components/crm/app/crm.css";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import NextLink from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { ArrowLeft, LifeBuoy, Search } from "lucide-react";
@@ -55,21 +55,30 @@ export type CrmVy = "oversikt" | "bolag" | "personer" | "affarer" | "uppgifter" 
  * avmonteras (Theme.js: useRootThemeSync). Snajps mörka läge bor i just det
  * attributet, stämplat av servern i app/layout.tsx. Utan vakten hade den som
  * valt mörkt fått en ljus arbetsyta när hon gick tillbaka från CRM:et, tills
- * nästa omladdning. Vakten ligger UTANFÖR temat och sätter tillbaka serverns
- * värde efter att temat har städat.
+ * nästa omladdning. Vakten ligger UTANFÖR temat och sätter tillbaka det senast
+ * valda temat efter att temat har städat.
+ *
+ * Bara vid avmontering: temat ligger i en ref och effekten har tom
+ * beroendelista. Körde avstädningen vid varje byte i menyn skrev den tillbaka
+ * det GAMLA temat efter att Astryx redan satt det nya.
  */
 function TemaVakt({ tema, children }: Readonly<{ tema: Tema; children: React.ReactNode }>) {
+  const senaste = useRef(tema);
+  useEffect(() => {
+    senaste.current = tema;
+  }, [tema]);
   useEffect(
     () => () => {
       window.setTimeout(() => {
+        const nu = senaste.current;
         const rot = document.documentElement;
-        const varde = dataTheme(tema);
+        const varde = dataTheme(nu);
         if (varde) rot.setAttribute("data-theme", varde);
         else rot.removeAttribute("data-theme");
-        rot.style.colorScheme = colorScheme(tema);
+        rot.style.colorScheme = colorScheme(nu);
       }, 0);
     },
-    [tema]
+    []
   );
   return children;
 }
@@ -255,6 +264,9 @@ export function CrmRam({
   const { products, addons, isPlatformAdmin } = useDashboard();
   const lage = useMemo(() => ({ products, addons, isPlatformAdmin }), [products, addons, isPlatformAdmin]);
   const grupper = useMemo(() => synligaGrupper(lage), [lage]);
+  // Stabila värden till paletten: en ny källa medan den är öppen kör om sökningen.
+  const palettposter = useMemo(() => synligaPoster(lage), [lage]);
+  const oppnaBytKund = useCallback(() => setDialog("bytkund"), []);
   const aktiv = postForVag(vag, bas);
   // Temat kan bytas i menyn: samma cookie som Inställningar › Tema, och <html> byts direkt.
   const [temaNu, setTemaNu] = useState<Tema>(tema);
@@ -409,8 +421,8 @@ export function CrmRam({
                 oppen={palett}
                 setOppen={setPalett}
                 bas={bas}
-                poster={synligaPoster(lage)}
-                bytKund={isPlatformAdmin ? () => setDialog("bytkund") : undefined}
+                poster={palettposter}
+                bytKund={isPlatformAdmin ? oppnaBytKund : undefined}
               />
               <Skaldialoger dialog={dialog} stang={() => setDialog(null)} />
               {hjalp && hjalpOppen ? <HjalpRuta onStang={() => setHjalpOppen(false)} /> : null}

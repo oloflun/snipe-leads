@@ -7,6 +7,7 @@
  * kundens nyckel. Appen har alltså inga egna genvägar förbi kundisoleringen.
  */
 import type { Localized } from "@/lib/i18n";
+import { PROXYKODER } from "@/lib/crm/felkoder";
 
 export type Relation = "customer" | "former_customer" | "prospect" | "partner" | "supplier" | "not_relevant" | "other";
 
@@ -290,19 +291,19 @@ async function tolka<T>(svar: Response): Promise<T> {
   if (!svar.ok) {
     const d = kropp?.detail;
     const okant = { sv: `Anropet gick inte igenom (HTTP ${svar.status}).`, en: `The request failed (HTTP ${svar.status}).` };
+    // Proxyns `error` är bara svensk: en känd `kod` översätts (felkoder.ts), annars reservtexten.
+    const proxykod = typeof kropp?.kod === "string" ? kropp.kod : null;
     const text =
       typeof d === "string"
         ? { sv: d, en: d }
         : d
           ? { sv: d.meddelande ?? d.message ?? okant.sv, en: d.message ?? d.meddelande ?? okant.en }
-          : typeof kropp?.error === "string"
-            ? { sv: kropp.error, en: kropp.error }
-            : okant;
+          : ((proxykod ? PROXYKODER[proxykod] : undefined) ?? okant);
     const objekt = typeof d === "object" && d ? d : null;
     const fel = new CrmFel(
       text,
       svar.status,
-      objekt?.code ?? (typeof kropp?.kod === "string" ? kropp.kod : null),
+      objekt?.code ?? proxykod,
       Array.isArray(objekt?.fields) ? objekt.fields : [],
       typeof objekt?.conflicting_id === "string" ? objekt.conflicting_id : null
     );

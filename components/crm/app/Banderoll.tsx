@@ -5,6 +5,7 @@ import { Eye, FlaskConical, Glasses } from "lucide-react";
 import { Banner } from "@astryxdesign/core/Banner";
 import { Button } from "@astryxdesign/core/Button";
 import { Icon } from "@astryxdesign/core/Icon";
+import { Spinner } from "@astryxdesign/core/Spinner";
 import { useSkaletsAtgarder } from "@/components/crm/app/Skalet";
 import { mejlaOss } from "@/components/marketing/copy";
 import { useDashboard } from "@/components/dashboard/DashboardContext";
@@ -19,6 +20,8 @@ import { useLocale } from "@/lib/i18n";
  *   gränssnitt som den egna arbetsytan; utan banderollen går lägena inte att skilja.
  * - **Läsroll** (`arLasare`): lugn och neutral. Läsaren gör inget fel; raden
  *   förklarar varför knappar är avstängda.
+ * - **Vybyte** (menyns Admin och Demo, `vybyte` i Skalet.tsx): förloppet, och
+ *   felet med Försök igen när server actionen inte bytte.
  * - **Demo**: en demoarbetsyta (`isDemo`) får begränsningen och Kontakta oss,
  *   adminens demovy (`vy === "demo"`) bara märkningen.
  *
@@ -29,9 +32,39 @@ import { useLocale } from "@/lib/i18n";
 export function Banderoll() {
   const { text } = useLocale();
   const { impersonation, arLasare, isDemo, vy } = useDashboard();
-  const { bytVy } = useSkaletsAtgarder();
+  const { bytVy, vybyte, bytVyMedBesked, glomVybyte } = useSkaletsAtgarder();
   const [avslutar, setAvslutar] = useState(false);
   const [fel, setFel] = useState(false);
+
+  // Vyväxeln i menyn (Admin, Demo): förloppet och felet, före läget man lämnar.
+  if (vybyte) {
+    const mal = vybyte.varde === "demo" ? text({ sv: "Demo", en: "Demo" }) : text({ sv: "Admin", en: "Admin" });
+    return (
+      <div role="status" className="crm-banderoll">
+        {vybyte.lage === "pagar" ? (
+          <Banner
+            status="info"
+            container="section"
+            icon={<Spinner size="sm" label={text({ sv: "Byter vy", en: "Switching view" })} />}
+            title={text({ sv: `Byter till ${mal}.`, en: `Switching to ${mal}.` })}
+          />
+        ) : (
+          <Banner
+            status="error"
+            container="section"
+            title={text({ sv: `Vyn gick inte att byta till ${mal}.`, en: `The view could not be switched to ${mal}.` })}
+            description={text({ sv: "Ladda om sidan och försök igen. Har du loggats ut, logga in igen.", en: "Reload the page and try again. If you have been signed out, sign in again." })}
+            endContent={
+              <>
+                <Button size="sm" variant="secondary" label={text({ sv: "Försök igen", en: "Try again" })} onClick={() => bytVyMedBesked(vybyte.varde)} />
+                <Button size="sm" variant="ghost" label={text({ sv: "Stäng", en: "Close" })} onClick={glomVybyte} />
+              </>
+            }
+          />
+        )}
+      </div>
+    );
+  }
 
   if (impersonation) {
     return (

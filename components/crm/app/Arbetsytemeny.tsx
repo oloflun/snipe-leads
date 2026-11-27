@@ -65,7 +65,9 @@ export function Arbetsytemeny({
 }>) {
   const { text, toggleLocale } = useLocale();
   const { isPlatformAdmin, impersonation, vy, signedIn, userEmail } = useDashboard();
-  const { bytVy, loggaUt } = useSkaletsAtgarder();
+  // Admin och Demo har ingen egen yta för förloppet (menyn stänger sig): banderollen visar det.
+  const { bytVyMedBesked, vybyte, loggaUt } = useSkaletsAtgarder();
+  const byter = vybyte?.lage === "pagar";
   const morkt = tema === "morkt";
 
   return (
@@ -117,15 +119,15 @@ export function Arbetsytemeny({
                 : text({ sv: "Din egen arbetsyta", en: "Your own workspace" })
             }
             icon={ShieldCheck}
-            isDisabled={vy === "admin" && !impersonation}
-            onClick={() => void bytVy("admin")}
+            isDisabled={(vy === "admin" && !impersonation) || byter}
+            onClick={() => bytVyMedBesked("admin")}
           />
           <NavHeadingMenuItem
             label={text({ sv: "Demo", en: "Demo" })}
             description={vy === "demo" ? text({ sv: "Visas nu", en: "Showing now" }) : text({ sv: "Demokontot, som en kund ser det", en: "The demo account, as a customer sees it" })}
             icon={Eye}
-            isDisabled={vy === "demo"}
-            onClick={() => void bytVy("demo")}
+            isDisabled={vy === "demo" || byter}
+            onClick={() => bytVyMedBesked("demo")}
           />
         </>
       ) : null}
@@ -173,10 +175,14 @@ function BytKundDialog({ oppen, stang }: Readonly<{ oppen: boolean; stang: () =>
   const [fel, setFel] = useState(false);
   const [byter, setByter] = useState<string | null>(null);
   const [bytFel, setBytFel] = useState(false);
+  // Ökas av Försök igen, så att hämtningen körs om utan att dialogen stängs.
+  const [forsok, setForsok] = useState(0);
 
   useEffect(() => {
     if (!oppen || kunder) return;
     let avbruten = false;
+    // Ett tidigare misslyckat försök ska inte stå kvar över en ny hämtning.
+    setFel(false);
     void (async () => {
       try {
         const svar = await fetch("/api/admin/kunder", { cache: "no-store" });
@@ -194,7 +200,7 @@ function BytKundDialog({ oppen, stang }: Readonly<{ oppen: boolean; stang: () =>
     return () => {
       avbruten = true;
     };
-  }, [oppen, kunder]);
+  }, [oppen, kunder, forsok]);
 
   const traffar = useMemo(() => {
     const q = sok.trim().toLocaleLowerCase("sv");
@@ -263,7 +269,10 @@ function BytKundDialog({ oppen, stang }: Readonly<{ oppen: boolean; stang: () =>
                 isDisabled={Boolean(byter)}
               />
               {fel ? (
-                <p className="text-[0.875rem] text-danger">{text({ sv: "Kundlistan gick inte att hämta.", en: "The customer list could not be loaded." })}</p>
+                <HStack gap={3} vAlign="center" justify="between">
+                  <p className="text-[0.875rem] text-danger">{text({ sv: "Kundlistan gick inte att hämta.", en: "The customer list could not be loaded." })}</p>
+                  <Button size="sm" variant="secondary" label={text({ sv: "Försök igen", en: "Try again" })} onClick={() => setForsok((n) => n + 1)} />
+                </HStack>
               ) : kunder === null ? (
                 <div role="status" aria-label={text({ sv: "Hämtar kunderna", en: "Loading the customers" })} className="flex flex-col gap-3 py-2">
                   {[0, 1, 2, 3].map((i) => (

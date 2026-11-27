@@ -10,7 +10,7 @@ import { Icon } from "@astryxdesign/core/Icon";
 import { HStack, StackItem } from "@astryxdesign/core/Stack";
 import { Text } from "@astryxdesign/core/Text";
 import type { SearchSource, SearchableItem } from "@astryxdesign/core/Typeahead";
-import { Objektikon, tonFor, tonklass, utanBolagsform, type Ton } from "@/components/crm/app/kit";
+import { Objektikon, tonFor, tonklass, useSkrivratt, utanBolagsform, type Ton } from "@/components/crm/app/kit";
 import { crmAnrop, type Bolag, type Sida } from "@/lib/crm/api";
 import type { Navpost } from "@/lib/crm/navigering";
 import { useLocale } from "@/lib/i18n";
@@ -32,7 +32,8 @@ const enkel = (s: string) => s.toLocaleLowerCase("sv").normalize("NFD").replace(
 /**
  * Kommandopaletten (DESIGN-CRM.md § Skalet), Ctrl K och Cmd K: Gå till (samma
  * poster som sidofältet, ur navigeringsregistret), Skapa (nytt bolag, ny affär, ny
- * uppgift, ny anslutning, ny spärr, ny nyckel), för plattformsadmin Byt kund, och
+ * uppgift, ny anslutning, ny spärr, ny nyckel; bara när `useSkrivratt` släpper
+ * fram skrivningar), för plattformsadmin Byt kund, och
  * Bolag, som söks mot `/v1/companies?q=` medan man skriver.
  *
  * Skapa och bolagsträffar beställer av vyn genom adressen (`?ny=1`,
@@ -56,6 +57,8 @@ export function Kommandopalett({
 }>) {
   const { text } = useLocale();
   const router = useRouter();
+  // Läsroll och kundbesök: Skapa-gruppen erbjuds inte, formulären hade fallit på proxyns 403.
+  const { far: farSkriva } = useSkrivratt();
 
   // Ctrl K överallt och Cmd K på Mac. Den första träffen vinner, så inget körs två gånger.
   useHotkeys([
@@ -66,23 +69,26 @@ export function Kommandopalett({
   const kommandon = useMemo<Traff[]>(() => {
     const ga = text({ sv: "Gå till", en: "Go to" });
     const ny = text({ sv: "Skapa", en: "Create" });
+    const skapa: Traff[] = [
+      { id: "skapa:bolag", label: text({ sv: "Nytt bolag", en: "New company" }), auxiliaryData: { group: ny, slag: "skapa", mal: `${bas}/bolag?ny=1`, ikon: Plus } },
+      { id: "skapa:affar", label: text({ sv: "Ny affär", en: "New deal" }), auxiliaryData: { group: ny, slag: "skapa", mal: `${bas}/affarer?ny=1`, ikon: Plus } },
+      { id: "skapa:uppgift", label: text({ sv: "Ny uppgift", en: "New task" }), auxiliaryData: { group: ny, slag: "skapa", mal: `${bas}/uppgifter?ny=1`, ikon: Plus } },
+      { id: "skapa:anslutning", label: text({ sv: "Ny anslutning", en: "New connection" }), auxiliaryData: { group: ny, slag: "skapa", mal: `${bas}/synk?ny=1`, ikon: RefreshCw } },
+      { id: "skapa:sparr", label: text({ sv: "Ny spärr", en: "New block" }), auxiliaryData: { group: ny, slag: "skapa", mal: `${bas}/sparrar?ny=1`, ikon: Ban } },
+      { id: "skapa:nyckel", label: text({ sv: "Ny nyckel", en: "New key" }), auxiliaryData: { group: ny, slag: "skapa", mal: `${bas}/utvecklare?ny=1`, ikon: KeyRound } }
+    ];
     return [
       ...poster.map<Traff>((p) => ({
         id: `ga:${p.nyckel}`,
         label: text(p.namn),
         auxiliaryData: { group: ga, slag: "ga", mal: `${bas}/${p.nyckel}`, ikon: p.ikon, ton: p.ton }
       })),
-      { id: "skapa:bolag", label: text({ sv: "Nytt bolag", en: "New company" }), auxiliaryData: { group: ny, slag: "skapa", mal: `${bas}/bolag?ny=1`, ikon: Plus } },
-      { id: "skapa:affar", label: text({ sv: "Ny affär", en: "New deal" }), auxiliaryData: { group: ny, slag: "skapa", mal: `${bas}/affarer?ny=1`, ikon: Plus } },
-      { id: "skapa:uppgift", label: text({ sv: "Ny uppgift", en: "New task" }), auxiliaryData: { group: ny, slag: "skapa", mal: `${bas}/uppgifter?ny=1`, ikon: Plus } },
-      { id: "skapa:anslutning", label: text({ sv: "Ny anslutning", en: "New connection" }), auxiliaryData: { group: ny, slag: "skapa", mal: `${bas}/synk?ny=1`, ikon: RefreshCw } },
-      { id: "skapa:sparr", label: text({ sv: "Ny spärr", en: "New block" }), auxiliaryData: { group: ny, slag: "skapa", mal: `${bas}/sparrar?ny=1`, ikon: Ban } },
-      { id: "skapa:nyckel", label: text({ sv: "Ny nyckel", en: "New key" }), auxiliaryData: { group: ny, slag: "skapa", mal: `${bas}/utvecklare?ny=1`, ikon: KeyRound } },
+      ...(farSkriva ? skapa : []),
       ...(bytKund
         ? [{ id: "gor:bytkund", label: text({ sv: "Byt kund", en: "Switch customer" }), auxiliaryData: { group: text({ sv: "Plattform", en: "Platform" }), slag: "gor" as const, mal: "", ikon: Repeat } }]
         : [])
     ];
-  }, [text, bas, poster, bytKund]);
+  }, [text, bas, poster, bytKund, farSkriva]);
 
   // Stabil källa: en ny källa medan paletten är öppen kör om sökningen.
   const kalla = useMemo<SearchSource<Traff>>(() => {

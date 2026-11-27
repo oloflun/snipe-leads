@@ -242,3 +242,22 @@ export const KORNINGSFEL: Record<string, Localized> = {
 };
 
 export const kodtext = (tabell: Record<string, Localized>, kod: string): Localized => tabell[kod] ?? { sv: kod, en: kod };
+
+/**
+ * Proxyns egna koder (`{ error, kod }` från app/api/snajp-support/_auth.ts och
+ * lib/snajp/tenant.ts). Proxyns `error` är bara svensk, så klienten visar den
+ * aldrig: en känd kod får sin text här, en okänd faller till den tvåspråkiga
+ * reservtexten i lib/crm/api.ts.
+ */
+export const PROXYKODER: Record<string, Localized> = {
+  lasroll: { sv: "Du har läsbehörighet. Du kan följa allt, men inte ändra något.", en: "You have read access. You can follow everything, but not change anything." },
+  ej_inloggad: { sv: "Du är inte inloggad längre. Logga in igen och försök på nytt.", en: "You are no longer signed in. Sign in again and try once more." },
+  ej_aktiverad: {
+    sv: "Arbetsytan håller på att läggas upp. Det brukar ta någon minut. Ladda om sidan om en stund.",
+    en: "The workspace is being set up. It usually takes a minute. Reload the page in a moment."
+  },
+  nyckel_saknas: {
+    sv: "Arbetsytan gick inte att öppna just nu. Felet ligger hos oss och är loggat. Försök igen om en stund.",
+    en: "The workspace could not be opened right now. The fault is ours and has been logged. Try again in a moment."
+  }
+};

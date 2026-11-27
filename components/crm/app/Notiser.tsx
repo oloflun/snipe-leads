@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { Bell } from "lucide-react";
 import { Button } from "@astryxdesign/core/Button";
 import { Icon } from "@astryxdesign/core/Icon";
@@ -12,7 +12,9 @@ import { HStack, StackItem } from "@astryxdesign/core/Stack";
 import { Text } from "@astryxdesign/core/Text";
 import { Timestamp } from "@astryxdesign/core/Timestamp";
 import { Prick, useSkrivratt } from "@/components/crm/app/kit";
+import { useDashboard } from "@/components/dashboard/DashboardContext";
 import { navpost } from "@/lib/crm/navigering";
+import { tillAdminvag } from "@/lib/routes";
 import { useLocale } from "@/lib/i18n";
 import { klassText, meddelaNotiser, notisEtikett, useNotisantal, type Notis } from "@/lib/leads/konversationer";
 import { leadsAnrop } from "@/lib/leads/suite";
@@ -50,13 +52,15 @@ export const notistal = (antal: number) => (antal > 99 ? "99+" : String(antal));
 
 /**
  * Vart en notis leder: konversationen. Tills CRM:et har vyn Konversationer
- * (registret: `iris/konversationer`) öppnas den i dagens Leads.
+ * (registret: `iris/konversationer`) öppnas den i dagens Leads. En plattformsadmin
+ * i vyn admin skickas av app/dashboard/layout.tsx vidare till /admin (SK-041),
+ * och då försvinner vägen: hon får adminytans väg direkt, som i AdminShell.
  */
-function notisMal(n: Notis, bas: string): string {
+function notisMal(n: Notis, bas: string, tillAdmin: boolean): string {
   const trad = n.thread_id ? `trad=${encodeURIComponent(n.thread_id)}` : "";
-  return navpost("iris/konversationer")?.byggd
-    ? `${bas}/iris/konversationer${trad ? `?${trad}` : ""}`
-    : `/dashboard/leads?vy=konversationer${trad ? `&${trad}` : ""}`;
+  if (navpost("iris/konversationer")?.byggd) return `${bas}/iris/konversationer${trad ? `?${trad}` : ""}`;
+  const vag = `/dashboard/leads?vy=konversationer${trad ? `&${trad}` : ""}`;
+  return tillAdmin ? tillAdminvag(vag) : vag;
 }
 
 /** Klockan i sidhuvudet med antalet olästa, och listan den öppnar. */
@@ -64,6 +68,10 @@ export function NotisKlocka() {
   const { text } = useLocale();
   const { pa, antal, bas } = useNotiser();
   const skriv = useSkrivratt();
+  const { isPlatformAdmin, vy } = useDashboard();
+  const tillAdmin = isPlatformAdmin && vy === "admin";
+  // Markera alla som lästa försvinner när allt är läst: fokus går då till rubriken, inte till sidans början.
+  const rubrik = useRef<HTMLSpanElement>(null);
   const [oppen, setOppen] = useState(false);
   const [notiser, setNotiser] = useState<Notis[] | null>(null);
   const [fel, setFel] = useState(false);
@@ -93,6 +101,7 @@ export function NotisKlocka() {
       await leadsAnrop("/leads/notiser/last", { method: "POST", body: JSON.stringify({}) });
       meddelaNotiser();
       await hamta();
+      rubrik.current?.focus();
       setBesked(text({ sv: "Alla notiser är markerade som lästa.", en: "All notifications are marked as read." }));
     } catch {
       setBesked(text({ sv: "Notiserna gick inte att markera som lästa. Försök igen.", en: "The notifications could not be marked as read. Try again." }));
@@ -111,9 +120,11 @@ export function NotisKlocka() {
     <div className="flex max-h-[min(70dvh,32rem)] flex-col gap-2">
       <HStack gap={3} vAlign="center">
         <StackItem size="fill">
-          <Text as="h2" weight="semibold">
-            {text({ sv: "Notiser", en: "Notifications" })}
-          </Text>
+          <span ref={rubrik} tabIndex={-1} className="outline-none">
+            <Text as="h2" weight="semibold">
+              {text({ sv: "Notiser", en: "Notifications" })}
+            </Text>
+          </span>
         </StackItem>
         {olasta ? (
           <Button
@@ -150,7 +161,7 @@ export function NotisKlocka() {
               return (
                 <ListItem
                   key={n.id}
-                  href={notisMal(n, bas)}
+                  href={notisMal(n, bas, tillAdmin)}
                   label={
                     <>
                       {text(notisEtikett(n))}
