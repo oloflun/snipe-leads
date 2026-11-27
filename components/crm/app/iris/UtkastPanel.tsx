@@ -125,6 +125,8 @@ export function UtkastPanel({
   uppfoljning: (rad: SkickatRad) => void;
 }>) {
   const { text, locale } = useLocale();
+  // Fotens plats för redigerarens beslut och utfall (se propen fot i Utkastredigerare).
+  const [fot, setFot] = useState<HTMLElement | null>(null);
   const ko = post?.slag === "granska" ? post.ko : null;
   const rad = post && post.slag !== "granska" ? post.rad : null;
   const namn = (ko?.company_name ?? rad?.company_name) || (ko?.prospect_email ?? rad?.prospect_email) || text({ sv: "Okänt bolag", en: "Unknown company" });
@@ -178,6 +180,7 @@ export function UtkastPanel({
                   avvisa={{ gor: () => avvisa(ko) }}
                   provmejl={{ queueItemId: ko.id }}
                   skriv={skriv}
+                  fot={fot}
                 />
               ) : rad ? (
                 <div className="flex flex-col gap-4">
@@ -227,7 +230,9 @@ export function UtkastPanel({
         footer={
           post ? (
             <LayoutFooter hasDivider>
-              <HStack gap={2} vAlign="center" justify="between" wrap="wrap">
+              <HStack gap={2} vAlign="end" justify="between" wrap="wrap">
+                {/* Besluten och utfallet för ett utkast som väntar: redigeraren ritar dem här (prop fot). */}
+                {ko ? <div ref={setFot} className="min-w-0 flex-1 basis-full sm:basis-0" /> : null}
                 {prospekt ? (
                   <Button label={text({ sv: "Öppna leadet", en: "Open the lead" })} variant="ghost" icon={<Icon icon={ArrowRight} size="sm" />} href={`${bas}/iris/leads?lead=${encodeURIComponent(prospekt)}`} />
                 ) : (

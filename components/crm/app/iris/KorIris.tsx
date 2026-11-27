@@ -274,10 +274,9 @@ export function KorIris({ oppen, stang, startad }: Readonly<{ oppen: boolean; st
               <fieldset className="crm-formgrupp">
                 <legend className="mb-3 text-[0.8125rem] font-semibold text-ink-muted">{text({ sv: "Körningen", en: "The run" })}</legend>
                 <div className="grid grid-cols-1 gap-x-4 gap-y-4 sm:grid-cols-2">
-                  <div data-falt="antal">
+                  <div data-falt="antal" className="sm:col-start-1 sm:row-start-1">
                     <TextInput
                       label={text({ sv: "Antal leads", en: "Number of leads" })}
-                      description={text({ sv: "1 till 200. Räknar leverbara leads, inte bolag som prövas.", en: "1 to 200. Counts deliverable leads, not companies tried." })}
                       inputMode="numeric"
                       value={antal}
                       onChange={(v) => {
@@ -289,7 +288,11 @@ export function KorIris({ oppen, stang, startad }: Readonly<{ oppen: boolean; st
                       status={status("antal")}
                     />
                   </div>
-                  <div data-falt="omfattning">
+                  {/* Förklaringen står under raden, så att de två fälten hamnar på samma höjd. */}
+                  <p className="-mt-2 text-[0.8125rem] text-ink-muted sm:col-span-2 sm:row-start-2">
+                    {text({ sv: "1 till 200. Räknar leverbara leads, inte bolag som prövas.", en: "1 to 200. Counts deliverable leads, not companies tried." })}
+                  </p>
+                  <div data-falt="omfattning" className="sm:col-start-2 sm:row-start-1">
                     <Selector
                       label={text({ sv: "Omfattning", en: "Scope" })}
                       value={omfattning}

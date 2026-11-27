@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Check, Mail, RefreshCw, Send, Sparkles, TriangleAlert, Undo2, X } from "lucide-react";
 import { AlertDialog } from "@astryxdesign/core/AlertDialog";
 import { Banner } from "@astryxdesign/core/Banner";
@@ -176,6 +177,7 @@ export function Utkastredigerare({
   provmejl,
   skriv,
   extra,
+  fot,
   visaText = true
 }: Readonly<{
   /** Utkastets id: ett nytt värde (annat utkast) börjar om från den sparade texten. */
@@ -205,6 +207,11 @@ export function Utkastredigerare({
   skriv: { far: boolean; skal: string | null };
   /** Ytans egna knappar, sist i raden. */
   extra?: React.ReactNode;
+  /**
+   * Panelens fot. Finns den står besluten (Godkänn och skicka, Spara, Avvisa) och utfallet där, så att
+   * de syns utan att man rullar förbi signaturen. Verktygen för texten står kvar vid texten.
+   */
+  fot?: HTMLElement | null;
   /** Falskt: bara handlingarna och utfallet, när ytan redan visar mejlet (en skickad konversation). */
   visaText?: boolean;
 }>) {
@@ -439,6 +446,25 @@ export function Utkastredigerare({
   const rader = Math.min(22, Math.max(8, falt.text.split("\n").length + Math.floor(falt.text.length / 72) + 1));
   const aiNamn = (v: Studioval) => text(STUDIOVAL.find((s) => s.v === v)?.namn ?? { sv: v, en: v });
 
+  const knappGodkann = godkann ? (
+    <Button
+      label={godkann.etikett ?? text({ sv: "Godkänn och skicka", en: "Approve and send" })}
+      variant="primary"
+      icon={<Icon icon={Send} size="sm" />}
+      isLoading={upptagen === "godkann"}
+      isDisabled={lasning.isDisabled || (handlingslista.length > 0 && !kontrollerat)}
+      tooltip={skriv.skal ?? (handlingslista.length > 0 && !kontrollerat ? text({ sv: "Bekräfta först att det utkastet påstår är gjort.", en: "First confirm that what the draft claims is done." }) : undefined)}
+      onClick={() => void gor("godkann", () => godkann.gor(handlingslista.length > 0 && kontrollerat))}
+    />
+  ) : null;
+  const knappSpara =
+    visaFalt && spara && andrad ? (
+      <Button label={text({ sv: "Spara", en: "Save" })} variant="secondary" icon={<Icon icon={Check} size="sm" />} isLoading={upptagen === "spara"} {...lasning} onClick={sparaNu} />
+    ) : null;
+  const knappAvvisa = avvisa ? (
+    <Button label={text({ sv: "Avvisa", en: "Reject" })} variant="ghost" icon={<Icon icon={X} size="sm" />} className="crm-farlig" isLoading={upptagen === "avvisa"} {...lasning} onClick={() => setAvvisas(true)} />
+  ) : null;
+
   return (
     <div className="flex flex-col gap-4">
       {visaText && mottagare !== undefined ? (
@@ -588,20 +614,8 @@ export function Utkastredigerare({
 
       {!skrivs ? (
         <div className="flex flex-wrap items-center gap-2">
-          {godkann ? (
-            <Button
-              label={godkann.etikett ?? text({ sv: "Godkänn och skicka", en: "Approve and send" })}
-              variant="primary"
-              icon={<Icon icon={Send} size="sm" />}
-              isLoading={upptagen === "godkann"}
-              isDisabled={lasning.isDisabled || (handlingslista.length > 0 && !kontrollerat)}
-              tooltip={skriv.skal ?? (handlingslista.length > 0 && !kontrollerat ? text({ sv: "Bekräfta först att det utkastet påstår är gjort.", en: "First confirm that what the draft claims is done." }) : undefined)}
-              onClick={() => void gor("godkann", () => godkann.gor(handlingslista.length > 0 && kontrollerat))}
-            />
-          ) : null}
-          {visaFalt && spara && andrad ? (
-            <Button label={text({ sv: "Spara", en: "Save" })} variant="secondary" icon={<Icon icon={Check} size="sm" />} isLoading={upptagen === "spara"} {...lasning} onClick={sparaNu} />
-          ) : null}
+          {fot ? null : knappGodkann}
+          {fot ? null : knappSpara}
           {skrivOm && !omskrivning ? (
             <Button label={text({ sv: "Skriv om", en: "Rewrite" })} variant="secondary" icon={<Icon icon={RefreshCw} size="sm" />} {...lasning} onClick={startaOmskrivning} />
           ) : null}
@@ -626,13 +640,27 @@ export function Utkastredigerare({
             <Button label={text({ sv: "Skicka provmejl", en: "Send test email" })} variant="ghost" icon={<Icon icon={Mail} size="sm" />} {...lasning} onClick={() => void oppnaProv()} />
           ) : null}
           {extra}
-          {avvisa ? (
-            <Button label={text({ sv: "Avvisa", en: "Reject" })} variant="ghost" icon={<Icon icon={X} size="sm" />} className="crm-farlig" isLoading={upptagen === "avvisa"} {...lasning} onClick={() => setAvvisas(true)} />
-          ) : null}
+          {fot ? null : knappAvvisa}
         </div>
       ) : null}
 
-      {/* Utfallet sägs upp i en region som finns hela tiden. */}
+      {/* Utfallet sägs upp i en region som finns hela tiden. Med en fot står det där, ovanför besluten. */}
+      {((utfall: React.ReactNode) =>
+        fot
+          ? createPortal(
+              <div className="flex min-w-0 flex-col gap-3">
+                {utfall}
+                {!skrivs ? (
+                  <div className="flex flex-wrap items-center gap-2">
+                    {knappGodkann}
+                    {knappSpara}
+                    {knappAvvisa}
+                  </div>
+                ) : null}
+              </div>,
+              fot
+            )
+          : utfall)(
       <div role="status" aria-live="polite">
         {/* Förloppet medan Iris skriver sägs här; rutan ovanför visar det bara. */}
         {skrivs ? <span className="sr-only">{text({ sv: "Iris skriver utkastet.", en: "Iris is writing the draft." })}</span> : null}
@@ -654,6 +682,7 @@ export function Utkastredigerare({
           />
         ) : null}
       </div>
+      )}
 
       <Dialog isOpen={prov != null} onOpenChange={(o) => !o && upptagen !== "prov" && setProv(null)} purpose="form" width={480}>
         <Layout

@@ -329,25 +329,25 @@ export function KorningarVy({ bas = "/crm" }: Readonly<{ bas?: string }>) {
       {
         key: "created_at",
         header: <Kolumnrubrik ikon={Clock}>{text({ sv: "Startad", en: "Started" })}</Kolumnrubrik>,
-        width: pixel(220),
+        width: pixel(264),
         renderCell: (r) => (
           <NextLink href={vag(r.job_id)} className="crm-chip inline-flex h-7 max-w-full items-center gap-2 rounded-[6px] pl-1 pr-2" aria-label={text({ sv: `Öppna körningen ${korningstid(r.created_at, locale)}`, en: `Open the run ${korningstid(r.created_at, locale)}` })}>
             <Objektikon objekt="korningar" storlek={20} />
-            <span className="truncate text-[0.875rem] font-semibold tabular-nums text-ink">{korningstid(r.created_at, locale)}</span>
-            {r.is_test ? <Badge variant="neutral" label={text({ sv: "Test", en: "Test" })} /> : null}
+            <span className="whitespace-nowrap text-[0.875rem] font-semibold tabular-nums text-ink">{korningstid(r.created_at, locale)}</span>
+            {r.is_test ? (<span className="shrink-0"><Badge variant="neutral" label={text({ sv: "Test", en: "Test" })} /></span>) : null}
           </NextLink>
         )
       },
       {
         key: "typ",
         header: <Kolumnrubrik ikon={Type}>{text({ sv: "Typ", en: "Type" })}</Kolumnrubrik>,
-        width: proportional(1, { minWidth: 150 }),
+        width: pixel(196),
         renderCell: (r) => <span title={typ(r)} className="text-ink2">{typ(r)}</span>
       },
       {
         key: "status",
         header: <Kolumnrubrik ikon={CircleDot}>{text({ sv: "Status", en: "Status" })}</Kolumnrubrik>,
-        width: pixel(164),
+        width: pixel(160),
         renderCell: (r) => <Korningsstatus rad={r} />
       },
       {
@@ -372,13 +372,13 @@ export function KorningarVy({ bas = "/crm" }: Readonly<{ bas?: string }>) {
       {
         key: "undersokta",
         header: <Kolumnrubrik ikon={Search}>{text({ sv: "Undersökta", en: "Researched" })}</Kolumnrubrik>,
-        width: pixel(128),
+        width: pixel(116),
         renderCell: (r) => <span className="tabular-nums text-ink2">{r.korning ? tal(r.korning.undersokta) : "-"}</span>
       },
       {
         key: "utfall",
         header: <Kolumnrubrik ikon={Layers}>{text({ sv: "Utfall", en: "Outcome" })}</Kolumnrubrik>,
-        width: proportional(2, { minWidth: 180 }),
+        width: proportional(1, { minWidth: 180 }),
         renderCell: (r) => {
           const u = utfallText(r, text);
           return (
