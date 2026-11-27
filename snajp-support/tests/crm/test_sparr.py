@@ -133,6 +133,26 @@ async def test_organisationsnummer_och_ogiltiga_varden(buddy):
             assert svar.json()["detail"]["fields"] == [{"field": falt, "code": kod}], kropp
         svar = await k.post(f"{V1}/suppressions/check", json={"channel": "email"})
         assert svar.status_code == 422 and svar.json()["detail"]["fields"][0]["code"] == "varde_saknas"
+        # Kontrollens fel bär frågans eget fältnamn, aldrig `value`.
+        for kropp, falt, kod in (
+            ({"email": "inte en adress"}, "email", "epost_ogiltig"),
+            ({"phone": "123"}, "phone", "telefon_saknar_landskod"),
+            ({"org_number": "556036-0794"}, "org_number", "orgnr_kontrollsiffra"),
+        ):
+            svar = await k.post(f"{V1}/suppressions/check", json={"channel": "all", **kropp})
+            assert svar.status_code == 422, kropp
+            assert svar.json()["detail"]["fields"] == [{"field": falt, "code": kod}], kropp
+
+
+async def test_organisationsnumret_gar_att_soka_sa_som_det_visas(buddy):
+    async with buddy.klient() as k:
+        await _sparra(k, channel="all", kind="org_number", value=ORGNR_A)
+        await _sparra(k, channel="email", kind="email", value="vd@bygg.se")
+        siffror = ORGNR_A.replace("-", "")
+        for q in (ORGNR_A, siffror, ORGNR_A[:8], siffror[:4]):
+            data = (await k.get(f"{V1}/suppressions", params={"q": q})).json()["data"]
+            assert [s["value"] for s in data] == [ORGNR_A], q
+        assert len((await k.get(f"{V1}/suppressions", params={"q": "bygg"})).json()["data"]) == 1
 
 
 # -- Varje källa för sig ------------------------------------------------------
@@ -182,7 +202,9 @@ async def test_en_havd_sparr_star_kvar_men_galler_inte(buddy, annan):
         ny = await k.post(f"{V1}/suppressions", json={"channel": "email", "kind": "email", "value": "vd@bygg.se",
                                                        "reason": "unsubscribe"})
         assert ny.status_code == 201 and ny.json()["id"] != rad["id"]
-        assert (await k.delete(f"{V1}/suppressions/inte-ett-id")).status_code == 404
+        # Ett felformat id ger samma svar och samma kod som ett id som inte finns.
+        felformat = await k.delete(f"{V1}/suppressions/inte-ett-id")
+        assert felformat.status_code == 404 and felformat.json()["detail"]["code"] == "suppression_not_found"
     # Den andra kunden kan varken se eller häva Buddys spärr.
     async with annan.klient() as k:
         svar = await k.delete(f"{V1}/suppressions/{ny.json()['id']}")
@@ -298,6 +320,61 @@ async def test_ringlistan_tappar_sparrade_nummer_och_orgnr(buddy, storage):
     assert [r["company_name"] for r in rader] == ["Fri AB"]
     # Utan spärren står alla tre kvar, som förut.
     assert len(samtal.samtalslista(prospekter, [], {}, lista="ring", idag=date.today())) == 3
+
+
+async def _sandbeslut(storage, tenant_id: str, lead: dict):
+    trad = {"prospect_id": lead["id"], "prospect_email": lead["contact_email"]}
+    return await scheduler._kor_send_guard(storage, tenant_id, trad, {}, now=datetime.now(timezone.utc))
+
+
+async def test_sandsparren_stoppar_ett_sparrat_organisationsnummer_vilken_adress_det_an_ar(buddy, annan, storage):
+    lead = await _lead(storage, buddy.id, "Org AB", epost="vd@bolaget.se", orgnr=ORGNR_A.replace("-", ""))
+    async with buddy.klient() as k:
+        # En telefonspärr på bolaget stoppar inte mejlet.
+        await _sparra(k, channel="phone", kind="org_number", value=ORGNR_A)
+        assert (await _sandbeslut(storage, buddy.id, lead)).regel != "sparrat_orgnr"
+        await _sparra(k, channel="email", kind="org_number", value=ORGNR_A)
+        assert (await _kolla(k, channel="email", org_number=ORGNR_A))["blocked"] is True
+    beslut = await _sandbeslut(storage, buddy.id, lead)
+    assert (beslut.atgard, beslut.regel) == (scheduler.SG_BLOCKERA, "sparrat_orgnr")
+    # Den andra kundens lead på samma organisationsnummer berörs inte.
+    hos_annan = await _lead(storage, annan.id, "Org AB", epost="vd@bolaget.se", orgnr=ORGNR_A)
+    assert (await _sandbeslut(storage, annan.id, hos_annan)).regel != "sparrat_orgnr"
+
+
+async def test_utfallet_kontakta_inte_stoppar_ett_nytt_lead_pa_samma_bolag(buddy, storage):
+    async with buddy.klient() as k:
+        bolag = (await k.post(f"{V1}/companies", json={"name": "Bygg AB", "org_number": ORGNR_B,
+                                                       "email": "info@bygg.se"})).json()
+        await k.post(f"{V1}/companies/{bolag['id']}/outcome", json={"outcome": "do_not_contact"})
+        # Märkningen tas bort från posten, men spärren med orsak och datum står kvar.
+        await k.patch(f"{V1}/companies/{bolag['id']}", json={"do_not_contact": False})
+    nytt = await _lead(storage, buddy.id, "Bygg AB", epost="ny.vd@bygg-ab.se", orgnr=ORGNR_B)
+    beslut = await _sandbeslut(storage, buddy.id, nytt)
+    assert (beslut.atgard, beslut.regel) == (scheduler.SG_BLOCKERA, "sparrat_orgnr")
+
+
+async def test_provkorningens_ringlista_under_listor_tappar_sparrade_nummer(buddy, storage):
+    from app.api.leads import _spara_listspar
+    from app.leads import korning
+
+    def ringrad(namn: str, telefon: str, orgnr: str | None = None) -> dict:
+        return {"spar": "ring", "company_name": namn, "orgnr": orgnr, "contact_phone": telefon,
+                "contact_name": "Test Testsson", "contact_role": "VD"}
+
+    async with buddy.klient() as k:
+        await k.post(f"{V1}/suppressions/import", json={"channel": "phone", "reason": "nix", "values": ["+46705550002"]})
+        await _sparra(k, channel="all", kind="org_number", value=ORGNR_B)
+        # En mejlspärr stoppar inte samtalet.
+        await _sparra(k, channel="email", kind="org_number", value=ORGNR_A)
+    kor = korning.ny_korning(mal=1, scope="research_and_draft", overrides=None, is_test=True)
+    kor["listspar"] = [ringrad("Fri AB", "070-555 00 01", ORGNR_A), ringrad("Nix AB", "0705550002"),
+                       ringrad("Org AB", "0705550003", ORGNR_B)]
+    await _spara_listspar(storage, buddy.id, kor)
+    [lista] = await storage.list_lead_lists(buddy.id)
+    assert lista["titel"].startswith("Ringlista, Iris ")
+    assert [r["company_name"] for r in await storage.list_lead_list_items(buddy.id, lista["id"])] == ["Fri AB"]
+    assert kor["fordelning"]["ring"] == 1
 
 
 # -- Händelser och webhooks ----------------------------------------------------

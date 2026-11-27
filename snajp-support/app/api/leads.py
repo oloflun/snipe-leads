@@ -3777,6 +3777,19 @@ def _ringlistrad(rad: dict) -> dict:
     }
 
 
+async def _utan_telefonsparr(storage, tenant_id: str, rader: list[dict]) -> list[dict]:
+    """Ringlisteraderna utan de som telefonspärren stoppar (spärrlistan för
+    telefon och alla, NIX-tvätten och poster märkta kontakta inte)."""
+    from ..crm import sparr as crm_sparr
+    from ..leads import samtal as leads_samtal
+
+    nummer = await crm_sparr.sparrade_nummer(storage, tenant_id)
+    orgnr = await crm_sparr.sparrade_orgnr(storage, tenant_id)
+    if not (nummer or orgnr):
+        return rader
+    return [r for r in rader if not leads_samtal._sparrad_for_telefon(r, nummer, orgnr)]
+
+
 async def _skriv_sparlista(storage, tenant_id: str, *, titel: str, rader: list[dict], is_test: bool) -> str:
     """En lista per spår och körning under Listor. Returnerar list-id."""
     lista = await storage.create_lead_list(
@@ -3838,6 +3851,15 @@ async def _spara_listspar(storage, tenant_id: str, k: dict) -> None:
             else:
                 rader.append(rad)
         fordelning["ej_kvalificerade"] = len(rader)
+        if ringrader:
+            # Den gemensamma spärren för telefon (app/crm/sparr.py, migration
+            # 166) gäller också provkörningens ringlista under Listor: ett
+            # nummer eller organisationsnummer som är spärrat, där NIX-tvättens
+            # nummer hör hemma, skrivs inte dit. Den skarpa ringlistan läser
+            # spärren när Samtal › Ringlista byggs (samtal.samtalslista).
+            fore = len(ringrader)
+            ringrader = await _utan_telefonsparr(storage, tenant_id, ringrader)
+            fordelning["ring"] -= fore - len(ringrader)
         if ringrader:
             k["listspar_ringlista"] = await _skriv_sparlista(
                 storage, tenant_id, titel="Ringlista", rader=ringrader, is_test=is_test

@@ -327,8 +327,10 @@ igen med `PATCH` när mottagaren är uppe.
 En invändning mot direktmarknadsföring (GDPR artikel 21) gäller i varje kanal. Spärren är
 en lista per arbetsyta över e-postadresser, domäner, telefonnummer och organisationsnummer
 som inte får kontaktas, med kanal, orsak och datum. Snajps mejlutskick, uppföljningar och
-kampanjer stoppas i sändögonblicket, och ringlistan och återkopplingen tappar spärrade
-nummer.
+kampanjer stoppas i sändögonblicket: på adressen, på domänen och på leadets
+organisationsnummer, vilken adress leadet än bär. Ringlistan och återkopplingen tappar
+spärrade nummer och organisationsnummer, och en provkörnings ringlista under Listor skrivs
+utan dem.
 
 ```bash
 curl -X POST "$BAS/suppressions" -H "X-API-Key: $NYCKEL" -H "Content-Type: application/json" \
@@ -348,9 +350,11 @@ Svaret är `201` med spärren, eller `200` med den som redan gäller för samma 
 värde. En domänspärr stoppar varje adress på domänen, men inte underdomäner.
 
 - `GET /suppressions` listar spärrarna, senast lagd först, med `channel`, `reason`, `q`
-  (del av värdet), `limit`, `cursor` och `include_lifted`.
+  (del av värdet; ett organisationsnummer hittas både som `556036-0793` och `5560360793`),
+  `limit`, `cursor` och `include_lifted`.
 - `DELETE /suppressions/{id}` häver spärren (`204`). Den står kvar med `lifted_at` och
-  `lifted_by` som bevis, men stoppar ingenting. Att häva igen ändrar ingenting.
+  `lifted_by` som bevis, men stoppar ingenting. Att häva igen ändrar ingenting. Ett id som
+  inte finns, eller inte är ett id, ger `404 suppression_not_found`.
 - `POST /suppressions/import` lägger många i ett anrop, högst 10 000. Så laddar ni upp
   utfallet av er egen NIX-tvätt:
 
@@ -625,7 +629,9 @@ Fältkoderna i `fields` för ett värde utanför sin lista: `relation_okand` (`r
 
 Fältkoderna för en spärr: `slag_passar_inte_kanalen` (`kind`), `varde_saknas`,
 `doman_ogiltig`, `orgnr_ar_personnummer` och samma koder som för bolagets och personens
-e-post, telefon och organisationsnummer (`value`).
+e-post, telefon och organisationsnummer (`value`). I `POST /suppressions/check` bär felet
+frågans eget fält: `email`, `phone` eller `org_number`, och `value` bara när inget av dem
+angavs (`varde_saknas`).
 
 Skälen till att en post i en sats hoppades över (`reason`): `saknar_namn`,
 `saknar_namn_och_epost`, `hoppas_over_enligt_mappningen`, `privatperson` (se nedan),

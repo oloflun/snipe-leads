@@ -194,6 +194,28 @@ async def _kor_send_guard(storage, tenant_id: str, thread: dict, message: dict, 
                 if prospect.get("status") == "suppressed"
                 else "Leadet är markerat som ej intresserat.",
             )
+    else:
+        prospect = {}
+
+    # Den gemensamma spärren på organisationsnummer (migration 166): en spärr
+    # i kanalen mejl eller alla, och ett CRM-bolag märkt kontakta inte, gäller
+    # bolaget, vilken adress leadet än bär. Utfallet kontakta inte lägger en
+    # sådan spärr, så ett nytt lead på samma bolag med en annan adress stoppas här.
+    orgnr_ra = prospect.get("orgnr") or thread.get("prospect_orgnr")
+    if orgnr_ra:
+        from ..crm import falt as crm_falt
+        from ..crm import sparr as crm_sparr
+
+        try:
+            orgnr_nyckel = crm_falt.orgnr(orgnr_ra)[1]
+        except crm_falt.FaltFel:
+            orgnr_nyckel = None
+        if orgnr_nyckel and orgnr_nyckel in await crm_sparr.sparrade_orgnr(storage, tenant_id, kanal="mejl"):
+            return GuardBeslut(
+                SG_BLOCKERA,
+                "sparrat_orgnr",
+                "Bolagets organisationsnummer står i kundens spärrlista för mejl.",
+            )
 
     tenant = await storage.get_tenant(tenant_id) or {}
     nyckel = thread.get("foretagsnyckel") or foretagsnyckel(

@@ -30,10 +30,13 @@ Svaret säger VILKEN källa som spärrade, aldrig adressen eller numret.
 ## Där spärren verkställs
 
 - Sändspärren (`app/leads/scheduler.py`) läser `lagring.kontakta_inte_adresser`,
-  som sedan 166 också bär spärrlistans adresser, och prövar domänspärrarna för
-  sig. Kampanjutskick och uppföljningar går samma väg.
+  som sedan 166 också bär spärrlistans adresser, och prövar domänspärrarna och
+  leadets organisationsnummer (`sparrade_orgnr`, kanal mejl) för sig.
+  Kampanjutskick och uppföljningar går samma väg.
 - Ringlistan och återkopplingen (`app/leads/samtal.py: samtalslista`) tappar
-  nummer och organisationsnummer som är spärrade för telefon.
+  nummer och organisationsnummer som är spärrade för telefon, och en
+  provkörnings ringlista under Listor skrivs utan dem
+  (`app/api/leads.py: _utan_telefonsparr`).
 
 ## Vad som aldrig skrivs
 
@@ -44,6 +47,7 @@ värdet: mottagaren hämtar spärren med sin nyckel om den behöver adressen.
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from . import falt, handelser, lagring
@@ -151,6 +155,14 @@ async def lista(
     limit = max(1, min(int(limit), 500))
     efter = lagring.las_markor(markor)
     sok = (q or "").strip().lower() or None
+    # Organisationsnumret lagras som tio siffror men visas NNNNNN-NNNN: en
+    # sökning av bara siffror, streck och mellanrum prövas också utan dem, så
+    # att det värde kunden ser i svaret går att söka på.
+    sok_siffror = None
+    if sok and re.fullmatch(r"[\d\s\-]+", sok):
+        sok_siffror = re.sub(r"\D", "", sok) or None
+        if sok_siffror == sok:
+            sok_siffror = None
     if lagring._ar_postgres(storage):
         villkor, varden = ["tenant_id = $1::text::uuid"], [tenant_id]
         for kol, varde in (("kanal", kanal), ("orsak", orsak)):
@@ -161,7 +173,11 @@ async def lista(
             villkor.append("havd_at is null")
         if sok:
             varden.append(f"%{sok}%")
-            villkor.append(f"varde ilike ${len(varden)}")
+            if sok_siffror:
+                varden.append(f"%{sok_siffror}%")
+                villkor.append(f"(varde ilike ${len(varden) - 1} or varde ilike ${len(varden)})")
+            else:
+                villkor.append(f"varde ilike ${len(varden)}")
         if efter:
             varden.extend(efter)
             villkor.append(f"(created_at, id) < (${len(varden) - 1}::text::timestamptz, ${len(varden)}::text::uuid)")
@@ -179,7 +195,8 @@ async def lista(
         sparrar = [dict(r) for r in lagring._minne(storage, _TABELL).values()
                    if r["tenant_id"] == tenant_id
                    and (not kanal or r["kanal"] == kanal) and (not orsak or r["orsak"] == orsak)
-                   and (med_havda or not r.get("havd_at")) and (not sok or sok in r["varde"].lower())
+                   and (med_havda or not r.get("havd_at"))
+                   and (not sok or sok in r["varde"].lower() or bool(sok_siffror and sok_siffror in r["varde"]))
                    and (not efter or (r["created_at"], r["id"]) < efter)]
         sparrar.sort(key=lambda r: (r["created_at"], r["id"]), reverse=True)
         sparrar = sparrar[: limit + 1]
@@ -321,8 +338,9 @@ async def ar_sparrad(
     """
     if kanal not in KANALER:
         raise OgiltigSparr("channel", "kanal_okand")
-    adress = normalisera("epost", epost) if epost else None
-    nummer = normalisera("telefon", telefon) if telefon else None
+    # Felet bär frågans eget fältnamn, så att anroparen ser vilket värde som var fel.
+    adress = _tolka("epost", epost, "email") if epost else None
+    nummer = _tolka("telefon", telefon, "phone") if telefon else None
     nyckel = None
     if orgnr:
         try:
@@ -342,6 +360,13 @@ async def ar_sparrad(
     if (adress or nyckel) and await _ur_leaden(storage, tenant_id, adress=adress, nyckel=nyckel):
         kallor.append("lead")
     return {"sparrad": bool(kallor), "kallor": kallor, "sparr_id": sorted(r["id"] for r in traffar)}
+
+
+def _tolka(slag: str, varde: Any, falt_: str) -> str:
+    try:
+        return normalisera(slag, varde)
+    except OgiltigSparr as fel:
+        raise OgiltigSparr(falt_, fel.kod) from None
 
 
 async def _ur_listan(

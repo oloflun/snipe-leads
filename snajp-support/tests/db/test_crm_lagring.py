@@ -741,6 +741,9 @@ async def test_sparrens_lista_import_och_grind_i_databasen(miljo):
     assert {r["orsak"] for r in resten} == {"nix"} and slut is None
     assert len((await sparr.lista(lager, a, kanal="telefon"))[0]) == 2
     assert [r["varde"] for r in (await sparr.lista(lager, a, q="KONKURRENT"))[0]] == ["konkurrent.se"]
+    # Organisationsnumret går att söka så som API:t visar det, med streck.
+    for q in (ORGNR_A, ORGNR_A.replace("-", "")):
+        assert [r["varde"] for r in (await sparr.lista(lager, a, q=q))[0]] == ["5560360793"], q
     # Grinden: listan, kanalerna och domänen.
     assert (await sparr.ar_sparrad(lager, a, telefon="0701234567", kanal="telefon"))["kallor"] == ["sparrlistan"]
     assert not (await sparr.ar_sparrad(lager, a, telefon="0701234567", kanal="mejl"))["sparrad"]

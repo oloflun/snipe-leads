@@ -14,12 +14,12 @@ En webhook om en spärr bär aldrig värdet eller anteckningen.
 from __future__ import annotations
 
 from typing import Any, Literal
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, Request, Response
 from pydantic import BaseModel, ConfigDict, Field
 
 from ..crm import handelser, sparr
-from .deps import kraev_uuid
 
 _KANAL_UT = {"mejl": "email", "telefon": "phone", "alla": "all"}
 _KANAL_IN = {v: k for k, v in _KANAL_UT.items()}
@@ -33,7 +33,8 @@ _GRIND_UT = {"sparrlistan": "suppression_list", "posten": "record", "avregistrer
              "lead": "lead"}
 #: Fältnamnen i ett fel, CRM:ets till API:ts.
 _FALT_UT = {"channel": "channel", "kind": "kind", "value": "value", "reason": "reason", "note": "note",
-            "source": "source", "values": "values", "org_number": "org_number"}
+            "source": "source", "values": "values", "org_number": "org_number", "email": "email",
+            "phone": "phone"}
 
 Kanal = Literal["email", "phone", "all"]
 Slag = Literal["email", "phone", "domain", "org_number"]
@@ -175,10 +176,19 @@ def koppla(v1: Any) -> APIRouter:
         """The suppression stays as a record with `lifted_at`, and no longer
         blocks. Lifting it again changes nothing. Sends `suppression.lifted`."""
         await v1._avtal(request, tenant)
-        rad = await sparr.hav(request.app.state.storage, tenant["tenant_id"],
-                              kraev_uuid(suppression_id, "Spärren"), **v1._ursprung(request, tenant))
+
+        def finns_inte() -> Exception:
+            return fel(404, "suppression_not_found", "The suppression does not exist.", "Spärren finns inte.")
+
+        # Ett felformat id och ett id som inte finns ger samma svar, med samma kod.
+        try:
+            sparr_id = str(UUID(suppression_id))
+        except (ValueError, AttributeError, TypeError):
+            raise finns_inte() from None
+        rad = await sparr.hav(request.app.state.storage, tenant["tenant_id"], sparr_id,
+                              **v1._ursprung(request, tenant))
         if rad is None:
-            raise fel(404, "suppression_not_found", "The suppression does not exist.", "Spärren finns inte.")
+            raise finns_inte()
         return Response(status_code=204)
 
     @router.post("/suppressions/check", summary="Is a contact blocked anywhere in Snajp?")
