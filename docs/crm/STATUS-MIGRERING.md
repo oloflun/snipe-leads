@@ -137,10 +137,10 @@ funktionslistan som hör till vyn står i noten.
 |---|---|---|---|
 | 4.1 | Skalets förutsättningar: gruppen Iris, banderollen, notisräknaren, läsroll och kundbesök i `app/crm/layout.tsx` | byggt och granskat, inte kört inloggat | `6c8e0242`, `15968282`. SK-038–SK-045, SK-064, SK-067–SK-079, SK-155–SK-157, AD-005, AD-008–AD-011. Navigeringen är ett register (`lib/crm/navigering.ts`), banderollen bär kundbesök, läsroll, vybyte och demo, klockan öppnar notislistan. SK-039 är halvt: se "Öppet efter 4.1 och 4.2" |
 | 4.2 | `/crm/iris/leads` med panelen `?lead=` | byggt och granskat, inte kört inloggat | `07f34196`, `6a017538`, `3b93e04c`. LR-001–LR-075, LR-090–LR-114 utom de som hör till 4.3, 4.9, 4.11 och 4.12. Webbgrinden sitter i `lib/crm/iris/webb.ts`: ytan visar bedömningen bara när svaret bär fälten. `signal_detalj` behövde ingen rättning (se beslutsloggen) |
-| 4.3 | Utkastredigeraren och `/crm/iris/utkast` (Att granska, Skickas snart, Skickat) | byggs 2026-11-27 | LU-030–LU-070, LU-080–LU-088, LU-150–LU-159, LU-172–LU-183, AP15 |
-| 4.4 | `/crm/iris/korningar` och `/crm/iris/korningar/[id]`, dialogen Kör Iris | byggs 2026-11-27 | LK-001–LK-057, LK-130–LK-138, OV-031–OV-037 |
-| 4.5 | `/crm/installningar/iris` | inte påbörjat | LK-060–LK-073, IN-100–IN-112, IN-144 |
-| 4.6 | Tråd- och inkorgsvyn och `/crm/iris/konversationer` | inte påbörjat | LU-001–LU-024, LU-081, LU-089, LU-110–LU-122, OV-105 |
+| 4.3 | Utkastredigeraren och `/crm/iris/utkast` (Att granska, Skickas snart, Skickat) | byggt och granskat, inte kört inloggat | `fb8003e9`, `bf669477`, `c8985e14`. LU-030–LU-070, LU-080–LU-088, LU-150–LU-159, LU-172–LU-183, AP15. Redigeraren (`iris/Utkastredigerare.tsx`) används av utkastvyn, leadets panel och körningens sida. LU-032 och LU-174 hör till Iris-översikten, LU-081 till konversationerna, LU-158 till listorna, LU-179 till inställningarna |
+| 4.4 | `/crm/iris/korningar` och `/crm/iris/korningar/[id]`, dialogen Kör Iris | byggt och granskat, inte kört inloggat | `4455670d`, `a92d9d3b`, `c8985e14`. LK-001–LK-057, LK-135–LK-138, OV-031, OV-032, OV-037. Demons exempelkörning (LK-015, LK-130–LK-133) väntar på steg 5.22, adminens testkörningar (LK-016, LK-134) hör till admin-loggen, diagrammen (OV-033–OV-036) till Iris-översikten |
+| 4.5 | `/crm/installningar/iris` | byggs 2026-11-27 | LK-060–LK-073, IN-100–IN-112, IN-144 |
+| 4.6 | Tråd- och inkorgsvyn och `/crm/iris/konversationer` | byggs 2026-11-27 | LU-001–LU-024, LU-081, LU-089, LU-110–LU-122, OV-105 |
 | 4.7 | `/crm/iris/uppfoljningar` | inte påbörjat | LU-100–LU-107 |
 | 4.8 | `/crm/iris/samtal` | inte påbörjat | LU-130–LU-138, LU-170, LU-171 |
 | 4.9 | `/crm/iris/listor` med import och säljlista | inte påbörjat | LR-120–LR-135, LK-100–LK-118, LK-142–LK-151 |
@@ -172,6 +172,42 @@ Inget av det är kört inloggat mot en riktig backend.
    Formuleringen bör bedömas.
 8. **Inte sett i bild:** vybytets förlopp i banderollen, felrutan i panelens flikar när ett lead inte går
    att hämta, och fokusflytten efter statusbyte med tangentbordet. Lästa i koden.
+
+### Öppet efter 4.3 och 4.4
+
+1. **Styrningen av en vilande körning är byggarens val, inte Antons.** Pausa visas inte för en körning
+   som vilar (letar vidare en gång per dygn), eftersom Återuppta väcker motorn direkt, utanför vilans
+   takt. Avbryt står kvar. Dagens app visar Pausa även då. Anton bör bekräfta.
+2. **Logik som är kopierad.** `delaMejl` och `forstaMening` ligger som kopior i `lib/crm/iris/mejl.ts`,
+   eftersom dagens komponenter inte får röras och originalen ligger i `components/leads/`. Vid växlingen
+   (fas 6) ska en av dem bort.
+3. **Uppföljningarnas förlopp minns webbläsaren.** Det finns ingen ändpunkt som listar pågående
+   uppföljningsjobb, så vyn sparar i `localStorage` vilka leads den följer och läser läget per lead. På
+   en annan enhet syns förloppet först när uppföljningen står under Att granska.
+4. **Inte sett i bild:** loggan i signaturen, mörkt läge på telefon, Tillbaka till Iris och en lyckad
+   Ändra tid, och utkastet för ett lead utanför köns 200 nyaste på körningens sida. Läsroll och
+   kundbesök är sedda av orkestratorn i 1440 för Utkast och Körningar.
+5. **Kapplöpningarna** (byte av post medan AI:n svarar, två svar i fel ordning) är rättade i koden och
+   lästa, men inte framkallade med fördröjda svar i webbläsaren.
+
+### Saknas i backenden (samlat under fas 4, inget är byggt runt)
+
+Gränssnittet visar det backenden svarar. Det här är ställen där ett fält eller en ändpunkt hade gjort
+ytan bättre. Inget av det stoppar bygget, och inget är ändrat i `snajp-support/`.
+
+| Vad | Följden i gränssnittet i dag |
+|---|---|
+| `befordra` svarar med meningar i `saknas`, inte med fältnamn | meningen kopplas till fältet efter hur den börjar |
+| `processa-om` tar inget önskemål (bara konversationens `/utkast/generera` gör det) | fältet för önskemål visas bara där ytan tar emot det |
+| Handlingskontrollen (`handlingar`) finns bara för konversationens svarsutkast | kön och leadets utkast har ingen kontroll av påståenden |
+| Email Studio saknar åtgärden "längre" som AP15 nämner | åtta åtgärder, inte nio |
+| Kön listar bara utkast som väntar på granskning | ett stoppat utkast syns med sitt skäl i leadets panel, inte i Att granska |
+| Ingen ändpunkt listar pågående uppföljningsjobb | förloppet minns webbläsaren (punkt 3 ovan) |
+| Ingen `GET /leads/queue/{id}` | utkastet på körningens sida byggs ur körningens svar, och AI-hjälpen saknar bolagets bakgrund för utkast utanför köns 200 nyaste |
+| `GET /leads/korningar/{id}/utkast` bär inte `pafylld` och `pafylld_skal` | hela leadslistan hämtas för att märka påfyllda leads |
+| En körning med egna bolag har inget motortillstånd i liggaren | körningens sida kan inte lista bolagen och hänvisar till Leads |
+| Sammanfattningen och trattens steg och skäl är bara på svenska | de visas som de står även på engelska |
+| `POST /leads/notiser/last` tar inte `is_test` | Markera alla som lästa är avstängd under kundbesök |
 
 ## Fas 5: resten av appen
 

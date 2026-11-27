@@ -9,6 +9,34 @@ möjligt), vad det betyder i koden.
 
 ---
 
+## 2026-11-27 — Snajp CRM: utkasten och körningarna, det byggarna och agenten valde (agentens val)
+
+Inget av detta är Antons ord. Det är val som gjordes när steg 4.3 och 4.4 blev kod, och varje punkt
+går att ändra.
+
+1. **En utkastredigerare, överallt.** Utkastvyn, leadets panel och körningens sida använder samma
+   komponent. Skäl: reglerna för ett utkast (spara före godkänn, struktur A eller B, provmejl, vad som
+   händer vid ett stopp) ska inte finnas i tre varianter som glider isär.
+2. **Besluten står i panelens fot.** Godkänn och skicka, Spara och Avvisa syns utan att man rullar förbi
+   mejlet och signaturen. Verktygen för texten (Bearbeta texten, Skicka provmejl, Skriv om) står kvar
+   vid texten. Skäl: det man kom för att göra ska inte ligga under vecket.
+3. **Ett AI-svar går att ångra.** Kortare, Förbättra, Personalisera, Ny vinkel och Översätt skriver in i
+   texten, och Ångra ger tillbaka det som stod där, även osparade ändringar.
+4. **Nyckeltalen för 28 dagar (skickat, svar) står i utkastens vyrad**, och i räknefoten på smal skärm.
+   Skäl: regeln att en ny funktion byggs in i den befintliga ytan. Ingen egen ruta.
+5. **Körningens sida är en sida, inte en panel.** Skäl: den öppnar själv två paneler (leadet och
+   utkastet) och visar listor med hundratals rader.
+6. **Kör Iris finns på Körningar och i kommandopaletten**, inte i varje vy. Starten följs där den
+   startades, och förloppet finns kvar efter en omladdning.
+7. **Pausa visas inte för en vilande körning.** Se "Öppet efter 4.3 och 4.4" i
+   `docs/crm/STATUS-MIGRERING.md`. Det avviker från dagens app och väntar på Antons ord.
+8. **Diagrammen över körningarna (OV-033 till OV-036) hör till Iris-översikten**, inte till
+   Körningar. Skäl: att lägga dem här vore en panel ovanpå listan.
+9. **Valet av struktur A eller B är en komponent** (`StrukturVal`) med en förklaring, i Kör Iris,
+   redigeraren, leadets utkast och leadslistan.
+
+---
+
 ## 2026-11-27 — Snajp CRM: skalet och Iris leads, det byggarna och agenten valde (agentens val)
 
 Inget av detta är Antons ord. Det är val som gjordes när steg 4.1 och 4.2 blev kod, och varje punkt

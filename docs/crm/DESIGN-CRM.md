@@ -286,6 +286,32 @@ lista (sekundär) och Ny spärr (primär). Vyraden: Alla, Mejl, Telefon och Upph
   och vad som händer.
 - **Telefon:** rader i stället för tabell, som i Bolag.
 
+## Iris utkast och utkastredigeraren (tillagt 2026-11-27, inte sett av Anton än)
+
+`/crm/iris/utkast` med vyerna Att granska, Skickas snart och Skickat. Posten öppnas i en panel
+(`?utkast=<id>`).
+
+- **Redigeraren** (`iris/Utkastredigerare.tsx`): mottagaren, ämnesraden, mejltexten med teckenräknare,
+  och under den ett kort i `crm-kallkort` med signaturen och den lagstadgade foten som mottagaren ser
+  dem. Verktygen för texten står under kortet.
+- **Besluten står i panelens fot** (propen `fot`): primärknappen Godkänn och skicka, Spara när något är
+  ändrat, Avvisa i varningston, och utfallet ovanför dem. Länken Öppna leadet står till höger.
+- **Mängdåtgärder** går genom `Bekraftelse`, som visar ämnet och första meningen för varje mejl.
+  Förloppet ("Skickar 3 av 10") står i åtgärdsraden, och utfallet grupperas per skäl.
+- **Läsroll:** fälten är avstängda och knapparna bär förklaringen.
+
+## Iris körningar (tillagt 2026-11-27, inte sett av Anton än)
+
+- **Listan** `/crm/iris/korningar`: startad (datum och tid som chip, med märket Test), typ, status som
+  piller, leads av beställt med en smal förloppsstapel medan körningen går, undersökta, utfall. Vyerna
+  Alla, Pågår, Klara, Misslyckade. Räknefoten säger att listan följer förloppet.
+- **Kör Iris** är en dialog: antal och omfattning i bredd, strukturen under, filtret för bara den här
+  körningen bakom knappen Filtrera, och en mening i ett kort som säger vad som kommer att hända.
+- **Körningens sida** `/crm/iris/korningar/<id>`: flikarna Översikt, Leads och Bortvalda. Översikten
+  har förloppet med fyra talrutor (leads klara, bolag undersökta, bortvalda, just nu), styrningen
+  (Pausa, Avbryt), tratten per steg med en mening om varför bolagen föll, och vad körningen kördes med.
+  Fliken Leads har Godkänn och skicka alla och Granska per rad. Ett påfyllt lead bär märket Påfyllt.
+
 ## Översikten (`/crm`, ny startsida)
 
 Twentys dashboardrutnät i Astryx kort (`Grid` plus `Card`, radie 16, luftig marginal).
