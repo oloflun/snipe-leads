@@ -17,7 +17,6 @@ import {
   ListTodo,
   MoreHorizontal,
   PhoneCall,
-  Plug,
   RefreshCw,
   SearchX,
   Send,
@@ -50,7 +49,7 @@ import { SIDSTORLEK, useSida, useSidaFor } from "@/components/leads/sidindelning
 import { pafyllnadSkal } from "@/components/leads/pafyllnad";
 import { Bekraftelse } from "@/components/crm/app/iris/Bekraftelse";
 import { LeadPanel } from "@/components/crm/app/iris/LeadPanel";
-import { Kallpiller, Kolumnrubrik, Postchip, Prick, Tabellskelett, Vyval, grannfokus, tonFor, tonklass, useSkrivratt, useSmal, utanBolagsform } from "@/components/crm/app/kit";
+import { Kolumnrubrik, Postchip, Prick, Tabellskelett, Vyval, grannfokus, tonFor, tonklass, useSkrivratt, useSmal, utanBolagsform } from "@/components/crm/app/kit";
 import { Felruta, Sida } from "@/components/crm/app/Sida";
 import { useDashboard } from "@/components/dashboard/DashboardContext";
 import { CrmFel } from "@/lib/crm/api";
@@ -888,7 +887,7 @@ export function LeadsVy({ bas = "/crm" }: Readonly<{ bas?: string }>) {
       {
         key: "company_name",
         header: <Kolumnrubrik ikon={Building2}>{text({ sv: "Bolag", en: "Company" })}</Kolumnrubrik>,
-        width: proportional(1.2, { minWidth: 180 }),
+        width: proportional(1.6, { minWidth: 210 }),
         renderCell: (p) => (
           <span className="flex min-w-0 items-center gap-2">
             <Postchip namn={p.company_name || text({ sv: "Namnlöst bolag", en: "Unnamed company" })} onClick={() => sattPost(p.id)} label={text({ sv: `Öppna ${p.company_name}`, en: `Open ${p.company_name}` })} />
@@ -899,13 +898,13 @@ export function LeadsVy({ bas = "/crm" }: Readonly<{ bas?: string }>) {
       {
         key: "status",
         header: <Kolumnrubrik ikon={Tag}>{text({ sv: "Status", en: "Status" })}</Kolumnrubrik>,
-        width: pixel(168),
+        width: pixel(172),
         renderCell: (p) => statusval(p)
       },
       {
         key: "poang",
         header: <Kolumnrubrik ikon={Gauge}>{text({ sv: "Poäng", en: "Score" })}</Kolumnrubrik>,
-        width: pixel(100),
+        width: pixel(92),
         renderCell: (p) => {
           const n = poang(p);
           if (obedomd(p) || n == null) return <span className="text-ink-muted" title={text({ sv: "Ingen poäng än", en: "No score yet" })}>-</span>;
@@ -920,7 +919,7 @@ export function LeadsVy({ bas = "/crm" }: Readonly<{ bas?: string }>) {
       {
         key: "signal",
         header: <Kolumnrubrik ikon={Sparkles}>{text({ sv: "Signal", en: "Signal" })}</Kolumnrubrik>,
-        width: proportional(1, { minWidth: 130 }),
+        width: proportional(1, { minWidth: 140 }),
         renderCell: (p) => {
           const pafyllt = p.pafylld ? pafyllnadSkal(p.pafylld_skal) : null;
           const skal = p.pafylld ? (pafyllt ? text(pafyllt) : "") : null;
@@ -937,7 +936,7 @@ export function LeadsVy({ bas = "/crm" }: Readonly<{ bas?: string }>) {
       k.push({
         key: "webb",
         header: <Kolumnrubrik ikon={Globe}>{text({ sv: "Webbplats", en: "Website" })}</Kolumnrubrik>,
-        width: pixel(96),
+        width: pixel(88),
         renderCell: (p) => {
           const m = betyg(p);
           if (m == null) return null;
@@ -955,7 +954,7 @@ export function LeadsVy({ bas = "/crm" }: Readonly<{ bas?: string }>) {
       {
         key: "utkast",
         header: <Kolumnrubrik ikon={FilePen}>{text({ sv: "Utkast", en: "Draft" })}</Kolumnrubrik>,
-        width: pixel(150),
+        width: pixel(140),
         renderCell: (p) => {
           const etikett = utkastText(p, locale, text);
           if (!etikett || !p.utkast_status) return <span className="text-ink-muted">-</span>;
@@ -972,22 +971,17 @@ export function LeadsVy({ bas = "/crm" }: Readonly<{ bas?: string }>) {
       {
         key: "kontakt",
         header: <Kolumnrubrik ikon={PhoneCall}>{text({ sv: "Kontakt", en: "Contact" })}</Kolumnrubrik>,
-        width: pixel(112),
+        width: pixel(118),
         renderCell: (p) => {
           const v = kontaktvag(p);
           return <Badge variant={v === "saknas" ? "yellow" : v === "bada" ? "green" : "neutral"} label={text(KONTAKTVAG[v])} />;
         }
       },
-      {
-        key: "kalla",
-        header: <Kolumnrubrik ikon={Plug}>{text({ sv: "Källa", en: "Source" })}</Kolumnrubrik>,
-        width: pixel(84),
-        renderCell: (p) => <Kallpiller kalla={text(LEAD_TYP_ETIKETT[leadTyp(p.origin)])} />
-      },
+      // Källan (Iris, lista, import) är ingen kolumn: den väljs under Filter och står i panelens flik Källa.
       {
         key: "senast",
         header: <Kolumnrubrik ikon={Clock}>{iUndan && vy === "arkiverade" ? text({ sv: "Arkiverad", en: "Archived" }) : text({ sv: "Ändrad", en: "Updated" })}</Kolumnrubrik>,
-        width: pixel(84),
+        width: pixel(94),
         renderCell: (p) => {
           const t = (vy === "arkiverade" ? p.arkiverad_at : null) ?? p.senaste_handelse_at ?? p.created_at;
           return t ? (
@@ -1002,7 +996,7 @@ export function LeadsVy({ bas = "/crm" }: Readonly<{ bas?: string }>) {
       k.push({
         key: "uppgift",
         header: <Kolumnrubrik ikon={ListTodo}>{text({ sv: "Nästa uppgift", en: "Next task" })}</Kolumnrubrik>,
-        width: pixel(140),
+        width: pixel(128),
         renderCell: (p) => {
           const u = nastaUppgift.get(p.id);
           return u ? (
@@ -1036,6 +1030,10 @@ export function LeadsVy({ bas = "/crm" }: Readonly<{ bas?: string }>) {
     "bortvalda",
     "arkiverade"
   ];
+  // Testytan, Bortvalda och Arkiverade ligger under Fler när de inte är valda: vyraden ryms då på en rad.
+  const SIDOVYER: Vy[] = ["testyta", "bortvalda", "arkiverade"];
+  const iRaden = vyer.filter((v) => !SIDOVYER.includes(v) || v === vy);
+  const underFler = vyer.filter((v) => SIDOVYER.includes(v) && v !== vy);
   const vyantal = (v: Vy) => {
     const n = antal[v];
     return n == null ? undefined : tal(n);
@@ -1135,6 +1133,12 @@ export function LeadsVy({ bas = "/crm" }: Readonly<{ bas?: string }>) {
 
   const fot = (
     <div className="crm-raknefot" role="status">
+      {live ? (
+        <span className="inline-flex shrink-0 items-center gap-1.5">
+          <Prick ton="ockra" pulserar />
+          <span className="crm-raknefot-etikett">{text({ sv: "Uppdateras live", en: "Updating live" })}</span>
+        </span>
+      ) : null}
       <span>
         <span className="crm-raknefot-etikett">{text({ sv: "Visar", en: "Showing" })}</span>{" "}
         <span className="crm-raknefot-tal">{urval.length ? `${tal(sidor.fran + 1)}–${tal(sidor.till)}` : "0"}</span>{" "}
@@ -1382,19 +1386,19 @@ export function LeadsVy({ bas = "/crm" }: Readonly<{ bas?: string }>) {
           />
         ) : (
           <>
-            <Vyval value={vy} onChange={setVy} label={text({ sv: "Vy", en: "View" })} val={vyer.map((v) => ({ v, namn: text(vynamn[v]), antal: vyantal(v) }))} />
-            {live ? (
-              <span className="inline-flex shrink-0 items-center gap-1.5 text-[0.8125rem] text-ink-muted">
-                <Prick ton="ockra" pulserar />
-                {text({ sv: "Uppdateras live", en: "Updating live" })}
-              </span>
+            <Vyval value={vy} onChange={setVy} label={text({ sv: "Vy", en: "View" })} val={iRaden.map((v) => ({ v, namn: text(vynamn[v]), antal: vyantal(v) }))} />
+            {underFler.length > 0 ? (
+              <DropdownMenu
+                button={{ label: text({ sv: "Fler", en: "More" }), variant: "ghost", size: "md" }}
+                items={underFler.map((v) => ({ label: vyantal(v) ? `${text(vynamn[v])}  ${vyantal(v)}` : text(vynamn[v]), onClick: () => setVy(v) }))}
+              />
             ) : null}
           </>
         )
       }
       vyradHoger={
         <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:flex-nowrap">
-          <div className="w-full min-w-0 sm:w-[240px] sm:flex-none">
+          <div className="w-full min-w-0 sm:w-[220px] sm:flex-none">
             <TextInput
               type="search"
               label={text({ sv: "Sök leads", en: "Search leads" })}
