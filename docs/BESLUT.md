@@ -9,6 +9,29 @@ möjligt), vad det betyder i koden.
 
 ---
 
+## 2026-11-27 — Snajp CRM: resten av appen byggs in, steg för steg (Anton, och agentens upplägg)
+
+Antons ord: "Fortsätt med att bygga ut resten av den befintliga appen i den nya miljön." Det är fas 4
+(Leads i CRM-miljön) och fas 5 (resten) i `docs/crm/PLAN-MIGRERING.md`. Upplägget är agentens:
+
+1. **Funktionslistans ordning följs**, ett steg i taget: först skalet (navigeringen som register,
+   banderollen, läsroll och kundbesök), sedan Iris leads med panel, utkasten, körningarna och så vidare.
+   Varje steg byggs av en byggare, läses av en granskare mot radernas underlag och mot backendkoden,
+   rättas, och ses i bild av orkestratorn före nästa.
+2. **Samma worktree och gren som CRM-kärnan**, inte det egna worktree planen nämner. Skäl: C: har
+   omkring 1,6 GB ledigt, och ett andra worktree behöver egna paket. Arbetet är additivt under `/crm`
+   och rör inte dagens app, så skyddet planen ville ha finns kvar.
+3. **En backend, ett API.** De nya vyerna anropar samma ändpunkter som dagens genom samma proxy. Saknas
+   en ändpunkt redovisas det, den byggs inte runt i klienten.
+4. **Dagens komponenter är facit för beteendet, inte för formen.** Formen är den låsta i
+   `DESIGN-CRM.md`.
+5. **Bara poster som gör något står i sidofältet.** En post läggs till av steget som bygger vyn.
+6. **Rapporten om att webbpoolens signal läckte bedömningen (LR-128) stämmer inte längre.** Kopieringen
+   till en annan kund nollar `signal_detalj` på webbpoolsrader (`admin_listor.py`), och webbpoolsrader
+   finns annars bara hos de kunder som får se bedömningen. De nya vyerna visar ändå bara det svaret bär.
+
+---
+
 ## 2026-11-27 — Snajp CRM: spärrar, uppgifter, egna steg och det byggarna valde (agentens val)
 
 Inget av detta är Antons ord. Det är val agenten och byggarna gjorde när förslagen i posten

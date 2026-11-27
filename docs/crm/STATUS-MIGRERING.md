@@ -126,6 +126,10 @@ inom en minut. Kunderna ser inte tillägget i sin lista förrän CRM:et öppnas 
 
 ## Fas 4: Leads i CRM-miljön
 
+Påbörjad 2026-11-27 på Antons ord. Byggs i samma worktree och gren som CRM-kärnan (disken rymmer inte
+ett andra worktree med egna paket). Beställningarna för varje steg ligger i sessionens scratchpad
+(`ui-gemensamt.md`, `ui-steg-4-*.md`), och arbetsflödet heter `crm-ui-steg`.
+
 En rad per vy, i byggordningen ur funktionslistans avsnitt "Ordningen" (där steg 4.7 här är delat i två och bolagssöket står som eget steg). Raderna i
 funktionslistan som hör till vyn står i noten.
 
