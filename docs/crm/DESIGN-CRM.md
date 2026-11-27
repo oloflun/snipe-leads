@@ -212,6 +212,15 @@ listorna. Antalet i sidhuvudet är öppna affärer. Vyraden bär Tavla och Pappe
   prick, och papperskorgen. Hårlinje mellan raderna. Felet står vid radens namn, och
   regeln som gäller hela tavlan i en ruta överst. På telefon står namnet för sig överst.
 
+### Registret i fliken Källa (tillagt 2026-11-27, inte sett av Anton än)
+
+Under anslutningarnas kort står ett kort till i samma form (`Registret.tsx`,
+`.crm-kallkort`): Register, Status som etikett (verksamt grön, avregistrerat varningsfärg)
+och Senast hämtad. Under raderna en sekundär knapp, Hämta ur registret, och en dämpad rad
+om vad knappen gör. Utfallet står som brödtext i kortet: vad som hämtades, vad registret
+säger annorlunda (med spökknappen Skriv över med registrets), och reklamspärren med en
+länk till Spärrar. I formuläret står samma knapp under organisationsnumret.
+
 ## Uppgifter (tillagt 2026-11-27, inte sett av Anton än)
 
 Vyn Uppgifter (`UppgifterVy.tsx`) är en listvy som de andra: sidhuvud med Ny uppgift,

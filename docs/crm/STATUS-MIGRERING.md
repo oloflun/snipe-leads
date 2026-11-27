@@ -66,14 +66,15 @@ fas 4 respektive fas 5.
 | Händelselogg, ändringsflöde och historik i postpanelen | klart | Migration 162. Bär fältens namn, aldrig värdena |
 | Webhooks ut | klart | Backend och vyn under Utvecklare. Inte kört mot en riktig mottagare |
 | Sortering nyast först, papperskorg, krockens id, namn på felrader | klart | Backend och vyer |
-| Synkens två nivåer och underlag till supportärende | klart | Migration 163 och vyn. Se "Var supportsystemet kopplar in" nedan |
+| Synkens två nivåer och supportärende | klart | Migration 163 och vyn. En körning med fel blir nu ett plattformsärende av sig själv, med systemet som rapportör, och numret står på körningen (`1a80affb`, `7c7e9907`). Provat mot minneslagret och PGlite, inte mot en riktig databas. Mejlet till Snajp om ett nytt ärende är inte provat mot en riktig mejltjänst |
 | Affärer med steg och tavla | klart | Migration 164 (`2fa09eb3`) och vyn Affärer (`7fc9da8b`): tavla med dra och släpp, affärens panel, formulär, papperskorg. Sedd i förhandsvisningen, 1440 ljust och mörkt samt 390. Egna steg (namn, ordning, sannolikhet, typ, nya och borttagna) ändras under Anpassa stegen (`1b51e2e5`) |
 | Uppgifter, anteckningar, aktiviteter | klart | Skrivs i historikfliken på bolag, person och affär (`e0a7cd21`), och ändras och tas bort där (`b7e93ea3`). Vyn Uppgifter samlar alla uppgifter, med ansvarig och beskrivning (`0d5257f9`). I den samlade listan väljs bara bolag för en ny uppgift |
 | Bilagor | klart | Bilagor i databasen, 10 MB per fil och 500 MB per kund (Antons ja 2026-11-27). Fliken Filer i bolagets och affärens panel och i personens, med en binärsäker väg genom proxyn (`6fbd9c5d`). Proxyvägen är typkontrollerad men inte körd mot backenden |
 | Tidslinje mot leads, mejl, samtal och ärenden | klart | `tidslinje.py`, nu också med CRM:ets anteckningar, aktiviteter, uppgifter och affärer, och en tidslinje för affären (`35672915`). Historikfliken i de tre panelerna läser den (`e0a7cd21`). Raderna från Iris leder till leadet och konversationen i Leads (`7509e4c9`). Supportärenden har ingen adress att länka till än |
-| Utfall speglas åt båda håll | klart | `utfall.py`. Sätts i historikens skrivyta på ett bolag som är ett lead hos Iris, och läget hos Iris står i bolagets översikt. Ett lead som bett att slippa kontakt spärrar bolagets snabbval. Sett i förhandsvisningen, inte kört mot leadsflödet |
+| Utfall speglas åt båda håll | klart | `utfall.py`. Sätts i historikens skrivyta på ett bolag som är ett lead hos Iris, och läget hos Iris står i bolagets översikt. Ett lead som bett att slippa kontakt spärrar bolagets snabbval. Sett i förhandsvisningen, inte kört mot leadsflödet. Anteckningen sparas nu också vid Vunnen och utan lead, som en aktivitet (`dd0cb8db`) |
 | Samlad kundlista, Iris och Egna | klart | `kundlista.py`, `GET /customers`, och väljaren Ursprung i vyn Kund (`b7e93ea3`). Ett vunnet lead för ett bolag märkt Ej aktuell visas inte (väntar på Antons bekräftelse) |
-| Svensk standard i koden | pågår | Klart: organisationsnummer, moms, telefon, postnummer, bolagsform, SNI, privatperson, relationen Ej aktuell, förlustorsak ur lista, personens källa och insamlingsdag, spärrlista med NIX-uppladdning. Pågår: uppslag i SCB:s företagsregister. Inte gjort: SEK-format i hela ytan |
+| Svensk standard i koden | pågår | Klart: organisationsnummer, moms, telefon, postnummer, bolagsform, SNI, privatperson, relationen Ej aktuell, förlustorsak ur lista, personens källa och insamlingsdag, spärrlista med NIX-uppladdning. Inte gjort: SEK-format i hela ytan |
+| Bolagsuppgifter ur SCB:s företagsregister | klart, utan nyckel | `scb.py`, `/v1/lookup/companies` och `/v1/companies/{id}/enrich`, migration 167 (`05c16340`, `d8a29aaf`), och rutan i fliken Källa samt Hämta ur registret i Nytt bolag (`a0b35b45`). Bara bolagsnivå. **Inte prövat mot SCB:** `SCB_API_NYCKEL` finns inte, och utan den svarar uppslagen 503. Se beslutsloggen om nyckelns villkor |
 | Gemensam spärrlista för alla kanaler | klart | Migration 166, `sparr.py`, `/v1/suppressions` (`69b8537e`, `a4e2c742`) och vyn Spärrar (`04badf37`, `b5173b30`). Sändspärren och ringlistorna i leadsflödet läser listan. 304 tester gröna för CRM, utskick och ringlistor. Sedd i förhandsvisningen |
 | Tunna webhooks för personer och enskilda firmor | klart | Id, objekt, typ, tid och fältnamn, aldrig posten (`69b8537e`) |
 | Hjälprutan i CRM:et | klart | Samma komponent som i arbetsytan, från sidofältets fot (`80db6b8c`). Sedd mot förhandsvisningens svar, inte mot hjälpens backend |
@@ -99,10 +100,10 @@ bygger supportärendena läser den här och svarar med ärendets nummer:
 - `POST /api/admin/crm/supportrapporter/{kund}/{körning}/arende` med `{"nummer": "F-7KQ2"}`:
   numret visas sedan för kunden på körningen.
 
-Plattformsärendena (migration 156) kräver i dag en rapportör och en arbetsyta ur en
-inloggad session, och synken har ingen: den startas av en API-nyckel. Därför skapar CRM:et
-inget ärende själv. Antingen får ärendetabellen en systemrapportör, eller så hämtar ett
-jobb på supportsidan rapporterna härifrån. Det valet är supportsessionens.
+Sedan 2026-11-27 skapar CRM:et ärendet själv (`supportrapport.py`): systemet är rapportör,
+ärendet är internt, och samma anslutning som faller igen lägger en händelse på det öppna
+ärendet. De tre vägarna ovan står kvar för de fall där inget ärende gick att skapa (kunden
+saknar arbetsyta, eller flaggan `CRM_SUPPORTARENDEN` är av).
 Kod: `snajp-support/app/crm/supportrapport.py`, `snajp-support/app/api/admin_crm.py`.
 
 ### Disken på C: (2026-11-26)

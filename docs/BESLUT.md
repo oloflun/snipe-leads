@@ -59,6 +59,36 @@ nedan blev kod, och varje punkt går att ändra.
     En skrivning ger 403 med ett tydligt besked. Skäl: proxyn märkte anropen som prov, och
     CRM:ets API tar inte emot okända fält.
 
+13. **SCB:s register läses med en nyckel, inte med certifikat.** Det nya, avgiftsfria API:t
+    (läst 2026-11-27 ur SCB:s egen specifikation) tar en nyckel i ett huvud, och de gamla
+    certifikaten gäller inte där. Nyckeln finns inte än: utan `SCB_API_NYCKEL` svarar
+    uppslagen 503 och rutan i gränssnittet säger det. **SCB skriver att nyckeln är
+    personlig och inte får delas.** Om den får användas i en tjänst åt flera kunder är en
+    fråga om SCB:s villkor som Anton behöver avgöra innan nyckeln läggs in.
+14. **Registret ger bara bolagsnivå, genom en vitlista.** Namn, bolagsform, status, SNI,
+    postadress, storleksklass och reklamspärr. Ett fält som SCB lägger till senare följer
+    inte med av sig självt. Enskild firma och dödsbo slås inte upp alls: namnet är där en
+    persons. Antal anställda fylls inte, eftersom registret bara ger en storleksklass.
+15. **Registrets reklamspärr blir inte Kontakta inte av sig själv.** Den visas, med en länk
+    till Spärrar. Skäl: reklamspärren gäller adresserad reklam ur registret, och kunden
+    kan ha en egen relation till bolaget. Kunden väljer.
+16. **Berikningen fyller tomma fält och skriver aldrig över tyst.** Säger registret annat
+    står det i utfallet, och kunden väljer Skriv över. Ett fält som ändrats för hand
+    skrivs inte över ens då.
+17. **Papperskorgen töms också hos en pausad eller avstängd kund.** Löftet om 30 dagar
+    gäller den registrerade, inte kundens betalning. Jobbet går en gång per dygn i varje
+    process: tömningen är densamma hur många gånger den körs.
+18. **En synk med fel blir ett ärende hos Snajp av sig själv.** Systemet är rapportör
+    (ingen användare), ärendet är internt och bär bara koder och tal, aldrig kundens
+    poster, och kunden ser ärendets nummer på körningen. Faller samma anslutning igen
+    läggs en händelse på det öppna ärendet i stället för ett nytt. Av med
+    `CRM_SUPPORTARENDEN=0`. Reglerna för Hjälprutan (2026-11-25) rörs inte: ingen
+    kundtext når en kodande agent den här vägen.
+19. **Anteckningen vid ett utfall sparas alltid.** Vid Vunnen, och för ett bolag som inte
+    är ett lead, blir den en aktivitet på bolaget. Förut föll den bort.
+20. **En affär som töms tar med sig sina anteckningar, aktiviteter och filer.** Uppgifterna
+    står kvar utan affär: en uppgift kan fortfarande vara något som ska göras.
+
 **Väntar på Antons bekräftelse** (byggarens val, lätta att vända):
 
 - Ett vunnet Iris-lead för ett bolag som kunden själv märkt Ej aktuell visas inte i
@@ -66,8 +96,14 @@ nedan blev kod, och varje punkt går att ändra.
 - Utfallet Ej intresserad sätter inte relationen Ej aktuell. Det vore en naturlig koppling,
   men den var inte beställd.
 
-Kod: `components/crm/app/SparrarVy.tsx`, `UppgifterVy.tsx`, `Stegdialog.tsx`,
-`snajp-support/app/crm/sparr.py`, `app/api/crm_v1_sparr.py`, migration 166.
+- På tidslinjen bär ett samtal från leadsflödet fortfarande leadsflödets egen kod för
+  utfallet (`mote`), medan CRM:ets aktiviteter bär API:ts (`meeting_booked`). Gränssnittet
+  skriver båda i klartext. Att göra API:t enhetligt är en ändring av ett svar som
+  integrationer kan läsa.
+
+Kod: `components/crm/app/SparrarVy.tsx`, `UppgifterVy.tsx`, `Stegdialog.tsx`, `Registret.tsx`,
+`snajp-support/app/crm/sparr.py`, `scb.py`, `stadning.py`, `supportrapport.py`,
+`app/api/crm_v1_sparr.py`, `crm_v1_berikning.py`, migrationerna 166 och 167.
 
 ---
 

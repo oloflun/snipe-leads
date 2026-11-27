@@ -72,7 +72,8 @@ gränssnitt eller API: filer i postens panel (`6fbd9c5d`), kundlistan Iris och E
 affärer i panelen samt ändra och ta bort i historiken (`b7e93ea3`), relationen ej aktuell,
 förlustorsak ur lista och personens källa (`f1b8eea9`, `80db6b8c`), Hjälprutan i CRM:et
 (`80db6b8c`), den gemensamma spärrlistan med NIX-uppladdning (`69b8537e`, `04badf37`), den
-samlade uppgiftslistan (`0d5257f9`) och egna steg på tavlan (`1b51e2e5`). Raderna om dem
+samlade uppgiftslistan (`0d5257f9`), egna steg på tavlan (`1b51e2e5`), jobbet som tömmer
+papperskorgen (`9967d7f1`) och uppslaget i SCB:s företagsregister (`05c16340`, `a0b35b45`). Raderna om dem
 ändras först när områdena läses om.
 
 ## De största luckorna
