@@ -434,9 +434,13 @@ async def _ur_leaden(storage: Any, tenant_id: str, *, adress: str | None, nyckel
     return any(p.get("status") == "suppressed" for p in leads)
 
 
-#: Så många av numrets sista siffror jämförs i SQL innan numret tolkas. Ett
+#: Så många av numrets sista siffror söker SQL efter innan numret tolkas. Ett
 #: leads nummer lagras som säljaren eller källan skrev det (070-…, +46…,
-#: 0046…), men de sista siffrorna är desamma i varje skrivsätt.
+#: 0046…), men de sista siffrorna är desamma i varje skrivsätt. Fältet kan
+#: bära fler nummer eller fritext ("070-…, 08-…", "tel 070-…, ank 3") och
+#: `falt.telefon` tolkar det första: därför söker SQL siffrorna var som helst
+#: i fältet, och Python avgör. Att jämföra fältets SISTA siffror tappade ett
+#: lead vars nummer stod först (granskningen 2026-11-27).
 _SLUTSIFFROR = 7
 
 
@@ -445,8 +449,8 @@ async def leadens_sparrade_nummer(storage: Any, tenant_id: str, *, nummer: str |
     kontakta inte (`app/leads/samtal.py: registrera`) lägger inget nummer i
     spärrlistan, så numret läses från leadet.
 
-    Med `nummer` läses bara de leads vars nummer slutar på samma siffror, och
-    svaret innehåller då högst det numret. Ett nummer som inte går att tolka
+    Med `nummer` läses bara de leads vars fält innehåller numrets sista
+    siffror, och svaret innehåller då högst det numret. Ett nummer som inte går att tolka
     kan inte matcha. Exempel- och provprospekt räknas inte, som i tidslinjen."""
     slut = re.sub(r"\D", "", nummer or "")[-_SLUTSIFFROR:] if nummer else None
     if lagring._ar_postgres(storage):
@@ -455,7 +459,7 @@ async def leadens_sparrade_nummer(storage: Any, tenant_id: str, *, nummer: str |
         varden: list[Any] = [tenant_id]
         if slut:
             varden.append(slut)
-            villkor.append(f"right(regexp_replace(contact_phone, '\\D', '', 'g'), {len(slut)}) = $2::text")
+            villkor.append("strpos(regexp_replace(contact_phone, '\\D', '', 'g'), $2::text) > 0")
         try:
             async with storage._scoped(tenant_id) as conn:
                 rader = await conn.fetch(f"select contact_phone from prospects where {' and '.join(villkor)}",

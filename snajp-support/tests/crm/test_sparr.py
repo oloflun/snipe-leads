@@ -249,6 +249,21 @@ async def test_leadets_nummer_sparrar_i_kontrollen_i_varje_skrivsatt(buddy, anna
     assert await sparr.sparrade_nummer(storage, annan.id) == {"+46707654321"}
 
 
+async def test_leadets_falt_med_fler_nummer_sparrar_det_forsta_som_ringlistan(buddy, storage):
+    """Fältet kan bära fler nummer eller fritext, och `falt.telefon` tolkar det
+    första. Kontrollen och ringlistans mängd ska då säga samma sak."""
+    await _lead(storage, buddy.id, "Två AB", epost="vd@tva.se", telefon="070-123 45 67, 08-555 55 55",
+                status="suppressed")
+    await _lead(storage, buddy.id, "Ank AB", epost="vd@ank.se", telefon="tel 070-222 33 44, ank 3",
+                status="suppressed")
+    mangd = await sparr.sparrade_nummer(storage, buddy.id)
+    assert mangd == {"+46701234567", "+46702223344"}
+    async with buddy.klient() as k:
+        for skrivet in ("070-123 45 67", "070-222 33 44"):
+            assert (await _kolla(k, channel="phone", phone=skrivet))["sources"] == ["lead"], skrivet
+        assert (await _kolla(k, channel="phone", phone="08-555 55 55"))["blocked"] is False
+
+
 async def test_ringlistan_tappar_ett_annat_lead_med_det_sparrade_leadets_nummer(buddy, storage):
     await _lead(storage, buddy.id, "Nej AB", epost="vd@nej.se", telefon="070-555 00 09", origin="ring",
                 status="suppressed")

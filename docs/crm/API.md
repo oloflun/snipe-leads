@@ -398,7 +398,7 @@ curl -X POST "$BAS/suppressions/check" -H "X-API-Key: $NYCKEL" -H "Content-Type:
 | `suppression_list` | spärrlistan ovan, också domän- och `all`-spärrar |
 | `record` | ett bolag eller en person märkt `do_not_contact` (varje privatperson är det), eller en person hos ett sådant bolag |
 | `unsubscribed` | adressen har avregistrerat sig från era utskick (bara `email`) |
-| `lead` | ett lead hos Iris på samma adress, organisationsnummer eller telefonnummer har bett att slippa kontakt (till exempel utfallet Kontakta inte på ringlistan). Numret jämförs tolkat, så `070-123 45 67`, `+46701234567` och `0046701234567` är samma nummer |
+| `lead` | ett lead hos Iris på samma adress, organisationsnummer eller telefonnummer har bett att slippa kontakt (till exempel utfallet Kontakta inte på ringlistan). Numret jämförs tolkat, så `070-123 45 67`, `+46701234567` och `0046701234567` är samma nummer. Står flera nummer i leadets telefonfält gäller det första, samma nummer som ringlistan spärrar |
 
 `channel: all` frågar om något alls spärrar, i någon kanal. Svaret säger vilken källa som
 spärrade, aldrig vad den visste. Ingenting kopieras mellan källorna: `do_not_contact` på en

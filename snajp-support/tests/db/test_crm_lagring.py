@@ -1030,14 +1030,10 @@ async def test_bara_havda_och_kanalens_sparrar_i_databasen(miljo):
     assert [r["id"] for r in (await sparr.lista(lager, a, kanal="mejl"))[0]] == [mejl["id"]]
 
 
-async def test_leadets_nummer_i_kontrollen_i_databasen(miljo):
-    """Frågan mot prospekten, med typade parametrar och regexp i SQL. Saknar
-    tabellen leadsflödets kolumner (PGlite med bara CRM-kedjan) läggs de till i
-    testets transaktion, som rullas tillbaka."""
-    from app.crm import sparr
-
-    lager, a, b = miljo
-    async with lager._scoped(a) as conn:
+async def _prospektens_kolumner(lager, kund):
+    """Saknar tabellen leadsflödets kolumner (PGlite med bara CRM-kedjan) läggs
+    de till i testets transaktion, som rullas tillbaka."""
+    async with lager._scoped(kund) as conn:
         kolumner = {r["column_name"] for r in await conn.fetch(
             "select column_name from information_schema.columns where table_name = 'prospects'")}
     if not {"tenant_id", "company_name", "status", "contact_phone", "origin"} <= kolumner:
@@ -1048,6 +1044,37 @@ async def test_leadets_nummer_i_kontrollen_i_databasen(miljo):
             "add column if not exists contact_phone text, add column if not exists origin text")
         await lager.conn.execute("grant select, insert on prospects to snajp_app")
         await lager.conn.execute("set local role snajp_app")
+
+
+async def test_leadets_falt_med_fler_nummer_i_databasen(miljo):
+    """Granskningen 2026-11-27: SQL jämförde fältets SISTA siffror, men
+    `falt.telefon` tolkar det FÖRSTA numret. Ett lead med "070-…, 08-…" föll då
+    bort i kontrollen fast ringlistans mängd spärrade numret."""
+    from app.crm import sparr
+
+    lager, a, _b = miljo
+    await _prospektens_kolumner(lager, a)
+    for telefon in ("070-123 45 67, 08-555 55 55", "tel 070-222 33 44, ank 3"):
+        async with lager._scoped(a) as conn:
+            await conn.execute("insert into prospects (tenant_id, company_name, status, contact_phone, origin) "
+                               "values ($1::text::uuid, 'Prov AB', 'suppressed', $2, 'manual')", a, telefon)
+    for skrivet, tolkat in (("070-123 45 67", "+46701234567"), ("070-222 33 44", "+46702223344")):
+        svar = await sparr.ar_sparrad(lager, a, telefon=skrivet, kanal="telefon")
+        assert svar["kallor"] == ["lead"], skrivet
+        assert await sparr.leadens_sparrade_nummer(lager, a, nummer=tolkat) == {tolkat}
+    # Det andra numret i fältet tolkas inte, varken i kontrollen eller i mängden.
+    assert not (await sparr.ar_sparrad(lager, a, telefon="08-555 55 55", kanal="telefon"))["sparrad"]
+    assert await sparr.leadens_sparrade_nummer(lager, a) == {"+46701234567", "+46702223344"}
+
+
+async def test_leadets_nummer_i_kontrollen_i_databasen(miljo):
+    """Frågan mot prospekten, med typade parametrar och regexp i SQL. Saknar
+    tabellen leadsflödets kolumner (PGlite med bara CRM-kedjan) läggs de till i
+    testets transaktion, som rullas tillbaka."""
+    from app.crm import sparr
+
+    lager, a, b = miljo
+    await _prospektens_kolumner(lager, a)
     for kund, telefon, status, origin in ((a, "070-123 45 67", "suppressed", "manual"),
                                           (a, "070-765 43 21", "contacted", "manual"),
                                           (a, "ring växeln", "suppressed", "manual"),
