@@ -13,7 +13,7 @@ import { TextInput } from "@astryxdesign/core/TextInput";
 import { Krocklank } from "@/components/crm/app/kit";
 import { CrmFel, crmAnrop } from "@/lib/crm/api";
 import { FALTKODER, kodtext } from "@/lib/crm/felkoder";
-import { GRUNDER, personnamn, type Personpost, type RattsligGrund } from "@/lib/crm/person";
+import { GRUNDER, KALLTYPER, personnamn, type Kalltyp, type Personpost, type RattsligGrund } from "@/lib/crm/person";
 import { useLocale, type Localized } from "@/lib/i18n";
 
 /** Fälten i dialogen, med samma namn som API:ts. Panelens "Lägg till" öppnar dialogen på ett av dem. */
@@ -26,6 +26,8 @@ export type Personfalt =
   | "phone"
   | "mobile"
   | "legal_basis"
+  | "source_type"
+  | "source_name"
   | "do_not_contact";
 
 type Varden = {
@@ -37,6 +39,8 @@ type Varden = {
   phone: string;
   mobile: string;
   legal_basis: string;
+  source_type: string;
+  source_name: string;
   do_not_contact: boolean;
 };
 
@@ -53,6 +57,8 @@ function varden(p: Personpost | null, bolagId?: string | null): Varden {
     phone: p?.phone ?? "",
     mobile: p?.mobile ?? "",
     legal_basis: p?.legal_basis ?? INGET,
+    source_type: p?.source_type ?? INGET,
+    source_name: p?.source_name ?? "",
     do_not_contact: p?.do_not_contact ?? false
   };
 }
@@ -202,7 +208,7 @@ export function PersonFormular({
     </div>
   );
   const halv = (k: Personfalt, barn: React.ReactNode) => <div data-falt={k}>{barn}</div>;
-  const textfalt = (k: Exclude<keyof Varden, "company_id" | "legal_basis" | "do_not_contact">, etikett: Localized, mer?: Partial<React.ComponentProps<typeof TextInput>>) => (
+  const textfalt = (k: Exclude<keyof Varden, "company_id" | "legal_basis" | "source_type" | "do_not_contact">, etikett: Localized, mer?: Partial<React.ComponentProps<typeof TextInput>>) => (
     <TextInput label={text(etikett)} value={v[k]} onChange={(x) => satt(k, x)} width="100%" status={status(k)} isOptional {...mer} />
   );
 
@@ -305,6 +311,38 @@ export function PersonFormular({
                       status={status("legal_basis")}
                     />
                   )}
+                  {hel(
+                    "source_type",
+                    <Selector
+                      label={text({ sv: "Uppgifternas källa", en: "Source of the details" })}
+                      description={text({
+                        sv: "Varifrån uppgifterna om personen kommer. Den som frågar har rätt att få veta det (GDPR artikel 14).",
+                        en: "Where the details about the person come from. Anyone who asks has a right to know (GDPR article 14)."
+                      })}
+                      value={v.source_type}
+                      onChange={(x) => x && satt("source_type", x)}
+                      options={[
+                        { value: INGET, label: text({ sv: "Inte angiven", en: "Not stated" }) },
+                        ...(Object.keys(KALLTYPER) as Kalltyp[]).map((k) => ({ value: k, label: text(KALLTYPER[k]) }))
+                      ]}
+                      width="100%"
+                      status={status("source_type")}
+                    />
+                  )}
+                  {v.source_type !== INGET || v.source_name
+                    ? hel(
+                        "source_name",
+                        <TextInput
+                          label={text({ sv: "Källans namn", en: "Name of the source" })}
+                          placeholder={text({ sv: "Sidan, registret eller systemet", en: "The page, the registry or the system" })}
+                          value={v.source_name}
+                          onChange={(x) => satt("source_name", x)}
+                          width="100%"
+                          status={status("source_name")}
+                          isOptional
+                        />
+                      )
+                    : null}
                   {hel(
                     "do_not_contact",
                     <CheckboxInput

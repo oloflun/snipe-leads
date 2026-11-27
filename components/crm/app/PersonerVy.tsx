@@ -27,7 +27,7 @@ import { iMangd } from "@/lib/crm/mangd";
 import { personnamn, type Personpost } from "@/lib/crm/person";
 import { useLocale, type Localized } from "@/lib/i18n";
 
-type Vy = "personer" | "papperskorg";
+type Vy = "personer" | "utan_kalla" | "papperskorg";
 type Massjobb = { slag: "radera" | "kontakta_inte"; klara: number; totalt: number };
 
 const SIDSTORLEK = 50;
@@ -158,6 +158,8 @@ export function PersonerVy({ bas = "/crm" }: Readonly<{ bas?: string }>) {
       const q = new URLSearchParams({ limit: String(SIDSTORLEK), sort: sortering });
       if (fraga) q.set("q", fraga);
       if (bolagsval !== ALLA) q.set("company_id", bolagsval);
+      // Personer vars uppgifter saknar källa (GDPR artikel 14): listan att beta av.
+      if (vy === "utan_kalla") q.set("missing_source", "true");
       if (markor) q.set("cursor", markor);
       try {
         const [sida, oversikt] = await Promise.all([
@@ -366,6 +368,7 @@ export function PersonerVy({ bas = "/crm" }: Readonly<{ bas?: string }>) {
   // Vyraden: personerna, och papperskorgen sist (som i Bolag). Korgen har inget tal i översikten.
   const vyval: { v: Vy; namn: string; antal?: string }[] = [
     { v: "personer", namn: text({ sv: "Alla", en: "All" }), antal: totalt == null ? undefined : tal(totalt) },
+    { v: "utan_kalla", namn: text({ sv: "Utan källa", en: "No source" }) },
     { v: "papperskorg", namn: text({ sv: "Papperskorg", en: "Trash" }) }
   ];
   const ettBolag = bolagsval !== ALLA ? (bolagsnamn[bolagsval] ?? null) : null;

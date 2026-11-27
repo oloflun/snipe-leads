@@ -56,7 +56,7 @@ type Filter = "alla" | Relation | "papperskorg";
 
 /** Vyerna i vyraden. Partner, leverantör och övrigt visas bara när de har bolag; papperskorgen står alltid sist. */
 const ALLTID: Filter[] = ["alla", "customer", "prospect", "former_customer"];
-const IBLAND: Filter[] = ["partner", "supplier", "other"];
+const IBLAND: Filter[] = ["partner", "supplier", "not_relevant", "other"];
 /** Översiktens nycklar är databasens (svenska) relationsnamn. Papperskorgen räknas inte där. */
 const RAKNENYCKEL: Record<Filter, string> = {
   alla: "alla",
@@ -65,6 +65,7 @@ const RAKNENYCKEL: Record<Filter, string> = {
   prospect: "prospekt",
   partner: "partner",
   supplier: "leverantor",
+  not_relevant: "ej_aktuell",
   other: "ovrigt",
   papperskorg: ""
 };
@@ -468,7 +469,15 @@ export function BolagVy() {
   const totalt = antal?.alla;
   const iFiltret = antal && !fraga && !iKorgen ? (antal[RAKNENYCKEL[filter]] ?? 0) : null;
   const kunder = antal?.kund ?? 0;
-  const vyer: Filter[] = [...ALLTID, ...IBLAND.filter((f) => (antal?.[RAKNENYCKEL[f]] ?? 0) > 0), "papperskorg"];
+  // Vyraden rymmer de fasta relationerna och EN till: den valda, annars den största. Resten
+  // (partner, leverantör, ej aktuell, övrigt, de som har bolag) ligger under Fler, så att raden
+  // inte bryts till två när kunden använder många relationer.
+  const ibland = IBLAND.filter((f) => (antal?.[RAKNENYCKEL[f]] ?? 0) > 0);
+  const extra = ibland.includes(filter) ? filter : [...ibland].sort((a, b) => (antal?.[RAKNENYCKEL[b]] ?? 0) - (antal?.[RAKNENYCKEL[a]] ?? 0))[0];
+  const fler = ibland.filter((f) => f !== extra);
+  const vyer: Filter[] = [...ALLTID, ...(extra ? [extra] : []), "papperskorg"];
+  /** Telefonens väljare har plats för alla. */
+  const allaVyer: Filter[] = [...ALLTID, ...ibland, "papperskorg"];
   const vynamn = (f: Filter) =>
     f === "alla" ? text({ sv: "Alla", en: "All" }) : f === "papperskorg" ? text({ sv: "Papperskorg", en: "Trash" }) : text(RELATIONER[f]);
   // Papperskorgen har inget tal i översikten: den står utan antal.
@@ -576,15 +585,27 @@ export function BolagVy() {
             size="md"
             value={filter}
             onChange={(v) => v && setFilter(v as Filter)}
-            options={vyer.map((f) => ({ value: f, label: vyetikett(f) }))}
+            options={allaVyer.map((f) => ({ value: f, label: vyetikett(f) }))}
           />
         ) : (
-          <Vyval
-            value={filter}
-            onChange={setFilter}
-            label={text({ sv: "Vy", en: "View" })}
-            val={vyer.map((f) => ({ v: f, namn: vynamn(f), antal: vyantal(f) }))}
-          />
+          <>
+            <Vyval
+              value={filter}
+              onChange={setFilter}
+              label={text({ sv: "Vy", en: "View" })}
+              val={vyer.map((f) => ({ v: f, namn: vynamn(f), antal: vyantal(f) }))}
+            />
+            {fler.length > 0 ? (
+              <DropdownMenu
+                button={{ label: text({ sv: "Fler", en: "More" }), variant: "ghost", size: "md" }}
+                items={fler.map((f) => ({
+                  label: vyetikett(f),
+                  icon: <Prick ton={f === "alla" || f === "papperskorg" ? null : RELATIONSTON[f].prick} />,
+                  onClick: () => setFilter(f)
+                }))}
+              />
+            ) : null}
+          </>
         )
       }
       vyradHoger={

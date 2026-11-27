@@ -46,7 +46,7 @@ import { TextInput } from "@astryxdesign/core/TextInput";
 import { Timestamp } from "@astryxdesign/core/Timestamp";
 import { useToast } from "@astryxdesign/core/Toast";
 import { Objektikon, type Ton } from "@/components/crm/app/kit";
-import { belopp } from "@/lib/crm/affar";
+import { FORLUSTORSAKER, belopp, type Forlustorsak } from "@/lib/crm/affar";
 import { CrmFel, SYSTEMNAMN, crmAnrop, type Bolag } from "@/lib/crm/api";
 import { faltetikett, uppraknat } from "@/lib/crm/felkoder";
 import { useLocale, type Localized } from "@/lib/i18n";
@@ -201,7 +201,7 @@ function rad(p: Tidslinjepost, text: (l: Localized) => string, sprak: "sv" | "en
         ikon: Handshake,
         ton: "sigill",
         vad: p.type === "deal_created" ? med({ sv: "Affär skapad", en: "Deal created" }) : med({ sv: "Affär avslutad", en: "Deal closed" }),
-        under: [pengar, str(p.data.lost_reason)].filter(Boolean).join(" · ") || undefined
+        under: [pengar, FORLUSTORSAKER[str(p.data.lost_reason_code) as Forlustorsak] ? text(FORLUSTORSAKER[str(p.data.lost_reason_code) as Forlustorsak]) : null, str(p.data.lost_reason)].filter(Boolean).join(" · ") || undefined
       };
     }
     case "lead_created":

@@ -12,12 +12,12 @@ import { HStack } from "@astryxdesign/core/Stack";
 import { Text } from "@astryxdesign/core/Text";
 import { TextInput } from "@astryxdesign/core/TextInput";
 import { CrmFel, crmAnrop, type Person, type Sida } from "@/lib/crm/api";
-import type { Affar, Affarssteg } from "@/lib/crm/affar";
+import { FORLUSTORSAKER, type Affar, type Affarssteg, type Forlustorsak } from "@/lib/crm/affar";
 import { FALTKODER, kodtext } from "@/lib/crm/felkoder";
 import { useLocale, type Localized } from "@/lib/i18n";
 
 /** Fälten i dialogen, med API:ts namn. Panelens "Lägg till" öppnar dialogen på ett av dem. */
-export type Affarsfalt = "name" | "company_id" | "person_id" | "stage_id" | "amount" | "probability" | "expected_close_date" | "owner" | "lost_reason";
+export type Affarsfalt = "name" | "company_id" | "person_id" | "stage_id" | "amount" | "probability" | "expected_close_date" | "owner" | "lost_reason_code" | "lost_reason";
 
 type Varden = {
   name: string;
@@ -28,6 +28,7 @@ type Varden = {
   probability: string;
   expected_close_date: string;
   owner: string;
+  lost_reason_code: string;
   lost_reason: string;
 };
 
@@ -48,6 +49,7 @@ function varden(a: Affar | null, stegId: string | null, bolagId: string | null):
     probability: a?.probability == null ? "" : String(a.probability),
     expected_close_date: a?.expected_close_date ?? "",
     owner: a?.owner ?? "",
+    lost_reason_code: a?.lost_reason_code ?? INGET,
     lost_reason: a?.lost_reason ?? ""
   };
 }
@@ -387,12 +389,30 @@ export function AffarFormular({
                     isOptional
                   />
                 )}
-                {valtSteg?.type === "lost" || v.lost_reason
+                {/* Förlustorsaken väljs ur en lista, så att den går att räkna på. Kommentaren är fri och valfri. */}
+                {valtSteg?.type === "lost" || v.lost_reason || v.lost_reason_code !== INGET
+                  ? hel(
+                      "lost_reason_code",
+                      <Selector
+                        label={text({ sv: "Förlustorsak", en: "Lost reason" })}
+                        value={v.lost_reason_code}
+                        onChange={(x) => x && satt("lost_reason_code", x)}
+                        options={[
+                          { value: INGET, label: text({ sv: "Inte angiven", en: "Not stated" }) },
+                          { type: "divider" as const },
+                          ...(Object.keys(FORLUSTORSAKER) as Forlustorsak[]).map((o) => ({ value: o, label: text(FORLUSTORSAKER[o]) }))
+                        ]}
+                        width="100%"
+                        status={status("lost_reason_code")}
+                      />
+                    )
+                  : null}
+                {valtSteg?.type === "lost" || v.lost_reason || v.lost_reason_code !== INGET
                   ? hel(
                       "lost_reason",
                       <TextInput
-                        label={text({ sv: "Förlustorsak", en: "Lost reason" })}
-                        description={text({ sv: "Varför affären inte blev av.", en: "Why the deal did not happen." })}
+                        label={text({ sv: "Kommentar", en: "Comment" })}
+                        description={text({ sv: "Det som inte ryms i orsaken, med egna ord.", en: "What the reason does not cover, in your own words." })}
                         value={v.lost_reason}
                         onChange={(x) => satt("lost_reason", x)}
                         width="100%"

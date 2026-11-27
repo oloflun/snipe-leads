@@ -153,6 +153,21 @@
    * och ytan målas av kolumnen, toppfältet och lådan ovan. */
   color: oklch(var(--rail-text));
 }
+/* Ett tal på en rad i sidofältet (ärenden som väntar): ockra platta, sidofältets mörka färg som text. */
+.crm-railtal {
+  display: inline-flex;
+  min-width: 20px;
+  height: 20px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background-color: oklch(var(--rail-ochre));
+  padding-inline: 6px;
+  color: oklch(var(--rail));
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1;
+}
 /* Arbetsyteväxlarens meny öppnas som ett lager inne i sidofältet men ritas på
  * bladets papper: där gäller temats egna färger igen. */
 .crm-rail [data-astryx-layer-root],

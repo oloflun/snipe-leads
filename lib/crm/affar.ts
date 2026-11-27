@@ -6,6 +6,19 @@ import type { Localized } from "@/lib/i18n";
 
 export type Stegtyp = "open" | "won" | "lost";
 
+/** Varför en affär förlorades, ur API:ts lista (`lost_reason_code`). Fritexten `lost_reason` står bredvid. */
+export type Forlustorsak = "price" | "competitor" | "timing" | "no_need" | "no_budget" | "no_response" | "other";
+
+export const FORLUSTORSAKER: Record<Forlustorsak, Localized> = {
+  price: { sv: "Priset", en: "Price" },
+  competitor: { sv: "Valde en konkurrent", en: "Chose a competitor" },
+  timing: { sv: "Fel tidpunkt", en: "Wrong timing" },
+  no_need: { sv: "Inget behov", en: "No need" },
+  no_budget: { sv: "Ingen budget", en: "No budget" },
+  no_response: { sv: "Inget svar", en: "No response" },
+  other: { sv: "Annat", en: "Other" }
+};
+
 export type Affarssteg = {
   id: string;
   name: string;
@@ -29,6 +42,7 @@ export type Affar = {
   expected_close_date: string | null;
   closed_at: string | null;
   lost_reason: string | null;
+  lost_reason_code?: Forlustorsak | null;
   owner: string | null;
   position: number | null;
   created_at: string | null;

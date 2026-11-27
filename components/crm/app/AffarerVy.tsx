@@ -246,7 +246,13 @@ export function AffarerVy({ bas = "/crm" }: Readonly<{ bas?: string }>) {
           visa({
             body: text({ sv: `${namnPa(affar)} står nu i ${mot.name}.`, en: `${namnPa(affar)} is now in ${mot.name}.` }),
             endContent: tyst ? undefined : (
-              <Button size="sm" variant="secondary" label={text({ sv: "Ångra", en: "Undo" })} onClick={() => void angra(id, { stegId: fran.id, foreId: gammalNasta })} />
+              <span className="inline-flex items-center gap-2">
+                {/* En förlorad affär utan orsak: vägen dit står i beskedet, medan säljaren minns varför. */}
+                {mot.type === "lost" && !sparad.lost_reason_code ? (
+                  <Button size="sm" variant="secondary" label={text({ sv: "Ange orsak", en: "Add reason" })} onClick={() => setFormular({ affar: sparad, fokus: "lost_reason_code", stegId: null })} />
+                ) : null}
+                <Button size="sm" variant="secondary" label={text({ sv: "Ångra", en: "Undo" })} onClick={() => void angra(id, { stegId: fran.id, foreId: gammalNasta })} />
+              </span>
             ),
             autoHideDuration: 8000,
             uniqueID: "crm-affar-flytt"

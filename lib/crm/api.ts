@@ -8,7 +8,7 @@
  */
 import type { Localized } from "@/lib/i18n";
 
-export type Relation = "customer" | "former_customer" | "prospect" | "partner" | "supplier" | "other";
+export type Relation = "customer" | "former_customer" | "prospect" | "partner" | "supplier" | "not_relevant" | "other";
 
 export type Bolag = {
   id: string;
@@ -320,6 +320,8 @@ export const RELATIONER: Record<Relation, Localized> = {
   prospect: { sv: "Prospekt", en: "Prospect" },
   partner: { sv: "Partner", en: "Partner" },
   supplier: { sv: "Leverantör", en: "Supplier" },
+  // Ett bolag som sagt nej eller inte passar: skilt från ett prospekt, och inte fritt för Iris.
+  not_relevant: { sv: "Ej aktuell", en: "Not relevant" },
   other: { sv: "Övrigt", en: "Other" }
 };
 

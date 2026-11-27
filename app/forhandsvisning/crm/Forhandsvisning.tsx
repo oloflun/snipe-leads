@@ -119,6 +119,11 @@ const BOLAG: Bolag[] = [
   // Samma organisationsnummer som ett levande bolag: återställningen krockar (409 med conflicting_id).
   iKorgen({ ...bolag(82), id: "r3", name: "Dubblett Påhitt AB", org_number: bolag(5).org_number }, 26)
 ].sort((a, b) => (a.name ?? "").localeCompare(b.name ?? "", "sv"));
+// Två bolag som sagt nej: relationen ej aktuell (skild från prospekt, och inte fri för Iris).
+for (const id of ["b16", "b33"]) {
+  const b = BOLAG.find((x) => x.id === id);
+  if (b) b.relation = "not_relevant";
+}
 
 // Påhittade personer, märkta som exempel med namn som inte finns: samma form som
 // person_ut i crm_v1.py. Några saknar uppgifter, så att tomma värden syns.
@@ -143,6 +148,10 @@ function person(i: number, b: Bolag | null): Personpost {
     company_id: b?.id ?? null,
     do_not_contact: i % 13 === 7,
     legal_basis: GRUNDER[i % GRUNDER.length],
+    // Var fjärde person saknar källa, så att vyn Utan källa har något att visa.
+    source_type: i % 4 === 3 ? null : synk ? "sync" : i % 2 ? "company_website" : "manual",
+    source_name: i % 4 === 3 ? null : synk ? b!.external_ids[0].connection : i % 2 ? `${b?.domain ?? "exempelpost.test"}/kontakt` : null,
+    collected_at: iso(24 * 30 + i),
     source: synk ? "synk" : i % 2 ? "api" : "app",
     external_ids: synk ? [{ connection: b!.external_ids[0].connection, id: String(91000 + i * 23), last_seen_at: iso(3) }] : [],
     created_at: iso(24 * 30 + i),
@@ -337,7 +346,8 @@ const AFFARER: Affarspost[] = AFFARSRADER.map(([steg, namn, summa, avslut, plats
     probability: i === 3 ? 35 : i === 8 ? 70 : null,
     expected_close_date: avslut,
     closed_at: stangd ? iso(24 * (6 + i)) : null,
-    lost_reason: steg === "s7" ? "Valde en leverantör med egen växel" : null,
+    lost_reason: steg === "s7" ? "Hade redan en växel hos sin mobiloperatör" : null,
+    lost_reason_code: steg === "s7" ? "competitor" : null,
     owner: i % 5 === 2 ? null : ANSVARIGA[i % ANSVARIGA.length],
     position: (i + 1) * 1000,
     created_at: iso(24 * (20 + i * 2)),
@@ -382,7 +392,7 @@ function placera(a: Affarspost, stegId: string, foreId: string | null) {
 
 /** Skriver in anropets fält i en affär: bara de fält som skickats, null tömmer. */
 function andraAffar(a: Affarspost, k: Record<string, unknown>) {
-  const falt = ["name", "company_id", "person_id", "amount", "currency", "probability", "expected_close_date", "lost_reason", "owner"] as const;
+  const falt = ["name", "company_id", "person_id", "amount", "currency", "probability", "expected_close_date", "lost_reason", "lost_reason_code", "owner"] as const;
   const mal = a as unknown as Record<string, unknown>;
   for (const f of falt) if (f in k) mal[f] = k[f] ?? null;
   if (typeof k.stage_id === "string" && k.stage_id !== a.stage_id) placera(a, k.stage_id, null);
@@ -527,7 +537,7 @@ function skriv(slag: "notes" | "tasks" | "activities", k: Record<string, unknown
   return json({ id: nr }, 201);
 }
 
-const DBNAMN: Record<Relation, string> = { customer: "kund", former_customer: "tidigare_kund", prospect: "prospekt", partner: "partner", supplier: "leverantor", other: "ovrigt" };
+const DBNAMN: Record<Relation, string> = { customer: "kund", former_customer: "tidigare_kund", prospect: "prospekt", partner: "partner", supplier: "leverantor", not_relevant: "ej_aktuell", other: "ovrigt" };
 
 /** Luhn över tio siffror, som falt.orgnr kontrollerar. */
 function luhn(siffror: string) {
@@ -624,7 +634,7 @@ function ordna<T extends { updated_at: string | null; deleted_at?: string | null
 
 /** Skriver in anropets fält i en person: bara de fält som skickats, null tömmer. */
 function andraPerson(p: Personpost, k: Record<string, unknown>) {
-  const falt = ["first_name", "last_name", "title", "email", "company_id", "legal_basis", "do_not_contact"] as const;
+  const falt = ["first_name", "last_name", "title", "email", "company_id", "legal_basis", "source_type", "source_name", "do_not_contact"] as const;
   const mal = p as unknown as Record<string, unknown>;
   for (const f of falt) if (f in k) mal[f] = k[f] ?? null;
   for (const f of ["phone", "mobile"] as const) if (f in k) p[f] = k[f] ? String(k[f]).replace(/[^\d+]/g, "").replace(/^0/, "+46") : null;
@@ -794,6 +804,7 @@ async function svara(url: URL, init?: RequestInit): Promise<Response> {
       (p) =>
         (korgen ? !!p.deleted_at : medRaderade || !p.deleted_at) &&
         (!bolagId || p.company_id === bolagId) &&
+        (url.searchParams.get("missing_source") !== "true" || !p.source_type) &&
         (!q || [p.first_name, p.last_name, p.email, p.title].some((v) => (v ?? "").toLowerCase().includes(q)))
     );
     const ordnade = ordna(traffar, sort, (p) => `${p.last_name ?? ""} ${p.id}`, korgen);
@@ -935,7 +946,7 @@ async function svara(url: URL, init?: RequestInit): Promise<Response> {
     if (fel) return fel;
     const ny: Affarspost = {
       id: `d${100 + AFFARER.length}`, name: null, company_id: null, person_id: null, stage_id: null, amount: null, currency: "SEK", probability: null,
-      expected_close_date: null, closed_at: null, lost_reason: null, owner: null, position: null,
+      expected_close_date: null, closed_at: null, lost_reason: null, lost_reason_code: null, owner: null, position: null,
       created_at: new Date().toISOString(), updated_at: new Date().toISOString(), deleted_at: null, purge_at: null
     };
     AFFARER.push(ny);
@@ -1133,6 +1144,35 @@ async function svara(url: URL, init?: RequestInit): Promise<Response> {
   return json({ detail: "Förhandsvisningen har inget svar för den här vägen." }, 404);
 }
 
+/**
+ * Hjälprutans anrop i förhandsvisningen (components/snajp/HjalpRuta.tsx). Ett påhittat ärende som
+ * väntar på kunden, så att talet på raden Hjälp och fel syns. En ny felrapport kvitteras med ett
+ * nummer. Frågor till agenten svarar att hjälpen inte är påslagen: den prövas i sin egen
+ * förhandsvisning (/forhandsvisning/hjalpruta).
+ */
+async function svaraHjalp(url: URL, init?: RequestInit): Promise<Response> {
+  await new Promise((r) => setTimeout(r, 150));
+  const metod = (init?.method ?? "GET").toUpperCase();
+  if (url.pathname === "/api/snajp-support/hjalp/arenden" && metod === "GET") {
+    return json({
+      arenden: [
+        {
+          id: "00000000-0000-4000-8000-000000000046", nummer: "F-0046", status: "redo_att_testa", sida: "/crm/synk",
+          gjorde: "Exempel: startade en full synk från HubSpot.", created_at: iso(72), updated_at: iso(1), vantar_pa_kund: true, testversion_url: null,
+          handelser: [
+            { tid: iso(72), typ: "skapad", status: "mottagen", meddelande: null },
+            { tid: iso(1), typ: "status", status: "redo_att_testa", meddelande: "Exempel: rättningen ligger i en testversion. Kör samma synk där." }
+          ]
+        }
+      ]
+    });
+  }
+  if (url.pathname === "/api/snajp-support/hjalp/arenden" && metod === "POST") {
+    return json({ id: "00000000-0000-4000-8000-000000000047", nummer: "F-0047", status: "mottagen", created_at: new Date().toISOString() }, 201);
+  }
+  return json({ kod: "hjalp_av", error: "Hjälpen är inte påslagen i förhandsvisningen." }, 503);
+}
+
 /** Satt av `?tillagg=saknas`: varje anrop svarar då 403 addon_missing. */
 let tillaggSaknas = false;
 
@@ -1151,7 +1191,9 @@ function fangaAnrop() {
   const riktig = window.fetch.bind(window);
   window.fetch = (in_: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(typeof in_ === "string" ? in_ : in_ instanceof URL ? in_.href : in_.url, window.location.origin);
-    const galler = window.location.pathname.startsWith("/forhandsvisning/") && url.pathname.startsWith("/api/snajp-support/crm");
+    const iForhandsvisning = window.location.pathname.startsWith("/forhandsvisning/");
+    if (iForhandsvisning && url.pathname.startsWith("/api/snajp-support/hjalp")) return svaraHjalp(url, init);
+    const galler = iForhandsvisning && url.pathname.startsWith("/api/snajp-support/crm");
     return galler ? svara(url, init) : riktig(in_, init);
   };
 }
@@ -1183,7 +1225,7 @@ export function CrmForhandsvisning({ tema, vy, kund, utanTillagg }: Readonly<{ t
 
   return (
     <DashboardProvider state={lage(kund)}>
-      <CrmRam tema={tema} bas="/forhandsvisning/crm" arbetsyta="Exempelbolaget AB">
+      <CrmRam tema={tema} bas="/forhandsvisning/crm" arbetsyta="Exempelbolaget AB" hjalp>
         {vy === "oversikt" ? <OversiktVy bas="/forhandsvisning/crm" /> : null}
         {vy === "bolag" ? <BolagVy /> : null}
         {vy === "personer" ? <PersonerVy bas="/forhandsvisning/crm" /> : null}

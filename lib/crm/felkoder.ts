@@ -95,7 +95,12 @@ export const FALT: Record<string, Faltord> = {
   probability: { etikett: { sv: "Sannolikhet", en: "Probability" }, naken: { sv: "sannolikhet", en: "probability" }, obest: { sv: "en sannolikhet", en: "a probability" } },
   expected_close_date: { etikett: { sv: "Väntat avslut", en: "Expected close" }, naken: { sv: "väntat avslut", en: "expected close" }, obest: { sv: "ett väntat avslut", en: "an expected close date" } },
   closed_at: { etikett: { sv: "Avslutad", en: "Closed" }, naken: { sv: "avslutsdag", en: "close date" }, obest: { sv: "en avslutsdag", en: "a close date" } },
-  lost_reason: { etikett: { sv: "Förlustorsak", en: "Lost reason" }, naken: { sv: "förlustorsak", en: "lost reason" }, obest: { sv: "en förlustorsak", en: "a lost reason" } },
+  lost_reason: { etikett: { sv: "Kommentar om förlusten", en: "Comment on the loss" }, naken: { sv: "kommentar om förlusten", en: "comment on the loss" }, obest: { sv: "en kommentar om förlusten", en: "a comment on the loss" } },
+  lost_reason_code: { etikett: { sv: "Förlustorsak", en: "Lost reason" }, naken: { sv: "förlustorsak", en: "lost reason" }, obest: { sv: "en förlustorsak", en: "a lost reason" } },
+  // Personens källa (GDPR artikel 14).
+  source_type: { etikett: { sv: "Uppgifternas källa", en: "Source of the details" }, naken: { sv: "uppgifternas källa", en: "source of the details" }, obest: { sv: "en källa", en: "a source" } },
+  source_name: { etikett: { sv: "Källans namn", en: "Name of the source" }, naken: { sv: "källans namn", en: "name of the source" }, obest: { sv: "ett namn på källan", en: "a name for the source" } },
+  collected_at: { etikett: { sv: "Insamlad", en: "Collected" }, naken: { sv: "insamlingsdag", en: "collection date" }, obest: { sv: "en insamlingsdag", en: "a collection date" } },
   person_id: { etikett: { sv: "Person", en: "Person" }, naken: { sv: "person", en: "person" }, obest: { sv: "en personkoppling", en: "a person link" } },
   position: { etikett: { sv: "Plats på tavlan", en: "Place on the board" }, naken: { sv: "plats på tavlan", en: "place on the board" }, obest: { sv: "en plats på tavlan", en: "a place on the board" } }
 };

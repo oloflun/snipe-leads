@@ -10,7 +10,7 @@ import "@/components/crm/app/crm.css";
 import { useEffect, useState } from "react";
 import NextLink from "next/link";
 import { usePathname } from "next/navigation";
-import { ArrowLeft, Search, Settings } from "lucide-react";
+import { ArrowLeft, LifeBuoy, Search, Settings } from "lucide-react";
 import { AppShell } from "@astryxdesign/core/AppShell";
 import { Avatar } from "@astryxdesign/core/Avatar";
 import { Icon } from "@astryxdesign/core/Icon";
@@ -26,6 +26,7 @@ import { Text } from "@astryxdesign/core/Text";
 import { Timestamp } from "@astryxdesign/core/Timestamp";
 import { Theme } from "@astryxdesign/core/theme";
 import { Logo } from "@/components/Logo";
+import { HjalpRuta, useHjalpArenden } from "@/components/snajp/HjalpRuta";
 import { Kommandopalett } from "@/components/crm/app/Kommandopalett";
 import { OBJEKT, Objektikon, Prick, type Objekt } from "@/components/crm/app/kit";
 import { snajpTheme } from "@/lib/crm/astryx/snajp";
@@ -161,14 +162,29 @@ export function CrmRam({
   tema,
   bas = "/crm",
   arbetsyta,
+  hjalp = false,
   children
-}: Readonly<{ tema: Tema; bas?: string; arbetsyta?: string; children: React.ReactNode }>) {
+}: Readonly<{
+  tema: Tema;
+  bas?: string;
+  arbetsyta?: string;
+  /**
+   * Hjälprutan (components/snajp/HjalpRuta.tsx): samma ruta som i arbetsytan, så att en fråga,
+   * kontext till kunskapsbasen och en felrapport går att lämna härifrån, med CRM-sidans adress i rapporten.
+   * Av i demoläget och utan inloggning, som i arbetsytan.
+   */
+  hjalp?: boolean;
+  children: React.ReactNode;
+}>) {
   const { locale, text } = useLocale();
   const vag = usePathname() ?? "";
   const aktiv = ((vag.startsWith(bas) ? vag.slice(bas.length).split("/")[1] : "") || "oversikt") as Objekt;
   const morkt = tema === "morkt";
   const [palett, setPalett] = useState(false);
   const [hopfalld, setHopfalld] = useState(false);
+  const [hjalpOppen, setHjalpOppen] = useState(false);
+  // Ärenden som väntar på kunden (ett svar, eller att prova en rättning) syns som ett tal på raden.
+  const { vantar } = useHjalpArenden(hjalp, false);
   const namn = arbetsyta || "Snajp";
 
   // Hopfällningen är ett utseendeval per läsare: det får bo i webbläsaren.
@@ -262,6 +278,23 @@ export function CrmRam({
                   footer={
                     <div className="flex flex-col gap-1">
                       {hopfalld ? null : <Synkkort bas={bas} />}
+                      {hjalp ? (
+                        <SideNavItem
+                          label={text({ sv: "Hjälp och fel", en: "Help and issues" })}
+                          icon={LifeBuoy}
+                          onClick={() => setHjalpOppen(true)}
+                          endContent={
+                            vantar > 0 ? (
+                              <span className="crm-railtal tabular-nums">
+                                {vantar}
+                                <span className="sr-only">
+                                  {vantar === 1 ? text({ sv: " ärende väntar på dig", en: " case is waiting for you" }) : text({ sv: " ärenden väntar på dig", en: " cases are waiting for you" })}
+                                </span>
+                              </span>
+                            ) : undefined
+                          }
+                        />
+                      ) : null}
                       <SideNavItem label={text({ sv: "Till arbetsytan", en: "Back to workspace" })} href="/dashboard" icon={ArrowLeft} />
                     </div>
                   }
@@ -282,6 +315,7 @@ export function CrmRam({
             >
               <Innehall>{children}</Innehall>
               <Kommandopalett oppen={palett} setOppen={setPalett} bas={bas} />
+              {hjalp && hjalpOppen ? <HjalpRuta onStang={() => setHjalpOppen(false)} /> : null}
             </AppShell>
             </SynklageKalla>
             </TillgangKalla>

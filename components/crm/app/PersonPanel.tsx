@@ -13,6 +13,7 @@ import {
   Phone,
   Plug,
   Scale,
+  Search,
   Smartphone,
   Trash2,
   type LucideIcon
@@ -34,7 +35,8 @@ import { Bilagor } from "@/components/crm/app/Bilagor";
 import { Tidslinje } from "@/components/crm/app/Tidslinje";
 import type { Personfalt } from "@/components/crm/app/PersonFormular";
 import { Kallpiller, Lankpiller, Postchip, tonFor, tonklass, useSmal } from "@/components/crm/app/kit";
-import { GRUNDER, personnamn, type Personpost } from "@/lib/crm/person";
+import { dagtext } from "@/lib/crm/api";
+import { GRUNDER, KALLTYPER, personnamn, type Personpost } from "@/lib/crm/person";
 import { useLocale, type Localized } from "@/lib/i18n";
 
 const ETIKETT_BRED = { position: "start" as const, width: 160 };
@@ -74,7 +76,7 @@ export function PersonPanel({
   redigera: (falt?: Personfalt) => void;
   taBort: (p: Personpost) => void;
 }>) {
-  const { text } = useLocale();
+  const { text, locale } = useLocale();
   const smal = useSmal();
   const ETIKETT = smal ? ETIKETT_SMAL : ETIKETT_BRED;
   const oppen = person != null || laddar;
@@ -203,6 +205,26 @@ export function PersonPanel({
 
                       <MetadataList title={text({ sv: "Behandling", en: "Processing" })} label={ETIKETT}>
                         {rad({ sv: "Rättslig grund", en: "Legal basis" }, Scale, varde(person.legal_basis ? text(GRUNDER[person.legal_basis]) : null, "legal_basis"))}
+                        {/* Varifrån uppgifterna kommer, och när de samlades in (GDPR artikel 14). Skilt från System › Källa, som är vägen in i Snajp. */}
+                        {rad(
+                          { sv: "Uppgifternas källa", en: "Source of the details" },
+                          Search,
+                          varde(
+                            person.source_type ? (
+                              <span className="flex flex-col">
+                                <span>{text(KALLTYPER[person.source_type])}</span>
+                                {person.source_name || person.collected_at ? (
+                                  <span className="text-[0.8125rem] text-ink-muted [overflow-wrap:anywhere]">
+                                    {[person.source_name ? kallnamn(person.source_name) : null, person.collected_at ? text({ sv: `insamlad ${dagtext(person.collected_at, locale)}`, en: `collected ${dagtext(person.collected_at, locale)}` }) : null]
+                                      .filter(Boolean)
+                                      .join(", ")}
+                                  </span>
+                                ) : null}
+                              </span>
+                            ) : null,
+                            "source_type"
+                          )
+                        )}
                         {rad(
                           { sv: "Kontakta inte", en: "Do not contact" },
                           Ban,

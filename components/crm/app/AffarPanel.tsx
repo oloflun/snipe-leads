@@ -41,7 +41,7 @@ import type { Affarsfalt } from "@/components/crm/app/AffarFormular";
 import { Bilagor } from "@/components/crm/app/Bilagor";
 import { Tidslinje } from "@/components/crm/app/Tidslinje";
 import { Personchip, Postchip, Prick, tonklass, useSmal, type Ton } from "@/components/crm/app/kit";
-import { STEGTYPER, belopp, sannolikhet, type Affar, type Affarssteg, type Stegtyp } from "@/lib/crm/affar";
+import { FORLUSTORSAKER, STEGTYPER, belopp, sannolikhet, type Affar, type Affarssteg, type Stegtyp } from "@/lib/crm/affar";
 import { crmAnrop, dagtext, type Person } from "@/lib/crm/api";
 import { useLocale, type Localized } from "@/lib/i18n";
 
@@ -279,8 +279,20 @@ export function AffarPanel({
                               )}
                           {rad({ sv: "Väntat avslut", en: "Expected close" }, CalendarClock, varde(dag(affar.expected_close_date), "expected_close_date"))}
                           {affar.closed_at ? rad({ sv: "Avslutad", en: "Closed" }, CalendarCheck, <span className="crm-varde">{datum(affar.closed_at)}</span>) : null}
-                          {nuSteg?.type === "lost" || affar.lost_reason
-                            ? rad({ sv: "Förlustorsak", en: "Lost reason" }, CircleSlash, varde(affar.lost_reason, "lost_reason"))
+                          {nuSteg?.type === "lost" || affar.lost_reason || affar.lost_reason_code
+                            ? rad(
+                                { sv: "Förlustorsak", en: "Lost reason" },
+                                CircleSlash,
+                                varde(
+                                  affar.lost_reason_code || affar.lost_reason ? (
+                                    <span className="flex flex-col">
+                                      {affar.lost_reason_code ? <span>{text(FORLUSTORSAKER[affar.lost_reason_code])}</span> : null}
+                                      {affar.lost_reason ? <span className={affar.lost_reason_code ? "text-[0.8125rem] text-ink-muted" : undefined}>{affar.lost_reason}</span> : null}
+                                    </span>
+                                  ) : null,
+                                  "lost_reason_code"
+                                )
+                              )
                             : null}
                         </MetadataList>
 

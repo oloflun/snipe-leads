@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { LASROLL, LASROLL_FEL } from "@/lib/auth/lasroll";
-import { SnajpTenantError, svarForTenantfel, type SnajpTenant } from "@/lib/snajp/tenant";
+import { SnajpTenantError, snajpIdentitet, svarForTenantfel, type SnajpTenant } from "@/lib/snajp/tenant";
+import { IDENTITET_HUVUD } from "../_auth";
 import { backendBas } from "../_lib";
 
 /**
@@ -69,6 +70,8 @@ export async function vidarebefordraBilaga(request: NextRequest, tenant: SnajpTe
     Vary: "Cookie",
     "X-Content-Type-Options": "nosniff"
   };
+  // Samma huvud som proxyAsTenant sätter (INV-SEC-014): en flik som bytt identitet märker det också här.
+  huvud[IDENTITET_HUVUD] = await snajpIdentitet().catch(() => "");
   const disposition = svar.headers.get("content-disposition");
   if (disposition) huvud["Content-Disposition"] = disposition;
   return new NextResponse(await svar.arrayBuffer(), { status: svar.status, headers: huvud });

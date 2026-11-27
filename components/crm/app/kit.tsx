@@ -358,6 +358,7 @@ export const RELATIONSTON: Record<Relation, { badge: "green" | "yellow" | "neutr
   former_customer: { badge: "neutral", prick: "mineral" },
   partner: { badge: "blue", prick: "bla" },
   supplier: { badge: "blue", prick: "bla" },
+  not_relevant: { badge: "neutral", prick: null },
   other: { badge: "neutral", prick: null }
 };
 

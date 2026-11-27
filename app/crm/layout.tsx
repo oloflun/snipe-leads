@@ -45,7 +45,7 @@ export default async function CrmLayout({ children }: Readonly<{ children: React
 
   return (
     <DashboardProvider state={state}>
-      <CrmRam tema={tema} arbetsyta={state.workspaceName ?? undefined}>
+      <CrmRam tema={tema} arbetsyta={state.workspaceName ?? undefined} hjalp={state.signedIn && !state.isDemo && state.vy !== "demo"}>
         {children}
       </CrmRam>
     </DashboardProvider>
