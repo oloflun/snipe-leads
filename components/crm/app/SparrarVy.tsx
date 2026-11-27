@@ -19,7 +19,7 @@ import { TextArea } from "@astryxdesign/core/TextArea";
 import { TextInput } from "@astryxdesign/core/TextInput";
 import { Timestamp } from "@astryxdesign/core/Timestamp";
 import { useToast } from "@astryxdesign/core/Toast";
-import { Kolumnrubrik, Tabellskelett, useBestallning, useSmal, Vyval } from "@/components/crm/app/kit";
+import { Kolumnrubrik, Tabellskelett, grannfokus, useBestallning, useSmal, Vyval } from "@/components/crm/app/kit";
 import { Felruta, Sida } from "@/components/crm/app/Sida";
 import { useDashboard } from "@/components/dashboard/DashboardContext";
 import { CrmFel, crmAnrop, orgnrVisning, type Sida as Svarssida } from "@/lib/crm/api";
@@ -51,6 +51,15 @@ const IMPORTSATS = 10_000;
 const SLAGIKON: Record<Sparrslag, LucideIcon> = { email: Mail, domain: Globe, phone: Phone, org_number: Hash };
 
 const feltext = (e: unknown): Localized => (e instanceof CrmFel ? e.text : { sv: "Okänt fel.", en: "Unknown error." });
+
+/**
+ * Sökordet som API:t får. Det som ser ut som ett nummer söks på siffrorna utan inledande nolla eller
+ * landskod: telefonnummer lagras som +46701234567, och "070-123 45 67" hade annars aldrig matchat.
+ */
+function sokord(skrivet: string): string {
+  const s = skrivet.trim();
+  return /^[\d\s()+-]+$/.test(s) && s.replace(/\D/g, "").length >= 4 ? s.replace(/\D/g, "").replace(/^(0046|46|0)/, "") : s;
+}
 
 /** Värdet som det läses: organisationsnumret med sitt streck, resten som det är sparat. */
 const visat = (s: Pick<Sparr, "kind" | "value">) => (s.kind === "org_number" ? orgnrVisning(s.value) : s.value);
@@ -102,16 +111,15 @@ export function SparrarVy() {
       else setLaddar(true);
       setFel(null);
       const q = new URLSearchParams({ limit: String(SIDSTORLEK) });
-      if (vy === "email" || vy === "phone") q.set("channel", vy);
-      if (vy === "havda") q.set("include_lifted", "true");
-      if (fraga) q.set("q", fraga);
+      // Mejl och Telefon visar det som stoppar kanalen: kanalens egna spärrar och de i Alla kanaler.
+      if (vy === "email" || vy === "phone") q.set("applies_to", vy);
+      if (vy === "havda") q.set("only_lifted", "true");
+      if (fraga) q.set("q", sokord(fraga));
       if (markor) q.set("cursor", markor);
       try {
         const sida = await crmAnrop<Svarssida<Sparr>>(`/v1/suppressions?${q}`);
         if (denna !== omgang.current) return;
-        // Vyn Hävda visar bara de hävda: API:t lämnar dem tillsammans med de som gäller.
-        const data = vy === "havda" ? sida.data.filter((s) => s.lifted_at) : sida.data.filter((s) => !s.lifted_at);
-        setRader((forr) => (markor ? [...forr, ...data] : data));
+        setRader((forr) => (markor ? [...forr, ...sida.data] : sida.data));
         setNasta(sida.next_cursor);
       } catch (e) {
         if (denna === omgang.current) setFel(e);
@@ -128,11 +136,15 @@ export function SparrarVy() {
   useEffect(() => {
     void hamta(null);
   }, [hamta]);
+  // Ångra i ett besked lever längre än vyn det kom ur: den hämtar om med vyns läge NU, inte läget när beskedet visades.
+  const hamtaNu = useRef(hamta);
+  hamtaNu.current = hamta;
 
   useBestallning("ny", () => setDialog("ny"));
 
   async function hav(s: Sparr) {
     if (haver) return;
+    const fokusVidare = grannfokus(document.activeElement, "button");
     setHaver(s.id);
     try {
       await crmAnrop<null>(`/v1/suppressions/${encodeURIComponent(s.id)}`, { method: "DELETE" });
@@ -143,7 +155,8 @@ export function SparrarVy() {
     }
     setHaver(null);
     setRader((forr) => forr.filter((r) => r.id !== s.id));
-    // Ångra lägger tillbaka samma spärr. Den hävda står kvar under Hävda, som bevis.
+    fokusVidare();
+    // Ångra lägger en ny spärr med samma innehåll. Den hävda står kvar under Upphävda, som bevis.
     const angra = async () => {
       try {
         await crmAnrop<Sparr>("/v1/suppressions", { method: "POST", body: JSON.stringify({ channel: s.channel, kind: s.kind, value: s.value, reason: s.reason, ...(s.note ? { note: s.note } : {}) }) });
@@ -151,10 +164,10 @@ export function SparrarVy() {
       } catch (e) {
         visa({ type: "error", body: text(feltext(e)), uniqueID: "crm-sparr" });
       }
-      void hamta(null);
+      void hamtaNu.current(null);
     };
     visa({
-      body: text({ sv: `Spärren för ${s.value} är hävd. Den står kvar under Hävda.`, en: `The block for ${s.value} is lifted. It stays under Lifted.` }),
+      body: text({ sv: `Spärren för ${s.value} är hävd. Den står kvar under Upphävda.`, en: `The block for ${s.value} is lifted. It stays under Lifted.` }),
       endContent: <Button size="sm" variant="secondary" label={text({ sv: "Ångra", en: "Undo" })} onClick={() => void angra()} />,
       autoHideDuration: 10000,
       uniqueID: "crm-sparr"
@@ -176,7 +189,7 @@ export function SparrarVy() {
   );
   const kanalmarke = useCallback((s: Sparr) => <Badge variant={s.channel === "all" ? "error" : "neutral"} label={text(SPARRKANALER[s.channel])} />, [text]);
   const havknapp = (s: Sparr) => (
-    <Button size="sm" variant="secondary" label={text({ sv: "Häv", en: "Lift" })} isLoading={haver === s.id} onClick={() => void hav(s)} aria-label={text({ sv: `Häv spärren för ${s.value}`, en: `Lift the block for ${s.value}` })} />
+    <Button size={smal ? "md" : "sm"} variant="secondary" label={text({ sv: "Häv", en: "Lift" })} isLoading={haver === s.id} onClick={() => void hav(s)} aria-label={text({ sv: `Häv spärren för ${s.value}`, en: `Lift the block for ${s.value}` })} />
   );
 
   const kolumner = useMemo<TableColumn<Sparr>[]>(
@@ -203,7 +216,7 @@ export function SparrarVy() {
       havda
         ? {
             key: "lifted_at",
-            header: <Kolumnrubrik ikon={CalendarPlus}>{text({ sv: "Hävd", en: "Lifted" })}</Kolumnrubrik>,
+            header: <Kolumnrubrik ikon={CalendarPlus}>{text({ sv: "Upphävd", en: "Lifted" })}</Kolumnrubrik>,
             width: pixel(160),
             renderCell: (s) => (s.lifted_at ? <Timestamp value={s.lifted_at} format="relative" /> : null)
           }
@@ -226,7 +239,7 @@ export function SparrarVy() {
           ])
     ],
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [text, vardecell, kanalmarke, havda, haver]
+    [text, vardecell, kanalmarke, havda, haver, smal]
   );
 
   const tomt = fraga ? (
@@ -242,7 +255,7 @@ export function SparrarVy() {
   ) : havda ? (
     <EmptyState
       icon={<Icon icon={Ban} size="lg" color="secondary" />}
-      title={text({ sv: "Ingen hävd spärr", en: "No lifted block" })}
+      title={text({ sv: "Ingen upphävd spärr", en: "No lifted block" })}
       description={text({ sv: "En spärr som hävs står kvar här, så att det går att visa när den gällde.", en: "A block that is lifted stays here, so it can be shown when it applied." })}
     />
   ) : (
@@ -272,22 +285,34 @@ export function SparrarVy() {
         {havda
           ? text({ sv: "En hävd spärr gäller inte längre. Den står kvar som bevis på när den gällde.", en: "A lifted block no longer applies. It stays as proof of when it applied." })
           : text({
-              sv: "Kontakta inte på ett bolag eller en person, avregistreringar och leads som bett att slippa kontakt spärrar också. De står på sina poster.",
-              en: "Do not contact on a company or person, unsubscribes and leads that asked not to be contacted also block. They are on their records."
+              sv: "Bolag och personer märkta Kontakta inte, avregistreringar och leads som bett att slippa kontakt spärrar också, utan att stå här. Kontrollera säger vilken källa som spärrar.",
+              en: "Companies and people marked Do not contact, unsubscribes and leads that asked not to be contacted also block, without being listed here. Check says which source blocks."
             })}
       </span>
       {senaste?.nar && !havda ? (
-        <button type="button" className="crm-raknefot-etikett underline decoration-dotted underline-offset-4 hover:decoration-solid" onClick={() => setDialog("senaste")}>
-          {text({ sv: "Senaste uppladdningen: ", en: "Latest upload: " })}
-          <span className="crm-raknefot-tal">{tal(senaste.tillagda)}</span>
-          {text({ sv: " nya", en: " new" })}
-          {senaste.ogiltiga.length ? (
+        <button type="button" className="crm-raknefot-etikett py-2 underline decoration-dotted underline-offset-4 hover:decoration-solid sm:py-0" onClick={() => setDialog("senaste")}>
+          {senaste.pagick || senaste.fel ? (
             <>
-              {", "}
-              <span className="crm-raknefot-tal">{tal(senaste.ogiltiga.length)}</span>
-              {senaste.ogiltiga.length === 1 ? text({ sv: " oläst rad", en: " unread row" }) : text({ sv: " olästa rader", en: " unread rows" })}
+              {text({ sv: "Senaste uppladdningen avbröts: ", en: "The latest upload stopped: " })}
+              <span className="crm-raknefot-tal">{tal(senaste.skickade)}</span>
+              {text({ sv: " av ", en: " of " })}
+              <span className="crm-raknefot-tal">{tal(senaste.totalt)}</span>
+              {text({ sv: " skickades", en: " were sent" })}
             </>
-          ) : null}
+          ) : (
+            <>
+              {text({ sv: "Senaste uppladdningen: ", en: "Latest upload: " })}
+              <span className="crm-raknefot-tal">{tal(senaste.tillagda)}</span>
+              {senaste.tillagda === 1 ? text({ sv: " ny", en: " new" }) : text({ sv: " nya", en: " new" })}
+              {senaste.ogiltigaAntal ? (
+                <>
+                  {", "}
+                  <span className="crm-raknefot-tal">{tal(senaste.ogiltigaAntal)}</span>
+                  {senaste.ogiltigaAntal === 1 ? text({ sv: " oläst rad", en: " unread row" }) : text({ sv: " olästa rader", en: " unread rows" })}
+                </>
+              ) : null}
+            </>
+          )}
         </button>
       ) : null}
       {nasta ? (
@@ -302,7 +327,7 @@ export function SparrarVy() {
     { v: "alla", namn: text({ sv: "Alla", en: "All" }) },
     { v: "email", namn: text({ sv: "Mejl", en: "Email" }) },
     { v: "phone", namn: text({ sv: "Telefon", en: "Phone" }) },
-    { v: "havda", namn: text({ sv: "Hävda", en: "Lifted" }) }
+    { v: "havda", namn: text({ sv: "Upphävda", en: "Lifted" }) }
   ];
 
   return (
@@ -343,7 +368,7 @@ export function SparrarVy() {
           {smal ? (
             <>
               <Button variant="ghost" size="md" label={text({ sv: "Kontrollera", en: "Check" })} onClick={() => setDialog("kontroll")} />
-              <Button variant="ghost" size="md" label={text({ sv: "Lista", en: "List" })} icon={<Icon icon={Upload} size="sm" />} onClick={() => setDialog("lista")} />
+              <Button variant="ghost" size="md" label={text({ sv: "Lista", en: "List" })} aria-label={text({ sv: "Ladda upp lista", en: "Upload list" })} icon={<Icon icon={Upload} size="sm" />} onClick={() => setDialog("lista")} />
             </>
           ) : null}
         </>
@@ -385,9 +410,10 @@ export function SparrarVy() {
         oppen={dialog === "lista" || dialog === "senaste"}
         visa={dialog === "senaste" ? senaste : null}
         stang={() => setDialog(null)}
+        mellanlage={(ut) => setSenaste(sparaSenaste(nyckel, ut))}
         klar={(ut) => {
           setSenaste(sparaSenaste(nyckel, ut));
-          if (ut.tillagda > 0) void hamta(null);
+          if (ut.tillagda > 0) void hamtaNu.current(null);
         }}
       />
       <Kontroll oppen={dialog === "kontroll"} stang={() => setDialog(null)} />
@@ -457,9 +483,9 @@ function NySparr({ oppen, stang, sparad }: Readonly<{ oppen: boolean; stang: () 
   }
 
   return (
-    <Dialog isOpen={oppen} onOpenChange={(o) => !o && stang()} purpose="form" width={560}>
+    <Dialog isOpen={oppen} onOpenChange={(o) => !o && !sparar && stang()} purpose="form" width={560}>
       <Layout
-        header={<DialogHeader title={text({ sv: "Ny spärr", en: "New block" })} onOpenChange={(o) => !o && stang()} />}
+        header={<DialogHeader title={text({ sv: "Ny spärr", en: "New block" })} onOpenChange={(o) => !o && !sparar && stang()} />}
         content={
           <LayoutContent>
             <form id="crm-sparrformular" onSubmit={spara} noValidate className="flex flex-col gap-4">
@@ -510,7 +536,10 @@ function NySparr({ oppen, stang, sparad }: Readonly<{ oppen: boolean; stang: () 
               />
               <TextInput
                 label={text({ sv: "Anteckning", en: "Note" })}
-                description={text({ sv: "Syns bara här. Den skickas aldrig vidare.", en: "Only shown here. It is never passed on." })}
+                description={text({
+                  sv: "Följer aldrig med i en webhook eller en logg. Den som läser spärrlistan ser den, också med en API-nyckel.",
+                  en: "Never included in a webhook or a log. Anyone reading the block list sees it, also with an API key."
+                })}
                 value={anteckning}
                 onChange={setAnteckning}
                 width="100%"
@@ -523,7 +552,7 @@ function NySparr({ oppen, stang, sparad }: Readonly<{ oppen: boolean; stang: () 
         footer={
           <LayoutFooter>
             <HStack justify="end" gap={2}>
-              <Button label={text({ sv: "Avbryt", en: "Cancel" })} variant="ghost" onClick={stang} />
+              <Button label={text({ sv: "Avbryt", en: "Cancel" })} variant="ghost" isDisabled={sparar} onClick={stang} />
               <Button type="submit" form="crm-sparrformular" variant="primary" label={text({ sv: "Spärra", en: "Block" })} isLoading={sparar} />
             </HStack>
           </LayoutFooter>
@@ -537,7 +566,21 @@ function NySparr({ oppen, stang, sparad }: Readonly<{ oppen: boolean; stang: () 
 // Ladda upp en lista (till exempel NIX-utfallet)
 // ---------------------------------------------------------------------------
 
-type Importutfall = { tillagda: number; redan: number; ogiltiga: { rad: number; varde: string; kod: string }[]; fel: Localized | null; nar?: string };
+type Importutfall = {
+  tillagda: number;
+  redan: number;
+  /** Raderna som inte gick att läsa. Efter en omladdning högst `MAX_SPARADE_RADER`, utan värdena. */
+  ogiltiga: { rad: number; varde: string; kod: string }[];
+  /** Hur många som inte gick att läsa, också när listan ovan kapats. */
+  ogiltigaAntal: number;
+  /** Värden i listan, och hur många av dem som hann skickas. */
+  totalt: number;
+  skickade: number;
+  /** Sparat mitt i en uppladdning: står det kvar efter en omladdning avbröts den. */
+  pagick?: boolean;
+  fel: Localized | null;
+  nar?: string;
+};
 
 const SENASTE_NYCKEL = "snajp.crm.sparrimport";
 /** Så många olästa rader sparas med radnummer och skäl. Resten räknas bara. */
@@ -546,8 +589,9 @@ const MAX_SPARADE_RADER = 200;
 function lasSenaste(nyckel: string): Importutfall | null {
   try {
     const ra = window.localStorage.getItem(nyckel);
-    const ut = ra ? (JSON.parse(ra) as Importutfall) : null;
-    return ut && typeof ut.tillagda === "number" && Array.isArray(ut.ogiltiga) ? ut : null;
+    const ut = ra ? (JSON.parse(ra) as Partial<Importutfall>) : null;
+    if (!ut || typeof ut.tillagda !== "number" || !Array.isArray(ut.ogiltiga)) return null;
+    return { redan: 0, fel: null, ...ut, tillagda: ut.tillagda, ogiltiga: ut.ogiltiga, ogiltigaAntal: ut.ogiltigaAntal ?? ut.ogiltiga.length, totalt: ut.totalt ?? 0, skickade: ut.skickade ?? 0 };
   } catch {
     return null;
   }
@@ -564,12 +608,43 @@ function sparaSenaste(nyckel: string, ut: Importutfall): Importutfall {
   return { ...sparat, ogiltiga: ut.ogiltiga };
 }
 
+/** Utfallet i en mening, för rutan och för skärmläsaren. */
+function utfallstext(u: Importutfall, text: (l: Localized) => string, sprak: string): string {
+  const n = (v: number) => v.toLocaleString(sprak);
+  return [
+    u.pagick || u.fel
+      ? text({
+          sv: `${n(u.skickade)} av ${n(u.totalt)} skickades. Ladda upp hela listan igen: det som redan finns räknas som redan spärrat.`,
+          en: `${n(u.skickade)} of ${n(u.totalt)} were sent. Upload the whole list again: what is already there counts as already blocked.`
+        })
+      : "",
+    u.tillagda === 1 ? text({ sv: "1 ny spärr.", en: "1 new block." }) : text({ sv: `${n(u.tillagda)} nya spärrar.`, en: `${n(u.tillagda)} new blocks.` }),
+    u.redan === 1 ? text({ sv: "1 var redan spärrad.", en: "1 was already blocked." }) : u.redan ? text({ sv: `${n(u.redan)} var redan spärrade.`, en: `${n(u.redan)} were already blocked.` }) : "",
+    u.ogiltigaAntal === 1
+      ? text({ sv: "1 rad gick inte att läsa.", en: "1 row could not be read." })
+      : u.ogiltigaAntal
+        ? text({ sv: `${n(u.ogiltigaAntal)} rader gick inte att läsa.`, en: `${n(u.ogiltigaAntal)} rows could not be read.` })
+        : "",
+    u.fel ? text(u.fel) : ""
+  ]
+    .filter(Boolean)
+    .join(" ");
+}
+
 function Listuppladdning({
   oppen,
   visa,
   stang,
+  mellanlage,
   klar
-}: Readonly<{ oppen: boolean; visa: Importutfall | null; stang: () => void; klar: (ut: Importutfall) => void }>) {
+}: Readonly<{
+  oppen: boolean;
+  visa: Importutfall | null;
+  stang: () => void;
+  /** Efter varje omgång: läget sparas, så att en avbruten uppladdning går att se efter en omladdning. */
+  mellanlage: (ut: Importutfall) => void;
+  klar: (ut: Importutfall) => void;
+}>) {
   const { text, locale } = useLocale();
   const sprak = locale === "sv" ? "sv-SE" : "en-GB";
   const [kanal, setKanal] = useState<Sparrkanal>("phone");
@@ -578,6 +653,16 @@ function Listuppladdning({
   const [forlopp, setForlopp] = useState<{ klara: number; totalt: number } | null>(null);
   const [utfall, setUtfall] = useState<Importutfall | null>(null);
   const valjare = useRef<HTMLInputElement>(null);
+  const fot = useRef<HTMLDivElement>(null);
+
+  // En uppladdning som pågår avbryts om fliken stängs: webbläsaren frågar först.
+  const pagarNu = forlopp != null;
+  useEffect(() => {
+    if (!pagarNu) return;
+    const varna = (e: BeforeUnloadEvent) => e.preventDefault();
+    window.addEventListener("beforeunload", varna);
+    return () => window.removeEventListener("beforeunload", varna);
+  }, [pagarNu]);
 
   useEffect(() => {
     if (!oppen) return;
@@ -590,13 +675,15 @@ function Listuppladdning({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [oppen]);
 
-  // Ett värde per rad. I en CSV-fil räknas första kolumnen, och en rubrikrad utan siffror och utan @ hoppas över av API:t som ogiltig.
+  // Ett värde per rad, med radens nummer i filen: tomma rader räknas, så att "Rad 40" är rad 40 i den egna filen.
+  // I en CSV-fil läses första kolumnen. En rubrikrad går inte att tolka och står i utfallet som en oläst rad.
   const varden = useMemo(
     () =>
       lista
+        .replace(/^\uFEFF/, "")
         .split(/\r?\n/)
-        .map((r) => r.split(/[;,\t]/)[0].trim().replace(/^"|"$/g, ""))
-        .filter(Boolean),
+        .map((r, i) => ({ rad: i + 1, varde: r.split(/[;,\t]/)[0].trim().replace(/^"|"$/g, "").trim() }))
+        .filter((p) => p.varde),
     [lista]
   );
 
@@ -608,29 +695,63 @@ function Listuppladdning({
   async function laddaUpp(e: React.FormEvent) {
     e.preventDefault();
     if (forlopp || varden.length === 0) return;
-    const ut: Importutfall = { tillagda: 0, redan: 0, ogiltiga: [], fel: null };
-    setUtfall(null);
-    setForlopp({ klara: 0, totalt: varden.length });
-    for (let start = 0; start < varden.length; start += IMPORTSATS) {
-      const sats = varden.slice(start, start + IMPORTSATS);
-      try {
-        const svar = await crmAnrop<Importsvar>("/v1/suppressions/import", { method: "POST", body: JSON.stringify({ channel: kanal, reason: orsak, values: sats }) });
-        ut.tillagda += svar.added;
-        ut.redan += svar.already_blocked;
-        ut.ogiltiga.push(...svar.invalid.map((o) => ({ rad: start + o.index + 1, varde: sats[o.index] ?? "", kod: o.code })));
-      } catch (orsakFel) {
-        // Det som redan lagts till står kvar: utfallet säger hur långt det kom.
-        ut.fel = feltext(orsakFel);
-        break;
+    const ut: Importutfall = { tillagda: 0, redan: 0, ogiltiga: [], ogiltigaAntal: 0, totalt: varden.length, skickade: 0, pagick: true, fel: null };
+    // API:t tar ett slag per anrop. Varje värde får sitt slag ur hur det ser ut, och det som inte går att
+    // spärra i kanalen står i utfallet utan att skickas. I kanalen Telefon prövas allt utom organisationsnummer som nummer.
+    const tillatna = SLAG_I_KANAL[kanal];
+    const grupper = new Map<Sparrslag, { rad: number; varde: string }[]>();
+    for (const p of varden) {
+      const gissat = gissaSlag(p.varde);
+      const slag = tillatna.includes(gissat) ? gissat : kanal === "phone" ? "phone" : null;
+      if (!slag) {
+        ut.ogiltiga.push({ rad: p.rad, varde: p.varde, kod: "slag_passar_inte_kanalen" });
+        ut.skickade += 1;
+        continue;
       }
-      setForlopp({ klara: Math.min(start + sats.length, varden.length), totalt: varden.length });
+      grupper.set(slag, [...(grupper.get(slag) ?? []), p]);
     }
+    setUtfall(null);
+    setForlopp({ klara: ut.skickade, totalt: varden.length });
+    avbrott: for (const [slag, poster] of grupper) {
+      for (let start = 0; start < poster.length; start += IMPORTSATS) {
+        const sats = poster.slice(start, start + IMPORTSATS);
+        try {
+          const svar = await crmAnrop<Importsvar>("/v1/suppressions/import", {
+            method: "POST",
+            body: JSON.stringify({ channel: kanal, reason: orsak, kind: slag, values: sats.map((p) => p.varde) })
+          });
+          ut.tillagda += svar.added;
+          ut.redan += svar.already_blocked;
+          ut.ogiltiga.push(...svar.invalid.map((o) => ({ rad: sats[o.index]?.rad ?? 0, varde: sats[o.index]?.varde ?? "", kod: o.code })));
+        } catch (orsakFel) {
+          // Det som redan lagts till står kvar: utfallet säger hur långt det kom.
+          ut.fel = feltext(orsakFel);
+          break avbrott;
+        }
+        ut.skickade += sats.length;
+        ut.ogiltigaAntal = ut.ogiltiga.length;
+        setForlopp({ klara: ut.skickade, totalt: varden.length });
+        mellanlage({ ...ut });
+      }
+    }
+    ut.ogiltiga.sort((a, b) => a.rad - b.rad);
+    ut.ogiltigaAntal = ut.ogiltiga.length;
+    ut.pagick = false;
     setForlopp(null);
     setUtfall(ut);
     klar(ut);
+    // Knappen som hade fokus byts mot Klar: fokus följer med dit.
+    window.setTimeout(() => fot.current?.querySelector<HTMLElement>("button")?.focus(), 80);
   }
 
-  const pagar = forlopp != null;
+  const pagar = pagarNu;
+  // En region som finns hela tiden och bara byter text: förlopp och utfall sägs då upp, vilket en region som monteras med sitt innehåll inte gör.
+  const sagt = forlopp
+    ? text({ sv: `Lägger in ${forlopp.klara.toLocaleString(sprak)} av ${forlopp.totalt.toLocaleString(sprak)}`, en: `Adding ${forlopp.klara.toLocaleString(sprak)} of ${forlopp.totalt.toLocaleString(sprak)}` })
+    : utfall && !visa
+      ? utfallstext(utfall, text, sprak)
+      : "";
+  const avbruten = utfall != null && (utfall.pagick === true || utfall.fel != null);
   return (
     <Dialog isOpen={oppen} onOpenChange={(o) => !o && !pagar && stang()} purpose="form" width={600}>
       <Layout
@@ -648,32 +769,22 @@ function Listuppladdning({
         content={
           <LayoutContent>
             <form id="crm-sparrlista" onSubmit={laddaUpp} noValidate className="flex flex-col gap-4">
+              <span role="status" className="sr-only">
+                {sagt}
+              </span>
               {utfall ? (
-                <div role="status" className="flex flex-col gap-3">
+                <div className="flex flex-col gap-3">
                   <Banner
-                    status={utfall.fel ? "error" : utfall.ogiltiga.length ? "warning" : "success"}
+                    status={avbruten ? "error" : utfall.ogiltigaAntal ? "warning" : "success"}
                     container="card"
                     title={
-                      utfall.fel
+                      avbruten
                         ? text({ sv: "Uppladdningen avbröts", en: "The upload stopped" })
-                        : utfall.ogiltiga.length
+                        : utfall.ogiltigaAntal
                           ? text({ sv: "Listan är inlagd, utom det som inte gick att läsa", en: "The list is in, except what could not be read" })
                           : text({ sv: "Listan är inlagd", en: "The list is in" })
                     }
-                    description={
-                      [
-                        utfall.tillagda === 1 ? text({ sv: "1 ny spärr.", en: "1 new block." }) : text({ sv: `${utfall.tillagda.toLocaleString(sprak)} nya spärrar.`, en: `${utfall.tillagda.toLocaleString(sprak)} new blocks.` }),
-                        utfall.redan === 1 ? text({ sv: "1 var redan spärrad.", en: "1 was already blocked." }) : utfall.redan ? text({ sv: `${utfall.redan.toLocaleString(sprak)} var redan spärrade.`, en: `${utfall.redan.toLocaleString(sprak)} were already blocked.` }) : "",
-                        utfall.ogiltiga.length === 1
-                          ? text({ sv: "1 rad gick inte att läsa.", en: "1 row could not be read." })
-                          : utfall.ogiltiga.length
-                            ? text({ sv: `${utfall.ogiltiga.length.toLocaleString(sprak)} rader gick inte att läsa.`, en: `${utfall.ogiltiga.length.toLocaleString(sprak)} rows could not be read.` })
-                            : "",
-                        utfall.fel ? text(utfall.fel) : ""
-                      ]
-                        .filter(Boolean)
-                        .join(" ")
-                    }
+                    description={utfallstext(utfall, text, sprak)}
                   />
                   {utfall.ogiltiga.length ? (
                     <div className="flex flex-col gap-1">
@@ -689,9 +800,9 @@ function Listuppladdning({
                           </li>
                         ))}
                       </ul>
-                      {utfall.ogiltiga.length > 20 ? (
+                      {utfall.ogiltigaAntal > 20 ? (
                         <Text type="supporting" color="secondary">
-                          {text({ sv: `Och ${(utfall.ogiltiga.length - 20).toLocaleString(sprak)} till.`, en: `And ${(utfall.ogiltiga.length - 20).toLocaleString(sprak)} more.` })}
+                          {text({ sv: `Och ${(utfall.ogiltigaAntal - 20).toLocaleString(sprak)} till.`, en: `And ${(utfall.ogiltigaAntal - 20).toLocaleString(sprak)} more.` })}
                         </Text>
                       ) : null}
                     </div>
@@ -720,8 +831,8 @@ function Listuppladdning({
                   <TextArea
                     label={text({ sv: "Värden, ett per rad", en: "Values, one per row" })}
                     description={text({
-                      sv: "Klistra in, eller välj en textfil eller CSV-fil. Ur en CSV-fil läses första kolumnen.",
-                      en: "Paste, or choose a text or CSV file. From a CSV file the first column is read."
+                      sv: "Klistra in, eller välj en textfil eller CSV-fil (första kolumnen läses). Telefonnummer, adresser, domäner och organisationsnummer känns igen var för sig. Det som inte går att spärra i kanalen står i utfallet.",
+                      en: "Paste, or choose a text or CSV file (the first column is read). Phone numbers, addresses, domains and organisation numbers are recognised one by one. What cannot be blocked in the channel is listed in the outcome."
                     })}
                     rows={8}
                     value={lista}
@@ -745,11 +856,13 @@ function Listuppladdning({
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <Button size="sm" variant="secondary" label={text({ sv: "Välj fil", en: "Choose file" })} icon={<Icon icon={Upload} size="sm" />} isDisabled={pagar} onClick={() => valjare.current?.click()} />
                     <Text type="supporting" color="secondary">
-                      <span className="tabular-nums">{text({ sv: `${varden.length.toLocaleString(sprak)} värden`, en: `${varden.length.toLocaleString(sprak)} values` })}</span>
+                      <span className="tabular-nums">
+                        {varden.length === 1 ? text({ sv: "1 värde", en: "1 value" }) : text({ sv: `${varden.length.toLocaleString(sprak)} värden`, en: `${varden.length.toLocaleString(sprak)} values` })}
+                      </span>
                     </Text>
                   </div>
                   {forlopp ? (
-                    <div className="flex flex-col gap-2" role="status" aria-live="polite">
+                    <div className="flex flex-col gap-2">
                       <Text type="supporting" color="secondary">
                         <span className="tabular-nums">
                           {text({ sv: `Lägger in ${forlopp.klara.toLocaleString(sprak)} av ${forlopp.totalt.toLocaleString(sprak)}`, en: `Adding ${forlopp.klara.toLocaleString(sprak)} of ${forlopp.totalt.toLocaleString(sprak)}` })}
@@ -765,6 +878,7 @@ function Listuppladdning({
         }
         footer={
           <LayoutFooter>
+            <div ref={fot}>
             <HStack justify="end" gap={2}>
               {utfall ? (
                 <Button variant="primary" label={text({ sv: "Klar", en: "Done" })} onClick={stang} />
@@ -786,6 +900,7 @@ function Listuppladdning({
                 </>
               )}
             </HStack>
+            </div>
           </LayoutFooter>
         }
       />
@@ -798,7 +913,7 @@ function Listuppladdning({
 // ---------------------------------------------------------------------------
 
 function Kontroll({ oppen, stang }: Readonly<{ oppen: boolean; stang: () => void }>) {
-  const { text, locale } = useLocale();
+  const { text } = useLocale();
   const [varde, setVarde] = useState("");
   const [kanal, setKanal] = useState<Sparrkanal>("all");
   const [svar, setSvar] = useState<{ fraga: string; kontroll: Sparrkontroll; traffar: Sparr[] } | null>(null);
@@ -834,9 +949,8 @@ function Kontroll({ oppen, stang }: Readonly<{ oppen: boolean; stang: () => void
       const id = new Set(kontroll.suppression_ids ?? []);
       let traffar: Sparr[] = [];
       if (id.size) {
-        const siffror = v.replace(/\D/g, "");
-        const sokord = slag === "email" ? (v.split("@")[1] ?? v).toLowerCase() : slag === "phone" ? siffror.replace(/^(0046|46|0)/, "") : siffror;
-        const sida = await crmAnrop<Svarssida<Sparr>>(`/v1/suppressions?limit=100&q=${encodeURIComponent(sokord)}`).catch(() => null);
+        const sokt = slag === "email" ? (v.split("@")[1] ?? v).toLowerCase() : sokord(v);
+        const sida = await crmAnrop<Svarssida<Sparr>>(`/v1/suppressions?limit=100&q=${encodeURIComponent(sokt)}`).catch(() => null);
         traffar = (sida?.data ?? []).filter((s) => id.has(s.id));
       }
       setSvar({ fraga: v, kontroll, traffar });
@@ -891,7 +1005,10 @@ function Kontroll({ oppen, stang }: Readonly<{ oppen: boolean; stang: () => void
                           sv: `Det som spärrar: ${uppraknat(svar.kontroll.sources.map((k) => text(SPARRGRINDAR[k] ?? { sv: k, en: k })), "och")}.`,
                           en: `What blocks: ${uppraknat(svar.kontroll.sources.map((k) => text(SPARRGRINDAR[k] ?? { sv: k, en: k })), "and")}.`
                         }),
-                        ...svar.traffar.map((s) => `${text(SPARRSLAG[s.kind])} ${visat(s)}, ${text(SPARRKANALER[s.channel]).toLocaleLowerCase(locale)}, ${text(SPARRORSAKER[s.reason]).toLocaleLowerCase(locale)}.`)
+                        ...svar.traffar.map(
+                          (s) =>
+                            `${text(SPARRSLAG[s.kind])} ${visat(s)}. ${text({ sv: "Kanal", en: "Channel" })}: ${text(SPARRKANALER[s.channel])}. ${text({ sv: "Orsak", en: "Reason" })}: ${text(SPARRORSAKER[s.reason])}.`
+                        )
                       ].join(" ")}
                     />
                   ) : (
@@ -899,7 +1016,10 @@ function Kontroll({ oppen, stang }: Readonly<{ oppen: boolean; stang: () => void
                       status="success"
                       container="card"
                       title={text({ sv: `${svar.fraga} är inte spärrad`, en: `${svar.fraga} is not blocked` })}
-                      description={text({ sv: "Ingen källa i Snajp spärrar den i den kanalen.", en: "No source in Snajp blocks it in that channel." })}
+                      description={text({
+                        sv: "Varken spärrlistan, en post märkt Kontakta inte, en avregistrering eller ett lead spärrar den i den kanalen.",
+                        en: "Neither the block list, a record marked Do not contact, an unsubscribe nor a lead blocks it in that channel."
+                      })}
                     />
                   )
                 ) : null}

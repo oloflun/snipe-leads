@@ -174,7 +174,7 @@ export function BolagFormular({
         besked: fyllda.length
           ? {
               sv: `Hämtat ur SCB:s företagsregister: ${fyllda.length} fält. Status i registret: ${status.sv.toLocaleLowerCase("sv")}.`,
-              en: `Fetched from Statistics Sweden's business register: ${fyllda.length} fields. Status in the registry: ${status.en.toLocaleLowerCase("en")}.`
+              en: `Fetched from Statistics Sweden's business register: ${fyllda.length} ${fyllda.length === 1 ? "field" : "fields"}. Status in the registry: ${status.en.toLocaleLowerCase("en")}.`
             }
           : {
               sv: `Inget nytt att fylla i. Status i registret: ${status.sv.toLocaleLowerCase("sv")}.`,
@@ -183,7 +183,9 @@ export function BolagFormular({
       });
     } catch (orsak) {
       const faltfel = orsak instanceof CrmFel ? orsak.falt.find((f) => f.field === "org_number") : undefined;
-      setRegister({ fel: true, besked: faltfel ? kodtext(FALTKODER, faltfel.code) : orsak instanceof CrmFel ? orsak.text : { sv: "Okänt fel.", en: "Unknown error." } });
+      // Ett fel på numret står vid fältet, så att det läses upp där och fältet märks som ogiltigt.
+      if (faltfel) setFalt((f) => ({ ...f, org_number: kodtext(FALTKODER, faltfel.code) }));
+      else setRegister({ fel: true, besked: orsak instanceof CrmFel ? orsak.text : { sv: "Okänt fel.", en: "Unknown error." } });
     } finally {
       setSlarUpp(false);
     }

@@ -20,12 +20,12 @@ import { TextArea } from "@astryxdesign/core/TextArea";
 import { TextInput } from "@astryxdesign/core/TextInput";
 import { Timestamp } from "@astryxdesign/core/Timestamp";
 import { useToast } from "@astryxdesign/core/Toast";
-import { Kolumnrubrik, Objektikon, Personchip, Postchip, Tabellskelett, useBestallning, useSmal, Vyval } from "@/components/crm/app/kit";
+import { Kolumnrubrik, Objektikon, Personchip, Postchip, Tabellskelett, grannfokus, useBestallning, useSmal, Vyval } from "@/components/crm/app/kit";
 import { Felruta, Sida } from "@/components/crm/app/Sida";
 import { CrmFel, crmAnrop, dagtext, idagLokalt, type Bolag, type Person, type Sida as Svarssida } from "@/lib/crm/api";
 import type { Affar } from "@/lib/crm/affar";
 import { FALT, FALTKODER, kodtext } from "@/lib/crm/felkoder";
-import { dagSomTid, lokalDag, type Uppgift } from "@/lib/crm/uppgift";
+import { dagSomTid, lokalDag, type Uppgift, type Uppgiftsstatus } from "@/lib/crm/uppgift";
 import { useLocale, type Localized } from "@/lib/i18n";
 
 type Vy = "oppna" | "forsenade" | "klara";
@@ -37,6 +37,9 @@ const INGET = "inget";
 const feltext = (e: unknown): Localized => (e instanceof CrmFel ? e.text : { sv: "Okänt fel.", en: "Unknown error." });
 const isodag = (v: string): ISODateString | undefined => (/^\d{4}-\d{2}-\d{2}$/.test(v) ? (v as ISODateString) : undefined);
 
+/** Så många namnuppslag går samtidigt. Resten står i kö. */
+const MAX_SAMTIDIGA = 4;
+
 /** Förfallodagen först, uppgifter utan dag sist. Samma ordning som API:ts `sort=due`. */
 const efterDag = (a: Uppgift, b: Uppgift) => (a.due_at ?? "9999").localeCompare(b.due_at ?? "9999");
 
@@ -47,24 +50,39 @@ const efterDag = (a: Uppgift, b: Uppgift) => (a.due_at ?? "9999").localeCompare(
 function useNamn(rader: Uppgift[]) {
   const [namn, setNamn] = useState<Record<string, string>>({});
   const fragade = useRef(new Set<string>());
+  const ko = useRef<[string, string, (svar: unknown) => string | null][]>([]);
+  const igang = useRef(0);
   useEffect(() => {
-    const behov: [string, string, (svar: unknown) => string | null][] = [];
     for (const u of rader) {
+      const behov: [string, string, (svar: unknown) => string | null][] = [];
       if (u.company_id) behov.push([`b:${u.company_id}`, `/v1/companies/${encodeURIComponent(u.company_id)}`, (s) => (s as Bolag).name ?? null]);
       if (u.person_id)
         behov.push([`p:${u.person_id}`, `/v1/people/${encodeURIComponent(u.person_id)}`, (s) => [(s as Person).first_name, (s as Person).last_name].filter(Boolean).join(" ") || null]);
       if (u.deal_id) behov.push([`a:${u.deal_id}`, `/v1/deals/${encodeURIComponent(u.deal_id)}`, (s) => (s as Affar).name ?? null]);
+      for (const b of behov) {
+        if (fragade.current.has(b[0])) continue;
+        fragade.current.add(b[0]);
+        ko.current.push(b);
+      }
     }
-    for (const [nyckel, vag, las] of behov) {
-      if (fragade.current.has(nyckel) || fragade.current.size > 600) continue;
-      fragade.current.add(nyckel);
+    const nasta = () => {
+      const jobb = ko.current.shift();
+      if (!jobb) return;
+      const [nyckel, vag, las] = jobb;
+      igang.current += 1;
       crmAnrop<unknown>(vag)
         .then((svar) => {
           const n = las(svar);
           if (n) setNamn((forr) => ({ ...forr, [nyckel]: n }));
         })
-        .catch(() => undefined);
-    }
+        // Ett uppslag som föll får prövas igen nästa gång raden visas.
+        .catch(() => void fragade.current.delete(nyckel))
+        .finally(() => {
+          igang.current -= 1;
+          nasta();
+        });
+    };
+    while (igang.current < MAX_SAMTIDIGA && ko.current.length) nasta();
   }, [rader]);
   return namn;
 }
@@ -141,29 +159,42 @@ export function UppgifterVy({ bas = "/crm" }: Readonly<{ bas?: string }>) {
   useEffect(() => {
     void hamta(null);
   }, [hamta]);
+  // Ångra i ett besked lever längre än vyn det kom ur: den hämtar om med vyns läge NU, inte läget när beskedet visades.
+  const hamtaNu = useRef(hamta);
+  hamtaNu.current = hamta;
 
   useBestallning("ny", () => setFormular({ uppgift: null }));
 
-  /** Bockar av eller öppnar igen. Raden lämnar vyn direkt, och kommer tillbaka om API:t säger nej. */
-  async function bocka(u: Uppgift, klar: boolean, tyst = false) {
+  /** Raden i listan, sökt på uppgiftens id: menyns val har inget element i raden att utgå från. */
+  const radFor = (u: Uppgift) => document.querySelector(`[data-uppgift="${u.id}"]`);
+
+  /**
+   * Bockar av eller öppnar igen. Raden lämnar vyn direkt, och kommer tillbaka om API:t säger nej.
+   * Ångra sätter tillbaka den status uppgiften hade (också `in_progress`, som sätts över API:t).
+   */
+  async function bocka(u: Uppgift, till: Uppgiftsstatus, tyst = false) {
+    const fokusVidare = tyst ? null : grannfokus(radFor(u), "input[type=checkbox]");
     setRader((forr) => forr.filter((r) => r.id !== u.id));
+    fokusVidare?.();
     try {
-      await crmAnrop<Uppgift>(`/v1/tasks/${encodeURIComponent(u.id)}`, { method: "PATCH", body: JSON.stringify({ status: klar ? "done" : "todo" }) });
+      await crmAnrop<Uppgift>(`/v1/tasks/${encodeURIComponent(u.id)}`, { method: "PATCH", body: JSON.stringify({ status: till }) });
     } catch (e) {
       visa({ type: "error", body: text(feltext(e)), uniqueID: "crm-uppgift" });
-      void hamta(null);
+      void hamtaNu.current(null);
       return;
     }
-    if (tyst) return void hamta(null);
+    if (tyst) return void hamtaNu.current(null);
+    const klar = till === "done";
     visa({
       body: klar ? text({ sv: `Klar: ${u.title ?? "uppgiften"}`, en: `Done: ${u.title ?? "the task"}` }) : text({ sv: `Öppnad igen: ${u.title ?? "uppgiften"}`, en: `Reopened: ${u.title ?? "the task"}` }),
-      endContent: <Button size="sm" variant="secondary" label={text({ sv: "Ångra", en: "Undo" })} onClick={() => void bocka(u, !klar, true)} />,
+      endContent: <Button size="sm" variant="secondary" label={text({ sv: "Ångra", en: "Undo" })} onClick={() => void bocka(u, u.status, true)} />,
       autoHideDuration: 8000,
       uniqueID: "crm-uppgift"
     });
   }
 
   async function taBort(u: Uppgift) {
+    const fokusVidare = grannfokus(radFor(u), "input[type=checkbox]");
     try {
       await crmAnrop<null>(`/v1/tasks/${encodeURIComponent(u.id)}`, { method: "DELETE" });
     } catch (e) {
@@ -171,13 +202,14 @@ export function UppgifterVy({ bas = "/crm" }: Readonly<{ bas?: string }>) {
       return;
     }
     setRader((forr) => forr.filter((r) => r.id !== u.id));
+    fokusVidare();
     const angra = async () => {
       try {
         await crmAnrop<Uppgift>(`/v1/tasks/${encodeURIComponent(u.id)}/restore`, { method: "POST" });
       } catch (e) {
         visa({ type: "error", body: text(feltext(e)), uniqueID: "crm-uppgift" });
       }
-      void hamta(null);
+      void hamtaNu.current(null);
     };
     visa({
       body: text({ sv: `Borttagen: ${u.title ?? "uppgiften"}`, en: `Deleted: ${u.title ?? "the task"}` }),
@@ -194,15 +226,16 @@ export function UppgifterVy({ bas = "/crm" }: Readonly<{ bas?: string }>) {
       label={klara ? text({ sv: `Öppna igen: ${u.title ?? "uppgiften"}`, en: `Reopen: ${u.title ?? "the task"}` }) : text({ sv: `Klar: ${u.title ?? "uppgiften"}`, en: `Done: ${u.title ?? "the task"}` })}
       isLabelHidden
       value={klara}
-      onChange={(v) => void bocka(u, v)}
+      onChange={(v) => void bocka(u, v ? "done" : "todo")}
     />
   );
 
   const titel = (u: Uppgift) => (
-    <span className="flex min-w-0 flex-col items-start">
+    <span data-uppgift={u.id} className="flex min-w-0 flex-col items-start">
       <button
         type="button"
-        className={`max-w-full truncate text-left text-[0.875rem] font-semibold underline-offset-2 hover:underline ${klara ? "text-ink-muted line-through" : "text-ink"}`}
+        title={text({ sv: "Ändra uppgiften", en: "Edit the task" })}
+        className={`crm-uppgiftstitel max-w-full truncate text-left text-[0.875rem] font-semibold ${klara ? "text-ink-muted line-through" : "text-ink"}`}
         onClick={() => setFormular({ uppgift: u })}
       >
         {u.title ?? text({ sv: "Utan titel", en: "Untitled" })}
@@ -252,7 +285,7 @@ export function UppgifterVy({ bas = "/crm" }: Readonly<{ bas?: string }>) {
       renderTrigger={(props) => (
         <IconButton
           {...props}
-          size="sm"
+          size={smal ? "md" : "sm"}
           variant="ghost"
           icon={<Icon icon={MoreHorizontal} size="sm" />}
           label={text({ sv: `Åtgärder för ${u.title ?? "uppgiften"}`, en: `Actions for ${u.title ?? "the task"}` })}
@@ -287,7 +320,7 @@ export function UppgifterVy({ bas = "/crm" }: Readonly<{ bas?: string }>) {
       { key: "meny", header: <span className="sr-only">{text({ sv: "Åtgärder", en: "Actions" })}</span>, width: pixel(72), align: "end" as const, renderCell: meny }
     ],
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [text, locale, klara, namn, idag, bas]
+    [text, locale, klara, namn, idag, bas, smal]
   );
 
   const tomt = fraga ? (
@@ -467,16 +500,26 @@ function Uppgiftsformular({
     setSparar(true);
     setFalt({});
     setAllmant(null);
-    const kropp = {
+    const kropp: Record<string, string | null> = {
       title: titel.trim(),
       description: beskrivning.trim() || null,
       due_at: dag ? dagSomTid(dag) : null,
       owner: ansvarig.trim() || null,
       company_id: bolagId === INGET ? null : bolagId
     };
+    // Ändra skickar bara det som ändrats. Dagen jämförs som dag: en uppgift som en integration lagt
+    // klockan 14 ska inte flyttas till klockan 9 för att någon rättade titeln.
+    const andrat = uppgift
+      ? Object.fromEntries(
+          Object.entries(kropp).filter(([k, v]) =>
+            k === "due_at" ? (uppgift.due_at ? lokalDag(uppgift.due_at) : "") !== dag : ((uppgift as unknown as Record<string, string | null>)[k] ?? null) !== v
+          )
+        )
+      : kropp;
     try {
+      if (uppgift && Object.keys(andrat).length === 0) return sparad(uppgift, false);
       const svar = uppgift
-        ? await crmAnrop<Uppgift>(`/v1/tasks/${encodeURIComponent(uppgift.id)}`, { method: "PATCH", body: JSON.stringify(kropp) })
+        ? await crmAnrop<Uppgift>(`/v1/tasks/${encodeURIComponent(uppgift.id)}`, { method: "PATCH", body: JSON.stringify(andrat) })
         : await crmAnrop<Uppgift>("/v1/tasks", { method: "POST", body: JSON.stringify(kropp) });
       sparad({ ...svar, title: svar.title ?? kropp.title }, !uppgift);
     } catch (orsak) {
@@ -491,9 +534,9 @@ function Uppgiftsformular({
   const dolda = Object.entries(falt).filter(([k]) => !["title", "description", "due_at", "owner", "company_id"].includes(k));
 
   return (
-    <Dialog isOpen={oppen} onOpenChange={(o) => !o && stang()} purpose="form" width={560}>
+    <Dialog isOpen={oppen} onOpenChange={(o) => !o && !sparar && stang()} purpose="form" width={560}>
       <Layout
-        header={<DialogHeader title={uppgift ? text({ sv: "Ändra uppgiften", en: "Edit the task" }) : text({ sv: "Ny uppgift", en: "New task" })} onOpenChange={(o) => !o && stang()} />}
+        header={<DialogHeader title={uppgift ? text({ sv: "Ändra uppgiften", en: "Edit the task" }) : text({ sv: "Ny uppgift", en: "New task" })} onOpenChange={(o) => !o && !sparar && stang()} />}
         content={
           <LayoutContent>
             <form id="crm-uppgiftsformular" onSubmit={spara} noValidate className="flex flex-col gap-4">
@@ -555,7 +598,7 @@ function Uppgiftsformular({
         footer={
           <LayoutFooter>
             <HStack justify="end" gap={2}>
-              <Button label={text({ sv: "Avbryt", en: "Cancel" })} variant="ghost" onClick={stang} />
+              <Button label={text({ sv: "Avbryt", en: "Cancel" })} variant="ghost" isDisabled={sparar} onClick={stang} />
               <Button type="submit" form="crm-uppgiftsformular" variant="primary" label={uppgift ? text({ sv: "Spara", en: "Save" }) : text({ sv: "Lägg till", en: "Add" })} isLoading={sparar} />
             </HStack>
           </LayoutFooter>

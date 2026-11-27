@@ -638,9 +638,10 @@ export function AffarerVy({ bas = "/crm" }: Readonly<{ bas?: string }>) {
         oppen={stegOppen}
         steg={tavla?.stages ?? []}
         stang={() => setStegOppen(false)}
-        sparat={(andrat) => {
+        sparat={(andrat, helt) => {
           if (!andrat) return;
-          visa({ body: text({ sv: "Stegen är sparade.", en: "The stages are saved." }), uniqueID: "crm-steg" });
+          // Föll sparningen halvvägs säger dialogen det själv: tavlan hämtas om, men inget besked om att allt är sparat.
+          if (helt) visa({ body: text({ sv: "Stegen är sparade.", en: "The stages are saved." }), uniqueID: "crm-steg" });
           void hamta();
         }}
       />

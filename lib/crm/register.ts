@@ -23,7 +23,10 @@ export type Registerpost = {
 export type Berikning = {
   company: Bolag;
   filled: string[];
+  /** Registret säger annat, och `?overwrite=true` skulle skriva över. */
   skipped: string[];
+  /** Registret säger annat, men fältet är ändrat för hand och skrivs aldrig över. */
+  protected?: string[];
   registry_status: Registerstatus;
   deregistered: boolean;
   advertising_block: boolean | null;

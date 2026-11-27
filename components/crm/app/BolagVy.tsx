@@ -811,7 +811,8 @@ export function BolagVy() {
         redigera={(falt) => post && setFormular({ bolag: post, fokus: falt ?? null })}
         taBort={(b) => setRadera([b])}
         uppdaterat={(b) => {
-          setPost(b);
+          // Bara om panelen fortfarande visar samma bolag: ett svar som kommer sent ska inte byta posten.
+          setPost((nu) => (nu && nu.id === b.id ? b : nu));
           setRader((forr) => forr.map((r) => (r.id === b.id ? b : r)));
           void hamtaRakning();
         }}

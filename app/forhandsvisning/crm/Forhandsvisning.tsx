@@ -1251,18 +1251,29 @@ async function svara(url: URL, init?: RequestInit): Promise<Response> {
       } else skipped.push(namn);
     }
     b.registry_status = r.registry_status as Bolag["registry_status"];
+    b.registry_advertising_block = r.advertising_block;
     b.registry_checked_at = new Date().toISOString();
     if (filled.length) b.updated_at = b.registry_checked_at;
-    return json({ company: b, filled, skipped, registry_status: r.registry_status, deregistered: r.registry_status === "deregistered", advertising_block: r.advertising_block, registry: r });
+    // Vart sjunde bolag har namnet ändrat för hand: registret säger annat, och det skrivs aldrig över.
+    const skyddade = n % 7 === 5 ? ["name"] : [];
+    return json({ company: b, filled, skipped, protected: skyddade, registry_status: r.registry_status, deregistered: r.registry_status === "deregistered", advertising_block: r.advertising_block, registry: r });
   }
   // ---- Spärrlistan (crm_v1_sparr.py) ------------------------------------------
   if (vag === "/v1/suppressions" && metod === "GET") {
     const q = (url.searchParams.get("q") ?? "").toLowerCase();
     const kanal = url.searchParams.get("channel");
+    const galler = url.searchParams.get("applies_to");
+    const baraHavda = url.searchParams.get("only_lifted") === "true";
     const medHavda = url.searchParams.get("include_lifted") === "true";
     const start = Number(url.searchParams.get("cursor") ?? 0);
     const limit = Math.min(500, Math.max(1, Number(url.searchParams.get("limit") ?? 50)));
-    const traffar = SPARRAR.filter((s) => (medHavda || !s.lifted_at) && (!kanal || s.channel === kanal) && (!q || s.value.includes(q))).sort((a, b) => (b.created_at ?? "").localeCompare(a.created_at ?? ""));
+    const traffar = SPARRAR.filter(
+      (s) =>
+        (baraHavda ? !!s.lifted_at : medHavda || !s.lifted_at) &&
+        (!kanal || s.channel === kanal) &&
+        (!galler || s.channel === galler || s.channel === "all") &&
+        (!q || s.value.includes(q))
+    ).sort((a, b) => (b.created_at ?? "").localeCompare(a.created_at ?? ""));
     return json({ data: traffar.slice(start, start + limit), next_cursor: start + limit < traffar.length ? String(start + limit) : null });
   }
   if (vag === "/v1/suppressions" && metod === "POST") {
@@ -1284,7 +1295,7 @@ async function svara(url: URL, init?: RequestInit): Promise<Response> {
     const varden = Array.isArray(kropp.values) ? (kropp.values as unknown[]).map(String) : [];
     const ut = { added: 0, already_blocked: 0, invalid: [] as { index: number; code: string }[] };
     varden.forEach((ratt, index) => {
-      const slag = gissaSlag(ratt);
+      const slag = (kropp.kind as Sparrslag | undefined) ?? gissaSlag(ratt);
       const varde = SLAG_I_KANAL[kanal].includes(slag) ? sparrvarde(slag, ratt) : null;
       if (!varde) return void ut.invalid.push({ index, code: kanal === "phone" ? "telefon_ogiltig" : slag === "email" ? "epost_ogiltig" : "slag_passar_inte_kanalen" });
       if (SPARRAR.some((s) => !s.lifted_at && s.kind === slag && s.value === varde && (s.channel === kanal || s.channel === "all"))) return void (ut.already_blocked += 1);

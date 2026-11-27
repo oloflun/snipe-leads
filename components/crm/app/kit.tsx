@@ -345,6 +345,23 @@ function prenumereraSmal(anmal: () => void) {
  * Sant under 640 px, där tabeller blir listor (DESIGN-CRM.md § Tabellen, Mobil).
  * Servern antar bred skärm; klienten rättar vid första målningen.
  */
+/**
+ * När en rad tas ur en lista medan något i den har fokus hamnar fokus på sidan
+ * och tangentbordet börjar om överst. Anropas FÖRE borttagningen med ett
+ * element i raden, och svarar med en funktion som efter borttagningen lägger
+ * fokus på samma slags kontroll i raden efter (annars raden före, annars `reserv`).
+ */
+export function grannfokus(fran: Element | null | undefined, valjare: string, reserv = ".crm-sokfalt input, input.crm-sokfalt"): () => void {
+  const rad = fran?.closest("tr, li");
+  const granne = (rad?.nextElementSibling ?? rad?.previousElementSibling ?? null) as HTMLElement | null;
+  return () => {
+    window.setTimeout(() => {
+      const mal = (granne?.isConnected ? granne.querySelector<HTMLElement>(valjare) : null) ?? document.querySelector<HTMLElement>(reserv);
+      mal?.focus();
+    }, 80);
+  };
+}
+
 export function useSmal(): boolean {
   return useSyncExternalStore(
     prenumereraSmal,

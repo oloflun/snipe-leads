@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import NextLink from "next/link";
-import { Activity, Clock, Landmark } from "lucide-react";
+import { Activity, Clock, Landmark, MailX } from "lucide-react";
 import { Badge } from "@astryxdesign/core/Badge";
 import { Button } from "@astryxdesign/core/Button";
 import { Icon } from "@astryxdesign/core/Icon";
@@ -32,11 +32,17 @@ export function Registret({
   const [hamtar, setHamtar] = useState<"fyll" | "skriv" | null>(null);
   const [utfall, setUtfall] = useState<Berikning | null>(null);
   const [fel, setFel] = useState<Localized | null>(null);
+  // Skriv över går inte att ångra (historiken bär fältens namn, inte värdena): ett steg till innan det sker.
+  const [bekraftar, setBekraftar] = useState(false);
+  // Bolaget som visas nu. Ett svar som kommer efter att panelen bytt bolag slängs.
+  const visat = useRef(bolag.id);
+  visat.current = bolag.id;
 
   useEffect(() => {
     setUtfall(null);
     setFel(null);
     setHamtar(null);
+    setBekraftar(false);
   }, [bolag.id]);
 
   const person = bolag.private_person || bolag.sole_proprietor;
@@ -44,17 +50,21 @@ export function Registret({
 
   async function hamta(skrivOver: boolean) {
     if (hamtar) return;
+    const fragat = bolag.id;
     setHamtar(skrivOver ? "skriv" : "fyll");
     setFel(null);
+    setBekraftar(false);
     try {
-      const svar = await crmAnrop<Berikning>(`/v1/companies/${encodeURIComponent(bolag.id)}/enrich${skrivOver ? "?overwrite=true" : ""}`, { method: "POST" });
+      const svar = await crmAnrop<Berikning>(`/v1/companies/${encodeURIComponent(fragat)}/enrich${skrivOver ? "?overwrite=true" : ""}`, { method: "POST" });
+      if (visat.current !== fragat) return;
       setUtfall(svar);
       uppdaterat?.(svar.company);
     } catch (orsak) {
+      if (visat.current !== fragat) return;
       setUtfall(null);
       setFel(orsak instanceof CrmFel ? orsak.text : { sv: "Okänt fel.", en: "Unknown error." });
     } finally {
-      setHamtar(null);
+      if (visat.current === fragat) setHamtar(null);
     }
   }
 
@@ -76,6 +86,11 @@ export function Registret({
             <span className="crm-varde text-ink-muted">{text({ sv: "Inte hämtad", en: "Not fetched" })}</span>
           )}
         </MetadataListItem>
+        {bolag.registry_advertising_block != null ? (
+          <MetadataListItem label={text({ sv: "Reklamspärr", en: "Advertising block" })} icon={<Icon icon={MailX} size="sm" />}>
+            <span className="crm-varde">{bolag.registry_advertising_block ? text({ sv: "Ja, i registret", en: "Yes, in the registry" }) : text({ sv: "Nej", en: "No" })}</span>
+          </MetadataListItem>
+        ) : null}
         {bolag.registry_checked_at ? (
           <MetadataListItem label={text({ sv: "Senast hämtad", en: "Last fetched" })} icon={<Icon icon={Clock} size="sm" />}>
             <Timestamp value={bolag.registry_checked_at} format="relative" color="primary" />
@@ -108,7 +123,22 @@ export function Registret({
         </div>
       )}
 
-      <div role="status" className="flex flex-col gap-2 empty:hidden">
+      {/* Det som står på posten och därför finns kvar efter en omladdning. */}
+      {status === "deregistered" ? (
+        <p className="text-[0.875rem] text-danger">{text({ sv: "Bolaget är avregistrerat i registret.", en: "The company is deregistered in the registry." })}</p>
+      ) : null}
+      {bolag.registry_advertising_block ? (
+        <p className="text-[0.875rem] text-ink2">
+          {text({ sv: "Bolaget har reklamspärr i registret. Den stoppar inget här förrän bolaget står i ", en: "The company has an advertising block in the registry. It stops nothing here until the company is in " })}
+          <NextLink href={`${sparrvag}?ny=1`} className="underline underline-offset-2">
+            {text({ sv: "Spärrar", en: "Blocks" })}
+          </NextLink>
+          .
+        </p>
+      ) : null}
+
+      {/* Utfallet av hämtningen. Regionen finns hela tiden och byter bara innehåll, så att beskedet sägs upp. */}
+      <div role="status" className="flex flex-col gap-2 empty:-mt-3">
         {fel ? <p className="text-[0.875rem] text-danger">{text(fel)}</p> : null}
         {utfall ? (
           <>
@@ -118,26 +148,35 @@ export function Registret({
                 : text({ sv: "Inget nytt att fylla i.", en: "Nothing new to fill in." })}
             </p>
             {utfall.skipped.length ? (
-              <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-                <p className="min-w-0 flex-1 basis-56 text-[0.875rem] text-ink2">
-                  {text({
-                    sv: `Registret säger annat om ${namn(utfall.skipped)}. Bolagets egna värden står kvar.`,
-                    en: `The registry says otherwise about ${namn(utfall.skipped)}. The company's own values stay.`
-                  })}
-                </p>
-                <Button size="sm" variant="ghost" label={text({ sv: "Skriv över med registrets", en: "Overwrite with the registry's" })} isLoading={hamtar === "skriv"} onClick={() => void hamta(true)} />
-              </div>
+              bekraftar ? (
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+                  <p className="min-w-0 flex-1 basis-56 text-[0.875rem] text-ink">
+                    {text({
+                      sv: `Bolagets ${namn(utfall.skipped)} ersätts med registrets. Det går inte att ångra.`,
+                      en: `The company's ${namn(utfall.skipped)} will be replaced with the registry's. This cannot be undone.`
+                    })}
+                  </p>
+                  <Button size="sm" variant="ghost" label={text({ sv: "Avbryt", en: "Cancel" })} onClick={() => setBekraftar(false)} />
+                  <Button size="sm" variant="secondary" label={text({ sv: "Skriv över", en: "Overwrite" })} isLoading={hamtar === "skriv"} onClick={() => void hamta(true)} />
+                </div>
+              ) : (
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+                  <p className="min-w-0 flex-1 basis-56 text-[0.875rem] text-ink2">
+                    {text({
+                      sv: `Registret säger annat om ${namn(utfall.skipped)}. Bolagets egna värden står kvar.`,
+                      en: `The registry says otherwise about ${namn(utfall.skipped)}. The company's own values stay.`
+                    })}
+                  </p>
+                  <Button size="sm" variant="ghost" label={text({ sv: "Skriv över med registrets", en: "Overwrite with the registry's" })} isDisabled={hamtar != null} onClick={() => setBekraftar(true)} />
+                </div>
+              )
             ) : null}
-            {utfall.deregistered ? (
-              <p className="text-[0.875rem] text-danger">{text({ sv: "Bolaget är avregistrerat i registret.", en: "The company is deregistered in the registry." })}</p>
-            ) : null}
-            {utfall.advertising_block ? (
+            {utfall.protected?.length ? (
               <p className="text-[0.875rem] text-ink2">
-                {text({ sv: "Bolaget har reklamspärr i registret. Den stoppar inget här förrän bolaget står i ", en: "The company has an advertising block in the registry. It stops nothing here until the company is in " })}
-                <NextLink href={sparrvag} className="underline underline-offset-2">
-                  {text({ sv: "Spärrar", en: "Blocks" })}
-                </NextLink>
-                .
+                {text({
+                  sv: `Registret säger också annat om ${namn(utfall.protected)}, som är ändrat för hand här och aldrig skrivs över. Ändra fältet själv om registret har rätt.`,
+                  en: `The registry also says otherwise about ${namn(utfall.protected)}, which was edited by hand here and is never overwritten. Change the field yourself if the registry is right.`
+                })}
               </p>
             ) : null}
           </>

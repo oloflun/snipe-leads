@@ -55,8 +55,8 @@ export const SPARRORSAKER: Record<Sparrorsak, Localized> = {
   objection: { sv: "Invändning", en: "Objection" },
   unsubscribe: { sv: "Avregistrering", en: "Unsubscribe" },
   nix: { sv: "NIX", en: "NIX" },
-  customer_request: { sv: "Egen begäran", en: "Own request" },
-  bounce: { sv: "Studs", en: "Bounce" },
+  customer_request: { sv: "Bad att slippa kontakt", en: "Asked not to be contacted" },
+  bounce: { sv: "Adressen fungerar inte", en: "The address does not work" },
   other: { sv: "Annat", en: "Other" }
 };
 

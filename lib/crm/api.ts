@@ -38,6 +38,8 @@ export type Bolag = {
   /** Bolagets status i SCB:s företagsregister, och när den lästes. Null tills bolaget hämtats ur registret. */
   registry_status?: "active" | "inactive" | "never_active" | "deregistered" | "unknown" | null;
   registry_checked_at?: string | null;
+  /** Registrets reklamspärr, som den stod vid senaste hämtningen. Den sätter aldrig `do_not_contact`. */
+  registry_advertising_block?: boolean | null;
   source: string | null;
   external_ids: { connection: string; id: string; last_seen_at: string | null }[];
   created_at: string | null;

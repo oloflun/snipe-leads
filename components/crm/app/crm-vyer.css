@@ -237,7 +237,7 @@
 }
 
 /* Stegen på tavlan (Stegdialog): en rad per steg med hårlinje emellan. Flyttknapparna, namnet,
-   sannolikheten, typen och papperskorgen står på en rad; på telefon står namnet för sig överst. */
+   sannolikheten, typen och papperskorgen står på en rad; på telefon står sannolikheten och typen på en egen rad under namnet. */
 .crm-stegrad {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) 88px 148px auto;
@@ -274,6 +274,10 @@
   font-size: 0.875rem;
   pointer-events: none;
 }
+/* Med ett fel står felets ikon i fältets högerkant: tecknet viker undan, och felraden säger intervallet. */
+.crm-stegrad-tal[data-fel]::after {
+  display: none;
+}
 .crm-stegrad-typ {
   grid-area: typ;
 }
@@ -282,10 +286,36 @@
   padding-top: 2px;
 }
 @media (max-width: 639.98px) {
+  /* Flyttknapparna, namnet och papperskorgen på en rad, sannolikheten och typen under: typens ord ryms då hela. */
   .crm-stegrad {
-    grid-template-columns: auto 88px minmax(0, 1fr) auto;
+    grid-template-columns: 88px minmax(0, 1fr) auto;
     grid-template-areas:
-      "namn namn namn namn"
-      "flytt tal typ bort";
+      "flytt namn bort"
+      "tal typ typ";
+  }
+}
+
+/* Uppgiftens titel öppnar Ändra. En tunn, prickad linje säger det också på pekskärm, där inget hovras. */
+.crm-uppgiftstitel {
+  text-decoration: underline dotted oklch(var(--ink) / 0.35);
+  text-underline-offset: 4px;
+  border-radius: 4px;
+}
+.crm-uppgiftstitel.line-through {
+  text-decoration: line-through;
+}
+@media (hover: hover) and (pointer: fine) {
+  .crm-uppgiftstitel:hover {
+    text-decoration-style: solid;
+    text-decoration-color: oklch(var(--ink));
+  }
+}
+.crm-uppgiftstitel:focus-visible {
+  outline: 2px solid var(--focus-outline-color);
+  outline-offset: 2px;
+}
+@media (max-width: 639.98px) {
+  .crm-uppgiftstitel {
+    padding-block: 6px;
   }
 }
