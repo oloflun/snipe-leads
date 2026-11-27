@@ -23,6 +23,7 @@ import {
   Globe,
   Handshake,
   LayoutDashboard,
+  ListTodo,
   Mail,
   Phone,
   Plug,
@@ -53,7 +54,7 @@ import { useLocale, type Localized } from "@/lib/i18n";
 export type Ton = "ockra" | "bla" | "mossa" | "sigill" | "mineral";
 
 /** CRM:ets vyer. Samma nycklar som adressen: `/crm/<vy>`. */
-export type Objekt = "oversikt" | "bolag" | "personer" | "affarer" | "synk" | "sparrar" | "utvecklare";
+export type Objekt = "oversikt" | "bolag" | "personer" | "affarer" | "uppgifter" | "synk" | "sparrar" | "utvecklare";
 
 export const OBJEKT: Record<Objekt, { ton: Ton; ikon: LucideIcon; namn: Localized }> = {
   oversikt: { ton: "ockra", ikon: LayoutDashboard, namn: { sv: "Översikt", en: "Overview" } },
@@ -61,6 +62,8 @@ export const OBJEKT: Record<Objekt, { ton: Ton; ikon: LucideIcon; namn: Localize
   personer: { ton: "mossa", ikon: Users, namn: { sv: "Personer", en: "People" } },
   // Sigill, som Synk: de står i var sin sektion av navigeringen och möts aldrig.
   affarer: { ton: "sigill", ikon: Handshake, namn: { sv: "Affärer", en: "Deals" } },
+  // Mineral, som Utvecklare: också de står i var sin sektion.
+  uppgifter: { ton: "mineral", ikon: ListTodo, namn: { sv: "Uppgifter", en: "Tasks" } },
   synk: { ton: "sigill", ikon: RefreshCw, namn: { sv: "Synk", en: "Sync" } },
   // Ockra, som Översikt: också de står i var sin sektion.
   sparrar: { ton: "ockra", ikon: Ban, namn: { sv: "Spärrar", en: "Blocks" } },

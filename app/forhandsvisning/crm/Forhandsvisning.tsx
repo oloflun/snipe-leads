@@ -7,6 +7,7 @@ import { OversiktVy } from "@/components/crm/app/OversiktVy";
 import { PersonerVy } from "@/components/crm/app/PersonerVy";
 import { SparrarVy } from "@/components/crm/app/SparrarVy";
 import { SynkVy } from "@/components/crm/app/SynkVy";
+import { UppgifterVy } from "@/components/crm/app/UppgifterVy";
 import { UtvecklareVy } from "@/components/crm/app/UtvecklareVy";
 import { DashboardProvider } from "@/components/dashboard/DashboardContext";
 import { BILAGA_MAX, BILAGETYPER, orgnrVisning, type Anslutning, type Bilaga, type Bolag, type Handelse, type Korning, type Leverans, type Nyckel, type Relation, type Webhook } from "@/lib/crm/api";
@@ -15,6 +16,7 @@ import type { DashboardState } from "@/lib/data/dashboard";
 import type { Personpost } from "@/lib/crm/person";
 import { SLAG_I_KANAL, gissaSlag, type Sparr, type Sparrkanal, type Sparrorsak, type Sparrslag } from "@/lib/crm/sparr";
 import type { Tema } from "@/lib/tema";
+import type { Uppgift } from "@/lib/crm/uppgift";
 
 /**
  * Förhandsvisning av Snajp CRM utan databas och utan inloggning. Anropen mot
@@ -543,6 +545,25 @@ const BILAGOR: Bilaga[] = [
 
 /** Uppgifter som bockats av i förhandsvisningen. */
 const KLARA: string[] = [];
+
+/** Den samlade uppgiftslistan (GET /v1/tasks). `timmar` framåt är negativt: förfaller om så många timmar. */
+const uppgift = (i: number, title: string, omTimmar: number | null, koppling: Partial<Pick<Uppgift, "company_id" | "person_id" | "deal_id">>, owner: string | null, description: string | null = null, klar: number | null = null): Uppgift => ({
+  id: `u${i}`, title, description, status: klar == null ? "todo" : "done", due_at: omTimmar == null ? null : iso(-omTimmar), completed_at: klar == null ? null : iso(klar),
+  owner, company_id: null, person_id: null, deal_id: null, ...koppling, created_at: iso(24 * 9), updated_at: iso(klar ?? 30)
+});
+const UPPGIFTER: Uppgift[] = [
+  uppgift(1, "Ring om offerten", -50, { company_id: "b3", deal_id: "d8" }, "Exempel Säljare", "De ville ha svar före månadsskiftet."),
+  uppgift(2, "Skicka avtalsutkastet", -26, { company_id: "b5" }, "Exempel Säljare"),
+  uppgift(3, "Boka uppföljning efter demon", 3, { company_id: "b1" }, "Exempel Säljare"),
+  uppgift(4, "Stäm av prisbilagan med ekonomi", 6, { deal_id: "d8" }, "Exempel Kollega", "Tre år, årlig indexering."),
+  uppgift(5, "Skicka referenskunder", 30, { person_id: "p2" }, "Exempel Säljare"),
+  uppgift(6, "Förbered kvartalsgenomgång", 24 * 4, { company_id: "b7" }, "Exempel Kollega"),
+  uppgift(7, "Uppdatera kontaktuppgifter efter flytten", 24 * 9, { company_id: "b12" }, null),
+  uppgift(8, "Gå igenom vårens kampanjlista", null, {}, "Exempel Säljare"),
+  uppgift(9, "Skicka mötesanteckningar", null, { company_id: "b3" }, "Exempel Säljare", null, 20),
+  uppgift(10, "Bekräfta leveransdatum", null, { company_id: "b5" }, "Exempel Kollega", null, 75)
+];
+let uppgiftsnummer = 100;
 /** Anteckningar, uppgifter och aktiviteter som ändrats eller tagits bort i förhandsvisningen, på länkens id. */
 const ANDRAT: Record<string, Partial<Tidsrad> & { data?: Record<string, unknown> }> = {};
 const BORTTAGET = new Set<string>();
@@ -928,6 +949,42 @@ async function svara(url: URL, init?: RequestInit): Promise<Response> {
   if (linje && metod === "GET") {
     const rader = tidslinje(linje[1] as "companies" | "people" | "deals", decodeURIComponent(linje[2]));
     return rader ? json({ data: rader }) : json({ detail: { code: "not_found", message: "The record does not exist.", meddelande: "Posten finns inte." } }, 404);
+  }
+  // ---- Den samlade uppgiftslistan (GET /v1/tasks och uppgifterna i den) -------
+  if (vag === "/v1/tasks" && metod === "GET") {
+    const q = (url.searchParams.get("q") ?? "").toLowerCase();
+    const status = url.searchParams.get("status");
+    const fore = url.searchParams.get("due_before");
+    const traffar = UPPGIFTER.filter((u) => !u.deleted_at && (!status || u.status === status) && (!fore || (u.due_at != null && u.due_at < fore)) && (!q || (u.title ?? "").toLowerCase().includes(q)));
+    const sort = url.searchParams.get("sort") ?? "updated";
+    traffar.sort((a, b) => (sort === "due" ? (a.due_at ?? "9999").localeCompare(b.due_at ?? "9999") : (b.updated_at ?? "").localeCompare(a.updated_at ?? "")));
+    return json({ data: traffar, next_cursor: null });
+  }
+  const iListan = vag.match(/^\/v1\/tasks\/([^/]+)(\/restore)?$/);
+  const iListanPost = iListan ? UPPGIFTER.find((u) => u.id === decodeURIComponent(iListan[1])) : null;
+  if (iListan && iListanPost) {
+    const u = iListanPost;
+    if (iListan[2] && metod === "POST") u.deleted_at = null;
+    else if (metod === "DELETE") {
+      u.deleted_at = new Date().toISOString();
+      return json(null, 204);
+    } else if (metod === "PATCH") {
+      for (const f of ["title", "description", "due_at", "owner", "company_id"] as const) if (f in kropp) (u as Record<string, unknown>)[f] = kropp[f] ?? null;
+      if (kropp.status === "done" || kropp.status === "todo") {
+        u.status = kropp.status;
+        u.completed_at = kropp.status === "done" ? new Date().toISOString() : null;
+      }
+      u.updated_at = new Date().toISOString();
+    }
+    return json(u);
+  }
+  if (vag === "/v1/tasks" && metod === "POST" && !kropp.person_id && !kropp.deal_id && ("description" in kropp || "owner" in kropp)) {
+    // Från vyn Uppgifter: uppgiften får stå för sig själv eller höra till ett bolag.
+    const ny = uppgift(++uppgiftsnummer, String(kropp.title ?? ""), null, { company_id: kropp.company_id ? String(kropp.company_id) : null }, kropp.owner ? String(kropp.owner) : null, kropp.description ? String(kropp.description) : null);
+    ny.due_at = kropp.due_at ? String(kropp.due_at) : null;
+    ny.created_at = ny.updated_at = new Date().toISOString();
+    UPPGIFTER.unshift(ny);
+    return json(ny, 201);
   }
   const skrivning = vag.match(/^\/v1\/(notes|tasks|activities)$/);
   if (skrivning && metod === "POST") return skriv(skrivning[1] as "notes" | "tasks" | "activities", kropp);
@@ -1325,6 +1382,7 @@ export function CrmForhandsvisning({ tema, vy, kund, utanTillagg }: Readonly<{ t
         {vy === "bolag" ? <BolagVy /> : null}
         {vy === "personer" ? <PersonerVy bas="/forhandsvisning/crm" /> : null}
         {vy === "affarer" ? <AffarerVy bas="/forhandsvisning/crm" /> : null}
+        {vy === "uppgifter" ? <UppgifterVy bas="/forhandsvisning/crm" /> : null}
         {vy === "synk" ? <SynkVy utvecklarvag="/forhandsvisning/crm/utvecklare" /> : null}
         {vy === "sparrar" ? <SparrarVy /> : null}
         {vy === "utvecklare" ? <UtvecklareVy /> : null}

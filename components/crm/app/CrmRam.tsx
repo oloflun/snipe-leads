@@ -38,7 +38,7 @@ import { attRatta } from "@/lib/crm/felkoder";
 import { useLocale } from "@/lib/i18n";
 import { colorScheme, dataTheme, type Tema } from "@/lib/tema";
 
-export type CrmVy = "oversikt" | "bolag" | "personer" | "affarer" | "synk" | "sparrar" | "utvecklare";
+export type CrmVy = "oversikt" | "bolag" | "personer" | "affarer" | "uppgifter" | "synk" | "sparrar" | "utvecklare";
 
 /**
  * Astryx rot-tema skriver `data-theme` på <html> och TAR BORT det när temat
@@ -305,6 +305,7 @@ export function CrmRam({
                     {post("bolag")}
                     {post("personer")}
                     {post("affarer")}
+                    {post("uppgifter")}
                   </SideNavSection>
                   <SideNavSection title={text({ sv: "Data", en: "Data" })}>
                     {post("synk")}
