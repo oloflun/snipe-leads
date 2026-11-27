@@ -44,9 +44,8 @@ _DETALJ_UT = {"fran": "from", "till": "to", "ursprung": "origin", "klass": "repl
               "forlustorsak": "lost_reason", "forlustorsak_kod": "lost_reason_code"}
 _AKTIVITET_UT = {"samtal": "call", "mote": "meeting", "mejl": "email", "besok": "visit", "ovrigt": "other"}
 
-_UTFALL_IN = {"no_answer": "ej_svar", "call_back": "aterkom", "not_interested": "ej_intresserad",
-              "do_not_contact": "kontakta_inte", "meeting_booked": "mote", "won": "vunnen"}
-_UTFALL_UT = {v: k for k, v in _UTFALL_IN.items()}
+_UTFALL_UT = utfall.UTFALL_API
+_UTFALL_IN = {v: k for k, v in _UTFALL_UT.items()}
 _URSPRUNG_IN = {"all": "alla", "own": "egna", "iris": "iris"}
 _URSPRUNG_UT = {"egna": "own", "iris": "iris"}
 

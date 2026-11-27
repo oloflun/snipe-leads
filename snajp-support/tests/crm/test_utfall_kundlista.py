@@ -119,9 +119,10 @@ async def test_anteckningen_vid_vunnen_och_utan_lead_blir_en_aktivitet_pa_bolage
         assert svar.status_code == 200 and svar.json()["lead_ids"] == []
         (aktivitet,) = await _aktiviteter(k, utan["id"])
         assert (aktivitet["type"], aktivitet["subject"], aktivitet["body"], aktivitet["outcome"]) == (
-            "call", "Återkom", "Ring efter jul.", "aterkom")
+            "call", "Återkom", "Ring efter jul.", "call_back")
         poster = (await k.get(f"{V1}/companies/{utan['id']}/timeline")).json()["data"]
-        assert [p["link"]["id"] for p in poster if p["type"] == "activity"] == [aktivitet["id"]]
+        (pa_tidslinjen,) = [p for p in poster if p["type"] == "activity"]
+        assert pa_tidslinjen["link"]["id"] == aktivitet["id"] and pa_tidslinjen["data"]["result"] == "call_back"
         # Utan anteckning blir det ingen aktivitet, och blanksteg räknas inte.
         await k.post(f"{V1}/companies/{utan['id']}/outcome", json={"outcome": "no_answer", "note": "   "})
         assert len(await _aktiviteter(k, utan["id"])) == 1
@@ -130,7 +131,9 @@ async def test_anteckningen_vid_vunnen_och_utan_lead_blir_en_aktivitet_pa_bolage
         med = (await k.post(f"{V1}/companies", json={"name": "Med Lead AB", "org_number": ORGNR_B})).json()
         await k.post(f"{V1}/companies/{med['id']}/outcome", json={"outcome": "won", "note": "Avtal signerat."})
         (vunnen,) = await _aktiviteter(k, med["id"])
-        assert (vunnen["subject"], vunnen["body"], vunnen["outcome"]) == ("Vunnen", "Avtal signerat.", "vunnen")
+        # Aktivitetens `outcome` är API:ts kod, samma ord som anropet och /iris använder.
+        assert (vunnen["subject"], vunnen["body"], vunnen["outcome"]) == ("Vunnen", "Avtal signerat.", "won")
+        assert (await k.get(f"{V1}/companies/{med['id']}/iris")).json()["outcome"] == vunnen["outcome"]
     # Vunnen går inte genom samtalet: anteckningen står bara på bolaget.
     assert await storage.list_lead_samtal(buddy.id, prospect_id=lead["id"]) == []
     async with annan.klient() as k:

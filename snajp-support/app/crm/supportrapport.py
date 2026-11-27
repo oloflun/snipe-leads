@@ -206,6 +206,14 @@ def arendets_hande(tenant_id: str, korning: dict[str, Any], rapport: dict[str, A
     return "\n".join(rader)
 
 
+def _antal_poster(korning: dict[str, Any]) -> str:
+    """Antalet poster som föll, ur felloggen. Loggen har taket MAX_FEL: står
+    den full är talet ett golv, och då säger texten "minst"."""
+    fel = korning.get("fel") or []
+    antal = sum(1 for rad in fel if ar_fel(rad))
+    return f"minst {antal}" if len(fel) >= lagring.MAX_FEL else str(antal)
+
+
 async def _arbetsyta(storage: Any, tenant_id: str) -> str | None:
     """Kundens arbetsyta, bara id. Oskopad systemläsning som `tillgang.grund`:
     `workspaces` bär workspace-RLS och en tenant-skopad anslutning ser noll
@@ -267,18 +275,27 @@ async def skapa_arende(
         if anslutning is None and korning.get("anslutning_id"):
             anslutning = await lagring.hamta_anslutning(storage, tenant_id, korning["anslutning_id"])
         gjorde = arendets_gjorde(anslutning, korning)
-        antal = sum(1 for rad in korning.get("fel") or [] if ar_fel(rad))
+        meddelande = f"Samma anslutning föll igen i körning {korning['id']}: {_antal_poster(korning)} poster"
 
-        oppet = next((a for a in await storage.list_plattformsarenden(rapportor_user_id=SYSTEMRAPPORTOR, limit=500)
-                      if a["status"] != "stangd" and a["kund_tenant_slug"] == slug
-                      and str(a["kund_workspace_id"]) == arbetsyta and a["gjorde"] == gjorde), None)
-        if oppet is not None:
-            await storage.andra_plattformsarende(
+        # Det öppna ärendet söks med en riktad fråga (inte bland en lista med
+        # tak), och händelsen skrivs villkorat på statusen som lästes. Byter
+        # någon status emellan, eller stänger ärendet, söks det om: ett
+        # stängt ärende ger då ett nytt, ett annat läge får händelsen.
+        for _ in range(3):
+            oppet = await storage.hitta_oppet_plattformsarende(
+                rapportor_user_id=SYSTEMRAPPORTOR, kund_workspace_id=arbetsyta, kund_tenant_slug=slug, gjorde=gjorde)
+            if oppet is None:
+                break
+            andrat = await storage.andra_plattformsarende(
                 oppet["id"], status=oppet["status"], kraver_status=(oppet["status"],),
-                handelse={"typ": "synk", "synlig_for_kund": False, "aktor": "system",
-                          "meddelande": f"Samma anslutning föll igen i körning {korning['id']}: {antal} poster"})
-            await satt_arende(storage, tenant_id, korning["id"], oppet["nummer"])
-            return oppet["nummer"]
+                handelse={"typ": "synk", "synlig_for_kund": False, "aktor": "system", "meddelande": meddelande})
+            if andrat is not None:
+                await satt_arende(storage, tenant_id, korning["id"], oppet["nummer"])
+                return oppet["nummer"]
+        else:
+            logger.warning("Synkens ärende bytte status under skrivningen tre gånger (tenant %s, körning %s).",
+                           tenant_id, korning["id"])
+            return None
 
         from ..api.schemas import PlattformsarendeRequest
 
@@ -287,7 +304,9 @@ async def skapa_arende(
             kund_tenant_slug=slug, vy="crm", roll="system", besok_av_admin=False, sida=_SIDA, gjorde=gjorde,
             hande=arendets_hande(tenant_id, korning, rapport)[:4000], vantade="Att alla poster kom in.",
         ).model_dump()
-        arende = await storage.skapa_plattformsarende(falt)
+        # Synken skapade ärendet, inte en kund: den första händelsen säger det
+        # och är intern, som de som följer.
+        arende = await storage.skapa_plattformsarende(falt, aktor="system", synlig_for_kund=False)
         await satt_arende(storage, tenant_id, korning["id"], arende["nummer"])
         uppgift = asyncio.create_task(_mejla(storage, arende["nummer"], arende["id"]))
         _pagaende.add(uppgift)

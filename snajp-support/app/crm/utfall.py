@@ -21,7 +21,8 @@ e-post, telefon och organisationsnummer (`sparr.lagg_till`, källan `utfall`).
 
 Anteckningen följer samtalet när det finns ett lead och utfallet går genom
 `samtal.registrera`. Vid vunnen, och för ett bolag utan lead, blir den en
-aktivitet (typ samtal) på bolaget, så att den inte tappas.
+aktivitet (typ samtal) på bolaget, så att den inte tappas. Aktivitetens
+`utfall` är då API:ts kod (`UTFALL_API`, t.ex. `won`), inte den interna.
 
 ## Från leadsflödet till CRM:et: `iris_lage`
 
@@ -45,6 +46,11 @@ UTFALL = ("ej_svar", "aterkom", "ej_intresserad", "kontakta_inte", "mote", "vunn
 #: Utfallens svenska namn: rubriken på aktiviteten som bär en anteckning.
 UTFALL_NAMN = {"ej_svar": "Ej svar", "aterkom": "Återkom", "ej_intresserad": "Ej intresserad",
                "kontakta_inte": "Kontakta inte", "mote": "Möte bokat", "vunnen": "Vunnen"}
+#: Utfallens koder i det publika API:t (`POST /companies/{id}/outcome`). Aktiviteten
+#: som bär en anteckning får API:ts kod som `utfall`, så att `outcome` på
+#: aktiviteten är samma ord som klienten skickade och som `/iris` svarar med.
+UTFALL_API = {"ej_svar": "no_answer", "aterkom": "call_back", "ej_intresserad": "not_interested",
+              "kontakta_inte": "do_not_contact", "mote": "meeting_booked", "vunnen": "won"}
 
 #: Leadets status när det inte ska bearbetas mer, och vad det betyder i CRM:et.
 _AVSLUTAT = {"suppressed": "kontakta_inte", "lost": "ej_intresserad", "meeting": "mote", "won": "vunnen"}
@@ -89,7 +95,7 @@ async def registrera(
     text = (anteckning or "").strip()
     if text and (utfall == "vunnen" or not berorda):
         await objekt.skapa(storage, tenant_id, "aktivitet", {
-            "typ": "samtal", "rubrik": UTFALL_NAMN[utfall], "text": text, "utfall": utfall,
+            "typ": "samtal", "rubrik": UTFALL_NAMN[utfall], "text": text, "utfall": UTFALL_API[utfall],
             "bolag_id": bolag["id"]}, via=via, aktor=aktor)
 
     andring: dict[str, Any] = {}

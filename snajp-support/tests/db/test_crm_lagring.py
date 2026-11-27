@@ -653,6 +653,74 @@ async def test_supportarendets_arbetsyta_och_kaskaden_for_en_affar_i_databasen(m
         assert rad == {"titel": "Skicka offert", "affar_id": None, "raderad_at": None}
 
 
+async def test_synkens_supportarende_skapas_och_ateranvands_i_databasen(miljo, monkeypatch):
+    """Granskningens fynd: ärendeflödet var bara provat mot minneslagret. Här
+    går det mot plattformsärendena (migration 156) med PostgresStorages egna
+    metoder och systemrapportörens värden: ärendet skapas, den första
+    händelsen är synkens och intern, nästa körning återanvänder ärendet med
+    en intern händelse, och ett stängt ärende ger ett nytt."""
+    from app.crm import supportrapport
+    from app.storage.postgres import PostgresStorage as PG
+
+    lager, a, b = miljo
+    for namn in ("_ARENDE_KOLUMNER", "_plattformsarenden_med_handelser", "skapa_plattformsarende",
+                 "hitta_oppet_plattformsarende", "andra_plattformsarende", "hamta_plattformsarende",
+                 "list_plattformsarenden"):
+        monkeypatch.setattr(Lager, namn, getattr(PG, namn), raising=False)
+
+    async def _kund(tenant_id):
+        return {"id": tenant_id, "slug": "crm-a" if tenant_id == a else "crm-b", "name": "Kund"}
+
+    async def _inga_kunder():
+        return []
+
+    lager.get_tenant, lager.list_tenants = _kund, _inga_kunder
+    ws = str(uuid.uuid4())
+    await lager.conn.execute("reset role")
+    await lager.conn.execute("insert into workspaces (id, ss_tenant_id) values ($1::text::uuid, $2::text::uuid)", ws, a)
+    await lager.conn.execute("set local role snajp_app")
+
+    anslutning = await lagring.skapa_anslutning(lager, a, namn="egen", system="generisk")
+
+    async def _korning():
+        korning = await lagring.skapa_korning(lager, a, anslutning_id=anslutning["id"])
+        await synk.synka_sats(lager, a, anslutning, korning, "bolag", [{"id": "1", "name": "Rent AB"}, {"id": "3"}])
+        return await synk.slutfor(lager, a, anslutning, korning)
+
+    forsta = await _korning()
+    nummer = forsta["support_arende"]
+    assert nummer and nummer.startswith("F-")
+    oppet = await lager.hitta_oppet_plattformsarende(
+        rapportor_user_id=supportrapport.SYSTEMRAPPORTOR, kund_workspace_id=ws, kund_tenant_slug="crm-a",
+        gjorde="Synk från egen (delta)")
+    assert oppet and oppet["nummer"] == nummer and oppet["status"] == "mottagen"
+    arende = await lager.hamta_plattformsarende(oppet["id"])
+    assert (arende["rapportor_user_id"], arende["vy"], arende["roll"], arende["sida"]) == (
+        supportrapport.SYSTEMRAPPORTOR, "crm", "system", "/crm/synk")
+    assert [(h["typ"], h["aktor"], h["synlig_for_kund"]) for h in arende["handelser"]] == [("skapad", "system", False)]
+
+    andra = await _korning()
+    assert andra["support_arende"] == nummer
+    arende = await lager.hamta_plattformsarende(oppet["id"])
+    # I testets enda transaktion står now() still: händelsernas ordning
+    # avgörs då av id, så de jämförs utan ordning.
+    assert sorted((h["typ"], h["aktor"], h["synlig_for_kund"]) for h in arende["handelser"]) == [
+        ("skapad", "system", False), ("synk", "system", False)]
+    (synk_handelse,) = [h for h in arende["handelser"] if h["typ"] == "synk"]
+    assert synk_handelse["meddelande"] == f"Samma anslutning föll igen i körning {andra['id']}: 1 poster"
+    assert arende["status"] == "mottagen"
+    # En annan arbetsyta eller ett annat `gjorde` hittar inte ärendet.
+    assert await lager.hitta_oppet_plattformsarende(
+        rapportor_user_id=supportrapport.SYSTEMRAPPORTOR, kund_workspace_id=str(uuid.uuid4()),
+        kund_tenant_slug="crm-a", gjorde="Synk från egen (delta)") is None
+
+    await lager.andra_plattformsarende(oppet["id"], status="stangd",
+                                       handelse={"typ": "status", "aktor": "plattformsadmin"})
+    tredje = await _korning()
+    assert tredje["support_arende"] not in (None, nummer)
+    assert len(await lager.list_plattformsarenden(rapportor_user_id=supportrapport.SYSTEMRAPPORTOR)) == 2
+
+
 async def test_ej_aktuell_ar_upptagen_och_raknas_i_databasen(miljo):
     """Migration 165: relationen ej_aktuell tas emot av check-villkoret, står
     kvar bland de upptagna och räknas för sig i översikten."""

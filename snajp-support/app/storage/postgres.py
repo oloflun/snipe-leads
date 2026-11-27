@@ -5934,7 +5934,9 @@ class PostgresStorage:
             ut.append(rad)
         return ut
 
-    async def skapa_plattformsarende(self, falt: dict[str, Any]) -> dict[str, Any]:
+    async def skapa_plattformsarende(
+        self, falt: dict[str, Any], *, aktor: str = "kund", synlig_for_kund: bool = True
+    ) -> dict[str, Any]:
         from .base import nytt_arendenummer
 
         async with self.pool.acquire() as conn:
@@ -5968,9 +5970,11 @@ class PostgresStorage:
                             """
                             insert into plattformsarende_handelser
                               (arende_id, typ, status, meddelande, synlig_for_kund, aktor)
-                            values ($1, 'skapad', 'mottagen', null, true, 'kund')
+                            values ($1, 'skapad', 'mottagen', null, $2::boolean, $3::text)
                             """,
                             arende["id"],
+                            bool(synlig_for_kund),
+                            aktor,
                         )
                     break
                 except asyncpg.exceptions.UniqueViolationError:
@@ -5982,6 +5986,32 @@ class PostgresStorage:
                 arende["id"],
             )
             return (await self._plattformsarenden_med_handelser(conn, [rad]))[0]
+
+    async def hitta_oppet_plattformsarende(
+        self, *, rapportor_user_id: str, kund_workspace_id: str, kund_tenant_slug: str, gjorde: str
+    ) -> dict[str, Any] | None:
+        # Riktad fråga utan händelser: synken frågar så vid varje körning med
+        # fel. Indexet plattformsarenden_rapportor_idx bär rapportören.
+        async with self.pool.acquire() as conn:
+            rad = await conn.fetchrow(
+                """
+                select a.id, a.nummer, a.status from plattformsarenden a
+                 where a.rapportor_user_id = $1::text::uuid
+                   and a.kund_workspace_id = $2::text::uuid
+                   and a.kund_tenant_slug = $3::text
+                   and a.gjorde = $4::text
+                   and a.status <> 'stangd'
+                 order by a.created_at desc, a.id
+                 limit 1
+                """,
+                str(rapportor_user_id),
+                str(kund_workspace_id),
+                kund_tenant_slug,
+                gjorde,
+            )
+        if rad is None:
+            return None
+        return {"id": str(rad["id"]), "nummer": rad["nummer"], "status": rad["status"]}
 
     async def hamta_plattformsarende(self, arende_id: str) -> dict[str, Any] | None:
         try:

@@ -537,8 +537,8 @@ curl -X POST "$BAS/companies/$ID/outcome" -H "X-API-Key: $NYCKEL" -H "Content-Ty
 leadet byter läge, och `do_not_contact` spärrar adressen. `won` gör bolaget till kund. Svaret
 bär posten och `lead_ids`, de leads som berördes. `note` sparas på leadets samtal när bolaget
 har ett lead. Vid `won`, och för ett bolag utan lead, blir den i stället en aktivitet på
-bolaget (`type: call`, utfallets namn som `subject`, koden som `outcome`), så att den står på
-tidslinjen.
+bolaget (`type: call`, utfallets namn som `subject`, och samma kod som i anropet, till exempel
+`won`, som `outcome`), så att den står på tidslinjen.
 
 Åt andra hållet: `GET /companies/{id}/iris` visar bolagets leads och vad de betyder för
 posten. `leads` står äldst först, och `latest` är det senast skapade leadet (samma form som en

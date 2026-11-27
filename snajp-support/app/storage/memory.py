@@ -4255,7 +4255,9 @@ class MemoryStorage:
         ut["handelser"] = [dict(h) for h in rad["handelser"]]
         return ut
 
-    async def skapa_plattformsarende(self, falt: dict[str, Any]) -> dict[str, Any]:
+    async def skapa_plattformsarende(
+        self, falt: dict[str, Any], *, aktor: str = "kund", synlig_for_kund: bool = True
+    ) -> dict[str, Any]:
         from .base import nytt_arendenummer
 
         lager = self._plattformsarenden()
@@ -4291,11 +4293,25 @@ class MemoryStorage:
             "_ordning": len(lager),
             "handelser": [{
                 "id": str(uuid.uuid4()), "arende_id": arende_id, "tid": nu, "typ": "skapad",
-                "status": "mottagen", "meddelande": None, "synlig_for_kund": True, "aktor": "kund",
+                "status": "mottagen", "meddelande": None, "synlig_for_kund": bool(synlig_for_kund), "aktor": aktor,
             }],
         }
         lager[arende_id] = rad
         return self._plattformsarende_ut(rad)
+
+    async def hitta_oppet_plattformsarende(
+        self, *, rapportor_user_id: str, kund_workspace_id: str, kund_tenant_slug: str, gjorde: str
+    ) -> dict[str, Any] | None:
+        rader = [
+            rad for rad in self._plattformsarenden().values()
+            if rad["rapportor_user_id"] == str(rapportor_user_id) and rad["status"] != "stangd"
+            and rad["kund_workspace_id"] == str(kund_workspace_id) and rad["kund_tenant_slug"] == kund_tenant_slug
+            and rad["gjorde"] == gjorde
+        ]
+        if not rader:
+            return None
+        rad = max(rader, key=lambda r: (r["created_at"], r["_ordning"]))
+        return {"id": rad["id"], "nummer": rad["nummer"], "status": rad["status"]}
 
     async def hamta_plattformsarende(self, arende_id: str) -> dict[str, Any] | None:
         rad = self._plattformsarenden().get(str(arende_id))

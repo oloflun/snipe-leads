@@ -2260,10 +2260,24 @@ class Storage(Protocol):
     # oskopat, av backendens roll (se migration 156). Vägarna ovanför
     # (app/api/plattformsarenden.py) filtrerar alltid på rapportören.
 
-    async def skapa_plattformsarende(self, falt: dict[str, Any]) -> dict[str, Any]:
+    async def skapa_plattformsarende(
+        self, falt: dict[str, Any], *, aktor: str = "kund", synlig_for_kund: bool = True
+    ) -> dict[str, Any]:
         """Sparar en ny felrapport med status 'mottagen', ett unikt nummer
         (`nytt_arendenummer`) och händelsen 'skapad'. `falt` bär kolumnerna
-        ur PlattformsarendeRequest. Returnerar ärendet med `handelser`."""
+        ur PlattformsarendeRequest. `aktor` och `synlig_for_kund` gäller den
+        första händelsen: Hjälprutans rapporter skapas av kunden, synkens
+        (app/crm/supportrapport.py) av 'system' och internt. Returnerar
+        ärendet med `handelser`."""
+        ...
+
+    async def hitta_oppet_plattformsarende(
+        self, *, rapportor_user_id: str, kund_workspace_id: str, kund_tenant_slug: str, gjorde: str
+    ) -> dict[str, Any] | None:
+        """Det senast skapade ärendet som inte är stängt, från rapportören, för
+        arbetsytan och kunden och med samma `gjorde`. Bara `{id, nummer,
+        status}`, inga händelser: synken frågar så varje körning med fel, och
+        en riktad fråga hittar också ett gammalt öppet ärende."""
         ...
 
     async def hamta_plattformsarende(self, arende_id: str) -> dict[str, Any] | None:

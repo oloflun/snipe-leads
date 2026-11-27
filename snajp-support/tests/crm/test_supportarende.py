@@ -137,6 +137,60 @@ async def test_ett_stangt_arende_ger_ett_nytt(buddy, storage, mejl):
     assert len(await _arenden(storage)) == 2
 
 
+async def test_ett_gammalt_oppet_arende_hittas_bakom_manga_nyare(buddy, storage, mejl):
+    """Granskningens fynd: återanvändningen letade bland de 500 nyaste
+    ärendena från synken, över alla kunder och stängda inräknade. Ett äldre
+    öppet ärende syns nu ändå, och den första händelsen är synkens, intern."""
+    _arbetsyta(storage, buddy)
+    forsta = await _synka(buddy, _FEL)
+    (arende,) = await _arenden(storage)
+    assert [(h["typ"], h["aktor"], h["synlig_for_kund"]) for h in arende["handelser"]] == [
+        ("skapad", "system", False)]
+    for i in range(510):
+        nytt = await storage.skapa_plattformsarende({
+            "rapportor_user_id": supportrapport.SYSTEMRAPPORTOR, "kund_workspace_id": str(uuid.uuid4()),
+            "kund_tenant_slug": f"kund-{i}", "vy": "crm", "roll": "system", "sida": "/crm/synk",
+            "gjorde": "Synk från egen (delta)", "hande": "x"}, aktor="system", synlig_for_kund=False)
+        if i % 2:
+            await storage.andra_plattformsarende(nytt["id"], status="stangd",
+                                                 handelse={"typ": "status", "aktor": "plattformsadmin"})
+    andra = await _synka(buddy, _FEL)
+    assert andra["support"]["ticket"] == forsta["support"]["ticket"]
+    assert len(await storage.list_plattformsarenden(rapportor_user_id=supportrapport.SYSTEMRAPPORTOR,
+                                                    limit=1000)) == 511
+
+
+async def test_ett_arende_som_stangs_under_skrivningen_ger_ett_nytt(buddy, storage, monkeypatch, mejl):
+    """Granskningens fynd: svaret från andra_plattformsarende ignorerades, och
+    körningen fick numret på ett ärende som just stängts utan händelsen."""
+    _arbetsyta(storage, buddy)
+    forsta = await _synka(buddy, _FEL)
+    (arende,) = await _arenden(storage)
+    riktig = storage.andra_plattformsarende
+
+    async def _stangs_forst(arende_id, **kw):
+        # En admin hinner stänga ärendet: den villkorade skrivningen säger nej.
+        await riktig(arende_id, status="stangd", handelse={"typ": "status", "aktor": "plattformsadmin"})
+        return await riktig(arende_id, **kw)
+
+    monkeypatch.setattr(storage, "andra_plattformsarende", _stangs_forst)
+    andra = await _synka(buddy, _FEL)
+    assert andra["support"]["ticket"] not in (None, forsta["support"]["ticket"])
+    stangt = await storage.hamta_plattformsarende(arende["id"])
+    assert stangt["status"] == "stangd" and not [h for h in stangt["handelser"] if h["typ"] == "synk"]
+
+
+def test_antalet_poster_ar_ett_golv_nar_felloggen_ar_full():
+    from app.crm import lagring
+
+    rad = {"objekt": "bolag", "orsak": "saknar_namn"}
+    assert supportrapport._antal_poster({"fel": [rad] * 3}) == "3"
+    assert supportrapport._antal_poster({"fel": [rad] * lagring.MAX_FEL}) == f"minst {lagring.MAX_FEL}"
+    # Med flit överhoppade rader räknas inte, men en full logg är fortfarande ett golv.
+    privat = {"objekt": "bolag", "orsak": "privatperson"}
+    assert supportrapport._antal_poster({"fel": [privat] * (lagring.MAX_FEL - 2) + [rad] * 2}) == "minst 2"
+
+
 async def test_utan_fel_eller_med_bara_privatpersoner_blir_det_inget_arende(buddy, storage, mejl):
     _arbetsyta(storage, buddy)
     ren = await _synka(buddy, [_FEL[0]])
@@ -156,7 +210,7 @@ async def test_en_kund_utan_arbetsyta_far_inget_arende_och_rapporten_vantar(app,
 async def test_ett_fel_i_arendet_faller_inte_korningen(buddy, storage, monkeypatch, mejl):
     _arbetsyta(storage, buddy)
 
-    async def _trasig(falt):
+    async def _trasig(falt, **kw):
         raise RuntimeError("databasen svarar inte")
 
     monkeypatch.setattr(storage, "skapa_plattformsarende", _trasig)
