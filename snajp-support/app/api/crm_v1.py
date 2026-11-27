@@ -155,6 +155,9 @@ def bolag_ut(rad: dict[str, Any], externa: list[dict[str, Any]] | None = None) -
     # POST /companies/{id}/enrich; null tills bolaget berikats.
     ut["registry_status"] = rad.get("registerstatus")
     ut["registry_checked_at"] = rad.get("registret_last_at")
+    # Registrets reklamspärr (migration 168): true, false eller null (okänt
+    # eller aldrig hämtat). Märker aldrig bolaget kontakta inte.
+    ut["registry_advertising_block"] = rad.get("reklamsparr")
     ut["external_ids"] = externa or []
     ut.update(created_at=rad.get("created_at"), updated_at=rad.get("updated_at"), deleted_at=rad.get("raderad_at"))
     ut["purge_at"] = _toms(rad)
@@ -186,7 +189,7 @@ handelser.registrera_form("person", person_ut)
 #: CRM:ets fältnamn till API:ts, för fälten som nämns i händelseloggen.
 _FALT_UT = {**{sv: en for en, sv in _BOLAG.items()}, **{sv: en for en, sv in _PERSON.items()},
             **{sv: f"address.{en}" for en, sv in _ADRESS.items()}, "extra": "custom",
-            "registerstatus": "registry_status"}
+            "registerstatus": "registry_status", "reklamsparr": "registry_advertising_block"}
 
 # Personer, enskilda firmor och privatpersoner går ut som tunna händelser:
 # fältnamnen, aldrig posten (app/crm/handelser.py: ar_tunn).

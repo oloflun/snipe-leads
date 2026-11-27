@@ -17,7 +17,8 @@ fyra, och `ar_sparrad` läser dem tillsammans:
    privatperson (migration 161), och personerna hos ett märkt bolag.
 3. **avregistreringarna** (`suppressions`), bara för mejl.
 4. **leadet** med status `suppressed` (ringlistans och svarens kontakta inte),
-   på samma adress eller samma organisationsnummer.
+   på samma adress, samma organisationsnummer eller samma telefonnummer
+   (`contact_phone`, tolkat till E.164).
 
 Ingenting kopieras mellan dem: grinden är en sammansatt läsning. Kontakta inte
 som sätts på en post genom API:t står på posten och läses därifrån. Utfallet
@@ -149,9 +150,23 @@ async def _gallande(storage: Any, tenant_id: str, kanal: str, slag: str, varde: 
 
 async def lista(
     storage: Any, tenant_id: str, *, limit: int = 50, markor: str | None = None, kanal: str | None = None,
-    orsak: str | None = None, q: str | None = None, med_havda: bool = False,
+    orsak: str | None = None, q: str | None = None, med_havda: bool = False, bara_havda: bool = False,
+    galler_i: str | None = None,
 ) -> tuple[list[dict[str, Any]], str | None]:
-    """En sida spärrar, senast lagd först, och markören till nästa sida."""
+    """En sida spärrar, senast lagd först, och markören till nästa sida.
+
+    `kanal` ger exakt den kanalens spärrar. `galler_i` (mejl eller telefon)
+    ger de spärrar som stoppar en kontakt i kanalen: kanalens egna och de i
+    `alla`. Anroparen ger högst en av dem.
+
+    `bara_havda` ger bara de hävda, senast hävd först, och markören går då på
+    när spärren hävdes. `med_havda` har då ingen betydelse."""
+    if kanal and galler_i:
+        raise ValueError("kanal_och_galler_i")
+    if galler_i is not None and galler_i not in ("mejl", "telefon"):
+        raise OgiltigSparr("applies_to", "kanal_okand")
+    kanaler = list(_kanaler_som_galler(galler_i)) if galler_i else [kanal] if kanal else None
+    ordning = "havd_at" if bara_havda else "created_at"
     limit = max(1, min(int(limit), 500))
     efter = lagring.las_markor(markor)
     sok = (q or "").strip().lower() or None
@@ -165,11 +180,15 @@ async def lista(
             sok_siffror = None
     if lagring._ar_postgres(storage):
         villkor, varden = ["tenant_id = $1::text::uuid"], [tenant_id]
-        for kol, varde in (("kanal", kanal), ("orsak", orsak)):
-            if varde:
-                varden.append(varde)
-                villkor.append(f"{kol} = ${len(varden)}")
-        if not med_havda:
+        if kanaler:
+            varden.append(kanaler)
+            villkor.append(f"kanal = any(${len(varden)}::text[])")
+        if orsak:
+            varden.append(orsak)
+            villkor.append(f"orsak = ${len(varden)}")
+        if bara_havda:
+            villkor.append("havd_at is not null")
+        elif not med_havda:
             villkor.append("havd_at is null")
         if sok:
             varden.append(f"%{sok}%")
@@ -180,12 +199,12 @@ async def lista(
                 villkor.append(f"varde ilike ${len(varden)}")
         if efter:
             varden.extend(efter)
-            villkor.append(f"(created_at, id) < (${len(varden) - 1}::text::timestamptz, ${len(varden)}::text::uuid)")
+            villkor.append(f"({ordning}, id) < (${len(varden) - 1}::text::timestamptz, ${len(varden)}::text::uuid)")
         try:
             async with storage._scoped(tenant_id) as conn:
                 rader = await conn.fetch(
                     f"select * from {_TABELL} where {' and '.join(villkor)} "
-                    f"order by created_at desc, id desc limit {limit + 1}", *varden)
+                    f"order by {ordning} desc, id desc limit {limit + 1}", *varden)
         except Exception as fel:
             if lagring._saknar_tabell(fel):
                 return [], None
@@ -194,16 +213,16 @@ async def lista(
     else:
         sparrar = [dict(r) for r in lagring._minne(storage, _TABELL).values()
                    if r["tenant_id"] == tenant_id
-                   and (not kanal or r["kanal"] == kanal) and (not orsak or r["orsak"] == orsak)
-                   and (med_havda or not r.get("havd_at"))
+                   and (not kanaler or r["kanal"] in kanaler) and (not orsak or r["orsak"] == orsak)
+                   and (bool(r.get("havd_at")) if bara_havda else med_havda or not r.get("havd_at"))
                    and (not sok or sok in r["varde"].lower() or bool(sok_siffror and sok_siffror in r["varde"]))
-                   and (not efter or (r["created_at"], r["id"]) < efter)]
-        sparrar.sort(key=lambda r: (r["created_at"], r["id"]), reverse=True)
+                   and (not efter or (r[ordning], r["id"]) < efter)]
+        sparrar.sort(key=lambda r: (r[ordning], r["id"]), reverse=True)
         sparrar = sparrar[: limit + 1]
     if len(sparrar) <= limit:
         return sparrar, None
     sparrar = sparrar[:limit]
-    return sparrar, lagring._markor(sparrar[-1]["created_at"], sparrar[-1]["id"])
+    return sparrar, lagring._markor(sparrar[-1][ordning], sparrar[-1]["id"])
 
 
 # -- Skriva --------------------------------------------------------------------
@@ -357,7 +376,8 @@ async def ar_sparrad(
         kallor.append("posten")
     if adress and kanal in ("mejl", "alla") and adress in await storage.list_suppressions(tenant_id):
         kallor.append("avregistrerad")
-    if (adress or nyckel) and await _ur_leaden(storage, tenant_id, adress=adress, nyckel=nyckel):
+    if ((adress or nyckel) and await _ur_leaden(storage, tenant_id, adress=adress, nyckel=nyckel)) or (
+            nummer and nummer in await leadens_sparrade_nummer(storage, tenant_id, nummer=nummer)):
         kallor.append("lead")
     return {"sparrad": bool(kallor), "kallor": kallor, "sparr_id": sorted(r["id"] for r in traffar)}
 
@@ -414,6 +434,52 @@ async def _ur_leaden(storage: Any, tenant_id: str, *, adress: str | None, nyckel
     return any(p.get("status") == "suppressed" for p in leads)
 
 
+#: Så många av numrets sista siffror jämförs i SQL innan numret tolkas. Ett
+#: leads nummer lagras som säljaren eller källan skrev det (070-…, +46…,
+#: 0046…), men de sista siffrorna är desamma i varje skrivsätt.
+_SLUTSIFFROR = 7
+
+
+async def leadens_sparrade_nummer(storage: Any, tenant_id: str, *, nummer: str | None = None) -> set[str]:
+    """Numren (E.164) på kundens leads med status `suppressed`: ringlistans
+    kontakta inte (`app/leads/samtal.py: registrera`) lägger inget nummer i
+    spärrlistan, så numret läses från leadet.
+
+    Med `nummer` läses bara de leads vars nummer slutar på samma siffror, och
+    svaret innehåller då högst det numret. Ett nummer som inte går att tolka
+    kan inte matcha. Exempel- och provprospekt räknas inte, som i tidslinjen."""
+    slut = re.sub(r"\D", "", nummer or "")[-_SLUTSIFFROR:] if nummer else None
+    if lagring._ar_postgres(storage):
+        villkor = ["tenant_id = $1::text::uuid", "status = 'suppressed'", "contact_phone is not null",
+                   "coalesce(origin, '') not in ('example', 'test')"]
+        varden: list[Any] = [tenant_id]
+        if slut:
+            varden.append(slut)
+            villkor.append(f"right(regexp_replace(contact_phone, '\\D', '', 'g'), {len(slut)}) = $2::text")
+        try:
+            async with storage._scoped(tenant_id) as conn:
+                rader = await conn.fetch(f"select contact_phone from prospects where {' and '.join(villkor)}",
+                                         *varden)
+        except Exception as fel:
+            if lagring._saknar_tabell(fel):
+                return set()
+            raise
+        telefoner = [r["contact_phone"] for r in rader]
+    else:
+        telefoner = [p.get("contact_phone") for p in getattr(storage, "prospects", {}).get(tenant_id, [])
+                     if p.get("status") == "suppressed" and p.get("contact_phone")
+                     and p.get("origin") not in ("example", "test")]
+    ut: set[str] = set()
+    for telefon in telefoner:
+        try:
+            tolkat = falt.telefon(telefon)
+        except falt.FaltFel:
+            continue
+        if tolkat and (nummer is None or tolkat == nummer):
+            ut.add(tolkat)
+    return ut
+
+
 # -- Mängderna sändspärren och ringlistan läser ------------------------------
 
 
@@ -432,9 +498,15 @@ async def sparrade_domaner(storage: Any, tenant_id: str) -> set[str]:
 
 async def sparrade_nummer(storage: Any, tenant_id: str) -> set[str]:
     """Nummer i E.164 som inte får ringas: spärrlistan (telefon och alla, där
-    hör NIX-tvättens nummer hemma) och numren på poster märkta kontakta inte."""
+    hör NIX-tvättens nummer hemma), numren på poster märkta kontakta inte och
+    numren på leads med status `suppressed`.
+
+    Ett lead med status `suppressed` faller redan bort ur ringlistan och
+    återkopplingen av sin status (`samtal.samtalslista`). Numret behövs här
+    för de ANDRA raderna med samma nummer: ett nytt lead på samma bolag, eller
+    en provkörnings ringlista under Listor."""
     return await lagring.sparrade_varden(storage, tenant_id, kanaler=("telefon", "alla"), slag="telefon") | \
-        await _kontakta_inte_nummer(storage, tenant_id)
+        await _kontakta_inte_nummer(storage, tenant_id) | await leadens_sparrade_nummer(storage, tenant_id)
 
 
 async def sparrade_orgnr(storage: Any, tenant_id: str, *, kanal: str = "telefon") -> set[str]:

@@ -6516,10 +6516,32 @@
                   "type": "null"
                 }
               ],
-              "description": "Only suppressions in this channel.",
+              "description": "Only suppressions in exactly this channel.",
               "title": "Channel"
             },
-            "description": "Only suppressions in this channel."
+            "description": "Only suppressions in exactly this channel."
+          },
+          {
+            "name": "applies_to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "email",
+                    "phone"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The suppressions that block this channel: its own and those in `all`. Not together with `channel`.",
+              "title": "Applies To"
+            },
+            "description": "The suppressions that block this channel: its own and those in `all`. Not together with `channel`."
           },
           {
             "name": "reason",
@@ -6575,6 +6597,18 @@
               "title": "Include Lifted"
             },
             "description": "Lifted suppressions are kept as a record but no longer block anything."
+          },
+          {
+            "name": "only_lifted",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Only lifted suppressions, most recently lifted first. `include_lifted` then has no effect.",
+              "default": false,
+              "title": "Only Lifted"
+            },
+            "description": "Only lifted suppressions, most recently lifted first. `include_lifted` then has no effect."
           },
           {
             "name": "x-api-key",
@@ -6791,7 +6825,7 @@
           "Snajp CRM"
         ],
         "summary": "Is a contact blocked anywhere in Snajp?",
-        "description": "Reads every source together: the suppression list (including domain\nand `all` blocks), records marked do-not-contact (every private person\nis), unsubscribed addresses (email only) and leads that asked not to be\ncontacted. `sources` says which ones blocked: `suppression_list`,\n`record`, `unsubscribed`, `lead`. Nothing about the contact is returned.",
+        "description": "Reads every source together: the suppression list (including domain\nand `all` blocks), records marked do-not-contact (every private person\nis), unsubscribed addresses (email only) and leads that asked not to be\ncontacted, matched on email, organisation number or phone number.\n`sources` says which ones blocked: `suppression_list`,\n`record`, `unsubscribed`, `lead`. Nothing about the contact is returned.",
         "operationId": "kontrollera_api_crm_v1_suppressions_check_post",
         "parameters": [
           {
@@ -6915,7 +6949,7 @@
           "Snajp CRM"
         ],
         "summary": "Fill a company's empty fields from SCB's business register",
-        "description": "Fills `name`, `legal_form`, `sni_code` and the address where they are\nempty, and always sets `registry_status`. `filled` and `skipped` name\nthe fields: skipped are fields where the register differs but the\ncompany's own value was kept. The employee size class is returned under\n`registry` but not written to `employees`, which is a count.\n\nAn advertising block in the register is returned as\n`advertising_block` and does NOT mark the company do-not-contact. Add\na suppression under `/suppressions` if you want it to block.",
+        "description": "Fills `name`, `legal_form`, `sni_code` and the address where they are\nempty, and always sets `registry_status` and\n`registry_advertising_block`. `filled`, `skipped` and `protected` name\nthe fields where the register differs: `skipped` are kept now but\nreplaced with `overwrite=true` (so it is always empty with it), and\n`protected` were changed by hand and are never replaced. The employee\nsize class is returned under `registry` but not written to\n`employees`, which is a count.\n\nAn advertising block in the register is stored on the company as\n`registry_advertising_block` and returned as `advertising_block`. It\ndoes NOT mark the company do-not-contact. Add a suppression under\n`/suppressions` if you want it to block.",
         "operationId": "berika_bolag_api_crm_v1_companies__company_id__enrich_post",
         "parameters": [
           {

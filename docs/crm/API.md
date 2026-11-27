@@ -354,9 +354,14 @@ curl -X POST "$BAS/suppressions" -H "X-API-Key: $NYCKEL" -H "Content-Type: appli
 Svaret är `201` med spärren, eller `200` med den som redan gäller för samma kanal, slag och
 värde. En domänspärr stoppar varje adress på domänen, men inte underdomäner.
 
-- `GET /suppressions` listar spärrarna, senast lagd först, med `channel`, `reason`, `q`
-  (del av värdet; ett organisationsnummer hittas både som `556036-0793` och `5560360793`),
-  `limit`, `cursor` och `include_lifted`.
+- `GET /suppressions` listar spärrarna, senast lagd först, med `channel`, `applies_to`,
+  `reason`, `q` (del av värdet; ett organisationsnummer hittas både som `556036-0793` och
+  `5560360793`), `limit`, `cursor`, `include_lifted` och `only_lifted`.
+  - `channel` ger exakt den kanalens spärrar. `applies_to=email` eller `applies_to=phone`
+    ger spärrarna som stoppar kanalen: dess egna och de i `all`. En adress spärrad i `all`
+    står alltså med under `applies_to=email`. Båda samtidigt ger `422 invalid_parameter`.
+  - `only_lifted=true` ger bara de hävda, senast hävd först, med samma `limit`, `cursor` och
+    `next_cursor`. `include_lifted` har då ingen betydelse.
 - `DELETE /suppressions/{id}` häver spärren (`204`). Den står kvar med `lifted_at` och
   `lifted_by` som bevis, men stoppar ingenting. Att häva igen ändrar ingenting. Ett id som
   inte finns, eller inte är ett id, ger `404 suppression_not_found`.
@@ -393,7 +398,7 @@ curl -X POST "$BAS/suppressions/check" -H "X-API-Key: $NYCKEL" -H "Content-Type:
 | `suppression_list` | spärrlistan ovan, också domän- och `all`-spärrar |
 | `record` | ett bolag eller en person märkt `do_not_contact` (varje privatperson är det), eller en person hos ett sådant bolag |
 | `unsubscribed` | adressen har avregistrerat sig från era utskick (bara `email`) |
-| `lead` | ett lead hos Iris på samma adress eller organisationsnummer har bett att slippa kontakt |
+| `lead` | ett lead hos Iris på samma adress, organisationsnummer eller telefonnummer har bett att slippa kontakt (till exempel utfallet Kontakta inte på ringlistan). Numret jämförs tolkat, så `070-123 45 67`, `+46701234567` och `0046701234567` är samma nummer |
 
 `channel: all` frågar om något alls spärrar, i någon kanal. Svaret säger vilken källa som
 spärrade, aldrig vad den visste. Ingenting kopieras mellan källorna: `do_not_contact` på en
@@ -575,13 +580,14 @@ Uppslaget svarar `{"data": {...}}` med `org_number`, `name`, `legal_form` (AB, H
 `10-19`), `advertising_block` och `codes` (registrets råa koder för status och reklamspärr).
 
 Berikningen fyller `name`, `legal_form`, `sni_code` och adressen där de är tomma, och svarar med
-bolaget och två listor:
+bolaget och tre listor:
 
 | Fält | Betyder |
 |---|---|
 | `company` | bolaget efter berikningen |
 | `filled` | fälten som fylldes |
-| `skipped` | fält där registret säger något annat men bolagets eget värde stod kvar |
+| `skipped` | fält där registret säger något annat och bolagets eget värde stod kvar, men som `?overwrite=true` skriver över. Med `overwrite=true` alltid tom |
+| `protected` | fält där registret säger något annat men bolagets värde ändrats för hand i Snajp. De skrivs aldrig över, varken med eller utan `overwrite` |
 | `registry_status` | `active`, `inactive`, `never_active`, `deregistered` eller `unknown` |
 | `deregistered` | `true` när registret säger att bolaget är avregistrerat, avfört, upplöst, eller att konkursen eller likvidationen är avslutad |
 | `advertising_block` | `true` när bolaget har frånsagt sig reklam, `false` när det tar emot, `null` när koden inte är känd |
@@ -590,11 +596,16 @@ bolaget och två listor:
 Ett fält som redan har ett värde skrivs aldrig över. Med `?overwrite=true` skrivs det över,
 utom ett fält som någon ändrat för hand i Snajp. Berikningen märker inte sina egna fält som
 ändrade för hand. Antal anställda skrivs inte: registret ger en storleksklass, och `employees`
-är ett antal. Bolaget bär efteråt `registry_status` och `registry_checked_at`.
+är ett antal. Bolaget bär efteråt `registry_status`, `registry_advertising_block` och
+`registry_checked_at`, också i `GET /companies/{id}`, i listorna och i webhooks för bolag.
+`registry_advertising_block` är `true`, `false` eller `null` (okänt, eller aldrig hämtat) och
+skrivs om vid varje berikning, så att ett bolag som tagit bort sin reklamspärr blir `false`.
+När den ändras står fältnamnet i ändringsflödet, som för `registry_status`. Ett avregistrerat
+bolag känns igen på `registry_status: "deregistered"`.
 
-**Reklamspärren gör inte bolaget till kontakta inte.** Den står i svaret, och vill ni att den
-ska spärra lägger ni en spärr under `/suppressions` (kanalen `all` eller `phone`, slaget
-`org_number`).
+**Reklamspärren gör inte bolaget till kontakta inte.** Den står på bolaget och i svaret, och
+vill ni att den ska spärra lägger ni en spärr under `/suppressions` (kanalen `all` eller
+`phone`, slaget `org_number`).
 
 Svarar SCB inte får ni 502 `registry_unavailable`, aldrig ett 500, och bolaget är orört. Är
 uppslaget inte konfigurerat för Snajp än svarar båda vägarna 503 `enrichment_not_configured`.

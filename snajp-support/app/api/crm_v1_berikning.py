@@ -12,9 +12,12 @@ Routern byggs av `koppla(crm_v1)` och läggs till därifrån, så grindarna
   (`manuellt_andrade`). Berikningen märker inte sina egna fält som ändrade för
   hand: registret är ingen människa.
 - Registrets status står alltid i `registry_status` och skrivs varje gång.
-- En reklamspärr i registret lämnas i svaret (`advertising_block`) och blir
-  INTE tyst kontakta inte. Spärrlistan (`/suppressions`) är platsen för den
-  när kunden vill spärra.
+- En reklamspärr i registret sparas på bolaget (`reklamsparr`, migration 168,
+  `registry_advertising_block` i API:t) och lämnas i svaret
+  (`advertising_block`), men blir INTE tyst kontakta inte. Spärrlistan
+  (`/suppressions`) är platsen för den när kunden vill spärra.
+- Ett fält registret säger annat om står i `skipped` när `overwrite=true`
+  skulle skriva över det, och i `protected` när det ändrats för hand.
 - SCB nere ger 502 `registry_unavailable`, aldrig 500. Utan nyckel 503
   `enrichment_not_configured`.
 """
@@ -32,7 +35,7 @@ from .deps import kraev_uuid
 #: Kolumnerna i API:ts namn, för `filled` och `skipped` och händelseloggen.
 _FALT_UT = {"namn": "name", "bolagsform": "legal_form", "sni": "sni_code", "gatuadress": "address.street",
             "co": "address.co", "postnr": "address.postal_code", "postort": "address.city",
-            "registerstatus": "registry_status"}
+            "registerstatus": "registry_status", "reklamsparr": "registry_advertising_block"}
 
 
 def registret_ut(b: scb.Bolagsuppgifter) -> dict[str, Any]:
@@ -60,22 +63,36 @@ def _registervarden(b: scb.Bolagsuppgifter) -> dict[str, Any]:
             "gatuadress": b.gatuadress, "co": b.co, "postnr": b.postnr, "postort": b.postort}
 
 
-def berika(post: dict[str, Any], b: scb.Bolagsuppgifter, *, overwrite: bool) -> tuple[dict[str, Any], list[str], list[str]]:
-    """(det som skrivs, fyllda kolumner, hoppade kolumner).
+def berika(
+    post: dict[str, Any], b: scb.Bolagsuppgifter, *, overwrite: bool,
+) -> tuple[dict[str, Any], list[str], list[str], list[str]]:
+    """(det som skrivs, fyllda kolumner, hoppade kolumner, skyddade kolumner).
 
-    Hoppad är ett fält där registret har ett annat värde men bolagets eget
-    stod kvar: det hade ett värde (utan `overwrite`), eller ändrades för hand."""
+    Där registret har ett annat värde än bolagets eget, som står kvar:
+    - hoppad: bolagets värde stod kvar för att `overwrite` saknades. Med
+      `overwrite` skrivs det över, så listan är då alltid tom.
+    - skyddad: värdet ändrades för hand (`manuellt_andrade`) och skrivs aldrig
+      över, varken med eller utan `overwrite`.
+
+    Registrets reklamspärr skrivs varje gång, också som falsk och som okänd
+    (None), så att bolaget alltid bär vad registret senast sa."""
     manuellt = post.get("manuellt_andrade") or {}
     skriv: dict[str, Any] = {}
     fyllda: list[str] = []
     hoppade: list[str] = []
+    skyddade: list[str] = []
     for kolumn, varde in _registervarden(b).items():
         if varde in (None, ""):
             continue
         nu = post.get(kolumn)
         if nu == varde:
             continue
-        if nu in (None, "") or (overwrite and kolumn not in manuellt):
+        if nu in (None, ""):
+            skriv[kolumn] = varde
+            fyllda.append(kolumn)
+        elif kolumn in manuellt:
+            skyddade.append(kolumn)
+        elif overwrite:
             skriv[kolumn] = varde
             fyllda.append(kolumn)
         else:
@@ -83,8 +100,9 @@ def berika(post: dict[str, Any], b: scb.Bolagsuppgifter, *, overwrite: bool) -> 
     if "namn" in skriv:
         skriv["namnnyckel"] = falt.namnnyckel(skriv["namn"])
     skriv["registerstatus"] = b.status
+    skriv["reklamsparr"] = b.reklamsparr
     skriv["registret_last_at"] = lagring.nu()
-    return skriv, fyllda, hoppade
+    return skriv, fyllda, hoppade, skyddade
 
 
 def koppla(v1: Any) -> APIRouter:
@@ -146,14 +164,18 @@ def koppla(v1: Any) -> APIRouter:
                                                    "except fields someone changed by hand in Snajp."),
                            tenant: dict = Depends(kraev("crm:skriv"))) -> Response:
         """Fills `name`, `legal_form`, `sni_code` and the address where they are
-        empty, and always sets `registry_status`. `filled` and `skipped` name
-        the fields: skipped are fields where the register differs but the
-        company's own value was kept. The employee size class is returned under
-        `registry` but not written to `employees`, which is a count.
+        empty, and always sets `registry_status` and
+        `registry_advertising_block`. `filled`, `skipped` and `protected` name
+        the fields where the register differs: `skipped` are kept now but
+        replaced with `overwrite=true` (so it is always empty with it), and
+        `protected` were changed by hand and are never replaced. The employee
+        size class is returned under `registry` but not written to
+        `employees`, which is a count.
 
-        An advertising block in the register is returned as
-        `advertising_block` and does NOT mark the company do-not-contact. Add
-        a suppression under `/suppressions` if you want it to block."""
+        An advertising block in the register is stored on the company as
+        `registry_advertising_block` and returned as `advertising_block`. It
+        does NOT mark the company do-not-contact. Add a suppression under
+        `/suppressions` if you want it to block."""
         await v1._avtal(request, tenant)
         storage = request.app.state.storage
         tenant_id = tenant["tenant_id"]
@@ -169,9 +191,9 @@ def koppla(v1: Any) -> APIRouter:
                 raise fel(422, "org_number_required", "The company has no organisation number to look up.",
                           "Bolaget saknar organisationsnummer att slå upp.")
             uppgifter = await _sla_upp(post["orgnr"])
-            skriv, fyllda, hoppade = berika(post, uppgifter, overwrite=overwrite)
+            skriv, fyllda, hoppade, skyddade = berika(post, uppgifter, overwrite=overwrite)
             ny = await lagring.uppdatera_post(storage, tenant_id, "bolag", rad_id, skriv) or post
-            andrade = [*fyllda, *(["registerstatus"] if post.get("registerstatus") != uppgifter.status else [])]
+            andrade = [*fyllda, *[k for k in ("registerstatus", "reklamsparr") if post.get(k) != skriv[k]]]
             if andrade:
                 ursprung = v1._ursprung(request, tenant)
                 await handelser.logga(storage, tenant_id,
@@ -181,6 +203,7 @@ def koppla(v1: Any) -> APIRouter:
                 "company": v1.bolag_ut(ny),
                 "filled": [_FALT_UT.get(k, k) for k in fyllda],
                 "skipped": [_FALT_UT.get(k, k) for k in hoppade],
+                "protected": [_FALT_UT.get(k, k) for k in skyddade],
                 "registry_status": uppgifter.status,
                 "deregistered": uppgifter.avregistrerad,
                 "advertising_block": uppgifter.reklamsparr,

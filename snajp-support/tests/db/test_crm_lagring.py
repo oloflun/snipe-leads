@@ -963,8 +963,9 @@ async def test_registrets_status_och_berikningen_i_databasen(miljo):
     uppgifter = scb.tolka(ORGNR_A, {"namn": "Byggarna Berggren AB", "jurform": "49", "bolStat": "52", "ftgStat": "9",
                                     "postAdress": {"gatuAdress": "Storgatan 1", "postNr": "11122", "postOrt": "STOCKHOLM"},
                                     "naringsgrenar": [{"rangordning": 1, "naringsgren": "41200"}]})
-    skriv, fyllda, hoppade = berika(bolag, uppgifter, overwrite=False)
+    skriv, fyllda, hoppade, skyddade = berika(bolag, uppgifter, overwrite=False)
     assert fyllda == ["bolagsform", "sni", "gatuadress", "postnr"] and hoppade == ["namn", "postort"]
+    assert skyddade == []
     ny = await lagring.uppdatera_post(lager, a, "bolag", bolag["id"], skriv)
     assert ny["registerstatus"] == "deregistered" and ny["registret_last_at"]
     assert ny["bolagsform"] == "AB" and ny["sni"] == "41200" and ny["postnr"] == "111 22" and ny["postort"] == "Solna"
@@ -973,3 +974,95 @@ async def test_registrets_status_och_berikningen_i_databasen(miljo):
         await lagring.uppdatera_post(lager, a, "bolag", bolag["id"], {"registerstatus": "kanske"})
     # Den andra kunden når inte raden.
     assert await lagring.uppdatera_post(lager, b, "bolag", bolag["id"], {"registerstatus": "active"}) is None
+
+
+# -- Migration 168: registrets reklamspärr på bolaget -------------------------
+
+
+async def test_reklamsparren_pa_bolaget_i_databasen(miljo):
+    from app.api.crm_v1 import bolag_ut
+    from app.api.crm_v1_berikning import berika
+    from app.crm import scb
+
+    lager, a, b = miljo
+    bolag, _ = await synk.skapa(lager, a, "bolag", {"namn": "Berggren", "orgnr": ORGNR_A}, kalla="api")
+    assert bolag["reklamsparr"] is None and bolag_ut(bolag)["registry_advertising_block"] is None
+    for kod, vantat in ((21, True), (11, False), (None, None)):
+        uppgifter = scb.tolka(ORGNR_A, {"jurform": "49", "reklamSparrTyp": kod})
+        skriv, *_ = berika(bolag, uppgifter, overwrite=False)
+        bolag = await lagring.uppdatera_post(lager, a, "bolag", bolag["id"], skriv)
+        assert bolag["reklamsparr"] is vantat, kod
+        assert (await lagring.hamta_post(lager, a, "bolag", bolag["id"]))["reklamsparr"] is vantat
+        assert bolag["kontakta_inte"] is False
+    # Den andra kunden når inte raden.
+    assert await lagring.uppdatera_post(lager, b, "bolag", bolag["id"], {"reklamsparr": True}) is None
+
+
+# -- Beställning 5: de hävda för sig, kanalens spärrar och leadets nummer ----
+
+
+async def test_bara_havda_och_kanalens_sparrar_i_databasen(miljo):
+    from app.crm import sparr
+
+    lager, a, b = miljo
+    ut = await sparr.importera(lager, a, kanal="telefon", orsak="nix",
+                               varden=[f"+467011{i:05d}" for i in range(6)])
+    assert ut["tillagda"] == 6
+    mejl, _ = await sparr.lagg_till(lager, a, kanal="mejl", slag="epost", varde="ett@bygg.se", orsak="annat", kalla="app")
+    alla, _ = await sparr.lagg_till(lager, a, kanal="alla", slag="epost", varde="tva@bygg.se", orsak="annat", kalla="app")
+    rader, _ = await sparr.lista(lager, a, kanal="telefon", limit=10)
+    # Tre hävs, med hävtider som skiljer sig (now() står still i testets transaktion).
+    havda = [rader[4]["id"], rader[0]["id"], rader[2]["id"]]
+    for i, sparr_id in enumerate(havda):
+        await sparr.hav(lager, a, sparr_id)
+        async with lager._scoped(a) as conn:
+            await conn.execute("update crm_sparrar set havd_at = now() + make_interval(mins => $2::int) "
+                               "where id = $1::text::uuid", sparr_id, i)
+    forsta, markor = await sparr.lista(lager, a, bara_havda=True, limit=2)
+    assert [r["id"] for r in forsta] == list(reversed(havda))[:2] and markor
+    resten, slut = await sparr.lista(lager, a, bara_havda=True, limit=2, markor=markor)
+    assert [r["id"] for r in resten] == [havda[0]] and slut is None
+    assert len((await sparr.lista(lager, a, bara_havda=True, med_havda=True))[0]) == 3
+    assert (await sparr.lista(lager, b, bara_havda=True))[0] == []
+    # Kanalens spärrar: dess egna och de i alla.
+    assert {r["id"] for r in (await sparr.lista(lager, a, galler_i="mejl"))[0]} == {mejl["id"], alla["id"]}
+    assert len((await sparr.lista(lager, a, galler_i="telefon"))[0]) == 3 + 1
+    assert [r["id"] for r in (await sparr.lista(lager, a, kanal="mejl"))[0]] == [mejl["id"]]
+
+
+async def test_leadets_nummer_i_kontrollen_i_databasen(miljo):
+    """Frågan mot prospekten, med typade parametrar och regexp i SQL. Saknar
+    tabellen leadsflödets kolumner (PGlite med bara CRM-kedjan) läggs de till i
+    testets transaktion, som rullas tillbaka."""
+    from app.crm import sparr
+
+    lager, a, b = miljo
+    async with lager._scoped(a) as conn:
+        kolumner = {r["column_name"] for r in await conn.fetch(
+            "select column_name from information_schema.columns where table_name = 'prospects'")}
+    if not {"tenant_id", "company_name", "status", "contact_phone", "origin"} <= kolumner:
+        await lager.conn.execute("reset role")
+        await lager.conn.execute(
+            "alter table prospects add column if not exists tenant_id uuid, "
+            "add column if not exists company_name text, add column if not exists status text, "
+            "add column if not exists contact_phone text, add column if not exists origin text")
+        await lager.conn.execute("grant select, insert on prospects to snajp_app")
+        await lager.conn.execute("set local role snajp_app")
+    for kund, telefon, status, origin in ((a, "070-123 45 67", "suppressed", "manual"),
+                                          (a, "070-765 43 21", "contacted", "manual"),
+                                          (a, "ring växeln", "suppressed", "manual"),
+                                          (a, "0708888888", "suppressed", "example"),
+                                          (b, "0707654321", "suppressed", "manual")):
+        async with lager._scoped(kund) as conn:
+            await conn.execute("insert into prospects (tenant_id, company_name, status, contact_phone, origin) "
+                               "values ($1::text::uuid, 'Prov AB', $2, $3, $4)", kund, status, telefon, origin)
+    for skrivet in ("070-123 45 67", "+46701234567", "0046701234567"):
+        svar = await sparr.ar_sparrad(lager, a, telefon=skrivet, kanal="telefon")
+        assert svar["kallor"] == ["lead"], skrivet
+    assert not (await sparr.ar_sparrad(lager, a, telefon="0707654321", kanal="telefon"))["sparrad"]
+    assert not (await sparr.ar_sparrad(lager, a, telefon="0708888888", kanal="telefon"))["sparrad"]
+    assert not (await sparr.ar_sparrad(lager, b, telefon="0701234567", kanal="alla"))["sparrad"]
+    assert await sparr.leadens_sparrade_nummer(lager, a) == {"+46701234567"}
+    assert await sparr.leadens_sparrade_nummer(lager, a, nummer="+46701234567") == {"+46701234567"}
+    assert await sparr.leadens_sparrade_nummer(lager, b) == {"+46707654321"}
+    assert "+46701234567" in await sparr.sparrade_nummer(lager, a)

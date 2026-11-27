@@ -110,20 +110,29 @@ def koppla(v1: Any) -> APIRouter:
     async def lista(
         request: Request, tenant: dict = Depends(kraev("crm:las")),
         limit: int = Query(50, ge=1, le=500), cursor: str | None = Query(None),
-        channel: Kanal | None = Query(None, description="Only suppressions in this channel."),
+        channel: Kanal | None = Query(None, description="Only suppressions in exactly this channel."),
+        applies_to: Literal["email", "phone"] | None = Query(
+            None, description="The suppressions that block this channel: its own and those in `all`. "
+            "Not together with `channel`."),
         reason: Orsak | None = Query(None),
         q: str | None = Query(None, max_length=200, description="Part of the value."),
         include_lifted: bool = Query(False, description="Lifted suppressions are kept as a record but no "
                                      "longer block anything."),
+        only_lifted: bool = Query(False, description="Only lifted suppressions, most recently lifted first. "
+                                  "`include_lifted` then has no effect."),
     ) -> dict:
         """The suppression list. Records marked do-not-contact, unsubscribed
         addresses and leads that asked not to be contacted also block, but are
         not listed here: ask `POST /suppressions/check`."""
+        if channel and applies_to:
+            raise fel(422, "invalid_parameter", "Use channel or applies_to, not both.",
+                      "Ange channel eller applies_to, inte båda.")
         try:
             rader, nasta = await sparr.lista(
                 request.app.state.storage, tenant["tenant_id"], limit=limit, markor=cursor,
                 kanal=_KANAL_IN[channel] if channel else None, orsak=_ORSAK_IN[reason] if reason else None,
-                q=q, med_havda=include_lifted)
+                q=q, med_havda=include_lifted, bara_havda=only_lifted,
+                galler_i=_KANAL_IN[applies_to] if applies_to else None)
         except ValueError:
             raise fel(422, "invalid_parameter", "cursor could not be read.", "cursor gick inte att läsa.") from None
         return {"data": [sparr_ut(r) for r in rader], "next_cursor": nasta}
@@ -196,7 +205,8 @@ def koppla(v1: Any) -> APIRouter:
         """Reads every source together: the suppression list (including domain
         and `all` blocks), records marked do-not-contact (every private person
         is), unsubscribed addresses (email only) and leads that asked not to be
-        contacted. `sources` says which ones blocked: `suppression_list`,
+        contacted, matched on email, organisation number or phone number.
+        `sources` says which ones blocked: `suppression_list`,
         `record`, `unsubscribed`, `lead`. Nothing about the contact is returned."""
         try:
             svar = await sparr.ar_sparrad(request.app.state.storage, tenant["tenant_id"], epost=kropp.email,

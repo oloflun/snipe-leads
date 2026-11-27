@@ -225,7 +225,106 @@ async def test_den_andra_kundens_sparr_galler_aldrig_har(buddy, annan, storage):
     assert await sparr.sparrade_nummer(storage, buddy.id) == set()
 
 
+async def test_leadets_nummer_sparrar_i_kontrollen_i_varje_skrivsatt(buddy, annan, storage):
+    """Ringlistans kontakta inte ger leadet status suppressed men lägger inget
+    nummer i spärrlistan: kontrollen läser numret från leadet."""
+    await _lead(storage, buddy.id, "Nej AB", epost="vd@nej.se", telefon="070-123 45 67", status="suppressed")
+    await _lead(storage, buddy.id, "Ja AB", epost="vd@ja.se", telefon="070-765 43 21", status="contacted")
+    await _lead(storage, buddy.id, "Trasig AB", epost="vd@trasig.se", telefon="ring växeln", status="suppressed")
+    # Den andra kunden har ett lead med samma nummer, men med status suppressed hos sig.
+    await _lead(storage, annan.id, "Ja AB", epost="vd@ja.se", telefon="0707654321", status="suppressed")
+    async with buddy.klient() as k:
+        for skrivet in ("070-123 45 67", "+46701234567", "0046701234567", "+46 70 123 45 67"):
+            for kanal in ("phone", "all"):
+                svar = await _kolla(k, channel=kanal, phone=skrivet)
+                assert svar == {"blocked": True, "sources": ["lead"], "suppression_ids": []}, (skrivet, kanal)
+        # Ett annat nummer med samma slutsiffror är inte samma nummer.
+        assert (await _kolla(k, channel="phone", phone="+4721234567"))["blocked"] is False
+        assert (await _kolla(k, channel="phone", phone="070-765 43 21"))["blocked"] is False
+    async with annan.klient() as k:
+        assert (await _kolla(k, channel="phone", phone="070-123 45 67"))["blocked"] is False
+        assert (await _kolla(k, channel="phone", phone="070-765 43 21"))["sources"] == ["lead"]
+    # Samma nummer i mängden ringlistan läser, för de andra raderna med numret.
+    assert await sparr.sparrade_nummer(storage, buddy.id) == {"+46701234567"}
+    assert await sparr.sparrade_nummer(storage, annan.id) == {"+46707654321"}
+
+
+async def test_ringlistan_tappar_ett_annat_lead_med_det_sparrade_leadets_nummer(buddy, storage):
+    await _lead(storage, buddy.id, "Nej AB", epost="vd@nej.se", telefon="070-555 00 09", origin="ring",
+                status="suppressed")
+    nytt = await _lead(storage, buddy.id, "Nej AB", epost="info@nej.se", telefon="+46705550009", origin="ring")
+    fri = await _lead(storage, buddy.id, "Fri AB", epost="vd@fri.se", telefon="070-555 00 01", origin="ring")
+    rader = samtal.samtalslista([nytt, fri], [], {}, lista="ring", idag=date.today(),
+                                sparrade_nummer=await sparr.sparrade_nummer(storage, buddy.id))
+    assert [r["company_name"] for r in rader] == ["Fri AB"]
+
+
 # -- Listan, importen och omfången --------------------------------------------
+
+
+async def test_bara_havda_med_egen_sidindelning(buddy, annan):
+    async with buddy.klient() as k:
+        svar = await k.post(f"{V1}/suppressions/import", json={
+            "channel": "phone", "reason": "nix", "values": [f"+467011{i:05d}" for i in range(153)]})
+        assert svar.json()["added"] == 153
+        alla = []
+        markor = None
+        while True:
+            sida = (await k.get(f"{V1}/suppressions", params={"limit": 500, **({"cursor": markor} if markor else {})})).json()
+            alla += sida["data"]
+            markor = sida["next_cursor"]
+            if not markor:
+                break
+        # Tre hävs, i en annan ordning än de lades.
+        havda = [alla[100]["id"], alla[5]["id"], alla[140]["id"]]
+        for sparr_id in havda:
+            assert (await k.delete(f"{V1}/suppressions/{sparr_id}")).status_code == 204
+        gallande = (await k.get(f"{V1}/suppressions", params={"limit": 100})).json()
+        assert len(gallande["data"]) == 100 and gallande["next_cursor"]
+        assert all(s["lifted_at"] is None for s in gallande["data"])
+        bara = (await k.get(f"{V1}/suppressions", params={"only_lifted": "true"})).json()
+        # Nyast hävd först.
+        assert [s["id"] for s in bara["data"]] == list(reversed(havda)) and bara["next_cursor"] is None
+        assert all(s["lifted_at"] for s in bara["data"])
+        # include_lifted har ingen betydelse när only_lifted är satt.
+        assert (await k.get(f"{V1}/suppressions", params={"only_lifted": "true", "include_lifted": "true"})
+                ).json()["data"] == bara["data"]
+        # Sidindelningen, två och sedan en.
+        forsta = (await k.get(f"{V1}/suppressions", params={"only_lifted": "true", "limit": 2})).json()
+        assert [s["id"] for s in forsta["data"]] == list(reversed(havda))[:2] and forsta["next_cursor"]
+        andra = (await k.get(f"{V1}/suppressions", params={"only_lifted": "true", "limit": 2,
+                                                           "cursor": forsta["next_cursor"]})).json()
+        assert [s["id"] for s in andra["data"]] == [havda[0]] and andra["next_cursor"] is None
+    async with annan.klient() as k:
+        assert (await k.get(f"{V1}/suppressions", params={"only_lifted": "true"})).json()["data"] == []
+
+
+async def test_applies_to_ger_kanalens_och_allas_sparrar(buddy, annan):
+    async with buddy.klient() as k:
+        mejl = await _sparra(k, channel="email", kind="email", value="ett@bygg.se")
+        alla = await _sparra(k, channel="all", kind="email", value="tva@bygg.se")
+        tel = await _sparra(k, channel="phone", kind="phone", value="070-123 45 67")
+        allt_tel = await _sparra(k, channel="all", kind="phone", value="08-123 456 78")
+        svar = (await k.get(f"{V1}/suppressions", params={"applies_to": "email"})).json()["data"]
+        assert {s["id"] for s in svar} == {mejl["id"], alla["id"], allt_tel["id"]}
+        svar = (await k.get(f"{V1}/suppressions", params={"applies_to": "phone"})).json()["data"]
+        assert {s["id"] for s in svar} == {tel["id"], alla["id"], allt_tel["id"]}
+        # channel betyder som förut exakt den kanalen.
+        assert {s["id"] for s in (await k.get(f"{V1}/suppressions", params={"channel": "email"})).json()["data"]} \
+            == {mejl["id"]}
+        # applies_to går ihop med de andra filtren.
+        svar = (await k.get(f"{V1}/suppressions", params={"applies_to": "email", "q": "tva"})).json()["data"]
+        assert [s["id"] for s in svar] == [alla["id"]]
+        await k.delete(f"{V1}/suppressions/{alla['id']}")
+        svar = (await k.get(f"{V1}/suppressions", params={"applies_to": "email", "only_lifted": "true"})).json()
+        assert [s["id"] for s in svar["data"]] == [alla["id"]]
+        # Båda samtidigt: 422.
+        fel = await k.get(f"{V1}/suppressions", params={"channel": "email", "applies_to": "email"})
+        assert fel.status_code == 422 and fel.json()["detail"]["code"] == "invalid_parameter"
+        # all är ingen kanal att fråga om: den frågan ställs till /suppressions/check.
+        assert (await k.get(f"{V1}/suppressions", params={"applies_to": "all"})).status_code == 422
+    async with annan.klient() as k:
+        assert (await k.get(f"{V1}/suppressions", params={"applies_to": "email"})).json()["data"] == []
 
 
 async def test_importen_raknar_dubbletter_ogiltiga_och_redan_sparrade(buddy):

@@ -147,7 +147,7 @@ async def test_tomma_falt_fylls_och_fyllda_star_kvar(buddy, annan, register):
         assert svar.status_code == 200, svar.text
         ut = svar.json()
         assert ut["filled"] == ["legal_form", "sni_code", "address.street", "address.postal_code"]
-        assert ut["skipped"] == ["name", "address.city"]
+        assert ut["skipped"] == ["name", "address.city"] and ut["protected"] == []
         assert ut["registry_status"] == "active" and ut["deregistered"] is False
         assert ut["advertising_block"] is True
         bolag = ut["company"]
@@ -182,8 +182,67 @@ async def test_overwrite_skriver_over_men_skyddar_manuellt_andrade(buddy, regist
         # Ett fält som ändrats för hand efter att posten skapades.
         await k.patch(f"{V1}/companies/{bolag['id']}", json={"address": {"city": "Solna"}})
         svar = (await k.post(f"{V1}/companies/{bolag['id']}/enrich", params={"overwrite": "true"})).json()
-        assert "name" in svar["filled"] and "address.city" in svar["skipped"]
+        assert "name" in svar["filled"] and svar["protected"] == ["address.city"] and svar["skipped"] == []
         assert svar["company"]["name"] == "Byggarna Berggren AB" and svar["company"]["address"]["city"] == "Solna"
+
+
+async def test_handandrat_falt_ar_skyddat_och_ovriga_hoppas_bara_utan_overwrite(buddy, annan, register):
+    """Skillnaden gränssnittet bygger knappen Skriv över med registrets på:
+    `skipped` är det knappen skriver över, `protected` det den aldrig rör."""
+    register.bolag[ORGNR_A.replace("-", "")] = _scb_svar(ORGNR_A)
+    async with buddy.klient() as k:
+        bolag = await _bolag(k, org_number=ORGNR_A, legal_form="HB")
+        await k.patch(f"{V1}/companies/{bolag['id']}", json={"address": {"city": "Solna"}})
+        utan = (await k.post(f"{V1}/companies/{bolag['id']}/enrich")).json()
+        assert utan["protected"] == ["address.city"]
+        assert utan["skipped"] == ["name", "legal_form"]
+        assert "legal_form" not in utan["filled"] and "address.city" not in utan["filled"]
+        med = (await k.post(f"{V1}/companies/{bolag['id']}/enrich", params={"overwrite": "true"})).json()
+        assert med["protected"] == ["address.city"] and med["skipped"] == []
+        assert med["filled"] == ["name", "legal_form"]
+        assert med["company"]["legal_form"] == "AB" and med["company"]["address"]["city"] == "Solna"
+        # Knappen kommer inte tillbaka: nästa hämtning har inget att skriva över.
+        igen = (await k.post(f"{V1}/companies/{bolag['id']}/enrich")).json()
+        assert igen["skipped"] == [] and igen["protected"] == ["address.city"] and igen["filled"] == []
+    # Den andra kundens bolag med samma nummer berörs inte.
+    async with annan.klient() as k:
+        eget = await _bolag(k, org_number=ORGNR_A, legal_form="HB")
+        ut = (await k.post(f"{V1}/companies/{eget['id']}/enrich")).json()
+        assert ut["protected"] == [] and ut["skipped"] == ["name", "legal_form"]
+
+
+async def test_reklamsparren_star_kvar_pa_bolaget_och_blir_aldrig_kontakta_inte(buddy, annan, register):
+    register.bolag[ORGNR_A.replace("-", "")] = _scb_svar(ORGNR_A, reklamSparrTyp=21)
+    async with buddy.klient() as k:
+        bolag = await _bolag(k, org_number=ORGNR_A)
+        assert bolag["registry_advertising_block"] is None
+        svar = (await k.post(f"{V1}/companies/{bolag['id']}/enrich")).json()
+        assert svar["advertising_block"] is True and svar["company"]["registry_advertising_block"] is True
+        # Efter en omladdning står den kvar.
+        hamtat = (await k.get(f"{V1}/companies/{bolag['id']}")).json()
+        assert hamtat["registry_advertising_block"] is True and hamtat["do_not_contact"] is False
+        assert (await k.get(f"{V1}/suppressions")).json()["data"] == []
+        assert (await k.post(f"{V1}/suppressions/check", json={"channel": "all", "org_number": ORGNR_A})
+                ).json()["blocked"] is False
+        flode = (await k.get(f"{V1}/changes")).json()["data"]
+        assert "registry_advertising_block" in flode[-1]["fields"]
+        # Nästa hämtning säger att bolaget tar emot reklam: false, inte kvar som true.
+        register.bolag[ORGNR_A.replace("-", "")] = _scb_svar(ORGNR_A, reklamSparrTyp=11)
+        svar = (await k.post(f"{V1}/companies/{bolag['id']}/enrich")).json()
+        assert svar["company"]["registry_advertising_block"] is False
+        assert "registry_advertising_block" in (await k.get(f"{V1}/changes")).json()["data"][-1]["fields"]
+        # Ett okänt värde blir null.
+        register.bolag[ORGNR_A.replace("-", "")] = _scb_svar(ORGNR_A, reklamSparrTyp=None)
+        svar = (await k.post(f"{V1}/companies/{bolag['id']}/enrich")).json()
+        assert svar["company"]["registry_advertising_block"] is None
+        assert svar["company"]["do_not_contact"] is False
+        # Oförändrat värde loggas inte igen.
+        antal = len((await k.get(f"{V1}/changes")).json()["data"])
+        await k.post(f"{V1}/companies/{bolag['id']}/enrich")
+        assert len((await k.get(f"{V1}/changes")).json()["data"]) == antal
+    async with annan.klient() as k:
+        eget = await _bolag(k, org_number=ORGNR_A)
+        assert (await k.get(f"{V1}/companies/{eget['id']}")).json()["registry_advertising_block"] is None
 
 
 async def test_bolag_utan_nummer_och_enskild_firma_och_privatperson(buddy, register):

@@ -50,6 +50,9 @@ TABELLER: dict[str, dict[str, str | None]] = {
         # Vad SCB:s företagsregister senast sa, och när (migration 167,
         # app/crm/scb.py). Bara bolagsnivå.
         "registerstatus": None, "registret_last_at": _TID,
+        # Registrets reklamspärr (migration 168): sant, falskt eller okänt
+        # (null). Blir aldrig kontakta inte av sig själv.
+        "reklamsparr": _BOOL,
         "created_at": _TID, "updated_at": _TID, "raderad_at": _TID,
     },
     "crm_personer": {
@@ -183,7 +186,7 @@ def _saknar_tabell(fel: BaseException) -> bool:
 SENA_KOLUMNER: dict[str, tuple[str, ...]] = {
     "crm_personer": ("kalla_typ", "kalla_namn", "insamlad_at"),  # migration 165
     "crm_affarer": ("forlustorsak_kod",),  # migration 165
-    "crm_bolag": ("registerstatus", "registret_last_at"),  # migration 167
+    "crm_bolag": ("registerstatus", "registret_last_at", "reklamsparr"),  # migration 167 och 168
 }
 
 
