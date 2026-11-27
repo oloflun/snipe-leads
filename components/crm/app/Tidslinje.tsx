@@ -727,12 +727,13 @@ export function Tidslinje({
           const r = rad(p, text, locale);
           const kalla = varifran(p, text);
           // Raden leder vidare dit saken finns: affären i CRM:et, leadet och konversationen i Leads.
-          const iLeads = p.link?.kind === "lead" || p.link?.kind === "conversation";
+          // Leadet öppnas i CRM:ets Iris-panel (steg 4.2); konversationen bor kvar i dagens Leads tills den vyn finns.
+          const iLeads = p.link?.kind === "conversation";
           const affar =
             p.link?.kind === "deal"
               ? `${bas}/affarer?affar=${encodeURIComponent(p.link.id)}`
               : p.link?.kind === "lead"
-                ? `/dashboard/leads?lead=${encodeURIComponent(p.link.id)}`
+                ? `${bas}/iris/leads?lead=${encodeURIComponent(p.link.id)}`
                 : p.link?.kind === "conversation"
                   ? `/dashboard/leads?vy=konversationer&trad=${encodeURIComponent(p.link.id)}`
                   : null;

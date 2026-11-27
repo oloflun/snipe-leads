@@ -11,7 +11,7 @@
  * Vem som ser en post (`produkt`, `tillagg`, `roll`) är en ritregel, inte en
  * grind. Grindarna sitter i servern och i proxyn (Sekretess punkt 5 till 8).
  */
-import { Target, type LucideIcon } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { OBJEKT, type Objekt, type Ton } from "@/components/crm/app/kit";
 import type { AddonKey } from "@/lib/addons";
 import type { Localized } from "@/lib/i18n";
@@ -63,15 +63,15 @@ export const NAVPOSTER: Navpost[] = [
   fran("personer", "arbetsyta"),
   fran("affarer", "arbetsyta"),
   fran("uppgifter", "arbetsyta"),
-  // Steg 4.2 bygger vyn på /crm/iris/leads och slår då om `byggd`.
+  // Steg 4.2: Iris leads som lista och panel (components/crm/app/iris/LeadsVy.tsx).
   {
     nyckel: "iris/leads",
     grupp: "iris",
-    namn: { sv: "Leads", en: "Leads" },
-    ikon: Target,
-    ton: "ockra",
+    namn: OBJEKT.leads.namn,
+    ikon: OBJEKT.leads.ikon,
+    ton: OBJEKT.leads.ton,
     produkt: "leads",
-    byggd: false,
+    byggd: true,
     raknare: "leadsnotiser"
   },
   fran("synk", "data"),

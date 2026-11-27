@@ -3,7 +3,9 @@
 import { AffarerVy } from "@/components/crm/app/AffarerVy";
 import { BolagVy } from "@/components/crm/app/BolagVy";
 import { CrmRam } from "@/components/crm/app/CrmRam";
+import { LeadsVy } from "@/components/crm/app/iris/LeadsVy";
 import type { Skalatgarder } from "@/components/crm/app/Skalet";
+import { svaraIris } from "./svar/iris";
 import { svaraSkalet } from "./svar/skalet";
 import { OversiktVy } from "@/components/crm/app/OversiktVy";
 import { PersonerVy } from "@/components/crm/app/PersonerVy";
@@ -1446,6 +1448,8 @@ function fangaAnrop() {
     if (iForhandsvisning && url.pathname.startsWith("/api/snajp-support/hjalp")) return svaraHjalp(url, init);
     const skalet = iForhandsvisning ? svaraSkalet(url, init) : null;
     if (skalet) return skalet;
+    const iris = iForhandsvisning ? svaraIris(url, init) : null;
+    if (iris) return iris;
     const galler = iForhandsvisning && url.pathname.startsWith("/api/snajp-support/crm");
     return galler ? svara(url, init) : riktig(in_, init);
   };
@@ -1506,7 +1510,7 @@ const FORHANDSATGARDER: Partial<Skalatgarder> = {
 };
 
 /** Vyerna förhandsvisningen kan visa. En ny vy läggs till här och i renderingen nedan. */
-const KANDA_VYER = ["oversikt", "bolag", "personer", "affarer", "uppgifter", "synk", "sparrar", "utvecklare"];
+const KANDA_VYER = ["oversikt", "bolag", "personer", "affarer", "uppgifter", "synk", "sparrar", "utvecklare", "iris/leads"];
 
 export function CrmForhandsvisning({
   tema,
@@ -1538,6 +1542,7 @@ export function CrmForhandsvisning({
         {visad === "synk" ? <SynkVy utvecklarvag="/forhandsvisning/crm/utvecklare" /> : null}
         {visad === "sparrar" ? <SparrarVy /> : null}
         {visad === "utvecklare" ? <UtvecklareVy /> : null}
+        {visad === "iris/leads" ? <LeadsVy bas="/forhandsvisning/crm" /> : null}
       </CrmRam>
     </DashboardProvider>
   );

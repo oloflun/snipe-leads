@@ -28,6 +28,7 @@ import {
   Phone,
   Plug,
   RefreshCw,
+  Target,
   Users,
   type LucideIcon
 } from "lucide-react";
@@ -55,7 +56,7 @@ import { useLocale, type Localized } from "@/lib/i18n";
 export type Ton = "ockra" | "bla" | "mossa" | "sigill" | "mineral";
 
 /** CRM:ets vyer. Samma nycklar som adressen: `/crm/<vy>`. */
-export type Objekt = "oversikt" | "bolag" | "personer" | "affarer" | "uppgifter" | "synk" | "sparrar" | "utvecklare";
+export type Objekt = "oversikt" | "bolag" | "personer" | "affarer" | "uppgifter" | "leads" | "synk" | "sparrar" | "utvecklare";
 
 export const OBJEKT: Record<Objekt, { ton: Ton; ikon: LucideIcon; namn: Localized }> = {
   oversikt: { ton: "ockra", ikon: LayoutDashboard, namn: { sv: "Översikt", en: "Overview" } },
@@ -65,6 +66,8 @@ export const OBJEKT: Record<Objekt, { ton: Ton; ikon: LucideIcon; namn: Localize
   affarer: { ton: "sigill", ikon: Handshake, namn: { sv: "Affärer", en: "Deals" } },
   // Mineral, som Utvecklare: också de står i var sin sektion.
   uppgifter: { ton: "mineral", ikon: ListTodo, namn: { sv: "Uppgifter", en: "Tasks" } },
+  // Iris leads (/crm/iris/leads): ockra, som Översikt och Spärrar, i en egen sektion av navigeringen.
+  leads: { ton: "ockra", ikon: Target, namn: { sv: "Leads", en: "Leads" } },
   synk: { ton: "sigill", ikon: RefreshCw, namn: { sv: "Synk", en: "Sync" } },
   // Ockra, som Översikt: också de står i var sin sektion.
   sparrar: { ton: "ockra", ikon: Ban, namn: { sv: "Spärrar", en: "Blocks" } },
