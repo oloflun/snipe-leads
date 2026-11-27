@@ -152,9 +152,13 @@ export const iResearch = (p: Lead) => p.origin !== "example" && p.status === "re
 /** Raden finns men är inte bedömd än: poängen visas som ett streck (LR-036). */
 export const obedomd = (p: Lead) => p.origin !== "example" && (p.status === "researching" || (!p.niva && p.score_total == null && p.icp_fit == null));
 
-/** Motiveringens första mening, annars underkännandets första skäl. */
-export function forstaMening(p: Lead): string | null {
-  const text = p.motivering ?? p.disqualifiers?.[0] ?? null;
+/**
+ * Motiveringens första mening, annars underkännandets första skäl. Under
+ * Bortvalda och Arkiverade (`skalForst`) går skälet före motiveringen (LR-050,
+ * listvy.listrad): raden ska säga varför Iris valde bort bolaget.
+ */
+export function forstaMening(p: Lead, skalForst = false): string | null {
+  const text = (skalForst ? (p.disqualifiers?.[0] ?? p.motivering) : (p.motivering ?? p.disqualifiers?.[0])) ?? null;
   if (!text) return null;
   const slut = text.search(/[.!?](\s|$)/);
   return slut > 0 ? text.slice(0, slut + 1) : text;

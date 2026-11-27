@@ -91,5 +91,12 @@ export async function allaLeads<T>(fraga = ""): Promise<T[]> {
 /** Skapa utkast delas i omgångar om så här många (LR-042: vyns omgångar, servern har inget tak). */
 export const PROCESSA_OMGANG = 200;
 
+/**
+ * Avsändaren när leadets panel (eller något i den) meddelar att leadet ändrats.
+ * Panelen har då redan läst om och lyssnar bara på ändringar från andra (listan,
+ * körningar, dagens Leads).
+ */
+export const PANELENS_KALLA = "crm-iris-panel";
+
 /** Signalen dagens Leads sänder när leads eller utkast ändrats. CRM:ets vyer lyssnar på samma. */
 export { LEADS_UPPDATERADE, meddelaLeadsUppdaterade } from "@/lib/leads/utkast";

@@ -13,7 +13,7 @@ import { Skeleton } from "@astryxdesign/core/Skeleton";
 import { Text } from "@astryxdesign/core/Text";
 import { useSkrivratt } from "@/components/crm/app/kit";
 import { CrmFel } from "@/lib/crm/api";
-import { irisAnrop, meddelaLeadsUppdaterade } from "@/lib/crm/iris/anrop";
+import { irisAnrop } from "@/lib/crm/iris/anrop";
 import { UTKASTTON, kanSkickas, obedomd, utkastText, type Lead, type Utkastsvar } from "@/lib/crm/iris/lead";
 import { lasStruktur, sparaStruktur, type Struktur } from "@/lib/leads/struktur";
 import { useLocale, type Localized } from "@/lib/i18n";
@@ -35,7 +35,19 @@ const feltext = (e: unknown): Localized => (e instanceof CrmFel ? e.text : { sv:
  * research först när leadet saknar mejladress eller bedömning (`research_and_draft`,
  * kontaktjakten). Utkastet läses om tills det inte längre skrivs.
  */
-export function LeadUtkast({ id, lead, andrat }: Readonly<{ id: string; lead: Lead; andrat: () => void }>) {
+export function LeadUtkast({
+  id,
+  lead,
+  andrat,
+  lasOm
+}: Readonly<{
+  id: string;
+  lead: Lead;
+  /** Utkastet ändrades: panelen hämtar om och listan bakom får veta det. */
+  andrat: () => void;
+  /** Bara leadet läses om, utan att listan meddelas (pollningen medan utkastet skrivs). */
+  lasOm: () => void;
+}>) {
   const { text, locale } = useLocale();
   const skriv = useSkrivratt("test");
   // Autonomin är kundens inställning, inte agentens data: den ändras aldrig under ett kundbesök.
@@ -54,26 +66,36 @@ export function LeadUtkast({ id, lead, andrat }: Readonly<{ id: string; lead: Le
     setStruktur(lasStruktur());
   }, []);
 
+  // Ordningsskydd: bara den senaste hämtningen skrivs in (byte av lead, pollning, omläsning efter en handling).
+  const hamtNr = useRef(0);
   const hamta = useCallback(async () => {
+    const nr = ++hamtNr.current;
     try {
-      setSvar(await irisAnrop<Utkastsvar>(`/leads/prospects/${encodeURIComponent(id)}/utkast`));
+      const s = await irisAnrop<Utkastsvar>(`/leads/prospects/${encodeURIComponent(id)}/utkast`);
+      if (nr !== hamtNr.current) return;
+      setSvar(s);
       setFel(null);
     } catch (e) {
+      if (nr !== hamtNr.current) return;
       setFel(e);
     }
   }, [id]);
 
   useEffect(() => {
+    hamtNr.current += 1;
     setSvar(null);
     setBesked(null);
     setGodkant(false);
     void hamta();
   }, [hamta]);
 
-  // Förlopp: medan utkastet skrivs läses det om, och listan bakom får veta när det är klart.
+  // Förlopp: medan utkastet skrivs läses utkastet och leadet om, och listan bakom får veta
+  // det EN gång, när det är klart (listan har sin egen livetakt under tiden).
   const skrivs = svar?.utkast_status === "skrivs" || lead.status === "researching";
   const andratRef = useRef(andrat);
   andratRef.current = andrat;
+  const lasOmRef = useRef(lasOm);
+  lasOmRef.current = lasOm;
   useEffect(() => {
     if (!skrivs) {
       if (varv.current > 0) andratRef.current();
@@ -90,7 +112,7 @@ export function LeadUtkast({ id, lead, andrat }: Readonly<{ id: string; lead: Le
       }
       // Leadet läses också om: under kontaktjakten är det leadets status (Research pågår) som säger att arbetet pågår.
       void hamta();
-      andratRef.current();
+      lasOmRef.current();
     }, POLL_MS);
     return () => window.clearInterval(t);
   }, [skrivs, hamta, text]);
@@ -112,7 +134,6 @@ export function LeadUtkast({ id, lead, andrat }: Readonly<{ id: string; lead: Le
       else if (s.utfall === "redan_hanterad") setBesked({ text: text({ sv: "Utkastet är redan hanterat.", en: "The draft has already been handled." }), fel: true });
       else setBesked({ text: skal ? text({ sv: `Inte skickat: ${skal}`, en: `Not sent: ${skal}` }) : text({ sv: "Inte skickat.", en: "Not sent." }), fel: true });
       if (s.utfall === "sent" || s.utfall === "requeued") setGodkant(true);
-      meddelaLeadsUppdaterade("crm-iris");
       andrat();
       await hamta();
     } catch (e) {
@@ -128,7 +149,6 @@ export function LeadUtkast({ id, lead, andrat }: Readonly<{ id: string; lead: Le
     try {
       await irisAnrop(`/leads/queue/${encodeURIComponent(svar.queue_item_id)}/reject`, { method: "POST" });
       setBesked({ text: text({ sv: "Utkastet är avvisat och skickas aldrig.", en: "The draft is rejected and will never be sent." }), fel: false });
-      meddelaLeadsUppdaterade("crm-iris");
       andrat();
       await hamta();
     } catch (e) {
@@ -160,7 +180,6 @@ export function LeadUtkast({ id, lead, andrat }: Readonly<{ id: string; lead: Le
               : text({ sv: "Iris skriver utkastet ur den research som redan finns.", en: "Iris is writing the draft from the existing research." }),
           fel: false
         });
-      meddelaLeadsUppdaterade("crm-iris");
       andrat();
       await hamta();
     } catch (e) {
@@ -176,7 +195,8 @@ export function LeadUtkast({ id, lead, andrat }: Readonly<{ id: string; lead: Le
       await irisAnrop("/leads/config", { method: "PUT", body: JSON.stringify({ autonomy: pa ? "auto_send" : "draft" }) });
       setAuto({ pa, sparar: false, besked: text({ sv: "Sparat.", en: "Saved." }), fel: false });
     } catch (e) {
-      setAuto({ pa: false, sparar: false, besked: text(feltext(e)), fel: true });
+      // Faller sparningen står rutan kvar på värdet före försöket: det är det servern har.
+      setAuto({ pa: !pa, sparar: false, besked: text(feltext(e)), fel: true });
     }
   }
 

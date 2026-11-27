@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Archive,
   ArchiveRestore,
@@ -58,7 +58,7 @@ import { LeadUtkast } from "@/components/crm/app/iris/LeadUtkast";
 import { Kallpiller, Lankpiller, Personchip, Prick, tonFor, tonklass, useSkrivratt, useSmal, utanBolagsform } from "@/components/crm/app/kit";
 import { Felruta } from "@/components/crm/app/Sida";
 import { CrmFel, orgnrVisning } from "@/lib/crm/api";
-import { irisAnrop } from "@/lib/crm/iris/anrop";
+import { IrisFel, LEADS_UPPDATERADE, PANELENS_KALLA, irisAnrop } from "@/lib/crm/iris/anrop";
 import {
   KONTAKTVAG,
   LEAD_TYP_ETIKETT,
@@ -142,22 +142,44 @@ export function LeadPanel({
   const [fraga, setFraga] = useState<"kontakta-inte" | "ta-bort" | null>(null);
   const [upptagen, setUpptagen] = useState(false);
 
+  // Ordningsskydd: bara svaret på den senaste hämtningen skrivs in. Byter användaren lead
+  // medan ett svar är på väg kastas det, så att panelen aldrig visar ett annat bolag än
+  // det som handlingarna går mot.
+  const hamtNr = useRef(0);
   const hamta = useCallback(async () => {
     if (!id) return;
+    const nr = ++hamtNr.current;
     try {
-      setSvar(await irisAnrop<LeadSvar>(`/leads/prospects/${encodeURIComponent(id)}`));
+      const s = await irisAnrop<LeadSvar>(`/leads/prospects/${encodeURIComponent(id)}`);
+      if (nr !== hamtNr.current) return;
+      setSvar(s);
       setFel(null);
     } catch (e) {
+      if (nr !== hamtNr.current) return;
       setFel(e);
     }
   }, [id]);
 
   useEffect(() => {
+    hamtNr.current += 1;
     setSvar(null);
     setFel(null);
     setFlik("oversikt");
     void hamta();
   }, [hamta]);
+
+  // Ändras leadet någon annanstans (listans massåtgärder, en körning, dagens Leads) hämtas
+  // panelen om. Panelens egna ändringar sänds med PANELENS_KALLA och är redan inlästa.
+  useEffect(() => {
+    if (!id) return;
+    const uppdatera = (e: Event) => {
+      if ((e as CustomEvent<string>).detail === PANELENS_KALLA) return;
+      setOmgang((n) => n + 1);
+      void hamta();
+    };
+    window.addEventListener(LEADS_UPPDATERADE, uppdatera);
+    return () => window.removeEventListener(LEADS_UPPDATERADE, uppdatera);
+  }, [id, hamta]);
 
   const ny = () => {
     setOmgang((n) => n + 1);
@@ -199,8 +221,24 @@ export function LeadPanel({
       }
       ny();
     } catch (e) {
-      const saknas = (e as { saknas?: string[] }).saknas;
-      visa({ type: "error", body: text(feltext(e)) + (saknas?.length ? ` (${saknas.join(", ")})` : ""), uniqueID: "iris-lead" });
+      // Befordran (LR-104): backenden säger vad som saknas i hela meningar, en per brist.
+      const saknas = e instanceof IrisFel ? e.saknas : [];
+      visa({
+        type: "error",
+        body: saknas.length ? (
+          <span className="flex flex-col gap-1">
+            <span>{text(feltext(e))}</span>
+            <ul className="flex flex-col gap-0.5">
+              {saknas.map((m) => (
+                <li key={m}>{m}</li>
+              ))}
+            </ul>
+          </span>
+        ) : (
+          text(feltext(e))
+        ),
+        uniqueID: "iris-lead"
+      });
     } finally {
       setUpptagen(false);
       setFraga(null);
@@ -228,7 +266,8 @@ export function LeadPanel({
         text: pa
           ? text({ sv: `${namn} är arkiverat och får inga mejl.`, en: `${namn} is archived and gets no emails.` }) + (stoppade ? ` ${text({ sv: "Det väntande utkastet ställdes in.", en: "The pending draft was cancelled." })}` : "")
           : text({ sv: `${namn} är tillbaka i listan.`, en: `${namn} is back in the list.` }),
-        angra: () => irisAnrop("/leads/prospects/arkivera", { method: "POST", body: JSON.stringify({ ids, arkivera: !pa }) })
+        // Ångra återställer bara arkiveringen: ställdes ett utkast in erbjuds ingen Ångra.
+        angra: stoppade === 0 ? () => irisAnrop("/leads/prospects/arkivera", { method: "POST", body: JSON.stringify({ ids, arkivera: !pa }) }) : undefined
       };
     });
 
@@ -286,6 +325,10 @@ export function LeadPanel({
     { label: text({ sv: "Ta bort för gott", en: "Delete for good" }), icon: <Icon icon={Trash2} size="sm" />, variant: "destructive" as const, onClick: () => setFraga("ta-bort") }
   ];
 
+  // Hämtfelet (LR-060) visas även när listans rad fyller huvudet: i Översikt överst, och i
+  // flikarna som kräver hela leadet i stället för innehållet.
+  const felruta = fel ? <Felruta fel={fel} igen={<Button size="sm" label={text({ sv: "Försök igen", en: "Try again" })} onClick={() => void hamta()} />} /> : null;
+
   const flikikon = (i: LucideIcon) => (smal ? undefined : <Icon icon={i} size="sm" />);
   const webb = post && barWebb(post) ? (post.webbrevision as Webbrevision | null) : null;
   const n = visad ? poang(visad) : null;
@@ -327,9 +370,7 @@ export function LeadPanel({
             <LayoutContent padding={0}>
               <div data-autofocus tabIndex={-1} className="crm-autofokus">
                 {fel && !visad ? (
-                  <div className="px-5 py-4">
-                    <Felruta fel={fel} igen={<Button size="sm" label={text({ sv: "Försök igen", en: "Try again" })} onClick={() => void hamta()} />} />
-                  </div>
+                  <div className="px-5 py-4">{felruta}</div>
                 ) : !visad ? (
                   <div className="flex flex-col gap-4 px-5 py-4" role="status" aria-busy="true" aria-label={text({ sv: "Hämtar leadet", en: "Loading the lead" })}>
                     {Array.from({ length: 7 }, (_, i) => (
@@ -384,6 +425,7 @@ export function LeadPanel({
                     <div id="iris-panelflik" role="tabpanel" className="crm-panelinnehall px-5 pb-6 pt-5">
                       {flik === "oversikt" ? (
                         <div className="flex flex-col gap-6">
+                          {fel && !post ? felruta : null}
                           <MetadataList title={text({ sv: "Hos Iris", en: "With Iris" })} label={ETIKETT}>
                             {rad(
                               { sv: "Status", en: "Status" },
@@ -484,7 +526,11 @@ export function LeadPanel({
 
                       {flik === "bedomning" ? (
                         !post ? (
-                          <Skeleton width="80%" height={10} radius="rounded" />
+                          fel ? (
+                            felruta
+                          ) : (
+                            <Skeleton width="80%" height={10} radius="rounded" />
+                          )
                         ) : (
                           <div className="flex flex-col gap-6">
                             {pafyllt ? (
@@ -575,7 +621,7 @@ export function LeadPanel({
                         )
                       ) : null}
 
-                      {flik === "utkast" && id ? <LeadUtkast id={id} lead={post ?? visad} andrat={ny} /> : null}
+                      {flik === "utkast" && id ? <LeadUtkast id={id} lead={post ?? visad} andrat={ny} lasOm={() => void hamta()} /> : null}
 
                       {flik === "historik" && id ? <LeadHistorik id={id} omgang={omgang} /> : null}
 
@@ -595,6 +641,8 @@ export function LeadPanel({
                                 </li>
                               ))}
                             </ul>
+                          ) : !svar && fel ? (
+                            felruta
                           ) : (
                             <Text color="secondary">{svar ? text({ sv: "Inga källor sparade.", en: "No sources saved." }) : text({ sv: "Hämtar källorna.", en: "Loading the sources." })}</Text>
                           )}

@@ -54,7 +54,7 @@ import { Kallpiller, Kolumnrubrik, Postchip, Prick, Tabellskelett, Vyval, grannf
 import { Felruta, Sida } from "@/components/crm/app/Sida";
 import { useDashboard } from "@/components/dashboard/DashboardContext";
 import { CrmFel } from "@/lib/crm/api";
-import { LEADS_UPPDATERADE, PROCESSA_OMGANG, allaLeads, irisAnrop, meddelaLeadsUppdaterade } from "@/lib/crm/iris/anrop";
+import { IrisFel, LEADS_UPPDATERADE, PANELENS_KALLA, PROCESSA_OMGANG, allaLeads, irisAnrop, meddelaLeadsUppdaterade } from "@/lib/crm/iris/anrop";
 import {
   FORE_UTSKICK,
   KONTAKTVAG,
@@ -93,7 +93,24 @@ import { useLocale, type Localized } from "@/lib/i18n";
 type Vy = "alla" | "researching" | "new" | "ready" | "testyta" | "bortvalda" | "arkiverade";
 type Sortering = "nyast" | "poang" | "webb";
 type Atgard = "skicka" | "skapa" | "skapa-om" | "uppfoljning" | "arkivera" | "aterstall" | "ta-bort" | "testyta" | "skarp" | "bearbeta" | "main";
-type Bekraftas = { typ: "skicka" | "skapa-om" | "ta-bort" | "bearbeta"; rader: Lead[] };
+type Bekraftas = { typ: "skicka" | "skapa" | "skapa-om" | "ta-bort" | "bearbeta"; rader: Lead[] };
+
+/** En rad i ifyllnaden vid befordran (LR-104). `saknas` är backendens meningar (befordran.py:saknade_falt). */
+type Ifyllnadsrad = { lead: Lead; saknas: string[]; orgnr: string; website: string; contact_email: string; fel: string | null; sparar: boolean };
+type Ifyllnadsfalt = "orgnr" | "website" | "contact_email";
+
+/**
+ * Vilket fält en mening ur `saknas` gäller. Backenden svarar med hela meningar
+ * skrivna för kunden ("Webbplatsen saknas eller är en exempeladress ..."), inte
+ * med fältnamn: meningen visas vid sitt fält, och en mening som inte känns igen
+ * visas i listan ovanför fälten, så att inget som saknas försvinner.
+ */
+function faltFor(mening: string): Ifyllnadsfalt | null {
+  if (/^(organisationsnummer|org\.?nr|orgnr)/i.test(mening)) return "orgnr";
+  if (/^(webbplats|website)/i.test(mening)) return "website";
+  if (/^(e-post|epost|mejl|contact_email)/i.test(mening)) return "contact_email";
+  return null;
+}
 
 /** Medan något researchas eller ett utkast skrivs hämtas listan tyst så här ofta (LR-038). */
 const LIVE_MS = 4000;
@@ -171,17 +188,26 @@ export function LeadsVy({ bas = "/crm" }: Readonly<{ bas?: string }>) {
   const [uppgifter, setUppgifter] = useState<Leaduppgift[]>([]);
   const [sparade, setSparade] = useState<Sparadvy[]>([]);
   const [fel, setFel] = useState<unknown>(null);
-  const [undanFel, setUndanFel] = useState<unknown>(null);
+  // Ett fel per undanvy: ett fel i Bortvalda ska inte skymma en redan hämtad Arkiverade.
+  const [undanFel, setUndanFel] = useState<{ bortvalda: unknown; arkiverade: unknown }>({ bortvalda: null, arkiverade: null });
   const [sidofel, setSidofel] = useState<string | null>(null);
+
+  // Ordningsskydd: varje hämtning (och varje optimistisk ändring) får ett nummer, och
+  // bara svaret på den senaste skrivs in. En äldre pollning som svarar sist skriver
+  // annars över en nyare lista eller en statusändring.
+  const aktivaNr = useRef(0);
+  const undanNr = useRef({ bortvalda: 0, arkiverade: 0 });
 
   const hamta = useCallback(async () => {
     setFel(null);
+    const nr = ++aktivaNr.current;
     try {
       const [l, u, v] = await Promise.allSettled([
         allaLeads<Lead>(),
         irisAnrop<{ uppgifter?: Leaduppgift[] }>("/leads/uppgifter?oppna=1"),
         irisAnrop<{ vyer?: Sparadvy[] }>("/leads/vyer")
       ]);
+      if (nr !== aktivaNr.current) return;
       if (l.status === "rejected") throw l.reason;
       setAktiva(l.value);
       setUppgifter(u.status === "fulfilled" ? (u.value.uppgifter ?? []) : []);
@@ -195,20 +221,25 @@ export function LeadsVy({ bas = "/crm" }: Readonly<{ bas?: string }>) {
 
   /** Bara leadsen, tyst: livetakten ska inte blinka fram fel eller skelett. */
   const hamtaTyst = useCallback(async () => {
+    const nr = ++aktivaNr.current;
     try {
-      setAktiva(await allaLeads<Lead>());
+      const rader = await allaLeads<Lead>();
+      if (nr === aktivaNr.current) setAktiva(rader);
     } catch {
       /* nästa varv försöker igen */
     }
   }, []);
 
   const hamtaUndan = useCallback(async (vilka: "bortvalda" | "arkiverade") => {
-    setUndanFel(null);
+    setUndanFel((f) => ({ ...f, [vilka]: null }));
+    const nr = ++undanNr.current[vilka];
     try {
       const rader = nyastForst(await allaLeads<Lead>(`${vilka}=1`));
+      if (nr !== undanNr.current[vilka]) return;
       (vilka === "bortvalda" ? setBortvalda : setArkiverade)(rader);
     } catch (e) {
-      setUndanFel(e);
+      if (nr !== undanNr.current[vilka]) return;
+      setUndanFel((f) => ({ ...f, [vilka]: e }));
       (vilka === "bortvalda" ? setBortvalda : setArkiverade)((nu) => nu ?? []);
     }
   }, []);
@@ -378,7 +409,15 @@ export function LeadsVy({ bas = "/crm" }: Readonly<{ bas?: string }>) {
     async (p: Lead, status: string, angra = false) => {
       const forra = p.status;
       if (forra === status) return;
+      // Lämnar raden urvalet (en statusvy, eller en status efter utskick) flyttas fokus till
+      // samma val i grannraden, annars till vyvalets första vy, Att bearbeta (LR-039).
+      const lamnar = vy === "alla" || vy === "testyta" ? !(FORE_UTSKICK as readonly string[]).includes(status) : status !== vy;
+      const fran = document.querySelector(`[data-lead-status="${CSS.escape(p.id)}"]`);
+      const fokus = lamnar ? grannfokus(fran, "[data-lead-status] button", ".crm-vyval button, .crm-vyval [role=radio], .crm-vyval input") : null;
+      // En äldre pollning som svarar efter bytet ska inte skriva tillbaka den gamla statusen.
+      aktivaNr.current += 1;
       setAktiva((rader) => rader?.map((r) => (r.id === p.id ? { ...r, status } : r)) ?? null);
+      fokus?.();
       const ny = text(STATUS_ETIKETT[status] ?? { sv: status, en: status });
       const nyLiten = ny.toLocaleLowerCase(sprak);
       setStatusbesked(text({ sv: `${p.company_name}: status ändrad till ${ny}`, en: `${p.company_name}: status changed to ${ny}` }));
@@ -394,12 +433,13 @@ export function LeadsVy({ bas = "/crm" }: Readonly<{ bas?: string }>) {
           });
         }
       } catch (e) {
+        aktivaNr.current += 1;
         setAktiva((rader) => rader?.map((r) => (r.id === p.id ? { ...r, status: forra } : r)) ?? null);
         const orsak = text(feltext(e));
         visa({ type: "error", body: text({ sv: `Statusen sparades inte: ${orsak}`, en: `The status was not saved: ${orsak}` }), uniqueID: "iris-status" });
       }
     },
-    [text, sprak, visa]
+    [text, sprak, visa, vy]
   );
 
   // ---- Massåtgärderna (LR-042 till LR-048, LR-102 till LR-106) ----------------
@@ -441,6 +481,13 @@ export function LeadsVy({ bas = "/crm" }: Readonly<{ bas?: string }>) {
       setAtgard(null);
       setFramsteg(null);
       setBekraftas(null);
+      // Verktygsraden och bekräftelsen försvinner med markeringen. Stod fokus där hamnar det
+      // på sidan: lägg det i markeringens kolumn, annars i sökfältet (LR-039, DESIGN-CRM.md).
+      window.setTimeout(() => {
+        const a = document.activeElement;
+        if (a && a !== document.body && a.isConnected) return;
+        document.querySelector<HTMLElement>(".crm-tabell input[type=checkbox], .crm-sokfalt input, input.crm-sokfalt")?.focus();
+      }, 120);
     }
   }
 
@@ -460,7 +507,9 @@ export function LeadsVy({ bas = "/crm" }: Readonly<{ bas?: string }>) {
       for (let i = 0; i < urvalet.length; i += PROCESSA_OMGANG) {
         const svar = await irisAnrop<{ count?: number; hoppade_over?: string[]; pagar_redan?: string[] }>("/leads/prospects/processa-om", {
           method: "POST",
-          body: JSON.stringify({ prospect_ids: urvalet.slice(i, i + PROCESSA_OMGANG).map((p) => p.id), scope: "utkast", ersatt })
+          // Strukturen A eller B väljs vid varje Skapa utkast (LR-074, LR-105). Skapa om skickar
+          // den också: valet i bekräftelsen gäller de omskrivna utkasten.
+          body: JSON.stringify({ prospect_ids: urvalet.slice(i, i + PROCESSA_OMGANG).map((p) => p.id), scope: "utkast", ersatt, struktur })
         });
         koade += svar.count ?? 0;
         hoppade.push(...(svar.hoppade_over ?? []));
@@ -468,9 +517,19 @@ export function LeadsVy({ bas = "/crm" }: Readonly<{ bas?: string }>) {
       }
       klart();
       const delar = [
-        text({ sv: `Utkast skrivs för ${koade} leads ur den research som redan finns. De står som Skriver utkast tills de är klara.`, en: `Drafts are being written for ${koade} leads from their existing research. They show as Writing draft until they are done.` }),
-        hoppade.length ? text({ sv: `${hoppade.length} har redan fått mejl utan någon uppföljning som väntar och hoppades över.`, en: `${hoppade.length} already emailed with no follow-up pending were skipped.` }) : null,
-        pagar.length ? text({ sv: `${pagar.length} bearbetas redan och hoppades över.`, en: `${pagar.length} already being processed were skipped.` }) : null
+        koade === 1
+          ? text({ sv: "Utkast skrivs för 1 lead ur den research som redan finns. Det står som Skriver utkast tills det är klart.", en: "A draft is being written for 1 lead from its existing research. It shows as Writing draft until it is done." })
+          : text({ sv: `Utkast skrivs för ${koade} leads ur den research som redan finns. De står som Skriver utkast tills de är klara.`, en: `Drafts are being written for ${koade} leads from their existing research. They show as Writing draft until they are done.` }),
+        hoppade.length === 1
+          ? text({ sv: "1 har redan fått mejl utan någon uppföljning som väntar och hoppades över.", en: "1 already emailed with no follow-up pending was skipped." })
+          : hoppade.length
+            ? text({ sv: `${hoppade.length} har redan fått mejl utan någon uppföljning som väntar och hoppades över.`, en: `${hoppade.length} already emailed with no follow-up pending were skipped.` })
+            : null,
+        pagar.length === 1
+          ? text({ sv: "1 bearbetas redan och hoppades över.", en: "1 already being processed was skipped." })
+          : pagar.length
+            ? text({ sv: `${pagar.length} bearbetas redan och hoppades över.`, en: `${pagar.length} already being processed were skipped.` })
+            : null
       ];
       return { text: delar.filter(Boolean).join(" "), fel: false };
     });
@@ -484,10 +543,18 @@ export function LeadsVy({ bas = "/crm" }: Readonly<{ bas?: string }>) {
         body: JSON.stringify({ prospect_ids: rader.map((p) => p.id), scope: "research_and_draft", struktur })
       });
       klart();
+      const n = svar.count ?? 0;
+      const pagar = svar.pagar_redan?.length ?? 0;
       return {
         text:
-          text({ sv: `Iris researchar ${svar.count ?? 0} bolag igen och skriver nya utkast.`, en: `Iris is researching ${svar.count ?? 0} companies again and writing new drafts.` }) +
-          (svar.pagar_redan?.length ? ` ${text({ sv: `${svar.pagar_redan.length} bearbetas redan och hoppades över.`, en: `${svar.pagar_redan.length} already being processed were skipped.` })}` : ""),
+          (n === 1
+            ? text({ sv: "Iris researchar 1 bolag igen och skriver ett nytt utkast.", en: "Iris is researching 1 company again and writing a new draft." })
+            : text({ sv: `Iris researchar ${n} bolag igen och skriver nya utkast.`, en: `Iris is researching ${n} companies again and writing new drafts.` })) +
+          (pagar === 1
+            ? ` ${text({ sv: "1 bearbetas redan och hoppades över.", en: "1 already being processed was skipped." })}`
+            : pagar
+              ? ` ${text({ sv: `${pagar} bearbetas redan och hoppades över.`, en: `${pagar} already being processed were skipped.` })}`
+              : ""),
         fel: false
       };
     });
@@ -551,10 +618,18 @@ export function LeadsVy({ bas = "/crm" }: Readonly<{ bas?: string }>) {
       const iKon = vantar + godkanda;
       const delar: (Localized | null)[] = [
         { sv: `${skickade} skickade`, en: `${skickade} sent` },
-        iKon ? { sv: `${iKon} skickas i tur och ordning från kön (vardagar från 08:00)`, en: `${iKon} go out in turn from the queue (weekdays from 08:00)` } : null,
+        iKon === 1
+          ? { sv: "1 skickas i tur och ordning från kön (vardagar från 08:00)", en: "1 goes out in turn from the queue (weekdays from 08:00)" }
+          : iKon
+            ? { sv: `${iKon} skickas i tur och ordning från kön (vardagar från 08:00)`, en: `${iKon} go out in turn from the queue (weekdays from 08:00)` }
+            : null,
         flyttade.length ? { sv: `${flyttade.length} flyttades över från provkörningen`, en: `${flyttade.length} moved over from the test run` } : null,
-        orgnrHamtade ? { sv: `org.nr hämtades från ${orgnrHamtade} webbplatser`, en: `company number found on ${orgnrHamtade} websites` } : null,
-        antalStopp ? { sv: `${antalStopp} skickades inte`, en: `${antalStopp} were not sent` } : null,
+        orgnrHamtade === 1
+          ? { sv: "org.nr hämtades från 1 webbplats", en: "company number found on 1 website" }
+          : orgnrHamtade
+            ? { sv: `org.nr hämtades från ${orgnrHamtade} webbplatser`, en: `company number found on ${orgnrHamtade} websites` }
+            : null,
+        antalStopp === 1 ? { sv: "1 skickades inte", en: "1 was not sent" } : antalStopp ? { sv: `${antalStopp} skickades inte`, en: `${antalStopp} were not sent` } : null,
         utan ? { sv: `${utan} saknade utkast`, en: `${utan} had no draft` } : null
       ];
       return { text: `${delar.filter((d): d is Localized => d != null).map((d) => text(d)).join(", ")}.`, fel: antalStopp > 0, orsaker };
@@ -570,12 +645,21 @@ export function LeadsVy({ bas = "/crm" }: Readonly<{ bas?: string }>) {
       fokus();
       const ids = svar.ids ?? [];
       const stoppade = svar.installda_utskick ?? 0;
+      const installda =
+        stoppade === 1
+          ? ` ${text({ sv: "1 väntande utkast ställdes in och skickas inte.", en: "1 pending draft was cancelled and will not be sent." })}`
+          : stoppade
+            ? ` ${text({ sv: `${stoppade} väntande utkast ställdes in och skickas inte.`, en: `${stoppade} pending drafts were cancelled and will not be sent.` })}`
+            : "";
       return {
         text: pa
-          ? text({ sv: `${ids.length} arkiverade.`, en: `${ids.length} archived.` }) + (stoppade ? ` ${text({ sv: `${stoppade} väntande utkast ställdes in och skickas inte.`, en: `${stoppade} pending drafts were cancelled and will not be sent.` })}` : "")
-          : text({ sv: `${ids.length} återställda till listan.`, en: `${ids.length} restored to the list.` }),
+          ? (ids.length === 1 ? text({ sv: "1 arkiverat.", en: "1 archived." }) : text({ sv: `${ids.length} arkiverade.`, en: `${ids.length} archived.` })) + installda
+          : ids.length === 1
+            ? text({ sv: "1 återställt till listan.", en: "1 restored to the list." })
+            : text({ sv: `${ids.length} återställda till listan.`, en: `${ids.length} restored to the list.` }),
         fel: false,
-        angra: ids.length
+        // Ångra återställer bara arkiveringen, inte de inställda utkasten: erbjuds därför bara när inget ställdes in.
+        angra: ids.length && stoppade === 0
           ? () => {
               void irisAnrop("/leads/prospects/arkivera", { method: "POST", body: JSON.stringify({ ids, arkivera: !pa }) }).then(
                 () => meddelaLeadsUppdaterade("crm-iris"),
@@ -594,10 +678,15 @@ export function LeadsVy({ bas = "/crm" }: Readonly<{ bas?: string }>) {
       if (postId && svar.raderade?.includes(postId)) sattPost(null);
       klart();
       const kontaktade = (svar.vagrade ?? []).filter((v) => v.skal === "kontaktad").length;
+      const raderade = svar.raderade?.length ?? 0;
       return {
         text:
-          text({ sv: `${svar.raderade?.length ?? 0} borttagna.`, en: `${svar.raderade?.length ?? 0} deleted.` }) +
-          (kontaktade ? ` ${text({ sv: `${kontaktade} har fått mejl och kan bara arkiveras.`, en: `${kontaktade} have been emailed and can only be archived.` })}` : ""),
+          (raderade === 1 ? text({ sv: "1 borttaget.", en: "1 deleted." }) : text({ sv: `${raderade} borttagna.`, en: `${raderade} deleted.` })) +
+          (kontaktade === 1
+            ? ` ${text({ sv: "1 har fått mejl och kan bara arkiveras.", en: "1 has been emailed and can only be archived." })}`
+            : kontaktade
+              ? ` ${text({ sv: `${kontaktade} har fått mejl och kan bara arkiveras.`, en: `${kontaktade} have been emailed and can only be archived.` })}`
+              : ""),
         fel: kontaktade > 0
       };
     });
@@ -624,7 +713,7 @@ export function LeadsVy({ bas = "/crm" }: Readonly<{ bas?: string }>) {
   }
 
   /** Flytta till testytan (LR-102) eller till skarpa listan (LR-103, LR-104). */
-  const [ifyllnad, setIfyllnad] = useState<{ lead: Lead; saknas: string[]; orgnr: string; website: string; contact_email: string; fel: string | null; sparar: boolean }[] | null>(null);
+  const [ifyllnad, setIfyllnad] = useState<Ifyllnadsrad[] | null>(null);
   async function flytta(rader: Lead[], till: "test" | "skarp") {
     await utfor(till === "test" ? "testyta" : "skarp", async () => {
       let andrade = 0;
@@ -639,12 +728,14 @@ export function LeadsVy({ bas = "/crm" }: Readonly<{ bas?: string }>) {
         }
       }
       klart();
-      const saknade = fall.filter((f) => f.fel instanceof CrmFel && f.fel.status === 422);
+      // De som saknar uppgifter (422) fylls i i dialogen; övriga fel redovisas med orsaken.
+      const saknade = till === "skarp" ? fall.filter((f) => f.fel instanceof CrmFel && f.fel.status === 422) : [];
+      const ovriga = fall.filter((f) => !saknade.includes(f));
       if (saknade.length) {
         setIfyllnad(
           saknade.map((f) => ({
             lead: f.lead,
-            saknas: (f.fel as { saknas?: string[] }).saknas ?? [],
+            saknas: f.fel instanceof IrisFel ? f.fel.saknas : [],
             orgnr: "",
             website: f.lead.website ?? "",
             contact_email: f.lead.contact_email ?? "",
@@ -653,32 +744,39 @@ export function LeadsVy({ bas = "/crm" }: Readonly<{ bas?: string }>) {
           }))
         );
       }
+      const huvud =
+        till === "test"
+          ? andrade === 1
+            ? text({ sv: "1 flyttades till testytan och kan inte längre skickas.", en: "1 moved to the test area and can no longer be sent." })
+            : text({ sv: `${andrade} flyttades till testytan och kan inte längre skickas.`, en: `${andrade} moved to the test area and can no longer be sent.` })
+          : text({ sv: `${andrade} flyttades till skarpa listan.`, en: `${andrade} moved to the live list.` });
+      const foll = fall.length === 1 ? text({ sv: "1 kunde inte flyttas.", en: "1 could not be moved." }) : fall.length ? text({ sv: `${fall.length} kunde inte flyttas.`, en: `${fall.length} could not be moved.` }) : "";
+      const ifyll = saknade.length ? text({ sv: "Fyll i det som saknas i rutan som öppnades.", en: "Fill in what is missing in the box that opened." }) : "";
       return {
-        text:
-          till === "test"
-            ? text({ sv: `${andrade} flyttades till testytan och kan inte längre skickas.`, en: `${andrade} moved to the test area and can no longer be sent.` })
-            : text({ sv: `${andrade} flyttades till skarpa listan.`, en: `${andrade} moved to the live list.` }) +
-              (fall.length ? ` ${text({ sv: `${fall.length} kunde inte flyttas.`, en: `${fall.length} could not be moved.` })}` : ""),
-        fel: fall.length > 0
+        text: [huvud, foll, ifyll].filter(Boolean).join(" "),
+        fel: fall.length > 0,
+        orsaker: ovriga.map((f) => `${f.lead.company_name}: ${text(feltext(f.fel))}`)
       };
     });
   }
 
-  async function befordraMedIfyllnad(i: number) {
-    const rad = ifyllnad?.[i];
-    if (!rad) return;
-    setIfyllnad((l) => l?.map((r, k) => (k === i ? { ...r, sparar: true, fel: null } : r)) ?? null);
+  /** Raderna i ifyllnaden adresseras med leadets id, aldrig med index: två formulär kan sparas samtidigt. */
+  const andraIfyllnad = (id: string, f: (r: Ifyllnadsrad) => Ifyllnadsrad) => setIfyllnad((l) => l?.map((r) => (r.lead.id === id ? f(r) : r)) ?? null);
+  async function befordraMedIfyllnad(id: string) {
+    const rad = ifyllnad?.find((r) => r.lead.id === id);
+    if (!rad || rad.sparar) return;
+    andraIfyllnad(id, (r) => ({ ...r, sparar: true, fel: null }));
     const kropp = Object.fromEntries(Object.entries({ orgnr: rad.orgnr.trim(), website: rad.website.trim(), contact_email: rad.contact_email.trim() }).filter(([, v]) => v));
     try {
-      await irisAnrop(`/leads/prospects/${encodeURIComponent(rad.lead.id)}/befordra`, { method: "POST", body: JSON.stringify(kropp) });
+      await irisAnrop(`/leads/prospects/${encodeURIComponent(id)}/befordra`, { method: "POST", body: JSON.stringify(kropp) });
       setIfyllnad((l) => {
-        const kvar = l?.filter((_, k) => k !== i) ?? [];
+        const kvar = l?.filter((r) => r.lead.id !== id) ?? [];
         return kvar.length ? kvar : null;
       });
       visa({ body: text({ sv: `${rad.lead.company_name} flyttades till skarpa listan.`, en: `${rad.lead.company_name} moved to the live list.` }), uniqueID: "iris-atgard" });
       meddelaLeadsUppdaterade("crm-iris");
     } catch (e) {
-      setIfyllnad((l) => l?.map((r, k) => (k === i ? { ...r, sparar: false, fel: text(feltext(e)), saknas: (e as { saknas?: string[] }).saknas ?? r.saknas } : r)) ?? null);
+      andraIfyllnad(id, (r) => ({ ...r, sparar: false, fel: text(feltext(e)), saknas: e instanceof IrisFel && e.saknas.length ? e.saknas : r.saknas }));
     }
   }
 
@@ -774,10 +872,12 @@ export function LeadsVy({ bas = "/crm" }: Readonly<{ bas?: string }>) {
         ...VALBARA.map((s) => ({ label: text(STATUS_ETIKETT[s]), icon: <Prick ton={STATUSTON[s] ?? null} />, onClick: () => void bytStatus(p, s) }))
       ];
       return (
-        <DropdownMenu
-          button={{ label: etikett, variant: "ghost", size: "sm", icon: <Prick ton={ton} />, "aria-label": text({ sv: `Status för ${p.company_name}: ${etikett}`, en: `Status for ${p.company_name}: ${etikett}` }) }}
-          items={val}
-        />
+        <span data-lead-status={p.id} className="inline-flex">
+          <DropdownMenu
+            button={{ label: etikett, variant: "ghost", size: "sm", icon: <Prick ton={ton} />, "aria-label": text({ sv: `Status för ${p.company_name}: ${etikett}`, en: `Status for ${p.company_name}: ${etikett}` }) }}
+            items={val}
+          />
+        </span>
       );
     },
     [text, iUndan, skriv.far, skriv.skal, bytStatus]
@@ -824,7 +924,7 @@ export function LeadsVy({ bas = "/crm" }: Readonly<{ bas?: string }>) {
         renderCell: (p) => {
           const pafyllt = p.pafylld ? pafyllnadSkal(p.pafylld_skal) : null;
           const skal = p.pafylld ? (pafyllt ? text(pafyllt) : "") : null;
-          const rad = skal != null ? (skal ? text({ sv: `Påfyllt: ${skal}`, en: `Filled in: ${skal}` }) : text({ sv: "Påfyllt", en: "Filled in" })) : forstaMening(p);
+          const rad = skal != null ? (skal ? text({ sv: `Påfyllt: ${skal}`, en: `Filled in: ${skal}` }) : text({ sv: "Påfyllt", en: "Filled in" })) : forstaMening(p, iUndan);
           return rad ? (
             <span className="block truncate text-[0.875rem] text-ink2" title={rad}>
               {rad}
@@ -1002,7 +1102,7 @@ export function LeadsVy({ bas = "/crm" }: Readonly<{ bas?: string }>) {
   };
   const vynamnLiten = text(vynamn[vy]).toLocaleLowerCase(sprak);
   const laddar = vy === "bortvalda" ? bortvalda === null : vy === "arkiverade" ? arkiverade === null : aktiva === null;
-  const vyFel = iUndan ? undanFel : fel;
+  const vyFel = vy === "bortvalda" ? undanFel.bortvalda : vy === "arkiverade" ? undanFel.arkiverade : fel;
 
   const tomt = filtrerar ? (
     <EmptyState
@@ -1066,7 +1166,6 @@ export function LeadsVy({ bas = "/crm" }: Readonly<{ bas?: string }>) {
       ? []
       : vy === "testyta"
         ? [
-            { label: text({ sv: "Skapa utkast", en: "Create drafts" }), icon: <Icon icon={FilePen} size="sm" />, isDisabled: utan === 0 || !skriv.far, onClick: () => void skapaUtkast(valt, false) },
             { label: text({ sv: "Bearbeta om", en: "Process again" }), icon: <Icon icon={RefreshCw} size="sm" />, isDisabled: !skriv.far, description: text({ sv: "Ny research och nytt utkast", en: "New research and a new draft" }), onClick: () => setBekraftas({ typ: "bearbeta", rader: valt }) }
           ]
         : [
@@ -1105,7 +1204,8 @@ export function LeadsVy({ bas = "/crm" }: Readonly<{ bas?: string }>) {
                   {vy === "testyta" ? (
                     <Button label={text({ sv: "Flytta till skarpa listan", en: "Move to the live list" })} variant="ghost" size="md" icon={<Icon icon={ArrowRightLeft} size="sm" />} isLoading={atgard === "skarp"} {...av} onClick={() => void flytta(valt, "skarp")} />
                   ) : null}
-                  {!iUndan && vy !== "testyta" ? (
+                  {/* Skicka finns även på testytan: provkörningens bolag skickas där bara om de flyttas över i bekräftelsen (LR-043). */}
+                  {!iUndan ? (
                     <>
                       <Button label={text({ sv: "Skicka utkast", en: "Send drafts" })} variant="primary" size="md" icon={<Icon icon={Send} size="sm" />} isLoading={atgard === "skicka"} {...av} onClick={() => {
                         if (valt.some(kanSkickas)) {
@@ -1115,14 +1215,17 @@ export function LeadsVy({ bas = "/crm" }: Readonly<{ bas?: string }>) {
                           const godkanda = valt.filter((p) => p.utkast_status === "godkant").length;
                           visa({
                             type: godkanda ? "info" : "error",
-                            body: godkanda
-                              ? text({ sv: `De ${godkanda} markerade utkasten är redan godkända och skickas i tur och ordning från kön.`, en: `The ${godkanda} selected drafts are already approved and go out in turn from the queue.` })
-                              : text({ sv: "Inget av de markerade bolagen har ett utkast som väntar. Välj Skapa utkast först.", en: "None of the selected companies has a draft waiting. Choose Create drafts first." }),
+                            body:
+                              godkanda === 1
+                                ? text({ sv: "Det markerade utkastet är redan godkänt och skickas i tur och ordning från kön.", en: "The selected draft is already approved and goes out in turn from the queue." })
+                                : godkanda
+                                  ? text({ sv: `De ${godkanda} markerade utkasten är redan godkända och skickas i tur och ordning från kön.`, en: `The ${godkanda} selected drafts are already approved and go out in turn from the queue.` })
+                                  : text({ sv: "Inget av de markerade bolagen har ett utkast som väntar. Välj Skapa utkast först.", en: "None of the selected companies has a draft waiting. Choose Create drafts first." }),
                             uniqueID: "iris-atgard"
                           });
                         }
                       }} />
-                      <Button label={text({ sv: `Skapa utkast (${utan})`, en: `Create drafts (${utan})` })} variant="ghost" size="md" icon={<Icon icon={FilePen} size="sm" />} isLoading={atgard === "skapa"} isDisabled={av.isDisabled || utan === 0} tooltip={av.tooltip} onClick={() => void skapaUtkast(valt, false)} />
+                      <Button label={text({ sv: `Skapa utkast (${utan})`, en: `Create drafts (${utan})` })} variant="ghost" size="md" icon={<Icon icon={FilePen} size="sm" />} isLoading={atgard === "skapa"} isDisabled={av.isDisabled || utan === 0} tooltip={av.tooltip} onClick={() => setBekraftas({ typ: "skapa", rader: valt })} />
                     </>
                   ) : null}
                   {vy !== "arkiverade" ? (
@@ -1140,6 +1243,24 @@ export function LeadsVy({ bas = "/crm" }: Readonly<{ bas?: string }>) {
       </div>
     ) : null;
 
+  // Utkastets struktur, A eller B, vid varje Skapa utkast, Skapa om och Bearbeta om (LR-074). Minns per webbläsare.
+  const strukturval = (
+    <Selector
+      label={text({ sv: "Utkastets struktur", en: "Draft structure" })}
+      value={struktur}
+      onChange={(v) => {
+        if (v !== "a" && v !== "b") return;
+        setStruktur(v);
+        void import("@/lib/leads/struktur").then((m) => m.sparaStruktur(v));
+      }}
+      options={[
+        { value: "a", label: text({ sv: "A, standardmejlet", en: "A, the standard email" }) },
+        { value: "b", label: text({ sv: "B, kort med en fråga", en: "B, short with a question" }) }
+      ]}
+      width="100%"
+    />
+  );
+
   // ---- Bekräftelsen (LR-057) ---------------------------------------------------------
   const bekr = (() => {
     if (!bekraftas) return null;
@@ -1149,14 +1270,25 @@ export function LeadsVy({ bas = "/crm" }: Readonly<{ bas?: string }>) {
       const prov = skickbara.filter((p) => p.origin === "test");
       const berorda = flyttaProv ? skickbara : skickbara.filter((p) => !prov.includes(p));
       const godkanda = r.filter((p) => p.utkast_status === "godkant").length;
+      // På testytan är alla provkörda: innan kryssrutan är i står de i listan, men inget skickas.
+      const baraProv = berorda.length === 0 && prov.length > 0;
       return {
-        titel: berorda.length === 1 ? text({ sv: "1 mejl godkänns och skickas till:", en: "1 email is approved and sent to:" }) : text({ sv: `${berorda.length} mejl godkänns och skickas till:`, en: `${berorda.length} emails are approved and sent to:` }),
-        poster: berorda.map((p) => ({ id: p.id, namn: p.company_name, under: p.contact_email ?? null })),
+        titel: baraProv
+          ? text({ sv: "Provkörningens bolag skickas bara om de flyttas över:", en: "The test run's companies are only sent if moved over:" })
+          : berorda.length === 1
+            ? text({ sv: "1 mejl godkänns och skickas till:", en: "1 email is approved and sent to:" })
+            : text({ sv: `${berorda.length} mejl godkänns och skickas till:`, en: `${berorda.length} emails are approved and sent to:` }),
+        poster: (baraProv ? prov : berorda).map((p) => ({ id: p.id, namn: p.company_name, under: p.contact_email ?? null })),
+        kanBekrafta: berorda.length > 0,
         overhoppade: r.length - skickbara.length - godkanda,
         tillagg: prov.length ? (
           <div className="crm-kallkort rounded-[16px] p-3">
             <CheckboxInput
-              label={text({ sv: `Flytta över ${prov.length} från provkörningar till dina riktiga leads och skicka dem också`, en: `Move ${prov.length} from test runs to your real leads and send them too` })}
+              label={
+                prov.length === 1
+                  ? text({ sv: "Flytta över 1 från provkörningar till dina riktiga leads och skicka det också", en: "Move 1 from test runs to your real leads and send it too" })
+                  : text({ sv: `Flytta över ${prov.length} från provkörningar till dina riktiga leads och skicka dem också`, en: `Move ${prov.length} from test runs to your real leads and send them too` })
+              }
               description={text({ sv: "Annars skickas de inte: en provkörnings bolag mejlas aldrig av misstag.", en: "Otherwise they are not sent: a test run's companies are never emailed by mistake." })}
               value={flyttaProv}
               onChange={setFlyttaProv}
@@ -1169,39 +1301,47 @@ export function LeadsVy({ bas = "/crm" }: Readonly<{ bas?: string }>) {
         bekrafta: () => void skicka(r)
       };
     }
+    if (bekraftas.typ === "skapa") {
+      // Skapa utkast (LR-042, LR-105): bara de utan utkast, i den struktur som väljs här (LR-074).
+      const utanUtkast = r.filter((p) => UTAN_UTKAST.has(p.utkast_status ?? "saknas"));
+      return {
+        titel:
+          utanUtkast.length === 1
+            ? text({ sv: "Ett utkast skrivs för 1 lead:", en: "A draft is written for 1 lead:" })
+            : text({ sv: `Utkast skrivs för ${utanUtkast.length} leads:`, en: `Drafts are written for ${utanUtkast.length} leads:` }),
+        poster: utanUtkast.map((p) => ({ id: p.id, namn: p.company_name, under: p.contact_email ?? null })),
+        kanBekrafta: utanUtkast.length > 0,
+        overhoppade: r.length - utanUtkast.length,
+        tillagg: strukturval,
+        forklaring: text({ sv: "Utkasten skrivs ur den research som redan finns, så bedömningen av bolagen ändras inte. De väntar på ditt ja innan något skickas.", en: "The drafts are written from the existing research, so the assessment of the companies does not change. They wait for your yes before anything is sent." }),
+        handling: utanUtkast.length === 1 ? text({ sv: "Skriv 1 utkast", en: "Write 1 draft" }) : text({ sv: `Skriv ${utanUtkast.length} utkast`, en: `Write ${utanUtkast.length} drafts` }),
+        farlig: false,
+        bekrafta: () => void skapaUtkast(r, false)
+      };
+    }
     if (bekraftas.typ === "skapa-om") {
       return {
-        titel: text({ sv: `Utkasten skrivs om för ${r.length} leads:`, en: `The drafts are rewritten for ${r.length} leads:` }),
+        titel: r.length === 1 ? text({ sv: "Utkastet skrivs om för 1 lead:", en: "The draft is rewritten for 1 lead:" }) : text({ sv: `Utkasten skrivs om för ${r.length} leads:`, en: `The drafts are rewritten for ${r.length} leads:` }),
         poster: r.map((p) => ({ id: p.id, namn: p.company_name, under: utkastText(p, locale, text) })),
+        kanBekrafta: r.length > 0,
         overhoppade: 0,
-        tillagg: undefined,
+        tillagg: strukturval,
         forklaring: text({ sv: "Väntande och godkända utkast ersätts och skickas aldrig. De nya skrivs ur den research som redan finns, så bedömningen av bolagen ändras inte.", en: "Pending and approved drafts are replaced and never sent. The new ones are written from the existing research, so the assessment of the companies does not change." }),
-        handling: text({ sv: `Skriv om ${r.length} utkast`, en: `Rewrite ${r.length} drafts` }),
+        handling: r.length === 1 ? text({ sv: "Skriv om 1 utkast", en: "Rewrite 1 draft" }) : text({ sv: `Skriv om ${r.length} utkast`, en: `Rewrite ${r.length} drafts` }),
         farlig: false,
         bekrafta: () => void skapaUtkast(r, true)
       };
     }
     if (bekraftas.typ === "bearbeta") {
       return {
-        titel: text({ sv: `${r.length} bolag researchas om och får nya utkast:`, en: `${r.length} companies are researched again and get new drafts:` }),
+        titel:
+          r.length === 1
+            ? text({ sv: "1 bolag researchas om och får ett nytt utkast:", en: "1 company is researched again and gets a new draft:" })
+            : text({ sv: `${r.length} bolag researchas om och får nya utkast:`, en: `${r.length} companies are researched again and get new drafts:` }),
         poster: r.map((p) => ({ id: p.id, namn: p.company_name, under: p.ort ?? null })),
+        kanBekrafta: r.length > 0,
         overhoppade: 0,
-        tillagg: (
-          <Selector
-            label={text({ sv: "Utkastets struktur", en: "Draft structure" })}
-            value={struktur}
-            onChange={(v) => {
-              if (v !== "a" && v !== "b") return;
-              setStruktur(v);
-              void import("@/lib/leads/struktur").then((m) => m.sparaStruktur(v));
-            }}
-            options={[
-              { value: "a", label: text({ sv: "A, standardmejlet", en: "A, the standard email" }) },
-              { value: "b", label: text({ sv: "B, kort med en fråga", en: "B, short with a question" }) }
-            ]}
-            width="100%"
-          />
-        ),
+        tillagg: strukturval,
         forklaring: text({ sv: "Researchen körs om och räknas mot er leadsbudget. Bedömningen kan ändras.", en: "The research runs again and counts against your leads budget. The assessment may change." }),
         handling: text({ sv: `Bearbeta om ${r.length}`, en: `Process ${r.length} again` }),
         farlig: false,
@@ -1209,6 +1349,7 @@ export function LeadsVy({ bas = "/crm" }: Readonly<{ bas?: string }>) {
       };
     }
     return {
+      kanBekrafta: r.length > 0,
       titel: r.length === 1 ? text({ sv: "1 lead tas bort för gott:", en: "1 lead is deleted for good:" }) : text({ sv: `${r.length} leads tas bort för gott:`, en: `${r.length} leads are deleted for good:` }),
       poster: r.map((p) => ({ id: p.id, namn: p.company_name, under: p.contact_email ?? null })),
       overhoppade: 0,
@@ -1220,6 +1361,7 @@ export function LeadsVy({ bas = "/crm" }: Readonly<{ bas?: string }>) {
     };
   })();
 
+  const ifyllnadSparar = (ifyllnad ?? []).some((r) => r.sparar);
   const postrad = postId ? (aktiva?.find((p) => p.id === postId) ?? bortvalda?.find((p) => p.id === postId) ?? arkiverade?.find((p) => p.id === postId) ?? null) : null;
 
   return (
@@ -1423,7 +1565,7 @@ export function LeadsVy({ bas = "/crm" }: Readonly<{ bas?: string }>) {
         listrad={postrad}
         bas={bas}
         stang={() => sattPost(null)}
-        andrat={() => meddelaLeadsUppdaterade("crm-iris")}
+        andrat={() => meddelaLeadsUppdaterade(PANELENS_KALLA)}
       />
 
       {bekr ? (
@@ -1431,6 +1573,7 @@ export function LeadsVy({ bas = "/crm" }: Readonly<{ bas?: string }>) {
           oppen
           titel={bekr.titel}
           poster={bekr.poster}
+          kanBekrafta={bekr.kanBekrafta}
           overhoppade={bekr.overhoppade}
           tillagg={bekr.tillagg}
           forklaring={bekr.forklaring}
@@ -1480,44 +1623,58 @@ export function LeadsVy({ bas = "/crm" }: Readonly<{ bas?: string }>) {
       </Dialog>
 
       {/* Ifyllnaden vid befordran (LR-104): det som saknas, i samma anrop som flytten. */}
-      <Dialog isOpen={ifyllnad != null} onOpenChange={(o) => !o && setIfyllnad(null)} purpose="form" width={640}>
+      <Dialog isOpen={ifyllnad != null} onOpenChange={(o) => !o && !ifyllnadSparar && setIfyllnad(null)} purpose="form" width={640}>
         <Layout
-          header={<DialogHeader title={text({ sv: "Fyll i det som saknas", en: "Fill in what is missing" })} onOpenChange={(o) => !o && setIfyllnad(null)} />}
+          header={<DialogHeader title={text({ sv: "Fyll i det som saknas", en: "Fill in what is missing" })} onOpenChange={(o) => !o && !ifyllnadSparar && setIfyllnad(null)} />}
           content={
             <LayoutContent>
               <div className="flex flex-col gap-6">
                 <p className="text-[0.875rem] text-ink2">
                   {text({ sv: "För att flyttas till skarpa listan behöver bolaget organisationsnummer, webbplats och en mejladress.", en: "To move to the live list the company needs a company number, a website and an email address." })}
                 </p>
-                {(ifyllnad ?? []).map((r, i) => (
-                  <form
-                    key={r.lead.id}
-                    noValidate
-                    className="crm-kallkort flex flex-col gap-3 rounded-[16px] p-4"
-                    onSubmit={(e) => {
-                      e.preventDefault();
-                      void befordraMedIfyllnad(i);
-                    }}
-                  >
-                    <Postchip namn={r.lead.company_name} />
-                    {r.fel ? <p className="text-[0.8125rem] text-danger">{r.fel}</p> : null}
-                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                      <TextInput label={text({ sv: "Organisationsnummer", en: "Company number" })} value={r.orgnr} onChange={(v) => setIfyllnad((l) => l?.map((x, k) => (k === i ? { ...x, orgnr: v } : x)) ?? null)} width="100%" isOptional />
-                      <TextInput label={text({ sv: "Webbplats", en: "Website" })} value={r.website} onChange={(v) => setIfyllnad((l) => l?.map((x, k) => (k === i ? { ...x, website: v } : x)) ?? null)} width="100%" isOptional status={r.saknas.includes("website") ? { type: "error", message: text({ sv: "Saknas", en: "Missing" }) } : undefined} />
-                      <TextInput label={text({ sv: "E-post", en: "Email" })} type="email" value={r.contact_email} onChange={(v) => setIfyllnad((l) => l?.map((x, k) => (k === i ? { ...x, contact_email: v } : x)) ?? null)} width="100%" isOptional status={r.saknas.includes("contact_email") ? { type: "error", message: text({ sv: "Saknas", en: "Missing" }) } : undefined} />
-                    </div>
-                    <div className="flex justify-end">
-                      <Button type="submit" size="sm" variant="primary" label={text({ sv: "Flytta till skarpa listan", en: "Move to the live list" })} isLoading={r.sparar} isDisabled={!skriv.far} tooltip={skriv.skal ?? undefined} />
-                    </div>
-                  </form>
-                ))}
+                {(ifyllnad ?? []).map((r) => {
+                  const vid = (falt: Ifyllnadsfalt) => {
+                    const mening = r.saknas.find((m) => faltFor(m) === falt);
+                    return mening ? { type: "error" as const, message: mening } : undefined;
+                  };
+                  const ovriga = r.saknas.filter((m) => faltFor(m) == null);
+                  return (
+                    <form
+                      key={r.lead.id}
+                      noValidate
+                      className="crm-kallkort flex flex-col gap-3 rounded-[16px] p-4"
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        void befordraMedIfyllnad(r.lead.id);
+                      }}
+                    >
+                      <Postchip namn={r.lead.company_name} />
+                      {r.fel ? <p className="text-[0.8125rem] text-danger">{r.fel}</p> : null}
+                      {ovriga.length ? (
+                        <ul className="flex flex-col gap-1 text-[0.8125rem] text-danger">
+                          {ovriga.map((m) => (
+                            <li key={m}>{m}</li>
+                          ))}
+                        </ul>
+                      ) : null}
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                        <TextInput label={text({ sv: "Organisationsnummer", en: "Company number" })} value={r.orgnr} onChange={(v) => andraIfyllnad(r.lead.id, (x) => ({ ...x, orgnr: v }))} width="100%" isDisabled={r.sparar} status={vid("orgnr")} />
+                        <TextInput label={text({ sv: "Webbplats", en: "Website" })} value={r.website} onChange={(v) => andraIfyllnad(r.lead.id, (x) => ({ ...x, website: v }))} width="100%" isDisabled={r.sparar} status={vid("website")} />
+                        <TextInput label={text({ sv: "E-post", en: "Email" })} type="email" value={r.contact_email} onChange={(v) => andraIfyllnad(r.lead.id, (x) => ({ ...x, contact_email: v }))} width="100%" isDisabled={r.sparar} status={vid("contact_email")} />
+                      </div>
+                      <div className="flex justify-end">
+                        <Button type="submit" size="sm" variant="primary" label={text({ sv: "Flytta till skarpa listan", en: "Move to the live list" })} isLoading={r.sparar} isDisabled={!skriv.far} tooltip={skriv.skal ?? undefined} />
+                      </div>
+                    </form>
+                  );
+                })}
               </div>
             </LayoutContent>
           }
           footer={
             <LayoutFooter>
               <HStack justify="end" gap={2}>
-                <Button label={text({ sv: "Stäng", en: "Close" })} variant="ghost" onClick={() => setIfyllnad(null)} />
+                <Button label={text({ sv: "Stäng", en: "Close" })} variant="ghost" isDisabled={ifyllnadSparar} onClick={() => setIfyllnad(null)} />
               </HStack>
             </LayoutFooter>
           }

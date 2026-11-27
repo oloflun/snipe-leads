@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import NextLink from "next/link";
 import { ArrowLeftRight, ArrowUpRight, CalendarClock, History, ListTodo, Mail, MailOpen, Phone, Plus, StickyNote, type LucideIcon } from "lucide-react";
 import { Button } from "@astryxdesign/core/Button";
@@ -16,7 +16,7 @@ import { TextInput } from "@astryxdesign/core/TextInput";
 import { Timestamp } from "@astryxdesign/core/Timestamp";
 import { Objektikon, useSkrivratt, type Ton } from "@/components/crm/app/kit";
 import { CrmFel, dagtext } from "@/lib/crm/api";
-import { irisAnrop, meddelaLeadsUppdaterade } from "@/lib/crm/iris/anrop";
+import { PANELENS_KALLA, irisAnrop, meddelaLeadsUppdaterade } from "@/lib/crm/iris/anrop";
 import { SAMTALSUTFALL, STATUS_ETIKETT, type Leadhandelse } from "@/lib/crm/iris/lead";
 import { useLocale, type Localized } from "@/lib/i18n";
 
@@ -56,17 +56,23 @@ export function LeadHistorik({ id, omgang = 0 }: Readonly<{ id: string; omgang?:
   const [skrivfel, setSkrivfel] = useState<string | null>(null);
   const [besked, setBesked] = useState("");
 
+  // Ordningsskydd: bara den senaste hämtningen skrivs in, så att ett byte av lead aldrig visar förra leadets historik.
+  const hamtNr = useRef(0);
   const hamta = useCallback(async () => {
+    const nr = ++hamtNr.current;
     try {
       const svar = await irisAnrop<{ handelser?: Leadhandelse[] }>(`/leads/prospects/${encodeURIComponent(id)}/tidslinje`);
+      if (nr !== hamtNr.current) return;
       setHandelser(svar.handelser ?? []);
       setFel(null);
     } catch (e) {
+      if (nr !== hamtNr.current) return;
       setFel(e);
     }
   }, [id]);
 
   useEffect(() => {
+    hamtNr.current += 1;
     setHandelser(null);
     void hamta();
   }, [hamta, omgang]);
@@ -97,7 +103,7 @@ export function LeadHistorik({ id, omgang = 0 }: Readonly<{ id: string; omgang?:
       }
       setBesked(anteckningen ? text({ sv: "Anteckningen är sparad.", en: "The note is saved." }) : text({ sv: "Uppgiften är sparad.", en: "The task is saved." }));
       stang();
-      meddelaLeadsUppdaterade("crm-iris");
+      meddelaLeadsUppdaterade(PANELENS_KALLA);
       await hamta();
     } catch (fel) {
       setSkrivfel(text(fel instanceof CrmFel ? fel.text : { sv: "Det gick inte att spara.", en: "Could not save." }));
@@ -112,7 +118,7 @@ export function LeadHistorik({ id, omgang = 0 }: Readonly<{ id: string; omgang?:
     try {
       await irisAnrop(`/leads/uppgifter/${encodeURIComponent(h.id)}`, { method: "PATCH", body: JSON.stringify({ klar }) });
       setBesked(klar ? text({ sv: `${h.rubrik} är klar.`, en: `${h.rubrik} is done.` }) : text({ sv: `${h.rubrik} är öppen igen.`, en: `${h.rubrik} is open again.` }));
-      meddelaLeadsUppdaterade("crm-iris");
+      meddelaLeadsUppdaterade(PANELENS_KALLA);
     } catch (fel) {
       setHandelser((l) => l?.map((x) => (x.typ === "uppgift" && x.id === h.id ? { ...x, klar: !klar } : x)) ?? null);
       setBesked(text(fel instanceof CrmFel ? fel.text : { sv: "Uppgiften sparades inte.", en: "The task was not saved." }));

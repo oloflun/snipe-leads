@@ -492,7 +492,12 @@ export function svaraIris(url: URL, init?: RequestInit): Promise<Response> | nul
       return vanta(() => {
         if (r.origin !== "test" && r.origin !== "example") return json({ prospect: heltProspekt(r), andrad: false });
         Object.assign(r, Object.fromEntries(Object.entries({ orgnr: kropp.orgnr, website: kropp.website, contact_email: kropp.contact_email }).filter(([, x]) => x)));
-        const brister = [!r.website ? "website" : null, !r.contact_email ? "contact_email" : null].filter(Boolean);
+        // Samma meningar som befordran.py:saknade_falt: hela meningar skrivna för kunden, inte fältnamn.
+        const brister = [
+          !/^\d{6}-?\d{4}$/.test((r.orgnr ?? "").trim()) ? "Organisationsnummer saknas eller är ogiltigt. Ange ett riktigt org.nr, till exempel 556824-9022." : null,
+          !r.website || /\.(example|invalid)(\/|$)/.test(r.website) ? "Webbplatsen saknas eller är en exempeladress (t.ex. .example). Ange bolagets riktiga webbplats." : null,
+          !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test((r.contact_email ?? "").trim()) ? "E-postadress saknas eller ser inte ut som en giltig adress." : null
+        ].filter(Boolean);
         if (brister.length) return json({ detail: { message: "Prospektet saknar det som krävs för att flyttas över.", saknas: brister } }, 422);
         r.origin = "manual";
         return json({ prospect: heltProspekt(r), andrad: true, orgnr_hamtat: false });

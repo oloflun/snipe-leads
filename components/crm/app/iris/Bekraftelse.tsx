@@ -23,6 +23,7 @@ export function Bekraftelse({
   oppen,
   titel,
   poster,
+  kanBekrafta,
   overhoppade = 0,
   tillagg,
   forklaring,
@@ -35,6 +36,8 @@ export function Bekraftelse({
   oppen: boolean;
   titel: string;
   poster: { id: string; namn: string; under?: string | null }[];
+  /** Om handlingen går att trycka på. Utan värde: när listan inte är tom. (Listan kan visa poster som ännu inte berörs, som provkörningens bolag innan de kryssats i.) */
+  kanBekrafta?: boolean;
   /** Markerade som inte berörs (saknar väntande utkast med mera). */
   overhoppade?: number;
   tillagg?: React.ReactNode;
@@ -84,7 +87,7 @@ export function Bekraftelse({
                 variant={farlig ? "secondary" : "primary"}
                 className={farlig ? "crm-farlig" : undefined}
                 isLoading={upptagen}
-                isDisabled={poster.length === 0}
+                isDisabled={!(kanBekrafta ?? poster.length > 0)}
                 onClick={bekrafta}
               />
             </HStack>
