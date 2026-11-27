@@ -28,6 +28,7 @@ import {
   Mail,
   Phone,
   Plug,
+  Radar,
   RefreshCw,
   Target,
   Users,
@@ -57,7 +58,7 @@ import { useLocale, type Localized } from "@/lib/i18n";
 export type Ton = "ockra" | "bla" | "mossa" | "sigill" | "mineral";
 
 /** CRM:ets vyer. Samma nycklar som adressen: `/crm/<vy>`. */
-export type Objekt = "oversikt" | "bolag" | "personer" | "affarer" | "uppgifter" | "leads" | "utkast" | "synk" | "sparrar" | "utvecklare";
+export type Objekt = "oversikt" | "bolag" | "personer" | "affarer" | "uppgifter" | "leads" | "utkast" | "korningar" | "synk" | "sparrar" | "utvecklare";
 
 export const OBJEKT: Record<Objekt, { ton: Ton; ikon: LucideIcon; namn: Localized }> = {
   oversikt: { ton: "ockra", ikon: LayoutDashboard, namn: { sv: "Översikt", en: "Overview" } },
@@ -71,6 +72,8 @@ export const OBJEKT: Record<Objekt, { ton: Ton; ikon: LucideIcon; namn: Localize
   leads: { ton: "ockra", ikon: Target, namn: { sv: "Leads", en: "Leads" } },
   // Iris utkast (/crm/iris/utkast, steg 4.3): blått, som Bolag, i Iris-sektionen bredvid leadsens ockra.
   utkast: { ton: "bla", ikon: FilePen, namn: { sv: "Utkast", en: "Drafts" } },
+  // Iris körningar (/crm/iris/korningar, steg 4.4): mossa, den tredje färgen i Iris-sektionen bredvid ockra och blått.
+  korningar: { ton: "mossa", ikon: Radar, namn: { sv: "Körningar", en: "Runs" } },
   synk: { ton: "sigill", ikon: RefreshCw, namn: { sv: "Synk", en: "Sync" } },
   // Ockra, som Översikt: också de står i var sin sektion.
   sparrar: { ton: "ockra", ikon: Ban, namn: { sv: "Spärrar", en: "Blocks" } },

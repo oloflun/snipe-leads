@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { Ban, KeyRound, Plus, RefreshCw, Repeat, type LucideIcon } from "lucide-react";
+import { Ban, KeyRound, Plus, Radar, RefreshCw, Repeat, type LucideIcon } from "lucide-react";
 import { Avatar } from "@astryxdesign/core/Avatar";
 import { CommandPalette, CommandPaletteInput } from "@astryxdesign/core/CommandPalette";
 import { useHotkeys } from "@astryxdesign/core/hooks";
@@ -59,6 +59,9 @@ export function Kommandopalett({
   const router = useRouter();
   // Läsroll och kundbesök: Skapa-gruppen erbjuds inte, formulären hade fallit på proxyns 403.
   const { far: farSkriva } = useSkrivratt();
+  // Kör Iris är agenternas data: under ett kundbesök märks körningen som test och släpps igenom (steg 4.4).
+  const { far: farKoraIris } = useSkrivratt("test");
+  const harKorningar = poster.some((p) => p.nyckel === "iris/korningar");
 
   // Ctrl K överallt och Cmd K på Mac. Den första träffen vinner, så inget körs två gånger.
   useHotkeys([
@@ -84,11 +87,14 @@ export function Kommandopalett({
         auxiliaryData: { group: ga, slag: "ga", mal: `${bas}/${p.nyckel}`, ikon: p.ikon, ton: p.ton }
       })),
       ...(farSkriva ? skapa : []),
+      ...(farKoraIris && harKorningar
+        ? [{ id: "skapa:koriris", label: text({ sv: "Kör Iris", en: "Run Iris" }), auxiliaryData: { group: ny, slag: "skapa" as const, mal: `${bas}/iris/korningar?ny=1`, ikon: Radar } }]
+        : []),
       ...(bytKund
         ? [{ id: "gor:bytkund", label: text({ sv: "Byt kund", en: "Switch customer" }), auxiliaryData: { group: text({ sv: "Plattform", en: "Platform" }), slag: "gor" as const, mal: "", ikon: Repeat } }]
         : [])
     ];
-  }, [text, bas, poster, bytKund, farSkriva]);
+  }, [text, bas, poster, bytKund, farSkriva, farKoraIris, harKorningar]);
 
   // Stabil källa: en ny källa medan paletten är öppen kör om sökningen.
   const kalla = useMemo<SearchSource<Traff>>(() => {

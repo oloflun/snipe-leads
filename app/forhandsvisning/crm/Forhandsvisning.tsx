@@ -5,8 +5,11 @@ import { BolagVy } from "@/components/crm/app/BolagVy";
 import { CrmRam } from "@/components/crm/app/CrmRam";
 import { LeadsVy } from "@/components/crm/app/iris/LeadsVy";
 import { UtkastVy } from "@/components/crm/app/iris/UtkastVy";
+import { KorningVy } from "@/components/crm/app/iris/KorningVy";
+import { KorningarVy } from "@/components/crm/app/iris/KorningarVy";
 import type { Skalatgarder } from "@/components/crm/app/Skalet";
 import { svaraIris } from "./svar/iris";
+import { svaraKorningar } from "./svar/korningar";
 import { svaraUtkast } from "./svar/utkast";
 import { svaraSkalet } from "./svar/skalet";
 import { OversiktVy } from "@/components/crm/app/OversiktVy";
@@ -1450,6 +1453,8 @@ function fangaAnrop() {
     if (iForhandsvisning && url.pathname.startsWith("/api/snajp-support/hjalp")) return svaraHjalp(url, init);
     const skalet = iForhandsvisning ? svaraSkalet(url, init) : null;
     if (skalet) return skalet;
+    const korningar = iForhandsvisning ? svaraKorningar(url, init) : null;
+    if (korningar) return korningar;
     const utkast = iForhandsvisning ? svaraUtkast(url, init) : null;
     if (utkast) return utkast;
     const iris = iForhandsvisning ? svaraIris(url, init) : null;
@@ -1514,7 +1519,7 @@ const FORHANDSATGARDER: Partial<Skalatgarder> = {
 };
 
 /** Vyerna förhandsvisningen kan visa. En ny vy läggs till här och i renderingen nedan. */
-const KANDA_VYER = ["oversikt", "bolag", "personer", "affarer", "uppgifter", "synk", "sparrar", "utvecklare", "iris/leads", "iris/utkast"];
+const KANDA_VYER = ["oversikt", "bolag", "personer", "affarer", "uppgifter", "synk", "sparrar", "utvecklare", "iris/leads", "iris/utkast", "iris/korningar"];
 
 export function CrmForhandsvisning({
   tema,
@@ -1526,7 +1531,9 @@ export function CrmForhandsvisning({
   fangaAnrop();
   const state = lage(lagen);
   // En väg som ingen vy här visar än faller tillbaka på översikten, som förut.
-  const visad = KANDA_VYER.includes(vy) ? vy : "oversikt";
+  // `iris/korningar/<id>`: körningens egen sida (steg 4.4).
+  const korning = vy.startsWith("iris/korningar/") ? vy.slice("iris/korningar/".length) : null;
+  const visad = korning ? "iris/korning" : KANDA_VYER.includes(vy) ? vy : "oversikt";
 
   return (
     <DashboardProvider state={state}>
@@ -1548,6 +1555,8 @@ export function CrmForhandsvisning({
         {visad === "utvecklare" ? <UtvecklareVy /> : null}
         {visad === "iris/leads" ? <LeadsVy bas="/forhandsvisning/crm" /> : null}
         {visad === "iris/utkast" ? <UtkastVy bas="/forhandsvisning/crm" /> : null}
+        {visad === "iris/korningar" ? <KorningarVy bas="/forhandsvisning/crm" /> : null}
+        {visad === "iris/korning" && korning ? <KorningVy id={korning} bas="/forhandsvisning/crm" /> : null}
       </CrmRam>
     </DashboardProvider>
   );

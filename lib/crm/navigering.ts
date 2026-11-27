@@ -84,6 +84,16 @@ export const NAVPOSTER: Navpost[] = [
     produkt: "leads",
     byggd: true
   },
+  // Steg 4.4: Iris körningar med förlopp, körningens sida och Kör Iris (components/crm/app/iris/KorningarVy.tsx).
+  {
+    nyckel: "iris/korningar",
+    grupp: "iris",
+    namn: OBJEKT.korningar.namn,
+    ikon: OBJEKT.korningar.ikon,
+    ton: OBJEKT.korningar.ton,
+    produkt: "leads",
+    byggd: true
+  },
   fran("synk", "data"),
   fran("sparrar", "data"),
   fran("utvecklare", "data")
