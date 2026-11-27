@@ -70,6 +70,8 @@ function bolag(i: number): Bolag {
     sole_proprietor: false,
     private_person: false,
     address: { street: `Exempelgatan ${1 + i}`, co: null, postal_code: `9${String(1000 + i * 3).slice(0, 2)} ${String(20 + i).slice(-2)}`, city: ORTER[i % ORTER.length], country: "SE" },
+    registry_status: i % 4 === 0 ? "active" : null,
+    registry_checked_at: i % 4 === 0 ? iso(24 * 3) : null,
     source: i % 10 === 7 ? "app" : "synk",
     external_ids: i % 10 === 7 ? [] : [{ connection: i % 6 === 5 ? "fortnox" : "hubspot", id: String(48000 + i * 17), last_seen_at: iso(3) }],
     created_at: iso(24 * 40),
@@ -228,10 +230,10 @@ const KORNINGAR: Korning[] = [
       { kind: "privatperson", object: "company", field: null, count: 4 },
       { kind: "begransad", object: "person", field: null, count: 1 }
     ],
-    support: { forwarded_at: iso(26.9), ticket: "4821" },
+    support: { forwarded_at: iso(26.9), ticket: "F-0041" },
     error: null, created_at: iso(27.1), completed_at: iso(27)
   },
-  { id: "k1", connection_id: "a1", mode: "full", status: "failed", started_by: "api", counts: rakning({}), errors: [], error: "tom_full_synk", issues: [], support: { forwarded_at: iso(51), ticket: null }, created_at: iso(51), completed_at: iso(51) }
+  { id: "k1", connection_id: "a1", mode: "full", status: "failed", started_by: "api", counts: rakning({}), errors: [], error: "tom_full_synk", issues: [], support: { forwarded_at: iso(51), ticket: "F-0046" }, created_at: iso(51), completed_at: iso(51) }
 ];
 
 // ---------------------------------------------------------------------------
@@ -777,7 +779,8 @@ async function svara(url: URL, init?: RequestInit): Promise<Response> {
     if (!b) return json({ detail: { code: "not_found", message: "The record does not exist.", meddelande: "Posten finns inte." } }, 404);
     const lage = LEADLAGEN[b.id] ?? "replied";
     if (irisdel[2] === "iris" && metod === "GET") {
-      return json({ leads: harLead(b) ? [{ id: "l1", name: b.name, status: lage, created_at: iso(24 * 9) }] : [], outcome: null, do_not_contact: b.do_not_contact === true || lage === "suppressed" });
+      const leads = harLead(b) ? [{ id: "l1", name: b.name, status: lage, created_at: iso(24 * 9) }] : [];
+      return json({ leads, latest: leads[leads.length - 1] ?? null, outcome: null, do_not_contact: b.do_not_contact === true || lage === "suppressed" });
     }
     if (irisdel[2] === "outcome" && metod === "POST") {
       const utfall = String(kropp.outcome ?? "");
@@ -1203,6 +1206,54 @@ async function svara(url: URL, init?: RequestInit): Promise<Response> {
     const n = NYCKLAR.find((x) => x.id === vag.split("/")[2]);
     if (n) n.revoked_at = new Date().toISOString();
     return json(null, 204);
+  }
+  // ---- SCB:s företagsregister (crm_v1_berikning.py), med påhittade uppgifter ----
+  const registerpost = (orgnr: string, namn: string | null, n: number) => ({
+    org_number: orgnrVisning(orgnr), name: namn, legal_form: "AB", legal_form_code: "49", registry_status: n % 11 === 10 ? "deregistered" : "active",
+    sni_codes: ["62010", "62020"], registered_office: { municipality: "2480", county: "24" },
+    postal_address: { street: `Registergatan ${1 + (n % 40)}`, co: null, postal_code: "903 26", city: "Umeå" },
+    employee_class: { code: "4", label: "10-19" }, advertising_block: n % 6 === 5, codes: {}
+  });
+  if (vag === "/v1/lookup/companies" && metod === "GET") {
+    const d = (url.searchParams.get("org_number") ?? "").replace(/\D/g, "");
+    const faltfel = (code: string) => json({ detail: { code: "invalid_fields", message: "One or more fields could not be interpreted.", meddelande: "Ett eller flera fält gick inte att tolka.", fields: [{ field: "org_number", code }] } }, 422);
+    if (d.length === 12 && !d.startsWith("16")) return json({ detail: { code: "not_a_company", message: "A sole proprietorship or private person is not looked up.", meddelande: "En enskild firma eller privatperson slås inte upp: numret hör till en person." } }, 422);
+    const nr = d.length === 12 ? d.slice(2) : d;
+    if (nr.length !== 10) return faltfel("orgnr_fel_langd");
+    if (!luhn(nr)) return faltfel("orgnr_kontrollsiffra");
+    if (nr.startsWith("5560")) return json({ detail: { code: "company_not_in_registry", message: "The registry has no company with that number.", meddelande: "Registret har inget bolag med det numret." } }, 404);
+    return json({ data: registerpost(nr, "Registrerat Exempel AB", Number(nr.slice(-3))) });
+  }
+  const berika = vag.match(/^\/v1\/companies\/([^/]+)\/enrich$/);
+  if (berika && metod === "POST") {
+    const b = BOLAG.find((x) => x.id === decodeURIComponent(berika[1]) && !x.deleted_at);
+    if (!b) return json({ detail: { code: "not_found", message: "The record does not exist.", meddelande: "Posten finns inte." } }, 404);
+    if (b.private_person || b.sole_proprietor) return json({ detail: { code: "not_a_company", message: "A sole proprietorship or private person is not looked up.", meddelande: "En enskild firma eller privatperson slås inte upp: numret hör till en person." } }, 422);
+    if (!b.org_number) return json({ detail: { code: "org_number_required", message: "The company has no organisation number.", meddelande: "Bolaget saknar organisationsnummer." } }, 422);
+    const n = Number(b.id.replace(/\D/g, "")) || 0;
+    const r = registerpost(b.org_number, b.name, n);
+    const skrivOver = url.searchParams.get("overwrite") === "true";
+    const varden: [string, string | null, (v: string) => void][] = [
+      ["legal_form", b.legal_form, (v) => (b.legal_form = v)],
+      ["sni_code", b.sni_code, (v) => (b.sni_code = v)],
+      ["address.street", b.address.street, (v) => (b.address.street = v)],
+      ["address.postal_code", b.address.postal_code, (v) => (b.address.postal_code = v)],
+      ["address.city", b.address.city, (v) => (b.address.city = v)]
+    ];
+    const ur: Record<string, string> = { legal_form: r.legal_form, sni_code: r.sni_codes[0], "address.street": r.postal_address.street, "address.postal_code": r.postal_address.postal_code, "address.city": r.postal_address.city };
+    const filled: string[] = [];
+    const skipped: string[] = [];
+    for (const [namn, nu_, satt] of varden) {
+      if (nu_ === ur[namn]) continue;
+      if (!nu_ || skrivOver) {
+        satt(ur[namn]);
+        filled.push(namn);
+      } else skipped.push(namn);
+    }
+    b.registry_status = r.registry_status as Bolag["registry_status"];
+    b.registry_checked_at = new Date().toISOString();
+    if (filled.length) b.updated_at = b.registry_checked_at;
+    return json({ company: b, filled, skipped, registry_status: r.registry_status, deregistered: r.registry_status === "deregistered", advertising_block: r.advertising_block, registry: r });
   }
   // ---- Spärrlistan (crm_v1_sparr.py) ------------------------------------------
   if (vag === "/v1/suppressions" && metod === "GET") {

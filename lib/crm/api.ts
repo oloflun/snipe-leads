@@ -35,6 +35,9 @@ export type Bolag = {
    */
   private_person: boolean;
   address: { street: string | null; co: string | null; postal_code: string | null; city: string | null; country: string | null };
+  /** Bolagets status i SCB:s företagsregister, och när den lästes. Null tills bolaget hämtats ur registret. */
+  registry_status?: "active" | "inactive" | "never_active" | "deregistered" | "unknown" | null;
+  registry_checked_at?: string | null;
   source: string | null;
   external_ids: { connection: string; id: string; last_seen_at: string | null }[];
   created_at: string | null;

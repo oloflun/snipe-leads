@@ -49,6 +49,29 @@ const BAS = {
 };
 
 const START: AdminArende[] = [
+  // Ett ärende som CRM:ets synk skapat själv (app/crm/supportrapport.py): ingen användare, bara koder och tal.
+  {
+    ...BAS,
+    id: "00000000-0000-4000-a000-0000000000f8",
+    nummer: "F-0008",
+    status: "mottagen",
+    sida: "/crm/synk",
+    gjorde: "Synk från HubSpot (delta)",
+    hande: "Körning 7c1e, status completed_with_errors.\nTotalt 240, skapade 3, uppdaterade 221, hoppade 16.\nFelkoder, störst först:\n- telefon_ogiltig: 9\n- orgnr_kontrollsiffra: 4\n- epost_ogiltig: 3",
+    vantade: "Att alla poster kom in.",
+    created_at: iso(1),
+    updated_at: iso(0.4),
+    rapportor_user_id: "00000000-0000-4000-b000-0000000000c5",
+    rapportor_namn: "Snajp CRM, synken",
+    kund_workspace_id: "00000000-0000-4000-c000-000000000001",
+    kund_tenant_slug: "exempelbolaget",
+    vy: "crm",
+    roll: "system",
+    handelser: [
+      handelse(1, "skapad", "mottagen", null, false, "system"),
+      handelse(0.4, "synk", null, "Samma anslutning föll igen i körning 9a40: 12 poster", false, "system")
+    ]
+  },
   {
     ...BAS,
     id: "00000000-0000-4000-a000-0000000000f1",

@@ -15,6 +15,7 @@ import { TextInput } from "@astryxdesign/core/TextInput";
 import { Krocklank } from "@/components/crm/app/kit";
 import { CrmFel, RELATIONER, crmAnrop, orgnrVisning, type Bolag, type Relation } from "@/lib/crm/api";
 import { FALTKODER, kodtext } from "@/lib/crm/felkoder";
+import { REGISTERSTATUS, type Registerpost } from "@/lib/crm/register";
 import { useLocale, type Localized } from "@/lib/i18n";
 
 /**
@@ -122,6 +123,9 @@ export function BolagFormular({
   const [falt, setFalt] = useState<Partial<Record<Bolagsfalt, Localized>>>({});
   const [allmant, setAllmant] = useState<Localized | null>(null);
   const [sparar, setSparar] = useState(false);
+  // Uppslaget i SCB:s företagsregister: vad som hämtades, eller varför det inte gick.
+  const [register, setRegister] = useState<{ besked: Localized; fel: boolean } | null>(null);
+  const [slarUpp, setSlarUpp] = useState(false);
   /** Vid 409: posten som redan har numret, när API:t kan peka ut den. */
   const [krock, setKrock] = useState<string | null>(null);
   const rot = useRef<HTMLFormElement>(null);
@@ -137,6 +141,7 @@ export function BolagFormular({
     setFalt({});
     setAllmant(null);
     setKrock(null);
+    setRegister(null);
     // Panelens "Lägg till" pekar ut ett fält: fokus dit när dialogen hunnit montera.
     const t = window.setTimeout(() => {
       const mal = rot.current?.querySelector<HTMLElement>(`[data-falt="${fokus ?? "name"}"] input, [data-falt="${fokus ?? "name"}"] button`);
@@ -144,6 +149,45 @@ export function BolagFormular({
     }, 60);
     return () => window.clearTimeout(t);
   }, [oppen, bolag, fokus]);
+
+  /** Fyller formulärets tomma fält ur registret. Det som redan står skrivet rörs inte. */
+  async function hamtaUrRegistret() {
+    if (slarUpp) return;
+    setSlarUpp(true);
+    setRegister(null);
+    try {
+      const { data: r } = await crmAnrop<{ data: Registerpost }>(`/v1/lookup/companies?org_number=${encodeURIComponent(v.org_number.trim())}`);
+      const ur: Partial<Varden> = {
+        name: r.name ?? "",
+        legal_form: r.legal_form ?? "",
+        sni_code: r.sni_codes[0] ?? "",
+        street: r.postal_address.street ?? "",
+        postal_code: r.postal_address.postal_code ?? "",
+        city: r.postal_address.city ?? ""
+      };
+      const fyllda = (Object.keys(ur) as (keyof Varden)[]).filter((k) => ur[k] && !String(v[k] ?? "").trim());
+      setV((f) => ({ ...f, ...Object.fromEntries(fyllda.map((k) => [k, ur[k]])) }));
+      const status = REGISTERSTATUS[r.registry_status]?.namn ?? { sv: r.registry_status, en: r.registry_status };
+      const stangt = r.registry_status === "deregistered" || r.registry_status === "inactive";
+      setRegister({
+        fel: stangt,
+        besked: fyllda.length
+          ? {
+              sv: `Hämtat ur SCB:s företagsregister: ${fyllda.length} fält. Status i registret: ${status.sv.toLocaleLowerCase("sv")}.`,
+              en: `Fetched from Statistics Sweden's business register: ${fyllda.length} fields. Status in the registry: ${status.en.toLocaleLowerCase("en")}.`
+            }
+          : {
+              sv: `Inget nytt att fylla i. Status i registret: ${status.sv.toLocaleLowerCase("sv")}.`,
+              en: `Nothing new to fill in. Status in the registry: ${status.en.toLocaleLowerCase("en")}.`
+            }
+      });
+    } catch (orsak) {
+      const faltfel = orsak instanceof CrmFel ? orsak.falt.find((f) => f.field === "org_number") : undefined;
+      setRegister({ fel: true, besked: faltfel ? kodtext(FALTKODER, faltfel.code) : orsak instanceof CrmFel ? orsak.text : { sv: "Okänt fel.", en: "Unknown error." } });
+    } finally {
+      setSlarUpp(false);
+    }
+  }
 
   const satt = <K extends keyof Varden>(k: K, varde: Varden[K]) => {
     setV((f) => ({ ...f, [k]: varde }));
@@ -310,6 +354,14 @@ export function BolagFormular({
                         { sv: "Organisationsnummer", en: "Organisation number" },
                         { inputMode: "numeric", placeholder: "556036-0793", isOptional: true }
                       )}
+                      {!privatperson && v.org_number.replace(/\D/g, "").length >= 10 ? (
+                        <div className="mt-2 flex flex-col items-start gap-1">
+                          <Button size="sm" variant="secondary" label={text({ sv: "Hämta ur registret", en: "Fetch from the registry" })} isLoading={slarUpp} onClick={() => void hamtaUrRegistret()} />
+                          <span role="status" className={`text-[0.8125rem] ${register?.fel ? "text-danger" : "text-ink-muted"}`}>
+                            {register ? text(register.besked) : null}
+                          </span>
+                        </div>
+                      ) : null}
                       {krock && falt.org_number && oppnaPost ? (
                         <Krocklank
                           etikett={text({ sv: "Öppna posten som redan har numret", en: "Open the record that already has the number" })}

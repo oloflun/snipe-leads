@@ -158,6 +158,17 @@ const KALLA: Record<string, Localized> = {
 const str = (v: unknown): string | null => (typeof v === "string" && v ? v : null);
 const iso = (v: string): ISODateString | undefined => (/^\d{4}-\d{2}-\d{2}$/.test(v) ? (v as ISODateString) : undefined);
 
+/** Aktivitetens utfall: API:ts kod (`won`, `call_back`) med sitt ord, fri text som den står. */
+const UTFALLSORD: Record<string, Localized> = {
+  no_answer: { sv: "Ej svar", en: "No answer" },
+  call_back: { sv: "Återkom", en: "Call back" },
+  not_interested: { sv: "Ej intresserad", en: "Not interested" },
+  do_not_contact: { sv: "Kontakta inte", en: "Do not contact" },
+  meeting_booked: { sv: "Möte bokat", en: "Meeting booked" },
+  won: { sv: "Vunnen", en: "Won" }
+};
+const utfallsord = (v: string | null, text: (l: Localized) => string) => (v && UTFALLSORD[v] ? text(UTFALLSORD[v]) : v);
+
 /** Radens ikon, färg och mening. Loggen bär fältnamn, aldrig värden. */
 function rad(p: Tidslinjepost, text: (l: Localized) => string, sprak: "sv" | "en"): { ikon: LucideIcon; ton: Ton; vad: string; under?: string } {
   const titel = p.title ?? "";
@@ -192,7 +203,7 @@ function rad(p: Tidslinjepost, text: (l: Localized) => string, sprak: "sv" | "en
     case "activity": {
       const typ = AKTIVITETER[(str(p.data.activity_type) ?? "other") as Aktivitetstyp] ?? AKTIVITETER.other;
       const minuter = typeof p.data.duration_minutes === "number" ? text({ sv: `${p.data.duration_minutes} min`, en: `${p.data.duration_minutes} min` }) : null;
-      return { ikon: typ.ikon, ton: "mossa", vad: titel || text(typ.namn), under: [text(typ.namn), minuter, str(p.data.result)].filter(Boolean).join(" · ") };
+      return { ikon: typ.ikon, ton: "mossa", vad: titel || text(typ.namn), under: [text(typ.namn), minuter, utfallsord(str(p.data.result), text)].filter(Boolean).join(" · ") };
     }
     case "deal_created":
     case "deal_closed": {

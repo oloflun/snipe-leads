@@ -220,6 +220,7 @@ export const FALTKODER: Record<string, Localized> = {
   id_ogiltigt: { sv: "Posten som valts finns inte längre. Välj en annan.", en: "The selected record no longer exists. Choose another." },
   forlustorsak_okand: { sv: "Förlustorsaken är okänd. Välj en ur listan.", en: "The lost reason is unknown. Choose one from the list." },
   kalltyp_okand: { sv: "Källan är okänd. Välj en ur listan.", en: "The source is unknown. Choose one from the list." },
+  ska_vara_alla_steg: { sv: "Ordningen ska innehålla varje steg en gång.", en: "The order must contain every stage once." },
   // Spärrlistans regler (app/crm/sparr.py).
   slag_okant: { sv: "Slaget är okänt. Välj ett ur listan.", en: "The kind is unknown. Choose one from the list." },
   varde_saknas: { sv: "Skriv det som ska spärras.", en: "Enter what to block." },

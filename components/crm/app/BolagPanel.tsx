@@ -41,6 +41,7 @@ import { Icon } from "@astryxdesign/core/Icon";
 import { IconButton } from "@astryxdesign/core/IconButton";
 import { Layout, LayoutContent, LayoutFooter } from "@astryxdesign/core/Layout";
 import { MetadataList, MetadataListItem } from "@astryxdesign/core/MetadataList";
+import { Registret } from "@/components/crm/app/Registret";
 import { Skeleton } from "@astryxdesign/core/Skeleton";
 import { HStack } from "@astryxdesign/core/Stack";
 import { Tab, TabList } from "@astryxdesign/core/TabList";
@@ -66,7 +67,8 @@ const IRISUTFALL: Record<string, Localized> = {
 };
 
 /** Bolagets leads hos Iris (`iris_ut` i crm_v1_tidslinje.py). */
-type Irislage = { leads: { id: string; name: string | null; status: string | null; created_at: string | null }[]; outcome: string | null; do_not_contact: boolean };
+type Irislead = { id: string; name: string | null; status: string | null; created_at: string | null };
+type Irislage = { leads: Irislead[]; latest?: Irislead | null; outcome: string | null; do_not_contact: boolean };
 
 /** Etikettkolumnen: en knapp tredjedel av panelen (Twentys rutnät), smalare på telefon. */
 const ETIKETT_BRED = { position: "start" as const, width: 160 };
@@ -111,6 +113,7 @@ export function BolagPanel({
   const vag = usePathname() ?? "/crm/bolag";
   const personerVag = vag.replace(/\/bolag\/?$/, "/personer");
   const affarerVag = vag.replace(/\/bolag\/?$/, "/affarer");
+  const sparrVag = vag.replace(/\/bolag\/?$/, "/sparrar");
   const ETIKETT = smal ? ETIKETT_SMAL : ETIKETT_BRED;
   const flikikon = (i: LucideIcon) => (smal ? undefined : <Icon icon={i} size="sm" />);
   const [flik, setFlik] = useState<Flik>("oversikt");
@@ -200,7 +203,8 @@ export function BolagPanel({
         : text({ sv: "Bolaget ska inte kontaktas.", en: "The company is not to be contacted." });
   // Leadsflödets avslutande utfall går först (API:t väljer det starkaste). Annars det senaste leadets läge:
   // listan står äldst först, och ett lead från i våras säger mindre än det från i höstas.
-  const lead = iris?.leads[iris.leads.length - 1];
+  // API:t pekar ut det senaste leadet. En äldre backend gör det inte: då är det sista i listan det senaste.
+  const lead = iris?.latest ?? iris?.leads[iris.leads.length - 1];
   const leadlage = iris?.outcome ? IRISUTFALL[iris.outcome] : lead ? LEADLAGE[lead.status ?? ""] : undefined;
   const ikon = (i: LucideIcon) => <Icon icon={i} size="sm" color="inherit" />;
 
@@ -508,7 +512,8 @@ export function BolagPanel({
                   ) : null}
 
                   {flik === "kalla" ? (
-                    bolag.external_ids.length === 0 ? (
+                    <div className="flex flex-col gap-4">
+                    {bolag.external_ids.length === 0 ? (
                       <MetadataList label={ETIKETT}>
                         {rad({ sv: "Källa", en: "Source" }, Plug, <Kallpiller kalla={text(bolagetsKalla(bolag))} />)}
                         {rad(
@@ -543,7 +548,9 @@ export function BolagPanel({
                           })}
                         </Text>
                       </div>
-                    )
+                    )}
+                    <Registret bolag={bolag} etikett={{ position: "start", width: 144 }} sparrvag={sparrVag} uppdaterat={uppdaterat} />
+                    </div>
                   ) : null}
 
                   {flik === "filer" ? <Bilagor objekt="companies" id={bolag.id} andrat={setAntalFiler} /> : null}
