@@ -22,7 +22,6 @@ import { Text } from "@astryxdesign/core/Text";
 import { TextInput } from "@astryxdesign/core/TextInput";
 import { Timestamp } from "@astryxdesign/core/Timestamp";
 import { useToast } from "@astryxdesign/core/Toast";
-import { forstaMening } from "@/components/leads/BekraftaUtskick";
 import { SIDSTORLEK, useSida, useSidaFor } from "@/components/leads/sidindelning";
 import { Bekraftelse } from "@/components/crm/app/iris/Bekraftelse";
 import { UtkastPanel, type Utkastpost } from "@/components/crm/app/iris/UtkastPanel";
@@ -30,7 +29,8 @@ import { Kolumnrubrik, Postchip, Prick, Tabellskelett, Vyval, grannfokus, tonFor
 import { Felruta, Sida } from "@/components/crm/app/Sida";
 import { CrmFel } from "@/lib/crm/api";
 import { LEADS_UPPDATERADE, irisAnrop, meddelaLeadsUppdaterade } from "@/lib/crm/iris/anrop";
-import { UPPFOLJNING_HOPPAD, sandtid } from "@/lib/crm/iris/lead";
+import { UPPFOLJNING_HOPPAD, sandtid, type Utkastsvar } from "@/lib/crm/iris/lead";
+import { forstaMening } from "@/lib/crm/iris/mejl";
 import {
   SKICKATLAGE,
   UTAN_AMNE,
@@ -70,6 +70,32 @@ type Rad = {
 
 const feltext = (e: unknown): Localized => (e instanceof CrmFel ? e.text : { sv: "Okänt fel.", en: "Unknown error." });
 const LAGEN: Skickatlage[] = ["vantar", "svarat", "mote", "ej"];
+const vyUr = (v: string | null | undefined): Vy => (VYER.includes(v as Vy) ? (v as Vy) : "granska");
+
+/** Källan vyn sänder med när den ändrat utkast: den har redan läst om och lyssnar inte på sin egen signal. */
+const VYNS_KALLA = "crm-utkast";
+/** Uppföljningarna Iris skriver följs så här ofta, högst så här många gånger (cirka fem minuter). */
+const FOLJ_MS = 4000;
+const FOLJ_MAX = 75;
+/** Leadsen vars uppföljning skrivs, i webbläsaren, så att förloppet tas upp igen efter en omladdning. Läget läses alltid från backenden. */
+const FOLJ_NYCKEL = "crm-iris-uppfoljningar";
+type Foljning = { alla: string[]; kvar: string[] };
+function lasFoljning(): Foljning | null {
+  try {
+    const f = JSON.parse(window.localStorage.getItem(FOLJ_NYCKEL) ?? "null") as Foljning | null;
+    return f && Array.isArray(f.alla) && Array.isArray(f.kvar) && f.kvar.length ? f : null;
+  } catch {
+    return null;
+  }
+}
+function sparaFoljning(f: Foljning | null) {
+  try {
+    if (f?.kvar.length) window.localStorage.setItem(FOLJ_NYCKEL, JSON.stringify(f));
+    else window.localStorage.removeItem(FOLJ_NYCKEL);
+  } catch {
+    /* utan lagring följs förloppet bara tills sidan laddas om */
+  }
+}
 
 /** Bolagen i en mening: högst tre namn, sedan hur många till. */
 function namnlista(bolag: string[], text: (v: Localized) => string): string {
@@ -104,9 +130,15 @@ export function UtkastVy({ bas = "/crm" }: Readonly<{ bas?: string }>) {
 
   // ---- Adressen: vyn (`?vy=skickat`, länkar hit) och den öppna posten (`?utkast=`) -----
   const adressensVy = params?.get("vy");
-  const [vy, setVyState] = useState<Vy>(VYER.includes(adressensVy as Vy) ? (adressensVy as Vy) : "granska");
+  const [vy, setVyState] = useState<Vy>(vyUr(adressensVy));
+  // Vyn följer adressen även när den byts utan omladdning (en länk, kommandopaletten).
+  useEffect(() => {
+    setVyState(vyUr(adressensVy));
+  }, [adressensVy]);
   const adressensPost = params?.get("utkast") ?? null;
   const [postId, setPostId] = useState<string | null>(adressensPost);
+  const postIdRef = useRef(postId);
+  postIdRef.current = postId;
   useEffect(() => {
     setPostId(adressensPost);
   }, [adressensPost]);
@@ -185,8 +217,11 @@ export function UtkastVy({ bas = "/crm" }: Readonly<{ bas?: string }>) {
   }, [hamtaAllt]);
 
   // Ändras utkast någon annanstans (leadets panel, Iris-listan, dagens Leads) hämtas allt om.
+  // Vyns egen signal hoppas över: den har redan läst om (klart()).
   useEffect(() => {
-    const uppdatera = () => hamtaAllt();
+    const uppdatera = (e: Event) => {
+      if ((e as CustomEvent).detail !== VYNS_KALLA) hamtaAllt();
+    };
     window.addEventListener(LEADS_UPPDATERADE, uppdatera);
     return () => window.removeEventListener(LEADS_UPPDATERADE, uppdatera);
   }, [hamtaAllt]);
@@ -286,8 +321,82 @@ export function UtkastVy({ bas = "/crm" }: Readonly<{ bas?: string }>) {
 
   const klart = () => {
     hamtaAllt();
-    meddelaLeadsUppdaterade("crm-utkast");
+    meddelaLeadsUppdaterade(VYNS_KALLA);
   };
+
+  // Förloppet för en åtgärd på flera sägs upp i den permanenta regionen (raden i åtgärdsraden visar det bara).
+  useEffect(() => {
+    if (!atgard || !framsteg) return;
+    setStatusbesked(
+      atgard === "avvisa"
+        ? text({ sv: `Avvisar ${framsteg.klara} av ${framsteg.totalt}`, en: `Rejecting ${framsteg.klara} of ${framsteg.totalt}` })
+        : text({ sv: `Skickar ${framsteg.klara} av ${framsteg.totalt}`, en: `Sending ${framsteg.klara} of ${framsteg.totalt}` })
+    );
+  }, [atgard, framsteg, text]);
+
+  // ---- Uppföljningar som Iris skriver (LU-086): följs tills de står under Att granska ------------
+  // Läget per lead läses från backenden (`GET /leads/prospects/{id}/utkast`, `skrivs` medan jobbet
+  // står i kö eller körs). Vilka leads som följs sparas i webbläsaren, så att förloppet tas upp igen
+  // efter en omladdning.
+  const [foljning, setFoljningState] = useState<Foljning | null>(null);
+  const setFoljning = useCallback((f: Foljning | null) => {
+    setFoljningState(f);
+    sparaFoljning(f);
+  }, []);
+  useEffect(() => {
+    setFoljningState(lasFoljning());
+  }, []);
+  const foljKvar = foljning?.kvar.join(",") ?? "";
+  useEffect(() => {
+    if (!foljning?.kvar.length) return;
+    let varv = 0;
+    let avbruten = false;
+    const t = window.setInterval(async () => {
+      if (document.visibilityState !== "visible") return;
+      varv += 1;
+      if (varv > FOLJ_MAX) {
+        window.clearInterval(t);
+        setFoljning(null);
+        visaBesked({ text: text({ sv: "Uppföljningarna tar längre tid än vanligt. De står under Att granska när de är klara.", en: "The follow-ups are taking longer than usual. They show under To review when done." }), fel: true });
+        return;
+      }
+      const lagen = await Promise.allSettled(foljning.kvar.map((pid) => irisAnrop<Utkastsvar>(`/leads/prospects/${encodeURIComponent(pid)}/utkast`)));
+      if (avbruten) return;
+      // Ett lead som inte går att läsa räknas som klart: annars följs det i evighet.
+      const kvar = foljning.kvar.filter((_, i) => {
+        const l = lagen[i];
+        return l.status === "fulfilled" && l.value?.utkast_status === "skrivs";
+      });
+      if (kvar.length === foljning.kvar.length) return;
+      void hamtaKo();
+      meddelaLeadsUppdaterade(VYNS_KALLA);
+      if (kvar.length) {
+        setFoljning({ alla: foljning.alla, kvar });
+        return;
+      }
+      setFoljning(null);
+      const n = foljning.alla.length;
+      visaBesked({
+        text: n === 1 ? text({ sv: "Uppföljningen är klar och står under Att granska.", en: "The follow-up is done and shows under To review." }) : text({ sv: `${n} uppföljningar är klara och står under Att granska.`, en: `${n} follow-ups are done and show under To review.` }),
+        fel: false
+      });
+    }, FOLJ_MS);
+    return () => {
+      avbruten = true;
+      window.clearInterval(t);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- följningen startas om bara när leadsen som följs ändras
+  }, [foljKvar]);
+  const foljtext = foljning
+    ? foljning.alla.length === 1
+      ? text({ sv: "Iris skriver uppföljningen.", en: "Iris is writing the follow-up." })
+      : text({ sv: `Iris skriver uppföljningar: ${foljning.alla.length - foljning.kvar.length} av ${foljning.alla.length} klara.`, en: `Iris is writing follow-ups: ${foljning.alla.length - foljning.kvar.length} of ${foljning.alla.length} done.` })
+    : "";
+  // Sägs upp när en blivit klar; starten sägs redan av handlingens besked.
+  const foljKlara = foljning ? foljning.alla.length - foljning.kvar.length : 0;
+  useEffect(() => {
+    if (foljtext && foljKlara > 0) setStatusbesked(foljtext);
+  }, [foljtext, foljKlara]);
   const visaBesked = (b: Besked) => {
     setBesked(b);
     setStatusbesked(b.text);
@@ -412,6 +521,13 @@ export function UtkastVy({ bas = "/crm" }: Readonly<{ bas?: string }>) {
       const pids = [...new Set(rader.map((r) => r.prospect_id).filter((p): p is string => Boolean(p)))];
       const s = await irisAnrop<{ count: number; hoppade?: Record<string, string[]> }>("/leads/uppfoljningar/skapa", { method: "POST", body: JSON.stringify({ prospect_ids: pids }) });
       klart();
+      // De som inte hoppades över skrivs nu: de följs tills de står under Att granska.
+      const hoppadeIds = new Set(Object.values(s.hoppade ?? {}).flat());
+      const skrivs = pids.filter((p) => !hoppadeIds.has(p));
+      if (s.count > 0 && skrivs.length) {
+        const forr = foljning?.kvar ?? [];
+        setFoljning({ alla: [...new Set([...(foljning?.alla ?? []), ...skrivs])], kvar: [...new Set([...forr, ...skrivs])] });
+      }
       const hoppade = Object.entries(s.hoppade ?? {})
         .filter(([, ids]) => ids.length)
         .map(([skal, ids]) => `${ids.length} ${text(UPPFOLJNING_HOPPAD[skal] ?? { sv: skal, en: skal })}`)
@@ -461,13 +577,15 @@ export function UtkastVy({ bas = "/crm" }: Readonly<{ bas?: string }>) {
   // ---- Panelens handlingar på ett utkast --------------------------------------------------
   /** Lämnar raden listan efter ett beslut i panelen: panelen stängs, utfallet sägs, fokus går till grannraden. */
   function lamnaRad(id: string, b: Besked) {
+    // Har panelen bytts till ett annat utkast medan beslutet gick igenom står den kvar: utfallet sägs ändå.
+    const oppenNu = postIdRef.current === id;
     const fran = document.querySelector(`[data-utkast-rad="${CSS.escape(id)}"]`);
     const fokus = grannfokus(fran, "button.crm-chip");
-    sattPost(null);
+    if (oppenNu) sattPost(null);
     visa({ body: b.text, uniqueID: "iris-utkast" });
     setStatusbesked(b.text);
     klart();
-    fokus();
+    if (oppenNu) fokus();
   }
   async function godkannEtt(k: Kopost): Promise<Besked | null> {
     const s = await irisAnrop<Sandutfall>(`/leads/queue/${encodeURIComponent(k.id)}/approve`, { method: "POST" });
@@ -606,6 +724,7 @@ export function UtkastVy({ bas = "/crm" }: Readonly<{ bas?: string }>) {
     <EmptyState icon={<Icon icon={Inbox} size="lg" color="secondary" />} title={text({ sv: "Inga mejl skickade än", en: "No emails sent yet" })} description={text({ sv: "Mejlen Iris skickar står här med leadets läge nu.", en: "The emails Iris sends stand here with the lead's current stage." })} />
   );
 
+  // Under lg står nyckeltalen (LU-088) i räknefoten, där vyraden inte rymmer dem.
   const fot = (
     <div className="crm-raknefot">
       <span>
@@ -613,6 +732,16 @@ export function UtkastVy({ bas = "/crm" }: Readonly<{ bas?: string }>) {
         <span className="crm-raknefot-tal">{urval.length ? `${tal(sidor.fran + 1)}–${tal(sidor.till)}` : "0"}</span>{" "}
         <span className="crm-raknefot-etikett">{text({ sv: "av", en: "of" })}</span> <span className="crm-raknefot-tal">{tal(urval.length)}</span>
       </span>
+      {antal28 ? (
+        <span className="inline-flex items-center gap-x-5 lg:hidden" title={text({ sv: "De senaste 28 dagarna", en: "The last 28 days" })}>
+          <span>
+            <span className="crm-raknefot-etikett">{text({ sv: "Skickat 28 d", en: "Sent 28 d" })}</span> <span className="crm-raknefot-tal">{tal(antal28.skickat)}</span>
+          </span>
+          <span>
+            <span className="crm-raknefot-etikett">{text({ sv: "Svar", en: "Replies" })}</span> <span className="crm-raknefot-tal">{tal(antal28.svarat)}</span>
+          </span>
+        </span>
+      ) : null}
       {sidor.antalSidor > 1 ? (
         <span className="ml-auto">
           <Pagination page={sidor.sida + 1} onChange={bytSida} totalItems={urval.length} pageSize={SIDSTORLEK} variant="compact" size="sm" label={text({ sv: "Sidor", en: "Pages" })} />
@@ -640,7 +769,7 @@ export function UtkastVy({ bas = "/crm" }: Readonly<{ bas?: string }>) {
       <div className="crm-atgardsrad-plats">
         <div className="crm-atgardsrad">
           {atgard && framsteg ? (
-            <div className="flex min-w-[300px] items-center gap-3 px-2" role="status" aria-live="polite">
+            <div className="flex min-w-[300px] items-center gap-3 px-2">
               <span className="whitespace-nowrap text-[0.875rem] font-semibold tabular-nums text-ink">
                 {atgard === "avvisa"
                   ? text({ sv: `Avvisar ${framsteg.klara} av ${framsteg.totalt}`, en: `Rejecting ${framsteg.klara} of ${framsteg.totalt}` })
@@ -850,6 +979,15 @@ export function UtkastVy({ bas = "/crm" }: Readonly<{ bas?: string }>) {
             />
           </div>
         ) : null}
+        {/* Förloppet för Skapa uppföljning, där handlingen startades, tills uppföljningarna står under Att granska. */}
+        {foljning ? (
+          <div className="px-4 pt-3 sm:px-6">
+            <span className="inline-flex items-center gap-2 text-[0.875rem] text-ink2">
+              <Prick ton="ockra" pulserar />
+              {foljtext}
+            </span>
+          </div>
+        ) : null}
         {vy === "snart" && snart.length > 0 ? (
           <p className="px-4 pb-1 pt-3 text-[0.875rem] text-ink-muted sm:px-6">
             {text({ sv: "Godkända mejl går ut ett i taget, ungefär ett i minuten, vardagar 08 till 16. Tiden är en uppskattning: en spärr eller ett svar däremellan flyttar resten.", en: "Approved emails go out one at a time, about one a minute, weekdays 08 to 16. The time is an estimate: a block or a reply in between moves the rest." })}
@@ -864,7 +1002,10 @@ export function UtkastVy({ bas = "/crm" }: Readonly<{ bas?: string }>) {
           <Tabellskelett rader={8} kolumner={smal ? 2 : 4} markering={!smal} label={text({ sv: "Hämtar utkasten", en: "Loading the drafts" })} />
         ) : smal ? (
           urval.length === 0 ? (
-            <div className="py-10">{tomt}</div>
+            <>
+              <div className="py-10">{tomt}</div>
+              {antal28 ? fot : null}
+            </>
           ) : (
             <>
               <div className="px-2">
@@ -930,7 +1071,7 @@ export function UtkastVy({ bas = "/crm" }: Readonly<{ bas?: string }>) {
               plugins={{ selection: markering }}
               emptyState={<div className="py-12">{tomt}</div>}
             />
-            {urval.length > 0 ? fot : null}
+            {urval.length > 0 ? fot : antal28 ? <div className="lg:hidden">{fot}</div> : null}
           </div>
         )}
 

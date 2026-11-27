@@ -621,7 +621,7 @@ export function LeadPanel({
                         )
                       ) : null}
 
-                      {flik === "utkast" && id ? <LeadUtkast id={id} lead={post ?? visad} andrat={ny} lasOm={() => void hamta()} /> : null}
+                      {flik === "utkast" && id ? <LeadUtkast key={id} id={id} lead={post ?? visad} andrat={ny} lasOm={() => void hamta()} /> : null}
 
                       {flik === "historik" && id ? <LeadHistorik id={id} omgang={omgang} /> : null}
 

@@ -11,9 +11,9 @@ import { Layout, LayoutContent, LayoutFooter } from "@astryxdesign/core/Layout";
 import { HStack } from "@astryxdesign/core/Stack";
 import { Text } from "@astryxdesign/core/Text";
 import { Timestamp } from "@astryxdesign/core/Timestamp";
-import { delaMejl } from "@/components/leads/IrisGranskning";
 import { Mejlsvans, Mejlvisning, Utkastredigerare } from "@/components/crm/app/iris/Utkastredigerare";
 import { Prick, tonFor, tonklass, utanBolagsform } from "@/components/crm/app/kit";
+import { delaMejl } from "@/lib/crm/iris/mejl";
 import { SKICKATLAGE, signalUr, skickatlage, skickatton, type Besked, type Kopost, type Signatur, type SkickatRad } from "@/lib/crm/iris/utkast";
 import { sandtid } from "@/lib/crm/iris/lead";
 import { delaCitat } from "@/lib/leads/konversation";
@@ -161,7 +161,10 @@ export function UtkastPanel({
           <LayoutContent padding={0}>
             <div data-autofocus tabIndex={-1} className="crm-autofokus px-5 pb-6 pt-2">
               {ko ? (
+                // key: listan bakom går att klicka i medan panelen är öppen. Ett nytt utkast får en ny redigerare,
+                // så att ett AI-svar eller en handling som pågår aldrig hamnar i fel utkast.
                 <Utkastredigerare
+                  key={ko.id}
                   nyckel={ko.id}
                   amne={ko.subject ?? null}
                   brodtext={ko.brodtext ?? ko.body ?? ""}
@@ -205,6 +208,7 @@ export function UtkastPanel({
                   )}
                   {/* Provmejlet: på köposten för ett schemalagt, på meddelandet för ett skickat (LU-087). Utan fält: redigeraren visar bara knappen och utfallet. */}
                   <Utkastredigerare
+                    key={`prov-${rad.id}`}
                     nyckel={`prov-${rad.id}`}
                     amne={rad.subject}
                     brodtext=""

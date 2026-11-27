@@ -173,6 +173,17 @@ export function LeadUtkast({
     };
   }
 
+  /**
+   * Handlingar som byter utkastets nyckel: utfallet står i panelens region (som
+   * finns kvar), inte i redigerarens, som börjar om när nyckeln byts. Ett fel
+   * kastas vidare och står i redigeraren, där nyckeln inte hunnit bytas.
+   */
+  async function egetBesked(fn: () => Promise<Besked>): Promise<null> {
+    setBesked(null);
+    setBesked(await fn());
+    return null;
+  }
+
   async function skapa() {
     setSkapar(true);
     setBesked(null);
@@ -231,7 +242,11 @@ export function LeadUtkast({
       ) : null}
 
       {svar.utkast || status === "skrivs" ? (
+        // key: ett annat lead får en ny redigerare, så att ett svar som pågår aldrig hamnar i fel leads utkast.
+        // Godkänn, Avvisa och Skriv om byter nyckel (köposten blir ett skickat mejl, eller ett nytt utkast), så
+        // deras utfall står i panelens egen region nedan, inte i redigerarens.
         <Utkastredigerare
+          key={id}
           nyckel={qid ?? svar.utkast?.id ?? id}
           amne={svar.utkast?.subject ?? null}
           brodtext={svar.utkast?.brodtext ?? svar.utkast?.body ?? ""}
@@ -249,9 +264,9 @@ export function LeadUtkast({
                 }
               : undefined
           }
-          godkann={kanSkickas(svar) ? { gor: () => godkann() } : undefined}
-          avvisa={kanAvvisas ? { gor: () => avvisaUtkast() } : undefined}
-          skrivOm={kanSkrivasOm ? { onskemal: false, struktur: true, gor: (_o, st) => skrivUtkast(true, st) } : undefined}
+          godkann={kanSkickas(svar) ? { gor: () => egetBesked(godkann) } : undefined}
+          avvisa={kanAvvisas ? { gor: () => egetBesked(avvisaUtkast) } : undefined}
+          skrivOm={kanSkrivasOm ? { onskemal: false, struktur: true, gor: (_o, st) => egetBesked(() => skrivUtkast(true, st)) } : undefined}
           provmejl={qid && status !== "skickat" ? { queueItemId: qid } : status === "skickat" && svar.utkast?.id ? { messageId: svar.utkast.id } : null}
           skriv={skriv}
         />

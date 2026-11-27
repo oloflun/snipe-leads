@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Check, Mail, RefreshCw, Send, Sparkles, TriangleAlert, X } from "lucide-react";
+import { Check, Mail, RefreshCw, Send, Sparkles, TriangleAlert, Undo2, X } from "lucide-react";
 import { AlertDialog } from "@astryxdesign/core/AlertDialog";
 import { Banner } from "@astryxdesign/core/Banner";
 import { Button } from "@astryxdesign/core/Button";
@@ -16,8 +16,8 @@ import { HStack } from "@astryxdesign/core/Stack";
 import { Text } from "@astryxdesign/core/Text";
 import { TextArea } from "@astryxdesign/core/TextArea";
 import { TextInput } from "@astryxdesign/core/TextInput";
-import { delaMejl } from "@/components/leads/IrisGranskning";
 import { Prick } from "@/components/crm/app/kit";
+import { delaMejl } from "@/lib/crm/iris/mejl";
 import { CrmFel } from "@/lib/crm/api";
 import {
   DIREKTA,
@@ -151,6 +151,10 @@ type Upptagen = "spara" | "godkann" | "avvisa" | "skriv" | "prov" | null;
  *
  * Utfallet av varje handling står i en region som finns hela tiden. Ytan
  * levererar handlingen och dess besked (`Besked`); redigeraren visar dem.
+ *
+ * Ge redigeraren `key={utkastets id}` där ytan kan byta post medan en handling
+ * pågår (en panel utan scrim): då kan ett sent svar aldrig hamna i fel utkast.
+ * Redigeraren kastar dessutom själv ett utfall som kommer efter att `nyckel` bytts.
  */
 export function Utkastredigerare({
   nyckel,
@@ -211,27 +215,44 @@ export function Utkastredigerare({
   const [kontrollerat, setKontrollerat] = useState(false);
   const [avvisas, setAvvisas] = useState(false);
   const [omskrivning, setOmskrivning] = useState<{ onskemal: string; struktur: Struktur } | null>(null);
-  const [prov, setProv] = useState<{ adresser: string[] | null; vald: string } | null>(null);
-  const [ai, setAi] = useState<{ pagar: Studioval | null; resultat: Studioresultat | null }>({ pagar: null, resultat: null });
+  const [prov, setProv] = useState<{ adresser: string[] | null; vald: string; fel?: string | null } | null>(null);
+  // `fore`: fälten före en direkt omskrivning, så att den går att ångra.
+  const [ai, setAi] = useState<{ pagar: Studioval | null; resultat: Studioresultat | null; fore?: { amne: string; text: string } | null }>({ pagar: null, resultat: null });
 
   const andrad = falt.amne !== (amne ?? "") || falt.text !== brodtext;
   const andradRef = useRef(andrad);
   andradRef.current = andrad;
   const forraNyckel = useRef(nyckel);
+  // Det utkast som visas nu: ett utfall som kommer efter ett byte gäller ett annat utkast och kastas.
+  const nyckelRef = useRef(nyckel);
+  nyckelRef.current = nyckel;
+  // Efter en lyckad Spara tar fälten det backenden sparade (trimmat, hälsningen rättad), även om rutan skilde sig.
+  const tvinga = useRef<{ amne: string; text: string; fore: { amne: string; text: string } } | null>(null);
+  const [synk, setSynk] = useState(0);
 
   // Ett annat utkast börjar om. Samma utkast med ny sparad text (omskrivet, läst om) tar
   // den nya texten bara när inget är osparat: egen redigering skrivs aldrig över.
   useEffect(() => {
     const nytt = forraNyckel.current !== nyckel;
     forraNyckel.current = nyckel;
+    const sparat = tvinga.current;
+    tvinga.current = null;
     if (nytt) {
       setBesked(null);
       setAi({ pagar: null, resultat: null });
       setOmskrivning(null);
       setFel({});
+      setUpptagen(null);
+      setProv(null);
+      setAvvisas(false);
     }
     if (nytt || !andradRef.current) setFalt({ amne: amne ?? "", text: brodtext });
-  }, [nyckel, amne, brodtext]);
+    else if (sparat) {
+      // Har den omlästa texten kommit visas den; annars det som skickades till servern.
+      const omlast = (amne ?? "") !== sparat.fore.amne || brodtext !== sparat.fore.text;
+      setFalt(omlast ? { amne: amne ?? "", text: brodtext } : { amne: sparat.amne, text: sparat.text });
+    }
+  }, [nyckel, amne, brodtext, synk]);
 
   const handlingslista = handlingar ?? [];
   const handlingsnyckel = handlingslista.join("\n");
@@ -274,11 +295,19 @@ export function Utkastredigerare({
   async function sparaOmAndrat(): Promise<boolean> {
     if (!andrad || !spara) return true;
     if (!provaFalt()) return false;
+    const a = falt.amne.trim();
+    const t = falt.text.trim();
+    const fore = { amne: amne ?? "", text: brodtext };
+    const start = nyckelRef.current;
     try {
-      await spara(falt.amne.trim(), falt.text.trim());
+      await spara(a, t);
+      if (nyckelRef.current !== start) return false;
       setFel({});
+      tvinga.current = { amne: a, text: t, fore };
+      setSynk((n) => n + 1);
       return true;
     } catch (e) {
+      if (nyckelRef.current !== start) return false;
       const m = text(feltext(e));
       // Backendens 422 säger vilket fält: ämnesraden nämns, annars gäller det texten.
       if (e instanceof CrmFel && e.status === 422) setFel(/ämnes|subject/i.test(m) ? { amne: m } : { text: m });
@@ -289,16 +318,17 @@ export function Utkastredigerare({
 
   async function gor(vad: Exclude<Upptagen, null>, fn: () => Promise<Besked | null>, sparaForst = true) {
     if (upptagen) return;
+    const start = nyckelRef.current;
     setUpptagen(vad);
     setBesked(null);
     try {
       if (sparaForst && !(await sparaOmAndrat())) return;
       const ut = await fn();
-      if (ut) setBesked(ut);
+      if (ut && nyckelRef.current === start) setBesked(ut);
     } catch (e) {
-      setBesked({ text: text(feltext(e)), fel: true });
+      if (nyckelRef.current === start) setBesked({ text: text(feltext(e)), fel: true });
     } finally {
-      setUpptagen(null);
+      if (nyckelRef.current === start) setUpptagen(null);
     }
   }
 
@@ -315,14 +345,20 @@ export function Utkastredigerare({
   // ---- AI (AP15) -------------------------------------------------------------
   async function korStudio(val: Studioval) {
     if (!kontext || ai.pagar) return;
+    const start = nyckelRef.current;
+    const fore = { amne: falt.amne, text: falt.text };
     setAi({ pagar: val, resultat: null });
     setBesked(null);
     try {
-      const r = await studio(val, falt.amne, falt.text, kontext, locale, Boolean(svans || signatur));
+      const r = await studio(val, fore.amne, fore.text, kontext, locale, Boolean(svans || signatur));
+      // Svaret gäller utkastet det begärdes för: har posten bytts kastas det.
+      if (nyckelRef.current !== start) return;
       // Ett förskrivet svar skriver aldrig över texten: det visas, och du väljer.
-      if (!r.simulerat && DIREKTA.has(val)) setFalt((f) => ({ amne: r.amnen[0] ?? f.amne, text: r.ny }));
-      setAi({ pagar: null, resultat: r });
+      const direkt = !r.simulerat && DIREKTA.has(val);
+      if (direkt) setFalt((f) => ({ amne: r.amnen[0] ?? f.amne, text: r.ny }));
+      setAi({ pagar: null, resultat: r, fore: direkt ? fore : null });
     } catch (e) {
+      if (nyckelRef.current !== start) return;
       setAi({ pagar: null, resultat: null });
       setBesked({ text: text(feltext(e)), fel: true });
     }
@@ -333,6 +369,13 @@ export function Utkastredigerare({
     setFalt((f) => ({ amne: r.amnen[0] ?? f.amne, text: r.ny }));
     setAi({ pagar: null, resultat: null });
   };
+  /** Ångrar en direkt omskrivning: ämnet och texten som stod i rutan före, även osparade ändringar. */
+  const angraResultat = () => {
+    const f = ai.fore;
+    if (!f) return;
+    setFalt(f);
+    setAi({ pagar: null, resultat: null });
+  };
 
   // ---- Provmejl ----------------------------------------------------------------
   async function oppnaProv() {
@@ -341,8 +384,16 @@ export function Utkastredigerare({
     setProv((p) => (p ? { adresser: lista, vald: p.vald || lista[0] || "" } : p));
   }
   const skickaProv = () =>
-    void gor("prov", async () => {
+    void gor(
+      "prov",
+      async () => {
       if (!prov?.vald || !provmejl) return null;
+      setProv((p) => (p ? { ...p, fel: null } : p));
+      // Spara först. Faller sparningen stängs dialogen, så att felet syns vid sitt fält.
+      if (!(await sparaOmAndrat())) {
+        setProv(null);
+        return null;
+      }
       try {
         const s = await irisAnrop<{ till?: string; saknar_fot?: boolean }>("/leads/provmejl", {
           method: "POST",
@@ -359,9 +410,13 @@ export function Utkastredigerare({
           fel: Boolean(s?.saknar_fot)
         };
       } catch (e) {
-        return { text: text(provmejlFel(e)), fel: true };
+        // Felet står i dialogen, som är öppen: bakom den syns det inte.
+        setProv((p) => (p ? { ...p, fel: text(provmejlFel(e)) } : p));
+        return null;
       }
-    });
+      },
+      false
+    );
 
   // ---- Skriv om ------------------------------------------------------------------
   const startaOmskrivning = () => setOmskrivning({ onskemal: "", struktur: lasStruktur() });
@@ -393,7 +448,7 @@ export function Utkastredigerare({
       ) : null}
 
       {skrivs ? (
-        <div className="crm-kallkort flex flex-col gap-3 rounded-[16px] p-4" role="status">
+        <div className="crm-kallkort flex flex-col gap-3 rounded-[16px] p-4">
           <span className="inline-flex items-center gap-2 text-[0.875rem] text-ink2">
             <Prick ton="ockra" pulserar />
             {text({ sv: "Iris skriver utkastet. Det visas här när det är klart, och du kan lämna sidan under tiden.", en: "Iris is writing the draft. It shows here when done, and you can leave the page meanwhile." })}
@@ -468,6 +523,9 @@ export function Utkastredigerare({
                 : aiNamn(ai.resultat.action)}
             </span>
             <HStack gap={1}>
+              {ai.fore && visaFalt ? (
+                <Button size="sm" variant="secondary" icon={<Icon icon={Undo2} size="sm" />} label={text({ sv: "Ångra", en: "Undo" })} tooltip={text({ sv: "Tillbaka till texten som stod före", en: "Back to the text from before" })} onClick={angraResultat} />
+              ) : null}
               {(!DIREKTA.has(ai.resultat.action) || ai.resultat.simulerat) && ai.resultat.action !== "analyze" && visaFalt ? (
                 <Button size="sm" variant="secondary" label={text({ sv: "Använd förslaget", en: "Use the suggestion" })} onClick={anvandResultat} />
               ) : null}
@@ -584,6 +642,8 @@ export function Utkastredigerare({
 
       {/* Utfallet sägs upp i en region som finns hela tiden. */}
       <div role="status" aria-live="polite">
+        {/* Förloppet medan Iris skriver sägs här; rutan ovanför visar det bara. */}
+        {skrivs ? <span className="sr-only">{text({ sv: "Iris skriver utkastet.", en: "Iris is writing the draft." })}</span> : null}
         {ai.pagar ? <Text color="secondary" type="supporting">{text({ sv: `${aiNamn(ai.pagar)}: AI:n skriver om texten.`, en: `${aiNamn(ai.pagar)}: the AI is rewriting the text.` })}</Text> : null}
         {besked ? (
           <Banner
@@ -626,6 +686,8 @@ export function Utkastredigerare({
                     width="100%"
                   />
                 )}
+                {/* Felet från provet står här, i dialogen, i en region som finns hela tiden. */}
+                <div role="status">{prov?.fel ? <Banner status="error" container="card" title={prov.fel} /> : null}</div>
                 <Text color="secondary" type="supporting">
                   {text({ sv: "Provet går bara till er, precis som leadet skulle få det. Utkastet och leadet påverkas inte.", en: "The test only goes to you, exactly as the lead would receive it. The draft and the lead are not affected." })}
                 </Text>
@@ -656,9 +718,12 @@ export function Utkastredigerare({
           void gor(
             "avvisa",
             async () => {
-              const ut = await avvisa.gor();
-              setAvvisas(false);
-              return ut;
+              // Dialogen stängs även när avvisningen faller, så att felet syns i regionen under knapparna.
+              try {
+                return await avvisa.gor();
+              } finally {
+                setAvvisas(false);
+              }
             },
             false
           );

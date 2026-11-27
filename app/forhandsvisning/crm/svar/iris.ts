@@ -383,7 +383,9 @@ export function svaraIris(url: URL, init?: RequestInit): Promise<Response> | nul
     return vanta(() => {
       const ids = (kropp.prospect_ids as string[]) ?? [];
       const skickade = ids.filter((id) => hitta(id)?.skickat_at);
-      return json({ count: skickade.length, hoppade: { inget_skickat: ids.filter((id) => !skickade.includes(id)) } });
+      // Uppföljningen skrivs som ett jobb (backenden: `_lagg_prospektjobb`), klart efter några sekunder.
+      skickade.forEach((id, n) => Object.assign(hitta(id) as Rad, { jobb: "utkast", klart_vid: Date.now() + 8000 + n * 2500 }));
+      return json({ count: skickade.length, jobs: skickade.map((id) => ({ prospect_id: id })), hoppade: { inget_skickat: ids.filter((id) => !skickade.includes(id)) } }, 202);
     });
   }
   if (v === "/config" && metod === "PUT") return vanta(() => json({ ok: true, autonomy: kropp.autonomy }));
