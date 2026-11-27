@@ -460,6 +460,39 @@ async def test_tomt_bolag_och_tomd_person_tar_med_sig_det_som_pekar_pa_dem(buddy
         assert (await k.get(f"{V1}/notes/{om_personen['id']}", params={"include_deleted": "true"})).json()["body"] == ""
 
 
+async def test_en_tomd_affar_tar_med_sig_sitt_arbete_och_uppgiften_tappar_kopplingen(buddy, annan, storage):
+    """Granskningens fynd: en affär som töms lämnade anteckningar, aktiviteter
+    och bilagor kvar, pekande på en gravsten."""
+    async with buddy.klient() as k:
+        bolag = await _bolag(k)
+        affar = (await k.post(f"{V1}/deals", json={"name": "Takbyte", "company_id": bolag["id"]})).json()
+        anteckning = (await k.post(f"{V1}/notes", json={"body": "Offert till Anna", "deal_id": affar["id"]})).json()
+        aktivitet = (await k.post(f"{V1}/activities", json={"subject": "Samtal", "deal_id": affar["id"]})).json()
+        bilaga = (await _ladda_upp(k, deal_id=affar["id"])).json()
+        uppgift = (await k.post(f"{V1}/tasks", json={"title": "Skicka offert", "deal_id": affar["id"]})).json()
+        pa_bolaget = (await k.post(f"{V1}/notes", json={"body": "Står kvar", "company_id": bolag["id"]})).json()
+    async with annan.klient() as k:
+        hans_affar = (await k.post(f"{V1}/deals", json={"name": "Hans affär"})).json()
+        hans = (await k.post(f"{V1}/notes", json={"body": "Hans anteckning", "deal_id": hans_affar["id"]})).json()
+    async with buddy.klient() as k:
+        assert (await k.delete(f"{V1}/deals/{affar['id']}", params={"permanent": "true"})).status_code == 204
+        for vag, post in [("notes", anteckning), ("activities", aktivitet), ("attachments", bilaga)]:
+            tomd = (await k.get(f"{V1}/{vag}/{post['id']}", params={"include_deleted": "true"})).json()
+            assert tomd["deleted_at"] and tomd["source"] == lagring.GRAVSTEN and tomd["deal_id"] is None, vag
+        assert lagring._minne(storage, "crm_anteckningar")[anteckning["id"]]["text"] == ""
+        assert lagring._minne(storage, "crm_bilagor")[bilaga["id"]]["innehall"] == b""
+        kvar = (await k.get(f"{V1}/tasks/{uppgift['id']}")).json()
+        assert kvar["deleted_at"] is None and kvar["title"] == "Skicka offert" and kvar["deal_id"] is None
+        assert (await k.get(f"{V1}/notes/{pa_bolaget['id']}")).json()["body"] == "Står kvar"
+        flode = (await k.get(f"{V1}/changes")).json()["data"]
+        tomda = {(h["object"], h["id"]) for h in flode if h["type"] == "purged"}
+        assert {("deal", affar["id"]), ("note", anteckning["id"]), ("activity", aktivitet["id"]),
+                ("attachment", bilaga["id"])} <= tomda
+        assert ("task", ["deal_id"]) in [(h["object"], h["fields"]) for h in flode if h["type"] == "updated"]
+    async with annan.klient() as k:
+        assert (await k.get(f"{V1}/notes/{hans['id']}")).json()["body"] == "Hans anteckning"
+
+
 async def test_papperskorgen_toms_efter_trettio_dagar(buddy, storage):
     async with buddy.klient() as k:
         bolag = await _bolag(k)

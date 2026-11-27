@@ -73,9 +73,14 @@ def tidslinjepost_ut(post: dict[str, Any], falt_ut: dict[str, str]) -> dict[str,
             if post["lank"] else None}
 
 
+def _lead_ut(lead: dict[str, Any]) -> dict[str, Any]:
+    return {"id": lead["id"], "name": lead["namn"], "status": lead["status"], "created_at": lead["created_at"]}
+
+
 def iris_ut(lage: dict[str, Any]) -> dict[str, Any]:
-    return {"leads": [{"id": lead["id"], "name": lead["namn"], "status": lead["status"],
-                       "created_at": lead["created_at"]} for lead in lage["leads"]],
+    senaste = lage.get("senaste")
+    return {"leads": [_lead_ut(lead) for lead in lage["leads"]],
+            "latest": _lead_ut(senaste) if senaste else None,
             "outcome": _UTFALL_UT.get(lage["utfall"]) if lage["utfall"] else None,
             "do_not_contact": lage["kontakta_inte"]}
 
@@ -136,7 +141,9 @@ def koppla(v1: Any) -> APIRouter:
     async def iris_bolag(request: Request, company_id: str, tenant: dict = Depends(kraev("crm:las"))) -> dict:
         """`do_not_contact` is true when the record says so OR when one of the
         company's leads has asked not to be contacted: that outcome always
-        wins over a value here that would reopen the lead."""
+        wins over a value here that would reopen the lead. `leads` are oldest
+        first; `latest` is the most recently created lead (same shape as a
+        row in `leads`), or null."""
         bolag = await _post(request, tenant, "bolag", company_id)
         return iris_ut(await utfall.iris_lage(request.app.state.storage, tenant["tenant_id"], bolag))
 

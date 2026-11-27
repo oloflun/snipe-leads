@@ -488,12 +488,12 @@ Listor och `GET /attachments/{id}` bär bara filens uppgifter. Själva filen hä
 `content_url` (`GET /attachments/{id}/content`), alltid som nedladdning och aldrig sparad i
 en mellanlagring.
 
-### Töms ett bolag eller en person
+### Töms ett bolag, en person eller en affär
 
-Raderas ett bolag eller en person för gott (`permanent=true`, eller efter 30 dagar i
-papperskorgen), töms också anteckningar, aktiviteter och bilagor som pekar på posten: de kan
-bära personuppgifter. Affärer och uppgifter är era egna och står kvar, men tappar kopplingen.
-Varje sådan ändring står i `GET /changes`.
+Raderas ett bolag, en person eller en affär för gott (`permanent=true`, eller efter 30 dagar
+i papperskorgen), töms också anteckningar, aktiviteter och bilagor som pekar på posten: de kan
+bära personuppgifter. Affärer och uppgifter är era egna och står kvar, men tappar kopplingen
+(när en affär töms gäller det uppgifterna). Varje sådan ändring står i `GET /changes`.
 
 ## Tidslinjen, utfall och den samlade kundlistan
 
@@ -535,11 +535,15 @@ curl -X POST "$BAS/companies/$ID/outcome" -H "X-API-Key: $NYCKEL" -H "Content-Ty
 `outcome` är `no_answer`, `call_back` (kräver `call_back_on`), `not_interested`,
 `do_not_contact`, `meeting_booked` eller `won`. Väntande utskick till bolagets leads stoppas,
 leadet byter läge, och `do_not_contact` spärrar adressen. `won` gör bolaget till kund. Svaret
-bär posten och `lead_ids`, de leads som berördes.
+bär posten och `lead_ids`, de leads som berördes. `note` sparas på leadets samtal när bolaget
+har ett lead. Vid `won`, och för ett bolag utan lead, blir den i stället en aktivitet på
+bolaget (`type: call`, utfallets namn som `subject`, koden som `outcome`), så att den står på
+tidslinjen.
 
 Åt andra hållet: `GET /companies/{id}/iris` visar bolagets leads och vad de betyder för
-posten. `do_not_contact` är sant där om posten säger det, eller om ett av bolagets leads har
-bett att slippa kontakt. Det utfallet vinner alltid över ett värde på posten.
+posten. `leads` står äldst först, och `latest` är det senast skapade leadet (samma form som en
+rad i `leads`), eller `null`. `do_not_contact` är sant där om posten säger det, eller om ett av
+bolagets leads har bett att slippa kontakt. Det utfallet vinner alltid över ett värde på posten.
 
 **Kundlistan.** `GET /customers` ger era egna kunder och de leads Iris har vunnit i en lista.
 `origin` är `own` eller `iris`, och `counts` säger hur många det finns av varje. Ett vunnet

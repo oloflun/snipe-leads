@@ -6237,7 +6237,7 @@
           "Snajp CRM"
         ],
         "summary": "The company's leads in Iris and what they mean here",
-        "description": "`do_not_contact` is true when the record says so OR when one of the\ncompany's leads has asked not to be contacted: that outcome always\nwins over a value here that would reopen the lead.",
+        "description": "`do_not_contact` is true when the record says so OR when one of the\ncompany's leads has asked not to be contacted: that outcome always\nwins over a value here that would reopen the lead. `leads` are oldest\nfirst; `latest` is the most recently created lead (same shape as a\nrow in `leads`), or null.",
         "operationId": "iris_bolag_api_crm_v1_companies__company_id__iris_get",
         "parameters": [
           {

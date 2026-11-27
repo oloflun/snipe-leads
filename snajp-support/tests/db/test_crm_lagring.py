@@ -625,6 +625,34 @@ async def test_supportrapporten_sparas_pa_korningen_i_databasen(miljo):
     assert await supportrapport.satt_arende(lager, b, klar["id"], "F-FEL") is None
 
 
+async def test_supportarendets_arbetsyta_och_kaskaden_for_en_affar_i_databasen(miljo):
+    """Arbetsytan slås upp oskopat (som tillgang.grund), bara id. En tömd affär
+    tar med sig sin anteckning, och uppgiften tappar kopplingen."""
+    from app.crm import objekt, supportrapport
+
+    lager, a, b = miljo
+    assert await supportrapport._arbetsyta(lager, a) is None
+    ws = str(uuid.uuid4())
+    # Arbetsytan läggs in som ägaren: workspaces har eget radskydd i kedjan.
+    await lager.conn.execute("reset role")
+    await lager.conn.execute("insert into workspaces (id, ss_tenant_id) values ($1::text::uuid, $2::text::uuid)", ws, a)
+    await lager.conn.execute("set local role snajp_app")
+    assert await supportrapport._arbetsyta(lager, a) == ws
+    assert await supportrapport._arbetsyta(lager, b) is None
+
+    affar = await objekt.skapa(lager, a, "affar", {"namn": "Takbyte"})
+    anteckning = await objekt.skapa(lager, a, "anteckning", {"text": "Offert till Anna", "affar_id": affar["id"]})
+    uppgift = await objekt.skapa(lager, a, "uppgift", {"titel": "Skicka offert", "affar_id": affar["id"]})
+    await lagring.gor_gravsten(lager, a, "affar", affar["id"])
+    async with lager._scoped(a) as conn:
+        rad = dict(await conn.fetchrow("select text, kalla, affar_id from crm_anteckningar where id = $1::text::uuid",
+                                       anteckning["id"]))
+        assert rad == {"text": "", "kalla": "gravsten", "affar_id": None}
+        rad = dict(await conn.fetchrow("select titel, affar_id, raderad_at from crm_uppgifter "
+                                       "where id = $1::text::uuid", uppgift["id"]))
+        assert rad == {"titel": "Skicka offert", "affar_id": None, "raderad_at": None}
+
+
 async def test_ej_aktuell_ar_upptagen_och_raknas_i_databasen(miljo):
     """Migration 165: relationen ej_aktuell tas emot av check-villkoret, står
     kvar bland de upptagna och räknas för sig i översikten."""

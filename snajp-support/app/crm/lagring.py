@@ -890,9 +890,10 @@ async def gor_gravsten(
     """Tömmer posten för gott. Källsystemens id för den glöms, så att en ny
     synk skapar en ny post i stället för att väcka den raderade.
 
-    Kaskaden (GDPR artikel 17): töms ett bolag eller en person, töms också
-    anteckningar, aktiviteter och bilagor som pekar på posten, och affärer och
-    uppgifter tappar kopplingen. En tömd anteckning tar sina bilagor med sig.
+    Kaskaden (GDPR artikel 17): töms ett bolag, en person eller en affär, töms
+    också anteckningar, aktiviteter och bilagor som pekar på posten, och
+    affärer och uppgifter tappar kopplingen (för en affär bara uppgifterna).
+    En tömd anteckning tar sina bilagor med sig.
     """
     post = await _hamta(storage, tenant_id, _OBJEKTTABELL[objekt], rad_id)
     if post is None:
@@ -905,7 +906,7 @@ async def gor_gravsten(
     from . import handelser  # sen import: handelser läser den här modulen
 
     logg = [handelser.Handelse(objekt, rad_id, "tomd")]
-    kolumn = _KOPPLING.get(objekt) if objekt in ("bolag", "person", "anteckning") else None
+    kolumn = _KOPPLING.get(objekt) if objekt in ("bolag", "person", "affar", "anteckning") else None
     if kolumn:
         for beroende in _TOMS_MED:
             tabell = _OBJEKTTABELL[beroende]
@@ -916,6 +917,9 @@ async def gor_gravsten(
                     await gor_gravsten(storage, tenant_id, beroende, rad["id"], via=via, aktor=aktor)
         for beroende in _TAPPAR_KOPPLING if objekt != "anteckning" else ():
             tabell = _OBJEKTTABELL[beroende]
+            # En affär har ingen affar_id: för en affär tappar bara uppgifterna kopplingen.
+            if kolumn not in TABELLER[tabell]:
+                continue
             for rad in await _valj(storage, tenant_id, tabell, lika={kolumn: rad_id}):
                 if rad.get("kalla") == GRAVSTEN:
                     continue

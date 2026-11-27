@@ -19,6 +19,10 @@ dess personer, `lagring.kontakta_inte_adresser`), och vunnen gör bolaget till
 kund. Kontakta inte lägger dessutom spärrar i alla kanaler för bolagets
 e-post, telefon och organisationsnummer (`sparr.lagg_till`, källan `utfall`).
 
+Anteckningen följer samtalet när det finns ett lead och utfallet går genom
+`samtal.registrera`. Vid vunnen, och för ett bolag utan lead, blir den en
+aktivitet (typ samtal) på bolaget, så att den inte tappas.
+
 ## Från leadsflödet till CRM:et: `iris_lage`
 
 Leadets läge läses när posten visas, det kopieras inte. Har ett av bolagets
@@ -34,10 +38,13 @@ from typing import Any
 
 from ..leads import samtal
 from ..leads.scheduler import avbryt_utskick_for_prospekt
-from . import sparr, synk, tidslinje
+from . import objekt, sparr, synk, tidslinje
 
 #: Utfallen CRM:et kan sätta. De fem första är samtalets egna (leadsregel 17).
 UTFALL = ("ej_svar", "aterkom", "ej_intresserad", "kontakta_inte", "mote", "vunnen")
+#: Utfallens svenska namn: rubriken på aktiviteten som bär en anteckning.
+UTFALL_NAMN = {"ej_svar": "Ej svar", "aterkom": "Återkom", "ej_intresserad": "Ej intresserad",
+               "kontakta_inte": "Kontakta inte", "mote": "Möte bokat", "vunnen": "Vunnen"}
 
 #: Leadets status när det inte ska bearbetas mer, och vad det betyder i CRM:et.
 _AVSLUTAT = {"suppressed": "kontakta_inte", "lost": "ej_intresserad", "meeting": "mote", "won": "vunnen"}
@@ -75,6 +82,15 @@ async def registrera(
                                     aterkom_datum=aterkom_datum if utfall == "aterkom" else None,
                                     anteckning=(anteckning or "").strip() or None)
         berorda.append(pid)
+
+    # Anteckningen bor på leadets samtal när ett lead finns och utfallet går
+    # genom samtalet. Annars (vunnen, eller ett bolag utan lead) sparas den
+    # som en aktivitet på bolaget, så att den står på bolagets tidslinje.
+    text = (anteckning or "").strip()
+    if text and (utfall == "vunnen" or not berorda):
+        await objekt.skapa(storage, tenant_id, "aktivitet", {
+            "typ": "samtal", "rubrik": UTFALL_NAMN[utfall], "text": text, "utfall": utfall,
+            "bolag_id": bolag["id"]}, via=via, aktor=aktor)
 
     andring: dict[str, Any] = {}
     if utfall == "kontakta_inte" and not bolag.get("kontakta_inte"):
@@ -121,5 +137,11 @@ async def iris_lage(storage: Any, tenant_id: str, bolag: dict[str, Any]) -> dict
              for p in await tidslinje.prospekt_for_bolag(storage, tenant_id, bolag)]
     statusar = {lead["status"] for lead in leads}
     utfall = next((_AVSLUTAT[s] for s in ("suppressed", "won", "meeting", "lost") if s in statusar), None)
-    return {"leads": leads, "utfall": utfall,
+    # Det senast skapade leadet, så att en klient inte behöver känna till
+    # listans ordning (äldst först). Vid lika tid vinner det sista i listan.
+    senaste = None
+    for lead in leads:
+        if senaste is None or (lead["created_at"] or "") >= (senaste["created_at"] or ""):
+            senaste = lead
+    return {"leads": leads, "senaste": senaste, "utfall": utfall,
             "kontakta_inte": bool(bolag.get("kontakta_inte")) or "suppressed" in statusar}

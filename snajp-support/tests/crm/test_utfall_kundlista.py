@@ -105,7 +105,67 @@ async def test_aterkom_kraver_datum_och_ett_bolag_utan_lead_far_bara_sin_egen_an
         assert (await k.post(f"{V1}/companies/{med['id']}/outcome", json={"outcome": "won"})).status_code == 403
 
 
+async def _aktiviteter(k, bolag_id: str) -> list[dict]:
+    return (await k.get(f"{V1}/activities", params={"company_id": bolag_id})).json()["data"]
+
+
+async def test_anteckningen_vid_vunnen_och_utan_lead_blir_en_aktivitet_pa_bolaget(buddy, annan, storage):
+    """Granskningens fynd: anteckningen gick bara till leadets samtal och
+    försvann vid vunnen och för ett bolag utan lead."""
+    async with buddy.klient() as k:
+        utan = (await k.post(f"{V1}/companies", json={"name": "Utan Lead AB", "org_number": ORGNR_A})).json()
+        svar = await k.post(f"{V1}/companies/{utan['id']}/outcome", json={
+            "outcome": "call_back", "call_back_on": "2026-12-15", "note": "Ring efter jul."})
+        assert svar.status_code == 200 and svar.json()["lead_ids"] == []
+        (aktivitet,) = await _aktiviteter(k, utan["id"])
+        assert (aktivitet["type"], aktivitet["subject"], aktivitet["body"], aktivitet["outcome"]) == (
+            "call", "Återkom", "Ring efter jul.", "aterkom")
+        poster = (await k.get(f"{V1}/companies/{utan['id']}/timeline")).json()["data"]
+        assert [p["link"]["id"] for p in poster if p["type"] == "activity"] == [aktivitet["id"]]
+        # Utan anteckning blir det ingen aktivitet, och blanksteg räknas inte.
+        await k.post(f"{V1}/companies/{utan['id']}/outcome", json={"outcome": "no_answer", "note": "   "})
+        assert len(await _aktiviteter(k, utan["id"])) == 1
+    lead = await _lead(storage, buddy.id, "Med Lead AB", ORGNR_B, "vd@medlead.se", status="meeting")
+    async with buddy.klient() as k:
+        med = (await k.post(f"{V1}/companies", json={"name": "Med Lead AB", "org_number": ORGNR_B})).json()
+        await k.post(f"{V1}/companies/{med['id']}/outcome", json={"outcome": "won", "note": "Avtal signerat."})
+        (vunnen,) = await _aktiviteter(k, med["id"])
+        assert (vunnen["subject"], vunnen["body"], vunnen["outcome"]) == ("Vunnen", "Avtal signerat.", "vunnen")
+    # Vunnen går inte genom samtalet: anteckningen står bara på bolaget.
+    assert await storage.list_lead_samtal(buddy.id, prospect_id=lead["id"]) == []
+    async with annan.klient() as k:
+        assert (await k.get(f"{V1}/activities")).json()["data"] == []
+
+
+async def test_anteckningen_med_lead_star_pa_samtalet_och_dubbleras_inte(buddy, storage):
+    lead = await _lead(storage, buddy.id, "Bygg AB", ORGNR_A, "vd@bygg.se", status="contacted")
+    async with buddy.klient() as k:
+        bolag = (await k.post(f"{V1}/companies", json={"name": "Bygg AB", "org_number": ORGNR_A})).json()
+        await k.post(f"{V1}/companies/{bolag['id']}/outcome", json={"outcome": "not_interested",
+                                                                   "note": "Har redan en leverantör."})
+        assert await _aktiviteter(k, bolag["id"]) == []
+        typer = [p["type"] for p in (await k.get(f"{V1}/companies/{bolag['id']}/timeline")).json()["data"]]
+        assert typer.count("call") == 1 and "activity" not in typer
+    (samtal,) = await storage.list_lead_samtal(buddy.id, prospect_id=lead["id"])
+    assert samtal["anteckning"] == "Har redan en leverantör."
+
+
 # -- Från leadsflödet till CRM:et --------------------------------------------
+
+
+async def test_iris_latest_ar_det_senast_skapade_leadet_och_ordningen_star_kvar(buddy, storage):
+    async with buddy.klient() as k:
+        bolag = (await k.post(f"{V1}/companies", json={"name": "Bygg AB", "org_number": ORGNR_A})).json()
+    forsta = await _lead(storage, buddy.id, "Bygg AB", ORGNR_A, "vd@bygg.se", status="lost")
+    andra = await _lead(storage, buddy.id, "Bygg Väst AB", ORGNR_A, "info@byggvast.se", status="contacted")
+    # Det som lades in först är det nyaste: listan går på tiden, inte på inläggningen.
+    tider = {forsta["id"]: "2026-06-01T09:00:00+00:00", andra["id"]: "2026-01-01T09:00:00+00:00"}
+    for p in storage.prospects[buddy.id]:
+        p["created_at"] = tider.get(p["id"], p.get("created_at"))
+    async with buddy.klient() as k:
+        lage = (await k.get(f"{V1}/companies/{bolag['id']}/iris")).json()
+    assert [lead["id"] for lead in lage["leads"]] == [andra["id"], forsta["id"]]
+    assert lage["latest"] == lage["leads"][1] and lage["latest"]["status"] == "lost"
 
 
 async def test_leadets_avslutande_utfall_galler_bolaget_i_crm(buddy, annan, storage):
@@ -113,7 +173,7 @@ async def test_leadets_avslutande_utfall_galler_bolaget_i_crm(buddy, annan, stor
         bolag = (await k.post(f"{V1}/companies", json={"name": "Bygg AB", "org_number": ORGNR_A})).json()
         utan = (await k.post(f"{V1}/companies", json={"name": "Utan Lead AB", "org_number": ORGNR_C})).json()
         assert (await k.get(f"{V1}/companies/{utan['id']}/iris")).json() == {
-            "leads": [], "outcome": None, "do_not_contact": False}
+            "leads": [], "latest": None, "outcome": None, "do_not_contact": False}
     lead = await _lead(storage, buddy.id, "Bygg AB", ORGNR_A, "vd@bygg.se", status="contacted")
     async with buddy.klient() as k:
         lage = (await k.get(f"{V1}/companies/{bolag['id']}/iris")).json()
