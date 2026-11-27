@@ -4,8 +4,10 @@ import { AffarerVy } from "@/components/crm/app/AffarerVy";
 import { BolagVy } from "@/components/crm/app/BolagVy";
 import { CrmRam } from "@/components/crm/app/CrmRam";
 import { LeadsVy } from "@/components/crm/app/iris/LeadsVy";
+import { UtkastVy } from "@/components/crm/app/iris/UtkastVy";
 import type { Skalatgarder } from "@/components/crm/app/Skalet";
 import { svaraIris } from "./svar/iris";
+import { svaraUtkast } from "./svar/utkast";
 import { svaraSkalet } from "./svar/skalet";
 import { OversiktVy } from "@/components/crm/app/OversiktVy";
 import { PersonerVy } from "@/components/crm/app/PersonerVy";
@@ -1448,6 +1450,8 @@ function fangaAnrop() {
     if (iForhandsvisning && url.pathname.startsWith("/api/snajp-support/hjalp")) return svaraHjalp(url, init);
     const skalet = iForhandsvisning ? svaraSkalet(url, init) : null;
     if (skalet) return skalet;
+    const utkast = iForhandsvisning ? svaraUtkast(url, init) : null;
+    if (utkast) return utkast;
     const iris = iForhandsvisning ? svaraIris(url, init) : null;
     if (iris) return iris;
     const galler = iForhandsvisning && url.pathname.startsWith("/api/snajp-support/crm");
@@ -1510,7 +1514,7 @@ const FORHANDSATGARDER: Partial<Skalatgarder> = {
 };
 
 /** Vyerna förhandsvisningen kan visa. En ny vy läggs till här och i renderingen nedan. */
-const KANDA_VYER = ["oversikt", "bolag", "personer", "affarer", "uppgifter", "synk", "sparrar", "utvecklare", "iris/leads"];
+const KANDA_VYER = ["oversikt", "bolag", "personer", "affarer", "uppgifter", "synk", "sparrar", "utvecklare", "iris/leads", "iris/utkast"];
 
 export function CrmForhandsvisning({
   tema,
@@ -1543,6 +1547,7 @@ export function CrmForhandsvisning({
         {visad === "sparrar" ? <SparrarVy /> : null}
         {visad === "utvecklare" ? <UtvecklareVy /> : null}
         {visad === "iris/leads" ? <LeadsVy bas="/forhandsvisning/crm" /> : null}
+        {visad === "iris/utkast" ? <UtkastVy bas="/forhandsvisning/crm" /> : null}
       </CrmRam>
     </DashboardProvider>
   );

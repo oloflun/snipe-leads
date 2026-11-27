@@ -74,6 +74,16 @@ export const NAVPOSTER: Navpost[] = [
     byggd: true,
     raknare: "leadsnotiser"
   },
+  // Steg 4.3: Iris utkast, att granska, skickas snart och skickat (components/crm/app/iris/UtkastVy.tsx).
+  {
+    nyckel: "iris/utkast",
+    grupp: "iris",
+    namn: OBJEKT.utkast.namn,
+    ikon: OBJEKT.utkast.ikon,
+    ton: OBJEKT.utkast.ton,
+    produkt: "leads",
+    byggd: true
+  },
   fran("synk", "data"),
   fran("sparrar", "data"),
   fran("utvecklare", "data")

@@ -35,7 +35,7 @@ export function Bekraftelse({
 }: Readonly<{
   oppen: boolean;
   titel: string;
-  poster: { id: string; namn: string; under?: string | null }[];
+  poster: { id: string; namn: string; under?: string | null; amne?: string | null; utdrag?: string | null }[];
   /** Om handlingen går att trycka på. Utan värde: när listan inte är tom. (Listan kan visa poster som ännu inte berörs, som provkörningens bolag innan de kryssats i.) */
   kanBekrafta?: boolean;
   /** Markerade som inte berörs (saknar väntande utkast med mera). */
@@ -59,9 +59,14 @@ export function Bekraftelse({
               {poster.length > 0 ? (
                 <ul className="crm-kallkort flex max-h-[18rem] flex-col overflow-y-auto rounded-[16px] px-3 py-1.5" aria-label={titel}>
                   {poster.map((p) => (
-                    <li key={p.id} className="flex min-w-0 flex-wrap items-center justify-between gap-x-3 gap-y-0.5 border-b border-ink/[0.07] py-2 last:border-b-0">
-                      <Postchip namn={p.namn} storlek="sm" vikt="lugn" />
-                      {p.under ? <span className="min-w-0 truncate text-[0.8125rem] text-ink-muted">{p.under}</span> : null}
+                    <li key={p.id} className="flex min-w-0 flex-col gap-0.5 border-b border-ink/[0.07] py-2 last:border-b-0">
+                      <span className="flex min-w-0 flex-wrap items-center justify-between gap-x-3 gap-y-0.5">
+                        <Postchip namn={p.namn} storlek="sm" vikt="lugn" />
+                        {p.under ? <span className="min-w-0 truncate text-[0.8125rem] text-ink-muted">{p.under}</span> : null}
+                      </span>
+                      {/* Steg 4.3: ämnet och mejlets första mening, så att man ser vad som går ut (LU-036, LU-180). */}
+                      {p.amne ? <span className="min-w-0 truncate pl-1 text-[0.8125rem] font-semibold text-ink2">{p.amne}</span> : null}
+                      {p.utdrag ? <span className="line-clamp-2 pl-1 text-[0.8125rem] leading-5 text-ink-muted">{p.utdrag}</span> : null}
                     </li>
                   ))}
                 </ul>

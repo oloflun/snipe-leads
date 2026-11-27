@@ -19,7 +19,7 @@
  * laddas om, så att flödet går att följa.
  */
 
-type Rad = {
+export type Rad = {
   id: string;
   company_name: string;
   contact_name: string | null;
@@ -161,7 +161,7 @@ function rad(i: number): Rad {
   };
 }
 
-const RADER: Rad[] = Array.from({ length: BOLAG.length }, (_, i) => rad(i));
+export const RADER: Rad[] = Array.from({ length: BOLAG.length }, (_, i) => rad(i));
 // Kontaktade: står inte i Att bearbeta (de bor under Skickat), men syns i bolagets panel och sök.
 for (const i of [8, 16]) Object.assign(RADER[i], { status: "contacted", utkast_status: "skickat", skickat_at: iso(30 + i), queue_item_id: null });
 // Ett godkänt utkast väntar på sändfönstret: det räknas som skickat för kunden och står inte i listan.
@@ -182,7 +182,7 @@ let VYER: { id: string; namn: string; filter: Record<string, string>; created_at
   { id: "00000000-0000-4000-b000-000000000001", namn: "Starka i Umeå", filter: { niva: "A", sok: "" }, created_at: iso(200) }
 ];
 let lopnr = 1000;
-const nyttId = (serie: string) => `00000000-0000-4000-${serie}-${String(100000000000 + lopnr++).slice(-12)}`;
+export const nyttId = (serie: string) => `00000000-0000-4000-${serie}-${String(100000000000 + lopnr++).slice(-12)}`;
 
 /** Den förvalda tidslinjen för ett lead, nyast först. */
 function tidslinje(r: Rad) {
@@ -197,7 +197,7 @@ function tidslinje(r: Rad) {
 }
 
 /** Gör färdigt ett jobb som hunnit bli klart (research eller utkast), som jobbkön hade gjort. */
-function framat() {
+export function framat() {
   for (const r of RADER) {
     if (!r.klart_vid || r.klart_vid > Date.now()) continue;
     if (r.jobb === "research") {

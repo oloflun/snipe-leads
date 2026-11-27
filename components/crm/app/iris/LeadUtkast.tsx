@@ -1,8 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Check, FilePen, RefreshCw, Send, X } from "lucide-react";
-import { AlertDialog } from "@astryxdesign/core/AlertDialog";
+import { Check, FilePen } from "lucide-react";
 import { Banner } from "@astryxdesign/core/Banner";
 import { Button } from "@astryxdesign/core/Button";
 import { CheckboxInput } from "@astryxdesign/core/CheckboxInput";
@@ -11,10 +10,13 @@ import { Icon } from "@astryxdesign/core/Icon";
 import { Selector } from "@astryxdesign/core/Selector";
 import { Skeleton } from "@astryxdesign/core/Skeleton";
 import { Text } from "@astryxdesign/core/Text";
+import { Utkastredigerare } from "@/components/crm/app/iris/Utkastredigerare";
 import { useSkrivratt } from "@/components/crm/app/kit";
 import { CrmFel } from "@/lib/crm/api";
 import { irisAnrop } from "@/lib/crm/iris/anrop";
-import { UTKASTTON, kanSkickas, obedomd, utkastText, type Lead, type Utkastsvar } from "@/lib/crm/iris/lead";
+import { UTKASTTON, kanSkickas, obedomd, utkastText, type Lead, type LeadPost, type Utkastsvar } from "@/lib/crm/iris/lead";
+import { signalUr, skalUr, type Besked, type Sandutfall } from "@/lib/crm/iris/utkast";
+import { offertForUtkast } from "@/lib/leads/offert";
 import { lasStruktur, sparaStruktur, type Struktur } from "@/lib/leads/struktur";
 import { useLocale, type Localized } from "@/lib/i18n";
 
@@ -25,10 +27,11 @@ const POLL_MAX = 45;
 const feltext = (e: unknown): Localized => (e instanceof CrmFel ? e.text : { sv: "Okänt fel.", en: "Unknown error." });
 
 /**
- * Mejlutkastet i leadets panel (LR-065, LR-067, LR-068, LR-071, LR-073, LR-074,
- * LR-112): som mottagaren ser det, med utkastets riktiga status
- * (`GET /leads/prospects/{id}/utkast`, utkaststatus.harled) och handlingarna som
- * inte kräver redigeraren: Godkänn och skicka, Avvisa, Skriv om och Skapa utkast.
+ * Mejlutkastet i leadets panel (LR-065 till LR-074, LR-112): utkastets riktiga
+ * status (`GET /leads/prospects/{id}/utkast`, utkaststatus.harled) och utkastet
+ * i utkastredigeraren (steg 4.3): ämne och text som går att ändra medan det
+ * väntar, signatur och fot som mottagaren ser dem, Godkänn och skicka, Avvisa,
+ * Skriv om, AI:n och provmejlet. Utan utkast: Skapa utkast.
  *
  * Skapa och Skriv om går genom `POST /leads/prospects/processa-om`, samma väg
  * som listans Skapa utkast: ur sparad research (`utkast`), eller med en ny
@@ -54,16 +57,18 @@ export function LeadUtkast({
   const installning = useSkrivratt("stangt");
   const [svar, setSvar] = useState<Utkastsvar | null>(null);
   const [fel, setFel] = useState<unknown>(null);
-  const [upptagen, setUpptagen] = useState<"godkann" | "avvisa" | "skriv" | null>(null);
-  const [besked, setBesked] = useState<{ text: string; fel: boolean } | null>(null);
-  const [avvisa, setAvvisa] = useState(false);
+  const [skapar, setSkapar] = useState(false);
+  const [besked, setBesked] = useState<Besked | null>(null);
   const [godkant, setGodkant] = useState(false);
   const [auto, setAuto] = useState<{ pa: boolean; sparar: boolean; besked: string | null; fel: boolean }>({ pa: false, sparar: false, besked: null, fel: false });
   const [struktur, setStruktur] = useState<Struktur>("a");
+  const [offer, setOffer] = useState<string | null>(null);
   const varv = useRef(0);
 
   useEffect(() => {
     setStruktur(lasStruktur());
+    // Kundens erbjudande är bakgrunden AI:n skriver om utifrån. Saknas det körs AI:n utan.
+    void offertForUtkast().then(setOffer, () => setOffer(null));
   }, []);
 
   // Ordningsskydd: bara den senaste hämtningen skrivs in (byte av lead, pollning, omläsning efter en handling).
@@ -118,74 +123,65 @@ export function LeadUtkast({
   }, [skrivs, hamta, text]);
 
   const status = svar?.utkast_status ?? null;
-  const kanAvvisas = Boolean(svar?.queue_item_id) && (status === "vantar" || status === "koad" || status === "godkant");
+  const qid = svar?.queue_item_id ?? null;
+  const kanAvvisas = Boolean(qid) && (status === "vantar" || status === "koad" || status === "godkant");
   const kanSkrivasOm = status === "vantar" || status === "koad" || status === "godkant" || status === "stoppat";
+  // Backenden tar emot en ändring medan köposten väntar eller är godkänd (leads.update_queue_item_text).
+  const redigerbar = Boolean(qid) && (status === "vantar" || status === "koad" || status === "godkant");
   const utanUtkast = !svar?.utkast && status !== "skrivs";
 
-  async function godkann() {
-    if (!svar?.queue_item_id) return;
-    setUpptagen("godkann");
-    setBesked(null);
-    try {
-      const s = await irisAnrop<{ utfall?: string; besked?: string; skal?: string | null }>(`/leads/queue/${encodeURIComponent(svar.queue_item_id)}/approve`, { method: "POST" });
-      const skal = s.skal ?? s.besked?.split(": ").slice(1).join(": ") ?? "";
-      if (s.utfall === "sent") setBesked({ text: text({ sv: "Skickat.", en: "Sent." }), fel: false });
-      else if (s.utfall === "requeued") setBesked({ text: text({ sv: "Godkänt. Mejlet skickas i tur och ordning från kön (vardagar från 08:00).", en: "Approved. The email goes out in turn from the queue (weekdays from 08:00)." }), fel: false });
-      else if (s.utfall === "redan_hanterad") setBesked({ text: text({ sv: "Utkastet är redan hanterat.", en: "The draft has already been handled." }), fel: true });
-      else setBesked({ text: skal ? text({ sv: `Inte skickat: ${skal}`, en: `Not sent: ${skal}` }) : text({ sv: "Inte skickat.", en: "Not sent." }), fel: true });
-      if (s.utfall === "sent" || s.utfall === "requeued") setGodkant(true);
-      andrat();
-      await hamta();
-    } catch (e) {
-      setBesked({ text: text(feltext(e)), fel: true });
-    } finally {
-      setUpptagen(null);
-    }
+  async function godkann(): Promise<Besked> {
+    if (!qid) return { text: text({ sv: "Utkastet finns inte längre.", en: "The draft no longer exists." }), fel: true };
+    const s = await irisAnrop<Sandutfall>(`/leads/queue/${encodeURIComponent(qid)}/approve`, { method: "POST" });
+    const skal = skalUr(s);
+    andrat();
+    await hamta();
+    if (s.utfall === "sent" || s.utfall === "requeued") setGodkant(true);
+    if (s.utfall === "sent") return { text: text({ sv: "Skickat.", en: "Sent." }), fel: false };
+    if (s.utfall === "requeued") return { text: text({ sv: "Godkänt. Mejlet skickas i tur och ordning från kön (vardagar från 08:00).", en: "Approved. The email goes out in turn from the queue (weekdays from 08:00)." }), fel: false };
+    if (s.utfall === "redan_hanterad") return { text: text({ sv: "Utkastet är redan hanterat.", en: "The draft has already been handled." }), fel: true };
+    return { text: skal ? text({ sv: `Inte skickat: ${skal}`, en: `Not sent: ${skal}` }) : text({ sv: "Inte skickat.", en: "Not sent." }), fel: true };
   }
 
-  async function avvisaUtkast() {
-    if (!svar?.queue_item_id) return;
-    setUpptagen("avvisa");
-    try {
-      await irisAnrop(`/leads/queue/${encodeURIComponent(svar.queue_item_id)}/reject`, { method: "POST" });
-      setBesked({ text: text({ sv: "Utkastet är avvisat och skickas aldrig.", en: "The draft is rejected and will never be sent." }), fel: false });
-      andrat();
-      await hamta();
-    } catch (e) {
-      setBesked({ text: text(feltext(e)), fel: true });
-    } finally {
-      setUpptagen(null);
-      setAvvisa(false);
-    }
+  async function avvisaUtkast(): Promise<Besked> {
+    if (!qid) return { text: text({ sv: "Utkastet finns inte längre.", en: "The draft no longer exists." }), fel: true };
+    await irisAnrop(`/leads/queue/${encodeURIComponent(qid)}/reject`, { method: "POST" });
+    andrat();
+    await hamta();
+    return { text: text({ sv: "Utkastet är avvisat och skickas aldrig.", en: "The draft is rejected and will never be sent." }), fel: false };
   }
 
   /** Skapa (utan utkast) eller Skriv om (ersätter det väntande). */
-  async function skrivUtkast(ersatt: boolean) {
-    setUpptagen("skriv");
-    setBesked(null);
+  async function skrivUtkast(ersatt: boolean, st: Struktur): Promise<Besked> {
     // Utan mejladress eller bedömning letar researchen först upp kontakten (kontaktjakten, LR-068).
     const scope = !lead.contact_email || obedomd(lead) ? "research_and_draft" : "utkast";
+    const s = await irisAnrop<{ count?: number; hoppade_over?: string[]; pagar_redan?: string[] }>("/leads/prospects/processa-om", {
+      method: "POST",
+      body: JSON.stringify({ prospect_ids: [id], scope, ersatt, struktur: st })
+    });
+    andrat();
+    await hamta();
+    if (s.pagar_redan?.length) return { text: text({ sv: "Leadet bearbetas redan. Utkastet visas här när det är klart.", en: "The lead is already being processed. The draft shows here when done." }), fel: false };
+    if (s.hoppade_over?.length)
+      return { text: text({ sv: "Leadet har redan fått mejl utan någon uppföljning som väntar, så inget nytt första mejl skrivs.", en: "The lead has already been emailed with no follow-up pending, so no new first email is written." }), fel: true };
+    return {
+      text:
+        scope === "research_and_draft"
+          ? text({ sv: "Iris letar kontaktadress på bolagets sajt och skriver utkastet direkt efteråt. Det tar ungefär en minut.", en: "Iris is looking for a contact address on the company's site and writes the draft right after. It takes about a minute." })
+          : text({ sv: "Iris skriver utkastet ur den research som redan finns.", en: "Iris is writing the draft from the existing research." }),
+      fel: false
+    };
+  }
+
+  async function skapa() {
+    setSkapar(true);
+    setBesked(null);
     try {
-      const s = await irisAnrop<{ count?: number; hoppade_over?: string[]; pagar_redan?: string[] }>("/leads/prospects/processa-om", {
-        method: "POST",
-        body: JSON.stringify({ prospect_ids: [id], scope, ersatt, struktur })
-      });
-      if (s.pagar_redan?.length) setBesked({ text: text({ sv: "Leadet bearbetas redan. Utkastet visas här när det är klart.", en: "The lead is already being processed. The draft shows here when done." }), fel: false });
-      else if (s.hoppade_over?.length) setBesked({ text: text({ sv: "Leadet har redan fått mejl utan någon uppföljning som väntar, så inget nytt första mejl skrivs.", en: "The lead has already been emailed with no follow-up pending, so no new first email is written." }), fel: true });
-      else
-        setBesked({
-          text:
-            scope === "research_and_draft"
-              ? text({ sv: "Iris letar kontaktadress på bolagets sajt och skriver utkastet direkt efteråt. Det tar ungefär en minut.", en: "Iris is looking for a contact address on the company's site and writes the draft right after. It takes about a minute." })
-              : text({ sv: "Iris skriver utkastet ur den research som redan finns.", en: "Iris is writing the draft from the existing research." }),
-          fel: false
-        });
-      andrat();
-      await hamta();
+      setBesked(await skrivUtkast(false, struktur));
     } catch (e) {
       setBesked({ text: text(feltext(e)), fel: true });
     } finally {
-      setUpptagen(null);
+      setSkapar(false);
     }
   }
 
@@ -199,23 +195,6 @@ export function LeadUtkast({
       setAuto({ pa: !pa, sparar: false, besked: text(feltext(e)), fel: true });
     }
   }
-
-  const strukturval = (
-    <Selector
-      label={text({ sv: "Struktur", en: "Structure" })}
-      value={struktur}
-      onChange={(v) => {
-        if (v !== "a" && v !== "b") return;
-        setStruktur(v);
-        sparaStruktur(v);
-      }}
-      options={[
-        { value: "a", label: text({ sv: "A, standardmejlet", en: "A, the standard email" }) },
-        { value: "b", label: text({ sv: "B, kort med en fråga", en: "B, short with a question" }) }
-      ]}
-      width="100%"
-    />
-  );
 
   if (fel && !svar) {
     return (
@@ -237,41 +216,45 @@ export function LeadUtkast({
   const ton = status ? UTKASTTON[status] : "dampad";
   const tonklass = ton === "varning" ? "text-warning" : ton === "mossa" ? "text-moss" : ton === "fara" ? "text-danger" : "text-ink-muted";
   const raden = utkastText(svar, locale, text);
+  const post = lead as LeadPost;
 
   return (
     <div className="flex flex-col gap-4">
       {raden ? (
         <div className="flex flex-col gap-1">
           <span className={`text-[0.875rem] font-semibold ${tonklass}`}>{raden}</span>
+          {/* Varför utkastet inte skickats (LU-050 till LU-062): skälet backenden lämnar, som det står. */}
           {svar.utkast_skal && (status === "stoppat" || status === "vantar" || status === "saknas" || status === "avvisat") ? (
             <span className="max-w-[65ch] text-[0.8125rem] leading-6 text-ink-muted">{svar.utkast_skal}</span>
           ) : null}
         </div>
       ) : null}
 
-      {svar.utkast ? (
-        /* Steg 4.3: utkastredigeraren (LR-065, LR-066, LR-070, LR-072) ersätter det här kortet för väntande,
-           köade och godkända utkast. Ändpunkten för att spara är PUT /leads/queue/{queue_item_id} {subject, brodtext}. */
-        <article className="crm-kallkort flex flex-col gap-3 rounded-[16px] p-4" aria-label={text({ sv: "Mejlet som mottagaren ser det", en: "The email as the recipient sees it" })}>
-          <dl className="flex flex-col gap-1 border-b border-ink/[0.08] pb-3 text-[0.8125rem]">
-            <div className="flex gap-2">
-              <dt className="w-12 shrink-0 text-ink-muted">{text({ sv: "Till", en: "To" })}</dt>
-              <dd className="min-w-0 truncate text-ink2">{lead.contact_email ?? text({ sv: "Ingen mottagare än", en: "No recipient yet" })}</dd>
-            </div>
-            <div className="flex gap-2">
-              <dt className="w-12 shrink-0 text-ink-muted">{text({ sv: "Ämne", en: "Subject" })}</dt>
-              <dd className="min-w-0 font-semibold text-ink">{svar.utkast.subject}</dd>
-            </div>
-          </dl>
-          <p className="whitespace-pre-wrap break-words text-[0.9375rem] leading-7 text-ink">{svar.utkast.brodtext ?? svar.utkast.body}</p>
-          {svar.utkast.svans ? <p className="whitespace-pre-wrap break-words border-t border-ink/[0.08] pt-3 text-[0.8125rem] leading-6 text-ink-muted">{svar.utkast.svans}</p> : null}
-        </article>
-      ) : status === "skrivs" ? (
-        <div className="crm-kallkort flex flex-col gap-3 rounded-[16px] p-4" role="status">
-          <span className="text-[0.875rem] text-ink2">{text({ sv: "Iris skriver utkastet. Det visas här när det är klart.", en: "Iris is writing the draft. It shows here when done." })}</span>
-          <Skeleton width="100%" height={10} radius="rounded" />
-          <Skeleton width="85%" height={10} radius="rounded" />
-        </div>
+      {svar.utkast || status === "skrivs" ? (
+        <Utkastredigerare
+          nyckel={qid ?? svar.utkast?.id ?? id}
+          amne={svar.utkast?.subject ?? null}
+          brodtext={svar.utkast?.brodtext ?? svar.utkast?.body ?? ""}
+          svans={svar.utkast?.svans ?? null}
+          signatur={svar.signatur ?? null}
+          mottagare={lead.contact_email ?? null}
+          redigerbar={redigerbar}
+          skrivs={status === "skrivs"}
+          kontext={{ companyName: lead.company_name, contactName: lead.contact_name, signal: signalUr(post.lagesbeskrivning, post.signaler), offer }}
+          spara={
+            qid
+              ? async (a, b) => {
+                  await irisAnrop(`/leads/queue/${encodeURIComponent(qid)}`, { method: "PUT", body: JSON.stringify({ subject: a, brodtext: b }) });
+                  await hamta();
+                }
+              : undefined
+          }
+          godkann={kanSkickas(svar) ? { gor: () => godkann() } : undefined}
+          avvisa={kanAvvisas ? { gor: () => avvisaUtkast() } : undefined}
+          skrivOm={kanSkrivasOm ? { onskemal: false, struktur: true, gor: (_o, st) => skrivUtkast(true, st) } : undefined}
+          provmejl={qid && status !== "skickat" ? { queueItemId: qid } : status === "skickat" && svar.utkast?.id ? { messageId: svar.utkast.id } : null}
+          skriv={skriv}
+        />
       ) : (
         <EmptyState
           isCompact
@@ -285,35 +268,40 @@ export function LeadUtkast({
         />
       )}
 
-      {utanUtkast || status === "avvisat" ? <div className="max-w-[280px]">{strukturval}</div> : null}
+      {utanUtkast || status === "avvisat" ? (
+        <div className="flex flex-col gap-3">
+          <div className="max-w-[280px]">
+            <Selector
+              label={text({ sv: "Struktur", en: "Structure" })}
+              value={struktur}
+              onChange={(v) => {
+                if (v !== "a" && v !== "b") return;
+                setStruktur(v);
+                sparaStruktur(v);
+              }}
+              options={[
+                { value: "a", label: text({ sv: "A, standardmejlet", en: "A, the standard email" }) },
+                { value: "b", label: text({ sv: "B, kort med en fråga", en: "B, short with a question" }) }
+              ]}
+              width="100%"
+            />
+          </div>
+          <div>
+            <Button
+              label={status === "avvisat" ? text({ sv: "Skapa nytt utkast", en: "Create a new draft" }) : text({ sv: "Skapa utkast", en: "Create draft" })}
+              variant="primary"
+              icon={<Icon icon={FilePen} size="sm" />}
+              isLoading={skapar}
+              isDisabled={!skriv.far || skapar}
+              tooltip={skriv.skal ?? undefined}
+              onClick={() => void skapa()}
+            />
+          </div>
+        </div>
+      ) : null}
 
-      <div className="flex flex-wrap items-center gap-2">
-        {kanSkickas(svar) ? (
-          <Button label={text({ sv: "Godkänn och skicka", en: "Approve and send" })} variant="primary" icon={<Icon icon={Send} size="sm" />} isLoading={upptagen === "godkann"} isDisabled={!skriv.far || upptagen != null} tooltip={skriv.skal ?? undefined} onClick={() => void godkann()} />
-        ) : null}
-        {utanUtkast || status === "avvisat" ? (
-          <Button
-            label={status === "avvisat" ? text({ sv: "Skapa nytt utkast", en: "Create a new draft" }) : text({ sv: "Skapa utkast", en: "Create draft" })}
-            variant={kanSkickas(svar) ? "secondary" : "primary"}
-            icon={<Icon icon={FilePen} size="sm" />}
-            isLoading={upptagen === "skriv"}
-            isDisabled={!skriv.far || upptagen != null}
-            tooltip={skriv.skal ?? undefined}
-            onClick={() => void skrivUtkast(false)}
-          />
-        ) : null}
-        {kanSkrivasOm ? (
-          <Button label={text({ sv: "Skriv om", en: "Rewrite" })} variant="secondary" icon={<Icon icon={RefreshCw} size="sm" />} isLoading={upptagen === "skriv"} isDisabled={!skriv.far || upptagen != null} tooltip={skriv.skal ?? undefined} onClick={() => void skrivUtkast(true)} />
-        ) : null}
-        {kanAvvisas ? (
-          <Button label={text({ sv: "Avvisa", en: "Reject" })} variant="ghost" icon={<Icon icon={X} size="sm" />} className="crm-farlig" isDisabled={!skriv.far || upptagen != null} tooltip={skriv.skal ?? undefined} onClick={() => setAvvisa(true)} />
-        ) : null}
-      </div>
-
-      {/* Utfallet sägs upp i en region som finns hela tiden. */}
-      <div role="status">
-        {besked ? <Banner status={besked.fel ? "error" : "success"} container="card" title={besked.text} /> : null}
-      </div>
+      {/* Utfallet av Skapa utkast och pollningen sägs upp i en region som finns hela tiden. */}
+      <div role="status">{besked ? <Banner status={besked.fel ? "error" : "success"} container="card" title={besked.text} /> : null}</div>
 
       {/* LR-112: efter ett lyckat godkännande, frågan om Iris ska skicka själv framöver. */}
       {godkant ? (
@@ -335,17 +323,6 @@ export function LeadUtkast({
           ) : null}
         </div>
       ) : null}
-
-      <AlertDialog
-        isOpen={avvisa}
-        onOpenChange={(o) => !o && upptagen == null && setAvvisa(false)}
-        title={text({ sv: "Avvisa utkastet?", en: "Reject the draft?" })}
-        description={text({ sv: "Utkastet skickas aldrig. Du kan skapa ett nytt efteråt.", en: "The draft is never sent. You can create a new one afterwards." })}
-        actionLabel={text({ sv: "Avvisa", en: "Reject" })}
-        cancelLabel={text({ sv: "Avbryt", en: "Cancel" })}
-        isActionLoading={upptagen === "avvisa"}
-        onAction={() => void avvisaUtkast()}
-      />
     </div>
   );
 }

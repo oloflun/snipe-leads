@@ -9,6 +9,7 @@
  */
 import type { Localized } from "@/lib/i18n";
 import type { UtkastStatus, Utkastfalt } from "@/lib/leads/utkast";
+import type { Signatur } from "@/lib/crm/iris/utkast";
 
 export { STATUS_ETIKETT, LEAD_TYP_ETIKETT, kriterier, leadTyp, nivaEtikett, utfallEtikett, type Kriterium, type LeadTyp } from "@/lib/prospekt";
 export { UTKAST_ETIKETT, kanSkickas, sandtid, utkastText, UTAN_UTKAST, type UtkastStatus } from "@/lib/leads/utkast";
@@ -76,7 +77,8 @@ export type LeadSvar = { prospect: LeadPost; sources: string[] };
 export type Utkastsvar = {
   utkast: { id: string | null; subject: string | null; body: string; brodtext: string | null; svans: string | null } | null;
   thread_id?: string | null;
-  signatur?: { text?: string | null; logotyp_url?: string | null } | null;
+  /** Kundens signatur med logotypen, så att utkastet visas som mottagaren ser det (lib/crm/iris/utkast.ts). */
+  signatur?: Signatur | null;
 } & Utkastfalt;
 
 /** En händelse på leadets tidslinje (`GET /leads/prospects/{id}/tidslinje`). */

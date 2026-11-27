@@ -20,6 +20,7 @@ import {
   Check,
   Code2,
   Copy,
+  FilePen,
   Globe,
   Handshake,
   LayoutDashboard,
@@ -56,7 +57,7 @@ import { useLocale, type Localized } from "@/lib/i18n";
 export type Ton = "ockra" | "bla" | "mossa" | "sigill" | "mineral";
 
 /** CRM:ets vyer. Samma nycklar som adressen: `/crm/<vy>`. */
-export type Objekt = "oversikt" | "bolag" | "personer" | "affarer" | "uppgifter" | "leads" | "synk" | "sparrar" | "utvecklare";
+export type Objekt = "oversikt" | "bolag" | "personer" | "affarer" | "uppgifter" | "leads" | "utkast" | "synk" | "sparrar" | "utvecklare";
 
 export const OBJEKT: Record<Objekt, { ton: Ton; ikon: LucideIcon; namn: Localized }> = {
   oversikt: { ton: "ockra", ikon: LayoutDashboard, namn: { sv: "Översikt", en: "Overview" } },
@@ -68,6 +69,8 @@ export const OBJEKT: Record<Objekt, { ton: Ton; ikon: LucideIcon; namn: Localize
   uppgifter: { ton: "mineral", ikon: ListTodo, namn: { sv: "Uppgifter", en: "Tasks" } },
   // Iris leads (/crm/iris/leads): ockra, som Översikt och Spärrar, i en egen sektion av navigeringen.
   leads: { ton: "ockra", ikon: Target, namn: { sv: "Leads", en: "Leads" } },
+  // Iris utkast (/crm/iris/utkast, steg 4.3): blått, som Bolag, i Iris-sektionen bredvid leadsens ockra.
+  utkast: { ton: "bla", ikon: FilePen, namn: { sv: "Utkast", en: "Drafts" } },
   synk: { ton: "sigill", ikon: RefreshCw, namn: { sv: "Synk", en: "Sync" } },
   // Ockra, som Översikt: också de står i var sin sektion.
   sparrar: { ton: "ockra", ikon: Ban, namn: { sv: "Spärrar", en: "Blocks" } },
