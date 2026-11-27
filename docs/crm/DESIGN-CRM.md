@@ -125,6 +125,23 @@ Kommandopaletten (`CommandPalette`, Ctrl K och Cmd K): Gå till (de fem vyerna),
 (Nytt bolag, Ny anslutning, Ny nyckel), och Bolag (sökning mot `/v1/companies?q=`
 medan man skriver, träffar som postchips).
 
+### Skalet bär hela appen (tillagt 2026-11-27, inte sett av Anton än)
+
+- **Navigeringen är ett register** (`lib/crm/navigering.ts`). Grupperna står i ordningen Arbetsyta, Iris,
+  Kundtjänst, Kvitton, Data, Plattform. En grupp utan synlig post syns inte, och en post syns bara när
+  vyn är byggd och arbetsytan har produkten, tillägget eller rollen. Nya vyer läggs till i registret,
+  aldrig direkt i `CrmRam`. Kommandopaletten läser samma register.
+- **Banderollen** (`Banderoll.tsx`, `.crm-banderoll`): en rad överst i bladet, Astryx `Banner` som
+  sektion. Kundbesök i ockra med Avsluta besöket, läsroll neutral, vybyte med förlopp och Försök igen,
+  demo med begränsningen. En rad på bred skärm. Ett nytt läge blir en gren här, inte en ruta i vyn.
+- **Notiserna** (`Notiser.tsx`): räknaren på menyposten Leads i ockra (`crm-railtal`) och en klocka i
+  sidhuvudet som öppnar en `Popover` med listan (svar, utkast, möten) och Markera alla som lästa. Båda
+  läser samma tal.
+- **Arbetsytemenyn** (`Arbetsytemeny.tsx`): Inställningar, Språk, Tema, Kontakt, Dataskydd, Anmäl
+  felaktigt svar, Logga ut, och för plattformsadmin Byt kund (sökbar) och Admin eller Demo.
+- **Skrivrätten** (`useSkrivratt()` i kit): `{ far, skal }`. En skrivande knapp som inte får användas är
+  avstängd och bär skälet som förklaring. Den göms inte.
+
 ## Sidhuvud och vyrad (alla listvyer)
 
 - Sidhuvud, 64 px: objektets ikonplatta (32 px, radie 10), Fraunces-rubrik, antalet
@@ -251,6 +268,23 @@ lista (sekundär) och Ny spärr (primär). Vyraden: Alla, Mejl, Telefon och Upph
   och raderna som inte gick att läsa med radnummer, värdet i kodstil och skälet.
 - **Kontrollen** svarar i en ruta under fältet: grön när inget spärrar, varningsfärg med
   källan när något gör det.
+
+## Iris leads (tillagt 2026-11-27, inte sett av Anton än)
+
+`/crm/iris/leads`, byggd som Bolag: samma sidhuvud, vyrad, tabell, räknefot och panel.
+
+- **Vyraden:** Att bearbeta, Research pågår (bara när något researchas), Ny, Redo, med antal. Testyta,
+  Bortvalda och Arkiverade ligger under knappen Fler när de inte är valda. Till höger sök (220 px),
+  Filter och Sortera.
+- **Tabellen** ryms i bladet i 1440 utan att rulla i sidled: bolaget som postchip (bredast), status,
+  poäng, signal, utkast, kontakt, ändrad, nästa uppgift. Kolumnen om sajten finns bara när svaret bär
+  webbplatsbedömningen. Källan är ingen kolumn.
+- **Räknefoten** säger samma tal som vyraden, och bär "Uppdateras live" med en pulsande prick när
+  listan hämtas om av sig själv.
+- **Panelen** (`?lead=<id>`): flikarna Översikt, Bedömning, Utkast, Historik, Källa. Utkastet visas som
+  mottagaren ser det. Handlingar som inte går att ångra går genom `Bekraftelse.tsx`, som säger antalet
+  och vad som händer.
+- **Telefon:** rader i stället för tabell, som i Bolag.
 
 ## Översikten (`/crm`, ny startsida)
 

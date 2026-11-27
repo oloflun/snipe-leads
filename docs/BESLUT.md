@@ -9,6 +9,39 @@ möjligt), vad det betyder i koden.
 
 ---
 
+## 2026-11-27 — Snajp CRM: skalet och Iris leads, det byggarna och agenten valde (agentens val)
+
+Inget av detta är Antons ord. Det är val som gjordes när steg 4.1 och 4.2 blev kod, och varje punkt
+går att ändra.
+
+1. **Navigeringen är ett register** (`lib/crm/navigering.ts`), inte en fast lista i skalet. Sidofältet,
+   kommandopaletten och notisräknaren läser samma poster, och en post som inte är byggd syns ingenstans.
+   Skäl: resten av appen ska in i samma sidofält, och varje steg ska kunna lägga till sin vy på ett
+   ställe.
+2. **Ett läge, en rad överst.** Kundbesök, läsroll, vybyte och demo står i samma banderoll, som skalet
+   bär på varje vy. Skäl: kundbesöket visar kundens riktiga uppgifter i samma gränssnitt som den egna
+   arbetsytan, och utan raden går lägena inte att skilja. Nästa läge som behöver en rad lägger en gren
+   där, inte en egen ruta i vyn.
+3. **Läsroll och kundbesök stänger av skrivande knappar med en förklaring**, i stället för att gömma dem.
+   Skäl: den som läser ska se vad som finns och varför det inte går att trycka. Spärren sitter som förut
+   i proxyn.
+4. **Leads statusremsa är vyer.** Dagens remsa "Pipeline" blev vyraden Att bearbeta, Research pågår, Ny,
+   Redo, med antal, som i Bolag. Testyta, Bortvalda och Arkiverade ligger under Fler när de inte är
+   valda. Skäl: vyraden ska rymmas på en rad, och de tre är sidospår man sällan besöker.
+5. **Källan är ingen kolumn i leadslistan.** Den väljs under Filter och står i panelens flik Källa, som i
+   dagens tabell. Skäl: med kolumnen kapades bolagens namn och tabellen rullade i sidled i 1440.
+6. **"Uppdateras live" står i räknefoten**, inte i vyraden. Skäl: det är listans läge, inte ett val.
+7. **Webbplatsbedömningen har en grind i gränssnittet** (`lib/crm/iris/webb.ts`): kolumnen, filtret,
+   sorteringen och panelens del om sajten ritas bara när svaret bär fälten. Gränssnittet räknar aldrig
+   fram bedömningen och frågar aldrig efter vem kunden är. Skäl: hemligheten ska hållas av backenden på
+   ett ställe, och en yta som själv avgör vem som får se kan läcka vid nästa ändring.
+8. **Utkastet i leadets panel visas som mottagaren ser det**, med godkänn och avvisa. Redigeringen byggs
+   i steg 4.3, och ingen knapp som inte gör något visas till dess.
+9. **Historiken i leadets panel läser leads egen tidslinje** (`/leads/prospects/{id}/tidslinje`), inte
+   CRM-API:ts. Skäl: ett lead som inte blivit ett bolag i CRM:et har ingen tidslinje där.
+
+---
+
 ## 2026-11-27 — Snajp CRM: resten av appen byggs in, steg för steg (Anton, och agentens upplägg)
 
 Antons ord: "Fortsätt med att bygga ut resten av den befintliga appen i den nya miljön." Det är fas 4

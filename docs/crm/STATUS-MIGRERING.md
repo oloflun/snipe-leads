@@ -135,10 +135,10 @@ funktionslistan som hör till vyn står i noten.
 
 | Steg | Vy | Läge | Not |
 |---|---|---|---|
-| 4.1 | Skalets förutsättningar: gruppen Iris, banderollen, notisräknaren, läsroll och kundbesök i `app/crm/layout.tsx` | inte påbörjat | SK-038–SK-045, SK-064, SK-067–SK-079, SK-155–SK-157, AD-005, AD-008–AD-011 |
-| 4.2 | `/crm/iris/leads` med panelen `?lead=` | inte påbörjat | LR-001–LR-075, LR-090–LR-114. Webbgrinden byggs här; `signal_detalj` rättas först |
-| 4.3 | Utkastredigeraren och `/crm/iris/utkast` (Att granska, Skickas snart, Skickat) | inte påbörjat | LU-030–LU-070, LU-080–LU-088, LU-150–LU-159, LU-172–LU-183, AP15 |
-| 4.4 | `/crm/iris/korningar` och `/crm/iris/korningar/[id]`, dialogen Kör Iris | inte påbörjat | LK-001–LK-057, LK-130–LK-138, OV-031–OV-037 |
+| 4.1 | Skalets förutsättningar: gruppen Iris, banderollen, notisräknaren, läsroll och kundbesök i `app/crm/layout.tsx` | byggt och granskat, inte kört inloggat | `6c8e0242`, `15968282`. SK-038–SK-045, SK-064, SK-067–SK-079, SK-155–SK-157, AD-005, AD-008–AD-011. Navigeringen är ett register (`lib/crm/navigering.ts`), banderollen bär kundbesök, läsroll, vybyte och demo, klockan öppnar notislistan. SK-039 är halvt: se "Öppet efter 4.1 och 4.2" |
+| 4.2 | `/crm/iris/leads` med panelen `?lead=` | byggt och granskat, inte kört inloggat | `07f34196`, `6a017538`, `3b93e04c`. LR-001–LR-075, LR-090–LR-114 utom de som hör till 4.3, 4.9, 4.11 och 4.12. Webbgrinden sitter i `lib/crm/iris/webb.ts`: ytan visar bedömningen bara när svaret bär fälten. `signal_detalj` behövde ingen rättning (se beslutsloggen) |
+| 4.3 | Utkastredigeraren och `/crm/iris/utkast` (Att granska, Skickas snart, Skickat) | byggs 2026-11-27 | LU-030–LU-070, LU-080–LU-088, LU-150–LU-159, LU-172–LU-183, AP15 |
+| 4.4 | `/crm/iris/korningar` och `/crm/iris/korningar/[id]`, dialogen Kör Iris | byggs 2026-11-27 | LK-001–LK-057, LK-130–LK-138, OV-031–OV-037 |
 | 4.5 | `/crm/installningar/iris` | inte påbörjat | LK-060–LK-073, IN-100–IN-112, IN-144 |
 | 4.6 | Tråd- och inkorgsvyn och `/crm/iris/konversationer` | inte påbörjat | LU-001–LU-024, LU-081, LU-089, LU-110–LU-122, OV-105 |
 | 4.7 | `/crm/iris/uppfoljningar` | inte påbörjat | LU-100–LU-107 |
@@ -147,6 +147,31 @@ funktionslistan som hör till vyn står i noten.
 | 4.10 | `/crm/iris/kampanjer` | inte påbörjat | LU-160–LU-162 |
 | 4.11 | `/crm/iris` Iris-översikten | inte påbörjat | LR-020–LR-027, LU-024, LU-032, LU-174 |
 | 4.12 | Bolagssöket i kommandopaletten | inte påbörjat | LR-080–LR-082 |
+
+### Öppet efter 4.1 och 4.2
+
+Det här är byggt i kod och sett i förhandsvisningen (påhittad data, anropen besvaras i webbläsaren).
+Inget av det är kört inloggat mot en riktig backend.
+
+1. **Läsroll och kundbesök i de äldre vyerna (SK-039).** Hjälparen `useSkrivratt()` finns i `kit.tsx` och
+   används av skalet och Iris leads. Bolag, Personer, Affärer, Uppgifter, Synk, Spärrar och Utvecklare
+   stänger inte av sina skrivande knappar än: proxyn stoppar skrivningen, men knappen ser tryckbar ut.
+   Det är ett eget steg, efter fas 4.
+2. **Demoläget med påhittade leads** (LR-009, LR-010, LR-052, LR-095) är inte byggt. Det hör ihop med
+   steg 5.22, som väntar på Antons beslut om demon.
+3. **Radanimationen när ett lead byter status** (LR-059) är inte byggd.
+4. **Notiserna under ett kundbesök.** `POST /leads/notiser/last` skulle svara 422, eftersom proxyn lägger
+   till `is_test` och modellen inte tar emot okända fält. Knappen Markera alla som lästa är därför
+   avstängd under ett besök, med förklaring.
+5. **Ifyllnaden vid Flytta till Iris.** Backenden svarar med meningar i `saknas`, inte med fältnamn, så
+   gränssnittet kopplar meningen till fältet efter hur den börjar. Ändras formuleringen i
+   `befordran.py:saknade_falt` hamnar meningen i en lista ovanför fälten. En fältnyckel i svaret vore
+   säkrare.
+6. **Texterna Kontakt och Dataskydd i arbetsytemenyn** är chattens formuleringar och kan behöva egna ord.
+7. **Skicka på testytan:** innan rutan är ikryssad står knappen avstängd med texten "Skicka 0 mejl".
+   Formuleringen bör bedömas.
+8. **Inte sett i bild:** vybytets förlopp i banderollen, felrutan i panelens flikar när ett lead inte går
+   att hämta, och fokusflytten efter statusbyte med tangentbordet. Lästa i koden.
 
 ## Fas 5: resten av appen
 
