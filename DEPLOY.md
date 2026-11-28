@@ -578,6 +578,24 @@ logotyp och besiktning kräver ögon och skrivs ut som checklista. Se `TENANTS.m
 | Deploy-gren, main | **`main`** (omlagd 2026-09-15, var `railway-main`; verifierat mot `deploymentTriggers` 2026-09-28) |
 | Deploy-gren, development | **`development`** (omlagd 2026-08-27, var `railway-development`) |
 
+### Miljön `crm`: Snajp CRM för sig (2026-11-28)
+
+En egen, TOM miljö för grenen `crm`, så att CRM:et går att se utan att
+`development` rörs. Skapad med `python scripts/railway_crm_miljo.py --apply`
+(körbart igen; utan `--apply` visas bara läget).
+
+| | Värde |
+|---|---|
+| Miljö | `crm` (`da3dc201-2bd2-4665-b5ac-a69d7265c811`) |
+| Tjänst | `crm-web` (`609d904a-62bc-4514-b687-f9ebb6acf47d`), bygger grenen `crm`, region Amsterdam |
+| Adress | `https://crm-web-crm-f9e3c48e.up.railway.app/forhandsvisning/crm` |
+| Variabler | `AUTH_SECRET` (slumpad), `AUTH_TRUST_HOST`, `NEXT_PUBLIC_SITE_URL`, `SITE_URL`. Ingen databas, inga nycklar |
+
+Miljön är inte en kopia av `development`, med flit: en kopia tar med sig
+adressen till development-databasen, som är en spegel av produktionen. Det som
+går att se är förhandsvisningen med påhittad data. Inloggning och `/api/health`
+fungerar inte där. Mer i `docs/crm/HANDOFF-2026-11-28.md`, avsnitt 9.
+
 Verifierat mot Railways API — grenarna är lästa ur `deploymentTriggers`, inte
 antagna. Senast omkontrollerat 2026-08-27 efter omläggningen av development.
 
