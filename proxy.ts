@@ -14,6 +14,18 @@ import { frameAncestors, getTenantByPublicKey } from "@/lib/tenants";
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
+  // Miljön `crm` hos Railway (scripts/railway_crm_miljo.py) har ingen databas
+  // och ingen inloggning: den finns för att se layout och struktur. Där leder
+  // den inloggade ytan till förhandsvisningen i stället för till /login, som
+  // bara kan svara att databasen saknas. Påslaget med en variabel som bara
+  // den miljön bär; utan den händer ingenting här.
+  if (process.env.CRM_FORHANDSVISNING === "1") {
+    const url = request.nextUrl.clone();
+    const rest = pathname.startsWith("/crm/") ? pathname.slice("/crm".length) : "";
+    url.pathname = `/forhandsvisning/crm${rest}`;
+    return NextResponse.redirect(url);
+  }
+
   // Widgetens inbäddningssida: domän-allowlisten per tenant sätts som CSP
   // frame-ancestors HÄR, eftersom en app-router-sida inte kan sätta sina
   // egna svarshuvuden. Det är webbläsaren som upprätthåller listan — läcker

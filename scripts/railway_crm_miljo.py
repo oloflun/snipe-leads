@@ -115,6 +115,8 @@ def main() -> int:
     satta = read_vars(sid, miljo_id)
     onskade = {
         "AUTH_TRUST_HOST": "true",
+        # Den inloggade ytan leder till förhandsvisningen (proxy.ts): miljön har ingen databas.
+        "CRM_FORHANDSVISNING": "1",
         "NEXT_PUBLIC_SITE_URL": f"https://{doman}" if doman else "",
         "SITE_URL": f"https://{doman}" if doman else "",
     }
